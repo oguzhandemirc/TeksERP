@@ -1,0 +1,23 @@
+---
+description: "Backend API Integration and Communication Standards"
+globs: "*.tsx, *.ts"
+alwaysApply: true
+---
+
+# TeksERP API Integration Rules
+
+## 1. Backend İletişim Altyapısı
+*   API çağrıları için native fetch yerine yapılandırılmış bir **Axios instance** (`src/services/apiClient.ts`) kullanılacaktır.
+*   Base URL, .env dosyalarından `VITE_API_BASE_URL` parametresi ile çekilecektir (`http://localhost:3000` veya production).
+
+## 2. Authentication & Authorization Flow
+*   **Token Eklenmesi:** Axios Request Interceptor kullanılarak, Zustand'da veya `localStorage`'da tutulan JWT Token, her isteğin `Authorization: Bearer [TOKEN]` header'ına otomatik eklenecektir.
+*   **Yetki / Oturum Hataları:** Axios Response Interceptor, `401 Unauthorized` veya `403 Forbidden` hatalarını global olarak dinlemelidir. Token expire olmuşsa kullanıcı pürüzsüz şekilde `/login` sayfasına yönlendirilecek ve durumu belirten bir hata Toast'u gösterilecektir.
+
+## 3. Error Handling (Hata Yönetimi)
+*   Backend (Teks-Erp Express), 400 Serisi iş mantığı hataları döndürür (Örn: "Miktar geçerli değil"). Bu hatalar UI katmanında catch edilmeli ve kullanıcıya insan dilinde "Toast" mesajı olarak sunulmalıdır.
+*   Sistem çökmelerine karşı API fonksiyonları içerisinde try-catch bloğu veya React Query'nin `onError` handler'ı mutlaka kullanılmalıdır.
+
+## 4. Tip Uyumluluğu (Type-Safety)
+*   Backend ile aynı veri tipleri konuşulmalıdır (Prisma). Dönen datanın (Response Body) interface'leri (Data Transfer Objects), ilgili serviste veya `types/` klasöründe mutlaka tanımlanmalıdır.
+*   Örnek: `interface WorkOrder { id: string; status: string; quantity: number }`. API'den gelen cevap bu tiplere zorlanmalıdır (`axios.get<WorkOrder[]>`).

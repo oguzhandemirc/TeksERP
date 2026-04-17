@@ -1,0 +1,32 @@
+---
+description: "Core React Architecture and Development Standards for TeksERP Frontend"
+globs: "*"
+alwaysApply: true
+globs: *
+alwaysApply: false
+---
+
+# TeksERP Frontend Architecture
+
+## 1. Core Stack
+*   **Framework:** React 19 + Vite.
+*   **Language:** TypeScript (Strict Mode DAHİL). `any` kullanımı KESİNLİKLE yasaktır. Backend Prisma tipleriyle senkronize interface'ler kullanılmalıdır.
+*   **Routing:** React Router DOM (v6+).
+
+## 2. Folder Structure
+*   `src/components/`: Tekrar kullanılabilir (reusable) UI elemanları (`Button`, `Modal`, `Table` vb.).
+*   `src/pages/`: Modül/Sayfa bazlı ana bileşenler (`Orders`, `Inventory`, `Tambur`).
+*   `src/hooks/`: Custom hook'lar (`useAuth`, `useRoleAccess`).
+*   `src/services/`: Backend API iletişim katmanı (Axios instance, endpoint çağrıları).
+*   `src/store/`: Global state yönetimi (Zustand) veya Context API.
+*   `src/types/`: TypeScript interface ve type dosyaları.
+
+## 3. State Management
+*   **Global State:** Kullanıcı oturumu (auth), roller, tema (dark/light) gibi genel konseptler için **Zustand** tercih edilmelidir. Karmaşık Redux yapıları yerine hafif state mimarisi kullanılacaktır.
+*   **Server State:** Backend'den gelen veri asenkron işlemleri, caching ve senkronizasyon için **React Query (@tanstack/react-query)** kullanılmalıdır. Fetching, error, loading state'leri doğrudan React Query üzerinden yönetilecektir.
+*   **Form State:** Rendersız form yönetimi için **React Hook Form**, validasyonlar için **Zod** (Backend ile aynı şema tipi) kullanılacaktır.
+
+## 4. Component Standards
+*   Fonksiyonel komponentler ve (Arrow Functions) kullanılacaktır.
+*   Prop'lar her zaman bir arayüz (Interface) ile tanımlanmalıdır.
+*   Side-effect barındıran (Örn: API'ye POST atan) mantıksal işlemler, UI komponentlerinden soyutlanıp custom hook'lara veya parent komponentlere çıkarılmalıdır (Container / Presentational mimarisi).
