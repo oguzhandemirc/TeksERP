@@ -1,0 +1,40 @@
+---
+description: Workflow to generate the Planning and WorkOrder (Parti Yönetimi) API endpoints.
+globs: *
+alwaysApply: false
+---
+
+---
+description: "Workflow to generate the Planning and WorkOrder (Parti Yönetimi) API endpoints."
+globs: "*"
+---
+
+# Workflow: Create Planning & WorkOrder API
+
+**Objective:** Build the API endpoints for order management, work order (batch) creation, routing, and roll allocation, strictly adhering to the one-to-many flexibility rules.
+
+## Step 1: Initialize Controllers and Services
+* Create `OrderController` and `WorkOrderController` with their respective services.
+* **Orders:** Use the `BaseController` logic for `/orders` to handle basic CRUD and dynamic filtering.
+
+## Step 2: Implement Work Order Creation (`POST /work-orders`)
+* **Logic:**
+  * Accept `batchNumber`, `type`, routing `steps` (array of `stationId` in sequence), and optional `orderLinks`.
+  * Ensure the creation logic supports creating a WorkOrder *without* any linked orders (producing for stock).
+  * Automatically generate `WorkOrderStep` records for the assigned route with sequence numbers.
+  * Trigger an insert into `SystemLog`.
+
+## Step 3: Implement Roll Attachment (`PATCH /work-orders/:id/attach-rolls`)
+* **Logic:**
+  * Accept an array of `barcode` strings from the hand-held terminals.
+  * Verify the rolls exist and are in `STOCK` status.
+  * Update the rolls to link them to the work order. Change their status to `IN_PRODUCTION`.
+  * Create `SystemLog` entries for these status changes.
+
+## Step 4: Implement Documents (Manifest & Travel Card)
+* Create `GET /work-orders/:id/manifest` to generate the Dyehouse Pick List (Çeki Listesi) data.
+* Create `GET /work-orders/:id/travel-card` to generate the Traveler Card data (barcode and route sequence).
+
+## Step 5: Security & RBAC
+* Register routes with authentication middleware.
+* Apply RBAC middleware checking for `planning:write` on POST/PATCH routes and `planning:read` on GET routes.

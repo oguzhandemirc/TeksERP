@@ -1,0 +1,108 @@
+// =============================================================================
+// TeksERP - Shipping Controller
+// =============================================================================
+
+import { Request, Response, NextFunction } from "express";
+import { z } from "zod";
+import { ShippingService } from "../services/shipping.service";
+import "../types/express-augment";
+
+const preparePackageSchema = z.object({
+  rollIds: z.array(z.string().uuid()).min(1, "En az bir top gerekli"),
+  packageId: z.string().min(1, "Paket ID (barkod) gerekli"),
+  grossWeightKg: z.number().positive("Brüt kilo pozitif olmalı"),
+});
+
+const createShipmentSchema = z.object({
+  customerId: z.string().uuid("Geçersiz müşteri ID"),
+  driverName: z.string().optional(),
+  plateNumber: z.string().optional(),
+  carrier: z.string().optional(),
+});
+
+const addItemsSchema = z.object({
+  rollIds: z.array(z.string().uuid()).min(1, "En az bir top gerekli"),
+});
+
+export class ShippingController {
+  private service: ShippingService;
+
+  constructor() {
+    this.service = new ShippingService();
+    this.getReadyOrders = this.getReadyOrders.bind(this);
+    this.preparePackage = this.preparePackage.bind(this);
+    this.createShipment = this.createShipment.bind(this);
+    this.addItems = this.addItems.bind(this);
+    this.finalize = this.finalize.bind(this);
+  }
+
+  /**
+   * GET /api/shipping/ready-orders
+   */
+  async getReadyOrders(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getReadyOrders();
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/shipping/prepare-package
+   */
+  async preparePackage(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = preparePackageSchema.parse(req.body);
+      const result = await this.service.preparePackage(body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/shipping/shipments
+   */
+  async createShipment(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = createShipmentSchema.parse(req.body);
+      const result = await this.service.createShipment(body, req.user?.userId);
+      res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/shipping/shipments/:id/add-items
+   */
+  async addItems(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = addItemsSchema.parse(req.body);
+      const result = await this.service.addItemsToShipment(
+        req.params.id as string,
+        body.rollIds,
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/shipping/shipments/:id/finalize
+   */
+  async finalize(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.finalizeShipment(
+        req.params.id as string,
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+}

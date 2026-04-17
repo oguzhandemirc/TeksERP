@@ -1,0 +1,41 @@
+---
+trigger: always_on
+globs: *
+alwaysApply: false
+---
+
+---
+description: "Production, subcontracting, quality control, and shipment business logic rules for the TeksERP project."
+globs: "*"
+alwaysApply: true
+---
+
+# TeksERP Business Logic and Process Rules
+
+## 1. Work Order (Batch) and Routing Logic
+* **Flexibility (One-to-Many Relations):** A work order (batch) can be linked to multiple orders or can be produced directly for inventory (stock) without being linked to any order. A work order is not mandatory for shipping an order; it can be shipped directly from stock.
+* **Routing Steps:** Stations in the production route must be followed sequentially. When each work order is finalized, a "Traveler Card" (Refakat Kartı) is generated to physically travel with the goods and trigger processes at stations.
+
+## 2. Station and Subcontracting (External) Operations
+* **Subcontractor Trigger:** The moment a product is shipped to an external subcontractor station (dyehouse, printing, etc.), that station's operation status changes to "Started" in the system. The system must allow real-time tracking that the product is "Being processed at a Subcontractor".
+* **Subcontractor Return — No New Labels (CRITICAL):** On return from a subcontractor, the system MUST NOT create new `Roll` records or print new barcodes. The ORIGINAL rolls that were dispatched are updated in place with the returned `newQty` (and optional `newWeight`). Each returned roll is then advanced to the next production step. The `RollMovement` closing for the subcontractor step records the returned `qtyOut`; a `RollOperation` of type `SUBCONTRACTOR_RETURNED` captures the shrinkage delta (`previousQty − newQty`). A step becomes `COMPLETED` only when every dispatched roll for that step has returned.
+* **Manifest Tracking:** The subcontractor's paper waybill number is stored as `manifestNo` on `SubcontractorReceipt`. It is required and traceable but does not generate internal barcodes.
+
+## 3. Kurşun + Kalite Kontrol 2 (Single PROCESS_QC Station)
+* **Single Physical Station, Single WorkOrderStep:** Kurşun (lead-tape application) and Kalite Kontrol 2 (second quality control) are the same physical station (`StationKind.PROCESS_QC`). They are modeled as ONE `WorkOrderStep`, not two. Per-roll differences are tracked via `RollOperation` log entries, not extra steps.
+* **Per-Roll Kurşun (NOT Per-Batch):** Within the same batch, some rolls may have Kurşun applied and some may not. The operator marks each roll individually with a `RollOperation` of type `KURSUN_APPLIED`. This operation is idempotent (re-marking is a no-op). It can be undone via `/api/kursun-qc/undo-kursun` ONLY if QC2 has not yet been completed for that roll.
+* **Per-Roll QC2 Completion:** Each roll is individually marked `QC2_COMPLETED` via its own `RollOperation`. The step itself stays `ACTIVE` until the operator calls `finishStep`. `finishStep` fails if any active roll is missing a `QC2_COMPLETED` entry.
+* **Operator Self-Selection (No Depo Queue):** There is no depo operator role or queue ordering. Operators physically pick carts/rolls by looking at the Traveler Card (Refakat Kartı) in front of them and scan the card to open the PROCESS_QC screen for that batch.
+* **Defect Detection Lifecycle (CRITICAL):** When a defect is reported at PROCESS_QC, the `RollError` row is populated with `detectedAtStepId` + `detectedByUserId` + `detectedAt`. It remains `isProcessed = false` until Tambur makes a decision.
+
+## 4. Tambur (Decision Point)
+* **Tambur Input = PROCESS_QC Defects:** All `RollError` rows with `isProcessed = false` that target a roll currently at Tambur appear on the Tambur screen.
+* **Decision Mechanism:** The operator marks each defect as `CUT` (with `qualityGrade` — `FIRE` or `A1`) or `NO_CUT`. On finalize, each processed `RollError` is stamped with `processedAtStepId` + `processedByUserId` + `processedAt` and `actionTaken` (`CUT_FOR_<grade>` or `KEPT_NO_CUT`).
+* **Roll Splitting (Critical):** If the operator `CUT`s a defect, the system MUST NOT merely reduce the meterage of the existing roll. It MUST create a new `Roll` record (with a new barcode, `parentRollId` = original) for the cut piece, assigning it a status of `SCRAP` (grade `FIRE`) or `A1_STOCK` (grade `A1`). The original roll's `currentQty` is then updated to reflect the remaining net product and its status becomes `PRODUCED`.
+* **Tambur Operation Log:** Each finalized roll at Tambur also gets a `RollOperation` of type `TAMBUR_PROCESSED` with metadata (`foldType`, `netCurrentQty`, `splitCount`, `processedErrors`).
+* **Allocation:** The net product coming out of the Tambur can be allocated to multiple orders by planning or put directly into stock.
+
+## 4. Logistics and Shipping Flexibility
+* **Visibility:** The shipping department does not see work orders; they only see orders in the "Ready for Shipment" status on their independent interface.
+* **Flexible Reassignment:** Goods reserved for one customer in the system can have their order link detached at the time of shipment and be reassigned and shipped to another customer's order.
+* **Order Completion Trigger:** When a shipment is confirmed (`SHIPPED` status), the system must check the total `shippedQty` for that order. If the shipped quantity meets or exceeds the requested `quantity`, the order's status MUST automatically update to `COMPLETED`. Otherwise, it remains `PARTIAL_SHIPPED`.

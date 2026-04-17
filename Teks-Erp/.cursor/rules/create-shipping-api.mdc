@@ -1,0 +1,52 @@
+---
+description: Workflow to generate the Shipping and Logistics API endpoints.
+globs: *
+alwaysApply: false
+---
+
+---
+description: "Workflow to generate the Shipping and Logistics API endpoints."
+globs: "*"
+---
+
+# Workflow: Create Shipping & Logistics API
+
+**Objective:** Build the API endpoints for packaging, shipment creation, flexible order reassignment, and stock deduction.
+
+## Step 1: Initialize Controller and Service
+* Create `ShippingController` and `ShippingService`.
+* Inject `SystemLog` capabilities.
+
+## Step 2: Implement Ready Orders Endpoint (`GET /shipping/ready-orders`)
+* **Logic:**
+  * Fetch orders that have lines with allocated rolls that are in `PRODUCED` or `READY_FOR_SHIP` status.
+  * The shipping department must only see order data, not production work orders.
+
+## Step 3: Implement Package Preparation (`POST /shipping/prepare-package`)
+* **Logic:**
+  * Accept an array of `rollId`s, a `packageId` (sack/palette barcode), and `grossWeightKg`.
+  * Update the selected rolls: set `packageId`, `grossWeightKg`, `packagingDate`, and change status to `READY_FOR_SHIP`.
+  * Trigger `SystemLog`.
+
+## Step 4: Implement Shipment Container Creation (`POST /shipping/shipments`)
+* **Logic:**
+  * Accept `customerId`, `driverName`, `plateNumber`, and `carrier`.
+  * Create a new `Shipment` record with a unique `shipmentNumber` and status `PREPARING`.
+
+## Step 5: Implement Add to Shipment & Reassign (`PATCH /shipping/shipments/:id/add-items`)
+* **Logic:**
+  * Accept `packageId` or individual `rollId`s.
+  * Create `ShipmentItem` records linking the rolls to the shipment.
+  * **CRITICAL BUSINESS RULE (Flexible Reassignment):** If a roll was previously allocated to Customer A's order, but is now being scanned into a shipment for Customer B, the system MUST detach the old `OrderAllocation` and reassign it to the new order before adding it to the shipment.
+
+## Step 6: Implement Shipment Finalization (`POST /shipping/shipments/:id/finalize`)
+* **Logic:**
+  * Change the Shipment status to `SHIPPED` and set `shippedAt`.
+  * Update all related rolls' status to `SHIPPED` (this effectively removes them from active inventory).
+  * **CRITICAL BUSINESS RULE (Order Completion Trigger):** For every order affected by this shipment, calculate the total `shippedQty`. If `shippedQty` >= requested `quantity`, automatically change the Order status to `COMPLETED`. Otherwise, set it to `PARTIAL_SHIPPED`.
+  * Generate the final Waybill (İrsaliye) data.
+  * Trigger `SystemLog`.
+
+## Step 7: Security & RBAC
+* Apply authentication middleware.
+* Apply RBAC middleware checking for `shipping:write` on POST/PATCH routes and `shipping:read` on GET routes.

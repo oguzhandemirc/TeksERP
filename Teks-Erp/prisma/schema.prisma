@@ -1,0 +1,1012 @@
+// =============================================================================
+// TeksERP - Prisma Schema
+// =============================================================================
+// Architecture Rules Applied (core-architecture.md):
+//   - PK: String @id @default(uuid()) on ALL models
+//   - Timestamps: createdAt + updatedAt on ALL models
+//   - Soft Delete: isActive flag (no physical DELETE)
+//   - Audit: SystemLog records every CUD operation
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum StationType {
+  INTERNAL
+  EXTERNAL
+}
+
+/// İstasyonun domain rolü — API davranış farkları için kullanılır.
+/// Örn. PROCESS_QC istasyonunda Kurşun+QC2 per-roll akışı çalışır.
+enum StationKind {
+  RAW_QC          // KK1 — ham mal girişi / dokuma çıkışı
+  PROCESS_QC      // Kurşun + Kalite Kontrol 2 (tek fiziksel istasyon)
+  TAMBUR          // Final karar noktası
+  SUBCONTRACTOR   // Fason / boyahane (dış işlem)
+  PACKAGING       // Paketleme
+  SHIPPING        // Sevkiyat
+  OTHER           // Diğer / özel istasyon
+}
+
+/// Top üzerinde yapılan her somut işlemin log'u.
+/// Boolean bayrak kullanmak yerine tarih + operatör + metadata ile tam iz bırakır.
+enum RollOperationType {
+  KURSUN_APPLIED           // PROCESS_QC: bu topa kurşun geçildi
+  QC2_COMPLETED            // PROCESS_QC: bu topun kalite kontrolü bitti
+  TAMBUR_PROCESSED         // TAMBUR: bu top için kesim/karar alındı
+  PACKAGED                 // PACKAGING: paketlendi
+  SUBCONTRACTOR_SENT       // SUBCONTRACTOR: fasona sevk edildi
+  SUBCONTRACTOR_RETURNED   // SUBCONTRACTOR: fasondan döndü
+}
+
+enum ItemType {
+  YARN
+  WARP
+  RAW_FABRIC
+  DYED_FABRIC
+  CONSUMABLE
+}
+
+enum RollStatus {
+  STOCK
+  IN_PRODUCTION
+  PRODUCED
+  READY_FOR_SHIP
+  SHIPPED
+  SCRAP
+  AT_SUBCONTRACTOR            // Fason/boyahanede işlem görüyor
+  A1_STOCK                    // 2. Kalite satılabilir stok
+  RETURNED_FROM_SUBCONTRACTOR // Fason dönüşünde yeni barkodlar üretildi, eski kapatıldı
+}
+
+enum CompanyType {
+  CUSTOMER
+  SUPPLIER
+  SUBCONTRACTOR
+  DYEHOUSE
+}
+
+enum OrderStatus {
+  PENDING
+  APPROVED
+  IN_PRODUCTION
+  PARTIAL_SHIPPED
+  COMPLETED
+  CANCELLED
+}
+
+enum WorkOrderType {
+  ORDER_PRODUCTION    // Siparişe Özel Üretim
+  STOCK_PRODUCTION    // Stoka Üretim
+  SAMPLE_PRODUCTION   // Numune Üretimi
+  REPAIR_REWORK       // Tamir ve Yeniden İşlem Üretimi
+}
+
+enum WorkOrderStatus {
+  PLANNED
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum StepStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  SKIPPED
+}
+
+enum ShipmentStatus {
+  PREPARING
+  SHIPPED
+  CANCELLED
+}
+
+enum TravelerCardStatus {
+  ACTIVE     // Mal ile birlikte gezen geçerli kart
+  REPRINTED  // Yeniden basıldı, bu kopya artık geçersiz
+  VOIDED     // Manuel iptal (hasar/kayıp dışında iptal)
+  COMPLETED  // WorkOrder COMPLETED olunca otomatik pasife çekilir
+}
+
+enum ScanType {
+  ARRIVAL    // İstasyona vardı
+  DEPARTURE  // İstasyondan ayrıldı
+  INFO       // Bilgi amaçlı tarama (istasyon hareketi değil)
+}
+
+// =============================================================================
+// 1. RBAC - Auth & User Management
+// =============================================================================
+
+model User {
+  id           String  @id @default(uuid())
+  username     String  @unique
+  passwordHash String
+  fullName     String
+  isActive     Boolean @default(true)
+
+  // Relations
+  roles                UserRole[]
+  logs                 SystemLog[]
+  printedTravelerCards TravelerCard[]     @relation("TravelerCardPrintedBy")
+  cardScans            TravelerCardScan[]
+  rollMovements        RollMovement[]
+  printedManifests     Manifest[]         @relation("ManifestPrintedBy")
+  dispatches           SubcontractorDispatch[] @relation("DispatchCreatedBy")
+  receipts             SubcontractorReceipt[]  @relation("ReceiptCreatedBy")
+  swatchesCreated      Swatch[]           @relation("SwatchCreatedBy")
+  rollOperations       RollOperation[]
+  detectedRollErrors   RollError[]        @relation("RollErrorDetectedBy")
+  processedRollErrors  RollError[]        @relation("RollErrorProcessedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([username])
+  @@map("users")
+}
+
+model Role {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+  isActive    Boolean @default(true)
+
+  // Relations
+  permissions RolePermission[]
+  users       UserRole[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("roles")
+}
+
+model Permission {
+  id     String @id @default(uuid())
+  code   String @unique // e.g. "order:read", "order:write", "workorder:create"
+  module String // e.g. "SALES", "PRODUCTION", "FINANCE"
+
+  // Relations
+  roles RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([module])
+  @@map("permissions")
+}
+
+/// Join table: User ↔ Role (N:N)
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+/// Join table: Role ↔ Permission (N:N)
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// =============================================================================
+// 2. MASTER DATA - Station, Machine, Route
+// =============================================================================
+
+model Station {
+  id         String      @id @default(uuid())
+  code       String      @unique // e.g. "BOYAHANE_DIS", "KURSUN_1"
+  name       String
+  type       StationType // INTERNAL or EXTERNAL
+  kind       StationKind @default(OTHER) // Domain rolü — API davranış dispatch'i
+  department String? // DOKUMA, DEVERE, TERBIYE, SEVKIYAT etc.
+  isActive   Boolean     @default(true)
+
+  // Relations
+  machines       Machine[]
+  routeSteps     RouteStep[]
+  workOrderSteps WorkOrderStep[]
+  cardScans      TravelerCardScan[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([kind])
+  @@map("stations")
+}
+
+model Machine {
+  id        String  @id @default(uuid())
+  stationId String
+  code      String  @unique
+  name      String
+  deviceIp  String? // COM port, scale or device connection
+  isActive  Boolean @default(true)
+
+  // Relations
+  station Station      @relation(fields: [stationId], references: [id])
+  logs    MachineLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([stationId])
+  @@map("machines")
+}
+
+model Route {
+  id          String  @id @default(uuid())
+  code        String? @unique // Opsiyonel kısa kod: "BKT-STD"
+  name        String  // e.g. "Boyahane + Kursun + Tambur"
+  description String?
+  isFavorite  Boolean @default(false) // Sık kullanılan şablon
+  customerId  String? // Müşteriye özel default rota (opsiyonel)
+  isActive    Boolean @default(true)
+
+  // Relations
+  customer   Customer?   @relation("CustomerDefaultRoutes", fields: [customerId], references: [id])
+  steps      RouteStep[]
+  workOrders WorkOrder[] // Bu şablondan türetilen WO'lar (analytics)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([isFavorite])
+  @@map("routes")
+}
+
+model RouteStep {
+  id           String  @id @default(uuid())
+  routeId      String
+  stationId    String
+  sequence     Int     // Order in the route
+  defaultNotes String? // Şablonda saklanan istasyon talimatı — WO oluşturulurken notes'a kopyalanır
+
+  // Relations
+  route   Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  station Station @relation(fields: [stationId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([routeId, sequence])
+  @@map("route_steps")
+}
+
+// =============================================================================
+// 3. ITEM (Stock Card) & INVENTORY
+// =============================================================================
+
+model Item {
+  id       String   @id @default(uuid())
+  code     String   @unique
+  name     String
+  itemType ItemType // YARN, RAW_FABRIC, DYED_FABRIC etc.
+  unit     String   @default("MT") // MT, KG, ADET
+  isActive Boolean  @default(true)
+
+  // Relations
+  rolls      Roll[]
+  orderLines OrderLine[]
+  variants   ItemVariant[]
+  swatches   Swatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([itemType])
+  @@map("items")
+}
+
+// Varyant: Her ürüne ait desen/varyant tanımları
+model ItemVariant {
+  id        String  @id @default(uuid())
+  itemId    String
+  code      String  // Varyant kodu: "BALIK_SIRTA", "NAVY_B12"
+  name      String  // Varyant adı: "Balık Sırta", "Navy Blue B12"
+  isActive  Boolean @default(true)
+
+  // Relations
+  item       Item        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  rolls      Roll[]
+  orderLines OrderLine[]
+  swatches   Swatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([itemId, code])
+  @@map("item_variants")
+}
+
+model Roll {
+  id      String @id @default(uuid())
+  barcode String @unique
+  itemId  String
+  variantId String? // Varyant ID — KK1 girişinde operatör tarafından seçilir
+
+  // Measurements
+  initialQty Float // Initial measurement (meters)
+  currentQty Float // Remaining/net quantity
+  weightKg   Float?
+
+  // Status & Quality
+  status       RollStatus @default(STOCK)
+  qualityGrade String     @default("1.KALITE") // 1.Kalite, A1, Fire
+  width        Float?     // En (cm) — KK1 girişinde ölçülen kumaş eni
+
+  // Production Links (real relations — not plain strings)
+  producedInStepId String? // Hangi WO step'inde üretildi (KK1 girişi / Tambur çıktısı)
+  currentStepId    String? // Şu anda hangi WO step'inde
+
+  // Lineage — fason dönüşünde veya tambur kesiminde kaynak rulo
+  parentRollId String?
+
+  // Packaging
+  packageId     String? // Package/sack barcode ID
+  grossWeightKg Float? // Gross weight from scale
+  netWeightKg   Float? // Fabric-only weight
+  packagingDate DateTime? // When packaging happened
+
+  // Relations
+  item            Item              @relation(fields: [itemId], references: [id])
+  variant         ItemVariant?      @relation(fields: [variantId], references: [id])
+  errors          RollError[]
+  allocations     OrderAllocation[]
+  shipmentItems   ShipmentItem[]
+  movements       RollMovement[]
+  operations      RollOperation[]
+  parent          Roll?             @relation("RollLineage", fields: [parentRollId], references: [id])
+  children        Roll[]            @relation("RollLineage")
+  dispatchItems   SubcontractorDispatchItem[]
+  receiptItems    SubcontractorReceiptItem[]
+  swatchesFrom    Swatch[]          @relation("SwatchParentRoll")
+  currentStep     WorkOrderStep?    @relation("RollCurrentStep", fields: [currentStepId], references: [id])
+  producedInStep  WorkOrderStep?    @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([itemId])
+  @@index([variantId])
+  @@index([status])
+  @@index([barcode])
+  @@index([parentRollId])
+  @@index([currentStepId])
+  @@index([producedInStepId])
+  @@map("rolls")
+}
+
+// =============================================================================
+// 4. SALES, ORDER & FINANCE
+// =============================================================================
+
+model Customer {
+  id        String      @id @default(uuid())
+  code      String      @unique
+  name      String
+  taxNumber String?
+  type      CompanyType @default(CUSTOMER)
+  isActive  Boolean     @default(true)
+
+  // Relations
+  orders              Order[]
+  accounts            CurrentAccount[]
+  shipments           Shipment[]
+  defaultRoutes       Route[]       @relation("CustomerDefaultRoutes")
+  workOrdersAsDyehouse WorkOrder[]  @relation("WorkOrderDyehouse")
+  dispatches          SubcontractorDispatch[]
+  receipts            SubcontractorReceipt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@map("customers")
+}
+
+model Order {
+  id          String @id @default(uuid())
+  orderNumber String @unique
+  customerId  String
+
+  // Finance & Pricing
+  currency    String   @default("TRY")
+  totalAmount Decimal? @db.Decimal(10, 2)
+
+  status    OrderStatus @default(PENDING)
+  orderDate DateTime    @default(now())
+  deadline  DateTime?
+
+  // Relations
+  customer Customer    @relation(fields: [customerId], references: [id])
+  lines    OrderLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderLine {
+  id        String   @id @default(uuid())
+  orderId   String
+  itemId    String
+  variantId String?
+  quantity  Float    // Requested quantity (meters)
+  unitPrice Decimal? @db.Decimal(10, 2) // For future finance module
+  width     Float?   // İstenen en (cm)
+
+  // Relations
+  order          Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  item           Item                   @relation(fields: [itemId], references: [id])
+  variant        ItemVariant?           @relation(fields: [variantId], references: [id])
+  allocations    OrderAllocation[]
+  workOrderLinks WorkOrderToOrderLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([itemId])
+  @@map("order_lines")
+}
+
+// =============================================================================
+// 5. WORK ORDER (BATCH) & DYNAMIC ROUTING
+// =============================================================================
+
+model WorkOrder {
+  id                String          @id @default(uuid())
+  batchNumber       String          @unique // Parti Numarası
+  type              WorkOrderType   @default(ORDER_PRODUCTION)
+  width             Float?          // En (cm) — kumaş eni
+  targetQuantity    Float?          // Hedef uzunluk/metraj
+  recipeNo          String?         // Reçete No — boyahane/baskı reçete kodu (renk kodu/varyant)
+  parameters        Json?           // Dynamic params: { "targetWidth": 150, "dyeRecipeCode": "R-123" }
+  status            WorkOrderStatus @default(PLANNED)
+  plannedStartDate  DateTime?       // Planlanan başlangıç tarihi
+  plannedEndDate    DateTime?       // Planlanan termin / bitiş tarihi
+
+  // 3.1 — Rota şablonu referansı (snapshot kopya sonrası bile tutulur; analytics için)
+  routeTemplateId   String?
+  routeTemplate     Route?          @relation(fields: [routeTemplateId], references: [id])
+
+  // 3.3 — Gidilecek boyahane (Customer/SUBCONTRACTOR) — ilk istasyondan bağımsız
+  dyehouseCompanyId String?
+  dyehouseCompany   Customer?       @relation("WorkOrderDyehouse", fields: [dyehouseCompanyId], references: [id])
+
+  // Relations
+  steps         WorkOrderStep[]
+  orderLinks    WorkOrderToOrderLine[]
+  travelerCards TravelerCard[]
+  manifests     Manifest[]
+  dispatches    SubcontractorDispatch[]
+  receipts      SubcontractorReceipt[]
+  swatches      Swatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([routeTemplateId])
+  @@index([dyehouseCompanyId])
+  @@map("work_orders")
+}
+
+model WorkOrderStep {
+  id           String     @id @default(uuid())
+  workOrderId  String
+  stationId    String
+  stepSequence Int // Order in the route: 1, 2, 3
+  status       StepStatus @default(PENDING)
+  stepData     Json? // Station-specific data (e.g. Tambur: { "foldType": "4-kat" })
+  notes        String? // Adıma özel talimat / not
+  skipReason   String? // R6: SKIPPED ise neden
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  // Relations
+  workOrder        WorkOrder @relation(fields: [workOrderId], references: [id])
+  station          Station   @relation(fields: [stationId], references: [id])
+  movements        RollMovement[]
+  cardScans        TravelerCardScan[]
+  dispatches       SubcontractorDispatch[]
+  receipts         SubcontractorReceipt[]
+  operations       RollOperation[]
+  currentRolls     Roll[]         @relation("RollCurrentStep")
+  producedRolls    Roll[]         @relation("RollProducedInStep")
+  detectedErrors   RollError[]    @relation("RollErrorDetectedAt")
+  processedErrors  RollError[]    @relation("RollErrorProcessedAt")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workOrderId, stepSequence])
+  @@index([stationId])
+  @@map("work_order_steps")
+}
+
+/// Join table: WorkOrder ↔ OrderLine (N:N)
+/// 3.2 — `allocatedQty`: bu WO'nun bu sipariş satırından tahsis ettiği metraj
+model WorkOrderToOrderLine {
+  workOrderId  String
+  orderLineId  String
+  allocatedQty Float  @default(0) // Metraj/kg cinsinden tahsis (sipariş birimiyle aynı)
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
+  orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([workOrderId, orderLineId])
+  @@index([orderLineId])
+  @@map("work_order_to_order_lines")
+}
+
+// =============================================================================
+// 6. PRODUCTION DATA - Errors & Defects
+// =============================================================================
+
+/// Top üzerinde tespit edilen hatalar. Kurşun/QC2 istasyonunda açılır,
+/// Tambur istasyonunda karara bağlanır (kesildi/korundu/A1).
+model RollError {
+  id          String  @id @default(uuid())
+  rollId      String
+  startMeter  Float
+  endMeter    Float
+  errorType   String? // Leke, Yirtik etc. (ileride error catalog'a bağlanabilir)
+  isProcessed Boolean @default(false) // Tambur kararı verildi mi?
+  actionTaken String? // "CUT_FOR_SCRAP", "KEPT_AS_A1", "NO_ACTION"
+
+  // Lifecycle — tespit (Kurşun/QC2) ve işlem (Tambur) ayrı izlenir.
+  detectedAtStepId  String?
+  detectedByUserId  String?
+  detectedAt        DateTime  @default(now())
+  processedAtStepId String?
+  processedByUserId String?
+  processedAt       DateTime?
+
+  // Relations
+  roll            Roll           @relation(fields: [rollId], references: [id])
+  detectedAtStep  WorkOrderStep? @relation("RollErrorDetectedAt", fields: [detectedAtStepId], references: [id])
+  processedAtStep WorkOrderStep? @relation("RollErrorProcessedAt", fields: [processedAtStepId], references: [id])
+  detectedBy      User?          @relation("RollErrorDetectedBy", fields: [detectedByUserId], references: [id])
+  processedBy     User?          @relation("RollErrorProcessedBy", fields: [processedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rollId])
+  @@index([detectedAtStepId])
+  @@index([processedAtStepId])
+  @@index([isProcessed])
+  @@map("roll_errors")
+}
+
+/// Top üzerinde yapılan somut işlem log'u (Kurşun geçildi, QC2 bitti, Tambur kararı, paketleme vb.).
+/// Boolean bayrak yerine tarih + operatör + metadata ile tam iz bırakır.
+/// Aynı roll × step × type için tek kayıt (@@unique) — idempotent tekrar basışlarda overwrite edilmez.
+model RollOperation {
+  id              String            @id @default(uuid())
+  rollId          String
+  workOrderStepId String
+  operationType   RollOperationType
+  operatorId      String?
+  metadata        Json? // Operasyona özgü veri (qty, weight, cutPoints, foldType vb.)
+
+  // Relations
+  roll     Roll          @relation(fields: [rollId], references: [id])
+  step     WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
+  operator User?         @relation(fields: [operatorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([rollId, workOrderStepId, operationType])
+  @@index([rollId])
+  @@index([workOrderStepId])
+  @@index([operationType])
+  @@map("roll_operations")
+}
+
+// =============================================================================
+// 7. LOGISTICS & ALLOCATION
+// =============================================================================
+
+model OrderAllocation {
+  id           String @id @default(uuid())
+  orderLineId  String
+  rollId       String
+  allocatedQty Float
+
+  // Relations
+  orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  roll      Roll      @relation(fields: [rollId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderLineId])
+  @@index([rollId])
+  @@map("order_allocations")
+}
+
+model Shipment {
+  id             String         @id @default(uuid())
+  shipmentNumber String         @unique // Irsaliye No / Sevk No
+  customerId     String
+  driverName     String? // Driver name
+  plateNumber    String? // Vehicle plate
+  carrier        String? // Carrier company
+  status         ShipmentStatus @default(PREPARING)
+  shippedAt      DateTime? // Actual departure time
+
+  // Relations
+  customer Customer       @relation(fields: [customerId], references: [id])
+  items    ShipmentItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@map("shipments")
+}
+
+model ShipmentItem {
+  id            String @id @default(uuid())
+  shipmentId    String
+  rollId        String @unique // A roll can only be in one shipment at a time
+  shippedQty    Float // Shipment meterage/weight (historical record for invoicing)
+  shippedWeight Float?
+
+  // Relations
+  shipment Shipment @relation(fields: [shipmentId], references: [id])
+  roll     Roll     @relation(fields: [rollId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shipmentId])
+  @@map("shipment_items")
+}
+
+// =============================================================================
+// 8. FINANCE & MACHINE LOGS (Future Investment)
+// =============================================================================
+
+model CurrentAccount {
+  id         String  @id @default(uuid())
+  customerId String
+  balance    Decimal @default(0.00) @db.Decimal(12, 2)
+  currency   String  @default("TRY")
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@map("current_accounts")
+}
+
+model MachineLog {
+  id        String @id @default(uuid())
+  machineId String
+  logType   String // "STATUS_UPDATE", "MAINTENANCE"
+  details   Json // e.g. { "workingItemCode": "LINE_DESEN_1", "speed": 400 }
+
+  // Relations
+  machine Machine @relation(fields: [machineId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([machineId])
+  @@map("machine_logs")
+}
+
+// =============================================================================
+// 9. REFAKAT KARTI (Traveler Card) — Adım 5
+// =============================================================================
+
+model TravelerCard {
+  id          String             @id @default(uuid())
+  cardNumber  String             @unique // İnsan okur: RK-YYMM-000123
+  barcode     String             @unique // Tarama: RK-YYMM-XXXXXX-C (Code128 uyumlu)
+  workOrderId String
+  version     Int                @default(1) // Aynı WO için kaçıncı basım (reprint)
+  status      TravelerCardStatus @default(ACTIVE)
+  printedAt   DateTime           @default(now())
+  printedById String?
+  voidedAt    DateTime?
+  voidReason  String?
+
+  // Relations
+  workOrder WorkOrder          @relation(fields: [workOrderId], references: [id])
+  printedBy User?              @relation("TravelerCardPrintedBy", fields: [printedById], references: [id])
+  scans     TravelerCardScan[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workOrderId])
+  @@index([barcode])
+  @@index([status])
+  @@map("traveler_cards")
+}
+
+model TravelerCardScan {
+  id              String   @id @default(uuid())
+  cardId          String
+  stationId       String
+  workOrderStepId String?  // Eşleştirilen WO adımı (server-side otomatik çözümlenir)
+  scanType        ScanType
+  scannedAt       DateTime @default(now())
+  scannedById     String?
+  deviceId        String?  // El terminali MAC/serial
+  notes           String?
+
+  // Relations
+  card      TravelerCard   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  station   Station        @relation(fields: [stationId], references: [id])
+  step      WorkOrderStep? @relation(fields: [workOrderStepId], references: [id])
+  scannedBy User?          @relation(fields: [scannedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([cardId])
+  @@index([stationId, scannedAt])
+  @@index([workOrderStepId])
+  @@map("traveler_card_scans")
+}
+
+// =============================================================================
+// 10. ROLL MOVEMENT — Top hareket geçmişi (3.4)
+// =============================================================================
+
+model RollMovement {
+  id              String    @id @default(uuid())
+  rollId          String
+  workOrderStepId String
+  qtyIn           Float     // İstasyona girişteki metraj
+  qtyOut          Float?    // İstasyon çıkışındaki metraj (FINISH/SKIP'te doldurulur)
+  weightIn        Float?
+  weightOut       Float?
+  enteredAt       DateTime  @default(now())
+  exitedAt        DateTime?
+  operatorId      String?
+  notes           String?
+
+  // Relations
+  roll     Roll          @relation(fields: [rollId], references: [id])
+  step     WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
+  operator User?         @relation(fields: [operatorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([rollId])
+  @@index([workOrderStepId])
+  @@index([enteredAt])
+  @@map("roll_movements")
+}
+
+// =============================================================================
+// 10.1 SUBCONTRACTOR (Fason) — Sevk & Mal Kabul
+// =============================================================================
+
+model SubcontractorDispatch {
+  id            String   @id @default(uuid())
+  dispatchNo    String   @unique // SD-YYMM-NNNNNN
+  workOrderId   String
+  stepId        String
+  companyId     String   // Fason firma (Customer/SUBCONTRACTOR)
+  plateNumber   String?
+  driverName    String?
+  dispatchedAt  DateTime @default(now())
+  dispatchedById String?
+  notes         String?
+  totalQty      Float    @default(0) // Toplam sevk edilen metraj (snapshot)
+
+  // Relations
+  workOrder    WorkOrder                   @relation(fields: [workOrderId], references: [id])
+  step         WorkOrderStep               @relation(fields: [stepId], references: [id])
+  company      Customer                    @relation(fields: [companyId], references: [id])
+  dispatchedBy User?                       @relation("DispatchCreatedBy", fields: [dispatchedById], references: [id])
+  items        SubcontractorDispatchItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workOrderId])
+  @@index([stepId])
+  @@index([companyId])
+  @@map("subcontractor_dispatches")
+}
+
+model SubcontractorDispatchItem {
+  id            String @id @default(uuid())
+  dispatchId    String
+  rollId        String
+  dispatchedQty Float
+  dispatchedWeight Float?
+
+  // Relations
+  dispatch     SubcontractorDispatch      @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  roll         Roll                       @relation(fields: [rollId], references: [id])
+  receiptItems SubcontractorReceiptItem[] @relation("ReceiptItemSource")
+
+  createdAt DateTime @default(now())
+
+  @@index([dispatchId])
+  @@index([rollId])
+  @@map("subcontractor_dispatch_items")
+}
+
+model SubcontractorReceipt {
+  id            String   @id @default(uuid())
+  receiptNo     String   @unique // SR-YYMM-NNNNNN
+  manifestNo    String   // İrsaliye no (fason firma tarafından verilir)
+  workOrderId   String
+  stepId        String
+  companyId     String
+  receivedAt    DateTime @default(now())
+  receivedById  String?
+  notes         String?
+  totalIncomingQty Float @default(0) // Gelen toplam metraj
+  firingMeters  Float   @default(0) // Fire / çekme (dispatch - incoming)
+
+  // Relations
+  workOrder  WorkOrder                  @relation(fields: [workOrderId], references: [id])
+  step       WorkOrderStep              @relation(fields: [stepId], references: [id])
+  company    Customer                   @relation(fields: [companyId], references: [id])
+  receivedBy User?                      @relation("ReceiptCreatedBy", fields: [receivedById], references: [id])
+  items      SubcontractorReceiptItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workOrderId])
+  @@index([stepId])
+  @@index([companyId])
+  @@index([manifestNo])
+  @@map("subcontractor_receipts")
+}
+
+model SubcontractorReceiptItem {
+  id                  String @id @default(uuid())
+  receiptId           String
+  newRollId           String @unique // Fason kabulde basılan yeni top
+  sourceDispatchItemId String? // Göz kontrolü ile eşleştirilen kaynak sevk kalemi
+  incomingQty         Float
+  incomingWeight      Float?
+
+  // Relations
+  receipt            SubcontractorReceipt        @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  newRoll            Roll                        @relation(fields: [newRollId], references: [id])
+  sourceDispatchItem SubcontractorDispatchItem?  @relation("ReceiptItemSource", fields: [sourceDispatchItemId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([receiptId])
+  @@index([newRollId])
+  @@index([sourceDispatchItemId])
+  @@map("subcontractor_receipt_items")
+}
+
+// =============================================================================
+// 10.2 SWATCH (Kartela) — Tambur'dan üretilen örnek kart
+// =============================================================================
+
+model Swatch {
+  id           String   @id @default(uuid())
+  cardNumber   String   @unique // SW-YYMM-NNN
+  barcode      String   @unique // SW-YYMM-XXXXXX-C (Crockford checksum)
+  itemId       String
+  variantId    String?
+  width        Float?   // cm
+  length       Float    // cm (örneğin 30cm)
+  workOrderId  String?
+  parentRollId String?
+  purpose      String?  // Müşteri sunumu, arşiv, laboratuvar vb.
+  createdById  String?
+
+  // Relations
+  item       Item         @relation(fields: [itemId], references: [id])
+  variant    ItemVariant? @relation(fields: [variantId], references: [id])
+  workOrder  WorkOrder?   @relation(fields: [workOrderId], references: [id])
+  parentRoll Roll?        @relation("SwatchParentRoll", fields: [parentRollId], references: [id])
+  createdBy  User?        @relation("SwatchCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([itemId])
+  @@index([workOrderId])
+  @@index([parentRollId])
+  @@index([barcode])
+  @@map("swatches")
+}
+
+// =============================================================================
+// 11. MANIFEST (Çeki Listesi) — 3.5
+// =============================================================================
+
+model Manifest {
+  id          String   @id @default(uuid())
+  manifestNo  String   @unique
+  workOrderId String
+  printedAt   DateTime @default(now())
+  printedById String?
+  snapshot    Json     // Yazdırma anındaki roll listesi (immutable belge)
+  notes       String?
+
+  // Relations
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
+  printedBy User?     @relation("ManifestPrintedBy", fields: [printedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workOrderId])
+  @@index([manifestNo])
+  @@map("manifests")
+}
+
+// =============================================================================
+// 12. SYSTEM LOG - Audit Trail
+// =============================================================================
+
+model SystemLog {
+  id        String  @id @default(uuid())
+  userId    String?
+  action    String // "CREATE", "UPDATE", "DELETE"
+  tableName String // e.g. "ORDER", "WORK_ORDER" (entityType in spec)
+  recordId  String // ID of the affected record
+  oldData   Json?
+  newData   Json?
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([tableName, recordId])
+  @@map("system_logs")
+}
