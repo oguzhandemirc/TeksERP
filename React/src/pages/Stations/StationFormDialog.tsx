@@ -14,12 +14,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import type { Station } from "@/types/models";
-import { StationType, stationTypeLabels } from "@/types/enums";
+import {
+  StationType,
+  stationTypeLabels,
+  StationKind,
+  stationKindLabels,
+} from "@/types/enums";
 
 const stationSchema = z.object({
   code: z.string().min(1, "Kod zorunludur"),
   name: z.string().min(1, "İsim zorunludur"),
   type: z.nativeEnum(StationType, { message: "Tür seçiniz" }),
+  kind: z.nativeEnum(StationKind, { message: "Domain rolü seçiniz" }),
   department: z.string().optional(),
 });
 
@@ -34,6 +40,10 @@ interface StationFormDialogProps {
 }
 
 const stationTypeOptions = Object.entries(stationTypeLabels).map(
+  ([value, label]) => ({ value, label }),
+);
+
+const stationKindOptions = Object.entries(stationKindLabels).map(
   ([value, label]) => ({ value, label }),
 );
 
@@ -57,6 +67,7 @@ export default function StationFormDialog({
       code: "",
       name: "",
       type: StationType.INTERNAL,
+      kind: StationKind.OTHER,
       department: "",
     },
   });
@@ -69,9 +80,16 @@ export default function StationFormDialog({
               code: station.code,
               name: station.name,
               type: station.type,
+              kind: station.kind,
               department: station.department ?? "",
             }
-          : { code: "", name: "", type: StationType.INTERNAL, department: "" },
+          : {
+              code: "",
+              name: "",
+              type: StationType.INTERNAL,
+              kind: StationKind.OTHER,
+              department: "",
+            },
       );
     }
   }, [open, station, reset]);
@@ -121,6 +139,23 @@ export default function StationFormDialog({
             />
             {errors.type && (
               <p className="text-sm text-destructive">{errors.type.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="kind" error={!!errors.kind}>Domain Rolü</Label>
+            <Select
+              id="kind"
+              {...register("kind")}
+              options={stationKindOptions}
+            />
+            <p className="text-xs text-muted-foreground">
+              API davranışını belirler. Ör. Kurşun + KK2 istasyonu için{" "}
+              <span className="font-medium">Kurşun + Kalite Kontrol 2</span>,
+              Tambur için <span className="font-medium">Tambur</span> seçin.
+            </p>
+            {errors.kind && (
+              <p className="text-sm text-destructive">{errors.kind.message}</p>
             )}
           </div>
 

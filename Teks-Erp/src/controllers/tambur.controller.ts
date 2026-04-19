@@ -18,6 +18,9 @@ const finalizeSchema = z.object({
     })
   ),
   foldType: z.enum(["2-KAT", "4-KAT"]).optional(),
+  layerCount: z.number().int().positive().max(20).nullish(),
+  cutMode: z.enum(["BY_DEFECT", "FIXED_LENGTH"]).nullish(),
+  cutLengthM: z.number().positive().nullish(),
 });
 
 const allocateSchema = z.object({
@@ -56,6 +59,7 @@ export class TamburController {
     this.service = new TamburService();
     this.getPendingRolls = this.getPendingRolls.bind(this);
     this.getRollForDecision = this.getRollForDecision.bind(this);
+    this.getByCardBarcode = this.getByCardBarcode.bind(this);
     this.finalize = this.finalize.bind(this);
     this.allocate = this.allocate.bind(this);
     this.splitAllocate = this.splitAllocate.bind(this);
@@ -69,6 +73,19 @@ export class TamburController {
   async getPendingRolls(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.getPendingRolls();
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/tambur/by-card/:barcode
+   */
+  async getByCardBarcode(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const barcode = (req.params.barcode as string).trim();
+      const result = await this.service.getByCardBarcode(barcode);
       res.status(200).json(result);
     } catch (error) {
       next(error);

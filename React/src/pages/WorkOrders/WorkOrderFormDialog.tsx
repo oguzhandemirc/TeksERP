@@ -12,6 +12,10 @@ import {
   Square,
   Factory,
   Layers,
+  Lock,
+  Unlock,
+  Calendar,
+  Clock,
 } from "lucide-react";
 import {
   Dialog,
@@ -87,6 +91,7 @@ export default function WorkOrderFormDialog({
   const [routeTemplateId, setRouteTemplateId] = useState<string>("");
   // allocatedQty için map (orderLineId -> qty)
   const [allocations, setAllocations] = useState<Record<string, number>>({});
+  const [isBatchEditable, setIsBatchEditable] = useState(false);
 
   // ── Açık Siparişler ──────────────────────────────────────────────────────
   const { data: openOrdersData, isLoading: ordersLoading } = useQuery({
@@ -146,13 +151,9 @@ export default function WorkOrderFormDialog({
     enabled: open,
   });
 
-  const subcontractorCustomers: Customer[] =
-    (customersData?.data ?? []).filter(
-      (c) =>
-        c.type === "SUBCONTRACTOR" ||
-        c.type === "DYEHOUSE" ||
-        c.type === "CUSTOMER",
-    );
+  const subcontractorCustomers: Customer[] = (
+    customersData?.data ?? []
+  ).filter((c) => c.type === "SUBCONTRACTOR" || c.type === "DYEHOUSE");
 
   const routeOptions =
     routesData?.data?.map((r: Route) => ({
@@ -179,6 +180,7 @@ export default function WorkOrderFormDialog({
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<WOFormValues>({
     resolver: zodResolver(woSchema),
@@ -202,6 +204,7 @@ export default function WorkOrderFormDialog({
       setAllocations({});
       setRouteMode("custom");
       setRouteTemplateId("");
+      setIsBatchEditable(false);
     }
   }
 
@@ -222,6 +225,14 @@ export default function WorkOrderFormDialog({
 
   // ── Sipariş / Kalem Seçimi ───────────────────────────────────────────────
   const selectedLineIds = Object.keys(allocations);
+  const hasOrderAllocation = selectedLineIds.length > 0;
+
+  useEffect(() => {
+    if (hasOrderAllocation) {
+      setValue("width", undefined);
+      setValue("targetQuantity", undefined);
+    }
+  }, [hasOrderAllocation, setValue]);
 
   const getLineIds = (order: Order): string[] =>
     order.lines?.map((l) => l.id) ?? [];
@@ -378,16 +389,28 @@ export default function WorkOrderFormDialog({
                         <Square className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium">
+                        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
+                          <span className="text-sm font-bold text-primary">
                             {order.orderNumber}
                           </span>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs font-semibold text-foreground/90">
                             {order.customer?.name ?? "—"}
                           </span>
+                          <div className="flex items-center gap-3 text-[10px] text-muted-foreground border-l pl-3 ml-1">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              <span>{new Date(order.orderDate).toLocaleDateString("tr-TR")}</span>
+                            </div>
+                            {order.deadline && (
+                              <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
+                                <Clock className="h-3 w-3" />
+                                <span>{new Date(order.deadline).toLocaleDateString("tr-TR")}</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <span className="text-xs font-medium tabular-nums shrink-0">
+                      <span className="text-sm font-bold tabular-nums shrink-0 self-center">
                         {totalQty.toLocaleString("tr-TR")} mt
                       </span>
                     </button>
@@ -479,11 +502,33 @@ export default function WorkOrderFormDialog({
                   (boş bırakılırsa otomatik üretilir)
                 </span>
               </Label>
-              <Input
-                id="batchNumber"
-                {...register("batchNumber")}
-                placeholder="ör: PARTI-2026-001 veya boş bırak"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  id="batchNumber"
+                  {...register("batchNumber")}
+                  disabled={!isBatchEditable}
+                  placeholder={
+                    isBatchEditable
+                      ? "ör: PARTI-2026-001"
+                      : "Otomatik üretilecek..."
+                  }
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 shrink-0 border-dashed"
+                  onClick={() => setIsBatchEditable(!isBatchEditable)}
+                  title={isBatchEditable ? "Kilitle" : "Düzenle"}
+                >
+                  {isBatchEditable ? (
+                    <Unlock className="h-4 w-4 text-primary" />
+                  ) : (
+                    <Lock className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -517,7 +562,10 @@ export default function WorkOrderFormDialog({
                     v === "" || v === undefined ? undefined : Number(v),
                 })}
                 error={!!errors.width}
-                placeholder="ör: 150"
+                disabled={hasOrderAllocation}
+                placeholder={
+                  hasOrderAllocation ? "Siparişten alınacak" : "ör: 150"
+                }
               />
             </div>
 
@@ -549,7 +597,10 @@ export default function WorkOrderFormDialog({
                   setValueAs: (v: string) =>
                     v === "" || v === undefined ? undefined : Number(v),
                 })}
-                placeholder="ör: 5000"
+                disabled={hasOrderAllocation}
+                placeholder={
+                  hasOrderAllocation ? "Siparişten alınacak" : "ör: 5000"
+                }
               />
             </div>
             <div className="space-y-2">

@@ -165,18 +165,21 @@ router.post(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [rollId, stepId, startMeter, endMeter]
+ *             required: [rollId, stepId, startMeter, endMeter, defectTypeId]
  *             properties:
- *               rollId:     { type: string, format: uuid }
- *               stepId:     { type: string, format: uuid }
- *               startMeter: { type: number, example: 120 }
- *               endMeter:   { type: number, example: 125 }
- *               errorType:  { type: string, example: "LEKE" }
+ *               rollId:       { type: string, format: uuid }
+ *               stepId:       { type: string, format: uuid }
+ *               startMeter:   { type: number, example: 120 }
+ *               endMeter:     { type: number, example: 125 }
+ *               defectTypeId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: DefectType.id — operatör kataloğundan seçer, serbest metin kabul edilmez.
  *     responses:
  *       201: { description: Hata kaydı oluşturuldu }
- *       400: { description: Metraj aralığı geçersiz }
+ *       400: { description: Metraj aralığı geçersiz veya hata tipi pasif }
  *       401: { description: Yetkisiz }
- *       404: { description: Top bulunamadı }
+ *       404: { description: Top veya hata tipi bulunamadı }
  *       500: { description: Sunucu hatası }
  */
 router.post(

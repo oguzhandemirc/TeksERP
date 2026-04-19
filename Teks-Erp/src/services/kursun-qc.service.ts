@@ -22,6 +22,14 @@ import {
   StationKind,
 } from "@prisma/client";
 
+interface RollDefectSummary {
+  id: string;
+  startMeter: number;
+  endMeter: number;
+  defectTypeId: string | null;
+  errorType: string | null; // snapshot'lanmış ad (DefectType.name)
+}
+
 interface RollSummary {
   rollId: string;
   barcode: string;
@@ -29,6 +37,7 @@ interface RollSummary {
   kursunApplied: boolean;
   qc2Completed: boolean;
   errorCount: number;
+  defects: RollDefectSummary[];
 }
 
 interface StepSummary {
@@ -243,6 +252,10 @@ export class KursunQcService {
   /**
    * Topta hata tespit et. RollError detectedAtStep/User/At ile kayıt açar.
    * Tambur'da karara bağlanır (isProcessed=true olana kadar pending).
+   *
+   * Hata tipi DefectType kataloğundan seçilir — serbest metin kabul edilmez.
+   * Katalog ileride yeniden adlandırılsa bile historik etiket `errorType`
+   * alanına snapshot olarak yazılır.
    */
   async reportError(
     data: {
@@ -250,7 +263,7 @@ export class KursunQcService {
       stepId: string;
       startMeter: number;
       endMeter: number;
-      errorType?: string | null;
+      defectTypeId: string;
     },
     userId?: string
   ): Promise<ApiResponse<RollError>> {
@@ -268,6 +281,16 @@ export class KursunQcService {
       );
     }
 
+    const defectType = await prisma.defectType.findUnique({
+      where: { id: data.defectTypeId },
+    });
+    if (!defectType) throw AppError.notFound("Hata tipi bulunamadı");
+    if (!defectType.isActive) {
+      throw AppError.badRequest(
+        `Hata tipi pasif durumda (${defectType.name}) — aktif bir tip seçin`
+      );
+    }
+
     await this.assertRollInStep(data.rollId, data.stepId, StationKind.PROCESS_QC);
 
     const err = await prisma.rollError.create({
@@ -275,7 +298,8 @@ export class KursunQcService {
         rollId: data.rollId,
         startMeter: data.startMeter,
         endMeter: data.endMeter,
-        errorType: data.errorType ?? null,
+        defectTypeId: defectType.id,
+        errorType: defectType.name, // snapshot — katalog rename olsa bile sabit kalır
         isProcessed: false,
         detectedAtStepId: data.stepId,
         detectedByUserId: userId ?? null,
@@ -292,14 +316,15 @@ export class KursunQcService {
         stepId: data.stepId,
         startMeter: data.startMeter,
         endMeter: data.endMeter,
-        errorType: data.errorType ?? null,
+        defectTypeId: defectType.id,
+        errorType: defectType.name,
       },
     });
 
     return {
       success: true,
       data: err,
-      message: `Hata kaydı açıldı (${data.startMeter}m–${data.endMeter}m)`,
+      message: `${defectType.name} · ${data.startMeter}m–${data.endMeter}m`,
     };
   }
 
@@ -517,10 +542,17 @@ export class KursunQcService {
         where: { workOrderStepId: stepId, rollId: { in: rollIds } },
         select: { rollId: true, operationType: true },
       }),
-      prisma.rollError.groupBy({
-        by: ["rollId"],
+      prisma.rollError.findMany({
         where: { rollId: { in: rollIds }, detectedAtStepId: stepId },
-        _count: { _all: true },
+        select: {
+          id: true,
+          rollId: true,
+          startMeter: true,
+          endMeter: true,
+          defectTypeId: true,
+          errorType: true,
+        },
+        orderBy: { startMeter: "asc" },
       }),
     ]);
 
@@ -529,19 +561,32 @@ export class KursunQcService {
       if (!opsByRoll.has(o.rollId)) opsByRoll.set(o.rollId, new Set());
       opsByRoll.get(o.rollId)!.add(o.operationType);
     }
-    const errCountByRoll = new Map<string, number>();
-    for (const e of errors) errCountByRoll.set(e.rollId, e._count._all);
+    const defectsByRoll = new Map<string, RollDefectSummary[]>();
+    for (const e of errors) {
+      if (!defectsByRoll.has(e.rollId)) defectsByRoll.set(e.rollId, []);
+      defectsByRoll.get(e.rollId)!.push({
+        id: e.id,
+        startMeter: e.startMeter,
+        endMeter: e.endMeter,
+        defectTypeId: e.defectTypeId,
+        errorType: e.errorType,
+      });
+    }
 
-    const rolls: RollSummary[] = openMovements.map((m) => ({
-      rollId: m.roll.id,
-      barcode: m.roll.barcode,
-      currentQty: m.roll.currentQty,
-      kursunApplied:
-        opsByRoll.get(m.roll.id)?.has(RollOperationType.KURSUN_APPLIED) ?? false,
-      qc2Completed:
-        opsByRoll.get(m.roll.id)?.has(RollOperationType.QC2_COMPLETED) ?? false,
-      errorCount: errCountByRoll.get(m.roll.id) ?? 0,
-    }));
+    const rolls: RollSummary[] = openMovements.map((m) => {
+      const defects = defectsByRoll.get(m.roll.id) ?? [];
+      return {
+        rollId: m.roll.id,
+        barcode: m.roll.barcode,
+        currentQty: m.roll.currentQty,
+        kursunApplied:
+          opsByRoll.get(m.roll.id)?.has(RollOperationType.KURSUN_APPLIED) ?? false,
+        qc2Completed:
+          opsByRoll.get(m.roll.id)?.has(RollOperationType.QC2_COMPLETED) ?? false,
+        errorCount: defects.length,
+        defects,
+      };
+    });
 
     return {
       success: true,

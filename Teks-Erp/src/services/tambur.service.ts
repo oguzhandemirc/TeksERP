@@ -21,6 +21,7 @@ import {
   RollStatus,
   RollError,
   RollOperationType,
+  StationKind,
   Swatch,
 } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
@@ -39,6 +40,38 @@ interface ErrorDecision {
   qualityGrade?: string; // "FIRE", "A1" etc. Only relevant for CUT
 }
 
+/** Cut strategy: operator either cuts only at reported defects, or at a fixed meter interval. */
+type CutMode = "BY_DEFECT" | "FIXED_LENGTH";
+
+interface TamburRollSummary {
+  rollId: string;
+  barcode: string;
+  itemCode: string;
+  itemName: string;
+  variantCode: string | null;
+  variantName: string | null;
+  currentQty: number;
+  width: number | null;
+  qualityGrade: string;
+  errorCount: number;
+  errors: Array<{
+    id: string;
+    startMeter: number;
+    endMeter: number;
+    errorType: string | null;
+  }>;
+}
+
+interface TamburStepSummary {
+  workOrderStepId: string;
+  workOrderId: string;
+  batchNumber: string;
+  stationId: string;
+  stationCode: string;
+  stationName: string;
+  rolls: TamburRollSummary[];
+}
+
 export class TamburService {
   /**
    * Get rolls pending at Tambur station with their unprocessed errors.
@@ -53,6 +86,7 @@ export class TamburService {
       },
       include: {
         item: true,
+        variant: true,
         errors: {
           where: { isProcessed: false },
           orderBy: { startMeter: "asc" },
@@ -71,6 +105,7 @@ export class TamburService {
       where: { id: rollId },
       include: {
         item: true,
+        variant: true,
         errors: {
           where: { isProcessed: false },
           orderBy: { startMeter: "asc" },
@@ -83,6 +118,95 @@ export class TamburService {
     }
 
     return { success: true, data: roll };
+  }
+
+  /**
+   * Refakat kartı barkoduyla TAMBUR adımını çöz ve o adımda şu an bekleyen
+   * rolleri (stok kodu, lot/varyant kodu, en, hata özeti ile birlikte) döndür.
+   *
+   * Operatör tambur tabletine kartı okutur, bu metot hangi iş emrinin Tambur
+   * adımında olduğumuzu ve işlenecek kumaşların listesini verir.
+   */
+  async getByCardBarcode(
+    cardBarcode: string
+  ): Promise<ApiResponse<TamburStepSummary>> {
+    const card = await prisma.travelerCard.findUnique({
+      where: { barcode: cardBarcode },
+      select: { id: true, status: true, workOrderId: true },
+    });
+    if (!card) {
+      throw AppError.notFound(`Refakat kartı bulunamadı: ${cardBarcode}`);
+    }
+    if (card.status !== "ACTIVE") {
+      throw AppError.badRequest(
+        `Bu refakat kartı aktif değil (durum: ${card.status})`
+      );
+    }
+
+    const step = await prisma.workOrderStep.findFirst({
+      where: {
+        workOrderId: card.workOrderId,
+        station: { kind: StationKind.TAMBUR },
+      },
+      include: {
+        station: true,
+        workOrder: { select: { batchNumber: true } },
+      },
+      orderBy: { stepSequence: "asc" },
+    });
+    if (!step) {
+      throw AppError.notFound("Bu iş emrinde Tambur adımı tanımlı değil");
+    }
+
+    // Adıma girmiş ama henüz tamamlanmamış roller (RollMovement.exitedAt = null)
+    const openMovements = await prisma.rollMovement.findMany({
+      where: { workOrderStepId: step.id, exitedAt: null },
+      select: {
+        roll: {
+          include: {
+            item: { select: { code: true, name: true } },
+            variant: { select: { code: true, name: true } },
+            errors: {
+              where: { isProcessed: false },
+              orderBy: { startMeter: "asc" },
+              select: {
+                id: true,
+                startMeter: true,
+                endMeter: true,
+                errorType: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const rolls: TamburRollSummary[] = openMovements.map((m) => ({
+      rollId: m.roll.id,
+      barcode: m.roll.barcode,
+      itemCode: m.roll.item.code,
+      itemName: m.roll.item.name,
+      variantCode: m.roll.variant?.code ?? null,
+      variantName: m.roll.variant?.name ?? null,
+      currentQty: m.roll.currentQty,
+      width: m.roll.width,
+      qualityGrade: m.roll.qualityGrade,
+      errorCount: m.roll.errors.length,
+      errors: m.roll.errors,
+    }));
+
+    return {
+      success: true,
+      data: {
+        workOrderStepId: step.id,
+        workOrderId: step.workOrderId,
+        batchNumber: step.workOrder.batchNumber,
+        stationId: step.stationId,
+        stationCode: step.station.code,
+        stationName: step.station.name,
+        rolls,
+      },
+    };
   }
 
   /**
@@ -100,6 +224,9 @@ export class TamburService {
       netCurrentQty: number;
       decisions: ErrorDecision[];
       foldType?: "2-KAT" | "4-KAT";
+      layerCount?: number | null;
+      cutMode?: CutMode | null;
+      cutLengthM?: number | null;
     },
     userId?: string
   ): Promise<
@@ -196,22 +323,30 @@ export class TamburService {
         processedCount++;
       }
 
-      // foldType'ı ilgili step'in stepData'sına yaz (Tambur step varsayımı)
-      if (data.foldType && roll.currentStepId) {
+      // Tambur parametrelerini (kat, kesim tipi, kesim uzunluğu) step.stepData'ya yaz
+      const hasStepData =
+        data.foldType !== undefined ||
+        data.layerCount != null ||
+        data.cutMode != null ||
+        data.cutLengthM != null;
+      if (hasStepData && roll.currentStepId) {
         const step = await tx.workOrderStep.findUnique({
           where: { id: roll.currentStepId },
           select: { stepData: true },
         });
         const existing = (step?.stepData as Record<string, unknown> | null) ?? {};
+        const merged: Record<string, unknown> = {
+          ...existing,
+          tamburDecidedAt: new Date().toISOString(),
+        };
+        if (data.foldType !== undefined) merged.foldType = data.foldType;
+        if (data.layerCount != null) merged.layerCount = data.layerCount;
+        if (data.cutMode != null) merged.cutMode = data.cutMode;
+        if (data.cutLengthM != null) merged.cutLengthM = data.cutLengthM;
+
         await tx.workOrderStep.update({
           where: { id: roll.currentStepId },
-          data: {
-            stepData: {
-              ...existing,
-              foldType: data.foldType,
-              tamburDecidedAt: new Date().toISOString(),
-            } as Prisma.InputJsonValue,
-          },
+          data: { stepData: merged as Prisma.InputJsonValue },
         });
       }
 
@@ -233,16 +368,52 @@ export class TamburService {
         });
       }
 
-      // Update the original roll with net quantity and PRODUCED status
+      // Sonraki adımı (varsa) bul — normalde Paket/Tartı/Etiket olur.
+      let nextStepId: string | null = null;
+      if (oldStepId) {
+        const currentStep = await tx.workOrderStep.findUnique({
+          where: { id: oldStepId },
+          select: { workOrderId: true, stepSequence: true },
+        });
+        if (currentStep) {
+          const next = await tx.workOrderStep.findFirst({
+            where: {
+              workOrderId: currentStep.workOrderId,
+              stepSequence: { gt: currentStep.stepSequence },
+              status: { not: "SKIPPED" },
+            },
+            orderBy: { stepSequence: "asc" },
+            select: { id: true },
+          });
+          nextStepId = next?.id ?? null;
+        }
+      }
+
+      // Update the original roll — sonraki adım varsa oraya, yoksa PRODUCED'a al.
       const updated = await tx.roll.update({
         where: { id: data.rollId },
         data: {
           currentQty: data.netCurrentQty,
-          status: RollStatus.PRODUCED,
-          currentStepId: null, // Exits Tambur
+          status: nextStepId ? RollStatus.IN_PRODUCTION : RollStatus.PRODUCED,
+          currentStepId: nextStepId,
         },
         include: { item: true },
       });
+
+      // Sonraki adıma RollMovement aç ve step status'u recompute et
+      if (nextStepId) {
+        await tx.rollMovement.create({
+          data: {
+            rollId: data.rollId,
+            workOrderStepId: nextStepId,
+            qtyIn: data.netCurrentQty,
+            weightIn: roll.weightKg,
+            operatorId: userId ?? null,
+            notes: "ENTERED_FROM_TAMBUR",
+          },
+        });
+        await recomputeStepStatus(tx, nextStepId);
+      }
 
       // Per-roll Tambur işlem log'u
       if (oldStepId) {
@@ -261,6 +432,9 @@ export class TamburService {
             operatorId: userId ?? null,
             metadata: {
               foldType: data.foldType ?? null,
+              layerCount: data.layerCount ?? null,
+              cutMode: data.cutMode ?? null,
+              cutLengthM: data.cutLengthM ?? null,
               netCurrentQty: data.netCurrentQty,
               splitCount: splitRolls.length,
               processedErrors: processedCount,

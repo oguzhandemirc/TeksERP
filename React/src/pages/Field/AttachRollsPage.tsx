@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { workOrderService, type AttachRollsResponse } from "@/services/workOrderService";
 import { rollService } from "@/services/rollService";
-import type { WorkOrder } from "@/types/models";
+import type { WorkOrder, OrderLine, Roll } from "@/types/models";
 import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
 import type { WorkOrderStatus, WorkOrderType } from "@/types/enums";
 import { RollStatus } from "@/types/enums";
@@ -19,6 +19,32 @@ const statusColorMap: Record<string, string> = {
   COMPLETED: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   CANCELLED: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
+
+/** Sipariş satırı varyantı: kod ve/veya ad (ör. yalnızca ad: "Gabardin") */
+function orderLineVariantLabel(line: OrderLine | null | undefined): string | null {
+  const v = line?.variant;
+  if (!v) return null;
+  const code = v.code?.trim() ?? "";
+  const name = v.name?.trim() ?? "";
+  if (code && name) return `${code} — ${name}`;
+  if (name) return name;
+  if (code) return code;
+  return null;
+}
+
+/** Top üzerindeki varyant / roll.design (liste kartları için) */
+function rollDesignLabel(roll: Roll): string | null {
+  const v = roll.variant;
+  if (v) {
+    const code = v.code?.trim() ?? "";
+    const name = v.name?.trim() ?? "";
+    if (code && name) return `${code} — ${name}`;
+    if (name) return name;
+    if (code) return code;
+  }
+  const d = roll.design?.trim();
+  return d || null;
+}
 
 export default function AttachRollsPage() {
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(null);
@@ -53,6 +79,19 @@ export default function AttachRollsPage() {
     queryFn: () => workOrderService.getAttachedRolls(selectedWorkOrder!.id),
     enabled: !!selectedWorkOrder,
   });
+
+  // Tam sipariş satırı + varyant bilgisi (liste endpoint'i eski cache / eksik include olabilir)
+  const { data: workOrderDetailRes } = useQuery({
+    queryKey: ["work-order-detail", selectedWorkOrder?.id],
+    queryFn: () => workOrderService.getById(selectedWorkOrder!.id),
+    enabled: !!selectedWorkOrder?.id,
+  });
+
+  const displayWorkOrder: WorkOrder | null = selectedWorkOrder
+    ? workOrderDetailRes?.success && workOrderDetailRes.data
+      ? workOrderDetailRes.data
+      : selectedWorkOrder
+    : null;
 
   const attachMutation = useMutation({
     mutationFn: ({ workOrderId, rollIds }: { workOrderId: string; rollIds: string[] }) => {
@@ -190,64 +229,88 @@ export default function AttachRollsPage() {
 
 
   // AŞAMA 2: Seçili İş Emri Detayı ve Top Bağlama Ekranı
-  if (selectedWorkOrder) {
+  if (selectedWorkOrder && displayWorkOrder) {
     return (
       <div className="space-y-4">
-        {/* Üst Kısım: Geri Butonu ve Sipariş Özeti */}
-        <div className="flex items-start gap-4">
-          <Button variant="outline" size="icon" onClick={handleBack} className="shrink-0">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="bg-card rounded-lg border flex-1 p-4 shadow-sm">
+        {/* Üst Kısım: Geri kartın içinde, başlığın yanında */}
+        <div className="bg-card rounded-lg border p-4 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleBack}
+                  className="shrink-0 mt-0.5"
+                  aria-label="İş emirleri listesine dön"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-bold">{selectedWorkOrder.batchNumber}</h2>
-                  <Badge className={statusColorMap[selectedWorkOrder.status] ?? ""} variant="secondary">
-                    {workOrderStatusLabels[selectedWorkOrder.status as WorkOrderStatus] ?? selectedWorkOrder.status}
+                  <h2 className="text-xl font-bold">{displayWorkOrder.batchNumber}</h2>
+                  <Badge className={statusColorMap[displayWorkOrder.status] ?? ""} variant="secondary">
+                    {workOrderStatusLabels[displayWorkOrder.status as WorkOrderStatus] ?? displayWorkOrder.status}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground flex-wrap">
                   <span className="font-medium text-foreground">
-                    {workOrderTypeLabels[selectedWorkOrder.type as WorkOrderType] ?? selectedWorkOrder.type}
+                    {workOrderTypeLabels[displayWorkOrder.type as WorkOrderType] ?? displayWorkOrder.type}
                   </span>
                   <span>•</span>
-                  <span>İlk İstasyon: {selectedWorkOrder.steps?.[0]?.station?.name ?? "-"}</span>
-                  {selectedWorkOrder.width && (
+                  <span>İlk İstasyon: {displayWorkOrder.steps?.[0]?.station?.name ?? "-"}</span>
+                  {displayWorkOrder.width && (
                     <>
                       <span>•</span>
-                      <span>En: {selectedWorkOrder.width}cm</span>
+                      <span>En: {displayWorkOrder.width}cm</span>
                     </>
                   )}
-                  {selectedWorkOrder.recipeNo && (
+                  {displayWorkOrder.recipeNo && (
                     <>
                       <span>•</span>
-                      <span>Desen: {selectedWorkOrder.recipeNo}</span>
+                      <span>Desen: {displayWorkOrder.recipeNo}</span>
                     </>
                   )}
+                </div>
                 </div>
               </div>
 
               {/* Sipariş Kalemleri (Sağ Taraf / Alt Kısım) */}
-              {selectedWorkOrder.orderLinks && selectedWorkOrder.orderLinks.length > 0 && (
+              {displayWorkOrder.orderLinks && displayWorkOrder.orderLinks.length > 0 && (
                 <div className="bg-muted/50 p-3 rounded-md min-w-[250px]">
                   <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Bağlı Siparişler</h3>
                   <div className="space-y-3">
-                    {Array.from(new Set(selectedWorkOrder.orderLinks.map(link => link.orderLine?.order?.customer?.name).filter(Boolean))).map(customerName => {
-  const customerLinks = selectedWorkOrder.orderLinks!.filter(l => l.orderLine?.order?.customer?.name === customerName);
+                    {Array.from(new Set(displayWorkOrder.orderLinks.map(link => link.orderLine?.order?.customer?.name).filter(Boolean))).map(customerName => {
+  const customerLinks = displayWorkOrder.orderLinks!.filter(l => l.orderLine?.order?.customer?.name === customerName);
   return (
     <div key={customerName as string}>
       <div className="text-sm font-bold text-primary mb-1">{customerName as string}</div>
       <div className="space-y-1">
-        {customerLinks.map((link, idx) => (
+        {customerLinks.map((link, idx) => {
+          const variantText = orderLineVariantLabel(link.orderLine);
+          return (
           <div key={idx} className="flex flex-col gap-0.5 bg-background p-1.5 rounded border border-border/50 text-xs shadow-sm">
             <div className="flex justify-between items-center">
               <span className="font-medium text-blue-600 dark:text-blue-400">#{link.orderLine?.order?.orderNumber}</span>
               <span className="font-semibold">{link.orderLine?.quantity} mt</span>
             </div>
             <div className="text-muted-foreground line-clamp-1">{link.orderLine?.item?.code} - {link.orderLine?.item?.name}</div>
+            <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+              {link.orderLine?.width != null ? (
+                <span className="font-medium text-foreground/80">En: {link.orderLine.width} cm</span>
+              ) : (
+                <span className="text-muted-foreground/70">En: —</span>
+              )}
+              {variantText ? (
+                <span className="line-clamp-1 text-foreground/80" title={variantText}>
+                  Desen/Varyant: {variantText}
+                </span>
+              ) : (
+                <span className="text-muted-foreground/70">Desen/Varyant: —</span>
+              )}
+            </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   )
@@ -256,7 +319,6 @@ export default function AttachRollsPage() {
                 </div>
               )}
             </div>
-          </div>
         </div>
 
         {/* SEPETTEKİ TOPLAR */}
@@ -376,7 +438,12 @@ export default function AttachRollsPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 max-h-[400px] overflow-y-auto pr-1">
-                {stockRolls.map((roll) => (
+                {stockRolls.map((roll) => {
+                  const productLine = roll.item
+                    ? [roll.item.code, roll.item.name].filter(Boolean).join(" · ")
+                    : "";
+                  const desen = rollDesignLabel(roll);
+                  return (
                   <button
                     key={roll.id}
                     onClick={() => toggleStockRollSelection(roll.id)}
@@ -396,9 +463,21 @@ export default function AttachRollsPage() {
                       </div>
                     </div>
                     
-                    <div className="text-xs text-muted-foreground space-y-1 mb-2">
-                      {roll.item && <div className="font-medium text-foreground line-clamp-1">{roll.item.code}</div>}
-                      {(roll.variant?.code || roll.design) && <div>Desen: {roll.variant?.code || roll.design}</div>}
+                    <div className="text-[11px] text-muted-foreground space-y-0.5 mb-2 min-h-0">
+                      {productLine ? (
+                        <div
+                          className="font-medium text-foreground line-clamp-1 leading-tight"
+                          title={productLine}
+                        >
+                          {productLine}
+                        </div>
+                      ) : null}
+                      {desen ? (
+                        <div className="line-clamp-1 leading-tight" title={`Desen: ${desen}`}>
+                          <span className="text-muted-foreground/75">Desen </span>
+                          <span className="text-foreground/90">{desen}</span>
+                        </div>
+                      ) : null}
                     </div>
                     
                     <div className="mt-auto pt-2 border-t flex items-center justify-between">
@@ -409,7 +488,8 @@ export default function AttachRollsPage() {
                       </div>
                     </div>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

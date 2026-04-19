@@ -20,7 +20,7 @@ const reportErrorSchema = z.object({
   stepId: z.string().uuid("Geçersiz adım ID"),
   startMeter: z.number().min(0, "Başlangıç metresi 0 veya daha büyük olmalı"),
   endMeter: z.number().positive("Bitiş metresi pozitif olmalı"),
-  errorType: z.string().max(100).nullish(),
+  defectTypeId: z.string().uuid("Hata tipi seçilmelidir"),
 });
 
 const deleteErrorSchema = z.object({
@@ -118,7 +118,7 @@ export class KursunQcController {
           stepId: body.stepId,
           startMeter: body.startMeter,
           endMeter: body.endMeter,
-          errorType: body.errorType ?? null,
+          defectTypeId: body.defectTypeId,
         },
         req.user?.userId
       );

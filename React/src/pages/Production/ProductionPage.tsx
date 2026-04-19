@@ -78,34 +78,37 @@ export default function ProductionPage() {
               {activeSteps.map((step) => (
                 <div
                   key={step.id}
-                  className="flex items-center gap-4 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950 p-4"
+                  className="flex items-center gap-4 rounded-lg border border-border bg-muted/50 p-4 shadow-sm border-l-4 border-l-primary dark:bg-muted/30"
                 >
                   <div className="shrink-0">
-                    <ArrowRight className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <ArrowRight className="h-5 w-5 text-primary" aria-hidden />
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm">
+                      <span className="font-semibold text-sm text-foreground">
                         {step.station?.code} - {step.station?.name}
                       </span>
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge
+                        variant="outline"
+                        className="text-xs font-medium text-foreground border-border bg-background"
+                      >
                         {stepStatusLabels[step.status as StepStatus] ??
                           step.status}
                       </Badge>
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                       {step.workOrder && (
                         <span>
                           Parti:{" "}
-                          <span className="font-medium text-foreground">
+                          <span className="font-medium text-foreground tabular-nums">
                             {step.workOrder.batchNumber}
                           </span>
                         </span>
                       )}
                       <span>Sıra: #{step.stepSequence}</span>
                       {step.startedAt && (
-                        <span>
+                        <span className="tabular-nums">
                           Başlangıç:{" "}
                           {new Date(step.startedAt).toLocaleString("tr-TR")}
                         </span>

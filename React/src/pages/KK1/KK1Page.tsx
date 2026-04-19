@@ -62,7 +62,7 @@ function LastEntryCard({ entry, onPrint }: { entry: LastEntry; onPrint: () => vo
           <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <code className="text-xs font-mono bg-green-100 dark:bg-green-900 px-1.5 py-0.5 rounded">
+              <code className="text-xs font-mono bg-green-100 text-green-900 dark:bg-green-900 dark:text-green-50 px-2 py-0.5 rounded border border-green-200 dark:border-green-800">
                 {entry.barcode}
               </code>
               <Badge variant="outline" className="text-xs">

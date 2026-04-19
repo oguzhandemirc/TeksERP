@@ -27,6 +27,36 @@ router.get("/pending-rolls", verifyToken, requirePermission("quality:read"), con
 
 /**
  * @openapi
+ * /api/tambur/by-card/{barcode}:
+ *   get:
+ *     tags: [Tambur]
+ *     summary: Refakat kartı ile Tambur adımındaki rolleri çöz
+ *     description: |
+ *       Tambur tabletinde operatör refakat kartını okutur. Bu endpoint, karta bağlı
+ *       iş emrinin Tambur adımında açık olan rolleri stok kodu, lot (varyant) kodu,
+ *       en ve hata özetleriyle birlikte döner.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: barcode
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Tambur adım özeti ve rol listesi }
+ *       400: { description: Kart aktif değil veya Tambur adımı yok }
+ *       404: { description: Refakat kartı bulunamadı }
+ *       500: { description: Sunucu hatası }
+ */
+router.get(
+  "/by-card/:barcode",
+  verifyToken,
+  requirePermission("quality:read"),
+  controller.getByCardBarcode
+);
+
+/**
+ * @openapi
  * /api/tambur/rolls/{rollId}:
  *   get:
  *     tags: [Tambur]
@@ -93,6 +123,22 @@ router.get("/rolls/:rollId", verifyToken, requirePermission("quality:read"), con
  *                       type: string
  *                       description: "Kesilen parçanın kalitesi (FIRE, A1 vb.)"
  *                       default: "FIRE"
+ *               foldType:
+ *                 type: string
+ *                 enum: [2-KAT, 4-KAT]
+ *                 description: Katlama şekli
+ *               layerCount:
+ *                 type: integer
+ *                 description: Kat sayısı (sarım)
+ *                 example: 2
+ *               cutMode:
+ *                 type: string
+ *                 enum: [BY_DEFECT, FIXED_LENGTH]
+ *                 description: Kesim stratejisi — hata noktasında mı, sabit metrede mi
+ *               cutLengthM:
+ *                 type: number
+ *                 description: FIXED_LENGTH ise her kaç metrede bir kesilecek
+ *                 example: 50
  *     responses:
  *       200:
  *         description: Tambur finalizasyonu tamamlandı (orijinal top + kesim topları)

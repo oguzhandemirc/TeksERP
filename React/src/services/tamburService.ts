@@ -8,11 +8,45 @@ export interface ErrorDecision {
   qualityGrade?: string;
 }
 
+export type CutMode = "BY_DEFECT" | "FIXED_LENGTH";
+
 export interface FinalizeRequest {
   rollId: string;
   netCurrentQty: number;
   decisions: ErrorDecision[];
   foldType?: "2-KAT" | "4-KAT";
+  layerCount?: number | null;
+  cutMode?: CutMode | null;
+  cutLengthM?: number | null;
+}
+
+export interface TamburRollSummary {
+  rollId: string;
+  barcode: string;
+  itemCode: string;
+  itemName: string;
+  variantCode: string | null;
+  variantName: string | null;
+  currentQty: number;
+  width: number | null;
+  qualityGrade: string;
+  errorCount: number;
+  errors: Array<{
+    id: string;
+    startMeter: number;
+    endMeter: number;
+    errorType: string | null;
+  }>;
+}
+
+export interface TamburStepSummary {
+  workOrderStepId: string;
+  workOrderId: string;
+  batchNumber: string;
+  stationId: string;
+  stationCode: string;
+  stationName: string;
+  rolls: TamburRollSummary[];
 }
 
 export interface SplitAllocationItem {
@@ -48,6 +82,16 @@ export const tamburService = {
   getRollForDecision(rollId: string): Promise<ApiResponse<Roll>> {
     return apiClient
       .get<ApiResponse<Roll>>(`/api/tambur/rolls/${rollId}`)
+      .then((r) => r.data);
+  },
+
+  getByCardBarcode(
+    barcode: string,
+  ): Promise<ApiResponse<TamburStepSummary>> {
+    return apiClient
+      .get<ApiResponse<TamburStepSummary>>(
+        `/api/tambur/by-card/${encodeURIComponent(barcode)}`,
+      )
       .then((r) => r.data);
   },
 

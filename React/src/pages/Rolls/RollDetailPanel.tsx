@@ -1,14 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { X, AlertTriangle, Package, Barcode } from "lucide-react";
+import { AlertTriangle, Package, Barcode } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { rollService } from "@/services/rollService";
 import { rollStatusLabels } from "@/types/enums";
 import { itemTypeLabels } from "@/types/enums";
 import type { ItemType } from "@/types/enums";
+import { SlideOverPanel, SlideOverContentLoader } from "@/components/ui/SlideOverPanel";
 
 interface RollDetailPanelProps {
   rollId: string | null;
+  isOpen: boolean;
   onClose: () => void;
 }
 
@@ -21,38 +22,29 @@ const statusColorMap: Record<string, string> = {
   SCRAP: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
-export default function RollDetailPanel({ rollId, onClose }: RollDetailPanelProps) {
+export default function RollDetailPanel({ rollId, isOpen, onClose }: RollDetailPanelProps) {
   const { data, isLoading } = useQuery({
     queryKey: ["roll-detail", rollId],
     queryFn: () => rollService.getById(rollId!),
     enabled: !!rollId,
   });
 
-  if (!rollId) return null;
-
   const roll = data?.data;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-40 w-full max-w-md bg-background border-l shadow-xl overflow-y-auto">
-      <div className="sticky top-0 bg-background border-b px-4 py-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Top Detayı</h2>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-
+    <SlideOverPanel
+      title={roll ? `Top Detayı: ${roll.barcode}` : "Top Detayı"}
+      isOpen={isOpen}
+      onClose={onClose}
+    >
       {isLoading ? (
-        <div className="p-6 space-y-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-6 bg-muted animate-pulse rounded" />
-          ))}
-        </div>
+        <SlideOverContentLoader />
       ) : !roll ? (
         <div className="p-6 text-center text-muted-foreground">Top bulunamadı</div>
       ) : (
-        <div className="p-4 space-y-6">
+        <div className="space-y-6">
           {/* Barkod & Durum */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 font-medium">
             <Barcode className="h-5 w-5 text-muted-foreground" />
             <code className="text-sm font-mono bg-muted px-2 py-1 rounded">
               {roll.barcode}
@@ -61,7 +53,6 @@ export default function RollDetailPanel({ rollId, onClose }: RollDetailPanelProp
               {rollStatusLabels[roll.status] ?? roll.status}
             </Badge>
           </div>
-
           {/* Ürün Bilgisi */}
           {roll.item && (
             <div className="rounded-lg border p-3 space-y-2">
@@ -203,6 +194,6 @@ export default function RollDetailPanel({ rollId, onClose }: RollDetailPanelProp
           </div>
         </div>
       )}
-    </div>
+    </SlideOverPanel>
   );
 }

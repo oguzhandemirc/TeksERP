@@ -17,9 +17,14 @@ import {
   BarChart3,
   ScanLine,
   Ticket,
-  LayoutGrid,
   PackageCheck,
   Palette,
+  Plus,
+  AlertTriangle,
+  Sparkles,
+  Warehouse,
+  Layers,
+  Trash2,
 } from "lucide-react";
 
 export interface NavItem {
@@ -79,15 +84,57 @@ export const navigationConfig: NavGroup[] = [
         icon: Route,
         permissions: ["station:read"],
       },
+      {
+        title: "Hata Tipleri",
+        href: "/defect-types",
+        icon: AlertTriangle,
+        permissions: ["quality:read"],
+      },
+      {
+        title: "Kalite Dereceleri",
+        href: "/quality-grades",
+        icon: Sparkles,
+        permissions: ["quality:read"],
+      },
     ],
   },
   {
-    label: "Envanter",
+    label: "Depo",
     items: [
       {
-        title: "Toplar (Rolls)",
+        title: "Toplar (Tümü)",
         href: "/rolls",
         icon: Cylinder,
+        permissions: ["roll:read"],
+      },
+      {
+        title: "Ham Depo",
+        href: "/depo/ham",
+        icon: Layers,
+        permissions: ["roll:read"],
+      },
+      {
+        title: "Mamul Depo",
+        href: "/depo/mamul",
+        icon: Warehouse,
+        permissions: ["roll:read"],
+      },
+      {
+        title: "A1 / 2. Kalite",
+        href: "/depo/a1",
+        icon: Sparkles,
+        permissions: ["roll:read"],
+      },
+      {
+        title: "Fire Deposu",
+        href: "/depo/fire",
+        icon: Trash2,
+        permissions: ["roll:read"],
+      },
+      {
+        title: "Numune Kartelası",
+        href: "/swatches",
+        icon: Palette,
         permissions: ["roll:read"],
       },
     ],
@@ -124,10 +171,10 @@ export const navigationConfig: NavGroup[] = [
     label: "Saha",
     items: [
       {
-        title: "Operatör Merkezi",
-        href: "/operator-hub",
-        icon: LayoutGrid,
-        permissions: ["workorder:read"],
+        title: "İstasyon İşlemleri",
+        href: "/station",
+        icon: Cog,
+        permissions: ["workorder:write"],
       },
       {
         title: "Top Bağlama",
@@ -164,6 +211,12 @@ export const navigationConfig: NavGroup[] = [
         icon: CircleDot,
         permissions: ["quality:read"],
       },
+      {
+        title: "Paket / Tartı / Etiket",
+        href: "/paketleme",
+        icon: PackageCheck,
+        permissions: ["roll:read"],
+      },
     ],
   },
   {
@@ -176,21 +229,22 @@ export const navigationConfig: NavGroup[] = [
         permissions: ["workorder:read"],
       },
       {
+        title: "Yeni Sevk",
+        href: "/subcontractor/dispatches/new",
+        icon: Plus,
+        permissions: ["workorder:write"],
+      },
+      {
         title: "Kabul Belgeleri",
         href: "/subcontractor/receipts",
         icon: PackageCheck,
         permissions: ["workorder:read"],
       },
-    ],
-  },
-  {
-    label: "Numune",
-    items: [
       {
-        title: "Kartela Envanteri",
-        href: "/swatches",
-        icon: Palette,
-        permissions: ["roll:read"],
+        title: "Yeni Kabul",
+        href: "/subcontractor/receipts/new",
+        icon: Plus,
+        permissions: ["workorder:write"],
       },
     ],
   },

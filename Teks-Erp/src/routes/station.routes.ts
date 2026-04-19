@@ -54,6 +54,9 @@ const router = Router();
  *         name: filter[type]
  *         schema: { type: string, enum: [INTERNAL, EXTERNAL] }
  *       - in: query
+ *         name: filter[kind]
+ *         schema: { type: string, enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, PACKAGING, SHIPPING, OTHER] }
+ *       - in: query
  *         name: filter[department]
  *         schema: { type: string }
  *       - in: query
@@ -121,11 +124,16 @@ router.get("/:id", verifyToken, requirePermission("station:read"), stationContro
  *         application/json:
  *           schema:
  *             type: object
- *             required: [code, name, type]
+ *             required: [code, name, type, kind]
  *             properties:
  *               code: { type: string, example: "SARDON_1" }
  *               name: { type: string, example: "Şardon Makinesi" }
  *               type: { type: string, enum: [INTERNAL, EXTERNAL] }
+ *               kind:
+ *                 type: string
+ *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, PACKAGING, SHIPPING, OTHER]
+ *                 description: Domain rolü — API davranış dispatch'i için kullanılır (ör. PROCESS_QC → Kurşun+QC2 akışı, TAMBUR → kesim/karar akışı). Varsayılan OTHER.
+ *                 example: OTHER
  *               department: { type: string, example: "TERBIYE" }
  *     responses:
  *       201:
@@ -146,6 +154,20 @@ router.post("/", verifyToken, requirePermission("station:write"), stationControl
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               code: { type: string }
+ *               name: { type: string }
+ *               type: { type: string, enum: [INTERNAL, EXTERNAL] }
+ *               kind:
+ *                 type: string
+ *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, PACKAGING, SHIPPING, OTHER]
+ *               department: { type: string }
+ *               isActive: { type: boolean }
  *     responses:
  *       200:
  *         description: Güncellendi

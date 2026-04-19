@@ -31,7 +31,7 @@ type ReturnRow = {
   notes: string;
 };
 
-export default function ReceivePanel() {
+export default function ReceiveCreatePage() {
   const qc = useQueryClient();
   const [selectedStepId, setSelectedStepId] = useState("");
   const [manifestNo, setManifestNo] = useState("");
@@ -122,8 +122,12 @@ export default function ReceivePanel() {
     rows.every((r) => r.newQty !== "" && Number(r.newQty) >= 0);
 
   return (
-    <div className="space-y-4">
-      {/* Bekleyen İadeler */}
+    <div className="space-y-4 max-w-4xl mx-auto">
+      <div className="flex items-center gap-2">
+        <PackageCheck className="h-6 w-6 text-primary" />
+        <h1 className="text-2xl font-bold tracking-tight">Fason Mal Kabul</h1>
+      </div>
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -199,7 +203,6 @@ export default function ReceivePanel() {
         </CardContent>
       </Card>
 
-      {/* Kabul Formu */}
       {selectedGroup && (
         <Card>
           <CardHeader>
@@ -215,7 +218,8 @@ export default function ReceivePanel() {
               <div>
                 <strong>Yeni barkod basılmaz.</strong> Her sevk edilen top için
                 dönüşte ölçülen net metrajı girin. Orijinal toplar güncellenir
-                ve bir sonraki istasyona taşınır.
+                ve <strong>otomatik</strong> olarak bir sonraki istasyona
+                taşınır.
               </div>
             </div>
 

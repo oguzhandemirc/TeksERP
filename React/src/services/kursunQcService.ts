@@ -17,7 +17,7 @@ export interface ReportErrorRequest {
   stepId: string;
   startMeter: number;
   endMeter: number;
-  errorType?: string | null;
+  defectTypeId: string;
 }
 
 export const kursunQcService = {

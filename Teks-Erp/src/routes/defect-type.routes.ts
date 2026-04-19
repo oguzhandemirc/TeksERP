@@ -1,0 +1,185 @@
+// =============================================================================
+// TeksERP - Defect Type (Hata Kataloğu) Routes
+// =============================================================================
+// Operatör ekranında butona dönüşen hata tipleri buradan yönetilir.
+// CRUD tamamen BaseController pattern'ı ile çalışır; özel iş kuralı yok.
+
+import { Router } from "express";
+import { BaseController } from "../controllers/base.controller";
+import { BaseService } from "../services/base.service";
+import { verifyToken } from "../middlewares/auth.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
+
+const service = new BaseService({
+  modelName: "defectType",
+  tableName: "DEFECT_TYPE",
+  searchFields: ["code", "name", "description"],
+  defaultInclude: undefined,
+});
+
+const controller = new BaseController(service);
+const router = Router();
+
+/**
+ * @openapi
+ * /api/defect-types:
+ *   get:
+ *     tags: [DefectTypes]
+ *     summary: Hata tipi listesi
+ *     description: |
+ *       Aktif hata tipleri operatör ekranında (Kurşun+QC2) buton olarak çıkar.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer, default: 100 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: filter[severity]
+ *         schema: { type: string, enum: [MINOR, MAJOR, CRITICAL] }
+ *       - in: query
+ *         name: filter[isActive]
+ *         schema: { type: string, enum: [true, false] }
+ *     responses:
+ *       200:
+ *         description: Sayfalanmış hata tipi listesi
+ */
+router.get("/", verifyToken, requirePermission("quality:read"), controller.findAll);
+
+/**
+ * @openapi
+ * /api/defect-types/{id}:
+ *   get:
+ *     tags: [DefectTypes]
+ *     summary: Hata tipi detayı
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Hata tipi detayı
+ *       404:
+ *         description: Kayıt bulunamadı
+ */
+router.get("/:id", verifyToken, requirePermission("quality:read"), controller.findById);
+
+/**
+ * @openapi
+ * /api/defect-types:
+ *   post:
+ *     tags: [DefectTypes]
+ *     summary: Yeni hata tipi oluştur
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code, name]
+ *             properties:
+ *               code: { type: string, example: "LEKE" }
+ *               name: { type: string, example: "Leke" }
+ *               description: { type: string, example: "Boya/kir lekesi" }
+ *               severity:
+ *                 type: string
+ *                 enum: [MINOR, MAJOR, CRITICAL]
+ *                 description: UI renklendirme / öncelik için opsiyonel.
+ *     responses:
+ *       201:
+ *         description: Hata tipi oluşturuldu
+ *       409:
+ *         description: Kod zaten mevcut
+ */
+router.post("/", verifyToken, requirePermission("quality:write"), controller.create);
+
+/**
+ * @openapi
+ * /api/defect-types/{id}:
+ *   patch:
+ *     tags: [DefectTypes]
+ *     summary: Hata tipini güncelle
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               description: { type: string }
+ *               severity: { type: string, enum: [MINOR, MAJOR, CRITICAL] }
+ *               isActive: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Güncellendi
+ */
+router.patch("/:id", verifyToken, requirePermission("quality:write"), controller.update);
+
+/**
+ * @openapi
+ * /api/defect-types/{id}:
+ *   delete:
+ *     tags: [DefectTypes]
+ *     summary: Hata tipini pasife al
+ *     description: Soft-delete — historik RollError snapshot'ları (errorType alanı) korunur.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Pasife alındı
+ */
+router.delete("/:id", verifyToken, requirePermission("quality:write"), controller.remove);
+
+/**
+ * @openapi
+ * /api/defect-types/{id}/permanent:
+ *   delete:
+ *     tags: [DefectTypes]
+ *     summary: Hata tipini kalıcı olarak sil
+ *     description: |
+ *       Geri alınamaz. Daha önce bu tipi kullanmış RollError kayıtlarında
+ *       `defectTypeId` NULL olur ancak `errorType` (name snapshot) korunur.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Kalıcı olarak silindi
+ *       404:
+ *         description: Kayıt bulunamadı
+ */
+router.delete(
+  "/:id/permanent",
+  verifyToken,
+  requirePermission("quality:write"),
+  controller.hardRemove,
+);
+
+export default router;

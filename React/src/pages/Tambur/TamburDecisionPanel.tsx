@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Layers,
   Palette,
+  Settings2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   tamburService,
   type ErrorDecision,
+  type CutMode,
 } from "@/services/tamburService";
 import { swatchService } from "@/services/swatchService";
 import type { RollError } from "@/types/models";
@@ -48,6 +50,9 @@ export default function TamburDecisionPanel({
   >({});
   const [netQty, setNetQty] = useState("");
   const [foldType, setFoldType] = useState<"2-KAT" | "4-KAT">("2-KAT");
+  const [layerCount, setLayerCount] = useState<number>(2);
+  const [cutMode, setCutMode] = useState<CutMode>("BY_DEFECT");
+  const [cutLengthM, setCutLengthM] = useState("50");
   const [showSwatch, setShowSwatch] = useState(false);
   const [swatchLength, setSwatchLength] = useState("0.3");
   const [swatchCount, setSwatchCount] = useState("1");
@@ -89,6 +94,9 @@ export default function TamburDecisionPanel({
         rollId,
         netCurrentQty: Number(netQty),
         foldType,
+        layerCount,
+        cutMode,
+        cutLengthM: cutMode === "FIXED_LENGTH" ? Number(cutLengthM) : null,
         decisions: decisionArray,
       });
     },
@@ -98,6 +106,7 @@ export default function TamburDecisionPanel({
         res.message ?? `Tambur tamamlandı. ${splitCount} kesim yapıldı.`,
       );
       qc.invalidateQueries({ queryKey: ["tambur-pending"] });
+      qc.invalidateQueries({ queryKey: ["packaging-pending"] });
       qc.invalidateQueries({ queryKey: ["rolls"] });
       onBack();
     },
@@ -180,23 +189,46 @@ export default function TamburDecisionPanel({
         </Button>
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-bold truncate">{roll.barcode}</h2>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground truncate">
             {roll.item?.code} — {roll.item?.name}
           </p>
+          <div className="flex gap-1.5 flex-wrap mt-1">
+            {roll.variant?.code && (
+              <Badge variant="outline" className="text-xs">
+                Lot: {roll.variant.code}
+              </Badge>
+            )}
+            {roll.qualityGrade && (
+              <Badge variant="secondary" className="text-xs">
+                {roll.qualityGrade}
+              </Badge>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Roll Summary */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground">Mevcut Metraj</p>
+            <p className="text-xs text-muted-foreground">Metraj</p>
             <p className="text-2xl font-bold">{roll.currentQty}m</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground">Hata Sayısı</p>
+            <p className="text-xs text-muted-foreground">En</p>
+            <p className="text-2xl font-bold">
+              {roll.width != null ? `${roll.width}` : "—"}
+              {roll.width != null && (
+                <span className="text-sm font-normal ml-1">cm</span>
+              )}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 text-center">
+            <p className="text-xs text-muted-foreground">Hata</p>
             <p className="text-2xl font-bold text-orange-600">
               {errors.length}
             </p>
@@ -312,29 +344,110 @@ export default function TamburDecisionPanel({
         })}
       </div>
 
-      {/* Fold Type */}
+      {/* Sarım (Kat) + Katlama */}
+      <Card>
+        <CardContent className="p-4 space-y-4">
+          <Label className="text-sm font-semibold flex items-center gap-2">
+            <Layers className="h-4 w-4" />
+            Sarım ve Katlama
+          </Label>
+
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Kat Sayısı (Sarım)</p>
+            <div className="grid grid-cols-6 gap-2">
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setLayerCount(n)}
+                  className={`h-12 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+                    layerCount === n
+                      ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/40"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Katlama Şekli</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(["2-KAT", "4-KAT"] as const).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setFoldType(opt)}
+                  className={`h-12 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+                    foldType === opt
+                      ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/40"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Kesim Stratejisi */}
       <Card>
         <CardContent className="p-4 space-y-3">
           <Label className="text-sm font-semibold flex items-center gap-2">
-            <Layers className="h-4 w-4" />
-            Katlama Şekli
+            <Settings2 className="h-4 w-4" />
+            Kesim Stratejisi
           </Label>
           <div className="grid grid-cols-2 gap-2">
-            {(["2-KAT", "4-KAT"] as const).map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setFoldType(opt)}
-                className={`h-14 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
-                  foldType === opt
-                    ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/40"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() => setCutMode("BY_DEFECT")}
+              className={`h-14 rounded-lg text-xs font-semibold transition-all cursor-pointer flex flex-col items-center justify-center ${
+                cutMode === "BY_DEFECT"
+                  ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/40"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              <span>Hata Noktasında</span>
+              <span className="text-[10px] opacity-80 font-normal mt-0.5">
+                (yalnız işaretli yerler)
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCutMode("FIXED_LENGTH")}
+              className={`h-14 rounded-lg text-xs font-semibold transition-all cursor-pointer flex flex-col items-center justify-center ${
+                cutMode === "FIXED_LENGTH"
+                  ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/40"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              <span>Sabit Metrede</span>
+              <span className="text-[10px] opacity-80 font-normal mt-0.5">
+                (her X m'de bir)
+              </span>
+            </button>
           </div>
+
+          {cutMode === "FIXED_LENGTH" && (
+            <div className="space-y-1 pt-2">
+              <Label htmlFor="cutLen" className="text-xs">
+                Her kaç metrede bir kesilecek?
+              </Label>
+              <Input
+                id="cutLen"
+                type="number"
+                step="1"
+                min="1"
+                value={cutLengthM}
+                onChange={(e) => setCutLengthM(e.target.value)}
+                className="h-12 text-lg"
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -451,7 +564,7 @@ export default function TamburDecisionPanel({
         ) : (
           <CheckCircle2 className="h-5 w-5" />
         )}
-        Tambur Onayla ({errors.length} hata, {cutCount} kesim)
+        Bitti — Paket/Tartıya Gönder ({errors.length} hata, {cutCount} kesim)
       </Button>
     </div>
   );

@@ -1,24 +1,3 @@
-export const StationKind = {
-  RAW_QC: "RAW_QC",
-  PROCESS_QC: "PROCESS_QC",
-  TAMBUR: "TAMBUR",
-  SUBCONTRACTOR: "SUBCONTRACTOR",
-  PACKAGING: "PACKAGING",
-  SHIPPING: "SHIPPING",
-  OTHER: "OTHER",
-} as const;
-export type StationKind = (typeof StationKind)[keyof typeof StationKind];
-
-export const stationKindLabels: Record<StationKind, string> = {
-  RAW_QC: "Ham Kalite Kontrol (KK1)",
-  PROCESS_QC: "Kurşun + Kalite Kontrol 2",
-  TAMBUR: "Tambur",
-  SUBCONTRACTOR: "Fason",
-  PACKAGING: "Paketleme",
-  SHIPPING: "Sevkiyat",
-  OTHER: "Diğer",
-};
-
 export const RollOperationType = {
   KURSUN_APPLIED: "KURSUN_APPLIED",
   QC2_COMPLETED: "QC2_COMPLETED",
@@ -40,6 +19,14 @@ export interface RollOperation {
   createdAt: string;
 }
 
+export interface KursunQcDefectSummary {
+  id: string;
+  startMeter: number;
+  endMeter: number;
+  defectTypeId: string | null;
+  errorType: string | null; // DefectType.name snapshot
+}
+
 export interface KursunQcRollSummary {
   rollId: string;
   barcode: string;
@@ -47,6 +34,7 @@ export interface KursunQcRollSummary {
   kursunApplied: boolean;
   qc2Completed: boolean;
   errorCount: number;
+  defects: KursunQcDefectSummary[];
 }
 
 export interface KursunQcStepSummary {

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Pencil, Trash2, X, Plus, Factory, RefreshCw } from "lucide-react";
+import { Pencil, Trash2, X, Plus, AlertTriangle, RefreshCw } from "lucide-react";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useCrudMutations } from "@/hooks/useCrudMutations";
 import {
@@ -14,26 +14,28 @@ import {
 } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { stationService } from "@/services/stationService";
-import type { Station } from "@/types/models";
-import { stationTypeLabels, StationType, stationKindLabels } from "@/types/enums";
-import StationFormDialog from "./StationFormDialog";
+import { defectTypeService } from "@/services/defectTypeService";
+import type { DefectType } from "@/types/models";
+import DefectTypeFormDialog from "./DefectTypeFormDialog";
+
+const severityLabels: Record<string, string> = {
+  MINOR: "Düşük",
+  MAJOR: "Orta",
+  CRITICAL: "Kritik",
+};
+
+const severityColor: Record<string, string> = {
+  MINOR: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200",
+  MAJOR: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  CRITICAL: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+};
 
 const filterConfigs: ColumnFilterConfig[] = [
   {
-    id: "type",
-    label: "Tür",
+    id: "severity",
+    label: "Önem",
     type: "select",
-    options: Object.entries(stationTypeLabels).map(([value, label]) => ({
-      value,
-      label,
-    })),
-  },
-  {
-    id: "kind",
-    label: "Domain Rolü",
-    type: "select",
-    options: Object.entries(stationKindLabels).map(([value, label]) => ({
+    options: Object.entries(severityLabels).map(([value, label]) => ({
       value,
       label,
     })),
@@ -49,73 +51,60 @@ const filterConfigs: ColumnFilterConfig[] = [
   },
 ];
 
-const typeColorMap: Record<string, string> = {
-  [StationType.INTERNAL]: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
-  [StationType.EXTERNAL]: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
-};
-
-export default function StationsPage() {
+export default function DefectTypesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editStation, setEditStation] = useState<Station | null>(null);
+  const [editDefect, setEditDefect] = useState<DefectType | null>(null);
 
-  const { createMutation, updateMutation, removeMutation, hardRemoveMutation, activateMutation } = useCrudMutations({
-    service: stationService,
-    queryKey: "stations",
-    entityName: "İstasyon",
+  const {
+    createMutation,
+    updateMutation,
+    removeMutation,
+    hardRemoveMutation,
+    activateMutation,
+  } = useCrudMutations({
+    service: defectTypeService,
+    queryKey: "defect-types",
+    entityName: "Hata Tipi",
   });
 
-  const columns = useMemo<ColumnDef<Station, unknown>[]>(
+  const columns = useMemo<ColumnDef<DefectType, unknown>[]>(
     () => [
-      getSelectionColumn<Station>(),
+      getSelectionColumn<DefectType>(),
       {
         accessorKey: "code",
         header: "Kod",
-        size: 140,
+        size: 160,
+        cell: ({ getValue }) => (
+          <code className="font-mono text-xs">{getValue<string>()}</code>
+        ),
       },
       {
         accessorKey: "name",
-        header: "İsim",
+        header: "Görünen Ad",
         size: 220,
       },
       {
-        accessorKey: "type",
-        header: "Tür",
-        size: 140,
+        accessorKey: "severity",
+        header: "Önem",
+        size: 110,
         cell: ({ getValue }) => {
-          const val = getValue<string>();
+          const val = getValue<string | null>();
+          if (!val) return <span className="text-muted-foreground">—</span>;
           return (
-            <Badge className={typeColorMap[val] ?? ""} variant="secondary">
-              {stationTypeLabels[val as keyof typeof stationTypeLabels] ?? val}
+            <Badge className={severityColor[val] ?? ""} variant="secondary">
+              {severityLabels[val] ?? val}
             </Badge>
           );
         },
       },
       {
-        accessorKey: "kind",
-        header: "Domain Rolü",
-        size: 200,
+        accessorKey: "description",
+        header: "Açıklama",
+        size: 300,
         cell: ({ getValue }) => {
-          const val = getValue<string>();
-          return (
-            <Badge variant="outline">
-              {stationKindLabels[val as keyof typeof stationKindLabels] ?? val}
-            </Badge>
-          );
+          const val = getValue<string | null>();
+          return val ?? <span className="text-muted-foreground">—</span>;
         },
-      },
-      {
-        accessorKey: "department",
-        header: "Departman",
-        size: 140,
-        cell: ({ getValue }) => getValue<string | null>() ?? "—",
-      },
-      {
-        id: "machineCount",
-        header: "Makine",
-        size: 90,
-        cell: ({ row }) => (
-          <Badge variant="outline">{row.original.machines?.length ?? 0}</Badge>
-        ),
       },
       {
         accessorKey: "isActive",
@@ -140,7 +129,7 @@ export default function StationsPage() {
               size="icon"
               onClick={(e) => {
                 e.stopPropagation();
-                setEditStation(row.original);
+                setEditDefect(row.original);
                 setDialogOpen(true);
               }}
             >
@@ -153,7 +142,11 @@ export default function StationsPage() {
                 title="Pasife Al"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (confirm("Bu istasyonu pasife almak istediğinize emin misiniz?")) {
+                  if (
+                    confirm(
+                      "Bu hata tipini pasife almak istediğinize emin misiniz? Operatör ekranında buton olarak görünmeyecek.",
+                    )
+                  ) {
                     removeMutation.mutate(row.original.id);
                   }
                 }}
@@ -167,9 +160,7 @@ export default function StationsPage() {
                 title="Aktif Et"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (confirm("Bu istasyonu tekrar aktif etmek istediğinize emin misiniz?")) {
-                    activateMutation.mutate(row.original.id);
-                  }
+                  activateMutation.mutate(row.original.id);
                 }}
               >
                 <RefreshCw className="h-4 w-4 text-green-600" />
@@ -181,7 +172,11 @@ export default function StationsPage() {
               title="Kalıcı Sil"
               onClick={(e) => {
                 e.stopPropagation();
-                if (confirm("DİKKAT: Bu istasyonu kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) {
+                if (
+                  confirm(
+                    "DİKKAT: Bu hata tipini kalıcı olarak silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz. Daha önce bu tip kullanılarak oluşturulmuş hata kayıtları, görsel etiketlerini koruyacak fakat bağlantı kesilecek.",
+                  )
+                ) {
                   hardRemoveMutation.mutate(row.original.id);
                 }
               }}
@@ -196,22 +191,29 @@ export default function StationsPage() {
   );
 
   const dt = useDataTable({
-    queryKey: "stations",
-    fetchFn: stationService.getAll,
+    queryKey: "defect-types",
+    fetchFn: defectTypeService.getAll,
     columns,
     defaultSortBy: "code",
     defaultSortOrder: "asc",
   });
 
-  const handleSubmit = (data: Partial<Station>) => {
-    if (editStation) {
+  const handleSubmit = (data: Partial<DefectType>) => {
+    if (editDefect) {
       updateMutation.mutate(
-        { id: editStation.id, data },
-        { onSuccess: () => { setDialogOpen(false); setEditStation(null); } },
+        { id: editDefect.id, data },
+        {
+          onSuccess: () => {
+            setDialogOpen(false);
+            setEditDefect(null);
+          },
+        },
       );
     } else {
       createMutation.mutate(data, {
-        onSuccess: () => { setDialogOpen(false); },
+        onSuccess: () => {
+          setDialogOpen(false);
+        },
       });
     }
   };
@@ -220,24 +222,30 @@ export default function StationsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Factory className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold tracking-tight">İstasyonlar</h1>
+          <AlertTriangle className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight">Hata Tipleri</h1>
         </div>
         <Button
           onClick={() => {
-            setEditStation(null);
+            setEditDefect(null);
             setDialogOpen(true);
           }}
         >
           <Plus className="h-4 w-4 mr-1" />
-          Yeni İstasyon
+          Yeni Hata Tipi
         </Button>
       </div>
+
+      <p className="text-sm text-muted-foreground">
+        Buradaki aktif hata tipleri operatör ekranında (Kurşun + KK2) buton
+        olarak çıkar. Pasife alınan tipler yeni kayıtlarda kullanılamaz ancak
+        historik verilerde etiket olarak korunur.
+      </p>
 
       <DataTableToolbar
         search={dt.search}
         onSearchChange={dt.setSearch}
-        searchPlaceholder="Kod veya isimde ara..."
+        searchPlaceholder="Kod, isim veya açıklamada ara..."
         filters={filterConfigs}
         activeFilters={dt.activeFilters}
         onFilterChange={dt.setFilter}
@@ -247,23 +255,28 @@ export default function StationsPage() {
         <DataTableExport
           data={dt.data}
           selectedData={dt.selectedRows}
-          filename="istasyonlar"
+          filename="hata-tipleri"
           columns={[
             { header: "Kod", accessor: "code" },
-            { header: "İsim", accessor: "name" },
-            { header: "Tür", accessor: (row: Station) => stationTypeLabels[row.type] },
-            { header: "Domain Rolü", accessor: (row: Station) => stationKindLabels[row.kind] },
-            { header: "Departman", accessor: "department" },
-            { header: "Makine Sayısı", accessor: (row: Station) => String(row.machines?.length ?? 0) },
-            { header: "Durum", accessor: (row: Station) => row.isActive ? "Aktif" : "Pasif" },
+            { header: "Görünen Ad", accessor: "name" },
+            {
+              header: "Önem",
+              accessor: (row: DefectType) =>
+                row.severity ? severityLabels[row.severity] ?? row.severity : "",
+            },
+            { header: "Açıklama", accessor: "description" },
+            {
+              header: "Durum",
+              accessor: (row: DefectType) => (row.isActive ? "Aktif" : "Pasif"),
+            },
           ]}
         />
       </DataTableToolbar>
 
       {dt.isLoading ? (
-        <DataTableSkeleton columnCount={8} rowCount={10} />
+        <DataTableSkeleton columnCount={7} rowCount={10} />
       ) : (
-        <DataTable table={dt.table} columnCount={8} isFetching={dt.isFetching} />
+        <DataTable table={dt.table} columnCount={7} isFetching={dt.isFetching} />
       )}
 
       <DataTablePagination
@@ -276,13 +289,13 @@ export default function StationsPage() {
         selectedCount={dt.selectedCount}
       />
 
-      <StationFormDialog
+      <DefectTypeFormDialog
         open={dialogOpen}
         onOpenChange={(open) => {
           setDialogOpen(open);
-          if (!open) setEditStation(null);
+          if (!open) setEditDefect(null);
         }}
-        station={editStation}
+        defectType={editDefect}
         onSubmit={handleSubmit}
         isLoading={createMutation.isPending || updateMutation.isPending}
       />

@@ -9,6 +9,7 @@ import {
   Building2,
   Ruler,
   FileText,
+  Cog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,7 @@ import {
 } from "@/types/enums";
 import type { StepInfoResponse } from "@/types/models";
 
-export default function StationPanel() {
+export default function StationPage() {
   const [barcode, setBarcode] = useState("");
   const [stationId, setStationId] = useState("");
   const [info, setInfo] = useState<StepInfoResponse | null>(null);
@@ -83,12 +84,16 @@ export default function StationPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Planlama Notu ve Bilgi Önizleme */}
+      <div className="flex items-center gap-2">
+        <Cog className="h-6 w-6 text-primary" />
+        <h1 className="text-2xl font-bold tracking-tight">İstasyon İşlemi</h1>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Info className="h-5 w-5" />
-            Adım Bilgi Önizleme (Tablet)
+            Adım Bilgi Önizleme
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -166,9 +171,7 @@ export default function StationPanel() {
                       Bağlı Siparişler:{" "}
                       {info.workOrder.orderLinks
                         .map(
-                          (l) =>
-                            l.orderLine?.order?.orderNumber ??
-                            "?",
+                          (l) => l.orderLine?.order?.orderNumber ?? "?",
                         )
                         .join(", ")}
                     </div>
@@ -239,7 +242,7 @@ export default function StationPanel() {
                           <p className="text-[11px] text-purple-700 dark:text-purple-300">
                             Dış istasyonda START/FINISH kullanılmaz. Sevk:
                             &ldquo;Fason Sevk&rdquo; · Mal kabul: &ldquo;Fason
-                            Mal Kabul&rdquo; sekmeleri.
+                            Mal Kabul&rdquo; sayfalarından yapılır.
                           </p>
                         )}
                         {info.currentStep.notes && (
@@ -292,7 +295,7 @@ export default function StationPanel() {
         </CardContent>
       </Card>
 
-      {/* Eylem Paneli — mevcut StepActionPanel yeniden kullanılıyor */}
+      {/* Başlat / Bitir / Atla */}
       <StepActionPanel />
     </div>
   );

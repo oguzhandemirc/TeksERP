@@ -2,6 +2,7 @@ import type {
   ItemType,
   CompanyType,
   StationType,
+  StationKind,
   RollStatus,
   OrderStatus,
   WorkOrderStatus,
@@ -49,6 +50,7 @@ export interface Station {
   code: string;
   name: string;
   type: StationType;
+  kind: StationKind;
   department: string | null;
   isActive: boolean;
   machines?: Machine[];
@@ -120,12 +122,37 @@ export interface Roll {
   updatedAt: string;
 }
 
+export interface DefectType {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  severity: "MINOR" | "MAJOR" | "CRITICAL" | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QualityGrade {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RollError {
   id: string;
   rollId: string;
   startMeter: number;
   endMeter: number;
-  errorType: string | null;
+  defectTypeId: string | null;
+  defectType?: DefectType | null;
+  errorType: string | null; // DefectType.name snapshot (kayıt anında donar)
   isProcessed: boolean;
   actionTaken: string | null;
   createdAt: string;

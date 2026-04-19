@@ -171,6 +171,29 @@ export class WorkOrderService {
       }));
     }
 
+    // Paket/Tartı/Etiket zorunlu — rota son adımı PACKAGING değilse otomatik ekle.
+    // (Tambur sonrası bu adımda kilo girilip etiket basılıyor.)
+    const stationKinds = await prisma.station.findMany({
+      where: { id: { in: finalSteps.map((s) => s.stationId) } },
+      select: { id: true, kind: true },
+    });
+    const kindById = new Map(stationKinds.map((s) => [s.id, s.kind]));
+    const hasPackaging = finalSteps.some(
+      (s) => kindById.get(s.stationId) === "PACKAGING"
+    );
+    if (!hasPackaging) {
+      const packagingStation = await prisma.station.findFirst({
+        where: { kind: "PACKAGING", isActive: true },
+        orderBy: { createdAt: "asc" },
+      });
+      if (!packagingStation) {
+        throw AppError.badRequest(
+          "Aktif bir Paketleme istasyonu tanımlı değil (StationKind.PACKAGING)"
+        );
+      }
+      finalSteps.push({ stationId: packagingStation.id, notes: null });
+    }
+
     // ── Sipariş bağları + tahsis miktarları (3.2) ───────────────────────────
     let allocations: { orderLineId: string; allocatedQty: number }[] = [];
     if (data.orderLineAllocations && data.orderLineAllocations.length > 0) {
@@ -283,7 +306,17 @@ export class WorkOrderService {
         },
         include: {
           steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
-          orderLinks: { include: { orderLine: { include: { order: true, item: true } } } },
+          orderLinks: {
+            include: {
+              orderLine: {
+                include: {
+                  order: { include: { customer: true } },
+                  item: true,
+                  variant: true,
+                },
+              },
+            },
+          },
           routeTemplate: true,
           dyehouseCompany: true,
         },
@@ -357,7 +390,17 @@ export class WorkOrderService {
         take,
         include: {
           steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
-          orderLinks: { include: { orderLine: { include: { order: true, item: true } } } },
+          orderLinks: {
+            include: {
+              orderLine: {
+                include: {
+                  order: { include: { customer: true } },
+                  item: true,
+                  variant: true,
+                },
+              },
+            },
+          },
         },
       }),
       prisma.workOrder.count({ where }),
@@ -383,7 +426,17 @@ export class WorkOrderService {
       where: { id },
       include: {
         steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
-        orderLinks: { include: { orderLine: { include: { order: true, item: true } } } },
+        orderLinks: {
+            include: {
+              orderLine: {
+                include: {
+                  order: { include: { customer: true } },
+                  item: true,
+                  variant: true,
+                },
+              },
+            },
+          },
       },
     });
 
@@ -878,6 +931,7 @@ export class WorkOrderService {
               include: {
                 order: { include: { customer: true } },
                 item: true,
+                variant: true,
               },
             },
           },
@@ -918,9 +972,13 @@ export class WorkOrderService {
   }
 
   /**
-   * Generate Manifest / Çeki Listesi data.
+   * Canlı önizleme — snapshot'a bakmaz, mevcut roll durumunu hesaplar.
+   * `createManifest` (yeni belge basma) ve henüz Manifest kaydı bulunmayan
+   * `getManifest` çağrıları bu yardımcıyı kullanır.
    */
-  async getManifest(workOrderId: string): Promise<ApiResponse<Record<string, unknown> | null>> {
+  private async computeLiveManifest(
+    workOrderId: string
+  ): Promise<Record<string, unknown> | null> {
     const wo = await prisma.workOrder.findUnique({
       where: { id: workOrderId },
       include: {
@@ -929,25 +987,14 @@ export class WorkOrderService {
           orderBy: { stepSequence: "asc" },
         },
         dyehouseCompany: true,
-        orderLinks: {
-          include: {
-            orderLine: {
-              include: {
-                order: { include: { customer: true } },
-                item: true,
-              },
-            },
-          },
-        },
       },
     });
-
-    if (!wo) {
-      return { success: false, data: null, message: "İş emri bulunamadı" };
-    }
+    if (!wo) return null;
 
     const rolls = await prisma.roll.findMany({
       where: {
+        parentRollId: null,
+        status: { notIn: [RollStatus.SCRAP, RollStatus.A1_STOCK, RollStatus.SHIPPED] },
         OR: [
           { producedInStepId: { in: wo.steps.map((s) => s.id) } },
           { currentStepId: { in: wo.steps.map((s) => s.id) } },
@@ -956,7 +1003,6 @@ export class WorkOrderService {
       include: { item: true },
     });
 
-    // 3.3 — destination öncelikle WorkOrder.dyehouseCompany; yoksa ilk istasyon (geriye uyum)
     const destination = wo.dyehouseCompany
       ? {
           kind: "DYEHOUSE" as const,
@@ -971,7 +1017,7 @@ export class WorkOrderService {
         }
       : null;
 
-    const manifest = {
+    return {
       batchNumber: wo.batchNumber,
       type: wo.type,
       width: wo.width,
@@ -988,8 +1034,49 @@ export class WorkOrderService {
       })),
       destination,
     };
+  }
 
-    return { success: true, data: manifest };
+  /**
+   * Generate Manifest / Çeki Listesi data.
+   *
+   * Davranış:
+   *   - Eğer bu WO için daha önce Manifest basılmışsa, SON snapshot döner
+   *     (dondurulmuş belge — Tambur'da kesilen çocuk toplar vs. artık listeyi
+   *     değiştiremez). Frontend `isSnapshot: true` ile bunu ayırt edebilir.
+   *   - Snapshot yoksa canlı önizleme döner; ama sadece orijinal (split olmayan)
+   *     toplar listeye girer — SCRAP/A1_STOCK çocukları hariç.
+   *   - Listeyi değiştirmek isteyen operatör yeni bir `createManifest` çağrısı
+   *     yapmalı (reprint = yeni belge).
+   */
+  async getManifest(workOrderId: string): Promise<ApiResponse<Record<string, unknown> | null>> {
+    const latestManifest = await prisma.manifest.findFirst({
+      where: { workOrderId },
+      orderBy: { printedAt: "desc" },
+      include: {
+        printedBy: { select: { id: true, username: true, fullName: true } },
+      },
+    });
+
+    if (latestManifest) {
+      const snapshot = (latestManifest.snapshot ?? {}) as Record<string, unknown>;
+      return {
+        success: true,
+        data: {
+          ...snapshot,
+          isSnapshot: true,
+          manifestNo: latestManifest.manifestNo,
+          printedAt: latestManifest.printedAt,
+          printedBy: latestManifest.printedBy,
+          notes: latestManifest.notes,
+        },
+      };
+    }
+
+    const live = await this.computeLiveManifest(workOrderId);
+    if (!live) {
+      return { success: false, data: null, message: "İş emri bulunamadı" };
+    }
+    return { success: true, data: { ...live, isSnapshot: false } };
   }
 
   /**
@@ -1002,8 +1089,8 @@ export class WorkOrderService {
     userId?: string,
     notes?: string
   ): Promise<ApiResponse<Record<string, unknown> | null>> {
-    const preview = await this.getManifest(workOrderId);
-    if (!preview.success || !preview.data) {
+    const live = await this.computeLiveManifest(workOrderId);
+    if (!live) {
       throw AppError.notFound("İş emri bulunamadı");
     }
 
@@ -1031,7 +1118,7 @@ export class WorkOrderService {
         manifestNo,
         workOrderId,
         printedById: userId ?? null,
-        snapshot: preview.data as Prisma.InputJsonValue,
+        snapshot: live as Prisma.InputJsonValue,
         notes: notes ?? null,
       },
     });
@@ -1091,6 +1178,7 @@ export class WorkOrderService {
               include: {
                 order: { include: { customer: true } },
                 item: true,
+                variant: true,
               },
             },
           },

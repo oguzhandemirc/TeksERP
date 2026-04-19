@@ -337,12 +337,11 @@ export default function RollsPage() {
         isLoading={createMutation.isPending}
       />
 
-      {detailRollId && (
-        <RollDetailPanel
-          rollId={detailRollId}
-          onClose={() => setDetailRollId(null)}
-        />
-      )}
+      <RollDetailPanel
+        rollId={detailRollId}
+        isOpen={!!detailRollId}
+        onClose={() => setDetailRollId(null)}
+      />
     </div>
   );
 }

@@ -66,6 +66,7 @@ enum RollStatus {
   AT_SUBCONTRACTOR            // Fason/boyahanede işlem görüyor
   A1_STOCK                    // 2. Kalite satılabilir stok
   RETURNED_FROM_SUBCONTRACTOR // Fason dönüşünde yeni barkodlar üretildi, eski kapatıldı
+  WAREHOUSE                   // Paketleme sonrası depoya kaldırıldı — satışa / sevke hazır
 }
 
 enum CompanyType {
@@ -581,16 +582,58 @@ model WorkOrderToOrderLine {
 // 6. PRODUCTION DATA - Errors & Defects
 // =============================================================================
 
+/// Kalite derecesi kataloğu — Tambur/QC kararlarında operatör ekranında
+/// buton olarak çıkar. Admin yönetir. Roll.qualityGrade alanı bu katalogdan
+/// seçilen code'un snapshot'ıdır (katalog değişse bile eski toplar bozulmaz).
+model QualityGrade {
+  id          String   @id @default(uuid())
+  code        String   @unique // "1.KALITE", "A1", "A2", "FIRE"
+  name        String              // UI'da görünen etiket
+  description String?
+  color       String?  // "#10b981" vb. — UI rozeti için opsiyonel
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("quality_grades")
+}
+
+/// Hata tipi kataloğu — operatör ekranında buton olarak çıkar, elle girilmez.
+/// Yönetici ekranı üzerinden eklenir/silinir. severity hataya görsel öncelik verir.
+model DefectType {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+  severity    String?  // "MINOR" | "MAJOR" | "CRITICAL" — UI renklendirme için
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rollErrors  RollError[]
+
+  @@index([isActive])
+  @@map("defect_types")
+}
+
 /// Top üzerinde tespit edilen hatalar. Kurşun/QC2 istasyonunda açılır,
 /// Tambur istasyonunda karara bağlanır (kesildi/korundu/A1).
+///
+/// Hata tipi iki alanla tutulur:
+///   - defectTypeId → DefectType FK (canonical, işlem anında seçilir)
+///   - errorType    → DefectType.name'in snapshot'ı (katalog ileride yeniden
+///                    adlandırılsa bile historik etiket korunur)
 model RollError {
-  id          String  @id @default(uuid())
-  rollId      String
-  startMeter  Float
-  endMeter    Float
-  errorType   String? // Leke, Yirtik etc. (ileride error catalog'a bağlanabilir)
-  isProcessed Boolean @default(false) // Tambur kararı verildi mi?
-  actionTaken String? // "CUT_FOR_SCRAP", "KEPT_AS_A1", "NO_ACTION"
+  id           String  @id @default(uuid())
+  rollId       String
+  startMeter   Float
+  endMeter     Float
+  defectTypeId String?
+  errorType    String? // DefectType.name snapshot (kayıt anında kopyalanır)
+  isProcessed  Boolean @default(false) // Tambur kararı verildi mi?
+  actionTaken  String? // "CUT_FOR_SCRAP", "KEPT_AS_A1", "NO_ACTION"
 
   // Lifecycle — tespit (Kurşun/QC2) ve işlem (Tambur) ayrı izlenir.
   detectedAtStepId  String?
@@ -602,6 +645,7 @@ model RollError {
 
   // Relations
   roll            Roll           @relation(fields: [rollId], references: [id])
+  defectType      DefectType?    @relation(fields: [defectTypeId], references: [id])
   detectedAtStep  WorkOrderStep? @relation("RollErrorDetectedAt", fields: [detectedAtStepId], references: [id])
   processedAtStep WorkOrderStep? @relation("RollErrorProcessedAt", fields: [processedAtStepId], references: [id])
   detectedBy      User?          @relation("RollErrorDetectedBy", fields: [detectedByUserId], references: [id])
@@ -614,6 +658,7 @@ model RollError {
   @@index([detectedAtStepId])
   @@index([processedAtStepId])
   @@index([isProcessed])
+  @@index([defectTypeId])
   @@map("roll_errors")
 }
 

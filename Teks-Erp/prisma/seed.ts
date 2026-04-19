@@ -256,6 +256,23 @@ async function main() {
   console.log("✅ 9 stations created");
 
   // =========================================================================
+  // 6.1 DEFECT TYPES (hata kataloğu — operatör ekranında buton olarak çıkar)
+  // =========================================================================
+  const defectTypes = await Promise.all([
+    prisma.defectType.create({ data: { code: "LEKE", name: "Leke", severity: "MAJOR", description: "Boya/kir lekesi" } }),
+    prisma.defectType.create({ data: { code: "YIRTIK", name: "Yırtık", severity: "CRITICAL", description: "Kumaşta yırtık veya delik" } }),
+    prisma.defectType.create({ data: { code: "ATKI_ATLAMA", name: "Atkı Atlaması", severity: "MAJOR", description: "Atkı ipliğinde atlama" } }),
+    prisma.defectType.create({ data: { code: "COZGU_ATLAMA", name: "Çözgü Atlaması", severity: "MAJOR", description: "Çözgü ipliğinde atlama" } }),
+    prisma.defectType.create({ data: { code: "RENK_FARKI", name: "Renk Farkı", severity: "MINOR", description: "Top içi veya toplar arası renk farkı" } }),
+    prisma.defectType.create({ data: { code: "KALIN_ATKI", name: "Kalın Atkı", severity: "MINOR" } }),
+    prisma.defectType.create({ data: { code: "INCE_ATKI", name: "İnce Atkı", severity: "MINOR" } }),
+    prisma.defectType.create({ data: { code: "BUZULME", name: "Büzülme", severity: "MAJOR", description: "Boyahane sonrası büzülme" } }),
+    prisma.defectType.create({ data: { code: "EGIK_ATKI", name: "Eğik Atkı", severity: "MINOR" } }),
+    prisma.defectType.create({ data: { code: "IPLIK_KOPUKLUGU", name: "İplik Kopukluğu", severity: "MAJOR" } }),
+  ]);
+  console.log(`✅ ${defectTypes.length} defect types created`);
+
+  // =========================================================================
   // 7. MACHINES
   // =========================================================================
   const machines = await Promise.all([
@@ -308,6 +325,7 @@ async function main() {
           { stationId: stDokuma.id, sequence: 2 },
           { stationId: stKursun.id, sequence: 3 },
           { stationId: stTambur.id, sequence: 4 },
+          { stationId: stPaketleme.id, sequence: 5 },
         ],
       },
     },

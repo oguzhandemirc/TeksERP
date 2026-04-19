@@ -41,6 +41,29 @@ export const stationTypeLabels: Record<StationType, string> = {
   EXTERNAL: "Harici (Fason)",
 };
 
+// İstasyonun domain rolü — API davranış dispatch'i için kullanılır.
+// (Ör. PROCESS_QC → Kurşun+QC2 per-roll akışı, TAMBUR → kesim/karar akışı)
+export const StationKind = {
+  RAW_QC: "RAW_QC",
+  PROCESS_QC: "PROCESS_QC",
+  TAMBUR: "TAMBUR",
+  SUBCONTRACTOR: "SUBCONTRACTOR",
+  PACKAGING: "PACKAGING",
+  SHIPPING: "SHIPPING",
+  OTHER: "OTHER",
+} as const;
+export type StationKind = (typeof StationKind)[keyof typeof StationKind];
+
+export const stationKindLabels: Record<StationKind, string> = {
+  RAW_QC: "Ham Kalite Kontrol (KK1)",
+  PROCESS_QC: "Kurşun + Kalite Kontrol 2",
+  TAMBUR: "Tambur",
+  SUBCONTRACTOR: "Fason / Boyahane",
+  PACKAGING: "Paketleme",
+  SHIPPING: "Sevkiyat",
+  OTHER: "Diğer",
+};
+
 export const RollStatus = {
   STOCK: "STOCK",
   IN_PRODUCTION: "IN_PRODUCTION",
@@ -51,6 +74,7 @@ export const RollStatus = {
   AT_SUBCONTRACTOR: "AT_SUBCONTRACTOR",
   A1_STOCK: "A1_STOCK",
   RETURNED_FROM_SUBCONTRACTOR: "RETURNED_FROM_SUBCONTRACTOR",
+  WAREHOUSE: "WAREHOUSE",
 } as const;
 export type RollStatus = (typeof RollStatus)[keyof typeof RollStatus];
 
@@ -64,6 +88,7 @@ export const rollStatusLabels: Record<RollStatus, string> = {
   AT_SUBCONTRACTOR: "Fasonda",
   A1_STOCK: "A1 (2. Kalite) Stok",
   RETURNED_FROM_SUBCONTRACTOR: "Fasondan Döndü (Kapandı)",
+  WAREHOUSE: "Depoda (Paketlenmiş)",
 };
 
 export const OrderStatus = {

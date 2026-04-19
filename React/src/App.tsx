@@ -13,20 +13,31 @@ import RoutesPage from "@/pages/Routes/RoutesPage";
 import KK1Page from "@/pages/KK1/KK1Page";
 import KursunQcPage from "@/pages/KursunQc/KursunQcPage";
 import RollsPage from "@/pages/Rolls/RollsPage";
+import {
+  HamDepoPage,
+  MamulDepoPage,
+  A1DepoPage,
+  FireDepoPage,
+} from "@/pages/Warehouse/WarehouseViewPage";
 import OrdersPage from "@/pages/Orders/OrdersPage";
 import WorkOrdersPage from "@/pages/WorkOrders/WorkOrdersPage";
 import AttachRollsPage from "@/pages/Field/AttachRollsPage";
 import TravelerCardScanPage from "@/pages/TravelerCards/TravelerCardScanPage";
 import ProductionPage from "@/pages/Production/ProductionPage";
 import TamburPage from "@/pages/Tambur/TamburPage";
+import PackagingPage from "@/pages/Packaging/PackagingPage";
 import ShippingPage from "@/pages/Shipping/ShippingPage";
 import SystemLogsPage from "@/pages/SystemLogs/SystemLogsPage";
 import UsersPage from "@/pages/Users/UsersPage";
 import ReportsPage from "@/pages/Reports/ReportsPage";
-import OperatorHubPage from "@/pages/OperatorHub/OperatorHubPage";
+import StationPage from "@/pages/Station/StationPage";
 import DispatchesPage from "@/pages/Subcontractor/DispatchesPage";
+import DispatchCreatePage from "@/pages/Subcontractor/DispatchCreatePage";
 import ReceiptsPage from "@/pages/Subcontractor/ReceiptsPage";
+import ReceiveCreatePage from "@/pages/Subcontractor/ReceiveCreatePage";
 import SwatchesPage from "@/pages/Swatches/SwatchesPage";
+import DefectTypesPage from "@/pages/DefectTypes/DefectTypesPage";
+import QualityGradesPage from "@/pages/QualityGrades/QualityGradesPage";
 import ProtectedRoute from "@/components/layout/ProtectedRoute";
 import AppLayout from "@/components/layout/AppLayout";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -77,17 +88,26 @@ const AppRoutes = () => {
           <Route path="/machines" element={<MachinesPage />} />
           <Route path="/routes" element={<RoutesPage />} />
           <Route path="/rolls" element={<RollsPage />} />
+          <Route path="/depo/ham" element={<HamDepoPage />} />
+          <Route path="/depo/mamul" element={<MamulDepoPage />} />
+          <Route path="/depo/a1" element={<A1DepoPage />} />
+          <Route path="/depo/fire" element={<FireDepoPage />} />
           <Route path="/kk1" element={<KK1Page />} />
           <Route path="/kursun-qc" element={<KursunQcPage />} />
+          <Route path="/defect-types" element={<DefectTypesPage />} />
+          <Route path="/quality-grades" element={<QualityGradesPage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/work-orders" element={<WorkOrdersPage />} />
           <Route path="/field/attach-rolls" element={<AttachRollsPage />} />
           <Route path="/field/traveler-scan" element={<TravelerCardScanPage />} />
           <Route path="/production" element={<ProductionPage />} />
           <Route path="/tambur" element={<TamburPage />} />
-          <Route path="/operator-hub" element={<OperatorHubPage />} />
+          <Route path="/paketleme" element={<PackagingPage />} />
+          <Route path="/station" element={<StationPage />} />
           <Route path="/subcontractor/dispatches" element={<DispatchesPage />} />
+          <Route path="/subcontractor/dispatches/new" element={<DispatchCreatePage />} />
           <Route path="/subcontractor/receipts" element={<ReceiptsPage />} />
+          <Route path="/subcontractor/receipts/new" element={<ReceiveCreatePage />} />
           <Route path="/swatches" element={<SwatchesPage />} />
           <Route path="/shipping" element={<ShippingPage />} />
           <Route path="/reports" element={<ReportsPage />} />
