@@ -719,6 +719,10 @@ model Shipment {
   status         ShipmentStatus @default(PREPARING)
   shippedAt      DateTime? // Actual departure time
 
+  // Snapshot — müşteri/ürün sonradan değişse/silinse bile irsaliye belgesi bozulmaz
+  customerCodeSnapshot String?
+  customerNameSnapshot String?
+
   // Relations
   customer Customer       @relation(fields: [customerId], references: [id])
   items    ShipmentItem[]
@@ -737,6 +741,12 @@ model ShipmentItem {
   rollId        String @unique // A roll can only be in one shipment at a time
   shippedQty    Float // Shipment meterage/weight (historical record for invoicing)
   shippedWeight Float?
+
+  // Snapshot — belge dondurma için
+  rollBarcodeSnapshot String?
+  itemCodeSnapshot    String?
+  itemNameSnapshot    String?
+  orderNumberSnapshot String?
 
   // Relations
   shipment Shipment @relation(fields: [shipmentId], references: [id])
@@ -932,8 +942,8 @@ model SubcontractorReceipt {
   receivedAt    DateTime @default(now())
   receivedById  String?
   notes         String?
-  totalIncomingQty Float @default(0) // Gelen toplam metraj
-  firingMeters  Float   @default(0) // Fire / çekme (dispatch - incoming)
+  // Ölçüm (metraj/ağırlık/fire) fason kabulde yapılmaz; sonraki istasyonun
+  // FINISH akışı kendi qty/weight değerlerini kaydeder.
 
   // Relations
   workOrder  WorkOrder                  @relation(fields: [workOrderId], references: [id])
@@ -955,10 +965,9 @@ model SubcontractorReceipt {
 model SubcontractorReceiptItem {
   id                  String @id @default(uuid())
   receiptId           String
-  newRollId           String @unique // Fason kabulde basılan yeni top
+  newRollId           String @unique // Fason dönüşünde kabul edilen orijinal top (yeni etiket basılmaz)
   sourceDispatchItemId String? // Göz kontrolü ile eşleştirilen kaynak sevk kalemi
-  incomingQty         Float
-  incomingWeight      Float?
+  notes               String?
 
   // Relations
   receipt            SubcontractorReceipt        @relation(fields: [receiptId], references: [id], onDelete: Cascade)

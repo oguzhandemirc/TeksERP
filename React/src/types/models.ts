@@ -310,8 +310,11 @@ export interface Shipment {
   carrier: string | null;
   status: ShipmentStatus;
   shippedAt: string | null;
+  customerCodeSnapshot: string | null;
+  customerNameSnapshot: string | null;
   customer?: Customer;
   items?: ShipmentItem[];
+  _count?: { items: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -322,6 +325,10 @@ export interface ShipmentItem {
   rollId: string;
   shippedQty: number;
   shippedWeight: number | null;
+  rollBarcodeSnapshot: string | null;
+  itemCodeSnapshot: string | null;
+  itemNameSnapshot: string | null;
+  orderNumberSnapshot: string | null;
   roll?: Roll;
   createdAt: string;
   updatedAt: string;
@@ -414,8 +421,7 @@ export interface SubcontractorReceiptItem {
   receiptId: string;
   newRollId: string;
   sourceDispatchItemId?: string | null;
-  incomingQty: number;
-  incomingWeight?: number | null;
+  notes?: string | null;
   newRoll?: Roll;
   sourceDispatchItem?: SubcontractorDispatchItem;
   createdAt: string;
@@ -431,8 +437,6 @@ export interface SubcontractorReceipt {
   receivedAt: string;
   receivedById?: string | null;
   notes?: string | null;
-  totalIncomingQty: number;
-  firingMeters: number;
   workOrder?: WorkOrder;
   step?: WorkOrderStep;
   company?: Customer;

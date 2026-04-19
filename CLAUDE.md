@@ -97,6 +97,7 @@ JWT_SECRET="..."
 - **Zod v4:** `z.record()` requires two parameters — `z.record(z.string(), z.unknown())`, not one.
 - **Express 5:** `req.params.id` may need `as string` cast in some controller patterns.
 - **Prisma 7:** Run `npm run prisma:generate` after every schema change or the client will be stale.
+- **`prisma.$transaction` + `pg` adapter:** Inside a `$transaction(async (tx) => ...)` block, **never** use `Promise.all` with `tx.*` calls. The tx client is a single pg connection — parallelism is illusory (pg serializes internally) and becomes a hard error in `pg@9`. Use sequential `await`. The backend ESLint config (`Teks-Erp/eslint.config.mjs`) catches regressions via `no-restricted-syntax`. `Promise.all` with top-level `prisma.*` (outside transactions) is fine — it uses the connection pool.
 
 ## Test Credentials (Seeded)
 

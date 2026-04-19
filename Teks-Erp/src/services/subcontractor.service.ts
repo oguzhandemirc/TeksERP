@@ -91,6 +91,15 @@ async function nextPrefixedSequence(
   }
 
   if (!lastBarcode) return 1;
+
+  // Dispatch/Receipt numaraları 3 parçalı, sade ondalık: SD-YYMM-NNNNNN / SR-YYMM-NNNNNN
+  // Swatch/Roll barkodları 4 parçalı, Crockford + checksum: PFX-YYMM-XXXXXX-C
+  if (table === "subcontractorDispatch" || table === "subcontractorReceipt") {
+    const parts = lastBarcode.split("-");
+    const n = parseInt(parts[2] ?? "", 10);
+    return (Number.isFinite(n) ? n : 0) + 1;
+  }
+
   const n = decodeSequenceFromBarcode(lastBarcode);
   return (n ?? 0) + 1;
 }
@@ -334,15 +343,17 @@ export class SubcontractorService {
   }
 
   // ===========================================================================
-  // RECEIVE — Fason mal kabul (etiket basmaz, orijinal rolleri günceller)
+  // RECEIVE — Fason mal kabul (etiket basmaz, ölçüm yapmaz)
   // ===========================================================================
   //
   // Kural:
-  //   - Yeni Roll kaydı AÇILMAZ. Fasona giden ORİJİNAL toplar dönüşte güncellenir.
-  //   - Operatör her dispatched roll için yeni metraj (+ opsiyonel ağırlık) girer.
-  //   - Top status → IN_PRODUCTION, currentQty/weight güncellenir, sonraki adıma taşınır.
+  //   - Yeni Roll kaydı AÇILMAZ. Fasona giden ORİJİNAL toplar dönüşte kabul edilir.
+  //   - Ölçüm (metraj / ağırlık / fire) burada YAPILMAZ. Top miktarları sevk
+  //     öncesindeki değerleriyle korunur; gerçek ölçüm sonraki istasyonun
+  //     FINISH akışında yapılır ve fire orada kayıt edilir.
+  //   - Top status → IN_PRODUCTION, sonraki adıma taşınır (son adımsa PRODUCED).
   //   - Step COMPLETED olur; son adım ise WO COMPLETED ve refakat kartı COMPLETED.
-  //   - Fason firma irsaliye no manifestNo olarak saklanır (izlenebilirlik).
+  //   - Sadece irsaliye no (manifestNo), kabul notu ve top-bazlı not saklanır.
   //
   async receive(
     data: {
@@ -352,9 +363,7 @@ export class SubcontractorService {
       manifestNo: string;
       returns: Array<{
         rollId: string;         // Orijinal fasona gönderilmiş top
-        newQty: number;          // Dönüşte ölçülen net metraj (zorunlu)
-        newWeight?: number | null;
-        notes?: string | null;
+        notes?: string | null;  // Bu topa dair kabul notu (opsiyonel)
       }>;
       notes?: string;
     },
@@ -365,11 +374,6 @@ export class SubcontractorService {
     }
     if (!data.manifestNo || data.manifestNo.trim().length < 2) {
       throw AppError.badRequest("İrsaliye numarası zorunlu");
-    }
-    for (const r of data.returns) {
-      if (r.newQty < 0) {
-        throw AppError.badRequest("Yeni metraj negatif olamaz");
-      }
     }
 
     const wo = await prisma.workOrder.findUnique({
@@ -434,12 +438,6 @@ export class SubcontractorService {
     const nextStep =
       currentIndex < allSteps.length - 1 ? allSteps[currentIndex + 1] : null;
 
-    const totalIncomingQty = data.returns.reduce((s, r) => s + r.newQty, 0);
-    const totalDispatchedQty = outstandingRolls
-      .filter((r) => returnIds.has(r.id))
-      .reduce((s, r) => s + r.currentQty, 0);
-    const firingMeters = Math.max(0, totalDispatchedQty - totalIncomingQty);
-
     const result = await prisma.$transaction(async (tx) => {
       const now = new Date();
       const seq = await nextPrefixedSequence(tx, "subcontractorReceipt", "SR", now);
@@ -454,16 +452,17 @@ export class SubcontractorService {
           companyId: data.companyId,
           receivedById: userId ?? null,
           notes: data.notes ?? null,
-          totalIncomingQty,
-          firingMeters,
         },
       });
 
-      // Her dönen top için: açık movement'i kapat + rollü güncelle + sonraki adıma taşı
+      // Her dönen top için: açık movement'i kapat + rolü sonraki adıma taşı
+      // Ölçüm YAPILMAZ — sevk öncesindeki qty/weight korunur.
       for (const ret of data.returns) {
         const orig = outstandingRolls.find((r) => r.id === ret.rollId)!;
 
-        // Fasondaki açık movement'i kapat
+        // Fasondaki açık movement'i kapat — qtyOut/weightOut sevk öncesindeki
+        // değerlerle (ölçüm yapılmadığı için) eşitlenir. Gerçek fire sonraki
+        // istasyonun FINISH akışında kaydedilir.
         await tx.rollMovement.updateMany({
           where: {
             rollId: ret.rollId,
@@ -472,18 +471,17 @@ export class SubcontractorService {
           },
           data: {
             exitedAt: new Date(),
-            qtyOut: ret.newQty,
-            weightOut: ret.newWeight ?? orig.weightKg,
+            qtyOut: orig.currentQty,
+            weightOut: orig.weightKg,
             notes: `RETURNED_VIA_RECEIPT:${receiptNo}`,
           },
         });
 
-        // Orijinal rolü güncelle — yeni metraj/ağırlık, status IN_PRODUCTION
+        // Orijinal rolün qty/weight değerlerine DOKUNULMAZ — sadece status ve
+        // bir sonraki adım güncellenir.
         await tx.roll.update({
           where: { id: ret.rollId },
           data: {
-            currentQty: ret.newQty,
-            weightKg: ret.newWeight ?? orig.weightKg,
             status: nextStep ? RollStatus.IN_PRODUCTION : RollStatus.PRODUCED,
             currentStepId: nextStep ? nextStep.id : null,
           },
@@ -494,19 +492,19 @@ export class SubcontractorService {
           data: {
             receiptId: receipt.id,
             newRollId: ret.rollId,
-            incomingQty: ret.newQty,
-            incomingWeight: ret.newWeight ?? null,
+            notes: ret.notes ?? null,
           },
         });
 
-        // Sonraki adım için yeni RollMovement aç (varsa)
+        // Sonraki adım için yeni RollMovement aç (varsa) — qtyIn sevk öncesi
+        // değerle girer, ölçüm FINISH'te yapılacak.
         if (nextStep) {
           await tx.rollMovement.create({
             data: {
               rollId: ret.rollId,
               workOrderStepId: nextStep.id,
-              qtyIn: ret.newQty,
-              weightIn: ret.newWeight ?? orig.weightKg,
+              qtyIn: orig.currentQty,
+              weightIn: orig.weightKg,
               operatorId: userId ?? null,
               notes: `FROM_SUBCONTRACTOR_RECEIPT:${receiptNo}`,
             },
@@ -530,11 +528,6 @@ export class SubcontractorService {
             metadata: {
               receiptNo,
               manifestNo: data.manifestNo.trim(),
-              previousQty: orig.currentQty,
-              newQty: ret.newQty,
-              previousWeight: orig.weightKg,
-              newWeight: ret.newWeight ?? null,
-              shrinkage: orig.currentQty - ret.newQty,
               returnNote: ret.notes ?? null,
             } as Prisma.InputJsonValue,
           },
@@ -613,15 +606,13 @@ export class SubcontractorService {
         workOrderId: data.workOrderId,
         stepId: data.stepId,
         returnCount: data.returns.length,
-        totalIncomingQty,
-        firingMeters,
       },
     });
 
     return {
       success: true,
       data: result,
-      message: `Fason kabul tamamlandı: ${result!.receiptNo} (${data.returns.length} top, Fire: ${firingMeters.toFixed(1)}m)`,
+      message: `Fason kabul tamamlandı: ${result!.receiptNo} (${data.returns.length} top). Ölçüm sonraki istasyonda yapılacak.`,
     };
   }
 

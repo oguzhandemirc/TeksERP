@@ -69,12 +69,10 @@ router.post(
  *                 type: array
  *                 items:
  *                   type: object
- *                   required: [rollId, newQty]
+ *                   required: [rollId]
  *                   properties:
- *                     rollId:    { type: string, format: uuid }
- *                     newQty:    { type: number, description: "Dönüşte ölçülen net metraj" }
- *                     newWeight: { type: number, nullable: true }
- *                     notes:     { type: string, nullable: true }
+ *                     rollId: { type: string, format: uuid }
+ *                     notes:  { type: string, nullable: true, description: "Bu topa dair kabul notu" }
  *     responses:
  *       201: { description: Mal kabul oluşturuldu }
  *       400: { description: Validasyon hatası / top bu adımda fason'da değil }

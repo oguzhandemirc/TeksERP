@@ -26,8 +26,6 @@ const receiveSchema = z.object({
     .array(
       z.object({
         rollId: z.string().uuid(),
-        newQty: z.number().min(0, "Metraj 0 veya pozitif olmalı"),
-        newWeight: z.number().positive().nullish(),
         notes: z.string().max(500).nullish(),
       })
     )
@@ -73,8 +71,6 @@ export class SubcontractorController {
           notes: body.notes,
           returns: body.returns.map((r) => ({
             rollId: r.rollId,
-            newQty: r.newQty,
-            newWeight: r.newWeight ?? null,
             notes: r.notes ?? null,
           })),
         },

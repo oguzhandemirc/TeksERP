@@ -102,6 +102,49 @@ router.post("/shipments", verifyToken, requirePermission("shipment:write"), cont
 
 /**
  * @openapi
+ * /api/shipping/shipments:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Sevkiyatları listele
+ *     description: Tüm sevkiyatları listeler. Opsiyonel `status` (PREPARING/SHIPPED/CANCELLED) ve `customerId` filtreleri.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [PREPARING, SHIPPED, CANCELLED] }
+ *       - in: query
+ *         name: customerId
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Sevkiyat listesi
+ */
+router.get("/shipments", verifyToken, requirePermission("shipment:read"), controller.listShipments);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Tek sevkiyat detay
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Sevkiyat detayı (kalemler dahil)
+ *       404:
+ *         description: Sevkiyat bulunamadı
+ */
+router.get("/shipments/:id", verifyToken, requirePermission("shipment:read"), controller.getShipmentById);
+
+/**
+ * @openapi
  * /api/shipping/shipments/{id}/add-items:
  *   patch:
  *     tags: [Shipping]

@@ -4,10 +4,8 @@ import {
   PackageCheck,
   RefreshCw,
   ChevronRight,
-  Ruler,
   Building2,
   ClipboardList,
-  AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -93,16 +91,7 @@ export default function ReceiptsPage() {
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                         <span>{new Date(r.receivedAt).toLocaleString("tr-TR")}</span>
-                        <span className="flex items-center gap-1">
-                          <Ruler className="h-3 w-3" />
-                          {r.totalIncomingQty.toFixed(1)}m
-                        </span>
-                        {r.firingMeters > 0 && (
-                          <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                            <AlertTriangle className="h-3 w-3" />
-                            Fire: {r.firingMeters.toFixed(1)}m
-                          </span>
-                        )}
+                        <span>{r.items?.length ?? 0} top</span>
                       </div>
                     </div>
                     <ChevronRight className="h-5 w-5 text-muted-foreground" />
@@ -130,15 +119,13 @@ export default function ReceiptsPage() {
               <span className="font-medium">{detail.workOrder?.batchNumber}</span>
               <span className="text-muted-foreground">Firma:</span>
               <span className="font-medium">{detail.company?.name}</span>
-              <span className="text-muted-foreground">Gelen Toplam:</span>
-              <span className="font-semibold">{detail.totalIncomingQty.toFixed(1)}m</span>
-              <span className="text-muted-foreground">Fire/Çekme:</span>
-              <span className={detail.firingMeters > 0 ? "text-amber-600 font-semibold" : ""}>
-                {detail.firingMeters.toFixed(1)}m
-              </span>
               <span className="text-muted-foreground">Tarih:</span>
               <span>{new Date(detail.receivedAt).toLocaleString("tr-TR")}</span>
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              Metraj / ağırlık / fire ölçümü bu belgede saklanmaz — sonraki
+              istasyonun FINISH kaydına bakın.
+            </p>
 
             {detail.notes && (
               <div className="rounded-md border p-2 bg-muted/30 text-xs">
@@ -148,21 +135,25 @@ export default function ReceiptsPage() {
 
             <div>
               <p className="text-xs font-semibold text-muted-foreground mb-1">
-                Gelen Yeni Toplar ({detail.items?.length ?? 0})
+                Kabul Edilen Toplar ({detail.items?.length ?? 0})
               </p>
               <div className="space-y-1">
                 {detail.items?.map((it, i) => (
                   <div
                     key={it.id}
-                    className="flex items-center gap-2 rounded border px-2 py-1.5 bg-background text-xs"
+                    className="flex flex-col gap-1 rounded border px-2 py-1.5 bg-background text-xs"
                   >
-                    <Badge variant="outline" className="text-[10px]">{i + 1}</Badge>
-                    <span className="font-mono">
-                      {it.newRoll?.barcode ?? it.newRollId}
-                    </span>
-                    <span className="ml-auto flex items-center gap-1">
-                      <Ruler className="h-3 w-3" /> {it.incomingQty.toFixed(1)}m
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">{i + 1}</Badge>
+                      <span className="font-mono">
+                        {it.newRoll?.barcode ?? it.newRollId}
+                      </span>
+                    </div>
+                    {it.notes && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {it.notes}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>

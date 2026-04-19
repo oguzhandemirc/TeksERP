@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -26,8 +26,6 @@ type ReturnRow = {
   rollId: string;
   barcode: string;
   dispatchedQty: number;
-  newQty: string;
-  newWeight: string;
   notes: string;
 };
 
@@ -60,24 +58,12 @@ export default function ReceiveCreatePage() {
         rollId: r.id,
         barcode: r.barcode,
         dispatchedQty: r.currentQty,
-        newQty: "",
-        newWeight: "",
         notes: "",
       })),
     );
     setManifestNo("");
     setNotes("");
   }, [selectedGroup]);
-
-  const totalDispatched = useMemo(
-    () => rows.reduce((s, r) => s + (r.dispatchedQty || 0), 0),
-    [rows],
-  );
-  const totalIncoming = useMemo(
-    () => rows.reduce((s, r) => s + (Number(r.newQty) || 0), 0),
-    [rows],
-  );
-  const shrinkage = Math.max(0, totalDispatched - totalIncoming);
 
   const receiveMutation = useMutation({
     mutationFn: () => {
@@ -88,14 +74,10 @@ export default function ReceiveCreatePage() {
         companyId: selectedGroup.lastDispatch?.companyId ?? "",
         manifestNo: manifestNo.trim(),
         notes: notes.trim() || undefined,
-        returns: rows
-          .filter((r) => r.newQty !== "")
-          .map((r) => ({
-            rollId: r.rollId,
-            newQty: Number(r.newQty),
-            newWeight: r.newWeight ? Number(r.newWeight) : null,
-            notes: r.notes.trim() || null,
-          })),
+        returns: rows.map((r) => ({
+          rollId: r.rollId,
+          notes: r.notes.trim() || null,
+        })),
       });
     },
     onSuccess: () => {
@@ -118,8 +100,7 @@ export default function ReceiveCreatePage() {
   const canSubmit =
     !!selectedGroup &&
     manifestNo.trim().length >= 2 &&
-    rows.length > 0 &&
-    rows.every((r) => r.newQty !== "" && Number(r.newQty) >= 0);
+    rows.length > 0;
 
   return (
     <div className="space-y-4 max-w-4xl mx-auto">
@@ -216,10 +197,10 @@ export default function ReceiveCreatePage() {
             <div className="rounded-md border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900 p-3 text-xs flex gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <strong>Yeni barkod basılmaz.</strong> Her sevk edilen top için
-                dönüşte ölçülen net metrajı girin. Orijinal toplar güncellenir
-                ve <strong>otomatik</strong> olarak bir sonraki istasyona
-                taşınır.
+                <strong>Yeni barkod basılmaz, ölçüm yapılmaz.</strong> Toplar
+                irsaliye ile kabul edilip otomatik olarak bir sonraki istasyona
+                taşınır. Metraj / ağırlık / fire ölçümü sonraki istasyonda
+                yapılır.
               </div>
             </div>
 
@@ -243,110 +224,40 @@ export default function ReceiveCreatePage() {
               </div>
             </div>
 
-            <div className="text-xs text-muted-foreground rounded-md bg-muted/30 border p-2">
-              Sevk edilmiş: <strong>{totalDispatched.toFixed(1)}m</strong>
-              {" · "}
-              Gelen: <strong>{totalIncoming.toFixed(1)}m</strong>
-              {" · "}
-              Fire/Çekme:{" "}
-              <strong className={shrinkage > 0 ? "text-amber-600" : ""}>
-                {shrinkage.toFixed(1)}m
-              </strong>
-            </div>
-
             <div className="space-y-2">
-              {rows.map((row, idx) => {
-                const qty = Number(row.newQty);
-                const rowShrink = row.newQty
-                  ? Math.max(0, row.dispatchedQty - qty)
-                  : 0;
-                return (
-                  <div
-                    key={row.rollId}
-                    className="rounded-lg border p-3 grid grid-cols-2 sm:grid-cols-6 gap-2 bg-card"
-                  >
-                    <div className="col-span-2 space-y-0.5">
-                      <Label className="text-xs text-muted-foreground">
-                        Top #{idx + 1}
-                      </Label>
-                      <code className="text-xs font-mono block">
-                        {row.barcode}
-                      </code>
-                      <span className="text-[11px] text-muted-foreground">
-                        Sevk: {row.dispatchedQty.toFixed(1)}m
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs">Dönüş Metraj *</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        value={row.newQty}
-                        onChange={(e) =>
-                          setRows((prev) =>
-                            prev.map((r, i) =>
-                              i === idx ? { ...r, newQty: e.target.value } : r,
-                            ),
-                          )
-                        }
-                        placeholder="m"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs">Ağırlık (kg)</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        value={row.newWeight}
-                        onChange={(e) =>
-                          setRows((prev) =>
-                            prev.map((r, i) =>
-                              i === idx
-                                ? { ...r, newWeight: e.target.value }
-                                : r,
-                            ),
-                          )
-                        }
-                        placeholder="opsiyonel"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs">Fire</Label>
-                      <div className="h-9 flex items-center px-2 rounded-md border bg-muted/30 text-xs">
-                        <span
-                          className={
-                            rowShrink > 0
-                              ? "text-amber-600 font-medium"
-                              : "text-muted-foreground"
-                          }
-                        >
-                          {rowShrink.toFixed(1)}m
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="col-span-2 sm:col-span-6 space-y-1">
-                      <Label className="text-xs">Not (opsiyonel)</Label>
-                      <Input
-                        value={row.notes}
-                        onChange={(e) =>
-                          setRows((prev) =>
-                            prev.map((r, i) =>
-                              i === idx ? { ...r, notes: e.target.value } : r,
-                            ),
-                          )
-                        }
-                        placeholder="Bu topa dair not…"
-                      />
-                    </div>
+              {rows.map((row, idx) => (
+                <div
+                  key={row.rollId}
+                  className="rounded-lg border p-3 grid grid-cols-1 sm:grid-cols-6 gap-2 bg-card"
+                >
+                  <div className="sm:col-span-2 space-y-0.5">
+                    <Label className="text-xs text-muted-foreground">
+                      Top #{idx + 1}
+                    </Label>
+                    <code className="text-xs font-mono block">
+                      {row.barcode}
+                    </code>
+                    <span className="text-[11px] text-muted-foreground">
+                      Sevk öncesi: {row.dispatchedQty.toFixed(1)}m
+                    </span>
                   </div>
-                );
-              })}
+
+                  <div className="sm:col-span-4 space-y-1">
+                    <Label className="text-xs">Not (opsiyonel)</Label>
+                    <Input
+                      value={row.notes}
+                      onChange={(e) =>
+                        setRows((prev) =>
+                          prev.map((r, i) =>
+                            i === idx ? { ...r, notes: e.target.value } : r,
+                          ),
+                        )
+                      }
+                      placeholder="Bu topa dair not…"
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
 
             <Button

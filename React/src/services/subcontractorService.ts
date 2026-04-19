@@ -18,8 +18,6 @@ export interface DispatchRequest {
 
 export interface ReceiveReturnItem {
   rollId: string;
-  newQty: number;
-  newWeight?: number | null;
   notes?: string | null;
 }
 

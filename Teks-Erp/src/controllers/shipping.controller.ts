@@ -4,6 +4,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import { ShipmentStatus } from "@prisma/client";
 import { ShippingService } from "../services/shipping.service";
 import "../types/express-augment";
 
@@ -21,7 +22,7 @@ const createShipmentSchema = z.object({
 });
 
 const addItemsSchema = z.object({
-  rollIds: z.array(z.string().uuid()).min(1, "En az bir top gerekli"),
+  rollIds: z.array(z.string().min(1)).min(1, "En az bir top gerekli"),
 });
 
 export class ShippingController {
@@ -34,6 +35,41 @@ export class ShippingController {
     this.createShipment = this.createShipment.bind(this);
     this.addItems = this.addItems.bind(this);
     this.finalize = this.finalize.bind(this);
+    this.listShipments = this.listShipments.bind(this);
+    this.getShipmentById = this.getShipmentById.bind(this);
+  }
+
+  /**
+   * GET /api/shipping/shipments
+   */
+  async listShipments(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const status = req.query.status as string | undefined;
+      const customerId = req.query.customerId as string | undefined;
+      const validStatus =
+        status && status in ShipmentStatus
+          ? (status as ShipmentStatus)
+          : undefined;
+      const result = await this.service.listShipments({
+        status: validStatus,
+        customerId,
+      });
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/shipping/shipments/:id
+   */
+  async getShipmentById(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getShipmentById(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
   }
 
   /**

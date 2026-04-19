@@ -1,6 +1,7 @@
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { Shipment, ReadyOrderView } from "@/types/models";
+import type { ShipmentStatus } from "@/types/enums";
 
 export interface PreparePackageRequest {
   rollIds: string[];
@@ -15,10 +16,29 @@ export interface CreateShipmentRequest {
   carrier?: string;
 }
 
+export interface ShipmentListFilters {
+  status?: ShipmentStatus;
+  customerId?: string;
+}
+
 export const shippingService = {
   getReadyOrders(): Promise<ApiResponse<ReadyOrderView[]>> {
     return apiClient
       .get<ApiResponse<ReadyOrderView[]>>("/api/shipping/ready-orders")
+      .then((r) => r.data);
+  },
+
+  list(filters?: ShipmentListFilters): Promise<ApiResponse<Shipment[]>> {
+    return apiClient
+      .get<ApiResponse<Shipment[]>>("/api/shipping/shipments", {
+        params: filters,
+      })
+      .then((r) => r.data);
+  },
+
+  getById(shipmentId: string): Promise<ApiResponse<Shipment>> {
+    return apiClient
+      .get<ApiResponse<Shipment>>(`/api/shipping/shipments/${shipmentId}`)
       .then((r) => r.data);
   },
 
@@ -42,12 +62,11 @@ export const shippingService = {
   addItems(
     shipmentId: string,
     rollIds: string[],
-  ): Promise<ApiResponse<{ added: number; reassigned: number }>> {
+  ): Promise<ApiResponse<{ added: number; reassigned: number; notFound: number }>> {
     return apiClient
-      .patch<ApiResponse<{ added: number; reassigned: number }>>(
-        `/api/shipping/shipments/${shipmentId}/add-items`,
-        { rollIds },
-      )
+      .patch<
+        ApiResponse<{ added: number; reassigned: number; notFound: number }>
+      >(`/api/shipping/shipments/${shipmentId}/add-items`, { rollIds })
       .then((r) => r.data);
   },
 

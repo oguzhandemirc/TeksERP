@@ -72,14 +72,14 @@ export async function recomputeStepStatus(
   // SKIPPED ise terminal kabul edelim, değiştirmeyiz.
   if (step.status === StepStatus.SKIPPED) return StepStatus.SKIPPED;
 
-  const [openCount, closedCount] = await Promise.all([
-    tx.rollMovement.count({
-      where: { workOrderStepId: stepId, exitedAt: null },
-    }),
-    tx.rollMovement.count({
-      where: { workOrderStepId: stepId, exitedAt: { not: null } },
-    }),
-  ]);
+  // Tx içinde paralel sorgu atmak illüzyondur: aynı pg bağlantısı onları
+  // zaten sıralar ve pg@9'da hard-error olur. Sıralı await zorunludur.
+  const openCount = await tx.rollMovement.count({
+    where: { workOrderStepId: stepId, exitedAt: null },
+  });
+  const closedCount = await tx.rollMovement.count({
+    where: { workOrderStepId: stepId, exitedAt: { not: null } },
+  });
 
   // Bu step'e henüz girmemiş ama iş emrinin üretimine dahil olan roller var mı?
   //   - currentStepId bu step'ten farklı ve
@@ -203,9 +203,8 @@ export async function getRollStepState(
   rollId: string,
   stepId: string
 ): Promise<{ active: boolean; completed: boolean }> {
-  const [active, completed] = await Promise.all([
-    isRollActiveInStep(tx, rollId, stepId),
-    hasRollCompletedStep(tx, rollId, stepId),
-  ]);
+  // Tx içinde Promise.all kullanılmaz — bkz. recomputeStepStatus açıklaması.
+  const active = await isRollActiveInStep(tx, rollId, stepId);
+  const completed = await hasRollCompletedStep(tx, rollId, stepId);
   return { active, completed };
 }

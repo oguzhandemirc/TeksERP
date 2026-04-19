@@ -185,6 +185,8 @@ export class ShippingService {
         plateNumber: data.plateNumber ?? null,
         carrier: data.carrier ?? null,
         status: ShipmentStatus.PREPARING,
+        customerCodeSnapshot: customer.code,
+        customerNameSnapshot: customer.name,
       },
       include: { customer: true },
     });
@@ -219,7 +221,7 @@ export class ShippingService {
     shipmentId: string,
     rollIds: string[],
     userId?: string
-  ): Promise<ApiResponse<{ added: number; reassigned: number }>> {
+  ): Promise<ApiResponse<{ added: number; reassigned: number; notFound: number }>> {
     const shipment = await prisma.shipment.findUnique({
       where: { id: shipmentId },
       include: { customer: true },
@@ -235,15 +237,25 @@ export class ShippingService {
 
     let added = 0;
     let reassigned = 0;
+    let notFound = 0;
 
     await prisma.$transaction(async (tx) => {
-      for (const rollId of rollIds) {
-        const roll = await tx.roll.findUnique({
-          where: { id: rollId },
-          include: { allocations: { include: { orderLine: { include: { order: true } } } } },
+      for (const identifier of rollIds) {
+        // Barkod veya UUID — her ikisini de destekle
+        const roll = await tx.roll.findFirst({
+          where: {
+            OR: [{ id: identifier }, { barcode: identifier }],
+          },
+          include: {
+            item: true,
+            allocations: { include: { orderLine: { include: { order: true } } } },
+          },
         });
 
-        if (!roll) continue;
+        if (!roll) {
+          notFound++;
+          continue;
+        }
 
         if (
           roll.status !== RollStatus.PRODUCED &&
@@ -255,11 +267,13 @@ export class ShippingService {
 
         // Check if roll is already in another shipment
         const existingItem = await tx.shipmentItem.findUnique({
-          where: { rollId },
+          where: { rollId: roll.id },
         });
         if (existingItem) continue; // Already in a shipment
 
         // Flexible Reassignment: check if allocation is for a different customer
+        // Snapshot: sevkiyat müşterisine ait kalan allocation'ın sipariş numarasını sakla
+        let orderNumberSnapshot: string | null = null;
         for (const allocation of roll.allocations) {
           if (allocation.orderLine.order.customerId !== shipment.customerId) {
             // Detach old allocation
@@ -274,11 +288,13 @@ export class ShippingService {
               tableName: "ORDER_ALLOCATION",
               recordId: allocation.id,
               oldData: {
-                rollId,
+                rollId: roll.id,
                 orderNumber: allocation.orderLine.order.orderNumber,
                 reason: "REASSIGNED_TO_DIFFERENT_CUSTOMER",
               },
             });
+          } else if (!orderNumberSnapshot) {
+            orderNumberSnapshot = allocation.orderLine.order.orderNumber;
           }
         }
 
@@ -286,9 +302,13 @@ export class ShippingService {
         await tx.shipmentItem.create({
           data: {
             shipmentId,
-            rollId,
+            rollId: roll.id,
             shippedQty: roll.currentQty,
             shippedWeight: roll.weightKg,
+            rollBarcodeSnapshot: roll.barcode,
+            itemCodeSnapshot: roll.item.code,
+            itemNameSnapshot: roll.item.name,
+            orderNumberSnapshot,
           },
         });
 
@@ -296,10 +316,14 @@ export class ShippingService {
       }
     });
 
+    const messages = [`${added} top sevkiyata eklendi`];
+    if (reassigned > 0) messages.push(`${reassigned} top yeniden atandı`);
+    if (notFound > 0) messages.push(`${notFound} barkod/ID bulunamadı`);
+
     return {
       success: true,
-      data: { added, reassigned },
-      message: `${added} top sevkiyata eklendi. ${reassigned} top yeniden atandı.`,
+      data: { added, reassigned, notFound },
+      message: messages.join(". ") + ".",
     };
   }
 
@@ -463,5 +487,53 @@ export class ShippingService {
       },
       message: `Sevkiyat onaylandı. ${shipment.items.length} top sevk edildi.`,
     };
+  }
+
+  /**
+   * List shipments (optionally filtered by status / customer).
+   */
+  async listShipments(filters?: {
+    status?: ShipmentStatus;
+    customerId?: string;
+  }): Promise<ApiResponse<Shipment[]>> {
+    const shipments = await prisma.shipment.findMany({
+      where: {
+        ...(filters?.status ? { status: filters.status } : {}),
+        ...(filters?.customerId ? { customerId: filters.customerId } : {}),
+      },
+      include: {
+        customer: true,
+        _count: { select: { items: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return { success: true, data: shipments };
+  }
+
+  /**
+   * Get a single shipment with all items (and their rolls) for the detail panel.
+   */
+  async getShipmentById(id: string): Promise<ApiResponse<Shipment>> {
+    const shipment = await prisma.shipment.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        items: {
+          include: {
+            roll: {
+              include: { item: true },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!shipment) {
+      throw AppError.notFound("Sevkiyat bulunamadı");
+    }
+
+    return { success: true, data: shipment };
   }
 }

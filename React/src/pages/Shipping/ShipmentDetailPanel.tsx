@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   X,
@@ -16,13 +16,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { shipmentStatusLabels } from "@/types/enums";
 import type { ShipmentStatus } from "@/types/enums";
-import type { Shipment } from "@/types/models";
 import { shippingService } from "@/services/shippingService";
 
 interface ShipmentDetailPanelProps {
-  shipment: Shipment;
+  shipmentId: string;
   onClose: () => void;
-  onRefresh: () => void;
 }
 
 const statusColorMap: Record<string, string> = {
@@ -33,21 +31,33 @@ const statusColorMap: Record<string, string> = {
 };
 
 export default function ShipmentDetailPanel({
-  shipment,
+  shipmentId,
   onClose,
-  onRefresh,
 }: ShipmentDetailPanelProps) {
   const qc = useQueryClient();
   const [rollIdInput, setRollIdInput] = useState("");
 
+  const { data, isLoading } = useQuery({
+    queryKey: ["shipment", shipmentId],
+    queryFn: () => shippingService.getById(shipmentId),
+    enabled: !!shipmentId,
+  });
+
+  const shipment = data?.data;
+
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ["shipment", shipmentId] });
+    qc.invalidateQueries({ queryKey: ["shipments"] });
+    qc.invalidateQueries({ queryKey: ["ready-orders"] });
+  };
+
   const addItemsMutation = useMutation({
     mutationFn: (rollIds: string[]) =>
-      shippingService.addItems(shipment.id, rollIds),
+      shippingService.addItems(shipmentId, rollIds),
     onSuccess: (res) => {
       toast.success(res.message ?? "Ürünler eklendi");
       setRollIdInput("");
-      qc.invalidateQueries({ queryKey: ["shipments"] });
-      onRefresh();
+      invalidateAll();
     },
     onError: () => {
       toast.error("Ürün ekleme başarısız");
@@ -55,22 +65,20 @@ export default function ShipmentDetailPanel({
   });
 
   const finalizeMutation = useMutation({
-    mutationFn: () => shippingService.finalize(shipment.id),
+    mutationFn: () => shippingService.finalize(shipmentId),
     onSuccess: (res) => {
-      const data = res.data;
+      const body = res.data;
       let msg = res.message ?? "Sevkiyat onaylandı";
-      if (data?.ordersCompleted?.length) {
-        msg += ` | Tamamlanan: ${data.ordersCompleted.join(", ")}`;
+      if (body?.ordersCompleted?.length) {
+        msg += ` | Tamamlanan: ${body.ordersCompleted.join(", ")}`;
       }
-      if (data?.ordersPartial?.length) {
-        msg += ` | Kısmi: ${data.ordersPartial.join(", ")}`;
+      if (body?.ordersPartial?.length) {
+        msg += ` | Kısmi: ${body.ordersPartial.join(", ")}`;
       }
       toast.success(msg);
-      qc.invalidateQueries({ queryKey: ["shipments"] });
-      qc.invalidateQueries({ queryKey: ["ready-orders"] });
+      invalidateAll();
       qc.invalidateQueries({ queryKey: ["orders"] });
       qc.invalidateQueries({ queryKey: ["rolls"] });
-      onRefresh();
     },
     onError: () => {
       toast.error("Finalizasyon başarısız");
@@ -83,10 +91,10 @@ export default function ShipmentDetailPanel({
     addItemsMutation.mutate([trimmed]);
   };
 
-  const isPreparing = shipment.status === "PREPARING";
-  const totalItems = shipment.items?.length ?? 0;
+  const isPreparing = shipment?.status === "PREPARING";
+  const totalItems = shipment?.items?.length ?? 0;
   const totalQty =
-    shipment.items?.reduce((s, i) => s + i.shippedQty, 0) ?? 0;
+    shipment?.items?.reduce((s, i) => s + i.shippedQty, 0) ?? 0;
 
   return (
     <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-background border-l shadow-xl flex flex-col">
@@ -94,7 +102,9 @@ export default function ShipmentDetailPanel({
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center gap-2">
           <Truck className="h-5 w-5 text-primary" />
-          <h2 className="font-semibold text-lg">{shipment.shipmentNumber}</h2>
+          <h2 className="font-semibold text-lg">
+            {shipment?.shipmentNumber ?? "Yükleniyor..."}
+          </h2>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose}>
           <X className="h-5 w-5" />
@@ -103,133 +113,166 @@ export default function ShipmentDetailPanel({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Info */}
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <span className="text-muted-foreground">Durum</span>
-            <div className="mt-1">
-              <Badge
-                className={
-                  statusColorMap[shipment.status] ?? ""
-                }
-              >
-                {shipmentStatusLabels[shipment.status as ShipmentStatus] ??
-                  shipment.status}
-              </Badge>
-            </div>
+        {isLoading || !shipment ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-          <div>
-            <span className="text-muted-foreground">Müşteri</span>
-            <p className="font-medium mt-1">
-              {shipment.customer?.name ?? "-"}
-            </p>
-          </div>
-          {shipment.driverName && (
-            <div>
-              <span className="text-muted-foreground">Şoför</span>
-              <p className="font-medium mt-1">{shipment.driverName}</p>
-            </div>
-          )}
-          {shipment.plateNumber && (
-            <div>
-              <span className="text-muted-foreground">Plaka</span>
-              <p className="font-medium mt-1">{shipment.plateNumber}</p>
-            </div>
-          )}
-          {shipment.carrier && (
-            <div className="col-span-2">
-              <span className="text-muted-foreground">Taşıyıcı</span>
-              <p className="font-medium mt-1">{shipment.carrier}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Summary */}
-        <div className="grid grid-cols-2 gap-3">
-          <Card>
-            <CardContent className="p-3 text-center">
-              <p className="text-xs text-muted-foreground">Top Sayısı</p>
-              <p className="text-xl font-bold">{totalItems}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-3 text-center">
-              <p className="text-xs text-muted-foreground">Toplam Metraj</p>
-              <p className="text-xl font-bold">{totalQty.toFixed(1)}m</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Add Roll (only if PREPARING) */}
-        {isPreparing && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium flex items-center gap-1">
-              <ScanBarcode className="h-4 w-4" />
-              Roll ID ile Ürün Ekle
-            </label>
-            <div className="flex gap-2">
-              <Input
-                value={rollIdInput}
-                onChange={(e) => setRollIdInput(e.target.value)}
-                placeholder="Roll UUID giriniz"
-                onKeyDown={(e) => e.key === "Enter" && handleAddRoll()}
-              />
-              <Button
-                type="button"
-                onClick={handleAddRoll}
-                disabled={!rollIdInput.trim() || addItemsMutation.isPending}
-                size="icon"
-              >
-                {addItemsMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Items List */}
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold flex items-center gap-1">
-            <Package className="h-4 w-4" />
-            Sevkiyat Kalemleri
-          </h3>
-          {totalItems === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              Henüz ürün eklenmedi
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {shipment.items?.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between p-3 rounded-md border text-sm"
-                >
-                  <div className="min-w-0">
-                    <span className="font-medium truncate block">
-                      {item.roll?.barcode ?? item.rollId.slice(0, 8)}
-                    </span>
-                    {item.roll?.item?.code && (
-                      <span className="text-xs text-muted-foreground">
-                        {item.roll.item.code}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <span className="font-medium">{item.shippedQty}m</span>
-                    {item.shippedWeight && (
-                      <span className="text-xs text-muted-foreground block">
-                        {item.shippedWeight}kg
-                      </span>
-                    )}
-                  </div>
+        ) : (
+          <>
+            {/* Info */}
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-muted-foreground">Durum</span>
+                <div className="mt-1">
+                  <Badge
+                    className={statusColorMap[shipment.status] ?? ""}
+                  >
+                    {shipmentStatusLabels[
+                      shipment.status as ShipmentStatus
+                    ] ?? shipment.status}
+                  </Badge>
                 </div>
-              ))}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Müşteri</span>
+                <p className="font-medium mt-1">
+                  {shipment.customerNameSnapshot ??
+                    shipment.customer?.name ??
+                    "-"}
+                </p>
+              </div>
+              {shipment.driverName && (
+                <div>
+                  <span className="text-muted-foreground">Şoför</span>
+                  <p className="font-medium mt-1">{shipment.driverName}</p>
+                </div>
+              )}
+              {shipment.plateNumber && (
+                <div>
+                  <span className="text-muted-foreground">Plaka</span>
+                  <p className="font-medium mt-1">{shipment.plateNumber}</p>
+                </div>
+              )}
+              {shipment.carrier && (
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Taşıyıcı</span>
+                  <p className="font-medium mt-1">{shipment.carrier}</p>
+                </div>
+              )}
+              {shipment.shippedAt && (
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Sevk Tarihi</span>
+                  <p className="font-medium mt-1">
+                    {new Date(shipment.shippedAt).toLocaleString("tr-TR")}
+                  </p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+
+            {/* Summary */}
+            <div className="grid grid-cols-2 gap-3">
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <p className="text-xs text-muted-foreground">Top Sayısı</p>
+                  <p className="text-xl font-bold">{totalItems}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-3 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    Toplam Metraj
+                  </p>
+                  <p className="text-xl font-bold">{totalQty.toFixed(1)}m</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Add Roll (only if PREPARING) */}
+            {isPreparing && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1">
+                  <ScanBarcode className="h-4 w-4" />
+                  Roll Barkodu / ID ile Ürün Ekle
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    value={rollIdInput}
+                    onChange={(e) => setRollIdInput(e.target.value)}
+                    placeholder="Roll UUID giriniz"
+                    onKeyDown={(e) => e.key === "Enter" && handleAddRoll()}
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleAddRoll}
+                    disabled={
+                      !rollIdInput.trim() || addItemsMutation.isPending
+                    }
+                    size="icon"
+                  >
+                    {addItemsMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Items List */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold flex items-center gap-1">
+                <Package className="h-4 w-4" />
+                Sevkiyat Kalemleri
+              </h3>
+              {totalItems === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  Henüz ürün eklenmedi
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {shipment.items?.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-3 rounded-md border text-sm"
+                    >
+                      <div className="min-w-0">
+                        <span className="font-medium truncate block">
+                          {item.rollBarcodeSnapshot ??
+                            item.roll?.barcode ??
+                            item.rollId.slice(0, 8)}
+                        </span>
+                        {(item.itemCodeSnapshot ||
+                          item.itemNameSnapshot) && (
+                          <span className="text-xs text-muted-foreground">
+                            {item.itemCodeSnapshot}
+                            {item.itemCodeSnapshot && item.itemNameSnapshot
+                              ? " — "
+                              : ""}
+                            {item.itemNameSnapshot}
+                          </span>
+                        )}
+                        {item.orderNumberSnapshot && (
+                          <span className="text-xs text-muted-foreground block">
+                            Sipariş: {item.orderNumberSnapshot}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-medium">{item.shippedQty}m</span>
+                        {item.shippedWeight && (
+                          <span className="text-xs text-muted-foreground block">
+                            {item.shippedWeight}kg
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Footer */}
