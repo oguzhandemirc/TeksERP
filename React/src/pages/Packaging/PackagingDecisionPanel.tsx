@@ -12,6 +12,8 @@ import {
   Repeat2,
   Ruler,
   Package,
+  Handshake,
+  AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,17 +59,26 @@ export default function PackagingDecisionPanel({
   const [printedLabel, setPrintedLabel] =
     useState<PackagingLabelPayload | null>(null);
 
+  const isFason = !!summary.ownerCustomerId;
+  const hasAnyOrder = summary.availableOrderLinks.length > 0;
+  const canShip = isFason || hasAnyOrder;
   const multipleOrders = summary.availableOrderLinks.length > 1;
   const selectedLink: PackagingOrderLinkOption | null =
     summary.availableOrderLinks.find((l) => l.orderLineId === orderLineId) ??
     null;
 
   useEffect(() => {
-    if (destination === "WAREHOUSE") return;
+    if (!canShip && destination === "SHIP") {
+      setDestination("WAREHOUSE");
+    }
+  }, [canShip, destination]);
+
+  useEffect(() => {
+    if (destination === "WAREHOUSE" || isFason) return;
     if (!orderLineId && summary.availableOrderLinks.length === 1) {
       setOrderLineId(summary.availableOrderLinks[0].orderLineId);
     }
-  }, [destination, orderLineId, summary.availableOrderLinks]);
+  }, [destination, orderLineId, summary.availableOrderLinks, isFason]);
 
   const weighMutation = useMutation({
     mutationFn: () => packagingService.simulateWeigh(summary.rollId),
@@ -88,7 +99,9 @@ export default function PackagingDecisionPanel({
         rollId: summary.rollId,
         weightKg: Number(weightKg),
         destination,
-        orderLineId: destination === "SHIP" ? orderLineId : null,
+        // Fason topta orderLineId gönderilmez
+        orderLineId:
+          destination === "SHIP" && !isFason ? orderLineId : null,
       }),
     onSuccess: (res) => {
       if (res.success && res.data) {
@@ -96,6 +109,10 @@ export default function PackagingDecisionPanel({
         toast.success(res.message ?? "Paketleme tamamlandı");
         qc.invalidateQueries({ queryKey: ["packaging-pending"] });
         qc.invalidateQueries({ queryKey: ["rolls"] });
+        qc.invalidateQueries({ queryKey: ["ready-orders"] });
+        qc.invalidateQueries({ queryKey: ["ready-fason"] });
+        // UX D: otomatik yazdırma — operatör ek tıklamadan kurtulur
+        setTimeout(() => window.print(), 200);
       } else {
         toast.error(res.message ?? "Paketleme başarısız");
       }
@@ -109,13 +126,23 @@ export default function PackagingDecisionPanel({
   });
 
   const weightNum = Number(weightKg);
+  // UX E: mantıklı ağırlık sınırları (0.5–200 kg)
+  const MIN_WEIGHT = 0.5;
+  const MAX_WEIGHT = 200;
+  const weightValid =
+    !Number.isNaN(weightNum) &&
+    weightNum >= MIN_WEIGHT &&
+    weightNum <= MAX_WEIGHT;
+  const weightWarning =
+    weightKg !== "" && !Number.isNaN(weightNum) && !weightValid
+      ? `Kilo ${MIN_WEIGHT}–${MAX_WEIGHT} kg arasında olmalı`
+      : null;
   const canFinalize =
     weightKg !== "" &&
-    !Number.isNaN(weightNum) &&
-    weightNum > 0 &&
+    weightValid &&
     (destination === "WAREHOUSE" ||
       (destination === "SHIP" &&
-        (orderLineId != null || summary.availableOrderLinks.length === 0)));
+        (isFason || orderLineId != null || !hasAnyOrder)));
 
   if (printedLabel) {
     return (
@@ -161,6 +188,40 @@ export default function PackagingDecisionPanel({
           </div>
         </div>
       </div>
+
+      {/* Müşteri desen karşılığı (varsa) */}
+      {summary.previewCustomerLabel && (
+        <Card className="border-purple-300 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/30">
+          <CardContent className="p-3 space-y-1">
+            <p className="text-[11px] uppercase tracking-wide text-purple-800 dark:text-purple-300 font-semibold">
+              Etikette Basılacak Desen Adı
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <p className="text-[10px] text-muted-foreground">Bizde</p>
+                <p className="font-medium truncate">
+                  {summary.variantCode ?? "—"}
+                  {summary.variantName ? ` · ${summary.variantName}` : ""}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">
+                  Müşteride
+                  {summary.previewCustomerName
+                    ? ` (${summary.previewCustomerName})`
+                    : ""}
+                </p>
+                <p className="font-semibold text-purple-900 dark:text-purple-200 truncate">
+                  {summary.previewCustomerLabel}
+                  {summary.previewCustomerCode
+                    ? ` · ${summary.previewCustomerCode}`
+                    : ""}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Roll summary */}
       <div className="grid grid-cols-3 gap-3">
@@ -229,6 +290,12 @@ export default function PackagingDecisionPanel({
           <p className="text-[11px] text-muted-foreground">
             İleride COM port üzerinden otomatik okunacak. Şu an simülasyon.
           </p>
+          {weightWarning && (
+            <p className="text-xs text-destructive flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              {weightWarning}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -239,15 +306,18 @@ export default function PackagingDecisionPanel({
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => setDestination("SHIP")}
-              className={`h-20 rounded-lg text-sm font-semibold transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
-                destination === "SHIP"
-                  ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/40"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              onClick={() => canShip && setDestination("SHIP")}
+              disabled={!canShip}
+              className={`h-20 rounded-lg text-sm font-semibold transition-all flex flex-col items-center justify-center gap-1 ${
+                !canShip
+                  ? "bg-muted/50 text-muted-foreground/60 cursor-not-allowed opacity-60"
+                  : destination === "SHIP"
+                    ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/40 cursor-pointer"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80 cursor-pointer"
               }`}
             >
               <Truck className="h-6 w-6" />
-              Sevkiyata
+              Sevke Hazır
             </button>
             <button
               type="button"
@@ -265,46 +335,62 @@ export default function PackagingDecisionPanel({
 
           {destination === "SHIP" && (
             <div className="pt-2 space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                Sipariş Atanması
-              </Label>
-              {summary.availableOrderLinks.length === 0 ? (
-                <p className="text-xs text-destructive">
-                  Bu iş emri hiçbir siparişe bağlı değil — lütfen depoya
-                  kaldırın.
-                </p>
+              {isFason ? (
+                <div className="rounded-lg border border-purple-200 bg-purple-50/60 dark:border-purple-900 dark:bg-purple-950/30 px-3 py-2 flex items-center gap-2">
+                  <Handshake className="h-4 w-4 text-purple-600 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] uppercase tracking-wide text-purple-800 dark:text-purple-300 font-semibold">
+                      Müşteri Malı (Fason)
+                    </p>
+                    <p className="text-sm font-semibold truncate">
+                      {summary.ownerCustomerName ?? "—"}
+                    </p>
+                  </div>
+                </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0 border rounded-lg px-3 py-2 bg-muted/40">
-                    {selectedLink ? (
-                      <>
-                        <p className="text-xs text-muted-foreground">
-                          {selectedLink.orderNumber}
+                <>
+                  <Label className="text-xs text-muted-foreground">
+                    Sipariş Atanması
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0 border rounded-lg px-3 py-2 bg-muted/40">
+                      {selectedLink ? (
+                        <>
+                          <p className="text-xs text-muted-foreground">
+                            {selectedLink.orderNumber}
+                          </p>
+                          <p className="text-sm font-semibold truncate">
+                            {selectedLink.customerName}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Sipariş seçilmedi
                         </p>
-                        <p className="text-sm font-semibold truncate">
-                          {selectedLink.customerName}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Sipariş seçilmedi
-                      </p>
+                      )}
+                    </div>
+                    {multipleOrders && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setOrderPickerOpen(true)}
+                        className="h-12 shrink-0"
+                      >
+                        <Repeat2 className="h-4 w-4 mr-1" />
+                        Değiştir
+                      </Button>
                     )}
                   </div>
-                  {multipleOrders && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setOrderPickerOpen(true)}
-                      className="h-12 shrink-0"
-                    >
-                      <Repeat2 className="h-4 w-4 mr-1" />
-                      Değiştir
-                    </Button>
-                  )}
-                </div>
+                </>
               )}
             </div>
+          )}
+
+          {!canShip && (
+            <p className="text-xs text-muted-foreground">
+              Stok üretimi: sipariş veya müşteri bağlantısı yok — sadece depoya
+              kaldırılabilir.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -408,10 +494,28 @@ function LabelPreview({ label, onDone }: LabelPreviewProps) {
                 <p className="text-[10px] uppercase text-muted-foreground">
                   Desen / Varyant
                 </p>
-                <p className="text-sm font-semibold">
-                  {label.variantCode}
-                  {label.variantName ? ` — ${label.variantName}` : ""}
-                </p>
+                {label.customerVariantLabel ? (
+                  <div className="space-y-0.5">
+                    <p className="text-base font-bold text-purple-900 dark:text-purple-200">
+                      {label.customerVariantLabel}
+                      {label.customerVariantCode
+                        ? ` · ${label.customerVariantCode}`
+                        : ""}
+                      <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                        (müşterideki adı)
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Bizdeki: {label.variantCode}
+                      {label.variantName ? ` — ${label.variantName}` : ""}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm font-semibold">
+                    {label.variantCode}
+                    {label.variantName ? ` — ${label.variantName}` : ""}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -479,18 +583,22 @@ function LabelPreview({ label, onDone }: LabelPreviewProps) {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 gap-2">
+      <p className="text-[11px] text-muted-foreground text-center">
+        Etiket otomatik gönderildi. Yazıcıdan çıkmadıysa "Tekrar Yazdır"a
+        basın.
+      </p>
+      <div className="grid grid-cols-[1fr_2fr] gap-2">
         <Button
           variant="outline"
           onClick={handlePrint}
-          className="h-14 text-base font-semibold"
+          className="h-14 text-sm font-semibold"
         >
           <Printer className="h-5 w-5" />
-          Yazdır
+          Tekrar Yazdır
         </Button>
-        <Button onClick={onDone} className="h-14 text-base font-semibold">
+        <Button onClick={onDone} className="h-14 text-base font-bold">
           <CheckCircle2 className="h-5 w-5" />
-          Tamam
+          Tamam — Bir Sonraki Top
         </Button>
       </div>
     </div>

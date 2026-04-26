@@ -25,6 +25,7 @@ import {
   Warehouse,
   Layers,
   Trash2,
+  Handshake,
 } from "lucide-react";
 
 export interface NavItem {
@@ -147,6 +148,12 @@ export const navigationConfig: NavGroup[] = [
         href: "/orders",
         icon: ShoppingCart,
         permissions: ["order:read"],
+      },
+      {
+        title: "Fason Üretim Kabul",
+        href: "/service-production",
+        icon: Handshake,
+        permissions: ["roll:write"],
       },
     ],
   },

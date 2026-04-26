@@ -3,7 +3,16 @@ import type { QueryParams } from "@/types/api";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Cylinder, Eye, Search, Trash2, X } from "lucide-react";
+import {
+  Plus,
+  Cylinder,
+  Eye,
+  Search,
+  Trash2,
+  X,
+  Factory,
+  Handshake,
+} from "lucide-react";
 import { useDataTable } from "@/hooks/useDataTable";
 import {
   DataTable,
@@ -23,6 +32,8 @@ import { RollStatus, rollStatusLabels, itemTypeLabels } from "@/types/enums";
 import type { ItemType } from "@/types/enums";
 import InitialEntryDialog from "./InitialEntryDialog";
 import RollDetailPanel from "./RollDetailPanel";
+
+type OwnerTab = "FACTORY" | "CUSTOMER";
 
 const filterConfigs: ColumnFilterConfig[] = [
   {
@@ -45,7 +56,273 @@ const statusColorMap: Record<string, string> = {
   [RollStatus.SCRAP]: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
+const factoryColumns = (
+  setDetailRollId: (id: string) => void,
+  removeMutation: { mutate: (id: string) => void; isPending: boolean },
+  hardRemoveMutation: { mutate: (id: string) => void; isPending: boolean },
+): ColumnDef<Roll, unknown>[] => [
+  getSelectionColumn<Roll>(),
+  {
+    accessorKey: "barcode",
+    header: "Barkod",
+    size: 210,
+    cell: ({ getValue }) => (
+      <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
+        {getValue<string>()}
+      </code>
+    ),
+  },
+  {
+    id: "itemCode",
+    header: "Ürün Kodu",
+    size: 130,
+    cell: ({ row }) => row.original.item?.code ?? "—",
+  },
+  {
+    id: "itemName",
+    header: "Ürün",
+    size: 190,
+    cell: ({ row }) => row.original.item?.name ?? "—",
+  },
+  {
+    id: "design",
+    header: "Desen",
+    size: 160,
+    cell: ({ row }) => (
+      <span className="text-sm">
+        {(row.original.variant?.code || row.original.design) ?? (
+          <span className="text-muted-foreground italic text-xs">—</span>
+        )}
+      </span>
+    ),
+  },
+  {
+    id: "itemType",
+    header: "Tür",
+    size: 120,
+    cell: ({ row }) => {
+      const type = row.original.item?.itemType;
+      return type ? itemTypeLabels[type as ItemType] ?? type : "—";
+    },
+  },
+  {
+    accessorKey: "width",
+    header: "En (cm)",
+    size: 90,
+    cell: ({ getValue }) => getValue<number | null>() ?? "—",
+  },
+  {
+    accessorKey: "currentQty",
+    header: "Miktar (mt)",
+    size: 110,
+    cell: ({ row }) => (
+      <span>
+        {row.original.currentQty}
+        {row.original.currentQty !== row.original.initialQty && (
+          <span className="text-muted-foreground text-xs ml-1">
+            / {row.original.initialQty}
+          </span>
+        )}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "weightKg",
+    header: "Ağırlık (kg)",
+    size: 110,
+    cell: ({ getValue }) => getValue<number | null>() ?? "—",
+  },
+  {
+    accessorKey: "qualityGrade",
+    header: "Kalite",
+    size: 100,
+  },
+  {
+    accessorKey: "status",
+    header: "Durum",
+    size: 130,
+    cell: ({ getValue }) => {
+      const val = getValue<string>();
+      return (
+        <Badge className={statusColorMap[val] ?? ""} variant="secondary">
+          {rollStatusLabels[val as keyof typeof rollStatusLabels] ?? val}
+        </Badge>
+      );
+    },
+  },
+  {
+    id: "actions",
+    header: "",
+    size: 100,
+    enableSorting: false,
+    cell: ({ row }) => (
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDetailRollId(row.original.id);
+          }}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+        {row.original.status === "STOCK" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Hurdaya Al"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirm("Bu topu hurdaya almak istediğinize emin misiniz?")) {
+                removeMutation.mutate(row.original.id);
+              }
+            }}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        )}
+        {row.original.status === "SCRAP" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Kalıcı Sil"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (
+                confirm(
+                  "DİKKAT: Bu topu kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!",
+                )
+              ) {
+                hardRemoveMutation.mutate(row.original.id);
+              }
+            }}
+          >
+            <X className="h-4 w-4 text-destructive" />
+          </Button>
+        )}
+      </div>
+    ),
+  },
+];
+
+const customerColumns = (
+  setDetailRollId: (id: string) => void,
+): ColumnDef<Roll, unknown>[] => [
+  getSelectionColumn<Roll>(),
+  {
+    accessorKey: "barcode",
+    header: "Barkod",
+    size: 210,
+    cell: ({ getValue }) => (
+      <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
+        {getValue<string>()}
+      </code>
+    ),
+  },
+  {
+    id: "owner",
+    header: "Mal Sahibi",
+    size: 180,
+    cell: ({ row }) => {
+      const owner = row.original.ownerCustomer;
+      if (!owner) return <span className="text-muted-foreground text-xs">—</span>;
+      return (
+        <span className="font-semibold text-purple-700 dark:text-purple-300">
+          {owner.name}
+        </span>
+      );
+    },
+  },
+  {
+    id: "itemCode",
+    header: "Ürün Kodu",
+    size: 130,
+    cell: ({ row }) => row.original.item?.code ?? "—",
+  },
+  {
+    id: "itemName",
+    header: "Ürün",
+    size: 190,
+    cell: ({ row }) => row.original.item?.name ?? "—",
+  },
+  {
+    id: "customerDescription",
+    header: "Müşteri Tanımı",
+    size: 160,
+    cell: ({ row }) => (
+      <span className="text-sm italic text-muted-foreground">
+        {row.original.customerDescription ?? "—"}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "width",
+    header: "En (cm)",
+    size: 90,
+    cell: ({ getValue }) => getValue<number | null>() ?? "—",
+  },
+  {
+    accessorKey: "currentQty",
+    header: "Miktar (mt)",
+    size: 110,
+    cell: ({ row }) => (
+      <span>
+        {row.original.currentQty}
+        {row.original.currentQty !== row.original.initialQty && (
+          <span className="text-muted-foreground text-xs ml-1">
+            / {row.original.initialQty}
+          </span>
+        )}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "weightKg",
+    header: "Ağırlık (kg)",
+    size: 110,
+    cell: ({ getValue }) => getValue<number | null>() ?? "—",
+  },
+  {
+    accessorKey: "qualityGrade",
+    header: "Kalite",
+    size: 100,
+  },
+  {
+    accessorKey: "status",
+    header: "Durum",
+    size: 130,
+    cell: ({ getValue }) => {
+      const val = getValue<string>();
+      return (
+        <Badge className={statusColorMap[val] ?? ""} variant="secondary">
+          {rollStatusLabels[val as keyof typeof rollStatusLabels] ?? val}
+        </Badge>
+      );
+    },
+  },
+  {
+    id: "actions",
+    header: "",
+    size: 60,
+    enableSorting: false,
+    cell: ({ row }) => (
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={(e) => {
+          e.stopPropagation();
+          setDetailRollId(row.original.id);
+        }}
+      >
+        <Eye className="h-4 w-4" />
+      </Button>
+    ),
+  },
+];
+
 export default function RollsPage() {
+  const [activeTab, setActiveTab] = useState<OwnerTab>("FACTORY");
   const [entryDialogOpen, setEntryDialogOpen] = useState(false);
   const [detailRollId, setDetailRollId] = useState<string | null>(null);
   const [barcodeSearch, setBarcodeSearch] = useState("");
@@ -58,9 +335,7 @@ export default function RollsPage() {
       qc.invalidateQueries({ queryKey: ["rolls"] });
       setEntryDialogOpen(false);
     },
-    onError: () => {
-      toast.error("Top oluşturulurken hata oluştu");
-    },
+    onError: () => toast.error("Top oluşturulurken hata oluştu"),
   });
 
   const removeMutation = useMutation({
@@ -96,172 +371,63 @@ export default function RollsPage() {
     }
   }, [barcodeSearch]);
 
-  const columns = useMemo<ColumnDef<Roll, unknown>[]>(
-    () => [
-      getSelectionColumn<Roll>(),
-      {
-        accessorKey: "barcode",
-        header: "Barkod",
-        size: 210,
-        cell: ({ getValue }) => (
-          <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
-            {getValue<string>()}
-          </code>
-        ),
-      },
-      {
-        id: "itemCode",
-        header: "Ürün Kodu",
-        size: 130,
-        cell: ({ row }) => row.original.item?.code ?? "—",
-      },
-      {
-        id: "itemName",
-        header: "Ürün",
-        size: 190,
-        cell: ({ row }) => row.original.item?.name ?? "—",
-      },
-      {
-        id: "design",
-        header: "Desen",
-        size: 160,
-        cell: ({ row }) => (
-          <span className="text-sm">
-            {(row.original.variant?.code || row.original.design) ?? (
-              <span className="text-muted-foreground italic text-xs">—</span>
-            )}
-          </span>
-        ),
-      },
-      {
-        id: "itemType",
-        header: "Tür",
-        size: 120,
-        cell: ({ row }) => {
-          const type = row.original.item?.itemType;
-          return type
-            ? itemTypeLabels[type as ItemType] ?? type
-            : "—";
-        },
-      },
-      {
-        accessorKey: "currentQty",
-        header: "Miktar (mt)",
-        size: 110,
-        cell: ({ row }) => (
-          <span>
-            {row.original.currentQty}
-            {row.original.currentQty !== row.original.initialQty && (
-              <span className="text-muted-foreground text-xs ml-1">
-                / {row.original.initialQty}
-              </span>
-            )}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "weightKg",
-        header: "Ağırlık (kg)",
-        size: 110,
-        cell: ({ getValue }) => getValue<number | null>() ?? "—",
-      },
-      {
-        accessorKey: "qualityGrade",
-        header: "Kalite",
-        size: 100,
-      },
-      {
-        accessorKey: "status",
-        header: "Durum",
-        size: 120,
-        cell: ({ getValue }) => {
-          const val = getValue<string>();
-          return (
-            <Badge className={statusColorMap[val] ?? ""} variant="secondary">
-              {rollStatusLabels[val as keyof typeof rollStatusLabels] ?? val}
-            </Badge>
-          );
-        },
-      },
-      {
-        id: "actions",
-        header: "",
-        size: 120,
-        enableSorting: false,
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                setDetailRollId(row.original.id);
-              }}
-            >
-              <Eye className="h-4 w-4" />
-            </Button>
-            {row.original.status === "STOCK" && (
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Hurdaya Al"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm("Bu topu hurdaya almak istediğinize emin misiniz?")) {
-                    removeMutation.mutate(row.original.id);
-                  }
-                }}
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            )}
-            {row.original.status === "SCRAP" && (
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Kalıcı Sil"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm("DİKKAT: Bu topu kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) {
-                    hardRemoveMutation.mutate(row.original.id);
-                  }
-                }}
-              >
-                <X className="h-4 w-4 text-destructive" />
-              </Button>
-            )}
-          </div>
-        ),
-      },
-    ],
+  const factoryCols = useMemo(
+    () => factoryColumns(setDetailRollId, removeMutation, hardRemoveMutation),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const customerCols = useMemo(
+    () => customerColumns(setDetailRollId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
-  const fetchRolls = useCallback((params: QueryParams) => {
-    const p = { ...params, filters: { ...params.filters } };
-    if (!p.filters.status) {
-      p.filters.status = "ALL";
-    }
-    return rollService.getAll(p);
-  }, []);
+  const fetchFactory = useCallback(
+    (params: QueryParams) => {
+      const p = { ...params, filters: { ...(params.filters || {}), ownerType: "FACTORY" } as Record<string, string | string[]> };
+      if (!p.filters.status) p.filters.status = "ALL";
+      return rollService.getAll(p);
+    },
+    [],
+  );
 
-  const dt = useDataTable({
-    queryKey: "rolls",
-    fetchFn: fetchRolls,
-    columns,
+  const fetchCustomer = useCallback(
+    (params: QueryParams) => {
+      const p = { ...params, filters: { ...(params.filters || {}), ownerType: "CUSTOMER" } as Record<string, string | string[]> };
+      if (!p.filters.status) p.filters.status = "ALL";
+      return rollService.getAll(p);
+    },
+    [],
+  );
+
+  const factoryDt = useDataTable({
+    queryKey: ["rolls", "factory"],
+    fetchFn: fetchFactory,
+    columns: factoryCols,
     defaultSortBy: "createdAt",
     defaultSortOrder: "desc",
   });
 
+  const customerDt = useDataTable({
+    queryKey: ["rolls", "customer"],
+    fetchFn: fetchCustomer,
+    columns: customerCols,
+    defaultSortBy: "createdAt",
+    defaultSortOrder: "desc",
+  });
+
+  const dt = activeTab === "FACTORY" ? factoryDt : customerDt;
+  const cols = activeTab === "FACTORY" ? factoryCols : customerCols;
+
   return (
     <div className="space-y-4">
+      {/* Başlık */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Cylinder className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight">Toplar (Envanter)</h1>
         </div>
         <div className="flex items-center gap-2">
-          {/* Barkod Arama */}
           <div className="flex items-center gap-1">
             <Input
               value={barcodeSearch}
@@ -281,6 +447,48 @@ export default function RollsPage() {
         </div>
       </div>
 
+      {/* Tab Seçici */}
+      <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveTab("FACTORY")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+            activeTab === "FACTORY"
+              ? "bg-background shadow-sm text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Factory className="h-4 w-4" />
+          Fabrika Stoğu
+          {activeTab === "FACTORY" && factoryDt.pagination.total > 0 && (
+            <Badge variant="secondary" className="ml-1 h-5 text-[10px]">
+              {factoryDt.pagination.total}
+            </Badge>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("CUSTOMER")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+            activeTab === "CUSTOMER"
+              ? "bg-purple-600 shadow-sm text-white"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Handshake className="h-4 w-4" />
+          Müşteri Malları (Fason)
+          {activeTab === "CUSTOMER" && customerDt.pagination.total > 0 && (
+            <Badge
+              variant="secondary"
+              className="ml-1 h-5 text-[10px] bg-purple-500 text-white"
+            >
+              {customerDt.pagination.total}
+            </Badge>
+          )}
+        </button>
+      </div>
+
+      {/* Toolbar */}
       <DataTableToolbar
         search={dt.search}
         onSearchChange={dt.setSearch}
@@ -294,27 +502,42 @@ export default function RollsPage() {
         <DataTableExport
           data={dt.data}
           selectedData={dt.selectedRows}
-          filename="envanter-toplar"
+          filename={
+            activeTab === "FACTORY" ? "fabrika-stogu" : "musteri-mallari"
+          }
           columns={[
-            { header: "Barkod",        accessor: "barcode" },
-            { header: "Ürün Kodu",     accessor: (row: Roll) => row.item?.code ?? "" },
-            { header: "Ürün",         accessor: (row: Roll) => row.item?.name ?? "" },
-            { header: "Desen",         accessor: (row: Roll) => row.design ?? "" },
-            { header: "İlk Metraj",   accessor: (row: Roll) => String(row.initialQty) },
+            { header: "Barkod", accessor: "barcode" },
+            { header: "Ürün Kodu", accessor: (row: Roll) => row.item?.code ?? "" },
+            { header: "Ürün", accessor: (row: Roll) => row.item?.name ?? "" },
+            ...(activeTab === "CUSTOMER"
+              ? [
+                  {
+                    header: "Mal Sahibi",
+                    accessor: (row: Roll) => row.ownerCustomer?.name ?? "",
+                  },
+                  {
+                    header: "Müşteri Tanımı",
+                    accessor: (row: Roll) => row.customerDescription ?? "",
+                  },
+                ]
+              : [{ header: "Desen", accessor: (row: Roll) => row.design ?? "" }]),
+            { header: "En (cm)", accessor: (row: Roll) => String(row.width ?? "") },
+            { header: "İlk Metraj", accessor: (row: Roll) => String(row.initialQty) },
             { header: "Mevcut Metraj", accessor: (row: Roll) => String(row.currentQty) },
             { header: "Ağırlık (kg)", accessor: (row: Roll) => String(row.weightKg ?? "") },
-            { header: "Kalite",        accessor: "qualityGrade" },
-            { header: "Durum",         accessor: (row: Roll) => rollStatusLabels[row.status] ?? row.status },
+            { header: "Kalite", accessor: "qualityGrade" },
+            { header: "Durum", accessor: (row: Roll) => rollStatusLabels[row.status] ?? row.status },
           ]}
         />
       </DataTableToolbar>
 
+      {/* Tablo */}
       {dt.isLoading ? (
-        <DataTableSkeleton columnCount={10} rowCount={10} />
+        <DataTableSkeleton columnCount={cols.length} rowCount={10} />
       ) : (
         <DataTable
           table={dt.table}
-          columnCount={10}
+          columnCount={cols.length}
           isFetching={dt.isFetching}
           onRowClick={(row) => setDetailRollId(row.id)}
         />

@@ -55,7 +55,7 @@ function VariantSelect({ itemId, value, onChange }: { itemId: string; value: str
     queryFn: () => itemService.getVariants(itemId),
     enabled: !!itemId,
   });
-  const opts = data?.data?.map((v: any) => ({ value: v.id, label: `${v.code} - ${v.name}` })) ?? [];
+  const opts = data?.data?.map((v) => ({ value: v.id, label: `${v.code} - ${v.name}` })) ?? [];
   
   // Eğer varyantlar varsa, bir "Varyant Yok" seçeneği ekleyelim ki seçimi temizleyebilsinler
   const finalOpts = opts.length > 0 ? [{ value: "", label: "--- Varyant Yok ---" }, ...opts] : opts;
@@ -122,7 +122,7 @@ export default function OrderFormDialog({
             : "",
         });
         setLines(
-          order.lines?.map((l: any) => ({
+          order.lines?.map((l) => ({
             itemId:    l.itemId,
             variantId: l.variantId ?? "",
             quantity:  String(l.quantity),

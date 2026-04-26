@@ -351,6 +351,10 @@ export class TamburService {
       }
 
       // Tambur adımındaki açık RollMovement'i kapat + step rollup recompute
+      // now sabitlenir: exitedAt ve TAMBUR_PROCESSED.createdAt aynı timestamp'i
+      // paylaşır → history sıralamasında OPERATION doğru yere (çıkışla birlikte,
+      // sonraki adım girişinden önce) gelir.
+      const now = new Date();
       const oldStepId = roll.currentStepId;
       if (oldStepId) {
         await tx.rollMovement.updateMany({
@@ -360,7 +364,7 @@ export class TamburService {
             exitedAt: null,
           },
           data: {
-            exitedAt: new Date(),
+            exitedAt: now,
             qtyOut: data.netCurrentQty,
             weightOut: roll.weightKg,
             notes: `TAMBUR_FINALIZED`,
@@ -430,6 +434,7 @@ export class TamburService {
             workOrderStepId: oldStepId,
             operationType: RollOperationType.TAMBUR_PROCESSED,
             operatorId: userId ?? null,
+            createdAt: now,
             metadata: {
               foldType: data.foldType ?? null,
               layerCount: data.layerCount ?? null,

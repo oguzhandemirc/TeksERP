@@ -1,367 +1,370 @@
-# TeksERP — Mimari ve Teknik Dökümantasyon
+# TeksERP — Backend Mimari ve Performans Referansı
 
-> **Son güncelleme:** 15 Nisan 2026  
-> **Bu dosya hem AI ajanlar hem de geliştiriciler için hazırlanmıştır.**  
-> Projeye katkıda bulunmadan önce bu dökümanı okuyun.
-
----
-
-## 1. Proje Özeti
-
-TeksERP, bir **tekstil fabrikası** için tasarlanmış uçtan uca ERP backend sistemidir. Ham kumaşın fabrikaya girişinden boyama, kalite kontrol, paketleme ve sevkiyata kadar tüm üretim sürecini yönetir.
-
-### Temel Akış (End-to-End)
-
-```
-Ham Mal Girişi → İş Emri → Boyahane → Kurşun (QC) → Tambur (Karar) → Paketleme → Sevkiyat
-     ↑               ↑            ↑           ↑             ↑              ↑          ↑
-  Inventory      Planning    Production   Production     Tambur        Shipping    Shipping
-   (Faz 2)       (Faz 3)     (Faz 4)      (Faz 4)       (Faz 5)       (Faz 6)     (Faz 6)
-```
-
-### Müşteri / Domain Bilgisi
-
-- **Sektör:** Tekstil (dokuma, boyama, baskı)
-- **Birimler:** Metraj (MT), Kilogram (KG), Adet
-- **Dil:** Tüm API mesajları ve Swagger açıklamaları Türkçe
-- **Top (Roll):** Üretimin temel birimi. Her top benzersiz barkoda sahiptir.
-- **Parti (Work Order):** Bir veya birden fazla topun birlikte işlendiği iş emri.
+> Bu dosya `CLAUDE.md`'nin uzun-form referansıdır. CLAUDE.md sözleşmedir, bu dosya kütüphane.
+> Schema değiştiğinde / yeni endpoint eklendiğinde / pattern güncellendiğinde bu dosya da güncellenmelidir.
 
 ---
 
-## 2. Tech Stack
+## 1. Tech Stack
 
-| Katman | Teknoloji | Versiyon |
-|--------|-----------|----------|
+| Katman | Teknoloji | Not |
+|---|---|---|
 | Runtime | Node.js | — |
-| Dil | TypeScript (strict) | 6.x |
-| Framework | Express | 5.x |
-| ORM | Prisma + pg adapter | 7.x |
+| Dil | TypeScript (strict) | `any` yasak |
+| Framework | Express 5 | `req.params.id` bazen `as string` ister |
+| ORM | Prisma 7 + `@prisma/adapter-pg` | Şema değişince `prisma:generate` zorunlu |
 | Veritabanı | PostgreSQL | — |
-| Auth | JWT (jsonwebtoken + bcryptjs) | — |
-| Validasyon | Zod | 4.x |
-| API Docs | Swagger (swagger-jsdoc + swagger-ui-express) | — |
-| Güvenlik | Helmet, CORS | — |
-| Loglama | Morgan | — |
-
-### Kritik Versiyon Notları
-
-- **Zod v4:** `z.record()` iki parametre alır → `z.record(z.string(), z.unknown())`
-- **Prisma 7:** `@prisma/adapter-pg` ile doğrudan `pg` Pool kullanılır
-- **Express 5:** `req.params` typed farklılıkları var, `as string` gerekebilir
+| Auth | JWT (`jsonwebtoken` + `bcryptjs`) | — |
+| Validasyon | Zod 4 | `z.record(z.string(), z.unknown())` — iki arg |
+| Docs | `swagger-jsdoc` + `swagger-ui-express` | `/api-docs` |
+| Güvenlik | `helmet`, `cors` | — |
+| Loglama | `morgan` | — |
 
 ---
 
-## 3. Dizin Yapısı
+## 2. Dizin Yapısı
 
 ```
 Teks-Erp/
 ├── prisma/
-│   ├── schema.prisma          # 22 model, 8 enum — TÜM veritabanı şeması
-│   ├── seed.ts                # Gerçekçi test verisi (858 satır)
-│   ├── migrations/            # Prisma migration dosyaları
-│   └── tsconfig.json          # Seed için ayrı TS config
+│   ├── schema.prisma          # 38 model, 13 enum
+│   ├── seed.ts                # Test verisi (6 kullanıcı)
+│   └── migrations/
 │
 ├── src/
-│   ├── server.ts              # Entry point — PORT dinleme
-│   ├── app.ts                 # Express app — middleware + route kayıtları
+│   ├── server.ts              # Entry point
+│   ├── app.ts                 # Express app + route kayıtları
 │   │
 │   ├── config/
-│   │   └── swagger.ts         # OpenAPI 3.0 yapılandırması
+│   │   └── swagger.ts         # OpenAPI 3.0
 │   │
 │   ├── lib/
 │   │   └── prisma.ts          # PrismaClient singleton (pg adapter)
 │   │
 │   ├── middlewares/
-│   │   ├── auth.middleware.ts  # JWT doğrulama → req.user
-│   │   ├── rbac.middleware.ts  # Yetki kontrolü (requirePermission)
-│   │   └── error.middleware.ts # Global hata yakalama (Prisma, Zod, AppError)
+│   │   ├── auth.middleware.ts  # verifyToken → req.user
+│   │   ├── rbac.middleware.ts  # requirePermission, requireAnyPermission
+│   │   └── error.middleware.ts # AppError + Prisma error mapping + Zod
 │   │
-│   ├── controllers/
-│   │   ├── base.controller.ts      # Genel CRUD (Master Data için)
-│   │   ├── auth.controller.ts      # Login, register, me
-│   │   ├── inventory.controller.ts # Roll girişi, envanter
-│   │   ├── workorder.controller.ts # İş emri, top bağlama
-│   │   ├── production.controller.ts# İstasyon aksiyonları, hata raporlama
-│   │   ├── tambur.controller.ts    # Tambur kararları, tahsis
-│   │   └── shipping.controller.ts  # Paketleme, sevkiyat
-│   │
-│   ├── services/
-│   │   ├── base.service.ts         # Dynamic Query Engine (filter/sort/page)
-│   │   ├── audit.service.ts        # SystemLog otomasyonu
-│   │   ├── auth.service.ts         # JWT sign/verify, password hash
-│   │   ├── inventory.service.ts    # Roll oluşturma, barkod üretimi
-│   │   ├── workorder.service.ts    # İş emri, rota, top bağlama
-│   │   ├── production.service.ts   # İstasyon start/finish, QC2
-│   │   ├── tambur.service.ts       # Roll splitting, tahsis
-│   │   └── shipping.service.ts     # Paketleme, sevkiyat, auto-complete
-│   │
-│   ├── routes/
-│   │   ├── auth.routes.ts          # /api/auth/*
-│   │   ├── item.routes.ts          # /api/items/*
-│   │   ├── customer.routes.ts      # /api/customers/*
-│   │   ├── station.routes.ts       # /api/stations/* + /api/machines/*
-│   │   ├── route.routes.ts         # /api/routes/*
-│   │   ├── inventory.routes.ts     # /api/rolls/*
-│   │   ├── order.routes.ts         # /api/orders/*
-│   │   ├── workorder.routes.ts     # /api/work-orders/*
-│   │   ├── production.routes.ts    # /api/production/*
-│   │   ├── tambur.routes.ts        # /api/tambur/*
-│   │   └── shipping.routes.ts      # /api/shipping/*
+│   ├── controllers/           # 12 dosya — HTTP layer
+│   ├── services/              # 17 dosya — iş mantığı
+│   ├── routes/                # 21 dosya — Swagger JSDoc + middleware
 │   │
 │   ├── types/
-│   │   ├── api.types.ts            # ApiResponse, PaginatedResponse, JwtPayload
-│   │   └── express-augment.ts      # Express Request'e user ekleme
+│   │   ├── api.types.ts       # ApiResponse, PaginatedResponse, JwtPayload
+│   │   └── express-augment.ts # Request.user
 │   │
 │   └── utils/
-│       ├── app-error.ts            # Custom error sınıfı (400,401,403,404,409,500)
-│       └── query-parser.ts         # URL query → Prisma where/orderBy/skip/take
+│       ├── app-error.ts       # 400/401/403/404/409/500
+│       └── query-parser.ts    # URL → Prisma where/orderBy/skip/take
 │
-├── .agents/                        # AI ajan yapılandırması
-│   ├── rules/                      # business-rules.md, core-architecture.md
-│   ├── workflows/                  # Faz bazlı workflow tanımları
-│   ├── skills/                     # prisma-expert, nodejs-backend-patterns vb.
-│   └── knowledge/                  # teksERP-specs.md
-│
-├── .env                            # DATABASE_URL, JWT_SECRET, PORT
-├── package.json
-└── tsconfig.json
+├── eslint.config.mjs           # tx içinde Promise.all yasağı dahil
+├── prisma.config.ts
+└── package.json
 ```
 
 ---
 
-## 4. Mimari Katmanlar (Layered Architecture)
+## 3. Layered Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│                   ROUTES                     │  Swagger JSDoc + RBAC + Auth middleware
-│  Express Router → verifyToken → requirePerm  │
-├─────────────────────────────────────────────┤
-│                CONTROLLERS                   │  Zod validasyon + HTTP status kodları
-│  Zod parse → Service call → res.json()       │
-├─────────────────────────────────────────────┤
-│                 SERVICES                     │  İş kuralları + Prisma queries
-│  Transaction + AuditService.log()            │
-├─────────────────────────────────────────────┤
-│              PRISMA CLIENT                   │  Singleton in src/lib/prisma.ts
-│  pg adapter → PostgreSQL                     │
-└─────────────────────────────────────────────┘
+Routes  →  verifyToken → requirePermission → controller method
+            (JWT)         (yetki kontrolü)
+                                  ↓
+Controllers → Zod validate → service.method() → res.json()
+
+Services  → İş kuralları + Prisma queries + transaction + AuditService.log()
+
+Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 ```
 
-### Katman Kuralları
-
-1. **Route** dosyası: Sadece middleware zinciri tanımlar + Swagger JSDoc
-2. **Controller**: Zod ile validasyon, Service'i çağır, HTTP yanıt dön
-3. **Service**: İş mantığı, Prisma query, transaction, AuditService
-4. **Hiçbir katman** alt katmanı atlamamalı (Route → Controller → Service → Prisma)
+**Katman kuralı:** Hiçbir katman alt katmanı atlamamalı. Route, Service'i doğrudan çağırmaz. Controller, prisma'yı doğrudan çağırmaz.
 
 ---
 
-## 5. Veritabanı Şeması (ER Özet)
+## 4. Schema — 38 Model + 13 Enum
 
-### Model Sayıları
+### Modeller (gruplandırılmış)
 
 | Grup | Modeller | Adet |
-|------|----------|------|
+|---|---|---|
 | RBAC | User, Role, Permission, UserRole, RolePermission | 5 |
 | Master Data | Station, Machine, Route, RouteStep | 4 |
-| Inventory | Item, Roll | 2 |
+| Item & Variant | Item, ItemVariant, CustomerVariantAlias | 3 |
+| Inventory | Roll, RollMovement, RollOperation | 3 |
 | Sales | Customer, Order, OrderLine | 3 |
-| Production | WorkOrder, WorkOrderStep, WorkOrderToOrderLine, RollError | 4 |
+| Production | WorkOrder, WorkOrderStep, WorkOrderToOrderLine | 3 |
+| Quality | QualityGrade, DefectType, RollError | 3 |
 | Logistics | OrderAllocation, Shipment, ShipmentItem | 3 |
-| Finance | CurrentAccount, MachineLog | 2 |
+| Subcontractor | SubcontractorDispatch, SubcontractorDispatchItem, SubcontractorReceipt, SubcontractorReceiptItem | 4 |
+| Documents | TravelerCard, TravelerCardScan, Manifest, Swatch | 4 |
+| Finance / Logs | CurrentAccount, MachineLog | 2 |
 | Audit | SystemLog | 1 |
-| **TOPLAM** | | **22** |
+| **TOPLAM** | | **38** |
 
-### Enumlar
+### Enum'lar
 
-```
-StationType:    INTERNAL | EXTERNAL
-ItemType:       YARN | WARP | RAW_FABRIC | DYED_FABRIC | CONSUMABLE
-RollStatus:     STOCK | IN_PRODUCTION | PRODUCED | READY_FOR_SHIP | SHIPPED | SCRAP
-CompanyType:    CUSTOMER | SUPPLIER | SUBCONTRACTOR
-OrderStatus:    PENDING | APPROVED | IN_PRODUCTION | PARTIAL_SHIPPED | COMPLETED | CANCELLED
-WorkOrderType:  WEAVING | WARPING | FABRIC_DYEING | RE_PROCESS
-WorkOrderStatus:PLANNED | IN_PROGRESS | PAUSED | COMPLETED | CANCELLED
-StepStatus:     PENDING | ACTIVE | COMPLETED | SKIPPED
-ShipmentStatus: PREPARING | SHIPPED | CANCELLED
-```
+| Enum | Değerler |
+|---|---|
+| `StationType` | INTERNAL, EXTERNAL |
+| `StationKind` | RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, PACKAGING, SHIPPING, OTHER |
+| `RollOperationType` | KURSUN_APPLIED, QC2_COMPLETED, TAMBUR_PROCESSED, PACKAGED, SUBCONTRACTOR_SENT, SUBCONTRACTOR_RETURNED |
+| `ItemType` | YARN, WARP, RAW_FABRIC, DYED_FABRIC, CONSUMABLE |
+| `RollStatus` | STOCK, IN_PRODUCTION, PRODUCED, READY_FOR_SHIP, SHIPPED, SCRAP, AT_SUBCONTRACTOR, A1_STOCK, RETURNED_FROM_SUBCONTRACTOR, WAREHOUSE |
+| `CompanyType` | CUSTOMER, SUPPLIER, SUBCONTRACTOR, DYEHOUSE |
+| `OrderStatus` | PENDING, APPROVED, IN_PRODUCTION, PARTIAL_SHIPPED, COMPLETED, CANCELLED |
+| `WorkOrderType` | ORDER_PRODUCTION, STOCK_PRODUCTION, SAMPLE_PRODUCTION, REPAIR_REWORK, SERVICE_PRODUCTION |
+| `WorkOrderStatus` | PLANNED, IN_PROGRESS, PAUSED, COMPLETED, CANCELLED |
+| `StepStatus` | PENDING, ACTIVE, COMPLETED, SKIPPED |
+| `ShipmentStatus` | PREPARING, SHIPPED, CANCELLED |
+| `TravelerCardStatus` | ACTIVE, REPRINTED, VOIDED, COMPLETED |
+| `ScanType` | ARRIVAL, DEPARTURE, INFO |
 
-### Roll Yaşam Döngüsü (Kritik)
-
-```
-STOCK → IN_PRODUCTION → PRODUCED → READY_FOR_SHIP → SHIPPED
-                                         ↓
-                                       SCRAP (Roll Splitting)
-```
-
-### Veritabanı Kuralları
+### Schema Kuralları
 
 - **PK:** Tüm modellerde `String @id @default(uuid())`
-- **Timestamps:** `createdAt` + `updatedAt` her modelde zorunlu
-- **Soft Delete:** Fiziksel DELETE yok, `isActive = false` kullanılır
-- **Audit:** Her CUD işlem `SystemLog` tablosuna kaydedilir
+- **Timestamps:** `createdAt` + `updatedAt` her modelde zorunlu (join tabloları hariç)
+- **Soft delete:** Fiziksel DELETE yok — `isActive: false` veya status değişikliği
+- **Audit:** Her CUD `SystemLog`'a yazılır → `AuditService.log()` üzerinden
+- **`StationKind`** — istasyon **domain rolü**; API davranışını dispatch eder (PROCESS_QC için Kurşun+QC2 akışı vb.)
+
+### Roll Yaşam Döngüsü
+
+```
+STOCK ─┬─→ IN_PRODUCTION ─→ AT_SUBCONTRACTOR ─→ RETURNED_FROM_SUBCONTRACTOR ─┐
+       │                                                                       │
+       └────────────────────────────────────────────────────────────────────→  PRODUCED
+                                                                                  ↓
+                                                              ┌──── SCRAP / A1_STOCK (Tambur kesim)
+                                                              ↓
+                                                          WAREHOUSE
+                                                              ↓
+                                                       READY_FOR_SHIP ─→ SHIPPED
+```
 
 ---
 
-## 6. API Endpoint Haritası
+## 5. API Endpoint Haritası
 
-### Kimlik Doğrulama (Public)
-| Method | Endpoint | Açıklama |
-|--------|----------|----------|
-| POST | `/api/auth/login` | JWT token al |
-| POST | `/api/auth/register` | Yeni kullanıcı (admin only) |
-| GET | `/api/auth/me` | Mevcut kullanıcı bilgisi |
+### Public (auth gerekmez)
+
+| Method | Endpoint | Not |
+|---|---|---|
+| POST | `/api/auth/login` | JWT döndürür |
+| GET | `/health` | Health check |
 
 ### Master Data (BaseController CRUD)
-| Method | Endpoint | Yetki |
-|--------|----------|-------|
-| CRUD | `/api/items` | `station:write` |
-| CRUD | `/api/customers` | `station:write` |
-| CRUD | `/api/stations` | `station:read/write` |
-| CRUD | `/api/machines` | `station:read/write` |
-| CRUD | `/api/routes` | `station:read/write` |
 
-### Envanter (Faz 2)
-| Method | Endpoint | Yetki | Açıklama |
-|--------|----------|-------|----------|
-| GET | `/api/rolls` | `inventory:read` | Stok listesi (varsayılan: STOCK) |
-| GET | `/api/rolls/:id` | `inventory:read` | Top detayı |
-| GET | `/api/rolls/barcode/:barcode` | `inventory:read` | Barkod sorgusu |
-| POST | `/api/rolls/initial-entry` | `inventory:write` | Ham mal girişi |
+| Endpoint | Permission |
+|---|---|
+| `/api/items` (+`/api/items/:itemId/variants`) | `item:read` / `item:write` |
+| `/api/customers` | `customer:read` / `customer:write` |
+| `/api/stations` (+`/api/machines`) | `station:read` / `station:write` |
+| `/api/routes` | `station:read` / `station:write` |
 
-### Planlama (Faz 3)
-| Method | Endpoint | Yetki | Açıklama |
-|--------|----------|-------|----------|
-| CRUD | `/api/orders` | `planning:read/write` | Sipariş yönetimi |
-| GET | `/api/work-orders` | `planning:read` | İş emri listesi |
-| GET | `/api/work-orders/:id` | `planning:read` | İş emri detayı |
-| POST | `/api/work-orders` | `planning:write` | İş emri oluştur |
-| PATCH | `/api/work-orders/:id/attach-rolls` | `planning:write` | Top bağla |
-| GET | `/api/work-orders/:id/travel-card` | `planning:read` | Refakat kartı |
-| GET | `/api/work-orders/:id/manifest` | `planning:read` | Çeki listesi |
+### Envanter
 
-### Üretim (Faz 4)
-| Method | Endpoint | Yetki | Açıklama |
-|--------|----------|-------|----------|
-| POST | `/api/production/step-action` | `production:write` | İstasyon başlat/tamamla |
-| GET | `/api/production/active-steps` | `production:read` | Aktif üretim dashboard |
-| POST | `/api/production/report-error` | `qc:write` | Kurşun hata raporlama |
+| Endpoint | Permission |
+|---|---|
+| `GET /api/rolls`, `/api/rolls/:id`, `/api/rolls/barcode/:barcode`, `/api/rolls/:id/history` | `roll:read` |
+| `POST /api/rolls/initial-entry`, `DELETE /api/rolls/:id` | `roll:write` |
 
-### Tambur (Faz 5)
-| Method | Endpoint | Yetki | Açıklama |
-|--------|----------|-------|----------|
-| GET | `/api/tambur/pending-rolls` | `tambur:read` | Bekleyen toplar |
-| GET | `/api/tambur/rolls/:rollId` | `tambur:read` | Karar ekranı |
-| POST | `/api/tambur/finalize` | `tambur:write` | **Roll Splitting** |
-| POST | `/api/tambur/allocate` | `tambur:write` | Sipariş tahsisi |
+### Planlama / Üretim
 
-### Sevkiyat (Faz 6)
-| Method | Endpoint | Yetki | Açıklama |
-|--------|----------|-------|----------|
-| GET | `/api/shipping/ready-orders` | `shipping:read` | Hazır siparişler |
-| POST | `/api/shipping/prepare-package` | `shipping:write` | Paketleme |
-| POST | `/api/shipping/shipments` | `shipping:write` | İrsaliye oluştur |
-| PATCH | `/api/shipping/shipments/:id/add-items` | `shipping:write` | Ürün ekle |
-| POST | `/api/shipping/shipments/:id/finalize` | `shipping:write` | **Sevkiyat onayla** |
+| Endpoint | Permission |
+|---|---|
+| `/api/orders` (CRUD) | `order:read` / `order:write` |
+| `/api/work-orders` (+ `/attach-rolls`, `/detach-rolls`, `/lock`, `/manifest`, `/travel-card`, `/rolls`, `/shipments`) | `workorder:read` / `workorder:write` |
+| `/api/production/active-steps`, `/step-info` | `workorder:read` |
+| `/api/production/step-action` | `roll:write` |
+| `/api/production/report-error` | `quality:write` |
+| `/api/kursun-qc/*` | `quality:read` / `quality:write` |
+| `/api/tambur/*` | `quality:read` / `quality:write` |
+| `/api/packaging/*` | `roll:read` / `roll:write` |
+| `/api/service-production/*` | `roll:read` / `roll:write` |
+
+### Sevkiyat / Lojistik
+
+| Endpoint | Permission |
+|---|---|
+| `/api/shipping/ready-orders`, `/ready-fason`, `/shipments` (CRUD + `/finalize`, `/print`, `/add-items`) | `shipment:read` / `shipment:write` |
+| `/api/subcontractor/dispatches`, `/receipts` | `workorder:read` / `workorder:write` |
+
+### Dokümanlar / Master
+
+| Endpoint | Permission |
+|---|---|
+| `/api/traveler-cards/*` | `workorder:read` / `workorder:write` |
+| `/api/swatches` | `quality:read` |
+| `/api/defect-types`, `/api/quality-grades` | `quality:read` / `quality:write` |
+
+Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`, `parameters`, `requestBody`, `responses` (200/201 + 400/401/500) zorunlu.
+
+---
+
+## 6. RBAC Permission Kodları
+
+`requirePermission(code)` middleware'i `req.user.permissions[]` array'ini kontrol eder. Toplam **20 permission**, 6 modül.
+
+| Modül | Permissions |
+|---|---|
+| SALES | `order:read`, `order:write`, `customer:read`, `customer:write` |
+| PRODUCTION | `workorder:read`, `workorder:write`, `roll:read`, `roll:write`, `station:read`, `station:write` |
+| MASTER_DATA | `item:read`, `item:write` |
+| QUALITY | `quality:read`, `quality:write` |
+| LOGISTICS | `shipment:read`, `shipment:write`, `allocation:write` |
+| ADMIN | `admin:users`, `admin:roles`, `admin:settings` |
+
+### Rol → Permission Atamaları
+
+| Rol | Permissions |
+|---|---|
+| Admin | TÜM 20 permission |
+| Planlama Şefi | `workorder:read/write`, `roll:read/write`, `station:read`, `item:read/write`, `order:read`, `allocation:write` |
+| Üretim Operatörü | `workorder:read`, `roll:read/write`, `station:read`, `item:read` |
+| Kalite Kontrol | `quality:read/write`, `roll:read/write`, `workorder:read`, `item:read` |
+| Satış Temsilcisi | `order:read/write`, `customer:read/write`, `item:read` |
+| Sevkiyatçı | `shipment:read/write`, `order:read`, `roll:read`, `item:read` |
+
+### Yeni Endpoint Yazarken
+
+Yeni `requirePermission(code)` çağrısında:
+1. `code` `seed.ts`'in `permissionData` listesinde **olmalı** — yoksa Admin dışı kullanıcılar 403 alır
+2. Ekleyen rolde de o permission **olmalı** — yoksa o rol erişemez
+3. Hem `seed.ts`'i güncelle hem de canlı DB'yi güncelle (yeni permission INSERT + role_permissions INSERT)
 
 ---
 
 ## 7. Kritik İş Kuralları
 
-> ⚠️ Bu kurallar kod yazarken mutlaka uyulması gereken domain gereksinimleridir.
-
-### 7.1 Roll Splitting (Tambur — tambur.service.ts)
+### 7.1 Roll Splitting (Tambur — `tambur.service.ts`)
 
 ```
 Kurşun'da hata tespit edildi → Tambur'da karar verildi: "KES"
   ↓
-Orijinal topun metrajı AZALTILMAZ!
-Kesilen parça için YENİ bir Roll kaydı oluşturulur (yeni barkod).
-Yeni Roll → status: SCRAP, qualityGrade: FIRE veya A1
+Orijinal topun metrajı AZALTILMAZ.
+Kesilen parça için YENİ Roll kaydı oluşturulur (yeni barcode).
+Yeni Roll → status: SCRAP veya A1_STOCK, parentRollId set
 Orijinal Roll → currentQty güncellenir, status: PRODUCED
 ```
 
-### 7.2 Taşeron Fire Hesabı (Production — production.service.ts)
+### 7.2 Fason Dönüş — Ölçüm YOKKEN
 
 ```
-İstasyon tipi EXTERNAL (boyahane, baskı vb.) ve action = FINISH ise:
-  → newQty ve/veya newWeight ZORUNLU
-  → Roll.currentQty güncellenir (çekme/fire sonrası)
+SubcontractorReceipt'te qty/weight ALINMAZ.
+Roll'lar AT_SUBCONTRACTOR → RETURNED_FROM_SUBCONTRACTOR'a geçer (yeni barkod basılmaz).
+Ölçüm bir sonraki istasyonun FINISH akışında yapılır
+(RollMovement.qtyOut/weightOut alanlarına yazılır).
 ```
 
-### 7.3 Esnek Müşteri Ataması (Shipping — shipping.service.ts)
+### 7.3 Esnek Müşteri Ataması (`shipping.service.ts`)
 
 ```
-Müşteri A'ya tahsisli top → Müşteri B'nin sevkiyatına ekleniyor:
+Müşteri A'ya tahsisli top → Müşteri B'nin sevkiyatına eklenebilir:
   → Eski OrderAllocation silinir
-  → Top yeni sevkiyata eklenir
+  → Top yeni Shipment'a ShipmentItem olarak eklenir
+İSTİSNA: Roll.ownerCustomerId varsa (SERVICE_PRODUCTION) o müşteriden
+        çıkarılamaz — fason üretim kabulü.
 ```
 
-### 7.4 Otomatik Sipariş Tamamlama (Shipping — shipping.service.ts)
+### 7.4 Otomatik Sipariş Tamamlama (`shipping.service.ts`)
 
 ```
-Sevkiyat onaylandığında (SHIPPED):
-  → Etkilenen her sipariş için toplam shippedQty hesaplanır
-  → shippedQty >= requestedQty → Order.status = COMPLETED
+Shipment finalize → SHIPPED:
+  → Etkilenen her Order için toplam shippedQty hesaplanır
+  → shippedQty >= quantity → Order.status = COMPLETED
   → Aksi halde → Order.status = PARTIAL_SHIPPED
 ```
 
-### 7.5 İş Emri Esnekliği (WorkOrder — workorder.service.ts)
+### 7.5 İş Emri Esnekliği (`workorder.service.ts`)
 
 ```
-- İş emri siparişsiz olabilir (stok için üretim)
-- İş emri birden fazla siparişe bağlanabilir
-- Sevkiyat iş emrini görmez, sadece sipariş görür
+- WorkOrder siparişsiz olabilir (STOCK_PRODUCTION, SERVICE_PRODUCTION)
+- WorkOrder birden fazla OrderLine'a bağlanabilir (WorkOrderToOrderLine N:N)
+- Sevkiyat WO görmez, sadece Order/ShipmentItem üzerinden çalışır
+```
+
+### 7.6 Refakat Kartı (`TravelerCard`)
+
+```
+WorkOrder finalize edildiğinde TravelerCard üretilir (cardNumber, barcode).
+Mal ile birlikte fiziksel olarak gezer.
+İstasyonda barkod taranınca → TravelerCardScan kaydı + step ilerletme.
+Reprint → eski kart REPRINTED'e döner, yeni kart ACTIVE.
+WO COMPLETED → tüm kartlar COMPLETED'a düşer.
+```
+
+### 7.7 RollOperation Idempotent
+
+```
+@@unique([rollId, workOrderStepId, operationType])
+→ Aynı operasyon iki kez çağrılırsa Prisma P2002 atar.
+→ İdempotent retry için: önce findUnique, varsa skip; yoksa create.
 ```
 
 ---
 
-## 8. Geliştirme Kalıpları (Patterns)
+## 8. Geliştirme Pattern'leri
 
-### 8.1 Yeni Master Data Modülü Ekleme (BaseController Kullanımı)
+### 8.1 Yeni Master Data Modülü (BaseController kullanımı)
 
-Yeni bir tablo için (örn. `Warehouse`) sadece route dosyası yeterlidir:
+`Warehouse` gibi basit bir tablo için:
 
 ```typescript
-// src/routes/warehouse.routes.ts
-import { BaseService } from "../services/base.service";
-import { BaseController } from "../controllers/base.controller";
-
-const service = new BaseService({
-  modelName: "warehouse",      // Prisma model adı (küçük harf)
-  tableName: "WAREHOUSE",      // SystemLog için tablo adı
-  searchFields: ["code", "name"], // ?search= parametresi ile aranacak alanlar
-  defaultInclude: undefined,   // İlişkili verileri otomatik getir
+// src/services/warehouse.service.ts
+import { BaseService } from "./base.service";
+export const warehouseService = new BaseService({
+  modelName: "warehouse",       // Prisma model adı (camelCase)
+  tableName: "WAREHOUSE",       // SystemLog için tablo adı
+  searchFields: ["code", "name"],
 });
 
-const controller = new BaseController(service);
-// ... router.get("/", verifyToken, ..., controller.findAll);
+// src/controllers/warehouse.controller.ts
+import { BaseController } from "./base.controller";
+import { warehouseService } from "../services/warehouse.service";
+export const warehouseController = new BaseController(warehouseService);
+
+// src/routes/warehouse.routes.ts
+import { Router } from "express";
+import { verifyToken } from "../middlewares/auth.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
+import { warehouseController } from "../controllers/warehouse.controller";
+
+const router = Router();
+router.get("/", verifyToken, requirePermission("station:read"), warehouseController.findAll);
+router.post("/", verifyToken, requirePermission("station:write"), warehouseController.create);
+// ...
+export default router;
+
+// src/app.ts
+app.use("/api/warehouses", warehouseRoutes);
 ```
 
-### 8.2 Yeni İş Mantığı Modülü Ekleme
+`BaseController` 6 endpoint sağlar: `GET /`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` (soft), `DELETE /:id/permanent` (hard).
+
+### 8.2 Karmaşık İş Mantığı Modülü
 
 ```
-1. src/services/yenimodul.service.ts    — İş kuralları + Prisma
-2. src/controllers/yenimodul.controller.ts — Zod validasyon + HTTP
-3. src/routes/yenimodul.routes.ts       — Swagger JSDoc + RBAC
-4. src/app.ts'e import ve app.use() ekle
+1. Service yaz (src/services/) — iş kuralları + transaction + AuditService.log()
+2. Controller yaz (src/controllers/) — Zod validate + service çağrısı
+3. Route yaz (src/routes/) — verifyToken + requirePermission + Swagger JSDoc
+4. app.ts'e import + app.use() ekle
 ```
 
-### 8.3 Zod Validasyon Şablonu
+### 8.3 Zod Validasyon
 
 ```typescript
 import { z } from "zod";
-
 const schema = z.object({
   name: z.string().min(1, "Ad gerekli"),
   quantity: z.number().positive("Miktar pozitif olmalı"),
   type: z.enum(["TYPE_A", "TYPE_B"]).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(), // Zod v4!
+  metadata: z.record(z.string(), z.unknown()).optional(), // Zod v4 — iki arg
 });
+const data = schema.parse(req.body); // Hata varsa errorHandler ZodError'ı yakalar → 400
 ```
 
-### 8.4 Transaction Kullanımı
+### 8.4 Transaction
 
 ```typescript
 const result = await prisma.$transaction(async (tx) => {
@@ -371,181 +374,313 @@ const result = await prisma.$transaction(async (tx) => {
 });
 ```
 
-### 8.5 AuditService Kullanımı
+**ZORUNLU:** `tx` içinde `Promise.all([tx.x, tx.y])` **yasak** — pg adapter'ında tek connection seri çalıştırır, parallelism illüzyon. ESLint kuralı bunu yakalar (`eslint.config.mjs`).
 
-**Her CUD işlemde zorunlu:**
+Top-level `prisma.$transaction([prisma.x, prisma.y])` (pool kullanımı) sorun değil.
+
+### 8.5 AuditService
+
+Her CUD işleminde **zorunlu**:
 
 ```typescript
 await AuditService.log({
-  userId,                    // req.user?.userId
-  action: "CREATE",          // "CREATE" | "UPDATE" | "DELETE"
-  tableName: "ROLL",         // Büyük harf tablo adı
-  recordId: record.id,       // Etkilenen kaydın ID'si
-  oldData: { ... },          // UPDATE/DELETE'de eski veri
-  newData: { ... },          // CREATE/UPDATE'de yeni veri
+  userId: req.user?.userId,
+  action: "CREATE",          // | "UPDATE" | "DELETE"
+  tableName: "ROLL",         // BÜYÜK HARF
+  recordId: record.id,
+  oldData: { ... },          // UPDATE/DELETE için
+  newData: { ... },          // CREATE/UPDATE için
+});
+```
+
+`BaseService` bunu otomatik yapar; özel servislerde manuel çağırmak gerekir.
+
+### 8.6 Hata Yönetimi
+
+`AppError` factory'leri (`utils/app-error.ts`):
+- `AppError.badRequest(msg)` → 400
+- `AppError.unauthorized(msg)` → 401
+- `AppError.forbidden(msg)` → 403
+- `AppError.notFound(msg)` → 404
+- `AppError.conflict(msg)` → 409
+
+`errorHandler` Prisma kodlarını da yakalar:
+- `P2002` (unique violation) → 409 + alan adı
+- `P2025` (record not found) → 404
+- `ZodError` → 400 + `errors[]` array
+- `PrismaClientValidationError` → 400 (yanlış veri yapısı)
+
+### 8.7 API Yanıt Formatları
+
+```typescript
+// Tekil başarı
+{ "success": true, "data": { ... }, "message": "Kayıt oluşturuldu" }
+
+// Sayfalanmış liste (BaseService.findAll)
+{
+  "success": true,
+  "data": [...],
+  "pagination": { "page": 1, "pageSize": 20, "total": 150, "totalPages": 8 }
+}
+
+// Hata
+{ "success": false, "message": "..." }
+
+// Validasyon hatası (Zod)
+{
+  "success": false,
+  "message": "Validasyon hatası",
+  "errors": [{ "field": "initialQty", "message": "Miktar pozitif olmalı" }]
+}
+```
+
+---
+
+## 9. Database Performance Playbook
+
+> **Kritik:** Üretim yüzbinlerce satır barındıracak. İndeks/sorgu hataları erken yakalanmalı.
+
+### 9.1 FK Indeksleri Otomatik Değildir
+
+Prisma her `@relation`'da arka planda FK index oluşturmaz. Yeni FK eklediğinde **`@@index([fkColumn])` zorunlu**.
+
+```prisma
+model Order {
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  @@index([customerId]) // ← unutma
+}
+```
+
+Etkisi: 10-100x daha hızlı JOIN ve CASCADE delete.
+
+### 9.2 Composite Index Sırası
+
+**Eşitlik kolonları önce, range/order kolonları sonra:**
+
+```prisma
+@@index([status, createdAt])  // ✓ status = ?, ORDER BY createdAt
+@@index([createdAt, status])  // ✗ Yanlış sıra — leftmost rule başarısız
+```
+
+Çift eşitlikte daha selektif olan kolon önce gelir (örn: `[workOrderId, status]` — workOrderId çok daha selektif).
+
+### 9.3 Sık Birlikte Filtrelenen Kolonlar = Tek Composite
+
+```prisma
+@@index([customerId])          // ✗ Bitmap scan'e zorlar
+@@index([status])              //
+                                
+@@index([customerId, status])  // ✓ Tek index scan
+```
+
+İki ayrı index, `WHERE customerId = ? AND status = ?` için zorunlu olarak bitmap scan yapar.
+
+### 9.4 Soft-Delete Tabloları için Partial Index
+
+`isActive: false` olan kayıtlar tabloda kalıyor. Aktif kayıt sorguları büyüdükçe yavaşlıyor. Çözüm: raw SQL migration'da partial index.
+
+```sql
+-- prisma/migrations/YYYYMMDD_partial_active_idx/migration.sql
+CREATE INDEX customers_active_code_idx
+  ON customers (code)
+  WHERE "isActive" = true;
+```
+
+Prisma şema syntax'ında native değil (yet). Hacme ulaşan tablolar için (Item, Customer, Station) eklenmeli.
+
+### 9.5 Yüksek Hacimli Tablolar için Cursor Pagination
+
+`BaseService.findAll` `skip/take` (offset) kullanıyor. 100. sayfa = 2000 satır tarama, 1000. sayfa = 20000 satır tarama.
+
+Yüksek hacim tablolarda (`Roll`, `RollMovement`, `RollOperation`, `SystemLog`, `TravelerCardScan`) cursor pagination şablonu:
+
+```typescript
+// İlk sayfa
+const items = await prisma.roll.findMany({
+  orderBy: { createdAt: "desc" },
+  take: 20,
+});
+// Sonraki sayfa — son item'ın createdAt + id'sini cursor olarak kullan
+const next = await prisma.roll.findMany({
+  cursor: { id: lastId },
+  skip: 1, // cursor item'ını atla
+  take: 20,
+  orderBy: { createdAt: "desc" },
+});
+```
+
+Tek-kolon `orderBy` için yeterli; çok-kolon sırada `(createdAt, id) > (?, ?)` raw query gerekebilir.
+
+### 9.6 JSON Alan Sorguları → GIN Index
+
+Schema'da Json alanları: `WorkOrder.parameters`, `WorkOrderStep.stepData`, `Shipment.printSnapshot`, `RollOperation.metadata`, `MachineLog.details`, `SystemLog.oldData/newData`, `Manifest.snapshot`.
+
+Eğer içinde sorgulanmıyorsa (yalnızca okunuyor) — index gerekmez.  
+Eğer sorgulanacaksa raw migration ile GIN index:
+
+```sql
+CREATE INDEX work_orders_parameters_gin
+  ON work_orders USING GIN (parameters);
+-- Containment query:
+SELECT * FROM work_orders WHERE parameters @> '{"dyeRecipe": "R-123"}';
+```
+
+### 9.7 N+1 Önleme — `include` ve `select`
+
+```typescript
+// ✗ N+1 — her order için ayrı query
+const orders = await prisma.order.findMany();
+for (const o of orders) {
+  const lines = await prisma.orderLine.findMany({ where: { orderId: o.id } });
+}
+
+// ✓ Tek query, ilişkiyi include et
+const orders = await prisma.order.findMany({
+  include: { lines: true },
+});
+
+// ✓✓ Daha iyi — sadece ihtiyaç duyulan alanları select et (overshoot azalır)
+const orders = await prisma.order.findMany({
+  select: {
+    id: true,
+    orderNumber: true,
+    lines: { select: { id: true, quantity: true } },
+  },
+});
+```
+
+### 9.8 Karmaşık Aggregation → Raw SQL
+
+Prisma'nın `aggregate`, `groupBy` API'si bazı durumlarda yetersiz veya çoklu round-trip yaratıyor. Karmaşık raporlar için:
+
+```typescript
+const result = await prisma.$queryRaw`
+  SELECT customer_id, COUNT(*) as count, SUM(quantity) as total
+  FROM order_lines
+  GROUP BY customer_id
+  ORDER BY total DESC
+`;
+```
+
+### 9.9 EXPLAIN ile Doğrulama
+
+Yeni endpoint'in büyük tabloya değdiği yerde:
+
+```sql
+EXPLAIN ANALYZE SELECT * FROM rolls WHERE status = 'STOCK' ORDER BY "createdAt" DESC LIMIT 20;
+```
+
+`Seq Scan` görürsen index eksik. `Index Scan` veya `Index Only Scan` → tamam.
+
+### 9.10 Toplu Insert için `createMany`
+
+100+ satır eklerken tek tek `create` yapma — `createMany` 10-50x hızlıdır:
+
+```typescript
+await prisma.rollOperation.createMany({
+  data: rolls.map(r => ({ rollId: r.id, ... })),
+  skipDuplicates: true, // @@unique varsa
+});
+```
+
+`createMany` Postgres'te `INSERT ... VALUES (...), (...), ...` formuna çevrilir.
+
+### 9.11 Transaction Süresi Kısa Tut
+
+Uzun transaction = uzun lock süresi = deadlock riski.
+
+```typescript
+// ✗ Yavaş — HTTP çağrısı transaction içinde
+await prisma.$transaction(async (tx) => {
+  const order = await tx.order.create({ ... });
+  await fetch("https://external-api/...", { ... }); // ← LOCK uzar
+});
+
+// ✓ External work önce, sonra transaction
+const externalData = await fetch("...");
+await prisma.$transaction(async (tx) => {
+  await tx.order.create({ data: { ..., externalData } });
 });
 ```
 
 ---
 
-## 9. Ortak API Yanıt Formatları
+## 10. Mevcut Şema İndeksleri (Audit)
 
-### Başarılı Tekil Yanıt
+Tüm hot-path tablolarında indeks durumu:
 
-```json
-{
-  "success": true,
-  "data": { "id": "uuid", ... },
-  "message": "Kayıt oluşturuldu"
-}
-```
+| Tablo | Doğrulanmış İndeksler |
+|---|---|
+| `rolls` | `itemId`, `variantId`, `status`, `parentRollId`, `currentStepId`, `producedInStepId`, `ownerCustomerId`, **composite `[status, createdAt]`** |
+| `roll_movements` | `rollId`, `workOrderStepId`, `enteredAt` |
+| `roll_operations` | `@@unique([rollId, workOrderStepId, operationType])`, `rollId`, `workOrderStepId`, `operationType` |
+| `roll_errors` | `rollId`, `detectedAtStepId`, `processedAtStepId`, `isProcessed`, `defectTypeId`, **composite `[rollId, isProcessed]`** |
+| `work_order_steps` | `[workOrderId, stepSequence]`, `stationId`, **composite `[workOrderId, status]`** |
+| `system_logs` | `userId`, `[tableName, recordId]`, **`[createdAt]`** |
+| `traveler_card_scans` | `cardId`, `[stationId, scannedAt]`, `workOrderStepId` |
+| `orders` | `customerId`, `status` |
+| `work_orders` | `status`, `routeTemplateId`, `dyehouseCompanyId` |
+| `shipments` | `customerId`, `status` |
+| `shipment_items` | `shipmentId`, `rollId @unique` |
 
-### Başarılı Sayfalanmış Liste
+### Gelecekte Düşünülmesi Gerekenler
 
-```json
-{
-  "success": true,
-  "data": [...],
-  "pagination": {
-    "page": 1,
-    "pageSize": 20,
-    "total": 150,
-    "totalPages": 8
-  }
-}
-```
-
-### Hata Yanıtı
-
-```json
-{
-  "success": false,
-  "message": "Kayıt bulunamadı"
-}
-```
-
-### Validasyon Hatası (Zod)
-
-```json
-{
-  "success": false,
-  "message": "Validasyon hatası",
-  "errors": [
-    { "field": "initialQty", "message": "Miktar pozitif olmalı" }
-  ]
-}
-```
+- `Order @@index([customerId, status])` — eğer "müşterinin açık siparişleri" sorgusu eklenirse
+- `WorkOrder @@index([status, plannedEndDate])` — eğer "termin yaklaşan WO" raporu eklenirse
+- `Item`, `Customer` partial index (`WHERE isActive = true`) — pasif kayıt birikmesi başlayınca
+- `RollOperation` BRIN index (`createdAt` üzerinde) — milyon satıra ulaşınca
 
 ---
 
-## 10. Ortam Değişkenleri
+## 11. Ortam Değişkenleri
 
-| Değişken | Açıklama | Örnek |
-|----------|----------|-------|
+| Var | Açıklama | Örnek |
+|---|---|---|
 | `PORT` | Sunucu portu | `4000` |
 | `DATABASE_URL` | PostgreSQL bağlantı | `postgresql://user:pass@host:5432/db` |
 | `JWT_SECRET` | JWT imzalama anahtarı | `supersecret_key` |
 
 ---
 
-## 11. Çalıştırma Komutları
+## 12. Çalıştırma Komutları
 
 ```bash
-# Geliştirme sunucusu
-npm run dev
-
-# Prisma şemasından client üret (şema değiştiğinde zorunlu)
-npm run prisma:generate
-
-# Veritabanı migration
-npm run prisma:migrate
-
-# Test verisi yükle
-npm run seed
-
-# Prisma Studio (DB GUI)
-npm run prisma:studio
-
-# TypeScript derleme kontrolü
-npx tsc --noEmit
+npm run dev                  # nodemon + ts-node (server.ts)
+npm run build                # tsc compile
+npm run seed                 # Test verisi yükle
+npm run prisma:generate      # Şema değişikliği sonrası ZORUNLU
+npm run prisma:migrate       # migrate deploy (production)
+npx prisma migrate dev       # Yeni migration oluştur (development)
+npm run prisma:studio        # DB GUI
+npm run lint                 # ESLint
+npx tsc --noEmit             # Type-check (build'siz)
 ```
 
 ---
 
-## 12. Test Kullanıcıları (Seed Data)
+## 13. Test Kullanıcıları (Seed)
 
-| Kullanıcı | Şifre | Rol | Yetkiler |
-|-----------|-------|-----|----------|
-| `admin` | `admin123` | Admin | TÜM yetkiler |
+| Username | Şifre | Rol | Ana Yetkiler |
+|---|---|---|---|
+| `admin` | `admin123` | Admin | TÜM |
 | `mehmet.planlama` | `test123` | Planlama Şefi | workorder, roll, order, allocation |
 | `ali.operator` | `test123` | Üretim Operatörü | workorder:read, roll, station:read |
 | `ayse.kalite` | `test123` | Kalite Kontrol | quality, roll, workorder:read |
-| `fatma.satis` | `test123` | Satış Temsilcisi | order, customer, allocation:read |
-| `veli.sevkiyat` | `test123` | Sevkiyatçı | shipment, order:read, roll:read |
+| `fatma.satis` | `test123` | Satış | order, customer, allocation:read |
+| `veli.sevkiyat` | `test123` | Sevkiyat | shipment, order:read, roll:read |
 
 ---
 
-## 13. RBAC Yetki Kodları
+## 14. Sık Yapılan Hatalar Kontrol Listesi
 
-| Modül | Read | Write |
-|-------|------|-------|
-| station | `station:read` | `station:write` |
-| inventory | `inventory:read` | `inventory:write` |
-| planning | `planning:read` | `planning:write` |
-| production | `production:read` | `production:write` |
-| qc | — | `qc:write` |
-| tambur | `tambur:read` | `tambur:write` |
-| shipping | `shipping:read` | `shipping:write` |
-| admin | — | `admin:users`, `admin:roles` |
-
-> **Not:** Seed verisindeki permission kodları (`order:read`, `roll:write` vb.) ile route'lardaki
-> permission kodları (`planning:read`, `inventory:write` vb.) arasında fark vardır.
-> Production'a geçmeden önce seed'deki permission'lar güncellenmeli veya route'lar
-> seed ile uyumlu hale getirilmelidir.
-
----
-
-## 14. Swagger / API Dökümantasyonu
-
-Sunucu çalışırken: **http://localhost:4000/api-docs**
-
-Tüm endpoint'ler `@openapi` JSDoc blokları ile dökümante edilmiştir.
-
----
-
-## 15. AI Ajanlar İçin Hızlı Referans
-
-### Dosya Bulma Rehberi
-
-| Yapmak İstediğin | Bakılacak Dosya |
-|-------------------|----------------|
-| Yeni endpoint eklemek | `src/routes/` → `src/controllers/` → `src/services/` |
-| Veritabanı şemasını değiştirmek | `prisma/schema.prisma` → `prisma:migrate` → `prisma:generate` |
-| İş kurallarını anlamak | Bu dosyanın §7 bölümü + `.agents/rules/business-rules.md` |
-| Mimari kuralları anlamak | Bu dosyanın §4 bölümü + `.agents/rules/core-architecture.md` |
-| Yeni modül workflow'u | `.agents/workflows/` altındaki ilgili `.md` dosyası |
-| Test verisi | `prisma/seed.ts` |
-| Hata ayıklama | `src/middlewares/error.middleware.ts` |
-
-### Sık Yapılan Hatalar
-
-1. **`prisma generate` unutmak** → `Module has no exported member 'PrismaClient'`
-2. **Zod v4'te `z.record()` tek parametre vermek** → İki parametre gerekli
-3. **Express 5'te `req.params.id`** → `as string` cast gerekebilir
-4. **Route kaydetmeyi unutmak** → `app.ts`'e `app.use()` eklenmeli
-5. **Audit log çağırmamak** → Her CUD işlemde `AuditService.log()` zorunlu
-6. **Fiziksel DELETE yapmak** → YASAK! `isActive = false` veya status değişikliği kullan
-
-### Yeni Modül Ekleme Kontrol Listesi
-
-```
-□ Service dosyası oluştur (src/services/)
-□ Controller dosyası oluştur (src/controllers/)
-□ Route dosyası oluştur + Swagger JSDoc ekle (src/routes/)
-□ app.ts'e import ve app.use() ekle
-□ RBAC permission kodu belirle
-□ AuditService.log() çağrılarını ekle
-□ Zod validasyon şemalarını yaz
-□ tsc --noEmit ile kontrol et
-□ Bu dökümana endpoint tablosunu ekle
-```
+- [ ] `prisma generate` çalıştırıldı mı? (şema değiştiyse zorunlu)
+- [ ] Yeni FK için `@@index([fkColumn])` eklendi mi?
+- [ ] `app.ts`'e route eklendi mi?
+- [ ] Swagger JSDoc yazıldı mı?
+- [ ] Her CUD'de `AuditService.log()` çağrıldı mı?
+- [ ] Fiziksel DELETE yerine `isActive: false` mı kullanıldı?
+- [ ] Transaction içinde `Promise.all([tx.*])` yok mu?
+- [ ] `any` type kullanılmadı mı?
+- [ ] Zod `z.record()` iki arg ile mi çağrıldı?
+- [ ] Yeni endpoint için RBAC permission kodu seçildi mi (seed'de tanımlı olduğu doğrulandı mı)?

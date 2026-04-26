@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npx eslint *)",
+      "Bash(npm run lint)",
+      "Bash(npx prisma format)",
+      "Bash(npx prisma validate)",
+      "Bash(npx prisma generate)",
+      "Bash(npx prisma migrate status)",
+      "Bash(npx prisma migrate diff *)"
+    ]
+  }
+}

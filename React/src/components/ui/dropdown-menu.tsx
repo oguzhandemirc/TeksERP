@@ -94,7 +94,7 @@ function DropdownMenuContent({
     <div
       ref={contentRef}
       className={cn(
-        "absolute z-50 mt-2 min-w-[12rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
+        "absolute z-200 mt-2 min-w-48 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
         align === "end" ? "right-0" : "left-0",
         className,
       )}

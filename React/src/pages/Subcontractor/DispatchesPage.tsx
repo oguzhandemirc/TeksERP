@@ -7,17 +7,18 @@ import {
   Ruler,
   Building2,
   ClipboardList,
+  Printer,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  SlideOverPanel,
-} from "@/components/ui/SlideOverPanel";
+import { SlideOverPanel } from "@/components/ui/SlideOverPanel";
 import { subcontractorService } from "@/services/subcontractorService";
+import SubcontractorDispatchPrintDialog from "@/pages/WorkOrders/SubcontractorDispatchPrintDialog";
 
 export default function DispatchesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [printId, setPrintId] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["dispatches"],
@@ -111,6 +112,18 @@ export default function DispatchesPage() {
         isOpen={!!selectedId}
         onClose={() => setSelectedId(null)}
         title={detail ? `Sevk: ${detail.dispatchNo}` : "Detay"}
+        headerActions={
+          selectedId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPrintId(selectedId)}
+            >
+              <Printer className="h-4 w-4 mr-1" />
+              İrsaliye
+            </Button>
+          )
+        }
       >
         {detailLoading ? (
           <p className="text-sm text-muted-foreground">Yükleniyor…</p>
@@ -159,6 +172,12 @@ export default function DispatchesPage() {
           </div>
         ) : null}
       </SlideOverPanel>
+
+      <SubcontractorDispatchPrintDialog
+        open={!!printId}
+        onOpenChange={(o) => { if (!o) setPrintId(null); }}
+        dispatchId={printId}
+      />
     </div>
   );
 }

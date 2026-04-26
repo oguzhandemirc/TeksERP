@@ -68,8 +68,8 @@ export default function TamburDecisionPanel({
   }, [errors.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (roll && errors.length > 0) {
-      const cutTotal = errors.reduce((sum, err) => {
+    if (roll) {
+      const cutTotal = (errors || []).reduce((sum, err) => {
         if (decisions[err.id]?.decision === "CUT") {
           return sum + (err.endMeter - err.startMeter);
         }

@@ -15,7 +15,7 @@
 // Bu modül tüm çağrıcılar için ortak transaction client (Prisma.TransactionClient)
 // kabul eder; atomik işlemler bozulmaz.
 // =============================================================================
-import { Prisma, RollStatus, StepStatus } from "@prisma/client";
+import { Prisma, RollStatus, StepStatus, WorkOrderStatus } from "@prisma/client";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -133,7 +133,31 @@ export async function recomputeStepStatus(
     });
   }
 
+  // Step ACTIVE ise iş emri PLANNED'dan IN_PROGRESS'e çekilmeli — idempotent.
+  // (step.status zaten ACTIVE olsa bile WO henüz güncellenmemiş olabilir.)
+  if (nextStatus === StepStatus.ACTIVE) {
+    await ensureWorkOrderInProgress(tx, step.workOrderId);
+  }
+
   return nextStatus;
+}
+
+/**
+ * İş emrini PLANNED → IN_PROGRESS'e çeker. Idempotent:
+ *   - WO zaten IN_PROGRESS/PAUSED/COMPLETED/CANCELLED ise hiçbir şey olmaz.
+ *   - updateMany + filter kullanır, status dışı durumlar bozulmaz.
+ *
+ * Rolleri attach etmek, bir step'i aktive etmek, fason intake yapmak vs. gibi
+ * "üretim başladı" sinyalleri olan her yerden güvenle çağrılabilir.
+ */
+export async function ensureWorkOrderInProgress(
+  tx: TxClient,
+  workOrderId: string
+): Promise<void> {
+  await tx.workOrder.updateMany({
+    where: { id: workOrderId, status: WorkOrderStatus.PLANNED },
+    data: { status: WorkOrderStatus.IN_PROGRESS },
+  });
 }
 
 /**

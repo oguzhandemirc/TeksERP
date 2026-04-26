@@ -7,6 +7,7 @@ import { BaseController } from "../controllers/base.controller";
 import { BaseService } from "../services/base.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
+import variantAliasRoutes from "./customer-variant-alias.routes";
 
 const service = new BaseService({
   modelName: "customer",
@@ -17,6 +18,9 @@ const service = new BaseService({
 
 const controller = new BaseController(service);
 const router = Router();
+
+// Nested: /api/customers/:customerId/variant-aliases — mount before /:id routes
+router.use("/:customerId/variant-aliases", variantAliasRoutes);
 
 /**
  * @openapi

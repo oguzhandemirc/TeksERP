@@ -11,6 +11,9 @@ import {
   Factory,
   FileText,
   Save,
+  Truck,
+  Handshake,
+  Package,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,10 +22,19 @@ import {
   workOrderStatusLabels,
   workOrderTypeLabels,
   stepStatusLabels,
+  shipmentStatusLabels,
 } from "@/types/enums";
-import type { WorkOrderStatus, WorkOrderType, StepStatus } from "@/types/enums";
+import type {
+  WorkOrderStatus,
+  WorkOrderType,
+  StepStatus,
+  ShipmentStatus,
+} from "@/types/enums";
 import ManifestPrintDialog from "../Field/ManifestPrintDialog";
+import ShipmentPrintDialog from "../Shipping/ShipmentPrintDialog";
+import SubcontractorDispatchPrintDialog from "./SubcontractorDispatchPrintDialog";
 import TravelerCardSection from "./TravelerCardSection";
+import { subcontractorService } from "@/services/subcontractorService";
 import {
   SlideOverPanel,
   SlideOverContentLoader,
@@ -68,6 +80,8 @@ export default function WorkOrderDetailPanel({
   const [manifestData, setManifestData] = useState<
     Record<string, unknown> | null
   >(null);
+  const [printShipmentId, setPrintShipmentId] = useState<string | null>(null);
+  const [printDispatchId, setPrintDispatchId] = useState<string | null>(null);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -83,13 +97,24 @@ export default function WorkOrderDetailPanel({
   });
   const manifests = manifestsData?.data ?? [];
 
-  const handlePrintManifest = async () => {
-    if (!workOrderId) return;
-    const response = await workOrderService.getManifest(workOrderId);
-    if (response.success && response.data) {
-      setManifestData(response.data as Record<string, unknown>);
-      setShowManifest(true);
-    }
+  const { data: shipmentsData } = useQuery({
+    queryKey: ["workorder-shipments", workOrderId],
+    queryFn: () => workOrderService.listShipments(workOrderId!),
+    enabled: !!workOrderId && isOpen,
+  });
+  const shipments = shipmentsData?.data ?? [];
+
+  const { data: dispatchesData } = useQuery({
+    queryKey: ["workorder-dispatches", workOrderId],
+    queryFn: () => subcontractorService.listDispatches({ workOrderId: workOrderId! }),
+    enabled: !!workOrderId && isOpen,
+  });
+  const dispatches = dispatchesData?.data ?? [];
+
+  const shipmentStatusColor: Record<string, string> = {
+    PREPARING: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+    SHIPPED: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    CANCELLED: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   };
 
   const saveManifestMutation = useMutation({
@@ -107,14 +132,6 @@ export default function WorkOrderDetailPanel({
 
   const wo = data?.data;
 
-  const headerActions = wo &&
-    (wo.status === "IN_PROGRESS" || wo.status === "COMPLETED") && (
-      <Button variant="outline" size="sm" onClick={handlePrintManifest}>
-        <Printer className="h-4 w-4 mr-1" />
-        Çeki Listesi
-      </Button>
-    );
-
   return (
     <>
       <SlideOverPanel
@@ -122,7 +139,6 @@ export default function WorkOrderDetailPanel({
         isOpen={isOpen}
         onClose={onClose}
         widthClass="max-w-lg"
-        headerActions={headerActions}
       >
         {isLoading ? (
           <SlideOverContentLoader />
@@ -144,6 +160,35 @@ export default function WorkOrderDetailPanel({
                   wo.status}
               </Badge>
             </div>
+
+            {/* Müşteri Malı (Fason Üretim Kabul) */}
+            {wo.serviceOwnerCustomer && (
+              <div className="rounded-lg border border-purple-300 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/30 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-purple-900 dark:text-purple-200">
+                  <Handshake className="h-4 w-4" />
+                  Müşteri Malı — Fason Üretim Kabul
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <span className="text-muted-foreground">Mal Sahibi:</span>
+                  <span className="font-bold text-purple-800 dark:text-purple-200">
+                    {wo.serviceOwnerCustomer.name}
+                  </span>
+                  <span className="text-muted-foreground">Müşteri Kodu:</span>
+                  <span className="font-mono">{wo.serviceOwnerCustomer.code}</span>
+                  {wo.servicePricePerMeter && (
+                    <>
+                      <span className="text-muted-foreground">Hizmet Bedeli:</span>
+                      <span className="font-semibold">
+                        {Number(wo.servicePricePerMeter).toFixed(2)} TL/mt
+                      </span>
+                    </>
+                  )}
+                </div>
+                <p className="text-xs text-purple-700 dark:text-purple-400">
+                  Bu iş emrindeki toplar yalnızca bu müşteriye sevk edilebilir.
+                </p>
+              </div>
+            )}
 
             {/* Genel Bilgiler */}
             <div className="rounded-lg border p-4 space-y-3 bg-muted/10">
@@ -331,43 +376,88 @@ export default function WorkOrderDetailPanel({
 
             {/* Bağlı Siparişler */}
             {wo.orderLinks && wo.orderLinks.length > 0 && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="text-sm font-semibold flex items-center justify-between">
                   <span>Bağlı Siparişler ({wo.orderLinks.length})</span>
                   <div className="h-px flex-1 bg-border ml-3" />
                 </div>
-                <div className="space-y-2">
-                  {wo.orderLinks.map((link) => (
-                    <div
-                      key={`${link.workOrderId}-${link.orderLineId}`}
-                      className="flex items-center justify-between rounded-xl border p-3 text-sm bg-background/50"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="font-bold text-primary">
-                          {link.orderLine?.order?.orderNumber ?? "—"}
-                        </div>
-                        {link.orderLine?.order?.customer && (
-                          <div className="text-[11px] text-muted-foreground">
-                            {link.orderLine.order.customer.name}
-                          </div>
-                        )}
+                <div className="space-y-4">
+                  {Object.entries(
+                    wo.orderLinks.reduce((acc, link) => {
+                      const customerId =
+                        link.orderLine?.order?.customer?.id || "unknown";
+                      if (!acc[customerId]) {
+                        acc[customerId] = {
+                          name:
+                            link.orderLine?.order?.customer?.name ||
+                            "Bilinmeyen Müşteri",
+                          links: [],
+                        };
+                      }
+                      acc[customerId].links.push(link);
+                      return acc;
+                    }, {} as Record<string, { name: string; links: typeof wo.orderLinks }>),
+                  ).map(([customerId, group]) => (
+                    <div key={customerId} className="space-y-2">
+                      <div className="flex items-center gap-2 px-1">
+                        <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                          {group.name}
+                        </span>
                       </div>
-                      <div className="text-right">
-                        <div className="font-medium text-xs">
-                          {link.orderLine?.item?.code}
-                        </div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {link.orderLine?.quantity} mt
-                          {link.allocatedQty !== undefined &&
-                            link.allocatedQty > 0 && (
-                              <>
-                                {" · "}
-                                <span className="font-bold text-blue-600 dark:text-blue-400">
-                                  {link.allocatedQty} mt
+                      <div className="grid gap-2">
+                        {group.links?.map((link) => (
+                          <div
+                            key={`${link.workOrderId}-${link.orderLineId}`}
+                            className="flex flex-col rounded-xl border p-3 text-sm bg-background/50 hover:bg-background transition-colors"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="font-bold text-primary">
+                                {link.orderLine?.order?.orderNumber ?? "—"}
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {link.orderLine?.width && (
+                                  <Badge variant="outline" className="text-[10px] h-5">
+                                    En: {link.orderLine.width} cm
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-1 text-xs">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-muted-foreground shrink-0 w-12">
+                                  Kumaş:
                                 </span>
-                              </>
-                            )}
-                        </div>
+                                <span className="font-medium truncate">
+                                  {link.orderLine?.item?.name || link.orderLine?.item?.code || "—"}
+                                </span>
+                              </div>
+                              {link.orderLine?.variant && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-muted-foreground shrink-0 w-12">
+                                    Varyant:
+                                  </span>
+                                  <span className="font-medium truncate">
+                                    {link.orderLine.variant.name || link.orderLine.variant.code}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="mt-3 pt-3 border-t border-dashed flex items-center justify-between text-xs">
+                              <div className="text-muted-foreground">
+                                Sipariş: <span className="font-semibold text-foreground">{link.orderLine?.quantity} mt</span>
+                              </div>
+                              {link.allocatedQty !== undefined &&
+                                link.allocatedQty > 0 && (
+                                  <div className="text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full">
+                                    Tahsis: {link.allocatedQty} mt
+                                  </div>
+                                )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
@@ -397,7 +487,7 @@ export default function WorkOrderDetailPanel({
                     isLoading={saveManifestMutation.isPending}
                   >
                     <Save className="h-3.5 w-3.5" />
-                    Belge Kaydet
+                    Yeniden Üret
                   </Button>
                 )}
               </div>
@@ -407,7 +497,7 @@ export default function WorkOrderDetailPanel({
                 </p>
               ) : (
                 <div className="grid grid-cols-1 gap-2">
-                  {manifests.map((m) => (
+                  {manifests.map((m, idx) => (
                     <button
                       key={m.id}
                       type="button"
@@ -425,6 +515,11 @@ export default function WorkOrderDetailPanel({
                         <span className="font-mono font-bold tracking-tighter">
                           {m.manifestNo}
                         </span>
+                        {idx === 0 && (
+                          <Badge className="text-[9px] px-1.5 h-4 bg-emerald-600 hover:bg-emerald-600 text-white border-none">
+                            Güncel
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-right flex flex-col items-end">
                         <span className="font-medium opacity-80">
@@ -436,6 +531,125 @@ export default function WorkOrderDetailPanel({
                       </div>
                     </button>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* Fason Sevk İrsaliyeleri */}
+            {dispatches.length > 0 && (
+              <div className="rounded-xl border p-4 space-y-4 bg-muted/5">
+                <div className="flex items-center gap-2">
+                  <Package className="h-5 w-5 text-primary" />
+                  <span className="text-sm font-bold">Fason Sevk İrsaliyeleri</span>
+                  <Badge variant="outline" className="ml-1">
+                    {dispatches.length}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  {dispatches.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => setPrintDispatchId(d.id)}
+                      className="w-full flex items-center justify-between rounded-lg border bg-background px-3 py-2.5 text-xs transition-colors hover:border-primary/50 hover:bg-muted/30 gap-2 text-left"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="p-1.5 rounded-md bg-orange-100 text-orange-700 shrink-0">
+                          <Package className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-mono font-bold tracking-tight truncate">
+                            {d.dispatchNo}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground truncate">
+                            {d.company?.name ?? "—"}
+                            {" · "}
+                            {d.items?.length ?? "?"} top · {d.totalQty.toFixed(1)}m
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="text-[10px] opacity-60">
+                          {new Date(d.dispatchedAt).toLocaleDateString("tr-TR")}
+                        </span>
+                        <div className="p-1 rounded-full bg-muted group-hover:bg-primary/10 transition-colors">
+                          <Printer className="h-3 w-3 opacity-40" />
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Müşteri Sevk İrsaliyeleri (Sevkiyatlar) */}
+            <div className="rounded-xl border p-4 space-y-4 bg-muted/5">
+              <div className="flex items-center gap-2">
+                <Truck className="h-5 w-5 text-primary" />
+                <span className="text-sm font-bold">Müşteri Sevk İrsaliyeleri</span>
+                {shipments.length > 0 && (
+                  <Badge variant="outline" className="ml-1">
+                    {shipments.length}
+                  </Badge>
+                )}
+              </div>
+              {shipments.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic text-center py-2 opacity-70">
+                  Bu iş emrine ait müşteri sevk irsaliyesi bulunamadı.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2">
+                  {shipments.map((s) => {
+                    const itemCount = s.items?.length ?? 0;
+                    const totalQty =
+                      s.items?.reduce((sum, i) => sum + (i.shippedQty ?? 0), 0) ??
+                      0;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setPrintShipmentId(s.id)}
+                        className="w-full flex items-center justify-between rounded-lg border bg-background px-3 py-2.5 text-xs transition-colors hover:border-primary/50 hover:bg-muted/30 gap-2 text-left"
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <div className="p-1.5 rounded-md bg-primary/10 text-primary shrink-0">
+                            <Truck className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-mono font-bold tracking-tight truncate">
+                              {s.shipmentNumber}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground truncate">
+                              {s.customerNameSnapshot ?? s.customer?.name ?? "—"}
+                              {" · "}
+                              {itemCount} top · {totalQty.toFixed(1)}m
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <Badge
+                            className={`text-[10px] ${
+                              shipmentStatusColor[s.status] ?? ""
+                            }`}
+                            variant="secondary"
+                          >
+                            {shipmentStatusLabels[s.status as ShipmentStatus] ??
+                              s.status}
+                          </Badge>
+                          <div className="flex items-center gap-2">
+                            {s.shippedAt && (
+                              <span className="text-[10px] opacity-60">
+                                {new Date(s.shippedAt).toLocaleDateString("tr-TR")}
+                              </span>
+                            )}
+                            <div className="p-1 rounded-full bg-muted group-hover:bg-primary/10 transition-colors">
+                              <Printer className="h-3 w-3 opacity-40" />
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -461,6 +675,22 @@ export default function WorkOrderDetailPanel({
           workOrderId={workOrderId ?? ""}
         />
       )}
+
+      <ShipmentPrintDialog
+        open={!!printShipmentId}
+        onOpenChange={(o) => {
+          if (!o) setPrintShipmentId(null);
+        }}
+        shipmentId={printShipmentId}
+      />
+
+      <SubcontractorDispatchPrintDialog
+        open={!!printDispatchId}
+        onOpenChange={(o) => {
+          if (!o) setPrintDispatchId(null);
+        }}
+        dispatchId={printDispatchId}
+      />
     </>
   );
 }

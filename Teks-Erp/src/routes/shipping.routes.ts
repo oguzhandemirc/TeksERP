@@ -29,6 +29,24 @@ router.get("/ready-orders", verifyToken, requirePermission("shipment:read"), con
 
 /**
  * @openapi
+ * /api/shipping/ready-fason:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Sevke hazır fason (müşteri-malı) toplar
+ *     description: |
+ *       `ownerCustomerId` dolu olan ve PRODUCED/READY_FOR_SHIP/A1_STOCK durumundaki
+ *       toplar müşteriye göre gruplanır. Sipariş tahsisi olmadan doğrudan sahibine
+ *       sevk edilir.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Müşteriye göre gruplanmış fason top listesi
+ */
+router.get("/ready-fason", verifyToken, requirePermission("shipment:read"), controller.getReadyFasonRolls);
+
+/**
+ * @openapi
  * /api/shipping/prepare-package:
  *   post:
  *     tags: [Shipping]
@@ -142,6 +160,29 @@ router.get("/shipments", verifyToken, requirePermission("shipment:read"), contro
  *         description: Sevkiyat bulunamadı
  */
 router.get("/shipments/:id", verifyToken, requirePermission("shipment:read"), controller.getShipmentById);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/print:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: İrsaliye yazdırma snapshot'ı (donmuş belge)
+ *     description: |
+ *       Finalize edilmiş bir sevkiyat için dondurulmuş yazdırma snapshot'ı döner.
+ *       Ürün, müşteri alias'ı, iş emri gibi alanlar sonradan değişse/silinse bile
+ *       belge aynı kalır. PREPARING sevkiyatlarda canlı hesaplanır ve
+ *       `frozen: false` döner.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Snapshot verisi }
+ *       404: { description: Sevkiyat bulunamadı }
+ */
+router.get("/shipments/:id/print", verifyToken, requirePermission("shipment:read"), controller.getPrintSnapshot);
 
 /**
  * @openapi

@@ -337,13 +337,11 @@ export default function WorkOrdersPage() {
         isLoading={createMutation.isPending}
       />
 
-      {detailId && (
-        <WorkOrderDetailPanel
-          workOrderId={detailId}
-          isOpen={!!detailId}
-          onClose={() => setDetailId(null)}
-        />
-      )}
+      <WorkOrderDetailPanel
+        workOrderId={detailId}
+        isOpen={!!detailId}
+        onClose={() => setDetailId(null)}
+      />
 
       </div>
   );

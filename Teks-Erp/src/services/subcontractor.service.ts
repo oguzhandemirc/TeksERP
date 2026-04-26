@@ -28,7 +28,10 @@ import {
   ScanType,
 } from "@prisma/client";
 import { buildPrefixedCardNumber } from "../utils/barcode";
-import { recomputeStepStatus } from "./helpers/roll-step.helper";
+import {
+  recomputeStepStatus,
+  ensureWorkOrderInProgress,
+} from "./helpers/roll-step.helper";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -170,7 +173,7 @@ export class SubcontractorService {
 
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
-      include: { station: true, workOrder: true },
+      include: { station: { select: { name: true, code: true, type: true } }, workOrder: true },
     });
     if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
     if (step.workOrderId !== data.workOrderId) {
@@ -224,11 +227,72 @@ export class SubcontractorService {
           data: { status: StepStatus.ACTIVE, startedAt: new Date() },
         });
       }
+      // WO henüz PLANNED ise IN_PROGRESS'e çek (fason sevki = üretim başlangıcı)
+      await ensureWorkOrderInProgress(tx, data.workOrderId);
 
       // Dispatch numarası
       const now = new Date();
       const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "SD", now);
       const dispatchNo = buildPrefixedCardNumber("SD", now, seq);
+
+      // Topların ürün/varyant bilgilerini çek (snapshot için)
+      const rollsWithMeta = await tx.roll.findMany({
+        where: { id: { in: data.rollIds } },
+        include: {
+          item: { select: { code: true, name: true } },
+          variant: { select: { code: true, name: true } },
+        },
+      });
+
+      const rollSnapshots = rollsWithMeta.map((r, idx) => ({
+        sequence: idx + 1,
+        id: r.id,
+        barcode: r.barcode,
+        itemCode: r.item?.code ?? "",
+        itemName: r.item?.name ?? "",
+        variantCode: r.variant?.code ?? null,
+        variantName: r.variant?.name ?? null,
+        dispatchedQty: r.currentQty,
+        dispatchedWeight: r.weightKg ?? null,
+        qualityGrade: r.qualityGrade,
+        width: r.width ?? null,
+      }));
+
+      const totalWeight = rollSnapshots.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
+
+      const printSnapshot = {
+        dispatchNo,
+        dispatchedAt: now.toISOString(),
+        driverName: data.driverName ?? null,
+        plateNumber: data.plateNumber ?? null,
+        notes: data.notes ?? null,
+        workOrder: {
+          id: wo.id,
+          batchNumber: wo.batchNumber,
+          recipeNo: wo.recipeNo,
+          parameters: (wo.parameters as Record<string, unknown> | null) ?? null,
+          type: wo.type,
+        },
+        company: {
+          id: company.id,
+          name: company.name,
+          code: company.code ?? null,
+        },
+        step: {
+          id: step.id,
+          stepSequence: step.stepSequence,
+          station: {
+            name: step.station.name,
+            code: step.station.code,
+          },
+        },
+        rolls: rollSnapshots,
+        totals: {
+          rollCount: rollSnapshots.length,
+          totalQty,
+          totalWeight,
+        },
+      };
 
       const dispatch = await tx.subcontractorDispatch.create({
         data: {
@@ -241,6 +305,7 @@ export class SubcontractorService {
           dispatchedById: userId ?? null,
           notes: data.notes ?? null,
           totalQty,
+          printSnapshot: printSnapshot as Prisma.InputJsonValue,
           items: {
             create: rolls.map((r) => ({
               rollId: r.id,
@@ -775,5 +840,162 @@ export class SubcontractorService {
 
     if (!receipt) throw AppError.notFound("Mal kabul belgesi bulunamadı");
     return { success: true, data: receipt };
+  }
+
+  // ===========================================================================
+  // DISPATCH PRINT SNAPSHOT
+  // ===========================================================================
+  async getDispatchPrintSnapshot(id: string): Promise<ApiResponse<unknown>> {
+    const dispatch = await prisma.subcontractorDispatch.findUnique({
+      where: { id },
+      include: {
+        company: true,
+        workOrder: { select: { id: true, batchNumber: true, recipeNo: true, parameters: true, type: true } },
+        step: { include: { station: { select: { name: true, code: true } } } },
+        items: {
+          include: {
+            roll: {
+              include: {
+                item: { select: { code: true, name: true } },
+                variant: { select: { code: true, name: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+
+    // Snapshot varsa döndür, yoksa live hesapla (geriye dönük uyumluluk)
+    if (dispatch.printSnapshot) {
+      return { success: true, data: dispatch.printSnapshot };
+    }
+
+    const rolls = dispatch.items.map((item, idx) => ({
+      sequence: idx + 1,
+      id: item.roll.id,
+      barcode: item.roll.barcode,
+      itemCode: item.roll.item?.code ?? "",
+      itemName: item.roll.item?.name ?? "",
+      variantCode: item.roll.variant?.code ?? null,
+      variantName: item.roll.variant?.name ?? null,
+      dispatchedQty: item.dispatchedQty,
+      dispatchedWeight: item.dispatchedWeight ?? null,
+      qualityGrade: item.roll.qualityGrade,
+      width: item.roll.width ?? null,
+    }));
+
+    const totalWeight = rolls.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
+
+    return {
+      success: true,
+      data: {
+        dispatchNo: dispatch.dispatchNo,
+        dispatchedAt: dispatch.dispatchedAt.toISOString(),
+        driverName: dispatch.driverName,
+        plateNumber: dispatch.plateNumber,
+        notes: dispatch.notes,
+        workOrder: {
+          id: dispatch.workOrder.id,
+          batchNumber: dispatch.workOrder.batchNumber,
+          recipeNo: dispatch.workOrder.recipeNo,
+          parameters: dispatch.workOrder.parameters as Record<string, unknown> | null,
+          type: dispatch.workOrder.type,
+        },
+        company: {
+          id: dispatch.company.id,
+          name: dispatch.company.name,
+          code: dispatch.company.code ?? null,
+        },
+        step: {
+          id: dispatch.step.id,
+          stepSequence: dispatch.step.stepSequence,
+          station: {
+            name: dispatch.step.station.name,
+            code: dispatch.step.station.code,
+          },
+        },
+        rolls,
+        totals: {
+          rollCount: rolls.length,
+          totalQty: dispatch.totalQty,
+          totalWeight,
+        },
+      },
+    };
+  }
+
+  // ===========================================================================
+  // RECEIPT PRINT SNAPSHOT
+  // ===========================================================================
+  async getReceiptPrintSnapshot(id: string): Promise<ApiResponse<unknown>> {
+    const receipt = await prisma.subcontractorReceipt.findUnique({
+      where: { id },
+      include: {
+        company: true,
+        workOrder: { select: { id: true, batchNumber: true, recipeNo: true, type: true } },
+        step: { include: { station: { select: { name: true, code: true } } } },
+        receivedBy: { select: { fullName: true } },
+        items: {
+          include: {
+            newRoll: {
+              include: {
+                item: { select: { code: true, name: true } },
+                variant: { select: { code: true, name: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!receipt) throw AppError.notFound("Kabul belgesi bulunamadı");
+
+    const rolls = receipt.items.map((item, idx) => ({
+      sequence: idx + 1,
+      id: item.newRoll.id,
+      barcode: item.newRoll.barcode,
+      itemCode: item.newRoll.item?.code ?? "",
+      itemName: item.newRoll.item?.name ?? "",
+      variantCode: item.newRoll.variant?.code ?? null,
+      variantName: item.newRoll.variant?.name ?? null,
+      qualityGrade: item.newRoll.qualityGrade,
+      notes: item.notes ?? null,
+    }));
+
+    return {
+      success: true,
+      data: {
+        receiptNo: receipt.receiptNo,
+        manifestNo: receipt.manifestNo,
+        receivedAt: receipt.receivedAt.toISOString(),
+        notes: receipt.notes,
+        receivedBy: receipt.receivedBy?.fullName ?? null,
+        workOrder: {
+          id: receipt.workOrder.id,
+          batchNumber: receipt.workOrder.batchNumber,
+          recipeNo: receipt.workOrder.recipeNo,
+          type: receipt.workOrder.type,
+        },
+        company: {
+          id: receipt.company.id,
+          name: receipt.company.name,
+          code: receipt.company.code ?? null,
+        },
+        step: {
+          id: receipt.step.id,
+          stepSequence: receipt.step.stepSequence,
+          station: {
+            name: receipt.step.station.name,
+            code: receipt.step.station.code,
+          },
+        },
+        rolls,
+        totals: { rollCount: rolls.length },
+      },
+    };
   }
 }

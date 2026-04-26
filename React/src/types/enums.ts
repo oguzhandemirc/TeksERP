@@ -133,6 +133,7 @@ export const WorkOrderType = {
   STOCK_PRODUCTION: "STOCK_PRODUCTION",
   SAMPLE_PRODUCTION: "SAMPLE_PRODUCTION",
   REPAIR_REWORK: "REPAIR_REWORK",
+  SERVICE_PRODUCTION: "SERVICE_PRODUCTION",
 } as const;
 export type WorkOrderType =
   (typeof WorkOrderType)[keyof typeof WorkOrderType];
@@ -142,6 +143,7 @@ export const workOrderTypeLabels: Record<WorkOrderType, string> = {
   STOCK_PRODUCTION: "Stoka Üretim",
   SAMPLE_PRODUCTION: "Numune Üretimi",
   REPAIR_REWORK: "Tamir ve Yeniden İşlem",
+  SERVICE_PRODUCTION: "Fason Üretim Kabul",
 };
 
 export const StepStatus = {

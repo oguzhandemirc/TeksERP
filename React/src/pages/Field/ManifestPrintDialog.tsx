@@ -114,17 +114,12 @@ export default function ManifestPrintDialog({
             <p className="text-sm text-gray-600 mt-1">
               Parti No: <strong>{data.batchNumber}</strong>
             </p>
-            {data.isSnapshot && data.manifestNo ? (
+            {data.isSnapshot && data.manifestNo && (
               <p className="text-xs text-gray-500 mt-1">
                 Belge: <strong>{data.manifestNo}</strong>
                 {data.printedAt && (
                   <> · {new Date(data.printedAt).toLocaleString("tr-TR")}</>
                 )}
-              </p>
-            ) : (
-              <p className="text-xs text-orange-600 mt-1">
-                Önizleme — henüz belge basılmadı. "Yeni Belge Bas" ile
-                dondurun.
               </p>
             )}
           </div>

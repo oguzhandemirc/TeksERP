@@ -65,6 +65,7 @@ export class WorkOrderController {
     this.getManifest = this.getManifest.bind(this);
     this.createManifest = this.createManifest.bind(this);
     this.listManifests = this.listManifests.bind(this);
+    this.listShipments = this.listShipments.bind(this);
     this.softDelete = this.softDelete.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
     this.findAvailableForAttach = this.findAvailableForAttach.bind(this);
@@ -230,6 +231,19 @@ export class WorkOrderController {
   async listManifests(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.listManifests(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/work-orders/:id/shipments
+   * Bu iş emrine bağlı topların geçtiği irsaliye (sevkiyat) listesi.
+   */
+  async listShipments(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getShipments(req.params.id as string);
       res.status(200).json(result);
     } catch (error) {
       next(error);

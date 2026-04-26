@@ -30,6 +30,11 @@ export interface PackagingRollSummary {
   defaultOrderLineId: string | null;
   defaultCustomerName: string | null;
   availableOrderLinks: PackagingOrderLinkOption[];
+  ownerCustomerId: string | null;
+  ownerCustomerName: string | null;
+  previewCustomerName: string | null;
+  previewCustomerLabel: string | null;
+  previewCustomerCode: string | null;
 }
 
 export interface PackagingStepSummary {
@@ -56,6 +61,8 @@ export interface PackagingLabelPayload {
   orderNumber: string | null;
   batchNumber: string;
   printedAt: string;
+  customerVariantLabel: string | null;
+  customerVariantCode: string | null;
 }
 
 export interface PackagingFinalizeRequest {

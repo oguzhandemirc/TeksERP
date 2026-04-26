@@ -118,11 +118,42 @@ router.get(
   controller.getDispatch
 );
 
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/print:
+ *   get:
+ *     tags: [Subcontractor]
+ *     summary: Fason sevk belgesi yazdırma snapshot'ı
+ *     description: Sevk fişi belgesi için gerekli tüm verileri döner (toplar, WO, firma, totaller).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Snapshot verisi }
+ *       404: { description: Sevk belgesi bulunamadı }
+ */
+router.get(
+  "/dispatches/:id/print",
+  verifyToken,
+  requirePermission("workorder:read"),
+  controller.getDispatchPrint
+);
+
 router.get(
   "/receipts",
   verifyToken,
   requirePermission("workorder:read"),
   controller.listReceipts
+);
+
+router.get(
+  "/receipts/:id/print",
+  verifyToken,
+  requirePermission("workorder:read"),
+  controller.getReceiptPrint
 );
 
 router.get(

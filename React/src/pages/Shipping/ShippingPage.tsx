@@ -11,6 +11,7 @@ import {
   FileText,
   Clock,
   CheckCircle2,
+  Handshake,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,12 @@ export default function ShippingPage() {
     refetchInterval: 30000,
   });
 
+  const { data: readyFasonData } = useQuery({
+    queryKey: ["ready-fason"],
+    queryFn: () => shippingService.getReadyFason(),
+    refetchInterval: 30000,
+  });
+
   const { data: preparingData } = useQuery({
     queryKey: ["shipments", "PREPARING"],
     queryFn: () => shippingService.list({ status: "PREPARING" }),
@@ -68,6 +75,7 @@ export default function ShippingPage() {
   });
 
   const readyOrders = readyData?.data ?? [];
+  const readyFasonGroups = readyFasonData?.data ?? [];
   const preparingShipments = preparingData?.data ?? [];
   const shippedShipments = shippedData?.data ?? [];
 
@@ -355,6 +363,92 @@ export default function ShippingPage() {
         </CardContent>
       </Card>
 
+      {/* Ready Fason (Müşteri Malı) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Handshake className="h-5 w-5 text-purple-600" />
+            Sevke Hazır Müşteri Malı (Fason)
+            <Badge variant="default" className="ml-1">
+              {readyFasonGroups.reduce((s, g) => s + g.rolls.length, 0)}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {readyFasonGroups.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground text-sm">
+              Sevke hazır fason top yok.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {readyFasonGroups.map((group) => {
+                const totalQty = group.rolls.reduce(
+                  (s, r) => s + r.currentQty,
+                  0,
+                );
+                return (
+                  <div
+                    key={group.customerId}
+                    className="border rounded-lg overflow-hidden border-purple-200 dark:border-purple-900"
+                  >
+                    <div className="flex items-center gap-3 p-4 bg-purple-50/60 dark:bg-purple-950/30">
+                      <Handshake className="h-4 w-4 shrink-0 text-purple-600" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold">
+                            {group.customerName}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className="bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900 dark:text-purple-200"
+                          >
+                            Müşteri Malı
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                          <span>{group.rolls.length} top hazır</span>
+                          <span>{totalQty.toFixed(1)}m toplam</span>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCreateShipment(group.customerId)}
+                      >
+                        <Truck className="h-3.5 w-3.5 mr-1" />
+                        Sevk
+                      </Button>
+                    </div>
+                    <div className="bg-muted/20 p-3 space-y-1">
+                      {group.rolls.map((roll) => (
+                        <div
+                          key={roll.rollId}
+                          className="flex items-center justify-between p-2 rounded border bg-background text-sm"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-mono text-xs font-semibold">
+                              {roll.barcode}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {roll.itemCode} — {roll.itemName}
+                              {roll.variantCode ? ` · ${roll.variantCode}` : ""}
+                            </div>
+                          </div>
+                          <span className="flex items-center gap-1 shrink-0 ml-2">
+                            <Ruler className="h-3 w-3" />
+                            {roll.currentQty}m
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Sevk Edilen İrsaliyeler (geçmiş) */}
       <Card>
         <CardHeader>
@@ -427,12 +521,10 @@ export default function ShippingPage() {
       />
 
       {/* Detail Panel */}
-      {activeShipmentId && (
-        <ShipmentDetailPanel
-          shipmentId={activeShipmentId}
-          onClose={() => setActiveShipmentId(null)}
-        />
-      )}
+      <ShipmentDetailPanel
+        shipmentId={activeShipmentId || ""}
+        onClose={() => setActiveShipmentId(null)}
+      />
     </div>
   );
 }

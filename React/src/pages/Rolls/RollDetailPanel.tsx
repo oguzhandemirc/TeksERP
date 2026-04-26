@@ -1,11 +1,36 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Package, Barcode } from "lucide-react";
+import {
+  AlertTriangle,
+  Package,
+  Barcode,
+  History,
+  Truck,
+  PackageCheck,
+  ArrowDownLeft,
+  ArrowUpRight,
+  LogIn,
+  LogOut,
+  Sparkles,
+  Send,
+  RotateCcw,
+  ClipboardList,
+  Handshake,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { rollService } from "@/services/rollService";
 import { rollStatusLabels } from "@/types/enums";
-import { itemTypeLabels } from "@/types/enums";
-import type { ItemType } from "@/types/enums";
-import { SlideOverPanel, SlideOverContentLoader } from "@/components/ui/SlideOverPanel";
+import type {
+  RollHistoryEvent,
+  RollHistoryEventKind,
+} from "@/types/models";
+import {
+  computeCurrentRollState,
+  getInitialTypeLabel,
+} from "@/lib/roll-state";
+import {
+  SlideOverPanel,
+  SlideOverContentLoader,
+} from "@/components/ui/SlideOverPanel";
 
 interface RollDetailPanelProps {
   rollId: string | null;
@@ -22,14 +47,112 @@ const statusColorMap: Record<string, string> = {
   SCRAP: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
-export default function RollDetailPanel({ rollId, isOpen, onClose }: RollDetailPanelProps) {
+function getEventIcon(kind: RollHistoryEventKind, subKind?: string) {
+  if (kind === "CREATED") return ClipboardList;
+  if (kind === "MOVEMENT_IN") return LogIn;
+  if (kind === "MOVEMENT_OUT") return LogOut;
+  if (kind === "SUBCONTRACTOR_DISPATCH") return Send;
+  if (kind === "SUBCONTRACTOR_RECEIPT") return RotateCcw;
+  if (kind === "SHIPPED") return Truck;
+  if (kind === "OPERATION") {
+    switch (subKind) {
+      case "PACKAGED":
+        return PackageCheck;
+      case "SUBCONTRACTOR_SENT":
+        return ArrowUpRight;
+      case "SUBCONTRACTOR_RETURNED":
+        return ArrowDownLeft;
+      default:
+        return Sparkles;
+    }
+  }
+  return History;
+}
+
+function EventRow({ event }: { event: RollHistoryEvent }) {
+  const Icon = getEventIcon(event.kind, event.subKind);
+  const d = event.details;
+
+  const detailsText = (() => {
+    const parts: string[] = [];
+    if (event.kind === "CREATED") {
+      if (d["initialQty"] != null) parts.push(`İlk miktar: ${d["initialQty"]}m`);
+      if (d["weightKg"] != null) parts.push(`Ağırlık: ${d["weightKg"]}kg`);
+    } else if (event.kind === "MOVEMENT_IN") {
+      if (d["qtyIn"] != null) parts.push(`Girişte: ${d["qtyIn"]}m`);
+      if (d["weightIn"] != null) parts.push(`${d["weightIn"]}kg`);
+    } else if (event.kind === "MOVEMENT_OUT") {
+      if (d["qtyIn"] != null && d["qtyOut"] != null) {
+        const loss = Number(d["qtyIn"]) - Number(d["qtyOut"]);
+        parts.push(`${d["qtyIn"]}m → ${d["qtyOut"]}m`);
+        if (loss > 0) parts.push(`fire: ${loss.toFixed(1)}m`);
+      } else if (d["qtyOut"] != null) {
+        parts.push(`Çıkışta: ${d["qtyOut"]}m`);
+      }
+    } else if (event.kind === "SUBCONTRACTOR_DISPATCH") {
+      if (d["dispatchNo"]) parts.push(String(d["dispatchNo"]));
+      if (d["dispatchedQty"] != null)
+        parts.push(`${d["dispatchedQty"]}m gönderildi`);
+      if (d["plateNumber"]) parts.push(String(d["plateNumber"]));
+    } else if (event.kind === "SUBCONTRACTOR_RECEIPT") {
+      if (d["receiptNo"]) parts.push(String(d["receiptNo"]));
+      if (d["manifestNo"]) parts.push(`İrs: ${d["manifestNo"]}`);
+    } else if (event.kind === "SHIPPED") {
+      if (d["shipmentNumber"]) parts.push(String(d["shipmentNumber"]));
+      if (d["shippedQty"] != null) parts.push(`${d["shippedQty"]}m`);
+    }
+    return parts.join(" · ");
+  })();
+
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center">
+        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+          <Icon className="h-4 w-4 text-primary" />
+        </div>
+        <div className="w-px flex-1 bg-border mt-1" />
+      </div>
+      <div className="flex-1 pb-4 -mt-0.5">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="text-sm font-medium">{event.title}</div>
+          <div className="text-xs text-muted-foreground">
+            {new Date(event.at).toLocaleString("tr-TR")}
+          </div>
+        </div>
+        {detailsText && (
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {detailsText}
+          </div>
+        )}
+        {event.operatorName && (
+          <div className="text-xs text-muted-foreground mt-0.5">
+            Operatör: {event.operatorName}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function RollDetailPanel({
+  rollId,
+  isOpen,
+  onClose,
+}: RollDetailPanelProps) {
   const { data, isLoading } = useQuery({
     queryKey: ["roll-detail", rollId],
     queryFn: () => rollService.getById(rollId!),
-    enabled: !!rollId,
+    enabled: !!rollId && isOpen,
+  });
+
+  const { data: historyData, isLoading: historyLoading } = useQuery({
+    queryKey: ["roll-history", rollId],
+    queryFn: () => rollService.getHistory(rollId!),
+    enabled: !!rollId && isOpen,
   });
 
   const roll = data?.data;
+  const events = historyData?.data?.events ?? [];
 
   return (
     <SlideOverPanel
@@ -40,7 +163,9 @@ export default function RollDetailPanel({ rollId, isOpen, onClose }: RollDetailP
       {isLoading ? (
         <SlideOverContentLoader />
       ) : !roll ? (
-        <div className="p-6 text-center text-muted-foreground">Top bulunamadı</div>
+        <div className="p-6 text-center text-muted-foreground">
+          Top bulunamadı
+        </div>
       ) : (
         <div className="space-y-6">
           {/* Barkod & Durum */}
@@ -49,11 +174,38 @@ export default function RollDetailPanel({ rollId, isOpen, onClose }: RollDetailP
             <code className="text-sm font-mono bg-muted px-2 py-1 rounded">
               {roll.barcode}
             </code>
-            <Badge className={statusColorMap[roll.status] ?? ""} variant="secondary">
+            <Badge
+              className={statusColorMap[roll.status] ?? ""}
+              variant="secondary"
+            >
               {rollStatusLabels[roll.status] ?? roll.status}
             </Badge>
           </div>
-          {/* Ürün Bilgisi */}
+
+          {/* Müşteri Malı (Fason Üretim Kabul) */}
+          {roll.ownerCustomer && (
+            <div className="rounded-lg border border-purple-300 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/30 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-purple-900 dark:text-purple-200">
+                <Handshake className="h-4 w-4" />
+                Müşteri Malı (Fason Üretim Kabul)
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <span className="text-muted-foreground">Sahip Müşteri:</span>
+                <span className="font-medium">{roll.ownerCustomer.name}</span>
+                {roll.customerDescription && (
+                  <>
+                    <span className="text-muted-foreground">Müşteri Tanımı:</span>
+                    <span>{roll.customerDescription}</span>
+                  </>
+                )}
+              </div>
+              <div className="text-xs text-purple-800 dark:text-purple-300">
+                Bu top sadece sahibi müşteriye sevk edilebilir.
+              </div>
+            </div>
+          )}
+
+          {/* Ürün + Giriş/Güncel */}
           {roll.item && (
             <div className="rounded-lg border p-3 space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium">
@@ -65,8 +217,12 @@ export default function RollDetailPanel({ rollId, isOpen, onClose }: RollDetailP
                 <span className="font-medium">{roll.item.code}</span>
                 <span className="text-muted-foreground">İsim:</span>
                 <span>{roll.item.name}</span>
-                <span className="text-muted-foreground">Tür:</span>
-                <span>{itemTypeLabels[roll.item.itemType as ItemType] ?? roll.item.itemType}</span>
+                <span className="text-muted-foreground">Giriş Türü:</span>
+                <span>{getInitialTypeLabel(roll)}</span>
+                <span className="text-muted-foreground">Güncel Durum:</span>
+                <span className="font-semibold">
+                  {computeCurrentRollState(roll)}
+                </span>
               </div>
             </div>
           )}
@@ -127,8 +283,12 @@ export default function RollDetailPanel({ rollId, isOpen, onClose }: RollDetailP
                 )}
                 {roll.packagingDate && (
                   <>
-                    <span className="text-muted-foreground">Paketleme Tarihi:</span>
-                    <span>{new Date(roll.packagingDate).toLocaleDateString("tr-TR")}</span>
+                    <span className="text-muted-foreground">
+                      Paketleme Tarihi:
+                    </span>
+                    <span>
+                      {new Date(roll.packagingDate).toLocaleDateString("tr-TR")}
+                    </span>
                   </>
                 )}
               </div>
@@ -153,11 +313,17 @@ export default function RollDetailPanel({ rollId, isOpen, onClose }: RollDetailP
                         {err.startMeter}m – {err.endMeter}m
                       </span>
                       {err.errorType && (
-                        <span className="text-muted-foreground ml-2">({err.errorType})</span>
+                        <span className="text-muted-foreground ml-2">
+                          ({err.errorType})
+                        </span>
                       )}
                     </div>
-                    <Badge variant={err.isProcessed ? "default" : "secondary"}>
-                      {err.isProcessed ? err.actionTaken ?? "İşlendi" : "Bekliyor"}
+                    <Badge
+                      variant={err.isProcessed ? "default" : "secondary"}
+                    >
+                      {err.isProcessed
+                        ? err.actionTaken ?? "İşlendi"
+                        : "Bekliyor"}
                     </Badge>
                   </div>
                 ))}
@@ -187,10 +353,43 @@ export default function RollDetailPanel({ rollId, isOpen, onClose }: RollDetailP
             </div>
           )}
 
+          {/* Geçmiş / Timeline */}
+          <div className="rounded-lg border p-3 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <History className="h-4 w-4 text-muted-foreground" />
+              Süreç Geçmişi
+              {events.length > 0 && (
+                <Badge variant="secondary" className="ml-auto">
+                  {events.length} olay
+                </Badge>
+              )}
+            </div>
+            {historyLoading ? (
+              <div className="text-sm text-muted-foreground py-4 text-center">
+                Yükleniyor...
+              </div>
+            ) : events.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-4 text-center">
+                Henüz olay kaydı yok.
+              </div>
+            ) : (
+              <div className="pt-1">
+                {events.map((event, idx) => (
+                  <EventRow key={`${event.kind}-${event.at}-${idx}`} event={event} />
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Tarihler */}
           <div className="text-xs text-muted-foreground space-y-1">
-            <div>Oluşturulma: {new Date(roll.createdAt).toLocaleString("tr-TR")}</div>
-            <div>Son Güncelleme: {new Date(roll.updatedAt).toLocaleString("tr-TR")}</div>
+            <div>
+              Oluşturulma: {new Date(roll.createdAt).toLocaleString("tr-TR")}
+            </div>
+            <div>
+              Son Güncelleme:{" "}
+              {new Date(roll.updatedAt).toLocaleString("tr-TR")}
+            </div>
           </div>
         </div>
       )}

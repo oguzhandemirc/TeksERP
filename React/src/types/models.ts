@@ -95,11 +95,21 @@ export interface RouteStep {
   updatedAt: string;
 }
 
+export type RollOperationType =
+  | "KURSUN_APPLIED"
+  | "QC2_COMPLETED"
+  | "TAMBUR_PROCESSED"
+  | "PACKAGED"
+  | "SUBCONTRACTOR_SENT"
+  | "SUBCONTRACTOR_RETURNED";
+
 export interface Roll {
   id: string;
   barcode: string;
   itemId: string;
   variantId?: string | null;
+  ownerCustomerId?: string | null;
+  customerDescription?: string | null;
   initialQty: number;
   currentQty: number;
   weightKg?: number | null;
@@ -116,10 +126,48 @@ export interface Roll {
   packagingDate?: string | null;
   item?: Item;
   variant?: ItemVariant | null;
+  ownerCustomer?: Customer | null;
   errors?: RollError[];
   allocations?: OrderAllocation[];
+  operations?: { operationType: RollOperationType }[];
+  producedInStep?: {
+    workOrder?: { id: string; batchNumber: string; type?: WorkOrderType };
+  } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type RollHistoryEventKind =
+  | "CREATED"
+  | "MOVEMENT_IN"
+  | "MOVEMENT_OUT"
+  | "OPERATION"
+  | "SUBCONTRACTOR_DISPATCH"
+  | "SUBCONTRACTOR_RECEIPT"
+  | "SHIPPED";
+
+export interface RollHistoryEvent {
+  kind: RollHistoryEventKind;
+  subKind?: string;
+  at: string;
+  title: string;
+  stationName: string | null;
+  details: Record<string, unknown>;
+  operatorName: string | null;
+}
+
+export interface RollHistoryPayload {
+  roll: {
+    id: string;
+    barcode: string;
+    status: RollStatus;
+    initialQty: number;
+    currentQty: number;
+    weightKg: number | null;
+    item: { id: string; code: string; name: string; itemType: string } | null;
+    variant: { id: string; code: string; name: string } | null;
+  };
+  events: RollHistoryEvent[];
 }
 
 export interface DefectType {
@@ -219,6 +267,8 @@ export interface WorkOrder {
   routeTemplateId?: string | null;
   dyehouseCompanyId?: string | null;
   dyehouseCompany?: Customer;
+  servicePricePerMeter?: number | string | null;
+  serviceOwnerCustomer?: { id: string; code: string; name: string } | null;
   steps?: WorkOrderStep[];
   orderLinks?: WorkOrderToOrderLine[];
   travelerCards?: TravelerCard[];
@@ -330,6 +380,11 @@ export interface ShipmentItem {
   itemNameSnapshot: string | null;
   orderNumberSnapshot: string | null;
   roll?: Roll;
+  /** Müşteri kendi kataloğunda bu ürünü nasıl isimlendiriyor (desen alias) */
+  customerAlias?: {
+    customerLabel: string;
+    customerCode: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }

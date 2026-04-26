@@ -1,6 +1,6 @@
 import apiClient from "./apiClient";
 import type { ApiResponse, PaginatedResponse, QueryParams } from "@/types/api";
-import type { WorkOrder, Manifest } from "@/types/models";
+import type { WorkOrder, Manifest, Shipment } from "@/types/models";
 import { buildQueryString } from "@/lib/query-builder";
 
 export interface OrderLineAllocation {
@@ -139,6 +139,14 @@ export const workOrderService = {
     return apiClient
       .get<ApiResponse<Manifest[]>>(
         `/api/work-orders/${id}/manifests`,
+      )
+      .then((r) => r.data);
+  },
+
+  listShipments(id: string): Promise<ApiResponse<Shipment[]>> {
+    return apiClient
+      .get<ApiResponse<Shipment[]>>(
+        `/api/work-orders/${id}/shipments`,
       )
       .then((r) => r.data);
   },

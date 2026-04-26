@@ -43,7 +43,9 @@ export class SubcontractorController {
     this.pendingReturns = this.pendingReturns.bind(this);
     this.listDispatches = this.listDispatches.bind(this);
     this.getDispatch = this.getDispatch.bind(this);
+    this.getDispatchPrint = this.getDispatchPrint.bind(this);
     this.listReceipts = this.listReceipts.bind(this);
+    this.getReceiptPrint = this.getReceiptPrint.bind(this);
     this.getReceipt = this.getReceipt.bind(this);
   }
 
@@ -116,6 +118,16 @@ export class SubcontractorController {
     }
   }
 
+  /** GET /api/subcontractor/dispatches/:id/print */
+  async getDispatchPrint(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getDispatchPrintSnapshot(req.params.id as string);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** GET /api/subcontractor/receipts */
   async listReceipts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -124,6 +136,16 @@ export class SubcontractorController {
         companyId:   typeof req.query.companyId   === "string" ? req.query.companyId   : undefined,
         limit:       typeof req.query.limit       === "string" ? Number(req.query.limit) : undefined,
       });
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/subcontractor/receipts/:id/print */
+  async getReceiptPrint(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getReceiptPrintSnapshot(req.params.id as string);
       res.status(200).json(result);
     } catch (err) {
       next(err);

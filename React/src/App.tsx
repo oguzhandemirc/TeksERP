@@ -36,6 +36,7 @@ import DispatchCreatePage from "@/pages/Subcontractor/DispatchCreatePage";
 import ReceiptsPage from "@/pages/Subcontractor/ReceiptsPage";
 import ReceiveCreatePage from "@/pages/Subcontractor/ReceiveCreatePage";
 import SwatchesPage from "@/pages/Swatches/SwatchesPage";
+import ServiceProductionPage from "@/pages/ServiceProduction/ServiceProductionPage";
 import DefectTypesPage from "@/pages/DefectTypes/DefectTypesPage";
 import QualityGradesPage from "@/pages/QualityGrades/QualityGradesPage";
 import ProtectedRoute from "@/components/layout/ProtectedRoute";
@@ -108,6 +109,7 @@ const AppRoutes = () => {
           <Route path="/subcontractor/dispatches/new" element={<DispatchCreatePage />} />
           <Route path="/subcontractor/receipts" element={<ReceiptsPage />} />
           <Route path="/subcontractor/receipts/new" element={<ReceiveCreatePage />} />
+          <Route path="/service-production" element={<ServiceProductionPage />} />
           <Route path="/swatches" element={<SwatchesPage />} />
           <Route path="/shipping" element={<ShippingPage />} />
           <Route path="/reports" element={<ReportsPage />} />

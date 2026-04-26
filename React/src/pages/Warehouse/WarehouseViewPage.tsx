@@ -18,9 +18,11 @@ import type { Roll } from "@/types/models";
 import {
   RollStatus,
   rollStatusLabels,
-  itemTypeLabels,
-  type ItemType,
 } from "@/types/enums";
+import {
+  computeCurrentRollState,
+  getInitialTypeLabel,
+} from "@/lib/roll-state";
 import RollDetailPanel from "../Rolls/RollDetailPanel";
 
 export interface WarehouseCategoryConfig {
@@ -92,12 +94,22 @@ export default function WarehouseViewPage({
           ),
       },
       {
-        id: "itemType",
-        header: "Tür",
+        id: "initialItemType",
+        header: "Giriş Türü",
         size: 120,
+        cell: ({ row }) => getInitialTypeLabel(row.original),
+      },
+      {
+        id: "currentItemType",
+        header: "Güncel Durum",
+        size: 140,
         cell: ({ row }) => {
-          const type = row.original.item?.itemType;
-          return type ? itemTypeLabels[type as ItemType] ?? type : "—";
+          const initial = getInitialTypeLabel(row.original);
+          const current = computeCurrentRollState(row.original);
+          if (current === initial) {
+            return <span className="text-muted-foreground">{current}</span>;
+          }
+          return <span className="font-medium">{current}</span>;
         },
       },
       {
@@ -126,6 +138,26 @@ export default function WarehouseViewPage({
           return (
             <Badge className={config.badgeClass} variant="secondary">
               {rollStatusLabels[val as keyof typeof rollStatusLabels] ?? val}
+            </Badge>
+          );
+        },
+      },
+      {
+        id: "owner",
+        header: "Sahip",
+        size: 160,
+        cell: ({ row }) => {
+          const owner = row.original.ownerCustomer;
+          if (!owner) {
+            return <span className="text-muted-foreground text-xs">Fabrika</span>;
+          }
+          return (
+            <Badge
+              variant="outline"
+              className="bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-950 dark:text-purple-200 dark:border-purple-800"
+              title={`Müşteri Malı: ${owner.name}`}
+            >
+              Müşteri · {owner.name}
             </Badge>
           );
         },
@@ -221,11 +253,11 @@ export default function WarehouseViewPage({
       </DataTableToolbar>
 
       {dt.isLoading ? (
-        <DataTableSkeleton columnCount={9} rowCount={10} />
+        <DataTableSkeleton columnCount={10} rowCount={10} />
       ) : (
         <DataTable
           table={dt.table}
-          columnCount={9}
+          columnCount={10}
           isFetching={dt.isFetching}
         />
       )}

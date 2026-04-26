@@ -6,15 +6,18 @@ import {
   ChevronRight,
   Building2,
   ClipboardList,
+  Printer,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SlideOverPanel } from "@/components/ui/SlideOverPanel";
 import { subcontractorService } from "@/services/subcontractorService";
+import SubcontractorReceiptPrintDialog from "@/pages/WorkOrders/SubcontractorReceiptPrintDialog";
 
 export default function ReceiptsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [printId, setPrintId] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["receipts"],
@@ -107,6 +110,13 @@ export default function ReceiptsPage() {
         isOpen={!!selectedId}
         onClose={() => setSelectedId(null)}
         title={detail ? `Kabul: ${detail.receiptNo}` : "Detay"}
+        headerActions={
+          selectedId ? (
+            <Button size="sm" variant="outline" onClick={() => setPrintId(selectedId)}>
+              <Printer className="h-4 w-4 mr-1" /> Kabul Formu
+            </Button>
+          ) : undefined
+        }
       >
         {detailLoading ? (
           <p className="text-sm text-muted-foreground">Yükleniyor…</p>
@@ -161,6 +171,12 @@ export default function ReceiptsPage() {
           </div>
         ) : null}
       </SlideOverPanel>
+
+      <SubcontractorReceiptPrintDialog
+        open={!!printId}
+        onOpenChange={(o) => { if (!o) setPrintId(null); }}
+        receiptId={printId}
+      />
     </div>
   );
 }

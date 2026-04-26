@@ -20,8 +20,13 @@ import {
   RollStatus,
   RollOperationType,
   StationKind,
+  StepStatus,
+  WorkOrderStatus,
 } from "@prisma/client";
 import { recomputeStepStatus } from "./helpers/roll-step.helper";
+import { CustomerVariantAliasService } from "./customer-variant-alias.service";
+
+const aliasService = new CustomerVariantAliasService();
 
 export type PackagingDestination = "SHIP" | "WAREHOUSE";
 
@@ -51,6 +56,13 @@ export interface PackagingRollSummary {
   defaultOrderLineId: string | null;
   defaultCustomerName: string | null;
   availableOrderLinks: PackagingOrderLinkOption[];
+  // Fason Üretim Kabul: müşteri-malı top ise sahibi burada
+  ownerCustomerId: string | null;
+  ownerCustomerName: string | null;
+  // Etiket önizlemesi: varsayılan hedef müşteriye göre çözülmüş karşılık
+  previewCustomerName: string | null;
+  previewCustomerLabel: string | null;
+  previewCustomerCode: string | null;
 }
 
 export interface PackagingStepSummary {
@@ -84,6 +96,9 @@ export interface PackagingLabelPayload {
   orderNumber: string | null;
   batchNumber: string;
   printedAt: string;
+  // Müşteri-özel desen adı (varsa etiketin ön yüzünde bu basılır)
+  customerVariantLabel: string | null;
+  customerVariantCode: string | null;
 }
 
 export interface PackagingFinalizeResult {
@@ -219,6 +234,7 @@ export class PackagingService {
       include: {
         item: true,
         variant: true,
+        ownerCustomer: { select: { id: true, name: true } },
         currentStep: {
           include: {
             station: true,
@@ -249,21 +265,33 @@ export class PackagingService {
       );
     }
 
-    // Hedef sipariş satırı: input verilmişse onu, yoksa iş emrinin tek bağı varsa onu kullan
+    // Fason Üretim Kabul: iş emrinin siparişi yok, sahip müşteri Roll.ownerCustomer'dadır
+    const isServiceOwned = !!roll.ownerCustomerId;
+
+    // Hedef sipariş satırı: input verilmişse onu, yoksa iş emrinin tek bağı varsa onu kullan.
+    // Müşteri-malı toplarda (fason) orderLinks boştur — sipariş aranmaz.
+    // WAREHOUSE hedefinde de sipariş bağlantısı korunur (ara depolama, ileride sevk edilecek).
     let targetOrderLineId: string | null = input.orderLineId ?? null;
-    if (input.destination === "SHIP") {
+    if (!isServiceOwned) {
       if (!targetOrderLineId) {
         const links = roll.currentStep.workOrder.orderLinks;
         if (links.length === 1) {
           targetOrderLineId = links[0].orderLineId;
         } else if (links.length === 0) {
-          throw AppError.badRequest(
-            "Bu iş emri hiçbir siparişe bağlı değil. Depoya kaldırın veya siparişe bağlayın."
-          );
-        } else {
+          if (input.destination === "SHIP") {
+            throw AppError.badRequest(
+              "Bu iş emri hiçbir siparişe bağlı değil. Depoya kaldırın veya siparişe bağlayın."
+            );
+          }
+          // WAREHOUSE: siparişsiz stok olarak kabul edilir
+        } else if (input.destination === "SHIP") {
           throw AppError.badRequest(
             "İş emrinde birden fazla sipariş var — lütfen hangisine gideceğini seçin"
           );
+        }
+        // WAREHOUSE + birden fazla sipariş: ilk bağlantıyı kullan (sevkiyatta netleşir)
+        if (!targetOrderLineId && links.length > 1) {
+          targetOrderLineId = links[0].orderLineId;
         }
       } else {
         const belongs = roll.currentStep.workOrder.orderLinks.some(
@@ -275,28 +303,37 @@ export class PackagingService {
           );
         }
       }
+    } else if (input.destination === "SHIP" && isServiceOwned && targetOrderLineId) {
+      // Operatör fason topu yanlışlıkla bir siparişe bağlamaya çalışırsa engelle
+      throw AppError.badRequest(
+        "Müşteri malı (fason) top bir siparişe bağlanamaz — doğrudan sahibine sevk edilir"
+      );
     }
 
     const netLength = roll.currentQty;
-    const customerName =
-      roll.currentStep.workOrder.orderLinks[0]?.orderLine.order.customer.name ?? null;
-    const orderNumber =
-      roll.currentStep.workOrder.orderLinks.find(
-        (l) => l.orderLineId === targetOrderLineId
-      )?.orderLine.order.orderNumber ??
-      (roll.currentStep.workOrder.orderLinks.length === 1
-        ? roll.currentStep.workOrder.orderLinks[0].orderLine.order.orderNumber
-        : null);
+    const customerName = isServiceOwned
+      ? roll.ownerCustomer?.name ?? null
+      : roll.currentStep.workOrder.orderLinks[0]?.orderLine.order.customer.name ?? null;
+    const orderNumber = isServiceOwned
+      ? null
+      : (roll.currentStep.workOrder.orderLinks.find(
+          (l) => l.orderLineId === targetOrderLineId
+        )?.orderLine.order.orderNumber ??
+        (roll.currentStep.workOrder.orderLinks.length === 1
+          ? roll.currentStep.workOrder.orderLinks[0].orderLine.order.orderNumber
+          : null));
     const batchNumber = roll.currentStep.workOrder.batchNumber;
 
     const stepId = roll.currentStepId;
 
     const updated = await prisma.$transaction(async (tx) => {
+      const now = new Date();
+
       // Paketleme movement'ini kapat
       await tx.rollMovement.updateMany({
         where: { rollId: input.rollId, workOrderStepId: stepId, exitedAt: null },
         data: {
-          exitedAt: new Date(),
+          exitedAt: now,
           qtyOut: netLength,
           weightOut: input.weightKg,
           notes:
@@ -307,8 +344,9 @@ export class PackagingService {
       });
 
       // Mevcut tahsisleri temizle, yenisini (varsa) ekle — "bütün top tek hedef"
+      // WAREHOUSE hedefinde de tahsis korunur: top sipariş için üretildi, depoda bekliyor.
       await tx.orderAllocation.deleteMany({ where: { rollId: input.rollId } });
-      if (input.destination === "SHIP" && targetOrderLineId) {
+      if (targetOrderLineId) {
         await tx.orderAllocation.create({
           data: {
             rollId: input.rollId,
@@ -348,6 +386,7 @@ export class PackagingService {
           workOrderStepId: stepId,
           operationType: RollOperationType.PACKAGED,
           operatorId: userId ?? null,
+          createdAt: now,
           metadata: {
             weightKg: input.weightKg,
             destination: input.destination,
@@ -359,6 +398,26 @@ export class PackagingService {
       });
 
       await recomputeStepStatus(tx, stepId);
+
+      // Tüm adımlar COMPLETED/SKIPPED ise WO'yu kapat
+      const workOrderId = roll.currentStep!.workOrderId;
+      const remaining = await tx.workOrderStep.count({
+        where: {
+          workOrderId,
+          status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
+        },
+      });
+      if (remaining === 0) {
+        await tx.workOrder.update({
+          where: { id: workOrderId },
+          data: { status: WorkOrderStatus.COMPLETED },
+        });
+        await tx.travelerCard.updateMany({
+          where: { workOrderId, status: "ACTIVE" },
+          data: { status: "COMPLETED" },
+        });
+      }
+
       return updatedRoll;
     });
 
@@ -379,6 +438,10 @@ export class PackagingService {
       },
     });
 
+    const resolution = await aliasService.resolveForRoll(input.rollId, {
+      preferredOrderLineId: targetOrderLineId,
+    });
+
     const label: PackagingLabelPayload = {
       barcode: updated.barcode,
       itemCode: roll.item.code,
@@ -393,6 +456,8 @@ export class PackagingService {
       orderNumber: input.destination === "SHIP" ? orderNumber : null,
       batchNumber,
       printedAt: new Date().toISOString(),
+      customerVariantLabel: resolution.customerLabel,
+      customerVariantCode: resolution.customerCode,
     };
 
     return {
@@ -432,7 +497,16 @@ export class PackagingService {
         roll: {
           include: {
             item: { select: { code: true, name: true } },
-            variant: { select: { code: true, name: true } },
+            variant: { select: { id: true, code: true, name: true } },
+            ownerCustomer: { select: { id: true, name: true } },
+            allocations: {
+              include: {
+                orderLine: {
+                  include: { order: { include: { customer: true } } },
+                },
+              },
+              orderBy: { createdAt: "asc" },
+            },
           },
         },
         step: {
@@ -457,9 +531,77 @@ export class PackagingService {
       orderBy: { enteredAt: "asc" },
     });
 
-    return movements.map((m) => {
+    // Varsayılan hedef müşteriyi çöz (resolver ile aynı öncelik sırası —
+    // preferredOrderLineId hariç; operatör henüz seçim yapmadı).
+    const previewTargets = movements.map((m) => {
+      const roll = m.roll;
+      let customerId: string | null = null;
+      let customerName: string | null = null;
+      if (roll.ownerCustomer) {
+        customerId = roll.ownerCustomer.id;
+        customerName = roll.ownerCustomer.name;
+      } else if (roll.allocations.length > 0) {
+        const c = roll.allocations[0].orderLine.order.customer;
+        customerId = c.id;
+        customerName = c.name;
+      } else {
+        const unique = new Set(
+          m.step.workOrder.orderLinks.map(
+            (l) => l.orderLine.order.customer.id,
+          ),
+        );
+        if (unique.size === 1) {
+          const c = m.step.workOrder.orderLinks[0].orderLine.order.customer;
+          customerId = c.id;
+          customerName = c.name;
+        }
+      }
+      return { movementId: m.id, customerId, customerName };
+    });
+
+    // Alias lookup — tek sorguda topla
+    const aliasKeys = previewTargets
+      .map((t, i) => {
+        const variantId = movements[i].roll.variantId;
+        if (!t.customerId || !variantId) return null;
+        return { customerId: t.customerId, variantId };
+      })
+      .filter((x): x is { customerId: string; variantId: string } => x !== null);
+
+    const aliasMap = new Map<string, { label: string; code: string | null }>();
+    if (aliasKeys.length > 0) {
+      const rows = await prisma.customerVariantAlias.findMany({
+        where: {
+          isActive: true,
+          OR: aliasKeys.map((k) => ({
+            customerId: k.customerId,
+            variantId: k.variantId,
+          })),
+        },
+        select: {
+          customerId: true,
+          variantId: true,
+          customerLabel: true,
+          customerCode: true,
+        },
+      });
+      for (const row of rows) {
+        aliasMap.set(`${row.customerId}:${row.variantId}`, {
+          label: row.customerLabel,
+          code: row.customerCode,
+        });
+      }
+    }
+
+    return movements.map((m, i) => {
       const links = m.step.workOrder.orderLinks;
       const defaultLink = links.length === 1 ? links[0] : null;
+      const target = previewTargets[i];
+      const aliasKey =
+        target.customerId && m.roll.variantId
+          ? `${target.customerId}:${m.roll.variantId}`
+          : null;
+      const alias = aliasKey ? aliasMap.get(aliasKey) : undefined;
       return {
         rollId: m.roll.id,
         barcode: m.roll.barcode,
@@ -484,6 +626,11 @@ export class PackagingService {
           itemName: l.orderLine.item?.name ?? "",
           requestedQty: l.orderLine.quantity,
         })),
+        ownerCustomerId: m.roll.ownerCustomer?.id ?? null,
+        ownerCustomerName: m.roll.ownerCustomer?.name ?? null,
+        previewCustomerName: target.customerName,
+        previewCustomerLabel: alias?.label ?? null,
+        previewCustomerCode: alias?.code ?? null,
       };
     });
   }

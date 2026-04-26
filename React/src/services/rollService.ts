@@ -1,6 +1,6 @@
 import apiClient from "./apiClient";
 import type { ApiResponse, PaginatedResponse, QueryParams } from "@/types/api";
-import type { Roll } from "@/types/models";
+import type { Roll, RollHistoryPayload } from "@/types/models";
 import { buildQueryString } from "@/lib/query-builder";
 
 export interface InitialEntryRequest {
@@ -29,6 +29,12 @@ export const rollService = {
   getByBarcode(barcode: string): Promise<ApiResponse<Roll>> {
     return apiClient
       .get<ApiResponse<Roll>>(`/api/rolls/barcode/${barcode}`)
+      .then((r) => r.data);
+  },
+
+  getHistory(id: string): Promise<ApiResponse<RollHistoryPayload>> {
+    return apiClient
+      .get<ApiResponse<RollHistoryPayload>>(`/api/rolls/${id}/history`)
       .then((r) => r.data);
   },
 

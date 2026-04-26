@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP - Database Seed
 // =============================================================================
-// Realistic Turkish textile industry test data for all 22 models.
+// Realistic Turkish textile industry test data for all 38 models.
 // Run: npx prisma db seed
 // =============================================================================
 
@@ -31,32 +31,31 @@ async function main() {
   // =========================================================================
   // 1. PERMISSIONS
   // =========================================================================
+  // Bu liste route'ların `requirePermission(...)` çağrılarıyla 1:1 eşleşmelidir.
+  // Yeni endpoint eklendiğinde burayı da güncelle, yoksa Admin dışı roller erişemez.
   const permissionData: { code: string; module: string }[] = [
     // SALES
     { code: "order:read", module: "SALES" },
     { code: "order:write", module: "SALES" },
-    { code: "order:delete", module: "SALES" },
     { code: "customer:read", module: "SALES" },
     { code: "customer:write", module: "SALES" },
     // PRODUCTION
     { code: "workorder:read", module: "PRODUCTION" },
     { code: "workorder:write", module: "PRODUCTION" },
-    { code: "workorder:create", module: "PRODUCTION" },
     { code: "roll:read", module: "PRODUCTION" },
     { code: "roll:write", module: "PRODUCTION" },
     { code: "station:read", module: "PRODUCTION" },
     { code: "station:write", module: "PRODUCTION" },
+    // MASTER_DATA
+    { code: "item:read", module: "MASTER_DATA" },
+    { code: "item:write", module: "MASTER_DATA" },
     // QUALITY
     { code: "quality:read", module: "QUALITY" },
     { code: "quality:write", module: "QUALITY" },
     // LOGISTICS
     { code: "shipment:read", module: "LOGISTICS" },
     { code: "shipment:write", module: "LOGISTICS" },
-    { code: "allocation:read", module: "LOGISTICS" },
     { code: "allocation:write", module: "LOGISTICS" },
-    // FINANCE
-    { code: "finance:read", module: "FINANCE" },
-    { code: "finance:write", module: "FINANCE" },
     // ADMIN
     { code: "admin:users", module: "ADMIN" },
     { code: "admin:roles", module: "ADMIN" },
@@ -104,11 +103,12 @@ async function main() {
     })),
   });
 
-  // Planning gets production + order read
+  // Planning gets production + order read + master data write
   const planningPermCodes = [
-    "workorder:read", "workorder:write", "workorder:create",
+    "workorder:read", "workorder:write",
     "roll:read", "roll:write", "station:read",
-    "order:read", "allocation:read", "allocation:write",
+    "item:read", "item:write",
+    "order:read", "allocation:write",
   ];
   await prisma.rolePermission.createMany({
     data: permissions
@@ -118,7 +118,8 @@ async function main() {
 
   // Production operator
   const prodPermCodes = [
-    "workorder:read", "roll:read", "roll:write", "station:read",
+    "workorder:read", "roll:read", "roll:write",
+    "station:read", "item:read",
   ];
   await prisma.rolePermission.createMany({
     data: permissions
@@ -129,7 +130,7 @@ async function main() {
   // Quality control
   const qualityPermCodes = [
     "quality:read", "quality:write", "roll:read", "roll:write",
-    "workorder:read",
+    "workorder:read", "item:read",
   ];
   await prisma.rolePermission.createMany({
     data: permissions
@@ -140,7 +141,7 @@ async function main() {
   // Sales
   const salesPermCodes = [
     "order:read", "order:write", "customer:read", "customer:write",
-    "allocation:read",
+    "item:read",
   ];
   await prisma.rolePermission.createMany({
     data: permissions
@@ -151,7 +152,7 @@ async function main() {
   // Shipping
   const shipPermCodes = [
     "shipment:read", "shipment:write", "order:read",
-    "roll:read", "allocation:read",
+    "roll:read", "item:read",
   ];
   await prisma.rolePermission.createMany({
     data: permissions

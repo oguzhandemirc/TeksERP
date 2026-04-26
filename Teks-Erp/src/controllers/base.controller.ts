@@ -81,7 +81,6 @@ export class BaseController {
       next(error);
     }
   }
-
   /**
    * DELETE /:id — Soft-delete (set isActive = false).
    */

@@ -28,11 +28,12 @@ export function SlideOverPanel({
 
     if (isOpen) {
       setShouldRender(true);
-      // Bir sonraki render cycle'da animasyonu başlat
-      timer = setTimeout(() => setIsAnimated(true), 10);
+      // Küçük bir gecikme ile DOM'a eklendikten sonra animasyonu başlat
+      timer = setTimeout(() => setIsAnimated(true), 20);
     } else {
+      // Önce animasyonu kapat (kapanış animasyonu başlar)
       setIsAnimated(false);
-      // Animasyon süresi (300ms) sonunda bileşeni DOM'dan kaldır
+      // Animasyon süresi (300ms) sonunda bileşeni tamamen kaldır
       timer = setTimeout(() => setShouldRender(false), 300);
     }
 
@@ -42,36 +43,46 @@ export function SlideOverPanel({
   if (!shouldRender) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end overflow-hidden">
-      {/* Arka Plan (Backdrop) */}
+    <div className="fixed inset-0 z-[100] overflow-hidden">
+      {/* Backdrop */}
       <div
-        className={`fixed inset-0 bg-black transition-opacity duration-300 ease-in-out ${
-          isAnimated ? "opacity-50" : "opacity-0"
+        className={`absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300 ease-in-out ${
+          isAnimated ? "opacity-100" : "opacity-0"
         }`}
         onClick={onClose}
-        aria-hidden="true"
       />
 
       {/* Panel */}
-      <div
-        className={`relative w-full ${widthClass} bg-background border-l shadow-xl flex flex-col transition-transform duration-300 ease-in-out transform ${
-          isAnimated ? "translate-x-0" : "translate-x-full"
-        }`}
-      >
-        {/* Header */}
-        <div className="sticky top-0 bg-background border-b px-4 py-3 flex items-center justify-between z-10 shrink-0">
-          <h2 className="text-lg font-semibold truncate pr-4">{title}</h2>
-          <div className="flex items-center gap-2">
-            {headerActions}
-            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+      <div className="absolute inset-y-0 right-0 flex max-w-full pl-10">
+        <div
+          className={`relative w-screen ${widthClass} transform transition-all duration-300 ease-in-out ${
+            isAnimated ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
+          }`}
+        >
+          <div className="flex h-full flex-col bg-background shadow-2xl border-l">
+            {/* Header */}
+            <div className="sticky top-0 bg-background/80 backdrop-blur-md border-b px-6 py-4 flex items-center justify-between z-10 shrink-0">
+              <h2 className="text-xl font-bold truncate pr-4 tracking-tight text-foreground">
+                {title}
+              </h2>
+              <div className="flex items-center gap-3">
+                {headerActions}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onClose}
+                  className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {children}
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-muted">
+              {children}
+            </div>
+          </div>
         </div>
       </div>
     </div>

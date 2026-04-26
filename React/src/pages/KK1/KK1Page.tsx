@@ -153,7 +153,6 @@ export default function KK1Page() {
       // Reset form for next entry (keep item selected)
       setForm((f) => ({ ...defaultValues, itemId: f.itemId, qualityGrade: "1.KALITE" }));
       qc.invalidateQueries({ queryKey: ["rolls"] });
-      qc.invalidateQueries({ queryKey: ["rolls-stock"] });
     },
     onError: () => {
       toast.error("Top oluşturulurken hata oluştu");

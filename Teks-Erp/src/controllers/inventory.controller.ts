@@ -30,8 +30,26 @@ export class InventoryController {
     this.findAllRolls = this.findAllRolls.bind(this);
     this.findRollById = this.findRollById.bind(this);
     this.findRollByBarcode = this.findRollByBarcode.bind(this);
+    this.getRollHistory = this.getRollHistory.bind(this);
     this.softDelete = this.softDelete.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
+  }
+
+  /**
+   * GET /api/rolls/:id/history
+   */
+  async getRollHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const result = await this.service.getRollHistory(id);
+      if (!result.success) {
+        res.status(404).json(result);
+        return;
+      }
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
   }
 
   /**

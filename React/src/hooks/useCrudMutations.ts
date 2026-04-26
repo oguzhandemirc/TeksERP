@@ -8,13 +8,15 @@ interface UseCrudMutationsOptions<T> {
   entityName: string;
 }
 
+// Hata toast'larını apiClient interceptor'ı backend'in gerçek mesajıyla gösterir.
+// Bu hook sadece success toast'larını gösterir; onError'a generic mesaj koymak
+// duplicate toast yaratır ve testçinin gerçek hata mesajını görmesini engeller.
 export function useCrudMutations<T>({
   service,
   queryKey,
   entityName,
 }: UseCrudMutationsOptions<T>) {
   const qc = useQueryClient();
-
   const invalidate = () => qc.invalidateQueries({ queryKey: [queryKey] });
 
   const createMutation = useMutation({
@@ -22,9 +24,6 @@ export function useCrudMutations<T>({
     onSuccess: () => {
       toast.success(`${entityName} başarıyla oluşturuldu`);
       invalidate();
-    },
-    onError: () => {
-      toast.error(`${entityName} oluşturulurken hata oluştu`);
     },
   });
 
@@ -35,9 +34,6 @@ export function useCrudMutations<T>({
       toast.success(`${entityName} başarıyla güncellendi`);
       invalidate();
     },
-    onError: () => {
-      toast.error(`${entityName} güncellenirken hata oluştu`);
-    },
   });
 
   const removeMutation = useMutation({
@@ -45,9 +41,6 @@ export function useCrudMutations<T>({
     onSuccess: () => {
       toast.success(`${entityName} başarıyla pasife alındı`);
       invalidate();
-    },
-    onError: () => {
-      toast.error(`${entityName} silinirken hata oluştu`);
     },
   });
 
@@ -57,9 +50,6 @@ export function useCrudMutations<T>({
       toast.success(`${entityName} kalıcı olarak silindi`);
       invalidate();
     },
-    onError: () => {
-      toast.error(`${entityName} kalıcı silinirken hata oluştu`);
-    },
   });
 
   const activateMutation = useMutation({
@@ -67,9 +57,6 @@ export function useCrudMutations<T>({
     onSuccess: () => {
       toast.success(`${entityName} başarıyla aktif edildi`);
       invalidate();
-    },
-    onError: () => {
-      toast.error(`${entityName} aktif edilirken hata oluştu`);
     },
   });
 

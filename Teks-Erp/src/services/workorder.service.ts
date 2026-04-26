@@ -20,7 +20,17 @@ import {
   buildPagination,
 } from "../utils/query-parser";
 import { Request } from "express";
-import { WorkOrder, WorkOrderStatus, RollStatus, Prisma } from "@prisma/client";
+import {
+  WorkOrder,
+  WorkOrderStatus,
+  RollStatus,
+  Shipment,
+  Prisma,
+} from "@prisma/client";
+import {
+  ensureWorkOrderInProgress,
+  recomputeStepStatus,
+} from "./helpers/roll-step.helper";
 
 /**
  * Eğer bir Order'a bağlı başka aktif (CANCELLED olmayan) WO yoksa,
@@ -420,23 +430,26 @@ export class WorkOrderService {
 
   /**
    * Get single work order by ID.
+   * SERVICE_PRODUCTION iş emirleri için `serviceOwnerCustomer` alanı eklenir:
+   * topların `ownerCustomerId`'si üzerinden müşteri bilgisi türetilir.
    */
-  async findById(id: string): Promise<ApiResponse<WorkOrder | null>> {
+  async findById(id: string): Promise<ApiResponse<Record<string, unknown> | null>> {
     const wo = await prisma.workOrder.findUnique({
       where: { id },
       include: {
         steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
         orderLinks: {
-            include: {
-              orderLine: {
-                include: {
-                  order: { include: { customer: true } },
-                  item: true,
-                  variant: true,
-                },
+          include: {
+            orderLine: {
+              include: {
+                order: { include: { customer: true } },
+                item: true,
+                variant: true,
               },
             },
           },
+        },
+        dyehouseCompany: true,
       },
     });
 
@@ -444,7 +457,28 @@ export class WorkOrderService {
       return { success: false, data: null, message: "İş emri bulunamadı" };
     }
 
-    return { success: true, data: wo };
+    // SERVICE_PRODUCTION: topların ownerCustomerId'sinden mal sahibini türet
+    let serviceOwnerCustomer: { id: string; code: string; name: string } | null = null;
+    if (wo.type === "SERVICE_PRODUCTION") {
+      const stepIds = wo.steps.map((s) => s.id);
+      if (stepIds.length > 0) {
+        const rollWithOwner = await prisma.roll.findFirst({
+          where: {
+            ownerCustomerId: { not: null },
+            OR: [
+              { producedInStepId: { in: stepIds } },
+              { currentStepId: { in: stepIds } },
+            ],
+          },
+          select: {
+            ownerCustomer: { select: { id: true, code: true, name: true } },
+          },
+        });
+        serviceOwnerCustomer = rollWithOwner?.ownerCustomer ?? null;
+      }
+    }
+
+    return { success: true, data: { ...wo, serviceOwnerCustomer } };
   }
 
   /**
@@ -452,7 +486,9 @@ export class WorkOrderService {
    * Veritabanı mantığı:
    * 1. İş Emri iptal edilir.
    * 2. İş Emrine bağlı kumaş topları (currentStepId veya producedInStepId üzerinden bağlanmış) bulunur.
-   * 3. İlgili topların bağı (adım bağlantıları) kopartılır ve statüleri STOCK (Ham Depo) durumuna geri çekilir.
+   * 3. Fabrika topları STOCK'a geri çekilir.
+   * 4. Fason (müşteri-malı) toplar fiziksel olarak silinir — WO sadece bu iş için açıldığı
+   *    ve müşteri malı bu iş bazında var olduğu için iptalle birlikte kaldırılır.
    * Tüm bu işlemler güvenli bir transaction bloğunda gerçekleşir.
    */
   async softDelete(id: string, userId?: string): Promise<ApiResponse<WorkOrder>> {
@@ -480,42 +516,103 @@ export class WorkOrderService {
       ...new Set(existing.orderLinks.map((l) => l.orderLine.orderId)),
     ];
 
-    const { updated, revertedOrderIds } = await prisma.$transaction(async (tx) => {
-      const cancelledWO = await tx.workOrder.update({
-        where: { id },
-        data: { status: WorkOrderStatus.CANCELLED },
-      });
+    const { updated, revertedOrderIds, deletedFasonRollCount } = await prisma.$transaction(
+      async (tx) => {
+        const cancelledWO = await tx.workOrder.update({
+          where: { id },
+          data: { status: WorkOrderStatus.CANCELLED },
+        });
 
-      if (stepIds.length > 0) {
-        await tx.roll.updateMany({
-          where: {
-            OR: [
-              { producedInStepId: { in: stepIds } },
-              { currentStepId: { in: stepIds } },
-            ],
-          },
+        let fasonRollIds: string[] = [];
+
+        if (stepIds.length > 0) {
+          // Fason (müşteri-malı) topları ayır — bunlar silinecek
+          const fasonRolls = await tx.roll.findMany({
+            where: {
+              ownerCustomerId: { not: null },
+              OR: [
+                { producedInStepId: { in: stepIds } },
+                { currentStepId: { in: stepIds } },
+              ],
+            },
+            select: { id: true },
+          });
+          fasonRollIds = fasonRolls.map((r) => r.id);
+
+          // Fabrika topları STOCK'a geri çek
+          await tx.roll.updateMany({
+            where: {
+              ownerCustomerId: null,
+              OR: [
+                { producedInStepId: { in: stepIds } },
+                { currentStepId: { in: stepIds } },
+              ],
+            },
+            data: {
+              status: RollStatus.STOCK,
+              producedInStepId: null,
+              currentStepId: null,
+            },
+          });
+
+          // Fason toplara ait step-FK'lerini ve roll-FK'lerini temizle,
+          // sonra rolleri sil. (hardDelete ile aynı sıralama mantığı.)
+          if (fasonRollIds.length > 0) {
+            // Step-FK'ler (RESTRICT): RollOperation sil, RollError step refs nullla, movement sil
+            await tx.rollOperation.deleteMany({
+              where: { rollId: { in: fasonRollIds } },
+            });
+            await tx.rollError.updateMany({
+              where: {
+                rollId: { in: fasonRollIds },
+                detectedAtStepId: { in: stepIds },
+              },
+              data: { detectedAtStepId: null },
+            });
+            await tx.rollError.updateMany({
+              where: {
+                rollId: { in: fasonRollIds },
+                processedAtStepId: { in: stepIds },
+              },
+              data: { processedAtStepId: null },
+            });
+            await tx.rollMovement.deleteMany({
+              where: { rollId: { in: fasonRollIds } },
+            });
+
+            // Fason belgeleri: dispatch/receipt sadece bu roller için değil
+            // WO geneli için silinmeli (iptal = WO bitiyor). Önce WO bazında sil.
+            await tx.subcontractorReceipt.deleteMany({ where: { workOrderId: id } });
+            await tx.subcontractorDispatch.deleteMany({ where: { workOrderId: id } });
+
+            // Roll-FK'ler (RESTRICT)
+            await tx.rollError.deleteMany({ where: { rollId: { in: fasonRollIds } } });
+            await tx.orderAllocation.deleteMany({ where: { rollId: { in: fasonRollIds } } });
+            await tx.shipmentItem.deleteMany({ where: { rollId: { in: fasonRollIds } } });
+
+            await tx.roll.deleteMany({ where: { id: { in: fasonRollIds } } });
+          }
+        }
+
+        // WO iptal olunca tüm ACTIVE refakat kartlarını VOIDED'a çek
+        await tx.travelerCard.updateMany({
+          where: { workOrderId: id, status: "ACTIVE" },
           data: {
-            status: RollStatus.STOCK,
-            producedInStepId: null,
-            currentStepId: null,
+            status: "VOIDED",
+            voidedAt: new Date(),
+            voidReason: "WO_CANCELLED",
           },
         });
-      }
 
-      // WO iptal olunca tüm ACTIVE refakat kartlarını VOIDED'a çek
-      await tx.travelerCard.updateMany({
-        where: { workOrderId: id, status: "ACTIVE" },
-        data: {
-          status: "VOIDED",
-          voidedAt: new Date(),
-          voidReason: "WO_CANCELLED",
-        },
-      });
+        const reverted = await revertOrdersIfNoActiveWO(tx, affectedOrderIds, id);
 
-      const reverted = await revertOrdersIfNoActiveWO(tx, affectedOrderIds, id);
-
-      return { updated: cancelledWO, revertedOrderIds: reverted };
-    });
+        return {
+          updated: cancelledWO,
+          revertedOrderIds: reverted,
+          deletedFasonRollCount: fasonRollIds.length,
+        };
+      },
+    );
 
     await AuditService.log({
       userId,
@@ -526,18 +623,23 @@ export class WorkOrderService {
       newData: {
         status: WorkOrderStatus.CANCELLED,
         revertedOrderIds,
+        deletedFasonRollCount,
       },
     });
+
+    const fasonNote =
+      deletedFasonRollCount > 0
+        ? `, ${deletedFasonRollCount} müşteri-malı top silindi`
+        : "";
+    const orderNote =
+      revertedOrderIds.length > 0
+        ? ` ve ${revertedOrderIds.length} sipariş APPROVED durumuna geri döndürüldü`
+        : "";
 
     return {
       success: true,
       data: updated,
-      message:
-        `İş emri iptal edildi, bağlı toplar STOCK'a çekildi` +
-        (revertedOrderIds.length > 0
-          ? ` ve ${revertedOrderIds.length} sipariş APPROVED durumuna geri döndürüldü`
-          : "") +
-        `: ${existing.batchNumber}`,
+      message: `İş emri iptal edildi, bağlı fabrika topları STOCK'a çekildi${fasonNote}${orderNote}: ${existing.batchNumber}`,
     };
   }
 
@@ -581,10 +683,30 @@ export class WorkOrderService {
       ...new Set(existing.orderLinks.map((l) => l.orderLine.orderId)),
     ];
 
-    const revertedOrderIds = await prisma.$transaction(async (tx) => {
+    const isServiceProduction = existing.type === "SERVICE_PRODUCTION";
+
+    const { revertedOrderIds, deletedFasonRollCount } = await prisma.$transaction(async (tx) => {
+      // 1. Bu WO'ya bağlı tüm topları bul: fason (müşteri-malı) vs fabrika.
+      //    Fason toplar WO ile birlikte silinir (müşteri malı, sadece bu iş için var).
+      //    Fabrika topları STOCK'a geri döner.
+      let fasonRollIds: string[] = [];
       if (stepIds.length > 0) {
+        const fasonRolls = await tx.roll.findMany({
+          where: {
+            ownerCustomerId: { not: null },
+            OR: [
+              { producedInStepId: { in: stepIds } },
+              { currentStepId: { in: stepIds } },
+            ],
+          },
+          select: { id: true },
+        });
+        fasonRollIds = fasonRolls.map((r) => r.id);
+
+        // Fabrika topları — STOCK'a geri çek
         await tx.roll.updateMany({
           where: {
+            ownerCustomerId: null,
             OR: [
               { producedInStepId: { in: stepIds } },
               { currentStepId: { in: stepIds } },
@@ -597,7 +719,21 @@ export class WorkOrderService {
           },
         });
 
-        // RollMovement RESTRICT — ilişkili hareketleri önce sil
+        // 2. Step-level FK'leri temizle (RESTRICT):
+        //    - RollOperation (her operasyon bir step'e RESTRICT bağlı)
+        await tx.rollOperation.deleteMany({
+          where: { workOrderStepId: { in: stepIds } },
+        });
+        //    - RollError.detectedAtStepId / processedAtStepId (optional, SET NULL yaklaşımı)
+        await tx.rollError.updateMany({
+          where: { detectedAtStepId: { in: stepIds } },
+          data: { detectedAtStepId: null },
+        });
+        await tx.rollError.updateMany({
+          where: { processedAtStepId: { in: stepIds } },
+          data: { processedAtStepId: null },
+        });
+        //    - RollMovement (RESTRICT)
         await tx.rollMovement.deleteMany({
           where: { workOrderStepId: { in: stepIds } },
         });
@@ -605,25 +741,39 @@ export class WorkOrderService {
 
       const reverted = await revertOrdersIfNoActiveWO(tx, affectedOrderIds, id);
 
-      // Fason belgeleri (stepId ve workOrderId RESTRICT) — önce mal kabul
-      // (receipt_items cascade ile siliniyor, newRollId referansı düşüyor),
-      // sonra sevk (dispatch_items cascade ile siliniyor).
+      // 3. Fason belgeleri (stepId ve workOrderId RESTRICT) — önce mal kabul
+      //    (receipt_items cascade ile siliniyor, newRollId referansı düşüyor),
+      //    sonra sevk (dispatch_items cascade ile siliniyor).
       await tx.subcontractorReceipt.deleteMany({ where: { workOrderId: id } });
       await tx.subcontractorDispatch.deleteMany({ where: { workOrderId: id } });
 
-      // Swatch (kartela) RESTRICT — iş emrine bağlı olanları sil
+      // 4. Fason topları tamamen sil (SERVICE_PRODUCTION için müşteri-malı toplar).
+      //    Önce topa bağlı RESTRICT FK'ler temizlenmeli.
+      if (fasonRollIds.length > 0) {
+        // RollError → Roll RESTRICT
+        await tx.rollError.deleteMany({ where: { rollId: { in: fasonRollIds } } });
+        // OrderAllocation → Roll RESTRICT (normalde fason'da olmaz ama güvenlik)
+        await tx.orderAllocation.deleteMany({ where: { rollId: { in: fasonRollIds } } });
+        // ShipmentItem → Roll RESTRICT (cancel öncesi sevk yapılmış olabilir)
+        await tx.shipmentItem.deleteMany({ where: { rollId: { in: fasonRollIds } } });
+        // Son olarak rolları sil
+        await tx.roll.deleteMany({ where: { id: { in: fasonRollIds } } });
+      }
+
+      // 5. Swatch (kartela) RESTRICT — iş emrine bağlı olanları sil
       await tx.swatch.deleteMany({ where: { workOrderId: id } });
 
-      // TravelerCard RESTRICT — kart ve (cascade ile) scan'leri sil
+      // 6. TravelerCard RESTRICT — kart ve (cascade ile) scan'leri sil
       await tx.travelerCard.deleteMany({ where: { workOrderId: id } });
-      // Manifest RESTRICT — belgeleri sil
+      // 7. Manifest RESTRICT — belgeleri sil
       await tx.manifest.deleteMany({ where: { workOrderId: id } });
 
+      // 8. Steps + WO link + WO
       await tx.workOrderStep.deleteMany({ where: { workOrderId: id } });
       await tx.workOrderToOrderLine.deleteMany({ where: { workOrderId: id } });
       await tx.workOrder.delete({ where: { id } });
 
-      return reverted;
+      return { revertedOrderIds: reverted, deletedFasonRollCount: fasonRollIds.length };
     });
 
     await AuditService.log({
@@ -637,13 +787,18 @@ export class WorkOrderService {
         status: existing.status,
         stepCount: existing.steps.length,
       },
-      newData: { revertedOrderIds },
+      newData: { revertedOrderIds, deletedFasonRollCount },
     });
+
+    const fasonNote =
+      isServiceProduction && deletedFasonRollCount > 0
+        ? ` (${deletedFasonRollCount} müşteri-malı top da kaldırıldı)`
+        : "";
 
     return {
       success: true,
       data: existing,
-      message: `İş emri kalıcı olarak silindi: ${existing.batchNumber}`,
+      message: `İş emri kalıcı olarak silindi: ${existing.batchNumber}${fasonNote}`,
     };
   }
 
@@ -736,6 +891,13 @@ export class WorkOrderService {
           prevStatus: roll.status,
           qtyIn: roll.currentQty,
         });
+      }
+
+      // En az bir top bağlandıysa ilk step'i ACTIVE'e çek + WO'yu IN_PROGRESS'e al.
+      // (Top bağlamak = üretimin fiilen başlaması; ayrıca lockWorkOrder beklenmez.)
+      if (attached.length > 0) {
+        await recomputeStepStatus(tx, firstStepId);
+        await ensureWorkOrderInProgress(tx, workOrderId);
       }
     });
 
@@ -1155,6 +1317,53 @@ export class WorkOrderService {
       },
     });
     return { success: true, data: manifests };
+  }
+
+  /**
+   * Bu iş emrine ait topların geçtiği tüm sevkiyat (irsaliye) belgelerini döner.
+   * WO.steps → Roll (producedInStep/currentStep) → ShipmentItem → Shipment zinciri.
+   *
+   * items alanı, yalnızca bu WO'dan gelen satırlara filtrelenir (aynı irsaliyede
+   * başka WO'lardan gelen toplar da olabilir; onlar listeye sızmaz).
+   */
+  async getShipments(workOrderId: string): Promise<ApiResponse<Shipment[]>> {
+    const wo = await prisma.workOrder.findUnique({
+      where: { id: workOrderId },
+      select: { id: true, steps: { select: { id: true } } },
+    });
+
+    if (!wo) {
+      throw AppError.notFound("İş emri bulunamadı");
+    }
+
+    const stepIds = wo.steps.map((s) => s.id);
+    if (stepIds.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    const rollFromThisWO: Prisma.RollWhereInput = {
+      OR: [
+        { producedInStepId: { in: stepIds } },
+        { currentStepId: { in: stepIds } },
+      ],
+    };
+
+    const shipments = await prisma.shipment.findMany({
+      where: { items: { some: { roll: rollFromThisWO } } },
+      include: {
+        customer: true,
+        items: {
+          where: { roll: rollFromThisWO },
+          include: {
+            roll: { include: { item: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return { success: true, data: shipments };
   }
 
   /**

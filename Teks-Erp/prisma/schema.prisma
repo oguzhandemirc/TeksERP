@@ -28,24 +28,24 @@ enum StationType {
 /// İstasyonun domain rolü — API davranış farkları için kullanılır.
 /// Örn. PROCESS_QC istasyonunda Kurşun+QC2 per-roll akışı çalışır.
 enum StationKind {
-  RAW_QC          // KK1 — ham mal girişi / dokuma çıkışı
-  PROCESS_QC      // Kurşun + Kalite Kontrol 2 (tek fiziksel istasyon)
-  TAMBUR          // Final karar noktası
-  SUBCONTRACTOR   // Fason / boyahane (dış işlem)
-  PACKAGING       // Paketleme
-  SHIPPING        // Sevkiyat
-  OTHER           // Diğer / özel istasyon
+  RAW_QC // KK1 — ham mal girişi / dokuma çıkışı
+  PROCESS_QC // Kurşun + Kalite Kontrol 2 (tek fiziksel istasyon)
+  TAMBUR // Final karar noktası
+  SUBCONTRACTOR // Fason / boyahane (dış işlem)
+  PACKAGING // Paketleme
+  SHIPPING // Sevkiyat
+  OTHER // Diğer / özel istasyon
 }
 
 /// Top üzerinde yapılan her somut işlemin log'u.
 /// Boolean bayrak kullanmak yerine tarih + operatör + metadata ile tam iz bırakır.
 enum RollOperationType {
-  KURSUN_APPLIED           // PROCESS_QC: bu topa kurşun geçildi
-  QC2_COMPLETED            // PROCESS_QC: bu topun kalite kontrolü bitti
-  TAMBUR_PROCESSED         // TAMBUR: bu top için kesim/karar alındı
-  PACKAGED                 // PACKAGING: paketlendi
-  SUBCONTRACTOR_SENT       // SUBCONTRACTOR: fasona sevk edildi
-  SUBCONTRACTOR_RETURNED   // SUBCONTRACTOR: fasondan döndü
+  KURSUN_APPLIED // PROCESS_QC: bu topa kurşun geçildi
+  QC2_COMPLETED // PROCESS_QC: bu topun kalite kontrolü bitti
+  TAMBUR_PROCESSED // TAMBUR: bu top için kesim/karar alındı
+  PACKAGED // PACKAGING: paketlendi
+  SUBCONTRACTOR_SENT // SUBCONTRACTOR: fasona sevk edildi
+  SUBCONTRACTOR_RETURNED // SUBCONTRACTOR: fasondan döndü
 }
 
 enum ItemType {
@@ -63,10 +63,10 @@ enum RollStatus {
   READY_FOR_SHIP
   SHIPPED
   SCRAP
-  AT_SUBCONTRACTOR            // Fason/boyahanede işlem görüyor
-  A1_STOCK                    // 2. Kalite satılabilir stok
+  AT_SUBCONTRACTOR // Fason/boyahanede işlem görüyor
+  A1_STOCK // 2. Kalite satılabilir stok
   RETURNED_FROM_SUBCONTRACTOR // Fason dönüşünde yeni barkodlar üretildi, eski kapatıldı
-  WAREHOUSE                   // Paketleme sonrası depoya kaldırıldı — satışa / sevke hazır
+  WAREHOUSE // Paketleme sonrası depoya kaldırıldı — satışa / sevke hazır
 }
 
 enum CompanyType {
@@ -86,10 +86,11 @@ enum OrderStatus {
 }
 
 enum WorkOrderType {
-  ORDER_PRODUCTION    // Siparişe Özel Üretim
-  STOCK_PRODUCTION    // Stoka Üretim
-  SAMPLE_PRODUCTION   // Numune Üretimi
-  REPAIR_REWORK       // Tamir ve Yeniden İşlem Üretimi
+  ORDER_PRODUCTION // Siparişe Özel Üretim
+  STOCK_PRODUCTION // Stoka Üretim
+  SAMPLE_PRODUCTION // Numune Üretimi
+  REPAIR_REWORK // Tamir ve Yeniden İşlem Üretimi
+  SERVICE_PRODUCTION // Fason Üretim Kabul — müşterinin getirdiği malı işleyip iade ederiz
 }
 
 enum WorkOrderStatus {
@@ -114,16 +115,16 @@ enum ShipmentStatus {
 }
 
 enum TravelerCardStatus {
-  ACTIVE     // Mal ile birlikte gezen geçerli kart
-  REPRINTED  // Yeniden basıldı, bu kopya artık geçersiz
-  VOIDED     // Manuel iptal (hasar/kayıp dışında iptal)
-  COMPLETED  // WorkOrder COMPLETED olunca otomatik pasife çekilir
+  ACTIVE // Mal ile birlikte gezen geçerli kart
+  REPRINTED // Yeniden basıldı, bu kopya artık geçersiz
+  VOIDED // Manuel iptal (hasar/kayıp dışında iptal)
+  COMPLETED // WorkOrder COMPLETED olunca otomatik pasife çekilir
 }
 
 enum ScanType {
-  ARRIVAL    // İstasyona vardı
-  DEPARTURE  // İstasyondan ayrıldı
-  INFO       // Bilgi amaçlı tarama (istasyon hareketi değil)
+  ARRIVAL // İstasyona vardı
+  DEPARTURE // İstasyondan ayrıldı
+  INFO // Bilgi amaçlı tarama (istasyon hareketi değil)
 }
 
 // =============================================================================
@@ -140,16 +141,16 @@ model User {
   // Relations
   roles                UserRole[]
   logs                 SystemLog[]
-  printedTravelerCards TravelerCard[]     @relation("TravelerCardPrintedBy")
+  printedTravelerCards TravelerCard[]          @relation("TravelerCardPrintedBy")
   cardScans            TravelerCardScan[]
   rollMovements        RollMovement[]
-  printedManifests     Manifest[]         @relation("ManifestPrintedBy")
+  printedManifests     Manifest[]              @relation("ManifestPrintedBy")
   dispatches           SubcontractorDispatch[] @relation("DispatchCreatedBy")
   receipts             SubcontractorReceipt[]  @relation("ReceiptCreatedBy")
-  swatchesCreated      Swatch[]           @relation("SwatchCreatedBy")
+  swatchesCreated      Swatch[]                @relation("SwatchCreatedBy")
   rollOperations       RollOperation[]
-  detectedRollErrors   RollError[]        @relation("RollErrorDetectedBy")
-  processedRollErrors  RollError[]        @relation("RollErrorProcessedBy")
+  detectedRollErrors   RollError[]             @relation("RollErrorDetectedBy")
+  processedRollErrors  RollError[]             @relation("RollErrorProcessedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -268,7 +269,7 @@ model Machine {
 model Route {
   id          String  @id @default(uuid())
   code        String? @unique // Opsiyonel kısa kod: "BKT-STD"
-  name        String  // e.g. "Boyahane + Kursun + Tambur"
+  name        String // e.g. "Boyahane + Kursun + Tambur"
   description String?
   isFavorite  Boolean @default(false) // Sık kullanılan şablon
   customerId  String? // Müşteriye özel default rota (opsiyonel)
@@ -291,7 +292,7 @@ model RouteStep {
   id           String  @id @default(uuid())
   routeId      String
   stationId    String
-  sequence     Int     // Order in the route
+  sequence     Int // Order in the route
   defaultNotes String? // Şablonda saklanan istasyon talimatı — WO oluşturulurken notes'a kopyalanır
 
   // Relations
@@ -332,17 +333,18 @@ model Item {
 
 // Varyant: Her ürüne ait desen/varyant tanımları
 model ItemVariant {
-  id        String  @id @default(uuid())
-  itemId    String
-  code      String  // Varyant kodu: "BALIK_SIRTA", "NAVY_B12"
-  name      String  // Varyant adı: "Balık Sırta", "Navy Blue B12"
-  isActive  Boolean @default(true)
+  id       String  @id @default(uuid())
+  itemId   String
+  code     String // Varyant kodu: "BALIK_SIRTA", "NAVY_B12"
+  name     String // Varyant adı: "Balık Sırta", "Navy Blue B12"
+  isActive Boolean @default(true)
 
   // Relations
-  item       Item        @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  rolls      Roll[]
-  orderLines OrderLine[]
-  swatches   Swatch[]
+  item            Item                   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  rolls           Roll[]
+  orderLines      OrderLine[]
+  swatches        Swatch[]
+  customerAliases CustomerVariantAlias[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -352,10 +354,14 @@ model ItemVariant {
 }
 
 model Roll {
-  id      String @id @default(uuid())
-  barcode String @unique
-  itemId  String
+  id        String  @id @default(uuid())
+  barcode   String  @unique
+  itemId    String
   variantId String? // Varyant ID — KK1 girişinde operatör tarafından seçilir
+
+  // Fason Üretim Kabul — müşteri-malı toplar (factory sadece hizmet uygular, iade eder)
+  ownerCustomerId     String? // dolu ise top bu müşterinin malı; sadece bu müşteriye sevk edilebilir
+  customerDescription String? // müşterinin kendi desen kodu/tanımı (opsiyonel serbest metin)
 
   // Measurements
   initialQty Float // Initial measurement (meters)
@@ -365,7 +371,7 @@ model Roll {
   // Status & Quality
   status       RollStatus @default(STOCK)
   qualityGrade String     @default("1.KALITE") // 1.Kalite, A1, Fire
-  width        Float?     // En (cm) — KK1 girişinde ölçülen kumaş eni
+  width        Float? // En (cm) — KK1 girişinde ölçülen kumaş eni
 
   // Production Links (real relations — not plain strings)
   producedInStepId String? // Hangi WO step'inde üretildi (KK1 girişi / Tambur çıktısı)
@@ -381,20 +387,21 @@ model Roll {
   packagingDate DateTime? // When packaging happened
 
   // Relations
-  item            Item              @relation(fields: [itemId], references: [id])
-  variant         ItemVariant?      @relation(fields: [variantId], references: [id])
-  errors          RollError[]
-  allocations     OrderAllocation[]
-  shipmentItems   ShipmentItem[]
-  movements       RollMovement[]
-  operations      RollOperation[]
-  parent          Roll?             @relation("RollLineage", fields: [parentRollId], references: [id])
-  children        Roll[]            @relation("RollLineage")
-  dispatchItems   SubcontractorDispatchItem[]
-  receiptItems    SubcontractorReceiptItem[]
-  swatchesFrom    Swatch[]          @relation("SwatchParentRoll")
-  currentStep     WorkOrderStep?    @relation("RollCurrentStep", fields: [currentStepId], references: [id])
-  producedInStep  WorkOrderStep?    @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
+  item           Item                        @relation(fields: [itemId], references: [id])
+  variant        ItemVariant?                @relation(fields: [variantId], references: [id])
+  ownerCustomer  Customer?                   @relation("RollOwnerCustomer", fields: [ownerCustomerId], references: [id])
+  errors         RollError[]
+  allocations    OrderAllocation[]
+  shipmentItems  ShipmentItem[]
+  movements      RollMovement[]
+  operations     RollOperation[]
+  parent         Roll?                       @relation("RollLineage", fields: [parentRollId], references: [id])
+  children       Roll[]                      @relation("RollLineage")
+  dispatchItems  SubcontractorDispatchItem[]
+  receiptItems   SubcontractorReceiptItem[]
+  swatchesFrom   Swatch[]                    @relation("SwatchParentRoll")
+  currentStep    WorkOrderStep?              @relation("RollCurrentStep", fields: [currentStepId], references: [id])
+  producedInStep WorkOrderStep?              @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -402,10 +409,12 @@ model Roll {
   @@index([itemId])
   @@index([variantId])
   @@index([status])
-  @@index([barcode])
   @@index([parentRollId])
   @@index([currentStepId])
   @@index([producedInStepId])
+  @@index([ownerCustomerId])
+  // Liste sayfaları: status filter + createdAt desc sort
+  @@index([status, createdAt])
   @@map("rolls")
 }
 
@@ -422,13 +431,15 @@ model Customer {
   isActive  Boolean     @default(true)
 
   // Relations
-  orders              Order[]
-  accounts            CurrentAccount[]
-  shipments           Shipment[]
-  defaultRoutes       Route[]       @relation("CustomerDefaultRoutes")
-  workOrdersAsDyehouse WorkOrder[]  @relation("WorkOrderDyehouse")
-  dispatches          SubcontractorDispatch[]
-  receipts            SubcontractorReceipt[]
+  orders               Order[]
+  accounts             CurrentAccount[]
+  shipments            Shipment[]
+  defaultRoutes        Route[]                 @relation("CustomerDefaultRoutes")
+  workOrdersAsDyehouse WorkOrder[]             @relation("WorkOrderDyehouse")
+  dispatches           SubcontractorDispatch[]
+  receipts             SubcontractorReceipt[]
+  ownedRolls           Roll[]                  @relation("RollOwnerCustomer")
+  variantAliases       CustomerVariantAlias[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -467,9 +478,9 @@ model OrderLine {
   orderId   String
   itemId    String
   variantId String?
-  quantity  Float    // Requested quantity (meters)
+  quantity  Float // Requested quantity (meters)
   unitPrice Decimal? @db.Decimal(10, 2) // For future finance module
-  width     Float?   // İstenen en (cm)
+  width     Float? // İstenen en (cm)
 
   // Relations
   order          Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -491,24 +502,27 @@ model OrderLine {
 // =============================================================================
 
 model WorkOrder {
-  id                String          @id @default(uuid())
-  batchNumber       String          @unique // Parti Numarası
-  type              WorkOrderType   @default(ORDER_PRODUCTION)
-  width             Float?          // En (cm) — kumaş eni
-  targetQuantity    Float?          // Hedef uzunluk/metraj
-  recipeNo          String?         // Reçete No — boyahane/baskı reçete kodu (renk kodu/varyant)
-  parameters        Json?           // Dynamic params: { "targetWidth": 150, "dyeRecipeCode": "R-123" }
-  status            WorkOrderStatus @default(PLANNED)
-  plannedStartDate  DateTime?       // Planlanan başlangıç tarihi
-  plannedEndDate    DateTime?       // Planlanan termin / bitiş tarihi
+  id               String          @id @default(uuid())
+  batchNumber      String          @unique // Parti Numarası
+  type             WorkOrderType   @default(ORDER_PRODUCTION)
+  width            Float? // En (cm) — kumaş eni
+  targetQuantity   Float? // Hedef uzunluk/metraj
+  recipeNo         String? // Reçete No — boyahane/baskı reçete kodu (renk kodu/varyant)
+  parameters       Json? // Dynamic params: { "targetWidth": 150, "dyeRecipeCode": "R-123" }
+  status           WorkOrderStatus @default(PLANNED)
+  plannedStartDate DateTime? // Planlanan başlangıç tarihi
+  plannedEndDate   DateTime? // Planlanan termin / bitiş tarihi
 
   // 3.1 — Rota şablonu referansı (snapshot kopya sonrası bile tutulur; analytics için)
-  routeTemplateId   String?
-  routeTemplate     Route?          @relation(fields: [routeTemplateId], references: [id])
+  routeTemplateId String?
+  routeTemplate   Route?  @relation(fields: [routeTemplateId], references: [id])
 
   // 3.3 — Gidilecek boyahane (Customer/SUBCONTRACTOR) — ilk istasyondan bağımsız
   dyehouseCompanyId String?
-  dyehouseCompany   Customer?       @relation("WorkOrderDyehouse", fields: [dyehouseCompanyId], references: [id])
+  dyehouseCompany   Customer? @relation("WorkOrderDyehouse", fields: [dyehouseCompanyId], references: [id])
+
+  // Fason Üretim Kabul — metre başı hizmet bedeli (sadece type=SERVICE_PRODUCTION için doldurulur)
+  servicePricePerMeter Decimal? @db.Decimal(10, 2)
 
   // Relations
   steps         WorkOrderStep[]
@@ -541,23 +555,25 @@ model WorkOrderStep {
   completedAt  DateTime?
 
   // Relations
-  workOrder        WorkOrder @relation(fields: [workOrderId], references: [id])
-  station          Station   @relation(fields: [stationId], references: [id])
-  movements        RollMovement[]
-  cardScans        TravelerCardScan[]
-  dispatches       SubcontractorDispatch[]
-  receipts         SubcontractorReceipt[]
-  operations       RollOperation[]
-  currentRolls     Roll[]         @relation("RollCurrentStep")
-  producedRolls    Roll[]         @relation("RollProducedInStep")
-  detectedErrors   RollError[]    @relation("RollErrorDetectedAt")
-  processedErrors  RollError[]    @relation("RollErrorProcessedAt")
+  workOrder       WorkOrder               @relation(fields: [workOrderId], references: [id])
+  station         Station                 @relation(fields: [stationId], references: [id])
+  movements       RollMovement[]
+  cardScans       TravelerCardScan[]
+  dispatches      SubcontractorDispatch[]
+  receipts        SubcontractorReceipt[]
+  operations      RollOperation[]
+  currentRolls    Roll[]                  @relation("RollCurrentStep")
+  producedRolls   Roll[]                  @relation("RollProducedInStep")
+  detectedErrors  RollError[]             @relation("RollErrorDetectedAt")
+  processedErrors RollError[]             @relation("RollErrorProcessedAt")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([workOrderId, stepSequence])
   @@index([stationId])
+  // Production/packaging/shipping/subcontractor servislerinde 8 yerde kullanılan paterne karşılık
+  @@index([workOrderId, status])
   @@map("work_order_steps")
 }
 
@@ -588,9 +604,9 @@ model WorkOrderToOrderLine {
 model QualityGrade {
   id          String   @id @default(uuid())
   code        String   @unique // "1.KALITE", "A1", "A2", "FIRE"
-  name        String              // UI'da görünen etiket
+  name        String // UI'da görünen etiket
   description String?
-  color       String?  // "#10b981" vb. — UI rozeti için opsiyonel
+  color       String? // "#10b981" vb. — UI rozeti için opsiyonel
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -607,12 +623,12 @@ model DefectType {
   code        String   @unique
   name        String
   description String?
-  severity    String?  // "MINOR" | "MAJOR" | "CRITICAL" — UI renklendirme için
+  severity    String? // "MINOR" | "MAJOR" | "CRITICAL" — UI renklendirme için
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  rollErrors  RollError[]
+  rollErrors RollError[]
 
   @@index([isActive])
   @@map("defect_types")
@@ -659,6 +675,8 @@ model RollError {
   @@index([processedAtStepId])
   @@index([isProcessed])
   @@index([defectTypeId])
+  // Tambur ekranı: bir topun bekleyen hatalarını listele
+  @@index([rollId, isProcessed])
   @@map("roll_errors")
 }
 
@@ -722,6 +740,12 @@ model Shipment {
   // Snapshot — müşteri/ürün sonradan değişse/silinse bile irsaliye belgesi bozulmaz
   customerCodeSnapshot String?
   customerNameSnapshot String?
+
+  /// Finalize (SHIPPED) anında tüm yazdırma verisinin tam kopyası.
+  /// Variant kodu, customer alias, fason notu, WO parti no gibi canlı JOIN'lerle
+  /// değişebilen tüm alanlar bu JSON içinde dondurulur — ileride ürün/WO/alias
+  /// değişse/silinse bile belge aynı kalır. PREPARING iken null.
+  printSnapshot Json?
 
   // Relations
   customer Customer       @relation(fields: [customerId], references: [id])
@@ -829,11 +853,11 @@ model TravelerCardScan {
   id              String   @id @default(uuid())
   cardId          String
   stationId       String
-  workOrderStepId String?  // Eşleştirilen WO adımı (server-side otomatik çözümlenir)
+  workOrderStepId String? // Eşleştirilen WO adımı (server-side otomatik çözümlenir)
   scanType        ScanType
   scannedAt       DateTime @default(now())
   scannedById     String?
-  deviceId        String?  // El terminali MAC/serial
+  deviceId        String? // El terminali MAC/serial
   notes           String?
 
   // Relations
@@ -858,8 +882,8 @@ model RollMovement {
   id              String    @id @default(uuid())
   rollId          String
   workOrderStepId String
-  qtyIn           Float     // İstasyona girişteki metraj
-  qtyOut          Float?    // İstasyon çıkışındaki metraj (FINISH/SKIP'te doldurulur)
+  qtyIn           Float // İstasyona girişteki metraj
+  qtyOut          Float? // İstasyon çıkışındaki metraj (FINISH/SKIP'te doldurulur)
   weightIn        Float?
   weightOut       Float?
   enteredAt       DateTime  @default(now())
@@ -885,17 +909,18 @@ model RollMovement {
 // =============================================================================
 
 model SubcontractorDispatch {
-  id            String   @id @default(uuid())
-  dispatchNo    String   @unique // SD-YYMM-NNNNNN
-  workOrderId   String
-  stepId        String
-  companyId     String   // Fason firma (Customer/SUBCONTRACTOR)
-  plateNumber   String?
-  driverName    String?
-  dispatchedAt  DateTime @default(now())
+  id             String   @id @default(uuid())
+  dispatchNo     String   @unique // SD-YYMM-NNNNNN
+  workOrderId    String
+  stepId         String
+  companyId      String // Fason firma (Customer/SUBCONTRACTOR)
+  plateNumber    String?
+  driverName     String?
+  dispatchedAt   DateTime @default(now())
   dispatchedById String?
-  notes         String?
-  totalQty      Float    @default(0) // Toplam sevk edilen metraj (snapshot)
+  notes          String?
+  totalQty       Float    @default(0) // Toplam sevk edilen metraj (snapshot)
+  printSnapshot  Json? // Sevk anında dondurulan irsaliye verisi
 
   // Relations
   workOrder    WorkOrder                   @relation(fields: [workOrderId], references: [id])
@@ -914,10 +939,10 @@ model SubcontractorDispatch {
 }
 
 model SubcontractorDispatchItem {
-  id            String @id @default(uuid())
-  dispatchId    String
-  rollId        String
-  dispatchedQty Float
+  id               String @id @default(uuid())
+  dispatchId       String
+  rollId           String
+  dispatchedQty    Float
   dispatchedWeight Float?
 
   // Relations
@@ -933,15 +958,15 @@ model SubcontractorDispatchItem {
 }
 
 model SubcontractorReceipt {
-  id            String   @id @default(uuid())
-  receiptNo     String   @unique // SR-YYMM-NNNNNN
-  manifestNo    String   // İrsaliye no (fason firma tarafından verilir)
-  workOrderId   String
-  stepId        String
-  companyId     String
-  receivedAt    DateTime @default(now())
-  receivedById  String?
-  notes         String?
+  id           String   @id @default(uuid())
+  receiptNo    String   @unique // SR-YYMM-NNNNNN
+  manifestNo   String // İrsaliye no (fason firma tarafından verilir)
+  workOrderId  String
+  stepId       String
+  companyId    String
+  receivedAt   DateTime @default(now())
+  receivedById String?
+  notes        String?
   // Ölçüm (metraj/ağırlık/fire) fason kabulde yapılmaz; sonraki istasyonun
   // FINISH akışı kendi qty/weight değerlerini kaydeder.
 
@@ -963,16 +988,16 @@ model SubcontractorReceipt {
 }
 
 model SubcontractorReceiptItem {
-  id                  String @id @default(uuid())
-  receiptId           String
-  newRollId           String @unique // Fason dönüşünde kabul edilen orijinal top (yeni etiket basılmaz)
+  id                   String  @id @default(uuid())
+  receiptId            String
+  newRollId            String  @unique // Fason dönüşünde kabul edilen orijinal top (yeni etiket basılmaz)
   sourceDispatchItemId String? // Göz kontrolü ile eşleştirilen kaynak sevk kalemi
-  notes               String?
+  notes                String?
 
   // Relations
-  receipt            SubcontractorReceipt        @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  newRoll            Roll                        @relation(fields: [newRollId], references: [id])
-  sourceDispatchItem SubcontractorDispatchItem?  @relation("ReceiptItemSource", fields: [sourceDispatchItemId], references: [id])
+  receipt            SubcontractorReceipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  newRoll            Roll                       @relation(fields: [newRollId], references: [id])
+  sourceDispatchItem SubcontractorDispatchItem? @relation("ReceiptItemSource", fields: [sourceDispatchItemId], references: [id])
 
   createdAt DateTime @default(now())
 
@@ -987,16 +1012,16 @@ model SubcontractorReceiptItem {
 // =============================================================================
 
 model Swatch {
-  id           String   @id @default(uuid())
-  cardNumber   String   @unique // SW-YYMM-NNN
-  barcode      String   @unique // SW-YYMM-XXXXXX-C (Crockford checksum)
+  id           String  @id @default(uuid())
+  cardNumber   String  @unique // SW-YYMM-NNN
+  barcode      String  @unique // SW-YYMM-XXXXXX-C (Crockford checksum)
   itemId       String
   variantId    String?
-  width        Float?   // cm
-  length       Float    // cm (örneğin 30cm)
+  width        Float? // cm
+  length       Float // cm (örneğin 30cm)
   workOrderId  String?
   parentRollId String?
-  purpose      String?  // Müşteri sunumu, arşiv, laboratuvar vb.
+  purpose      String? // Müşteri sunumu, arşiv, laboratuvar vb.
   createdById  String?
 
   // Relations
@@ -1026,7 +1051,7 @@ model Manifest {
   workOrderId String
   printedAt   DateTime @default(now())
   printedById String?
-  snapshot    Json     // Yazdırma anındaki roll listesi (immutable belge)
+  snapshot    Json // Yazdırma anındaki roll listesi (immutable belge)
   notes       String?
 
   // Relations
@@ -1039,6 +1064,35 @@ model Manifest {
   @@index([workOrderId])
   @@index([manifestNo])
   @@map("manifests")
+}
+
+// =============================================================================
+// 11.5 CUSTOMER VARIANT ALIASES - Müşteri-özel desen isimleri
+// =============================================================================
+
+// Aynı desen her müşteride farklı adla geçebilir (ör. "patos" ↔ "selop").
+// Paketleme/etiket basımında müşterinin kendi ismiyle basmak için kullanılır.
+// Hedef müşteri: ORDER_PRODUCTION → Order.customerId, STOCK_PRODUCTION →
+// OrderAllocation zinciri, SERVICE_PRODUCTION → Roll.ownerCustomerId.
+model CustomerVariantAlias {
+  id         String @id @default(uuid())
+  customerId String
+  variantId  String
+
+  customerLabel String // müşterideki desen adı (etikete basılır)
+  customerCode  String? // müşterideki opsiyonel desen/ürün kodu
+  isActive      Boolean @default(true)
+
+  customer Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  variant  ItemVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([customerId, variantId])
+  @@index([customerId])
+  @@index([variantId])
+  @@map("customer_variant_aliases")
 }
 
 // =============================================================================
@@ -1062,5 +1116,7 @@ model SystemLog {
 
   @@index([userId])
   @@index([tableName, recordId])
+  // Audit tablosu en hızlı büyüyen tablodur — zaman aralığı sorguları için
+  @@index([createdAt])
   @@map("system_logs")
 }

@@ -18,7 +18,59 @@ import {
 } from "../utils/query-parser";
 import { Request } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { Roll, RollStatus } from "@prisma/client";
+import { Roll, RollStatus, RollOperationType } from "@prisma/client";
+
+export type RollHistoryEventKind =
+  | "CREATED"
+  | "MOVEMENT_IN"
+  | "MOVEMENT_OUT"
+  | "OPERATION"
+  | "SUBCONTRACTOR_DISPATCH"
+  | "SUBCONTRACTOR_RECEIPT"
+  | "SHIPPED";
+
+export interface RollHistoryEvent {
+  kind: RollHistoryEventKind;
+  subKind?: string;
+  at: string;
+  title: string;
+  stationName: string | null;
+  details: Record<string, unknown>;
+  operatorName: string | null;
+}
+
+export interface RollHistoryPayload {
+  roll: {
+    id: string;
+    barcode: string;
+    status: RollStatus;
+    initialQty: number;
+    currentQty: number;
+    weightKg: number | null;
+    item: { id: string; code: string; name: string; itemType: string } | null;
+    variant: { id: string; code: string; name: string } | null;
+  };
+  events: RollHistoryEvent[];
+}
+
+function operationLabel(type: RollOperationType): string {
+  switch (type) {
+    case "KURSUN_APPLIED":
+      return "Kurşun Uygulandı";
+    case "QC2_COMPLETED":
+      return "QC2 Tamamlandı";
+    case "TAMBUR_PROCESSED":
+      return "Tambur İşlendi";
+    case "PACKAGED":
+      return "Paketlendi";
+    case "SUBCONTRACTOR_SENT":
+      return "Fasona Gönderildi";
+    case "SUBCONTRACTOR_RETURNED":
+      return "Fasondan Döndü";
+    default:
+      return type;
+  }
+}
 
 /**
  * Generate a unique barcode string: TEKS-YYYYMMDD-XXXX
@@ -128,6 +180,16 @@ export class InventoryService {
       where.status = RollStatus.STOCK;
     }
 
+    // ownerType filtresi: "CUSTOMER" → müşteri malı, "FACTORY" → fabrika stoğu
+    const ownerType = params.filters["ownerType"] as string | undefined;
+    if (ownerType === "CUSTOMER") {
+      where.ownerCustomerId = { not: null };
+    } else if (ownerType === "FACTORY") {
+      where.ownerCustomerId = null;
+    }
+    // ownerType filtresi buildWhereClause'a taşınmaması için temizle
+    delete where.ownerType;
+
     const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
     const { skip, take } = buildPagination(params.page, params.pageSize);
 
@@ -140,6 +202,8 @@ export class InventoryService {
         include: {
           item: true,
           variant: true,
+          ownerCustomer: true,
+          operations: { select: { operationType: true } },
         },
       }),
       prisma.roll.count({ where }),
@@ -166,7 +230,9 @@ export class InventoryService {
       include: {
         item: true,
         variant: true,
+        ownerCustomer: true,
         errors: true,
+        operations: { select: { operationType: true } },
         allocations: {
           include: {
             orderLine: {
@@ -193,6 +259,7 @@ export class InventoryService {
       include: {
         item: true,
         variant: true,
+        ownerCustomer: true,
         errors: true,
         allocations: {
           include: {
@@ -209,6 +276,250 @@ export class InventoryService {
     }
 
     return { success: true, data: roll };
+  }
+
+  /**
+   * Get a roll's full lifecycle history — station movements, discrete operations,
+   * subcontractor dispatches/receipts and shipment — merged into one chronological timeline.
+   */
+  async getRollHistory(id: string): Promise<ApiResponse<RollHistoryPayload | null>> {
+    const roll = await prisma.roll.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        initialQty: true,
+        currentQty: true,
+        weightKg: true,
+        createdAt: true,
+        item: { select: { id: true, code: true, name: true, itemType: true } },
+        variant: { select: { id: true, code: true, name: true } },
+      },
+    });
+
+    if (!roll) {
+      return { success: false, data: null, message: "Top bulunamadı" };
+    }
+
+    const [movements, operations, dispatchItems, receiptItems, shipmentItems] =
+      await Promise.all([
+        prisma.rollMovement.findMany({
+          where: { rollId: id },
+          include: {
+            step: { include: { station: true } },
+            operator: { select: { id: true, username: true, fullName: true } },
+          },
+          orderBy: { enteredAt: "asc" },
+        }),
+        prisma.rollOperation.findMany({
+          where: { rollId: id },
+          include: {
+            step: { include: { station: true } },
+            operator: { select: { id: true, username: true, fullName: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        }),
+        prisma.subcontractorDispatchItem.findMany({
+          where: { rollId: id },
+          include: {
+            dispatch: {
+              include: {
+                company: { select: { id: true, code: true, name: true } },
+                dispatchedBy: { select: { id: true, username: true, fullName: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        }),
+        prisma.subcontractorReceiptItem.findMany({
+          where: { newRollId: id },
+          include: {
+            receipt: {
+              include: {
+                company: { select: { id: true, code: true, name: true } },
+                receivedBy: { select: { id: true, username: true, fullName: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        }),
+        prisma.shipmentItem.findMany({
+          where: { rollId: id },
+          include: {
+            shipment: {
+              include: {
+                customer: { select: { id: true, code: true, name: true } },
+              },
+            },
+          },
+        }),
+      ]);
+
+    const events: RollHistoryEvent[] = [];
+
+    // Initial entry (Mal Kabul)
+    events.push({
+      kind: "CREATED",
+      at: roll.createdAt.toISOString(),
+      title: "Mal Kabul (Giriş)",
+      stationName: null,
+      details: {
+        barcode: roll.barcode,
+        initialQty: roll.initialQty,
+        weightKg: roll.weightKg,
+        itemCode: roll.item?.code,
+        itemName: roll.item?.name,
+        itemType: roll.item?.itemType,
+      },
+      operatorName: null,
+    });
+
+    for (const m of movements) {
+      events.push({
+        kind: "MOVEMENT_IN",
+        at: m.enteredAt.toISOString(),
+        title: `${m.step?.station?.name ?? "İstasyon"} – Giriş`,
+        stationName: m.step?.station?.name ?? null,
+        details: {
+          qtyIn: m.qtyIn,
+          weightIn: m.weightIn,
+          notes: m.notes,
+        },
+        operatorName: m.operator?.fullName ?? m.operator?.username ?? null,
+      });
+      if (m.exitedAt) {
+        events.push({
+          kind: "MOVEMENT_OUT",
+          at: m.exitedAt.toISOString(),
+          title: `${m.step?.station?.name ?? "İstasyon"} – Çıkış`,
+          stationName: m.step?.station?.name ?? null,
+          details: {
+            qtyOut: m.qtyOut,
+            weightOut: m.weightOut,
+            qtyIn: m.qtyIn,
+            weightIn: m.weightIn,
+            notes: m.notes,
+          },
+          operatorName: m.operator?.fullName ?? m.operator?.username ?? null,
+        });
+      }
+    }
+
+    for (const op of operations) {
+      events.push({
+        kind: "OPERATION",
+        subKind: op.operationType,
+        at: op.createdAt.toISOString(),
+        title: operationLabel(op.operationType),
+        stationName: op.step?.station?.name ?? null,
+        details: {
+          metadata: op.metadata,
+        },
+        operatorName: op.operator?.fullName ?? op.operator?.username ?? null,
+      });
+    }
+
+    for (const di of dispatchItems) {
+      events.push({
+        kind: "SUBCONTRACTOR_DISPATCH",
+        at: di.dispatch.dispatchedAt.toISOString(),
+        title: `Fasona Sevk: ${di.dispatch.company?.name ?? "-"}`,
+        stationName: null,
+        details: {
+          dispatchNo: di.dispatch.dispatchNo,
+          companyCode: di.dispatch.company?.code,
+          companyName: di.dispatch.company?.name,
+          dispatchedQty: di.dispatchedQty,
+          dispatchedWeight: di.dispatchedWeight,
+          plateNumber: di.dispatch.plateNumber,
+          driverName: di.dispatch.driverName,
+        },
+        operatorName:
+          di.dispatch.dispatchedBy?.fullName ??
+          di.dispatch.dispatchedBy?.username ??
+          null,
+      });
+    }
+
+    for (const ri of receiptItems) {
+      events.push({
+        kind: "SUBCONTRACTOR_RECEIPT",
+        at: ri.receipt.receivedAt.toISOString(),
+        title: `Fasondan Kabul: ${ri.receipt.company?.name ?? "-"}`,
+        stationName: null,
+        details: {
+          receiptNo: ri.receipt.receiptNo,
+          manifestNo: ri.receipt.manifestNo,
+          companyCode: ri.receipt.company?.code,
+          companyName: ri.receipt.company?.name,
+          notes: ri.notes,
+        },
+        operatorName:
+          ri.receipt.receivedBy?.fullName ??
+          ri.receipt.receivedBy?.username ??
+          null,
+      });
+    }
+
+    for (const si of shipmentItems) {
+      const when = si.shipment.shippedAt ?? si.shipment.createdAt;
+      events.push({
+        kind: "SHIPPED",
+        at: when.toISOString(),
+        title:
+          si.shipment.status === "SHIPPED"
+            ? `Sevk Edildi: ${si.shipment.customer?.name ?? "-"}`
+            : `İrsaliyeye Eklendi: ${si.shipment.customer?.name ?? "-"}`,
+        stationName: null,
+        details: {
+          shipmentNumber: si.shipment.shipmentNumber,
+          shipmentStatus: si.shipment.status,
+          customerCode: si.shipment.customer?.code,
+          customerName: si.shipment.customer?.name,
+          shippedQty: si.shippedQty,
+          shippedWeight: si.shippedWeight,
+        },
+        operatorName: null,
+      });
+    }
+
+    // Sort: first by timestamp, then by kind order (MOVEMENT_OUT before MOVEMENT_IN
+    // before OPERATION) to correctly represent process flow when timestamps coincide.
+    // Stable sort preserves original relative order for equal keys.
+    // Eşit timestamp'te doğal süreç sırası:
+    // istasyondan çıkış → o istasyondaki işlem/karar → sonraki istasyona giriş
+    const kindOrder: Record<string, number> = {
+      MOVEMENT_OUT: 0,
+      OPERATION: 1,
+      MOVEMENT_IN: 2,
+      SUBCONTRACTOR_DISPATCH: 3,
+      SUBCONTRACTOR_RECEIPT: 4,
+      SHIPPED: 5,
+      CREATED: 6,
+    };
+    events.sort((a, b) => {
+      if (a.at < b.at) return -1;
+      if (a.at > b.at) return 1;
+      return (kindOrder[a.kind] ?? 9) - (kindOrder[b.kind] ?? 9);
+    });
+
+    return {
+      success: true,
+      data: {
+        roll: {
+          id: roll.id,
+          barcode: roll.barcode,
+          status: roll.status,
+          currentQty: roll.currentQty,
+          initialQty: roll.initialQty,
+          weightKg: roll.weightKg,
+          item: roll.item,
+          variant: roll.variant,
+        },
+        events,
+      },
+    };
   }
 
   /**

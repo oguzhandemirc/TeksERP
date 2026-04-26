@@ -7,7 +7,7 @@
     "build": "tsc",
     "seed": "npx prisma db seed",
     "prisma:generate": "npx prisma generate",
-    "prisma:migrate": "npx prisma migrate dev",
+    "prisma:migrate": "npx prisma migrate deploy",
     "prisma:studio": "npx prisma studio",
     "lint": "eslint src"
   },

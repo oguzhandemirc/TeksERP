@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { customerService } from "@/services/customerService";
 import { SlideOverPanel, SlideOverContentLoader } from "@/components/ui/SlideOverPanel";
 import { Building2 } from "lucide-react";
-import { companyTypeLabels } from "@/types/enums";
+import { companyTypeLabels, CompanyType as CompanyTypeEnum } from "@/types/enums";
 import type { CompanyType } from "@/types/enums";
+import CustomerVariantAliasManager from "./CustomerVariantAliasManager";
 
 interface CustomerDetailPanelProps {
   customerId: string | null;
@@ -64,6 +65,10 @@ export default function CustomerDetailPanel({ customerId, isOpen, onClose }: Cus
               <span className="font-medium">{customer.isActive ? "Aktif" : "Pasif"}</span>
             </div>
           </div>
+
+          {customer.type === CompanyTypeEnum.CUSTOMER && (
+            <CustomerVariantAliasManager customerId={customer.id} />
+          )}
 
           <div className="text-xs text-muted-foreground space-y-1">
             <div>Oluşturulma: {new Date(customer.createdAt).toLocaleString("tr-TR")}</div>

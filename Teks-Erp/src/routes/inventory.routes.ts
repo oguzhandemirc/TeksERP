@@ -99,6 +99,31 @@ router.get("/:id", verifyToken, requirePermission("roll:read"), controller.findR
 
 /**
  * @openapi
+ * /api/rolls/{id}/history:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Topun yaşam döngüsü geçmişi
+ *     description: |
+ *       Topun oluşumundan itibaren geçtiği tüm olayları kronolojik timeline olarak döner:
+ *       istasyon giriş/çıkışları (RollMovement), operasyonlar (RollOperation),
+ *       fason sevk/kabul ve sevkiyat (irsaliye).
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Top geçmişi (events dizisi ile)
+ *       404:
+ *         description: Top bulunamadı
+ */
+router.get("/:id/history", verifyToken, requirePermission("roll:read"), controller.getRollHistory);
+
+/**
+ * @openapi
  * /api/rolls/initial-entry:
  *   post:
  *     tags: [Inventory]

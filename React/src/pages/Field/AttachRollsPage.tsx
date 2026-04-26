@@ -63,7 +63,7 @@ export default function AttachRollsPage() {
 
   // Fetch STOCK rolls for the selection
   const { data: rollsData, isLoading: isLoadingRolls } = useQuery({
-    queryKey: ["rolls-stock"],
+    queryKey: ["rolls", "stock"],
     queryFn: () => rollService.getAll({ 
       page: 1, 
       pageSize: 100, 
@@ -109,7 +109,7 @@ export default function AttachRollsPage() {
       if (data.errors.length > 0) {
         data.errors.forEach((err) => toast.error(err));
       }
-      qc.invalidateQueries({ queryKey: ["rolls-stock"] });
+      qc.invalidateQueries({ queryKey: ["rolls"] });
       qc.invalidateQueries({ queryKey: ["attached-rolls", selectedWorkOrder?.id] });
       setSelectedStockRollIds(new Set());
     },
@@ -125,7 +125,7 @@ export default function AttachRollsPage() {
     onSuccess: async (response) => {
       const data = response.data as any;
       toast.success(`${data.detached || 0} top sepetten çıkarıldı.`);
-      qc.invalidateQueries({ queryKey: ["rolls-stock"] });
+      qc.invalidateQueries({ queryKey: ["rolls"] });
       qc.invalidateQueries({ queryKey: ["attached-rolls", selectedWorkOrder?.id] });
       setSelectedAttachedRollIds(new Set());
     },
@@ -220,10 +220,6 @@ export default function AttachRollsPage() {
     setSelectedStockRollIds(new Set());
     setSelectedAttachedRollIds(new Set());
   };
-
-  const totalStockMeterage = stockRolls
-    .filter((r) => selectedStockRollIds.has(r.id))
-    .reduce((sum, r) => sum + r.currentQty, 0);
 
   const totalAttachedMeterage = attachedRolls.reduce((sum, r) => sum + r.currentQty, 0);
 

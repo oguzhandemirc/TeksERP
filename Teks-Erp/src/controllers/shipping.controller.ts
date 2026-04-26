@@ -31,12 +31,14 @@ export class ShippingController {
   constructor() {
     this.service = new ShippingService();
     this.getReadyOrders = this.getReadyOrders.bind(this);
+    this.getReadyFasonRolls = this.getReadyFasonRolls.bind(this);
     this.preparePackage = this.preparePackage.bind(this);
     this.createShipment = this.createShipment.bind(this);
     this.addItems = this.addItems.bind(this);
     this.finalize = this.finalize.bind(this);
     this.listShipments = this.listShipments.bind(this);
     this.getShipmentById = this.getShipmentById.bind(this);
+    this.getPrintSnapshot = this.getPrintSnapshot.bind(this);
   }
 
   /**
@@ -73,11 +75,40 @@ export class ShippingController {
   }
 
   /**
+   * GET /api/shipping/shipments/:id/print
+   * Yazdırma için donmuş (veya canlı) snapshot döner.
+   */
+  async getPrintSnapshot(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getPrintSnapshot(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/shipping/ready-orders
    */
   async getReadyOrders(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.getReadyOrders();
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/shipping/ready-fason
+   */
+  async getReadyFasonRolls(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const result = await this.service.getReadyFasonRolls();
       res.status(200).json(result);
     } catch (error) {
       next(error);

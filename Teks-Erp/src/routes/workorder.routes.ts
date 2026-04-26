@@ -170,6 +170,25 @@ router.get("/:id/manifests", verifyToken, requirePermission("workorder:read"), c
 
 /**
  * @openapi
+ * /api/work-orders/{id}/shipments:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: İş emrine bağlı irsaliye (sevkiyat) belgeleri
+ *     description: İş emrinin adımlarından geçmiş tüm topların dahil olduğu sevkiyatları, sadece bu WO'ya ait kalemlerle filtrelenmiş şekilde döner.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Sevkiyat listesi }
+ *       404: { description: İş emri bulunamadı }
+ */
+router.get("/:id/shipments", verifyToken, requirePermission("workorder:read"), controller.listShipments);
+
+/**
+ * @openapi
  * /api/work-orders:
  *   post:
  *     tags: [WorkOrders]

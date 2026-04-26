@@ -14,7 +14,7 @@ import { buildQueryString, parseUrlToQueryParams } from "@/lib/query-builder";
 import type { DateRange } from "@/components/data-table/DataTableDateRangeFilter";
 
 interface UseDataTableOptions<TData> {
-  queryKey: string;
+  queryKey: string | string[];
   fetchFn: (params: QueryParams) => Promise<PaginatedResponse<TData>>;
   columns: ColumnDef<TData, unknown>[];
   defaultPageSize?: number;
@@ -78,7 +78,7 @@ export function useDataTable<TData>({
   const { data, isLoading, isFetching, isError, refetch } = useQuery<
     PaginatedResponse<TData>
   >({
-    queryKey: [queryKey, effectiveParams],
+    queryKey: Array.isArray(queryKey) ? [...queryKey, effectiveParams] : [queryKey, effectiveParams],
     queryFn: () => fetchFn(effectiveParams),
     placeholderData: (prev) => prev,
     ...queryOptions,

@@ -2,12 +2,8 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Loader2 } from "lucide-react";
 
-interface ProtectedRouteProps {
-  allowedRoles?: string[];
-}
-
-const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
-  const { isAuthenticated, isLoading, user } = useAuthStore();
+const ProtectedRoute = () => {
+  const { isAuthenticated, isLoading } = useAuthStore();
 
   if (isLoading) {
     return (
@@ -19,13 +15,6 @@ const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
-  }
-
-  if (allowedRoles && user) {
-    const hasRole = user.roles.some((role) => allowedRoles.includes(role));
-    if (!hasRole) {
-      return <Navigate to="/" replace />;
-    }
   }
 
   return <Outlet />;

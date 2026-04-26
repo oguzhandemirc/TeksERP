@@ -94,4 +94,95 @@ export const subcontractorService = {
       .get<ApiResponse<SubcontractorReceipt>>(`/api/subcontractor/receipts/${id}`)
       .then((r) => r.data);
   },
+
+  getReceiptPrint(id: string): Promise<ApiResponse<SubcontractorReceiptPrintSnapshot>> {
+    return apiClient
+      .get<ApiResponse<SubcontractorReceiptPrintSnapshot>>(`/api/subcontractor/receipts/${id}/print`)
+      .then((r) => r.data);
+  },
+
+  getDispatchPrint(id: string): Promise<ApiResponse<SubcontractorDispatchPrintSnapshot>> {
+    return apiClient
+      .get<ApiResponse<SubcontractorDispatchPrintSnapshot>>(`/api/subcontractor/dispatches/${id}/print`)
+      .then((r) => r.data);
+  },
 };
+
+export interface SubcontractorDispatchPrintSnapshot {
+  dispatchNo: string;
+  dispatchedAt: string;
+  driverName: string | null;
+  plateNumber: string | null;
+  notes: string | null;
+  workOrder: {
+    id: string;
+    batchNumber: string;
+    recipeNo: string | null;
+    parameters: Record<string, unknown> | null;
+    type: string;
+  };
+  company: {
+    id: string;
+    name: string;
+    code: string | null;
+  };
+  step: {
+    id: string;
+    stepSequence: number;
+    station: { name: string; code: string };
+  };
+  rolls: Array<{
+    sequence: number;
+    id: string;
+    barcode: string;
+    itemCode: string;
+    itemName: string;
+    variantCode: string | null;
+    variantName: string | null;
+    dispatchedQty: number;
+    dispatchedWeight: number | null;
+    qualityGrade: string;
+    width: number | null;
+  }>;
+  totals: {
+    rollCount: number;
+    totalQty: number;
+    totalWeight: number;
+  };
+}
+
+export interface SubcontractorReceiptPrintSnapshot {
+  receiptNo: string;
+  manifestNo: string;
+  receivedAt: string;
+  notes: string | null;
+  receivedBy: string | null;
+  workOrder: {
+    id: string;
+    batchNumber: string;
+    recipeNo: string | null;
+    type: string;
+  };
+  company: {
+    id: string;
+    name: string;
+    code: string | null;
+  };
+  step: {
+    id: string;
+    stepSequence: number;
+    station: { name: string; code: string };
+  };
+  rolls: Array<{
+    sequence: number;
+    id: string;
+    barcode: string;
+    itemCode: string;
+    itemName: string;
+    variantCode: string | null;
+    variantName: string | null;
+    qualityGrade: string;
+    notes: string | null;
+  }>;
+  totals: { rollCount: number };
+}
