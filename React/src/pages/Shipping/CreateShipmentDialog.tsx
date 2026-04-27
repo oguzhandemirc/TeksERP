@@ -99,6 +99,8 @@ export default function CreateShipmentDialog({
     onSuccess: (res) => {
       toast.success(res.message ?? "Sevkiyat oluşturuldu");
       qc.invalidateQueries({ queryKey: ["shipments"] });
+      qc.invalidateQueries({ queryKey: ["ready-orders"] });
+      qc.invalidateQueries({ queryKey: ["ready-fason"] });
       onOpenChange(false);
       if (res.data?.id) {
         onCreated?.(res.data.id);

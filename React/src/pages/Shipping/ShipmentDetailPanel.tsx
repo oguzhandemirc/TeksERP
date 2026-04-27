@@ -93,9 +93,11 @@ export default function ShipmentDetailPanel({
       invalidateAll();
       qc.invalidateQueries({ queryKey: ["orders"] });
       qc.invalidateQueries({ queryKey: ["rolls"] });
-      qc.invalidateQueries({ queryKey: ["workorders"] });
+      qc.invalidateQueries({ queryKey: ["work-orders"] });
       qc.invalidateQueries({ queryKey: ["workorder-detail"] });
       qc.invalidateQueries({ queryKey: ["workorder-shipments"] });
+      qc.invalidateQueries({ queryKey: ["workorder-dispatches"] });
+      qc.invalidateQueries({ queryKey: ["workorder-manifests"] });
     },
     onError: () => {
       toast.error("Finalizasyon başarısız");

@@ -18,7 +18,11 @@ import {
 } from "../utils/query-parser";
 import { Request } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { Roll, RollStatus, RollOperationType } from "@prisma/client";
+import { Prisma, Roll, RollStatus, RollOperationType } from "@prisma/client";
+import {
+  findOrCreateDerivedItem,
+  getItemDerivedAttributes,
+} from "./helpers/item-derive.helper";
 
 export type RollHistoryEventKind =
   | "CREATED"
@@ -607,6 +611,105 @@ export class InventoryService {
       success: true,
       data: existing,
       message: `Top kalıcı olarak silindi: ${existing.barcode}`,
+    };
+  }
+
+  /**
+   * Manuel kimlik override (hibrit mod) — operatör fason kabul sonrası bir
+   * rulonun rengini/özelliklerini elle düzeltebilir. Senaryolar:
+   *   - Boyahane mavi vermesi gereken 10 ruloda 2'si yanmazlık tutmamış →
+   *     o 2 ruloya yanmazlık atanmaz (manuel kaldır).
+   *   - Bir rulo bonus olarak ekstra özellik kazandı → operatör manuel ekler.
+   *
+   * Replace semantics: gönderilen colorId + propertyIds yeni TAM listedir.
+   * Mevcut Roll.itemId'sinden baseItemId türetilir; baz item korunur.
+   */
+  async applyManualProperties(
+    rollId: string,
+    data: { colorId: string | null; propertyIds: string[] },
+    userId?: string,
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    const roll = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: { id: true, barcode: true, itemId: true, status: true },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+    if (roll.status === RollStatus.SCRAP) {
+      throw AppError.badRequest("Hurda topun kimliği değiştirilemez");
+    }
+
+    // Catalog doğrulamaları (varsa)
+    if (data.colorId) {
+      const c = await prisma.color.findUnique({
+        where: { id: data.colorId },
+        select: { isActive: true },
+      });
+      if (!c || !c.isActive) {
+        throw AppError.badRequest("Renk bulunamadı veya pasif");
+      }
+    }
+    const dedupedProps = [...new Set(data.propertyIds)];
+    if (dedupedProps.length > 0) {
+      const props = await prisma.fabricProperty.findMany({
+        where: { id: { in: dedupedProps }, isActive: true },
+        select: { id: true },
+      });
+      if (props.length !== dedupedProps.length) {
+        throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const current = await getItemDerivedAttributes(tx, roll.itemId);
+      const derived = await findOrCreateDerivedItem(tx, {
+        baseItemId: current.baseItemId,
+        colorId: data.colorId,
+        propertyIds: dedupedProps,
+      });
+
+      if (derived.itemId !== roll.itemId) {
+        await tx.roll.update({
+          where: { id: rollId },
+          data: { itemId: derived.itemId },
+        });
+        await tx.systemLog.create({
+          data: {
+            userId: userId ?? null,
+            action: "UPDATE",
+            tableName: "ROLL_ITEM_MANUAL_OVERRIDE",
+            recordId: rollId,
+            oldData: {
+              itemId: roll.itemId,
+              colorId: current.colorId,
+              propertyIds: current.propertyIds,
+            } as Prisma.InputJsonValue,
+            newData: {
+              itemId: derived.itemId,
+              itemCode: derived.itemCode,
+              itemName: derived.itemName,
+              colorId: data.colorId,
+              propertyIds: dedupedProps,
+              isNew: derived.isNew,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+
+      return derived;
+    });
+
+    return {
+      success: true,
+      data: {
+        rollId,
+        itemId: result.itemId,
+        itemCode: result.itemCode,
+        itemName: result.itemName,
+        colorId: data.colorId,
+        propertyIds: dedupedProps,
+        isNew: result.isNew,
+      },
+      message: `Top kimliği güncellendi: ${result.itemName}`,
     };
   }
 }

@@ -183,7 +183,11 @@ export default function ServiceProductionPage() {
         setRolls([emptyRoll()]);
         setNotes("");
         qc.invalidateQueries({ queryKey: ["rolls"] });
+        qc.invalidateQueries({ queryKey: ["roll-detail"] });
+        qc.invalidateQueries({ queryKey: ["roll-history"] });
         qc.invalidateQueries({ queryKey: ["work-orders"] });
+        qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+        qc.invalidateQueries({ queryKey: ["workorder-manifests"] });
       } else {
         toast.error(res.message ?? "Kabul oluşturulamadı");
       }

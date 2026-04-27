@@ -44,7 +44,12 @@ export default function AttachRollsDialog({
         data.errors.forEach((err) => toast.error(err));
       }
       qc.invalidateQueries({ queryKey: ["work-orders"] });
+      qc.invalidateQueries({ queryKey: ["work-orders-available"] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+      qc.invalidateQueries({ queryKey: ["workorder-manifests"] });
+      qc.invalidateQueries({ queryKey: ["attached-rolls"] });
       qc.invalidateQueries({ queryKey: ["rolls"] });
+      qc.invalidateQueries({ queryKey: ["roll-detail"] });
       onOpenChange(false);
       setBarcodes([]);
     },

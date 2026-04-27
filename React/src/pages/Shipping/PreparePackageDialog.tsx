@@ -66,7 +66,11 @@ export default function PreparePackageDialog({
     onSuccess: (res) => {
       toast.success(res.message ?? "Paketleme tamamlandı");
       qc.invalidateQueries({ queryKey: ["ready-orders"] });
+      qc.invalidateQueries({ queryKey: ["ready-fason"] });
       qc.invalidateQueries({ queryKey: ["rolls"] });
+      qc.invalidateQueries({ queryKey: ["roll-detail"] });
+      qc.invalidateQueries({ queryKey: ["shipments"] });
+      qc.invalidateQueries({ queryKey: ["shipment"] });
       onOpenChange(false);
     },
     onError: () => {

@@ -328,11 +328,17 @@ export default function RollsPage() {
   const [barcodeSearch, setBarcodeSearch] = useState("");
   const qc = useQueryClient();
 
+  const invalidateRollCaches = () => {
+    qc.invalidateQueries({ queryKey: ["rolls"] });
+    qc.invalidateQueries({ queryKey: ["roll-detail"] });
+    qc.invalidateQueries({ queryKey: ["roll-history"] });
+  };
+
   const createMutation = useMutation({
     mutationFn: (data: InitialEntryRequest) => rollService.createInitialEntry(data),
     onSuccess: (res) => {
       toast.success(res.message ?? "Top başarıyla oluşturuldu");
-      qc.invalidateQueries({ queryKey: ["rolls"] });
+      invalidateRollCaches();
       setEntryDialogOpen(false);
     },
     onError: () => toast.error("Top oluşturulurken hata oluştu"),
@@ -342,7 +348,7 @@ export default function RollsPage() {
     mutationFn: (id: string) => rollService.softDelete(id),
     onSuccess: (res) => {
       toast.success(res.message ?? "Top hurda olarak işaretlendi");
-      qc.invalidateQueries({ queryKey: ["rolls"] });
+      invalidateRollCaches();
     },
     onError: () => toast.error("Top hurdaya alınırken hata oluştu"),
   });
@@ -351,7 +357,7 @@ export default function RollsPage() {
     mutationFn: (id: string) => rollService.hardDelete(id),
     onSuccess: (res) => {
       toast.success(res.message ?? "Top kalıcı olarak silindi");
-      qc.invalidateQueries({ queryKey: ["rolls"] });
+      invalidateRollCaches();
     },
     onError: () => toast.error("Top silinirken hata oluştu"),
   });

@@ -111,6 +111,8 @@ export default function AttachRollsPage() {
       }
       qc.invalidateQueries({ queryKey: ["rolls"] });
       qc.invalidateQueries({ queryKey: ["attached-rolls", selectedWorkOrder?.id] });
+      qc.invalidateQueries({ queryKey: ["work-order-detail", selectedWorkOrder?.id] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail", selectedWorkOrder?.id] });
       setSelectedStockRollIds(new Set());
     },
     onError: () => {
@@ -127,6 +129,8 @@ export default function AttachRollsPage() {
       toast.success(`${data.detached || 0} top sepetten çıkarıldı.`);
       qc.invalidateQueries({ queryKey: ["rolls"] });
       qc.invalidateQueries({ queryKey: ["attached-rolls", selectedWorkOrder?.id] });
+      qc.invalidateQueries({ queryKey: ["work-order-detail", selectedWorkOrder?.id] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail", selectedWorkOrder?.id] });
       setSelectedAttachedRollIds(new Set());
     },
     onError: () => {
@@ -140,6 +144,8 @@ export default function AttachRollsPage() {
       toast.success("Sepet onaylandı, iş emri üretime alındı!");
       qc.invalidateQueries({ queryKey: ["work-orders"] });
       qc.invalidateQueries({ queryKey: ["work-orders-available"] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+      qc.invalidateQueries({ queryKey: ["workorder-manifests"] });
       
       // Fetch manifest for printing before returning to screen
       if (selectedWorkOrder) {

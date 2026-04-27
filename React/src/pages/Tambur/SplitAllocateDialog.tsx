@@ -95,8 +95,12 @@ export default function SplitAllocateDialog({
     onSuccess: (res) => {
       toast.success(res.message ?? "Paylaştırma tamamlandı");
       qc.invalidateQueries({ queryKey: ["rolls"] });
+      qc.invalidateQueries({ queryKey: ["roll-detail"] });
       qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["order-detail"] });
       qc.invalidateQueries({ queryKey: ["tambur-pending"] });
+      qc.invalidateQueries({ queryKey: ["packaging-pending"] });
+      qc.invalidateQueries({ queryKey: ["ready-orders"] });
       onOpenChange(false);
     },
     onError: (err: unknown) => {

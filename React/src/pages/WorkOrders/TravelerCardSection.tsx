@@ -58,6 +58,7 @@ export default function TravelerCardSection({
     onSuccess: (res) => {
       toast.success(res.message ?? "Refakat kartı basıldı");
       qc.invalidateQueries({ queryKey: ["traveler-history", workOrderId] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail", workOrderId] });
       if (res.data) setPrintCard(res.data);
     },
   });
@@ -68,6 +69,7 @@ export default function TravelerCardSection({
     onSuccess: (res) => {
       toast.success(res.message ?? "Yeniden basıldı");
       qc.invalidateQueries({ queryKey: ["traveler-history", workOrderId] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail", workOrderId] });
       if (res.data) setPrintCard(res.data);
     },
   });
@@ -78,6 +80,7 @@ export default function TravelerCardSection({
     onSuccess: (res) => {
       toast.success(res.message ?? "İptal edildi");
       qc.invalidateQueries({ queryKey: ["traveler-history", workOrderId] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail", workOrderId] });
     },
   });
 

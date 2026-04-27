@@ -30,8 +30,91 @@ export interface Item {
   itemType: ItemType;
   unit: string;
   isActive: boolean;
+  // Türetilmiş Item alanları (fason dönüşünde otomatik üretilir)
+  baseItemId?: string | null;
+  colorId?: string | null;
+  isDerived?: boolean;
+  baseItem?: Item | null;
+  color?: Color | null;
+  properties?: ItemProperty[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Color {
+  id: string;
+  code: string;
+  name: string;
+  hex: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FabricProperty {
+  id: string;
+  code: string;
+  name: string;
+  category: string | null;
+  description: string | null;
+  color: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ItemProperty {
+  id: string;
+  itemId: string;
+  propertyId: string;
+  property?: FabricProperty;
+  createdAt: string;
+}
+
+// Bir istasyonun renk + özellik yetkinlikleri (StationCapabilityService DTO)
+export interface StationCapability {
+  stationId: string;
+  stationCode: string;
+  stationName: string;
+  colors: { id: string; code: string; name: string; hex: string | null }[];
+  properties: {
+    id: string;
+    code: string;
+    name: string;
+    category: string | null;
+  }[];
+}
+
+export interface StationCapabilitySummary {
+  stationId: string;
+  stationCode: string;
+  stationName: string;
+  colorCount: number;
+  propertyCount: number;
+}
+
+// WO için hedef özellik kaydı (m:n)
+export interface WorkOrderTargetProperty {
+  id: string;
+  workOrderId: string;
+  propertyId: string;
+  plannedStepId: string | null;
+  notes: string | null;
+  property?: FabricProperty;
+  plannedStep?: WorkOrderStep | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Sipariş satırı için hedef özellik kaydı (m:n, opsiyonel)
+export interface OrderLineTargetProperty {
+  id: string;
+  orderLineId: string;
+  propertyId: string;
+  property?: FabricProperty;
+  createdAt: string;
 }
 
 export interface Customer {
@@ -249,6 +332,10 @@ export interface OrderLine {
   item?: Item;
   variant?: ItemVariant | null;
   allocations?: OrderAllocation[];
+  // Müşterinin istediği renk + özellikler (opsiyonel — WO oluşturulurken öneri olur)
+  targetColorId?: string | null;
+  targetColor?: Color | null;
+  targetProperties?: OrderLineTargetProperty[];
   createdAt: string;
   updatedAt: string;
 }
@@ -273,6 +360,12 @@ export interface WorkOrder {
   orderLinks?: WorkOrderToOrderLine[];
   travelerCards?: TravelerCard[];
   manifests?: Manifest[];
+  // Hedef renk + özellikler (fason adımlarında uygulanır)
+  targetColorId?: string | null;
+  targetColorStepId?: string | null;
+  targetColor?: Color | null;
+  targetColorStep?: WorkOrderStep | null;
+  targetProperties?: WorkOrderTargetProperty[];
   createdAt: string;
   updatedAt: string;
 }

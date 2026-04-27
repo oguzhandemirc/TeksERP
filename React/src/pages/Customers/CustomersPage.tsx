@@ -57,6 +57,7 @@ export default function CustomersPage() {
     service: customerService,
     queryKey: "customers",
     entityName: "Müşteri",
+    relatedKeys: ["customer-detail"],
   });
 
   const columns = useMemo<ColumnDef<Customer, unknown>[]>(

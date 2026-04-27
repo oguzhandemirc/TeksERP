@@ -109,8 +109,15 @@ export default function PackagingDecisionPanel({
         toast.success(res.message ?? "Paketleme tamamlandı");
         qc.invalidateQueries({ queryKey: ["packaging-pending"] });
         qc.invalidateQueries({ queryKey: ["rolls"] });
+        qc.invalidateQueries({ queryKey: ["roll-detail"] });
+        qc.invalidateQueries({ queryKey: ["roll-history"] });
         qc.invalidateQueries({ queryKey: ["ready-orders"] });
         qc.invalidateQueries({ queryKey: ["ready-fason"] });
+        qc.invalidateQueries({ queryKey: ["orders"] });
+        qc.invalidateQueries({ queryKey: ["order-detail"] });
+        qc.invalidateQueries({ queryKey: ["work-orders"] });
+        qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+        qc.invalidateQueries({ queryKey: ["workorder-manifests"] });
         // UX D: otomatik yazdırma — operatör ek tıklamadan kurtulur
         setTimeout(() => window.print(), 200);
       } else {

@@ -108,6 +108,13 @@ export default function TamburDecisionPanel({
       qc.invalidateQueries({ queryKey: ["tambur-pending"] });
       qc.invalidateQueries({ queryKey: ["packaging-pending"] });
       qc.invalidateQueries({ queryKey: ["rolls"] });
+      qc.invalidateQueries({ queryKey: ["roll-detail"] });
+      qc.invalidateQueries({ queryKey: ["roll-history"] });
+      qc.invalidateQueries({ queryKey: ["work-orders"] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+      qc.invalidateQueries({ queryKey: ["workorder-manifests"] });
+      qc.invalidateQueries({ queryKey: ["ready-orders"] });
+      qc.invalidateQueries({ queryKey: ["ready-fason"] });
       onBack();
     },
     onError: () => {

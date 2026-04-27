@@ -6,6 +6,12 @@ interface UseCrudMutationsOptions<T> {
   service: CrudService<T>;
   queryKey: string;
   entityName: string;
+  /**
+   * Mutation başarılı olduğunda invalidate edilecek ek queryKey'ler.
+   * Cross-entity senaryolar için: örn. order güncellenince ["customers"] da invalidate edilebilir.
+   * Prefix match ile çalışır, yani ["work-orders"] hem ["work-orders", params] hem de ["work-orders", id] cache'lerini invalidate eder.
+   */
+  relatedKeys?: (string | readonly unknown[])[];
 }
 
 // Hata toast'larını apiClient interceptor'ı backend'in gerçek mesajıyla gösterir.
@@ -15,9 +21,15 @@ export function useCrudMutations<T>({
   service,
   queryKey,
   entityName,
+  relatedKeys,
 }: UseCrudMutationsOptions<T>) {
   const qc = useQueryClient();
-  const invalidate = () => qc.invalidateQueries({ queryKey: [queryKey] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: [queryKey] });
+    relatedKeys?.forEach((k) => {
+      qc.invalidateQueries({ queryKey: Array.isArray(k) ? [...k] : [k] });
+    });
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<T>) => service.create(data),

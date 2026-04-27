@@ -15,7 +15,12 @@ const service = new OrderService({
   defaultInclude: {
     customer: true,
     lines: {
-      include: { item: true, variant: true },
+      include: {
+        item: true,
+        variant: true,
+        targetColor: true,
+        targetProperties: { include: { property: true } },
+      },
     },
   },
   nestedCreateFields: ["lines"],

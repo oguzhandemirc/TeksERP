@@ -121,8 +121,15 @@ export default function DispatchCreatePage() {
         `Sevk belgesi oluşturuldu: ${res.data?.dispatchNo ?? ""}`,
       );
       qc.invalidateQueries({ queryKey: ["rolls"] });
+      qc.invalidateQueries({ queryKey: ["roll-detail"] });
       qc.invalidateQueries({ queryKey: ["pending-returns"] });
       qc.invalidateQueries({ queryKey: ["dispatches"] });
+      qc.invalidateQueries({ queryKey: ["work-orders"] });
+      qc.invalidateQueries({ queryKey: ["work-orders", "for-dispatch"] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+      qc.invalidateQueries({ queryKey: ["workorder-dispatches"] });
+      qc.invalidateQueries({ queryKey: ["workorder-manifests"] });
+      qc.invalidateQueries({ queryKey: ["active-steps"] });
       setRolls([]);
       setPlateNumber("");
       setDriverName("");

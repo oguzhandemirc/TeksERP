@@ -97,6 +97,18 @@ export const navigationConfig: NavGroup[] = [
         icon: Sparkles,
         permissions: ["quality:read"],
       },
+      {
+        title: "Renkler",
+        href: "/colors",
+        icon: Palette,
+        permissions: ["property:read"],
+      },
+      {
+        title: "Kumaş Özellikleri",
+        href: "/fabric-properties",
+        icon: Layers,
+        permissions: ["property:read"],
+      },
     ],
   },
   {

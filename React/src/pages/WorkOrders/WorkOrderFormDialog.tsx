@@ -16,6 +16,8 @@ import {
   Unlock,
   Calendar,
   Clock,
+  Palette,
+  Sparkle,
 } from "lucide-react";
 import {
   Dialog,
@@ -33,13 +35,24 @@ import { stationService } from "@/services/stationService";
 import { routeService } from "@/services/routeService";
 import { orderService } from "@/services/orderService";
 import { customerService } from "@/services/customerService";
+import { colorService } from "@/services/colorService";
+import { fabricPropertyService } from "@/services/fabricPropertyService";
+import { stationCapabilityService } from "@/services/stationCapabilityService";
 import type {
   Route,
   Order,
   OrderLine,
   Customer,
+  Color,
+  FabricProperty,
+  StationCapability,
 } from "@/types/models";
 import type { OrderLineAllocation } from "@/services/workOrderService";
+
+interface TargetPropertyEntry {
+  propertyId: string;
+  plannedStepIndex: number | null;
+}
 
 const woSchema = z.object({
   batchNumber:      z.string().optional(),
@@ -74,6 +87,12 @@ interface WorkOrderFormDialogProps {
     dyehouseCompanyId?:  string;
     steps?:              { stationId: string; notes?: string }[];
     orderLineAllocations?: OrderLineAllocation[];
+    targetColorId?:        string;
+    targetColorStepIndex?: number;
+    targetProperties?: {
+      propertyId: string;
+      plannedStepIndex?: number;
+    }[];
   }) => void;
   isLoading: boolean;
 }
@@ -92,6 +111,14 @@ export default function WorkOrderFormDialog({
   // allocatedQty için map (orderLineId -> qty)
   const [allocations, setAllocations] = useState<Record<string, number>>({});
   const [isBatchEditable, setIsBatchEditable] = useState(false);
+  // Hedef renk + özellikler
+  const [targetColorId, setTargetColorId] = useState<string>("");
+  const [targetColorStepIndex, setTargetColorStepIndex] = useState<number | null>(
+    null,
+  );
+  const [targetProperties, setTargetProperties] = useState<TargetPropertyEntry[]>(
+    [],
+  );
 
   // ── Açık Siparişler ──────────────────────────────────────────────────────
   const { data: openOrdersData, isLoading: ordersLoading } = useQuery({
@@ -136,6 +163,45 @@ export default function WorkOrderFormDialog({
       }),
     enabled: open,
   });
+
+  // ── Renk + Özellik kataloglarını yükle ───────────────────────────────────
+  const { data: colorsData } = useQuery({
+    queryKey: ["colors", "all-active"],
+    queryFn: () =>
+      colorService.getAll({
+        page: 1,
+        pageSize: 200,
+        sortBy: "sortOrder",
+        sortOrder: "asc",
+        filters: { isActive: "true" },
+      }),
+    enabled: open,
+  });
+  const colors: Color[] = colorsData?.data ?? [];
+
+  const { data: propsData } = useQuery({
+    queryKey: ["fabric-properties", "all-active"],
+    queryFn: () =>
+      fabricPropertyService.getAll({
+        page: 1,
+        pageSize: 200,
+        sortBy: "sortOrder",
+        sortOrder: "asc",
+        filters: { isActive: "true" },
+      }),
+    enabled: open,
+  });
+  const propertiesCatalog: FabricProperty[] = propsData?.data ?? [];
+
+  const { data: capabilitiesData } = useQuery({
+    queryKey: ["station-capabilities", "detailed"],
+    queryFn: () => stationCapabilityService.listDetailed(),
+    enabled: open,
+  });
+  const capabilities: StationCapability[] = capabilitiesData?.data ?? [];
+  const capByStationId = new Map<string, StationCapability>(
+    capabilities.map((c) => [c.stationId, c]),
+  );
 
   // ── Fason/Boyahane Müşterileri ───────────────────────────────────────────
   const { data: customersData } = useQuery({
@@ -205,6 +271,9 @@ export default function WorkOrderFormDialog({
       setRouteMode("custom");
       setRouteTemplateId("");
       setIsBatchEditable(false);
+      setTargetColorId("");
+      setTargetColorStepIndex(null);
+      setTargetProperties([]);
     }
   }
 
@@ -314,6 +383,17 @@ export default function WorkOrderFormDialog({
       allocatedQty: qty > 0 ? qty : undefined,
     }));
 
+    // Hedef renk/özellik payload'ını oluştur (sadece doluysa gönder)
+    const targetPropertiesPayload = targetProperties
+      .filter((tp) => tp.propertyId)
+      .map((tp) => ({
+        propertyId: tp.propertyId,
+        plannedStepIndex:
+          tp.plannedStepIndex !== null && tp.plannedStepIndex !== undefined
+            ? tp.plannedStepIndex
+            : undefined,
+      }));
+
     onSubmit({
       batchNumber:       cleanValue(data.batchNumber),
       type:              data.type,
@@ -332,6 +412,13 @@ export default function WorkOrderFormDialog({
           })),
       orderLineAllocations:
         orderLineAllocations.length > 0 ? orderLineAllocations : undefined,
+      targetColorId: targetColorId || undefined,
+      targetColorStepIndex:
+        targetColorStepIndex !== null && targetColorStepIndex !== undefined
+          ? targetColorStepIndex
+          : undefined,
+      targetProperties:
+        targetPropertiesPayload.length > 0 ? targetPropertiesPayload : undefined,
     });
   };
 
@@ -784,6 +871,202 @@ export default function WorkOrderFormDialog({
               </div>
             )}
           </div>
+
+          {/* ── HEDEF RENK + ÖZELLİKLER ─────────────────────────────────── */}
+          {steps.filter((s) => s.stationId).length > 0 && (
+            <div className="space-y-3 border-t pt-4">
+              <div className="flex items-center gap-2">
+                <Palette className="h-4 w-4 text-primary" />
+                <Label>Hedef Renk + Özellikler (opsiyonel)</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Fason adımlarında kazanılacak renk + özellikler. Adım seçilen
+                istasyonun bu rengi/özelliği uygulayabilmesi gerekir
+                (yetkinlik). Belirtmezseniz fason kabul rulonun kimliğini
+                değiştirmez.
+              </p>
+
+              {/* Renk seçici */}
+              <div className="grid grid-cols-2 gap-3 items-end">
+                <div className="space-y-1">
+                  <Label htmlFor="targetColor" className="text-xs">
+                    Hedef Renk
+                  </Label>
+                  <Select
+                    id="targetColor"
+                    value={targetColorId}
+                    onChange={(e) => {
+                      setTargetColorId(e.target.value);
+                      // Renk değişince adım seçimini koru ama yetkinlik
+                      // kontrolü yapmıyoruz — backend reddedecek.
+                    }}
+                    options={[
+                      { value: "", label: "(Renk yok)" },
+                      ...colors.map((c) => ({
+                        value: c.id,
+                        label: c.name,
+                      })),
+                    ]}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Hangi adımda?</Label>
+                  <Select
+                    value={
+                      targetColorStepIndex !== null
+                        ? String(targetColorStepIndex)
+                        : ""
+                    }
+                    disabled={!targetColorId}
+                    onChange={(e) =>
+                      setTargetColorStepIndex(
+                        e.target.value === "" ? null : Number(e.target.value),
+                      )
+                    }
+                    options={[
+                      { value: "", label: "(Adım atanmadı)" },
+                      ...steps
+                        .map((s, idx) => {
+                          if (!s.stationId) return null;
+                          const cap = capByStationId.get(s.stationId);
+                          const station = stationOptions.find(
+                            (o) => o.value === s.stationId,
+                          );
+                          const supports = cap?.colors.some(
+                            (c) => c.id === targetColorId,
+                          );
+                          return {
+                            value: String(idx),
+                            label: `#${idx + 1} ${station?.label ?? ""}${
+                              supports ? "" : " (yetkinlik yok)"
+                            }`,
+                            disabled: !supports,
+                          };
+                        })
+                        .filter(
+                          (o): o is { value: string; label: string; disabled: boolean } =>
+                            o !== null,
+                        ),
+                    ]}
+                  />
+                </div>
+              </div>
+
+              {/* Özellik checkbox listesi */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Sparkle className="h-3.5 w-3.5 text-primary" />
+                  <Label className="text-xs">Hedef Özellikler</Label>
+                </div>
+                {propertiesCatalog.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Henüz özellik tanımlanmamış.
+                  </p>
+                )}
+                <div className="space-y-1 border rounded-md p-2 max-h-48 overflow-y-auto">
+                  {propertiesCatalog.map((p) => {
+                    const entry = targetProperties.find(
+                      (t) => t.propertyId === p.id,
+                    );
+                    const selected = !!entry;
+
+                    const toggleProp = () => {
+                      setTargetProperties((prev) => {
+                        if (selected) {
+                          return prev.filter((t) => t.propertyId !== p.id);
+                        }
+                        return [
+                          ...prev,
+                          { propertyId: p.id, plannedStepIndex: null },
+                        ];
+                      });
+                    };
+
+                    const updateStepIdx = (idx: number | null) => {
+                      setTargetProperties((prev) =>
+                        prev.map((t) =>
+                          t.propertyId === p.id
+                            ? { ...t, plannedStepIndex: idx }
+                            : t,
+                        ),
+                      );
+                    };
+
+                    return (
+                      <div
+                        key={p.id}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${
+                          selected ? "bg-primary/5" : ""
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={toggleProp}
+                          className="shrink-0"
+                        >
+                          {selected ? (
+                            <CheckSquare className="h-4 w-4 text-primary" />
+                          ) : (
+                            <Square className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </button>
+                        <span className="flex-1 truncate">
+                          <strong>{p.name}</strong>
+                          {p.category && (
+                            <span className="ml-2 text-muted-foreground">
+                              {p.category}
+                            </span>
+                          )}
+                        </span>
+                        {selected && (
+                          <Select
+                            value={
+                              entry.plannedStepIndex !== null
+                                ? String(entry.plannedStepIndex)
+                                : ""
+                            }
+                            onChange={(e) =>
+                              updateStepIdx(
+                                e.target.value === ""
+                                  ? null
+                                  : Number(e.target.value),
+                              )
+                            }
+                            className="h-7 text-xs w-56"
+                            options={[
+                              { value: "", label: "(Adım atanmadı)" },
+                              ...steps
+                                .map((s, idx) => {
+                                  if (!s.stationId) return null;
+                                  const cap = capByStationId.get(s.stationId);
+                                  const station = stationOptions.find(
+                                    (o) => o.value === s.stationId,
+                                  );
+                                  const supports = cap?.properties.some(
+                                    (pp) => pp.id === p.id,
+                                  );
+                                  return {
+                                    value: String(idx),
+                                    label: `#${idx + 1} ${station?.label ?? ""}${
+                                      supports ? "" : " (yok)"
+                                    }`,
+                                    disabled: !supports,
+                                  };
+                                })
+                                .filter(
+                                  (o): o is { value: string; label: string; disabled: boolean } =>
+                                    o !== null,
+                                ),
+                            ]}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
 
           <DialogFooter>
             <Button

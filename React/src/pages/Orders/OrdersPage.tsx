@@ -50,6 +50,7 @@ export default function OrdersPage() {
     service: orderService,
     queryKey: "orders",
     entityName: "Sipariş",
+    relatedKeys: ["order-detail", "ready-orders"],
   });
 
   const columns = useMemo<ColumnDef<Order, unknown>[]>(

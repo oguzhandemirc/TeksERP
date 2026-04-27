@@ -86,7 +86,15 @@ export default function ReceiveCreatePage() {
       );
       qc.invalidateQueries({ queryKey: ["pending-returns"] });
       qc.invalidateQueries({ queryKey: ["rolls"] });
+      qc.invalidateQueries({ queryKey: ["roll-detail"] });
+      qc.invalidateQueries({ queryKey: ["roll-history"] });
       qc.invalidateQueries({ queryKey: ["receipts"] });
+      qc.invalidateQueries({ queryKey: ["dispatches"] });
+      qc.invalidateQueries({ queryKey: ["work-orders"] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+      qc.invalidateQueries({ queryKey: ["workorder-dispatches"] });
+      qc.invalidateQueries({ queryKey: ["workorder-manifests"] });
+      qc.invalidateQueries({ queryKey: ["active-steps"] });
       setSelectedStepId("");
     },
     onError: (err: unknown) => {

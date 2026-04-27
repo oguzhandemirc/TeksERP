@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ScanLine,
@@ -53,6 +53,7 @@ export default function TravelerCardScanPage() {
   const [lastScan, setLastScan] = useState<TravelerCardScan | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const qc = useQueryClient();
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -108,6 +109,11 @@ export default function TravelerCardScanPage() {
         setNotes("");
         setPreview(null);
         inputRef.current?.focus();
+        qc.invalidateQueries({ queryKey: ["traveler-history"] });
+        qc.invalidateQueries({ queryKey: ["work-orders"] });
+        qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+        qc.invalidateQueries({ queryKey: ["active-steps"] });
+        qc.invalidateQueries({ queryKey: ["rolls"] });
       }
     },
   });

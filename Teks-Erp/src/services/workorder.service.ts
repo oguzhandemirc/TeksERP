@@ -89,6 +89,17 @@ export interface WorkOrderCreateInput {
    */
   orderLineAllocations?: { orderLineId: string; allocatedQty?: number }[];
   orderLineIds?: string[] | null;
+
+  // Hedef renk + özellikler — fason adımlarında uygulanacak (Phase 4 ile receive() okur).
+  // stepIndex: oluşacak WorkOrderStep'lerin 0-bazlı sırası.
+  // null verilirse adım atanmaz; sonradan atama için ileride PATCH endpoint açılabilir.
+  targetColorId?:        string | null;
+  targetColorStepIndex?: number | null;
+  targetProperties?: {
+    propertyId:        string;
+    plannedStepIndex?: number | null;
+    notes?:            string | null;
+  }[];
 }
 
 export class WorkOrderService {
@@ -238,6 +249,100 @@ export class WorkOrderService {
       }
     }
 
+    // ── Hedef renk + özellik doğrulamaları (yeni) ───────────────────────────
+    // 1) Catalog kayıtları aktif mi?
+    // 2) Atanan adım istasyonu bu renk/özelliği uygulayabilir mi (StationColor/StationProperty)?
+    if (data.targetColorId) {
+      const color = await prisma.color.findUnique({
+        where: { id: data.targetColorId },
+        select: { id: true, isActive: true },
+      });
+      if (!color || !color.isActive) {
+        throw AppError.badRequest("Hedef renk bulunamadı veya pasif");
+      }
+      if (
+        data.targetColorStepIndex !== null &&
+        data.targetColorStepIndex !== undefined
+      ) {
+        if (
+          data.targetColorStepIndex < 0 ||
+          data.targetColorStepIndex >= finalSteps.length
+        ) {
+          throw AppError.badRequest(
+            `Hedef renk için geçersiz adım indexi: ${data.targetColorStepIndex}`,
+          );
+        }
+        const stationId = finalSteps[data.targetColorStepIndex].stationId;
+        const cap = await prisma.stationColor.findUnique({
+          where: {
+            stationId_colorId: { stationId, colorId: data.targetColorId },
+          },
+          select: { id: true },
+        });
+        if (!cap) {
+          const station = await prisma.station.findUnique({
+            where: { id: stationId },
+            select: { code: true, name: true },
+          });
+          throw AppError.badRequest(
+            `${station?.name ?? stationId} istasyonu bu rengi uygulayamaz. Yetkinlik tanımlayın veya başka bir adım seçin.`,
+          );
+        }
+      }
+    }
+
+    const targetProperties = data.targetProperties ?? [];
+    if (targetProperties.length > 0) {
+      const uniquePropIds = [...new Set(targetProperties.map((p) => p.propertyId))];
+      if (uniquePropIds.length !== targetProperties.length) {
+        throw AppError.badRequest(
+          "Aynı özellik birden fazla kez seçilmiş",
+        );
+      }
+      const props = await prisma.fabricProperty.findMany({
+        where: { id: { in: uniquePropIds }, isActive: true },
+        select: { id: true, name: true },
+      });
+      if (props.length !== uniquePropIds.length) {
+        throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
+      }
+      const propNameById = new Map(props.map((p) => [p.id, p.name]));
+
+      // Adım yetkinlik kontrolü
+      for (const tp of targetProperties) {
+        if (tp.plannedStepIndex === null || tp.plannedStepIndex === undefined) {
+          continue;
+        }
+        if (
+          tp.plannedStepIndex < 0 ||
+          tp.plannedStepIndex >= finalSteps.length
+        ) {
+          throw AppError.badRequest(
+            `'${propNameById.get(tp.propertyId)}' özelliği için geçersiz adım indexi: ${tp.plannedStepIndex}`,
+          );
+        }
+        const stationId = finalSteps[tp.plannedStepIndex].stationId;
+        const cap = await prisma.stationProperty.findUnique({
+          where: {
+            stationId_propertyId: {
+              stationId,
+              propertyId: tp.propertyId,
+            },
+          },
+          select: { id: true },
+        });
+        if (!cap) {
+          const station = await prisma.station.findUnique({
+            where: { id: stationId },
+            select: { name: true },
+          });
+          throw AppError.badRequest(
+            `${station?.name ?? stationId} istasyonu '${propNameById.get(tp.propertyId)}' özelliğini uygulayamaz. Yetkinlik tanımlayın veya başka bir adım seçin.`,
+          );
+        }
+      }
+    }
+
     // ── batchNumber (R11 generator) ─────────────────────────────────────────
     const batchNumber = data.batchNumber && data.batchNumber.trim().length > 0
       ? data.batchNumber.trim()
@@ -351,6 +456,39 @@ export class WorkOrderService {
         }
       }
 
+      // ── Hedef renk + özellikleri bağla (yeni) ────────────────────────────
+      // Steps zaten oluşturuldu — stepIndex (frontend'den gelen) → stepId çözümü.
+      const orderedSteps = wo.steps.sort(
+        (a, b) => a.stepSequence - b.stepSequence,
+      );
+      const stepIdAtIndex = (idx: number | null | undefined): string | null => {
+        if (idx === null || idx === undefined) return null;
+        if (idx < 0 || idx >= orderedSteps.length) return null;
+        return orderedSteps[idx].id;
+      };
+
+      if (data.targetColorId) {
+        const colorStepId = stepIdAtIndex(data.targetColorStepIndex);
+        await tx.workOrder.update({
+          where: { id: wo.id },
+          data: {
+            targetColorId: data.targetColorId,
+            targetColorStepId: colorStepId,
+          },
+        });
+      }
+
+      if (targetProperties.length > 0) {
+        await tx.workOrderTargetProperty.createMany({
+          data: targetProperties.map((tp) => ({
+            workOrderId: wo.id,
+            propertyId: tp.propertyId,
+            plannedStepId: stepIdAtIndex(tp.plannedStepIndex),
+            notes: tp.notes ?? null,
+          })),
+        });
+      }
+
       return wo;
     });
 
@@ -360,15 +498,17 @@ export class WorkOrderService {
       tableName: "WORK_ORDER",
       recordId: workOrder.id,
       newData: {
-        batchNumber:       workOrder.batchNumber,
-        type:              workOrder.type,
-        width:             workOrder.width,
-        recipeNo:          workOrder.recipeNo,
-        status:            workOrder.status,
-        stepCount:         finalSteps.length,
-        routeTemplateId:   workOrder.routeTemplateId,
-        dyehouseCompanyId: workOrder.dyehouseCompanyId,
-        allocationCount:   allocations.length,
+        batchNumber:        workOrder.batchNumber,
+        type:               workOrder.type,
+        width:              workOrder.width,
+        recipeNo:           workOrder.recipeNo,
+        status:             workOrder.status,
+        stepCount:          finalSteps.length,
+        routeTemplateId:    workOrder.routeTemplateId,
+        dyehouseCompanyId:  workOrder.dyehouseCompanyId,
+        allocationCount:    allocations.length,
+        targetColorId:      data.targetColorId ?? null,
+        targetPropertyIds:  targetProperties.map((p) => p.propertyId),
       },
     });
 
@@ -411,6 +551,8 @@ export class WorkOrderService {
               },
             },
           },
+          targetColor: true,
+          targetProperties: { include: { property: true } },
         },
       }),
       prisma.workOrder.count({ where }),
@@ -450,6 +592,14 @@ export class WorkOrderService {
           },
         },
         dyehouseCompany: true,
+        targetColor: true,
+        targetColorStep: { include: { station: true } },
+        targetProperties: {
+          include: {
+            property: true,
+            plannedStep: { include: { station: true } },
+          },
+        },
       },
     });
 
@@ -1312,7 +1462,13 @@ export class WorkOrderService {
     const manifests = await prisma.manifest.findMany({
       where: { workOrderId },
       orderBy: { printedAt: "desc" },
-      include: {
+      // snapshot (JSON) liste görünümünde yüklenmez; sadece detail/print endpoint'i çeker
+      select: {
+        id: true,
+        manifestNo: true,
+        workOrderId: true,
+        printedAt: true,
+        notes: true,
         printedBy: { select: { id: true, username: true, fullName: true } },
       },
     });

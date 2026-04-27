@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Pencil, Trash2, X, Plus, Factory, RefreshCw } from "lucide-react";
+import { Pencil, Trash2, X, Plus, Factory, RefreshCw, Sparkles } from "lucide-react";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useCrudMutations } from "@/hooks/useCrudMutations";
 import {
@@ -18,6 +18,7 @@ import { stationService } from "@/services/stationService";
 import type { Station } from "@/types/models";
 import { stationTypeLabels, StationType, stationKindLabels } from "@/types/enums";
 import StationFormDialog from "./StationFormDialog";
+import StationCapabilityDialog from "./StationCapabilityDialog";
 
 const filterConfigs: ColumnFilterConfig[] = [
   {
@@ -57,6 +58,10 @@ const typeColorMap: Record<string, string> = {
 export default function StationsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editStation, setEditStation] = useState<Station | null>(null);
+  const [capabilityDialogOpen, setCapabilityDialogOpen] = useState(false);
+  const [capabilityStation, setCapabilityStation] = useState<Station | null>(
+    null,
+  );
 
   const { createMutation, updateMutation, removeMutation, hardRemoveMutation, activateMutation } = useCrudMutations({
     service: stationService,
@@ -135,6 +140,18 @@ export default function StationsPage() {
         enableSorting: false,
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Renk + Özellik Yetkinlikleri"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCapabilityStation(row.original);
+                setCapabilityDialogOpen(true);
+              }}
+            >
+              <Sparkles className="h-4 w-4 text-primary" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -285,6 +302,15 @@ export default function StationsPage() {
         station={editStation}
         onSubmit={handleSubmit}
         isLoading={createMutation.isPending || updateMutation.isPending}
+      />
+
+      <StationCapabilityDialog
+        open={capabilityDialogOpen}
+        onOpenChange={(open) => {
+          setCapabilityDialogOpen(open);
+          if (!open) setCapabilityStation(null);
+        }}
+        station={capabilityStation}
       />
     </div>
   );

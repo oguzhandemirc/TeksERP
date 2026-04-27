@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   PackageCheck,
@@ -30,11 +30,12 @@ export default function PackagingPage() {
   );
   const [scanMode, setScanMode] = useState<ScanMode>("CARD");
   const [scanInput, setScanInput] = useState("");
-  const [isScanning, setIsScanning] = useState(false);
   const [cardSummary, setCardSummary] = useState<PackagingStepSummary | null>(
     null,
   );
+  const [lastCardBarcode, setLastCardBarcode] = useState<string | null>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
+  const qc = useQueryClient();
 
   const { data: pendingData, isLoading } = useQuery({
     queryKey: ["packaging-pending"],
@@ -49,38 +50,51 @@ export default function PackagingPage() {
     }
   }, [selectedRoll, cardSummary]);
 
-  const handleScan = async () => {
+  const cardScanMutation = useMutation({
+    mutationFn: (code: string) => packagingService.getByCardBarcode(code),
+    onSuccess: (res, code) => {
+      if (res.success && res.data) {
+        setCardSummary(res.data);
+        setLastCardBarcode(code);
+        setScanInput("");
+        toast.success(
+          `İş emri ${res.data.batchNumber} — ${res.data.rolls.length} top`,
+        );
+      } else {
+        toast.error(res.message ?? "Kart bulunamadı");
+      }
+    },
+  });
+
+  const rollScanMutation = useMutation({
+    mutationFn: (code: string) => packagingService.getByRollBarcode(code),
+    onSuccess: (res) => {
+      if (res.success && res.data) {
+        setSelectedRoll(res.data);
+        setScanInput("");
+      } else {
+        toast.error(res.message ?? "Top bulunamadı");
+      }
+    },
+  });
+
+  const isScanning = cardScanMutation.isPending || rollScanMutation.isPending;
+
+  const handleScan = () => {
     const code = scanInput.trim();
     if (!code) return;
-    setIsScanning(true);
-    try {
-      if (scanMode === "CARD") {
-        const res = await packagingService.getByCardBarcode(code);
-        if (res.success && res.data) {
-          setCardSummary(res.data);
-          setScanInput("");
-          toast.success(
-            `İş emri ${res.data.batchNumber} — ${res.data.rolls.length} top`,
-          );
-        } else {
-          toast.error(res.message ?? "Kart bulunamadı");
-        }
-      } else {
-        const res = await packagingService.getByRollBarcode(code);
-        if (res.success && res.data) {
-          setSelectedRoll(res.data);
-          setScanInput("");
-        } else {
-          toast.error(res.message ?? "Top bulunamadı");
-        }
-      }
-    } catch (err) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "Okuma başarısız";
-      toast.error(msg);
-    } finally {
-      setIsScanning(false);
+    if (scanMode === "CARD") {
+      cardScanMutation.mutate(code);
+    } else {
+      rollScanMutation.mutate(code);
+    }
+  };
+
+  const refreshCardSummary = async () => {
+    if (!lastCardBarcode) return;
+    const res = await packagingService.getByCardBarcode(lastCardBarcode);
+    if (res.success && res.data) {
+      setCardSummary(res.data);
     }
   };
 
@@ -89,19 +103,11 @@ export default function PackagingPage() {
       <div className="max-w-2xl mx-auto">
         <PackagingDecisionPanel
           summary={selectedRoll}
-          onDone={() => {
+          onDone={async () => {
             setSelectedRoll(null);
-            if (cardSummary) {
-              setCardSummary((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      rolls: prev.rolls.filter(
-                        (r) => r.rollId !== selectedRoll.rollId,
-                      ),
-                    }
-                  : prev,
-              );
+            qc.invalidateQueries({ queryKey: ["packaging-pending"] });
+            if (lastCardBarcode) {
+              await refreshCardSummary();
             }
           }}
           onBack={() => setSelectedRoll(null)}
@@ -221,6 +227,7 @@ export default function PackagingPage() {
               className="h-10 w-10"
               onClick={() => {
                 setCardSummary(null);
+                setLastCardBarcode(null);
                 setTimeout(() => scanInputRef.current?.focus(), 0);
               }}
               aria-label="Kart taramasını temizle"

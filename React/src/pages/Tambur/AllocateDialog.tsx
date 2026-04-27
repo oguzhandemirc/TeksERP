@@ -96,8 +96,12 @@ export default function AllocateDialog({
     onSuccess: (res) => {
       toast.success(res.message ?? "Tahsis başarılı");
       qc.invalidateQueries({ queryKey: ["rolls"] });
+      qc.invalidateQueries({ queryKey: ["roll-detail"] });
       qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["order-detail"] });
       qc.invalidateQueries({ queryKey: ["tambur-pending"] });
+      qc.invalidateQueries({ queryKey: ["packaging-pending"] });
+      qc.invalidateQueries({ queryKey: ["ready-orders"] });
       onOpenChange(false);
     },
     onError: () => {

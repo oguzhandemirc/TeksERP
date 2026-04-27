@@ -48,6 +48,14 @@ export default function StepActionPanel() {
       toast.success(res.message ?? "İşlem başarılı");
       qc.invalidateQueries({ queryKey: ["active-steps"] });
       qc.invalidateQueries({ queryKey: ["rolls"] });
+      qc.invalidateQueries({ queryKey: ["roll-detail"] });
+      qc.invalidateQueries({ queryKey: ["roll-history"] });
+      qc.invalidateQueries({ queryKey: ["work-orders"] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+      qc.invalidateQueries({ queryKey: ["traveler-history"] });
+      qc.invalidateQueries({ queryKey: ["pending-returns"] });
+      qc.invalidateQueries({ queryKey: ["packaging-pending"] });
+      qc.invalidateQueries({ queryKey: ["tambur-pending"] });
       setBarcode("");
       setNewQty("");
       setNewWeight("");

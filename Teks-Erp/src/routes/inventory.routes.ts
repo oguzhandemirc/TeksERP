@@ -196,6 +196,45 @@ router.post("/initial-entry", verifyToken, requirePermission("roll:write"), cont
  *       404:
  *         description: Top bulunamadı
  */
+/**
+ * @openapi
+ * /api/rolls/{id}/identity:
+ *   patch:
+ *     tags: [Inventory]
+ *     summary: Topun kimliğini manuel olarak güncelle (renk + özellikler)
+ *     description: |
+ *       Hibrit mod — fason kabul sonrası operatör bir rulonun rengini/
+ *       özelliklerini elle düzeltir. Replace semantics: gönderilen liste
+ *       yeni TAM listedir. baseItem (ham kimlik) korunur.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               colorId:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               propertyIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Yeni kimlik (itemId, itemCode, itemName)
+ *       404:
+ *         description: Top bulunamadı
+ */
+router.patch("/:id/identity", verifyToken, requirePermission("roll:write"), controller.applyManualProperties);
+
 router.delete("/:id", verifyToken, requirePermission("roll:write"), controller.softDelete);
 
 /**

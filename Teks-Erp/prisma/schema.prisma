@@ -234,10 +234,12 @@ model Station {
   isActive   Boolean     @default(true)
 
   // Relations
-  machines       Machine[]
-  routeSteps     RouteStep[]
-  workOrderSteps WorkOrderStep[]
-  cardScans      TravelerCardScan[]
+  machines             Machine[]
+  routeSteps           RouteStep[]
+  workOrderSteps       WorkOrderStep[]
+  cardScans            TravelerCardScan[]
+  colorCapabilities    StationColor[]
+  propertyCapabilities StationProperty[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -318,16 +320,29 @@ model Item {
   unit     String   @default("MT") // MT, KG, ADET
   isActive Boolean  @default(true)
 
+  // Türetilmiş kimlik — fason dönüşünde renk + özellik kazanan ham item'dan
+  // otomatik üretilen yeni stok kartı. baseItemId null → bu zaten ham/baz Item.
+  baseItemId String? // Ham item referansı (örn. "Ham Patos")
+  colorId    String? // Türetilmiş ise rengin FK'si (Mavi, Kırmızı, ...)
+  isDerived  Boolean @default(false)
+
   // Relations
-  rolls      Roll[]
-  orderLines OrderLine[]
-  variants   ItemVariant[]
-  swatches   Swatch[]
+  rolls       Roll[]
+  orderLines  OrderLine[]
+  variants    ItemVariant[]
+  swatches    Swatch[]
+  baseItem    Item?          @relation("ItemDerivation", fields: [baseItemId], references: [id])
+  derivatives Item[]         @relation("ItemDerivation")
+  color       Color?         @relation(fields: [colorId], references: [id])
+  properties  ItemProperty[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([itemType])
+  @@index([baseItemId])
+  @@index([colorId])
+  @@index([isDerived])
   @@map("items")
 }
 
@@ -482,18 +497,25 @@ model OrderLine {
   unitPrice Decimal? @db.Decimal(10, 2) // For future finance module
   width     Float? // İstenen en (cm)
 
+  // Müşterinin istediği renk + özellikler — opsiyonel.
+  // Doldurulursa WO oluşturulurken öneri olarak frontend'e iletilir.
+  targetColorId String?
+
   // Relations
-  order          Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  item           Item                   @relation(fields: [itemId], references: [id])
-  variant        ItemVariant?           @relation(fields: [variantId], references: [id])
-  allocations    OrderAllocation[]
-  workOrderLinks WorkOrderToOrderLine[]
+  order            Order                     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  item             Item                      @relation(fields: [itemId], references: [id])
+  variant          ItemVariant?              @relation(fields: [variantId], references: [id])
+  allocations      OrderAllocation[]
+  workOrderLinks   WorkOrderToOrderLine[]
+  targetColor      Color?                    @relation("OrderLineTargetColor", fields: [targetColorId], references: [id])
+  targetProperties OrderLineTargetProperty[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([itemId])
+  @@index([targetColorId])
   @@map("order_lines")
 }
 
@@ -524,14 +546,22 @@ model WorkOrder {
   // Fason Üretim Kabul — metre başı hizmet bedeli (sadece type=SERVICE_PRODUCTION için doldurulur)
   servicePricePerMeter Decimal? @db.Decimal(10, 2)
 
+  // Hedef renk + özellikler — fason adımlarında uygulanacak.
+  // targetColorStepId opsiyonel: hangi adımda renk uygulanacak (Boyahane gibi).
+  targetColorId     String?
+  targetColorStepId String?
+
   // Relations
-  steps         WorkOrderStep[]
-  orderLinks    WorkOrderToOrderLine[]
-  travelerCards TravelerCard[]
-  manifests     Manifest[]
-  dispatches    SubcontractorDispatch[]
-  receipts      SubcontractorReceipt[]
-  swatches      Swatch[]
+  steps            WorkOrderStep[]
+  orderLinks       WorkOrderToOrderLine[]
+  travelerCards    TravelerCard[]
+  manifests        Manifest[]
+  dispatches       SubcontractorDispatch[]
+  receipts         SubcontractorReceipt[]
+  swatches         Swatch[]
+  targetColor      Color?                    @relation("WorkOrderTargetColor", fields: [targetColorId], references: [id])
+  targetColorStep  WorkOrderStep?            @relation("WOTargetColorStep", fields: [targetColorStepId], references: [id])
+  targetProperties WorkOrderTargetProperty[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -539,6 +569,8 @@ model WorkOrder {
   @@index([status])
   @@index([routeTemplateId])
   @@index([dyehouseCompanyId])
+  @@index([targetColorId])
+  @@index([targetColorStepId])
   @@map("work_orders")
 }
 
@@ -555,17 +587,19 @@ model WorkOrderStep {
   completedAt  DateTime?
 
   // Relations
-  workOrder       WorkOrder               @relation(fields: [workOrderId], references: [id])
-  station         Station                 @relation(fields: [stationId], references: [id])
-  movements       RollMovement[]
-  cardScans       TravelerCardScan[]
-  dispatches      SubcontractorDispatch[]
-  receipts        SubcontractorReceipt[]
-  operations      RollOperation[]
-  currentRolls    Roll[]                  @relation("RollCurrentStep")
-  producedRolls   Roll[]                  @relation("RollProducedInStep")
-  detectedErrors  RollError[]             @relation("RollErrorDetectedAt")
-  processedErrors RollError[]             @relation("RollErrorProcessedAt")
+  workOrder             WorkOrder                 @relation(fields: [workOrderId], references: [id])
+  station               Station                   @relation(fields: [stationId], references: [id])
+  movements             RollMovement[]
+  cardScans             TravelerCardScan[]
+  dispatches            SubcontractorDispatch[]
+  receipts              SubcontractorReceipt[]
+  operations            RollOperation[]
+  currentRolls          Roll[]                    @relation("RollCurrentStep")
+  producedRolls         Roll[]                    @relation("RollProducedInStep")
+  detectedErrors        RollError[]               @relation("RollErrorDetectedAt")
+  processedErrors       RollError[]               @relation("RollErrorProcessedAt")
+  targetColorWorkOrders WorkOrder[]               @relation("WOTargetColorStep")
+  targetProperties      WorkOrderTargetProperty[] @relation("WOTargetPropertyStep")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1096,6 +1130,166 @@ model CustomerVariantAlias {
 }
 
 // =============================================================================
+// 11.6 FABRIC IDENTITY — Color, FabricProperty + ItemProperty + Capabilities + Targets
+// =============================================================================
+//
+// Fason dönüşünde bir ham kumaş renk + özellik kazanır ve YENİ bir Item kimliği
+// haline gelir (örn. Ham Patos → Patos Mavi Yanmaz). Stoklarda farklı satır
+// olarak görünür. Bu bölümdeki modeller bu kimlik akışını temsil eder.
+//
+// Akış:
+//   1) Admin Color (Mavi) ve FabricProperty (Yanmazlık) kayıtlarını yönetir.
+//   2) Admin StationColor + StationProperty ile bir istasyonun hangi renk/özellik
+//      uygulayabileceğini bağlar (zorunlu kısıt — WO planlamada kontrol edilir).
+//   3) WO oluşturulurken WorkOrderTargetProperty + WorkOrder.targetColorId ile
+//      hedeflenen renk/özellikler ve hangi adımda kazanılacağı işaretlenir.
+//   4) subcontractor.receive() bu hedeflere bakarak findOrCreateDerivedItem ile
+//      türetilmiş Item bulur/oluşturur ve dönen rulonun Roll.itemId'sini günceller.
+//      Operatör hibrit modda manuel ekle/çıkar override yapabilir.
+// =============================================================================
+
+/// Renk kataloğu — Mavi, Kırmızı, Yeşil...
+/// Türetilmiş Item.colorId buradan referans alır.
+model Color {
+  id        String   @id @default(uuid())
+  code      String   @unique // "MAVI", "KIRMIZI"
+  name      String
+  hex       String? // UI rozeti için #RRGGBB
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  derivedItems        Item[]
+  stationCapabilities StationColor[]
+  workOrderTargets    WorkOrder[]    @relation("WorkOrderTargetColor")
+  orderLineTargets    OrderLine[]    @relation("OrderLineTargetColor")
+
+  @@index([isActive, sortOrder])
+  @@map("colors")
+}
+
+/// Kumaş özellik kataloğu — Yanmazlık, Kayganlık, Su Geçirmezlik...
+/// ItemProperty üzerinden türetilmiş Item'a m:n bağlanır.
+model FabricProperty {
+  id          String   @id @default(uuid())
+  code        String   @unique // "YANMAZLIK", "KAYGAN"
+  name        String
+  category    String? // "Dayanıklılık", "Yüzey", "Kimyasal" vb. (UI gruplama için)
+  description String?
+  color       String? // UI badge hex
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  itemProperties      ItemProperty[]
+  stationCapabilities StationProperty[]
+  workOrderTargets    WorkOrderTargetProperty[]
+  orderLineTargets    OrderLineTargetProperty[]
+
+  @@index([isActive, sortOrder])
+  @@index([category])
+  @@map("fabric_properties")
+}
+
+/// Item ↔ FabricProperty M:N — türetilmiş bir Item'ın sahip olduğu özellikler.
+/// Ham Item için boştur; Item.isDerived = true olanlar için doldurulur.
+model ItemProperty {
+  id         String @id @default(uuid())
+  itemId     String
+  propertyId String
+
+  item     Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  property FabricProperty @relation(fields: [propertyId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([itemId, propertyId])
+  @@index([propertyId])
+  @@map("item_properties")
+}
+
+/// İstasyon ↔ Color M:N — bir istasyonun uygulayabileceği renkler.
+/// WO planlamada hedef rengin atandığı adımın bu yetkinliğe sahip olması ZORUNLUDUR.
+model StationColor {
+  id        String @id @default(uuid())
+  stationId String
+  colorId   String
+
+  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  color   Color   @relation(fields: [colorId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([stationId, colorId])
+  @@index([colorId])
+  @@map("station_colors")
+}
+
+/// İstasyon ↔ FabricProperty M:N — bir istasyonun uygulayabileceği özellikler.
+/// WO planlamada hedef özelliğin atandığı adımın bu yetkinliğe sahip olması ZORUNLUDUR.
+model StationProperty {
+  id         String @id @default(uuid())
+  stationId  String
+  propertyId String
+
+  station  Station        @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  property FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([stationId, propertyId])
+  @@index([propertyId])
+  @@map("station_properties")
+}
+
+/// WO ↔ FabricProperty M:N — bir iş emrinin hedef özellikleri ve bunların
+/// hangi adımda kazanılacağı. plannedStepId WO oluşturulurken zorunlu doldurulur
+/// (istasyon yetkinlik kontrolü için).
+model WorkOrderTargetProperty {
+  id            String  @id @default(uuid())
+  workOrderId   String
+  propertyId    String
+  plannedStepId String?
+  notes         String?
+
+  workOrder   WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  property    FabricProperty @relation(fields: [propertyId], references: [id])
+  plannedStep WorkOrderStep? @relation("WOTargetPropertyStep", fields: [plannedStepId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workOrderId, propertyId])
+  @@index([propertyId])
+  @@index([plannedStepId])
+  @@map("work_order_target_properties")
+}
+
+/// OrderLine ↔ FabricProperty M:N — sipariş satırı için müşterinin
+/// istediği özellikler. Opsiyonel; doldurulursa WO oluşturulurken öneri olarak
+/// frontend'e iletilir.
+model OrderLineTargetProperty {
+  id          String @id @default(uuid())
+  orderLineId String
+  propertyId  String
+
+  orderLine OrderLine      @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  property  FabricProperty @relation(fields: [propertyId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([orderLineId, propertyId])
+  @@index([propertyId])
+  @@map("order_line_target_properties")
+}
+
+// =============================================================================
 // 12. SYSTEM LOG - Audit Trail
 // =============================================================================
 
@@ -1119,4 +1313,24 @@ model SystemLog {
   // Audit tablosu en hızlı büyüyen tablodur — zaman aralığı sorguları için
   @@index([createdAt])
   @@map("system_logs")
+}
+
+/// Sistem loglarının periyodik arşivi. Admin tarafından tetiklenir;
+/// system_logs tablosundan X aydan eski kayıtlar buraya taşınır.
+/// Arşiv sorgulanmaz, sadece yasal/uyum amaçlı saklanır.
+model SystemLogArchive {
+  id         String   @id // Orijinal UUID — arşivleme sonrası aynı kalır
+  userId     String?
+  action     String
+  tableName  String
+  recordId   String
+  oldData    Json?
+  newData    Json?
+  archivedAt DateTime @default(now())
+  createdAt  DateTime
+  updatedAt  DateTime
+
+  @@index([tableName, recordId])
+  @@index([createdAt])
+  @@map("system_log_archives")
 }

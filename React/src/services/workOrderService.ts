@@ -22,6 +22,14 @@ export interface CreateWorkOrderRequest {
   steps?:             { stationId: string; notes?: string }[];
   orderLineIds?:      string[];
   orderLineAllocations?: OrderLineAllocation[];
+  // Hedef renk + özellikler — fason adımlarında uygulanır
+  targetColorId?:        string;
+  targetColorStepIndex?: number;
+  targetProperties?: {
+    propertyId:        string;
+    plannedStepIndex?: number;
+    notes?:            string;
+  }[];
 }
 
 export interface AttachRollsResponse {

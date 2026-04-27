@@ -39,6 +39,8 @@ import SwatchesPage from "@/pages/Swatches/SwatchesPage";
 import ServiceProductionPage from "@/pages/ServiceProduction/ServiceProductionPage";
 import DefectTypesPage from "@/pages/DefectTypes/DefectTypesPage";
 import QualityGradesPage from "@/pages/QualityGrades/QualityGradesPage";
+import ColorsPage from "@/pages/Colors/ColorsPage";
+import FabricPropertiesPage from "@/pages/FabricProperties/FabricPropertiesPage";
 import ProtectedRoute from "@/components/layout/ProtectedRoute";
 import AppLayout from "@/components/layout/AppLayout";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -48,8 +50,9 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      refetchOnWindowFocus: false,
-      staleTime: 5 * 60 * 1000,
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
+      staleTime: 30 * 1000,
     },
   },
 });
@@ -97,6 +100,8 @@ const AppRoutes = () => {
           <Route path="/kursun-qc" element={<KursunQcPage />} />
           <Route path="/defect-types" element={<DefectTypesPage />} />
           <Route path="/quality-grades" element={<QualityGradesPage />} />
+          <Route path="/colors" element={<ColorsPage />} />
+          <Route path="/fabric-properties" element={<FabricPropertiesPage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/work-orders" element={<WorkOrdersPage />} />
           <Route path="/field/attach-rolls" element={<AttachRollsPage />} />

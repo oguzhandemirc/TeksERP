@@ -32,6 +32,10 @@ import {
   recomputeStepStatus,
   ensureWorkOrderInProgress,
 } from "./helpers/roll-step.helper";
+import {
+  findOrCreateDerivedItem,
+  getItemDerivedAttributes,
+} from "./helpers/item-derive.helper";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -443,8 +447,21 @@ export class SubcontractorService {
 
     const wo = await prisma.workOrder.findUnique({
       where: { id: data.workOrderId },
+      include: {
+        // Bu adımda hangi renk + özellikler kazanılacak? — fason dönüşünde
+        // rulonun yeni Item kimliğini hesaplamak için gerekir.
+        targetProperties: {
+          where: { plannedStepId: data.stepId },
+          select: { propertyId: true },
+        },
+      },
     });
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
+
+    // Bu adım için planlanmış renk (eğer varsa)
+    const stepAcquiresColorId =
+      wo.targetColorStepId === data.stepId ? wo.targetColorId : null;
+    const stepAcquiresPropertyIds = wo.targetProperties.map((p) => p.propertyId);
 
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
@@ -478,6 +495,7 @@ export class SubcontractorService {
         barcode: true,
         currentQty: true,
         weightKg: true,
+        itemId: true, // türetilmiş item hesabı için
       },
     });
     const outstandingIds = new Set(outstandingRolls.map((r) => r.id));
@@ -520,7 +538,12 @@ export class SubcontractorService {
         },
       });
 
+      // Türetilmiş Item kimliği için bu adımda kazanılacak özellik var mı?
+      const stepDerivesIdentity =
+        Boolean(stepAcquiresColorId) || stepAcquiresPropertyIds.length > 0;
+
       // Her dönen top için: açık movement'i kapat + rolü sonraki adıma taşı
+      // + (varsa) yeni Item kimliği ata.
       // Ölçüm YAPILMAZ — sevk öncesindeki qty/weight korunur.
       for (const ret of data.returns) {
         const orig = outstandingRolls.find((r) => r.id === ret.rollId)!;
@@ -542,15 +565,64 @@ export class SubcontractorService {
           },
         });
 
-        // Orijinal rolün qty/weight değerlerine DOKUNULMAZ — sadece status ve
-        // bir sonraki adım güncellenir.
+        // ── Türetilmiş Item kimliği ──────────────────────────────────────
+        // Rulonun mevcut Item'ından (baz, renk, özellikler) attribute'ları al,
+        // bu adımda kazanılan renk + özellikleri ekle, findOrCreateDerivedItem
+        // ile yeni / mevcut Item'ı bul, Roll.itemId'yi güncelle.
+        let newItemId: string | undefined = undefined;
+        let derivedItemAuditPayload: Record<string, unknown> | null = null;
+        if (stepDerivesIdentity) {
+          const current = await getItemDerivedAttributes(tx, orig.itemId);
+          // Renk: bu adımda renk kazanılıyorsa onu kullan, aksi halde mevcudunu koru.
+          // (Bir rulonun rengi sadece tek bir adımda set edilir; tekrar değişmez.)
+          const nextColorId = stepAcquiresColorId ?? current.colorId;
+          // Özellikler: union (deduplicate edilmiş)
+          const nextPropertyIds = [
+            ...new Set([...current.propertyIds, ...stepAcquiresPropertyIds]),
+          ];
+
+          const derived = await findOrCreateDerivedItem(tx, {
+            baseItemId: current.baseItemId,
+            colorId: nextColorId,
+            propertyIds: nextPropertyIds,
+          });
+          if (derived.itemId !== orig.itemId) {
+            newItemId = derived.itemId;
+            derivedItemAuditPayload = {
+              prevItemId: orig.itemId,
+              newItemId: derived.itemId,
+              newItemCode: derived.itemCode,
+              newItemName: derived.itemName,
+              isNew: derived.isNew,
+              acquiredColorId: stepAcquiresColorId,
+              acquiredPropertyIds: stepAcquiresPropertyIds,
+            };
+          }
+        }
+
+        // Orijinal rolün qty/weight değerlerine DOKUNULMAZ — sadece status,
+        // bir sonraki adım ve (varsa) itemId güncellenir.
         await tx.roll.update({
           where: { id: ret.rollId },
           data: {
             status: nextStep ? RollStatus.IN_PRODUCTION : RollStatus.PRODUCED,
             currentStepId: nextStep ? nextStep.id : null,
+            ...(newItemId ? { itemId: newItemId } : {}),
           },
         });
+
+        // Türetilmiş Item geçişinde audit log'una ayrı bir UPDATE kaydı yaz.
+        if (derivedItemAuditPayload) {
+          await tx.systemLog.create({
+            data: {
+              userId: userId ?? null,
+              action: "UPDATE",
+              tableName: "ROLL_ITEM_DERIVED",
+              recordId: ret.rollId,
+              newData: derivedItemAuditPayload as Prisma.InputJsonValue,
+            },
+          });
+        }
 
         // Receipt item kaydı — newRollId ORİJİNAL top'u işaret eder (etiket basılmaz)
         await tx.subcontractorReceiptItem.create({

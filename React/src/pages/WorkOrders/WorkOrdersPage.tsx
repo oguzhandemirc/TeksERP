@@ -70,13 +70,23 @@ export default function WorkOrdersPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const qc = useQueryClient();
 
+  const invalidateWorkOrderCaches = () => {
+    qc.invalidateQueries({ queryKey: ["work-orders"] });
+    qc.invalidateQueries({ queryKey: ["work-orders-available"] });
+    qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+    qc.invalidateQueries({ queryKey: ["workorder-manifests"] });
+    qc.invalidateQueries({ queryKey: ["workorder-shipments"] });
+    qc.invalidateQueries({ queryKey: ["workorder-dispatches"] });
+    qc.invalidateQueries({ queryKey: ["orders"] });
+    qc.invalidateQueries({ queryKey: ["rolls"] });
+  };
+
   const createMutation = useMutation({
     mutationFn: (data: CreateWorkOrderRequest) =>
       workOrderService.create(data),
     onSuccess: (res) => {
       toast.success(res.message ?? "İş emri oluşturuldu");
-      qc.invalidateQueries({ queryKey: ["work-orders"] });
-      qc.invalidateQueries({ queryKey: ["work-orders-available"] });
+      invalidateWorkOrderCaches();
       setFormOpen(false);
     },
     onError: () => {
@@ -88,8 +98,7 @@ export default function WorkOrdersPage() {
     mutationFn: (id: string) => workOrderService.softDelete(id),
     onSuccess: (res) => {
       toast.success(res.message ?? "İş emri iptal edildi");
-      qc.invalidateQueries({ queryKey: ["work-orders"] });
-      qc.invalidateQueries({ queryKey: ["work-orders-available"] });
+      invalidateWorkOrderCaches();
     },
     onError: () => toast.error("İş emri iptal edilirken hata oluştu"),
   });
@@ -98,8 +107,7 @@ export default function WorkOrdersPage() {
     mutationFn: (id: string) => workOrderService.hardDelete(id),
     onSuccess: (res) => {
       toast.success(res.message ?? "İş emri kalıcı olarak silindi");
-      qc.invalidateQueries({ queryKey: ["work-orders"] });
-      qc.invalidateQueries({ queryKey: ["work-orders-available"] });
+      invalidateWorkOrderCaches();
     },
     onError: () => toast.error("İş emri silinirken hata oluştu"),
   });

@@ -25,6 +25,10 @@ import serviceProductionRoutes from "./routes/service-production.routes";
 import swatchRoutes from "./routes/swatch.routes";
 import defectTypeRoutes from "./routes/defect-type.routes";
 import qualityGradeRoutes from "./routes/quality-grade.routes";
+import colorRoutes from "./routes/color.routes";
+import fabricPropertyRoutes from "./routes/fabric-property.routes";
+import stationCapabilityRoutes from "./routes/station-capability.routes";
+import adminRoutes from "./routes/admin.routes";
 
 const app: Express = express();
 
@@ -71,6 +75,10 @@ app.use("/api/service-production", serviceProductionRoutes);
 app.use("/api/swatches", swatchRoutes);
 app.use("/api/defect-types", defectTypeRoutes);
 app.use("/api/quality-grades", qualityGradeRoutes);
+app.use("/api/colors", colorRoutes);
+app.use("/api/fabric-properties", fabricPropertyRoutes);
+app.use("/api/station-capabilities", stationCapabilityRoutes);
+app.use("/api/admin", adminRoutes);
 
 // =============================================================================
 // Global Error Handler (must be LAST middleware)

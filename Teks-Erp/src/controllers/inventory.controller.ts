@@ -20,6 +20,11 @@ const initialEntrySchema = z.object({
   width:        z.number().positive("En pozitif olmalı").optional(),
 });
 
+const applyPropertiesSchema = z.object({
+  colorId:     z.string().uuid("Geçersiz renk ID").nullable(),
+  propertyIds: z.array(z.string().uuid()).default([]),
+});
+
 export class InventoryController {
   private service: InventoryService;
 
@@ -33,6 +38,26 @@ export class InventoryController {
     this.getRollHistory = this.getRollHistory.bind(this);
     this.softDelete = this.softDelete.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
+    this.applyManualProperties = this.applyManualProperties.bind(this);
+  }
+
+  /**
+   * PATCH /api/rolls/:id/identity
+   * Manuel renk/özellik override (hibrit mod).
+   */
+  async applyManualProperties(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const body = applyPropertiesSchema.parse(req.body);
+      const result = await this.service.applyManualProperties(
+        id,
+        body,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
   }
 
   /**

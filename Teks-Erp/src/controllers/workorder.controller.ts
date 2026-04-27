@@ -31,6 +31,19 @@ const createSchema = z.object({
     }))
     .optional(),
   orderLineIds: z.array(z.string().uuid()).optional().nullable(),
+
+  // Hedef renk + özellikler — fason adımlarında uygulanacak.
+  // stepIndex, steps array'inin (veya rota şablonu adımlarının) 0-bazlı index'i.
+  // null/undefined verilirse adım atanmaz (sonradan atanabilir).
+  targetColorId:        z.string().uuid().optional().nullable(),
+  targetColorStepIndex: z.number().int().nonnegative().optional().nullable(),
+  targetProperties: z
+    .array(z.object({
+      propertyId:       z.string().uuid(),
+      plannedStepIndex: z.number().int().nonnegative().optional().nullable(),
+      notes:            z.string().max(500).optional().nullable(),
+    }))
+    .optional(),
 }).refine(
   (d) => Boolean(d.routeTemplateId) || (d.steps && d.steps.length > 0),
   { message: "routeTemplateId veya en az bir step gerekli", path: ["steps"] },

@@ -44,6 +44,38 @@ export class OrderService extends BaseService {
       orderNumber,
     };
 
+    // Lines: targetProperties (m:n) varsa { create: [...] } formatına çevir.
+    // Frontend `targetPropertyIds: string[]` da gönderebilir — onu transform eder.
+    if (Array.isArray(prismaData.lines)) {
+      prismaData.lines = (prismaData.lines as Record<string, unknown>[]).map(
+        (rawLine) => {
+          const line = { ...rawLine };
+          // Frontend'den gelebilecek iki format desteklenir:
+          //   1. line.targetPropertyIds: string[]
+          //   2. line.targetProperties: [{ propertyId }, ...]
+          let propertyIds: string[] = [];
+          if (Array.isArray(line.targetPropertyIds)) {
+            propertyIds = (line.targetPropertyIds as string[]).filter(Boolean);
+          } else if (Array.isArray(line.targetProperties)) {
+            propertyIds = (line.targetProperties as { propertyId: string }[])
+              .map((p) => p.propertyId)
+              .filter(Boolean);
+          }
+          delete line.targetPropertyIds;
+          if (propertyIds.length > 0) {
+            line.targetProperties = {
+              create: [...new Set(propertyIds)].map((propertyId) => ({
+                propertyId,
+              })),
+            };
+          } else {
+            delete line.targetProperties;
+          }
+          return line;
+        },
+      );
+    }
+
     if (this.config.nestedCreateFields) {
       for (const field of this.config.nestedCreateFields) {
         if (Array.isArray(prismaData[field])) {

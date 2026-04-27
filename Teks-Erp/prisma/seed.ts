@@ -52,6 +52,9 @@ async function main() {
     // QUALITY
     { code: "quality:read", module: "QUALITY" },
     { code: "quality:write", module: "QUALITY" },
+    // PROPERTY (renk + kumaş özellik kataloğu)
+    { code: "property:read", module: "QUALITY" },
+    { code: "property:write", module: "QUALITY" },
     // LOGISTICS
     { code: "shipment:read", module: "LOGISTICS" },
     { code: "shipment:write", module: "LOGISTICS" },
@@ -106,9 +109,10 @@ async function main() {
   // Planning gets production + order read + master data write
   const planningPermCodes = [
     "workorder:read", "workorder:write",
-    "roll:read", "roll:write", "station:read",
+    "roll:read", "roll:write", "station:read", "station:write",
     "item:read", "item:write",
     "order:read", "allocation:write",
+    "property:read", "property:write",
   ];
   await prisma.rolePermission.createMany({
     data: permissions
@@ -131,6 +135,7 @@ async function main() {
   const qualityPermCodes = [
     "quality:read", "quality:write", "roll:read", "roll:write",
     "workorder:read", "item:read",
+    "property:read",
   ];
   await prisma.rolePermission.createMany({
     data: permissions
@@ -272,6 +277,93 @@ async function main() {
     prisma.defectType.create({ data: { code: "IPLIK_KOPUKLUGU", name: "İplik Kopukluğu", severity: "MAJOR" } }),
   ]);
   console.log(`✅ ${defectTypes.length} defect types created`);
+
+  // =========================================================================
+  // 6.2 COLORS (renk kataloğu — fason dönüşünde Item.colorId üzerinden snapshot)
+  // =========================================================================
+  const colors = await Promise.all([
+    prisma.color.create({ data: { code: "MAVI", name: "Mavi", hex: "#1d4ed8", sortOrder: 1 } }),
+    prisma.color.create({ data: { code: "KIRMIZI", name: "Kırmızı", hex: "#dc2626", sortOrder: 2 } }),
+    prisma.color.create({ data: { code: "YESIL", name: "Yeşil", hex: "#16a34a", sortOrder: 3 } }),
+    prisma.color.create({ data: { code: "SARI", name: "Sarı", hex: "#eab308", sortOrder: 4 } }),
+    prisma.color.create({ data: { code: "SIYAH", name: "Siyah", hex: "#111827", sortOrder: 5 } }),
+    prisma.color.create({ data: { code: "BEYAZ", name: "Beyaz", hex: "#f9fafb", sortOrder: 6 } }),
+  ]);
+  console.log(`✅ ${colors.length} colors created`);
+
+  // =========================================================================
+  // 6.3 FABRIC PROPERTIES (kumaş özellik kataloğu — fason dönüşünde m:n)
+  // =========================================================================
+  const properties = await Promise.all([
+    prisma.fabricProperty.create({
+      data: {
+        code: "YANMAZLIK",
+        name: "Yanmazlık",
+        category: "Dayanıklılık",
+        description: "Yanmazlık kimyasal işlemi uygulanmış",
+        sortOrder: 1,
+      },
+    }),
+    prisma.fabricProperty.create({
+      data: {
+        code: "KAYGAN",
+        name: "Kayganlık",
+        category: "Yüzey",
+        description: "Yüzey kaplama ile kayganlık özelliği",
+        sortOrder: 2,
+      },
+    }),
+    prisma.fabricProperty.create({
+      data: {
+        code: "SU_GECIRMEZ",
+        name: "Su Geçirmezlik",
+        category: "Kimyasal",
+        description: "Su itici emprime",
+        sortOrder: 3,
+      },
+    }),
+    prisma.fabricProperty.create({
+      data: {
+        code: "ANTI_BAKTERI",
+        name: "Antibakteriyel",
+        category: "Kimyasal",
+        sortOrder: 4,
+      },
+    }),
+    prisma.fabricProperty.create({
+      data: {
+        code: "UV_KORUMA",
+        name: "UV Koruma",
+        category: "Dayanıklılık",
+        sortOrder: 5,
+      },
+    }),
+  ]);
+  console.log(`✅ ${properties.length} fabric properties created`);
+
+  // =========================================================================
+  // 6.4 STATION CAPABILITIES — hangi istasyon hangi renk/özellik uygulayabilir
+  // =========================================================================
+  // Boyahane (dış): tüm renkleri verebilir + yanmazlık + UV koruma
+  await prisma.stationColor.createMany({
+    data: colors.map((c) => ({ stationId: stBoyahaneDis.id, colorId: c.id })),
+  });
+  await prisma.stationProperty.createMany({
+    data: [
+      { stationId: stBoyahaneDis.id, propertyId: properties[0].id }, // Yanmazlık
+      { stationId: stBoyahaneDis.id, propertyId: properties[4].id }, // UV
+    ],
+  });
+
+  // Baskı (dış): kayganlık + su geçirmez + antibakteriyel
+  await prisma.stationProperty.createMany({
+    data: [
+      { stationId: stBaskiDis.id, propertyId: properties[1].id }, // Kayganlık
+      { stationId: stBaskiDis.id, propertyId: properties[2].id }, // Su geçirmez
+      { stationId: stBaskiDis.id, propertyId: properties[3].id }, // Antibakteriyel
+    ],
+  });
+  console.log("✅ Station capabilities (color + property) seeded");
 
   // =========================================================================
   // 7. MACHINES

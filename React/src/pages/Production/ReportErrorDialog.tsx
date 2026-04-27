@@ -85,6 +85,9 @@ export default function ReportErrorDialog({
     onSuccess: (res) => {
       toast.success(res.message ?? "Hata kaydı oluşturuldu");
       qc.invalidateQueries({ queryKey: ["rolls"] });
+      qc.invalidateQueries({ queryKey: ["roll-detail"] });
+      qc.invalidateQueries({ queryKey: ["roll-history"] });
+      qc.invalidateQueries({ queryKey: ["active-steps"] });
       onOpenChange(false);
     },
     onError: () => {

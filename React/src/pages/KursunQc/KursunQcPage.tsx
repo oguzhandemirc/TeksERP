@@ -125,8 +125,14 @@ export default function KursunQcPage() {
     [step, activeRollId],
   );
 
-  const invalidate = () =>
+  const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["kursun-qc-step", stepId] });
+    qc.invalidateQueries({ queryKey: ["rolls"] });
+    qc.invalidateQueries({ queryKey: ["roll-detail"] });
+    qc.invalidateQueries({ queryKey: ["roll-history"] });
+    qc.invalidateQueries({ queryKey: ["work-orders"] });
+    qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+  };
 
   const lookupMutation = useMutation({
     mutationFn: (barcode: string) => kursunQcService.getByCardBarcode(barcode),
@@ -220,7 +226,13 @@ export default function KursunQcPage() {
       setStepId(null);
       setActiveRollId(null);
       qc.invalidateQueries({ queryKey: ["rolls"] });
+      qc.invalidateQueries({ queryKey: ["roll-detail"] });
+      qc.invalidateQueries({ queryKey: ["roll-history"] });
       qc.invalidateQueries({ queryKey: ["work-orders"] });
+      qc.invalidateQueries({ queryKey: ["workorder-detail"] });
+      qc.invalidateQueries({ queryKey: ["workorder-manifests"] });
+      qc.invalidateQueries({ queryKey: ["active-steps"] });
+      qc.invalidateQueries({ queryKey: ["tambur-pending"] });
     },
     onError: (err) => toast.error(errorMessage(err, "Adım kapatılamadı")),
   });

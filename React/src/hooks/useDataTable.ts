@@ -80,7 +80,18 @@ export function useDataTable<TData>({
   >({
     queryKey: Array.isArray(queryKey) ? [...queryKey, effectiveParams] : [queryKey, effectiveParams],
     queryFn: () => fetchFn(effectiveParams),
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => {
+      const prevParams = prevQuery?.queryKey?.[prevQuery.queryKey.length - 1] as
+        | QueryParams
+        | undefined;
+      if (!prevParams) return prev;
+      const onlyPaginationChanged =
+        prevParams.search === effectiveParams.search &&
+        prevParams.sortBy === effectiveParams.sortBy &&
+        prevParams.sortOrder === effectiveParams.sortOrder &&
+        JSON.stringify(prevParams.filters) === JSON.stringify(effectiveParams.filters);
+      return onlyPaginationChanged ? prev : undefined;
+    },
     ...queryOptions,
   });
 

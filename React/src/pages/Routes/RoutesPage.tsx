@@ -41,6 +41,7 @@ export default function RoutesPage() {
     service: routeService,
     queryKey: "routes",
     entityName: "Rota",
+    relatedKeys: ["route-detail"],
   });
 
   const columns = useMemo<ColumnDef<Route, unknown>[]>(

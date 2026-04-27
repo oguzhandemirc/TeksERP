@@ -59,6 +59,7 @@ export default function ItemsPage() {
     service: itemService,
     queryKey: "items",
     entityName: "Stok kartı",
+    relatedKeys: ["item-detail", "item-variants"],
   });
 
   const columns = useMemo<ColumnDef<Item, unknown>[]>(
