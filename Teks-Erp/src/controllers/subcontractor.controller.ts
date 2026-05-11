@@ -10,18 +10,22 @@ import "../types/express-augment";
 const dispatchSchema = z.object({
   workOrderId: z.string().uuid(),
   stepId: z.string().uuid(),
-  companyId: z.string().uuid(),
+  subcontractorId: z.string().uuid(),
   rollIds: z.array(z.string().uuid()).min(1, "En az bir top seçmelisiniz"),
   plateNumber: z.string().max(32).optional(),
   driverName: z.string().max(128).optional(),
   notes: z.string().max(1000).optional(),
 });
 
+const cancelDispatchSchema = z.object({
+  reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(500),
+});
+
 const receiveSchema = z.object({
   workOrderId: z.string().uuid(),
   stepId: z.string().uuid(),
-  companyId: z.string().uuid(),
-  manifestNo: z.string().trim().min(2, "İrsaliye numarası zorunlu").max(64),
+  subcontractorId: z.string().uuid(),
+  manifestNo: z.string().trim().max(64).nullish(),
   returns: z
     .array(
       z.object({
@@ -39,6 +43,7 @@ export class SubcontractorController {
   constructor() {
     this.service = new SubcontractorService();
     this.dispatch = this.dispatch.bind(this);
+    this.cancelDispatch = this.cancelDispatch.bind(this);
     this.receive = this.receive.bind(this);
     this.pendingReturns = this.pendingReturns.bind(this);
     this.listDispatches = this.listDispatches.bind(this);
@@ -60,6 +65,18 @@ export class SubcontractorController {
     }
   }
 
+  /** POST /api/subcontractor/dispatches/:id/cancel */
+  async cancelDispatch(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const body = cancelDispatchSchema.parse(req.body);
+      const result = await this.service.cancel(id, body.reason, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** POST /api/subcontractor/receive */
   async receive(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -68,7 +85,7 @@ export class SubcontractorController {
         {
           workOrderId: body.workOrderId,
           stepId: body.stepId,
-          companyId: body.companyId,
+          subcontractorId: body.subcontractorId,
           manifestNo: body.manifestNo,
           notes: body.notes,
           returns: body.returns.map((r) => ({
@@ -84,10 +101,13 @@ export class SubcontractorController {
     }
   }
 
-  /** GET /api/subcontractor/pending-returns */
-  async pendingReturns(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  /** GET /api/subcontractor/pending-returns?workOrderId=... */
+  async pendingReturns(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.listPendingReturns();
+      const result = await this.service.listPendingReturns({
+        workOrderId:
+          typeof req.query.workOrderId === "string" ? req.query.workOrderId : undefined,
+      });
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -98,9 +118,10 @@ export class SubcontractorController {
   async listDispatches(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.listDispatches({
-        workOrderId: typeof req.query.workOrderId === "string" ? req.query.workOrderId : undefined,
-        companyId:   typeof req.query.companyId   === "string" ? req.query.companyId   : undefined,
-        limit:       typeof req.query.limit       === "string" ? Number(req.query.limit) : undefined,
+        workOrderId:     typeof req.query.workOrderId     === "string" ? req.query.workOrderId     : undefined,
+        subcontractorId: typeof req.query.subcontractorId === "string" ? req.query.subcontractorId : undefined,
+        page:            typeof req.query.page            === "string" ? Number(req.query.page)     : undefined,
+        pageSize:        typeof req.query.pageSize        === "string" ? Number(req.query.pageSize) : undefined,
       });
       res.status(200).json(result);
     } catch (err) {
@@ -132,9 +153,10 @@ export class SubcontractorController {
   async listReceipts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.listReceipts({
-        workOrderId: typeof req.query.workOrderId === "string" ? req.query.workOrderId : undefined,
-        companyId:   typeof req.query.companyId   === "string" ? req.query.companyId   : undefined,
-        limit:       typeof req.query.limit       === "string" ? Number(req.query.limit) : undefined,
+        workOrderId:     typeof req.query.workOrderId     === "string" ? req.query.workOrderId     : undefined,
+        subcontractorId: typeof req.query.subcontractorId === "string" ? req.query.subcontractorId : undefined,
+        page:            typeof req.query.page            === "string" ? Number(req.query.page)     : undefined,
+        pageSize:        typeof req.query.pageSize        === "string" ? Number(req.query.pageSize) : undefined,
       });
       res.status(200).json(result);
     } catch (err) {

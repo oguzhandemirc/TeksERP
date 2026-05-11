@@ -47,6 +47,35 @@ router.get("/ready-fason", verifyToken, requirePermission("shipment:read"), cont
 
 /**
  * @openapi
+ * /api/shipping/orphan-rolls:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Atanmamış hazır toplar (recovery)
+ *     description: |
+ *       READY_FOR_SHIP durumunda olup hiçbir sipariş satırına allocate edilmemiş,
+ *       fason da olmayan toplar. Paketleme sırasında satır eşleştirilemediyse
+ *       burada görünür; operatör sonradan ilgili sipariş satırına bağlar.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Hayalet top listesi (planlı sipariş + satır adayları ile)
+ */
+router.get("/orphan-rolls", verifyToken, requirePermission("shipment:read"), controller.getOrphanReadyRolls);
+
+/**
+ * @openapi
+ * /api/shipping/orphan-rolls/{rollId}/assign:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Hayalet topu sipariş satırına bağla
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post("/orphan-rolls/:rollId/assign", verifyToken, requirePermission("allocation:write"), controller.assignOrphanRoll);
+
+/**
+ * @openapi
  * /api/shipping/prepare-package:
  *   post:
  *     tags: [Shipping]
@@ -247,5 +276,149 @@ router.patch("/shipments/:id/add-items", verifyToken, requirePermission("shipmen
  *         description: Sevkiyat bulunamadı
  */
 router.post("/shipments/:id/finalize", verifyToken, requirePermission("shipment:write"), controller.finalize);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/add-sack:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Çuvalı sevkiyata ekle (içindeki Roll'lar için ShipmentItem'lar oluşur)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sackId]
+ *             properties:
+ *               sackId: { type: string, format: uuid }
+ */
+router.post(
+  "/shipments/:id/add-sack",
+  verifyToken,
+  requirePermission("shipment:write"),
+  controller.addSack
+);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/remove-sack:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Çuvalı sevkiyattan çıkar
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/shipments/:id/remove-sack",
+  verifyToken,
+  requirePermission("shipment:write"),
+  controller.removeSack
+);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/bind-to-orders:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Geriye dönük sipariş bağlama (SHIPPED sevkiyat → sipariş satırları)
+ *     description: |
+ *       Stoktan üretilip irsaliyesiz sevk edilmiş bir SHIPPED sevkiyatın
+ *       toplarını sonradan gelen sipariş satırlarına tahsis eder
+ *       (OrderAllocation create) ve etkilenen siparişleri otomatik olarak
+ *       COMPLETED / PARTIAL_SHIPPED durumuna çeker.
+ *
+ *       Kurallar:
+ *         - Shipment SHIPPED olmalı (PREPARING için tambur.allocate kullanılır)
+ *         - Sipariş ve sevkiyat aynı müşteriye ait olmalı
+ *         - Top bu sevkiyata dahil olmalı
+ *         - Aynı (rol, sipariş satırı) çifti zaten varsa hata
+ *         - Tahsis miktarı topun kalan kapasitesini aşamaz
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [bindings]
+ *             properties:
+ *               bindings:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required: [rollId, orderLineId, allocatedQty]
+ *                   properties:
+ *                     rollId: { type: string, format: uuid }
+ *                     orderLineId: { type: string, format: uuid }
+ *                     allocatedQty: { type: number, minimum: 0.01 }
+ *     responses:
+ *       200: { description: Bağlama tamamlandı; tamamlanan/kısmi siparişler döner }
+ *       400: { description: Validation hatası (müşteri eşleşmiyor, kapasite aşımı vb) }
+ *       404: { description: Sevkiyat / sipariş satırı / top bulunamadı }
+ *       409: { description: Çift tahsis (aynı rol-satır çifti zaten var) }
+ */
+router.post(
+  "/shipments/:id/bind-to-orders",
+  verifyToken,
+  requirePermission("allocation:write"),
+  controller.bindToOrders
+);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/plan:
+ *   patch:
+ *     tags: [Shipping]
+ *     summary: Sevkiyat planını güncelle (priority, plannedDate)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.patch(
+  "/shipments/:id/plan",
+  verifyToken,
+  requirePermission("allocation:write"),
+  controller.updateShipmentPlan
+);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/planned-orders:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevkiyat planına sipariş ekle
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/shipments/:id/planned-orders",
+  verifyToken,
+  requirePermission("allocation:write"),
+  controller.addPlannedOrder
+);
+
+/**
+ * @openapi
+ * /api/shipping/planned-orders/{plannedOrderId}:
+ *   delete:
+ *     tags: [Shipping]
+ *     summary: Sevkiyat planından sipariş çıkar
+ *     security: [{ bearerAuth: [] }]
+ */
+router.delete(
+  "/planned-orders/:plannedOrderId",
+  verifyToken,
+  requirePermission("allocation:write"),
+  controller.removePlannedOrder
+);
 
 export default router;

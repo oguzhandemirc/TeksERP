@@ -12,8 +12,14 @@ Each sub-project has its own `CLAUDE.md` with detailed guidance.
 ## Production Flow
 
 ```
-Inventory (Rolls) → Work Orders → Production (Stations/Machines) → Tambur (QC2) → Shipping
+Inventory (Rolls) → Work Orders → Production (Stations/Machines) → Tambur (QC2)
+  → Depo (RollStatus.WAREHOUSE) → Tartı/Paket → Shipping
 ```
+
+Tambur'dan çıkan top **kesinlikle önce depoya** geçer (`status=WAREHOUSE`).
+Depo bir istasyon değil, tartı/paket öncesi bekleme statüsüdür. Tartı/paket
+operatörü depodan çekip tartar + paketler; rulo doğrudan `READY_FOR_SHIP`
+olur — sevkiyatta tekrar barkod okutulmaz.
 
 ## Domain Facts
 

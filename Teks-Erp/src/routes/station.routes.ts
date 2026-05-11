@@ -16,7 +16,10 @@ const stationService = new BaseService({
   modelName: "station",
   tableName: "STATION",
   searchFields: ["code", "name"],
-  defaultInclude: { machines: true },
+  defaultInclude: {
+    machines: true,
+    defaultCategory: { select: { id: true, code: true, name: true } },
+  },
 });
 
 const stationController = new BaseController(stationService);

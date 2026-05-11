@@ -1,0 +1,547 @@
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Check, ChevronDown, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+import type { CrudService } from "@/services/crudService";
+
+// Local-time day boundaries — kullanıcı "07.05.2026" derken İstanbul tz'inde
+// o günün 00:00:00 ile 23:59:59'u kastediyor; UTC midnight değil.
+function startOfDayIso(ymd: string): string {
+  const [y = 1970, m = 1, d = 1] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
+}
+function endOfDayIso(ymd: string): string {
+  const [y = 1970, m = 1, d = 1] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
+}
+function toLocalYmd(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * URL-driven filter bar. Her filtre değişimi `useSearchParams`'a yazar →
+ * `useDataTable` URL'i izleyip cursor'ı sıfırlar + refetch eder.
+ *
+ * Filtre türleri:
+ *  - `select`: sabit seçenek listesi (status, type vb.)
+ *  - `lookup`: master data dropdown (customer, item — `CrudService.getAll`)
+ *  - `multi-lookup`: çoklu master data (popover + checkbox) — virgülle ayrılmış
+ *  - `numberRange`: iki sayısal input (min-max). URL'e `<key>Min`, `<key>Max`
+ *  - `dateRange`: preset (Son 7g/30g/90g/Tümü) — `dateField` zorunlu
+ *
+ * `defaultDateRangeDays` set edilirse URL'de tarih yokken otomatik uygular —
+ * operasyon sayfaları için "son N gün" performans varsayılanı.
+ */
+
+interface LookupItemBase {
+  id: string;
+  name?: string;
+  code?: string;
+}
+type LookupGetLabel = (it: LookupItemBase) => string;
+
+export type FilterDef =
+  | {
+      kind: "select";
+      key: string;
+      label: string;
+      options: { value: string; label: string }[];
+    }
+  | {
+      kind: "lookup";
+      key: string;
+      label: string;
+      service: CrudService<LookupItemBase>;
+      queryKey: string;
+      getLabel?: LookupGetLabel;
+      /** Lookup listesini daraltmak için ek backend filter (örn. isDerived=false). */
+      extraFilters?: Record<string, string>;
+    }
+  | {
+      kind: "multi-lookup";
+      key: string;
+      label: string;
+      service: CrudService<LookupItemBase>;
+      queryKey: string;
+      getLabel?: LookupGetLabel;
+      extraFilters?: Record<string, string>;
+    }
+  | {
+      kind: "numberRange";
+      key: string;
+      label: string;
+      unit?: string;
+      step?: number;
+    }
+  | {
+      kind: "dateRange";
+      label: string;
+      defaultField: string;
+      fieldOptions?: { value: string; label: string }[];
+    };
+
+interface Props {
+  filters: FilterDef[];
+  /** İlk açılışta URL'de tarih yoksa bu kadar günü default uygular. 0 = devre dışı. */
+  defaultDateRangeDays?: number;
+}
+
+const DATE_PRESETS = [
+  { days: 7, label: "Son 7g" },
+  { days: 30, label: "Son 30g" },
+  { days: 90, label: "Son 90g" },
+] as const;
+
+const NONE = "__all__";
+
+export function FilterBar({ filters, defaultDateRangeDays = 0 }: Props) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dateDef = filters.find((f) => f.kind === "dateRange");
+
+  // Default tarih aralığını (ilk render) uygula — URL'de yoksa.
+  useEffect(() => {
+    if (!dateDef || !defaultDateRangeDays) return;
+    if (searchParams.get("dateFrom") || searchParams.get("dateTo")) return;
+    const next = new URLSearchParams(searchParams);
+    const today = new Date();
+    const from = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() - defaultDateRangeDays,
+      0, 0, 0, 0,
+    );
+    const to = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+      23, 59, 59, 999,
+    );
+    next.set("dateField", searchParams.get("dateField") ?? dateDef.defaultField);
+    next.set("dateFrom", from.toISOString());
+    next.set("dateTo", to.toISOString());
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const update = (mutator: (sp: URLSearchParams) => void) => {
+    const next = new URLSearchParams(searchParams);
+    mutator(next);
+    setSearchParams(next, { replace: true });
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs">
+      {filters.map((f) => {
+        if (f.kind === "select") return <SelectFilter key={f.key} def={f} sp={searchParams} update={update} />;
+        if (f.kind === "lookup") return <LookupFilter key={f.key} def={f} sp={searchParams} update={update} />;
+        if (f.kind === "multi-lookup") return <MultiLookupFilter key={f.key} def={f} sp={searchParams} update={update} />;
+        if (f.kind === "numberRange") return <NumberRangeFilter key={f.key} def={f} sp={searchParams} update={update} />;
+        return <DateRangeFilter key="date" def={f} sp={searchParams} update={update} />;
+      })}
+    </div>
+  );
+}
+
+interface SubProps<D> {
+  def: D;
+  sp: URLSearchParams;
+  update: (m: (sp: URLSearchParams) => void) => void;
+}
+
+function SelectFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "select" }>>) {
+  const value = sp.get(`filter[${def.key}]`) ?? NONE;
+  return (
+    <Select
+      value={value}
+      onValueChange={(v) =>
+        update((next) => {
+          if (v === NONE) next.delete(`filter[${def.key}]`);
+          else next.set(`filter[${def.key}]`, v);
+        })
+      }
+    >
+      <SelectTrigger className="h-7 w-auto min-w-[140px] gap-1 text-xs">
+        <SelectValue placeholder={def.label} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={NONE} className="text-muted-foreground">
+          Tümü ({def.label})
+        </SelectItem>
+        {def.options.map((o) => (
+          <SelectItem key={o.value} value={o.value}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function LookupFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "lookup" }>>) {
+  const value = sp.get(`filter[${def.key}]`) ?? NONE;
+  const { data } = useQuery({
+    queryKey: [def.queryKey, "filter-lookup", def.extraFilters],
+    queryFn: () =>
+      def.service.getAll({
+        page: 1,
+        pageSize: 200,
+        sortBy: "name",
+        sortOrder: "asc",
+        filters: { isActive: "true", ...def.extraFilters },
+      }),
+    staleTime: 60_000,
+  });
+  const items = data?.data ?? [];
+  const label = (it: { id: string; name?: string; code?: string }) =>
+    def.getLabel ? def.getLabel(it) : it.name ?? it.code ?? it.id;
+
+  return (
+    <Select
+      value={value}
+      onValueChange={(v) =>
+        update((next) => {
+          if (v === NONE) next.delete(`filter[${def.key}]`);
+          else next.set(`filter[${def.key}]`, v);
+        })
+      }
+    >
+      <SelectTrigger className="h-7 w-auto min-w-[160px] gap-1 text-xs">
+        <SelectValue placeholder={def.label} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={NONE} className="text-muted-foreground">
+          Tümü ({def.label})
+        </SelectItem>
+        {items.map((it) => (
+          <SelectItem key={it.id} value={it.id}>
+            {label(it)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function DateRangeFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "dateRange" }>>) {
+  const dateField = sp.get("dateField") ?? def.defaultField;
+  const dateFromIso = sp.get("dateFrom") ?? "";
+  const dateToIso = sp.get("dateTo") ?? "";
+  const hasRange = Boolean(dateFromIso || dateToIso);
+
+  const fromInput = dateFromIso ? toLocalYmd(dateFromIso) : "";
+  const toInput = dateToIso ? toLocalYmd(dateToIso) : "";
+
+  const setFrom = (ymd: string) =>
+    update((next) => {
+      if (!ymd) {
+        next.delete("dateFrom");
+        return;
+      }
+      next.set("dateField", dateField);
+      next.set("dateFrom", startOfDayIso(ymd));
+    });
+
+  const setTo = (ymd: string) =>
+    update((next) => {
+      if (!ymd) {
+        next.delete("dateTo");
+        return;
+      }
+      next.set("dateField", dateField);
+      next.set("dateTo", endOfDayIso(ymd));
+    });
+
+  const applyPreset = (days: number) =>
+    update((next) => {
+      const today = new Date();
+      const from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - days, 0, 0, 0, 0);
+      const to = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+      next.set("dateField", dateField);
+      next.set("dateFrom", from.toISOString());
+      next.set("dateTo", to.toISOString());
+    });
+
+  const clear = () =>
+    update((next) => {
+      next.delete("dateFrom");
+      next.delete("dateTo");
+    });
+
+  const fieldOptions = useMemo(
+    () => def.fieldOptions ?? [{ value: def.defaultField, label: def.label }],
+    [def.fieldOptions, def.defaultField, def.label],
+  );
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {fieldOptions.length > 1 ? (
+        <Select
+          value={dateField}
+          onValueChange={(v) => update((next) => next.set("dateField", v))}
+        >
+          <SelectTrigger className="h-7 w-auto gap-1 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {fieldOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
+
+      <Input
+        type="date"
+        value={fromInput}
+        onChange={(e) => setFrom(e.target.value)}
+        className="h-7 w-[130px] px-2 text-xs"
+        placeholder="Başlangıç"
+        title="Başlangıç tarihi"
+      />
+      <span className="text-muted-foreground">–</span>
+      <Input
+        type="date"
+        value={toInput}
+        onChange={(e) => setTo(e.target.value)}
+        className="h-7 w-[130px] px-2 text-xs"
+        placeholder="Bitiş"
+        title="Bitiş tarihi (gün sonu dahil)"
+      />
+
+      {DATE_PRESETS.map((p) => (
+        <Button
+          key={p.days}
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-xs"
+          onClick={() => applyPreset(p.days)}
+        >
+          {p.label}
+        </Button>
+      ))}
+
+      {hasRange ? (
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={clear}
+          title="Tarih filtresini kaldır"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function MultiLookupFilter({
+  def,
+  sp,
+  update,
+}: SubProps<Extract<FilterDef, { kind: "multi-lookup" }>>) {
+  const [open, setOpen] = useState(false);
+  const csv = sp.get(`filter[${def.key}]`) ?? "";
+  const selectedIds = useMemo(
+    () => (csv ? csv.split(",").filter(Boolean) : []),
+    [csv],
+  );
+
+  const { data } = useQuery({
+    queryKey: [def.queryKey, "filter-lookup-multi", def.extraFilters],
+    queryFn: () =>
+      def.service.getAll({
+        page: 1,
+        pageSize: 200,
+        sortBy: "name",
+        sortOrder: "asc",
+        filters: { isActive: "true", ...def.extraFilters },
+      }),
+    staleTime: 60_000,
+  });
+  const items = data?.data ?? [];
+  const labelOf = (it: LookupItemBase) =>
+    def.getLabel ? def.getLabel(it) : it.name ?? it.code ?? it.id;
+
+  const toggle = (id: string) =>
+    update((next) => {
+      const set = new Set(selectedIds);
+      if (set.has(id)) set.delete(id);
+      else set.add(id);
+      if (set.size === 0) next.delete(`filter[${def.key}]`);
+      else next.set(`filter[${def.key}]`, Array.from(set).join(","));
+    });
+
+  const clearAll = () =>
+    update((next) => next.delete(`filter[${def.key}]`));
+
+  const triggerLabel =
+    selectedIds.length === 0
+      ? def.label
+      : selectedIds.length === 1
+        ? labelOf(items.find((it) => it.id === selectedIds[0]) ?? { id: selectedIds[0]! })
+        : `${def.label} (${selectedIds.length})`;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-7 min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
+            selectedIds.length > 0 && "border-primary/50",
+          )}
+        >
+          <span className={cn(selectedIds.length === 0 && "text-muted-foreground")}>
+            {triggerLabel}
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder={`${def.label} ara...`} className="h-8" />
+          <CommandList>
+            <CommandEmpty>Sonuç yok.</CommandEmpty>
+            <CommandGroup>
+              {items.map((it) => {
+                const selected = selectedIds.includes(it.id);
+                return (
+                  <CommandItem
+                    key={it.id}
+                    value={labelOf(it)}
+                    onSelect={() => toggle(it.id)}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-3.5 w-3.5",
+                        selected ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    {labelOf(it)}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+          {selectedIds.length > 0 ? (
+            <div className="border-t p-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 w-full justify-center text-xs"
+                onClick={clearAll}
+              >
+                Temizle
+              </Button>
+            </div>
+          ) : null}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function NumberRangeFilter({
+  def,
+  sp,
+  update,
+}: SubProps<Extract<FilterDef, { kind: "numberRange" }>>) {
+  const minKey = `filter[${def.key}Min]`;
+  const maxKey = `filter[${def.key}Max]`;
+  const minVal = sp.get(minKey) ?? "";
+  const maxVal = sp.get(maxKey) ?? "";
+  const hasValue = Boolean(minVal || maxVal);
+
+  const setMin = (v: string) =>
+    update((next) => {
+      if (!v) next.delete(minKey);
+      else next.set(minKey, v);
+    });
+  const setMax = (v: string) =>
+    update((next) => {
+      if (!v) next.delete(maxKey);
+      else next.set(maxKey, v);
+    });
+  const clear = () =>
+    update((next) => {
+      next.delete(minKey);
+      next.delete(maxKey);
+    });
+
+  const placeholder = def.unit ? `${def.label} (${def.unit})` : def.label;
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1 rounded-md border bg-background px-1.5 py-0.5",
+        hasValue ? "border-primary/50" : "border-input",
+      )}
+      title={placeholder}
+    >
+      <span className="text-[10px] text-muted-foreground">{def.label}</span>
+      <Input
+        type="number"
+        inputMode="decimal"
+        step={def.step ?? "any"}
+        value={minVal}
+        onChange={(e) => setMin(e.target.value)}
+        className="h-6 w-[68px] border-0 px-1 text-xs shadow-none focus-visible:ring-0"
+        placeholder="min"
+      />
+      <span className="text-muted-foreground">–</span>
+      <Input
+        type="number"
+        inputMode="decimal"
+        step={def.step ?? "any"}
+        value={maxVal}
+        onChange={(e) => setMax(e.target.value)}
+        className="h-6 w-[68px] border-0 px-1 text-xs shadow-none focus-visible:ring-0"
+        placeholder="max"
+      />
+      {hasValue ? (
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="h-5 w-5"
+          onClick={clear}
+          title="Temizle"
+        >
+          <X className="h-3 w-3" />
+        </Button>
+      ) : null}
+    </div>
+  );
+}

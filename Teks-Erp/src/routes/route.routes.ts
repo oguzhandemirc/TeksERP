@@ -15,9 +15,16 @@ const service = new BaseService({
   modelName: "route",
   tableName: "ROUTE",
   searchFields: ["name"],
+  nestedCreateFields: ["steps"],
   defaultInclude: {
     steps: {
-      include: { station: true },
+      include: {
+        station: {
+          include: {
+            defaultCategory: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
       orderBy: { sequence: "asc" },
     },
   },

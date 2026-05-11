@@ -34,6 +34,17 @@ export class TravelerCardController {
     this.scan         = this.scan.bind(this);
     this.findByBarcode = this.findByBarcode.bind(this);
     this.getHistory   = this.getHistory.bind(this);
+    this.list         = this.list.bind(this);
+  }
+
+  /** GET /api/traveler-cards */
+  async list(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.list(req);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
   }
 
   /** POST /api/work-orders/:id/traveler-cards */

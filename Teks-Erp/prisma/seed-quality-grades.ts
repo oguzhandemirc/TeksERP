@@ -14,17 +14,23 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const DEFAULTS = [
-  { code: "1.KALITE", name: "1. Kalite", color: "#10b981", sortOrder: 10 },
-  { code: "A1",       name: "A1 (Alt Kalite)", color: "#f59e0b", sortOrder: 20 },
-  { code: "A2",       name: "A2 (2. Kalite)", color: "#f97316", sortOrder: 30 },
-  { code: "FIRE",     name: "Fire",           color: "#ef4444", sortOrder: 40 },
+  { code: "1.KALITE", name: "1. Kalite",       color: "#10b981", sortOrder: 10, targetStatus: "WAREHOUSE" as const },
+  { code: "A1",       name: "A1 (Alt Kalite)", color: "#f59e0b", sortOrder: 20, targetStatus: "A1_STOCK" as const },
+  { code: "A2",       name: "A2 (2. Kalite)",  color: "#f97316", sortOrder: 30, targetStatus: "A1_STOCK" as const },
+  { code: "FIRE",     name: "Fire",            color: "#ef4444", sortOrder: 40, targetStatus: "SCRAP" as const },
 ];
 
 async function main() {
   for (const g of DEFAULTS) {
     await prisma.qualityGrade.upsert({
       where: { code: g.code },
-      update: { name: g.name, color: g.color, sortOrder: g.sortOrder, isActive: true },
+      update: {
+        name: g.name,
+        color: g.color,
+        sortOrder: g.sortOrder,
+        targetStatus: g.targetStatus,
+        isActive: true,
+      },
       create: { ...g },
     });
     console.log(`  ✓ ${g.code} — ${g.name}`);

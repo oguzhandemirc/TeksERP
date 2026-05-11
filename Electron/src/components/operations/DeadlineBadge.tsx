@@ -1,0 +1,43 @@
+import { differenceInCalendarDays, format } from "date-fns";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+interface Props {
+  deadline: string | Date | null | undefined;
+  className?: string;
+}
+
+export function DeadlineBadge({ deadline, className }: Props) {
+  if (!deadline) return <span className="text-muted-foreground">—</span>;
+
+  const date = typeof deadline === "string" ? new Date(deadline) : deadline;
+  const days = differenceInCalendarDays(date, new Date());
+  const dateText = format(date, "dd.MM.yyyy");
+
+  let tone = "bg-muted text-muted-foreground";
+  let suffix = "";
+
+  if (days < 0) {
+    tone = "bg-red-500/15 text-red-600 dark:text-red-400";
+    suffix = `${Math.abs(days)} gün geçti`;
+  } else if (days === 0) {
+    tone = "bg-red-500/15 text-red-600 dark:text-red-400";
+    suffix = "bugün";
+  } else if (days <= 3) {
+    tone = "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400";
+    suffix = `${days} gün kaldı`;
+  } else if (days <= 7) {
+    tone = "bg-blue-500/15 text-blue-600 dark:text-blue-400";
+    suffix = `${days} gün kaldı`;
+  } else {
+    tone = "bg-muted text-muted-foreground";
+    suffix = `${days} gün kaldı`;
+  }
+
+  return (
+    <div className={cn("flex items-center gap-2", className)}>
+      <span className="text-xs tabular-nums">{dateText}</span>
+      <Badge className={cn(tone, "border-transparent text-[10px]")}>{suffix}</Badge>
+    </div>
+  );
+}

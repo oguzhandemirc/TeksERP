@@ -1,0 +1,533 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  useWindowDimensions,
+  Keyboard,
+  TextInput as RNTextInput,
+} from 'react-native';
+import RefreshButton from './RefreshButton';
+import Modal from 'react-native-modal';
+import {
+  Text,
+  TextInput,
+  IconButton,
+  Button,
+  TouchableRipple,
+  ActivityIndicator,
+} from 'react-native-paper';
+import { FlashList } from '@shopify/flash-list';
+
+export interface PickerOption {
+  value: string;
+  label: string;
+  sublabel?: string;
+  /** Zengin görünüm — çok satırlı detay (iş emri, ürün vb için) */
+  details?: string[];
+  /** Sağ üst köşede gösterilecek küçük renkli etiket (status chip vb) */
+  badge?: { text: string; color: string };
+}
+
+export interface SortOption {
+  value: string;
+  label: string;
+  icon?: string;
+}
+
+interface BaseProps {
+  visible: boolean;
+  title: string;
+  options: PickerOption[];
+  selectedValue?: string | null;
+  onSelect: (value: string) => void;
+  onDismiss: () => void;
+  emptyText?: string;
+  loading?: boolean;
+  numColumns?: number;
+  /** Header'da yenile ikonu — basıldığında parent refetch yapar. */
+  onRefresh?: () => void;
+  /** Yenileme veya fetch sürerken refresh ikonu döner. */
+  refreshing?: boolean;
+  /** Son fetch başarısız oldu mu — bitiş haptic'i + error toast için. */
+  refreshError?: boolean;
+  /** Hata mesajı (toast'ta gösterilir). */
+  refreshErrorMessage?: string;
+}
+
+interface PaginatedProps extends BaseProps {
+  /**
+   * Sunucu tarafı sayfalama / arama / sıralama modu.
+   * - `options` parent tarafından server-side fetch ile hazırlanır
+   * - In-memory filter kapalı; arama yalnızca "Ara" butonu / Enter ile tetiklenir
+   * - Pagination ve sort callback'leri parent'a bildirilir
+   */
+  paginated: true;
+  searchValue: string;
+  onSearchSubmit: (q: string) => void;
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  sortOptions?: SortOption[];
+  selectedSort?: string;
+  onSortChange?: (value: string) => void;
+  fetching?: boolean;
+}
+
+interface ClientProps extends BaseProps {
+  paginated?: false;
+}
+
+type Props = PaginatedProps | ClientProps;
+
+export default function PickerModal(props: Props) {
+  const {
+    visible,
+    title,
+    options,
+    selectedValue,
+    onSelect,
+    onDismiss,
+    emptyText = 'Seçenek yok',
+    loading,
+    numColumns = 4,
+    onRefresh,
+    refreshing = false,
+    refreshError = false,
+    refreshErrorMessage,
+  } = props;
+
+  const paginated = props.paginated === true;
+  const { width: winW, height: winH } = useWindowDimensions();
+  const searchRef = useRef<RNTextInput>(null);
+
+  // Client-mode: in-memory arama
+  const [clientSearch, setClientSearch] = useState('');
+  // Paginated-mode: kontrollü arama input metni (henüz submit edilmemiş)
+  const [pendingSearch, setPendingSearch] = useState('');
+
+  useEffect(() => {
+    if (!visible) {
+      searchRef.current?.blur();
+      Keyboard.dismiss();
+    }
+  }, [visible]);
+
+  // Modal açılınca paginated mode'da pending search'ü server'daki ile eşitle
+  useEffect(() => {
+    if (paginated && visible) {
+      setPendingSearch((props as PaginatedProps).searchValue);
+    }
+  }, [visible, paginated]);
+
+  // Liste verisi: paginated ise olduğu gibi; değilse sırala + filtrele
+  const listData = useMemo(() => {
+    if (paginated) return options;
+    const sorted = [...options].sort((a, b) =>
+      a.label.localeCompare(b.label, 'tr', { sensitivity: 'base' })
+    );
+    const q = clientSearch.trim().toLocaleLowerCase('tr');
+    if (!q) return sorted;
+    return sorted.filter(
+      (o) =>
+        o.label.toLocaleLowerCase('tr').includes(q) ||
+        (o.sublabel?.toLocaleLowerCase('tr').includes(q) ?? false)
+    );
+  }, [paginated, options, clientSearch]);
+
+  // Paginated submit handler
+  const submitSearch = () => {
+    if (!paginated) return;
+    (props as PaginatedProps).onSearchSubmit(pendingSearch.trim());
+    Keyboard.dismiss();
+  };
+
+  return (
+    <Modal
+      isVisible={visible}
+      onBackdropPress={onDismiss}
+      onBackButtonPress={onDismiss}
+      backdropOpacity={0.5}
+      style={styles.modal}
+      useNativeDriver
+      hideModalContentWhileAnimating
+      avoidKeyboard={false}
+      deviceWidth={winW}
+      deviceHeight={winH}
+      statusBarTranslucent
+    >
+      <View style={[styles.sheet, { width: winW * 0.82, height: winH * 0.88 }]}>
+        {/* Başlık + arama + kapat */}
+        <View style={styles.header}>
+          <Text variant="titleLarge" style={styles.title}>
+            {title}
+          </Text>
+
+          {/* Refresh: başlık tarafında — close'tan uzakta, yanlış tap riskini azalt */}
+          {onRefresh && (
+            <RefreshButton
+              onPress={onRefresh}
+              refreshing={refreshing}
+              isError={refreshError}
+              errorMessage={refreshErrorMessage}
+            />
+          )}
+
+          {paginated ? (
+            <View style={styles.searchGroup}>
+              <TextInput
+                ref={searchRef as React.Ref<any>}
+                mode="outlined"
+                dense
+                placeholder="Batch no..."
+                value={pendingSearch}
+                onChangeText={setPendingSearch}
+                onSubmitEditing={submitSearch}
+                returnKeyType="search"
+                left={<TextInput.Icon icon="magnify" />}
+                right={
+                  pendingSearch.length > 0 ? (
+                    <TextInput.Icon
+                      icon="close"
+                      onPress={() => {
+                        setPendingSearch('');
+                        (props as PaginatedProps).onSearchSubmit('');
+                      }}
+                    />
+                  ) : undefined
+                }
+                style={styles.searchInput}
+                showSoftInputOnFocus
+              />
+              <Button
+                mode="contained"
+                icon="magnify"
+                onPress={submitSearch}
+                style={styles.searchBtn}
+                contentStyle={styles.searchBtnContent}
+                labelStyle={styles.searchBtnLabel}
+              >
+                Ara
+              </Button>
+            </View>
+          ) : (
+            <TextInput
+              ref={searchRef as React.Ref<any>}
+              mode="outlined"
+              dense
+              placeholder="Ara..."
+              value={clientSearch}
+              onChangeText={setClientSearch}
+              left={<TextInput.Icon icon="magnify" />}
+              style={styles.searchInput}
+              showSoftInputOnFocus
+            />
+          )}
+
+          <IconButton
+            icon="close"
+            size={22}
+            onPress={onDismiss}
+            style={styles.headerBtn}
+          />
+        </View>
+
+        {/* Sort segments — sadece paginated modda */}
+        {paginated &&
+          (props as PaginatedProps).sortOptions &&
+          (props as PaginatedProps).sortOptions!.length > 0 && (
+            <View style={styles.sortRow}>
+              {(props as PaginatedProps).sortOptions!.map((opt) => {
+                const selected = (props as PaginatedProps).selectedSort === opt.value;
+                return (
+                  <TouchableRipple
+                    key={opt.value}
+                    borderless
+                    rippleColor="rgba(79, 70, 229, 0.15)"
+                    onPress={() =>
+                      (props as PaginatedProps).onSortChange?.(opt.value)
+                    }
+                    style={[styles.sortChip, selected && styles.sortChipActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.sortChipText,
+                        selected && styles.sortChipTextActive,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableRipple>
+                );
+              })}
+            </View>
+          )}
+
+        {/* Liste */}
+        <View style={styles.listBox}>
+          {loading ? (
+            <View style={styles.loading}>
+              <ActivityIndicator size="large" color="#4f46e5" />
+            </View>
+          ) : listData.length === 0 ? (
+            <Text style={styles.empty}>{emptyText}</Text>
+          ) : (
+            <FlashList
+              data={listData}
+              keyExtractor={(item) => item.value}
+              numColumns={numColumns}
+              renderItem={({ item }) => (
+                <PickerCard
+                  option={item}
+                  selected={item.value === selectedValue}
+                  onPress={() => {
+                    onSelect(item.value);
+                    onDismiss();
+                    if (!paginated) setClientSearch('');
+                  }}
+                />
+              )}
+            />
+          )}
+        </View>
+
+        {/* Sayfalama — paginated modda */}
+        {paginated && (props as PaginatedProps).totalPages > 1 && (
+          <View style={styles.pagination}>
+            <IconButton
+              mode="outlined"
+              icon="chevron-left"
+              size={20}
+              onPress={() =>
+                (props as PaginatedProps).onPageChange(
+                  Math.max(1, (props as PaginatedProps).page - 1)
+                )
+              }
+              disabled={
+                (props as PaginatedProps).page <= 1 ||
+                (props as PaginatedProps).fetching
+              }
+              accessibilityLabel="Önceki sayfa"
+              style={styles.pageBtn}
+            />
+            <Text style={styles.pageInfo}>
+              {(props as PaginatedProps).page} /{' '}
+              {(props as PaginatedProps).totalPages}
+            </Text>
+            <IconButton
+              mode="outlined"
+              icon="chevron-right"
+              size={20}
+              onPress={() =>
+                (props as PaginatedProps).onPageChange(
+                  Math.min(
+                    (props as PaginatedProps).totalPages,
+                    (props as PaginatedProps).page + 1
+                  )
+                )
+              }
+              disabled={
+                (props as PaginatedProps).page >= (props as PaginatedProps).totalPages ||
+                (props as PaginatedProps).fetching
+              }
+              accessibilityLabel="Sonraki sayfa"
+              style={styles.pageBtn}
+            />
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+function PickerCard({
+  option,
+  selected,
+  onPress,
+}: {
+  option: PickerOption;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const hasDetails = !!option.details?.length;
+  return (
+    <View style={styles.cardWrap}>
+      <TouchableRipple
+        onPress={onPress}
+        borderless
+        rippleColor="rgba(79, 70, 229, 0.15)"
+        style={[
+          styles.card,
+          selected && styles.cardSelected,
+          hasDetails && styles.cardRich,
+        ]}
+      >
+        <View style={styles.cardContent}>
+          <View style={styles.cardHeader}>
+            <Text variant="titleMedium" style={styles.cardLabel} numberOfLines={2}>
+              {option.label}
+            </Text>
+            {option.badge ? (
+              <View style={[styles.cardBadge, { backgroundColor: option.badge.color }]}>
+                <Text style={styles.cardBadgeText}>{option.badge.text}</Text>
+              </View>
+            ) : null}
+          </View>
+          {option.sublabel ? (
+            <Text variant="bodySmall" style={styles.cardSublabel} numberOfLines={1}>
+              {option.sublabel}
+            </Text>
+          ) : null}
+          {hasDetails &&
+            option.details!.map((d, i) => (
+              <Text key={i} style={styles.cardDetail} numberOfLines={1}>
+                {d}
+              </Text>
+            ))}
+        </View>
+      </TouchableRipple>
+    </View>
+  );
+}
+
+const SEARCH_HEIGHT = 40;
+
+const styles = StyleSheet.create({
+  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
+  sheet: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  title: { fontWeight: '700', color: '#0f172a', flex: 1, fontSize: 16 },
+  headerBtn: { margin: 0, width: 32, height: 32 },
+
+  searchGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: SEARCH_HEIGHT,
+  },
+  searchInput: {
+    backgroundColor: '#fff',
+    width: 240,
+    height: SEARCH_HEIGHT,
+    fontSize: 13,
+  },
+  searchBtn: {
+    borderRadius: 8,
+    height: SEARCH_HEIGHT,
+    justifyContent: 'center',
+    elevation: 2,
+  },
+  searchBtnContent: {
+    height: SEARCH_HEIGHT,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+  },
+  searchBtnLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginVertical: 0,
+    letterSpacing: 0.3,
+  },
+
+  sortRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 2,
+  },
+  sortChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#fff',
+  },
+  sortChipActive: {
+    borderColor: '#4f46e5',
+    backgroundColor: '#eef2ff',
+    borderWidth: 2,
+  },
+  sortChipText: { fontSize: 12, color: '#475569', fontWeight: '600' },
+  sortChipTextActive: { color: '#4f46e5', fontWeight: '700' },
+
+  listBox: { flex: 1 },
+  empty: { textAlign: 'center', color: '#94a3b8', padding: 24 },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  pageBtn: { margin: 0, width: 32, height: 32 },
+  pageInfo: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+    minWidth: 48,
+    textAlign: 'center',
+  },
+
+  cardWrap: { flex: 1, padding: 4 },
+  card: {
+    backgroundColor: '#fff',
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    borderRadius: 10,
+    minHeight: 72,
+    overflow: 'hidden',
+  },
+  cardRich: { minHeight: 96 },
+  cardSelected: {
+    borderColor: '#4f46e5',
+    backgroundColor: '#eef2ff',
+    borderWidth: 2,
+  },
+  cardContent: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cardLabel: { fontWeight: '700', color: '#0f172a', fontSize: 15, flex: 1 },
+  cardSublabel: {
+    color: '#64748b',
+    fontFamily: 'monospace',
+    fontSize: 12,
+  },
+  cardDetail: {
+    color: '#475569',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  cardBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  cardBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+});

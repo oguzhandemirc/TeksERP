@@ -28,14 +28,11 @@ import {
   ScanType,
 } from "@prisma/client";
 import { buildPrefixedCardNumber } from "../utils/barcode";
+import { buildPagination } from "../utils/query-parser";
 import {
   recomputeStepStatus,
   ensureWorkOrderInProgress,
 } from "./helpers/roll-step.helper";
-import {
-  findOrCreateDerivedItem,
-  getItemDerivedAttributes,
-} from "./helpers/item-derive.helper";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -150,7 +147,7 @@ export class SubcontractorService {
     data: {
       workOrderId: string;
       stepId: string;
-      companyId: string;
+      subcontractorId: string;
       rollIds: string[];
       plateNumber?: string;
       driverName?: string;
@@ -177,7 +174,11 @@ export class SubcontractorService {
 
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
-      include: { station: { select: { name: true, code: true, type: true } }, workOrder: true },
+      include: {
+        station: { select: { name: true, code: true, type: true } },
+        workOrder: true,
+        requiredCategory: { select: { id: true, name: true } },
+      },
     });
     if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
     if (step.workOrderId !== data.workOrderId) {
@@ -194,10 +195,31 @@ export class SubcontractorService {
       );
     }
 
-    const company = await prisma.customer.findUnique({
-      where: { id: data.companyId },
+    const subcontractor = await prisma.subcontractor.findUnique({
+      where: { id: data.subcontractorId },
     });
-    if (!company) throw AppError.notFound("Fason firma bulunamadı");
+    if (!subcontractor) throw AppError.notFound("Fason firma bulunamadı");
+
+    // Adımın hizmet kategorisi tanımlıysa, seçilen fason firmanın bu kategoride
+    // hizmet veriyor olması zorunlu (SubcontractorToCategory eşleşmesi).
+    if (step.requiredCategoryId) {
+      const link = await prisma.subcontractorToCategory.findUnique({
+        where: {
+          subcontractorId_categoryId: {
+            subcontractorId: data.subcontractorId,
+            categoryId: step.requiredCategoryId,
+          },
+        },
+        select: { categoryId: true },
+      });
+      if (!link) {
+        const categoryName =
+          step.requiredCategory?.name ?? step.requiredCategoryId;
+        throw AppError.badRequest(
+          `Bu fason firma bu kategoride hizmet vermiyor (gerekli: ${categoryName}).`
+        );
+      }
+    }
 
     const rolls = await prisma.roll.findMany({
       where: { id: { in: data.rollIds } },
@@ -208,7 +230,18 @@ export class SubcontractorService {
       throw AppError.notFound(`Top bulunamadı: ${missing.join(", ")}`);
     }
 
+    // Sevk anında otomatik attach edilecek toplar (mobil sahada tek-adım akış için).
+    // Top serbest stoktaysa (henüz iş emrine bağlanmamış), aynı transaction içinde
+    // bu adıma attach edilir; operatör ayrıca attach çağrısı yapmak zorunda kalmaz.
+    const autoAttachIds = new Set<string>();
+
     for (const r of rolls) {
+      // 1) Serbest stok → otomatik attach uygunluğu
+      if (r.currentStepId === null && r.status === RollStatus.STOCK) {
+        autoAttachIds.add(r.id);
+        continue;
+      }
+      // 2) Zaten bu adıma bağlı → eski mantık (geç)
       if (r.currentStepId !== data.stepId) {
         throw AppError.badRequest(
           `Top ${r.barcode} bu adımda değil (mevcut step: ${r.currentStepId ?? "yok"})`
@@ -224,6 +257,15 @@ export class SubcontractorService {
     const totalQty = rolls.reduce((s, r) => s + r.currentQty, 0);
 
     const result = await prisma.$transaction(async (tx) => {
+      // Otomatik attach: serbest stoktaki toplar bu adıma bağlanır.
+      // (status STOCK kalır — alt blok aynı transaction içinde AT_SUBCONTRACTOR'a çekecek.)
+      if (autoAttachIds.size > 0) {
+        await tx.roll.updateMany({
+          where: { id: { in: Array.from(autoAttachIds) } },
+          data: { currentStepId: data.stepId },
+        });
+      }
+
       // Step ACTIVE'e çek
       if (step.status === StepStatus.PENDING) {
         await tx.workOrderStep.update({
@@ -277,10 +319,10 @@ export class SubcontractorService {
           parameters: (wo.parameters as Record<string, unknown> | null) ?? null,
           type: wo.type,
         },
-        company: {
-          id: company.id,
-          name: company.name,
-          code: company.code ?? null,
+        subcontractor: {
+          id: subcontractor.id,
+          name: subcontractor.name,
+          code: subcontractor.code ?? null,
         },
         step: {
           id: step.id,
@@ -303,7 +345,10 @@ export class SubcontractorService {
           dispatchNo,
           workOrderId: data.workOrderId,
           stepId: data.stepId,
-          companyId: data.companyId,
+          subcontractorId: data.subcontractorId,
+          // Plan snapshot — sevk anında step.plannedSubcontractorId ne ise dondurulur.
+          // step.plannedSubcontractorId ileride değişse bile rapor için bu sabit kalır.
+          plannedSubcontractorId: step.plannedSubcontractorId ?? null,
           plateNumber: data.plateNumber ?? null,
           driverName: data.driverName ?? null,
           dispatchedById: userId ?? null,
@@ -320,7 +365,7 @@ export class SubcontractorService {
         },
         include: {
           items: true,
-          company: true,
+          subcontractor: true,
           step: { include: { station: true } },
         },
       });
@@ -398,8 +443,10 @@ export class SubcontractorService {
         dispatchNo: result.dispatchNo,
         workOrderId: data.workOrderId,
         stepId: data.stepId,
-        companyId: data.companyId,
+        subcontractorId: data.subcontractorId,
+        plannedSubcontractorId: step.plannedSubcontractorId ?? null,
         rollCount: rolls.length,
+        autoAttachedRollCount: autoAttachIds.size,
         totalQty,
       },
     });
@@ -408,6 +455,148 @@ export class SubcontractorService {
       success: true,
       data: result,
       message: `Fason sevki oluşturuldu: ${result.dispatchNo} (${rolls.length} top, ${totalQty.toFixed(1)}m)`,
+    };
+  }
+
+  // ===========================================================================
+  // CANCEL — Sevk iptali (soft cancel)
+  // ===========================================================================
+  //
+  // Kural:
+  //   - Dispatch silinmez; cancelledAt/cancelledById/cancelReason set edilir.
+  //   - Toplar STOCK'a geri döner ve currentStepId temizlenir (serbest stoğa iner).
+  //   - Açık RollMovement varsa "CANCEL:dispatchNo" notuyla kapatılır.
+  //   - SUBCONTRACTOR_SENT operation log'u silinir (idempotent).
+  //   - Step'te başka aktif sevk/dispatch yoksa PENDING'e döner.
+  //   - Mal kabul yapılmış sevk iptal EDİLEMEZ (önce kabul iptal endpoint'i
+  //     gerekir — şu an o yok, dolayısıyla blok).
+  //   - Refakat kartına CANCEL log'u düşülür.
+  //
+  async cancel(
+    dispatchId: string,
+    reason: string,
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    const trimmedReason = reason?.trim();
+    if (!trimmedReason || trimmedReason.length < 3) {
+      throw AppError.badRequest("İptal sebebi en az 3 karakter olmalı");
+    }
+
+    const dispatch = await prisma.subcontractorDispatch.findUnique({
+      where: { id: dispatchId },
+      include: {
+        items: true,
+        step: { select: { id: true, status: true, stationId: true, workOrderId: true } },
+      },
+    });
+    if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+    if (dispatch.cancelledAt) {
+      throw AppError.conflict("Bu sevk zaten iptal edilmiş");
+    }
+
+    // Mal kabul edilmiş sevk iptal edilemez (ReceiptItem.sourceDispatchItem üzerinden bağlı)
+    const acceptedReceiptItem = await prisma.subcontractorReceiptItem.findFirst({
+      where: { sourceDispatchItem: { is: { dispatchId } } },
+      select: { receipt: { select: { receiptNo: true } } },
+    });
+    if (acceptedReceiptItem?.receipt) {
+      throw AppError.conflict(
+        `Mal kabul yapılmış sevk iptal edilemez (kabul: ${acceptedReceiptItem.receipt.receiptNo}). Önce kabul iptal edilmeli.`
+      );
+    }
+
+    const rollIds = dispatch.items.map((i) => i.rollId);
+
+    await prisma.$transaction(async (tx) => {
+      // 1) Dispatch'i soft-cancel
+      await tx.subcontractorDispatch.update({
+        where: { id: dispatchId },
+        data: {
+          cancelledAt: new Date(),
+          cancelledById: userId ?? null,
+          cancelReason: trimmedReason,
+        },
+      });
+
+      // 2) Toplar: STOCK + currentStepId temizle
+      await tx.roll.updateMany({
+        where: { id: { in: rollIds } },
+        data: { status: RollStatus.STOCK, currentStepId: null },
+      });
+
+      // 3) Açık RollMovement'ları CANCEL notuyla kapat
+      const openMovements = await tx.rollMovement.findMany({
+        where: {
+          rollId: { in: rollIds },
+          workOrderStepId: dispatch.stepId,
+          exitedAt: null,
+        },
+        select: { id: true, notes: true },
+      });
+      for (const mv of openMovements) {
+        await tx.rollMovement.update({
+          where: { id: mv.id },
+          data: {
+            exitedAt: new Date(),
+            notes: mv.notes
+              ? `${mv.notes} | CANCEL:${dispatch.dispatchNo}`
+              : `CANCEL:${dispatch.dispatchNo}`,
+          },
+        });
+      }
+
+      // 4) SUBCONTRACTOR_SENT operation log'larını sil (idempotent — yoksa atla)
+      await tx.rollOperation.deleteMany({
+        where: {
+          rollId: { in: rollIds },
+          workOrderStepId: dispatch.stepId,
+          operationType: RollOperationType.SUBCONTRACTOR_SENT,
+        },
+      });
+
+      // 5) Step'te başka aktif (iptal edilmemiş) dispatch yoksa PENDING'e döndür
+      const otherActive = await tx.subcontractorDispatch.count({
+        where: {
+          stepId: dispatch.stepId,
+          cancelledAt: null,
+          id: { not: dispatchId },
+        },
+      });
+      if (otherActive === 0 && dispatch.step.status === StepStatus.ACTIVE) {
+        await tx.workOrderStep.update({
+          where: { id: dispatch.stepId },
+          data: { status: StepStatus.PENDING, startedAt: null },
+        });
+      }
+
+      // 6) Refakat kartı INFO scan (sevk iptal bildirimi)
+      await logTravelerScan(
+        tx,
+        dispatch.workOrderId,
+        dispatch.step.stationId,
+        dispatch.stepId,
+        ScanType.INFO,
+        userId,
+        `Fason sevk iptal: ${dispatch.dispatchNo} — ${trimmedReason}`
+      );
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SUBCONTRACTOR_DISPATCH",
+      recordId: dispatchId,
+      newData: {
+        cancelled: true,
+        cancelReason: trimmedReason,
+        rolledBackRollCount: rollIds.length,
+      },
+    });
+
+    return {
+      success: true,
+      data: { id: dispatchId, dispatchNo: dispatch.dispatchNo },
+      message: `Sevk iptal edildi: ${dispatch.dispatchNo}`,
     };
   }
 
@@ -428,8 +617,8 @@ export class SubcontractorService {
     data: {
       workOrderId: string;
       stepId: string;
-      companyId: string;
-      manifestNo: string;
+      subcontractorId: string;
+      manifestNo?: string | null; // Opsiyonel — fason her zaman irsaliye vermeyebilir
       returns: Array<{
         rollId: string;         // Orijinal fasona gönderilmiş top
         notes?: string | null;  // Bu topa dair kabul notu (opsiyonel)
@@ -441,27 +630,28 @@ export class SubcontractorService {
     if (!data.returns || data.returns.length === 0) {
       throw AppError.badRequest("En az bir dönüş kaydı girin");
     }
-    if (!data.manifestNo || data.manifestNo.trim().length < 2) {
-      throw AppError.badRequest("İrsaliye numarası zorunlu");
-    }
+
+    const subcontractor = await prisma.subcontractor.findUnique({
+      where: { id: data.subcontractorId },
+      select: { id: true },
+    });
+    if (!subcontractor) throw AppError.notFound("Fason firma bulunamadı");
+
+    // İrsaliye no opsiyonel — boş geldiyse null sakla.
+    const manifestNoTrimmed =
+      data.manifestNo && data.manifestNo.trim().length > 0
+        ? data.manifestNo.trim()
+        : null;
 
     const wo = await prisma.workOrder.findUnique({
       where: { id: data.workOrderId },
-      include: {
-        // Bu adımda hangi renk + özellikler kazanılacak? — fason dönüşünde
-        // rulonun yeni Item kimliğini hesaplamak için gerekir.
-        targetProperties: {
-          where: { plannedStepId: data.stepId },
-          select: { propertyId: true },
-        },
-      },
+      select: { id: true },
     });
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
 
-    // Bu adım için planlanmış renk (eğer varsa)
-    const stepAcquiresColorId =
-      wo.targetColorStepId === data.stepId ? wo.targetColorId : null;
-    const stepAcquiresPropertyIds = wo.targetProperties.map((p) => p.propertyId);
+    // Roll.itemId artık fason dönüşünde DEĞİŞMEZ. Final Item ataması Tambur'da
+    // (PROCESS_QC → WAREHOUSE geçişinde) wo.targetItemId üzerinden yapılır.
+    // Fason dönüşü sadece konum + status güncellemesi yapar.
 
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
@@ -495,7 +685,6 @@ export class SubcontractorService {
         barcode: true,
         currentQty: true,
         weightKg: true,
-        itemId: true, // türetilmiş item hesabı için
       },
     });
     const outstandingIds = new Set(outstandingRolls.map((r) => r.id));
@@ -529,148 +718,85 @@ export class SubcontractorService {
       const receipt = await tx.subcontractorReceipt.create({
         data: {
           receiptNo,
-          manifestNo: data.manifestNo.trim(),
+          manifestNo: manifestNoTrimmed,
           workOrderId: data.workOrderId,
           stepId: data.stepId,
-          companyId: data.companyId,
+          subcontractorId: data.subcontractorId,
           receivedById: userId ?? null,
           notes: data.notes ?? null,
         },
       });
 
-      // Türetilmiş Item kimliği için bu adımda kazanılacak özellik var mı?
-      const stepDerivesIdentity =
-        Boolean(stepAcquiresColorId) || stepAcquiresPropertyIds.length > 0;
+      // ── Toplu hazırlık ─────────────────────────────────────────────────
+      // Roll.itemId fason dönüşünde DEĞİŞMEZ (final Item ataması Tambur'da).
+      // Burada sadece movement kapatma + Roll status/currentStepId güncellemesi.
+      const returnRollIds = data.returns.map((r) => r.rollId);
 
-      // Her dönen top için: açık movement'i kapat + rolü sonraki adıma taşı
-      // + (varsa) yeni Item kimliği ata.
-      // Ölçüm YAPILMAZ — sevk öncesindeki qty/weight korunur.
-      for (const ret of data.returns) {
-        const orig = outstandingRolls.find((r) => r.id === ret.rollId)!;
+      // 1) Açık movement'leri tek raw SQL ile kapat (qtyOut/weightOut roll'dan).
+      await tx.$executeRaw`
+        UPDATE "roll_movements" rm
+        SET "qtyOut"   = r."currentQty",
+            "weightOut" = r."weightKg",
+            "exitedAt"  = NOW(),
+            "notes"     = ${`RETURNED_VIA_RECEIPT:${receiptNo}`}
+        FROM "rolls" r
+        WHERE rm."rollId" = r."id"
+          AND rm."workOrderStepId" = ${data.stepId}
+          AND rm."exitedAt" IS NULL
+          AND rm."rollId" = ANY(${returnRollIds}::text[])
+      `;
 
-        // Fasondaki açık movement'i kapat — qtyOut/weightOut sevk öncesindeki
-        // değerlerle (ölçüm yapılmadığı için) eşitlenir. Gerçek fire sonraki
-        // istasyonun FINISH akışında kaydedilir.
-        await tx.rollMovement.updateMany({
-          where: {
-            rollId: ret.rollId,
-            workOrderStepId: data.stepId,
-            exitedAt: null,
-          },
-          data: {
-            exitedAt: new Date(),
-            qtyOut: orig.currentQty,
-            weightOut: orig.weightKg,
-            notes: `RETURNED_VIA_RECEIPT:${receiptNo}`,
-          },
-        });
+      // 2) Roll.update — toplu updateMany (itemId değişmediği için tek query).
+      const nextRollStatus = nextStep ? RollStatus.IN_PRODUCTION : RollStatus.PRODUCED;
+      const nextCurrentStepId = nextStep ? nextStep.id : null;
+      await tx.roll.updateMany({
+        where: { id: { in: returnRollIds } },
+        data: { status: nextRollStatus, currentStepId: nextCurrentStepId },
+      });
 
-        // ── Türetilmiş Item kimliği ──────────────────────────────────────
-        // Rulonun mevcut Item'ından (baz, renk, özellikler) attribute'ları al,
-        // bu adımda kazanılan renk + özellikleri ekle, findOrCreateDerivedItem
-        // ile yeni / mevcut Item'ı bul, Roll.itemId'yi güncelle.
-        let newItemId: string | undefined = undefined;
-        let derivedItemAuditPayload: Record<string, unknown> | null = null;
-        if (stepDerivesIdentity) {
-          const current = await getItemDerivedAttributes(tx, orig.itemId);
-          // Renk: bu adımda renk kazanılıyorsa onu kullan, aksi halde mevcudunu koru.
-          // (Bir rulonun rengi sadece tek bir adımda set edilir; tekrar değişmez.)
-          const nextColorId = stepAcquiresColorId ?? current.colorId;
-          // Özellikler: union (deduplicate edilmiş)
-          const nextPropertyIds = [
-            ...new Set([...current.propertyIds, ...stepAcquiresPropertyIds]),
-          ];
+      // 4) Receipt item kayıtları — toplu insert.
+      await tx.subcontractorReceiptItem.createMany({
+        data: data.returns.map((ret) => ({
+          receiptId: receipt.id,
+          newRollId: ret.rollId,
+          notes: ret.notes ?? null,
+        })),
+      });
 
-          const derived = await findOrCreateDerivedItem(tx, {
-            baseItemId: current.baseItemId,
-            colorId: nextColorId,
-            propertyIds: nextPropertyIds,
-          });
-          if (derived.itemId !== orig.itemId) {
-            newItemId = derived.itemId;
-            derivedItemAuditPayload = {
-              prevItemId: orig.itemId,
-              newItemId: derived.itemId,
-              newItemCode: derived.itemCode,
-              newItemName: derived.itemName,
-              isNew: derived.isNew,
-              acquiredColorId: stepAcquiresColorId,
-              acquiredPropertyIds: stepAcquiresPropertyIds,
-            };
-          }
-        }
-
-        // Orijinal rolün qty/weight değerlerine DOKUNULMAZ — sadece status,
-        // bir sonraki adım ve (varsa) itemId güncellenir.
-        await tx.roll.update({
-          where: { id: ret.rollId },
-          data: {
-            status: nextStep ? RollStatus.IN_PRODUCTION : RollStatus.PRODUCED,
-            currentStepId: nextStep ? nextStep.id : null,
-            ...(newItemId ? { itemId: newItemId } : {}),
-          },
-        });
-
-        // Türetilmiş Item geçişinde audit log'una ayrı bir UPDATE kaydı yaz.
-        if (derivedItemAuditPayload) {
-          await tx.systemLog.create({
-            data: {
-              userId: userId ?? null,
-              action: "UPDATE",
-              tableName: "ROLL_ITEM_DERIVED",
-              recordId: ret.rollId,
-              newData: derivedItemAuditPayload as Prisma.InputJsonValue,
-            },
-          });
-        }
-
-        // Receipt item kaydı — newRollId ORİJİNAL top'u işaret eder (etiket basılmaz)
-        await tx.subcontractorReceiptItem.create({
-          data: {
-            receiptId: receipt.id,
-            newRollId: ret.rollId,
-            notes: ret.notes ?? null,
-          },
-        });
-
-        // Sonraki adım için yeni RollMovement aç (varsa) — qtyIn sevk öncesi
-        // değerle girer, ölçüm FINISH'te yapılacak.
-        if (nextStep) {
-          await tx.rollMovement.create({
-            data: {
+      // 5) Sonraki step için RollMovement'ler — toplu insert (varsa).
+      if (nextStep) {
+        await tx.rollMovement.createMany({
+          data: data.returns.map((ret) => {
+            const orig = outstandingRolls.find((o) => o.id === ret.rollId)!;
+            return {
               rollId: ret.rollId,
               workOrderStepId: nextStep.id,
               qtyIn: orig.currentQty,
               weightIn: orig.weightKg,
               operatorId: userId ?? null,
               notes: `FROM_SUBCONTRACTOR_RECEIPT:${receiptNo}`,
-            },
-          });
-        }
-
-        // Per-roll operation log
-        await tx.rollOperation.upsert({
-          where: {
-            rollId_workOrderStepId_operationType: {
-              rollId: ret.rollId,
-              workOrderStepId: data.stepId,
-              operationType: RollOperationType.SUBCONTRACTOR_RETURNED,
-            },
-          },
-          create: {
-            rollId: ret.rollId,
-            workOrderStepId: data.stepId,
-            operationType: RollOperationType.SUBCONTRACTOR_RETURNED,
-            operatorId: userId ?? null,
-            metadata: {
-              receiptNo,
-              manifestNo: data.manifestNo.trim(),
-              returnNote: ret.notes ?? null,
-            } as Prisma.InputJsonValue,
-          },
-          update: {},
+            };
+          }),
         });
       }
+
+      // 6) RollOperation log'ları — toplu insert. Unique key (rollId, stepId, opType)
+      //    — `skipDuplicates` ile tekrar gönderim sessiz geçer (eski upsert'ün
+      //    `update: {}` davranışıyla aynı semantik).
+      await tx.rollOperation.createMany({
+        data: data.returns.map((ret) => ({
+          rollId: ret.rollId,
+          workOrderStepId: data.stepId,
+          operationType: RollOperationType.SUBCONTRACTOR_RETURNED,
+          operatorId: userId ?? null,
+          metadata: {
+            receiptNo,
+            manifestNo: manifestNoTrimmed,
+            returnNote: ret.notes ?? null,
+          } as Prisma.InputJsonValue,
+        })),
+        skipDuplicates: true,
+      });
 
       // Step COMPLETED (tüm outstanding'ler dönmediyse hala ACTIVE kalmalı)
       const stillAtSubcontractor = await tx.roll.count({
@@ -719,13 +845,15 @@ export class SubcontractorService {
         step.id,
         ScanType.ARRIVAL,
         userId,
-        `Fason kabul: ${receiptNo} (İrsaliye: ${data.manifestNo})`
+        manifestNoTrimmed
+          ? `Fason kabul: ${receiptNo} (İrsaliye: ${manifestNoTrimmed})`
+          : `Fason kabul: ${receiptNo}`
       );
 
       return tx.subcontractorReceipt.findUnique({
         where: { id: receipt.id },
         include: {
-          company: true,
+          subcontractor: true,
           step: { include: { station: true } },
           items: { include: { newRoll: true } },
         },
@@ -757,31 +885,68 @@ export class SubcontractorService {
   // LIST & QUERIES
   // ===========================================================================
 
-  async listPendingReturns(): Promise<ApiResponse<unknown>> {
-    // Fasondan beklenen tüm sevk-istasyon-firma üçlüsü
+  async listPendingReturns(params?: {
+    workOrderId?: string;
+  }): Promise<ApiResponse<unknown>> {
+    // Mobil mal kabul akışı: refakat kartı okutulduğunda sadece o iş emrinin
+    // bekleyen grupları çekilir (gereksiz veri taşımamak için).
+    const rollWhere: Prisma.RollWhereInput = {
+      status: RollStatus.AT_SUBCONTRACTOR,
+      ...(params?.workOrderId
+        ? { currentStep: { workOrderId: params.workOrderId } }
+        : {}),
+    };
+    // HAFİF projection — mobil/web sadece şunları tüketir:
+    //   barcode, qty/weight/width, qualityGrade, item.{code,name}, variant.{code,name}
+    // include:true her ilişkili tablonun TÜM kolonlarını çeker → 300+ rolllık
+    // worst-case'de 300KB payload. select ile ~50KB'ye düşürür.
     const outstandingRolls = await prisma.roll.findMany({
-      where: { status: RollStatus.AT_SUBCONTRACTOR },
-      include: {
-        item: true,
-        variant: true,
+      where: rollWhere,
+      select: {
+        id: true,
+        barcode: true,
+        currentQty: true,
+        weightKg: true,
+        width: true,
+        qualityGrade: true,
+        status: true,
+        currentStepId: true,
+        item: { select: { id: true, code: true, name: true } },
+        variant: { select: { id: true, code: true, name: true } },
       },
     });
 
     const stepIds = [...new Set(outstandingRolls.map((r) => r.currentStepId).filter(Boolean) as string[])];
     const steps = await prisma.workOrderStep.findMany({
       where: { id: { in: stepIds } },
-      include: {
-        station: true,
+      select: {
+        id: true,
+        stepSequence: true,
+        notes: true,
+        station: { select: { id: true, code: true, name: true, type: true } },
         workOrder: {
-          include: { dyehouseCompany: true },
+          select: { id: true, batchNumber: true, recipeNo: true, status: true },
         },
+        plannedSubcontractor: {
+          select: { id: true, code: true, name: true },
+        },
+        requiredCategory: { select: { id: true, code: true, name: true } },
       },
     });
 
-    // Her step için son dispatch'i bul
+    // Her step için son dispatch'i bul. printSnapshot (büyük JSON) liste için gereksiz.
     const dispatches = await prisma.subcontractorDispatch.findMany({
       where: { stepId: { in: stepIds } },
-      include: { company: true, items: true },
+      select: {
+        id: true,
+        dispatchNo: true,
+        dispatchedAt: true,
+        plateNumber: true,
+        driverName: true,
+        stepId: true,
+        subcontractorId: true,
+        subcontractor: { select: { id: true, code: true, name: true } },
+      },
       orderBy: { dispatchedAt: "desc" },
     });
 
@@ -804,12 +969,13 @@ export class SubcontractorService {
           stepSequence: step.stepSequence,
           station: step.station,
           notes: step.notes,
+          requiredCategory: step.requiredCategory,
+          plannedSubcontractor: step.plannedSubcontractor,
         },
         workOrder: {
           id: step.workOrder.id,
           batchNumber: step.workOrder.batchNumber,
           recipeNo: step.workOrder.recipeNo,
-          dyehouseCompany: step.workOrder.dyehouseCompany,
           status: step.workOrder.status,
         },
         lastDispatch,
@@ -824,43 +990,104 @@ export class SubcontractorService {
 
   async listDispatches(params?: {
     workOrderId?: string;
-    companyId?: string;
-    limit?: number;
-  }): Promise<ApiResponse<unknown>> {
+    subcontractorId?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{
+    success: true;
+    data: unknown[];
+    pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  }> {
     const where: Prisma.SubcontractorDispatchWhereInput = {};
     if (params?.workOrderId) where.workOrderId = params.workOrderId;
-    if (params?.companyId) where.companyId = params.companyId;
+    if (params?.subcontractorId) where.subcontractorId = params.subcontractorId;
 
-    const dispatches = await prisma.subcontractorDispatch.findMany({
-      where,
-      include: {
-        company: true,
-        workOrder: true,
-        step: { include: { station: true } },
-        items: { include: { roll: true } },
-        dispatchedBy: { select: { id: true, username: true, fullName: true } },
+    const page = Math.max(1, params?.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, params?.pageSize ?? 10));
+    // buildPagination MAX_OFFSET=10K aşımında 400 fırlatır (curl saldırı yüzeyi).
+    const { skip } = buildPagination(page, pageSize);
+
+    // Liste için ÇOK HAFIF select — detay endpoint (`getDispatch`) tam veriyi döner.
+    // Müşteri/orderLinks/ownerCustomer gibi N+ join'ler list response'unu şişiriyordu;
+    // operatör detaya tıkladığında lazy fetch ile zenginleşir.
+    const [dispatches, total] = await Promise.all([
+      prisma.subcontractorDispatch.findMany({
+        where,
+        select: {
+          id: true,
+          dispatchNo: true,
+          dispatchedAt: true,
+          totalQty: true,
+          plateNumber: true,
+          driverName: true,
+          cancelledAt: true,
+          cancelReason: true,
+          workOrder: { select: { id: true, batchNumber: true } },
+          subcontractor: { select: { id: true, name: true } },
+          _count: { select: { items: true } },
+        },
+        orderBy: { dispatchedAt: "desc" },
+        skip,
+        take: pageSize,
+      }),
+      prisma.subcontractorDispatch.count({ where }),
+    ]);
+
+    return {
+      success: true,
+      data: dispatches,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize) || 1,
       },
-      orderBy: { dispatchedAt: "desc" },
-      take: params?.limit ?? 100,
-    });
-
-    return { success: true, data: dispatches };
+    };
   }
 
   async getDispatch(id: string): Promise<ApiResponse<unknown>> {
     const dispatch = await prisma.subcontractorDispatch.findUnique({
       where: { id },
       include: {
-        company: true,
+        subcontractor: true,
+        plannedSubcontractor: true,
+        // WO + sipariş + müşteri zinciri (detay panelinde "kim için" göstermek için)
         workOrder: {
           include: {
-            dyehouseCompany: true,
-            orderLinks: { include: { orderLine: { include: { order: { include: { customer: true } } } } } },
+            targetItem: {
+              include: {
+                color: true,
+              },
+            },
+            targetProperties: { include: { property: true } },
+            orderLinks: {
+              include: {
+                orderLine: {
+                  include: {
+                    item: true,
+                    variant: true,
+                    order: { include: { customer: true } },
+                  },
+                },
+              },
+            },
           },
         },
         step: { include: { station: true } },
-        items: { include: { roll: { include: { item: true, variant: true } } } },
+        // Roll-level müşteri sahipliği (SERVICE_PRODUCTION müşteri-malı uyarısı)
+        items: {
+          include: {
+            roll: {
+              include: {
+                item: true,
+                variant: true,
+                ownerCustomer: true,
+              },
+            },
+          },
+        },
         dispatchedBy: { select: { id: true, username: true, fullName: true } },
+        cancelledBy: { select: { id: true, username: true, fullName: true } },
       },
     });
 
@@ -870,35 +1097,85 @@ export class SubcontractorService {
 
   async listReceipts(params?: {
     workOrderId?: string;
-    companyId?: string;
-    limit?: number;
-  }): Promise<ApiResponse<unknown>> {
+    subcontractorId?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{
+    success: true;
+    data: unknown[];
+    pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  }> {
     const where: Prisma.SubcontractorReceiptWhereInput = {};
     if (params?.workOrderId) where.workOrderId = params.workOrderId;
-    if (params?.companyId) where.companyId = params.companyId;
+    if (params?.subcontractorId) where.subcontractorId = params.subcontractorId;
 
-    const receipts = await prisma.subcontractorReceipt.findMany({
-      where,
-      include: {
-        company: true,
-        workOrder: true,
-        step: { include: { station: true } },
-        items: { include: { newRoll: true } },
-        receivedBy: { select: { id: true, username: true, fullName: true } },
+    const page = Math.max(1, params?.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, params?.pageSize ?? 10));
+    // buildPagination MAX_OFFSET=10K aşımında 400 fırlatır (curl saldırı yüzeyi).
+    const { skip } = buildPagination(page, pageSize);
+
+    // Hafif select — detay `getReceipt` ile lazy gelir (sevk listesindeki desen).
+    // Mal kabulde metraj ölçülmez; toplam metraj sevk anındaki `dispatchedQty`
+    // toplamından hesaplanır (fason hizmeti — qty değişmez).
+    const [receipts, total] = await Promise.all([
+      prisma.subcontractorReceipt.findMany({
+        where,
+        select: {
+          id: true,
+          receiptNo: true,
+          manifestNo: true,
+          receivedAt: true,
+          notes: true,
+          workOrder: { select: { id: true, batchNumber: true } },
+          subcontractor: { select: { id: true, name: true, code: true } },
+          step: {
+            select: {
+              id: true,
+              stepSequence: true,
+              station: { select: { name: true, code: true } },
+            },
+          },
+          receivedBy: { select: { id: true, username: true, fullName: true } },
+          _count: { select: { items: true } },
+          items: {
+            select: {
+              sourceDispatchItem: { select: { dispatchedQty: true } },
+            },
+          },
+        },
+        orderBy: { receivedAt: "desc" },
+        skip,
+        take: pageSize,
+      }),
+      prisma.subcontractorReceipt.count({ where }),
+    ]);
+
+    const enriched = receipts.map(({ items, ...rest }) => ({
+      ...rest,
+      totalQty: items.reduce(
+        (sum, it) => sum + (it.sourceDispatchItem?.dispatchedQty ?? 0),
+        0
+      ),
+    }));
+
+    return {
+      success: true,
+      data: enriched,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize) || 1,
       },
-      orderBy: { receivedAt: "desc" },
-      take: params?.limit ?? 100,
-    });
-
-    return { success: true, data: receipts };
+    };
   }
 
   async getReceipt(id: string): Promise<ApiResponse<unknown>> {
     const receipt = await prisma.subcontractorReceipt.findUnique({
       where: { id },
       include: {
-        company: true,
-        workOrder: { include: { dyehouseCompany: true } },
+        subcontractor: true,
+        workOrder: true,
         step: { include: { station: true } },
         items: {
           include: {
@@ -921,7 +1198,7 @@ export class SubcontractorService {
     const dispatch = await prisma.subcontractorDispatch.findUnique({
       where: { id },
       include: {
-        company: true,
+        subcontractor: true,
         workOrder: { select: { id: true, batchNumber: true, recipeNo: true, parameters: true, type: true } },
         step: { include: { station: { select: { name: true, code: true } } } },
         items: {
@@ -976,10 +1253,10 @@ export class SubcontractorService {
           parameters: dispatch.workOrder.parameters as Record<string, unknown> | null,
           type: dispatch.workOrder.type,
         },
-        company: {
-          id: dispatch.company.id,
-          name: dispatch.company.name,
-          code: dispatch.company.code ?? null,
+        subcontractor: {
+          id: dispatch.subcontractor.id,
+          name: dispatch.subcontractor.name,
+          code: dispatch.subcontractor.code ?? null,
         },
         step: {
           id: dispatch.step.id,
@@ -1006,7 +1283,7 @@ export class SubcontractorService {
     const receipt = await prisma.subcontractorReceipt.findUnique({
       where: { id },
       include: {
-        company: true,
+        subcontractor: true,
         workOrder: { select: { id: true, batchNumber: true, recipeNo: true, type: true } },
         step: { include: { station: { select: { name: true, code: true } } } },
         receivedBy: { select: { fullName: true } },
@@ -1052,10 +1329,10 @@ export class SubcontractorService {
           recipeNo: receipt.workOrder.recipeNo,
           type: receipt.workOrder.type,
         },
-        company: {
-          id: receipt.company.id,
-          name: receipt.company.name,
-          code: receipt.company.code ?? null,
+        subcontractor: {
+          id: receipt.subcontractor.id,
+          name: receipt.subcontractor.name,
+          code: receipt.subcontractor.code ?? null,
         },
         step: {
           id: receipt.step.id,

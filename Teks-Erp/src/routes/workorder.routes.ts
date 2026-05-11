@@ -170,6 +170,25 @@ router.get("/:id/manifests", verifyToken, requirePermission("workorder:read"), c
 
 /**
  * @openapi
+ * /api/work-orders/manifest-by-id/{manifestId}:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Tek manifest'i ID ile getir (snapshot dahil)
+ *     description: Yazdırma / preview için kayıtlı snapshot'ı döner — yeniden hesaplama yok.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: manifestId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Manifest detayı (snapshot dahil) }
+ *       404: { description: Manifest bulunamadı }
+ */
+router.get("/manifest-by-id/:manifestId", verifyToken, requirePermission("workorder:read"), controller.getManifestById);
+
+/**
+ * @openapi
  * /api/work-orders/{id}/shipments:
  *   get:
  *     tags: [WorkOrders]
@@ -244,6 +263,60 @@ router.post("/", verifyToken, requirePermission("workorder:write"), controller.c
 
 /**
  * @openapi
+ * /api/work-orders/{id}:
+ *   patch:
+ *     tags: [WorkOrders]
+ *     summary: İş emrinin temel alanlarını güncelle (sadece PLANNED)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               batchNumber: { type: string }
+ *               width: { type: number, nullable: true }
+ *               targetQuantity: { type: number, nullable: true }
+ *               recipeNo: { type: string, nullable: true }
+ *               plannedStartDate: { type: string, nullable: true }
+ *               plannedEndDate: { type: string, nullable: true }
+ *     responses:
+ *       200: { description: Güncellendi }
+ *       409: { description: Üretim başlamış (sadece PLANNED düzenlenebilir) }
+ */
+router.patch("/:id", verifyToken, requirePermission("workorder:write"), controller.update);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}:
+ *   put:
+ *     tags: [WorkOrders]
+ *     summary: İş emrini tüm ilişkileri ile birlikte yeniden yaz (full replace)
+ *     description: |
+ *       Sadece PLANNED durumda ve üretime başlanmamış iş emirlerinde çalışır.
+ *       Rota şablonu, custom adımlar, bağlı sipariş kalemleri, hedef ürün ve
+ *       özellikler dahil tüm alanlar değişebilir. Mevcut WorkOrderStep,
+ *       WorkOrderToOrderLine ve WorkOrderTargetProperty kayıtları drop-and-recreate
+ *       pattern'i ile yenilenir.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Güncellendi }
+ *       409: { description: Üretim başlamış (sadece PLANNED + roll bağlı olmayan WO) }
+ */
+router.put("/:id", verifyToken, requirePermission("workorder:write"), controller.replace);
+
+/**
+ * @openapi
  * /api/work-orders/{id}/attach-rolls:
  *   patch:
  *     tags: [WorkOrders]
@@ -307,6 +380,40 @@ router.patch("/:id/attach-rolls", verifyToken, requirePermission("workorder:writ
  *         description: Toplar sepetten çıkarıldı
  */
 router.patch("/:id/detach-rolls", verifyToken, requirePermission("workorder:write"), controller.detachRolls);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/steps/{stepId}/planning:
+ *   patch:
+ *     tags: [WorkOrders]
+ *     summary: Fason adımı planlaması (kategori + planlanan firma)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: stepId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               requiredCategoryId:     { type: string, format: uuid, nullable: true }
+ *               plannedSubcontractorId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       200: { description: Adım planlaması güncellendi }
+ */
+router.patch(
+  "/:id/steps/:stepId/planning",
+  verifyToken,
+  requirePermission("workorder:write"),
+  controller.updateStepPlanning
+);
 
 /**
  * @openapi
@@ -393,5 +500,64 @@ router.delete("/:id", verifyToken, requirePermission("workorder:write"), control
  *         description: İş emri bulunamadı
  */
 router.delete("/:id/permanent", verifyToken, requirePermission("workorder:write"), controller.hardDelete);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/target-properties/impact:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: targetProperties değişikliği etkisi
+ *     description: |
+ *       Frontend update öncesi "kaç rulo etkilenir" uyarısı için. Tambur'dan
+ *       geçmiş ve henüz üretimde olan rulo sayılarını döner.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ */
+router.get(
+  "/:id/target-properties/impact",
+  verifyToken,
+  requirePermission("workorder:read"),
+  controller.getTargetPropertiesImpact,
+);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/target-properties:
+ *   patch:
+ *     tags: [WorkOrders]
+ *     summary: Hedef özellikler güncelle (replace)
+ *     description: |
+ *       WO.targetProperties replace edilir; bağlı tüm Roll'ların properties'i
+ *       senkronize edilir. Status farketmez.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [propertyIds]
+ *             properties:
+ *               propertyIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ */
+router.patch(
+  "/:id/target-properties",
+  verifyToken,
+  requirePermission("workorder:write"),
+  controller.updateTargetProperties,
+);
 
 export default router;

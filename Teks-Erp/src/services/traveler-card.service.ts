@@ -10,12 +10,15 @@
 //   - WO COMPLETED veya CANCELLED olunca ACTIVE kartlar COMPLETED/VOIDED'a çekilir.
 // =============================================================================
 
+import { Request } from "express";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
-import { ApiResponse } from "../types/api.types";
+import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { buildBarcode, buildCardNumber, verifyBarcode } from "../utils/barcode";
+import { parseQueryParams, buildPagination } from "../utils/query-parser";
 import {
+  Prisma,
   TravelerCard,
   TravelerCardScan,
   TravelerCardStatus,
@@ -55,6 +58,58 @@ export class TravelerCardService {
       n = n * 32 + v;
     }
     return n + 1;
+  }
+
+  /**
+   * Transaction-aware idempotent kart oluşturucu — WorkOrder.create flow'undan
+   * çağrılır. WO zaten varlık doğrulamış olduğu için tekrar kontrol etmez.
+   *
+   * - Halihazırda ACTIVE kart varsa onu döner (idempotent — yarıda kesilen
+   *   create/recreate akışlarında güvenli).
+   * - Aksi halde version=1 ile yeni kart üretir, AuditService.log düşer.
+   */
+  async createForWorkOrder(
+    tx: Prisma.TransactionClient,
+    workOrderId: string,
+    userId?: string
+  ): Promise<TravelerCard> {
+    const existing = await tx.travelerCard.findFirst({
+      where: { workOrderId, status: TravelerCardStatus.ACTIVE },
+    });
+    if (existing) return existing;
+
+    const now = new Date();
+    const seq = await this.nextMonthlySequence(now);
+    const cardNumber = buildCardNumber(now, seq);
+    const barcode = buildBarcode(now, seq);
+
+    const card = await tx.travelerCard.create({
+      data: {
+        cardNumber,
+        barcode,
+        workOrderId,
+        version: 1,
+        status: TravelerCardStatus.ACTIVE,
+        printedById: userId ?? null,
+      },
+    });
+
+    // Audit dış prisma'ya yazıyor — tx commit'inden sonra düşse bile kayıp olmaz
+    // (best-effort log). Asıl card kaydı tx içinde garanti.
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "TRAVELER_CARD",
+      recordId: card.id,
+      newData: {
+        cardNumber,
+        barcode,
+        version: 1,
+        event: "AUTO_PRINT_ON_WO_CREATE",
+      },
+    });
+
+    return card;
   }
 
   /**
@@ -293,20 +348,128 @@ export class TravelerCardService {
   }
 
   /**
-   * Barkoddan kart bilgisi (tarama öncesi önizleme).
+   * Aktif refakat kartlarını listeler — mobil ekranlarda "kart seç" picker'ı için.
+   *
+   * Filtreler:
+   *  - `?filter[status]=ACTIVE|COMPLETED|...|ALL` (default: ACTIVE)
+   *  - `?search=...` — cardNumber, barcode, batchNumber üzerinde contains (insensitive)
+   *
+   * Sıralama: default `printedAt desc`. Sayfa derinliği `MAX_OFFSET` ile sınırlı.
+   * Response shape mobil `TravelerCardLookup` ile uyumlu (workOrder + targetItem.color).
    */
-  async findByBarcode(barcode: string): Promise<ApiResponse<TravelerCard | null>> {
-    if (!verifyBarcode(barcode)) {
-      throw AppError.badRequest("Geçersiz barkod formatı");
+  async list(req: Request): Promise<PaginatedResponse<unknown>> {
+    const params = parseQueryParams(req);
+
+    // Status filtresi — explicit 'ALL' verilirse status'a göre filtreleme yapma.
+    const where: Prisma.TravelerCardWhereInput = {};
+    const statusFilter = params.filters.status;
+    if (statusFilter === "ALL" || (Array.isArray(statusFilter) && statusFilter.includes("ALL"))) {
+      // no status filter
+    } else if (Array.isArray(statusFilter)) {
+      where.status = { in: statusFilter as TravelerCardStatus[] };
+    } else if (typeof statusFilter === "string") {
+      where.status = statusFilter as TravelerCardStatus;
+    } else {
+      where.status = TravelerCardStatus.ACTIVE;
     }
 
-    const card = await prisma.travelerCard.findUnique({
-      where: { barcode: barcode.toUpperCase() },
+    // Search: cardNumber / barcode / WO batchNumber üzerinde insensitive contains
+    if (params.search && params.search.trim()) {
+      const q = params.search.trim();
+      where.OR = [
+        { cardNumber: { contains: q, mode: "insensitive" } },
+        { barcode: { contains: q, mode: "insensitive" } },
+        { workOrder: { batchNumber: { contains: q, mode: "insensitive" } } },
+      ];
+    }
+
+    const { skip, take } = buildPagination(params.page, params.pageSize);
+    // createdAt yerine printedAt üzerinden sırala — yeni basılan kart ilk gelsin
+    const sortField = params.sortBy && params.sortBy !== "createdAt" ? params.sortBy : "printedAt";
+    const orderBy = { [sortField]: params.sortOrder };
+
+    const [items, total] = await Promise.all([
+      prisma.travelerCard.findMany({
+        where,
+        orderBy,
+        skip,
+        take,
+        select: {
+          id: true,
+          cardNumber: true,
+          barcode: true,
+          version: true,
+          status: true,
+          workOrderId: true,
+          printedAt: true,
+          workOrder: {
+            select: {
+              id: true,
+              batchNumber: true,
+              status: true,
+              type: true,
+              targetItem: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  color: {
+                    select: { id: true, code: true, name: true, hex: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.travelerCard.count({ where }),
+    ]);
+
+    return {
+      success: true,
+      data: items,
+      pagination: {
+        page: params.page,
+        pageSize: params.pageSize,
+        total,
+        totalPages: Math.ceil(total / params.pageSize) || 1,
+      },
+    };
+  }
+
+  /**
+   * Barkoddan kart bilgisi (tarama öncesi önizleme).
+   */
+  /**
+   * Kartı barkod **veya** insan-okur kart numarası ile bulur.
+   *
+   * - Tam barkod (checksum'lı): `RK-YYMM-XXXXXX-C` — kamera/yazıcı çıktısı
+   * - Kart numarası (insan-okur): `RK-YYMM-NNN` — elle yazılırken kısa hali
+   *
+   * Mobile/admin tarafı her iki formatta da bu endpoint'i çağırabilir.
+   */
+  async findByBarcode(input: string): Promise<ApiResponse<TravelerCard | null>> {
+    const normalized = input.trim().toUpperCase();
+
+    const isFullBarcode = /^RK-\d{4}-[0-9A-Z]{6}-[0-9A-Z]$/.test(normalized);
+    const isCardNumber = /^RK-\d{4}-\d{1,6}$/.test(normalized);
+
+    if (!isFullBarcode && !isCardNumber) {
+      throw AppError.badRequest(
+        "Geçersiz format. Beklenen: RK-YYMM-XXXXXX-C (barkod) veya RK-YYMM-NNN (kart no)",
+      );
+    }
+    if (isFullBarcode && !verifyBarcode(normalized)) {
+      throw AppError.badRequest("Barkod checksum'ı geçersiz");
+    }
+
+    const card = await prisma.travelerCard.findFirst({
+      where: isFullBarcode ? { barcode: normalized } : { cardNumber: normalized },
       include: {
         workOrder: {
           include: {
+            targetItem: { include: { color: true } },
             steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
-            dyehouseCompany: true,
           },
         },
         scans: {

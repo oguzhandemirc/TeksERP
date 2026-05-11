@@ -69,20 +69,34 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmal�
 
 ## Database Performance Rules (her zaman uygula)
 
-> Üretim yüzbinlerce satır barındıracak. Detay + örnekler: ARCHITECTURE.md §9.
+> Üretim yüzbinlerce satır barındıracak; ERP yıllarca yerel sunucuda çalışacak. Detay + örnekler: ARCHITECTURE.md §9, §10.1, §10.2.
 
 1. **FK index zorunlu.** Her `@relation` kolonuna `@@index([fkColumn])` — Prisma otomatik yapmaz.
 2. **Composite index sırası:** Eşitlik kolonları önce, range/order sonra. Örn: `[status, createdAt]` ✓, `[createdAt, status]` ✗.
 3. **Sık birlikte filtrelenen kolonlar = tek composite.** İki ayrı index bitmap scan'e zorlar.
-4. **Soft-delete tablolarda partial index.** `WHERE isActive = true` — raw SQL migration ile (Prisma şemada native değil).
-5. **Yüksek hacim tablolar (`Roll`, `RollMovement`, `RollOperation`, `SystemLog`, `TravelerCardScan`)** için cursor pagination. `BaseService`'in `skip/take`'i 1000+ sayfada O(n) bozulur.
-6. **JSON alan sorgulanacaksa GIN index** raw migration ile. Sorgulanmıyorsa gerekmez.
-7. **`include` yerine `select`** — only-needed-fields, over-fetch'i azaltır.
+4. **Soft-delete tablolarda partial index.** `WHERE isActive = true` — raw SQL migration ile (Prisma şemada native değil). Aktif: `items`, `customers`.
+5. **Yüksek hacim tablolar (`Roll`, `RollMovement`, `RollOperation`, `SystemLog`, `TravelerCardScan`)** için cursor pagination. `MAX_OFFSET=10000` guard aktif (`query-parser.ts`) — `skip > 10K` → 400.
+6. **JSON alan sorgulanacaksa GIN index** raw migration ile, **endpoint yazılmadan ÖNCE**. Şu an hiçbiri sorgulanmıyor (`MachineLog.details`, `WorkOrder.parameters`, `RollOperation.metadata`, snapshot'lar).
+7. **`include` yerine `select`** — only-needed-fields, over-fetch'i azaltır. Liste sayfaları için detay ekranındaki tüm alanları çekme.
 8. **Karmaşık aggregation → `prisma.$queryRaw`.** Prisma `groupBy` API'si bazen çoklu round-trip yaratır.
 9. **`createMany` toplu insert için.** 100+ satır eklerken tek-tek `create` 10-50x yavaş.
-10. **Transaction süresi kısa.** External I/O (HTTP, file) tx içinde **yapma** — lock uzar, deadlock riski.
+10. **Transaction süresi kısa.** External I/O (HTTP, file) tx içinde **yapma** — lock uzar, deadlock riski. DB-level `idle_in_transaction_session_timeout=5min` aktif.
 11. **`tx.*` ile `Promise.all` YASAK.** pg adapter tek connection seri çalıştırır; ESLint kuralı yakalar (`eslint.config.mjs`).
 12. **EXPLAIN ile doğrula.** Yeni endpoint büyük tabloya değiyorsa `EXPLAIN ANALYZE` koş. `Seq Scan` görürsen index eksik.
+13. **Snapshot JSON'ları liste sorgusunda çekme.** `Manifest.snapshot`, `Shipment.printSnapshot`, `SubcontractorDispatch.printSnapshot` — sadece detay/print endpoint'i `select`'ine al.
+14. **Canlı DB'de index migration → `CREATE INDEX CONCURRENTLY` + `psql`.** `prisma migrate dev` regular `CREATE INDEX` üretir → milyon-satır tabloda yazma kilidi dakikalarca sürer (operatör mal kabul edemez). Çözüm: SQL'i `CREATE INDEX CONCURRENTLY IF NOT EXISTS` ile yaz; Prisma migrate ve `db execute` transaction'a sarıyor (CONCURRENTLY orada çalışmaz). Uygulama tek komutla:
+    ```bash
+    npm run migrate:concurrent <migration-adı>
+    ```
+    Wrapper script (`scripts/migrate-concurrent.sh`) önce SQL'i `psql` ile çalıştırır, sonra Prisma'ya "applied" işaretletir. Migration'da `CONCURRENTLY` yoksa script reddeder — sadece concurrent index migration'ları için. Şema değişiklikleri (`ALTER TABLE`, kolon ekle/sil) normal `migrate dev`/`migrate deploy` akışında. Boş DB'ye baseline kurarken (yeni kurulum) gerek yok — fark yaratmaz.
+
+## Operasyonel Bakım
+
+- **`statement_timeout=30s`** aktif (uzun sorgu otomatik iptal). Migration: `20260427160000_db_runtime_safety`.
+- **Slow query log** (`>500ms`) PostgreSQL log dosyasına düşer.
+- **6 ayda bir** `POST /api/admin/system-logs/archive { "monthsToKeep": 6 }` — `archived=0` dönene kadar tekrar et.
+- **3 ayda bir** ARCHITECTURE.md §10.2 sağlık kontrol SQL'lerini çalıştır.
+- **Yılda bir** `REINDEX TABLE CONCURRENTLY` yüksek hacim tablolarda (rolls, system_logs, roll_movements vb.).
 
 ## Yeni Endpoint Kontrol Listesi
 

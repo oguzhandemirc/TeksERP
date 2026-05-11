@@ -9,7 +9,6 @@ import "../types/express-augment";
 
 const finalizeSchema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
-  netCurrentQty: z.number().min(0, "Net miktar 0 veya daha büyük olmalı"),
   decisions: z.array(
     z.object({
       errorId: z.string().uuid("Geçersiz hata ID"),
@@ -17,6 +16,15 @@ const finalizeSchema = z.object({
       qualityGrade: z.string().optional(),
     })
   ),
+  voluntaryCuts: z
+    .array(
+      z.object({
+        start: z.number().min(0, "Başlangıç 0 veya daha büyük olmalı"),
+        end: z.number().positive("Bitiş pozitif olmalı"),
+        qualityGrade: z.string().min(1, "Kalite seçilmelidir"),
+      })
+    )
+    .default([]),
   foldType: z.enum(["2-KAT", "4-KAT"]).optional(),
   layerCount: z.number().int().positive().max(20).nullish(),
   cutMode: z.enum(["BY_DEFECT", "FIXED_LENGTH"]).nullish(),
@@ -52,6 +60,20 @@ const swatchSchema = z.object({
   variantId: z.string().uuid().nullish(),
 });
 
+const reportErrorSchema = z.object({
+  rollId: z.string().uuid(),
+  stepId: z.string().uuid(),
+  startMeter: z.number().min(0),
+  endMeter: z.number().positive(),
+  defectTypeId: z.string().uuid(),
+});
+
+const postProductionSplitSchema = z.object({
+  rollId: z.string().uuid(),
+  cutLength: z.number().positive(),
+  originalKeepsLarger: z.boolean(),
+});
+
 export class TamburController {
   private service: TamburService;
 
@@ -60,11 +82,88 @@ export class TamburController {
     this.getPendingRolls = this.getPendingRolls.bind(this);
     this.getRollForDecision = this.getRollForDecision.bind(this);
     this.getByCardBarcode = this.getByCardBarcode.bind(this);
+    this.getStep = this.getStep.bind(this);
     this.finalize = this.finalize.bind(this);
     this.allocate = this.allocate.bind(this);
     this.splitAllocate = this.splitAllocate.bind(this);
     this.createSwatch = this.createSwatch.bind(this);
     this.listSwatches = this.listSwatches.bind(this);
+    this.reportError = this.reportError.bind(this);
+    this.listOpenCards = this.listOpenCards.bind(this);
+    this.postProductionSplit = this.postProductionSplit.bind(this);
+    this.getSwatchByBarcode = this.getSwatchByBarcode.bind(this);
+    this.listRecentOutputRolls = this.listRecentOutputRolls.bind(this);
+  }
+
+  /** GET /api/tambur/recent-output-rolls?workOrderId=&limit= */
+  async listRecentOutputRolls(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const workOrderId =
+        typeof req.query.workOrderId === "string" ? req.query.workOrderId : undefined;
+      const limit =
+        typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+      const result = await this.service.listRecentOutputRolls({
+        workOrderId,
+        limit: Number.isFinite(limit) ? limit : undefined,
+      });
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/swatches/by-barcode/:barcode */
+  async getSwatchByBarcode(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getSwatchByBarcode(
+        (req.params.barcode as string).trim()
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/tambur/post-production-split */
+  async postProductionSplit(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = postProductionSplitSchema.parse(req.body);
+      const result = await this.service.postProductionSplit(body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/tambur/step/:stepId */
+  async getStep(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getStep(req.params.stepId as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/tambur/report-error */
+  async reportError(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = reportErrorSchema.parse(req.body);
+      const result = await this.service.reportError(body, req.user?.userId);
+      res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/tambur/open-cards */
+  async listOpenCards(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.listOpenCards();
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
   }
 
   /**

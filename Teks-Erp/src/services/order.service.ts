@@ -12,16 +12,43 @@ import { AuditService } from "./audit.service";
 import { BaseService, BaseServiceConfig } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
+import { OrderStatus } from "@prisma/client";
 
 export class OrderService extends BaseService {
   constructor(config: BaseServiceConfig) {
     super(config);
   }
 
+  /**
+   * Hedef şubenin müşteriye ait + aktif olduğunu doğrular.
+   * Aynı validasyon deseni shipping.service.ts:createShipment'te kullanılır.
+   */
+  private async validateBranch(
+    branchId: string,
+    customerId: string
+  ): Promise<void> {
+    const branch = await prisma.customerBranch.findUnique({
+      where: { id: branchId },
+      select: { id: true, customerId: true, isActive: true },
+    });
+    if (!branch) throw AppError.notFound("Şube bulunamadı");
+    if (branch.customerId !== customerId) {
+      throw AppError.badRequest("Şube bu müşteriye ait değil");
+    }
+    if (!branch.isActive) throw AppError.badRequest("Şube pasif durumda");
+  }
+
   async create(
     data: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    if (data.branchId && data.customerId) {
+      await this.validateBranch(
+        data.branchId as string,
+        data.customerId as string
+      );
+    }
+
     const today = new Date();
     const prefix =
       today.getFullYear().toString() +
@@ -42,38 +69,26 @@ export class OrderService extends BaseService {
     const prismaData: Record<string, unknown> = {
       ...data,
       orderNumber,
+      // Sipariş oluşturulur oluşturulmaz üretime/sevke açık olsun;
+      // ayrı bir "onay" adımı kullanılmıyor.
+      status: OrderStatus.APPROVED,
     };
 
-    // Lines: targetProperties (m:n) varsa { create: [...] } formatına çevir.
-    // Frontend `targetPropertyIds: string[]` da gönderebilir — onu transform eder.
+    // Lines: requiredPropertyIds varsa { create: [...] } formatına çevir.
     if (Array.isArray(prismaData.lines)) {
-      prismaData.lines = (prismaData.lines as Record<string, unknown>[]).map(
-        (rawLine) => {
-          const line = { ...rawLine };
-          // Frontend'den gelebilecek iki format desteklenir:
-          //   1. line.targetPropertyIds: string[]
-          //   2. line.targetProperties: [{ propertyId }, ...]
-          let propertyIds: string[] = [];
-          if (Array.isArray(line.targetPropertyIds)) {
-            propertyIds = (line.targetPropertyIds as string[]).filter(Boolean);
-          } else if (Array.isArray(line.targetProperties)) {
-            propertyIds = (line.targetProperties as { propertyId: string }[])
-              .map((p) => p.propertyId)
-              .filter(Boolean);
-          }
-          delete line.targetPropertyIds;
-          if (propertyIds.length > 0) {
-            line.targetProperties = {
-              create: [...new Set(propertyIds)].map((propertyId) => ({
-                propertyId,
-              })),
-            };
-          } else {
-            delete line.targetProperties;
-          }
-          return line;
-        },
-      );
+      prismaData.lines = (prismaData.lines as Record<string, unknown>[]).map((rawLine) => {
+        const line = { ...rawLine };
+        const ids = Array.isArray(line.requiredPropertyIds)
+          ? [...new Set((line.requiredPropertyIds as string[]).filter(Boolean))]
+          : [];
+        delete line.requiredPropertyIds;
+        if (ids.length > 0) {
+          line.requiredProperties = {
+            create: ids.map((propertyId) => ({ propertyId })),
+          };
+        }
+        return line;
+      });
     }
 
     if (this.config.nestedCreateFields) {
@@ -100,6 +115,97 @@ export class OrderService extends BaseService {
     });
 
     return { success: true, data: record, message: "Sipariş oluşturuldu" };
+  }
+
+  /**
+   * Update override — status-gated header editi.
+   *
+   * Kurallar:
+   * - COMPLETED / CANCELLED → değiştirilemez (409).
+   * - PARTIAL_SHIPPED → sadece `deadline` güncellenir; diğer alanlar yoksayılır.
+   * - APPROVED → header alanları (customerId, branchId, currency, deadline) açık;
+   *   ancak aktif (PLANNED dışı) iş emri bağlıysa customerId/branchId
+   *   değiştirilemez (409).
+   * - Lines (kalemler) HİÇBİR durumda güncellenmez — yanlışlıkla gelmiş olsa
+   *   bile data'dan silinir. Kalem değişikliği için sipariş iptal + yeniden
+   *   oluşturma akışı kullanılır.
+   */
+  async update(
+    id: string,
+    data: Record<string, unknown>,
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    const current = await prisma.order.findUnique({
+      where: { id },
+      select: {
+        customerId: true,
+        branchId: true,
+        status: true,
+        lines: {
+          select: {
+            workOrderLinks: {
+              select: { workOrder: { select: { status: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!current) throw AppError.notFound("Sipariş bulunamadı");
+
+    if (
+      current.status === OrderStatus.COMPLETED ||
+      current.status === OrderStatus.CANCELLED
+    ) {
+      throw AppError.conflict(
+        "Tamamlanmış veya iptal edilmiş sipariş düzenlenemez"
+      );
+    }
+
+    // Kalem güncellemesi hiçbir koşulda kabul edilmez.
+    const cleanData: Record<string, unknown> = { ...data };
+    delete cleanData.lines;
+
+    if (current.status === OrderStatus.PARTIAL_SHIPPED) {
+      const allowed = new Set(["deadline"]);
+      for (const key of Object.keys(cleanData)) {
+        if (!allowed.has(key)) delete cleanData[key];
+      }
+      if (Object.keys(cleanData).length === 0) {
+        return { success: true, data: current, message: "Değişiklik yok" };
+      }
+      return super.update(id, cleanData, userId);
+    }
+
+    const branchChanging = Object.prototype.hasOwnProperty.call(cleanData, "branchId");
+    const customerChanging = Object.prototype.hasOwnProperty.call(cleanData, "customerId");
+
+    if (branchChanging || customerChanging) {
+      // Aktif (PLANNED dışı) WO bağlıysa müşteri/şube değiştirilemez.
+      const blockingStatuses = new Set(["IN_PROGRESS", "PAUSED", "COMPLETED"]);
+      const hasBlockingWO = current.lines.some((line) =>
+        line.workOrderLinks.some((link) =>
+          blockingStatuses.has(link.workOrder.status)
+        )
+      );
+      if (hasBlockingWO) {
+        throw AppError.conflict(
+          "Aktif iş emrine bağlı sipariş; müşteri veya şube değiştirilemez"
+        );
+      }
+
+      const finalBranchId = branchChanging
+        ? (cleanData.branchId as string | null)
+        : current.branchId;
+      const finalCustomerId = customerChanging
+        ? (cleanData.customerId as string)
+        : current.customerId;
+
+      if (finalBranchId) {
+        await this.validateBranch(finalBranchId, finalCustomerId);
+      }
+    }
+
+    return super.update(id, cleanData, userId);
   }
 
   /**
@@ -187,6 +293,164 @@ export class OrderService extends BaseService {
         plannedLinkIds.length > 0
           ? `Sipariş iptal edildi. ${plannedLinkIds.length} planlı iş emri bağlantısı koparıldı.`
           : "Sipariş iptal edildi",
+    };
+  }
+
+  /**
+   * Planlamacı tarafından manuel tamamlama. Tölerans dışında eksik metraj
+   * kabul edildiğinde, ürün üretilmeyecekse, müşteri kabul ettiğinde vb.
+   *
+   * - APPROVED veya PARTIAL_SHIPPED durumdaki siparişler için.
+   * - PENDING (onaysız) ya da CANCELLED kapatılamaz.
+   * - Zaten COMPLETED ise no-op değil hata — yanlışlıkla tetiklenmesin.
+   */
+  async manualComplete(
+    id: string,
+    reason: string,
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    if (!userId) throw AppError.unauthorized();
+    if (!reason.trim()) throw AppError.badRequest("Tamamlama sebebi gerekli");
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      select: { id: true, orderNumber: true, status: true, completedAt: true },
+    });
+    if (!order) throw AppError.notFound("Sipariş bulunamadı");
+    if (order.status === OrderStatus.COMPLETED) {
+      throw AppError.badRequest("Sipariş zaten tamamlanmış");
+    }
+    if (order.status === OrderStatus.CANCELLED) {
+      throw AppError.badRequest("İptal edilmiş sipariş kapatılamaz");
+    }
+    if (order.status === OrderStatus.PENDING) {
+      throw AppError.badRequest("Onaysız sipariş manuel tamamlanamaz");
+    }
+
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        status: OrderStatus.COMPLETED,
+        completedAt: order.completedAt ?? new Date(),
+        manualClosedById: userId,
+        manualCloseReason: reason.trim(),
+      },
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: this.config.tableName,
+      recordId: id,
+      oldData: { status: order.status },
+      newData: {
+        status: updated.status,
+        manualClosedById: userId,
+        manualCloseReason: updated.manualCloseReason,
+      },
+    });
+
+    return {
+      success: true,
+      data: updated,
+      message: `Sipariş manuel tamamlandı: ${order.orderNumber}`,
+    };
+  }
+
+  /**
+   * Manuel kapatılmış siparişi geri açar. Recompute sonucunda statü
+   * otomatik PARTIAL_SHIPPED veya APPROVED'a döner. Sadece manuel
+   * kapatılmış (manualClosedById dolu) siparişler için.
+   */
+  async reopen(
+    id: string,
+    reason: string,
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    if (!userId) throw AppError.unauthorized();
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        manualClosedById: true,
+      },
+    });
+    if (!order) throw AppError.notFound("Sipariş bulunamadı");
+    if (!order.manualClosedById) {
+      throw AppError.badRequest(
+        "Bu sipariş manuel kapatılmamış — yeniden açma uygulanamaz"
+      );
+    }
+
+    // Manuel iz silinir, status PARTIAL_SHIPPED veya APPROVED olarak
+    // recompute belirler. Önce manualClosedById'yi temizle ki recompute çalışabilsin.
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id },
+        data: {
+          manualClosedById: null,
+          manualCloseReason: null,
+          completedAt: null,
+          status: OrderStatus.PARTIAL_SHIPPED, // sevk yoksa recompute APPROVED'a çekecek; sevk varsa zaten PARTIAL_SHIPPED kalacak
+        },
+      });
+      // recompute import'unu burada yapamıyorum (circular?) — manuel hesap:
+      const o = await tx.order.findUnique({
+        where: { id },
+        select: {
+          status: true,
+          lines: {
+            select: {
+              allocations: {
+                select: {
+                  roll: {
+                    select: {
+                      shipmentItems: {
+                        where: { shipment: { status: "SHIPPED" } },
+                        select: { shippedQty: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+      const shipped = (o?.lines ?? [])
+        .flatMap((l) => l.allocations)
+        .flatMap((a) => a.roll.shipmentItems)
+        .reduce((s, si) => s + si.shippedQty, 0);
+
+      const finalStatus: OrderStatus =
+        shipped > 0 ? OrderStatus.PARTIAL_SHIPPED : OrderStatus.APPROVED;
+
+      return tx.order.update({
+        where: { id },
+        data: { status: finalStatus },
+      });
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: this.config.tableName,
+      recordId: id,
+      oldData: { status: order.status, manualClosedById: order.manualClosedById },
+      newData: {
+        status: updated.status,
+        manualClosedById: null,
+        reopenReason: reason.trim() || null,
+      },
+    });
+
+    return {
+      success: true,
+      data: updated,
+      message: `Sipariş yeniden açıldı: ${order.orderNumber}`,
     };
   }
 }

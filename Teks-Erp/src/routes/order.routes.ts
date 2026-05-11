@@ -2,24 +2,32 @@
 // TeksERP - Order Routes (OrderService + BaseController CRUD)
 // =============================================================================
 
-import { Router } from "express";
+import { Router, Request, Response, NextFunction } from "express";
+import { z } from "zod";
 import { BaseController } from "../controllers/base.controller";
 import { OrderService } from "../services/order.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
+import "../types/express-augment";
 
 const service = new OrderService({
   modelName: "order",
   tableName: "ORDER",
   searchFields: ["orderNumber"],
+  dateFields: ["createdAt", "deadline"],
   defaultInclude: {
     customer: true,
+    branch: { select: { id: true, name: true, city: true, district: true } },
     lines: {
       include: {
-        item: true,
+        item: {
+          include: {
+            color: true,
+            allowedProperties: { include: { property: true } },
+          },
+        },
         variant: true,
-        targetColor: true,
-        targetProperties: { include: { property: true } },
+        requiredProperties: { include: { property: true } },
       },
     },
   },
@@ -28,6 +36,88 @@ const service = new OrderService({
 
 const controller = new BaseController(service);
 const router = Router();
+
+const reasonSchema = z.object({
+  reason: z.string().min(1, "Sebep gerekli").max(500),
+});
+
+/**
+ * @openapi
+ * /api/orders/{id}/manual-complete:
+ *   post:
+ *     tags: [Orders]
+ *     summary: Siparişi manuel tamamla (planlamacı)
+ *     description: |
+ *       Tölerans dışında eksik metraj, müşteri kabulü vb. durumlarda planlamacı
+ *       siparişi manuel kapatır. APPROVED veya PARTIAL_SHIPPED durumdaki
+ *       siparişler için. Sebep zorunlu.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string, maxLength: 500 }
+ *     responses:
+ *       200: { description: Sipariş tamamlandı }
+ *       400: { description: Onaysız/iptal/zaten tamamlanmış sipariş }
+ */
+router.post(
+  "/:id/manual-complete",
+  verifyToken,
+  requirePermission("allocation:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { reason } = reasonSchema.parse(req.body);
+      const result = await service.manualComplete(
+        req.params.id as string,
+        reason,
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/orders/{id}/reopen:
+ *   post:
+ *     tags: [Orders]
+ *     summary: Manuel kapatılmış siparişi yeniden aç
+ *     description: |
+ *       Sadece manualClosedById dolu siparişler için. Status PARTIAL_SHIPPED
+ *       (sevk varsa) veya APPROVED'a döner.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/:id/reopen",
+  verifyToken,
+  requirePermission("allocation:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { reason } = reasonSchema.parse(req.body);
+      const result = await service.reopen(
+        req.params.id as string,
+        reason,
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 /**
  * @openapi

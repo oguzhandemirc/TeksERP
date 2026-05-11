@@ -99,6 +99,40 @@ const travelerCardRouter = Router();
 
 /**
  * @openapi
+ * /api/traveler-cards:
+ *   get:
+ *     tags: [TravelerCards]
+ *     summary: Refakat kartlarını listele (mobil picker'lar için)
+ *     description: |
+ *       Aktif refakat kartlarını WO + targetItem (+color) bilgisiyle döner.
+ *       Default `filter[status]=ACTIVE`; `ALL` ile tüm statüler çekilir.
+ *       `search` cardNumber/barcode/batchNumber üzerinde insensitive contains uygular.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: filter[status]
+ *         schema: { type: string, enum: [ACTIVE, COMPLETED, REPRINTED, VOIDED, ALL] }
+ *     responses:
+ *       200: { description: Sayfalı kart listesi }
+ */
+travelerCardRouter.get(
+  "/",
+  verifyToken,
+  requirePermission("workorder:read"),
+  controller.list
+);
+
+/**
+ * @openapi
  * /api/traveler-cards/scan:
  *   post:
  *     tags: [TravelerCards]

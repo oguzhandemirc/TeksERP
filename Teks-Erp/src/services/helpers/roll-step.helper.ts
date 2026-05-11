@@ -74,11 +74,24 @@ export async function recomputeStepStatus(
 
   // Tx içinde paralel sorgu atmak illüzyondur: aynı pg bağlantısı onları
   // zaten sıralar ve pg@9'da hard-error olur. Sıralı await zorunludur.
+  //
+  // CANCELLED roller "hiç olmamış" semantiği — movement'ları step status
+  // hesabına dahil edilmez (operatör iptal ettiyse step PENDING'e döner).
+  // SCRAP (gerçek fire — Tambur kalite reddi vb.) sayılır: o top istasyondan
+  // gerçekten geçmiş, audit kalır.
   const openCount = await tx.rollMovement.count({
-    where: { workOrderStepId: stepId, exitedAt: null },
+    where: {
+      workOrderStepId: stepId,
+      exitedAt: null,
+      roll: { status: { not: RollStatus.CANCELLED } },
+    },
   });
   const closedCount = await tx.rollMovement.count({
-    where: { workOrderStepId: stepId, exitedAt: { not: null } },
+    where: {
+      workOrderStepId: stepId,
+      exitedAt: { not: null },
+      roll: { status: { not: RollStatus.CANCELLED } },
+    },
   });
 
   // Bu step'e henüz girmemiş ama iş emrinin üretimine dahil olan roller var mı?

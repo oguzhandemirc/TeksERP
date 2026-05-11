@@ -27,6 +27,30 @@ router.get("/pending-rolls", verifyToken, requirePermission("quality:read"), con
 
 /**
  * @openapi
+ * /api/tambur/recent-output-rolls:
+ *   get:
+ *     tags: [Tambur]
+ *     summary: Tambur'dan son çıkmış toplar (etiket yeniden basımı için)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: workOrderId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 50, maximum: 200 }
+ *     responses:
+ *       200: { description: Toplar listesi (item.color, variant ile) }
+ */
+router.get(
+  "/recent-output-rolls",
+  verifyToken,
+  requirePermission("quality:read"),
+  controller.listRecentOutputRolls
+);
+
+/**
+ * @openapi
  * /api/tambur/by-card/{barcode}:
  *   get:
  *     tags: [Tambur]
@@ -53,6 +77,122 @@ router.get(
   verifyToken,
   requirePermission("quality:read"),
   controller.getByCardBarcode
+);
+
+/**
+ * @openapi
+ * /api/tambur/step/{stepId}:
+ *   get:
+ *     tags: [Tambur]
+ *     summary: Step ID ile direkt çek (refresh için)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: stepId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Tambur adım özeti }
+ *       400: { description: Adım Tambur tipinde değil }
+ *       404: { description: Adım bulunamadı }
+ */
+router.get(
+  "/step/:stepId",
+  verifyToken,
+  requirePermission("quality:read"),
+  controller.getStep
+);
+
+/**
+ * @openapi
+ * /api/tambur/open-cards:
+ *   get:
+ *     tags: [Tambur]
+ *     summary: Tambur adımlarında açık top bekleyen aktif kartlar (kamera modal)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Açık kart listesi }
+ */
+router.get(
+  "/open-cards",
+  verifyToken,
+  requirePermission("quality:read"),
+  controller.listOpenCards
+);
+
+/**
+ * @openapi
+ * /api/tambur/report-error:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: Tambur'da yeni hata kaydı (Kurşun'da yakalanmamış)
+ *     description: |
+ *       Tambur'da operatör Kurşun'da görülmemiş bir hata fark ederse aynı `RollError`
+ *       modelinde kayıt açar. `isProcessed=false` kalır, finalize akışıyla beraber
+ *       Kurşun'dan gelenlerle aynı listede karara bağlanır.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollId, stepId, startMeter, endMeter, defectTypeId]
+ *             properties:
+ *               rollId:       { type: string, format: uuid }
+ *               stepId:       { type: string, format: uuid }
+ *               startMeter:   { type: number }
+ *               endMeter:     { type: number }
+ *               defectTypeId: { type: string, format: uuid }
+ *     responses:
+ *       201: { description: Hata kaydı oluşturuldu }
+ *       400: { description: Geçersiz aralık veya pasif hata tipi }
+ *       404: { description: Top, adım veya hata tipi bulunamadı }
+ */
+router.post(
+  "/report-error",
+  verifyToken,
+  requirePermission("quality:write"),
+  controller.reportError
+);
+
+/**
+ * @openapi
+ * /api/tambur/post-production-split:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: Post-production split — depodaki topu istenen metrede ikiye böl
+ *     description: |
+ *       Hata kesimi DEĞİL — aynı kalitede fonksiyonel kesim. Senaryo: 500m'lik
+ *       depodaki top → 300m yeni siparişe + 200m geride kalan top depoda.
+ *       İkisi de aynı qualityGrade ve WAREHOUSE'da kalır. Çuvallanmış top
+ *       (sackId dolu) kesime gitmez.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollId, cutLength, originalKeepsLarger]
+ *             properties:
+ *               rollId: { type: string, format: uuid }
+ *               cutLength: { type: number, description: Kesim metresi (orijinalden ayrılan parça) }
+ *               originalKeepsLarger:
+ *                 type: boolean
+ *                 description: |
+ *                   true: orijinal büyük kalır (qty-cutLength), yeni roll küçük (cutLength)
+ *                   false: orijinal küçük (cutLength), yeni roll büyük (qty-cutLength)
+ *     responses:
+ *       200: { description: 2 top — original + newRoll }
+ *       400: { description: Geçersiz parametreler veya çuvallanmış top }
+ *       404: { description: Top bulunamadı }
+ */
+router.post(
+  "/post-production-split",
+  verifyToken,
+  requirePermission("quality:write"),
+  controller.postProductionSplit
 );
 
 /**

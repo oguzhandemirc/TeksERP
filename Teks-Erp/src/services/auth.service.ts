@@ -14,28 +14,20 @@ const JWT_EXPIRES_IN = "8h";
 export class AuthService {
   /**
    * Authenticate user and return JWT token.
+   * Efektif yetki = UserPermission tablosundan validFrom/validUntil filtreli okuma.
+   * Roller yok — yetki kişiye doğrudan atanır.
    */
   static async login(
     username: string,
     password: string
   ): Promise<{ token: string; user: JwtPayload }> {
-    // Find user with roles and permissions
     const user = await prisma.user.findUnique({
       where: { username },
-      include: {
-        roles: {
-          include: {
-            role: {
-              include: {
-                permissions: {
-                  include: {
-                    permission: true,
-                  },
-                },
-              },
-            },
-          },
-        },
+      select: {
+        id: true,
+        username: true,
+        passwordHash: true,
+        isActive: true,
       },
     });
 
@@ -48,20 +40,11 @@ export class AuthService {
       throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
     }
 
-    // Extract role names and unique permission codes
-    const roles = user.roles.map((ur) => ur.role.name);
-    const permissionSet = new Set<string>();
-    for (const ur of user.roles) {
-      for (const rp of ur.role.permissions) {
-        permissionSet.add(rp.permission.code);
-      }
-    }
-    const permissions = Array.from(permissionSet);
+    const permissions = await this.getEffectivePermissions(user.id);
 
     const payload: JwtPayload = {
       userId: user.id,
       username: user.username,
-      roles,
       permissions,
     };
 
@@ -86,5 +69,26 @@ export class AuthService {
    */
   static async hashPassword(password: string): Promise<string> {
     return bcrypt.hash(password, 10);
+  }
+
+  /**
+   * Bir kullanıcının şu an geçerli efektif permission code'larını döner.
+   * validFrom/validUntil pencereleri filtrelenir.
+   */
+  static async getEffectivePermissions(userId: string): Promise<string[]> {
+    const now = new Date();
+    const grants = await prisma.userPermission.findMany({
+      where: {
+        userId,
+        AND: [
+          { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+          { OR: [{ validUntil: null }, { validUntil: { gte: now } }] },
+        ],
+      },
+      select: { permission: { select: { code: true } } },
+    });
+    const set = new Set<string>();
+    for (const g of grants) set.add(g.permission.code);
+    return Array.from(set);
   }
 }

@@ -17,11 +17,26 @@ const createSchema = z.object({
   plannedStartDate:  z.string().optional().nullable(),
   plannedEndDate:    z.string().optional().nullable(),
   routeTemplateId:   z.string().uuid().optional().nullable(),
-  dyehouseCompanyId: z.string().uuid().optional().nullable(),
+  targetItemId:      z.string().uuid().optional().nullable(),
   steps: z
     .array(z.object({
-      stationId: z.string().uuid("Geçersiz istasyon ID"),
-      notes:     z.string().max(500).optional().nullable(),
+      stationId:              z.string().uuid("Geçersiz istasyon ID"),
+      notes:                  z.string().max(500).optional().nullable(),
+      requiredCategoryId:     z.string().uuid().optional().nullable(),
+      plannedSubcontractorId: z.string().uuid().optional().nullable(),
+    }))
+    .optional(),
+  /**
+   * routeTemplateId ile birlikte verilir: şablondan klonlanan adımların fason
+   * planlamasını üzerine yazar. `sequence` adımın rotadaki sırasıdır
+   * (aynı istasyon iki kez gözükebileceğinden stationId yerine sequence ile eşleşir).
+   */
+  stepPlanning: z
+    .array(z.object({
+      sequence:               z.number().int().positive(),
+      requiredCategoryId:     z.string().uuid().optional().nullable(),
+      plannedSubcontractorId: z.string().uuid().optional().nullable(),
+      notes:                  z.string().max(500).optional().nullable(),
     }))
     .optional(),
   orderLineAllocations: z
@@ -31,23 +46,15 @@ const createSchema = z.object({
     }))
     .optional(),
   orderLineIds: z.array(z.string().uuid()).optional().nullable(),
-
-  // Hedef renk + özellikler — fason adımlarında uygulanacak.
-  // stepIndex, steps array'inin (veya rota şablonu adımlarının) 0-bazlı index'i.
-  // null/undefined verilirse adım atanmaz (sonradan atanabilir).
-  targetColorId:        z.string().uuid().optional().nullable(),
-  targetColorStepIndex: z.number().int().nonnegative().optional().nullable(),
-  targetProperties: z
-    .array(z.object({
-      propertyId:       z.string().uuid(),
-      plannedStepIndex: z.number().int().nonnegative().optional().nullable(),
-      notes:            z.string().max(500).optional().nullable(),
-    }))
-    .optional(),
+  targetPropertyIds: z.array(z.string().uuid()).optional(),
 }).refine(
   (d) => Boolean(d.routeTemplateId) || (d.steps && d.steps.length > 0),
   { message: "routeTemplateId veya en az bir step gerekli", path: ["steps"] },
 );
+
+const targetPropertiesSchema = z.object({
+  propertyIds: z.array(z.string().uuid()),
+});
 
 const attachRollsSchema = z.object({
   barcodes: z
@@ -61,6 +68,65 @@ const detachRollsSchema = z.object({
     .min(1, "En az bir top (roll) id'si gerekli"),
 });
 
+const updateStepPlanningSchema = z.object({
+  requiredCategoryId: z.string().uuid().nullable().optional(),
+  plannedSubcontractorId: z.string().uuid().nullable().optional(),
+});
+
+const updateWorkOrderSchema = z.object({
+  batchNumber: z.string().trim().min(1).max(64).optional(),
+  width: z.number().positive().nullable().optional(),
+  targetQuantity: z.number().positive().nullable().optional(),
+  recipeNo: z.string().max(100).nullable().optional(),
+  plannedStartDate: z.string().nullable().optional(),
+  plannedEndDate: z.string().nullable().optional(),
+  targetItemId: z.string().uuid().nullable().optional(),
+});
+
+/**
+ * Full replace: createSchema ile aynı yapı. Sadece PLANNED + üretime başlanmamış
+ * iş emirlerinde çalışır. Rota, kalemler, hedef ürün/özellikler hepsi değişebilir.
+ */
+const replaceWorkOrderSchema = z.object({
+  batchNumber:       z.string().trim().min(1).optional().nullable(),
+  type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION", "SAMPLE_PRODUCTION", "REPAIR_REWORK"]).optional(),
+  width:             z.number().positive("En değeri pozitif olmalı").optional().nullable(),
+  targetQuantity:    z.number().positive().optional().nullable(),
+  recipeNo:          z.string().max(100).optional().nullable(),
+  parameters:        z.record(z.string(), z.unknown()).optional().nullable(),
+  plannedStartDate:  z.string().optional().nullable(),
+  plannedEndDate:    z.string().optional().nullable(),
+  routeTemplateId:   z.string().uuid().optional().nullable(),
+  targetItemId:      z.string().uuid().optional().nullable(),
+  steps: z
+    .array(z.object({
+      stationId:              z.string().uuid("Geçersiz istasyon ID"),
+      notes:                  z.string().max(500).optional().nullable(),
+      requiredCategoryId:     z.string().uuid().optional().nullable(),
+      plannedSubcontractorId: z.string().uuid().optional().nullable(),
+    }))
+    .optional(),
+  stepPlanning: z
+    .array(z.object({
+      sequence:               z.number().int().positive(),
+      requiredCategoryId:     z.string().uuid().optional().nullable(),
+      plannedSubcontractorId: z.string().uuid().optional().nullable(),
+      notes:                  z.string().max(500).optional().nullable(),
+    }))
+    .optional(),
+  orderLineAllocations: z
+    .array(z.object({
+      orderLineId:  z.string().uuid(),
+      allocatedQty: z.number().nonnegative().optional(),
+    }))
+    .optional(),
+  orderLineIds: z.array(z.string().uuid()).optional().nullable(),
+  targetPropertyIds: z.array(z.string().uuid()).optional(),
+}).refine(
+  (d) => Boolean(d.routeTemplateId) || (d.steps && d.steps.length > 0),
+  { message: "routeTemplateId veya en az bir step gerekli", path: ["steps"] },
+);
+
 
 export class WorkOrderController {
   private service: WorkOrderService;
@@ -72,16 +138,22 @@ export class WorkOrderController {
     this.findById = this.findById.bind(this);
     this.attachRolls = this.attachRolls.bind(this);
     this.detachRolls = this.detachRolls.bind(this);
+    this.updateStepPlanning = this.updateStepPlanning.bind(this);
+    this.update = this.update.bind(this);
+    this.replace = this.replace.bind(this);
     this.lockWorkOrder = this.lockWorkOrder.bind(this);
     this.getAttachedRolls = this.getAttachedRolls.bind(this);
     this.getTravelCard = this.getTravelCard.bind(this);
     this.getManifest = this.getManifest.bind(this);
     this.createManifest = this.createManifest.bind(this);
     this.listManifests = this.listManifests.bind(this);
+    this.getManifestById = this.getManifestById.bind(this);
     this.listShipments = this.listShipments.bind(this);
     this.softDelete = this.softDelete.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
     this.findAvailableForAttach = this.findAvailableForAttach.bind(this);
+    this.getTargetPropertiesImpact = this.getTargetPropertiesImpact.bind(this);
+    this.updateTargetProperties = this.updateTargetProperties.bind(this);
   }
 
   /**
@@ -151,6 +223,62 @@ export class WorkOrderController {
       const result = await this.service.detachRolls(
         req.params.id as string,
         body.rollIds,
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/work-orders/:id
+   * İş emrinin temel alanlarını günceller. Sadece PLANNED durumdayken çalışır.
+   */
+  async update(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = updateWorkOrderSchema.parse(req.body);
+      const result = await this.service.update(
+        req.params.id as string,
+        body,
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /api/work-orders/:id
+   * Tam replace: rota/kalem/hedef ürün/özellikler dahil tüm WO yeniden yazılır.
+   * Sadece PLANNED + üretime başlanmamış WO'lar.
+   */
+  async replace(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = replaceWorkOrderSchema.parse(req.body);
+      const result = await this.service.replace(
+        req.params.id as string,
+        body,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/work-orders/:id/steps/:stepId/planning
+   * Adımın requiredCategory ve plannedSubcontractor alanlarını ayarlar.
+   */
+  async updateStepPlanning(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = updateStepPlanningSchema.parse(req.body);
+      const result = await this.service.updateStepPlanning(
+        req.params.id as string,
+        req.params.stepId as string,
+        body,
         req.user?.userId
       );
       res.status(200).json(result);
@@ -251,6 +379,19 @@ export class WorkOrderController {
   }
 
   /**
+   * GET /api/work-orders/manifest-by-id/:manifestId
+   * Tek manifest'i ID ile getir (snapshot dahil) — yazdırma/preview için.
+   */
+  async getManifestById(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getManifestById(req.params.manifestId as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/work-orders/:id/shipments
    * Bu iş emrine bağlı topların geçtiği irsaliye (sevkiyat) listesi.
    */
@@ -302,6 +443,37 @@ export class WorkOrderController {
   async findAvailableForAttach(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.findAvailableForAttach();
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/work-orders/:id/target-properties/impact
+   * Frontend update öncesi "kaç rulo etkilenir" uyarısı için.
+   */
+  async getTargetPropertiesImpact(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getTargetPropertyChangeImpact(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/work-orders/:id/target-properties
+   * Replace WO.targetProperties + senkronize bağlı Roll.properties.
+   */
+  async updateTargetProperties(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = targetPropertiesSchema.parse(req.body);
+      const result = await this.service.updateTargetProperties(
+        req.params.id as string,
+        body.propertyIds,
+        req.user?.userId,
+      );
       res.status(200).json(result);
     } catch (error) {
       next(error);

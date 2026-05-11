@@ -25,6 +25,16 @@ import {
   Prisma,
 } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
+import { recomputeOrderStatus } from "./helpers/order-status.helper";
+import {
+  cursorWhere,
+  buildNextCursor,
+  decodeCursor,
+  decodeDynamicCursor,
+  dynamicCursorWhere,
+  buildNextDynamicCursor,
+} from "../utils/cursor";
+
 
 /**
  * İrsaliye snapshot'ı — finalize anında üretilir, sonsuza kadar saklanır.
@@ -233,63 +243,216 @@ function generateShipmentNumber(): string {
   return `IRS-${datePart}-${seq}`;
 }
 
+/**
+ * Bir siparişin statusunu kapsamlı olarak yeniden hesaplar (READY/SHORT/IN_PRODUCTION
+ * + PARTIAL_SHIPPED/COMPLETED). Eski adı `recomputeOrderCompletion` idi; yerine
+ * `recomputeOrderStatus` (helpers/order-status.helper) çağrılır. Çağrı kontratı korunur.
+ *
+ * Returns: { completed: boolean, orderNumber: string } | null
+ */
+async function recomputeOrderCompletion(
+  tx: Prisma.TransactionClient,
+  orderId: string
+): Promise<{ completed: boolean; orderNumber: string } | null> {
+  const order = await tx.order.findUnique({
+    where: { id: orderId },
+    select: { orderNumber: true },
+  });
+  if (!order) return null;
+
+  const result = await recomputeOrderStatus(tx, orderId);
+  return {
+    completed: result?.newStatus === OrderStatus.COMPLETED,
+    orderNumber: order.orderNumber,
+  };
+}
+
 export class ShippingService {
   /**
    * Get orders that are ready for shipment.
-   * Business Rule: Shows orders that have allocated rolls in PRODUCED or READY_FOR_SHIP.
+   * Business Rule: Shows orders that have allocated rolls in PRODUCED, READY_FOR_SHIP
+   * veya A1_STOCK. WAREHOUSE statüsündeki toplar henüz tartı/paket'ten
+   * geçmemiştir → sevkiyatta listelenmez.
    * Shipping dept does NOT see work orders.
    */
-  async getReadyOrders(): Promise<ApiResponse<Record<string, unknown>[]>> {
-    const orders = await prisma.order.findMany({
-      where: {
-        status: {
-          in: [OrderStatus.APPROVED, OrderStatus.IN_PRODUCTION, OrderStatus.PARTIAL_SHIPPED],
-        },
-        lines: {
-          some: {
-            allocations: {
-              some: {
-                roll: {
-                  status: { in: [RollStatus.PRODUCED, RollStatus.READY_FOR_SHIP, RollStatus.A1_STOCK, RollStatus.WAREHOUSE] },
+  async getReadyOrders(params?: {
+    q?: string;
+    customerId?: string;
+    limit?: number;
+    offset?: number;
+    cursor?: string;
+    mode?: "offset" | "cursor";
+  }): Promise<
+    | (ApiResponse<Record<string, unknown>[]> & {
+        pagination: { total: number; limit: number; offset: number; hasMore: boolean };
+      })
+    | (ApiResponse<Record<string, unknown>[]> & {
+        pagination: { nextCursor: string | null; hasMore: boolean; limit: number; totalEstimate?: number };
+      })
+  > {
+    const limit = Math.min(100, Math.max(1, params?.limit ?? 50));
+    const offset = Math.max(0, params?.offset ?? 0);
+    const q = params?.q?.trim();
+    const useCursor = params?.mode === "cursor" || !!params?.cursor;
+
+    const searchOR: Prisma.OrderWhereInput[] | undefined = q
+      ? [
+          { orderNumber: { contains: q, mode: "insensitive" } },
+          { customer: { name: { contains: q, mode: "insensitive" } } },
+        ]
+      : undefined;
+
+    const baseWhere: Prisma.OrderWhereInput = {
+      status: {
+        notIn: [OrderStatus.PENDING, OrderStatus.COMPLETED, OrderStatus.CANCELLED],
+      },
+      lines: {
+        some: {
+          allocations: {
+            some: {
+              roll: {
+                status: {
+                  in: [RollStatus.PRODUCED, RollStatus.READY_FOR_SHIP, RollStatus.A1_STOCK],
                 },
               },
             },
           },
         },
       },
-      include: {
-        customer: true,
-        lines: {
-          include: {
-            item: true,
-            allocations: {
-              include: {
-                roll: true,
+      ...(params?.customerId ? { customerId: params.customerId } : {}),
+      ...(searchOR ? { OR: searchOR } : {}),
+    };
+
+    const cursor = params?.cursor ? decodeCursor(params.cursor) : null;
+    const where: Prisma.OrderWhereInput = useCursor && cursor
+      ? { AND: [baseWhere, cursorWhere(cursor)] }
+      : baseWhere;
+
+    const orderSelect = {
+      id: true,
+      orderNumber: true,
+      customerId: true,
+      branchId: true,
+      status: true,
+      deadline: true,
+      orderDate: true,
+      currency: true,
+      totalAmount: true,
+      createdAt: true,
+      customer: { select: { id: true, code: true, name: true } },
+      branch: { select: { id: true, name: true, city: true, district: true } },
+      lines: {
+        select: {
+          id: true,
+          quantity: true,
+          width: true,
+          unitPrice: true,
+          item: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              color: { select: { id: true, code: true, name: true, hex: true } },
+            },
+          },
+          variant: { select: { id: true, code: true, name: true } },
+          allocations: {
+            select: {
+              id: true,
+              rollId: true,
+              allocatedQty: true,
+              roll: {
+                select: {
+                  id: true,
+                  barcode: true,
+                  status: true,
+                  packageId: true,
+                  currentQty: true,
+                  weightKg: true,
+                  width: true,
+                  qualityGrade: true,
+                },
               },
             },
           },
         },
       },
-    });
+    } as const;
 
-    // Transform to shipping-friendly view
+    const orderByOffset: Prisma.OrderOrderByWithRelationInput[] = [
+      { deadline: { sort: "asc", nulls: "last" } },
+      { createdAt: "desc" },
+    ];
+    const orderByCursor: Prisma.OrderOrderByWithRelationInput[] = [
+      { createdAt: "desc" },
+      { id: "desc" },
+    ];
+
+    const [totalEstimate, ordersRaw] = await Promise.all([
+      prisma.order.count({ where: baseWhere }),
+      useCursor
+        ? prisma.order.findMany({
+            where,
+            select: orderSelect,
+            orderBy: orderByCursor,
+            take: limit + 1,
+          })
+        : prisma.order.findMany({
+            where,
+            select: orderSelect,
+            orderBy: orderByOffset,
+            skip: offset,
+            take: limit,
+          }),
+    ]);
+
+    const total = totalEstimate;
+    const hasMoreCursor = useCursor && ordersRaw.length > limit;
+    const orders = hasMoreCursor ? ordersRaw.slice(0, limit) : ordersRaw;
+
     const readyOrders = orders.map((order) => ({
       orderId: order.id,
       orderNumber: order.orderNumber,
       customerName: order.customer.name,
       customerId: order.customerId,
+      branchId: order.branchId,
+      branch: order.branch
+        ? {
+            id: order.branch.id,
+            name: order.branch.name,
+            city: order.branch.city,
+            district: order.branch.district,
+          }
+        : null,
       status: order.status,
+      orderDate: order.orderDate,
       deadline: order.deadline,
+      currency: order.currency,
+      totalAmount: order.totalAmount ? String(order.totalAmount) : null,
       lines: order.lines.map((line) => ({
         lineId: line.id,
+        itemCode: line.item.code,
         itemName: line.item.name,
+        color: line.item.color
+          ? {
+              id: line.item.color.id,
+              code: line.item.color.code,
+              name: line.item.color.name,
+              hex: line.item.color.hex,
+            }
+          : null,
+        variant: line.variant
+          ? { id: line.variant.id, code: line.variant.code, name: line.variant.name }
+          : null,
+        width: line.width,
+        unitPrice: line.unitPrice ? String(line.unitPrice) : null,
         requestedQty: line.quantity,
         allocatedRolls: line.allocations
-          .filter((a) =>
-            a.roll.status === RollStatus.PRODUCED ||
-            a.roll.status === RollStatus.READY_FOR_SHIP ||
-            a.roll.status === RollStatus.A1_STOCK ||
-            a.roll.status === RollStatus.WAREHOUSE
+          .filter(
+            (a) =>
+              a.roll.status === RollStatus.PRODUCED ||
+              a.roll.status === RollStatus.READY_FOR_SHIP ||
+              a.roll.status === RollStatus.A1_STOCK,
           )
           .map((a) => ({
             allocationId: a.id,
@@ -298,11 +461,36 @@ export class ShippingService {
             allocatedQty: a.allocatedQty,
             rollStatus: a.roll.status,
             packageId: a.roll.packageId,
+            currentQty: a.roll.currentQty,
+            weightKg: a.roll.weightKg,
+            width: a.roll.width,
+            qualityGrade: a.roll.qualityGrade,
           })),
       })),
     }));
 
-    return { success: true, data: readyOrders };
+    if (useCursor) {
+      const last = orders[orders.length - 1] as
+        | { id: string; createdAt: Date }
+        | undefined;
+      const nextCursor = hasMoreCursor && last ? buildNextCursor(last) : null;
+      return {
+        success: true,
+        data: readyOrders,
+        pagination: { nextCursor, hasMore: hasMoreCursor, limit, totalEstimate: total },
+      };
+    }
+
+    return {
+      success: true,
+      data: readyOrders,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + orders.length < total,
+      },
+    };
   }
 
   /**
@@ -404,6 +592,228 @@ export class ShippingService {
   }
 
   /**
+   * Paketleme finalize'inde plannedOrder vardı ama satır ataması yapılmadan
+   * READY_FOR_SHIP'e geçmiş "hayalet" toplar. Sipariş satırı belirsizliği
+   * (aynı item için birden fazla satır) durumunda eski sürümde sessizce
+   * oluşurdu. Recovery için DONE kuyruk satırından planlı siparişi okuyup
+   * operatöre seçtirebileceğimiz adayları döner.
+   */
+  async getOrphanReadyRolls(): Promise<
+    ApiResponse<
+      Array<{
+        rollId: string;
+        barcode: string;
+        itemId: string;
+        itemCode: string;
+        itemName: string;
+        variantCode: string | null;
+        variantName: string | null;
+        currentQty: number;
+        weightKg: number | null;
+        width: number | null;
+        qualityGrade: string;
+        packagingDate: Date | null;
+        plannedOrder: {
+          orderId: string;
+          orderNumber: string;
+          customerName: string;
+          deadline: Date | null;
+          status: OrderStatus;
+          lines: Array<{
+            lineId: string;
+            itemId: string;
+            itemCode: string;
+            itemName: string;
+            requestedQty: number;
+            width: number | null;
+            variantName: string | null;
+            colorName: string | null;
+          }>;
+        } | null;
+      }>
+    >
+  > {
+    const rolls = await prisma.roll.findMany({
+      where: {
+        status: RollStatus.READY_FOR_SHIP,
+        ownerCustomerId: null,
+        allocations: { none: {} },
+        shipmentItems: { none: {} },
+      },
+      select: {
+        id: true,
+        barcode: true,
+        itemId: true,
+        currentQty: true,
+        weightKg: true,
+        width: true,
+        qualityGrade: true,
+        packagingDate: true,
+        item: { select: { code: true, name: true } },
+        variant: { select: { code: true, name: true } },
+        packagingQueueEntries: {
+          where: { status: "DONE", plannedOrderId: { not: null } },
+          orderBy: { completedAt: "desc" },
+          take: 1,
+          select: {
+            plannedOrder: {
+              select: {
+                id: true,
+                orderNumber: true,
+                status: true,
+                deadline: true,
+                customer: { select: { name: true } },
+                lines: {
+                  select: {
+                    id: true,
+                    itemId: true,
+                    quantity: true,
+                    width: true,
+                    item: {
+                      select: {
+                        code: true,
+                        name: true,
+                        color: { select: { name: true } },
+                      },
+                    },
+                    variant: { select: { name: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { packagingDate: "desc" },
+      take: 200,
+    });
+
+    const data = rolls.map((roll) => {
+      const planned = roll.packagingQueueEntries[0]?.plannedOrder ?? null;
+      return {
+        rollId: roll.id,
+        barcode: roll.barcode,
+        itemId: roll.itemId,
+        itemCode: roll.item.code,
+        itemName: roll.item.name,
+        variantCode: roll.variant?.code ?? null,
+        variantName: roll.variant?.name ?? null,
+        currentQty: roll.currentQty,
+        weightKg: roll.weightKg,
+        width: roll.width,
+        qualityGrade: roll.qualityGrade,
+        packagingDate: roll.packagingDate,
+        plannedOrder: planned
+          ? {
+              orderId: planned.id,
+              orderNumber: planned.orderNumber,
+              customerName: planned.customer.name,
+              deadline: planned.deadline,
+              status: planned.status,
+              lines: planned.lines.map((l) => ({
+                lineId: l.id,
+                itemId: l.itemId,
+                itemCode: l.item.code,
+                itemName: l.item.name,
+                requestedQty: l.quantity,
+                width: l.width,
+                variantName: l.variant?.name ?? null,
+                colorName: l.item.color?.name ?? null,
+              })),
+            }
+          : null,
+      };
+    });
+
+    return { success: true, data };
+  }
+
+  /**
+   * Hayalet topu sipariş satırına bağlar — paketleme finalize'i sırasında
+   * yapılması gereken allocation'ı sonradan kurmak için.
+   */
+  async assignOrphanRollToOrderLine(
+    rollId: string,
+    orderLineId: string,
+    userId: string | undefined
+  ): Promise<ApiResponse<{ rollId: string; orderLineId: string }>> {
+    const roll = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: {
+        id: true,
+        status: true,
+        itemId: true,
+        currentQty: true,
+        ownerCustomerId: true,
+        allocations: { select: { id: true } },
+      },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+    if (roll.status !== RollStatus.READY_FOR_SHIP) {
+      throw AppError.badRequest(
+        `Top READY_FOR_SHIP durumunda değil (mevcut: ${roll.status})`
+      );
+    }
+    if (roll.ownerCustomerId) {
+      throw AppError.badRequest("Fason (müşteri-malı) top siparişe bağlanamaz");
+    }
+    if (roll.allocations.length > 0) {
+      throw AppError.conflict("Top zaten bir sipariş satırına bağlı");
+    }
+
+    const line = await prisma.orderLine.findUnique({
+      where: { id: orderLineId },
+      select: {
+        id: true,
+        itemId: true,
+        order: { select: { id: true, orderNumber: true, status: true } },
+      },
+    });
+    if (!line) throw AppError.notFound("Sipariş satırı bulunamadı");
+    if (line.itemId !== roll.itemId) {
+      throw AppError.badRequest(
+        "Sipariş satırı ile topun ürünü eşleşmiyor"
+      );
+    }
+    if (
+      line.order.status === OrderStatus.CANCELLED ||
+      line.order.status === OrderStatus.COMPLETED
+    ) {
+      throw AppError.badRequest(
+        `Sipariş durumu uygun değil (${line.order.status})`
+      );
+    }
+
+    await prisma.orderAllocation.create({
+      data: {
+        rollId,
+        orderLineId,
+        allocatedQty: roll.currentQty,
+      },
+    });
+
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "OrderAllocation",
+      recordId: rollId,
+      newData: {
+        rollId,
+        orderLineId,
+        orderNumber: line.order.orderNumber,
+        allocatedQty: roll.currentQty,
+        reason: "orphan-recovery",
+      },
+    });
+
+    return {
+      success: true,
+      data: { rollId, orderLineId },
+      message: `Top ${line.order.orderNumber} siparişine bağlandı`,
+    };
+  }
+
+  /**
    * Prepare package: assign rolls to a package (sack/palette).
    * Updates rolls with packageId, grossWeightKg, and READY_FOR_SHIP status.
    */
@@ -465,9 +875,13 @@ export class ShippingService {
   async createShipment(
     data: {
       customerId: string;
+      branchId?: string | null;
       driverName?: string;
       plateNumber?: string;
       carrier?: string;
+      priority?: number;
+      plannedDate?: string | null;
+      plannedOrderIds?: string[]; // Planlamacı sevkiyatı oluştururken siparişleri de seçer
     },
     userId?: string
   ): Promise<ApiResponse<Shipment>> {
@@ -479,18 +893,80 @@ export class ShippingService {
       throw AppError.notFound("Müşteri bulunamadı");
     }
 
-    const shipment = await prisma.shipment.create({
-      data: {
-        shipmentNumber: generateShipmentNumber(),
-        customerId: data.customerId,
-        driverName: data.driverName ?? null,
-        plateNumber: data.plateNumber ?? null,
-        carrier: data.carrier ?? null,
-        status: ShipmentStatus.PREPARING,
-        customerCodeSnapshot: customer.code,
-        customerNameSnapshot: customer.name,
-      },
-      include: { customer: true },
+    // Verify branch (if provided) and check it belongs to the customer
+    let branchNameSnapshot: string | null = null;
+    if (data.branchId) {
+      const branch = await prisma.customerBranch.findUnique({
+        where: { id: data.branchId },
+        select: { id: true, name: true, customerId: true, isActive: true },
+      });
+      if (!branch) throw AppError.notFound("Şube bulunamadı");
+      if (branch.customerId !== data.customerId) {
+        throw AppError.badRequest("Şube bu müşteriye ait değil");
+      }
+      if (!branch.isActive) throw AppError.badRequest("Şube pasif durumda");
+      branchNameSnapshot = branch.name;
+    }
+
+    // Planlanan siparişler (varsa) — hepsi aynı müşteriye ait olmalı.
+    if (data.plannedOrderIds && data.plannedOrderIds.length > 0) {
+      const orders = await prisma.order.findMany({
+        where: { id: { in: data.plannedOrderIds } },
+        select: { id: true, customerId: true, status: true, orderNumber: true },
+      });
+      if (orders.length !== data.plannedOrderIds.length) {
+        throw AppError.notFound("Planlanan siparişlerden biri bulunamadı");
+      }
+      const wrongCustomer = orders.find((o) => o.customerId !== data.customerId);
+      if (wrongCustomer) {
+        throw AppError.badRequest(
+          `Sipariş ${wrongCustomer.orderNumber} bu müşteriye ait değil`
+        );
+      }
+      const closed = orders.find(
+        (o) => o.status === "COMPLETED" || o.status === "CANCELLED"
+      );
+      if (closed) {
+        throw AppError.badRequest(
+          `Sipariş ${closed.orderNumber} kapanmış (${closed.status}) — sevkiyat planına eklenemez`
+        );
+      }
+    }
+
+    const shipment = await prisma.$transaction(async (tx) => {
+      const created = await tx.shipment.create({
+        data: {
+          shipmentNumber: generateShipmentNumber(),
+          customerId: data.customerId,
+          branchId: data.branchId ?? null,
+          driverName: data.driverName ?? null,
+          plateNumber: data.plateNumber ?? null,
+          carrier: data.carrier ?? null,
+          status: ShipmentStatus.PREPARING,
+          priority: data.priority ?? 0,
+          plannedDate: data.plannedDate ? new Date(data.plannedDate) : null,
+          customerCodeSnapshot: customer.code,
+          customerNameSnapshot: customer.name,
+          branchNameSnapshot,
+        },
+        include: { customer: true, branch: true },
+      });
+
+      if (data.plannedOrderIds && data.plannedOrderIds.length > 0 && userId) {
+        // Sıralama planlamacının verdiği sırayla
+        for (let i = 0; i < data.plannedOrderIds.length; i++) {
+          await tx.shipmentPlannedOrder.create({
+            data: {
+              shipmentId: created.id,
+              orderId: data.plannedOrderIds[i],
+              sortOrder: i,
+              addedByUserId: userId,
+            },
+          });
+        }
+      }
+
+      return created;
     });
 
     await AuditService.log({
@@ -502,6 +978,8 @@ export class ShippingService {
         shipmentNumber: shipment.shipmentNumber,
         customerId: data.customerId,
         customerName: customer.name,
+        branchId: data.branchId ?? null,
+        branchName: branchNameSnapshot,
       },
     });
 
@@ -512,6 +990,170 @@ export class ShippingService {
     };
   }
 
+  // =========================================================================
+  // PLANLAMA AKIŞI — planlamacı (allocation:write) tarafından çağrılır
+  // =========================================================================
+
+  /**
+   * Sevkiyatın priority/plannedDate alanlarını günceller (planlamacı sıralaması).
+   * Sadece PREPARING durumunda. SHIPPED bir sevkiyatın planını değiştirmiyoruz.
+   */
+  async updateShipmentPlan(
+    id: string,
+    data: { priority?: number; plannedDate?: string | null },
+    userId?: string
+  ): Promise<ApiResponse<Shipment>> {
+    if (!userId) throw AppError.unauthorized();
+    const shipment = await prisma.shipment.findUnique({
+      where: { id },
+      select: { id: true, status: true, priority: true, plannedDate: true },
+    });
+    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
+    if (shipment.status !== ShipmentStatus.PREPARING) {
+      throw AppError.badRequest(
+        "Sadece hazırlıktaki (PREPARING) sevkiyatlar planlanabilir"
+      );
+    }
+
+    const updated = await prisma.shipment.update({
+      where: { id },
+      data: {
+        priority: data.priority,
+        plannedDate:
+          data.plannedDate === undefined
+            ? undefined
+            : data.plannedDate === null
+              ? null
+              : new Date(data.plannedDate),
+      },
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SHIPMENT",
+      recordId: id,
+      oldData: {
+        priority: shipment.priority,
+        plannedDate: shipment.plannedDate,
+      },
+      newData: {
+        priority: updated.priority,
+        plannedDate: updated.plannedDate,
+      },
+    });
+
+    return { success: true, data: updated, message: "Sevkiyat planı güncellendi" };
+  }
+
+  /**
+   * Sevkiyat planına sipariş ekle. Aynı müşteriye ait olmalı, kapanmamış olmalı.
+   */
+  async addOrderToShipmentPlan(
+    shipmentId: string,
+    orderId: string,
+    note: string | undefined,
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    if (!userId) throw AppError.unauthorized();
+
+    const [shipment, order] = await Promise.all([
+      prisma.shipment.findUnique({
+        where: { id: shipmentId },
+        select: { id: true, status: true, customerId: true, shipmentNumber: true },
+      }),
+      prisma.order.findUnique({
+        where: { id: orderId },
+        select: { id: true, customerId: true, status: true, orderNumber: true },
+      }),
+    ]);
+    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
+    if (!order) throw AppError.notFound("Sipariş bulunamadı");
+    if (shipment.status !== ShipmentStatus.PREPARING) {
+      throw AppError.badRequest("Sadece PREPARING sevkiyatın planı düzenlenebilir");
+    }
+    if (order.customerId !== shipment.customerId) {
+      throw AppError.badRequest("Sipariş bu sevkiyatın müşterisine ait değil");
+    }
+    if (order.status === "COMPLETED" || order.status === "CANCELLED") {
+      throw AppError.badRequest(
+        `Sipariş kapalı (${order.status}) — sevkiyat planına eklenemez`
+      );
+    }
+
+    const existing = await prisma.shipmentPlannedOrder.findUnique({
+      where: { shipmentId_orderId: { shipmentId, orderId } },
+      select: { id: true },
+    });
+    if (existing) throw AppError.conflict("Sipariş zaten bu sevkiyatın planında");
+
+    // sortOrder = mevcut max + 1
+    const last = await prisma.shipmentPlannedOrder.aggregate({
+      where: { shipmentId },
+      _max: { sortOrder: true },
+    });
+    const sortOrder = (last._max.sortOrder ?? -1) + 1;
+
+    const created = await prisma.shipmentPlannedOrder.create({
+      data: {
+        shipmentId,
+        orderId,
+        sortOrder,
+        note: note ?? null,
+        addedByUserId: userId,
+      },
+    });
+
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "SHIPMENT_PLANNED_ORDER",
+      recordId: created.id,
+      newData: {
+        shipmentNumber: shipment.shipmentNumber,
+        orderNumber: order.orderNumber,
+      },
+    });
+
+    return { success: true, data: created, message: "Plana eklendi" };
+  }
+
+  /**
+   * Sevkiyat planından sipariş çıkar.
+   */
+  async removeOrderFromShipmentPlan(
+    plannedOrderId: string,
+    userId?: string
+  ): Promise<ApiResponse<{ id: string }>> {
+    if (!userId) throw AppError.unauthorized();
+
+    const existing = await prisma.shipmentPlannedOrder.findUnique({
+      where: { id: plannedOrderId },
+      select: {
+        id: true,
+        shipmentId: true,
+        orderId: true,
+        shipment: { select: { status: true } },
+      },
+    });
+    if (!existing) throw AppError.notFound("Planlama kaydı bulunamadı");
+    if (existing.shipment.status !== ShipmentStatus.PREPARING) {
+      throw AppError.badRequest("Sevkiyat hazırlıktan çıkmış — plan düzenlenemez");
+    }
+
+    await prisma.shipmentPlannedOrder.delete({ where: { id: plannedOrderId } });
+
+    await AuditService.log({
+      userId,
+      action: "DELETE",
+      tableName: "SHIPMENT_PLANNED_ORDER",
+      recordId: plannedOrderId,
+      oldData: { shipmentId: existing.shipmentId, orderId: existing.orderId },
+    });
+
+    return { success: true, data: { id: plannedOrderId }, message: "Plandan çıkarıldı" };
+  }
+
   /**
    * Add rolls to a shipment.
    *
@@ -519,6 +1161,153 @@ export class ShippingService {
    * If a roll was allocated to a different customer's order, the old allocation
    * is detached and the roll is reassigned to the shipment's customer.
    */
+  /**
+   * Bir çuvalı sevkiyata ekle.
+   *  - Sack.shipmentId set edilir (PREPARING aşamasında)
+   *  - Çuvalın içindeki Roll'lar için ShipmentItem oluşturulur (addItemsToShipment ile)
+   *  - Müşteri uyumu zorunlu (sack.customerId === shipment.customerId)
+   */
+  async addSackToShipment(
+    data: { shipmentId: string; sackId: string },
+    userId?: string
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    const shipment = await prisma.shipment.findUnique({
+      where: { id: data.shipmentId },
+      select: { id: true, status: true, customerId: true, shipmentNumber: true },
+    });
+    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
+    if (shipment.status !== ShipmentStatus.PREPARING) {
+      throw AppError.conflict(
+        `Bu sevkiyata çuval eklenemez (durum: ${shipment.status})`
+      );
+    }
+
+    const sack = await prisma.sack.findUnique({
+      where: { id: data.sackId },
+      select: {
+        id: true,
+        sackNumber: true,
+        customerId: true,
+        shipmentId: true,
+        rolls: { select: { id: true } },
+      },
+    });
+    if (!sack) throw AppError.notFound("Çuval bulunamadı");
+    if (sack.customerId !== shipment.customerId) {
+      throw AppError.badRequest(
+        "Çuvalın müşterisi bu sevkiyatın müşterisinden farklı"
+      );
+    }
+    if (sack.shipmentId && sack.shipmentId !== data.shipmentId) {
+      throw AppError.conflict(
+        "Çuval başka bir sevkiyatta — önce oradan çıkarın"
+      );
+    }
+    if (sack.rolls.length === 0) {
+      throw AppError.badRequest("Boş çuval sevkiyata eklenemez");
+    }
+
+    // Sack.shipmentId set
+    await prisma.sack.update({
+      where: { id: data.sackId },
+      data: { shipmentId: data.shipmentId },
+    });
+
+    // İçindeki rollar için ShipmentItem oluştur (addItemsToShipment idempotent olmalı —
+    // alreadyInShipment durumunu zaten ele alıyor)
+    const result = await this.addItemsToShipment(
+      data.shipmentId,
+      sack.rolls.map((r) => r.id),
+      userId
+    );
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SACK_SHIPMENT_ASSIGN",
+      recordId: data.sackId,
+      newData: {
+        sackNumber: sack.sackNumber,
+        shipmentId: data.shipmentId,
+        shipmentNumber: shipment.shipmentNumber,
+        rollsAdded: result.data?.added ?? 0,
+      },
+    });
+
+    return {
+      success: true,
+      data: { sackId: data.sackId, ...result.data },
+      message: `Çuval ${sack.sackNumber} sevkiyata eklendi`,
+    };
+  }
+
+  /**
+   * Bir çuvalı sevkiyattan çıkar.
+   *  - Sack.shipmentId null
+   *  - Çuvaldaki Roll'ların ShipmentItem'ları bu sevkiyattan silinir
+   *  - Sadece PREPARING aşamasındaki sevkiyatlardan çıkarılabilir
+   */
+  async removeSackFromShipment(
+    data: { shipmentId: string; sackId: string },
+    userId?: string
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    const shipment = await prisma.shipment.findUnique({
+      where: { id: data.shipmentId },
+      select: { status: true, shipmentNumber: true },
+    });
+    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
+    if (shipment.status !== ShipmentStatus.PREPARING) {
+      throw AppError.conflict(
+        `Sevkiyat finalize edilmiş — çuval çıkarılamaz`
+      );
+    }
+
+    const sack = await prisma.sack.findUnique({
+      where: { id: data.sackId },
+      select: {
+        id: true,
+        sackNumber: true,
+        shipmentId: true,
+        rolls: { select: { id: true } },
+      },
+    });
+    if (!sack) throw AppError.notFound("Çuval bulunamadı");
+    if (sack.shipmentId !== data.shipmentId) {
+      throw AppError.badRequest("Çuval bu sevkiyatta değil");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // ShipmentItem'ları sil (sadece bu sevkiyat × bu sack'in roll'ları)
+      await tx.shipmentItem.deleteMany({
+        where: {
+          shipmentId: data.shipmentId,
+          rollId: { in: sack.rolls.map((r) => r.id) },
+        },
+      });
+      await tx.sack.update({
+        where: { id: data.sackId },
+        data: { shipmentId: null },
+      });
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SACK_SHIPMENT_ASSIGN",
+      recordId: data.sackId,
+      newData: {
+        sackNumber: sack.sackNumber,
+        removedFromShipment: shipment.shipmentNumber,
+      },
+    });
+
+    return {
+      success: true,
+      data: { sackId: data.sackId, removedFromShipment: shipment.shipmentNumber },
+      message: `Çuval ${sack.sackNumber} sevkiyattan çıkarıldı`,
+    };
+  }
+
   async addItemsToShipment(
     shipmentId: string,
     rollIds: string[],
@@ -759,78 +1548,44 @@ export class ShippingService {
         data: {
           status: ShipmentStatus.SHIPPED,
           shippedAt: new Date(),
+          shippedById: userId ?? null,
           printSnapshot: printSnapshot as unknown as Prisma.InputJsonValue,
         },
         include: { customer: true },
       });
 
-      // 2. Update all rolls to SHIPPED status
+      // 2. Toplu roll status güncellemesi — N round-trip yerine 1.
+      //    Etkilenen sipariş ve step'leri toplama tx dışındaki shipment.items
+      //    snapshot'ından yapılır (tx içine alacak ek sorgu yok).
+      const rollIds: string[] = [];
       for (const item of shipment.items) {
-        await tx.roll.update({
-          where: { id: item.rollId },
-          data: { status: RollStatus.SHIPPED },
-        });
-
-        // Collect affected orders
+        rollIds.push(item.rollId);
         for (const allocation of item.roll.allocations) {
           affectedOrderIds.add(allocation.orderLine.orderId);
         }
-
-        // Collect steps that link rolls → affected work orders
         if (item.roll.producedInStepId) affectedStepIds.add(item.roll.producedInStepId);
         if (item.roll.currentStepId) affectedStepIds.add(item.roll.currentStepId);
       }
+      await tx.roll.updateMany({
+        where: { id: { in: rollIds } },
+        data: { status: RollStatus.SHIPPED },
+      });
 
-      // 3. Auto-check order completion
+      // 2b. Bu sevkiyata bağlı çuvalları "sevk edildi" olarak işaretle.
+      // (Sack.shipmentId zaten dolu; shippedAt + içindeki kartelaların izlenmesi için.)
+      await tx.sack.updateMany({
+        where: { shipmentId },
+        data: { shippedAt: new Date() },
+      });
+
+      // 3. Auto-check order completion (helper'a delege — bindShipmentToOrders ile aynı mantık)
       for (const orderId of affectedOrderIds) {
-        const order = await tx.order.findUnique({
-          where: { id: orderId },
-          include: {
-            lines: {
-              include: {
-                allocations: {
-                  include: {
-                    roll: {
-                      include: { shipmentItems: true },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        });
-
-        if (!order) continue;
-
-        // Check each order line
-        let allLinesComplete = true;
-        for (const line of order.lines) {
-          const totalShipped = line.allocations.reduce((sum, a) => {
-            const shipped = a.roll.shipmentItems.reduce(
-              (s, si) => s + si.shippedQty,
-              0
-            );
-            return sum + shipped;
-          }, 0);
-
-          if (totalShipped < line.quantity) {
-            allLinesComplete = false;
-          }
-        }
-
-        const newStatus = allLinesComplete
-          ? OrderStatus.COMPLETED
-          : OrderStatus.PARTIAL_SHIPPED;
-
-        await tx.order.update({
-          where: { id: orderId },
-          data: { status: newStatus },
-        });
-
-        if (allLinesComplete) {
-          ordersCompleted.push(order.orderNumber);
+        const result = await recomputeOrderCompletion(tx, orderId);
+        if (!result) continue;
+        if (result.completed) {
+          ordersCompleted.push(result.orderNumber);
         } else {
-          ordersPartial.push(order.orderNumber);
+          ordersPartial.push(result.orderNumber);
         }
       }
 
@@ -839,11 +1594,17 @@ export class ShippingService {
       //    RETURNED_FROM_SUBCONTRACTOR) ulaştıysa WO.status = COMPLETED.
       //    ORDER_PRODUCTION / STOCK_PRODUCTION / SERVICE_PRODUCTION / REPAIR_REWORK
       //    tiplerinin hepsi bu yoldan geçer.
+      // Etkilenen WO'ları tek findMany ile toplu çek; sonra TÜM WO step'lerine
+      // dair aktif roll var mı kontrolünü TEK bir findMany ile yap.
+      // Önceki pattern: WO başına 2 query (findUnique + count) → N=20 için 40 query.
+      // Yeni: 3 sabit query (stepWO, WOs, activeRolls) + 2 toplu update.
       const stepWorkOrders = await tx.workOrderStep.findMany({
         where: { id: { in: Array.from(affectedStepIds) } },
         select: { workOrderId: true },
       });
-      const affectedWorkOrderIds = new Set(stepWorkOrders.map((s) => s.workOrderId));
+      const affectedWorkOrderIds = Array.from(
+        new Set(stepWorkOrders.map((s) => s.workOrderId))
+      );
 
       const ACTIVE_ROLL_STATUSES: RollStatus[] = [
         RollStatus.STOCK,
@@ -854,47 +1615,74 @@ export class ShippingService {
         RollStatus.WAREHOUSE,
       ];
 
-      for (const workOrderId of affectedWorkOrderIds) {
-        const wo = await tx.workOrder.findUnique({
-          where: { id: workOrderId },
+      if (affectedWorkOrderIds.length > 0) {
+        const wos = await tx.workOrder.findMany({
+          where: { id: { in: affectedWorkOrderIds } },
           select: {
+            id: true,
             batchNumber: true,
             status: true,
             steps: { select: { id: true } },
           },
         });
-        if (!wo) continue;
-        if (
-          wo.status === WorkOrderStatus.COMPLETED ||
-          wo.status === WorkOrderStatus.CANCELLED
-        ) {
-          continue;
-        }
 
-        const woStepIds = wo.steps.map((s) => s.id);
-        if (woStepIds.length === 0) continue;
+        // Sadece tamamlanma için aday olanlar (COMPLETED/CANCELLED dışı + step'i olan)
+        const candidates = wos.filter(
+          (w) =>
+            w.status !== WorkOrderStatus.COMPLETED &&
+            w.status !== WorkOrderStatus.CANCELLED &&
+            w.steps.length > 0
+        );
 
-        const activeRollCount = await tx.roll.count({
-          where: {
-            OR: [
-              { producedInStepId: { in: woStepIds } },
-              { currentStepId: { in: woStepIds } },
-            ],
-            status: { in: ACTIVE_ROLL_STATUSES },
-          },
-        });
+        if (candidates.length > 0) {
+          // step → WO eşleme tablosu
+          const stepToWo = new Map<string, string>();
+          const allCandidateStepIds: string[] = [];
+          for (const w of candidates) {
+            for (const s of w.steps) {
+              stepToWo.set(s.id, w.id);
+              allCandidateStepIds.push(s.id);
+            }
+          }
 
-        if (activeRollCount === 0) {
-          await tx.workOrder.update({
-            where: { id: workOrderId },
-            data: { status: WorkOrderStatus.COMPLETED },
+          // Tek query ile tüm aday WO'ların step'lerine dair aktif roll'ları çek;
+          // hangi WO'larda en az bir aktif kalmış belirle.
+          const activeRolls = await tx.roll.findMany({
+            where: {
+              OR: [
+                { producedInStepId: { in: allCandidateStepIds } },
+                { currentStepId: { in: allCandidateStepIds } },
+              ],
+              status: { in: ACTIVE_ROLL_STATUSES },
+            },
+            select: { producedInStepId: true, currentStepId: true },
           });
-          // WO kapandı → açık refakat kartlarını COMPLETED'a çek
-          await tx.travelerCard.updateMany({
-            where: { workOrderId, status: "ACTIVE" },
-            data: { status: "COMPLETED" },
-          });
-          workOrdersCompleted.push(wo.batchNumber);
+          const wosWithActive = new Set<string>();
+          for (const r of activeRolls) {
+            const fromProduced = r.producedInStepId
+              ? stepToWo.get(r.producedInStepId)
+              : undefined;
+            const fromCurrent = r.currentStepId
+              ? stepToWo.get(r.currentStepId)
+              : undefined;
+            if (fromProduced) wosWithActive.add(fromProduced);
+            if (fromCurrent) wosWithActive.add(fromCurrent);
+          }
+
+          const toComplete = candidates.filter((w) => !wosWithActive.has(w.id));
+          if (toComplete.length > 0) {
+            const completeIds = toComplete.map((w) => w.id);
+            await tx.workOrder.updateMany({
+              where: { id: { in: completeIds } },
+              data: { status: WorkOrderStatus.COMPLETED },
+            });
+            // WO kapandı → açık refakat kartlarını COMPLETED'a çek (tek query)
+            await tx.travelerCard.updateMany({
+              where: { workOrderId: { in: completeIds }, status: "ACTIVE" },
+              data: { status: "COMPLETED" },
+            });
+            for (const w of toComplete) workOrdersCompleted.push(w.batchNumber);
+          }
         }
       }
 
@@ -930,25 +1718,336 @@ export class ShippingService {
   }
 
   /**
+   * Geriye dönük: SHIPPED bir sevkiyatın itemlerini sipariş satırlarına bağlar
+   * (OrderAllocation create) ve etkilenen siparişleri yeniden hesaplar.
+   *
+   * Use case: stoktan üretilip irsaliyesiz sevk edilen malları, sonradan gelen
+   * bir siparişe geriye dönük tahsis edip siparişi otomatik kapatmak.
+   *
+   * Kurallar:
+   *   - Shipment SHIPPED olmalı (PREPARING için zaten tambur.allocate kullanılıyor)
+   *   - Order ve Shipment aynı müşteriye ait olmalı (kross-customer atama yasak)
+   *   - Roll bu shipment'a dahil olmalı
+   *   - Roll.ownerCustomerId varsa o müşteri ile eşleşmeli
+   *   - allocatedQty > 0 ve roll'un kalan kapasitesini aşmamalı
+   *   - Aynı (rollId, orderLineId) çifti zaten varsa hata
+   */
+  async bindShipmentToOrders(
+    shipmentId: string,
+    bindings: Array<{
+      rollId: string;
+      orderLineId: string;
+      allocatedQty: number;
+    }>,
+    userId?: string
+  ): Promise<
+    ApiResponse<{
+      created: number;
+      ordersCompleted: string[];
+      ordersPartial: string[];
+    }>
+  > {
+    if (!bindings || bindings.length === 0) {
+      throw AppError.badRequest("En az bir bağlama girişi gerekli");
+    }
+
+    const shipment = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      include: {
+        items: { select: { rollId: true } },
+      },
+    });
+    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
+    if (shipment.status !== ShipmentStatus.SHIPPED) {
+      throw AppError.badRequest(
+        `Geriye dönük bağlama yalnızca SHIPPED sevkiyatlar için. Mevcut: ${shipment.status}`
+      );
+    }
+
+    const shipmentRollIds = new Set(shipment.items.map((it) => it.rollId));
+
+    // Tüm hedef order line'ları + roller önden çek (validation + döngü için)
+    const orderLineIds = Array.from(new Set(bindings.map((b) => b.orderLineId)));
+    const rollIds = Array.from(new Set(bindings.map((b) => b.rollId)));
+
+    const [orderLines, rolls] = await Promise.all([
+      prisma.orderLine.findMany({
+        where: { id: { in: orderLineIds } },
+        include: {
+          order: { select: { id: true, customerId: true, orderNumber: true } },
+        },
+      }),
+      prisma.roll.findMany({
+        where: { id: { in: rollIds } },
+        include: { allocations: true },
+      }),
+    ]);
+
+    const orderLineMap = new Map(orderLines.map((ol) => [ol.id, ol]));
+    const rollMap = new Map(rolls.map((r) => [r.id, r]));
+
+    // Validation
+    for (const b of bindings) {
+      const ol = orderLineMap.get(b.orderLineId);
+      if (!ol) throw AppError.notFound(`Sipariş satırı bulunamadı: ${b.orderLineId}`);
+      if (ol.order.customerId !== shipment.customerId) {
+        throw AppError.badRequest(
+          `Sipariş ${ol.order.orderNumber} farklı müşteriye ait — sevkiyat müşterisiyle eşleşmiyor`
+        );
+      }
+
+      const roll = rollMap.get(b.rollId);
+      if (!roll) throw AppError.notFound(`Top bulunamadı: ${b.rollId}`);
+      if (!shipmentRollIds.has(b.rollId)) {
+        throw AppError.badRequest(`Top ${roll.barcode} bu sevkiyata dahil değil`);
+      }
+      if (roll.ownerCustomerId && roll.ownerCustomerId !== shipment.customerId) {
+        throw AppError.badRequest(
+          `Top ${roll.barcode} başka bir müşterinin malı (SERVICE_PRODUCTION) — atanamaz`
+        );
+      }
+
+      if (!(b.allocatedQty > 0)) {
+        throw AppError.badRequest(`Tahsis miktarı pozitif olmalı (${roll.barcode})`);
+      }
+      const existingTotal = roll.allocations.reduce(
+        (s, a) => s + a.allocatedQty,
+        0
+      );
+      // Aynı (rollId, orderLineId) duplicate kontrolü
+      if (
+        roll.allocations.some((a) => a.orderLineId === b.orderLineId)
+      ) {
+        throw AppError.conflict(
+          `Top ${roll.barcode} zaten bu sipariş satırına tahsis edilmiş`
+        );
+      }
+      if (existingTotal + b.allocatedQty > roll.currentQty) {
+        throw AppError.badRequest(
+          `Top ${roll.barcode}: yetersiz kapasite. Mevcut: ${roll.currentQty}m, ` +
+            `tahsis edilmiş: ${existingTotal}m, istenen: ${b.allocatedQty}m`
+        );
+      }
+    }
+
+    const affectedOrderIds = new Set<string>(
+      orderLines.map((ol) => ol.order.id)
+    );
+
+    const ordersCompleted: string[] = [];
+    const ordersPartial: string[] = [];
+
+    await prisma.$transaction(async (tx) => {
+      for (const b of bindings) {
+        await tx.orderAllocation.create({
+          data: {
+            rollId: b.rollId,
+            orderLineId: b.orderLineId,
+            allocatedQty: b.allocatedQty,
+          },
+        });
+      }
+
+      for (const orderId of affectedOrderIds) {
+        const result = await recomputeOrderCompletion(tx, orderId);
+        if (!result) continue;
+        if (result.completed) {
+          ordersCompleted.push(result.orderNumber);
+        } else {
+          ordersPartial.push(result.orderNumber);
+        }
+      }
+    });
+
+    await Promise.all(
+      bindings.map((b) =>
+        AuditService.log({
+          userId,
+          action: "CREATE",
+          tableName: "ORDER_ALLOCATION",
+          recordId: `${b.rollId}:${b.orderLineId}`,
+          newData: {
+            shipmentId,
+            rollId: b.rollId,
+            orderLineId: b.orderLineId,
+            allocatedQty: b.allocatedQty,
+            retroactive: true,
+          },
+        })
+      )
+    );
+
+    return {
+      success: true,
+      data: {
+        created: bindings.length,
+        ordersCompleted,
+        ordersPartial,
+      },
+      message: `${bindings.length} kalem siparişe bağlandı. ${ordersCompleted.length} sipariş tamamlandı.`,
+    };
+  }
+
+  /**
    * List shipments (optionally filtered by status / customer).
    */
   async listShipments(filters?: {
     status?: ShipmentStatus;
     customerId?: string;
-  }): Promise<ApiResponse<Shipment[]>> {
-    const shipments = await prisma.shipment.findMany({
-      where: {
-        ...(filters?.status ? { status: filters.status } : {}),
-        ...(filters?.customerId ? { customerId: filters.customerId } : {}),
-      },
-      include: {
-        customer: true,
-        _count: { select: { items: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    q?: string;
+    limit?: number;
+    offset?: number;
+    cursor?: string;
+    mode?: "offset" | "cursor";
+    withTotal?: boolean;
+    dateFrom?: Date;
+    dateTo?: Date;
+    dateField?: "createdAt" | "shippedAt" | "plannedDate";
+    sortBy?:
+      | "shipmentNumber"
+      | "createdAt"
+      | "shippedAt"
+      | "plannedDate"
+      | "carrier"
+      | "status";
+    sortOrder?: "asc" | "desc";
+  }): Promise<
+    | (ApiResponse<Shipment[]> & {
+        pagination: { total: number; limit: number; offset: number; hasMore: boolean };
+      })
+    | (ApiResponse<Shipment[]> & {
+        pagination: { nextCursor: string | null; hasMore: boolean; limit: number; totalEstimate?: number };
+      })
+  > {
+    const limit = Math.min(100, Math.max(1, filters?.limit ?? 50));
+    const offset = Math.max(0, filters?.offset ?? 0);
+    const q = filters?.q?.trim();
+    const isPreparing = filters?.status === ShipmentStatus.PREPARING;
+    const useCursor = filters?.mode === "cursor" || !!filters?.cursor;
 
-    return { success: true, data: shipments };
+    const searchOR: Prisma.ShipmentWhereInput[] | undefined = q
+      ? [
+          { shipmentNumber: { contains: q, mode: "insensitive" } },
+          { customer: { name: { contains: q, mode: "insensitive" } } },
+          { plateNumber: { contains: q, mode: "insensitive" } },
+        ]
+      : undefined;
+
+    const dateField = filters?.dateField ?? "createdAt";
+    const dateRange =
+      filters?.dateFrom || filters?.dateTo
+        ? {
+            [dateField]: {
+              ...(filters?.dateFrom ? { gte: filters.dateFrom } : {}),
+              ...(filters?.dateTo ? { lte: filters.dateTo } : {}),
+            },
+          }
+        : {};
+
+    const baseWhere: Prisma.ShipmentWhereInput = {
+      ...(filters?.status ? { status: filters.status } : {}),
+      ...(filters?.customerId ? { customerId: filters.customerId } : {}),
+      ...(searchOR ? { OR: searchOR } : {}),
+      ...dateRange,
+    };
+
+    const sortBy = filters?.sortBy ?? "createdAt";
+    const sortOrder: "asc" | "desc" = filters?.sortOrder ?? "desc";
+
+    const dynCursor = filters?.cursor ? decodeDynamicCursor(filters.cursor) : null;
+    const where: Prisma.ShipmentWhereInput = useCursor && dynCursor
+      ? { AND: [baseWhere, dynamicCursorWhere(dynCursor, sortBy, sortOrder)] }
+      : baseWhere;
+
+    const include = {
+      customer: { select: { id: true, code: true, name: true } },
+      branch: { select: { id: true, name: true, code: true } },
+      plannedOrders: {
+        select: {
+          id: true,
+          orderId: true,
+          sortOrder: true,
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              status: true,
+              deadline: true,
+            },
+          },
+        },
+        orderBy: { sortOrder: "asc" },
+      },
+      _count: { select: { items: true } },
+    } as const;
+
+    // PREPARING özel sırası (priority + plannedDate) sadece offset mode'da
+    // ve sortBy verilmediğinde geçerli — kullanıcı sütun başlığına tıklayıp
+    // sortBy seçtiyse onun isteğine saygı duyulur.
+    const userSortRequested = !!filters?.sortBy;
+    const orderByOffset: Prisma.ShipmentOrderByWithRelationInput[] =
+      isPreparing && !userSortRequested
+        ? [
+            { priority: "asc" },
+            { plannedDate: { sort: "asc", nulls: "last" } },
+            { createdAt: "asc" },
+          ]
+        : [{ [sortBy]: sortOrder } as Prisma.ShipmentOrderByWithRelationInput];
+    // Cursor mode: sortBy + id tie-breaker (aynı yönde — kararlı sayfalama).
+    const orderByCursor: Prisma.ShipmentOrderByWithRelationInput[] = [
+      { [sortBy]: sortOrder } as Prisma.ShipmentOrderByWithRelationInput,
+      { id: sortOrder },
+    ];
+
+    // count(*) yalnız (a) offset mode'da (UI sayfa hesaplaması için zorunlu)
+    // veya (b) cursor mode'da `withTotal` istendiğinde çalışsın. Cursor sayfalama
+    // sırasında (ikinci/üçüncü sayfa) gereksiz tam-tablo count'tan kaçar.
+    const wantTotal = !useCursor || filters?.withTotal === true;
+
+    const [totalEstimate, shipmentsRaw] = await Promise.all([
+      wantTotal
+        ? prisma.shipment.count({ where: baseWhere })
+        : Promise.resolve(undefined),
+      useCursor
+        ? prisma.shipment.findMany({
+            where,
+            include,
+            orderBy: orderByCursor,
+            take: limit + 1,
+          })
+        : prisma.shipment.findMany({
+            where,
+            include,
+            orderBy: orderByOffset,
+            skip: offset,
+            take: limit,
+          }),
+    ]);
+
+    if (useCursor) {
+      const hasMore = shipmentsRaw.length > limit;
+      const data = (hasMore ? shipmentsRaw.slice(0, limit) : shipmentsRaw) as Shipment[];
+      const last = data[data.length - 1] as Record<string, unknown> | undefined;
+      const nextCursor = hasMore && last ? buildNextDynamicCursor(last, sortBy) : null;
+      return {
+        success: true,
+        data,
+        pagination: { nextCursor, hasMore, limit, totalEstimate },
+      };
+    }
+
+    // wantTotal=true offset path için zorunlu (üstte set edildi).
+    const offsetTotal = totalEstimate ?? 0;
+    return {
+      success: true,
+      data: shipmentsRaw as Shipment[],
+      pagination: {
+        total: offsetTotal,
+        limit,
+        offset,
+        hasMore: offset + shipmentsRaw.length < offsetTotal,
+      },
+    };
   }
 
   /**
@@ -959,6 +2058,29 @@ export class ShippingService {
       where: { id },
       include: {
         customer: true,
+        branch: { select: { id: true, name: true, code: true, city: true, address: true } },
+        plannedOrders: {
+          include: {
+            order: {
+              select: {
+                id: true,
+                orderNumber: true,
+                status: true,
+                deadline: true,
+                lines: {
+                  select: {
+                    id: true,
+                    quantity: true,
+                    item: { select: { id: true, code: true, name: true } },
+                    variant: { select: { id: true, code: true, name: true } },
+                  },
+                },
+              },
+            },
+            addedBy: { select: { id: true, fullName: true } },
+          },
+          orderBy: { sortOrder: "asc" },
+        },
         items: {
           include: {
             roll: {
@@ -975,6 +2097,17 @@ export class ShippingService {
                 },
               },
             },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+        sacks: {
+          select: {
+            id: true,
+            sackNumber: true,
+            weightKg: true,
+            notes: true,
+            createdAt: true,
+            _count: { select: { rolls: true, swatches: true } },
           },
           orderBy: { createdAt: "asc" },
         },

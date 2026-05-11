@@ -56,30 +56,42 @@ enum ItemType {
   CONSUMABLE
 }
 
+/// Top'un sisteme nasıl girdiğini ifade eder — raporlama ayrımı için kritik.
+/// itemType "ne olduğunu", entrySource "nereden geldiğini" söyler.
+enum RollEntrySource {
+  PRODUCTION // Dahili üretim — ham kumaş dokuma/Devere çıktısı
+  SUPPLIER_RECEIPT // Tedarikçiden satın alınan mal kabul (yarn, consumable, dış kaynaklı kumaş)
+  CUSTOMER_SUPPLIED // Müşteri kendi malını getirdi (SERVICE_PRODUCTION) — Roll.ownerCustomerId dolu
+  TAMBUR_SPLIT // Tambur'da KES kararı sonucu ayrılan parça (parentRollId dolu)
+}
+
 enum RollStatus {
   STOCK
   IN_PRODUCTION
   PRODUCED
   READY_FOR_SHIP
   SHIPPED
-  SCRAP
+  SCRAP // Gerçek fire — Tambur kalite reddi vb. fiziksel hurda
+  CANCELLED // Operatör iptali (yanlış giriş) — fire değil, sadece kayıt geri alındı
   AT_SUBCONTRACTOR // Fason/boyahanede işlem görüyor
   A1_STOCK // 2. Kalite satılabilir stok
   RETURNED_FROM_SUBCONTRACTOR // Fason dönüşünde yeni barkodlar üretildi, eski kapatıldı
   WAREHOUSE // Paketleme sonrası depoya kaldırıldı — satışa / sevke hazır
+  TAMBUR_CONSUMED // Tambur'da bölündü; tüm metraj çocuk topları olarak doğdu — parent retire
 }
 
 enum CompanyType {
   CUSTOMER
   SUPPLIER
-  SUBCONTRACTOR
-  DYEHOUSE
 }
 
+// Phase 1: yaşam döngüsü sadeleşti. READY/SHORT/IN_PRODUCTION kaldırıldı —
+// "envanter hazır mı?" / "üretim sürüyor mu?" runtime hesabı (allocation +
+// workOrder.status üzerinden). Lifecycle:
+//   PENDING → APPROVED → PARTIAL_SHIPPED → COMPLETED / CANCELLED
 enum OrderStatus {
   PENDING
   APPROVED
-  IN_PRODUCTION
   PARTIAL_SHIPPED
   COMPLETED
   CANCELLED
@@ -127,6 +139,24 @@ enum ScanType {
   INFO // Bilgi amaçlı tarama (istasyon hareketi değil)
 }
 
+/// Paketleme kuyruğu kaydının yaşam döngüsü.
+/// Planlamacı kuyruğa ekler (WAITING) → operatör çeker (TAKEN) →
+/// sipariş tamamen sevk edildiğinde otomatik DONE; planlamacı kuyruğu
+/// iptal ederse CANCELLED.
+enum PackagingQueueStatus {
+  WAITING
+  TAKEN
+  DONE
+  CANCELLED
+}
+
+enum ShippingQueueStatus {
+  WAITING
+  TAKEN
+  DONE
+  CANCELLED
+}
+
 // =============================================================================
 // 1. RBAC - Auth & User Management
 // =============================================================================
@@ -139,18 +169,29 @@ model User {
   isActive     Boolean @default(true)
 
   // Relations
-  roles                UserRole[]
-  logs                 SystemLog[]
-  printedTravelerCards TravelerCard[]          @relation("TravelerCardPrintedBy")
-  cardScans            TravelerCardScan[]
-  rollMovements        RollMovement[]
-  printedManifests     Manifest[]              @relation("ManifestPrintedBy")
-  dispatches           SubcontractorDispatch[] @relation("DispatchCreatedBy")
-  receipts             SubcontractorReceipt[]  @relation("ReceiptCreatedBy")
-  swatchesCreated      Swatch[]                @relation("SwatchCreatedBy")
-  rollOperations       RollOperation[]
-  detectedRollErrors   RollError[]             @relation("RollErrorDetectedBy")
-  processedRollErrors  RollError[]             @relation("RollErrorProcessedBy")
+  permissions            UserPermission[]        @relation("UserPermissionUser")
+  grantedPermissions     UserPermission[]        @relation("UserPermissionGrantedBy")
+  logs                   SystemLog[]
+  printedTravelerCards   TravelerCard[]          @relation("TravelerCardPrintedBy")
+  cardScans              TravelerCardScan[]
+  rollMovements          RollMovement[]
+  printedManifests       Manifest[]              @relation("ManifestPrintedBy")
+  dispatches             SubcontractorDispatch[] @relation("DispatchCreatedBy")
+  cancelledDispatches    SubcontractorDispatch[] @relation("DispatchCancelledBy")
+  receipts               SubcontractorReceipt[]  @relation("ReceiptCreatedBy")
+  swatchesCreated        Swatch[]                @relation("SwatchCreatedBy")
+  rollOperations         RollOperation[]
+  detectedRollErrors     RollError[]             @relation("RollErrorDetectedBy")
+  processedRollErrors    RollError[]             @relation("RollErrorProcessedBy")
+  createdRolls           Roll[]                  @relation("RollCreatedBy")
+  shippedShipments       Shipment[]              @relation("ShipmentShippedBy")
+  queuedPackagingJobs    PackagingQueue[]        @relation("PackagingQueueAddedBy")
+  takenPackagingJobs     PackagingQueue[]        @relation("PackagingQueueAssigned")
+  queuedShippingJobs     ShippingQueue[]         @relation("ShippingQueueAddedBy")
+  takenShippingJobs      ShippingQueue[]         @relation("ShippingQueueOperator")
+  manualClosedOrders     Order[]                 @relation("OrderManualClosedBy")
+  systemSettingsUpdates  SystemSetting[]
+  shipmentPlanItemsAdded ShipmentPlannedOrder[]  @relation("ShipmentPlannedOrderAddedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -159,65 +200,84 @@ model User {
   @@map("users")
 }
 
-model Role {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  description String?
-  isActive    Boolean @default(true)
-
-  // Relations
-  permissions RolePermission[]
-  users       UserRole[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("roles")
-}
-
+/// Yetki kataloğu — runtime'da sadece bu tablo + UserPermission birlikte tüketilir.
+/// `category` admin UI'sında gruplamak için: "web" (web ekran/aksiyon), "mobile"
+/// (mobil ekran), "admin" (admin operasyonları).
 model Permission {
-  id     String @id @default(uuid())
-  code   String @unique // e.g. "order:read", "order:write", "workorder:create"
-  module String // e.g. "SALES", "PRODUCTION", "FINANCE"
+  id          String  @id @default(uuid())
+  code        String  @unique // "order:read", "mobile:kk2", "admin:users", "mobile:*"
+  module      String // "SALES", "PRODUCTION", "FINANCE", "MOBILE"
+  category    String  @default("web") // "web" | "mobile" | "admin"
+  description String?
 
   // Relations
-  roles RolePermission[]
+  userPermissions     UserPermission[]
+  templateMemberships PermissionTemplateItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([module])
+  @@index([category])
   @@map("permissions")
 }
 
-/// Join table: User ↔ Role (N:N)
-model UserRole {
-  userId String
-  roleId String
+/// Direct grant: User ↔ Permission (N:N).
+/// Efektif yetki tek kaynaktan okunur — rol katmanı yoktur.
+/// `validFrom`/`validUntil` opsiyonel: "Ali bu hafta Ahmet vardiyasına bakacak" gibi
+/// zaman sınırlı atamalar için. Null ise sınırsız.
+/// `grantedById` audit izi için: yetkiyi hangi admin verdi.
+model UserPermission {
+  id           String    @id @default(uuid())
+  userId       String
+  permissionId String
+  validFrom    DateTime?
+  validUntil   DateTime?
+  grantedById  String?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user       User       @relation("UserPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  grantedBy  User?      @relation("UserPermissionGrantedBy", fields: [grantedById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@id([userId, roleId])
-  @@map("user_roles")
+  @@unique([userId, permissionId])
+  @@index([userId])
+  @@index([permissionId])
+  @@map("user_permissions")
 }
 
-/// Join table: Role ↔ Permission (N:N)
-model RolePermission {
-  roleId       String
-  permissionId String
+/// Admin-side şablon — sadece "kullanıcı oluştururken hızlıca yetki paketi seç"
+/// kısayolu. Runtime'da User'a hiçbir şekilde join'lenmez; uygulandığında
+/// permission'ları UserPermission'a kopyalanır ve şablon-user bağı kalmaz.
+/// Bu sayede şablonu sonradan değiştirmek mevcut kullanıcıları etkilemez.
+model PermissionTemplate {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+  isActive    Boolean @default(true)
 
-  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  permissions PermissionTemplateItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@id([roleId, permissionId])
-  @@map("role_permissions")
+  @@map("permission_templates")
+}
+
+model PermissionTemplateItem {
+  templateId   String
+  permissionId String
+
+  template   PermissionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  permission Permission         @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([templateId, permissionId])
+  @@index([permissionId])
+  @@map("permission_template_items")
 }
 
 // =============================================================================
@@ -233,6 +293,11 @@ model Station {
   department String? // DOKUMA, DEVERE, TERBIYE, SEVKIYAT etc.
   isActive   Boolean     @default(true)
 
+  // EXTERNAL istasyonlar için varsayılan fason kategorisi. WO oluşturulurken
+  // fason planlama modalında otomatik önerilir (kullanıcı değiştirebilir).
+  defaultCategoryId String?
+  defaultCategory   SubcontractorCategory? @relation("StationDefaultCategory", fields: [defaultCategoryId], references: [id])
+
   // Relations
   machines             Machine[]
   routeSteps           RouteStep[]
@@ -246,6 +311,7 @@ model Station {
 
   @@index([type])
   @@index([kind])
+  @@index([defaultCategoryId])
   @@map("stations")
 }
 
@@ -320,21 +386,24 @@ model Item {
   unit     String   @default("MT") // MT, KG, ADET
   isActive Boolean  @default(true)
 
-  // Türetilmiş kimlik — fason dönüşünde renk + özellik kazanan ham item'dan
-  // otomatik üretilen yeni stok kartı. baseItemId null → bu zaten ham/baz Item.
+  // Türetilmiş kimlik — bir ham ürünün belli bir renkte halidir. Kimlik =
+  // (baseItemId, colorId). Özellikler (ItemProperty) kimliği etkilemez,
+  // sadece "uygulanabilir özellikler" listesidir (allowedProperties).
   baseItemId String? // Ham item referansı (örn. "Ham Patos")
   colorId    String? // Türetilmiş ise rengin FK'si (Mavi, Kırmızı, ...)
   isDerived  Boolean @default(false)
 
   // Relations
-  rolls       Roll[]
-  orderLines  OrderLine[]
-  variants    ItemVariant[]
-  swatches    Swatch[]
-  baseItem    Item?          @relation("ItemDerivation", fields: [baseItemId], references: [id])
-  derivatives Item[]         @relation("ItemDerivation")
-  color       Color?         @relation(fields: [colorId], references: [id])
-  properties  ItemProperty[]
+  rolls              Roll[]
+  orderLines         OrderLine[]
+  variants           ItemVariant[]
+  swatches           Swatch[]
+  baseItem           Item?          @relation("ItemDerivation", fields: [baseItemId], references: [id])
+  derivatives        Item[]         @relation("ItemDerivation")
+  color              Color?         @relation(fields: [colorId], references: [id])
+  /// Item'a uygulanabilir özellikler (allowed). Boşsa = serbest.
+  allowedProperties  ItemProperty[]
+  workOrdersAsTarget WorkOrder[]    @relation("WorkOrderTargetItem")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -388,6 +457,10 @@ model Roll {
   qualityGrade String     @default("1.KALITE") // 1.Kalite, A1, Fire
   width        Float? // En (cm) — KK1 girişinde ölçülen kumaş eni
 
+  // Top'un sisteme nasıl girdiği — raporlama ayrımı için.
+  // itemType "ne olduğunu", entrySource "nereden geldiğini" söyler.
+  entrySource RollEntrySource @default(SUPPLIER_RECEIPT)
+
   // Production Links (real relations — not plain strings)
   producedInStepId String? // Hangi WO step'inde üretildi (KK1 girişi / Tambur çıktısı)
   currentStepId    String? // Şu anda hangi WO step'inde
@@ -395,28 +468,41 @@ model Roll {
   // Lineage — fason dönüşünde veya tambur kesiminde kaynak rulo
   parentRollId String?
 
+  // Audit — KK1 girişinde / sistem genelinde topu kim oluşturdu
+  // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
+  createdById String?
+
   // Packaging
   packageId     String? // Package/sack barcode ID
   grossWeightKg Float? // Gross weight from scale
   netWeightKg   Float? // Fabric-only weight
   packagingDate DateTime? // When packaging happened
 
+  // Tartı/Paket: top hangi çuvalda — null ise depodadır (henüz çuvallanmamış)
+  sackId String?
+
   // Relations
-  item           Item                        @relation(fields: [itemId], references: [id])
-  variant        ItemVariant?                @relation(fields: [variantId], references: [id])
-  ownerCustomer  Customer?                   @relation("RollOwnerCustomer", fields: [ownerCustomerId], references: [id])
-  errors         RollError[]
-  allocations    OrderAllocation[]
-  shipmentItems  ShipmentItem[]
-  movements      RollMovement[]
-  operations     RollOperation[]
-  parent         Roll?                       @relation("RollLineage", fields: [parentRollId], references: [id])
-  children       Roll[]                      @relation("RollLineage")
-  dispatchItems  SubcontractorDispatchItem[]
-  receiptItems   SubcontractorReceiptItem[]
-  swatchesFrom   Swatch[]                    @relation("SwatchParentRoll")
-  currentStep    WorkOrderStep?              @relation("RollCurrentStep", fields: [currentStepId], references: [id])
-  producedInStep WorkOrderStep?              @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
+  item                  Item                        @relation(fields: [itemId], references: [id])
+  variant               ItemVariant?                @relation(fields: [variantId], references: [id])
+  ownerCustomer         Customer?                   @relation("RollOwnerCustomer", fields: [ownerCustomerId], references: [id])
+  sack                  Sack?                       @relation(fields: [sackId], references: [id])
+  errors                RollError[]
+  allocations           OrderAllocation[]
+  shipmentItems         ShipmentItem[]
+  movements             RollMovement[]
+  operations            RollOperation[]
+  parent                Roll?                       @relation("RollLineage", fields: [parentRollId], references: [id])
+  children              Roll[]                      @relation("RollLineage")
+  /// Bu rol parent olarak hangi RollOperation kayıtlarına kaynak — Tambur kalıtım izi
+  inheritedOperations   RollOperation[]             @relation("RollOperationInherited")
+  dispatchItems         SubcontractorDispatchItem[]
+  receiptItems          SubcontractorReceiptItem[]
+  swatchesFrom          Swatch[]                    @relation("SwatchParentRoll")
+  currentStep           WorkOrderStep?              @relation("RollCurrentStep", fields: [currentStepId], references: [id])
+  producedInStep        WorkOrderStep?              @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
+  createdBy             User?                       @relation("RollCreatedBy", fields: [createdById], references: [id])
+  properties            RollProperty[]
+  packagingQueueEntries PackagingQueue[]            @relation("PackagingQueueRoll")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -428,8 +514,12 @@ model Roll {
   @@index([currentStepId])
   @@index([producedInStepId])
   @@index([ownerCustomerId])
+  @@index([createdById])
+  @@index([sackId])
   // Liste sayfaları: status filter + createdAt desc sort
   @@index([status, createdAt])
+  // Raporlama: kaynak bazlı dönem sorguları (örn. "Mart 2027 ham kumaş üretimi")
+  @@index([entrySource, createdAt])
   @@map("rolls")
 }
 
@@ -446,15 +536,14 @@ model Customer {
   isActive  Boolean     @default(true)
 
   // Relations
-  orders               Order[]
-  accounts             CurrentAccount[]
-  shipments            Shipment[]
-  defaultRoutes        Route[]                 @relation("CustomerDefaultRoutes")
-  workOrdersAsDyehouse WorkOrder[]             @relation("WorkOrderDyehouse")
-  dispatches           SubcontractorDispatch[]
-  receipts             SubcontractorReceipt[]
-  ownedRolls           Roll[]                  @relation("RollOwnerCustomer")
-  variantAliases       CustomerVariantAlias[]
+  orders         Order[]
+  accounts       CurrentAccount[]
+  shipments      Shipment[]
+  defaultRoutes  Route[]                @relation("CustomerDefaultRoutes")
+  ownedRolls     Roll[]                 @relation("RollOwnerCustomer")
+  variantAliases CustomerVariantAlias[]
+  sacks          Sack[]
+  branches       CustomerBranch[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -463,10 +552,42 @@ model Customer {
   @@map("customers")
 }
 
+// =============================================================================
+// CUSTOMER BRANCH — Müşterinin sevk noktası (şube/depo/mağaza adresi)
+// =============================================================================
+// Sevkiyatın hedefi her zaman bir şubedir. Aynı müşterinin farklı şehir/şube
+// sevkiyatları ayrı planlanır. Soft delete: isActive=false.
+// =============================================================================
+model CustomerBranch {
+  id           String  @id @default(uuid())
+  customerId   String
+  code         String? // Müşterinin iç şube kodu (opsiyonel)
+  name         String // "Ankara Şubesi", "Merkez Depo" gibi
+  address      String?
+  city         String?
+  district     String?
+  contactName  String?
+  contactPhone String?
+  notes        String?
+  isActive     Boolean @default(true)
+
+  customer  Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  shipments Shipment[]
+  orders    Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([customerId, isActive])
+  @@map("customer_branches")
+}
+
 model Order {
-  id          String @id @default(uuid())
-  orderNumber String @unique
+  id          String  @id @default(uuid())
+  orderNumber String  @unique
   customerId  String
+  branchId    String? // Hedef şube — opsiyonel; bir sipariş tek bir şubeye gider. Mevcut kayıtlar için null kabul.
 
   // Finance & Pricing
   currency    String   @default("TRY")
@@ -476,18 +597,36 @@ model Order {
   orderDate DateTime    @default(now())
   deadline  DateTime?
 
+  // Tamamlanma kaydı
+  completedAt       DateTime? // İlk COMPLETED'a düştüğü an (otomatik veya manuel)
+  manualClosedById  String? // Manuel kapatan kullanıcı (null = otomatik kapandı)
+  manualCloseReason String?   @db.Text
+
   // Relations
-  customer Customer    @relation(fields: [customerId], references: [id])
-  lines    OrderLine[]
+  customer       Customer               @relation(fields: [customerId], references: [id])
+  branch         CustomerBranch?        @relation(fields: [branchId], references: [id])
+  manualClosedBy User?                  @relation("OrderManualClosedBy", fields: [manualClosedById], references: [id])
+  lines          OrderLine[]
+  packagingQueue PackagingQueue[]       @relation("PackagingQueuePlannedOrder")
+  shippingQueue  ShippingQueue?         @relation("ShippingQueueOrder")
+  shipmentPlans  ShipmentPlannedOrder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([customerId])
+  @@index([branchId])
   @@index([status])
+  @@index([manualClosedById])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([deadline])
   @@map("orders")
 }
 
+// Sipariş satırı — `itemId` final (isDerived=true) Item'a işaret eder
+// (PATOS-MAVI gibi, ham + renk). Müşteri özel özellik istemişse
+// `requiredProperties` doldurulur; planlamacı WO açarken bu set
+// targetProperties önerisi olarak kullanılır.
 model OrderLine {
   id        String   @id @default(uuid())
   orderId   String
@@ -497,26 +636,152 @@ model OrderLine {
   unitPrice Decimal? @db.Decimal(10, 2) // For future finance module
   width     Float? // İstenen en (cm)
 
-  // Müşterinin istediği renk + özellikler — opsiyonel.
-  // Doldurulursa WO oluşturulurken öneri olarak frontend'e iletilir.
-  targetColorId String?
-
   // Relations
-  order            Order                     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  item             Item                      @relation(fields: [itemId], references: [id])
-  variant          ItemVariant?              @relation(fields: [variantId], references: [id])
-  allocations      OrderAllocation[]
-  workOrderLinks   WorkOrderToOrderLine[]
-  targetColor      Color?                    @relation("OrderLineTargetColor", fields: [targetColorId], references: [id])
-  targetProperties OrderLineTargetProperty[]
+  order               Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  item                Item                        @relation(fields: [itemId], references: [id])
+  variant             ItemVariant?                @relation(fields: [variantId], references: [id])
+  allocations         OrderAllocation[]
+  workOrderLinks      WorkOrderToOrderLine[]
+  reproductionBacklog ReproductionBacklog[]
+  requiredProperties  OrderLineRequiredProperty[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([itemId])
-  @@index([targetColorId])
   @@map("order_lines")
+}
+
+/// OrderLine ↔ FabricProperty M:N — müşterinin sipariş satırı için
+/// istediği özellikler. WO oluşturulurken planlamacıya öneri olarak gelir.
+model OrderLineRequiredProperty {
+  id          String @id @default(uuid())
+  orderLineId String
+  propertyId  String
+
+  orderLine OrderLine      @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  property  FabricProperty @relation(fields: [propertyId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([orderLineId, propertyId])
+  @@index([propertyId])
+  @@map("order_line_required_properties")
+}
+
+// =============================================================================
+// Yeniden üretim borç kuyruğu (Phase 2)
+// =============================================================================
+// Bir allocation başka siparişe taşındığında (reassignAllocation) kaynak
+// OrderLine için bir "borç" kaydı oluşur: "X siparişe N metre üretmemiz lazım".
+// Yeni bir allocation eklenip ihtiyaç karşılanınca resolvedAt set edilir.
+// =============================================================================
+
+model ReproductionBacklog {
+  id           String    @id @default(uuid())
+  orderLineId  String
+  qtyDeficit   Float // Geri üretilmesi gereken miktar (m)
+  reason       String    @db.Text // "ORD-002 acil sevk nedeniyle taşındı" vb.
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+  resolvedNote String?   @db.Text
+
+  orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+
+  @@index([orderLineId, resolvedAt])
+  @@index([resolvedAt])
+  @@map("reproduction_backlog")
+}
+
+// =============================================================================
+// Paketleme kuyruğu (Phase 3) — rulo seviyesinde
+// =============================================================================
+// Planlamacı, depodaki (WAREHOUSE) rulları açık siparişlerle eşler ve
+// paketleme önceliklerini buradan yönetir. Bir satır = bir rulonun paketleme
+// görevi. plannedOrderId boş bırakılabilir (stoğa paketleme — sonradan
+// siparişe atanabilir). Operatör kendisi seçmez — kuyruğun en üstündeki ruloyu
+// "alır" (TAKEN); SKIP LOCKED ile yarış önlenir. Paketleme bitince status=DONE
+// olur ve rulo READY_FOR_SHIP'e geçer.
+// SERVICE_PRODUCTION kuralı: Roll.ownerCustomerId dolu ise plannedOrderId
+// ancak aynı customer'ın siparişi olabilir (service layer'da enforce edilir).
+// =============================================================================
+
+model PackagingQueue {
+  id                 String               @id @default(uuid())
+  rollId             String // Depodaki rulo — kuyrukta bekleyen iş bu rulonun paketlenmesi
+  plannedOrderId     String? // Planlamacının atadığı sipariş; null = stoğa paketleme
+  priority           Int                  @default(0) // Küçük = önce; sürükle-bırak ile güncellenir
+  isUrgent           Boolean              @default(false) // Acil → tepeye taşınır; aralarında priority+createdAt sıralı
+  status             PackagingQueueStatus @default(WAITING)
+  assignedOperatorId String? // İlk alan operatör (info amaçlı, kilit değil)
+  addedByUserId      String
+  note               String?              @db.Text // Planlamacı notu ("acil", müşteri açıklaması vb.)
+  urgentMarkedAt     DateTime? // Acil işaretlendiği an — birden fazla acil arasında FIFO sırası için
+  takenAt            DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelReason       String?              @db.Text
+
+  // Relations
+  roll             Roll   @relation("PackagingQueueRoll", fields: [rollId], references: [id], onDelete: Cascade)
+  plannedOrder     Order? @relation("PackagingQueuePlannedOrder", fields: [plannedOrderId], references: [id], onDelete: SetNull)
+  addedBy          User   @relation("PackagingQueueAddedBy", fields: [addedByUserId], references: [id])
+  assignedOperator User?  @relation("PackagingQueueAssigned", fields: [assignedOperatorId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // NOTE: aktif (WAITING/TAKEN) kayıtlar için rollId benzersiz olmalı —
+  // bir rulo aynı anda iki kuyruk satırında olamaz. Partial unique index
+  // migration'da CREATE UNIQUE INDEX ile eklenir (Prisma şema seviyesinde
+  // partial unique desteği yok).
+  @@index([status, priority, createdAt])
+  // Acil sıralama: isUrgent DESC önce, sonra acillerin kendi içinde FIFO
+  // (urgentMarkedAt ASC), normallerin priority + createdAt ASC.
+  @@index([status, isUrgent, urgentMarkedAt, priority, createdAt])
+  @@index([rollId])
+  @@index([plannedOrderId])
+  @@index([assignedOperatorId])
+  @@map("packaging_queue")
+}
+
+// =============================================================================
+// Sevkiyat kuyruğu (Phase 4) — sipariş seviyesinde
+// =============================================================================
+// Planlamacı bir siparişi sevkiyat akışına ekler. Saha personeli (tablet)
+// kuyruktan sırayı alır, depodan kumaşları kendisi tarayarak çuvallara
+// koyar, tartar ve sevkiyata gönderir. Bir sipariş aynı anda yalnız bir
+// kez kuyrukta olabilir (orderId @unique).
+// =============================================================================
+
+model ShippingQueue {
+  id                 String              @id @default(uuid())
+  orderId            String              @unique
+  priority           Int                 @default(0)
+  isUrgent           Boolean             @default(false)
+  urgentMarkedAt     DateTime?
+  status             ShippingQueueStatus @default(WAITING)
+  assignedOperatorId String?
+  addedByUserId      String
+  note               String?             @db.Text
+  takenAt            DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelReason       String?             @db.Text
+
+  // Relations
+  order            Order @relation("ShippingQueueOrder", fields: [orderId], references: [id], onDelete: Cascade)
+  addedBy          User  @relation("ShippingQueueAddedBy", fields: [addedByUserId], references: [id])
+  assignedOperator User? @relation("ShippingQueueOperator", fields: [assignedOperatorId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, priority, createdAt])
+  @@index([status, isUrgent, urgentMarkedAt, priority, createdAt])
+  @@index([assignedOperatorId])
+  @@map("shipping_queue")
 }
 
 // =============================================================================
@@ -539,17 +804,16 @@ model WorkOrder {
   routeTemplateId String?
   routeTemplate   Route?  @relation(fields: [routeTemplateId], references: [id])
 
-  // 3.3 — Gidilecek boyahane (Customer/SUBCONTRACTOR) — ilk istasyondan bağımsız
-  dyehouseCompanyId String?
-  dyehouseCompany   Customer? @relation("WorkOrderDyehouse", fields: [dyehouseCompanyId], references: [id])
-
   // Fason Üretim Kabul — metre başı hizmet bedeli (sadece type=SERVICE_PRODUCTION için doldurulur)
   servicePricePerMeter Decimal? @db.Decimal(10, 2)
 
-  // Hedef renk + özellikler — fason adımlarında uygulanacak.
-  // targetColorStepId opsiyonel: hangi adımda renk uygulanacak (Boyahane gibi).
-  targetColorId     String?
-  targetColorStepId String?
+  // Hedef ürün — planlamacının "ne üretiyoruz" cevabı. Final (isDerived=true)
+  // Item'a işaret eder; kimlik = baseItem + color. Özellikler ayrıdır
+  // (targetProperties M:N) ve Tambur'da Roll.properties'e bindirilir.
+  // ORDER_PRODUCTION: orderLine.itemId'den otomatik (validation tutarlılık için)
+  // STOCK_PRODUCTION: zorunlu (manuel seçilir)
+  // SERVICE_PRODUCTION: opsiyonel (müşteri malı, item rolldan gelir)
+  targetItemId String?
 
   // Relations
   steps            WorkOrderStep[]
@@ -559,8 +823,7 @@ model WorkOrder {
   dispatches       SubcontractorDispatch[]
   receipts         SubcontractorReceipt[]
   swatches         Swatch[]
-  targetColor      Color?                    @relation("WorkOrderTargetColor", fields: [targetColorId], references: [id])
-  targetColorStep  WorkOrderStep?            @relation("WOTargetColorStep", fields: [targetColorStepId], references: [id])
+  targetItem       Item?                     @relation("WorkOrderTargetItem", fields: [targetItemId], references: [id])
   targetProperties WorkOrderTargetProperty[]
 
   createdAt DateTime @default(now())
@@ -568,9 +831,11 @@ model WorkOrder {
 
   @@index([status])
   @@index([routeTemplateId])
-  @@index([dyehouseCompanyId])
-  @@index([targetColorId])
-  @@index([targetColorStepId])
+  @@index([targetItemId])
+  // Sevk picker'ı: WHERE status IN (...) ORDER BY createdAt DESC için composite
+  @@index([status, createdAt(sort: Desc)])
+  // "Termini Yakın" sıralaması: WHERE status IN (...) ORDER BY plannedEndDate ASC
+  @@index([status, plannedEndDate])
   @@map("work_orders")
 }
 
@@ -586,28 +851,35 @@ model WorkOrderStep {
   startedAt    DateTime?
   completedAt  DateTime?
 
+  // EXTERNAL adımlar için planlama alanları:
+  //   requiredCategoryId    : Adım hangi tür fason hizmeti gerektiriyor (Boyahane, Yıkama vs)
+  //   plannedSubcontractorId: Planlamada hangi firma seçildi (opsiyonel — sevk anında değiştirilebilir)
+  requiredCategoryId     String?
+  plannedSubcontractorId String?
+
   // Relations
-  workOrder             WorkOrder                 @relation(fields: [workOrderId], references: [id])
-  station               Station                   @relation(fields: [stationId], references: [id])
-  movements             RollMovement[]
-  cardScans             TravelerCardScan[]
-  dispatches            SubcontractorDispatch[]
-  receipts              SubcontractorReceipt[]
-  operations            RollOperation[]
-  currentRolls          Roll[]                    @relation("RollCurrentStep")
-  producedRolls         Roll[]                    @relation("RollProducedInStep")
-  detectedErrors        RollError[]               @relation("RollErrorDetectedAt")
-  processedErrors       RollError[]               @relation("RollErrorProcessedAt")
-  targetColorWorkOrders WorkOrder[]               @relation("WOTargetColorStep")
-  targetProperties      WorkOrderTargetProperty[] @relation("WOTargetPropertyStep")
+  workOrder            WorkOrder               @relation(fields: [workOrderId], references: [id])
+  station              Station                 @relation(fields: [stationId], references: [id])
+  movements            RollMovement[]
+  cardScans            TravelerCardScan[]
+  dispatches           SubcontractorDispatch[]
+  receipts             SubcontractorReceipt[]
+  operations           RollOperation[]
+  currentRolls         Roll[]                  @relation("RollCurrentStep")
+  producedRolls        Roll[]                  @relation("RollProducedInStep")
+  detectedErrors       RollError[]             @relation("RollErrorDetectedAt")
+  processedErrors      RollError[]             @relation("RollErrorProcessedAt")
+  requiredCategory     SubcontractorCategory?  @relation("StepRequiredCategory", fields: [requiredCategoryId], references: [id])
+  plannedSubcontractor Subcontractor?          @relation("StepPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([workOrderId, stepSequence])
   @@index([stationId])
-  // Production/packaging/shipping/subcontractor servislerinde 8 yerde kullanılan paterne karşılık
   @@index([workOrderId, status])
+  @@index([requiredCategoryId])
+  @@index([plannedSubcontractorId])
   @@map("work_order_steps")
 }
 
@@ -636,15 +908,18 @@ model WorkOrderToOrderLine {
 /// buton olarak çıkar. Admin yönetir. Roll.qualityGrade alanı bu katalogdan
 /// seçilen code'un snapshot'ıdır (katalog değişse bile eski toplar bozulmaz).
 model QualityGrade {
-  id          String   @id @default(uuid())
-  code        String   @unique // "1.KALITE", "A1", "A2", "FIRE"
-  name        String // UI'da görünen etiket
-  description String?
-  color       String? // "#10b981" vb. — UI rozeti için opsiyonel
-  sortOrder   Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String     @id @default(uuid())
+  code         String     @unique // "1.KALITE", "A1", "A2", "FIRE" (eski) veya KAL-YYMM-XXXX (admin)
+  name         String // UI'da görünen etiket
+  description  String?
+  color        String? // "#10b981" vb. — UI rozeti için opsiyonel
+  sortOrder    Int        @default(0)
+  isActive     Boolean    @default(true)
+  /// Tambur'da bu kalite seçildiğinde çocuk top'un alacağı hedef RollStatus.
+  /// 1. Kalite → WAREHOUSE, alt kaliteler (A1/A2/2.K) → A1_STOCK, FİRE → SCRAP.
+  targetStatus RollStatus @default(SCRAP)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@index([isActive, sortOrder])
   @@map("quality_grades")
@@ -718,17 +993,22 @@ model RollError {
 /// Boolean bayrak yerine tarih + operatör + metadata ile tam iz bırakır.
 /// Aynı roll × step × type için tek kayıt (@@unique) — idempotent tekrar basışlarda overwrite edilmez.
 model RollOperation {
-  id              String            @id @default(uuid())
-  rollId          String
-  workOrderStepId String
-  operationType   RollOperationType
-  operatorId      String?
-  metadata        Json? // Operasyona özgü veri (qty, weight, cutPoints, foldType vb.)
+  id                        String            @id @default(uuid())
+  rollId                    String
+  workOrderStepId           String
+  operationType             RollOperationType
+  operatorId                String?
+  metadata                  Json? // Operasyona özgü veri (qty, weight, cutPoints, foldType vb.)
+  /// Tambur bölünmesinde parent'tan kopyalanan op'larda parent.id; orijinal kayıtlarda null.
+  /// Aggregation/istatistik sorguları bu satırları "WHERE inheritedFromParentRollId IS NULL"
+  /// ile filtreleyerek çift sayımı önler.
+  inheritedFromParentRollId String?
 
   // Relations
-  roll     Roll          @relation(fields: [rollId], references: [id])
-  step     WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
-  operator User?         @relation(fields: [operatorId], references: [id])
+  roll                Roll          @relation(fields: [rollId], references: [id])
+  step                WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
+  operator            User?         @relation(fields: [operatorId], references: [id])
+  inheritedFromParent Roll?         @relation("RollOperationInherited", fields: [inheritedFromParentRollId], references: [id])
 
   createdAt DateTime @default(now())
 
@@ -736,6 +1016,8 @@ model RollOperation {
   @@index([rollId])
   @@index([workOrderStepId])
   @@index([operationType])
+  @@index([operatorId])
+  @@index([inheritedFromParentRollId])
   @@map("roll_operations")
 }
 
@@ -765,15 +1047,20 @@ model Shipment {
   id             String         @id @default(uuid())
   shipmentNumber String         @unique // Irsaliye No / Sevk No
   customerId     String
+  branchId       String? // Hedef şube — opsiyonel (eski kayıtlar için null kabul)
   driverName     String? // Driver name
   plateNumber    String? // Vehicle plate
   carrier        String? // Carrier company
   status         ShipmentStatus @default(PREPARING)
+  priority       Int            @default(0) // Planlamacı sırası — küçük = önce
+  plannedDate    DateTime? // Planlanan sevk tarihi (planlamacı belirler)
   shippedAt      DateTime? // Actual departure time
+  shippedById    String? // finalize (SHIPPED) işlemini yapan kullanıcı
 
   // Snapshot — müşteri/ürün sonradan değişse/silinse bile irsaliye belgesi bozulmaz
   customerCodeSnapshot String?
   customerNameSnapshot String?
+  branchNameSnapshot   String? // şube adı (silinse bile belge bozulmasın)
 
   /// Finalize (SHIPPED) anında tüm yazdırma verisinin tam kopyası.
   /// Variant kodu, customer alias, fason notu, WO parti no gibi canlı JOIN'lerle
@@ -782,15 +1069,72 @@ model Shipment {
   printSnapshot Json?
 
   // Relations
-  customer Customer       @relation(fields: [customerId], references: [id])
-  items    ShipmentItem[]
+  customer      Customer               @relation(fields: [customerId], references: [id])
+  branch        CustomerBranch?        @relation(fields: [branchId], references: [id])
+  shippedBy     User?                  @relation("ShipmentShippedBy", fields: [shippedById], references: [id])
+  items         ShipmentItem[]
+  sacks         Sack[]
+  plannedOrders ShipmentPlannedOrder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([customerId])
+  @@index([branchId])
   @@index([status])
+  @@index([status, priority, plannedDate])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([shippedAt])
+  @@index([shippedById])
   @@map("shipments")
+}
+
+// =============================================================================
+// SHIPMENT PLANNED ORDER — sevkiyata planlanan sipariş ilişkisi (m:n)
+// =============================================================================
+// Planlamacı bir sevkiyatta hangi siparişler gidecek belirler. Saha çuvalları
+// doldururken bu plan rehber olur. Metraj burada tutulmaz — sahada çuvallar
+// dolduruldukça gerçek metraj allocation üzerinden hesaplanır.
+// =============================================================================
+model ShipmentPlannedOrder {
+  id            String  @id @default(uuid())
+  shipmentId    String
+  orderId       String
+  sortOrder     Int     @default(0) // sevkiyat içinde planlamacının siparişler arası sıralaması (opsiyonel görsel)
+  note          String? @db.Text
+  addedByUserId String
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  addedBy  User     @relation("ShipmentPlannedOrderAddedBy", fields: [addedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shipmentId, orderId]) // Aynı sevkiyatta aynı sipariş bir kez
+  @@index([shipmentId])
+  @@index([orderId])
+  @@map("shipment_planned_orders")
+}
+
+// =============================================================================
+// SYSTEM SETTING — runtime'da güncellenebilir konfigürasyon (key-value)
+// =============================================================================
+// Örn: shipping.toleranceMeters = "5"  (sevk eksiklik tölerans payı, m)
+// Admin (admin:settings) okur/yazar. recomputeOrderStatus runtime'da DB'den okur.
+// =============================================================================
+model SystemSetting {
+  key         String  @id // örn: "shipping.toleranceMeters"
+  value       String // string-encoded; ihtiyaç tipine göre runtime parse
+  description String?
+  updatedById String?
+
+  updatedBy User? @relation(fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
 }
 
 model ShipmentItem {
@@ -905,6 +1249,7 @@ model TravelerCardScan {
   @@index([cardId])
   @@index([stationId, scannedAt])
   @@index([workOrderStepId])
+  @@index([scannedById])
   @@map("traveler_card_scans")
 }
 
@@ -935,6 +1280,7 @@ model RollMovement {
   @@index([rollId])
   @@index([workOrderStepId])
   @@index([enteredAt])
+  @@index([operatorId])
   @@map("roll_movements")
 }
 
@@ -943,32 +1289,51 @@ model RollMovement {
 // =============================================================================
 
 model SubcontractorDispatch {
-  id             String   @id @default(uuid())
-  dispatchNo     String   @unique // SD-YYMM-NNNNNN
-  workOrderId    String
-  stepId         String
-  companyId      String // Fason firma (Customer/SUBCONTRACTOR)
-  plateNumber    String?
-  driverName     String?
-  dispatchedAt   DateTime @default(now())
-  dispatchedById String?
-  notes          String?
-  totalQty       Float    @default(0) // Toplam sevk edilen metraj (snapshot)
-  printSnapshot  Json? // Sevk anında dondurulan irsaliye verisi
+  id                     String   @id @default(uuid())
+  dispatchNo             String   @unique // SD-YYMM-NNNNNN
+  workOrderId            String
+  stepId                 String
+  subcontractorId        String // Gerçekleşen fason firma
+  // Sevk anında "plan ne diyordu" snapshot'ı — rapor için.
+  // step.plannedSubcontractorId değişebilir; bu alan o anki değeri dondurur.
+  plannedSubcontractorId String?
+  plateNumber            String?
+  driverName             String?
+  dispatchedAt           DateTime @default(now())
+  dispatchedById         String?
+  notes                  String?
+  totalQty               Float    @default(0) // Toplam sevk edilen metraj (snapshot)
+  printSnapshot          Json? // Sevk anında dondurulan irsaliye verisi
+
+  // İptal — soft cancel (kayıt silinmez, izlenebilirlik korunur)
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelReason  String?
 
   // Relations
-  workOrder    WorkOrder                   @relation(fields: [workOrderId], references: [id])
-  step         WorkOrderStep               @relation(fields: [stepId], references: [id])
-  company      Customer                    @relation(fields: [companyId], references: [id])
-  dispatchedBy User?                       @relation("DispatchCreatedBy", fields: [dispatchedById], references: [id])
-  items        SubcontractorDispatchItem[]
+  workOrder            WorkOrder                   @relation(fields: [workOrderId], references: [id])
+  step                 WorkOrderStep               @relation(fields: [stepId], references: [id])
+  subcontractor        Subcontractor               @relation("DispatchSubcontractor", fields: [subcontractorId], references: [id])
+  plannedSubcontractor Subcontractor?              @relation("DispatchPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
+  dispatchedBy         User?                       @relation("DispatchCreatedBy", fields: [dispatchedById], references: [id])
+  cancelledBy          User?                       @relation("DispatchCancelledBy", fields: [cancelledById], references: [id])
+  items                SubcontractorDispatchItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([workOrderId])
   @@index([stepId])
-  @@index([companyId])
+  @@index([subcontractorId])
+  @@index([plannedSubcontractorId])
+  @@index([cancelledById])
+  // Liste sayfasında ORDER BY dispatchedAt DESC için — derin sayfalama hızlanır
+  @@index([dispatchedAt])
+  // Composite: WO-filtreli + tarih sıralı liste (workorder detay panelinde kullanılır)
+  @@index([workOrderId, dispatchedAt])
+  // Composite: Fason firma-filtreli + tarih sıralı liste (firma raporları için)
+  @@index([subcontractorId, dispatchedAt])
+  @@index([dispatchedById])
   @@map("subcontractor_dispatches")
 }
 
@@ -992,32 +1357,38 @@ model SubcontractorDispatchItem {
 }
 
 model SubcontractorReceipt {
-  id           String   @id @default(uuid())
-  receiptNo    String   @unique // SR-YYMM-NNNNNN
-  manifestNo   String // İrsaliye no (fason firma tarafından verilir)
-  workOrderId  String
-  stepId       String
-  companyId    String
-  receivedAt   DateTime @default(now())
-  receivedById String?
-  notes        String?
+  id              String   @id @default(uuid())
+  receiptNo       String   @unique // SR-YYMM-NNNNNN
+  manifestNo      String? // İrsaliye no (fason firma tarafından verilir, opsiyonel)
+  workOrderId     String
+  stepId          String
+  subcontractorId String
+  receivedAt      DateTime @default(now())
+  receivedById    String?
+  notes           String?
   // Ölçüm (metraj/ağırlık/fire) fason kabulde yapılmaz; sonraki istasyonun
   // FINISH akışı kendi qty/weight değerlerini kaydeder.
 
   // Relations
-  workOrder  WorkOrder                  @relation(fields: [workOrderId], references: [id])
-  step       WorkOrderStep              @relation(fields: [stepId], references: [id])
-  company    Customer                   @relation(fields: [companyId], references: [id])
-  receivedBy User?                      @relation("ReceiptCreatedBy", fields: [receivedById], references: [id])
-  items      SubcontractorReceiptItem[]
+  workOrder     WorkOrder                  @relation(fields: [workOrderId], references: [id])
+  step          WorkOrderStep              @relation(fields: [stepId], references: [id])
+  subcontractor Subcontractor              @relation("ReceiptSubcontractor", fields: [subcontractorId], references: [id])
+  receivedBy    User?                      @relation("ReceiptCreatedBy", fields: [receivedById], references: [id])
+  items         SubcontractorReceiptItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([workOrderId])
   @@index([stepId])
-  @@index([companyId])
+  @@index([subcontractorId])
   @@index([manifestNo])
+  // Mobil/web liste sayfası ORDER BY receivedAt DESC için — milyon satırda kritik
+  @@index([receivedAt])
+  // Composite: WO-filtreli + tarih sıralı liste (WO detayında "kabuller" sekmesi)
+  @@index([workOrderId, receivedAt])
+  // Composite: Fason firma-filtreli + tarih sıralı liste
+  @@index([subcontractorId, receivedAt])
   @@map("subcontractor_receipts")
 }
 
@@ -1042,6 +1413,68 @@ model SubcontractorReceiptItem {
 }
 
 // =============================================================================
+// 10.3 SUBCONTRACTOR (Fason Firma) — Customer'dan ayrı domain
+// =============================================================================
+// Müşteri ≠ Fason firma. Bir firma her ikisi olursa iki ayrı kayıt açılır.
+// Kategori (Boyahane, Yıkama, Zımpara...) admin tarafından yönetilen DB-driven
+// liste; firma birden fazla kategoride hizmet verebilir (M:N).
+
+model SubcontractorCategory {
+  id          String  @id @default(uuid())
+  code        String  @unique // DYE_HOUSE, SANDING, PRINTING...
+  name        String // "Boyahane", "Zımpara"
+  description String?
+  isActive    Boolean @default(true)
+
+  // Relations
+  subcontractors  SubcontractorToCategory[]
+  workOrderSteps  WorkOrderStep[]           @relation("StepRequiredCategory")
+  defaultStations Station[]                 @relation("StationDefaultCategory")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subcontractor_categories")
+}
+
+model Subcontractor {
+  id        String  @id @default(uuid())
+  code      String  @unique
+  name      String
+  taxNumber String?
+  phone     String?
+  address   String?
+  isActive  Boolean @default(true)
+
+  // Relations
+  categories        SubcontractorToCategory[]
+  dispatches        SubcontractorDispatch[]   @relation("DispatchSubcontractor")
+  plannedDispatches SubcontractorDispatch[]   @relation("DispatchPlannedSubcontractor")
+  receipts          SubcontractorReceipt[]    @relation("ReceiptSubcontractor")
+  plannedSteps      WorkOrderStep[]           @relation("StepPlannedSubcontractor")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subcontractors")
+}
+
+/// M:N — bir firma birden fazla kategoride hizmet verebilir
+model SubcontractorToCategory {
+  subcontractorId String
+  categoryId      String
+
+  subcontractor Subcontractor         @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  category      SubcontractorCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([subcontractorId, categoryId])
+  @@index([categoryId])
+  @@map("subcontractor_category_links")
+}
+
+// =============================================================================
 // 10.2 SWATCH (Kartela) — Tambur'dan üretilen örnek kart
 // =============================================================================
 
@@ -1053,10 +1486,12 @@ model Swatch {
   variantId    String?
   width        Float? // cm
   length       Float // cm (örneğin 30cm)
+  weightKg     Float? // tartı/paket sırasında girilir (ihracat araç kg kapasitesi için kritik)
   workOrderId  String?
   parentRollId String?
   purpose      String? // Müşteri sunumu, arşiv, laboratuvar vb.
   createdById  String?
+  sackId       String? // Hangi çuvalda — null ise depodadır
 
   // Relations
   item       Item         @relation(fields: [itemId], references: [id])
@@ -1064,6 +1499,7 @@ model Swatch {
   workOrder  WorkOrder?   @relation(fields: [workOrderId], references: [id])
   parentRoll Roll?        @relation("SwatchParentRoll", fields: [parentRollId], references: [id])
   createdBy  User?        @relation("SwatchCreatedBy", fields: [createdById], references: [id])
+  sack       Sack?        @relation(fields: [sackId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1072,7 +1508,46 @@ model Swatch {
   @@index([workOrderId])
   @@index([parentRollId])
   @@index([barcode])
+  @@index([sackId])
   @@map("swatches")
+}
+
+// =============================================================================
+// SACK (Çuval) — Tartı/Paket çıktısı; bir müşteriye ait, içinde N top ve N kartela
+// =============================================================================
+// İş kuralları:
+//   - Bir çuval **bir müşteriye** aittir (`customerId` zorunlu).
+//   - Çuvalda farklı ürün/varyant/kalite olabilir; tek kısıt müşteridir.
+//   - Status alanı yok: depodaki çuvallar `shipmentId IS NULL`, sevkiyata
+//     atananlar `shipmentId` dolu. Operatör çuvala her an top/kartela ekleyip
+//     çıkarabilir (sevkiyatta finalize olana kadar).
+//   - `weightKg` opsiyonel — çuval brüt ağırlığı (tartı/paket sonunda
+//     operatör isterse tartar). İhracat araç kg kapasitesi kontrolünde kullanılır.
+//   - `notes` operatörün çuval üzerine kalemle yazdığı notun (varsa) dijital
+//     karşılığı. Sahada genellikle müşteri adı yazılır → otomatik gösterilir.
+// =============================================================================
+model Sack {
+  id         String    @id @default(uuid())
+  sackNumber String    @unique // ÇVL-YYMM-NNNNNN — otomatik üretilir
+  customerId String
+  weightKg   Float? // çuval brüt — opsiyonel
+  notes      String?
+  shipmentId String? // sevkiyata atandığında dolar; null ise depoda
+  shippedAt  DateTime?
+
+  customer Customer  @relation(fields: [customerId], references: [id])
+  shipment Shipment? @relation(fields: [shipmentId], references: [id])
+  rolls    Roll[]
+  swatches Swatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([shipmentId])
+  // Depodaki açık çuvallar listesi: (customer, !shipped) sorgusu
+  @@index([customerId, shipmentId])
+  @@map("sacks")
 }
 
 // =============================================================================
@@ -1133,19 +1608,21 @@ model CustomerVariantAlias {
 // 11.6 FABRIC IDENTITY — Color, FabricProperty + ItemProperty + Capabilities + Targets
 // =============================================================================
 //
-// Fason dönüşünde bir ham kumaş renk + özellik kazanır ve YENİ bir Item kimliği
-// haline gelir (örn. Ham Patos → Patos Mavi Yanmaz). Stoklarda farklı satır
-// olarak görünür. Bu bölümdeki modeller bu kimlik akışını temsil eder.
+// Final Item ham bir kumaşın renk + özellik kombinasyonunu içerir (örn.
+// "PATOS-MAVI-YANMAZ"). Müşteri sipariş verirken doğrudan final Item seçer;
+// renk/özellik bilgisi Item.colorId ve Item.properties'de zaten gömülüdür.
 //
 // Akış:
 //   1) Admin Color (Mavi) ve FabricProperty (Yanmazlık) kayıtlarını yönetir.
 //   2) Admin StationColor + StationProperty ile bir istasyonun hangi renk/özellik
 //      uygulayabileceğini bağlar (zorunlu kısıt — WO planlamada kontrol edilir).
-//   3) WO oluşturulurken WorkOrderTargetProperty + WorkOrder.targetColorId ile
-//      hedeflenen renk/özellikler ve hangi adımda kazanılacağı işaretlenir.
-//   4) subcontractor.receive() bu hedeflere bakarak findOrCreateDerivedItem ile
-//      türetilmiş Item bulur/oluşturur ve dönen rulonun Roll.itemId'sini günceller.
-//      Operatör hibrit modda manuel ekle/çıkar override yapabilir.
+//   3) Planlamacı/Tanımlar ekranı: ham + renk + özellikler kombinasyonu için
+//      manuel olarak final Item tanımlar (kod deterministic üretilir, isim
+//      otomatik önerilir). Aynı kombinasyon ikinci kez tanımlanmaya
+//      çalışılırsa sistem mevcut Item'ı önerir.
+//   4) WorkOrder.targetItemId final Item'a işaret eder; renk/özellik bilgisi
+//      hedef Item'dan okunur. Fason dönüşünde Roll.itemId final Item ile
+//      güncellenir (item-derive.helper.ts → findDerivedItemOrThrow).
 // =============================================================================
 
 /// Renk kataloğu — Mavi, Kırmızı, Yeşil...
@@ -1163,15 +1640,16 @@ model Color {
   // Relations
   derivedItems        Item[]
   stationCapabilities StationColor[]
-  workOrderTargets    WorkOrder[]    @relation("WorkOrderTargetColor")
-  orderLineTargets    OrderLine[]    @relation("OrderLineTargetColor")
 
   @@index([isActive, sortOrder])
   @@map("colors")
 }
 
 /// Kumaş özellik kataloğu — Yanmazlık, Kayganlık, Su Geçirmezlik...
-/// ItemProperty üzerinden türetilmiş Item'a m:n bağlanır.
+/// Üç farklı m:n ile bağlanır:
+///   - ItemProperty   : bir Item'a hangi özelliklerin uygulanabileceği (allowed)
+///   - WorkOrderTargetProperty : bir iş emrinin üretim çıktısında olacak özellikler
+///   - RollProperty   : bir rulonun fiilen sahip olduğu özellikler
 model FabricProperty {
   id          String   @id @default(uuid())
   code        String   @unique // "YANMAZLIK", "KAYGAN"
@@ -1185,18 +1663,21 @@ model FabricProperty {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  itemProperties      ItemProperty[]
-  stationCapabilities StationProperty[]
+  itemAllowed         ItemProperty[]
   workOrderTargets    WorkOrderTargetProperty[]
-  orderLineTargets    OrderLineTargetProperty[]
+  rollProperties      RollProperty[]
+  orderLineRequired   OrderLineRequiredProperty[]
+  stationCapabilities StationProperty[]
 
   @@index([isActive, sortOrder])
   @@index([category])
   @@map("fabric_properties")
 }
 
-/// Item ↔ FabricProperty M:N — türetilmiş bir Item'ın sahip olduğu özellikler.
-/// Ham Item için boştur; Item.isDerived = true olanlar için doldurulur.
+/// Item ↔ FabricProperty M:N — bir Item'a uygulanabilir özellikler (allowed).
+/// Item kimliğini ETKİLEMEZ (kimlik = baseItem + color). Sadece WO planlamada
+/// targetProperties seçilirken filter kaynağıdır. Boş bırakılırsa = tüm aktif
+/// FabricProperty serbest.
 model ItemProperty {
   id         String @id @default(uuid())
   itemId     String
@@ -1210,6 +1691,42 @@ model ItemProperty {
   @@unique([itemId, propertyId])
   @@index([propertyId])
   @@map("item_properties")
+}
+
+/// WorkOrder ↔ FabricProperty M:N — planlamacının iş emri için belirlediği
+/// üretim özellikleri. Tambur'da finalize sırasında bu liste otomatik olarak
+/// üretilen Roll'lara RollProperty olarak yazılır. Step planlaması YOK.
+model WorkOrderTargetProperty {
+  id          String @id @default(uuid())
+  workOrderId String
+  propertyId  String
+
+  workOrder WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  property  FabricProperty @relation(fields: [propertyId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([workOrderId, propertyId])
+  @@index([propertyId])
+  @@map("work_order_target_properties")
+}
+
+/// Roll ↔ FabricProperty M:N — bir rulonun fiilen sahip olduğu özellikler.
+/// Tambur finalize anında WO.targetProperties'tan kopyalanır. Sonradan
+/// inventory.applyManualProperties ile düzenlenebilir.
+model RollProperty {
+  id         String @id @default(uuid())
+  rollId     String
+  propertyId String
+
+  roll     Roll           @relation(fields: [rollId], references: [id], onDelete: Cascade)
+  property FabricProperty @relation(fields: [propertyId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([rollId, propertyId])
+  @@index([propertyId])
+  @@map("roll_properties")
 }
 
 /// İstasyon ↔ Color M:N — bir istasyonun uygulayabileceği renkler.
@@ -1246,47 +1763,6 @@ model StationProperty {
   @@unique([stationId, propertyId])
   @@index([propertyId])
   @@map("station_properties")
-}
-
-/// WO ↔ FabricProperty M:N — bir iş emrinin hedef özellikleri ve bunların
-/// hangi adımda kazanılacağı. plannedStepId WO oluşturulurken zorunlu doldurulur
-/// (istasyon yetkinlik kontrolü için).
-model WorkOrderTargetProperty {
-  id            String  @id @default(uuid())
-  workOrderId   String
-  propertyId    String
-  plannedStepId String?
-  notes         String?
-
-  workOrder   WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  property    FabricProperty @relation(fields: [propertyId], references: [id])
-  plannedStep WorkOrderStep? @relation("WOTargetPropertyStep", fields: [plannedStepId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([workOrderId, propertyId])
-  @@index([propertyId])
-  @@index([plannedStepId])
-  @@map("work_order_target_properties")
-}
-
-/// OrderLine ↔ FabricProperty M:N — sipariş satırı için müşterinin
-/// istediği özellikler. Opsiyonel; doldurulursa WO oluşturulurken öneri olarak
-/// frontend'e iletilir.
-model OrderLineTargetProperty {
-  id          String @id @default(uuid())
-  orderLineId String
-  propertyId  String
-
-  orderLine OrderLine      @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
-  property  FabricProperty @relation(fields: [propertyId], references: [id])
-
-  createdAt DateTime @default(now())
-
-  @@unique([orderLineId, propertyId])
-  @@index([propertyId])
-  @@map("order_line_target_properties")
 }
 
 // =============================================================================

@@ -18,6 +18,7 @@ const initialEntrySchema = z.object({
   weightKg:     z.number().positive("Ağırlık pozitif olmalı").optional(),
   qualityGrade: z.string().optional(),
   width:        z.number().positive("En pozitif olmalı").optional(),
+  workOrderId:  z.string().uuid("Geçersiz iş emri ID").optional().nullable(),
 });
 
 const applyPropertiesSchema = z.object({

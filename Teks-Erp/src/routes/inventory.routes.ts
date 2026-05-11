@@ -41,10 +41,49 @@ const router = Router();
  *         description: Barkod ile arama
  *       - in: query
  *         name: filter[status]
- *         schema: { type: string, enum: [STOCK, IN_PRODUCTION, PRODUCED, READY_FOR_SHIP, SHIPPED, SCRAP] }
+ *         schema: { type: string, enum: [STOCK, IN_PRODUCTION, PRODUCED, READY_FOR_SHIP, SHIPPED, SCRAP, AT_SUBCONTRACTOR, WAREHOUSE, A1_STOCK, ALL] }
+ *       - in: query
+ *         name: filter[statusIn]
+ *         schema: { type: string }
+ *         description: Çoklu status (virgülle ayrılmış). Sekme bazlı filtre için. Örn. "STOCK,WAREHOUSE"
  *       - in: query
  *         name: filter[itemId]
  *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: filter[ownerType]
+ *         schema: { type: string, enum: [FACTORY, CUSTOMER] }
+ *         description: FACTORY = fabrika stoğu, CUSTOMER = müşteri malları (fason)
+ *       - in: query
+ *         name: filter[isDerived]
+ *         schema: { type: string, enum: ["true", "false"] }
+ *         description: Item.isDerived — false=ham, true=işlenmiş (renk/özellik kazanmış)
+ *       - in: query
+ *         name: filter[baseItemId]
+ *         schema: { type: string, format: uuid }
+ *         description: Ham item ID. Bu item ve ondan türetilmiş tüm item'ların top'larını getirir.
+ *       - in: query
+ *         name: filter[colorId]
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: filter[propertyIds]
+ *         schema: { type: string }
+ *         description: Virgülle ayrılmış FabricProperty ID'leri (AND-every — hepsini birden taşıyan).
+ *       - in: query
+ *         name: filter[widthMin]
+ *         schema: { type: number }
+ *         description: Roll.width min (cm).
+ *       - in: query
+ *         name: filter[widthMax]
+ *         schema: { type: number }
+ *         description: Roll.width max (cm). Eşit değer için min=max.
+ *       - in: query
+ *         name: filter[qtyMin]
+ *         schema: { type: number }
+ *         description: Roll.currentQty min (mt).
+ *       - in: query
+ *         name: filter[qtyMax]
+ *         schema: { type: number }
+ *         description: Roll.currentQty max (mt).
  *     responses:
  *       200:
  *         description: Sayfalanmış top listesi

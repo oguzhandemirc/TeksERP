@@ -62,6 +62,28 @@ router.get(
 
 /**
  * @openapi
+ * /api/kursun-qc/open-cards:
+ *   get:
+ *     tags: [KursunQc]
+ *     summary: PROCESS_QC istasyonlarında açık top bekleyen aktif refakat kartları
+ *     description: |
+ *       Mobil "kamera simülasyonu" modal'ı için. Sahada operatör fiziksel kart
+ *       yokken bu listeden seçim yapabilir. Filtre: PROCESS_QC adımı COMPLETED
+ *       olmamış, en az bir açık top mevcut, WO'nun ACTIVE refakat kartı var.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Açık kart listesi }
+ *       500: { description: Sunucu hatası }
+ */
+router.get(
+  "/open-cards",
+  verifyToken,
+  requirePermission("quality:read"),
+  controller.listOpenCards
+);
+
+/**
+ * @openapi
  * /api/kursun-qc/apply-kursun:
  *   post:
  *     tags: [KursunQc]
@@ -150,6 +172,36 @@ router.post(
   verifyToken,
   requirePermission("quality:write"),
   controller.completeQc2
+);
+
+/**
+ * @openapi
+ * /api/kursun-qc/undo-qc2:
+ *   post:
+ *     tags: [KursunQc]
+ *     summary: Bir topun QC2 tamamlandı işaretini geri al
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollId, stepId]
+ *             properties:
+ *               rollId: { type: string, format: uuid }
+ *               stepId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: İşaret kaldırıldı veya zaten yoktu }
+ *       400: { description: Top bu adımda değil }
+ *       401: { description: Yetkisiz }
+ *       500: { description: Sunucu hatası }
+ */
+router.post(
+  "/undo-qc2",
+  verifyToken,
+  requirePermission("quality:write"),
+  controller.undoQc2
 );
 
 /**
@@ -249,6 +301,40 @@ router.post(
   verifyToken,
   requirePermission("quality:write"),
   controller.finishStep
+);
+
+/**
+ * @openapi
+ * /api/kursun-qc/reopen-step:
+ *   post:
+ *     tags: [KursunQc]
+ *     summary: Yanlışlıkla kapatılan PROCESS_QC adımını yeniden aç
+ *     description: |
+ *       Geliştirme aşaması yardımcı endpoint'i — operatör adımı yanlışlıkla
+ *       kapattığında kartı tekrar okutup devam edebilsin diye. Yalnızca roller
+ *       hâlâ sonraki adımda bekliyorsa (ileri taşınmamışsa) çalışır.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [stepId]
+ *             properties:
+ *               stepId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Adım yeniden açıldı }
+ *       400: { description: Adım kapalı değil veya toplar ileri taşınmış }
+ *       401: { description: Yetkisiz }
+ *       404: { description: Adım bulunamadı }
+ *       500: { description: Sunucu hatası }
+ */
+router.post(
+  "/reopen-step",
+  verifyToken,
+  requirePermission("quality:write"),
+  controller.reopenStep
 );
 
 export default router;

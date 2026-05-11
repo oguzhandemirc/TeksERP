@@ -4,17 +4,21 @@
 
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
-import { BaseService } from "../services/base.service";
+import { ItemService } from "../services/item.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 
 import variantRoutes from "./variant.routes";
 
-const service = new BaseService({
+const service = new ItemService({
   modelName: "item",
   tableName: "ITEM",
   searchFields: ["code", "name"],
-  defaultInclude: undefined,
+  defaultInclude: {
+    baseItem: true,
+    color: true,
+    allowedProperties: { include: { property: true } },
+  },
 });
 
 const controller = new BaseController(service);

@@ -31,6 +31,10 @@ const finishStepSchema = z.object({
   stepId: z.string().uuid("Geçersiz adım ID"),
 });
 
+const reopenStepSchema = z.object({
+  stepId: z.string().uuid("Geçersiz adım ID"),
+});
+
 export class KursunQcController {
   private service: KursunQcService;
 
@@ -38,12 +42,15 @@ export class KursunQcController {
     this.service = new KursunQcService();
     this.getByCardBarcode = this.getByCardBarcode.bind(this);
     this.getStep = this.getStep.bind(this);
+    this.listOpenCards = this.listOpenCards.bind(this);
     this.applyKursun = this.applyKursun.bind(this);
     this.undoKursun = this.undoKursun.bind(this);
     this.completeQc2 = this.completeQc2.bind(this);
+    this.undoQc2 = this.undoQc2.bind(this);
     this.reportError = this.reportError.bind(this);
     this.deleteError = this.deleteError.bind(this);
     this.finishStep = this.finishStep.bind(this);
+    this.reopenStep = this.reopenStep.bind(this);
   }
 
   /** GET /api/kursun-qc/by-card/:barcode */
@@ -60,6 +67,16 @@ export class KursunQcController {
   async getStep(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.getStep(req.params.stepId as string);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/kursun-qc/open-cards */
+  async listOpenCards(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.listOpenCards();
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -108,6 +125,20 @@ export class KursunQcController {
     }
   }
 
+  /** POST /api/kursun-qc/undo-qc2 */
+  async undoQc2(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = z.object({
+        rollId: z.string().uuid(),
+        stepId: z.string().uuid(),
+      }).parse(req.body);
+      const result = await this.service.undoQc2(body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** POST /api/kursun-qc/report-error */
   async reportError(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -144,6 +175,17 @@ export class KursunQcController {
     try {
       const body = finishStepSchema.parse(req.body);
       const result = await this.service.finishStep(body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/kursun-qc/reopen-step */
+  async reopenStep(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = reopenStepSchema.parse(req.body);
+      const result = await this.service.reopenStep(body, req.user?.userId);
       res.status(200).json(result);
     } catch (err) {
       next(err);

@@ -160,7 +160,6 @@ export class ProductionService {
               include: { station: true },
               orderBy: { stepSequence: "asc" },
             },
-            dyehouseCompany: true,
             orderLinks: {
               include: {
                 orderLine: {
@@ -251,7 +250,6 @@ export class ProductionService {
           status: currentStep.workOrder.status,
           width: currentStep.workOrder.width,
           targetQuantity: currentStep.workOrder.targetQuantity,
-          dyehouseCompany: currentStep.workOrder.dyehouseCompany,
           orderLinks: currentStep.workOrder.orderLinks,
         },
         allSteps: allSteps.map((s) => ({

@@ -20,4 +20,26 @@ const router = Router();
  */
 router.get("/", verifyToken, requirePermission("quality:read"), controller.listSwatches);
 
+/**
+ * @openapi
+ * /api/swatches/by-barcode/{barcode}:
+ *   get:
+ *     tags: [Swatches]
+ *     summary: Barkoddan kartela bul (TartıPaket scan akışı)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: barcode
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Kartela bulundu veya not-found }
+ */
+router.get(
+  "/by-barcode/:barcode",
+  verifyToken,
+  requirePermission("quality:read"),
+  controller.getSwatchByBarcode
+);
+
 export default router;

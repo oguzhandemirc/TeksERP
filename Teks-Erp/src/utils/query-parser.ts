@@ -7,10 +7,41 @@
 
 import { Request } from "express";
 import { QueryParams } from "../types/api.types";
+import { AppError } from "./app-error";
+import { decodeCursor } from "./cursor";
+import type { Cursor } from "./cursor";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
+// Yıllar süren operasyonda derin offset (skip) sorguları PostgreSQL'i her sayfada
+// O(n) tarama yapmaya zorlar. UI'da hiç kimse 5K satırdan sonrasına gitmez —
+// gidiyorsa filtre eksiktir. Erken hata fırlatıp kullanıcıyı filtre kullanmaya yönlendir.
+const MAX_OFFSET = 10000;
+
+export interface CursorParams {
+  cursor: Cursor | null;
+  limit: number;
+}
+
+/**
+ * Cursor pagination parametrelerini parse et.
+ * `?cursor=<base64>&limit=50` formatı.
+ * Cursor yoksa null (ilk sayfa). Limit MAX_PAGE_SIZE ile sınırlı.
+ */
+export function parseCursorParams(req: Request): CursorParams {
+  const cursor = decodeCursor(req.query.cursor as string | undefined);
+  const rawLimit = parseInt(req.query.limit as string, 10) || DEFAULT_PAGE_SIZE;
+  const limit = Math.min(Math.max(1, rawLimit), MAX_PAGE_SIZE);
+  return { cursor, limit };
+}
+
+/**
+ * İstemci cursor mode istediği mi? `?cursor=...` veya `?mode=cursor` parametre.
+ */
+export function isCursorRequested(req: Request): boolean {
+  return req.query.cursor !== undefined || req.query.mode === "cursor";
+}
 
 /**
  * Parse query parameters from the Express request.
@@ -40,7 +71,37 @@ export function parseQueryParams(req: Request): QueryParams {
     }
   }
 
-  return { page, pageSize, sortBy, sortOrder, filters, search };
+  const dateField = req.query.dateField as string | undefined;
+  const dateFrom = parseIsoDate(req.query.dateFrom);
+  const dateTo = parseIsoDate(req.query.dateTo);
+
+  return { page, pageSize, sortBy, sortOrder, filters, search, dateField, dateFrom, dateTo };
+}
+
+function parseIsoDate(value: unknown): Date | undefined {
+  if (typeof value !== "string" || !value) return undefined;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+/**
+ * Tarih aralığı koşulunu `where`'a ekler — service kendi whitelist'ini sağlar.
+ * Whitelist dışındaki dateField sessizce yok sayılır (404 değil; UI hatasız).
+ *
+ * Performans notu: range query için `dateField` kolonunda index ŞART. Yoksa
+ * büyük tabloda seq scan tetiklenir. Composite `[status, dateField]` ideal.
+ */
+export function applyDateRange(
+  where: Record<string, unknown>,
+  params: QueryParams,
+  allowedFields: readonly string[]
+): void {
+  if (!params.dateField || !allowedFields.includes(params.dateField)) return;
+  if (!params.dateFrom && !params.dateTo) return;
+  const range: { gte?: Date; lte?: Date } = {};
+  if (params.dateFrom) range.gte = params.dateFrom;
+  if (params.dateTo) range.lte = params.dateTo;
+  where[params.dateField] = range;
 }
 
 /**
@@ -88,10 +149,14 @@ export function buildOrderByClause(
 
 /**
  * Calculate Prisma skip/take from page & pageSize.
+ * MAX_OFFSET guard: skip > 10K → 400 fırlat (filtre kullanmaya zorla).
  */
 export function buildPagination(page: number, pageSize: number): { skip: number; take: number } {
-  return {
-    skip: (page - 1) * pageSize,
-    take: pageSize,
-  };
+  const skip = (page - 1) * pageSize;
+  if (skip > MAX_OFFSET) {
+    throw AppError.badRequest(
+      `Sayfa derinliği aşıldı (skip=${skip}). Lütfen filtre daraltın veya tarih aralığı kullanın.`
+    );
+  }
+  return { skip, take: pageSize };
 }

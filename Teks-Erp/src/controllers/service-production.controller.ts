@@ -16,13 +16,12 @@ const rollSchema = z.object({
   customerDescription: z.string().max(200).optional().nullable(),
 });
 
+// PACKAGING / SHIPPING rotaya konulmaz — fulfillment WO dışı.
 const routeKinds = z.enum([
   "RAW_QC",
   "PROCESS_QC",
   "SUBCONTRACTOR",
   "TAMBUR",
-  "PACKAGING",
-  "SHIPPING",
   "OTHER",
 ]);
 

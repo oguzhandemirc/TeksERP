@@ -29,12 +29,17 @@ export interface QueryParams {
   sortOrder: "asc" | "desc";
   filters: Record<string, string | string[]>;
   search?: string;
+  /** ISO datetime — kayıt aralığı sorgusu (`dateField >= dateFrom`) */
+  dateFrom?: Date;
+  /** ISO datetime — kayıt aralığı sorgusu (`dateField <= dateTo`) */
+  dateTo?: Date;
+  /** Hangi tarih kolonu üzerinden filtre. Whitelist service'te. */
+  dateField?: string;
 }
 
 /** JWT payload stored in token */
 export interface JwtPayload {
   userId: string;
   username: string;
-  roles: string[];
   permissions: string[];
 }

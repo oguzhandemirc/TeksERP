@@ -23,12 +23,12 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [workOrderId, stepId, companyId, rollIds]
+ *             required: [workOrderId, stepId, subcontractorId, rollIds]
  *             properties:
- *               workOrderId: { type: string, format: uuid }
- *               stepId:      { type: string, format: uuid }
- *               companyId:   { type: string, format: uuid }
- *               rollIds:     { type: array, items: { type: string, format: uuid } }
+ *               workOrderId:     { type: string, format: uuid }
+ *               stepId:          { type: string, format: uuid }
+ *               subcontractorId: { type: string, format: uuid }
+ *               rollIds:         { type: array, items: { type: string, format: uuid } }
  *               plateNumber: { type: string }
  *               driverName:  { type: string }
  *               notes:       { type: string }
@@ -58,12 +58,12 @@ router.post(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [workOrderId, stepId, companyId, manifestNo, returns]
+ *             required: [workOrderId, stepId, subcontractorId, manifestNo, returns]
  *             properties:
- *               workOrderId: { type: string, format: uuid }
- *               stepId:      { type: string, format: uuid }
- *               companyId:   { type: string, format: uuid }
- *               manifestNo:  { type: string, description: "Fason firma irsaliye no" }
+ *               workOrderId:     { type: string, format: uuid }
+ *               stepId:          { type: string, format: uuid }
+ *               subcontractorId: { type: string, format: uuid }
+ *               manifestNo:      { type: string, description: "Fason firma irsaliye no" }
  *               notes:       { type: string }
  *               returns:
  *                 type: array
@@ -140,6 +140,44 @@ router.get(
   verifyToken,
   requirePermission("workorder:read"),
   controller.getDispatchPrint
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/cancel:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: Fason sevkini iptal et (soft cancel)
+ *     description: |
+ *       Sevk silinmez, cancelledAt/cancelledById/cancelReason set edilir.
+ *       Toplar STOCK'a geri döner (currentStepId temizlenir). Mal kabul yapılmış
+ *       sevk iptal edilemez.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string, minLength: 3, maxLength: 500 }
+ *     responses:
+ *       200: { description: Sevk iptal edildi }
+ *       400: { description: Geçersiz sebep }
+ *       404: { description: Sevk bulunamadı }
+ *       409: { description: Zaten iptal edilmiş veya mal kabul yapılmış }
+ */
+router.post(
+  "/dispatches/:id/cancel",
+  verifyToken,
+  requirePermission("workorder:write"),
+  controller.cancelDispatch
 );
 
 router.get(

@@ -92,7 +92,7 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 | Master Data | Station, Machine, Route, RouteStep | 4 |
 | Item & Variant | Item, ItemVariant, CustomerVariantAlias | 3 |
 | Inventory | Roll, RollMovement, RollOperation | 3 |
-| Sales | Customer, Order, OrderLine | 3 |
+| Sales | Customer, CustomerBranch, Order, OrderLine | 4 |
 | Production | WorkOrder, WorkOrderStep, WorkOrderToOrderLine | 3 |
 | Quality | QualityGrade, DefectType, RollError | 3 |
 | Logistics | OrderAllocation, Shipment, ShipmentItem | 3 |
@@ -133,14 +133,20 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 ```
 STOCK ─┬─→ IN_PRODUCTION ─→ AT_SUBCONTRACTOR ─→ RETURNED_FROM_SUBCONTRACTOR ─┐
        │                                                                       │
-       └────────────────────────────────────────────────────────────────────→  PRODUCED
-                                                                                  ↓
-                                                              ┌──── SCRAP / A1_STOCK (Tambur kesim)
-                                                              ↓
-                                                          WAREHOUSE
-                                                              ↓
-                                                       READY_FOR_SHIP ─→ SHIPPED
+       └─────────────────────────────────────────────→ IN_PRODUCTION (TAMBUR)─┤
+                                                                              ↓
+                                                ┌──── SCRAP / A1_STOCK (Tambur kesim)
+                                                ↓
+                                            WAREHOUSE  (depo — tartı/paket bekliyor)
+                                                ↓
+                                        READY_FOR_SHIP  (tartı/paket tamamlandı)
+                                                ↓
+                                             SHIPPED
 ```
+
+`PRODUCED` statüsü artık yalnızca yedek/legacy yol içindir — normal akışta
+Tambur sonrası top doğrudan `WAREHOUSE`'a düşer ve paketleme sonrası
+`READY_FOR_SHIP` olur.
 
 ---
 
@@ -245,7 +251,10 @@ Kurşun'da hata tespit edildi → Tambur'da karar verildi: "KES"
 Orijinal topun metrajı AZALTILMAZ.
 Kesilen parça için YENİ Roll kaydı oluşturulur (yeni barcode).
 Yeni Roll → status: SCRAP veya A1_STOCK, parentRollId set
-Orijinal Roll → currentQty güncellenir, status: PRODUCED
+Orijinal Roll → currentQty güncellenir, status: WAREHOUSE,
+                currentStepId: null  (saf statü modeli — depo bir istasyon değil;
+                paketleme RollMovement'i tartı/paket finalize anında atomic
+                açılır + kapanır, READY_FOR_SHIP'e geçer)
 ```
 
 ### 7.2 Fason Dönüş — Ölçüm YOKKEN
@@ -624,12 +633,115 @@ Tüm hot-path tablolarında indeks durumu:
 | `shipments` | `customerId`, `status` |
 | `shipment_items` | `shipmentId`, `rollId @unique` |
 
+### Aktif Partial / Conditional İndeksler (raw SQL migration)
+
+| İndeks | Tablo | Koşul | Migration |
+|---|---|---|---|
+| `items_active_type_name_idx` | `items` | `WHERE "isActive" = true` üstüne `(itemType, name)` | `20260427150000_add_partial_active_indexes` |
+| `customers_active_type_name_idx` | `customers` | `WHERE "isActive" = true` üstüne `(type, name)` | `20260427150000_add_partial_active_indexes` |
+| `traveler_cards_workOrderId_active_key` | `traveler_cards` | `WHERE status = 'ACTIVE'` üstüne `workOrderId` (unique) | (mevcut) |
+
 ### Gelecekte Düşünülmesi Gerekenler
 
 - `Order @@index([customerId, status])` — eğer "müşterinin açık siparişleri" sorgusu eklenirse
 - `WorkOrder @@index([status, plannedEndDate])` — eğer "termin yaklaşan WO" raporu eklenirse
-- `Item`, `Customer` partial index (`WHERE isActive = true`) — pasif kayıt birikmesi başlayınca
 - `RollOperation` BRIN index (`createdAt` üzerinde) — milyon satıra ulaşınca
+- `MachineLog`, `WorkOrder.parameters`, `RollOperation.metadata` için **GIN index** — JSON sütununa filtre uygulanmaya başlandığı anda (önce ekle, sonra endpoint yaz)
+
+---
+
+## 10.1 DB Runtime Safety (her zaman aktif)
+
+Yıllarca yerel sunucuda çalışacak ERP'de tek bir kötü sorgu DB'yi kilitlememeli. Migration: `20260427160000_db_runtime_safety`.
+
+| Ayar | Değer | Amaç |
+|---|---|---|
+| `statement_timeout` | `30s` | Tek sorgu 30 saniyeyi aşarsa otomatik iptal — runaway query koruması |
+| `idle_in_transaction_session_timeout` | `5min` | Açık kalmış transaction'lar tablo lock'ı tutmasın |
+| `log_min_duration_statement` | `500ms` | 500ms+ süren her sorgu PostgreSQL log'una düşer |
+| `log_lock_waits` | `on` | Lock beklemeleri loglansın (deadlock teşhisi) |
+| `log_temp_files` | `10MB` | Disk'e dökülen büyük sıralama/JOIN'leri kaydet |
+| `MAX_OFFSET` (kod) | `10000` | `skip > 10K` → 400 hatası, kullanıcıyı filtre kullanmaya zorlar (`query-parser.ts`) |
+
+**Mevcut değeri görmek için:**
+```sql
+SELECT name, setting, unit FROM pg_settings
+WHERE name IN ('statement_timeout','idle_in_transaction_session_timeout',
+               'log_min_duration_statement','log_lock_waits','log_temp_files');
+```
+
+**Tekrar uygulamak gerekirse** (DB taşıma, kurulum vb.):
+```bash
+psql -h <host> -p <port> -U postgres -d TeksErpDb -f \
+  prisma/migrations/20260427160000_db_runtime_safety/migration.sql
+```
+
+---
+
+## 10.2 Çeyreklik DB Sağlık Kontrolü
+
+Her **3 ayda bir** admin tarafından çalıştırılır. Çıktıları operasyon defterine kaydedilir.
+
+### A. Tablo boyutu ve büyüme hızı
+```sql
+SELECT
+  schemaname || '.' || relname AS table,
+  pg_size_pretty(pg_total_relation_size(relid)) AS total_size,
+  pg_size_pretty(pg_relation_size(relid)) AS data_size,
+  n_live_tup AS rows
+FROM pg_stat_user_tables
+ORDER BY pg_total_relation_size(relid) DESC
+LIMIT 15;
+```
+
+### B. SystemLog büyüme + arşivleme tetikleyicisi
+```sql
+SELECT
+  COUNT(*) AS active_rows,
+  MIN("createdAt") AS oldest,
+  MAX("createdAt") AS newest
+FROM system_logs;
+```
+> Eğer `oldest > 6 ay öncesi` → `POST /api/admin/system-logs/archive { "monthsToKeep": 6 }` çağır.
+
+### C. Kullanılmayan index'leri tespit et (yer kaplıyor, INSERT yavaşlatıyor)
+```sql
+SELECT schemaname, relname, indexrelname,
+       pg_size_pretty(pg_relation_size(indexrelid)) AS size,
+       idx_scan AS scans
+FROM pg_stat_user_indexes
+WHERE idx_scan = 0 AND indexrelname NOT LIKE '%_pkey'
+ORDER BY pg_relation_size(indexrelid) DESC;
+```
+
+### D. Seq scan oranı yüksek tablolar (eksik index sinyali)
+```sql
+SELECT relname, seq_scan, idx_scan,
+       seq_tup_read, idx_tup_fetch,
+       CASE WHEN seq_scan + idx_scan = 0 THEN 0
+            ELSE seq_scan::float / (seq_scan + idx_scan) END AS seq_ratio
+FROM pg_stat_user_tables
+WHERE seq_scan > 1000
+ORDER BY seq_ratio DESC
+LIMIT 10;
+```
+
+### E. Index bloat — yıllar içinde şişer, REINDEX gerekir
+```sql
+-- Yılda bir kez (düşük yoğunluk saatinde):
+REINDEX TABLE CONCURRENTLY rolls;
+REINDEX TABLE CONCURRENTLY system_logs;
+REINDEX TABLE CONCURRENTLY roll_movements;
+REINDEX TABLE CONCURRENTLY roll_operations;
+REINDEX TABLE CONCURRENTLY traveler_card_scans;
+```
+
+### F. PostgreSQL log dosyasında 500ms+ sorgular
+```bash
+# Linux yerel sunucu (örn. /var/log/postgresql/):
+grep "duration:" /var/log/postgresql/postgresql-*.log \
+  | sort -t: -k2 -n -r | head -20
+```
 
 ---
 

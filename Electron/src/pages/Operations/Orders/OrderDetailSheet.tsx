@@ -1,0 +1,332 @@
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { safeFormat } from "@/lib/format";
+import { Lock, Pencil, Ban, Truck } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { PermissionGate } from "@/components/PermissionGate";
+import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
+import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
+import { orderStatusLabels } from "@/types/enums";
+import { orderService } from "./service";
+import { shippingQueueService } from "@/pages/Operations/ShippingQueue/service";
+import type { Order } from "./types";
+
+interface Props {
+  order: Order | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onEdit?: (order: Order) => void;
+}
+
+export function OrderDetailSheet({ order, open, onOpenChange, onEdit }: Props) {
+  const qc = useQueryClient();
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const closeMut = useMutation({
+    mutationFn: ({ id, r }: { id: string; r: string }) => orderService.manualClose(id, r),
+    onSuccess: () => {
+      toast.success("Sipariş manuel olarak kapatıldı.");
+      void qc.invalidateQueries({ queryKey: ["orders"] });
+      setCloseOpen(false);
+      setReason("");
+      onOpenChange(false);
+    },
+  });
+
+  const cancelMut = useMutation({
+    mutationFn: (id: string) => orderService.remove(id),
+    onSuccess: (res) => {
+      toast.success(res.message ?? "Sipariş iptal edildi.");
+      void qc.invalidateQueries({ queryKey: ["orders"] });
+      setCancelOpen(false);
+      onOpenChange(false);
+    },
+  });
+
+  const enqueueMut = useMutation({
+    mutationFn: (orderId: string) => shippingQueueService.enqueue({ orderId }),
+    onSuccess: (res) => {
+      toast.success(res.message ?? "Sipariş sevkiyat kuyruğuna alındı.");
+      void qc.invalidateQueries({ queryKey: ["shipping-queue"] });
+    },
+  });
+
+  const totalQty = order?.lines.reduce((acc, l) => acc + l.quantity, 0) ?? 0;
+  const isEditable = order && (order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
+  const isCancellable = order && order.status !== "COMPLETED" && order.status !== "CANCELLED";
+  const canClose = order && (order.status === "PENDING" || order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <span className="font-mono">{order?.orderNumber}</span>
+            {order && (
+              <StatusBadge
+                status={order.status}
+                labels={orderStatusLabels}
+                tones={orderStatusTones}
+              />
+            )}
+          </SheetTitle>
+          <SheetDescription>
+            {order?.customer?.name}
+            {order?.branch && (
+              <>
+                {" — "}
+                <span className="font-medium text-foreground">Şube: {order.branch.name}</span>
+                {(order.branch.city || order.branch.district) && (
+                  <span className="text-muted-foreground">
+                    {" ("}
+                    {[order.branch.district, order.branch.city].filter(Boolean).join(" / ")}
+                    {")"}
+                  </span>
+                )}
+              </>
+            )}
+          </SheetDescription>
+        </SheetHeader>
+
+        {order && (
+          <div className="mt-4 space-y-4">
+            <div className="grid grid-cols-3 gap-2 text-sm">
+              <Card>
+                <CardContent className="p-3">
+                  <div className="text-xs text-muted-foreground">Sipariş Tarihi</div>
+                  <div className="font-medium">{safeFormat(order.orderDate, "dd.MM.yyyy")}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-3">
+                  <div className="text-xs text-muted-foreground">Termin</div>
+                  <div className="mt-1">
+                    <DeadlineBadge deadline={order.deadline} />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-3">
+                  <div className="text-xs text-muted-foreground">Toplam</div>
+                  <div className="font-medium tabular-nums">
+                    {totalQty.toLocaleString("tr-TR")} m
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {order.completedAt && (
+              <div className="rounded-md border bg-muted/30 p-3 text-xs">
+                <div className="font-medium">
+                  Tamamlandı: {safeFormat(order.completedAt, "dd.MM.yyyy HH:mm")}
+                </div>
+                {order.manualCloseReason && (
+                  <div className="mt-1 text-muted-foreground">
+                    Manuel kapatma sebebi: {order.manualCloseReason}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div>
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Sipariş Kalemleri ({order.lines.length})
+              </div>
+              <ul className="space-y-2">
+                {order.lines.map((line) => (
+                  <li key={line.id} className="rounded-md border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-xs">{line.item?.code}</span>
+                          <span className="font-medium">{line.item?.name}</span>
+                          {line.variant && (
+                            <Badge variant="muted" className="text-[10px]">
+                              {line.variant.name}
+                            </Badge>
+                          )}
+                          {line.item?.color && (
+                            <Badge variant="muted" className="gap-1 text-[10px]">
+                              {line.item.color.hex && (
+                                <span
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: line.item.color.hex }}
+                                />
+                              )}
+                              {line.item.color.name}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                          <span>
+                            <span className="font-medium text-foreground">
+                              {line.quantity.toLocaleString("tr-TR")}
+                            </span>{" "}
+                            metre
+                          </span>
+                          {line.width != null && <span>En: {line.width} cm</span>}
+                          {line.unitPrice && (
+                            <span>
+                              {line.unitPrice} {order.currency}
+                            </span>
+                          )}
+                        </div>
+                        {line.requiredProperties && line.requiredProperties.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                            <span className="text-[10px] text-muted-foreground">
+                              Özellik:
+                            </span>
+                            {line.requiredProperties.map((p) => (
+                              <Badge key={p.propertyId} variant="muted" className="text-[10px]">
+                                {p.property.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <PermissionGate permission="order:write">
+              <div className="flex flex-wrap gap-2 border-t pt-3">
+                {isEditable && onEdit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onEdit(order)}
+                    className="gap-1.5"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Düzenle
+                  </Button>
+                )}
+                {isEditable && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => enqueueMut.mutate(order.id)}
+                    disabled={enqueueMut.isPending}
+                    className="gap-1.5"
+                  >
+                    <Truck className="h-3.5 w-3.5" />{" "}
+                    {enqueueMut.isPending
+                      ? "Ekleniyor..."
+                      : "Sevkiyat Kuyruğuna Al"}
+                  </Button>
+                )}
+                {canClose && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCloseOpen(true)}
+                    className="gap-1.5"
+                  >
+                    <Lock className="h-3.5 w-3.5" /> Manuel Kapat
+                  </Button>
+                )}
+                {isCancellable && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCancelOpen(true)}
+                    className="ml-auto gap-1.5 text-destructive hover:text-destructive"
+                  >
+                    <Ban className="h-3.5 w-3.5" /> İptal Et
+                  </Button>
+                )}
+              </div>
+              {canClose && (
+                <p className="text-xs text-muted-foreground">
+                  Manuel Kapat: eksik sevkiyat olsa bile tamamlanmış işaretler.
+                </p>
+              )}
+            </PermissionGate>
+          </div>
+        )}
+
+        <ConfirmDialog
+          open={cancelOpen}
+          onOpenChange={setCancelOpen}
+          title="Siparişi iptal et"
+          description="Bu siparişi iptal etmek istediğinize emin misiniz? Bağlı planlı iş emirleri otomatik koparılır. Üretimi başlamış iş emri varsa iptal reddedilir."
+          confirmLabel="İptal Et"
+          destructive
+          isPending={cancelMut.isPending}
+          onConfirm={() => {
+            if (!order) return;
+            cancelMut.mutate(order.id);
+          }}
+        />
+
+        <ConfirmDialog
+          open={closeOpen}
+          onOpenChange={setCloseOpen}
+          title="Siparişi manuel kapat"
+          description="Bu işlem siparişi 'Tamamlandı' duruma alır ve audit log'a düşer. Sebep yaz:"
+          confirmLabel="Kapat"
+          isPending={closeMut.isPending}
+          onConfirm={() => {
+            if (!order || !reason.trim()) return;
+            closeMut.mutate({ id: order.id, r: reason.trim() });
+          }}
+        />
+        {closeOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 pointer-events-none">
+            <Card className="pointer-events-auto w-full max-w-sm shadow-2xl">
+              <CardContent className="p-4 space-y-3">
+                <div>
+                  <div className="text-sm font-semibold">Manuel Kapatma Sebebi</div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Sebep audit log'a yazılır.
+                  </p>
+                </div>
+                <Input
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Örn: müşteri talebi, fire kabul edildi..."
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setCloseOpen(false);
+                      setReason("");
+                    }}
+                  >
+                    İptal
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!reason.trim() || closeMut.isPending}
+                    onClick={() => {
+                      if (!order) return;
+                      closeMut.mutate({ id: order.id, r: reason.trim() });
+                    }}
+                  >
+                    {closeMut.isPending ? "Kapatılıyor..." : "Kapat"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}

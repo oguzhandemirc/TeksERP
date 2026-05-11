@@ -12,9 +12,28 @@ import {
   buildWhereClause,
   buildOrderByClause,
   buildPagination,
+  isCursorRequested,
+  applyDateRange,
 } from "../utils/query-parser";
+import {
+  decodeDynamicCursor,
+  dynamicCursorWhere,
+  buildNextDynamicCursor,
+} from "../utils/cursor";
 import { PaginatedResponse, ApiResponse } from "../types/api.types";
 import { Request } from "express";
+
+export interface CursorPaginatedResponse<T> {
+  success: boolean;
+  data: T[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    limit: number;
+    /** İstemci için yaklaşık toplam (count). Sayma maliyetli olabilir; opsiyonel. */
+    totalEstimate?: number;
+  };
+}
 
 // Prisma delegate type helper — allows us to call .findMany, .create etc. dynamically
 type PrismaDelegate = {
@@ -30,6 +49,8 @@ export interface BaseServiceConfig {
   modelName: string; // Prisma model name (e.g., "item", "customer")
   tableName: string; // For SystemLog (e.g., "ITEM", "CUSTOMER")
   searchFields?: string[]; // Fields to search via ?search= param
+  /** `?dateField=...&dateFrom=...&dateTo=...` için kabul edilen kolonlar. */
+  dateFields?: readonly string[];
   defaultInclude?: Record<string, unknown>; // Default relations to include
   nestedCreateFields?: string[]; // Array fields to wrap in { create: [...] } for Prisma nested writes
 }
@@ -50,14 +71,30 @@ export class BaseService {
 
   /**
    * List with dynamic filtering, sorting, pagination, and search.
+   *
+   * İki modda çalışır (geri uyumlu):
+   *   - **Offset mode** (default): `?page=1&pageSize=50` → eski sayfalama,
+   *     küçük tablolar için uygun, sayfa atlatma destekler.
+   *   - **Cursor mode**: `?cursor=<token>&limit=50` (veya `?mode=cursor`) →
+   *     büyük tablolar için sabit hız, "Daha Fazla Yükle" pattern.
+   *
+   * İstemci cursor parametresi gönderirse otomatik cursor mode'a geçer.
    */
-  async findAll(req: Request): Promise<PaginatedResponse<unknown>> {
+  async findAll(req: Request): Promise<PaginatedResponse<unknown> | CursorPaginatedResponse<unknown>> {
+    if (isCursorRequested(req)) {
+      return this.findAllCursor(req);
+    }
+    return this.findAllOffset(req);
+  }
+
+  protected async findAllOffset(req: Request): Promise<PaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
     const where = buildWhereClause(
       params.filters,
       this.config.searchFields,
       params.search
     );
+    applyDateRange(where, params, this.config.dateFields ?? []);
     const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
     const { skip, take } = buildPagination(params.page, params.pageSize);
 
@@ -82,6 +119,66 @@ export class BaseService {
         pageSize: params.pageSize,
         total,
         totalPages: Math.ceil(total / params.pageSize),
+      },
+    };
+  }
+
+  /**
+   * Cursor pagination ile listele.
+   * - Birincil sıralama: `params.sortBy` (default `createdAt`), `sortOrder` ile.
+   *   Tie-breaker: `id` aynı yönde — sayfalar arası kararlı.
+   * - filter[]/search aynı çalışır.
+   * - count opsiyonel: `?withTotal=true` parametresiyle açılır (sayma maliyeti).
+   * - Cursor token'ı sortBy değerini içerir; sortBy değişirse istemci cursor'ı
+   *   sıfırlamalı (`useDataTable` zaten sortBy değişiminde refetch ediyor).
+   */
+  protected async findAllCursor(req: Request): Promise<CursorPaginatedResponse<unknown>> {
+    const params = parseQueryParams(req);
+    const rawLimit = parseInt(req.query.limit as string, 10) || 50;
+    const limit = Math.min(Math.max(1, rawLimit), 200);
+    const wantTotal = req.query.withTotal === "true";
+
+    const sortBy = params.sortBy || "createdAt";
+    const sortOrder: "asc" | "desc" = params.sortOrder === "asc" ? "asc" : "desc";
+
+    const cursor = decodeDynamicCursor(req.query.cursor as string | undefined);
+
+    const baseWhere = buildWhereClause(
+      params.filters,
+      this.config.searchFields,
+      params.search
+    );
+    applyDateRange(baseWhere, params, this.config.dateFields ?? []);
+    const where = cursor
+      ? { AND: [baseWhere, dynamicCursorWhere(cursor, sortBy, sortOrder)] }
+      : baseWhere;
+
+    // limit + 1 çekiyoruz; fazla 1 varsa hasMore=true
+    const [items, totalEstimate] = await Promise.all([
+      this.delegate.findMany({
+        where,
+        orderBy: [{ [sortBy]: sortOrder }, { id: sortOrder }],
+        take: limit + 1,
+        ...(this.config.defaultInclude
+          ? { include: this.config.defaultInclude }
+          : {}),
+      }),
+      wantTotal ? this.delegate.count({ where: baseWhere }) : Promise.resolve(undefined),
+    ]);
+
+    const hasMore = items.length > limit;
+    const data = hasMore ? items.slice(0, limit) : items;
+    const last = data[data.length - 1] as Record<string, unknown> | undefined;
+    const nextCursor = hasMore ? buildNextDynamicCursor(last, sortBy) : null;
+
+    return {
+      success: true,
+      data,
+      pagination: {
+        nextCursor,
+        hasMore,
+        limit,
+        ...(totalEstimate !== undefined ? { totalEstimate } : {}),
       },
     };
   }

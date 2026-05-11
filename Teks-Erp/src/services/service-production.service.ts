@@ -20,6 +20,7 @@ import { ApiResponse } from "../types/api.types";
 import {
   Prisma,
   RollStatus,
+  RollEntrySource,
   WorkOrderStatus,
   WorkOrderType,
   StationKind,
@@ -143,10 +144,13 @@ export class ServiceProductionService {
     }
 
     // Rota adımlarını StationKind → gerçek Station'a çevir.
-    // Paketleme daima bulunur (workorder.service zaten kontrol ediyor ama burada
-    // müşteri "paketleme yok" dese bile gerekli — son istasyon olmazsa etiket basılamaz).
-    const desiredKinds = new Set<StationKind>(data.routeStationKinds);
-    desiredKinds.add(StationKind.PACKAGING);
+    // PACKAGING/SHIPPING rotaya KONULMAZ — paket/sevkiyat WO'dan bağımsız
+    // fulfillment akışı. Bu yüzden müşteri istese bile filtreleriz.
+    const desiredKinds = new Set<StationKind>(
+      data.routeStationKinds.filter(
+        (k) => k !== StationKind.PACKAGING && k !== StationKind.SHIPPING
+      )
+    );
 
     const candidateStations = await prisma.station.findMany({
       where: { kind: { in: Array.from(desiredKinds) }, isActive: true },
@@ -169,14 +173,12 @@ export class ServiceProductionService {
       );
     }
 
-    // Kanonik sıra: PROCESS_QC → TAMBUR → PACKAGING → SHIPPING (varsa)
+    // Kanonik sıra: RAW_QC → PROCESS_QC → SUBCONTRACTOR → TAMBUR (üretim sonu)
     const orderedKinds: StationKind[] = [
       StationKind.RAW_QC,
       StationKind.PROCESS_QC,
       StationKind.SUBCONTRACTOR,
       StationKind.TAMBUR,
-      StationKind.PACKAGING,
-      StationKind.SHIPPING,
       StationKind.OTHER,
     ].filter((k) => desiredKinds.has(k));
 
@@ -240,6 +242,7 @@ export class ServiceProductionService {
             width: r.width ?? null,
             qualityGrade: r.qualityGrade ?? "1.KALITE",
             status: RollStatus.IN_PRODUCTION,
+            entrySource: RollEntrySource.CUSTOMER_SUPPLIED,
             producedInStepId: firstStepId,
             currentStepId: firstStepId,
           },

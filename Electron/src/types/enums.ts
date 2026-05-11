@@ -1,0 +1,220 @@
+export const ItemType = {
+  YARN: "YARN",
+  WARP: "WARP",
+  RAW_FABRIC: "RAW_FABRIC",
+  DYED_FABRIC: "DYED_FABRIC",
+  CONSUMABLE: "CONSUMABLE",
+} as const;
+export type ItemType = (typeof ItemType)[keyof typeof ItemType];
+
+export const itemTypeLabels: Record<ItemType, string> = {
+  YARN: "İplik",
+  WARP: "Çözgü",
+  RAW_FABRIC: "Ham Kumaş",
+  DYED_FABRIC: "Boyalı Kumaş",
+  CONSUMABLE: "Sarf Malzeme",
+};
+
+export const CompanyType = {
+  CUSTOMER: "CUSTOMER",
+  SUPPLIER: "SUPPLIER",
+} as const;
+export type CompanyType = (typeof CompanyType)[keyof typeof CompanyType];
+
+export const companyTypeLabels: Record<CompanyType, string> = {
+  CUSTOMER: "Müşteri",
+  SUPPLIER: "Tedarikçi",
+};
+
+export const StationType = {
+  INTERNAL: "INTERNAL",
+  EXTERNAL: "EXTERNAL",
+} as const;
+export type StationType = (typeof StationType)[keyof typeof StationType];
+
+export const stationTypeLabels: Record<StationType, string> = {
+  INTERNAL: "Dahili",
+  EXTERNAL: "Harici (Fason)",
+};
+
+export const StationKind = {
+  RAW_QC: "RAW_QC",
+  PROCESS_QC: "PROCESS_QC",
+  TAMBUR: "TAMBUR",
+  SUBCONTRACTOR: "SUBCONTRACTOR",
+  PACKAGING: "PACKAGING",
+  SHIPPING: "SHIPPING",
+  OTHER: "OTHER",
+} as const;
+export type StationKind = (typeof StationKind)[keyof typeof StationKind];
+
+export const stationKindLabels: Record<StationKind, string> = {
+  RAW_QC: "Ham Kalite Kontrol (KK1)",
+  PROCESS_QC: "Kurşun + Kalite Kontrol 2",
+  TAMBUR: "Tambur",
+  SUBCONTRACTOR: "Fason / Boyahane",
+  PACKAGING: "Paketleme",
+  SHIPPING: "Sevkiyat",
+  OTHER: "Diğer",
+};
+
+export const DefectSeverity = {
+  MINOR: "MINOR",
+  MAJOR: "MAJOR",
+  CRITICAL: "CRITICAL",
+} as const;
+export type DefectSeverity = (typeof DefectSeverity)[keyof typeof DefectSeverity];
+
+export const defectSeverityLabels: Record<DefectSeverity, string> = {
+  MINOR: "Düşük",
+  MAJOR: "Orta",
+  CRITICAL: "Kritik",
+};
+
+// =============================================================================
+// OPERASYON ENUM'LARI
+// =============================================================================
+
+export const OrderStatus = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  PARTIAL_SHIPPED: "PARTIAL_SHIPPED",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+} as const;
+export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
+
+export const orderStatusLabels: Record<OrderStatus, string> = {
+  PENDING: "Beklemede",
+  APPROVED: "Onaylandı",
+  PARTIAL_SHIPPED: "Kısmi Sevk",
+  COMPLETED: "Tamamlandı",
+  CANCELLED: "İptal",
+};
+
+export const WorkOrderStatus = {
+  PLANNED: "PLANNED",
+  IN_PROGRESS: "IN_PROGRESS",
+  PAUSED: "PAUSED",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+} as const;
+export type WorkOrderStatus = (typeof WorkOrderStatus)[keyof typeof WorkOrderStatus];
+
+export const workOrderStatusLabels: Record<WorkOrderStatus, string> = {
+  PLANNED: "Planlandı",
+  IN_PROGRESS: "Devam Ediyor",
+  PAUSED: "Duraklatıldı",
+  COMPLETED: "Tamamlandı",
+  CANCELLED: "İptal",
+};
+
+export const WorkOrderType = {
+  ORDER_PRODUCTION: "ORDER_PRODUCTION",
+  STOCK_PRODUCTION: "STOCK_PRODUCTION",
+  SAMPLE_PRODUCTION: "SAMPLE_PRODUCTION",
+  REPAIR_REWORK: "REPAIR_REWORK",
+  SERVICE_PRODUCTION: "SERVICE_PRODUCTION",
+} as const;
+export type WorkOrderType = (typeof WorkOrderType)[keyof typeof WorkOrderType];
+
+export const workOrderTypeLabels: Record<WorkOrderType, string> = {
+  ORDER_PRODUCTION: "Siparişe Özel",
+  STOCK_PRODUCTION: "Stoka",
+  SAMPLE_PRODUCTION: "Numune",
+  REPAIR_REWORK: "Tamir / Yeniden",
+  SERVICE_PRODUCTION: "Fason Üretim Kabul",
+};
+
+export const StepStatus = {
+  PENDING: "PENDING",
+  ACTIVE: "ACTIVE",
+  COMPLETED: "COMPLETED",
+  SKIPPED: "SKIPPED",
+} as const;
+export type StepStatus = (typeof StepStatus)[keyof typeof StepStatus];
+
+export const stepStatusLabels: Record<StepStatus, string> = {
+  PENDING: "Bekliyor",
+  ACTIVE: "Aktif",
+  COMPLETED: "Tamamlandı",
+  SKIPPED: "Atlandı",
+};
+
+export const RollStatus = {
+  STOCK: "STOCK",
+  IN_PRODUCTION: "IN_PRODUCTION",
+  PRODUCED: "PRODUCED",
+  READY_FOR_SHIP: "READY_FOR_SHIP",
+  SHIPPED: "SHIPPED",
+  SCRAP: "SCRAP",
+  CANCELLED: "CANCELLED",
+  AT_SUBCONTRACTOR: "AT_SUBCONTRACTOR",
+  A1_STOCK: "A1_STOCK",
+  RETURNED_FROM_SUBCONTRACTOR: "RETURNED_FROM_SUBCONTRACTOR",
+  WAREHOUSE: "WAREHOUSE",
+  TAMBUR_CONSUMED: "TAMBUR_CONSUMED",
+} as const;
+export type RollStatus = (typeof RollStatus)[keyof typeof RollStatus];
+
+export const rollStatusLabels: Record<RollStatus, string> = {
+  STOCK: "Stokta",
+  IN_PRODUCTION: "Üretimde",
+  PRODUCED: "Üretildi",
+  READY_FOR_SHIP: "Sevke Hazır",
+  SHIPPED: "Sevk Edildi",
+  SCRAP: "Fire",
+  CANCELLED: "İptal Edildi",
+  AT_SUBCONTRACTOR: "Fasonda",
+  A1_STOCK: "A1 (2. Kalite)",
+  RETURNED_FROM_SUBCONTRACTOR: "Fasondan Döndü",
+  WAREHOUSE: "Depoda",
+  TAMBUR_CONSUMED: "Bölündü",
+};
+
+export const RollOperationType = {
+  KURSUN_APPLIED: "KURSUN_APPLIED",
+  QC2_COMPLETED: "QC2_COMPLETED",
+  TAMBUR_PROCESSED: "TAMBUR_PROCESSED",
+  PACKAGED: "PACKAGED",
+  SUBCONTRACTOR_SENT: "SUBCONTRACTOR_SENT",
+  SUBCONTRACTOR_RETURNED: "SUBCONTRACTOR_RETURNED",
+} as const;
+export type RollOperationType = (typeof RollOperationType)[keyof typeof RollOperationType];
+
+export const rollOperationTypeLabels: Record<RollOperationType, string> = {
+  KURSUN_APPLIED: "Kurşun Uygulandı",
+  QC2_COMPLETED: "KK2 Tamamlandı",
+  TAMBUR_PROCESSED: "Tambur Kararı",
+  PACKAGED: "Paketlendi",
+  SUBCONTRACTOR_SENT: "Fasona Gönderildi",
+  SUBCONTRACTOR_RETURNED: "Fasondan Döndü",
+};
+
+export const ShipmentStatus = {
+  PREPARING: "PREPARING",
+  SHIPPED: "SHIPPED",
+  CANCELLED: "CANCELLED",
+} as const;
+export type ShipmentStatus = (typeof ShipmentStatus)[keyof typeof ShipmentStatus];
+
+export const shipmentStatusLabels: Record<ShipmentStatus, string> = {
+  PREPARING: "Hazırlanıyor",
+  SHIPPED: "Sevk Edildi",
+  CANCELLED: "İptal",
+};
+
+export const PackagingQueueStatus = {
+  WAITING: "WAITING",
+  TAKEN: "TAKEN",
+  DONE: "DONE",
+  CANCELLED: "CANCELLED",
+} as const;
+export type PackagingQueueStatus = (typeof PackagingQueueStatus)[keyof typeof PackagingQueueStatus];
+
+export const packagingQueueStatusLabels: Record<PackagingQueueStatus, string> = {
+  WAITING: "Bekliyor",
+  TAKEN: "Alındı",
+  DONE: "Tamamlandı",
+  CANCELLED: "İptal",
+};
