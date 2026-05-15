@@ -21,6 +21,10 @@ const cancelDispatchSchema = z.object({
   reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(500),
 });
 
+const cancelReceiptSchema = z.object({
+  reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(500),
+});
+
 const receiveSchema = z.object({
   workOrderId: z.string().uuid(),
   stepId: z.string().uuid(),
@@ -35,6 +39,11 @@ const receiveSchema = z.object({
     )
     .min(1, "En az bir dönüş kaydı girin"),
   notes: z.string().max(1000).optional(),
+  // Receipt seviyesinde uygulanan kimlik (boyahane gibi açık kumaş döndüren
+  // fason için). Verilmezse: appliesColor=true kategoride WO.targetColor /
+  // targetProperties otomatik kullanılır; değilse null/[].
+  appliedColorId: z.string().uuid().nullish(),
+  appliedPropertyIds: z.array(z.string().uuid()).optional(),
 });
 
 export class SubcontractorController {
@@ -52,6 +61,7 @@ export class SubcontractorController {
     this.listReceipts = this.listReceipts.bind(this);
     this.getReceiptPrint = this.getReceiptPrint.bind(this);
     this.getReceipt = this.getReceipt.bind(this);
+    this.cancelReceipt = this.cancelReceipt.bind(this);
   }
 
   /** POST /api/subcontractor/dispatch */
@@ -92,6 +102,8 @@ export class SubcontractorController {
             rollId: r.rollId,
             notes: r.notes ?? null,
           })),
+          appliedColorId: body.appliedColorId,
+          appliedPropertyIds: body.appliedPropertyIds,
         },
         req.user?.userId
       );
@@ -178,6 +190,18 @@ export class SubcontractorController {
   async getReceipt(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.getReceipt(req.params.id as string);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/subcontractor/receipts/:id/cancel */
+  async cancelReceipt(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const body = cancelReceiptSchema.parse(req.body);
+      const result = await this.service.cancelReceipt(id, body.reason, req.user?.userId);
       res.status(200).json(result);
     } catch (err) {
       next(err);

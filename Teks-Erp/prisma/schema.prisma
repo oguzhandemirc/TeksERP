@@ -51,8 +51,7 @@ enum RollOperationType {
 enum ItemType {
   YARN
   WARP
-  RAW_FABRIC
-  DYED_FABRIC
+  FABRIC
   CONSUMABLE
 }
 
@@ -63,6 +62,7 @@ enum RollEntrySource {
   SUPPLIER_RECEIPT // Tedarikçiden satın alınan mal kabul (yarn, consumable, dış kaynaklı kumaş)
   CUSTOMER_SUPPLIED // Müşteri kendi malını getirdi (SERVICE_PRODUCTION) — Roll.ownerCustomerId dolu
   TAMBUR_SPLIT // Tambur'da KES kararı sonucu ayrılan parça (parentRollId dolu)
+  SUBCONTRACTOR_RETURN // Boyahane vb. fason dönüşü — açık kumaş Roll (parentReceiptId dolu, barcode null)
 }
 
 enum RollStatus {
@@ -78,6 +78,7 @@ enum RollStatus {
   RETURNED_FROM_SUBCONTRACTOR // Fason dönüşünde yeni barkodlar üretildi, eski kapatıldı
   WAREHOUSE // Paketleme sonrası depoya kaldırıldı — satışa / sevke hazır
   TAMBUR_CONSUMED // Tambur'da bölündü; tüm metraj çocuk topları olarak doğdu — parent retire
+  SUBCONTRACTOR_CONSUMED // Fason kabulde kapandı — yeni "açık kumaş" Roll'ları receipt üzerinden doğacak (örn. boyahane top→açık kumaş dönüşü)
 }
 
 enum CompanyType {
@@ -157,6 +158,16 @@ enum ShippingQueueStatus {
   CANCELLED
 }
 
+/// Etiket türü — her tür için ayrı template havuzu var, default da ayrı.
+/// ROLL: Tambur output / Packaging label / standalone reprint (ortak veri).
+/// SWATCH: Kartela etiketi.
+/// SHIPMENT_DOCKET: Sevkiyat irsaliyesi belge başlık/tablo düzeni.
+enum LabelKind {
+  ROLL
+  SWATCH
+  SHIPMENT_DOCKET
+}
+
 // =============================================================================
 // 1. RBAC - Auth & User Management
 // =============================================================================
@@ -179,6 +190,7 @@ model User {
   dispatches             SubcontractorDispatch[] @relation("DispatchCreatedBy")
   cancelledDispatches    SubcontractorDispatch[] @relation("DispatchCancelledBy")
   receipts               SubcontractorReceipt[]  @relation("ReceiptCreatedBy")
+  cancelledReceipts      SubcontractorReceipt[]  @relation("ReceiptCancelledBy")
   swatchesCreated        Swatch[]                @relation("SwatchCreatedBy")
   rollOperations         RollOperation[]
   detectedRollErrors     RollError[]             @relation("RollErrorDetectedBy")
@@ -378,70 +390,49 @@ model RouteStep {
 // 3. ITEM (Stock Card) & INVENTORY
 // =============================================================================
 
+/// Stok kartı — tek kayıt olarak ürünün kendisini tanımlar (örn. "Patos").
+/// Renk ve özellikler kimliğin parçası DEĞİLDİR; rulo/sipariş/iş emri seviyesinde
+/// taşınır. Üründe sadece "izin verilen renk/özellik listesi" tutulur (M:N).
+/// Boş liste = tüm aktif renk/özelliğe izin var.
 model Item {
   id       String   @id @default(uuid())
   code     String   @unique
   name     String
-  itemType ItemType // YARN, RAW_FABRIC, DYED_FABRIC etc.
+  itemType ItemType // YARN, WARP, FABRIC, CONSUMABLE
   unit     String   @default("MT") // MT, KG, ADET
   isActive Boolean  @default(true)
-
-  // Türetilmiş kimlik — bir ham ürünün belli bir renkte halidir. Kimlik =
-  // (baseItemId, colorId). Özellikler (ItemProperty) kimliği etkilemez,
-  // sadece "uygulanabilir özellikler" listesidir (allowedProperties).
-  baseItemId String? // Ham item referansı (örn. "Ham Patos")
-  colorId    String? // Türetilmiş ise rengin FK'si (Mavi, Kırmızı, ...)
-  isDerived  Boolean @default(false)
 
   // Relations
   rolls              Roll[]
   orderLines         OrderLine[]
-  variants           ItemVariant[]
   swatches           Swatch[]
-  baseItem           Item?          @relation("ItemDerivation", fields: [baseItemId], references: [id])
-  derivatives        Item[]         @relation("ItemDerivation")
-  color              Color?         @relation(fields: [colorId], references: [id])
-  /// Item'a uygulanabilir özellikler (allowed). Boşsa = serbest.
-  allowedProperties  ItemProperty[]
-  workOrdersAsTarget WorkOrder[]    @relation("WorkOrderTargetItem")
+  /// Item'a uygulanabilir renkler (allowed). Boş = tüm aktif Color serbest.
+  allowedColors      ItemAllowedColor[]
+  /// Item'a uygulanabilir özellikler (allowed). Boş = tüm aktif FabricProperty serbest.
+  allowedProperties  ItemAllowedProperty[]
+  workOrdersAsTarget WorkOrder[]           @relation("WorkOrderTargetItem")
+  /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
+  customerAliases    CustomerItemAlias[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([itemType])
-  @@index([baseItemId])
-  @@index([colorId])
-  @@index([isDerived])
   @@map("items")
 }
 
-// Varyant: Her ürüne ait desen/varyant tanımları
-model ItemVariant {
-  id       String  @id @default(uuid())
-  itemId   String
-  code     String // Varyant kodu: "BALIK_SIRTA", "NAVY_B12"
-  name     String // Varyant adı: "Balık Sırta", "Navy Blue B12"
-  isActive Boolean @default(true)
-
-  // Relations
-  item            Item                   @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  rolls           Roll[]
-  orderLines      OrderLine[]
-  swatches        Swatch[]
-  customerAliases CustomerVariantAlias[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([itemId, code])
-  @@map("item_variants")
-}
-
 model Roll {
-  id        String  @id @default(uuid())
-  barcode   String  @unique
-  itemId    String
-  variantId String? // Varyant ID — KK1 girişinde operatör tarafından seçilir
+  id      String  @id @default(uuid())
+  /// Fiziksel barkod. KK1 girişinde + Tambur kesim çıktısında basılır.
+  /// Açık kumaş Roll'ları (Kurşun/KK2'de doğan) için NULL — fiziksel etiket basılmaz.
+  /// Unique constraint: PostgreSQL'de NULL'lar tek olabilir (multiple NULLs allowed).
+  barcode String? @unique
+  itemId  String
+  /// Rulonun kazandığı renk. Üretim sürecinde "renk veren" fason adımı (örn.
+  /// boyahane) başarıyla tamamlandıktan sonra WO.targetColorId'den kopyalanır.
+  /// NULL = ham (henüz renk kazanmamış). Rulonun "ham/işlenmiş" ayrımının tek
+  /// kaynak doğrusudur.
+  colorId String?
 
   // Fason Üretim Kabul — müşteri-malı toplar (factory sadece hizmet uygular, iade eder)
   ownerCustomerId     String? // dolu ise top bu müşterinin malı; sadece bu müşteriye sevk edilebilir
@@ -468,6 +459,11 @@ model Roll {
   // Lineage — fason dönüşünde veya tambur kesiminde kaynak rulo
   parentRollId String?
 
+  // Lineage — fason kabul (boyahane vb.) sonrası açık kumaş olarak doğan Roll'ların
+  // kaynak SubcontractorReceipt'i. Receipt = batch (renk + property) referansı.
+  // Açık kumaş ileride Tambur'da bölünüp gerçek toplara dönüşür (parentRollId).
+  parentReceiptId String?
+
   // Audit — KK1 girişinde / sistem genelinde topu kim oluşturdu
   // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
   createdById String?
@@ -483,7 +479,7 @@ model Roll {
 
   // Relations
   item                  Item                        @relation(fields: [itemId], references: [id])
-  variant               ItemVariant?                @relation(fields: [variantId], references: [id])
+  color                 Color?                      @relation(fields: [colorId], references: [id])
   ownerCustomer         Customer?                   @relation("RollOwnerCustomer", fields: [ownerCustomerId], references: [id])
   sack                  Sack?                       @relation(fields: [sackId], references: [id])
   errors                RollError[]
@@ -493,6 +489,7 @@ model Roll {
   operations            RollOperation[]
   parent                Roll?                       @relation("RollLineage", fields: [parentRollId], references: [id])
   children              Roll[]                      @relation("RollLineage")
+  parentReceipt         SubcontractorReceipt?       @relation("RollFromReceipt", fields: [parentReceiptId], references: [id])
   /// Bu rol parent olarak hangi RollOperation kayıtlarına kaynak — Tambur kalıtım izi
   inheritedOperations   RollOperation[]             @relation("RollOperationInherited")
   dispatchItems         SubcontractorDispatchItem[]
@@ -508,9 +505,10 @@ model Roll {
   updatedAt DateTime @updatedAt
 
   @@index([itemId])
-  @@index([variantId])
+  @@index([colorId])
   @@index([status])
   @@index([parentRollId])
+  @@index([parentReceiptId])
   @@index([currentStepId])
   @@index([producedInStepId])
   @@index([ownerCustomerId])
@@ -518,6 +516,10 @@ model Roll {
   @@index([sackId])
   // Liste sayfaları: status filter + createdAt desc sort
   @@index([status, createdAt])
+  // Ham/işlenmiş filter: WHERE "colorId" IS NULL (ham) — yüksek seçicilikli partial index
+  // (Postgres native; Prisma şemasında native değil ama @@index runtime'da partial olmadan
+  // eklenir; ileride raw migration ile partial CONCURRENTLY üretmek gerekebilir.)
+  @@index([colorId, status])
   // Raporlama: kaynak bazlı dönem sorguları (örn. "Mart 2027 ham kumaş üretimi")
   @@index([entrySource, createdAt])
   @@map("rolls")
@@ -536,14 +538,15 @@ model Customer {
   isActive  Boolean     @default(true)
 
   // Relations
-  orders         Order[]
-  accounts       CurrentAccount[]
-  shipments      Shipment[]
-  defaultRoutes  Route[]                @relation("CustomerDefaultRoutes")
-  ownedRolls     Roll[]                 @relation("RollOwnerCustomer")
-  variantAliases CustomerVariantAlias[]
-  sacks          Sack[]
-  branches       CustomerBranch[]
+  orders        Order[]
+  accounts      CurrentAccount[]
+  shipments     Shipment[]
+  defaultRoutes Route[]          @relation("CustomerDefaultRoutes")
+  ownedRolls    Roll[]           @relation("RollOwnerCustomer")
+  sacks         Sack[]
+  branches      CustomerBranch[]
+  itemAliases   CustomerItemAlias[]
+  colorAliases  CustomerColorAlias[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -623,23 +626,33 @@ model Order {
   @@map("orders")
 }
 
-// Sipariş satırı — `itemId` final (isDerived=true) Item'a işaret eder
-// (PATOS-MAVI gibi, ham + renk). Müşteri özel özellik istemişse
-// `requiredProperties` doldurulur; planlamacı WO açarken bu set
-// targetProperties önerisi olarak kullanılır.
+// Sipariş satırı — `itemId` baz ürünü (örn. PATOS) işaret eder. Renk ayrı
+// alanda (`colorId`); özellikler `requiredProperties` (M:N) ile saklanır.
+// Planlamacı WO açarken bu üçü targetItem/targetColor/targetProperties
+// önerisi olarak kullanır.
 model OrderLine {
   id        String   @id @default(uuid())
   orderId   String
   itemId    String
-  variantId String?
+  /// Müşterinin istediği renk. NULL = ham talep (ileride satılabilir; bugün
+  /// default akış değil). Item.allowedColors dolu ise bu listeden olmalı.
+  colorId   String?
   quantity  Float // Requested quantity (meters)
   unitPrice Decimal? @db.Decimal(10, 2) // For future finance module
   width     Float? // İstenen en (cm)
 
+  /// "Müşterideki adı" — sipariş satırı bazlı override (1-shot).
+  /// NULL ise effective name CustomerItemAlias.alias'tan (master, live) okunur;
+  /// o da yoksa Item.name (default). Master değişti → bu null satırlar otomatik
+  /// yansıtır; bu alan dolu ise kilit (özel istek için frozen).
+  customerItemName  String?
+  /// "Müşterideki rengin adı" — aynı override mantığı (CustomerColorAlias → Color.name).
+  customerColorName String?
+
   // Relations
   order               Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   item                Item                        @relation(fields: [itemId], references: [id])
-  variant             ItemVariant?                @relation(fields: [variantId], references: [id])
+  color               Color?                      @relation(fields: [colorId], references: [id])
   allocations         OrderAllocation[]
   workOrderLinks      WorkOrderToOrderLine[]
   reproductionBacklog ReproductionBacklog[]
@@ -650,6 +663,7 @@ model OrderLine {
 
   @@index([orderId])
   @@index([itemId])
+  @@index([colorId])
   @@map("order_lines")
 }
 
@@ -794,8 +808,7 @@ model WorkOrder {
   type             WorkOrderType   @default(ORDER_PRODUCTION)
   width            Float? // En (cm) — kumaş eni
   targetQuantity   Float? // Hedef uzunluk/metraj
-  recipeNo         String? // Reçete No — boyahane/baskı reçete kodu (renk kodu/varyant)
-  parameters       Json? // Dynamic params: { "targetWidth": 150, "dyeRecipeCode": "R-123" }
+  parameters       Json? // Dynamic params: serbest meta
   status           WorkOrderStatus @default(PLANNED)
   plannedStartDate DateTime? // Planlanan başlangıç tarihi
   plannedEndDate   DateTime? // Planlanan termin / bitiş tarihi
@@ -807,13 +820,24 @@ model WorkOrder {
   // Fason Üretim Kabul — metre başı hizmet bedeli (sadece type=SERVICE_PRODUCTION için doldurulur)
   servicePricePerMeter Decimal? @db.Decimal(10, 2)
 
-  // Hedef ürün — planlamacının "ne üretiyoruz" cevabı. Final (isDerived=true)
-  // Item'a işaret eder; kimlik = baseItem + color. Özellikler ayrıdır
-  // (targetProperties M:N) ve Tambur'da Roll.properties'e bindirilir.
-  // ORDER_PRODUCTION: orderLine.itemId'den otomatik (validation tutarlılık için)
+  // Hedef ürün — planlamacının "ne üretiyoruz" cevabı. Item'ın kendisini işaret
+  // eder (artık türetilmiş Item yok). Renk ve özellikler ayrı alanlardadır:
+  // targetColorId + targetProperties M:N. Bunlar "renk veren" fason adımının
+  // (SubcontractorCategory.appliesColor=true) Fason Kabul'ünde Roll'a kopyalanır.
+  // ORDER_PRODUCTION: orderLine.itemId/colorId/properties'den otomatik
   // STOCK_PRODUCTION: zorunlu (manuel seçilir)
   // SERVICE_PRODUCTION: opsiyonel (müşteri malı, item rolldan gelir)
-  targetItemId String?
+  targetItemId  String?
+  targetColorId String?
+
+  /// Tambur planlama bilgisi — kumaşın kaç-kat sarılacağı ("2-KAT" / "4-KAT" gibi).
+  /// Tambur ekranında **bilgi olarak** gösterilir; nihai kararı operatör verir
+  /// (finalize sırasında override edebilir, gerçek değer RollOperation
+  /// metadata'sına yazılır).
+  foldType   String?
+  /// Tambur planlama bilgisi — toplam katman sayısı (opsiyonel; foldType ile
+  /// birlikte ya da ayrı kullanılabilir).
+  layerCount Int?
 
   // Relations
   steps            WorkOrderStep[]
@@ -824,6 +848,7 @@ model WorkOrder {
   receipts         SubcontractorReceipt[]
   swatches         Swatch[]
   targetItem       Item?                     @relation("WorkOrderTargetItem", fields: [targetItemId], references: [id])
+  targetColor      Color?                    @relation("WorkOrderTargetColor", fields: [targetColorId], references: [id])
   targetProperties WorkOrderTargetProperty[]
 
   createdAt DateTime @default(now())
@@ -832,6 +857,7 @@ model WorkOrder {
   @@index([status])
   @@index([routeTemplateId])
   @@index([targetItemId])
+  @@index([targetColorId])
   // Sevk picker'ı: WHERE status IN (...) ORDER BY createdAt DESC için composite
   @@index([status, createdAt(sort: Desc)])
   // "Termini Yakın" sıralaması: WHERE status IN (...) ORDER BY plannedEndDate ASC
@@ -954,7 +980,9 @@ model RollError {
   id           String  @id @default(uuid())
   rollId       String
   startMeter   Float
-  endMeter     Float
+  /// Hata bitiş metresi (cm/mt). Kurşun/KK2 operatörü çoğunlukla sadece
+  /// başlangıç metresi girer ("60. metrede hata") — bu yüzden NULL olabilir.
+  endMeter     Float?
   defectTypeId String?
   errorType    String? // DefectType.name snapshot (kayıt anında kopyalanır)
   isProcessed  Boolean @default(false) // Tambur kararı verildi mi?
@@ -1369,12 +1397,31 @@ model SubcontractorReceipt {
   // Ölçüm (metraj/ağırlık/fire) fason kabulde yapılmaz; sonraki istasyonun
   // FINISH akışı kendi qty/weight değerlerini kaydeder.
 
+  /// Boyahane gibi "açık kumaş döndüren" fason senaryosu: fason kabulde orijinal
+  /// Roll'lar SUBCONTRACTOR_CONSUMED'a çekilir, yeni "açık kumaş" Roll'ları bu
+  /// receipt'ten doğar. appliedColorId + appliedProperties = receipt seviyesinde
+  /// uygulanan kimlik (renk + özellikler); yeni Roll'lar bunu inherit eder.
+  /// Renk vermeyen fason kategorilerinde (yıkama, zımpara) NULL kalır.
+  appliedColorId String?
+
+  // Soft-cancel — kabul yanlış girilmişse operatör geri çeker.
+  // Rulalar AT_SUBCONTRACTOR'a döner, colorId/RollProperty (renk veren adımdan
+  // gelmişse) sıfırlanır. Belge silinmez, audit izi kalır.
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelReason  String?
+
   // Relations
-  workOrder     WorkOrder                  @relation(fields: [workOrderId], references: [id])
-  step          WorkOrderStep              @relation(fields: [stepId], references: [id])
-  subcontractor Subcontractor              @relation("ReceiptSubcontractor", fields: [subcontractorId], references: [id])
-  receivedBy    User?                      @relation("ReceiptCreatedBy", fields: [receivedById], references: [id])
-  items         SubcontractorReceiptItem[]
+  workOrder         WorkOrder                      @relation(fields: [workOrderId], references: [id])
+  step              WorkOrderStep                  @relation(fields: [stepId], references: [id])
+  subcontractor     Subcontractor                  @relation("ReceiptSubcontractor", fields: [subcontractorId], references: [id])
+  receivedBy        User?                          @relation("ReceiptCreatedBy", fields: [receivedById], references: [id])
+  cancelledBy       User?                          @relation("ReceiptCancelledBy", fields: [cancelledById], references: [id])
+  items             SubcontractorReceiptItem[]
+  appliedColor      Color?                         @relation(fields: [appliedColorId], references: [id])
+  appliedProperties SubcontractorReceiptProperty[]
+  /// Bu receipt'ten doğan "açık kumaş" Roll'ları (Kurşun/KK2 öncesi).
+  bornRolls         Roll[]                         @relation("RollFromReceipt")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1383,6 +1430,7 @@ model SubcontractorReceipt {
   @@index([stepId])
   @@index([subcontractorId])
   @@index([manifestNo])
+  @@index([appliedColorId])
   // Mobil/web liste sayfası ORDER BY receivedAt DESC için — milyon satırda kritik
   @@index([receivedAt])
   // Composite: WO-filtreli + tarih sıralı liste (WO detayında "kabuller" sekmesi)
@@ -1390,6 +1438,25 @@ model SubcontractorReceipt {
   // Composite: Fason firma-filtreli + tarih sıralı liste
   @@index([subcontractorId, receivedAt])
   @@map("subcontractor_receipts")
+}
+
+/// SubcontractorReceipt ↔ FabricProperty M:N — fason kabulde uygulanan özellikler.
+/// Receipt seviyesinde tutulur (Roll seviyesinde değil), çünkü fason boyahane
+/// dönüşünde Roll'lar terminal'e çekilir; yeni doğan açık kumaş Roll'ları bu
+/// listeyi inherit eder.
+model SubcontractorReceiptProperty {
+  id         String @id @default(uuid())
+  receiptId  String
+  propertyId String
+
+  receipt  SubcontractorReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  property FabricProperty       @relation(fields: [propertyId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([receiptId, propertyId])
+  @@index([propertyId])
+  @@map("subcontractor_receipt_properties")
 }
 
 model SubcontractorReceiptItem {
@@ -1425,6 +1492,13 @@ model SubcontractorCategory {
   name        String // "Boyahane", "Zımpara"
   description String?
   isActive    Boolean @default(true)
+
+  /// "Renk veren" kategori bayrağı. true ise bu kategorideki Fason Kabul
+  /// başarıyla tamamlandığında, kabul edilen rulonun colorId ve özellikleri
+  /// WO.targetColorId / WO.targetProperties'tan otomatik kopyalanır. Bir
+  /// rotada tek bir adımın bu flag'li kategoride olması beklenir (sistem ilk
+  /// kabul'de uygular; aynı rota içinde ikinci kez uygulanmaz).
+  appliesColor Boolean @default(false)
 
   // Relations
   subcontractors  SubcontractorToCategory[]
@@ -1483,7 +1557,8 @@ model Swatch {
   cardNumber   String  @unique // SW-YYMM-NNN
   barcode      String  @unique // SW-YYMM-XXXXXX-C (Crockford checksum)
   itemId       String
-  variantId    String?
+  /// Kartelanın rengi — kaynak rolden veya manuel girilir.
+  colorId      String?
   width        Float? // cm
   length       Float // cm (örneğin 30cm)
   weightKg     Float? // tartı/paket sırasında girilir (ihracat araç kg kapasitesi için kritik)
@@ -1494,17 +1569,18 @@ model Swatch {
   sackId       String? // Hangi çuvalda — null ise depodadır
 
   // Relations
-  item       Item         @relation(fields: [itemId], references: [id])
-  variant    ItemVariant? @relation(fields: [variantId], references: [id])
-  workOrder  WorkOrder?   @relation(fields: [workOrderId], references: [id])
-  parentRoll Roll?        @relation("SwatchParentRoll", fields: [parentRollId], references: [id])
-  createdBy  User?        @relation("SwatchCreatedBy", fields: [createdById], references: [id])
-  sack       Sack?        @relation(fields: [sackId], references: [id])
+  item       Item       @relation(fields: [itemId], references: [id])
+  color      Color?     @relation(fields: [colorId], references: [id])
+  workOrder  WorkOrder? @relation(fields: [workOrderId], references: [id])
+  parentRoll Roll?      @relation("SwatchParentRoll", fields: [parentRollId], references: [id])
+  createdBy  User?      @relation("SwatchCreatedBy", fields: [createdById], references: [id])
+  sack       Sack?      @relation(fields: [sackId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([itemId])
+  @@index([colorId])
   @@index([workOrderId])
   @@index([parentRollId])
   @@index([barcode])
@@ -1576,35 +1652,6 @@ model Manifest {
 }
 
 // =============================================================================
-// 11.5 CUSTOMER VARIANT ALIASES - Müşteri-özel desen isimleri
-// =============================================================================
-
-// Aynı desen her müşteride farklı adla geçebilir (ör. "patos" ↔ "selop").
-// Paketleme/etiket basımında müşterinin kendi ismiyle basmak için kullanılır.
-// Hedef müşteri: ORDER_PRODUCTION → Order.customerId, STOCK_PRODUCTION →
-// OrderAllocation zinciri, SERVICE_PRODUCTION → Roll.ownerCustomerId.
-model CustomerVariantAlias {
-  id         String @id @default(uuid())
-  customerId String
-  variantId  String
-
-  customerLabel String // müşterideki desen adı (etikete basılır)
-  customerCode  String? // müşterideki opsiyonel desen/ürün kodu
-  isActive      Boolean @default(true)
-
-  customer Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  variant  ItemVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([customerId, variantId])
-  @@index([customerId])
-  @@index([variantId])
-  @@map("customer_variant_aliases")
-}
-
-// =============================================================================
 // 11.6 FABRIC IDENTITY — Color, FabricProperty + ItemProperty + Capabilities + Targets
 // =============================================================================
 //
@@ -1626,7 +1673,8 @@ model CustomerVariantAlias {
 // =============================================================================
 
 /// Renk kataloğu — Mavi, Kırmızı, Yeşil...
-/// Türetilmiş Item.colorId buradan referans alır.
+/// Roll, OrderLine, WorkOrder.targetColor, Swatch ve Item.allowedColors buradan
+/// referans alır.
 model Color {
   id        String   @id @default(uuid())
   code      String   @unique // "MAVI", "KIRMIZI"
@@ -1638,8 +1686,16 @@ model Color {
   updatedAt DateTime @updatedAt
 
   // Relations
-  derivedItems        Item[]
+  itemAllowed         ItemAllowedColor[]
+  rolls               Roll[]
+  orderLines          OrderLine[]
+  workOrderTargets    WorkOrder[]        @relation("WorkOrderTargetColor")
+  swatches            Swatch[]
   stationCapabilities StationColor[]
+  /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
+  customerAliases     CustomerColorAlias[]
+  /// Fason kabullerde renk olarak uygulandığı receipt'ler (boyahane dönüşü).
+  appliedAtReceipts   SubcontractorReceipt[]
 
   @@index([isActive, sortOrder])
   @@map("colors")
@@ -1663,22 +1719,23 @@ model FabricProperty {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  itemAllowed         ItemProperty[]
+  itemAllowed         ItemAllowedProperty[]
   workOrderTargets    WorkOrderTargetProperty[]
   rollProperties      RollProperty[]
   orderLineRequired   OrderLineRequiredProperty[]
   stationCapabilities StationProperty[]
+  /// Fason kabullerde uygulandığı receipt'ler (boyahane dönüşü gibi).
+  appliedAtReceipts   SubcontractorReceiptProperty[]
 
   @@index([isActive, sortOrder])
   @@index([category])
   @@map("fabric_properties")
 }
 
-/// Item ↔ FabricProperty M:N — bir Item'a uygulanabilir özellikler (allowed).
-/// Item kimliğini ETKİLEMEZ (kimlik = baseItem + color). Sadece WO planlamada
-/// targetProperties seçilirken filter kaynağıdır. Boş bırakılırsa = tüm aktif
-/// FabricProperty serbest.
-model ItemProperty {
+/// Item ↔ FabricProperty M:N — bir Item'a uygulanabilir özellikler (allowed list).
+/// Item kimliğini ETKİLEMEZ (Item kimliği sadece kod). Sadece sipariş/WO
+/// planlamada filter kaynağıdır. Boş = tüm aktif FabricProperty serbest.
+model ItemAllowedProperty {
   id         String @id @default(uuid())
   itemId     String
   propertyId String
@@ -1690,7 +1747,97 @@ model ItemProperty {
 
   @@unique([itemId, propertyId])
   @@index([propertyId])
-  @@map("item_properties")
+  @@map("item_allowed_properties")
+}
+
+/// Item ↔ Color M:N — bir Item'a uygulanabilir renkler (allowed list).
+/// Item kimliğini ETKİLEMEZ. Sipariş satırında ve WO targetColor'da filter
+/// kaynağıdır. Boş = tüm aktif Color serbest.
+model ItemAllowedColor {
+  id      String @id @default(uuid())
+  itemId  String
+  colorId String
+
+  item  Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  color Color @relation(fields: [colorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([itemId, colorId])
+  @@index([colorId])
+  @@map("item_allowed_colors")
+}
+
+/// Customer ↔ Item alias — müşterinin bizdeki ürün için kullandığı isim.
+/// Örn: bizde "PATOS", ABC müşterisinde "AKTOS". Sipariş girişinde otomatik
+/// öneri olarak gelir; OrderLine.customerItemName boşsa etiket basımında live
+/// olarak buradan okunur. Operatörün uyguladığı OrderLine override bu kaydı
+/// EZMEZ — bir-seferlik talep için.
+model CustomerItemAlias {
+  id         String @id @default(uuid())
+  customerId String
+  itemId     String
+  alias      String // Müşterideki ad (örn. "AKTOS")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  item     Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([customerId, itemId])
+  @@index([customerId])
+  @@index([itemId])
+  @@map("customer_item_aliases")
+}
+
+/// Customer ↔ Color alias — aynı mantık, renk için. Örn: bizde "MAVI",
+/// ABC müşterisinde "ROYAL BLUE".
+model CustomerColorAlias {
+  id         String @id @default(uuid())
+  customerId String
+  colorId    String
+  alias      String // Müşterideki renk adı
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  color    Color    @relation(fields: [colorId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([customerId, colorId])
+  @@index([customerId])
+  @@index([colorId])
+  @@map("customer_color_aliases")
+}
+
+/// Etiket template'i — hangi alanlar gözüksün, sırası, başlığı, bold/font.
+/// Her LabelKind için en fazla 1 isDefault=true (service-level enforcement).
+/// `fields` JSON yapısı: src/config/label-fields.ts içindeki catalog'a uygun
+/// olmalı. Şema-level sıkı yapı yok (esneklik için JSON), service validate.
+///
+/// Örnek fields:
+///   [
+///     { "key": "barcode",     "label": "Barkod",  "order": 1, "isVisible": true,  "isBold": true,  "fontSize": "lg" },
+///     { "key": "itemName",    "label": "Ürün",    "order": 2, "isVisible": true },
+///     { "key": "customerName","label": "Müşteri", "order": 3, "isVisible": true }
+///   ]
+model LabelTemplate {
+  id        String    @id @default(uuid())
+  name      String // "Standart Top Etiketi", "Müşteri X Özel"
+  kind      LabelKind
+  isDefault Boolean   @default(false)
+  isActive  Boolean   @default(true)
+  /// Field listesi — operatör toggle/sırala/bold ile kalıcı düzenler.
+  fields    Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([kind, name])
+  @@index([kind, isDefault])
+  @@index([kind, isActive])
+  @@map("label_templates")
 }
 
 /// WorkOrder ↔ FabricProperty M:N — planlamacının iş emri için belirlediği
@@ -1712,7 +1859,8 @@ model WorkOrderTargetProperty {
 }
 
 /// Roll ↔ FabricProperty M:N — bir rulonun fiilen sahip olduğu özellikler.
-/// Tambur finalize anında WO.targetProperties'tan kopyalanır. Sonradan
+/// "Renk veren" fason adımının (SubcontractorCategory.appliesColor=true) Fason
+/// Kabul'ünde WO.targetProperties'tan kopyalanır. Sonradan
 /// inventory.applyManualProperties ile düzenlenebilir.
 model RollProperty {
   id         String @id @default(uuid())

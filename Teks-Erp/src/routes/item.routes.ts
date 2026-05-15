@@ -8,24 +8,18 @@ import { ItemService } from "../services/item.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 
-import variantRoutes from "./variant.routes";
-
 const service = new ItemService({
   modelName: "item",
   tableName: "ITEM",
   searchFields: ["code", "name"],
   defaultInclude: {
-    baseItem: true,
-    color: true,
+    allowedColors: { include: { color: true } },
     allowedProperties: { include: { property: true } },
   },
 });
 
 const controller = new BaseController(service);
 const router = Router();
-
-// Mount nested variant routes FIRST
-router.use("/:itemId/variants", variantRoutes);
 
 /**
  * @openapi
@@ -55,7 +49,7 @@ router.use("/:itemId/variants", variantRoutes);
  *         description: Kod veya isimde arama
  *       - in: query
  *         name: filter[itemType]
- *         schema: { type: string, enum: [YARN, WARP, RAW_FABRIC, DYED_FABRIC, CONSUMABLE] }
+ *         schema: { type: string, enum: [YARN, WARP, FABRIC, CONSUMABLE] }
  *       - in: query
  *         name: filter[isActive]
  *         schema: { type: string, enum: [true, false] }

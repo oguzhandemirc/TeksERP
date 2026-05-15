@@ -27,6 +27,7 @@ import {
   openMovementForNextStep,
   recomputeStepStatus,
   getRollStepState,
+  canRollGoBackFromStep,
 } from "./helpers/roll-step.helper";
 
 export class ProductionService {
@@ -125,7 +126,7 @@ export class ProductionService {
       where: { barcode },
       include: {
         item: true,
-        variant: true,
+        color: true,
       },
     });
     if (!roll) {
@@ -246,7 +247,6 @@ export class ProductionService {
         workOrder: {
           id: currentStep.workOrder.id,
           batchNumber: currentStep.workOrder.batchNumber,
-          recipeNo: currentStep.workOrder.recipeNo,
           status: currentStep.workOrder.status,
           width: currentStep.workOrder.width,
           targetQuantity: currentStep.workOrder.targetQuantity,
@@ -702,6 +702,156 @@ export class ProductionService {
       success: true,
       data: rollError,
       message: `Hata kaydı oluşturuldu: ${data.startMeter}m - ${data.endMeter}m`,
+    };
+  }
+
+  // ===========================================================================
+  // UNDO — Generic step finish geri alma (operatör hatası düzeltme)
+  // ===========================================================================
+  //
+  // Kural:
+  //   - Bu rulonun bu step'te kapalı movement'ı olmalı (zaten finish basıldı).
+  //   - Sonraki adımda bu rulo için bir iz yoksa (ne kapalı movement, ne
+  //     RollOperation, ne de aktif fason sevki) geri alınabilir.
+  //   - Sonraki step'in açık movement'ı silinir, bu step'in kapalı movement'ı
+  //     yeniden açılır, Roll.currentStepId bu adıma döner.
+  //   - EXTERNAL adımlar için kullanılmaz — onlar fason kabul/sevk akışıyla
+  //     yönetilir (cancelDispatch / cancelReceipt).
+  //   - Tambur adımı için kullanılmaz — Tambur finalize farklı bir akış
+  //     (split lifecycle).
+  //
+  async undoStepFinish(
+    data: { rollId: string; stepId: string },
+    userId?: string,
+  ): Promise<ApiResponse<{ rollId: string; stepId: string }>> {
+    const step = await prisma.workOrderStep.findUnique({
+      where: { id: data.stepId },
+      include: {
+        station: { select: { name: true, type: true, kind: true } },
+        workOrder: {
+          select: {
+            id: true,
+            status: true,
+            steps: {
+              orderBy: { stepSequence: "asc" },
+              select: { id: true, stepSequence: true },
+            },
+          },
+        },
+      },
+    });
+    if (!step) throw AppError.notFound("Adım bulunamadı");
+    if (step.workOrder.status === WorkOrderStatus.COMPLETED) {
+      throw AppError.conflict("Tamamlanmış iş emrinde geri alma yapılamaz");
+    }
+    if (step.station.type === StationType.EXTERNAL) {
+      throw AppError.badRequest(
+        `"${step.station.name}" fason istasyondur — geri alma için fason kabul iptal kullanın`,
+      );
+    }
+    if (step.station.kind === "TAMBUR") {
+      throw AppError.badRequest(
+        "Tambur finalize geri alınamaz — düzeltme için Tambur split akışı kullanın",
+      );
+    }
+
+    const roll = await prisma.roll.findUnique({
+      where: { id: data.rollId },
+      select: { id: true, barcode: true, currentStepId: true, currentQty: true, weightKg: true },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+
+    // Bu step için kapalı movement var mı? (finish basılmış olmalı)
+    const closedMovement = await prisma.rollMovement.findFirst({
+      where: { rollId: data.rollId, workOrderStepId: data.stepId, exitedAt: { not: null } },
+      orderBy: { exitedAt: "desc" },
+      select: { id: true, qtyIn: true, weightIn: true },
+    });
+    if (!closedMovement) {
+      throw AppError.badRequest(
+        `Top ${roll.barcode} bu adımda finish basılmamış — geri alınacak işlem yok`,
+      );
+    }
+
+    // Sonraki adım izi var mı?
+    const allSteps = step.workOrder.steps;
+    const currentIndex = allSteps.findIndex((s) => s.id === step.id);
+    const nextStep = currentIndex < allSteps.length - 1 ? allSteps[currentIndex + 1] : null;
+
+    const check = await canRollGoBackFromStep(
+      prisma as unknown as Prisma.TransactionClient,
+      data.rollId,
+      nextStep?.id ?? null,
+    );
+    if (!check.canGoBack) {
+      throw AppError.conflict(check.reason ?? "Geri alınamaz");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1) Sonraki adımdaki açık movement'ı sil
+      if (nextStep) {
+        await tx.rollMovement.deleteMany({
+          where: {
+            rollId: data.rollId,
+            workOrderStepId: nextStep.id,
+            exitedAt: null,
+          },
+        });
+      }
+
+      // 2) Bu adımın kapalı movement'ını geri aç
+      await tx.rollMovement.update({
+        where: { id: closedMovement.id },
+        data: { qtyOut: null, weightOut: null, exitedAt: null },
+      });
+
+      // 3) Roll.currentStepId bu step'e geri çek; PRODUCED → IN_PRODUCTION
+      await tx.roll.update({
+        where: { id: data.rollId },
+        data: {
+          currentStepId: data.stepId,
+          ...(roll.currentStepId === null
+            ? { status: RollStatus.IN_PRODUCTION }
+            : {}),
+          // qty/weight'ı movement'in qtyIn değerine geri çevir (operatör finish'te
+          // değiştirmiş olabilir)
+          currentQty: closedMovement.qtyIn ?? roll.currentQty,
+          weightKg: closedMovement.weightIn ?? roll.weightKg,
+        },
+      });
+
+      // 4) Bu step ve sonraki step'in status'unu recompute et
+      await recomputeStepStatus(tx, step.id);
+      if (nextStep) await recomputeStepStatus(tx, nextStep.id);
+
+      // 5) WO COMPLETED olmuştuysa geri çek (son adım undo'sunda)
+      if (step.workOrder.status === WorkOrderStatus.COMPLETED) {
+        await tx.workOrder.update({
+          where: { id: step.workOrder.id },
+          data: { status: WorkOrderStatus.IN_PROGRESS },
+        });
+      }
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "WORK_ORDER_STEP",
+      recordId: step.id,
+      oldData: { rollActive: false },
+      newData: {
+        action: "UNDO_STEP_FINISH",
+        rollId: data.rollId,
+        rollBarcode: roll.barcode,
+        revertedToStepId: step.id,
+        clearedNextStepId: nextStep?.id ?? null,
+      },
+    });
+
+    return {
+      success: true,
+      data: { rollId: data.rollId, stepId: data.stepId },
+      message: `Top ${roll.barcode} "${step.station.name}" adımına geri alındı`,
     };
   }
 }

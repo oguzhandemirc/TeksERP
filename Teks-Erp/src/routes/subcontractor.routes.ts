@@ -47,10 +47,19 @@ router.post(
  * /api/subcontractor/receive:
  *   post:
  *     tags: [Subcontractor]
- *     summary: Fason mal kabul (orijinal rolleri günceller, yeni etiket basmaz)
+ *     summary: Fason mal kabul — orijinal Roll'ları SUBCONTRACTOR_CONSUMED'a çeker
  *     description: |
- *       Her dispatched roll için dönüşte yeni metraj (+ opsiyonel ağırlık) girilir.
- *       Yeni Roll kaydı oluşturulmaz — orijinal top güncellenir ve sonraki adıma taşınır.
+ *       Boyahane gibi açık kumaş döndüren fasonlar için: orijinal toplar terminal'e
+ *       (`SUBCONTRACTOR_CONSUMED`) çekilir; yeni Roll burada AÇILMAZ. Receipt'e
+ *       `appliedColorId` + `appliedPropertyIds` yazılır — Kurşun/KK2'de operatör
+ *       açık kumaş Roll oluşturduğunda bu kimliği inherit eder.
+ *
+ *       `appliedColorId`/`appliedPropertyIds` verilmezse: fason kategorisi
+ *       `appliesColor=true` ise WO.targetColor / targetProperties otomatik
+ *       kullanılır; değilse null/[] olur.
+ *
+ *       Bu adımın tüm outstanding'i consumed olunca step COMPLETED. Sonraki step
+ *       PENDING kalır (Roll yok); Kurşun/KK2'de ilk açık kumaş açıldığında ACTIVE.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -58,13 +67,22 @@ router.post(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [workOrderId, stepId, subcontractorId, manifestNo, returns]
+ *             required: [workOrderId, stepId, subcontractorId, returns]
  *             properties:
- *               workOrderId:     { type: string, format: uuid }
- *               stepId:          { type: string, format: uuid }
- *               subcontractorId: { type: string, format: uuid }
- *               manifestNo:      { type: string, description: "Fason firma irsaliye no" }
- *               notes:       { type: string }
+ *               workOrderId:        { type: string, format: uuid }
+ *               stepId:             { type: string, format: uuid }
+ *               subcontractorId:    { type: string, format: uuid }
+ *               manifestNo:         { type: string, nullable: true, description: "Fason firma irsaliye no (opsiyonel)" }
+ *               notes:              { type: string }
+ *               appliedColorId:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: Receipt seviyesinde uygulanan renk (UI override; verilmezse appliesColor kategoride WO.targetColor otomatik)
+ *               appliedPropertyIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *                 description: Receipt seviyesinde uygulanan özellikler (UI override; verilmezse appliesColor kategoride WO.targetProperties otomatik)
  *               returns:
  *                 type: array
  *                 items:
@@ -74,11 +92,10 @@ router.post(
  *                     rollId: { type: string, format: uuid }
  *                     notes:  { type: string, nullable: true, description: "Bu topa dair kabul notu" }
  *     responses:
- *       201: { description: Mal kabul oluşturuldu }
+ *       201: { description: Mal kabul oluşturuldu (orijinal Roll'lar consumed) }
  *       400: { description: Validasyon hatası / top bu adımda fason'da değil }
  *       401: { description: Yetkisiz }
  *       404: { description: İş emri/adım bulunamadı }
- *       500: { description: Sunucu hatası }
  */
 router.post(
   "/receive",
@@ -199,6 +216,47 @@ router.get(
   verifyToken,
   requirePermission("workorder:read"),
   controller.getReceipt
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/receipts/{id}/cancel:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: Fason kabulü iptal et (soft cancel)
+ *     description: |
+ *       Mal kabul yanlış girilmişse geri alır. Kabul belgesi silinmez,
+ *       cancelledAt/By/Reason set edilir. Bu kabul'deki rulalar
+ *       AT_SUBCONTRACTOR'a geri döner; "renk veren" kategoriden geldiyse
+ *       Roll.colorId ve WO.targetProperties listesindeki RollProperty
+ *       silinir. Sonraki adımda iz (kapalı movement, RollOperation, yeni
+ *       fason sevki) varsa REDDEDİLİR.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string, minLength: 3, maxLength: 500 }
+ *     responses:
+ *       200: { description: Kabul iptal edildi, rulolar geri çekildi }
+ *       400: { description: Geçersiz sebep veya kabul boş }
+ *       404: { description: Kabul belgesi bulunamadı }
+ *       409: { description: Zaten iptal edilmiş veya sonraki adımda iz var }
+ */
+router.post(
+  "/receipts/:id/cancel",
+  verifyToken,
+  requirePermission("workorder:write"),
+  controller.cancelReceipt
 );
 
 export default router;

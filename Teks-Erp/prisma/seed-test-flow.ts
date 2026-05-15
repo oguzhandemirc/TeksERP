@@ -1,16 +1,16 @@
 // =============================================================================
-// TeksERP - Kurşun+KK2 Sonrası Akış Test Seed
+// TeksERP - Boyahane (Fason Kabul) → Tambur Test Seed
 // =============================================================================
-// Ham stok + sipariş + iş emri + toplar hazırlar. Toplar Kurşun+KK2 adımında
-// açık halde bekler — operatör refakat kartı veya istasyon ekranı üzerinden
-// Kurşun → QC2 → Tambur → Paket/Tartı/Etiket akışını uçtan uca test edebilir.
+// Tek ürün ("Patos"), izin verilen renk/özellik listeleri, sipariş + iş emri,
+// hammadde rulo + boyahaneye gönderilmiş bekleyen rulolar oluşturur. Akış:
+//
+//   KK1 (girdi, COMPLETED) → Boyahane (Fason Sevk yapıldı, AT_SUBCONTRACTOR
+//   bekliyor) → Fason Kabul ile renk/özellik kazanır → KK2/Kurşun → Tambur
+//   → Depo (WAREHOUSE) → Tartı/Paket → Sevkiyat
 //
 // Çalıştırma:
 //   cd Teks-Erp
 //   npx ts-node prisma/seed-test-flow.ts
-//
-// Her çalıştırmada yeni bir iş emri + refakat kartı + toplar üretir. İstersen
-// önce `npx ts-node prisma/clean-business-data.ts` ile eski iş verilerini sil.
 // =============================================================================
 
 import { PrismaClient } from "@prisma/client";
@@ -23,113 +23,168 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log("🌱 Test akışı seed'i başlıyor (ham stok + sipariş + WO)...\n");
+  console.log("🌱 Test akışı seed'i başlıyor (Patos + Mavi + Yanmaz)...\n");
 
   // ---------------------------------------------------------------------------
-  // 0. ÖN KOŞUL: stations, operator user
+  // 0. ÖN KOŞUL: stations (upsert), admin user, "renk veren" kategori (Boyahane)
   // ---------------------------------------------------------------------------
-  // İlk adım istasyonu: varsa dokuma/dokuma benzeri OTHER, yoksa ilk
-  // SUBCONTRACTOR (Boyahane). Asıl amaç: Kurşun+KK2 öncesi geçmiş bir adım
-  // olsun; iş akışı için hangisi olduğu kritik değil.
-  const stStart =
-    (await prisma.station.findFirst({
-      where: { kind: "OTHER", department: { contains: "DOKUMA" } },
-    })) ??
-    (await prisma.station.findFirst({
-      where: { kind: "SUBCONTRACTOR" },
-      orderBy: { createdAt: "asc" },
-    })) ??
-    (await prisma.station.findFirst({ where: { kind: "OTHER" } }));
-
-  const [stKursun, stTambur, stPaketleme, stSevk] = await Promise.all([
-    prisma.station.findFirst({ where: { kind: "PROCESS_QC" } }),
-    prisma.station.findFirst({ where: { kind: "TAMBUR" } }),
-    prisma.station.findFirst({ where: { kind: "PACKAGING" } }),
-    prisma.station.findFirst({ where: { kind: "SHIPPING" } }),
-  ]);
-  if (!stStart || !stKursun || !stTambur || !stPaketleme) {
-    throw new Error(
-      "Gerekli istasyonlar bulunamadı. PROCESS_QC / TAMBUR / PACKAGING ve en az bir başlangıç istasyonu gerekli.",
-    );
-  }
   const admin = await prisma.user.findUnique({ where: { username: "admin" } });
   if (!admin) {
     throw new Error("admin kullanıcısı yok. Önce `npm run seed` çalıştırın.");
   }
 
-  console.log("✅ İstasyonlar bulundu:");
-  console.log(`   Başlangıç   → ${stStart.code} (${stStart.kind})`);
-  console.log(`   Kurşun+KK2  → ${stKursun.code}`);
-  console.log(`   Tambur      → ${stTambur.code}`);
-  console.log(`   Paket/Tartı → ${stPaketleme.code}`);
-  if (stSevk) console.log(`   Sevkiyat    → ${stSevk.code}`);
-
-  const stamp = Date.now().toString().slice(-6); // son 6 hane — benzersizlik
-
-  // ---------------------------------------------------------------------------
-  // 1. ITEM + VARIANT (upsert — ana seed varsa tekrar kullanılır)
-  // ---------------------------------------------------------------------------
-  const itemHam = await prisma.item.upsert({
-    where: { code: "HAM-POPLIN-150" },
+  const stKK1 = await prisma.station.upsert({
+    where: { code: "KK1" },
+    update: {},
+    create: { code: "KK1", name: "Kalite Kontrol 1", kind: "RAW_QC", type: "INTERNAL" },
+  });
+  const stBoyahane = await prisma.station.upsert({
+    where: { code: "BOYAHANE" },
     update: {},
     create: {
-      code: "HAM-POPLIN-150",
-      name: "Ham Poplin 150cm",
-      itemType: "RAW_FABRIC",
-      unit: "MT",
+      code: "BOYAHANE",
+      name: "Boyahane (Fason)",
+      kind: "SUBCONTRACTOR",
+      type: "EXTERNAL",
     },
   });
-
-  const itemMamul = await prisma.item.upsert({
-    where: { code: "MAM-POPLIN-LAC" },
+  const stKursun = await prisma.station.upsert({
+    where: { code: "KK2" },
     update: {},
-    create: {
-      code: "MAM-POPLIN-LAC",
-      name: "Boyalı Poplin — Lacivert",
-      itemType: "DYED_FABRIC",
-      unit: "MT",
-    },
+    create: { code: "KK2", name: "Kurşun + KK2", kind: "PROCESS_QC", type: "INTERNAL" },
+  });
+  const stTambur = await prisma.station.upsert({
+    where: { code: "TAMBUR" },
+    update: {},
+    create: { code: "TAMBUR", name: "Tambur", kind: "TAMBUR", type: "INTERNAL" },
+  });
+  const stPaketleme = await prisma.station.upsert({
+    where: { code: "PAKET" },
+    update: {},
+    create: { code: "PAKET", name: "Tartı / Paketleme", kind: "PACKAGING", type: "INTERNAL" },
   });
 
-  const variantLacivert =
-    (await prisma.itemVariant.findUnique({
-      where: { itemId_code: { itemId: itemMamul.id, code: "NAVY-B12" } },
-    })) ??
-    (await prisma.itemVariant.create({
+  // Boyahane kategorisi — appliesColor=true zorunlu (renk + özellik buradan kopyalanır)
+  let boyahaneKategorisi = await prisma.subcontractorCategory.findUnique({
+    where: { code: "BOYAHANE" },
+  });
+  if (!boyahaneKategorisi) {
+    boyahaneKategorisi = await prisma.subcontractorCategory.create({
       data: {
-        itemId: itemMamul.id,
-        code: "NAVY-B12",
-        name: "Navy Blue B12",
+        code: "BOYAHANE",
+        name: "Boyahane",
+        description: "Renk + özellik veren fason",
+        appliesColor: true,
       },
-    }));
+    });
+  } else if (!boyahaneKategorisi.appliesColor) {
+    boyahaneKategorisi = await prisma.subcontractorCategory.update({
+      where: { id: boyahaneKategorisi.id },
+      data: { appliesColor: true },
+    });
+  }
+  // Bir Boyahane fason firması (test için)
+  let boyaFirma = await prisma.subcontractor.findUnique({
+    where: { code: "BOY-001" },
+  });
+  if (!boyaFirma) {
+    boyaFirma = await prisma.subcontractor.create({
+      data: { code: "BOY-001", name: "Anadolu Boya Ltd." },
+    });
+  }
+  await prisma.subcontractorToCategory.upsert({
+    where: {
+      subcontractorId_categoryId: {
+        subcontractorId: boyaFirma.id,
+        categoryId: boyahaneKategorisi.id,
+      },
+    },
+    update: {},
+    create: {
+      subcontractorId: boyaFirma.id,
+      categoryId: boyahaneKategorisi.id,
+    },
+  });
 
-  console.log(
-    `✅ Ürünler: ${itemHam.code}, ${itemMamul.code} (varyant: ${variantLacivert.code})`,
-  );
+  console.log("✅ İstasyonlar + Boyahane kategorisi (appliesColor=true) hazır");
+
+  const stamp = Date.now().toString().slice(-6);
 
   // ---------------------------------------------------------------------------
-  // 2. HAM STOK (KK1 geçmiş — STOCK durumunda)
+  // 1. RENK + ÖZELLİK + ÜRÜN (Patos) + ALLOWED LIST
   // ---------------------------------------------------------------------------
-  const hamRolls = await Promise.all(
-    [1200, 1100, 950].map((qty, i) =>
-      prisma.roll.create({
-        data: {
-          barcode: `HAM-${stamp}-${String(i + 1).padStart(3, "0")}`,
-          itemId: itemHam.id,
-          initialQty: qty,
-          currentQty: qty,
-          weightKg: Number((qty * 0.18).toFixed(2)),
-          width: 150,
-          status: "STOCK",
-          qualityGrade: "1.KALITE",
-        },
-      }),
-    ),
-  );
-  console.log(`✅ ${hamRolls.length} ham top stoka girildi`);
+  const colorMavi = await prisma.color.upsert({
+    where: { code: "MAVI" },
+    update: {},
+    create: { code: "MAVI", name: "Mavi", hex: "#1E40AF", sortOrder: 10 },
+  });
+  const colorKirmizi = await prisma.color.upsert({
+    where: { code: "KIRMIZI" },
+    update: {},
+    create: { code: "KIRMIZI", name: "Kırmızı", hex: "#DC2626", sortOrder: 20 },
+  });
+  await prisma.color.upsert({
+    where: { code: "SIYAH" },
+    update: {},
+    create: { code: "SIYAH", name: "Siyah", hex: "#111827", sortOrder: 30 },
+  });
+
+  const propYanmaz = await prisma.fabricProperty.upsert({
+    where: { code: "YANMAZ" },
+    update: {},
+    create: { code: "YANMAZ", name: "Yanmazlık", category: "FINISH", sortOrder: 10 },
+  });
+  await prisma.fabricProperty.upsert({
+    where: { code: "SU_GECIRMEZ" },
+    update: {},
+    create: {
+      code: "SU_GECIRMEZ",
+      name: "Su Geçirmez",
+      category: "FINISH",
+      sortOrder: 20,
+    },
+  });
+
+  const itemPatos = await prisma.item.upsert({
+    where: { code: "PATOS" },
+    update: {},
+    create: {
+      code: "PATOS",
+      name: "Patos",
+      itemType: "FABRIC",
+      unit: "MT",
+    },
+  });
+
+  // Allowed colors (Mavi, Kırmızı izinli; Siyah istersen sonra ekle)
+  await prisma.itemAllowedColor.upsert({
+    where: {
+      itemId_colorId: { itemId: itemPatos.id, colorId: colorMavi.id },
+    },
+    update: {},
+    create: { itemId: itemPatos.id, colorId: colorMavi.id },
+  });
+  await prisma.itemAllowedColor.upsert({
+    where: {
+      itemId_colorId: { itemId: itemPatos.id, colorId: colorKirmizi.id },
+    },
+    update: {},
+    create: { itemId: itemPatos.id, colorId: colorKirmizi.id },
+  });
+
+  // Allowed properties
+  await prisma.itemAllowedProperty.upsert({
+    where: {
+      itemId_propertyId: { itemId: itemPatos.id, propertyId: propYanmaz.id },
+    },
+    update: {},
+    create: { itemId: itemPatos.id, propertyId: propYanmaz.id },
+  });
+
+  console.log("✅ Patos + 2 renk + 2 özellik + allowed listeler oluşturuldu");
 
   // ---------------------------------------------------------------------------
-  // 3. MÜŞTERİ (upsert) + SİPARİŞ
+  // 2. MÜŞTERİ + SİPARİŞ (Patos / Mavi / Yanmaz, 2400m)
   // ---------------------------------------------------------------------------
   const musteri = await prisma.customer.upsert({
     where: { code: "MUS-TEST-001" },
@@ -147,15 +202,18 @@ async function main() {
       orderNumber: `SIP-TEST-${stamp}`,
       customerId: musteri.id,
       currency: "TRY",
-      status: "IN_PRODUCTION",
+      status: "APPROVED",
       deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       lines: {
         create: [
           {
-            itemId: itemMamul.id,
-            variantId: variantLacivert.id,
+            itemId: itemPatos.id,
+            colorId: colorMavi.id,
             quantity: 2400,
             width: 150,
+            requiredProperties: {
+              create: [{ propertyId: propYanmaz.id }],
+            },
           },
         ],
       },
@@ -164,11 +222,11 @@ async function main() {
   });
   const orderLine = order.lines[0];
   console.log(
-    `✅ Sipariş: ${order.orderNumber} (${orderLine.quantity}m @ ${musteri.name})`,
+    `✅ Sipariş: ${order.orderNumber} (${orderLine.quantity}m Patos · Mavi · Yanmaz · ${musteri.name})`,
   );
 
   // ---------------------------------------------------------------------------
-  // 4. WORK ORDER — Dokuma(COMPLETED) → Kurşun+KK2(ACTIVE) → Tambur → Paket
+  // 3. WORK ORDER — KK1(COMPLETED) → Boyahane(ACTIVE, AT_SUBCONTRACTOR) → KK2 → Tambur → Paket
   // ---------------------------------------------------------------------------
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -180,32 +238,34 @@ async function main() {
       type: "ORDER_PRODUCTION",
       width: 150,
       targetQuantity: 2400,
-      recipeNo: "R-NAVY-B12",
-      parameters: {
-        targetWidth: 150,
-        color: "Lacivert",
-        dyeRecipeCode: "R-NAVY-B12",
-      },
+      parameters: { color: "Mavi" },
       status: "IN_PROGRESS",
       plannedStartDate: sevenDaysAgo,
       plannedEndDate: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
+      targetItemId: itemPatos.id,
+      targetColorId: colorMavi.id,
+      targetProperties: {
+        create: [{ propertyId: propYanmaz.id }],
+      },
       steps: {
         create: [
           {
-            stationId: stStart.id,
+            stationId: stKK1.id,
             stepSequence: 1,
             status: "COMPLETED",
             startedAt: sevenDaysAgo,
             completedAt: oneDayAgo,
           },
           {
-            stationId: stKursun.id,
+            stationId: stBoyahane.id,
             stepSequence: 2,
             status: "ACTIVE",
             startedAt: oneDayAgo,
+            requiredCategoryId: boyahaneKategorisi.id,
+            plannedSubcontractorId: boyaFirma.id,
           },
-          { stationId: stTambur.id, stepSequence: 3, status: "PENDING" },
-          { stationId: stPaketleme.id, stepSequence: 4, status: "PENDING" },
+          { stationId: stKursun.id, stepSequence: 3, status: "PENDING" },
+          { stationId: stTambur.id, stepSequence: 4, status: "PENDING" },
         ],
       },
       orderLinks: {
@@ -217,21 +277,38 @@ async function main() {
     include: { steps: { orderBy: { stepSequence: "asc" } } },
   });
 
-  const [stepStart, stepKursun] = wo.steps;
+  const [stepKK1, stepBoyahane] = wo.steps;
   console.log(`✅ İş emri: ${wo.batchNumber}`);
   console.log(
-    `   Adımlar: ${stStart.code}(COMPLETED) → Kurşun+KK2(ACTIVE) → Tambur(PENDING) → Paket(PENDING)`,
+    `   Adımlar: KK1(✓) → Boyahane(ACTIVE) → KK2(PENDING) → Tambur(PENDING)`,
   );
 
   // ---------------------------------------------------------------------------
-  // 5. WO'ya BAĞLI TOPLAR — Kurşun+KK2 adımında açık bekliyor
+  // 4. HAM TOPLAR — KK1 girdisi + Boyahane'ye sevk edilmiş (AT_SUBCONTRACTOR)
+  //    Bu rulolar HENÜZ RENK ALMAMIŞ — Fason Kabul ile colorId set edilecek.
   // ---------------------------------------------------------------------------
   const rollSeeds = [
-    { qty: 580, weightKg: 70.5, grade: "1.KALITE" },
-    { qty: 540, weightKg: 65.8, grade: "1.KALITE" },
-    { qty: 610, weightKg: 74.2, grade: "1.KALITE" },
-    { qty: 495, weightKg: 60.1, grade: "1.KALITE" },
+    { qty: 580, weightKg: 70.5 },
+    { qty: 540, weightKg: 65.8 },
+    { qty: 610, weightKg: 74.2 },
+    { qty: 495, weightKg: 60.1 },
   ];
+
+  // Önce Fason Sevk belgesi oluştur (gerçekçi olsun)
+  const dispatchNo = `SD-${String(now.getFullYear()).slice(-2)}${String(
+    now.getMonth() + 1,
+  ).padStart(2, "0")}-TEST-${stamp}`;
+  const dispatch = await prisma.subcontractorDispatch.create({
+    data: {
+      dispatchNo,
+      workOrderId: wo.id,
+      stepId: stepBoyahane.id,
+      subcontractorId: boyaFirma.id,
+      plannedSubcontractorId: boyaFirma.id,
+      dispatchedById: admin.id,
+      totalQty: rollSeeds.reduce((s, r) => s + r.qty, 0),
+    },
+  });
 
   const woRolls = await Promise.all(
     rollSeeds.map(async (seed, i) => {
@@ -239,40 +316,63 @@ async function main() {
       const roll = await prisma.roll.create({
         data: {
           barcode,
-          itemId: itemMamul.id,
-          variantId: variantLacivert.id,
+          itemId: itemPatos.id,
+          // colorId: null — HAM, henüz boyahaneden geçmemiş
           initialQty: seed.qty,
           currentQty: seed.qty,
           weightKg: seed.weightKg,
           width: 150,
-          status: "IN_PRODUCTION",
-          qualityGrade: seed.grade,
-          producedInStepId: stepStart.id,
-          currentStepId: stepKursun.id,
+          status: "AT_SUBCONTRACTOR",
+          qualityGrade: "1.KALITE",
+          producedInStepId: stepKK1.id,
+          currentStepId: stepBoyahane.id,
         },
       });
 
-      // Kurşun+KK2 adımında AÇIK (exitedAt=null) movement — Kurşun servisi bu
-      // RollMovement'e bakarak topları "adımda açık" olarak listeler.
+      // KK1 movement (kapanmış) + Boyahane movement (açık, fason süresince)
       await prisma.rollMovement.create({
         data: {
           rollId: roll.id,
-          workOrderStepId: stepKursun.id,
+          workOrderStepId: stepKK1.id,
+          qtyIn: seed.qty,
+          qtyOut: seed.qty,
+          weightIn: seed.weightKg,
+          weightOut: seed.weightKg,
+          enteredAt: sevenDaysAgo,
+          exitedAt: oneDayAgo,
+          operatorId: admin.id,
+          notes: "AUTO_INTAKE",
+        },
+      });
+      await prisma.rollMovement.create({
+        data: {
+          rollId: roll.id,
+          workOrderStepId: stepBoyahane.id,
           qtyIn: seed.qty,
           weightIn: seed.weightKg,
-          enteredAt: new Date(),
+          enteredAt: oneDayAgo,
           operatorId: admin.id,
-          notes: `ENTERED_FROM_${stStart.code} (test seed)`,
+          notes: `DISPATCH:${dispatchNo}`,
+        },
+      });
+      await prisma.subcontractorDispatchItem.create({
+        data: {
+          dispatchId: dispatch.id,
+          rollId: roll.id,
+          dispatchedQty: seed.qty,
+          dispatchedWeight: seed.weightKg,
         },
       });
 
       return roll;
     }),
   );
-  console.log(`✅ ${woRolls.length} top iş emrine bağlandı (Kurşun+KK2 adımında açık)`);
+  console.log(
+    `✅ ${woRolls.length} ham top boyahaneye gönderildi (AT_SUBCONTRACTOR, colorId=null)`,
+  );
 
   // ---------------------------------------------------------------------------
-  // 6. REFAKAT KARTI (Traveler Card) — operatör okutsun
+  // 5. REFAKAT KARTI
   // ---------------------------------------------------------------------------
   const yyMm = `${String(now.getFullYear()).slice(-2)}${String(
     now.getMonth() + 1,
@@ -298,29 +398,25 @@ async function main() {
   console.log(`  Müşteri        : ${musteri.name}`);
   console.log(`  Sipariş        : ${order.orderNumber} (${orderLine.quantity}m)`);
   console.log(`  İş Emri        : ${wo.batchNumber}`);
-  console.log(`  Ürün           : ${itemMamul.code} / ${variantLacivert.code}`);
+  console.log(`  Hedef          : Patos · Mavi · Yanmaz`);
+  console.log(`  Boyahane Sevk  : ${dispatchNo}`);
   console.log(`  Refakat Kartı  : ${card.barcode}`);
   console.log("");
-  console.log("  📦 Ham stokta bekleyen top:");
-  hamRolls.forEach((r) =>
-    console.log(`     - ${r.barcode}  ${r.currentQty}m  ${r.weightKg}kg`),
-  );
-  console.log("");
-  console.log("  🔩 Kurşun+KK2 adımında açık (bu adımdan test başlayacak):");
+  console.log("  🔵 Boyahaneye gönderilmiş ham toplar (renksiz):");
   woRolls.forEach((r) =>
-    console.log(`     - ${r.barcode}  ${r.currentQty}m  ${r.weightKg}kg`),
+    console.log(`     - ${r.barcode}  ${r.currentQty}m  ${r.weightKg}kg  HAM`),
   );
   console.log("─".repeat(64));
   console.log("");
-  console.log("👉 Frontend'de test akışı:");
-  console.log(
-    `   1. /kursun-qc → Refakat Kartı okut: ${card.barcode}`,
-  );
-  console.log("   2. Her top için: Kurşun Geç → (opsiyonel hata ekle) → QC2 Bitti");
-  console.log("   3. Toplar Tambur'a düşecek → /tambur");
-  console.log("   4. Tambur'da: Refakat Kartı okut → kesim/korundu kararları → Bitti");
-  console.log("   5. Toplar Paketleme'ye düşecek → /paketleme");
-  console.log("   6. Her top için: tartı → Sevkiyata/Depoya → Bitti → etiket");
+  console.log("👉 Test adımları:");
+  console.log("   1. /fason-kabul → Bu sevki seç → tüm topları kabul et");
+  console.log("      → Toplar otomatik colorId=Mavi + RollProperty=Yanmaz alır");
+  console.log("      → Status: IN_PRODUCTION (KK2 adımına taşınır)");
+  console.log("   2. /kursun-qc → Refakat Kartı okut → Kurşun + QC2 işle");
+  console.log("   3. /tambur → Refakat Kartı okut → kesim/koruma → finalize");
+  console.log("   4. Toplar Depo'ya (WAREHOUSE) düşer");
+  console.log("   5. /paketleme → tartı + paket → READY_FOR_SHIP");
+  console.log("   6. /sevkiyat → çuval seç → finalize");
   console.log("");
 }
 

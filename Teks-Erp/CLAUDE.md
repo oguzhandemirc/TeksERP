@@ -92,7 +92,7 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmal�
 
 ## Operasyonel Bakım
 
-- **`statement_timeout=30s`** aktif (uzun sorgu otomatik iptal). Migration: `20260427160000_db_runtime_safety`.
+- **`statement_timeout=50s`** aktif (uzun sorgu otomatik iptal). DB-level: `ALTER DATABASE adnansahin_db SET statement_timeout = '50s'`.
 - **Slow query log** (`>500ms`) PostgreSQL log dosyasına düşer.
 - **6 ayda bir** `POST /api/admin/system-logs/archive { "monthsToKeep": 6 }` — `archived=0` dönene kadar tekrar et.
 - **3 ayda bir** ARCHITECTURE.md §10.2 sağlık kontrol SQL'lerini çalıştır.

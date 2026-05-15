@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "RollEntrySource" ADD VALUE 'SUBCONTRACTOR_RETURN';

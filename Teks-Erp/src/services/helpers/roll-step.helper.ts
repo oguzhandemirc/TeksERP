@@ -15,7 +15,9 @@
 // Bu modül tüm çağrıcılar için ortak transaction client (Prisma.TransactionClient)
 // kabul eder; atomik işlemler bozulmaz.
 // =============================================================================
-import { Prisma, RollStatus, StepStatus, WorkOrderStatus } from "@prisma/client";
+import { Prisma, RollStatus, StationKind, StepStatus, WorkOrderStatus } from "@prisma/client";
+import prisma from "../../lib/prisma";
+import { AppError } from "../../utils/app-error";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -244,4 +246,132 @@ export async function getRollStepState(
   const active = await isRollActiveInStep(tx, rollId, stepId);
   const completed = await hasRollCompletedStep(tx, rollId, stepId);
   return { active, completed };
+}
+
+/**
+ * Bir rulonun mevcut adımındaki işlemini "geri alabilir miyiz?" kontrolü.
+ *
+ * Kural: sonraki adımda bu rulo için **ileri taşınma izi** varsa geri
+ * alamayız. İz:
+ *   - Sonraki step'te kapalı (`exitedAt != null`) RollMovement → bitmiş
+ *   - Sonraki step'te RollOperation (Kurşun/QC2/Tambur/Sevk vb.) → işlem yapıldı
+ *   - Sonraki step için SubcontractorDispatch (fason'a gönderildi)
+ *
+ * Sadece **açık** (henüz başlamamış / movement açık olup hiçbir karar
+ * verilmemiş) durum reopen'a izindir.
+ *
+ * nextStepId null ise (mevcut adım rotanın son üretim adımı) geri alma
+ * her zaman serbest — sonraki adım yok.
+ */
+export async function canRollGoBackFromStep(
+  tx: TxClient,
+  rollId: string,
+  nextStepId: string | null,
+): Promise<{ canGoBack: boolean; reason: string | null }> {
+  if (!nextStepId) {
+    return { canGoBack: true, reason: null };
+  }
+
+  const closedMovement = await tx.rollMovement.findFirst({
+    where: { rollId, workOrderStepId: nextStepId, exitedAt: { not: null } },
+    select: { id: true },
+  });
+  if (closedMovement) {
+    return {
+      canGoBack: false,
+      reason: "Sonraki adım için bu rulo zaten tamamlanmış — geri alınamaz",
+    };
+  }
+
+  const operation = await tx.rollOperation.findFirst({
+    where: { rollId, workOrderStepId: nextStepId },
+    select: { id: true, operationType: true },
+  });
+  if (operation) {
+    return {
+      canGoBack: false,
+      reason: `Sonraki adımda işlem yapılmış (${operation.operationType}) — önce o işlemi geri al`,
+    };
+  }
+
+  const dispatch = await tx.subcontractorDispatch.findFirst({
+    where: {
+      stepId: nextStepId,
+      cancelledAt: null,
+      items: { some: { rollId } },
+    },
+    select: { id: true, dispatchNo: true },
+  });
+  if (dispatch) {
+    return {
+      canGoBack: false,
+      reason: `Sonraki adımda fason sevki yapılmış (${dispatch.dispatchNo}) — önce sevki iptal et`,
+    };
+  }
+
+  return { canGoBack: true, reason: null };
+}
+
+/**
+ * Bir iş emrinin **hedef kind step'ini** çöz ve kart-okuma akışı için
+ * doğrula. Operatör Kurşun veya Tambur tabletinde kart okuttuğunda
+ * çağrılır.
+ *
+ * Davranış:
+ *   - Hedef kind'da step yoksa → 404 ("Bu iş emrinde X adımı yok")
+ *   - Step var + açık movement var → { stepId, openRollCount } döner.
+ *   - Step var + açık movement yok → multi-batch destekli net 400:
+ *     "Bu iş emrinde X adımında açık top yok. Mevcut konum: Boyahane (4),
+ *      Tambur (4)" gibi. Operatör hangi tableti açması gerektiğini görür.
+ *
+ * Multi-batch senaryosu: aynı WO'nun rulları farklı zamanlarda akabilir
+ * (örn. 12 rulodan 4'ü Tambur'da, 4'ü Kurşun'da, 4'ü Boyahane'de).
+ * `currentRolls` üzerinden gerçek dağılımı raporlar.
+ */
+export async function assertWoAtStepKind(
+  workOrderId: string,
+  expectedKind: StationKind,
+): Promise<{ stepId: string; openRollCount: number }> {
+  const targetStep = await prisma.workOrderStep.findFirst({
+    where: { workOrderId, station: { kind: expectedKind } },
+    select: { id: true, station: { select: { name: true } } },
+    orderBy: { stepSequence: "asc" },
+  });
+  if (!targetStep) {
+    throw AppError.notFound(
+      `Bu iş emrinde ${expectedKind} adımı tanımlı değil`,
+    );
+  }
+
+  const openRollCount = await prisma.rollMovement.count({
+    where: { workOrderStepId: targetStep.id, exitedAt: null },
+  });
+
+  if (openRollCount > 0) {
+    return { stepId: targetStep.id, openRollCount };
+  }
+
+  // Açık movement yok — WO'nun rulları gerçekte hangi adımlarda?
+  const stepsWithRolls = await prisma.workOrderStep.findMany({
+    where: { workOrderId, currentRolls: { some: {} } },
+    select: {
+      id: true,
+      station: { select: { name: true } },
+      _count: { select: { currentRolls: true } },
+    },
+    orderBy: { stepSequence: "asc" },
+  });
+
+  if (stepsWithRolls.length === 0) {
+    throw AppError.badRequest(
+      `Bu iş emrinin "${targetStep.station.name}" adımında işlenecek top yok ve şu an aktif başka bir adım da yok. (Üretim henüz başlamamış veya bitmiş.)`,
+    );
+  }
+
+  const stepNames = stepsWithRolls
+    .map((s) => `${s.station.name} (${s._count.currentRolls} rulo)`)
+    .join(", ");
+  throw AppError.badRequest(
+    `Bu iş emrinin "${targetStep.station.name}" adımında şu an açık top yok. Mevcut konum: ${stepNames}. Tabletinizi yanlış istasyonda okutmuş olabilirsiniz.`,
+  );
 }

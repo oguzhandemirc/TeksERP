@@ -387,7 +387,7 @@ export class SackService {
           id: true,
           quantity: true,
           itemId: true,
-          variantId: true,
+          colorId: true,
           order: { select: { id: true, customerId: true } },
         },
       });
@@ -674,7 +674,7 @@ export class SackService {
             width: true,
             qualityGrade: true,
             item: { select: { code: true, name: true } },
-            variant: { select: { code: true, name: true } },
+            color: { select: { code: true, name: true } },
             allocations: {
               select: {
                 allocatedQty: true,
@@ -716,7 +716,7 @@ export class SackService {
         qualityGrade: r.qualityGrade,
         itemCode: r.item.code,
         itemName: r.item.name,
-        variantName: r.variant?.name ?? null,
+        colorName: r.color?.name ?? null,
         orderNumber: r.allocations[0]?.orderLine.order.orderNumber ?? null,
         allocatedQty: r.allocations[0]?.allocatedQty ?? null,
       })),
@@ -780,7 +780,7 @@ export class SackService {
         rolls: {
           include: {
             item: { select: { code: true, name: true } },
-            variant: { select: { code: true, name: true } },
+            color: { select: { code: true, name: true } },
             allocations: {
               include: {
                 orderLine: {
@@ -794,7 +794,7 @@ export class SackService {
         swatches: {
           include: {
             item: { select: { code: true, name: true } },
-            variant: { select: { code: true, name: true } },
+            color: { select: { code: true, name: true } },
           },
           orderBy: { createdAt: "asc" },
         },
@@ -838,7 +838,7 @@ export class SackService {
           status: true,
           ownerCustomerId: true,
           item: { select: { id: true, code: true, name: true } },
-          variant: { select: { id: true, code: true, name: true } },
+          color: { select: { id: true, code: true, name: true } },
           allocations: {
             select: {
               orderLine: {
@@ -863,7 +863,7 @@ export class SackService {
           width: true,
           weightKg: true,
           item: { select: { id: true, code: true, name: true } },
-          variant: { select: { id: true, code: true, name: true } },
+          color: { select: { id: true, code: true, name: true } },
           parentRoll: { select: { id: true, barcode: true } },
         },
         orderBy: { createdAt: "asc" },

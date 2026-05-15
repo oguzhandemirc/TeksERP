@@ -37,7 +37,7 @@ const router = Router();
  *               itemId:
  *                 type: string
  *                 format: uuid
- *               variantId:
+ *               colorId:
  *                 type: string
  *                 format: uuid
  *                 nullable: true

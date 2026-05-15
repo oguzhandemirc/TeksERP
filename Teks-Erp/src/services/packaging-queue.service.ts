@@ -54,7 +54,7 @@ const QUEUE_INCLUDE = {
       qualityGrade: true,
       ownerCustomerId: true,
       item: { select: { id: true, code: true, name: true } },
-      variant: { select: { id: true, code: true, name: true } },
+      color: { select: { id: true, code: true, name: true } },
       ownerCustomer: { select: { id: true, code: true, name: true } },
     },
   },
@@ -616,7 +616,7 @@ export class PackagingQueueService {
         id: true,
         customerId: true,
         status: true,
-        lines: { select: { itemId: true, item: { select: { baseItemId: true } } } },
+        lines: { select: { itemId: true, colorId: true } },
       },
     });
     if (!order) throw AppError.notFound("Sipariş bulunamadı");
@@ -634,20 +634,16 @@ export class PackagingQueueService {
     };
 
     if (options.onlyMatching) {
-      const itemIds = new Set<string>();
-      for (const line of order.lines) {
-        itemIds.add(line.itemId);
-        if (line.item.baseItemId) itemIds.add(line.item.baseItemId);
-      }
-      if (itemIds.size > 0) {
+      // Eşleşme: sipariş satırlarındaki (item, color) çiftlerinden biri.
+      // Aynı item farklı renklerde sipariş edilmişse her biri ayrı eşleşir.
+      const lineMatchers: Prisma.RollWhereInput[] = order.lines.map((line) => ({
+        itemId: line.itemId,
+        ...(line.colorId ? { colorId: line.colorId } : {}),
+      }));
+      if (lineMatchers.length > 0) {
         where.AND = [
           ...(Array.isArray(where.AND) ? (where.AND as Prisma.RollWhereInput[]) : []),
-          {
-            OR: [
-              { itemId: { in: Array.from(itemIds) } },
-              { item: { baseItemId: { in: Array.from(itemIds) } } },
-            ],
-          },
+          { OR: lineMatchers },
         ];
       }
     }
@@ -670,8 +666,8 @@ export class PackagingQueueService {
       orderBy: [{ createdAt: "asc" }],
       take: 500,
       include: {
-        item: { include: { color: { select: { id: true, code: true, name: true, hex: true } } } },
-        variant: { select: { id: true, code: true, name: true } },
+        item: true,
+        color: { select: { id: true, code: true, name: true, hex: true } },
         ownerCustomer: { select: { id: true, code: true, name: true } },
         operations: { select: { operationType: true } },
         properties: {

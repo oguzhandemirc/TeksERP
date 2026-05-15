@@ -51,15 +51,8 @@ const QUEUE_INCLUDE = {
           id: true,
           quantity: true,
           width: true,
-          item: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-              color: { select: { id: true, code: true, name: true, hex: true } },
-            },
-          },
-          variant: { select: { id: true, code: true, name: true } },
+          item: { select: { id: true, code: true, name: true } },
+          color: { select: { id: true, code: true, name: true, hex: true } },
           allocations: {
             select: {
               id: true,
@@ -92,8 +85,7 @@ function shapeQueueRow(q: QueueRowWithIncludes) {
       itemId: line.item.id,
       itemCode: line.item.code,
       itemName: line.item.name,
-      color: line.item.color,
-      variant: line.variant,
+      color: line.color,
       width: line.width,
       requestedQty: line.quantity,
       allocatedQty,

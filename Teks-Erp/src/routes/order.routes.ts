@@ -190,7 +190,14 @@ router.get("/:id", verifyToken, requirePermission("order:read"), controller.find
  *             required: [customerId]
  *             properties:
  *               customerId: { type: string, format: uuid }
- *               currency: { type: string, default: "TRY" }
+ *               branchId: { type: string, format: uuid, nullable: true }
+ *               currency: { type: string, enum: [TRY, USD, EUR, GBP], default: "TRY" }
+ *               totalAmount:
+ *                 type: number
+ *                 description: |
+ *                   Boş bırakılırsa lines'tan otomatik hesaplanır
+ *                   (sum(quantity × unitPrice)). Manuel verirseniz override
+ *                   olur (KDV/indirim/navlun gibi durumlar için).
  *               deadline: { type: string, format: date-time }
  *               lines:
  *                 type: array
@@ -198,11 +205,17 @@ router.get("/:id", verifyToken, requirePermission("order:read"), controller.find
  *                   type: object
  *                   properties:
  *                     itemId: { type: string, format: uuid }
+ *                     colorId: { type: string, format: uuid, nullable: true }
  *                     quantity: { type: number }
- *                     unitPrice: { type: number }
+ *                     unitPrice: { type: number, nullable: true, description: "Opsiyonel — fiyatsız sipariş için boş bırakılabilir" }
+ *                     width: { type: number, nullable: true }
+ *                     customerItemName: { type: string, nullable: true }
+ *                     customerColorName: { type: string, nullable: true }
  *     responses:
  *       201:
  *         description: Sipariş oluşturuldu
+ *       400:
+ *         description: Geçersiz para birimi veya validasyon hatası
  */
 router.post("/", verifyToken, requirePermission("order:write"), controller.create);
 
@@ -211,7 +224,12 @@ router.post("/", verifyToken, requirePermission("order:write"), controller.creat
  * /api/orders/{id}:
  *   patch:
  *     tags: [Orders]
- *     summary: Sipariş güncelle
+ *     summary: Sipariş güncelle (header alanları)
+ *     description: |
+ *       APPROVED durumunda customerId, branchId, currency, totalAmount, deadline
+ *       güncellenebilir (aktif WO bağı varsa customer/branch kilit). PARTIAL_SHIPPED'de
+ *       sadece deadline. COMPLETED/CANCELLED kilitli. Kalemler hiçbir durumda
+ *       güncellenmez.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -219,9 +237,20 @@ router.post("/", verifyToken, requirePermission("order:write"), controller.creat
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               customerId:  { type: string, format: uuid }
+ *               branchId:    { type: string, format: uuid, nullable: true }
+ *               currency:    { type: string, enum: [TRY, USD, EUR, GBP] }
+ *               totalAmount: { type: number, nullable: true }
+ *               deadline:    { type: string, format: date-time, nullable: true }
  *     responses:
- *       200:
- *         description: Güncellendi
+ *       200: { description: Güncellendi }
+ *       409: { description: Tamamlanmış veya aktif WO bağı nedeniyle kilit }
  */
 router.patch("/:id", verifyToken, requirePermission("order:write"), controller.update);
 

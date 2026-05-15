@@ -141,4 +141,42 @@ router.post("/step-action", verifyToken, requirePermission("roll:write"), contro
  */
 router.post("/report-error", verifyToken, requirePermission("quality:write"), controller.reportError);
 
+/**
+ * @openapi
+ * /api/production/undo-step-finish:
+ *   post:
+ *     tags: [Production]
+ *     summary: Bir rulonun adım finish'ini geri al
+ *     description: |
+ *       Operatör hatalı finish bastıysa veya kontrol amaçlı geri almak isterse
+ *       kullanılır. Bu rulonun bu step'teki kapalı movement'ı yeniden açılır,
+ *       Roll.currentStepId bu adıma döner. Sonraki step'te bu rulo için bir
+ *       iz (kapalı movement, RollOperation, aktif fason sevki) varsa REDDEDİLİR
+ *       ("önce o işlemi geri al" hatası). EXTERNAL ve TAMBUR adımları için
+ *       kullanılmaz — onlar kendi cancel/undo akışlarına sahiptir.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollId, stepId]
+ *             properties:
+ *               rollId: { type: string, format: uuid }
+ *               stepId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Adım geri alındı }
+ *       400: { description: EXTERNAL/TAMBUR adım veya finish basılmamış }
+ *       404: { description: Top veya adım bulunamadı }
+ *       409: { description: Tamamlanmış WO veya sonraki adımda iz var }
+ */
+router.post(
+  "/undo-step-finish",
+  verifyToken,
+  requirePermission("roll:write"),
+  controller.undoStepFinish
+);
+
 export default router;

@@ -54,16 +54,29 @@ const router = Router();
  *         schema: { type: string, enum: [FACTORY, CUSTOMER] }
  *         description: FACTORY = fabrika stoğu, CUSTOMER = müşteri malları (fason)
  *       - in: query
- *         name: filter[isDerived]
- *         schema: { type: string, enum: ["true", "false"] }
- *         description: Item.isDerived — false=ham, true=işlenmiş (renk/özellik kazanmış)
+ *         name: filter[processingStatus]
+ *         schema: { type: string, enum: [raw, processed, open_fabric, finished] }
+ *         description: |
+ *           Roll.colorId/status/barcode üzerinden türev:
+ *           raw = colorId IS NULL (henüz renk almamış);
+ *           processed = colorId IS NOT NULL ve henüz Tambur'a ulaşmamış;
+ *           open_fabric = barcode IS NULL + status=IN_PRODUCTION (Kurşun/KK2/Tambur'da bekleyen açık kumaş);
+ *           finished = WAREHOUSE/READY_FOR_SHIP (Tambur'dan çıkmış).
  *       - in: query
- *         name: filter[baseItemId]
- *         schema: { type: string, format: uuid }
- *         description: Ham item ID. Bu item ve ondan türetilmiş tüm item'ların top'larını getirir.
+ *         name: filter[rollKind]
+ *         schema: { type: string, enum: [OPEN_FABRIC, WOUND_ROLL] }
+ *         description: |
+ *           Fiziksel form: OPEN_FABRIC = barkodsuz açık kumaş; WOUND_ROLL = barkodlu top.
+ *       - in: query
+ *         name: filter[currentStepKind]
+ *         schema: { type: string, enum: [RAW_QC, EXTERNAL, PROCESS_QC, TAMBUR, SUBCONTRACTOR, PACKAGING, SHIPPING, OTHER] }
+ *         description: |
+ *           Roll'un şu an bulunduğu istasyon türü (Roll.currentStep.station.kind).
+ *           Örn. PROCESS_QC = Kurşun/KK2'de bekleyenler; TAMBUR = Tambur'da bekleyenler.
  *       - in: query
  *         name: filter[colorId]
  *         schema: { type: string, format: uuid }
+ *         description: Roll.colorId ile filtre — belirli renkteki rulolar.
  *       - in: query
  *         name: filter[propertyIds]
  *         schema: { type: string }
@@ -184,6 +197,11 @@ router.get("/:id/history", verifyToken, requirePermission("roll:read"), controll
  *                 type: string
  *                 format: uuid
  *                 description: Stok kartı ID
+ *               colorId:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: Opsiyonel renk (ham mal genelde NULL — boyahanede kazanır)
  *               initialQty:
  *                 type: number
  *                 description: İlk ölçüm (metre)
@@ -196,16 +214,26 @@ router.get("/:id/history", verifyToken, requirePermission("roll:read"), controll
  *                 type: string
  *                 description: Kalite sınıfı
  *                 default: "1.KALITE"
- *               design:
+ *               width:
+ *                 type: number
+ *                 nullable: true
+ *                 description: |
+ *                   En (cm) — opsiyonel. Operatör KK1'de ölçmediyse boş
+ *                   bırakılabilir; sonra Tambur veya manuel düzenleme ile
+ *                   doldurulur. Pozitif olmalı (verildiyse).
+ *                 example: 150
+ *               workOrderId:
  *                 type: string
- *                 description: Desen adı veya kodu (KK1 operatörü tarafından girilir)
- *                 example: "BALIK SIRTA"
- *                 maxLength: 200
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: Opsiyonel — verilirse top doğrudan iş emrinin ilk adımına bağlanır
  *     responses:
  *       201:
  *         description: Top oluşturuldu
  *       400:
  *         description: Validasyon hatası
+ *       409:
+ *         description: İş emrinin KK1 adımı tamamlanmış — yeni rulo eklenemez
  *       404:
  *         description: Ürün bulunamadı
  */
@@ -301,5 +329,134 @@ router.delete("/:id", verifyToken, requirePermission("roll:write"), controller.s
  *         description: Top bulunamadı
  */
 router.delete("/:id/permanent", verifyToken, requirePermission("roll:write"), controller.hardDelete);
+
+/**
+ * @openapi
+ * /api/rolls/kk1-context/{cardBarcode}:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: KK1 tabletinde kart okutarak WO context al
+ *     description: |
+ *       Mobile KK1 tabletinde refakat kartı okutulduğunda çağrılır. Kart aktif
+ *       ise ve WO'nun KK1 (RAW_QC) adımı şu an açıksa, WO context'i (batchNumber,
+ *       targetItem, targetColor) döner. KK1 zaten tamamlanmış veya WO başka
+ *       adımdaysa multi-batch destekli net 400 mesajı: "Mevcut konum: Boyahane
+ *       (4 rulo). Tabletinizi yanlış istasyonda okutmuş olabilirsiniz."
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: cardBarcode
+ *         required: true
+ *         schema: { type: string, example: "RK-2605-939944-C" }
+ *     responses:
+ *       200: { description: WO context }
+ *       400: { description: Kart pasif veya WO başka adımda }
+ *       404: { description: Kart bulunamadı veya WO'da KK1 adımı yok }
+ */
+router.get(
+  "/kk1-context/:cardBarcode",
+  verifyToken,
+  requirePermission("roll:read"),
+  controller.getKk1ContextByCard
+);
+
+/**
+ * @openapi
+ * /api/rolls/open-fabric:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Kurşun/KK2'de açık kumaş Roll oluştur (boyahane fason dönüşü)
+ *     description: |
+ *       Boyahane gibi açık kumaş döndüren fason kabul sonrası, Kurşun/KK2
+ *       operatörü "yeni kumaş aç" der → bu endpoint çağrılır.
+ *
+ *       Yeni Roll özellikleri:
+ *       - Barkod basılmaz (`barcode = NULL`); fiziksel takip arabada.
+ *       - colorId / properties receipt'ten inherit (receipt.appliedColor + appliedProperties).
+ *       - itemId WO.targetItemId.
+ *       - currentStepId / producedInStepId = verilen Kurşun/KK2 step.
+ *       - parentReceiptId = kaynak SubcontractorReceipt.
+ *       - initialQty / currentQty = 0 (ölçüm `kursun-finish`'te yapılır).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [receiptId, stepId]
+ *             properties:
+ *               receiptId: { type: string, format: uuid, description: Kaynak SubcontractorReceipt }
+ *               stepId:    { type: string, format: uuid, description: Kurşun/KK2 (PROCESS_QC) step }
+ *               notes:     { type: string, nullable: true }
+ *     responses:
+ *       201: { description: Açık kumaş Roll oluşturuldu }
+ *       400: { description: Validasyon / receipt iptal / step PROCESS_QC değil }
+ *       404: { description: Receipt veya step bulunamadı }
+ *       409: { description: İş emri tamamlanmış / step kapalı }
+ */
+router.post(
+  "/open-fabric",
+  verifyToken,
+  requirePermission("roll:write"),
+  controller.createOpenFabric,
+);
+
+/**
+ * @openapi
+ * /api/rolls/{id}/kursun-finish:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Açık kumaş Kurşun/KK2 sonu — metraj + hata + Tambur'a ilerlet
+ *     description: |
+ *       Operatör cihazda gözüken toplam metreyi ve tespit ettiği hata noktalarını
+ *       kaydeder. Sonra Roll Tambur step'ine ilerletilir.
+ *
+ *       Yapılan işlemler:
+ *       - Roll.initialQty / currentQty = totalMeters
+ *       - RollError'lar insert (sadece startMeter zorunlu, endMeter opsiyonel)
+ *       - RollOperation: KURSUN_APPLIED + QC2_COMPLETED
+ *       - Kurşun/KK2 movement'ı kapatılır (qtyOut = totalMeters)
+ *       - Sonraki step (Tambur) için movement açılır + Roll.currentStepId güncellenir
+ *
+ *       Yeniden çağırma engellenir (`initialQty > 0` ise 409).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [totalMeters]
+ *             properties:
+ *               totalMeters: { type: number, example: 500 }
+ *               errors:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [startMeter]
+ *                   properties:
+ *                     startMeter:   { type: number, example: 60 }
+ *                     endMeter:     { type: number, nullable: true, description: "Opsiyonel — operatör çoğu zaman sadece başlangıç metresi girer" }
+ *                     defectTypeId: { type: string, format: uuid, nullable: true }
+ *               notes: { type: string, nullable: true }
+ *     responses:
+ *       200: { description: Kurşun/KK2 tamamlandı, Roll Tambur'a ilerletildi }
+ *       400: { description: Validasyon / Roll açık kumaş değil / yanlış step }
+ *       404: { description: Roll bulunamadı }
+ *       409: { description: Bu Roll zaten finalize edilmiş }
+ */
+router.post(
+  "/:id/kursun-finish",
+  verifyToken,
+  requirePermission("roll:write"),
+  controller.kursunFinish,
+);
 
 export default router;

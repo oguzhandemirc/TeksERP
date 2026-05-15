@@ -37,6 +37,10 @@ import allocationRoutes from "./routes/allocation.routes";
 import packagingQueueRoutes from "./routes/packaging-queue.routes";
 import shippingQueueRoutes from "./routes/shipping-queue.routes";
 import sackRoutes from "./routes/sack.routes";
+import labelRoutes from "./routes/label.routes";
+import labelTemplateRoutes from "./routes/label-template.routes";
+import currencyRoutes from "./routes/currency.routes";
+import featureFlagRoutes from "./routes/feature-flag.routes";
 import adminRoutes from "./routes/admin.routes";
 
 const app: Express = express();
@@ -96,6 +100,10 @@ app.use("/api/allocations", allocationRoutes);
 app.use("/api/packaging-queue", packagingQueueRoutes);
 app.use("/api/shipping-queue", shippingQueueRoutes);
 app.use("/api/sacks", sackRoutes);
+app.use("/api/labels", labelRoutes);
+app.use("/api/label-templates", labelTemplateRoutes);
+app.use("/api/currencies", currencyRoutes);
+app.use("/api/feature-flags", featureFlagRoutes);
 app.use("/api/admin", adminRoutes);
 
 // =============================================================================

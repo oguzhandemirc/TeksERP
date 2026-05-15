@@ -285,6 +285,16 @@ router.post("/", verifyToken, requirePermission("workorder:write"), controller.c
  *               recipeNo: { type: string, nullable: true }
  *               plannedStartDate: { type: string, nullable: true }
  *               plannedEndDate: { type: string, nullable: true }
+ *               foldType:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Tambur planlama bilgisi ("2-KAT" / "4-KAT" gibi). Tambur'a bilgi olarak iletilir; operatör override edebilir.
+ *               layerCount:
+ *                 type: integer
+ *                 nullable: true
+ *                 minimum: 1
+ *                 maximum: 20
+ *                 description: Tambur planlama bilgisi (toplam katman sayısı). Operatör override edebilir.
  *     responses:
  *       200: { description: Güncellendi }
  *       409: { description: Üretim başlamış (sadece PLANNED düzenlenebilir) }

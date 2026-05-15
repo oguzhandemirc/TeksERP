@@ -34,6 +34,11 @@ import {
   dynamicCursorWhere,
   buildNextDynamicCursor,
 } from "../utils/cursor";
+import {
+  resolveName,
+  batchLoadAliases,
+  NameSource,
+} from "./helpers/customer-name.helper";
 
 
 /**
@@ -65,12 +70,15 @@ export interface ShipmentPrintSnapshot {
     rollId: string;
     rollBarcode: string;
     itemCode: string;
-    itemName: string;
-    variantCode: string | null;
-    variantName: string | null;
+    itemName: string;                         // bizdeki ad (default)
+    itemNameForCustomer: string;               // effective cascade (irsaliyede basılır)
+    itemNameForCustomerSource: NameSource;
+    colorCode: string | null;
+    colorName: string | null;                  // bizdeki ad (default)
+    colorNameForCustomer: string | null;       // effective cascade
+    colorNameForCustomerSource: NameSource | null;
     customerLabel: string | null;
-    customerCode: string | null;
-    customerLabelSource: "ALIAS" | "ROLL_DESCRIPTION" | null;
+    customerLabelSource: "ROLL_DESCRIPTION" | null;
     orderNumber: string | null;
     workOrderBatchNumber: string | null;
     workOrderType: string | null;
@@ -101,7 +109,7 @@ async function buildShipmentPrintSnapshot(
           roll: {
             include: {
               item: true,
-              variant: true,
+              color: true,
               producedInStep: {
                 select: {
                   workOrder: {
@@ -109,6 +117,20 @@ async function buildShipmentPrintSnapshot(
                       id: true,
                       batchNumber: true,
                       type: true,
+                    },
+                  },
+                },
+              },
+              // Allocation üstündeki OrderLine override'ları cascade için lazım.
+              // Çoklu allocation (anomali) → ilki (createdAt asc) alınır.
+              allocations: {
+                orderBy: { createdAt: "asc" },
+                take: 1,
+                select: {
+                  orderLine: {
+                    select: {
+                      customerItemName: true,
+                      customerColorName: true,
                     },
                   },
                 },
@@ -125,55 +147,48 @@ async function buildShipmentPrintSnapshot(
     throw AppError.notFound("Sevkiyat bulunamadı");
   }
 
-  // Müşteri alias'larını toplu çek
-  const variantIds = Array.from(
-    new Set(
-      shipment.items
-        .map((i) => i.roll.variantId)
-        .filter((v): v is string => !!v),
-    ),
+  // Master alias'ları toplu çek — N rulolu sevkiyatta 2N query yerine 2.
+  // Customer = sevkiyatın gittiği müşteri (reassign sonrası actual receiver).
+  const itemIds = shipment.items.map((i) => i.roll.itemId);
+  const colorIds = shipment.items
+    .map((i) => i.roll.colorId)
+    .filter((c): c is string => !!c);
+  const aliases = await batchLoadAliases(
+    tx,
+    shipment.customerId,
+    itemIds,
+    colorIds,
   );
-  const aliasByVariantId = new Map<
-    string,
-    { customerLabel: string; customerCode: string | null }
-  >();
-  if (variantIds.length > 0) {
-    const aliases = await tx.customerVariantAlias.findMany({
-      where: {
-        customerId: shipment.customerId,
-        variantId: { in: variantIds },
-        isActive: true,
-      },
-      select: { variantId: true, customerLabel: true, customerCode: true },
-    });
-    for (const a of aliases) {
-      aliasByVariantId.set(a.variantId, {
-        customerLabel: a.customerLabel,
-        customerCode: a.customerCode,
-      });
-    }
-  }
 
   const itemsSnapshot = shipment.items.map((item, idx) => {
-    const alias = item.roll.variantId
-      ? aliasByVariantId.get(item.roll.variantId) ?? null
-      : null;
-
-    // customerLabel önceliği: alias → roll.customerDescription → null
+    // customerLabel: SERVICE_PRODUCTION rulolarında roll.customerDescription
+    // (müşterinin kendi tanımı). Variant alias mekanizması kalktı.
     let customerLabel: string | null = null;
-    let customerCode: string | null = null;
-    let source: "ALIAS" | "ROLL_DESCRIPTION" | null = null;
-    if (alias) {
-      customerLabel = alias.customerLabel;
-      customerCode = alias.customerCode;
-      source = "ALIAS";
-    } else if (
+    let source: "ROLL_DESCRIPTION" | null = null;
+    if (
       item.roll.customerDescription &&
       item.roll.customerDescription.trim().length > 0
     ) {
       customerLabel = item.roll.customerDescription;
       source = "ROLL_DESCRIPTION";
     }
+
+    const ol = item.roll.allocations[0]?.orderLine ?? null;
+    const itemDefault = item.itemNameSnapshot ?? item.roll.item.name ?? "";
+    const colorDefault = item.roll.color?.name ?? null;
+
+    const itemForCustomer = resolveName(
+      ol?.customerItemName ?? null,
+      aliases.itemAliasByItemId.get(item.roll.itemId) ?? null,
+      itemDefault,
+    );
+    const colorForCustomer = item.roll.color
+      ? resolveName(
+          ol?.customerColorName ?? null,
+          aliases.colorAliasByColorId.get(item.roll.color.id) ?? null,
+          colorDefault ?? "",
+        )
+      : null;
 
     return {
       id: item.id,
@@ -182,11 +197,14 @@ async function buildShipmentPrintSnapshot(
       rollBarcode:
         item.rollBarcodeSnapshot ?? item.roll.barcode ?? "",
       itemCode: item.itemCodeSnapshot ?? item.roll.item.code ?? "",
-      itemName: item.itemNameSnapshot ?? item.roll.item.name ?? "",
-      variantCode: item.roll.variant?.code ?? null,
-      variantName: item.roll.variant?.name ?? null,
+      itemName: itemDefault,
+      itemNameForCustomer: itemForCustomer.name,
+      itemNameForCustomerSource: itemForCustomer.source,
+      colorCode: item.roll.color?.code ?? null,
+      colorName: colorDefault,
+      colorNameForCustomer: colorForCustomer?.name ?? null,
+      colorNameForCustomerSource: colorForCustomer?.source ?? null,
       customerLabel,
-      customerCode,
       customerLabelSource: source,
       orderNumber: item.orderNumberSnapshot ?? null,
       workOrderBatchNumber:
@@ -347,15 +365,8 @@ export class ShippingService {
           quantity: true,
           width: true,
           unitPrice: true,
-          item: {
-            select: {
-              id: true,
-              name: true,
-              code: true,
-              color: { select: { id: true, code: true, name: true, hex: true } },
-            },
-          },
-          variant: { select: { id: true, code: true, name: true } },
+          item: { select: { id: true, name: true, code: true } },
+          color: { select: { id: true, code: true, name: true, hex: true } },
           allocations: {
             select: {
               id: true,
@@ -433,16 +444,13 @@ export class ShippingService {
         lineId: line.id,
         itemCode: line.item.code,
         itemName: line.item.name,
-        color: line.item.color
+        color: line.color
           ? {
-              id: line.item.color.id,
-              code: line.item.color.code,
-              name: line.item.color.name,
-              hex: line.item.color.hex,
+              id: line.color.id,
+              code: line.color.code,
+              name: line.color.name,
+              hex: line.color.hex,
             }
-          : null,
-        variant: line.variant
-          ? { id: line.variant.id, code: line.variant.code, name: line.variant.name }
           : null,
         width: line.width,
         unitPrice: line.unitPrice ? String(line.unitPrice) : null,
@@ -505,11 +513,11 @@ export class ShippingService {
         customerName: string;
         rolls: Array<{
           rollId: string;
-          barcode: string;
+          barcode: string | null;
           itemCode: string;
           itemName: string;
-          variantCode: string | null;
-          variantName: string | null;
+          colorCode: string | null;
+          colorName: string | null;
           currentQty: number;
           weightKg: number | null;
           width: number | null;
@@ -534,7 +542,7 @@ export class ShippingService {
       },
       include: {
         item: { select: { code: true, name: true } },
-        variant: { select: { code: true, name: true } },
+        color: { select: { code: true, name: true } },
         ownerCustomer: { select: { id: true, name: true } },
       },
       orderBy: { packagingDate: "desc" },
@@ -547,11 +555,11 @@ export class ShippingService {
         customerName: string;
         rolls: Array<{
           rollId: string;
-          barcode: string;
+          barcode: string | null;
           itemCode: string;
           itemName: string;
-          variantCode: string | null;
-          variantName: string | null;
+          colorCode: string | null;
+          colorName: string | null;
           currentQty: number;
           weightKg: number | null;
           width: number | null;
@@ -577,8 +585,8 @@ export class ShippingService {
         barcode: roll.barcode,
         itemCode: roll.item.code,
         itemName: roll.item.name,
-        variantCode: roll.variant?.code ?? null,
-        variantName: roll.variant?.name ?? null,
+        colorCode: roll.color?.code ?? null,
+        colorName: roll.color?.name ?? null,
         currentQty: roll.currentQty,
         weightKg: roll.weightKg,
         width: roll.width,
@@ -602,12 +610,12 @@ export class ShippingService {
     ApiResponse<
       Array<{
         rollId: string;
-        barcode: string;
+        barcode: string | null;
         itemId: string;
         itemCode: string;
         itemName: string;
-        variantCode: string | null;
-        variantName: string | null;
+        colorCode: string | null;
+        colorName: string | null;
         currentQty: number;
         weightKg: number | null;
         width: number | null;
@@ -626,7 +634,6 @@ export class ShippingService {
             itemName: string;
             requestedQty: number;
             width: number | null;
-            variantName: string | null;
             colorName: string | null;
           }>;
         } | null;
@@ -650,7 +657,7 @@ export class ShippingService {
         qualityGrade: true,
         packagingDate: true,
         item: { select: { code: true, name: true } },
-        variant: { select: { code: true, name: true } },
+        color: { select: { code: true, name: true } },
         packagingQueueEntries: {
           where: { status: "DONE", plannedOrderId: { not: null } },
           orderBy: { completedAt: "desc" },
@@ -669,14 +676,8 @@ export class ShippingService {
                     itemId: true,
                     quantity: true,
                     width: true,
-                    item: {
-                      select: {
-                        code: true,
-                        name: true,
-                        color: { select: { name: true } },
-                      },
-                    },
-                    variant: { select: { name: true } },
+                    item: { select: { code: true, name: true } },
+                    color: { select: { name: true } },
                   },
                 },
               },
@@ -696,8 +697,8 @@ export class ShippingService {
         itemId: roll.itemId,
         itemCode: roll.item.code,
         itemName: roll.item.name,
-        variantCode: roll.variant?.code ?? null,
-        variantName: roll.variant?.name ?? null,
+        colorCode: roll.color?.code ?? null,
+        colorName: roll.color?.name ?? null,
         currentQty: roll.currentQty,
         weightKg: roll.weightKg,
         width: roll.width,
@@ -717,8 +718,7 @@ export class ShippingService {
                 itemName: l.item.name,
                 requestedQty: l.quantity,
                 width: l.width,
-                variantName: l.variant?.name ?? null,
-                colorName: l.item.color?.name ?? null,
+                colorName: l.color?.name ?? null,
               })),
             }
           : null,
@@ -2072,7 +2072,7 @@ export class ShippingService {
                     id: true,
                     quantity: true,
                     item: { select: { id: true, code: true, name: true } },
-                    variant: { select: { id: true, code: true, name: true } },
+                    color: { select: { id: true, code: true, name: true } },
                   },
                 },
               },
@@ -2086,7 +2086,7 @@ export class ShippingService {
             roll: {
               include: {
                 item: true,
-                variant: true,
+                color: true,
                 ownerCustomer: true,
                 producedInStep: {
                   select: {
@@ -2118,49 +2118,9 @@ export class ShippingService {
       throw AppError.notFound("Sevkiyat bulunamadı");
     }
 
-    // Müşteri desen karşılıklarını (customer variant alias) toplu çek ve her
-    // item'a `customerAlias` olarak ekle — irsaliyede müşteri kendi adıyla görsün.
-    const variantIds = Array.from(
-      new Set(
-        shipment.items
-          .map((i) => i.roll.variantId)
-          .filter((v): v is string => !!v),
-      ),
-    );
-
-    const aliasByVariantId = new Map<
-      string,
-      { customerLabel: string; customerCode: string | null }
-    >();
-
-    if (variantIds.length > 0) {
-      const aliases = await prisma.customerVariantAlias.findMany({
-        where: {
-          customerId: shipment.customerId,
-          variantId: { in: variantIds },
-          isActive: true,
-        },
-        select: { variantId: true, customerLabel: true, customerCode: true },
-      });
-      for (const a of aliases) {
-        aliasByVariantId.set(a.variantId, {
-          customerLabel: a.customerLabel,
-          customerCode: a.customerCode,
-        });
-      }
-    }
-
-    const enrichedItems = shipment.items.map((item) => ({
-      ...item,
-      customerAlias:
-        item.roll.variantId && aliasByVariantId.has(item.roll.variantId)
-          ? aliasByVariantId.get(item.roll.variantId)!
-          : null,
-    }));
-
     return {
       success: true,
-      data: { ...shipment, items: enrichedItems } as unknown as Shipment,
+      data: shipment as unknown as Shipment,
     };
   }
 

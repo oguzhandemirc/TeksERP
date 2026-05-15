@@ -19,12 +19,12 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { Roll, RollStatus } from "@prisma/client";
-import { CustomerVariantAliasService } from "./customer-variant-alias.service";
 import { PackagingQueueService } from "./packaging-queue.service";
+import { CustomerAliasService } from "./customer-alias.service";
+import { resolveName, NameSource } from "./helpers/customer-name.helper";
 
 const packagingQueueService = new PackagingQueueService();
-
-const aliasService = new CustomerVariantAliasService();
+const aliasService = new CustomerAliasService();
 
 export interface PackagingFinalizeInput {
   rollId: string;
@@ -35,9 +35,13 @@ export interface PackagingFinalizeInput {
 export interface PackagingLabelPayload {
   barcode: string;
   itemCode: string;
-  itemName: string;
-  variantCode: string | null;
-  variantName: string | null;
+  itemName: string;             // effective (cascade)
+  itemNameDefault: string;       // bizdeki ad (Item.name)
+  itemNameSource: NameSource;
+  colorCode: string | null;
+  colorName: string | null;      // effective (cascade)
+  colorNameDefault: string | null;
+  colorNameSource: NameSource | null;
   widthCm: number | null;
   lengthMeters: number;
   weightKg: number;
@@ -45,9 +49,6 @@ export interface PackagingLabelPayload {
   orderNumber: string | null;
   batchNumber: string;
   printedAt: string;
-  // Müşteri-özel desen adı (varsa etiketin ön yüzünde bu basılır)
-  customerVariantLabel: string | null;
-  customerVariantCode: string | null;
 }
 
 export interface PackagingFinalizeResult {
@@ -119,7 +120,7 @@ export class PackagingService {
       where: { id: input.rollId },
       include: {
         item: true,
-        variant: true,
+        color: true,
         ownerCustomer: { select: { id: true, name: true } },
         allocations: true,
         packagingQueueEntries: {
@@ -128,7 +129,14 @@ export class PackagingService {
             plannedOrder: {
               include: {
                 customer: true,
-                lines: { select: { id: true, itemId: true } },
+                lines: {
+                  select: {
+                    id: true,
+                    itemId: true,
+                    customerItemName: true,
+                    customerColorName: true,
+                  },
+                },
               },
             },
           },
@@ -141,6 +149,11 @@ export class PackagingService {
     if (roll.status !== RollStatus.WAREHOUSE) {
       throw AppError.badRequest(
         `Top depoda değil (durum: ${roll.status}) — önce Tambur'dan çıkması gerekir`
+      );
+    }
+    if (!roll.barcode) {
+      throw AppError.badRequest(
+        "Açık kumaş Roll paketlenemez — önce Tambur'da gerçek toplara bölünmelidir."
       );
     }
 
@@ -218,16 +231,47 @@ export class PackagingService {
       },
     });
 
-    const resolution = await aliasService.resolveForRoll(input.rollId, {
-      preferredOrderLineId: targetOrderLineId,
-    });
+    // Effective name cascade: OrderLine override > master alias > Item.name.
+    // Müşteri alanları null ise (allocation yok / stok üretimi) cascade master
+    // sorgulamayı atlar — fason rulolar için ownerCustomer alias'ı kullanılmaz
+    // (fason malı zaten müşteri adına etiketlenmez).
+    const targetLine = targetOrderLineId
+      ? plannedOrder?.lines.find((l) => l.id === targetOrderLineId) ?? null
+      : null;
+    const effectiveCustomerId =
+      isServiceOwned ? null : plannedOrder?.customer.id ?? null;
+
+    const masterAliases = effectiveCustomerId
+      ? await aliasService.lookupAlias(
+          effectiveCustomerId,
+          roll.item.id,
+          roll.color?.id ?? null,
+        )
+      : { itemAlias: null, colorAlias: null };
+
+    const itemResolved = resolveName(
+      targetLine?.customerItemName ?? null,
+      masterAliases.itemAlias,
+      roll.item.name,
+    );
+    const colorResolved = roll.color
+      ? resolveName(
+          targetLine?.customerColorName ?? null,
+          masterAliases.colorAlias,
+          roll.color.name,
+        )
+      : null;
 
     const label: PackagingLabelPayload = {
-      barcode: updated.barcode,
+      barcode: roll.barcode,
       itemCode: roll.item.code,
-      itemName: roll.item.name,
-      variantCode: roll.variant?.code ?? null,
-      variantName: roll.variant?.name ?? null,
+      itemName: itemResolved.name,
+      itemNameDefault: roll.item.name,
+      itemNameSource: itemResolved.source,
+      colorCode: roll.color?.code ?? null,
+      colorName: colorResolved?.name ?? null,
+      colorNameDefault: roll.color?.name ?? null,
+      colorNameSource: colorResolved?.source ?? null,
       widthCm: updated.width,
       lengthMeters: netLength,
       weightKg: input.weightKg,
@@ -235,8 +279,6 @@ export class PackagingService {
       orderNumber,
       batchNumber: "",
       printedAt: new Date().toISOString(),
-      customerVariantLabel: resolution.customerLabel,
-      customerVariantCode: resolution.customerCode,
     };
 
     return {

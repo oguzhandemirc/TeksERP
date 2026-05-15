@@ -62,6 +62,18 @@ async function main() {
     // SUBCONTRACTOR (yeni — fason firma + kategori CRUD)
     { code: "subcontractor:read", module: "SUBCONTRACTOR", category: "web" },
     { code: "subcontractor:write", module: "SUBCONTRACTOR", category: "web" },
+    // CUSTOMER ALIAS — müşteri-bazlı ürün/renk isim eşleştirmesi
+    { code: "customer-alias:read", module: "SALES", category: "web" },
+    { code: "customer-alias:write", module: "SALES", category: "web" },
+    // LABEL — etiket basımı 3'e bölünmüş yetki: görüntüle / bas / düzenle.
+    // Operatör başına ayrı verilebilir (vardiya/kişi bazında geri alma için).
+    { code: "label:read", module: "LOGISTICS", category: "web", description: "Etiket payload'unu görüntüleme (önizleme)" },
+    { code: "label:print", module: "LOGISTICS", category: "web", description: "Etiket basma aksiyonu (yazıcıya gönderme)" },
+    { code: "label:edit", module: "LOGISTICS", category: "web", description: "Sipariş satırı bazlı müşteri ismi/renk override etme" },
+    // LABEL TEMPLATE — etiket standardı yönetimi (alan toggle/sıra/başlık).
+    // Operatöre verilebilir → Tambur master template'i kalıcı düzenleyebilir.
+    { code: "label-template:read", module: "LOGISTICS", category: "web", description: "Etiket template'lerini listele" },
+    { code: "label-template:write", module: "LOGISTICS", category: "web", description: "Template oluştur/düzenle/default değiştir" },
     // ADMIN
     { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
     { code: "admin:settings", module: "ADMIN", category: "admin", description: "Sistem ayarları + log arşiv" },

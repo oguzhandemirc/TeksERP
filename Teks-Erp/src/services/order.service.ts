@@ -13,6 +13,29 @@ import { BaseService, BaseServiceConfig } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { OrderStatus } from "@prisma/client";
+import { isValidCurrency, CURRENCY_CODES } from "../config/currencies";
+import { readOrderDefaultDeadlineDays } from "./system-setting.service";
+
+/**
+ * Lines üzerinden totalAmount hesaplar. unitPrice null olan satırlar toplama
+ * dahil edilmez (kasıtlı: "fiyatlandırılmamış" kalemleri 0 saymak yanıltıcı).
+ * Hiç satırın fiyatı yoksa null döner — sipariş "fiyatsız" sayılır.
+ */
+function computeTotalAmount(
+  lines: Array<{ quantity?: number; unitPrice?: number | null | string }>
+): number | null {
+  let total = 0;
+  let any = false;
+  for (const l of lines) {
+    if (l.unitPrice == null) continue;
+    const qty = Number(l.quantity ?? 0);
+    const price = typeof l.unitPrice === "string" ? Number(l.unitPrice) : l.unitPrice;
+    if (!Number.isFinite(qty) || !Number.isFinite(price)) continue;
+    total += qty * (price as number);
+    any = true;
+  }
+  return any ? Number(total.toFixed(2)) : null;
+}
 
 export class OrderService extends BaseService {
   constructor(config: BaseServiceConfig) {
@@ -47,6 +70,39 @@ export class OrderService extends BaseService {
         data.branchId as string,
         data.customerId as string
       );
+    }
+
+    // Currency whitelist (varsa). Boş bırakılırsa şema default "TRY" kullanır.
+    if (data.currency != null && !isValidCurrency(data.currency as string)) {
+      throw AppError.badRequest(
+        `Geçersiz para birimi: ${data.currency}. İzinli: ${CURRENCY_CODES.join(", ")}`
+      );
+    }
+
+    // totalAmount: gönderilmediyse lines'tan otomatik hesapla. Gönderilmiş ise
+    // (planlamacı override etmiş — KDV/indirim gibi) olduğu gibi bırak.
+    if (
+      data.totalAmount == null &&
+      Array.isArray(data.lines) &&
+      data.lines.length > 0
+    ) {
+      const computed = computeTotalAmount(
+        data.lines as Array<{ quantity?: number; unitPrice?: number | null | string }>
+      );
+      if (computed !== null) data.totalAmount = computed;
+    }
+
+    // Termin (deadline) default: sipariş tarihinden N gün sonra. N tanımlardan
+    // (`order.defaultDeadlineDays`) okunur; yoksa 7. orderDate verilmediyse
+    // şema default'u (now()) baz alınır.
+    if (data.deadline == null) {
+      const baseDate = data.orderDate
+        ? new Date(data.orderDate as string)
+        : new Date();
+      const days = await readOrderDefaultDeadlineDays();
+      const deadline = new Date(baseDate);
+      deadline.setDate(deadline.getDate() + days);
+      data.deadline = deadline;
     }
 
     const today = new Date();
@@ -123,9 +179,9 @@ export class OrderService extends BaseService {
    * Kurallar:
    * - COMPLETED / CANCELLED → değiştirilemez (409).
    * - PARTIAL_SHIPPED → sadece `deadline` güncellenir; diğer alanlar yoksayılır.
-   * - APPROVED → header alanları (customerId, branchId, currency, deadline) açık;
-   *   ancak aktif (PLANNED dışı) iş emri bağlıysa customerId/branchId
-   *   değiştirilemez (409).
+   * - APPROVED → header alanları (customerId, branchId, currency, totalAmount,
+   *   deadline) açık; ancak aktif (PLANNED dışı) iş emri bağlıysa customerId/
+   *   branchId değiştirilemez (409). Currency whitelist kontrolü de yapılır.
    * - Lines (kalemler) HİÇBİR durumda güncellenmez — yanlışlıkla gelmiş olsa
    *   bile data'dan silinir. Kalem değişikliği için sipariş iptal + yeniden
    *   oluşturma akışı kullanılır.
@@ -164,6 +220,13 @@ export class OrderService extends BaseService {
     // Kalem güncellemesi hiçbir koşulda kabul edilmez.
     const cleanData: Record<string, unknown> = { ...data };
     delete cleanData.lines;
+
+    // Currency whitelist (varsa). PARTIAL_SHIPPED'de zaten allowlist filtrele.
+    if (cleanData.currency != null && !isValidCurrency(cleanData.currency as string)) {
+      throw AppError.badRequest(
+        `Geçersiz para birimi: ${cleanData.currency}. İzinli: ${CURRENCY_CODES.join(", ")}`
+      );
+    }
 
     if (current.status === OrderStatus.PARTIAL_SHIPPED) {
       const allowed = new Set(["deadline"]);

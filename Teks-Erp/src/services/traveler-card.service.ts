@@ -468,7 +468,8 @@ export class TravelerCardService {
       include: {
         workOrder: {
           include: {
-            targetItem: { include: { color: true } },
+            targetItem: true,
+            targetColor: true,
             steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
           },
         },

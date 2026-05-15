@@ -23,18 +23,21 @@ import {
   StationKind,
   StepStatus,
 } from "@prisma/client";
+import { assertWoAtStepKind } from "./helpers/roll-step.helper";
 
 interface RollDefectSummary {
   id: string;
   startMeter: number;
-  endMeter: number;
+  /// Bitiş metresi opsiyonel — operatör çoğunlukla sadece başlangıç metresi girer.
+  endMeter: number | null;
   defectTypeId: string | null;
   errorType: string | null; // snapshot'lanmış ad (DefectType.name)
 }
 
 interface RollSummary {
   rollId: string;
-  barcode: string;
+  /// Açık kumaş Roll'larında NULL olabilir.
+  barcode: string | null;
   currentQty: number;
   kursunApplied: boolean;
   qc2Completed: boolean;
@@ -80,25 +83,14 @@ export class KursunQcService {
       );
     }
 
-    // İş emrindeki ilk PROCESS_QC adımı (tipik olarak tek tane olur).
-    const step = await prisma.workOrderStep.findFirst({
-      where: {
-        workOrderId: card.workOrderId,
-        station: { kind: StationKind.PROCESS_QC },
-      },
-      include: {
-        station: true,
-        workOrder: { select: { batchNumber: true } },
-      },
-      orderBy: { stepSequence: "asc" },
-    });
-    if (!step) {
-      throw AppError.notFound(
-        "Bu iş emrinde Kurşun + QC2 adımı tanımlı değil"
-      );
-    }
+    // İş emrindeki PROCESS_QC step'ini doğrula. Multi-batch: WO'nun rulları
+    // farklı adımlarda olabilir; helper bu durumda net mesaj döner.
+    const { stepId } = await assertWoAtStepKind(
+      card.workOrderId,
+      StationKind.PROCESS_QC,
+    );
 
-    return this.buildStepSummary(step.id);
+    return this.buildStepSummary(stepId);
   }
 
   /** Step ID ile doğrudan çek (admin/test ekranları). */

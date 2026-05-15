@@ -77,7 +77,8 @@ export interface ServiceIntakeRoll {
 export interface ServiceIntakeInput {
   customerId: string;
   itemId: string;
-  variantId?: string | null;
+  /** Müşteri kumaşı zaten boyalı geldiyse renk; ham geldiyse null */
+  colorId?: string | null;
   /** Metre başı hizmet bedeli (₺/m) */
   servicePricePerMeter: number;
   /** Müşteri talebine göre seçilen istasyon kind'ları. Paketleme her zaman zorunlu; server otomatik ekler. */
@@ -130,16 +131,13 @@ export class ServiceProductionService {
       throw AppError.notFound("Ürün bulunamadı veya pasif");
     }
 
-    if (data.variantId) {
-      const variant = await prisma.itemVariant.findUnique({
-        where: { id: data.variantId },
-        select: { id: true, itemId: true, isActive: true },
+    if (data.colorId) {
+      const color = await prisma.color.findUnique({
+        where: { id: data.colorId },
+        select: { id: true, isActive: true },
       });
-      if (!variant || !variant.isActive) {
-        throw AppError.notFound("Varyant bulunamadı veya pasif");
-      }
-      if (variant.itemId !== data.itemId) {
-        throw AppError.badRequest("Varyant seçilen ürüne ait değil");
+      if (!color || !color.isActive) {
+        throw AppError.notFound("Renk bulunamadı veya pasif");
       }
     }
 
@@ -230,7 +228,7 @@ export class ServiceProductionService {
           data: {
             barcode,
             itemId: data.itemId,
-            variantId: data.variantId ?? null,
+            colorId: data.colorId ?? null,
             ownerCustomerId: data.customerId,
             customerDescription:
               r.customerDescription && r.customerDescription.trim().length > 0
@@ -260,7 +258,7 @@ export class ServiceProductionService {
         });
 
         rollIds.push(roll.id);
-        barcodes.push(roll.barcode);
+        barcodes.push(barcode);
       }
 
       // İlk step'i ACTIVE olarak hesapla (açık movement'ler var) ve WO'yu IN_PROGRESS'e çek.
@@ -281,7 +279,7 @@ export class ServiceProductionService {
         type: created.wo.type,
         customerId: data.customerId,
         itemId: data.itemId,
-        variantId: data.variantId ?? null,
+        colorId: data.colorId ?? null,
         servicePricePerMeter: data.servicePricePerMeter,
         rollCount: created.rollIds.length,
         routeKinds: orderedKinds,

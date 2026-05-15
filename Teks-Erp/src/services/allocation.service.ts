@@ -97,10 +97,10 @@ export class AllocationService {
         select: {
           id: true,
           itemId: true,
-          variantId: true,
+          colorId: true,
           quantity: true,
           item: { select: { code: true, name: true, itemType: true } },
-          variant: { select: { code: true, name: true } },
+          color: { select: { code: true, name: true } },
           allocations: { select: { allocatedQty: true } },
         },
       },
@@ -150,9 +150,9 @@ export class AllocationService {
             itemCode: line.item.code,
             itemName: line.item.name,
             itemType: line.item.itemType,
-            variantId: line.variantId,
-            variantCode: line.variant?.code ?? null,
-            variantName: line.variant?.name ?? null,
+            colorId: line.colorId,
+            colorCode: line.color?.code ?? null,
+            colorName: line.color?.name ?? null,
             requested: line.quantity,
             allocated,
             remaining: Math.max(0, line.quantity - allocated),
@@ -232,7 +232,7 @@ export class AllocationService {
     const rolls = await prisma.roll.findMany({
       where: {
         itemId: orderLine.itemId,
-        ...(orderLine.variantId ? { variantId: orderLine.variantId } : {}),
+        ...(orderLine.colorId ? { colorId: orderLine.colorId } : {}),
         status: { in: ELIGIBLE_ROLL_STATUSES },
         OR: [
           { ownerCustomerId: null },
@@ -241,7 +241,7 @@ export class AllocationService {
       },
       include: {
         item: { select: { code: true, name: true } },
-        variant: { select: { code: true, name: true } },
+        color: { select: { code: true, name: true } },
         allocations: { select: { allocatedQty: true } },
         ownerCustomer: { select: { id: true, code: true, name: true } },
       },
@@ -261,8 +261,8 @@ export class AllocationService {
           status: r.status,
           itemCode: r.item.code,
           itemName: r.item.name,
-          variantCode: r.variant?.code ?? null,
-          variantName: r.variant?.name ?? null,
+          colorCode: r.color?.code ?? null,
+          colorName: r.color?.name ?? null,
           currentQty: r.currentQty,
           weightKg: r.weightKg,
           width: r.width,
@@ -322,9 +322,9 @@ export class AllocationService {
       );
     }
 
-    // Variant uyumu (orderLine.variantId tanımlıysa eşleşmeli)
-    if (orderLine.variantId && roll.variantId !== orderLine.variantId) {
-      throw AppError.badRequest("Top varyantı sipariş satırı varyantına uymuyor");
+    // Renk uyumu (orderLine.colorId tanımlıysa eşleşmeli; null ise her renk uyar)
+    if (orderLine.colorId && roll.colorId !== orderLine.colorId) {
+      throw AppError.badRequest("Top rengi sipariş satırı rengine uymuyor");
     }
 
     if (roll.itemId !== orderLine.itemId) {
@@ -475,13 +475,13 @@ export class AllocationService {
       );
     }
 
-    // Item / variant uyumu
+    // Item / renk uyumu
     if (existing.roll.itemId !== newOrderLine.itemId) {
       throw AppError.badRequest("Top ürünü hedef sipariş satırı ürününe uymuyor");
     }
-    if (newOrderLine.variantId && existing.roll.variantId !== newOrderLine.variantId) {
+    if (newOrderLine.colorId && existing.roll.colorId !== newOrderLine.colorId) {
       throw AppError.badRequest(
-        "Top varyantı hedef sipariş satırı varyantına uymuyor"
+        "Top rengi hedef sipariş satırı rengine uymuyor"
       );
     }
 
@@ -572,8 +572,8 @@ export class AllocationService {
         orderLineId: { not: targetOrderLineId },
         roll: {
           itemId: target.itemId,
-          // Variant uyumu — hedef variant istiyorsa, kaynak topun variant'ı eşleşmeli
-          ...(target.variantId ? { variantId: target.variantId } : {}),
+          // Renk uyumu — hedef renk istiyorsa, kaynak topun rengi eşleşmeli
+          ...(target.colorId ? { colorId: target.colorId } : {}),
           // SERVICE_PRODUCTION: müşteri-malı top sadece sahibinin siparişine
           OR: [
             { ownerCustomerId: null },

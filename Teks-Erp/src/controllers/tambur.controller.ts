@@ -57,7 +57,7 @@ const swatchSchema = z.object({
   count: z.number().int().positive().max(1000),
   purpose: z.string().max(255).nullish(),
   workOrderId: z.string().uuid().nullish(),
-  variantId: z.string().uuid().nullish(),
+  colorId: z.string().uuid().nullish(),
 });
 
 const reportErrorSchema = z.object({
@@ -72,6 +72,23 @@ const postProductionSplitSchema = z.object({
   rollId: z.string().uuid(),
   cutLength: z.number().positive(),
   originalKeepsLarger: z.boolean(),
+});
+
+const cutOpenFabricSchema = z.object({
+  lengthMeters: z.number().positive("Kesim metresi pozitif olmalı"),
+  status: z.enum(["WAREHOUSE", "SCRAP", "A1_STOCK"], {
+    message: "Status WAREHOUSE | SCRAP | A1_STOCK olmalı",
+  }),
+  qualityGrade: z.string().max(50).optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+const finalizeOpenFabricSchema = z.object({
+  scrapRemaining: z.boolean().optional(),
+  notes: z.string().max(1000).optional().nullable(),
+  // Tambur kararı — WO planlaması override (verilmezse WO.foldType/layerCount kullanılır).
+  foldType: z.string().trim().max(32).optional().nullable(),
+  layerCount: z.number().int().positive().max(20).optional().nullable(),
 });
 
 export class TamburController {
@@ -93,6 +110,44 @@ export class TamburController {
     this.postProductionSplit = this.postProductionSplit.bind(this);
     this.getSwatchByBarcode = this.getSwatchByBarcode.bind(this);
     this.listRecentOutputRolls = this.listRecentOutputRolls.bind(this);
+    this.cutOpenFabric = this.cutOpenFabric.bind(this);
+    this.finalizeOpenFabric = this.finalizeOpenFabric.bind(this);
+    this.getTamburContext = this.getTamburContext.bind(this);
+  }
+
+  /** POST /api/tambur/:id/cut */
+  async cutOpenFabric(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const body = cutOpenFabricSchema.parse(req.body);
+      const result = await this.service.cutOpenFabric(id, body, req.user?.userId);
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/tambur/:id/finalize-open-fabric */
+  async finalizeOpenFabric(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const body = finalizeOpenFabricSchema.parse(req.body);
+      const result = await this.service.finalizeOpenFabric(id, body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/tambur/context/:cardBarcode */
+  async getTamburContext(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const cardBarcode = req.params.cardBarcode as string;
+      const result = await this.service.getTamburContext(cardBarcode);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
   }
 
   /** GET /api/tambur/recent-output-rolls?workOrderId=&limit= */
@@ -266,7 +321,7 @@ export class TamburController {
           count: body.count,
           purpose: body.purpose ?? null,
           workOrderId: body.workOrderId ?? null,
-          variantId: body.variantId ?? null,
+          colorId: body.colorId ?? null,
         },
         req.user?.userId
       );

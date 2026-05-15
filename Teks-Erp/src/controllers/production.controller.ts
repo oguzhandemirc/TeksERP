@@ -30,6 +30,11 @@ const reportErrorSchema = z.object({
   errorType: z.string().optional(),
 });
 
+const undoStepFinishSchema = z.object({
+  rollId: z.string().uuid("Geçersiz top ID"),
+  stepId: z.string().uuid("Geçersiz adım ID"),
+});
+
 export class ProductionController {
   private service: ProductionService;
 
@@ -39,6 +44,7 @@ export class ProductionController {
     this.getActiveSteps = this.getActiveSteps.bind(this);
     this.reportError = this.reportError.bind(this);
     this.getStepInfo = this.getStepInfo.bind(this);
+    this.undoStepFinish = this.undoStepFinish.bind(this);
   }
 
   /**
@@ -96,6 +102,20 @@ export class ProductionController {
       const body = reportErrorSchema.parse(req.body);
       const result = await this.service.reportError(body, req.user?.userId);
       res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/production/undo-step-finish
+   * Operatör finish hatasını geri al (rulo bazlı).
+   */
+  async undoStepFinish(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = undoStepFinishSchema.parse(req.body);
+      const result = await this.service.undoStepFinish(body, req.user?.userId);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }

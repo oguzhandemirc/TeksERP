@@ -12,12 +12,15 @@ const createSchema = z.object({
   type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION", "SAMPLE_PRODUCTION", "REPAIR_REWORK"]).default("ORDER_PRODUCTION"),
   width:             z.number().positive("En değeri pozitif olmalı").optional().nullable(),
   targetQuantity:    z.number().positive().optional().nullable(),
-  recipeNo:          z.string().max(100).optional().nullable(),
   parameters:        z.record(z.string(), z.unknown()).optional().nullable(),
   plannedStartDate:  z.string().optional().nullable(),
   plannedEndDate:    z.string().optional().nullable(),
   routeTemplateId:   z.string().uuid().optional().nullable(),
   targetItemId:      z.string().uuid().optional().nullable(),
+  targetColorId:     z.string().uuid().optional().nullable(),
+  // Tambur planlama bilgisi — operatör override edebilir.
+  foldType:          z.string().trim().max(32).optional().nullable(),
+  layerCount:        z.number().int().positive().max(20).optional().nullable(),
   steps: z
     .array(z.object({
       stationId:              z.string().uuid("Geçersiz istasyon ID"),
@@ -77,10 +80,12 @@ const updateWorkOrderSchema = z.object({
   batchNumber: z.string().trim().min(1).max(64).optional(),
   width: z.number().positive().nullable().optional(),
   targetQuantity: z.number().positive().nullable().optional(),
-  recipeNo: z.string().max(100).nullable().optional(),
   plannedStartDate: z.string().nullable().optional(),
   plannedEndDate: z.string().nullable().optional(),
   targetItemId: z.string().uuid().nullable().optional(),
+  targetColorId: z.string().uuid().nullable().optional(),
+  foldType: z.string().trim().max(32).nullable().optional(),
+  layerCount: z.number().int().positive().max(20).nullable().optional(),
 });
 
 /**
@@ -92,14 +97,19 @@ const replaceWorkOrderSchema = z.object({
   type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION", "SAMPLE_PRODUCTION", "REPAIR_REWORK"]).optional(),
   width:             z.number().positive("En değeri pozitif olmalı").optional().nullable(),
   targetQuantity:    z.number().positive().optional().nullable(),
-  recipeNo:          z.string().max(100).optional().nullable(),
   parameters:        z.record(z.string(), z.unknown()).optional().nullable(),
   plannedStartDate:  z.string().optional().nullable(),
   plannedEndDate:    z.string().optional().nullable(),
   routeTemplateId:   z.string().uuid().optional().nullable(),
   targetItemId:      z.string().uuid().optional().nullable(),
+  targetColorId:     z.string().uuid().optional().nullable(),
+  foldType:          z.string().trim().max(32).optional().nullable(),
+  layerCount:        z.number().int().positive().max(20).optional().nullable(),
   steps: z
     .array(z.object({
+      // smart-merge için: mevcut step'i güncellemek istersen id gönder.
+      // Boş bırakırsan yeni adım eklenir.
+      id:                     z.string().uuid().optional(),
       stationId:              z.string().uuid("Geçersiz istasyon ID"),
       notes:                  z.string().max(500).optional().nullable(),
       requiredCategoryId:     z.string().uuid().optional().nullable(),

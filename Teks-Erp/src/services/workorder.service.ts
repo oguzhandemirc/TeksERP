@@ -46,8 +46,33 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { TravelerCardService } from "./traveler-card.service";
+import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 
 const travelerCardService = new TravelerCardService();
+
+/**
+ * plannedStartDate / plannedEndDate default'ları:
+ *   - Başlangıç verilmediyse şimdi.
+ *   - Termin verilmediyse başlangıç + N gün (N tanımlardan
+ *     `workorder.defaultPlanDurationDays`; yoksa 7).
+ * CREATE ve full-update (replace) akışında çağrılır; partial header update
+ * (updatePlanning) bu default'u UYGULAMAZ — operatör explicit null ile temizler.
+ */
+async function resolvePlanDates(
+  startInput: string | Date | null | undefined,
+  endInput: string | Date | null | undefined,
+): Promise<{ plannedStartDate: Date; plannedEndDate: Date }> {
+  const plannedStartDate = startInput ? new Date(startInput) : new Date();
+  let plannedEndDate: Date;
+  if (endInput) {
+    plannedEndDate = new Date(endInput);
+  } else {
+    const days = await readWorkOrderDefaultPlanDurationDays();
+    plannedEndDate = new Date(plannedStartDate);
+    plannedEndDate.setDate(plannedEndDate.getDate() + days);
+  }
+  return { plannedStartDate, plannedEndDate };
+}
 
 // Phase 1: WO açılış/iptali artık order status'a dokunmuyor. IN_PRODUCTION
 // statü olarak kaldırıldı; "üretim sürüyor mu?" sorusu line.workOrderLinks
@@ -58,23 +83,37 @@ export interface WorkOrderCreateInput {
   type?:              string;
   width?:             number | null;
   targetQuantity?:    number | null;
-  recipeNo?:          string | null;
   parameters?:        Record<string, unknown> | null;
   plannedStartDate?:  string | null;
   plannedEndDate?:    string | null;
   routeTemplateId?:   string | null;
   targetItemId?:      string | null;
+  /** Hedef renk — "renk veren" fason adımının (appliesColor=true) Fason
+   *  Kabul'ünde Roll.colorId'ye kopyalanır. ORDER_PRODUCTION'da orderLine'dan
+   *  auto-pull edilir; STOCK_PRODUCTION'da manuel zorunlu olabilir. */
+  targetColorId?:     string | null;
+  /** Tambur planlama bilgisi — "2-KAT" / "4-KAT" gibi. Tambur'a bilgi olarak
+   *  iletilir; operatör finalize sırasında override edebilir. */
+  foldType?:          string | null;
+  /** Tambur planlama bilgisi — toplam katman sayısı. Operatör override
+   *  edebilir. */
+  layerCount?:        number | null;
   /**
-   * Üretim çıktısı rulolarda olacak özellikler. Tambur'da finalize sırasında
-   * Roll.properties'e bindirilir. Item.allowedProperties dolu ise bu liste
-   * onun alt kümesi olmalı.
+   * Üretim çıktısı rulolarda olacak özellikler. "Renk veren" fason adımının
+   * Fason Kabul'ünde Roll.properties'e bindirilir. Item.allowedProperties
+   * dolu ise bu liste onun alt kümesi olmalı.
    */
   targetPropertyIds?: string[];
   /**
    * Rota adımları — routeTemplateId verilmezse zorunlu.
    * Şablon verilirse bu alan override için kullanılabilir.
+   *
+   * `id` opsiyonel: replace akışında smart-merge için kullanılır. Mevcut bir
+   * step'i güncelletmek istersen id'yi gönder; yeni adım için id boş bırak.
+   * (create akışında id yok sayılır.)
    */
   steps?: {
+    id?: string;
     stationId: string;
     notes?: string | null;
     requiredCategoryId?: string | null;
@@ -249,11 +288,13 @@ export class WorkOrderService {
       }
     }
 
-    // ORDER_PRODUCTION'da hedef ürünü orderLine'lardan otomatik türet/doğrula
+    // ORDER_PRODUCTION'da hedef ürün+renk+özellikleri orderLine'lardan otomatik
+    // türet/doğrula. Tüm bağlı satırların aynı item+color olması beklenir.
+    let resolvedTargetColorId: string | null = data.targetColorId ?? null;
     if (type === "ORDER_PRODUCTION" && allocations.length > 0) {
       const orderLineItems = await prisma.orderLine.findMany({
         where: { id: { in: allocations.map((a) => a.orderLineId) } },
-        select: { id: true, itemId: true },
+        select: { id: true, itemId: true, colorId: true },
       });
       const distinctItems = new Set(orderLineItems.map((l) => l.itemId));
       if (distinctItems.size === 1) {
@@ -269,14 +310,32 @@ export class WorkOrderService {
           "Sipariş satırları farklı ürünler içeriyor; hedef ürünü açıkça belirtin"
         );
       }
+
+      const distinctColors = new Set(orderLineItems.map((l) => l.colorId));
+      if (distinctColors.size === 1) {
+        const onlyColorId = Array.from(distinctColors)[0];
+        if (
+          data.targetColorId !== undefined &&
+          data.targetColorId !== onlyColorId
+        ) {
+          throw AppError.badRequest(
+            "Hedef renk, sipariş satırlarındaki renk ile uyuşmuyor",
+          );
+        }
+        resolvedTargetColorId = onlyColorId;
+      } else if (distinctColors.size > 1 && data.targetColorId === undefined) {
+        throw AppError.badRequest(
+          "Sipariş satırları farklı renkler içeriyor; hedef rengi açıkça belirtin",
+        );
+      }
     }
 
-    // ── Hedef Item + targetProperties doğrulamaları ───────────────────────
+    // ── Hedef Item + targetColor + targetProperties doğrulamaları ────────
     // 1) ORDER_PRODUCTION'da targetPropertyIds verilmediyse, bağlı OrderLine'ların
     //    requiredProperties birleşimi otomatik kullanılır (planlamacı override edebilir).
-    // 2) Item allowed listesi dolu ise targetPropertyIds o setin alt kümesi olmalı
-    // 3) Yetkinlik: Item.colorId ve her hedef özellik için rotadaki adımlardan
-    //    en az birinde StationColor/StationProperty olmalı
+    // 2) Item allowed listeleri dolu ise targetColor/Property o setin alt kümesi olmalı.
+    // 3) targetColorId set edilmişse, rotada appliesColor=true en az bir adım olmalı
+    //    (yoksa renk asla uygulanmaz → planlama hatası).
     let targetPropertyIds = [...new Set(data.targetPropertyIds ?? [])];
     if (
       targetPropertyIds.length === 0 &&
@@ -295,12 +354,31 @@ export class WorkOrderService {
       const targetItemFull = await prisma.item.findUnique({
         where: { id: resolvedTargetItemId },
         select: {
-          colorId: true,
-          isDerived: true,
+          allowedColors: { select: { colorId: true } },
           allowedProperties: { select: { propertyId: true } },
         },
       });
 
+      // Renk allowed list kontrolü
+      if (resolvedTargetColorId) {
+        const colorRow = await prisma.color.findUnique({
+          where: { id: resolvedTargetColorId },
+          select: { isActive: true, name: true },
+        });
+        if (!colorRow || !colorRow.isActive) {
+          throw AppError.badRequest("Hedef renk bulunamadı veya pasif");
+        }
+        const allowedColorSet = new Set(
+          (targetItemFull?.allowedColors ?? []).map((c) => c.colorId),
+        );
+        if (allowedColorSet.size > 0 && !allowedColorSet.has(resolvedTargetColorId)) {
+          throw AppError.badRequest(
+            `'${colorRow.name}' rengi bu ürüne uygulanabilir renk listesinde değil`,
+          );
+        }
+      }
+
+      // Özellik allowed list kontrolü
       if (targetPropertyIds.length > 0) {
         const propRows = await prisma.fabricProperty.findMany({
           where: { id: { in: targetPropertyIds }, isActive: true },
@@ -323,38 +401,24 @@ export class WorkOrderService {
         }
       }
 
-      if (targetItemFull?.isDerived) {
-        const stepStationIds = finalSteps.map((s) => s.stationId);
-
-        if (targetItemFull.colorId) {
-          const cap = await prisma.stationColor.findFirst({
-            where: {
-              colorId: targetItemFull.colorId,
-              stationId: { in: stepStationIds },
-            },
-            select: { id: true },
-          });
-          if (!cap) {
-            throw AppError.badRequest(
-              "Hedef ürünün rengini uygulayabilecek bir istasyon rotada yok. Yetkinlik tanımlayın veya rota seçin.",
-            );
-          }
+      // "Renk veren" adım var mı? (appliesColor=true bir SubcontractorCategory'e bağlı step)
+      if (resolvedTargetColorId) {
+        const stepCategoryIds = finalSteps
+          .map((s) => s.requiredCategoryId)
+          .filter((c): c is string => !!c);
+        if (stepCategoryIds.length === 0) {
+          throw AppError.badRequest(
+            "Hedef renk seçildi ama rotada hiç fason kategorisi tanımlı değil. Renk uygulayabilecek bir adım gerekiyor.",
+          );
         }
-
-        for (const propId of targetPropertyIds) {
-          const cap = await prisma.stationProperty.findFirst({
-            where: { propertyId: propId, stationId: { in: stepStationIds } },
-            select: { id: true },
-          });
-          if (!cap) {
-            const propName = await prisma.fabricProperty.findUnique({
-              where: { id: propId },
-              select: { name: true },
-            });
-            throw AppError.badRequest(
-              `'${propName?.name ?? propId}' özelliğini uygulayabilecek bir istasyon rotada yok. Yetkinlik tanımlayın veya rota seçin.`,
-            );
-          }
+        const colorGivingCategory = await prisma.subcontractorCategory.findFirst({
+          where: { id: { in: stepCategoryIds }, appliesColor: true },
+          select: { id: true },
+        });
+        if (!colorGivingCategory) {
+          throw AppError.badRequest(
+            "Rotada 'renk veren' fason kategorisi (appliesColor=true) tanımlı değil. Boyahane gibi bir adım eklenmeli.",
+          );
         }
       }
     }
@@ -404,19 +468,26 @@ export class WorkOrderService {
         }
       }
 
+      const planDates = await resolvePlanDates(
+        data.plannedStartDate,
+        data.plannedEndDate,
+      );
+
       const wo = await tx.workOrder.create({
         data: {
           batchNumber,
           type,
           width:             data.width          ?? null,
           targetQuantity:    data.targetQuantity ?? null,
-          recipeNo:          data.recipeNo       ?? null,
           parameters:        (data.parameters as Prisma.InputJsonValue) ?? undefined,
           status:            WorkOrderStatus.PLANNED,
-          plannedStartDate:  data.plannedStartDate ? new Date(data.plannedStartDate) : null,
-          plannedEndDate:    data.plannedEndDate   ? new Date(data.plannedEndDate)   : null,
+          plannedStartDate:  planDates.plannedStartDate,
+          plannedEndDate:    planDates.plannedEndDate,
           routeTemplateId:   data.routeTemplateId   ?? null,
           targetItemId:      resolvedTargetItemId,
+          targetColorId:     resolvedTargetColorId,
+          foldType:          data.foldType          ?? null,
+          layerCount:        data.layerCount        ?? null,
           steps: {
             create: finalSteps.map((step, index) => ({
               stationId:              step.stationId,
@@ -452,7 +523,7 @@ export class WorkOrderService {
                 include: {
                   order: { include: { customer: true } },
                   item: true,
-                  variant: true,
+                  color: true,
                 },
               },
             },
@@ -481,12 +552,12 @@ export class WorkOrderService {
         batchNumber:        workOrder.batchNumber,
         type:               workOrder.type,
         width:              workOrder.width,
-        recipeNo:           workOrder.recipeNo,
         status:             workOrder.status,
         stepCount:          finalSteps.length,
         routeTemplateId:    workOrder.routeTemplateId,
         allocationCount:    allocations.length,
         targetItemId:       workOrder.targetItemId,
+        targetColorId:      workOrder.targetColorId,
         targetPropertyIds,
       },
     });
@@ -527,11 +598,11 @@ export class WorkOrderService {
       status: true,
       width: true,
       targetQuantity: true,
-      recipeNo: true,
       plannedStartDate: true,
       plannedEndDate: true,
       routeTemplateId: true,
       targetItemId: true,
+      targetColorId: true,
       servicePricePerMeter: true,
       createdAt: true,
       updatedAt: true,
@@ -553,7 +624,7 @@ export class WorkOrderService {
                   select: {
                     id: true,
                     item: { select: { id: true, name: true } },
-                    variant: { select: { id: true, name: true } },
+                    color: { select: { id: true, name: true } },
                     order: { select: { id: true, deadline: true } },
                   },
                 },
@@ -637,11 +708,8 @@ export class WorkOrderService {
     const wo = await prisma.workOrder.findUnique({
       where: { id },
       include: {
-        targetItem: {
-          include: {
-            color: true,
-          },
-        },
+        targetItem: true,
+        targetColor: true,
         targetProperties: { include: { property: true } },
         steps: {
           include: {
@@ -656,8 +724,8 @@ export class WorkOrderService {
             orderLine: {
               include: {
                 order: { include: { customer: true } },
-                item: { include: { color: true } },
-                variant: true,
+                item: true,
+                color: true,
                 requiredProperties: { include: { property: true } },
               },
             },
@@ -1040,9 +1108,12 @@ export class WorkOrderService {
       throw AppError.notFound("İş emri bulunamadı");
     }
 
-    if (wo.status !== WorkOrderStatus.PLANNED) {
+    if (
+      wo.status === WorkOrderStatus.COMPLETED ||
+      wo.status === WorkOrderStatus.CANCELLED
+    ) {
       throw AppError.conflict(
-        `Sadece 'Planlandı' durumundaki iş emrine top bağlanabilir (mevcut: ${wo.status}).`
+        `Tamamlanmış/iptal edilmiş iş emrine top bağlanamaz (durum: ${wo.status}).`,
       );
     }
 
@@ -1065,7 +1136,7 @@ export class WorkOrderService {
         ? [RollStatus.STOCK, RollStatus.PRODUCED, RollStatus.READY_FOR_SHIP]
         : [RollStatus.STOCK];
 
-    const attached: { id: string; barcode: string; prevStatus: RollStatus; qtyIn: number }[] = [];
+    const attached: { id: string; barcode: string | null; prevStatus: RollStatus; qtyIn: number }[] = [];
     const errorMessages: string[] = [];
 
     await prisma.$transaction(async (tx) => {
@@ -1199,9 +1270,15 @@ export class WorkOrderService {
   }
 
   /**
-   * İş emrinin temel alanlarını günceller. Sadece PLANNED durumdayken
-   * değiştirilebilir (üretim başladıktan sonra parti no, hedef metraj vb. dondurulur).
-   * Steps/orderLinks/targetItem gibi karmaşık ilişkiler bu endpoint'in scope'unda DEĞİL.
+   * İş emrinin temel alanlarını günceller. Planlamacının kontrolünde — üretim
+   * sırasında değişikliklere izin verilir (örn. boyahane mavi yerine kırmızı
+   * boyasın denildi → targetColorId değişir; henüz colorId almamış rulolar
+   * Fason Kabul'de yeni rengi otomatik alır). Sadece COMPLETED/CANCELLED
+   * iş emirlerinde değişiklik yapılamaz (geriye dönük tutarlılık).
+   *
+   * Steps/orderLinks/targetProperties gibi koleksiyonlar bu endpoint'in
+   * scope'unda DEĞİL — onlar için `replace`/`updateStepPlanning`/
+   * `updateTargetProperties` kullan.
    */
   async update(
     id: string,
@@ -1209,18 +1286,23 @@ export class WorkOrderService {
       batchNumber?: string;
       width?: number | null;
       targetQuantity?: number | null;
-      recipeNo?: string | null;
       plannedStartDate?: string | null;
       plannedEndDate?: string | null;
       targetItemId?: string | null;
+      targetColorId?: string | null;
+      foldType?: string | null;
+      layerCount?: number | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     const wo = await prisma.workOrder.findUnique({ where: { id } });
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
-    if (wo.status !== WorkOrderStatus.PLANNED) {
+    if (
+      wo.status === WorkOrderStatus.COMPLETED ||
+      wo.status === WorkOrderStatus.CANCELLED
+    ) {
       throw AppError.conflict(
-        `Üretim başlamış iş emri düzenlenemez (durum: ${wo.status}). Sadece PLANNED durumdaki iş emirleri.`
+        `Tamamlanmış/iptal edilmiş iş emri düzenlenemez (durum: ${wo.status}).`,
       );
     }
 
@@ -1239,6 +1321,15 @@ export class WorkOrderService {
         throw AppError.badRequest("Hedef ürün bulunamadı veya pasif");
       }
     }
+    if (data.targetColorId) {
+      const color = await prisma.color.findUnique({
+        where: { id: data.targetColorId },
+        select: { isActive: true },
+      });
+      if (!color || !color.isActive) {
+        throw AppError.badRequest("Hedef renk bulunamadı veya pasif");
+      }
+    }
 
     const updated = await prisma.workOrder.update({
       where: { id },
@@ -1246,7 +1337,6 @@ export class WorkOrderService {
         batchNumber: data.batchNumber ?? undefined,
         width: data.width ?? undefined,
         targetQuantity: data.targetQuantity ?? undefined,
-        recipeNo: data.recipeNo,
         plannedStartDate: data.plannedStartDate
           ? new Date(data.plannedStartDate)
           : data.plannedStartDate === null
@@ -1258,6 +1348,9 @@ export class WorkOrderService {
             ? null
             : undefined,
         targetItemId: data.targetItemId === undefined ? undefined : data.targetItemId,
+        targetColorId: data.targetColorId === undefined ? undefined : data.targetColorId,
+        foldType: data.foldType === undefined ? undefined : data.foldType,
+        layerCount: data.layerCount === undefined ? undefined : data.layerCount,
       },
     });
 
@@ -1273,11 +1366,20 @@ export class WorkOrderService {
   }
 
   /**
-   * İş emrini tüm ilişkileri ile birlikte yeniden yazar. Sadece PLANNED ve
-   * üretime başlanmamış (hiçbir Roll WO'nun step'lerine bağlanmamış) iş emirleri
-   * tam düzenlenebilir; rota/kalemler/hedef ürün/özellikler hepsi değişebilir.
-   * Mevcut WorkOrderStep, WorkOrderToOrderLine, WorkOrderTargetProperty drop-and-recreate
-   * pattern'i ile yenilenir. Validasyon mantığı `create()` ile aynı.
+   * İş emrini tüm ilişkileri ile birlikte yeniden yazar. Planlamacının
+   * kontrolünde — üretim sırasında değişikliklere izin verilir. Sadece
+   * COMPLETED/CANCELLED iş emirlerinde yapılamaz.
+   *
+   * Smart merge stratejisi (rota için):
+   * - `steps[i].id` mevcut step'i işaret ediyorsa → güncellenir (notes,
+   *   stationId, sequence, requiredCategoryId, plannedSubcontractorId).
+   * - `steps[i].id` boşsa → yeni step eklenir.
+   * - Mevcut listede olup yeni listede olmayan step → status=PENDING ve
+   *   hiçbir bağlı kayıt (rulo, movement, dispatch, vb.) yoksa silinir;
+   *   aksi halde "tamamlanmış/aktif/bağlı adım silinemez" hatası.
+   *
+   * orderLinks ve targetProperties drop-and-recreate (sadece M:N kayıtları;
+   * OrderAllocation'lar dokunulmaz, fulfillment ayrı katmandadır).
    */
   async replace(
     id: string,
@@ -1286,37 +1388,23 @@ export class WorkOrderService {
   ): Promise<ApiResponse<WorkOrder>> {
     const existing = await prisma.workOrder.findUnique({
       where: { id },
-      include: { steps: { select: { id: true } } },
     });
     if (!existing) throw AppError.notFound("İş emri bulunamadı");
-    if (existing.status !== WorkOrderStatus.PLANNED) {
+    if (
+      existing.status === WorkOrderStatus.COMPLETED ||
+      existing.status === WorkOrderStatus.CANCELLED
+    ) {
       throw AppError.conflict(
-        `Üretim başlamış iş emri düzenlenemez (durum: ${existing.status}). Sadece PLANNED durumdaki iş emirleri.`,
+        `Tamamlanmış/iptal edilmiş iş emri düzenlenemez (durum: ${existing.status}).`,
       );
-    }
-
-    // Üretim başlamış mı? Step'lere bağlı bir top varsa düzenleme yasak.
-    const existingStepIds = existing.steps.map((s) => s.id);
-    if (existingStepIds.length > 0) {
-      const inFlightCount = await prisma.roll.count({
-        where: {
-          OR: [
-            { producedInStepId: { in: existingStepIds } },
-            { currentStepId: { in: existingStepIds } },
-          ],
-        },
-      });
-      if (inFlightCount > 0) {
-        throw AppError.conflict(
-          "Üretime başlanmış — bu iş emrine top bağlı, düzenleme yapılamaz",
-        );
-      }
     }
 
     const type = (data.type as WorkOrder["type"]) ?? existing.type;
 
     // ── Rota adımlarını hazırla (şablondan veya raw'dan) — create() ile aynı.
+    // `id?` smart-merge için propagasyonla taşınır; routeTemplate'tan gelenler id'siz.
     let finalSteps: {
+      id?: string;
       stationId: string;
       notes: string | null;
       requiredCategoryId?: string | null;
@@ -1356,6 +1444,7 @@ export class WorkOrderService {
         );
       }
       finalSteps = data.steps.map((s) => ({
+        id: s.id,
         stationId: s.stationId,
         notes: s.notes ?? null,
         requiredCategoryId: s.requiredCategoryId ?? null,
@@ -1402,10 +1491,11 @@ export class WorkOrderService {
       }
     }
 
+    let resolvedTargetColorId: string | null = data.targetColorId ?? null;
     if (type === "ORDER_PRODUCTION" && allocations.length > 0) {
       const orderLineItems = await prisma.orderLine.findMany({
         where: { id: { in: allocations.map((a) => a.orderLineId) } },
-        select: { id: true, itemId: true },
+        select: { id: true, itemId: true, colorId: true },
       });
       const distinctItems = new Set(orderLineItems.map((l) => l.itemId));
       if (distinctItems.size === 1) {
@@ -1419,6 +1509,24 @@ export class WorkOrderService {
       } else if (distinctItems.size > 1 && !resolvedTargetItemId) {
         throw AppError.badRequest(
           "Sipariş satırları farklı ürünler içeriyor; hedef ürünü açıkça belirtin",
+        );
+      }
+
+      const distinctColors = new Set(orderLineItems.map((l) => l.colorId));
+      if (distinctColors.size === 1) {
+        const onlyColorId = Array.from(distinctColors)[0];
+        if (
+          data.targetColorId !== undefined &&
+          data.targetColorId !== onlyColorId
+        ) {
+          throw AppError.badRequest(
+            "Hedef renk, sipariş satırlarındaki renk ile uyuşmuyor",
+          );
+        }
+        resolvedTargetColorId = onlyColorId;
+      } else if (distinctColors.size > 1 && data.targetColorId === undefined) {
+        throw AppError.badRequest(
+          "Sipariş satırları farklı renkler içeriyor; hedef rengi açıkça belirtin",
         );
       }
     }
@@ -1442,11 +1550,28 @@ export class WorkOrderService {
       const targetItemFull = await prisma.item.findUnique({
         where: { id: resolvedTargetItemId },
         select: {
-          colorId: true,
-          isDerived: true,
+          allowedColors: { select: { colorId: true } },
           allowedProperties: { select: { propertyId: true } },
         },
       });
+
+      if (resolvedTargetColorId) {
+        const colorRow = await prisma.color.findUnique({
+          where: { id: resolvedTargetColorId },
+          select: { isActive: true, name: true },
+        });
+        if (!colorRow || !colorRow.isActive) {
+          throw AppError.badRequest("Hedef renk bulunamadı veya pasif");
+        }
+        const allowedColorSet = new Set(
+          (targetItemFull?.allowedColors ?? []).map((c) => c.colorId),
+        );
+        if (allowedColorSet.size > 0 && !allowedColorSet.has(resolvedTargetColorId)) {
+          throw AppError.badRequest(
+            `'${colorRow.name}' rengi bu ürüne uygulanabilir renk listesinde değil`,
+          );
+        }
+      }
 
       if (targetPropertyIds.length > 0) {
         const propRows = await prisma.fabricProperty.findMany({
@@ -1469,33 +1594,23 @@ export class WorkOrderService {
         }
       }
 
-      if (targetItemFull?.isDerived) {
-        const stepStationIds = finalSteps.map((s) => s.stationId);
-        if (targetItemFull.colorId) {
-          const cap = await prisma.stationColor.findFirst({
-            where: { colorId: targetItemFull.colorId, stationId: { in: stepStationIds } },
-            select: { id: true },
-          });
-          if (!cap) {
-            throw AppError.badRequest(
-              "Hedef ürünün rengini uygulayabilecek bir istasyon rotada yok. Yetkinlik tanımlayın veya rota seçin.",
-            );
-          }
+      if (resolvedTargetColorId) {
+        const stepCategoryIds = finalSteps
+          .map((s) => s.requiredCategoryId)
+          .filter((c): c is string => !!c);
+        if (stepCategoryIds.length === 0) {
+          throw AppError.badRequest(
+            "Hedef renk seçildi ama rotada hiç fason kategorisi tanımlı değil. Renk uygulayabilecek bir adım gerekiyor.",
+          );
         }
-        for (const propId of targetPropertyIds) {
-          const cap = await prisma.stationProperty.findFirst({
-            where: { propertyId: propId, stationId: { in: stepStationIds } },
-            select: { id: true },
-          });
-          if (!cap) {
-            const propName = await prisma.fabricProperty.findUnique({
-              where: { id: propId },
-              select: { name: true },
-            });
-            throw AppError.badRequest(
-              `'${propName?.name ?? propId}' özelliğini uygulayabilecek bir istasyon rotada yok. Yetkinlik tanımlayın veya rota seçin.`,
-            );
-          }
+        const colorGivingCategory = await prisma.subcontractorCategory.findFirst({
+          where: { id: { in: stepCategoryIds }, appliesColor: true },
+          select: { id: true },
+        });
+        if (!colorGivingCategory) {
+          throw AppError.badRequest(
+            "Rotada 'renk veren' fason kategorisi (appliesColor=true) tanımlı değil. Boyahane gibi bir adım eklenmeli.",
+          );
         }
       }
     }
@@ -1505,7 +1620,7 @@ export class WorkOrderService {
         ? data.batchNumber.trim()
         : existing.batchNumber;
 
-    // ── Transaction: drop-and-recreate ───────────────────────────────────────
+    // ── Transaction: smart merge (steps id-bazlı diff) ───────────────────────
     const updated = await prisma.$transaction(async (tx) => {
       // Overbooking guard (kendi mevcut link'lerini hariç tutarak)
       if (allocations.length > 0) {
@@ -1545,10 +1660,93 @@ export class WorkOrderService {
         }
       }
 
-      // Çocuk kayıtları sil — hiçbir Roll bağlı olmadığı için FK güvenli.
-      await tx.workOrderStep.deleteMany({ where: { workOrderId: id } });
+      // ── Step diff (smart merge) ─────────────────────────────────────────
+      // Mevcut step'leri çek + bağlı kayıt sayılarını topla.
+      const existingStepRows = await tx.workOrderStep.findMany({
+        where: { workOrderId: id },
+        select: {
+          id: true,
+          stepSequence: true,
+          status: true,
+          _count: {
+            select: {
+              movements: true,
+              cardScans: true,
+              dispatches: true,
+              receipts: true,
+              operations: true,
+              currentRolls: true,
+              producedRolls: true,
+              detectedErrors: true,
+              processedErrors: true,
+            },
+          },
+        },
+      });
+      const existingStepById = new Map(existingStepRows.map((s) => [s.id, s]));
+      const incomingExistingIds = new Set(
+        finalSteps
+          .map((s) => s.id)
+          .filter((sid): sid is string => !!sid && existingStepById.has(sid)),
+      );
+
+      // 1) Yeni listede olmayan eski step'leri sil — sadece PENDING + bağlısız.
+      for (const old of existingStepRows) {
+        if (incomingExistingIds.has(old.id)) continue;
+        if (old.status !== "PENDING") {
+          throw AppError.conflict(
+            `Adım ${old.stepSequence} silinemez — durum ${old.status} (sadece PENDING adımlar silinebilir).`,
+          );
+        }
+        const refCount = Object.values(old._count).reduce((a, b) => a + (b as number), 0);
+        if (refCount > 0) {
+          throw AppError.conflict(
+            `Adım ${old.stepSequence} silinemez — bağlı kayıtlar var (rulo/movement/sevk vs).`,
+          );
+        }
+        await tx.workOrderStep.delete({ where: { id: old.id } });
+      }
+
+      // 2) Step'leri güncelle veya ekle. stepSequence yeni listedeki indeks
+      //    bazlı yeniden numaralandırılır. (workOrderId, stepSequence)
+      //    üzerinde unique kısıtı olmadığı için iki-aşamalı güncelleme gerekmez.
+      for (const [index, incoming] of finalSteps.entries()) {
+        const stepSequence = index + 1;
+        if (incoming.id && existingStepById.has(incoming.id)) {
+          await tx.workOrderStep.update({
+            where: { id: incoming.id },
+            data: {
+              stationId: incoming.stationId,
+              stepSequence,
+              notes: incoming.notes,
+              requiredCategoryId: incoming.requiredCategoryId ?? null,
+              plannedSubcontractorId: incoming.plannedSubcontractorId ?? null,
+            },
+          });
+        } else {
+          await tx.workOrderStep.create({
+            data: {
+              workOrderId: id,
+              stationId: incoming.stationId,
+              stepSequence,
+              notes: incoming.notes,
+              requiredCategoryId: incoming.requiredCategoryId ?? null,
+              plannedSubcontractorId: incoming.plannedSubcontractorId ?? null,
+            },
+          });
+        }
+      }
+
+      // ── orderLinks ve targetProperties drop-and-recreate ────────────────
+      // Bunlar başka tablolardan FK ile referanslanmaz — güvenli.
+      // OrderAllocation (Roll → OrderLine) AYRIDIR, dokunulmaz.
       await tx.workOrderToOrderLine.deleteMany({ where: { workOrderId: id } });
       await tx.workOrderTargetProperty.deleteMany({ where: { workOrderId: id } });
+
+      const planDates = await resolvePlanDates(
+        data.plannedStartDate,
+        data.plannedEndDate,
+      );
 
       const wo = await tx.workOrder.update({
         where: { id },
@@ -1557,21 +1755,14 @@ export class WorkOrderService {
           type,
           width: data.width ?? null,
           targetQuantity: data.targetQuantity ?? null,
-          recipeNo: data.recipeNo ?? null,
           parameters: (data.parameters as Prisma.InputJsonValue) ?? undefined,
-          plannedStartDate: data.plannedStartDate ? new Date(data.plannedStartDate) : null,
-          plannedEndDate: data.plannedEndDate ? new Date(data.plannedEndDate) : null,
+          plannedStartDate: planDates.plannedStartDate,
+          plannedEndDate: planDates.plannedEndDate,
           routeTemplateId: data.routeTemplateId ?? null,
           targetItemId: resolvedTargetItemId,
-          steps: {
-            create: finalSteps.map((step, index) => ({
-              stationId: step.stationId,
-              stepSequence: index + 1,
-              notes: step.notes,
-              requiredCategoryId: step.requiredCategoryId ?? null,
-              plannedSubcontractorId: step.plannedSubcontractorId ?? null,
-            })),
-          },
+          targetColorId: resolvedTargetColorId,
+          foldType: data.foldType ?? null,
+          layerCount: data.layerCount ?? null,
           ...(allocations.length > 0
             ? {
                 orderLinks: {
@@ -1598,7 +1789,7 @@ export class WorkOrderService {
                 include: {
                   order: { include: { customer: true } },
                   item: true,
-                  variant: true,
+                  color: true,
                 },
               },
             },
@@ -1623,6 +1814,7 @@ export class WorkOrderService {
         routeTemplateId: updated.routeTemplateId,
         allocationCount: allocations.length,
         targetItemId: updated.targetItemId,
+        targetColorId: updated.targetColorId,
         targetPropertyIds,
       },
     });
@@ -1764,8 +1956,9 @@ export class WorkOrderService {
 
   /**
    * EXTERNAL adım planlaması — gerekli kategori ve planlanan firma seçimi.
-   * Sadece adım PENDING'deyken değiştirilebilir; başlamış (ACTIVE) veya
-   * tamamlanmış (COMPLETED/SKIPPED/CANCELLED) adımlar dokunulamaz.
+   * Adım hangi durumda olursa olsun (PENDING/ACTIVE/COMPLETED/SKIPPED/CANCELLED)
+   * planlamacı kategori veya firma değiştirebilir. Tek istisna: WO COMPLETED
+   * veya CANCELLED ise hiçbir değişiklik yapılamaz.
    *
    * Subcontractor seçilirse kategoriye uygun olmalıdır.
    */
@@ -1778,6 +1971,20 @@ export class WorkOrderService {
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    const wo = await prisma.workOrder.findUnique({
+      where: { id: workOrderId },
+      select: { id: true, status: true },
+    });
+    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (
+      wo.status === WorkOrderStatus.COMPLETED ||
+      wo.status === WorkOrderStatus.CANCELLED
+    ) {
+      throw AppError.conflict(
+        `Tamamlanmış/iptal edilmiş iş emrinde adım planlaması değiştirilemez (durum: ${wo.status}).`,
+      );
+    }
+
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
       include: {
@@ -1792,11 +1999,6 @@ export class WorkOrderService {
     if (step.station.type !== "EXTERNAL") {
       throw AppError.badRequest(
         `Sadece fason (EXTERNAL) adımlar planlanabilir. Mevcut: ${step.station.type}`
-      );
-    }
-    if (step.status !== "PENDING") {
-      throw AppError.conflict(
-        `Bu adım planlanamaz (durum: ${step.status}). Sadece beklemedeki adımlar düzenlenebilir.`
       );
     }
 
@@ -1876,10 +2078,15 @@ export class WorkOrderService {
       throw AppError.notFound("İş emri bulunamadı");
     }
 
-    // R4: Sepet mantığı — sadece PLANNED durumdayken top çıkarılabilir.
-    if (wo.status !== WorkOrderStatus.PLANNED) {
+    // Tamamlanmış/iptal edilmiş WO'da değişiklik yapılamaz; diğer durumlarda
+    // planlamacının kontrolünde top çıkarılabilir (örn. yanlış bağlanmış top
+    // boyahaneye gönderildikten sonra fark edildi → çıkar, sevki iptal et).
+    if (
+      wo.status === WorkOrderStatus.COMPLETED ||
+      wo.status === WorkOrderStatus.CANCELLED
+    ) {
       throw AppError.conflict(
-        `Sadece 'Planlandı' durumundaki iş emirlerinden top çıkarılabilir (mevcut: ${wo.status}).`
+        `Tamamlanmış/iptal edilmiş iş emrinden top çıkarılamaz (durum: ${wo.status}).`,
       );
     }
 
@@ -1888,7 +2095,7 @@ export class WorkOrderService {
       throw AppError.badRequest("İş emrinin adımları bulunamadı.");
     }
 
-    const detached: { id: string; barcode: string }[] = [];
+    const detached: { id: string; barcode: string | null }[] = [];
 
     await prisma.$transaction(async (tx) => {
       for (const rollId of rollIds) {
@@ -2001,7 +2208,7 @@ export class WorkOrderService {
           { currentStepId: { in: stepIds } },
         ],
       },
-      include: { item: true, variant: true },
+      include: { item: true, color: true },
       orderBy: { createdAt: "desc" },
     });
 
@@ -2016,6 +2223,7 @@ export class WorkOrderService {
     const wo = await prisma.workOrder.findUnique({
       where: { id: workOrderId },
       include: {
+        targetColor: true,
         steps: {
           include: { station: true },
           orderBy: { stepSequence: "asc" },
@@ -2026,7 +2234,7 @@ export class WorkOrderService {
               include: {
                 order: { include: { customer: true } },
                 item: true,
-                variant: true,
+                color: true,
               },
             },
           },
@@ -2042,7 +2250,9 @@ export class WorkOrderService {
       batchNumber: wo.batchNumber,
       type: wo.type,
       width: wo.width,
-      recipeNo: wo.recipeNo,
+      targetColor: wo.targetColor
+        ? { id: wo.targetColor.id, code: wo.targetColor.code, name: wo.targetColor.name }
+        : null,
       status: wo.status,
       parameters: wo.parameters,
       route: wo.steps.map((step) => ({
@@ -2058,6 +2268,7 @@ export class WorkOrderService {
         orderNumber: link.orderLine.order.orderNumber,
         customerName: link.orderLine.order.customer.name,
         itemName: link.orderLine.item.name,
+        colorName: link.orderLine.color?.name ?? null,
         requestedQty: link.orderLine.quantity,
       })),
       createdAt: wo.createdAt,
@@ -2113,7 +2324,6 @@ export class WorkOrderService {
       batchNumber: wo.batchNumber,
       type: wo.type,
       width: wo.width,
-      recipeNo: wo.recipeNo,
       totalRolls: rolls.length,
       totalMeterage: rolls.reduce((sum, r) => sum + r.currentQty, 0),
       totalWeight: rolls.reduce((sum, r) => sum + (r.weightKg ?? 0), 0),
@@ -2348,7 +2558,7 @@ export class WorkOrderService {
               include: {
                 order: { include: { customer: true } },
                 item: true,
-                variant: true,
+                color: true,
               },
             },
           },

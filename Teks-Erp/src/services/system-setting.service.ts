@@ -15,7 +15,25 @@ const TABLE = "SYSTEM_SETTING";
 
 export const SETTING_KEYS = {
   SHIPPING_TOLERANCE_METERS: "shipping.toleranceMeters",
+  /** Pricing/currency UI'da gösterilsin mi (sipariş ve ileride sevkiyat). */
+  FINANCE_PRICING_ENABLED: "finance.pricingEnabled",
+  /** Sipariş oluştururken termin (deadline) verilmediyse orderDate + N gün. Default 7. */
+  ORDER_DEFAULT_DEADLINE_DAYS: "order.defaultDeadlineDays",
+  /** İş emri oluştururken plannedEndDate verilmediyse plannedStartDate + N gün. Default 7. */
+  WORKORDER_DEFAULT_PLAN_DURATION_DAYS: "workorder.defaultPlanDurationDays",
 } as const;
+
+const DEFAULT_DEADLINE_DAYS = 7;
+
+/**
+ * Tüm public feature flag'lerin tek atışta okunmuş hali. Frontend app
+ * açılışında 1 kez çekip context'e koyar; UI bu flag'lere göre alanları
+ * gösterir/gizler. Backend tarafı feature flag'i ENFORCE ETMEZ — sadece
+ * UI rehberi (admin/test araçları field'ları gönderebilir).
+ */
+export interface FeatureFlags {
+  pricingEnabled: boolean;
+}
 
 export class SystemSettingService {
   async list(): Promise<ApiResponse<unknown[]>> {
@@ -88,6 +106,42 @@ export class SystemSettingService {
     if (!Number.isFinite(parsed) || parsed < 0) return 5;
     return parsed;
   }
+
+  /**
+   * Tüm feature flag'leri tek atışta. Default: tüm flag'ler false (en
+   * konservatif — fabrika fiyat görmek istemiyor şu an).
+   */
+  async getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
+    const flags: FeatureFlags = {
+      pricingEnabled: await readPricingEnabled(),
+    };
+    return { success: true, data: flags };
+  }
+
+  /**
+   * Bir feature flag'i toggle et. Kabul: { pricingEnabled: boolean }.
+   * Verilmeyen alanlar dokunulmaz.
+   */
+  async setFeatureFlags(
+    input: Partial<FeatureFlags>,
+    userId: string | undefined
+  ): Promise<ApiResponse<FeatureFlags>> {
+    if (!userId) throw AppError.unauthorized();
+
+    if (Object.prototype.hasOwnProperty.call(input, "pricingEnabled")) {
+      if (typeof input.pricingEnabled !== "boolean") {
+        throw AppError.badRequest("pricingEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_PRICING_ENABLED,
+        input.pricingEnabled ? "true" : "false",
+        "Sipariş/sevkiyat ekranlarında para birimi + fiyat alanlarını göster",
+        userId
+      );
+    }
+
+    return this.getFeatureFlags();
+  }
 }
 
 // Module-level singleton — helper'lar import edip kullanır.
@@ -109,4 +163,66 @@ export async function readShippingToleranceMeters(
   const parsed = parseFloat(setting.value);
   if (!Number.isFinite(parsed) || parsed < 0) return 5;
   return parsed;
+}
+
+/**
+ * Pricing/currency UI gösterilsin mi? Default false (kayıt yoksa). Frontend
+ * bu flag'e göre order create/list/detail ekranlarındaki currency dropdown +
+ * unitPrice + totalAmount alanlarını render eder.
+ */
+export async function readPricingEnabled(): Promise<boolean> {
+  const setting = await prisma.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_PRICING_ENABLED },
+    select: { value: true },
+  });
+  return setting?.value === "true";
+}
+
+/**
+ * Pozitif tamsayı setting okuyucu — yoksa veya geçersizse default döner.
+ * 0/negatif/NaN/Infinity → default. Float verilirse Math.floor uygulanır.
+ */
+async function readPositiveIntSetting(
+  key: string,
+  fallback: number,
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key },
+    select: { value: true },
+  });
+  if (!setting) return fallback;
+  const parsed = parseFloat(setting.value);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.floor(parsed);
+}
+
+/**
+ * Sipariş termini default gün sayısı. Order.create'de deadline verilmediyse
+ * orderDate + N gün hesaplanır. Yoksa/geçersizse 7.
+ */
+export async function readOrderDefaultDeadlineDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  return readPositiveIntSetting(
+    SETTING_KEYS.ORDER_DEFAULT_DEADLINE_DAYS,
+    DEFAULT_DEADLINE_DAYS,
+    tx,
+  );
+}
+
+/**
+ * İş emri planlama default süresi (gün). WorkOrder.create/update'de
+ * plannedEndDate verilmediyse plannedStartDate + N gün hesaplanır.
+ * Yoksa/geçersizse 7.
+ */
+export async function readWorkOrderDefaultPlanDurationDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  return readPositiveIntSetting(
+    SETTING_KEYS.WORKORDER_DEFAULT_PLAN_DURATION_DAYS,
+    DEFAULT_DEADLINE_DAYS,
+    tx,
+  );
 }

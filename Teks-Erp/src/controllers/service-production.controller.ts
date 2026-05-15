@@ -28,7 +28,7 @@ const routeKinds = z.enum([
 const intakeSchema = z.object({
   customerId: z.string().uuid("Geçersiz müşteri ID"),
   itemId: z.string().uuid("Geçersiz ürün ID"),
-  variantId: z.string().uuid("Geçersiz varyant ID").optional().nullable(),
+  colorId: z.string().uuid("Geçersiz renk ID").optional().nullable(),
   servicePricePerMeter: z.number().positive("Metre başı bedel pozitif olmalı"),
   routeStationKinds: z.array(routeKinds).min(1, "En az bir rota adımı seçilmelidir"),
   batchNumber: z.string().max(40).optional().nullable(),
