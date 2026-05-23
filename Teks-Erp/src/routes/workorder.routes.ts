@@ -39,7 +39,7 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *         schema: { type: string, enum: [PLANNED, IN_PROGRESS, PAUSED, COMPLETED, CANCELLED] }
  *       - in: query
  *         name: filter[type]
- *         schema: { type: string, enum: [ORDER_PRODUCTION, STOCK_PRODUCTION, SAMPLE_PRODUCTION, REPAIR_REWORK] }
+ *         schema: { type: string, enum: [ORDER_PRODUCTION, STOCK_PRODUCTION, SERVICE_PRODUCTION] }
  *     responses:
  *       200:
  *         description: Sayfalanmış iş emri listesi
@@ -289,12 +289,6 @@ router.post("/", verifyToken, requirePermission("workorder:write"), controller.c
  *                 type: string
  *                 nullable: true
  *                 description: Tambur planlama bilgisi ("2-KAT" / "4-KAT" gibi). Tambur'a bilgi olarak iletilir; operatör override edebilir.
- *               layerCount:
- *                 type: integer
- *                 nullable: true
- *                 minimum: 1
- *                 maximum: 20
- *                 description: Tambur planlama bilgisi (toplam katman sayısı). Operatör override edebilir.
  *     responses:
  *       200: { description: Güncellendi }
  *       409: { description: Üretim başlamış (sadece PLANNED düzenlenebilir) }

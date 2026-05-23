@@ -1,17 +1,25 @@
 import type { OrderStatus } from "@/types/enums";
 
+export interface OrderLineColor {
+  id: string;
+  code: string;
+  name: string;
+  hex: string | null;
+}
+
 export interface OrderLineItem {
   id: string;
   code: string;
   name: string;
-  isDerived: boolean;
-  baseItemId: string | null;
-  colorId: string | null;
-  color?: { id: string; code: string; name: string; hex: string | null } | null;
   /** Item'ın olası özellikleri (allowed). Boşsa = serbest. */
   allowedProperties?: {
     propertyId: string;
     property: { id: string; code: string; name: string };
+  }[];
+  /** Item'ın olası renkleri (allowed). Boşsa = serbest. */
+  allowedColors?: {
+    colorId: string;
+    color: OrderLineColor;
   }[];
 }
 
@@ -23,12 +31,16 @@ export interface OrderLineRequiredPropertyLink {
 export interface OrderLine {
   id: string;
   itemId: string;
-  variantId: string | null;
+  colorId: string | null;
   quantity: number;
   width: number | null;
   unitPrice: string | null;
+  /** Müşteri-bazlı ürün adı override (1-shot). Boşsa master alias veya default'a düşer. */
+  customerItemName: string | null;
+  /** Müşteri-bazlı renk adı override (1-shot). */
+  customerColorName: string | null;
   item?: OrderLineItem;
-  variant?: { id: string; code: string; name: string } | null;
+  color?: OrderLineColor | null;
   /** Müşterinin istediği özellikler — WO açılırken targetProperties önerisi olur. */
   requiredProperties?: OrderLineRequiredPropertyLink[];
 }
@@ -41,6 +53,7 @@ export interface Order {
   currency: string;
   totalAmount: string | null;
   status: OrderStatus;
+  shippedQty: number;
   orderDate: string;
   deadline: string | null;
   completedAt: string | null;

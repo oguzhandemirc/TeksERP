@@ -50,9 +50,15 @@ export function SwatchesPanel() {
                       {s.item.code} {s.item.name}
                     </Badge>
                   )}
-                  {s.variant && (
-                    <Badge variant="secondary" className="text-[10px]">
-                      {s.variant.code}
+                  {s.color && (
+                    <Badge variant="secondary" className="gap-1 text-[10px]">
+                      {s.color.hex && (
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: s.color.hex }}
+                        />
+                      )}
+                      {s.color.name}
                     </Badge>
                   )}
                 </div>
@@ -62,7 +68,9 @@ export function SwatchesPanel() {
                   </span>
                   {s.width != null && <span>En: {s.width} cm</span>}
                   {s.workOrder && <span>Parti: {s.workOrder.batchNumber}</span>}
-                  {s.parentRoll && <span>Kaynak: {s.parentRoll.barcode}</span>}
+                  {s.parentRoll && s.parentRoll.barcode && (
+                    <span>Kaynak: {s.parentRoll.barcode}</span>
+                  )}
                   <span className="tabular-nums">
                     {safeFormat(s.createdAt, "dd.MM.yyyy HH:mm")}
                   </span>

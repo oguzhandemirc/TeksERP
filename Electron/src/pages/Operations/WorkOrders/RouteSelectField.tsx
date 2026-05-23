@@ -56,7 +56,7 @@ export function RouteSelectField({
         </div>
       ) : (
         <div className="flex gap-2">
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <Controller
               control={control}
               name="routeTemplateId"
@@ -66,7 +66,7 @@ export function RouteSelectField({
                   onChange={(v) => field.onChange(v ?? "")}
                   service={routeService}
                   queryKey="routes"
-                  getLabel={(r) => `${r.name}${r.code ? ` (${r.code})` : ""}`}
+                  getLabel={(r) => r.name}
                   placeholder="Şablon seç..."
                 />
               )}
@@ -75,7 +75,7 @@ export function RouteSelectField({
           <Button
             type="button"
             variant="outline"
-            className="gap-1"
+            className="shrink-0 gap-1"
             onClick={onOpenDesigner}
           >
             <Plus className="h-3.5 w-3.5" /> Özel Rota

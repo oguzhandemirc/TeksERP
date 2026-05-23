@@ -9,6 +9,7 @@
 // API: GET ve PUT — bulk get / bulk replace pattern.
 // =============================================================================
 
+import { StationKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -18,6 +19,13 @@ export interface StationCapabilityDto {
   stationId: string;
   stationCode: string;
   stationName: string;
+  stationKind: StationKind;
+  /** İstasyona varsayılan fason kategorisi atanmış mı? */
+  hasDefaultCategory: boolean;
+  /** Bu istasyon renk uygulayabilir mi? (defaultCategory.appliesColor=true) */
+  canApplyColor: boolean;
+  /** Bu istasyon özellik uygulayabilir mi? (defaultCategory.appliesProperty=true) */
+  canApplyProperty: boolean;
   colors: { id: string; code: string; name: string; hex: string | null }[];
   properties: {
     id: string;
@@ -25,6 +33,33 @@ export interface StationCapabilityDto {
     name: string;
     category: string | null;
   }[];
+}
+
+/**
+ * Bir istasyon için renk/özellik uygulayabilirliği — kind ve defaultCategory
+ * flag'lerinden türetilir. UI gating'in (sebep dahil) tek kaynağıdır.
+ */
+function deriveCapabilityFlags(station: {
+  kind: StationKind;
+  defaultCategory: { appliesColor: boolean; appliesProperty: boolean } | null;
+}): {
+  hasDefaultCategory: boolean;
+  canApplyColor: boolean;
+  canApplyProperty: boolean;
+} {
+  const hasDefaultCategory = !!station.defaultCategory;
+  if (station.kind !== StationKind.SUBCONTRACTOR || !station.defaultCategory) {
+    return {
+      hasDefaultCategory,
+      canApplyColor: false,
+      canApplyProperty: false,
+    };
+  }
+  return {
+    hasDefaultCategory,
+    canApplyColor: station.defaultCategory.appliesColor,
+    canApplyProperty: station.defaultCategory.appliesProperty,
+  };
 }
 
 export class StationCapabilityService {
@@ -36,9 +71,18 @@ export class StationCapabilityService {
   ): Promise<ApiResponse<StationCapabilityDto>> {
     const station = await prisma.station.findUnique({
       where: { id: stationId },
-      select: { id: true, code: true, name: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        kind: true,
+        defaultCategory: {
+          select: { appliesColor: true, appliesProperty: true },
+        },
+      },
     });
     if (!station) throw AppError.notFound("İstasyon bulunamadı");
+    const flags = deriveCapabilityFlags(station);
 
     const [colorRows, propertyRows] = await Promise.all([
       prisma.stationColor.findMany({
@@ -71,6 +115,10 @@ export class StationCapabilityService {
         stationId: station.id,
         stationCode: station.code,
         stationName: station.name,
+        stationKind: station.kind,
+        hasDefaultCategory: flags.hasDefaultCategory,
+        canApplyColor: flags.canApplyColor,
+        canApplyProperty: flags.canApplyProperty,
         colors: colorRows
           .filter((r) => r.color.isActive)
           .map((r) => ({
@@ -103,11 +151,35 @@ export class StationCapabilityService {
   ): Promise<ApiResponse<StationCapabilityDto>> {
     const station = await prisma.station.findUnique({
       where: { id: stationId },
-      select: { id: true, code: true, name: true, isActive: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        kind: true,
+        isActive: true,
+        defaultCategory: {
+          select: { appliesColor: true, appliesProperty: true },
+        },
+      },
     });
     if (!station) throw AppError.notFound("İstasyon bulunamadı");
     if (!station.isActive) {
       throw AppError.badRequest("Pasif istasyona yetkinlik atanamaz");
+    }
+
+    // Renk/özellik atama, varsayılan fason kategorisinin renk/özellik veren
+    // (appliesColor / appliesProperty) bayraklarına bağlıdır. Boş listeye izin
+    // var (mevcut kayıtları silmek için).
+    const { canApplyColor, canApplyProperty } = deriveCapabilityFlags(station);
+    if (data.colorIds.length > 0 && !canApplyColor) {
+      throw AppError.badRequest(
+        "Bu istasyona renk yetkinliği atanamaz — varsayılan fason kategorisi 'renk veren' (appliesColor=true) olmalı",
+      );
+    }
+    if (data.propertyIds.length > 0 && !canApplyProperty) {
+      throw AppError.badRequest(
+        "Bu istasyona özellik yetkinliği atanamaz — varsayılan fason kategorisi 'özellik veren' (appliesProperty=true) olmalı",
+      );
     }
 
     // Renk + özellik referans doğrulaması (her biri DB'de var ve aktif mi?)
@@ -221,6 +293,10 @@ export class StationCapabilityService {
         stationId: string;
         stationCode: string;
         stationName: string;
+        stationKind: StationKind;
+        hasDefaultCategory: boolean;
+        canApplyColor: boolean;
+        canApplyProperty: boolean;
         colorCount: number;
         propertyCount: number;
       }[]
@@ -232,6 +308,10 @@ export class StationCapabilityService {
         id: true,
         code: true,
         name: true,
+        kind: true,
+        defaultCategory: {
+          select: { appliesColor: true, appliesProperty: true },
+        },
         _count: {
           select: { colorCapabilities: true, propertyCapabilities: true },
         },
@@ -241,13 +321,20 @@ export class StationCapabilityService {
 
     return {
       success: true,
-      data: stations.map((s) => ({
-        stationId: s.id,
-        stationCode: s.code,
-        stationName: s.name,
-        colorCount: s._count.colorCapabilities,
-        propertyCount: s._count.propertyCapabilities,
-      })),
+      data: stations.map((s) => {
+        const flags = deriveCapabilityFlags(s);
+        return {
+          stationId: s.id,
+          stationCode: s.code,
+          stationName: s.name,
+          stationKind: s.kind,
+          hasDefaultCategory: flags.hasDefaultCategory,
+          canApplyColor: flags.canApplyColor,
+          canApplyProperty: flags.canApplyProperty,
+          colorCount: s._count.colorCapabilities,
+          propertyCount: s._count.propertyCapabilities,
+        };
+      }),
     };
   }
 
@@ -262,6 +349,10 @@ export class StationCapabilityService {
         id: true,
         code: true,
         name: true,
+        kind: true,
+        defaultCategory: {
+          select: { appliesColor: true, appliesProperty: true },
+        },
         colorCapabilities: {
           include: {
             color: {
@@ -294,27 +385,34 @@ export class StationCapabilityService {
 
     return {
       success: true,
-      data: stations.map((s) => ({
-        stationId: s.id,
-        stationCode: s.code,
-        stationName: s.name,
-        colors: s.colorCapabilities
-          .filter((r) => r.color.isActive)
-          .map((r) => ({
-            id: r.color.id,
-            code: r.color.code,
-            name: r.color.name,
-            hex: r.color.hex,
-          })),
-        properties: s.propertyCapabilities
-          .filter((r) => r.property.isActive)
-          .map((r) => ({
-            id: r.property.id,
-            code: r.property.code,
-            name: r.property.name,
-            category: r.property.category,
-          })),
-      })),
+      data: stations.map((s) => {
+        const flags = deriveCapabilityFlags(s);
+        return {
+          stationId: s.id,
+          stationCode: s.code,
+          stationName: s.name,
+          stationKind: s.kind,
+          hasDefaultCategory: flags.hasDefaultCategory,
+          canApplyColor: flags.canApplyColor,
+          canApplyProperty: flags.canApplyProperty,
+          colors: s.colorCapabilities
+            .filter((r) => r.color.isActive)
+            .map((r) => ({
+              id: r.color.id,
+              code: r.color.code,
+              name: r.color.name,
+              hex: r.color.hex,
+            })),
+          properties: s.propertyCapabilities
+            .filter((r) => r.property.isActive)
+            .map((r) => ({
+              id: r.property.id,
+              code: r.property.code,
+              name: r.property.name,
+              category: r.property.category,
+            })),
+        };
+      }),
     };
   }
 }

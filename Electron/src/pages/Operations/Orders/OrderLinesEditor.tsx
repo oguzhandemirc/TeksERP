@@ -5,10 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { usePricingEnabled } from "@/hooks/usePricingEnabled";
 import { itemService } from "@/pages/Items/service";
 import type { Item, ItemCreatePayload } from "@/pages/Items/types";
 import { ItemFormDialog } from "@/pages/Items/ItemFormDialog";
 import { LineRequiredPropertiesEditor } from "./LineRequiredPropertiesEditor";
+import { OrderLineColorPicker } from "./OrderLineColorPicker";
+import { OrderLineAliasFields } from "./OrderLineAliasFields";
 import { newLineClientId, type OrderLineFormValues } from "./schema";
 import { toast } from "sonner";
 
@@ -16,22 +19,24 @@ interface Props {
   value: OrderLineFormValues[];
   onChange: (next: OrderLineFormValues[]) => void;
   error?: string;
+  /** Müşterinin aliası — alias suggest için. */
+  customerId: string | null;
 }
 
-export function OrderLinesEditor({ value, onChange, error }: Props) {
+export function OrderLinesEditor({ value, onChange, error, customerId }: Props) {
   const qc = useQueryClient();
+  const pricingEnabled = usePricingEnabled();
   const [quickAddForLine, setQuickAddForLine] = useState<string | null>(null);
 
   const createItemMutation = useMutation({
     mutationFn: (payload: ItemCreatePayload) =>
       itemService.create(payload as unknown as Partial<Item>),
     onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ["items-final"] });
       qc.invalidateQueries({ queryKey: ["items"] });
       const created = res.data;
       if (quickAddForLine && created?.id) {
         updateLine(quickAddForLine, { itemId: created.id });
-        toast.success(`Final ürün oluşturuldu: ${created.code}`);
+        toast.success(`Ürün oluşturuldu: ${created.code}`);
       }
       setQuickAddForLine(null);
     },
@@ -51,9 +56,12 @@ export function OrderLinesEditor({ value, onChange, error }: Props) {
       {
         clientId: newLineClientId(),
         itemId: "",
+        colorId: null,
         quantity: 0,
         width: null,
         unitPrice: "",
+        customerItemName: "",
+        customerColorName: "",
         requiredPropertyIds: [],
       },
     ]);
@@ -78,23 +86,21 @@ export function OrderLinesEditor({ value, onChange, error }: Props) {
                 {idx + 1}
               </Badge>
               <div className="grid flex-1 grid-cols-12 gap-2">
-                <div className="col-span-12 sm:col-span-6 flex gap-1">
+                <div className="col-span-12 sm:col-span-5 flex gap-1">
                   <div className="flex-1">
                     <ReferenceSelect<Item>
                       value={line.itemId || undefined}
                       onChange={(v) =>
                         updateLine(line.clientId, {
                           itemId: v ?? "",
-                          // Item değişince eski özellik isteği temizlenir
-                          // (yeni ürünün allowed seti farklı olabilir).
+                          colorId: null,
                           requiredPropertyIds: [],
                         })
                       }
                       service={itemService}
-                      queryKey="items-final"
+                      queryKey="items"
                       getLabel={(i) => i.name}
-                      placeholder="Final ürün seç..."
-                      extraFilters={{ isDerived: "true" }}
+                      placeholder="Ürün seç..."
                     />
                   </div>
                   <Button
@@ -103,10 +109,17 @@ export function OrderLinesEditor({ value, onChange, error }: Props) {
                     variant="outline"
                     className="h-9 w-9 shrink-0"
                     onClick={() => setQuickAddForLine(line.clientId)}
-                    title="Yeni final ürün tanımla"
+                    title="Yeni ürün tanımla"
                   >
                     <PackagePlus className="h-4 w-4" />
                   </Button>
+                </div>
+                <div className="col-span-12 sm:col-span-3">
+                  <OrderLineColorPicker
+                    itemId={line.itemId}
+                    value={line.colorId ?? null}
+                    onChange={(v) => updateLine(line.clientId, { colorId: v })}
+                  />
                 </div>
                 <Input
                   className="col-span-4 sm:col-span-2 text-sm"
@@ -130,12 +143,24 @@ export function OrderLinesEditor({ value, onChange, error }: Props) {
                     })
                   }
                 />
-                <Input
-                  className="col-span-4 sm:col-span-2 text-sm"
-                  placeholder="Fiyat"
-                  value={line.unitPrice ?? ""}
-                  onChange={(e) => updateLine(line.clientId, { unitPrice: e.target.value })}
-                />
+                {pricingEnabled && (
+                  <Input
+                    className="col-span-12 sm:col-span-12 text-sm"
+                    placeholder="Birim fiyat (opsiyonel)"
+                    value={line.unitPrice ?? ""}
+                    onChange={(e) => updateLine(line.clientId, { unitPrice: e.target.value })}
+                  />
+                )}
+                <div className="col-span-12">
+                  <OrderLineAliasFields
+                    customerId={customerId}
+                    itemId={line.itemId}
+                    colorId={line.colorId ?? null}
+                    itemName={line.customerItemName ?? ""}
+                    colorName={line.customerColorName ?? ""}
+                    onChange={(patch) => updateLine(line.clientId, patch)}
+                  />
+                </div>
                 <div className="col-span-12 -mt-1">
                   <LineRequiredPropertiesEditor
                     itemId={line.itemId}
@@ -166,7 +191,6 @@ export function OrderLinesEditor({ value, onChange, error }: Props) {
         onOpenChange={(open) => {
           if (!open) setQuickAddForLine(null);
         }}
-        forcedMode="final"
         isSubmitting={createItemMutation.isPending}
         onSubmit={async (payload) => {
           await createItemMutation.mutateAsync(payload);

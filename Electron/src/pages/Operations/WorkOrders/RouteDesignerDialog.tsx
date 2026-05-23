@@ -22,6 +22,8 @@ import type { FasonStepPlan } from "./FasonPlanningDialog";
 
 export interface DesignerStep {
   clientId: string;
+  /** Mevcut WO step'inin DB id'si — smart-merge için backend'e iletilir. */
+  serverId?: string | null;
   stationId: string;
   stationCode: string;
   stationName: string;
@@ -32,6 +34,8 @@ export interface DesignerStep {
 }
 
 export interface CustomRouteStep {
+  /** Mevcut step'i güncelleme için backend smart-merge id'si. */
+  id?: string;
   stationId: string;
   notes: string | null;
   requiredCategoryId: string | null;
@@ -41,6 +45,27 @@ export interface CustomRouteStep {
 export type RouteDesignerResult =
   | { mode: "template"; routeTemplateId: string; fasonPlans: FasonStepPlan[] }
   | { mode: "custom"; customSteps: CustomRouteStep[] };
+
+/**
+ * Şablon kodu otomatik üretilir — kullanıcı kod girmez.
+ * Format: ad'ın kelime baş harfleri (en fazla 4) + 4 hex karakter.
+ * Örn: "Boyahane + Kursun + Tambur" → "BKT-A3F2".
+ * Unique constraint (Route.code) çakışmaya karşı güvence.
+ */
+function generateRouteCode(name: string): string {
+  const initials = name
+    .split(/\s+/)
+    .map((w) => w.replace(/[^a-zA-ZçğıöşüÇĞİÖŞÜ0-9]/g, ""))
+    .filter(Boolean)
+    .map((w) => w[0]!.toUpperCase())
+    .slice(0, 4)
+    .join("");
+  const suffix = Math.floor(Math.random() * 0xffff)
+    .toString(16)
+    .toUpperCase()
+    .padStart(4, "0");
+  return initials ? `${initials}-${suffix}` : `RT-${suffix}`;
+}
 
 interface Props {
   open: boolean;
@@ -74,7 +99,6 @@ export function RouteDesignerDialog({
   const [pendingSeedId, setPendingSeedId] = useState<string | null>(null);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
-  const [templateCode, setTemplateCode] = useState("");
   const [forCustomer, setForCustomer] = useState(false);
 
   useEffect(() => {
@@ -84,7 +108,6 @@ export function RouteDesignerDialog({
     setPendingSeedId(null);
     setSaveAsTemplate(false);
     setTemplateName("");
-    setTemplateCode("");
     setForCustomer(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -107,7 +130,7 @@ export function RouteDesignerDialog({
     mutationFn: async () => {
       const payload = {
         name: templateName.trim(),
-        code: templateCode.trim() || null,
+        code: generateRouteCode(templateName),
         customerId: forCustomer && customerId ? customerId : null,
         isActive: true,
         isFavorite: false,
@@ -177,6 +200,7 @@ export function RouteDesignerDialog({
       {
         mode: "custom",
         customSteps: steps.map((s) => ({
+          id: s.serverId ?? undefined,
           stationId: s.stationId,
           notes: s.notes.trim() || null,
           requiredCategoryId: s.requiredCategoryId,
@@ -252,8 +276,6 @@ export function RouteDesignerDialog({
               onEnabledChange={setSaveAsTemplate}
               name={templateName}
               onNameChange={setTemplateName}
-              code={templateCode}
-              onCodeChange={setTemplateCode}
               customerId={customerId ?? null}
               forCustomer={forCustomer}
               onForCustomerChange={setForCustomer}

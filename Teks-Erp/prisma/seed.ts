@@ -11,6 +11,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import * as bcrypt from "bcryptjs";
 import "dotenv/config";
+import { seedQualityGrades } from "./seed-quality-grades";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -162,6 +163,13 @@ async function main() {
     })),
   });
   console.log(`✅ Admin'e ${permissionData.length} yetki atandı`);
+
+  // ===========================================================================
+  // 5. QUALITY GRADES — 3 sabit sınıf (1.KALITE / A1 / FIRE)
+  // ===========================================================================
+  // UI'dan yönetilmez; mobil KK1/Tambur ekranı buradan besleniyor.
+  const qgCount = await seedQualityGrades(prisma);
+  console.log(`✅ ${qgCount} kalite sınıfı yüklendi`);
 
   console.log("\n🎉 Seed tamamlandı.\n");
   console.log("Kullanıcılar:");

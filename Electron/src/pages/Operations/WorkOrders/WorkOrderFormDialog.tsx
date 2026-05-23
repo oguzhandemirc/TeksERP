@@ -2,21 +2,32 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import { Factory } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertTriangle, ChevronDown, Factory, Lock, Package } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { FormField } from "@/components/forms/FormField";
 import { EnumSelect } from "@/components/forms/EnumSelect";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { workOrderTypeLabels, WorkOrderType } from "@/types/enums";
 import { routeService } from "@/pages/Routes/service";
 import type { RouteStep } from "@/pages/Routes/types";
-import { itemService } from "@/pages/Items/service";
-import type { Item } from "@/pages/Items/types";
 import { LinkedOrderLinesField } from "./LinkedOrderLinesField";
 import { RouteSelectField } from "./RouteSelectField";
-import { TargetItemSummary, TargetPropertiesField } from "./TargetItemFields";
+import { TargetColorSelect, TargetPropertiesField } from "./TargetItemFields";
+import { TargetItemPicker } from "./TargetItemPicker";
 import { FasonPlanningDialog, type FasonStepPlan } from "./FasonPlanningDialog";
 import {
   RouteDesignerDialog,
@@ -37,18 +48,14 @@ import {
 } from "./workOrderPrefill";
 import type { WorkOrder } from "./types";
 
-// SERVICE_PRODUCTION ayrı akış (mal kabul) — bu form'da yok.
 const formTypeLabels: Record<string, string> = {
   ORDER_PRODUCTION: workOrderTypeLabels.ORDER_PRODUCTION,
   STOCK_PRODUCTION: workOrderTypeLabels.STOCK_PRODUCTION,
-  SAMPLE_PRODUCTION: workOrderTypeLabels.SAMPLE_PRODUCTION,
-  REPAIR_REWORK: workOrderTypeLabels.REPAIR_REWORK,
 };
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Düzenleme modu: prefill için var olan WO (detay endpoint'inden). */
   workOrder?: WorkOrder | null;
   onSubmit: (
     values: WorkOrderFormValues,
@@ -57,11 +64,18 @@ interface Props {
   isSubmitting?: boolean;
 }
 
-export function WorkOrderFormDialog({ open, onOpenChange, workOrder, onSubmit, isSubmitting }: Props) {
+export function WorkOrderFormDialog({
+  open,
+  onOpenChange,
+  workOrder,
+  onSubmit,
+  isSubmitting,
+}: Props) {
   const isEdit = Boolean(workOrder);
+  const isInProgress = workOrder?.status === "IN_PROGRESS";
+
   const form = useForm<WorkOrderFormValues>({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    resolver: zodResolver(workOrderFormSchema as any) as unknown as Resolver<WorkOrderFormValues>,
+    resolver: zodResolver(workOrderFormSchema) as Resolver<WorkOrderFormValues>,
     defaultValues: workOrderFormDefaults,
   });
 
@@ -76,10 +90,8 @@ export function WorkOrderFormDialog({ open, onOpenChange, workOrder, onSubmit, i
   const [fasonPlans, setFasonPlans] = useState<FasonStepPlan[]>([]);
   const [designerOpen, setDesignerOpen] = useState(false);
   const [customSteps, setCustomSteps] = useState<CustomRouteStep[]>([]);
-  // Designer'a tekrar açılınca pre-fill için son DesignerStep snapshot'ı.
   const [designerSnapshot, setDesignerSnapshot] = useState<DesignerStep[]>([]);
-  // Prefill ile gelen routeTemplateId'yi takip et: kullanıcı rotayı değiştirirse
-  // fasonPlans'i sıfırla, ama prefill'in kendisi sıfırlamayı tetiklemesin.
+  const [advancedOpen, setAdvancedOpen] = useState(true);
   const prevRouteIdRef = useRef<string>("");
 
   useEffect(() => {
@@ -93,6 +105,9 @@ export function WorkOrderFormDialog({ open, onOpenChange, workOrder, onSubmit, i
       setCustomSteps(route.customSteps);
       setDesignerSnapshot(route.designerSnapshot);
       prevRouteIdRef.current = values.routeTemplateId ?? "";
+      setAdvancedOpen(
+        Boolean(values.foldType || values.plannedStartDate || values.plannedEndDate),
+      );
     } else {
       form.reset(workOrderFormDefaults);
       setPickedLines([]);
@@ -100,6 +115,7 @@ export function WorkOrderFormDialog({ open, onOpenChange, workOrder, onSubmit, i
       setCustomSteps([]);
       setDesignerSnapshot([]);
       prevRouteIdRef.current = "";
+      setAdvancedOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, workOrder?.id]);
@@ -119,15 +135,16 @@ export function WorkOrderFormDialog({ open, onOpenChange, workOrder, onSubmit, i
     [routeQuery.data?.data?.steps],
   );
 
-  // Rota değişince fason planlamasını sıfırla (yeni rotanın adımları farklı).
-  // Prefill sırasındaki ilk setlemede tetiklenmesin diye ref ile karşılaştır.
   useEffect(() => {
     if (watchedRouteId === prevRouteIdRef.current) return;
     prevRouteIdRef.current = watchedRouteId ?? "";
     setFasonPlans([]);
   }, [watchedRouteId]);
 
-  const handleDesignerConfirm = (result: RouteDesignerResult, snapshot: DesignerStep[]) => {
+  const handleDesignerConfirm = (
+    result: RouteDesignerResult,
+    snapshot: DesignerStep[],
+  ) => {
     setDesignerSnapshot(snapshot);
     if (result.mode === "template") {
       form.setValue("routeTemplateId", result.routeTemplateId);
@@ -148,7 +165,6 @@ export function WorkOrderFormDialog({ open, onOpenChange, workOrder, onSubmit, i
   const watchedType = form.watch("type");
   const isOrderProduction = watchedType === WorkOrderType.ORDER_PRODUCTION;
 
-  // type değişince ORDER_PRODUCTION değilse bağlı kalemleri temizle.
   useEffect(() => {
     if (!isOrderProduction) {
       form.setValue("orderLineIds", []);
@@ -163,177 +179,262 @@ export function WorkOrderFormDialog({ open, onOpenChange, workOrder, onSubmit, i
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
+      <DialogContent className="flex h-[85vh] max-h-[85vh] max-w-6xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>{isEdit ? "İş Emrini Düzenle" : "Yeni İş Emri"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Sadece üretime başlanmamış (PLANNED) iş emirleri düzenlenebilir."
+              ? "PLANNED ve IN_PROGRESS iş emirleri düzenlenebilir. COMPLETED/CANCELLED için kapalıdır."
               : "Üretim partisi tanımı. Rota şablonu seç, hedefleri belirle."}
           </DialogDescription>
         </DialogHeader>
 
-        <form
-          onSubmit={form.handleSubmit(async (v) => {
-            if (!v.routeTemplateId && customSteps.length === 0) {
-              form.setError("routeTemplateId", {
-                type: "manual",
-                message: "Rota şablonu seç veya özel rota tasarla.",
-              });
-              return;
-            }
-            await onSubmit(v, { fasonPlans, customSteps });
-          })}
-          className="space-y-3"
-        >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <FormField label="Tip" error={form.formState.errors.type} required>
-              <Controller
-                control={form.control}
-                name="type"
-                render={({ field }) => (
-                  <EnumSelect<string>
-                    value={field.value}
-                    onChange={(v) => field.onChange(v)}
-                    labels={formTypeLabels}
-                  />
-                )}
-              />
-            </FormField>
-            <RouteSelectField
-              control={form.control}
-              error={form.formState.errors.routeTemplateId}
-              customStepCount={customSteps.length}
-              onOpenDesigner={() => setDesignerOpen(true)}
-              onClearCustom={clearCustomRoute}
-            />
+        {isInProgress && (
+          <div className="mx-6 mt-3 flex shrink-0 items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <div className="font-medium">Üretim devam ediyor</div>
+              <div>
+                Renk veya özellik değişikliği yalnızca henüz boyahaneden gelmemiş rulolara uygulanır. Mevcut bağlı rulolar fiziksel olarak ne taşıyorsa onunla kalır.
+              </div>
+            </div>
           </div>
+        )}
 
-          {customSteps.length === 0 && externalSteps.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setFasonOpen(true)}
-              className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted/50"
-            >
-              <Factory className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">
-                Fason Adım Planlaması ({externalSteps.length})
-              </span>
-              <span className="ml-auto text-xs text-muted-foreground">
-                {fasonPlans.length === 0
-                  ? "Plan yapılmadı"
-                  : `${
-                      fasonPlans.filter((p) => p.plannedSubcontractorId).length
-                    } / ${externalSteps.length} firma seçildi`}
-              </span>
-            </button>
-          )}
-
-          {isOrderProduction && (
-            <LinkedOrderLinesField
-              lines={pickedLines}
-              onChange={handleLinesChange}
-              onPickerConfirm={handlePickerConfirm}
-            />
-          )}
-
-          <FormField label="Hedef Ürün (opsiyonel)">
-            <Controller
-              control={form.control}
-              name="targetItemId"
-              render={({ field }) => (
-                <ReferenceSelect<Item>
-                  value={field.value}
-                  onChange={(v) => {
-                    field.onChange(v);
-                    // Item değişince eski targetPropertyIds tutulmaz —
-                    // her ürün kendi allowed seti ile gelir
-                    form.setValue("targetPropertyIds", []);
-                  }}
-                  service={itemService}
-                  queryKey="items-final"
-                  getLabel={(i) => `${i.code} — ${i.name}`}
-                  placeholder="Final ürün seç..."
-                  nullable
-                  noneLabel="— Atanmadı"
-                  extraFilters={{ isDerived: "true" }}
-                />
-              )}
-            />
-          </FormField>
-
-          <TargetItemSummary control={form.control} />
-
-          <TargetPropertiesField control={form.control} />
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <FormField
-              label={widthLocked ? "En (cm) · otomatik" : "En (cm)"}
-              htmlFor="width"
-              error={form.formState.errors.width}
-              hint={
-                mixedWidths
-                  ? "Kalemlerin enleri farklı, manuel gir"
-                  : widthLocked
-                    ? "Sipariş kaleminden alındı"
-                    : undefined
+        <TooltipProvider delayDuration={150}>
+          <form
+            onSubmit={form.handleSubmit(async (v) => {
+              if (!v.routeTemplateId && customSteps.length === 0) {
+                form.setError("routeTemplateId", {
+                  type: "manual",
+                  message: "Rota şablonu seç veya özel rota tasarla.",
+                });
+                return;
               }
-            >
-              <Input
-                id="width"
-                type="number"
-                step="0.1"
-                min={0}
-                placeholder="150"
-                disabled={widthLocked}
-                {...form.register("width")}
-              />
-            </FormField>
-            <FormField
-              label={quantityLocked ? "Hedef Metraj · otomatik" : "Hedef Metraj"}
-              htmlFor="targetQuantity"
-              error={form.formState.errors.targetQuantity}
-              hint={quantityLocked ? "Sipariş kalemleri toplamı" : undefined}
-            >
-              <Input
-                id="targetQuantity"
-                type="number"
-                step="0.1"
-                min={0}
-                placeholder="1000"
-                disabled={quantityLocked}
-                {...form.register("targetQuantity")}
-              />
-            </FormField>
-            <FormField label="Reçete No" htmlFor="recipeNo" error={form.formState.errors.recipeNo}>
-              <Input id="recipeNo" placeholder="R-123" {...form.register("recipeNo")} />
-            </FormField>
-          </div>
+              await onSubmit(v, { fasonPlans, customSteps });
+            })}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="flex min-h-0 flex-1">
+              {/* Sol panel — bağımsız scroll */}
+              <aside className="hidden w-[340px] shrink-0 flex-col border-r bg-muted/10 lg:flex">
+                {isOrderProduction ? (
+                  <LinkedOrderLinesField
+                    lines={pickedLines}
+                    onChange={handleLinesChange}
+                    onPickerConfirm={handlePickerConfirm}
+                  />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center p-6 text-center text-xs text-muted-foreground">
+                    <Package className="mb-2 h-8 w-8 text-muted-foreground/50" />
+                    <div className="text-sm font-medium text-foreground">
+                      Stoğa Üretim
+                    </div>
+                    <div className="mt-1">
+                      Bağlı sipariş kalemi yok.<br />
+                      Üretilen toplar serbest stok olarak depoya geçer.
+                    </div>
+                  </div>
+                )}
+              </aside>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <FormField label="Planlı Başlangıç" htmlFor="plannedStartDate">
-              <Input id="plannedStartDate" type="date" {...form.register("plannedStartDate")} />
-            </FormField>
-            <FormField label="Planlı Bitiş" htmlFor="plannedEndDate">
-              <Input id="plannedEndDate" type="date" {...form.register("plannedEndDate")} />
-            </FormField>
-          </div>
+              {/* Sağ panel — form içeriği */}
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
+                {/* lg altında inline gösterim */}
+                {isOrderProduction && (
+                  <div className="rounded-md border bg-muted/10 lg:hidden">
+                    <LinkedOrderLinesField
+                      lines={pickedLines}
+                      onChange={handleLinesChange}
+                      onPickerConfirm={handlePickerConfirm}
+                    />
+                  </div>
+                )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              İptal
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting
-                ? isEdit
-                  ? "Güncelleniyor..."
-                  : "Oluşturuluyor..."
-                : isEdit
-                  ? "Güncelle"
-                  : "İş Emri Oluştur"}
-            </Button>
-          </DialogFooter>
-        </form>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                  <div className="sm:w-44 sm:shrink-0">
+                    <FormField label="Tip" error={form.formState.errors.type} required>
+                      <Controller
+                        control={form.control}
+                        name="type"
+                        render={({ field }) => (
+                          <EnumSelect<string>
+                            value={field.value}
+                            onChange={(v) => field.onChange(v)}
+                            labels={formTypeLabels}
+                          />
+                        )}
+                      />
+                    </FormField>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <RouteSelectField
+                      control={form.control}
+                      error={form.formState.errors.routeTemplateId}
+                      customStepCount={customSteps.length}
+                      onOpenDesigner={() => setDesignerOpen(true)}
+                      onClearCustom={clearCustomRoute}
+                    />
+                  </div>
+                </div>
+
+                {customSteps.length === 0 && externalSteps.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFasonOpen(true)}
+                    className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted/50"
+                  >
+                    <Factory className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">
+                      Fason Adım Planlaması ({externalSteps.length})
+                    </span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {fasonPlans.length === 0
+                        ? "Plan yapılmadı"
+                        : `${
+                            fasonPlans.filter((p) => p.plannedSubcontractorId).length
+                          } / ${externalSteps.length} firma seçildi`}
+                    </span>
+                  </button>
+                )}
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <FormField label="Hedef Ürün (opsiyonel)">
+                    <TargetItemPicker
+                      control={form.control}
+                      onItemChange={() => {
+                        form.setValue("targetColorId", null);
+                        form.setValue("targetPropertyIds", []);
+                      }}
+                    />
+                  </FormField>
+                  <FormField label="Hedef Renk (opsiyonel)">
+                    <TargetColorSelect control={form.control} />
+                  </FormField>
+                </div>
+
+                <TargetPropertiesField control={form.control} />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    label="En (cm)"
+                    htmlFor="width"
+                    error={form.formState.errors.width}
+                    hint={mixedWidths ? "Kalemlerin enleri farklı, manuel gir" : undefined}
+                  >
+                    <LockedInput
+                      id="width"
+                      type="number"
+                      step="0.1"
+                      min={0}
+                      placeholder="150"
+                      locked={widthLocked}
+                      lockedTooltip="Sipariş kaleminden alındı"
+                      {...form.register("width")}
+                    />
+                  </FormField>
+                  <FormField
+                    label="Hedef Metraj"
+                    htmlFor="targetQuantity"
+                    error={form.formState.errors.targetQuantity}
+                  >
+                    <LockedInput
+                      id="targetQuantity"
+                      type="number"
+                      step="0.1"
+                      min={0}
+                      placeholder="1000"
+                      locked={quantityLocked}
+                      lockedTooltip="Sipariş kalemleri toplamı"
+                      {...form.register("targetQuantity")}
+                    />
+                  </FormField>
+                </div>
+
+                {/* Gelişmiş accordion */}
+                <div className="rounded-md border">
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedOpen((v) => !v)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/30"
+                    aria-expanded={advancedOpen}
+                  >
+                    <span className="uppercase tracking-wide">
+                      Gelişmiş — Tambur Bilgisi &amp; Planlama
+                    </span>
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform ${advancedOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                  {advancedOpen && (
+                    <div className="space-y-3 border-t bg-muted/10 p-3">
+                      <FormField
+                        label="Kat Tipi"
+                        error={form.formState.errors.foldType}
+                        hint="Tambur operatörüne bilgi; operatör gerekirse değiştirebilir."
+                      >
+                        <Controller
+                          control={form.control}
+                          name="foldType"
+                          render={({ field }) => (
+                            <div className="grid grid-cols-2 gap-2">
+                              {(["2-KAT", "4-KAT"] as const).map((opt) => {
+                                const active = field.value === opt;
+                                return (
+                                  <Button
+                                    key={opt}
+                                    type="button"
+                                    variant={active ? "default" : "outline"}
+                                    onClick={() => field.onChange(active ? "" : opt)}
+                                  >
+                                    {opt}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        />
+                      </FormField>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <FormField label="Planlı Başlangıç" htmlFor="plannedStartDate">
+                          <Input
+                            id="plannedStartDate"
+                            type="date"
+                            placeholder="Boş bırakılırsa bugün"
+                            {...form.register("plannedStartDate")}
+                          />
+                        </FormField>
+                        <FormField label="Planlı Bitiş" htmlFor="plannedEndDate">
+                          <Input
+                            id="plannedEndDate"
+                            type="date"
+                            placeholder="Boş bırakılırsa varsayılan N gün"
+                            {...form.register("plannedEndDate")}
+                          />
+                        </FormField>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="shrink-0 border-t bg-background px-6 py-3">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                İptal
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting
+                  ? isEdit
+                    ? "Güncelleniyor..."
+                    : "Oluşturuluyor..."
+                  : isEdit
+                    ? "Güncelle"
+                    : "İş Emri Oluştur"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </TooltipProvider>
 
         <FasonPlanningDialog
           open={fasonOpen}
@@ -354,3 +455,35 @@ export function WorkOrderFormDialog({ open, onOpenChange, workOrder, onSubmit, i
     </Dialog>
   );
 }
+
+interface LockedInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  locked?: boolean;
+  lockedTooltip?: string;
+}
+
+const LockedInput = ({
+  locked,
+  lockedTooltip,
+  className,
+  ...rest
+}: LockedInputProps) => (
+  <div className="relative">
+    <Input
+      {...rest}
+      disabled={locked || rest.disabled}
+      className={`${locked ? "pr-9" : ""} ${className ?? ""}`.trim()}
+    />
+    {locked && (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="pointer-events-auto absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
+            <Lock className="h-3.5 w-3.5" />
+          </span>
+        </TooltipTrigger>
+        {lockedTooltip && (
+          <TooltipContent side="top">{lockedTooltip}</TooltipContent>
+        )}
+      </Tooltip>
+    )}
+  </div>
+);

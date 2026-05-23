@@ -21,6 +21,26 @@ export const subcontractorCategoryColumns: ColumnDef<SubcontractorCategory>[] = 
     ),
   },
   {
+    id: "appliesColor",
+    header: "Renk verir",
+    cell: ({ row }) =>
+      row.original.appliesColor ? (
+        <Badge>Evet</Badge>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
+    id: "appliesProperty",
+    header: "Özellik verir",
+    cell: ({ row }) =>
+      row.original.appliesProperty ? (
+        <Badge>Evet</Badge>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     accessorKey: "description",
     header: "Açıklama",
     cell: ({ row }) =>

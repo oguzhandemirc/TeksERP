@@ -5,6 +5,7 @@ import * as Print from 'expo-print';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { buildRollLabelHtml } from '../utils/labelHtml';
+import { labelService } from '../services/label.service';
 import type { Roll } from '../types/models';
 
 interface Props {
@@ -38,6 +39,16 @@ export function LabelPrinter({ roll, batchNumber, onDone }: Props) {
       firedRef.current = false;
       return;
     }
+    if (!roll.barcode) {
+      // Açık kumaş Roll'lar (barkodsuz) için etiket basılmaz.
+      Toast.show({
+        type: 'info',
+        text1: 'Bu top için etiket basılamaz',
+        text2: 'Açık kumaş (Kurşun/KK2 öncesi) fiziksel etiket almaz.',
+      });
+      onDone();
+      return;
+    }
     if (firedRef.current) return;
     // QR component'in mount olup ref'i set etmesi için kısa bir tick bekle.
     const t = setTimeout(() => {
@@ -56,6 +67,11 @@ export function LabelPrinter({ roll, batchNumber, onDone }: Props) {
           });
           await Print.printAsync({ html });
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // Refactor 6 — audit izi (label:print yetkisi backend'de zorlanır).
+          // Hata baskı akışını engellemez — sessiz log.
+          labelService.recordPrintEvent(roll.id).catch((e) => {
+            console.warn('Print audit failed', (e as Error).message);
+          });
         } catch (err) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           Toast.show({
@@ -71,7 +87,7 @@ export function LabelPrinter({ roll, batchNumber, onDone }: Props) {
     return () => clearTimeout(t);
   }, [roll, batchNumber, onDone]);
 
-  if (!roll) return null;
+  if (!roll || !roll.barcode) return null;
 
   return (
     <View

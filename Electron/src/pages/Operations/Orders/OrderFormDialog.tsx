@@ -1,7 +1,15 @@
 import { useEffect, useMemo } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
@@ -9,6 +17,8 @@ import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
 import type { Customer } from "@/pages/Customers/types";
+import { usePricingEnabled } from "@/hooks/usePricingEnabled";
+import { currencyService } from "@/services/featureFlagService";
 import { OrderLinesEditor } from "./OrderLinesEditor";
 import type { Order } from "./types";
 import {
@@ -36,9 +46,12 @@ function orderToFormValues(order: Order): OrderFormValues {
     lines: order.lines.map((l) => ({
       clientId: l.id ?? newLineClientId(),
       itemId: l.itemId,
+      colorId: l.colorId,
       quantity: l.quantity,
       width: l.width,
       unitPrice: l.unitPrice ?? "",
+      customerItemName: l.customerItemName ?? "",
+      customerColorName: l.customerColorName ?? "",
       requiredPropertyIds: (l.requiredProperties ?? []).map((p) => p.propertyId),
     })),
   };
@@ -48,6 +61,14 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
   const isEdit = Boolean(order);
   const partialShipped = order?.status === "PARTIAL_SHIPPED";
   const headerLocked = partialShipped;
+  const pricingEnabled = usePricingEnabled();
+
+  const currenciesQ = useQuery({
+    queryKey: ["currencies"],
+    queryFn: () => currencyService.list(),
+    enabled: pricingEnabled,
+    staleTime: 60 * 60 * 1000,
+  });
 
   const form = useForm<OrderFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -131,15 +152,41 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
 
           <div className="grid grid-cols-2 gap-3 sm:max-w-md">
             <FormField label="Termin" htmlFor="deadline" error={form.formState.errors.deadline}>
-              <Input id="deadline" type="date" {...form.register("deadline")} />
-            </FormField>
-            <FormField label="Para Birimi" htmlFor="currency" error={form.formState.errors.currency} required>
               <Input
-                id="currency"
-                {...form.register("currency")}
-                disabled={headerLocked}
+                id="deadline"
+                type="date"
+                placeholder="Boş bırakılırsa varsayılan N gün"
+                {...form.register("deadline")}
               />
             </FormField>
+            {pricingEnabled && (
+              <FormField
+                label="Para Birimi"
+                htmlFor="currency"
+                error={form.formState.errors.currency}
+                required
+              >
+                <Controller
+                  control={form.control}
+                  name="currency"
+                  render={({ field }) => (
+                    <select
+                      id="currency"
+                      value={field.value}
+                      onChange={field.onChange}
+                      disabled={headerLocked}
+                      className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                    >
+                      {(currenciesQ.data?.data ?? [{ code: "TRY", name: "TRY", symbol: "₺" }]).map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} — {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                />
+              </FormField>
+            )}
           </div>
 
           {isEdit ? (
@@ -157,6 +204,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
                     value={field.value}
                     onChange={field.onChange}
                     error={fieldState.error?.message}
+                    customerId={form.watch("customerId") || null}
                   />
                 )}
               />

@@ -17,6 +17,8 @@ import { EnumSelect } from "@/components/forms/EnumSelect";
 import { companyTypeLabels, type CompanyType } from "@/types/enums";
 import { customerFormDefaults, customerFormSchema, type CustomerFormValues } from "./schema";
 import { CustomerBranchesPanel } from "./CustomerBranchesPanel";
+import { CustomerItemAliasesPanel } from "./CustomerItemAliasesPanel";
+import { CustomerColorAliasesPanel } from "./CustomerColorAliasesPanel";
 import type { Customer } from "./types";
 
 interface Props {
@@ -51,7 +53,7 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Müşteriyi Düzenle" : "Yeni Müşteri"}</DialogTitle>
           <DialogDescription>
@@ -66,6 +68,12 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
             <TabsTrigger value="info">Bilgiler</TabsTrigger>
             <TabsTrigger value="branches" disabled={!isEdit || !initial}>
               Şubeler
+            </TabsTrigger>
+            <TabsTrigger value="item-aliases" disabled={!isEdit || !initial}>
+              Müşterideki Ürün Adları
+            </TabsTrigger>
+            <TabsTrigger value="color-aliases" disabled={!isEdit || !initial}>
+              Müşterideki Renk Adları
             </TabsTrigger>
           </TabsList>
 
@@ -119,6 +127,14 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
 
           <TabsContent value="branches">
             {initial && <CustomerBranchesPanel customerId={initial.id} />}
+          </TabsContent>
+
+          <TabsContent value="item-aliases">
+            {initial && <CustomerItemAliasesPanel customerId={initial.id} />}
+          </TabsContent>
+
+          <TabsContent value="color-aliases">
+            {initial && <CustomerColorAliasesPanel customerId={initial.id} />}
           </TabsContent>
         </Tabs>
       </DialogContent>

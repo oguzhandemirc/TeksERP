@@ -32,7 +32,6 @@ import { buildPagination } from "../utils/query-parser";
 import {
   recomputeStepStatus,
   ensureWorkOrderInProgress,
-  canRollGoBackFromStep,
 } from "./helpers/roll-step.helper";
 
 // -----------------------------------------------------------------------------
@@ -631,9 +630,18 @@ export class SubcontractorService {
       /// Override — fason kategorisi appliesColor=true ise WO.targetColorId
       /// otomatik kullanılır; UI farklı renk seçtiyse buradan gönderilir.
       appliedColorId?: string | null;
-      /// Override — appliesColor=true ise WO.targetProperties otomatik
-      /// kullanılır; UI farklı liste verirse buradan gönderilir (replace).
+      /// Override — fason kategorisi appliesProperty=true ise WO.targetProperties
+      /// otomatik kullanılır; UI farklı liste verirse buradan gönderilir (replace).
       appliedPropertyIds?: string[];
+      /// Fasondan gelen açık kumaş parçaları — verilirse Receipt anında yeni
+      /// "open-fabric" Roll'lar otomatik doğar ve rotadaki bir sonraki adıma
+      /// bağlanır. Verilmezse mevcut akış: Kurşun/KK2 operatörü
+      /// `POST /api/rolls/open-fabric` ile manuel açar.
+      newRolls?: Array<{
+        qty: number;
+        weightKg?: number | null;
+        notes?: string | null;
+      }>;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
@@ -657,22 +665,32 @@ export class SubcontractorService {
       where: { id: data.workOrderId },
       select: {
         id: true,
+        targetItemId: true,
         targetColorId: true,
         targetProperties: { select: { propertyId: true } },
       },
     });
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
 
-    // Roll.itemId fason dönüşünde DEĞİŞMEZ. Renk/özellik ise BU ADIM 'renk veren'
-    // bir kategoriye (SubcontractorCategory.appliesColor=true) bağlıysa
-    // WO.targetColorId/targetProperties'tan otomatik kopyalanır. Tek bir adım
-    // appliesColor olur (planlama tarafında garanti edildi).
+    // Roll.itemId fason dönüşünde DEĞİŞMEZ. Renk ise BU ADIM "renk veren" bir
+    // kategoriye (SubcontractorCategory.appliesColor=true) bağlıysa
+    // WO.targetColorId'den; özellikler ise "özellik veren" kategoride
+    // (SubcontractorCategory.appliesProperty=true) WO.targetProperties'tan
+    // otomatik kopyalanır. Aynı adım her ikisini de yapabilir (Boyahane).
+    // Planlama tarafı rotada her bayrak için bir adım garanti eder.
 
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
       include: {
         station: true,
-        requiredCategory: { select: { id: true, name: true, appliesColor: true } },
+        requiredCategory: {
+          select: {
+            id: true,
+            name: true,
+            appliesColor: true,
+            appliesProperty: true,
+          },
+        },
         workOrder: {
           include: { steps: { orderBy: { stepSequence: "asc" } } },
         },
@@ -691,6 +709,7 @@ export class SubcontractorService {
     }
 
     const appliesColor = !!step.requiredCategory?.appliesColor;
+    const appliesProperty = !!step.requiredCategory?.appliesProperty;
     if (appliesColor && !wo.targetColorId && data.appliedColorId === undefined) {
       throw AppError.badRequest(
         "Bu adım renk uygulayan bir fason kategorisinde, ancak iş emrinde hedef renk tanımlı değil. Planlamayı düzeltin veya appliedColorId override gönderin.",
@@ -699,7 +718,9 @@ export class SubcontractorService {
 
     // appliedColorId / appliedPropertyIds resolution:
     //   - Override gönderildiyse onu kullan (null override de meşru — renk yok)
-    //   - Yoksa: appliesColor=true ise WO.target'tan otomatik; değilse null/[]
+    //   - Yoksa: appliesColor=true ise WO.targetColorId'den otomatik; değilse null
+    //   - Property için ayrı bayrak: appliesProperty=true ise WO.targetProperties;
+    //     boş targetProperties bilinçli olabilir → sessizce boş liste
     const resolvedAppliedColorId =
       data.appliedColorId !== undefined
         ? data.appliedColorId
@@ -709,7 +730,7 @@ export class SubcontractorService {
     const resolvedAppliedPropertyIds =
       data.appliedPropertyIds !== undefined
         ? data.appliedPropertyIds
-        : appliesColor
+        : appliesProperty
           ? wo.targetProperties.map((p) => p.propertyId)
           : [];
 
@@ -781,8 +802,9 @@ export class SubcontractorService {
 
       // ── Toplu hazırlık ─────────────────────────────────────────────────
       // YENİ MODEL: Roll'lar sonraki step'e taşınmaz. Terminal'e (CONSUMED)
-      // çekilir — boyahane top açıp bütün kumaş halinde döndürdüğü için
-      // fiziksel "top" kavramı kaybolmuştur. Yeni Roll'lar Kurşun/KK2'de doğar.
+      // çekilir — top fasona gittiyse (boyahane / zımpara / başkası) mutlaka
+      // açılır, fiziksel "top" kavramı kaybolur. Yeni Roll'lar Kurşun/KK2'de
+      // operatörün open-fabric çağrısıyla doğar.
       const returnRollIds = data.returns.map((r) => r.rollId);
 
       // 1) Açık movement'leri kapat (qtyOut/weightOut Roll'un sevk anındaki
@@ -802,8 +824,9 @@ export class SubcontractorService {
       `;
 
       // 2) Orijinal Roll'lar TERMINAL'e: SUBCONTRACTOR_CONSUMED, currentStepId=null.
-      //    currentQty / colorId / RollProperty dokunulmaz — son hayatın izi
-      //    audit/raporlamada kalsın.
+      //    Top fasona gittiyse mutlaka açıldı — boyahane/zımpara fark etmez,
+      //    kimliği kaybeder. currentQty / colorId / RollProperty dokunulmaz —
+      //    son hayatın izi audit/raporlamada kalsın.
       await tx.roll.updateMany({
         where: { id: { in: returnRollIds } },
         data: {
@@ -874,8 +897,75 @@ export class SubcontractorService {
         }
       }
 
-      // YENİ MODEL: Sonraki step PENDING'te kalır — Roll yok henüz. Operatör
-      // Kurşun/KK2'de ilk açık kumaş Roll'u oluşturduğunda step ACTIVE olur
+      // 5) newRolls verildiyse açık kumaş Roll'larını burada doğur. Sonraki
+      //    adım rotadaki bir sonraki adım — fason ise oraya bağlanır (kullanıcı
+      //    sonra Dispatch çağırır), değilse Kurşun/KK2 gibi internal step'e.
+      //    nextStep yoksa Roll'lar serbest stokta kalır.
+      if (data.newRolls && data.newRolls.length > 0) {
+        // itemId: WO target varsa onu, yoksa orijinal kaynak Roll'lardan al.
+        let bornItemId = wo.targetItemId;
+        if (!bornItemId) {
+          const sourceRoll = await tx.roll.findFirst({
+            where: { id: { in: returnRollIds } },
+            select: { itemId: true },
+          });
+          bornItemId = sourceRoll?.itemId ?? null;
+        }
+        if (!bornItemId) {
+          throw AppError.badRequest(
+            "Yeni Roll için item belirlenemedi (WO.targetItemId ve kaynak Roll itemId yok)"
+          );
+        }
+
+        for (const nr of data.newRolls) {
+          if (!Number.isFinite(nr.qty) || nr.qty <= 0) {
+            throw AppError.badRequest("Yeni Roll metrajı pozitif olmalı");
+          }
+          const created = await tx.roll.create({
+            data: {
+              itemId: bornItemId,
+              colorId: resolvedAppliedColorId,
+              initialQty: nr.qty,
+              currentQty: nr.qty,
+              weightKg: nr.weightKg ?? null,
+              status: RollStatus.STOCK,
+              entrySource: "SUBCONTRACTOR_RETURN",
+              parentReceiptId: receipt.id,
+              currentStepId: nextStep ? nextStep.id : null,
+              createdById: userId ?? null,
+              // barcode null — açık kumaş, fiziksel etiket yok
+              ...(resolvedAppliedPropertyIds.length > 0
+                ? {
+                    properties: {
+                      create: resolvedAppliedPropertyIds.map((propertyId) => ({
+                        property: { connect: { id: propertyId } },
+                      })),
+                    },
+                  }
+                : {}),
+            },
+          });
+          // Sonraki step varsa açılış RollMovement'i (qty/weight in)
+          if (nextStep) {
+            await tx.rollMovement.create({
+              data: {
+                rollId: created.id,
+                workOrderStepId: nextStep.id,
+                qtyIn: nr.qty,
+                weightIn: nr.weightKg ?? null,
+                operatorId: userId ?? null,
+                notes: `RECEIPT_OPEN_FABRIC:${receiptNo}`,
+              },
+            });
+          }
+        }
+        // Sonraki step var ise status'unu güncelle (PENDING → ACTIVE / vb.)
+        if (nextStep) {
+          await recomputeStepStatus(tx, nextStep.id);
+        }
+      }
+      // newRolls verilmediyse: sonraki step PENDING'te kalır — Roll yok henüz.
+      // Operatör Kurşun/KK2'de ilk açık kumaş Roll'unu açtığında step ACTIVE olur
       // (open-fabric endpoint kendisi recomputeStepStatus çağırır).
 
       // Refakat kartı ARRIVAL
@@ -1374,8 +1464,8 @@ export class SubcontractorService {
   //   - Receipt soft-cancel edilir (cancelledAt/By/Reason).
   //   - Receipt'teki rulalar AT_SUBCONTRACTOR'a geri çekilir, currentStepId
   //     bu fason adımına döner.
-  //   - "Renk veren" kategori (appliesColor=true) idiyse: Roll.colorId=null
-  //     ve RollProperty (WO.targetProperties listesindeki) silinir.
+  //   - Receipt seviyesindeki appliedColor / appliedProperty kayıtları silinir
+  //     ("renk veren" ya da "özellik veren" kategori bu adımdaydı diye).
   //   - Sonraki adımda her rulo için: kapalı movement, RollOperation veya
   //     yeni dispatch varsa REDDET ("önce o işlemi geri al"). Aksi halde
   //     sonraki adımdaki açık movement silinir.
@@ -1399,14 +1489,11 @@ export class SubcontractorService {
         items: { select: { newRollId: true } },
         step: {
           include: {
-            requiredCategory: { select: { appliesColor: true } },
             workOrder: {
               select: {
                 id: true,
                 status: true,
                 steps: { orderBy: { stepSequence: "asc" }, select: { id: true, stepSequence: true } },
-                targetColorId: true,
-                targetProperties: { select: { propertyId: true } },
               },
             },
           },
@@ -1426,7 +1513,7 @@ export class SubcontractorService {
       throw AppError.badRequest("Bu kabul belgesinde rulo yok");
     }
 
-    // YENİ MODEL: Receipt'ten doğmuş "açık kumaş" Roll'ları varsa iptal yasak —
+    // Receipt'ten doğmuş "açık kumaş" Roll'ları varsa iptal yasak —
     // önce o Roll'lar elle silinmeli (Kurşun/KK2 operatörü temizlemeli).
     const bornRollCount = await prisma.roll.count({
       where: { parentReceiptId: receiptId },

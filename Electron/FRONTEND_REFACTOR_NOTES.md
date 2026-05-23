@@ -33,13 +33,14 @@ Backend permission ailesi de bu ayrımı yansıtır: `mobile:*` mobil, diğerler
 | `OrderLine.colorId` | Yoktu | **Yeni** — nullable FK Color |
 | `WorkOrder.targetColorId` | Yoktu | **Yeni** — nullable FK Color |
 | `Roll.colorId` | Item.colorId üzerinden derive | **Yeni** — nullable FK Color, doğrudan Roll'da |
-| `SubcontractorCategory.appliesColor` | Yoktu | **Yeni** — Boolean. true ise bu kategorideki fason kabul rengin/özelliklerin kopyalandığı adımdır |
+| `SubcontractorCategory.appliesColor` | Yoktu | **Yeni** — Boolean. true ise bu kategorideki fason kabulde Roll.colorId WO.targetColorId'den kopyalanır |
+| `SubcontractorCategory.appliesProperty` | Yoktu | **Yeni (2026-05-18)** — Boolean. true ise bu kategorideki fason kabulde RollProperty WO.targetProperties'tan kopyalanır. `appliesColor`'dan bağımsız: Boyahane ikisi de true, ileride Zımpara/Kurşun yalnız özellik verici olabilir |
 
 ### Akış değişiklikleri
 1. **Ürün kataloğu**: Tek "Patos" kaydı. Kullanıcı ürün açarken artık "ham mı/final mi" seçmiyor. Sadece kod, isim, tip (FABRIC/YARN/...), birim, izin verilen renkler (allowedColors), izin verilen özellikler (allowedProperties).
 2. **Sipariş**: `OrderLine` satırında `itemId` (Patos) + `colorId` (Mavi, opsiyonel) + properties (allowed list'ten).
 3. **İş emri**: ORDER_PRODUCTION'da `targetItemId` + `targetColorId` + `targetProperties` orderLine'dan **otomatik** çekilir. STOCK_PRODUCTION'da manuel.
-4. **Fason Kabul**: Eğer adımın `requiredCategory.appliesColor === true` ise, kabul edilen rulonun `colorId` ve özellikleri WO'dan kopyalanır.
+4. **Fason Kabul**: Renk → adımın `requiredCategory.appliesColor === true` ise `Roll.colorId` WO'dan kopyalanır. Özellik → `requiredCategory.appliesProperty === true` ise `RollProperty` WO'dan kopyalanır (iki bayrak bağımsız).
 5. **Tambur**: Artık renk/özellik kopyalamıyor. Sadece bölme + WAREHOUSE'a aktarma. (Eğer Fason Kabul'da renk uygulanmadıysa Tambur "ham bitmiş ürün" uyarısı verir, operatör onaylarsa devam.)
 6. **Depo (Inventory)**: Filter `?processingStatus=raw|processed|finished`. Türev:
    - `raw` = `colorId IS NULL`
@@ -1061,7 +1062,7 @@ sonrası kırılıyor. Yeni yaşam döngüsü:
 }
 ```
 
-- Verilmezse: kategori `appliesColor=true` ise `WO.targetColor` + `WO.targetProperties` otomatik kullanılır; değilse null/[].
+- `appliedColorId` verilmezse: kategori `appliesColor=true` ise `WO.targetColor` otomatik; değilse `null`. `appliedPropertyIds` verilmezse: kategori `appliesProperty=true` ise `WO.targetProperties` otomatik; değilse `[]`. (İki bayrak bağımsızdır — 2026-05-18 sonrası.)
 - Eski **Roll'a renk uygulama** mantığı kaldırıldı — artık receipt seviyesinde tutuluyor.
 - Orijinal Roll'lar `SUBCONTRACTOR_CONSUMED`'a çekiliyor; sonraki step'e movement açılmıyor (Roll yok henüz).
 - Sonraki step (Kurşun/KK2) PENDING kalır; ilk açık kumaş açıldığında ACTIVE olur.
@@ -1196,9 +1197,10 @@ UI öneri preset'leri:
 
 ### A. Fason Kabul ekranı (planlama / mal kabul personeli)
 
-Mevcut `POST /api/subcontractor/receive` çağrısına **renk + özellik seçici** eklenmeli:
-- **appliesColor=true kategoride** (boyahane vb.): default WO.targetColor + WO.targetProperties; operatör override edebilir.
-- **appliesColor=false kategoride** (yıkama, zımpara vb.): renk/property seçici hiç gösterilmez.
+Mevcut `POST /api/subcontractor/receive` çağrısına **renk + özellik seçici** eklenmeli (2026-05-18 sonrası iki bayrak bağımsız):
+- **`appliesColor=true` kategoride** (Boyahane): renk seçici görünür; default WO.targetColor, operatör override edebilir.
+- **`appliesProperty=true` kategoride** (Boyahane bugün; ileride Zımpara/Kurşun): özellik seçici görünür; default WO.targetProperties, operatör override edebilir.
+- **Her ikisi de false** kategoride (Yıkama vb.): hiçbir seçici gösterilmez.
 - Operatör seçtiklerini `appliedColorId` + `appliedPropertyIds` olarak gönderir.
 - Ölçüm alanları (qty/weight/fire) **kaldırıldı** — UI'dan da kaldırın.
 

@@ -1,3 +1,24 @@
+// ============================================================================
+// [YENİ — 2026-05-18] TODO: appliesProperty ayrımı yansıtılmadı
+// ----------------------------------------------------------------------------
+// Backend `SubcontractorCategory` artık iki bayrak tutuyor:
+//   - appliesColor    → fason kabulde renk uygulanır mı?
+//   - appliesProperty → fason kabulde özellik uygulanır mı? (BAĞIMSIZ)
+//
+// Bu ekran şu an "Uygulanacak Renk + Özellikler" bloğunu tek `appliesColor`
+// koşuluna bağlıyor (aşağıda satır ~ "appliesColor &&" altı). Yeni mantıkta:
+//   - Renk seçici/önizleme → step.requiredCategory.appliesColor === true
+//   - Özellik seçici/önizleme → step.requiredCategory.appliesProperty === true
+//   - İkisi de true ise (Boyahane gibi) iki blok da görünür.
+//   - Yalnız appliesProperty=true bir kategori (örn. ileride Zımpara) için
+//     renk seçici GÖSTERİLMEZ, sadece özellik seçici çıkar.
+//
+// Backend `subcontractor.service.ts` artık `appliedPropertyIds` çözümünü
+// `appliesProperty` bayrağı üzerinden yapıyor; mobil eski `appliesColor`
+// üzerinden override gönderse de geri uyumlu çalışır, ancak UI yanıltıcıdır.
+// Kullanıcı bilinçli olarak ayrı bir iterasyonda ele alınacağını söyledi.
+// ============================================================================
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import RNModal from 'react-native-modal';
@@ -28,6 +49,8 @@ import type {
   PendingReturnGroup,
   ReceiveRequest,
   TravelerCardLookup,
+  Color,
+  FabricProperty,
 } from '../../../types/models';
 
 const RECEIPTS_PAGE_SIZE = 12;
@@ -35,9 +58,10 @@ const SUBMIT_ARM_TIMEOUT_MS = 3000;
 
 interface RollRow {
   rollId: string;
-  barcode: string;
+  /** Açık kumaş Roll'lar (boyahane öncesi) için NULL; ama fasona giden hep barkodlu. */
+  barcode: string | null;
   itemName: string;
-  variantName?: string | null;
+  colorName?: string | null;
   dispatchedQty: number;
   width: number | null;
   qualityGrade: string;
@@ -56,6 +80,18 @@ export default function FasonKabulScreen() {
   const [rows, setRows] = useState<RollRow[]>([]);
   const [manifestNo, setManifestNo] = useState('');
   const [notes, setNotes] = useState('');
+  /**
+   * Receipt seviyesinde uygulanan renk + özellik (Refactor 9 — Boyahane akışı).
+   * Adımın `requiredCategory.appliesColor === true` olduğunda backend default
+   * olarak WO.targetColor / targetProperties'i kullanır; operatör override
+   * etmek isterse buradan değiştirir. NULL gönderilirse backend default'a düşer.
+   */
+  const [appliedColor, setAppliedColor] = useState<Color | null>(null);
+  const [appliedProperties, setAppliedProperties] = useState<FabricProperty[]>([]);
+
+  // Kabul iptal modalı
+  const [cancelTargetReceiptId, setCancelTargetReceiptId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
 
   // ── Right column ──
   const [rightTab, setRightTab] = useState<RightTab>('pending');
@@ -123,6 +159,29 @@ export default function FasonKabulScreen() {
     },
   });
 
+  const cancelReceiptMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      subcontractorService.cancelReceipt(id, { reason }),
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Mal kabul iptal edildi' });
+      setCancelTargetReceiptId(null);
+      setCancelReason('');
+      qc.invalidateQueries({ queryKey: ['receipts'] });
+      qc.invalidateQueries({ queryKey: ['pending-returns'] });
+      qc.invalidateQueries({ queryKey: ['rolls'] });
+    },
+    onError: (err: Error) => {
+      // 409 — sonraki adımda iz var ("Top X: Sonraki adımda işlem yapılmış...")
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({
+        type: 'error',
+        text1: 'İptal edilemedi',
+        text2: err.message,
+      });
+    },
+  });
+
   // ── Handlers ──
   const resetForm = () => {
     setSelectedGroup(null);
@@ -140,7 +199,7 @@ export default function FasonKabulScreen() {
         rollId: r.id,
         barcode: r.barcode,
         itemName: r.item?.name ?? '—',
-        variantName: r.variant?.name ?? null,
+        colorName: r.color?.name ?? null,
         dispatchedQty: r.currentQty,
         width: r.width ?? null,
         qualityGrade: r.qualityGrade,
@@ -149,9 +208,14 @@ export default function FasonKabulScreen() {
         noteOpen: false,
       }))
     );
+    // applied color/properties default → WO.targetColor / targetProperties
+    setAppliedColor(g.workOrder.targetColor ?? null);
+    setAppliedProperties(g.workOrder.targetProperties ?? []);
     setSubmitArmed(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
+
+  const appliesColor = !!selectedGroup?.step.requiredCategory?.appliesColor;
 
   const handleResolveCard = async (overrideBarcode?: string) => {
     const barcode = (overrideBarcode ?? cardBarcode).trim();
@@ -175,8 +239,21 @@ export default function FasonKabulScreen() {
         return;
       }
 
-      const allGroups = pendingQuery.data?.data ?? [];
-      const matching = allGroups.filter((g) => g.workOrder.id === card.workOrderId);
+      // Refactor 5 — backend WO için bekleyen kabul yoksa net mesajla 400 atar
+      // ("Mevcut konum: Kurşun + KK2 (4 rulo)..."). Banner'da göster.
+      let matching: PendingReturnGroup[];
+      try {
+        const pr = await subcontractorService.pendingReturns(card.workOrderId);
+        matching = pr.data ?? [];
+      } catch (err) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        Toast.show({
+          type: 'error',
+          text1: 'Yanlış istasyon',
+          text2: (err as Error).message,
+        });
+        return;
+      }
 
       if (matching.length === 0) {
         Toast.show({
@@ -250,6 +327,13 @@ export default function FasonKabulScreen() {
       subcontractorId: subId,
       manifestNo: manifestNo.trim() || null,
       notes: notes.trim() || undefined,
+      // Refactor 9 — "renk veren" kategori için receipt seviyesi renk/özellik
+      ...(appliesColor
+        ? {
+            appliedColorId: appliedColor?.id ?? null,
+            appliedPropertyIds: appliedProperties.map((p) => p.id),
+          }
+        : {}),
       returns: rows
         .filter((r) => r.checked)
         .map((r) => ({ rollId: r.rollId, notes: r.notes.trim() || null })),
@@ -342,6 +426,52 @@ export default function FasonKabulScreen() {
                 </Text>
               </View>
 
+              {/* "Renk veren" kategori (Boyahane vb.) — uygulanacak renk/özellikler */}
+              {appliesColor && (
+                <View style={styles.appliesColorCard}>
+                  <View style={styles.appliesColorHeader}>
+                    <Icon source="palette" size={16} color="#7c3aed" />
+                    <Text style={styles.appliesColorTitle}>
+                      Uygulanacak Renk + Özellikler
+                    </Text>
+                    <Text style={styles.appliesColorHint}>
+                      WO planlamasından
+                    </Text>
+                  </View>
+                  <View style={styles.appliesColorBody}>
+                    {appliedColor ? (
+                      <View style={styles.appliesColorChip}>
+                        <View
+                          style={[
+                            styles.colorSwatch,
+                            { backgroundColor: appliedColor.hex ?? '#a78bfa' },
+                          ]}
+                        />
+                        <Text style={styles.appliesColorChipText}>
+                          {appliedColor.name}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.appliesColorEmpty}>
+                        WO'da renk belirtilmemiş — kabul sonrası rulolar
+                        renksiz kalır
+                      </Text>
+                    )}
+                    {appliedProperties.length > 0 && (
+                      <View style={styles.appliesPropertyRow}>
+                        {appliedProperties.map((p) => (
+                          <View key={p.id} style={styles.appliesPropertyChip}>
+                            <Text style={styles.appliesPropertyChipText}>
+                              {p.name}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+
               {/* Toplar — ScrollView'in büyük kısmı */}
               <ScrollView
                 style={styles.rollsScroll}
@@ -406,7 +536,7 @@ export default function FasonKabulScreen() {
                         <View style={{ flex: 1 }}>
                           <View style={styles.rollTopLine}>
                             <Text style={styles.rollBarcode} numberOfLines={1}>
-                              {row.barcode}
+                              {row.barcode ?? '—'}
                             </Text>
                             {!row.checked && (
                               <View style={styles.missingTag}>
@@ -416,7 +546,7 @@ export default function FasonKabulScreen() {
                           </View>
                           <Text style={styles.rollItemName} numberOfLines={1}>
                             {row.itemName}
-                            {row.variantName ? ` · ${row.variantName}` : ''}
+                            {row.colorName ? ` · ${row.colorName}` : ''}
                           </Text>
                           <View style={styles.rollBadges}>
                             <Badge icon="arrow-expand-vertical">
@@ -621,6 +751,10 @@ export default function FasonKabulScreen() {
               totalPages={receiptsQuery.data?.pagination?.totalPages ?? 1}
               total={receiptsQuery.data?.pagination?.total ?? 0}
               onShowDetail={setDetailReceiptId}
+              onCancel={(id) => {
+                setCancelTargetReceiptId(id);
+                setCancelReason('');
+              }}
               onPageChange={setReceiptsPage}
               onRefresh={() => receiptsQuery.refetch()}
             />
@@ -656,9 +790,127 @@ export default function FasonKabulScreen() {
           handleResolveCard(data);
         }}
       />
+
+      {/* Mal kabul iptal modalı (Refactor 3 — per-action undo) */}
+      <CancelReceiptModal
+        visible={!!cancelTargetReceiptId}
+        onDismiss={() => {
+          setCancelTargetReceiptId(null);
+          setCancelReason('');
+        }}
+        reason={cancelReason}
+        onReasonChange={setCancelReason}
+        submitting={cancelReceiptMutation.isPending}
+        onConfirm={() => {
+          if (!cancelTargetReceiptId) return;
+          if (cancelReason.trim().length < 3) {
+            Toast.show({
+              type: 'error',
+              text1: 'Sebep çok kısa',
+              text2: 'En az 3 karakter gerekli',
+            });
+            return;
+          }
+          cancelReceiptMutation.mutate({
+            id: cancelTargetReceiptId,
+            reason: cancelReason.trim(),
+          });
+        }}
+      />
     </ScreenChrome>
   );
 }
+
+function CancelReceiptModal({
+  visible,
+  onDismiss,
+  reason,
+  onReasonChange,
+  submitting,
+  onConfirm,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  reason: string;
+  onReasonChange: (v: string) => void;
+  submitting: boolean;
+  onConfirm: () => void;
+}) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  return (
+    <RNModal
+      isVisible={visible}
+      onBackdropPress={submitting ? undefined : onDismiss}
+      onBackButtonPress={submitting ? undefined : onDismiss}
+      backdropOpacity={0.55}
+      useNativeDriver
+      hideModalContentWhileAnimating
+      deviceWidth={winW}
+      deviceHeight={winH}
+      statusBarTranslucent
+      style={cancelStyles.modal}
+    >
+      <View style={[cancelStyles.sheet, { maxWidth: winW * 0.6 }]}>
+        <View style={cancelStyles.header}>
+          <Icon source="alert-circle" size={22} color="#dc2626" />
+          <Text variant="titleMedium" style={cancelStyles.title}>
+            Mal Kabulü İptal Et
+          </Text>
+        </View>
+        <Text style={cancelStyles.body}>
+          Bu kabul iptal edilecek. Rulolar boyahaneye/fason firmaya geri
+          dönecek, renk/özellik bilgisi (uygulandıysa) silinecek. Sonraki
+          adımda işlem yapılmışsa iptal reddedilir.
+        </Text>
+        <TextInput
+          mode="outlined"
+          label="İptal sebebi"
+          value={reason}
+          onChangeText={onReasonChange}
+          placeholder="Örn. operatör yanlış receipt seçti"
+          multiline
+          numberOfLines={3}
+          style={cancelStyles.input}
+        />
+        <View style={cancelStyles.actions}>
+          <Button mode="outlined" onPress={onDismiss} disabled={submitting}>
+            Vazgeç
+          </Button>
+          <Button
+            mode="contained"
+            buttonColor="#dc2626"
+            onPress={onConfirm}
+            loading={submitting}
+            disabled={submitting || reason.trim().length < 3}
+          >
+            İptal Et
+          </Button>
+        </View>
+      </View>
+    </RNModal>
+  );
+}
+
+const cancelStyles = StyleSheet.create({
+  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
+  sheet: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    gap: 12,
+    width: '90%',
+  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { fontWeight: '700', color: '#0f172a' },
+  body: { fontSize: 13, color: '#475569', lineHeight: 18 },
+  input: { backgroundColor: '#fff' },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 4,
+  },
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Yardımcı bileşenler
@@ -944,6 +1196,7 @@ function HistoryPane({
   totalPages,
   total,
   onShowDetail,
+  onCancel,
   onPageChange,
   onRefresh,
 }: {
@@ -955,6 +1208,7 @@ function HistoryPane({
   totalPages: number;
   total: number;
   onShowDetail: (id: string) => void;
+  onCancel: (id: string) => void;
   onPageChange: (page: number) => void;
   onRefresh: () => void;
 }) {
@@ -991,7 +1245,11 @@ function HistoryPane({
         keyExtractor={(r) => r.id}
         contentContainerStyle={{ padding: 8 }}
         renderItem={({ item }) => (
-          <ReceiptRow receipt={item} onShowDetail={onShowDetail} />
+          <ReceiptRow
+            receipt={item}
+            onShowDetail={onShowDetail}
+            onCancel={onCancel}
+          />
         )}
       />
       {totalPages > 1 && (
@@ -1071,6 +1329,61 @@ const styles = StyleSheet.create({
     borderBottomColor: '#fbbf24',
   },
   warningText: { fontSize: 11, color: '#92400e', flex: 1 },
+
+  // Refactor 9 — Boyahane / "renk veren" kategori uygulama bilgisi
+  appliesColorCard: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#faf5ff',
+    borderWidth: 1,
+    borderColor: '#c4b5fd',
+    gap: 8,
+  },
+  appliesColorHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  appliesColorTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6d28d9',
+    flex: 1,
+  },
+  appliesColorHint: {
+    fontSize: 10,
+    color: '#7c3aed',
+    fontStyle: 'italic',
+  },
+  appliesColorBody: { gap: 6 },
+  appliesColorChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd6fe',
+  },
+  colorSwatch: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+  },
+  appliesColorChipText: { fontSize: 13, fontWeight: '600', color: '#0f172a' },
+  appliesColorEmpty: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' },
+  appliesPropertyRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  appliesPropertyChip: {
+    backgroundColor: '#ede9fe',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  appliesPropertyChipText: { fontSize: 11, fontWeight: '600', color: '#5b21b6' },
 
   // Toplar — scrollable
   rollsScroll: { flex: 1 },

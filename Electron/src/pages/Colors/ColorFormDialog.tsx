@@ -19,7 +19,6 @@ export function ColorFormDialog({ open, onOpenChange, initial, onSubmit, isSubmi
     ? {
         name: initial.name,
         hex: initial.hex ?? "",
-        sortOrder: initial.sortOrder,
         isActive: initial.isActive,
       }
     : colorFormDefaults;
@@ -41,14 +40,9 @@ export function ColorFormDialog({ open, onOpenChange, initial, onSubmit, isSubmi
               Kod: <span className="font-mono">{initial.code}</span>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
-              <Input id="name" autoFocus placeholder="Mavi, Kırmızı..." {...form.register("name")} />
-            </FormField>
-            <FormField label="Sıra" htmlFor="sortOrder" error={form.formState.errors.sortOrder} required>
-              <Input id="sortOrder" type="number" min={0} {...form.register("sortOrder")} />
-            </FormField>
-          </div>
+          <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
+            <Input id="name" autoFocus placeholder="Mavi, Kırmızı..." {...form.register("name")} />
+          </FormField>
           <FormField
             label="Renk"
             error={form.formState.errors.hex}

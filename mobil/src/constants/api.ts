@@ -12,14 +12,12 @@ function getDevHost(): string | null {
   return host;
 }
 
-const fromExtra = (Constants.expoConfig?.extra as Record<string, unknown> | undefined)?.apiUrl;
+const envApiUrl = process.env.EXPO_PUBLIC_API_URL;
 const devHost = __DEV__ ? getDevHost() : null;
 
 export const API_URL = devHost
   ? `http://${devHost}:${BACKEND_PORT}/api`
-  : typeof fromExtra === 'string'
-    ? fromExtra
-    : `http://192.168.1.105:${BACKEND_PORT}/api`;
+  : envApiUrl ?? `http://localhost:${BACKEND_PORT}/api`;
 
 export const ENDPOINTS = {
   auth: {

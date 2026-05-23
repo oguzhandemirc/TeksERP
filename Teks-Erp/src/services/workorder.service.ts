@@ -95,9 +95,6 @@ export interface WorkOrderCreateInput {
   /** Tambur planlama bilgisi — "2-KAT" / "4-KAT" gibi. Tambur'a bilgi olarak
    *  iletilir; operatör finalize sırasında override edebilir. */
   foldType?:          string | null;
-  /** Tambur planlama bilgisi — toplam katman sayısı. Operatör override
-   *  edebilir. */
-  layerCount?:        number | null;
   /**
    * Üretim çıktısı rulolarda olacak özellikler. "Renk veren" fason adımının
    * Fason Kabul'ünde Roll.properties'e bindirilir. Item.allowedProperties
@@ -200,7 +197,7 @@ export class WorkOrderService {
     if (data.routeTemplateId) {
       if (data.steps && data.steps.length > 0) {
         throw AppError.badRequest(
-          "Aynı anda hem routeTemplateId hem steps veremezsiniz. Birini seçin."
+          "Aynı anda hem rota şablonu hem özel rota adımları veremezsiniz. Birini seçin."
         );
       }
       const template = await prisma.route.findUnique({
@@ -233,7 +230,7 @@ export class WorkOrderService {
     } else {
       if (!data.steps || data.steps.length === 0) {
         throw AppError.badRequest(
-          "En az bir rota adımı (steps) veya bir routeTemplateId gerekli"
+          "Rota şablonu seçin veya özel rota adımları tanımlayın."
         );
       }
       finalSteps = data.steps.map((s) => ({
@@ -243,10 +240,6 @@ export class WorkOrderService {
         plannedSubcontractorId: s.plannedSubcontractorId ?? null,
       }));
     }
-
-    // NOT: PACKAGING/SHIPPING rotaya otomatik EKLENMEZ — paket/sevkiyat WO'dan
-    // bağımsız fulfillment akışı (PackagingQueue + ayrı sevkiyat). WO rotası
-    // sadece üretim istasyonlarını içerir (KK1, Fason Sevk/Kabul, Kurşun/QC2, Tambur).
 
     // ── Sipariş bağları + tahsis miktarları (3.2) ───────────────────────────
     let allocations: { orderLineId: string; allocatedQty: number }[] = [];
@@ -262,7 +255,7 @@ export class WorkOrderService {
 
     if (type === "ORDER_PRODUCTION" && allocations.length === 0) {
       throw AppError.badRequest(
-        "ORDER_PRODUCTION tipindeki iş emri en az bir sipariş satırına bağlanmalıdır"
+        "Siparişe özel üretim iş emri en az bir sipariş kalemine bağlanmalıdır."
       );
     }
 
@@ -274,7 +267,7 @@ export class WorkOrderService {
 
     if (type === "STOCK_PRODUCTION" && !resolvedTargetItemId) {
       throw AppError.badRequest(
-        "STOCK_PRODUCTION tipindeki iş emri için hedef ürün (targetItemId) zorunludur"
+        "Stoğa üretim iş emri için hedef ürün seçmelisiniz."
       );
     }
 
@@ -336,6 +329,8 @@ export class WorkOrderService {
     // 2) Item allowed listeleri dolu ise targetColor/Property o setin alt kümesi olmalı.
     // 3) targetColorId set edilmişse, rotada appliesColor=true en az bir adım olmalı
     //    (yoksa renk asla uygulanmaz → planlama hatası).
+    // 4) targetProperties dolu ise, rotada appliesProperty=true en az bir adım olmalı
+    //    (simetrik kural — özellik asla uygulanmaz aksi halde).
     let targetPropertyIds = [...new Set(data.targetPropertyIds ?? [])];
     if (
       targetPropertyIds.length === 0 &&
@@ -401,23 +396,31 @@ export class WorkOrderService {
         }
       }
 
-      // "Renk veren" adım var mı? (appliesColor=true bir SubcontractorCategory'e bağlı step)
-      if (resolvedTargetColorId) {
+      // "Renk veren" / "Özellik veren" adım var mı? (rota uygunluk kontrolü)
+      if (resolvedTargetColorId || targetPropertyIds.length > 0) {
         const stepCategoryIds = finalSteps
           .map((s) => s.requiredCategoryId)
           .filter((c): c is string => !!c);
         if (stepCategoryIds.length === 0) {
           throw AppError.badRequest(
-            "Hedef renk seçildi ama rotada hiç fason kategorisi tanımlı değil. Renk uygulayabilecek bir adım gerekiyor.",
+            "Hedef renk veya özellik seçildi ama rotada hiç fason kategorisi tanımlı değil. Uygulayabilecek bir adım gerekiyor.",
           );
         }
-        const colorGivingCategory = await prisma.subcontractorCategory.findFirst({
-          where: { id: { in: stepCategoryIds }, appliesColor: true },
-          select: { id: true },
+        const categoryFlags = await prisma.subcontractorCategory.findMany({
+          where: { id: { in: stepCategoryIds } },
+          select: { appliesColor: true, appliesProperty: true },
         });
-        if (!colorGivingCategory) {
+        if (resolvedTargetColorId && !categoryFlags.some((c) => c.appliesColor)) {
           throw AppError.badRequest(
-            "Rotada 'renk veren' fason kategorisi (appliesColor=true) tanımlı değil. Boyahane gibi bir adım eklenmeli.",
+            "Rotada 'renk veren' bir fason adımı (örn. boyahane) tanımlı değil. Hedef rengin uygulanabilmesi için böyle bir adım eklenmelidir.",
+          );
+        }
+        if (
+          targetPropertyIds.length > 0 &&
+          !categoryFlags.some((c) => c.appliesProperty)
+        ) {
+          throw AppError.badRequest(
+            "Rotada 'özellik veren' bir fason adımı tanımlı değil. Hedef özelliklerin uygulanabilmesi için böyle bir adım eklenmelidir.",
           );
         }
       }
@@ -450,7 +453,7 @@ export class WorkOrderService {
           if (!line) continue;
           if (alloc.allocatedQty < 0) {
             throw AppError.badRequest(
-              `Negatif tahsis miktarı kabul edilmez (orderLine: ${line.id})`
+              "Tahsis miktarı negatif olamaz."
             );
           }
           const alreadyReserved = line.workOrderLinks.reduce(
@@ -460,9 +463,7 @@ export class WorkOrderService {
           const remaining = line.quantity - alreadyReserved;
           if (alloc.allocatedQty > remaining + 0.0001 /* float tolerance */) {
             throw AppError.conflict(
-              `Sipariş satırı ${line.id} için kalan kapasite ${remaining.toFixed(
-                2
-              )} — talep edilen ${alloc.allocatedQty.toFixed(2)} aşıyor (overbooking).`
+              `Bir sipariş kalemi için kalan kapasite ${remaining.toFixed(2)} m, talep edilen ${alloc.allocatedQty.toFixed(2)} m bunu aşıyor.`
             );
           }
         }
@@ -487,7 +488,6 @@ export class WorkOrderService {
           targetItemId:      resolvedTargetItemId,
           targetColorId:     resolvedTargetColorId,
           foldType:          data.foldType          ?? null,
-          layerCount:        data.layerCount        ?? null,
           steps: {
             create: finalSteps.map((step, index) => ({
               stationId:              step.stationId,
@@ -958,7 +958,7 @@ export class WorkOrderService {
 
     if (existing.status === WorkOrderStatus.IN_PROGRESS) {
       throw AppError.conflict(
-        "Üretimdeki iş emri kalıcı olarak silinemez. Önce iptal edin (soft-delete)."
+        "Üretimdeki iş emri kalıcı olarak silinemez. Önce iptal edin."
       );
     }
 
@@ -1113,7 +1113,7 @@ export class WorkOrderService {
       wo.status === WorkOrderStatus.CANCELLED
     ) {
       throw AppError.conflict(
-        `Tamamlanmış/iptal edilmiş iş emrine top bağlanamaz (durum: ${wo.status}).`,
+        "Tamamlanmış veya iptal edilmiş iş emrine top bağlanamaz.",
       );
     }
 
@@ -1128,13 +1128,8 @@ export class WorkOrderService {
     // INTERNAL ilk step: roller fabrikada, bağlama anında ilk adıma giriş yaparlar.
     const firstStepIsExternal = firstStep.station.type === "EXTERNAL";
 
-    // R10: WorkOrderType bazlı kabul edilen roll statüsleri
-    // - REPAIR_REWORK: tamamlanmış/sevke hazır topu tekrar işlemeye alabilir.
-    // - Diğerleri: sadece STOCK'tan başlar.
-    const acceptedRollStatuses: RollStatus[] =
-      wo.type === "REPAIR_REWORK"
-        ? [RollStatus.STOCK, RollStatus.PRODUCED, RollStatus.READY_FOR_SHIP]
-        : [RollStatus.STOCK];
+    // R10: Tüm WO tipleri için sadece STOCK statüsündeki rulolar bağlanabilir.
+    const acceptedRollStatuses: RollStatus[] = [RollStatus.STOCK];
 
     const attached: { id: string; barcode: string | null; prevStatus: RollStatus; qtyIn: number }[] = [];
     const errorMessages: string[] = [];
@@ -1291,7 +1286,6 @@ export class WorkOrderService {
       targetItemId?: string | null;
       targetColorId?: string | null;
       foldType?: string | null;
-      layerCount?: number | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
@@ -1302,14 +1296,14 @@ export class WorkOrderService {
       wo.status === WorkOrderStatus.CANCELLED
     ) {
       throw AppError.conflict(
-        `Tamamlanmış/iptal edilmiş iş emri düzenlenemez (durum: ${wo.status}).`,
+        "Tamamlanmış veya iptal edilmiş iş emri düzenlenemez.",
       );
     }
 
     // STOCK_PRODUCTION'da targetItemId zorunlu — null'a çevirme yasak
     if (wo.type === "STOCK_PRODUCTION" && data.targetItemId === null) {
       throw AppError.badRequest(
-        "STOCK_PRODUCTION tipindeki iş emrinde hedef ürün boş bırakılamaz"
+        "Stoğa üretim iş emrinde hedef ürün boş bırakılamaz."
       );
     }
     if (data.targetItemId) {
@@ -1350,7 +1344,6 @@ export class WorkOrderService {
         targetItemId: data.targetItemId === undefined ? undefined : data.targetItemId,
         targetColorId: data.targetColorId === undefined ? undefined : data.targetColorId,
         foldType: data.foldType === undefined ? undefined : data.foldType,
-        layerCount: data.layerCount === undefined ? undefined : data.layerCount,
       },
     });
 
@@ -1395,7 +1388,7 @@ export class WorkOrderService {
       existing.status === WorkOrderStatus.CANCELLED
     ) {
       throw AppError.conflict(
-        `Tamamlanmış/iptal edilmiş iş emri düzenlenemez (durum: ${existing.status}).`,
+        "Tamamlanmış veya iptal edilmiş iş emri düzenlenemez.",
       );
     }
 
@@ -1452,9 +1445,6 @@ export class WorkOrderService {
       }));
     }
 
-    // NOT: PACKAGING/SHIPPING rotaya otomatik EKLENMEZ — paket/sevkiyat WO'dan
-    // bağımsız fulfillment akışı. Rota sadece üretim istasyonlarını içerir.
-
     // ── Sipariş bağları + tahsis miktarları ─────────────────────────────────
     let allocations: { orderLineId: string; allocatedQty: number }[] = [];
     if (data.orderLineAllocations && data.orderLineAllocations.length > 0) {
@@ -1468,7 +1458,7 @@ export class WorkOrderService {
 
     if (type === "ORDER_PRODUCTION" && allocations.length === 0) {
       throw AppError.badRequest(
-        "ORDER_PRODUCTION tipindeki iş emri en az bir sipariş satırına bağlanmalıdır",
+        "Siparişe özel üretim iş emri en az bir sipariş kalemine bağlanmalıdır.",
       );
     }
 
@@ -1477,7 +1467,7 @@ export class WorkOrderService {
 
     if (type === "STOCK_PRODUCTION" && !resolvedTargetItemId) {
       throw AppError.badRequest(
-        "STOCK_PRODUCTION tipindeki iş emri için hedef ürün (targetItemId) zorunludur",
+        "Stoğa üretim iş emri için hedef ürün seçmelisiniz.",
       );
     }
 
@@ -1594,22 +1584,30 @@ export class WorkOrderService {
         }
       }
 
-      if (resolvedTargetColorId) {
+      if (resolvedTargetColorId || targetPropertyIds.length > 0) {
         const stepCategoryIds = finalSteps
           .map((s) => s.requiredCategoryId)
           .filter((c): c is string => !!c);
         if (stepCategoryIds.length === 0) {
           throw AppError.badRequest(
-            "Hedef renk seçildi ama rotada hiç fason kategorisi tanımlı değil. Renk uygulayabilecek bir adım gerekiyor.",
+            "Hedef renk veya özellik seçildi ama rotada hiç fason kategorisi tanımlı değil. Uygulayabilecek bir adım gerekiyor.",
           );
         }
-        const colorGivingCategory = await prisma.subcontractorCategory.findFirst({
-          where: { id: { in: stepCategoryIds }, appliesColor: true },
-          select: { id: true },
+        const categoryFlags = await prisma.subcontractorCategory.findMany({
+          where: { id: { in: stepCategoryIds } },
+          select: { appliesColor: true, appliesProperty: true },
         });
-        if (!colorGivingCategory) {
+        if (resolvedTargetColorId && !categoryFlags.some((c) => c.appliesColor)) {
           throw AppError.badRequest(
-            "Rotada 'renk veren' fason kategorisi (appliesColor=true) tanımlı değil. Boyahane gibi bir adım eklenmeli.",
+            "Rotada 'renk veren' bir fason adımı (örn. boyahane) tanımlı değil. Hedef rengin uygulanabilmesi için böyle bir adım eklenmelidir.",
+          );
+        }
+        if (
+          targetPropertyIds.length > 0 &&
+          !categoryFlags.some((c) => c.appliesProperty)
+        ) {
+          throw AppError.badRequest(
+            "Rotada 'özellik veren' bir fason adımı tanımlı değil. Hedef özelliklerin uygulanabilmesi için böyle bir adım eklenmelidir.",
           );
         }
       }
@@ -1644,7 +1642,7 @@ export class WorkOrderService {
           if (!line) continue;
           if (alloc.allocatedQty < 0) {
             throw AppError.badRequest(
-              `Negatif tahsis miktarı kabul edilmez (orderLine: ${line.id})`,
+              "Tahsis miktarı negatif olamaz.",
             );
           }
           const alreadyReserved = line.workOrderLinks.reduce(
@@ -1654,7 +1652,7 @@ export class WorkOrderService {
           const remaining = line.quantity - alreadyReserved;
           if (alloc.allocatedQty > remaining + 0.0001) {
             throw AppError.conflict(
-              `Sipariş satırı ${line.id} için kalan kapasite ${remaining.toFixed(2)} — talep edilen ${alloc.allocatedQty.toFixed(2)} aşıyor (overbooking).`,
+              `Bir sipariş kalemi için kalan kapasite ${remaining.toFixed(2)} m, talep edilen ${alloc.allocatedQty.toFixed(2)} m bunu aşıyor.`,
             );
           }
         }
@@ -1695,13 +1693,13 @@ export class WorkOrderService {
         if (incomingExistingIds.has(old.id)) continue;
         if (old.status !== "PENDING") {
           throw AppError.conflict(
-            `Adım ${old.stepSequence} silinemez — durum ${old.status} (sadece PENDING adımlar silinebilir).`,
+            `${old.stepSequence}. adım silinemez — sadece henüz başlamamış (bekleyen) adımlar silinebilir.`,
           );
         }
         const refCount = Object.values(old._count).reduce((a, b) => a + (b as number), 0);
         if (refCount > 0) {
           throw AppError.conflict(
-            `Adım ${old.stepSequence} silinemez — bağlı kayıtlar var (rulo/movement/sevk vs).`,
+            `${old.stepSequence}. adım silinemez — bu adıma bağlı rulo, hareket veya sevk kaydı var.`,
           );
         }
         await tx.workOrderStep.delete({ where: { id: old.id } });
@@ -1762,7 +1760,6 @@ export class WorkOrderService {
           targetItemId: resolvedTargetItemId,
           targetColorId: resolvedTargetColorId,
           foldType: data.foldType ?? null,
-          layerCount: data.layerCount ?? null,
           ...(allocations.length > 0
             ? {
                 orderLinks: {

@@ -28,7 +28,7 @@ import { shipmentService, type ReadyOrder } from "./service";
 
 interface PickerRow {
   rollId: string;
-  barcode: string;
+  barcode: string | null;
   itemName: string;
   itemCode: string;
   colorName: string | null;
@@ -303,11 +303,6 @@ export function ShipFromOrderPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-xs">{line.itemCode}</span>
                     <span className="font-medium">{line.itemName}</span>
-                    {line.variant && (
-                      <Badge variant="muted" className="text-[10px]">
-                        {line.variant.name}
-                      </Badge>
-                    )}
                     {line.color && (
                       <Badge variant="muted" className="gap-1 text-[10px]">
                         {line.color.hex && (

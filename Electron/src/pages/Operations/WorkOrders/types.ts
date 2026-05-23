@@ -15,10 +15,13 @@ export interface WorkOrderTargetItem {
   id: string;
   code: string;
   name: string;
-  isDerived: boolean;
-  baseItemId: string | null;
-  colorId: string | null;
-  color?: { id: string; code: string; name: string; hex: string | null } | null;
+}
+
+export interface WorkOrderTargetColor {
+  id: string;
+  code: string;
+  name: string;
+  hex: string | null;
 }
 
 export interface WorkOrderTargetPropertyLink {
@@ -33,15 +36,18 @@ export interface WorkOrder {
   status: WorkOrderStatus;
   width: number | null;
   targetQuantity: number | null;
-  recipeNo: string | null;
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   routeTemplateId: string | null;
   targetItemId: string | null;
+  targetColorId: string | null;
+  /** Tambur planlama bilgisi — operatöre default olarak gelir. */
+  foldType: string | null;
   servicePricePerMeter: string | null;
   steps: WorkOrderStepLite[];
   routeTemplate?: { id: string; code: string | null; name: string } | null;
   targetItem?: WorkOrderTargetItem | null;
+  targetColor?: WorkOrderTargetColor | null;
   /** Tambur'da finalize edilen rulolarda olacak özellikler. */
   targetProperties?: WorkOrderTargetPropertyLink[];
   orderLinks?: {
@@ -50,6 +56,7 @@ export interface WorkOrder {
     orderLine?: {
       quantity: number;
       width: number | null;
+      colorId: string | null;
       order?: {
         id: string;
         orderNumber: string;
@@ -59,9 +66,8 @@ export interface WorkOrder {
       item?: {
         id: string;
         name: string;
-        color?: { id: string; code: string; name: string; hex: string | null } | null;
       };
-      variant?: { id: string; name: string } | null;
+      color?: { id: string; code: string; name: string; hex: string | null } | null;
       requiredProperties?: {
         propertyId: string;
         property: { id: string; name: string };

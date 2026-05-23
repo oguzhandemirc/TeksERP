@@ -15,6 +15,7 @@ import { AppError } from "../utils/app-error";
 import { OrderStatus } from "@prisma/client";
 import { isValidCurrency, CURRENCY_CODES } from "../config/currencies";
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
+import { recomputeOrderStatus } from "./helpers/order-status.helper";
 
 /**
  * Lines üzerinden totalAmount hesaplar. unitPrice null olan satırlar toplama
@@ -448,8 +449,8 @@ export class OrderService extends BaseService {
       );
     }
 
-    // Manuel iz silinir, status PARTIAL_SHIPPED veya APPROVED olarak
-    // recompute belirler. Önce manualClosedById'yi temizle ki recompute çalışabilsin.
+    // Manuel iz silinir; sonra recomputeOrderStatus sevk sayaçlarına göre
+    // status (APPROVED/PARTIAL_SHIPPED) ve shippedQty'yi senkronize eder.
     const updated = await prisma.$transaction(async (tx) => {
       await tx.order.update({
         where: { id },
@@ -457,44 +458,11 @@ export class OrderService extends BaseService {
           manualClosedById: null,
           manualCloseReason: null,
           completedAt: null,
-          status: OrderStatus.PARTIAL_SHIPPED, // sevk yoksa recompute APPROVED'a çekecek; sevk varsa zaten PARTIAL_SHIPPED kalacak
+          status: OrderStatus.APPROVED,
         },
       });
-      // recompute import'unu burada yapamıyorum (circular?) — manuel hesap:
-      const o = await tx.order.findUnique({
-        where: { id },
-        select: {
-          status: true,
-          lines: {
-            select: {
-              allocations: {
-                select: {
-                  roll: {
-                    select: {
-                      shipmentItems: {
-                        where: { shipment: { status: "SHIPPED" } },
-                        select: { shippedQty: true },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
-      const shipped = (o?.lines ?? [])
-        .flatMap((l) => l.allocations)
-        .flatMap((a) => a.roll.shipmentItems)
-        .reduce((s, si) => s + si.shippedQty, 0);
-
-      const finalStatus: OrderStatus =
-        shipped > 0 ? OrderStatus.PARTIAL_SHIPPED : OrderStatus.APPROVED;
-
-      return tx.order.update({
-        where: { id },
-        data: { status: finalStatus },
-      });
+      await recomputeOrderStatus(tx, id);
+      return tx.order.findUniqueOrThrow({ where: { id } });
     });
 
     await AuditService.log({

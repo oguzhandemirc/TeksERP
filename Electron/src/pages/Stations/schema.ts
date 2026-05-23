@@ -2,18 +2,29 @@ import { z } from "zod";
 import { StationKind, StationType } from "@/types/enums";
 
 export const stationFormSchema = z.object({
-  name: z.string().min(1, "Ad gerekli").max(120),
-  type: z.enum([StationType.INTERNAL, StationType.EXTERNAL]),
-  kind: z.enum([
-    StationKind.RAW_QC,
-    StationKind.PROCESS_QC,
-    StationKind.TAMBUR,
-    StationKind.SUBCONTRACTOR,
-    StationKind.PACKAGING,
-    StationKind.SHIPPING,
-    StationKind.OTHER,
-  ]),
-  department: z.string().max(60).optional().or(z.literal("")),
+  name: z
+    .string()
+    .trim()
+    .min(1, "İstasyon adı boş bırakılamaz")
+    .max(120, "İstasyon adı en fazla 120 karakter olabilir"),
+  type: z.enum([StationType.INTERNAL, StationType.EXTERNAL], {
+    message: "İstasyon tipi seçilmeli",
+  }),
+  kind: z.enum(
+    [
+      StationKind.RAW_QC,
+      StationKind.PROCESS_QC,
+      StationKind.TAMBUR,
+      StationKind.SUBCONTRACTOR,
+      StationKind.OTHER,
+    ],
+    { message: "İstasyon türü seçilmeli" },
+  ),
+  department: z
+    .string()
+    .max(60, "Bölüm adı en fazla 60 karakter olabilir")
+    .optional()
+    .or(z.literal("")),
   isActive: z.boolean(),
   defaultCategoryId: z.string().nullable().optional(),
 });

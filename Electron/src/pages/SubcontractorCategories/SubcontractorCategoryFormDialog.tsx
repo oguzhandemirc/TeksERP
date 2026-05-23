@@ -28,6 +28,8 @@ export function SubcontractorCategoryFormDialog({
         name: initial.name,
         description: initial.description ?? "",
         isActive: initial.isActive,
+        appliesColor: initial.appliesColor,
+        appliesProperty: initial.appliesProperty,
       }
     : subcontractorCategoryFormDefaults;
 
@@ -54,6 +56,29 @@ export function SubcontractorCategoryFormDialog({
           <FormField label="Açıklama" htmlFor="description" error={form.formState.errors.description}>
             <Input id="description" {...form.register("description")} />
           </FormField>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1" {...form.register("appliesColor")} />
+            <span>
+              <span className="font-medium">Renk veren kategori</span>
+              <span className="block text-xs text-muted-foreground">
+                İşaretliyse: fason kabulde Roll'a iş emrinin hedef rengi
+                otomatik uygulanır. Boyahane için aç; Zımpara/Yıkama gibi
+                renk vermeyen kategoriler için kapalı bırak.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1" {...form.register("appliesProperty")} />
+            <span>
+              <span className="font-medium">Özellik veren kategori</span>
+              <span className="block text-xs text-muted-foreground">
+                İşaretliyse: fason kabulde Roll'a iş emrinin hedef özellikleri
+                otomatik uygulanır. Boyahane'de renk ile birlikte; ileride
+                Zımpara/Kurşun gibi "zımparalanmış"/"kurşunlanmış" özelliğini
+                kazandıracak adımlar için bağımsız açılabilir.
+              </span>
+            </span>
+          </label>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...form.register("isActive")} /> Aktif
           </label>

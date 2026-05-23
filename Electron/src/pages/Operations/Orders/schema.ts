@@ -2,25 +2,48 @@ import { z } from "zod";
 
 export const orderLineSchema = z.object({
   clientId: z.string(),
-  itemId: z.string().min(1, "Ürün seç"),
-  quantity: z.coerce.number().positive("Miktar pozitif olmalı"),
-  width: z.union([z.coerce.number().positive(), z.literal("").transform(() => null), z.null()]).optional().nullable(),
+  itemId: z.string().min(1, "Ürün seçilmeli"),
+  colorId: z.string().nullable().optional(),
+  quantity: z.coerce.number().positive("Miktar 0'dan büyük olmalı"),
+  width: z
+    .union([
+      z.coerce.number().positive("En 0'dan büyük olmalı"),
+      z.literal("").transform(() => null),
+      z.null(),
+    ])
+    .optional()
+    .nullable(),
   unitPrice: z.string().optional().or(z.literal("")),
+  customerItemName: z
+    .string()
+    .max(200, "Müşterideki ürün adı en fazla 200 karakter olabilir")
+    .optional()
+    .or(z.literal("")),
+  customerColorName: z
+    .string()
+    .max(200, "Müşterideki renk adı en fazla 200 karakter olabilir")
+    .optional()
+    .or(z.literal("")),
   requiredPropertyIds: z.array(z.string()).optional().default([]),
 });
 
 export const orderFormSchema = z.object({
-  customerId: z.string().min(1, "Müşteri seç"),
+  customerId: z.string().min(1, "Müşteri seçilmeli"),
   branchId: z.string().nullable().optional(),
-  currency: z.string().min(1).max(8),
+  currency: z
+    .string()
+    .trim()
+    .min(1, "Para birimi boş bırakılamaz")
+    .max(8, "Para birimi en fazla 8 karakter olabilir"),
   deadline: z.string().optional().or(z.literal("")),
-  lines: z.array(orderLineSchema).min(1, "En az bir kalem gerekli"),
+  lines: z
+    .array(orderLineSchema)
+    .min(1, "Sipariş en az bir kalem içermeli"),
 });
 
 export type OrderLineFormValues = z.infer<typeof orderLineSchema>;
 export type OrderFormValues = z.infer<typeof orderFormSchema>;
 
-/** Otomatik sipariş no — submit sırasında üretilir, kullanıcı görmez. */
 export function generateOrderNumber(): string {
   const now = new Date();
   const yy = String(now.getFullYear()).slice(2);
@@ -47,9 +70,12 @@ export const orderFormDefaults: OrderFormValues = {
     {
       clientId: newLineClientId(),
       itemId: "",
+      colorId: null,
       quantity: 0,
       width: null,
       unitPrice: "",
+      customerItemName: "",
+      customerColorName: "",
       requiredPropertyIds: [],
     },
   ],

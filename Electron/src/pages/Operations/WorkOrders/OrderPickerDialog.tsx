@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import { Info, Search, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { orderService } from "@/pages/Operations/Orders/service";
+import { customerService } from "@/pages/Customers/service";
+import type { Customer } from "@/pages/Customers/types";
 import type { Order, OrderLine } from "@/pages/Operations/Orders/types";
 
 export interface PickedOrderLineProperty {
@@ -30,6 +33,7 @@ export interface PickedOrderLine {
   customerName: string;
   itemId: string;
   itemName: string;
+  colorId: string | null;
   itemColorHex: string | null;
   itemColorName: string | null;
   quantity: number;
@@ -40,8 +44,34 @@ export interface PickedOrderLine {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialSelectedIds: string[];
+  /** Açılışta önceden seçili kalemler — Confirm öncesi tam veri (orderNumber, customer vb.) gerekir. */
+  initialSelected: PickedOrderLine[];
   onConfirm: (lines: PickedOrderLine[]) => void;
+}
+
+type DeadlinePreset = "all" | "week" | "month" | "overdue";
+type SortKey = "deadline" | "customer" | "orderNumber";
+
+interface Anchor {
+  itemId: string;
+  itemName: string;
+  colorId: string | null;
+  colorName: string | null;
+  colorHex: string | null;
+  width: number | null;
+}
+
+interface LineCompatTarget {
+  itemId: string;
+  colorId: string | null;
+  width: number | null;
+}
+
+function mismatchReason(anchor: Anchor, line: LineCompatTarget): string | null {
+  if (line.itemId !== anchor.itemId) return "Farklı ürün";
+  if ((line.colorId ?? null) !== (anchor.colorId ?? null)) return "Farklı renk";
+  if ((line.width ?? null) !== (anchor.width ?? null)) return "Farklı en";
+  return null;
 }
 
 function buildPicked(order: Order, line: OrderLine): PickedOrderLine {
@@ -54,8 +84,9 @@ function buildPicked(order: Order, line: OrderLine): PickedOrderLine {
     customerName: order.customer?.name ?? "—",
     itemId: line.itemId,
     itemName: line.item?.name ?? "—",
-    itemColorHex: line.item?.color?.hex ?? null,
-    itemColorName: line.item?.color?.name ?? null,
+    colorId: line.colorId,
+    itemColorHex: line.color?.hex ?? null,
+    itemColorName: line.color?.name ?? null,
     quantity: line.quantity,
     width: line.width ?? null,
     requiredProperties: (line.requiredProperties ?? []).map((rp) => ({
@@ -65,21 +96,59 @@ function buildPicked(order: Order, line: OrderLine): PickedOrderLine {
   };
 }
 
-export function OrderPickerDialog({ open, onOpenChange, initialSelectedIds, onConfirm }: Props) {
+function deadlineTone(d: string | null): "danger" | "warning" | "muted" {
+  if (!d) return "muted";
+  const days = (new Date(d).getTime() - Date.now()) / 86_400_000;
+  if (days < 0) return "danger";
+  if (days < 3) return "warning";
+  return "muted";
+}
+
+function deadlineRangeOf(p: DeadlinePreset): { dateFrom?: string; dateTo?: string } | null {
+  const now = new Date();
+  if (p === "all") return null;
+  if (p === "overdue") return { dateTo: now.toISOString() };
+  const end = new Date(now);
+  end.setDate(end.getDate() + (p === "week" ? 7 : 30));
+  return { dateFrom: now.toISOString(), dateTo: end.toISOString() };
+}
+
+const DEADLINE_PRESETS: { value: DeadlinePreset; label: string }[] = [
+  { value: "all", label: "Tümü" },
+  { value: "overdue", label: "Geçti" },
+  { value: "week", label: "Bu hafta" },
+  { value: "month", label: "Bu ay" },
+];
+
+const SORT_PRESETS: { value: SortKey; label: string }[] = [
+  { value: "deadline", label: "Termin" },
+  { value: "customer", label: "Müşteri" },
+  { value: "orderNumber", label: "Sipariş No" },
+];
+
+export function OrderPickerDialog({ open, onOpenChange, initialSelected, onConfirm }: Props) {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [deadlinePreset, setDeadlinePreset] = useState<DeadlinePreset>("all");
+  const [sortBy, setSortBy] = useState<SortKey>("deadline");
+  const [showOnlySelected, setShowOnlySelected] = useState(false);
+  const [hideIncompatible, setHideIncompatible] = useState(true);
+  const [selectedMap, setSelectedMap] = useState<Map<string, PickedOrderLine>>(new Map());
 
   useEffect(() => {
-    if (open) setSelected(new Set(initialSelectedIds));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) {
+    if (open) {
+      setSelectedMap(new Map(initialSelected.map((l) => [l.lineId, l])));
+    } else {
       setSearch("");
       setDebounced("");
+      setCustomerId(null);
+      setDeadlinePreset("all");
+      setSortBy("deadline");
+      setShowOnlySelected(false);
+      setHideIncompatible(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
@@ -87,178 +156,637 @@ export function OrderPickerDialog({ open, onOpenChange, initialSelectedIds, onCo
     return () => clearTimeout(t);
   }, [search]);
 
+  const range = useMemo(() => deadlineRangeOf(deadlinePreset), [deadlinePreset]);
+  const backendSortBy: string = sortBy === "customer" ? "deadline" : sortBy;
+
   const query = useQuery({
-    queryKey: ["orders", "wo-picker", debounced],
+    queryKey: [
+      "orders",
+      "wo-picker",
+      debounced,
+      customerId,
+      deadlinePreset,
+      backendSortBy,
+    ],
     queryFn: () =>
       orderService.getAll({
         page: 1,
-        pageSize: 50,
-        sortBy: "deadline",
-        sortOrder: "asc",
+        pageSize: 100,
+        sortBy: backendSortBy,
+        sortOrder: sortBy === "orderNumber" ? "desc" : "asc",
         search: debounced || undefined,
-        filters: { status: "APPROVED,PARTIAL_SHIPPED" },
+        filters: {
+          status: "APPROVED,PARTIAL_SHIPPED",
+          ...(customerId ? { customerId } : {}),
+        },
+        ...(range
+          ? {
+              dateField: "deadline",
+              ...(range.dateFrom ? { dateFrom: range.dateFrom } : {}),
+              ...(range.dateTo ? { dateTo: range.dateTo } : {}),
+            }
+          : {}),
       }),
-    enabled: open,
+    enabled: open && !showOnlySelected,
     staleTime: 30_000,
   });
 
-  const orders = query.data?.data ?? [];
+  const fetchedOrders = query.data?.data ?? [];
+  const sortedFetched = useMemo(() => {
+    if (sortBy !== "customer") return fetchedOrders;
+    return [...fetchedOrders].sort((a, b) =>
+      (a.customer?.name ?? "").localeCompare(b.customer?.name ?? "", "tr"),
+    );
+  }, [fetchedOrders, sortBy]);
 
-  const toggle = (lineId: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(lineId)) next.delete(lineId);
-      else next.add(lineId);
+  const selectedArray = useMemo(() => Array.from(selectedMap.values()), [selectedMap]);
+  const totalQty = selectedArray.reduce((s, l) => s + l.quantity, 0);
+  const customerCount = new Set(selectedArray.map((l) => l.customerId)).size;
+
+  const anchor: Anchor | null = useMemo(() => {
+    const f = selectedArray[0];
+    if (!f) return null;
+    return {
+      itemId: f.itemId,
+      itemName: f.itemName,
+      colorId: f.colorId,
+      colorName: f.itemColorName,
+      colorHex: f.itemColorHex,
+      width: f.width,
+    };
+  }, [selectedArray]);
+
+  // Anchor + hideIncompatible aktifken her siparişin uyumsuz satırlarını gizle,
+  // hiç uyumlu satırı kalmayan siparişleri tamamen listeden çıkar. Anchor yoksa
+  // veya kullanıcı toggle'ı kapadıysa hepsi gösterilir (uyumsuzlar disabled görünür).
+  const visibleFetched = useMemo(() => {
+    if (!anchor || !hideIncompatible) return sortedFetched;
+    return sortedFetched
+      .map((o) => ({
+        ...o,
+        lines: (o.lines ?? []).filter(
+          (l) =>
+            mismatchReason(anchor, {
+              itemId: l.itemId,
+              colorId: l.colorId,
+              width: l.width ?? null,
+            }) === null,
+        ),
+      }))
+      .filter((o) => (o.lines?.length ?? 0) > 0);
+  }, [sortedFetched, anchor, hideIncompatible]);
+
+  const groupedSelected = useMemo(() => {
+    const map = new Map<
+      string,
+      { id: string; orderNumber: string; customerName: string; deadline: string | null; lines: PickedOrderLine[] }
+    >();
+    for (const p of selectedArray) {
+      if (!map.has(p.orderId)) {
+        map.set(p.orderId, {
+          id: p.orderId,
+          orderNumber: p.orderNumber,
+          customerName: p.customerName,
+          deadline: p.orderDeadline,
+          lines: [],
+        });
+      }
+      map.get(p.orderId)!.lines.push(p);
+    }
+    return Array.from(map.values());
+  }, [selectedArray]);
+
+  const addLine = (picked: PickedOrderLine) => {
+    setSelectedMap((prev) => {
+      const next = new Map(prev);
+      next.set(picked.lineId, picked);
       return next;
     });
   };
-
-  const toggleOrder = (order: Order, checked: boolean) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
+  const removeLine = (lineId: string) => {
+    setSelectedMap((prev) => {
+      const next = new Map(prev);
+      next.delete(lineId);
+      return next;
+    });
+  };
+  const toggleOrderFromFetched = (order: Order, checked: boolean) => {
+    setSelectedMap((prev) => {
+      const next = new Map(prev);
       for (const line of order.lines ?? []) {
-        if (checked) next.add(line.id);
+        // Anchor varsa sadece uyumlu satırları seç; uncheck'te kısıt yok.
+        const incompatible =
+          checked && anchor
+            ? mismatchReason(anchor, {
+                itemId: line.itemId,
+                colorId: line.colorId,
+                width: line.width ?? null,
+              }) !== null
+            : false;
+        if (incompatible) continue;
+        if (checked) next.set(line.id, buildPicked(order, line));
         else next.delete(line.id);
       }
       return next;
     });
   };
-
-  const orderAllSelected = (o: Order) =>
-    (o.lines ?? []).length > 0 && (o.lines ?? []).every((l) => selected.has(l.id));
+  const clearAllSelected = () => setSelectedMap(new Map());
 
   const handleConfirm = () => {
-    const picked: PickedOrderLine[] = [];
-    for (const order of orders) {
-      for (const line of order.lines ?? []) {
-        if (selected.has(line.id)) picked.push(buildPicked(order, line));
-      }
-    }
-    onConfirm(picked);
+    onConfirm(selectedArray);
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
-        <DialogHeader>
+      <DialogContent className="flex h-[88vh] max-h-[88vh] max-w-7xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Müsait Sipariş Kalemleri</DialogTitle>
           <DialogDescription>
             Onaylı ve kısmi sevk edilmiş sipariş kalemleri. İş emrine bağlanacakları seç.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Sipariş no veya müşteri ara..."
-              className="h-10 pl-9"
-            />
-          </div>
-          <div className="text-sm text-muted-foreground whitespace-nowrap">
-            {selected.size > 0 ? (
-              <span>
-                <span className="font-medium text-foreground">{selected.size}</span> kalem seçildi
-              </span>
-            ) : (
-              <span>{orders.length} sipariş</span>
-            )}
-          </div>
-        </div>
-
-        <div className="max-h-[65vh] overflow-y-auto rounded-md border">
-          {query.isLoading && (
-            <div className="p-6 text-sm text-muted-foreground">Yükleniyor...</div>
-          )}
-          {!query.isLoading && orders.length === 0 && (
-            <div className="p-8 text-center text-sm text-muted-foreground">
-              {debounced ? "Sonuç yok." : "Müsait sipariş yok."}
+        {/* Toolbar */}
+        <div className="shrink-0 space-y-2 border-b bg-muted/10 px-6 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[240px] flex-1">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Sipariş no ara..."
+                className="h-10 pl-9"
+              />
             </div>
-          )}
-          <ul className="divide-y">
-            {orders.map((order) => (
-              <li key={order.id} className="p-4">
-                <div className="mb-3 flex flex-wrap items-center gap-3">
-                  <Checkbox
-                    checked={orderAllSelected(order)}
-                    onCheckedChange={(c) => toggleOrder(order, Boolean(c))}
-                  />
-                  <span className="font-mono text-sm font-semibold">{order.orderNumber}</span>
-                  <span className="text-muted-foreground">·</span>
-                  <span className="text-sm">{order.customer?.name}</span>
-                  {order.deadline && (
-                    <Badge variant="muted" className="ml-auto">
-                      Termin: {new Date(order.deadline).toLocaleDateString("tr-TR")}
-                    </Badge>
-                  )}
-                </div>
-                <div className="ml-7 grid grid-cols-1 gap-2 lg:grid-cols-2">
-                  {(order.lines ?? []).map((line) => (
-                    <div
-                      key={line.id}
-                      className="flex items-start gap-3 rounded-md border bg-muted/30 p-3 text-sm"
-                    >
-                      <Checkbox
-                        checked={selected.has(line.id)}
-                        onCheckedChange={() => toggle(line.id)}
-                        className="mt-0.5"
-                      />
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-medium">{line.item?.name ?? "—"}</span>
-                          {line.item?.color && (
-                            <Badge variant="muted" className="gap-1">
-                              {line.item.color.hex && (
-                                <span
-                                  className="h-2 w-2 rounded-full"
-                                  style={{ backgroundColor: line.item.color.hex }}
-                                />
-                              )}
-                              {line.item.color.name}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {line.quantity.toLocaleString("tr-TR")} m
-                          {line.width ? ` × ${line.width} cm` : ""}
-                        </div>
-                        {line.requiredProperties && line.requiredProperties.length > 0 && (
-                          <div className="flex flex-wrap items-center gap-1">
-                            <span className="text-[10px] text-muted-foreground">
-                              Özellik:
-                            </span>
-                            {line.requiredProperties.map((rp) => (
-                              <Badge
-                                key={rp.propertyId}
-                                variant="outline"
-                                className="text-[10px]"
-                              >
-                                {rp.property.name}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </li>
-            ))}
-          </ul>
+            <div className="min-w-[220px]">
+              <ReferenceSelect<Customer>
+                value={customerId}
+                onChange={setCustomerId}
+                service={customerService}
+                queryKey="customers"
+                getLabel={(c) => c.name}
+                placeholder="Tüm müşteriler"
+                nullable
+                noneLabel="— Tüm müşteriler"
+              />
+            </div>
+            <label className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-xs">
+              <Checkbox
+                checked={showOnlySelected}
+                onCheckedChange={(c) => setShowOnlySelected(Boolean(c))}
+              />
+              Yalnız seçilileri göster
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className="text-muted-foreground">Termin:</span>
+            <div className="flex gap-1">
+              {DEADLINE_PRESETS.map((p) => (
+                <Button
+                  key={p.value}
+                  type="button"
+                  size="sm"
+                  variant={deadlinePreset === p.value ? "default" : "outline"}
+                  className="h-7 text-xs"
+                  onClick={() => setDeadlinePreset(p.value)}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
+            <span className="ml-2 text-muted-foreground">Sırala:</span>
+            <div className="flex gap-1">
+              {SORT_PRESETS.map((p) => (
+                <Button
+                  key={p.value}
+                  type="button"
+                  size="sm"
+                  variant={sortBy === p.value ? "default" : "outline"}
+                  className="h-7 text-xs"
+                  onClick={() => setSortBy(p.value)}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            İptal
-          </Button>
-          <Button type="button" disabled={selected.size === 0} onClick={handleConfirm}>
-            {selected.size > 0 ? `Seçili ${selected.size} Kalemi Ekle` : "Seç"}
-          </Button>
+        {/* Body split */}
+        <div className="flex min-h-0 flex-1">
+          {/* Sol — orders list */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            {anchor && !showOnlySelected && (
+              <AnchorBanner
+                anchor={anchor}
+                hideIncompatible={hideIncompatible}
+                onHideIncompatibleChange={setHideIncompatible}
+              />
+            )}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {showOnlySelected ? (
+                groupedSelected.length === 0 ? (
+                  <EmptyState text="Henüz hiçbir kalem seçilmedi." />
+                ) : (
+                  <ul className="divide-y">
+                    {groupedSelected.map((o) => (
+                      <SelectedOrderRow
+                        key={o.id}
+                        order={o}
+                        onRemoveLine={removeLine}
+                      />
+                    ))}
+                  </ul>
+                )
+              ) : query.isLoading ? (
+                <div className="p-6 text-sm text-muted-foreground">Yükleniyor...</div>
+              ) : visibleFetched.length === 0 ? (
+                <EmptyState
+                  text={
+                    anchor && hideIncompatible && sortedFetched.length > 0
+                      ? "Eşleşen başka kalem yok. Tümünü görmek için banner'daki filtreyi kapat."
+                      : debounced || customerId || deadlinePreset !== "all"
+                        ? "Filtreyle eşleşen sipariş yok."
+                        : "Müsait sipariş yok."
+                  }
+                />
+              ) : (
+                <ul className="divide-y">
+                  {visibleFetched.map((order) => (
+                    <FetchedOrderRow
+                      key={order.id}
+                      order={order}
+                      selectedMap={selectedMap}
+                      anchor={anchor}
+                      onToggleLine={(line, checked) =>
+                        checked
+                          ? addLine(buildPicked(order, line))
+                          : removeLine(line.id)
+                      }
+                      onToggleOrder={(c) => toggleOrderFromFetched(order, c)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* Sağ — selected panel */}
+          <aside className="hidden w-[300px] shrink-0 flex-col border-l bg-muted/10 lg:flex">
+            <div className="flex shrink-0 items-center justify-between border-b bg-muted/40 px-3 py-2.5">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Seçilenler
+                </div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    {selectedArray.length} kalem
+                  </span>{" "}
+                  · {totalQty.toLocaleString("tr-TR")} m · {customerCount} müşteri
+                </div>
+              </div>
+              {selectedArray.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={clearAllSelected}
+                >
+                  Temizle
+                </Button>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              {selectedArray.length === 0 ? (
+                <div className="flex h-full items-center justify-center p-4 text-center text-xs text-muted-foreground">
+                  Henüz kalem seçilmedi.
+                </div>
+              ) : (
+                <ul className="space-y-1.5">
+                  {selectedArray.map((l) => (
+                    <li
+                      key={l.lineId}
+                      className="group rounded-md border bg-card p-2 text-[11px]"
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        <span className="font-mono text-xs font-semibold">
+                          {l.orderNumber}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeLine(l.lineId)}
+                          className="-mr-1 -mt-0.5 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          aria-label={`${l.orderNumber} kaldır`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <div className="mt-0.5 text-muted-foreground">{l.customerName}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <span className="font-medium">{l.itemName}</span>
+                        {l.itemColorName && (
+                          <Badge variant="muted" className="gap-1 text-[10px]">
+                            {l.itemColorHex && (
+                              <span
+                                className="h-2 w-2 rounded-full border"
+                                style={{ backgroundColor: l.itemColorHex }}
+                              />
+                            )}
+                            {l.itemColorName}
+                          </Badge>
+                        )}
+                        <span className="ml-auto tabular-nums text-muted-foreground">
+                          {l.quantity.toLocaleString("tr-TR")} m
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </aside>
+        </div>
+
+        {/* Sticky footer */}
+        <DialogFooter className="shrink-0 items-center border-t bg-background px-6 py-3 sm:justify-between">
+          <span className="text-xs text-muted-foreground">
+            {selectedArray.length > 0 ? (
+              <>
+                <span className="font-medium text-foreground">
+                  {selectedArray.length} kalem
+                </span>{" "}
+                seçildi · {totalQty.toLocaleString("tr-TR")} m · {customerCount} müşteri
+              </>
+            ) : (
+              "Henüz seçim yok"
+            )}
+          </span>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              İptal
+            </Button>
+            <Button
+              type="button"
+              disabled={selectedArray.length === 0}
+              onClick={handleConfirm}
+            >
+              {selectedArray.length > 0 ? `${selectedArray.length} Kalemi Ekle` : "Seç"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <div className="p-8 text-center text-sm text-muted-foreground">{text}</div>;
+}
+
+function DeadlineBadge({ deadline }: { deadline: string | null }) {
+  if (!deadline) return null;
+  const tone = deadlineTone(deadline);
+  const cls =
+    tone === "danger"
+      ? "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
+      : tone === "warning"
+        ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+        : "";
+  return (
+    <Badge variant={tone === "muted" ? "muted" : "outline"} className={`text-[10px] ${cls}`}>
+      Termin: {new Date(deadline).toLocaleDateString("tr-TR")}
+    </Badge>
+  );
+}
+
+function FetchedOrderRow({
+  order,
+  selectedMap,
+  anchor,
+  onToggleLine,
+  onToggleOrder,
+}: {
+  order: Order;
+  selectedMap: Map<string, PickedOrderLine>;
+  anchor: Anchor | null;
+  onToggleLine: (line: OrderLine, checked: boolean) => void;
+  onToggleOrder: (checked: boolean) => void;
+}) {
+  const lines = order.lines ?? [];
+  const compatLines = anchor
+    ? lines.filter(
+        (l) =>
+          mismatchReason(anchor, {
+            itemId: l.itemId,
+            colorId: l.colorId,
+            width: l.width ?? null,
+          }) === null,
+      )
+    : lines;
+  const allChecked =
+    compatLines.length > 0 && compatLines.every((l) => selectedMap.has(l.id));
+  const someChecked = compatLines.some((l) => selectedMap.has(l.id));
+  const orderDisabled = anchor !== null && compatLines.length === 0;
+
+  return (
+    <li className="px-4 py-3">
+      <div className="flex items-center gap-2">
+        <Checkbox
+          disabled={orderDisabled}
+          checked={allChecked ? true : someChecked ? "indeterminate" : false}
+          onCheckedChange={(c) => onToggleOrder(Boolean(c))}
+        />
+        <span className="font-mono text-sm font-semibold">{order.orderNumber}</span>
+        <span className="text-muted-foreground">·</span>
+        <span className="text-sm">{order.customer?.name}</span>
+        <span className="ml-auto">
+          <DeadlineBadge deadline={order.deadline} />
+        </span>
+      </div>
+      <ul className="ml-6 mt-1.5 space-y-1">
+        {lines.map((line) => {
+          const reason = anchor
+            ? mismatchReason(anchor, {
+                itemId: line.itemId,
+                colorId: line.colorId,
+                width: line.width ?? null,
+              })
+            : null;
+          const incompatible = reason !== null;
+          const isSelected = selectedMap.has(line.id);
+          return (
+            <li key={line.id}>
+              <label
+                className={`flex items-center gap-2 rounded px-2 py-1 text-xs ${
+                  incompatible
+                    ? "cursor-not-allowed opacity-50"
+                    : "cursor-pointer hover:bg-muted/50"
+                }`}
+                title={incompatible ? `${reason} — bu kalem birleştirilemez` : undefined}
+              >
+                <Checkbox
+                  checked={isSelected}
+                  disabled={incompatible && !isSelected}
+                  onCheckedChange={(c) => onToggleLine(line, Boolean(c))}
+                />
+                <span className="font-medium">{line.item?.name ?? "—"}</span>
+                {line.color && (
+                  <Badge variant="muted" className="gap-1 text-[10px]">
+                    {line.color.hex && (
+                      <span
+                        className="h-2 w-2 rounded-full border"
+                        style={{ backgroundColor: line.color.hex }}
+                      />
+                    )}
+                    {line.color.name}
+                  </Badge>
+                )}
+                <span className="tabular-nums text-muted-foreground">
+                  {line.quantity.toLocaleString("tr-TR")} m
+                  {line.width ? ` × ${line.width} cm` : ""}
+                </span>
+                {incompatible && (
+                  <Badge
+                    variant="outline"
+                    className="border-amber-300 bg-amber-50 text-[10px] text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+                  >
+                    {reason}
+                  </Badge>
+                )}
+                {line.requiredProperties && line.requiredProperties.length > 0 && (
+                  <span className="ml-auto flex flex-wrap gap-1">
+                    {line.requiredProperties.map((rp) => (
+                      <Badge
+                        key={rp.propertyId}
+                        variant="outline"
+                        className="text-[10px]"
+                      >
+                        {rp.property.name}
+                      </Badge>
+                    ))}
+                  </span>
+                )}
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </li>
+  );
+}
+
+function AnchorBanner({
+  anchor,
+  hideIncompatible,
+  onHideIncompatibleChange,
+}: {
+  anchor: Anchor;
+  hideIncompatible: boolean;
+  onHideIncompatibleChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-amber-50/60 px-4 py-2 text-xs dark:bg-amber-950/30">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Info className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-300" />
+        <span className="text-amber-900 dark:text-amber-100">
+          Bu seçim sadece eşleşen kalemlerle birleştirilebilir:
+        </span>
+        <Badge variant="muted" className="text-[10px]">
+          {anchor.itemName}
+        </Badge>
+        {anchor.colorId ? (
+          <Badge variant="muted" className="gap-1 text-[10px]">
+            {anchor.colorHex && (
+              <span
+                className="h-2 w-2 rounded-full border"
+                style={{ backgroundColor: anchor.colorHex }}
+              />
+            )}
+            {anchor.colorName ?? "renk"}
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-[10px]">
+            renksiz
+          </Badge>
+        )}
+        <Badge variant="muted" className="text-[10px]">
+          {anchor.width != null ? `${anchor.width} cm` : "en serbest"}
+        </Badge>
+      </div>
+      <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-amber-900 dark:text-amber-100">
+        <Checkbox
+          checked={hideIncompatible}
+          onCheckedChange={(c) => onHideIncompatibleChange(Boolean(c))}
+        />
+        Sadece uyumluları göster
+      </label>
+    </div>
+  );
+}
+
+function SelectedOrderRow({
+  order,
+  onRemoveLine,
+}: {
+  order: {
+    id: string;
+    orderNumber: string;
+    customerName: string;
+    deadline: string | null;
+    lines: PickedOrderLine[];
+  };
+  onRemoveLine: (lineId: string) => void;
+}) {
+  return (
+    <li className="px-4 py-3">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-sm font-semibold">{order.orderNumber}</span>
+        <span className="text-muted-foreground">·</span>
+        <span className="text-sm">{order.customerName}</span>
+        <span className="ml-auto">
+          <DeadlineBadge deadline={order.deadline} />
+        </span>
+      </div>
+      <ul className="ml-6 mt-1.5 space-y-1">
+        {order.lines.map((l) => (
+          <li
+            key={l.lineId}
+            className="flex items-center gap-2 rounded px-2 py-1 text-xs hover:bg-muted/50"
+          >
+            <Checkbox
+              checked
+              onCheckedChange={() => onRemoveLine(l.lineId)}
+            />
+            <span className="font-medium">{l.itemName}</span>
+            {l.itemColorName && (
+              <Badge variant="muted" className="gap-1 text-[10px]">
+                {l.itemColorHex && (
+                  <span
+                    className="h-2 w-2 rounded-full border"
+                    style={{ backgroundColor: l.itemColorHex }}
+                  />
+                )}
+                {l.itemColorName}
+              </Badge>
+            )}
+            <span className="tabular-nums text-muted-foreground">
+              {l.quantity.toLocaleString("tr-TR")} m
+              {l.width ? ` × ${l.width} cm` : ""}
+            </span>
+            {l.requiredProperties.length > 0 && (
+              <span className="ml-auto flex flex-wrap gap-1">
+                {l.requiredProperties.map((rp) => (
+                  <Badge key={rp.id} variant="outline" className="text-[10px]">
+                    {rp.name}
+                  </Badge>
+                ))}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </li>
   );
 }

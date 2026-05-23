@@ -18,7 +18,7 @@ export const shippingQueueStatusLabels: Record<ShippingQueueStatus, string> = {
 
 export interface ShippingQueueLineAllocation {
   rollId: string;
-  barcode: string;
+  barcode: string | null;
   rollStatus: RollStatus;
   sackId: string | null;
   allocatedQty: number;
@@ -30,7 +30,6 @@ export interface ShippingQueueLine {
   itemCode: string;
   itemName: string;
   color: { id: string; code: string; name: string; hex: string | null } | null;
-  variant: { id: string; code: string; name: string } | null;
   width: number | null;
   requestedQty: number;
   allocatedQty: number;

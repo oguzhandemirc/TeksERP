@@ -14,7 +14,6 @@ export interface PoolRoll {
   itemId: string;
   itemCode: string;
   itemName: string;
-  variantName: string | null;
   colorName: string | null;
   colorHex: string | null;
   currentQty: number;

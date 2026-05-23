@@ -148,20 +148,21 @@ export function OrderDetailSheet({ order, open, onOpenChange, onEdit }: Props) {
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="font-mono text-xs">{line.item?.code}</span>
                           <span className="font-medium">{line.item?.name}</span>
-                          {line.variant && (
-                            <Badge variant="muted" className="text-[10px]">
-                              {line.variant.name}
-                            </Badge>
-                          )}
-                          {line.item?.color && (
+                          {line.color && (
                             <Badge variant="muted" className="gap-1 text-[10px]">
-                              {line.item.color.hex && (
+                              {line.color.hex && (
                                 <span
                                   className="h-2 w-2 rounded-full"
-                                  style={{ backgroundColor: line.item.color.hex }}
+                                  style={{ backgroundColor: line.color.hex }}
                                 />
                               )}
-                              {line.item.color.name}
+                              {line.color.name}
+                            </Badge>
+                          )}
+                          {line.customerItemName && (
+                            <Badge variant="outline" className="text-[10px]">
+                              Müşteride: {line.customerItemName}
+                              {line.customerColorName ? ` · ${line.customerColorName}` : ""}
                             </Badge>
                           )}
                         </div>

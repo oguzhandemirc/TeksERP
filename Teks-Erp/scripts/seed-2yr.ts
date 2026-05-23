@@ -327,8 +327,6 @@ async function ensureMasterData(adminUserId: string) {
     { code: `${PREFIX}KK2-1`, name: "Kurşun + KK2 #1", kind: StationKind.PROCESS_QC, type: StationType.INTERNAL },
     { code: `${PREFIX}KK2-2`, name: "Kurşun + KK2 #2", kind: StationKind.PROCESS_QC, type: StationType.INTERNAL },
     { code: `${PREFIX}TAMBUR-1`, name: "Tambur #1", kind: StationKind.TAMBUR, type: StationType.INTERNAL },
-    { code: `${PREFIX}PAKET-1`, name: "Paketleme #1", kind: StationKind.PACKAGING, type: StationType.INTERNAL },
-    { code: `${PREFIX}SEVK`, name: "Sevkiyat", kind: StationKind.SHIPPING, type: StationType.INTERNAL },
     { code: `${PREFIX}FASON`, name: "Fason İstasyonu", kind: StationKind.SUBCONTRACTOR, type: StationType.EXTERNAL },
   ];
   await prisma.station.createMany({ data: stationDefs, skipDuplicates: true });
@@ -743,13 +741,12 @@ async function main() {
     ]);
     switch (variation) {
       case "simple":
-        return [StationKind.RAW_QC, StationKind.PROCESS_QC, StationKind.PACKAGING];
+        return [StationKind.RAW_QC, StationKind.PROCESS_QC];
       case "standard":
         return [
           StationKind.RAW_QC,
           StationKind.PROCESS_QC,
           StationKind.TAMBUR,
-          StationKind.PACKAGING,
         ];
       case "fason":
         return [
@@ -757,7 +754,6 @@ async function main() {
           StationKind.PROCESS_QC,
           StationKind.SUBCONTRACTOR,
           StationKind.TAMBUR,
-          StationKind.PACKAGING,
         ];
       default:
         return [
@@ -766,19 +762,15 @@ async function main() {
           StationKind.SUBCONTRACTOR,
           StationKind.PROCESS_QC,
           StationKind.TAMBUR,
-          StationKind.PACKAGING,
-          StationKind.SHIPPING,
         ];
     }
   }
 
   const woData: WorkOrderRow[] = Array.from({ length: TARGET.workOrders }, (_, i) => {
     const type = pickWeighted<WorkOrderType>([
-      ["ORDER_PRODUCTION", 55],
-      ["STOCK_PRODUCTION", 20],
+      ["ORDER_PRODUCTION", 65],
+      ["STOCK_PRODUCTION", 23],
       ["SERVICE_PRODUCTION", 12],
-      ["SAMPLE_PRODUCTION", 5],
-      ["REPAIR_REWORK", 8],
     ]);
     const status = pickWeighted<WorkOrderStatus>([
       ["COMPLETED", 55],
@@ -1254,10 +1246,6 @@ async function main() {
         case StationKind.TAMBUR:
           opType = RollOperationType.TAMBUR_PROCESSED;
           chanceToLog = 0.8;
-          break;
-        case StationKind.PACKAGING:
-          opType = RollOperationType.PACKAGED;
-          chanceToLog = r.status === RollStatus.SCRAP ? 0 : 0.7;
           break;
         case StationKind.SUBCONTRACTOR:
           opType = chance(0.5)

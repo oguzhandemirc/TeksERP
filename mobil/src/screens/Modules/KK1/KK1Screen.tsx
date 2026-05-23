@@ -38,7 +38,7 @@ import { rollService, InitialEntryRequest } from '../../../services/roll.service
 import { hardwareService } from '../../../services/hardware.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { travelerCardService } from '../../../services/travelerCard.service';
-import type { Roll, TravelerCardLookup } from '../../../types/models';
+import type { Roll, Kk1Context } from '../../../types/models';
 
 const RECENT_PAGE_SIZE = 6;
 const HISTORY_PAGE_SIZE = 20;
@@ -46,8 +46,6 @@ const HISTORY_PAGE_SIZE = 20;
 interface FormState {
   itemId: string;
   itemLabel: string;
-  variantId: string;
-  variantLabel: string;
   initialQty: string;
   width: string;
   weightKg: string;
@@ -57,8 +55,6 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   itemId: '',
   itemLabel: '',
-  variantId: '',
-  variantLabel: '',
   initialQty: '',
   width: '',
   weightKg: '',
@@ -68,7 +64,7 @@ const EMPTY_FORM: FormState = {
 export default function KK1Screen() {
   const qc = useQueryClient();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [pickerOpen, setPickerOpen] = useState<'item' | 'variant' | null>(null);
+  const [pickerOpen, setPickerOpen] = useState<'item' | null>(null);
   const [pulling, setPulling] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
@@ -76,7 +72,14 @@ export default function KK1Screen() {
   // Boşsa eski free-entry akışı çalışır.
   const [cardBarcode, setCardBarcode] = useState('');
   const [resolvingCard, setResolvingCard] = useState(false);
-  const [resolvedCard, setResolvedCard] = useState<TravelerCardLookup | null>(null);
+  /**
+   * KK1 context — `GET /api/rolls/kk1-context/:cardBarcode` cevabı. KK1 step ACTIVE
+   * iken döner; başka adımdaysa backend 400 atar (operatöre yanlış istasyon mesajı
+   * gösterilir, banner state'i altta tutulur).
+   */
+  const [resolvedCard, setResolvedCard] = useState<Kk1Context | null>(null);
+  /** "Yanlış istasyon" / 409 KK1 kapalı / kart bulunamadı → operatöre banner. */
+  const [cardError, setCardError] = useState<string | null>(null);
   // Etiket basımı — null değilse LabelPrinter QR + PDF üretir, sistem print menüsünü açar.
   const [printRoll, setPrintRoll] = useState<Roll | null>(null);
   // Kart okutma modalı (kamera).
@@ -101,16 +104,16 @@ export default function KK1Screen() {
     closeTarget();
   }, [closeTarget]);
 
-  // ── Items: SADECE ham kumaş (RAW_FABRIC) ──
+  // ── Items: kumaş (Variant kaldırıldı; RAW/DYED ayrımı yok artık) ──
   const itemsQuery = useQuery({
-    queryKey: ['items', 'kk1', 'RAW_FABRIC'],
+    queryKey: ['items', 'kk1', 'FABRIC'],
     queryFn: () =>
       itemService.getAll({
         page: 1,
         pageSize: 500,
         sortBy: 'code',
         sortOrder: 'asc',
-        filters: { isActive: 'true', itemType: 'RAW_FABRIC' },
+        filters: { isActive: 'true', itemType: 'FABRIC' },
       }),
   });
 
@@ -123,13 +126,6 @@ export default function KK1Screen() {
       })),
     [itemsQuery.data]
   );
-
-  // ── Variants ──
-  const variantsQuery = useQuery({
-    queryKey: ['items', form.itemId, 'variants'],
-    queryFn: () => itemService.getVariants(form.itemId),
-    enabled: !!form.itemId,
-  });
 
   // ── Kalite dereceleri (admin yönetimli katalog) ──
   const qualityGradesQuery = useQuery({
@@ -145,16 +141,6 @@ export default function KK1Screen() {
       setForm((f) => ({ ...f, qualityGrade: qualityGrades[0].code }));
     }
   }, [qualityGrades, form.qualityGrade]);
-
-  const variantOptions = useMemo<PickerOption[]>(
-    () =>
-      (variantsQuery.data?.data ?? []).map((v) => ({
-        value: v.id,
-        label: v.name,
-        sublabel: v.code,
-      })),
-    [variantsQuery.data]
-  );
 
   // ── Refakat kartları (kart seç modalı) — ACTIVE liste, server-side arama+sayfalama
   const cardListQuery = useQuery({
@@ -175,11 +161,10 @@ export default function KK1Screen() {
       (cardListQuery.data?.data ?? []).map((c) => {
         const wo = c.workOrder;
         const ti = wo?.targetItem;
+        const tc = wo?.targetColor;
         const details: string[] = [];
         if (ti) {
-          details.push(
-            ti.color ? `${ti.name} · ${ti.color.name}` : ti.name
-          );
+          details.push(tc ? `${ti.name} · ${tc.name}` : ti.name);
         }
         if (c.version > 1) details.push(`Versiyon: v${c.version}`);
         return {
@@ -192,17 +177,15 @@ export default function KK1Screen() {
     [cardListQuery.data]
   );
 
+  /**
+   * Kart listeden seçimde de yeni kk1-context endpoint'ini çağırırız ki
+   * "yanlış istasyon" doğrulaması yapılsın. Liste sadece ACTIVE kartları
+   * filtreliyor ama WO başka adımda olabilir.
+   */
   const handleSelectCardFromList = (cardId: string) => {
     const picked = cardListQuery.data?.data.find((c) => c.id === cardId);
     if (!picked) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setResolvedCard(picked);
-    setCardBarcode('');
-    Toast.show({
-      type: 'success',
-      text1: 'İş emri seçildi',
-      text2: picked.workOrder?.batchNumber ?? picked.cardNumber,
-    });
+    void resolveCardBarcode(picked.barcode);
   };
 
   // ── Son kayıtlar (inline): SADECE 1. sayfa, az kayıt ──
@@ -280,6 +263,10 @@ export default function KK1Screen() {
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // Backend KK1 step COMPLETED ise 409 atar: "Bu iş emrinin ilk adımı (KK1)
+      // tamamlanmış. Yeni rulo eklemek için önce o adımı yeniden açın."
+      // Mesajı banner'a da yansıt — operatör yöneticiyle yeniden açtırır.
+      setCardError(err.message);
       Toast.show({
         type: 'error',
         text1: 'Kayıt başarısız',
@@ -296,7 +283,7 @@ export default function KK1Screen() {
       Toast.show({
         type: 'success',
         text1: 'Top iptal edildi',
-        text2: res.data?.barcode,
+        text2: res.data?.barcode ?? undefined,
       });
       qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
     },
@@ -314,7 +301,7 @@ export default function KK1Screen() {
     (roll: Roll) => {
       Alert.alert(
         'Topu iptal et?',
-        `Barkod: ${roll.barcode}\n${roll.item?.name ?? ''}\n\nYanlış giriş için kullan. İptal edilen toplar fire sayılmaz, sadece kayıt geri alınır.`,
+        `Barkod: ${roll.barcode ?? '—'}\n${roll.item?.name ?? ''}\n\nYanlış giriş için kullan. İptal edilen toplar fire sayılmaz, sadece kayıt geri alınır.`,
         [
           { text: 'Vazgeç', style: 'cancel' },
           {
@@ -362,7 +349,6 @@ export default function KK1Screen() {
     }
     createMutation.mutate({
       itemId: form.itemId,
-      variantId: form.variantId || null,
       initialQty: qty,
       weightKg: form.weightKg ? Number(form.weightKg) : undefined,
       width,
@@ -376,38 +362,40 @@ export default function KK1Screen() {
     if (!barcode) return;
     blurAll();
     setResolvingCard(true);
+    setCardError(null);
     try {
-      const res = await travelerCardService.findByBarcode(barcode);
-      const card = res.data;
-      if (!card) {
+      // Yeni endpoint — KK1 step ACTIVE değilse backend net 400 mesajı döner
+      // ("Bu iş emrinin 'KK1' adımı tamamlanmış. Mevcut konum: Boyahane (4 rulo)").
+      const res = await rollService.getKk1Context(barcode);
+      const ctx = res.data;
+      if (!ctx) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        Toast.show({ type: 'error', text1: 'Kart bulunamadı', text2: barcode });
-        return;
-      }
-      if (card.status !== 'ACTIVE') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        Toast.show({
-          type: 'error',
-          text1: 'Kart aktif değil',
-          text2: `Durum: ${card.status}`,
-        });
+        setCardError('Kart için context bulunamadı');
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setResolvedCard(card);
+      setResolvedCard(ctx);
+      setCardListOpen(false);
       setCardBarcode('');
+      // Item picker'ı WO.targetItemId ile otomatik doldur — operatör daha hızlı kaydeder
+      if (ctx.targetItem) {
+        setForm((f) => ({
+          ...f,
+          itemId: ctx.targetItem!.id,
+          itemLabel: `${ctx.targetItem!.name} — ${ctx.targetItem!.code}`,
+        }));
+      }
       Toast.show({
         type: 'success',
         text1: 'İş emri seçildi',
-        text2: card.workOrder?.batchNumber ?? card.cardNumber,
+        text2: ctx.batchNumber,
       });
     } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({
-        type: 'error',
-        text1: 'Kart okuma hatası',
-        text2: (err as Error).message,
-      });
+      const msg = (err as Error).message;
+      // Backend mesajı genelde multi-line, banner'da göster
+      setCardError(msg);
+      Toast.show({ type: 'error', text1: 'Kart okunamadı', text2: msg });
     } finally {
       setResolvingCard(false);
     }
@@ -418,6 +406,7 @@ export default function KK1Screen() {
   const handleClearCard = () => {
     setResolvedCard(null);
     setCardBarcode('');
+    setCardError(null);
   };
 
   const handlePrintLabel = (barcode: string) => {
@@ -449,16 +438,19 @@ export default function KK1Screen() {
               <Icon source="card-account-details-outline" size={20} color="#0d9488" />
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardScanResolvedTitle} numberOfLines={1}>
-                  {resolvedCard.workOrder?.batchNumber ?? resolvedCard.cardNumber}
+                  {resolvedCard.batchNumber}
                 </Text>
-                {resolvedCard.workOrder?.targetItem && (
+                {resolvedCard.targetItem && (
                   <Text style={styles.cardScanResolvedSubtitle} numberOfLines={1}>
-                    {resolvedCard.workOrder.targetItem.name}
-                    {resolvedCard.workOrder.targetItem.color
-                      ? ` · ${resolvedCard.workOrder.targetItem.color.name}`
+                    {resolvedCard.targetItem.name}
+                    {resolvedCard.targetColor
+                      ? ` · ${resolvedCard.targetColor.name}`
                       : ''}
                   </Text>
                 )}
+                <Text style={styles.cardScanResolvedHint} numberOfLines={1}>
+                  KK1 · {resolvedCard.rollCount} top
+                </Text>
               </View>
               <IconButton
                 icon="close"
@@ -524,61 +516,50 @@ export default function KK1Screen() {
             </Surface>
           )}
 
-          <Surface style={styles.card} elevation={1}>
-            <View style={styles.row}>
-              <View style={styles.col}>
-                <Text style={styles.label}>
-                  Ürün <Text style={styles.required}>*</Text>
+          {/* Hata banner'ı — yanlış istasyon / KK1 kapalı / 409 (KK1 tamamlanmış) */}
+          {cardError && (
+            <Surface style={styles.errorBanner} elevation={1}>
+              <Icon source="alert-circle" size={20} color="#b91c1c" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.errorBannerTitle}>
+                  {resolvedCard ? 'Yeni rulo eklenemedi' : 'Yanlış istasyon'}
                 </Text>
-                <TouchableRipple
-                  borderless
-                  rippleColor="rgba(79, 70, 229, 0.15)"
-                  onPressIn={blurAll}
-                  onPress={() => {
-                    blurAll();
-                    setPickerOpen('item');
-                  }}
-                  style={styles.picker}
-                >
-                  <View style={styles.pickerInner}>
-                    <Text
-                      style={[styles.pickerText, !form.itemId && styles.pickerPlaceholder]}
-                      numberOfLines={1}
-                    >
-                      {form.itemLabel || 'Ürün seçiniz...'}
-                    </Text>
-                    <Icon source="chevron-down" size={22} color="#475569" />
-                  </View>
-                </TouchableRipple>
+                <Text style={styles.errorBannerText}>{cardError}</Text>
               </View>
+              <IconButton
+                icon="close"
+                size={18}
+                onPress={() => setCardError(null)}
+                accessibilityLabel="Hata mesajını kapat"
+                style={{ margin: 0 }}
+              />
+            </Surface>
+          )}
 
-              <View style={styles.col}>
-                <Text style={styles.label}>Desen / Varyant</Text>
-                <TouchableRipple
-                  borderless
-                  rippleColor="rgba(79, 70, 229, 0.15)"
-                  onPressIn={blurAll}
-                  onPress={() => {
-                    if (!form.itemId) return;
-                    blurAll();
-                    setPickerOpen('variant');
-                  }}
-                  disabled={!form.itemId}
-                  style={[styles.picker, !form.itemId && styles.pickerDisabled]}
+          <Surface style={styles.card} elevation={1}>
+            <Text style={styles.label}>
+              Ürün <Text style={styles.required}>*</Text>
+            </Text>
+            <TouchableRipple
+              borderless
+              rippleColor="rgba(79, 70, 229, 0.15)"
+              onPressIn={blurAll}
+              onPress={() => {
+                blurAll();
+                setPickerOpen('item');
+              }}
+              style={styles.picker}
+            >
+              <View style={styles.pickerInner}>
+                <Text
+                  style={[styles.pickerText, !form.itemId && styles.pickerPlaceholder]}
+                  numberOfLines={1}
                 >
-                  <View style={styles.pickerInner}>
-                    <Text
-                      style={[styles.pickerText, !form.variantId && styles.pickerPlaceholder]}
-                      numberOfLines={1}
-                    >
-                      {form.variantLabel ||
-                        (form.itemId ? 'Desen / Varyant seçiniz...' : 'Önce ürün seçin')}
-                    </Text>
-                    <Icon source="chevron-down" size={22} color="#475569" />
-                  </View>
-                </TouchableRipple>
+                  {form.itemLabel || 'Ürün seçiniz...'}
+                </Text>
+                <Icon source="chevron-down" size={22} color="#475569" />
               </View>
-            </View>
+            </TouchableRipple>
 
             <Text style={[styles.label, styles.labelSpaced]}>
               Metraj (mt) <Text style={styles.required}>*</Text>
@@ -799,25 +780,6 @@ export default function KK1Screen() {
             ...f,
             itemId: value,
             itemLabel: item ? `${item.label} — ${item.sublabel}` : '',
-            variantId: '',
-            variantLabel: '',
-          }));
-        }}
-      />
-      <PickerModal
-        visible={pickerOpen === 'variant'}
-        title="Varyant Seç"
-        options={variantOptions}
-        selectedValue={form.variantId}
-        loading={variantsQuery.isLoading}
-        emptyText="Bu ürüne ait varyant yok"
-        onDismiss={() => setPickerOpen(null)}
-        onSelect={(value) => {
-          const v = variantOptions.find((o) => o.value === value);
-          setForm((f) => ({
-            ...f,
-            variantId: value,
-            variantLabel: v ? `${v.label} — ${v.sublabel}` : '',
           }));
         }}
       />
@@ -825,7 +787,7 @@ export default function KK1Screen() {
       {/* ── Etiket yazıcı (headless): printRoll set olunca QR + A4 PDF üretir ── */}
       <LabelPrinter
         roll={printRoll}
-        batchNumber={resolvedCard?.workOrder?.batchNumber ?? null}
+        batchNumber={resolvedCard?.batchNumber ?? null}
         onDone={() => setPrintRoll(null)}
       />
 
@@ -1043,13 +1005,15 @@ function RollListItem({
   const at = roll.createdAt ? dayjs(roll.createdAt) : null;
   const qty = `${roll.initialQty} mt`;
   const widthLabel = roll.width != null ? `${roll.width} cm` : null;
-  const isInactive = roll.status === 'SCRAP' || roll.status === 'CANCELLED';
+  const isInactive = roll.status === 'SCRAP';
+  const barcode = roll.barcode ?? '—';
+  const canPrint = !!roll.barcode;
 
   return (
     <Surface style={[styles.recentItem, isInactive && styles.recentItemScrapped]} elevation={1}>
       <View style={styles.recentItemHeader}>
         <Text style={[styles.recentBarcode, isInactive && styles.recentBarcodeScrapped]}>
-          {roll.barcode}
+          {barcode}
         </Text>
         <Text style={styles.recentTime}>{at ? at.format('DD.MM HH:mm') : ''}</Text>
         {onScrap && !isInactive && (
@@ -1065,21 +1029,23 @@ function RollListItem({
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           />
         )}
-        <IconButton
-          icon="printer"
-          mode="contained-tonal"
-          size={35}
-          containerColor="#eef2ff"
-          iconColor="#000000ff"
-          onPress={() => onPrint(roll.barcode)}
-          accessibilityLabel="Etiket bas"
-          style={styles.recentPrintBtn}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        />
+        {canPrint && (
+          <IconButton
+            icon="printer"
+            mode="contained-tonal"
+            size={35}
+            containerColor="#eef2ff"
+            iconColor="#000000ff"
+            onPress={() => onPrint(roll.barcode!)}
+            accessibilityLabel="Etiket bas"
+            style={styles.recentPrintBtn}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          />
+        )}
       </View>
       <Text style={styles.recentItemName} numberOfLines={1}>
         {roll.item?.name ?? '—'}
-        {roll.variant?.name ? ` · ${roll.variant.name}` : ''}
+        {roll.color?.name ? ` · ${roll.color.name}` : ''}
       </Text>
       <View style={styles.recentBottomRow}>
         <View style={styles.recentBadgeRow}>
@@ -1152,6 +1118,28 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
   cardScanResolvedSubtitle: { fontSize: 12, color: '#0f766e', marginTop: 1 },
+  cardScanResolvedHint: { fontSize: 11, color: '#0f766e', marginTop: 1, fontWeight: '500' },
+
+  // Yanlış istasyon / KK1 kapalı / kart bulunamadı banner
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingLeft: 14,
+    paddingRight: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  errorBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#991b1b',
+    marginBottom: 2,
+  },
+  errorBannerText: { fontSize: 12, color: '#7f1d1d', lineHeight: 16 },
 
   label: { fontSize: 14, fontWeight: '600', color: '#334155', marginBottom: 4 },
   labelSpaced: { marginTop: 8 },

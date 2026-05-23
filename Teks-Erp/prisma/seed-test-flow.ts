@@ -58,13 +58,8 @@ async function main() {
     update: {},
     create: { code: "TAMBUR", name: "Tambur", kind: "TAMBUR", type: "INTERNAL" },
   });
-  const stPaketleme = await prisma.station.upsert({
-    where: { code: "PAKET" },
-    update: {},
-    create: { code: "PAKET", name: "Tartı / Paketleme", kind: "PACKAGING", type: "INTERNAL" },
-  });
 
-  // Boyahane kategorisi — appliesColor=true zorunlu (renk + özellik buradan kopyalanır)
+  // Boyahane kategorisi — hem renk hem özellik veren fason (her iki bayrak true)
   let boyahaneKategorisi = await prisma.subcontractorCategory.findUnique({
     where: { code: "BOYAHANE" },
   });
@@ -75,12 +70,16 @@ async function main() {
         name: "Boyahane",
         description: "Renk + özellik veren fason",
         appliesColor: true,
+        appliesProperty: true,
       },
     });
-  } else if (!boyahaneKategorisi.appliesColor) {
+  } else if (
+    !boyahaneKategorisi.appliesColor ||
+    !boyahaneKategorisi.appliesProperty
+  ) {
     boyahaneKategorisi = await prisma.subcontractorCategory.update({
       where: { id: boyahaneKategorisi.id },
-      data: { appliesColor: true },
+      data: { appliesColor: true, appliesProperty: true },
     });
   }
   // Bir Boyahane fason firması (test için)
@@ -106,7 +105,7 @@ async function main() {
     },
   });
 
-  console.log("✅ İstasyonlar + Boyahane kategorisi (appliesColor=true) hazır");
+  console.log("✅ İstasyonlar + Boyahane kategorisi (appliesColor + appliesProperty) hazır");
 
   const stamp = Date.now().toString().slice(-6);
 

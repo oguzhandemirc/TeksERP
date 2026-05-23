@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Save, Palette, Sparkles } from "lucide-react";
+import { Save, Palette, Sparkles, Lock } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,13 +21,26 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+function emptyStateMessage(station: StationCapabilitySummary): string {
+  if (station.stationKind !== "SUBCONTRACTOR") {
+    return "Renk ve özellik yetkinliği yalnızca fason istasyonlarına atanabilir.";
+  }
+  if (!station.hasDefaultCategory) {
+    return "Bu istasyona varsayılan fason kategorisi atanmamış. İstasyonlar sayfasından bir kategori seçin (örn. Boyahane).";
+  }
+  return "Varsayılan fason kategorisinin renk veren (appliesColor) veya özellik veren (appliesProperty) olması gerekir.";
+}
+
 export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
   const qc = useQueryClient();
+  const canApplyColor = !!station?.canApplyColor;
+  const canApplyProperty = !!station?.canApplyProperty;
+  const editable = canApplyColor || canApplyProperty;
 
   const detail = useQuery({
     queryKey: [QUERY_KEY, station?.stationId],
     queryFn: () => stationCapabilityService.getByStation(station!.stationId),
-    enabled: open && Boolean(station?.stationId),
+    enabled: open && Boolean(station?.stationId) && editable,
     refetchOnMount: "always",
     staleTime: 0,
   });
@@ -43,7 +56,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
         filters: { isActive: "true" },
       }),
     staleTime: 60_000,
-    enabled: open,
+    enabled: open && canApplyColor,
   });
 
   const propsQuery = useQuery({
@@ -57,7 +70,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
         filters: { isActive: "true" },
       }),
     staleTime: 60_000,
-    enabled: open,
+    enabled: open && canApplyProperty,
   });
 
   const [colorIds, setColorIds] = useState<string[]>([]);
@@ -109,7 +122,12 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
     },
   });
 
-  const loading = detail.isLoading || colorsQuery.isLoading || propsQuery.isLoading;
+  const loading =
+    detail.isLoading ||
+    (canApplyColor && colorsQuery.isLoading) ||
+    (canApplyProperty && propsQuery.isLoading);
+
+  const defaultTab = canApplyColor ? "colors" : "properties";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -122,50 +140,66 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
           </SheetDescription>
         </SheetHeader>
 
-        {loading ? (
+        {!editable ? (
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 rounded-md border border-dashed p-8 text-center">
+            <Lock className="h-8 w-8 text-muted-foreground" />
+            <div className="text-sm font-medium">Bu istasyon için yetkinlik atanamaz</div>
+            <div className="max-w-sm text-xs text-muted-foreground">
+              {station ? emptyStateMessage(station) : null}
+            </div>
+          </div>
+        ) : loading ? (
           <div className="mt-4 space-y-2">
             <Skeleton className="h-8 w-full" />
             <Skeleton className="h-64 w-full" />
           </div>
         ) : (
           <div className="mt-4 flex h-[calc(100vh-180px)] flex-col">
-            <Tabs defaultValue="colors" className="flex flex-1 flex-col">
+            <Tabs defaultValue={defaultTab} className="flex flex-1 flex-col">
               <TabsList>
-                <TabsTrigger value="colors" className="gap-1.5">
-                  <Palette className="h-3.5 w-3.5" />
-                  Renkler
-                  <Badge variant="muted" className="ml-1 text-[10px]">
-                    {colorIds.length}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="properties" className="gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Özellikler
-                  <Badge variant="muted" className="ml-1 text-[10px]">
-                    {propertyIds.length}
-                  </Badge>
-                </TabsTrigger>
+                {canApplyColor && (
+                  <TabsTrigger value="colors" className="gap-1.5">
+                    <Palette className="h-3.5 w-3.5" />
+                    Renkler
+                    <Badge variant="muted" className="ml-1 text-[10px]">
+                      {colorIds.length}
+                    </Badge>
+                  </TabsTrigger>
+                )}
+                {canApplyProperty && (
+                  <TabsTrigger value="properties" className="gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Özellikler
+                    <Badge variant="muted" className="ml-1 text-[10px]">
+                      {propertyIds.length}
+                    </Badge>
+                  </TabsTrigger>
+                )}
               </TabsList>
 
-              <TabsContent value="colors" className="flex-1 mt-3">
-                <MultiSelectCheckboxList
-                  items={colorItems}
-                  value={colorIds}
-                  onChange={setColorIds}
-                  placeholder="Renk ara..."
-                  emptyHint="Tanımlı renk yok."
-                />
-              </TabsContent>
+              {canApplyColor && (
+                <TabsContent value="colors" className="flex-1 mt-3">
+                  <MultiSelectCheckboxList
+                    items={colorItems}
+                    value={colorIds}
+                    onChange={setColorIds}
+                    placeholder="Renk ara..."
+                    emptyHint="Tanımlı renk yok."
+                  />
+                </TabsContent>
+              )}
 
-              <TabsContent value="properties" className="flex-1 mt-3">
-                <MultiSelectCheckboxList
-                  items={propertyItems}
-                  value={propertyIds}
-                  onChange={setPropertyIds}
-                  placeholder="Özellik ara..."
-                  emptyHint="Tanımlı özellik yok."
-                />
-              </TabsContent>
+              {canApplyProperty && (
+                <TabsContent value="properties" className="flex-1 mt-3">
+                  <MultiSelectCheckboxList
+                    items={propertyItems}
+                    value={propertyIds}
+                    onChange={setPropertyIds}
+                    placeholder="Özellik ara..."
+                    emptyHint="Tanımlı özellik yok."
+                  />
+                </TabsContent>
+              )}
             </Tabs>
 
             <div className="mt-3 flex items-center justify-between border-t pt-3">

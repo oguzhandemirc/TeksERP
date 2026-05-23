@@ -42,6 +42,7 @@ export async function recomputeOrderStatus(
     select: {
       id: true,
       status: true,
+      shippedQty: true,
       manualClosedById: true,
       completedAt: true,
       lines: {
@@ -93,7 +94,10 @@ export async function recomputeOrderStatus(
   }
   // shipped == 0 → mevcut status korunur.
 
-  if (next === order.status) {
+  const statusChanged = next !== order.status;
+  const qtyChanged = totalShipped !== order.shippedQty;
+
+  if (!statusChanged && !qtyChanged) {
     return { changed: false, oldStatus: order.status, newStatus: next };
   }
 
@@ -101,6 +105,7 @@ export async function recomputeOrderStatus(
     where: { id: orderId },
     data: {
       status: next,
+      shippedQty: totalShipped,
       // Otomatik COMPLETED'a düşerse completedAt'i set et (manualClosedById null kalır → otomatik kapatma)
       completedAt:
         next === OrderStatus.COMPLETED && !order.completedAt
@@ -109,7 +114,7 @@ export async function recomputeOrderStatus(
     },
   });
 
-  return { changed: true, oldStatus: order.status, newStatus: next };
+  return { changed: statusChanged, oldStatus: order.status, newStatus: next };
 }
 
 /**

@@ -69,7 +69,7 @@ const router = Router();
  *           Fiziksel form: OPEN_FABRIC = barkodsuz açık kumaş; WOUND_ROLL = barkodlu top.
  *       - in: query
  *         name: filter[currentStepKind]
- *         schema: { type: string, enum: [RAW_QC, EXTERNAL, PROCESS_QC, TAMBUR, SUBCONTRACTOR, PACKAGING, SHIPPING, OTHER] }
+ *         schema: { type: string, enum: [RAW_QC, PROCESS_QC, SUBCONTRACTOR, TAMBUR, OTHER] }
  *         description: |
  *           Roll'un şu an bulunduğu istasyon türü (Roll.currentStep.station.kind).
  *           Örn. PROCESS_QC = Kurşun/KK2'de bekleyenler; TAMBUR = Tambur'da bekleyenler.

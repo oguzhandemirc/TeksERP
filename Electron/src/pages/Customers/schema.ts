@@ -2,9 +2,19 @@ import { z } from "zod";
 import { CompanyType } from "@/types/enums";
 
 export const customerFormSchema = z.object({
-  name: z.string().min(1, "Ad gerekli").max(200),
-  taxNumber: z.string().max(40).optional().or(z.literal("")),
-  type: z.enum([CompanyType.CUSTOMER, CompanyType.SUPPLIER]),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Müşteri adı boş bırakılamaz")
+    .max(200, "Müşteri adı en fazla 200 karakter olabilir"),
+  taxNumber: z
+    .string()
+    .max(40, "Vergi numarası en fazla 40 karakter olabilir")
+    .optional()
+    .or(z.literal("")),
+  type: z.enum([CompanyType.CUSTOMER, CompanyType.SUPPLIER], {
+    message: "Müşteri veya tedarikçi seçilmeli",
+  }),
   isActive: z.boolean(),
 });
 

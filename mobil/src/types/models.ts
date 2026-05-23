@@ -4,6 +4,13 @@ export type QualityGradeCode = '1.KALITE' | 'A1' | '2.KALITE' | 'FIRE';
 
 export type CompanyType = 'CUSTOMER' | 'SUBCONTRACTOR' | 'BOTH';
 export type StationType = 'PROCESS' | 'PROCESS_QC' | 'EXTERNAL' | 'WAREHOUSE';
+export type StationKind =
+  | 'RAW_QC'
+  | 'EXTERNAL'
+  | 'PROCESS_QC'
+  | 'TAMBUR'
+  | 'SUBCONTRACTOR'
+  | 'OTHER';
 export type StepStatus = 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'SKIPPED' | 'CANCELLED';
 export type WorkOrderStatus =
   | 'PLANNED'
@@ -19,6 +26,50 @@ export type WorkOrderType =
   | 'REPAIR_REWORK'
   | 'SERVICE_PRODUCTION';
 
+export type RollStatus =
+  | 'STOCK'
+  | 'IN_PRODUCTION'
+  | 'PRODUCED'
+  | 'WAREHOUSE'
+  | 'READY_FOR_SHIP'
+  | 'SHIPPED'
+  | 'SCRAP'
+  | 'AT_SUBCONTRACTOR'
+  | 'A1_STOCK'
+  | 'TAMBUR_CONSUMED'
+  | 'SUBCONTRACTOR_CONSUMED';
+
+export type RollEntrySource =
+  | 'KK1_INITIAL'
+  | 'TAMBUR_SPLIT'
+  | 'SUBCONTRACTOR_RETURN'
+  | 'MANUAL'
+  | 'SERVICE_PRODUCTION';
+
+// =============================================================================
+// Master data — Color, FabricProperty
+// =============================================================================
+
+export interface Color {
+  id: string;
+  code: string;
+  name: string;
+  hex?: string | null;
+  isActive?: boolean;
+}
+
+export interface FabricProperty {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive?: boolean;
+}
+
+// =============================================================================
+// Customer / Subcontractor / Station
+// =============================================================================
+
 export interface Customer {
   id: string;
   code: string;
@@ -32,6 +83,26 @@ export interface SubcontractorCategory {
   code: string;
   name: string;
   description?: string | null;
+  /**
+   * true ise bu kategorideki fason kabulde Roll'a iş emrinin hedef rengi
+   * otomatik uygulanır. Boyahane gibi.
+   */
+  appliesColor?: boolean;
+  /**
+   * [YENİ — 2026-05-18] true ise bu kategorideki fason kabulde Roll'a iş
+   * emrinin hedef özellikleri otomatik uygulanır. Boyahane'de appliesColor ile
+   * birlikte gelir; ileride Zımpara/Kurşun gibi yalnız özellik veren adımlar
+   * ("zımparalanmış", "kurşunlanmış") için bağımsız açılabilir.
+   *
+   * TODO (FasonKabulScreen): UI şu an renk + özellik bloklarını tek
+   * appliesColor flag'ine bağlı tutuyor. Yeni mantıkta:
+   *   - renk seçici → appliesColor=true ise göster
+   *   - özellik seçici → appliesProperty=true ise göster
+   * Backend `subcontractor.service.ts` artık property'i `appliesProperty`
+   * üzerinden çözüyor (`appliesColor`'dan bağımsız). Mobil bu ayrımı henüz
+   * yansıtmıyor — kullanıcı bilinçli olarak sonraya bıraktı.
+   */
+  appliesProperty?: boolean;
   isActive: boolean;
 }
 
@@ -57,7 +128,26 @@ export interface Station {
   code: string;
   name: string;
   type: StationType;
+  kind?: StationKind;
 }
+
+// =============================================================================
+// Item — Variant kaldırıldı; allowedColors / allowedProperties pattern
+// =============================================================================
+
+export interface Item {
+  id: string;
+  code: string;
+  name: string;
+  itemType?: string;
+  isActive?: boolean;
+  allowedColors?: Color[];
+  allowedProperties?: FabricProperty[];
+}
+
+// =============================================================================
+// WorkOrder + steps + order links
+// =============================================================================
 
 export interface WorkOrderStep {
   id: string;
@@ -67,15 +157,12 @@ export interface WorkOrderStep {
   status: StepStatus;
   notes?: string | null;
   station?: Station;
-  // Fason adımları için planlama
   requiredCategoryId?: string | null;
   requiredCategory?: SubcontractorCategory | null;
   plannedSubcontractorId?: string | null;
   plannedSubcontractor?: Subcontractor | null;
 }
 
-// Sipariş satırı + müşteri snapshot — sadece picker için lazımdır,
-// `withOrderDetail=true` query param'ıyla backend'den gelir.
 export interface WorkOrderToOrderLine {
   workOrderId: string;
   orderLineId: string;
@@ -84,8 +171,11 @@ export interface WorkOrderToOrderLine {
     id: string;
     quantity: number;
     width: number | null;
+    colorId?: string | null;
+    customerItemName?: string | null;
+    customerColorName?: string | null;
     item?: { id: string; code: string; name: string };
-    variant?: { id: string; code: string; name: string } | null;
+    color?: Color | null;
     order?: {
       id: string;
       orderNumber: string;
@@ -102,42 +192,39 @@ export interface WorkOrder {
   type?: WorkOrderType;
   width?: number | null;
   targetQuantity?: number | null;
-  recipeNo?: string | null;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   steps?: WorkOrderStep[];
   createdAt?: string;
   // withOrderDetail=true ile gelen alanlar
   orderLinks?: WorkOrderToOrderLine[];
-  targetColor?: { id: string; code: string; name: string; hex?: string | null } | null;
-  dispatchedTotalQty?: number;
-  // findByBarcode include eder — KK1 ham mal kabul context'i için.
   targetItemId?: string | null;
-  targetItem?: {
-    id: string;
-    code: string;
-    name: string;
-    isDerived?: boolean;
-    baseItemId?: string | null;
-    color?: { id: string; code: string; name: string; hex: string | null } | null;
-  } | null;
+  targetItem?: Item | null;
+  targetColorId?: string | null;
+  targetColor?: Color | null;
+  targetProperties?: FabricProperty[];
+  /** "2-KAT" / "4-KAT" gibi — Tambur planlaması, opsiyonel. */
+  foldType?: string | null;
+  /** Tambur katman sayısı (1-20), opsiyonel. */
+  layerCount?: number | null;
+  dispatchedTotalQty?: number;
 }
+
+// =============================================================================
+// Subcontractor Dispatch
+// =============================================================================
 
 export interface SubcontractorDispatchItem {
   id: string;
   rollId: string;
   dispatchedQty: number;
   dispatchedWeight: number | null;
-  roll?: Pick<Roll, 'id' | 'barcode' | 'item' | 'variant' | 'qualityGrade' | 'width'> & {
+  roll?: Pick<Roll, 'id' | 'barcode' | 'item' | 'qualityGrade' | 'width' | 'color'> & {
     ownerCustomerId?: string | null;
     ownerCustomer?: { id: string; code: string; name: string } | null;
   };
 }
 
-/**
- * Sevk listesi response'unda gelen HAFİF kayıt.
- * Detay (orderLinks, items, dispatchedBy …) `getDispatch` ile lazy çekilir.
- */
 export interface SubcontractorDispatchListItem {
   id: string;
   dispatchNo: string;
@@ -152,10 +239,6 @@ export interface SubcontractorDispatchListItem {
   _count?: { items: number };
 }
 
-/**
- * Detay endpoint (`getDispatch`) tam veri.
- * Liste satırından tıklamayla `useQuery` cache'iyle dolar.
- */
 export interface SubcontractorDispatch {
   id: string;
   dispatchNo: string;
@@ -179,40 +262,43 @@ export interface SubcontractorDispatch {
   items?: SubcontractorDispatchItem[];
 }
 
-export interface ItemVariant {
-  id: string;
-  code: string;
-  name: string;
+// =============================================================================
+// Roll — barcode nullable (açık kumaş), colorId + properties bağımsız
+// =============================================================================
+
+export interface RollProperty {
+  propertyId: string;
+  property?: FabricProperty;
 }
 
-export interface Item {
+export interface RollErrorRecord {
   id: string;
-  code: string;
-  name: string;
-  itemType?: string;
-  isActive?: boolean;
+  startMeter: number;
+  endMeter: number | null;
+  defectTypeId: string | null;
+  errorType: string | null;
+  isProcessed?: boolean;
 }
 
 export interface Roll {
   id: string;
-  barcode: string;
+  /** Açık kumaş (boyahane dönüşü Kurşun/KK2 aşaması) için NULL. */
+  barcode: string | null;
   itemId: string;
-  variantId: string | null;
+  colorId?: string | null;
   initialQty: number;
   currentQty: number;
   weightKg: number | null;
   width: number | null;
   qualityGrade: string;
-  status: string;
-  entrySource?: string;
+  status: RollStatus;
+  entrySource?: RollEntrySource;
   ownerCustomerId?: string | null;
-  item?: {
-    id: string;
-    code: string;
-    name: string;
-    color?: { id: string; code: string; name: string; hex: string | null } | null;
-  };
-  variant?: { id: string; code: string; name: string } | null;
+  parentReceiptId?: string | null;
+  item?: { id: string; code: string; name: string };
+  color?: Color | null;
+  properties?: RollProperty[];
+  ownerCustomer?: { id: string; code: string; name: string } | null;
   producedInStep?: {
     workOrder?: { id: string; batchNumber: string } | null;
   } | null;
@@ -224,10 +310,6 @@ export interface Roll {
 // Fason Mal Kabul (Subcontractor Receipt)
 // =============================================================================
 
-/**
- * `GET /api/subcontractor/pending-returns?workOrderId=` cevabındaki bir grup.
- * Bir step üzerine fasonda bekleyen toplar + son sevk + planlanan/güncel firma.
- */
 export interface PendingReturnGroup {
   step: {
     id: string;
@@ -240,8 +322,9 @@ export interface PendingReturnGroup {
   workOrder: {
     id: string;
     batchNumber: string;
-    recipeNo: string | null;
     status: WorkOrderStatus;
+    targetColor?: Color | null;
+    targetProperties?: FabricProperty[];
   };
   lastDispatch: {
     id: string;
@@ -269,6 +352,10 @@ export interface ReceiveRequest {
   subcontractorId: string;
   manifestNo?: string | null;
   notes?: string;
+  /** Receipt seviyesinde uygulanan renk (override; appliesColor=true kategoride boş bırakılabilir → WO.targetColor). */
+  appliedColorId?: string | null;
+  /** Receipt seviyesinde uygulanan özellikler (override; appliesColor=true kategoride boş bırakılabilir → WO.targetProperties). */
+  appliedPropertyIds?: string[];
   returns: ReceiveReturnInput[];
 }
 
@@ -277,32 +364,40 @@ export interface SubcontractorReceiptItem {
   receiptId: string;
   newRollId: string;
   notes: string | null;
-  newRoll?: Pick<Roll, 'id' | 'barcode' | 'item' | 'variant' | 'qualityGrade'>;
+  newRoll?: Pick<Roll, 'id' | 'barcode' | 'item' | 'qualityGrade' | 'color'>;
 }
 
-/** Liste cevabı için hafif kayıt — `GET /api/subcontractor/receipts` */
 export interface SubcontractorReceiptListItem {
   id: string;
   receiptNo: string;
   manifestNo: string | null;
   receivedAt: string;
   notes: string | null;
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
+  appliedColorId?: string | null;
+  appliedColor?: Color | null;
   workOrder?: Pick<WorkOrder, 'id' | 'batchNumber'>;
   subcontractor?: Pick<Subcontractor, 'id' | 'name' | 'code'>;
   step?: { id: string; stepSequence: number; station: Pick<Station, 'name' | 'code'> };
   receivedBy?: { id: string; username: string; fullName: string } | null;
+  cancelledBy?: { id: string; username: string; fullName: string } | null;
   items?: { id: string }[];
   _count?: { items: number };
   totalQty?: number;
 }
 
-/** Detay cevabı — `GET /api/subcontractor/receipts/:id` */
 export interface SubcontractorReceipt extends SubcontractorReceiptListItem {
   items?: SubcontractorReceiptItem[];
+  appliedProperties?: FabricProperty[];
+}
+
+export interface CancelReceiptRequest {
+  reason: string;
 }
 
 // =============================================================================
-// Refakat Kartı (Traveler Card) — `findByBarcode` cevabı
+// Refakat Kartı (Traveler Card)
 // =============================================================================
 
 export type TravelerCardStatus = 'ACTIVE' | 'COMPLETED' | 'VOIDED';
@@ -334,29 +429,27 @@ export interface DefectType {
 }
 
 // =============================================================================
-// Kurşun + QC2 (PROCESS_QC istasyonu) — operatör ekranı tipleri
+// Kurşun + QC2 (PROCESS_QC istasyonu)
 // =============================================================================
 
 export interface KursunRollDefectSummary {
   id: string;
   startMeter: number;
-  endMeter: number;
+  endMeter: number | null;
   defectTypeId: string | null;
-  errorType: string | null; // DefectType.name snapshot — kayıt anında dondurulur
+  errorType: string | null;
 }
 
 export interface KursunRollSummary {
   rollId: string;
-  barcode: string;
+  barcode: string | null;
   currentQty: number;
   kursunApplied: boolean;
   qc2Completed: boolean;
   errorCount: number;
   defects: KursunRollDefectSummary[];
-  // Backend `getByCardBarcode` cevabı per-roll item bilgisi göndermeyebilir;
-  // varsa ek alan olarak gelirse opsiyonel.
   itemName?: string;
-  variantName?: string | null;
+  colorName?: string | null;
 }
 
 export interface KursunStepSummary {
@@ -370,7 +463,6 @@ export interface KursunStepSummary {
   rolls: KursunRollSummary[];
 }
 
-/** `GET /api/kursun-qc/open-cards` cevabı — kamera modalı için. */
 export interface KursunOpenCard {
   cardId: string;
   cardNumber: string;
@@ -383,37 +475,42 @@ export interface KursunOpenCard {
   openRollCount: number;
 }
 
-// =============================================================================
-// Kalite derecesi kataloğu (admin yönetimli)
-// =============================================================================
-export interface QualityGrade {
-  id: string;
-  code: string;
-  name: string;
-  description: string | null;
-  color: string | null;
-  sortOrder: number;
-  isActive: boolean;
+/** Açık kumaş aç (Kurşun/KK2) — `POST /api/rolls/open-fabric` */
+export interface OpenFabricCreateRequest {
+  receiptId: string;
+  stepId: string;
+  notes?: string | null;
+}
+
+/** Açık kumaş kapanışı (Kurşun/KK2) — `POST /api/rolls/:id/kursun-finish` */
+export interface KursunFinishRequest {
+  totalMeters: number;
+  errors?: Array<{
+    startMeter: number;
+    endMeter?: number | null;
+    defectTypeId?: string | null;
+  }>;
+  notes?: string | null;
 }
 
 // =============================================================================
-// Tambur ekranı tipleri
+// Tambur ekranı
 // =============================================================================
 
 export interface TamburRollDefect {
   id: string;
   startMeter: number;
-  endMeter: number;
-  errorType: string | null; // DefectType.name snapshot (veya backend'in döndürdüğü)
+  endMeter: number | null;
+  errorType: string | null;
 }
 
 export interface TamburRollSummary {
   rollId: string;
-  barcode: string;
+  barcode: string | null;
   itemCode: string;
   itemName: string;
-  variantCode: string | null;
-  variantName: string | null;
+  colorCode: string | null;
+  colorName: string | null;
   currentQty: number;
   width: number | null;
   qualityGrade: string;
@@ -436,17 +533,18 @@ export type TamburDecision = 'CUT' | 'NO_CUT';
 export interface TamburErrorDecision {
   errorId: string;
   decision: TamburDecision;
-  qualityGrade?: string; // CUT için zorunlu (FIRE/A1 vb.)
+  qualityGrade?: string;
 }
 
-export type TamburFoldType = '2-KAT' | '4-KAT';
+export type TamburFoldType = string; // serbest string ("2-KAT" / "4-KAT" / özel)
 
 export interface TamburVoluntaryCut {
   start: number;
-  end: number; // > start
+  end: number;
   qualityGrade: string;
 }
 
+/** Eski model — barkodlu Roll (boyahaneye gitmemiş) için. */
 export interface TamburFinalizeRequest {
   rollId: string;
   decisions: TamburErrorDecision[];
@@ -472,7 +570,6 @@ export interface TamburSwatchRequest {
   count: number;
   purpose?: string | null;
   workOrderId?: string | null;
-  variantId?: string | null;
 }
 
 export interface TamburPostSplitRequest {
@@ -483,7 +580,7 @@ export interface TamburPostSplitRequest {
 
 export interface TamburSplitRollLabel {
   id: string;
-  barcode: string;
+  barcode: string | null;
   qualityGrade: string;
   currentQty: number;
   width: number | null;
@@ -501,4 +598,220 @@ export interface TamburOpenCard {
   stationName: string;
   stationCode: string;
   openRollCount: number;
+}
+
+// =============================================================================
+// Yeni Tambur context — açık kumaş modeli (boyahane dönüşü)
+// =============================================================================
+
+export interface TamburContextOrderLine {
+  lineId: string;
+  itemCode: string;
+  itemName: string;
+  colorCode: string | null;
+  colorName: string | null;
+  orderedQty: number;
+  shippedQty: number;
+}
+
+export interface TamburContextOrder {
+  orderId: string;
+  orderNumber: string;
+  customerId: string;
+  customerName: string;
+  lines: TamburContextOrderLine[];
+}
+
+export interface TamburContextOpenFabricError {
+  id: string;
+  startMeter: number;
+  endMeter: number | null;
+  errorType: string | null;
+}
+
+export interface TamburContextOpenFabric {
+  rollId: string;
+  currentQty: number;
+  initialQty: number;
+  receiptNo: string | null;
+  colorCode: string | null;
+  colorName: string | null;
+  kursunFinishedAt: string | null;
+  errors: TamburContextOpenFabricError[];
+}
+
+export interface TamburContext {
+  workOrderId: string;
+  batchNumber: string;
+  stepId: string;
+  stationName: string;
+  /** WO planlamasında belirlenen kat tipi — Tambur'a bilgi olarak iletilir. */
+  plannedFoldType?: string | null;
+  /** WO planlamasında belirlenen katman sayısı (1-20). */
+  plannedLayerCount?: number | null;
+  orders: TamburContextOrder[];
+  openFabricRolls: TamburContextOpenFabric[];
+}
+
+/** `POST /api/tambur/:id/cut` — açık kumaşta tek kesim */
+export interface TamburCutRequest {
+  lengthMeters: number;
+  status: 'WAREHOUSE' | 'SCRAP' | 'A1_STOCK';
+  qualityGrade?: string | null;
+  notes?: string | null;
+}
+
+/** `POST /api/tambur/:id/finalize-open-fabric` — açık kumaşı bitir */
+export interface TamburFinalizeOpenFabricRequest {
+  scrapRemaining?: boolean;
+  notes?: string | null;
+  foldType?: string | null;
+  layerCount?: number | null;
+}
+
+// =============================================================================
+// Kalite derecesi kataloğu (admin yönetimli)
+// =============================================================================
+export interface QualityGrade {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+// =============================================================================
+// KK1 context — `GET /api/rolls/kk1-context/:cardBarcode`
+// =============================================================================
+
+export interface Kk1Context {
+  workOrderId: string;
+  batchNumber: string;
+  stepId: string;
+  stationCode: string;
+  stationName: string;
+  targetItem: { id: string; code: string; name: string } | null;
+  targetColor: Color | null;
+  rollCount: number;
+}
+
+// =============================================================================
+// Label payload + template
+// =============================================================================
+
+export type NameSource = 'OVERRIDE' | 'MASTER' | 'DEFAULT';
+
+export interface LabelPayload {
+  rollId: string;
+  barcode: string | null;
+  status: string;
+  qualityGrade: string;
+  widthCm: number | null;
+  lengthMeters: number;
+  weightKg: number | null;
+  packagingDate: string | null;
+
+  itemCode: string;
+  itemName: string;
+  itemNameDefault: string;
+  itemNameSource: NameSource;
+  colorCode: string | null;
+  colorName: string | null;
+  colorNameDefault: string | null;
+  colorNameSource: NameSource | null;
+
+  customerName: string | null;
+  customerId: string | null;
+  orderNumber: string | null;
+  orderLineId: string | null;
+
+  ownerCustomerName: string | null;
+
+  batchNumber: string | null;
+  printedAt: string;
+}
+
+export interface SwatchLabelPayload {
+  swatchId: string;
+  cardNumber: string;
+  barcode: string;
+  itemCode: string;
+  itemName: string;
+  itemNameDefault: string;
+  itemNameSource: NameSource;
+  colorCode: string | null;
+  colorName: string | null;
+  colorNameDefault: string | null;
+  colorNameSource: NameSource | null;
+  widthCm: number | null;
+  lengthCm: number;
+  weightKg: number | null;
+  customerName: string | null;
+  customerId: string | null;
+  orderNumber: string | null;
+  orderLineId: string | null;
+  ownerCustomerName: string | null;
+  batchNumber: string | null;
+  parentRollBarcode: string | null;
+  printedAt: string;
+}
+
+export interface UpdateOrderLineCustomerNamesRequest {
+  customerItemName?: string | null;
+  customerColorName?: string | null;
+}
+
+// === Label Template ===
+
+export type LabelKind = 'ROLL' | 'SWATCH' | 'SHIPMENT_DOCKET';
+
+export type LabelFontSize = 'sm' | 'md' | 'lg' | 'xl';
+
+export interface LabelFieldDef {
+  key: string;
+  defaultLabel: string;
+  type: 'text' | 'number' | 'date' | 'qr' | 'barcode' | 'table';
+  required?: boolean;
+}
+
+export interface LabelTemplateField {
+  key: string;
+  label: string;
+  order: number;
+  isVisible: boolean;
+  isBold?: boolean;
+  fontSize?: LabelFontSize;
+}
+
+export interface LabelTemplate {
+  id: string;
+  name: string;
+  kind: LabelKind;
+  isDefault: boolean;
+  isActive: boolean;
+  fields: LabelTemplateField[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LabelTemplateCatalog {
+  kind: LabelKind;
+  fields: LabelFieldDef[];
+}
+
+export interface LabelTemplateCreateRequest {
+  name: string;
+  kind: LabelKind;
+  isDefault?: boolean;
+  isActive?: boolean;
+  fields?: LabelTemplateField[];
+}
+
+export interface LabelTemplateUpdateRequest {
+  name?: string;
+  isDefault?: boolean;
+  isActive?: boolean;
+  fields?: LabelTemplateField[];
 }

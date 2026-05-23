@@ -15,9 +15,9 @@ import { shipmentService } from "./service";
 
 interface PickerRow {
   rollId: string;
-  barcode: string;
+  barcode: string | null;
   itemName: string;
-  variantName?: string | null;
+  colorName?: string | null;
   rollStatus: string;
   qty: number;
   weightKg: number | null;
@@ -83,7 +83,7 @@ export function ReadyRollsPicker({
         out.push({
           rollId: r.rollId,
           barcode: r.barcode,
-          itemName: `${r.itemName}${r.variantName ? ` · ${r.variantName}` : ""}`,
+          itemName: `${r.itemName}${r.colorName ? ` · ${r.colorName}` : ""}`,
           rollStatus: r.status,
           qty: r.currentQty,
           weightKg: r.weightKg,

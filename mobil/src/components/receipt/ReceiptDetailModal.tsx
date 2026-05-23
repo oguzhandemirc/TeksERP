@@ -141,7 +141,7 @@ export default function ReceiptDetailModal({ receiptId, onDismiss }: Props) {
                     </Text>
                     <Text style={styles.rollItemName} numberOfLines={1}>
                       {item.newRoll?.item?.name ?? '—'}
-                      {item.newRoll?.variant?.name ? ` · ${item.newRoll.variant.name}` : ''}
+                      {item.newRoll?.color?.name ? ` · ${item.newRoll.color.name}` : ''}
                     </Text>
                     {item.notes && (
                       <Text style={styles.rollNote} numberOfLines={2}>

@@ -39,8 +39,6 @@ const FILTERS: FilterDef[] = [
     options: [
       { value: "ORDER_PRODUCTION", label: "Siparişe Özel" },
       { value: "STOCK_PRODUCTION", label: "Stoka" },
-      { value: "SAMPLE_PRODUCTION", label: "Numune" },
-      { value: "REPAIR_REWORK", label: "Tamir/Yeniden" },
       { value: "SERVICE_PRODUCTION", label: "Fason" },
     ],
   },
@@ -81,14 +79,15 @@ interface CreatePayload {
   routeTemplateId?: string;
   steps?: CustomRouteStep[];
   targetItemId: string | null;
+  targetColorId: string | null;
   targetPropertyIds: string[];
   orderLineIds?: string[];
   stepPlanning?: StepPlanPayload[];
   width: number | null;
   targetQuantity: number | null;
-  recipeNo: string | null;
   plannedStartDate: string | null;
   plannedEndDate: string | null;
+  foldType: string | null;
 }
 
 function buildPayload(
@@ -123,15 +122,16 @@ function buildPayload(
     type: v.type,
     ...routePart,
     targetItemId: v.targetItemId ?? null,
+    targetColorId: v.targetColorId ?? null,
     targetPropertyIds: v.targetPropertyIds ?? [],
     ...(v.type === "ORDER_PRODUCTION" && orderLineIds.length > 0
       ? { orderLineIds }
       : {}),
     width: v.width ?? null,
     targetQuantity: v.targetQuantity ?? null,
-    recipeNo: trimOrNull(v.recipeNo),
     plannedStartDate: dateOrNull(v.plannedStartDate),
     plannedEndDate: dateOrNull(v.plannedEndDate),
+    foldType: trimOrNull(v.foldType),
   };
 }
 

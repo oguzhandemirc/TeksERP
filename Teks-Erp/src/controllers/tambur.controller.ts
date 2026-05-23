@@ -26,7 +26,6 @@ const finalizeSchema = z.object({
     )
     .default([]),
   foldType: z.enum(["2-KAT", "4-KAT"]).optional(),
-  layerCount: z.number().int().positive().max(20).nullish(),
   cutMode: z.enum(["BY_DEFECT", "FIXED_LENGTH"]).nullish(),
   cutLengthM: z.number().positive().nullish(),
 });
@@ -86,9 +85,8 @@ const cutOpenFabricSchema = z.object({
 const finalizeOpenFabricSchema = z.object({
   scrapRemaining: z.boolean().optional(),
   notes: z.string().max(1000).optional().nullable(),
-  // Tambur kararı — WO planlaması override (verilmezse WO.foldType/layerCount kullanılır).
+  // Tambur kararı — WO planlaması override (verilmezse WO.foldType kullanılır).
   foldType: z.string().trim().max(32).optional().nullable(),
-  layerCount: z.number().int().positive().max(20).optional().nullable(),
 });
 
 export class TamburController {

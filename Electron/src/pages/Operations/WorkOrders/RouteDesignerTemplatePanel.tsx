@@ -5,8 +5,6 @@ interface Props {
   onEnabledChange: (v: boolean) => void;
   name: string;
   onNameChange: (v: string) => void;
-  code: string;
-  onCodeChange: (v: string) => void;
   customerId: string | null;
   forCustomer: boolean;
   onForCustomerChange: (v: boolean) => void;
@@ -17,8 +15,6 @@ export function RouteDesignerTemplatePanel({
   onEnabledChange,
   name,
   onNameChange,
-  code,
-  onCodeChange,
   customerId,
   forCustomer,
   onForCustomerChange,
@@ -35,23 +31,16 @@ export function RouteDesignerTemplatePanel({
       </label>
       {enabled && (
         <div className="space-y-2 pl-6">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-              <label className="text-xs text-muted-foreground">Şablon Adı *</label>
-              <Input
-                value={name}
-                onChange={(e) => onNameChange(e.target.value)}
-                placeholder="Örn: Boyahane + Kursun + Tambur"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Kod (opsiyonel)</label>
-              <Input
-                value={code}
-                onChange={(e) => onCodeChange(e.target.value)}
-                placeholder="BKT-STD"
-              />
-            </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Şablon Adı *</label>
+            <Input
+              value={name}
+              onChange={(e) => onNameChange(e.target.value)}
+              placeholder="Örn: Boyahane + Kursun + Tambur"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Kod otomatik atanır.
+            </p>
           </div>
           {customerId && (
             <label className="flex items-center gap-2 text-xs">

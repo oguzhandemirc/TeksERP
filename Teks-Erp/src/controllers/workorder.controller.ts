@@ -9,7 +9,7 @@ import "../types/express-augment";
 
 const createSchema = z.object({
   batchNumber:       z.string().trim().min(1).optional().nullable(),
-  type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION", "SAMPLE_PRODUCTION", "REPAIR_REWORK"]).default("ORDER_PRODUCTION"),
+  type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).default("ORDER_PRODUCTION"),
   width:             z.number().positive("En değeri pozitif olmalı").optional().nullable(),
   targetQuantity:    z.number().positive().optional().nullable(),
   parameters:        z.record(z.string(), z.unknown()).optional().nullable(),
@@ -20,7 +20,6 @@ const createSchema = z.object({
   targetColorId:     z.string().uuid().optional().nullable(),
   // Tambur planlama bilgisi — operatör override edebilir.
   foldType:          z.string().trim().max(32).optional().nullable(),
-  layerCount:        z.number().int().positive().max(20).optional().nullable(),
   steps: z
     .array(z.object({
       stationId:              z.string().uuid("Geçersiz istasyon ID"),
@@ -52,7 +51,7 @@ const createSchema = z.object({
   targetPropertyIds: z.array(z.string().uuid()).optional(),
 }).refine(
   (d) => Boolean(d.routeTemplateId) || (d.steps && d.steps.length > 0),
-  { message: "routeTemplateId veya en az bir step gerekli", path: ["steps"] },
+  { message: "Rota şablonu seçin veya özel rota adımları tanımlayın.", path: ["steps"] },
 );
 
 const targetPropertiesSchema = z.object({
@@ -85,7 +84,6 @@ const updateWorkOrderSchema = z.object({
   targetItemId: z.string().uuid().nullable().optional(),
   targetColorId: z.string().uuid().nullable().optional(),
   foldType: z.string().trim().max(32).nullable().optional(),
-  layerCount: z.number().int().positive().max(20).nullable().optional(),
 });
 
 /**
@@ -94,7 +92,7 @@ const updateWorkOrderSchema = z.object({
  */
 const replaceWorkOrderSchema = z.object({
   batchNumber:       z.string().trim().min(1).optional().nullable(),
-  type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION", "SAMPLE_PRODUCTION", "REPAIR_REWORK"]).optional(),
+  type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).optional(),
   width:             z.number().positive("En değeri pozitif olmalı").optional().nullable(),
   targetQuantity:    z.number().positive().optional().nullable(),
   parameters:        z.record(z.string(), z.unknown()).optional().nullable(),
@@ -104,7 +102,6 @@ const replaceWorkOrderSchema = z.object({
   targetItemId:      z.string().uuid().optional().nullable(),
   targetColorId:     z.string().uuid().optional().nullable(),
   foldType:          z.string().trim().max(32).optional().nullable(),
-  layerCount:        z.number().int().positive().max(20).optional().nullable(),
   steps: z
     .array(z.object({
       // smart-merge için: mevcut step'i güncellemek istersen id gönder.
@@ -134,7 +131,7 @@ const replaceWorkOrderSchema = z.object({
   targetPropertyIds: z.array(z.string().uuid()).optional(),
 }).refine(
   (d) => Boolean(d.routeTemplateId) || (d.steps && d.steps.length > 0),
-  { message: "routeTemplateId veya en az bir step gerekli", path: ["steps"] },
+  { message: "Rota şablonu seçin veya özel rota adımları tanımlayın.", path: ["steps"] },
 );
 
 

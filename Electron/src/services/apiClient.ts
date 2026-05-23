@@ -16,14 +16,26 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
+interface ApiErrorBody {
+  message?: string;
+  errors?: Array<{ field: string; message: string }>;
+}
+
+/** Backend validation errors → tek satır okunabilir mesaj. */
+function buildErrorMessage(body: ApiErrorBody | undefined): string {
+  const fieldErrors = body?.errors ?? [];
+  if (fieldErrors.length > 0) {
+    return fieldErrors.map((e) => e.message).join(" • ");
+  }
+  return body?.message ?? "Beklenmeyen bir hata oluştu";
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (axios.isAxiosError(error)) {
       const status = error.response?.status;
-      const message =
-        (error.response?.data as { message?: string } | undefined)?.message ??
-        "Beklenmeyen bir hata oluştu";
+      const body = error.response?.data as ApiErrorBody | undefined;
 
       if (status === 401) {
         await tokenStore.clear();
@@ -38,7 +50,7 @@ apiClient.interceptors.response.use(
       }
 
       if (status && status >= 400 && status < 500) {
-        toast.error(message);
+        toast.error(buildErrorMessage(body));
       } else if (status && status >= 500) {
         toast.error("Sunucu hatası. Lütfen daha sonra tekrar deneyin.");
       } else if (!error.response) {

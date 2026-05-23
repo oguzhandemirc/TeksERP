@@ -794,11 +794,6 @@ function PoolContent({
                       {roll.colorName}
                     </Chip>
                   )}
-                  {roll.variantName && (
-                    <Chip compact style={S.attrChip} textStyle={S.attrChipText}>
-                      {roll.variantName}
-                    </Chip>
-                  )}
                   <Text style={S.rollMeta}>
                     {roll.currentQty.toFixed(1)} m
                     {roll.weightKg != null && ` · ${roll.weightKg.toFixed(1)} kg`}

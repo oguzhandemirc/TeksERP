@@ -134,10 +134,10 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
                   </div>
                 </>
               )}
-              {workOrder.targetItem?.color && (
+              {workOrder.targetColor && (
                 <>
                   <div className="text-muted-foreground">Renk</div>
-                  <div>{workOrder.targetItem.color.name}</div>
+                  <div>{workOrder.targetColor.name}</div>
                 </>
               )}
               {workOrder.width != null && (
@@ -152,10 +152,10 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
                   <div>{formatNumber(workOrder.targetQuantity, 0)} m</div>
                 </>
               )}
-              {workOrder.recipeNo && (
+              {workOrder.foldType && (
                 <>
-                  <div className="text-muted-foreground">Reçete No</div>
-                  <div className="font-mono">{workOrder.recipeNo}</div>
+                  <div className="text-muted-foreground">Kat Tipi</div>
+                  <div>{workOrder.foldType}</div>
                 </>
               )}
               <div className="text-muted-foreground">Planlı Başlangıç</div>

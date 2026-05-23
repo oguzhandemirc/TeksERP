@@ -18,8 +18,7 @@ export function buildRollLabelHtml({
   batchNumber,
 }: BuildLabelArgs): string {
   const itemName = escapeHtml(roll.item?.name ?? '—');
-  const variantName = roll.variant?.name ? escapeHtml(roll.variant.name) : '';
-  const color = roll.item?.color ?? null;
+  const color = roll.color ?? null;
   const colorName = color?.name ? escapeHtml(color.name) : '';
   const colorHex = color?.hex ?? '#94a3b8';
   const qty = formatNumber(roll.currentQty ?? roll.initialQty);
@@ -28,12 +27,13 @@ export function buildRollLabelHtml({
   const quality = escapeHtml(roll.qualityGrade ?? '');
   const date = dayjs(roll.createdAt ?? new Date()).format('DD.MM.YYYY HH:mm');
   const safeBatch = batchNumber ? escapeHtml(batchNumber) : '';
+  const barcode = escapeHtml(roll.barcode ?? '');
 
   return `<!doctype html>
 <html lang="tr">
 <head>
 <meta charset="utf-8" />
-<title>Top Etiketi · ${escapeHtml(roll.barcode)}</title>
+<title>Top Etiketi · ${barcode || '—'}</title>
 <style>
   @page { size: A6 portrait; margin: 4mm; }
   * { box-sizing: border-box; }
@@ -143,7 +143,6 @@ export function buildRollLabelHtml({
     </div>
 
     <div class="item-name">${itemName}</div>
-    ${variantName ? `<div class="variant">${variantName}</div>` : ''}
 
     ${
       colorName
@@ -159,7 +158,7 @@ export function buildRollLabelHtml({
     <div class="qr-row">
       <img class="qr" src="${qrDataUrl}" alt="QR" />
       <div class="qr-info">
-        <div class="barcode">${escapeHtml(roll.barcode)}</div>
+        <div class="barcode">${barcode || '—'}</div>
         <div class="meta-row"><span class="k">En</span><span>${widthLabel}</span></div>
         <div class="meta-row"><span class="k">Kalite</span><span>${quality}</span></div>
       </div>

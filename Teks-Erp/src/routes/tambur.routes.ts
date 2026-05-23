@@ -267,10 +267,6 @@ router.get("/rolls/:rollId", verifyToken, requirePermission("quality:read"), con
  *                 type: string
  *                 enum: [2-KAT, 4-KAT]
  *                 description: Katlama şekli
- *               layerCount:
- *                 type: integer
- *                 description: Kat sayısı (sarım)
- *                 example: 2
  *               cutMode:
  *                 type: string
  *                 enum: [BY_DEFECT, FIXED_LENGTH]
@@ -469,12 +465,6 @@ router.post(
  *                   Verilmezse WO'nun planlanan değeri kullanılır. Hem planlanan
  *                   hem actual değer RollOperation metadata'sına yazılır
  *                   (sapma izlenebilir).
- *               layerCount:
- *                 type: integer
- *                 nullable: true
- *                 minimum: 1
- *                 maximum: 20
- *                 description: Tambur kararı — WO.layerCount override.
  *     responses:
  *       200: { description: Açık kumaş finalize edildi }
  *       400: { description: Validasyon / Roll açık kumaş değil }

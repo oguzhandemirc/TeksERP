@@ -1,43 +1,48 @@
-import { CrudPage } from "@/components/layout/CrudPage";
-import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
+import { Lock } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
+import { RefreshButton } from "@/components/RefreshButton";
+import { useDataTable } from "@/hooks/useDataTable";
 import { qualityGradeColumns } from "./columns";
 import { qualityGradeService } from "./service";
-import { QualityGradeFormDialog } from "./QualityGradeFormDialog";
 import type { QualityGrade } from "./types";
-import type { QualityGradeFormValues } from "./schema";
-
-const buildPayload = (
-  v: QualityGradeFormValues,
-  initial: QualityGrade | null,
-): Partial<QualityGrade> => ({
-  code: initial?.code ?? generateCode(CODE_PREFIXES.QUALITY_GRADE),
-  name: v.name,
-  description: v.description || null,
-  color: v.color || null,
-  sortOrder: v.sortOrder,
-  isActive: v.isActive,
-});
 
 export function QualityGradesPage() {
+  const { table, query, search, setSearch, pagination } = useDataTable<QualityGrade>({
+    queryKey: "quality-grades",
+    fetchFn: qualityGradeService.listCursor,
+    columns: qualityGradeColumns,
+    forceFilters: { isActive: "true" },
+  });
+
   return (
-    <CrudPage<QualityGrade>
-      title="Kalite Sınıfları"
-      description="A1, A2, FIRE gibi kalite kademeleri."
-      entityName="Kalite sınıfı"
-      queryKey="quality-grades"
-      service={qualityGradeService}
-      columns={qualityGradeColumns}
-      writePermission="quality:write"
-      searchPlaceholder="Kod veya ad ara..."
-      renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
-        <QualityGradeFormDialog
-          open={open}
-          onOpenChange={onOpenChange}
-          initial={initial}
-          isSubmitting={isSubmitting}
-          onSubmit={(values) => onSubmit(buildPayload(values, initial))}
-        />
-      )}
-    />
+    <div className="flex h-full flex-col">
+      <PageHeader
+        title="Kalite Sınıfları"
+        description="Sistem tarafından sabitlenmiş kalite kademeleri."
+        actions={<RefreshButton queryKey="quality-grades" />}
+      />
+
+      <div className="mb-3 flex items-start gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          Bu liste seed dosyasından yönetilir; UI üzerinden ekle / değiştir / sil yapılamaz. Yeni kalite kademesi veya hedef değişimi geliştirici işidir.
+        </span>
+      </div>
+
+      <DataTableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Kod veya ad ara..."
+      />
+
+      <DataTable<QualityGrade>
+        table={table}
+        isLoading={query.isLoading}
+        pagination={pagination}
+        emptyText="Kayıt yok."
+      />
+    </div>
   );
 }

@@ -139,8 +139,8 @@ export default function DispatchDetailPanel({
           </Text>
           {(dispatch.items ?? []).map((item) => {
             const r = item.roll;
-            const itemLabel = r?.variant
-              ? `${r.item?.name ?? '—'} · ${r.variant.name}`
+            const itemLabel = r?.color
+              ? `${r.item?.name ?? '—'} · ${r.color.name}`
               : (r?.item?.name ?? '—');
             return (
               <View key={item.id} style={styles.rollItem}>

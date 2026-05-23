@@ -11,15 +11,9 @@ function dateToInput(iso: string | null | undefined): string {
 }
 
 function pickFormType(t: WorkOrder["type"]): WorkOrderFormValues["type"] {
-  switch (t) {
-    case WorkOrderType.STOCK_PRODUCTION:
-    case WorkOrderType.SAMPLE_PRODUCTION:
-    case WorkOrderType.REPAIR_REWORK:
-      return t;
-    default:
-      // SERVICE_PRODUCTION ayrı bir akış — bu form'da düzenlenmez.
-      return WorkOrderType.ORDER_PRODUCTION;
-  }
+  if (t === WorkOrderType.STOCK_PRODUCTION) return t;
+  // SERVICE_PRODUCTION ayrı bir akış — bu form'da düzenlenmez.
+  return WorkOrderType.ORDER_PRODUCTION;
 }
 
 export function formValuesFromWorkOrder(wo: WorkOrder): WorkOrderFormValues {
@@ -28,13 +22,14 @@ export function formValuesFromWorkOrder(wo: WorkOrder): WorkOrderFormValues {
     type,
     routeTemplateId: wo.routeTemplateId ?? "",
     targetItemId: wo.targetItemId,
+    targetColorId: wo.targetColorId,
     targetPropertyIds: (wo.targetProperties ?? []).map((p) => p.propertyId),
     orderLineIds: (wo.orderLinks ?? []).map((l) => l.orderLineId),
     width: wo.width,
     targetQuantity: wo.targetQuantity,
-    recipeNo: wo.recipeNo ?? "",
     plannedStartDate: dateToInput(wo.plannedStartDate),
     plannedEndDate: dateToInput(wo.plannedEndDate),
+    foldType: wo.foldType ?? "",
   };
 }
 
@@ -52,8 +47,9 @@ export function pickedLinesFromWorkOrder(wo: WorkOrder): PickedOrderLine[] {
       customerName: ol.order?.customer?.name ?? "—",
       itemId: ol.item?.id ?? "",
       itemName: ol.item?.name ?? "—",
-      itemColorHex: ol.item?.color?.hex ?? null,
-      itemColorName: ol.item?.color?.name ?? null,
+      colorId: ol.colorId ?? null,
+      itemColorHex: ol.color?.hex ?? null,
+      itemColorName: ol.color?.name ?? null,
       quantity: ol.quantity,
       width: ol.width ?? null,
       requiredProperties: (ol.requiredProperties ?? []).map((rp) => ({
@@ -94,6 +90,7 @@ export function routeStateFromWorkOrder(wo: WorkOrder): RoutePrefillState {
 
   // Custom rota — designer'a re-open için snapshot da hazırla.
   const customSteps: CustomRouteStep[] = sortedSteps.map((s) => ({
+    id: s.id,
     stationId: s.station?.id ?? "",
     notes: s.notes ?? null,
     requiredCategoryId: s.requiredCategoryId ?? null,
@@ -101,6 +98,7 @@ export function routeStateFromWorkOrder(wo: WorkOrder): RoutePrefillState {
   }));
   const designerSnapshot: DesignerStep[] = sortedSteps.map((s, i) => ({
     clientId: `ds-prefill-${i}`,
+    serverId: s.id,
     stationId: s.station?.id ?? "",
     stationCode: s.station?.code ?? "",
     stationName: s.station?.name ?? "—",

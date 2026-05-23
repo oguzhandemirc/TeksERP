@@ -43,9 +43,10 @@ const PAGE_SIZE = 10;
 
 interface ScannedRoll {
   id: string;
-  barcode: string;
+  /** Açık kumaş Roll'lar barkodsuz olabilir; fasona giden hep barkodlu. Defansif. */
+  barcode: string | null;
   itemName: string;
-  variantName?: string;
+  colorName?: string | null;
   currentQty: number;
   width: number | null;
   qualityGrade: string;
@@ -456,7 +457,7 @@ export default function FasonSevkScreen() {
         id: r.id,
         barcode: r.barcode,
         itemName: r.item?.name ?? '—',
-        variantName: r.variant?.name,
+        colorName: r.color?.name ?? null,
         currentQty: r.currentQty,
         width: r.width ?? null,
         qualityGrade: r.qualityGrade,
@@ -752,14 +753,14 @@ export default function FasonSevkScreen() {
                   <Surface key={r.id} style={styles.rollItem} elevation={1}>
                     <View style={{ flex: 1 }}>
                       <View style={styles.rollItemTop}>
-                        <Text style={styles.rollBarcode}>{r.barcode}</Text>
+                        <Text style={styles.rollBarcode}>{r.barcode ?? '—'}</Text>
                         <Chip compact style={styles.rollStatusChip}>
                           {trLabel(ROLL_STATUS_LABEL, r.status)}
                         </Chip>
                       </View>
                       <Text style={styles.rollItemName} numberOfLines={1}>
                         {r.itemName}
-                        {r.variantName ? ` · ${r.variantName}` : ''}
+                        {r.colorName ? ` · ${r.colorName}` : ''}
                       </Text>
                       <View style={styles.rollBadgeRow}>
                         <View style={styles.rollBadge}>
@@ -1127,14 +1128,14 @@ function RollPickerModal({
                   <View style={pickerStyles.rowInner}>
                     <View style={{ flex: 1 }}>
                       <View style={pickerStyles.rowTop}>
-                        <Text style={pickerStyles.rowBarcode}>{item.barcode}</Text>
+                        <Text style={pickerStyles.rowBarcode}>{item.barcode ?? '—'}</Text>
                         <Chip compact style={pickerStyles.rowStatus}>
                           {trLabel(ROLL_STATUS_LABEL, item.status)}
                         </Chip>
                       </View>
                       <Text style={pickerStyles.rowName} numberOfLines={1}>
                         {item.item?.name ?? '—'}
-                        {item.variant?.name ? ` · ${item.variant.name}` : ''}
+                        {item.color?.name ? ` · ${item.color.name}` : ''}
                       </Text>
                       <View style={pickerStyles.rowBadgeRow}>
                         <View style={pickerStyles.rowBadge}>

@@ -58,7 +58,7 @@ const router = Router();
  *         schema: { type: string, enum: [INTERNAL, EXTERNAL] }
  *       - in: query
  *         name: filter[kind]
- *         schema: { type: string, enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, PACKAGING, SHIPPING, OTHER] }
+ *         schema: { type: string, enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, OTHER] }
  *       - in: query
  *         name: filter[department]
  *         schema: { type: string }
@@ -134,7 +134,7 @@ router.get("/:id", verifyToken, requirePermission("station:read"), stationContro
  *               type: { type: string, enum: [INTERNAL, EXTERNAL] }
  *               kind:
  *                 type: string
- *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, PACKAGING, SHIPPING, OTHER]
+ *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, OTHER]
  *                 description: Domain rolü — API davranış dispatch'i için kullanılır (ör. PROCESS_QC → Kurşun+QC2 akışı, TAMBUR → kesim/karar akışı). Varsayılan OTHER.
  *                 example: OTHER
  *               department: { type: string, example: "TERBIYE" }
@@ -168,7 +168,7 @@ router.post("/", verifyToken, requirePermission("station:write"), stationControl
  *               type: { type: string, enum: [INTERNAL, EXTERNAL] }
  *               kind:
  *                 type: string
- *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, PACKAGING, SHIPPING, OTHER]
+ *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, OTHER]
  *               department: { type: string }
  *               isActive: { type: boolean }
  *     responses:
@@ -258,6 +258,24 @@ router.delete("/:id/permanent", verifyToken, requirePermission("station:write"),
 // MACHINE ENDPOINTS (separate router for /api/machines)
 // =============================================================================
 const machineRouter = Router();
+
+/**
+ * @openapi
+ * /api/machines:
+ *   get:
+ *     tags: [Machines]
+ *     summary: Makine listesi (offset veya cursor)
+ *     description: |
+ *       Standart BaseService akışı — `?cursor=...&limit=...` cursor moduna geçer,
+ *       aksi halde offset (`page`/`pageSize`) döner. `filter[stationId]`,
+ *       `filter[isActive]`, `search` destekli.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Makine listesi
+ */
+machineRouter.get("/", verifyToken, requirePermission("station:read"), machineController.findAll);
 
 /**
  * @openapi

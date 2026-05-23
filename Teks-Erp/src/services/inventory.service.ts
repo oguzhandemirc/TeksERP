@@ -524,7 +524,7 @@ export class InventoryService {
     }
 
     // currentStepKind: Roll'un şu an hangi istasyon türünde olduğunu filtreler
-    //   RAW_QC | EXTERNAL | PROCESS_QC | TAMBUR | PACKAGING | SHIPPING | OTHER | SUBCONTRACTOR
+    //   RAW_QC | PROCESS_QC | SUBCONTRACTOR | TAMBUR | OTHER
     const currentStepKindRaw = f["currentStepKind"] as string | undefined;
     delete where.currentStepKind;
     if (

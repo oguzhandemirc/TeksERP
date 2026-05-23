@@ -7,6 +7,34 @@ import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { orderStatusLabels } from "@/types/enums";
 import type { Order } from "./types";
 
+export function buildOrderColumns(pricingEnabled: boolean): ColumnDef<Order>[] {
+  return [
+    ...orderColumns,
+    ...(pricingEnabled
+      ? [
+          {
+            id: "totalAmount",
+            header: "Tutar",
+            cell: ({ row }) => {
+              const o = row.original;
+              if (!o.totalAmount) {
+                return <span className="text-muted-foreground text-xs">—</span>;
+              }
+              return (
+                <span className="tabular-nums text-xs">
+                  {Number(o.totalAmount).toLocaleString("tr-TR", {
+                    minimumFractionDigits: 2,
+                  })}{" "}
+                  {o.currency}
+                </span>
+              );
+            },
+          } as ColumnDef<Order>,
+        ]
+      : []),
+  ];
+}
+
 export const orderColumns: ColumnDef<Order>[] = [
   {
     accessorKey: "orderNumber",
@@ -39,6 +67,27 @@ export const orderColumns: ColumnDef<Order>[] = [
     id: "lines",
     header: "Kalem",
     cell: ({ row }) => <Badge variant="muted">{row.original.lines?.length ?? 0}</Badge>,
+  },
+  {
+    id: "shipped",
+    header: "Sevk",
+    cell: ({ row }) => {
+      const o = row.original;
+      const requested = (o.lines ?? []).reduce((s, l) => s + (l.quantity ?? 0), 0);
+      if (requested === 0) {
+        return <span className="text-muted-foreground text-xs">—</span>;
+      }
+      const shipped = o.shippedQty ?? 0;
+      const pct = Math.min(100, Math.round((shipped / requested) * 100));
+      const fmt = (n: number) =>
+        n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+      return (
+        <span className="tabular-nums text-xs">
+          {fmt(shipped)}/{fmt(requested)} m
+          <span className="text-muted-foreground ml-1">({pct}%)</span>
+        </span>
+      );
+    },
   },
   {
     accessorKey: "status",

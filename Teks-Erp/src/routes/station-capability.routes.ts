@@ -59,7 +59,7 @@ router.get(
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: { colors, properties } }
+ *       200: { description: "{ colors, properties }" }
  *       404: { description: İstasyon bulunamadı }
  */
 router.get(

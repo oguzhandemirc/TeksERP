@@ -1592,8 +1592,8 @@ export class ShippingService {
       // 4. Auto-check work order completion.
       //    Bir WO'ya bağlı tüm toplar terminal duruma (SHIPPED/SCRAP/A1_STOCK/
       //    RETURNED_FROM_SUBCONTRACTOR) ulaştıysa WO.status = COMPLETED.
-      //    ORDER_PRODUCTION / STOCK_PRODUCTION / SERVICE_PRODUCTION / REPAIR_REWORK
-      //    tiplerinin hepsi bu yoldan geçer.
+      //    ORDER_PRODUCTION / STOCK_PRODUCTION / SERVICE_PRODUCTION tiplerinin
+      //    hepsi bu yoldan geçer.
       // Etkilenen WO'ları tek findMany ile toplu çek; sonra TÜM WO step'lerine
       // dair aktif roll var mı kontrolünü TEK bir findMany ile yap.
       // Önceki pattern: WO başına 2 query (findUnique + count) → N=20 için 40 query.

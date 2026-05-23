@@ -153,6 +153,17 @@ export default function TartiPaketScreen() {
         return;
       }
 
+      // Açık kumaş (barkodsuz) tartı/pakete gelmez — depoya geçen Roll'lar
+      // tamamı barkodlu olmalı. Defansif kontrol.
+      if (!roll.barcode) {
+        Toast.show({
+          type: 'error',
+          text1: 'Top için barkod yok',
+          text2: 'Açık kumaş Roll tartılamaz',
+        });
+        return;
+      }
+
       // Fason kuralı
       if (roll.ownerCustomerId && roll.ownerCustomerId !== activeJob.order.customer.id) {
         Toast.show({
@@ -188,9 +199,8 @@ export default function TartiPaketScreen() {
         itemId: roll.itemId,
         itemCode: roll.item?.code ?? '',
         itemName: roll.item?.name ?? '',
-        variantName: roll.variant?.name ?? null,
-        colorName: roll.item?.color?.name ?? null,
-        colorHex: roll.item?.color?.hex ?? null,
+        colorName: roll.color?.name ?? null,
+        colorHex: roll.color?.hex ?? null,
         currentQty: roll.currentQty,
         weightKg: roll.weightKg ?? null,
         width: roll.width ?? null,

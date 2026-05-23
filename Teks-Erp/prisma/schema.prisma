@@ -32,8 +32,6 @@ enum StationKind {
   PROCESS_QC // Kurşun + Kalite Kontrol 2 (tek fiziksel istasyon)
   TAMBUR // Final karar noktası
   SUBCONTRACTOR // Fason / boyahane (dış işlem)
-  PACKAGING // Paketleme
-  SHIPPING // Sevkiyat
   OTHER // Diğer / özel istasyon
 }
 
@@ -43,7 +41,7 @@ enum RollOperationType {
   KURSUN_APPLIED // PROCESS_QC: bu topa kurşun geçildi
   QC2_COMPLETED // PROCESS_QC: bu topun kalite kontrolü bitti
   TAMBUR_PROCESSED // TAMBUR: bu top için kesim/karar alındı
-  PACKAGED // PACKAGING: paketlendi
+  PACKAGED // Paketlendi (fulfillment audit — Station'a bağlı değil)
   SUBCONTRACTOR_SENT // SUBCONTRACTOR: fasona sevk edildi
   SUBCONTRACTOR_RETURNED // SUBCONTRACTOR: fasondan döndü
 }
@@ -101,8 +99,6 @@ enum OrderStatus {
 enum WorkOrderType {
   ORDER_PRODUCTION // Siparişe Özel Üretim
   STOCK_PRODUCTION // Stoka Üretim
-  SAMPLE_PRODUCTION // Numune Üretimi
-  REPAIR_REWORK // Tamir ve Yeniden İşlem Üretimi
   SERVICE_PRODUCTION // Fason Üretim Kabul — müşterinin getirdiği malı işleyip iade ederiz
 }
 
@@ -541,8 +537,8 @@ model Customer {
   orders        Order[]
   accounts      CurrentAccount[]
   shipments     Shipment[]
-  defaultRoutes Route[]          @relation("CustomerDefaultRoutes")
-  ownedRolls    Roll[]           @relation("RollOwnerCustomer")
+  defaultRoutes Route[]              @relation("CustomerDefaultRoutes")
+  ownedRolls    Roll[]               @relation("RollOwnerCustomer")
   sacks         Sack[]
   branches      CustomerBranch[]
   itemAliases   CustomerItemAlias[]
@@ -599,6 +595,10 @@ model Order {
   status    OrderStatus @default(PENDING)
   orderDate DateTime    @default(now())
   deadline  DateTime?
+
+  /// Denormalize sevk toplamı (m). Tek yazma noktası: recomputeOrderStatus.
+  /// Liste sayfasında "shippedQty / sum(lines.quantity)" gösterimi için.
+  shippedQty Float @default(0)
 
   // Tamamlanma kaydı
   completedAt       DateTime? // İlk COMPLETED'a düştüğü an (otomatik veya manuel)
@@ -822,8 +822,11 @@ model WorkOrder {
 
   // Hedef ürün — planlamacının "ne üretiyoruz" cevabı. Item'ın kendisini işaret
   // eder (artık türetilmiş Item yok). Renk ve özellikler ayrı alanlardadır:
-  // targetColorId + targetProperties M:N. Bunlar "renk veren" fason adımının
-  // (SubcontractorCategory.appliesColor=true) Fason Kabul'ünde Roll'a kopyalanır.
+  // targetColorId + targetProperties M:N. targetColorId, rotadaki
+  // "renk veren" (SubcontractorCategory.appliesColor=true) Fason Kabul'ünde
+  // Roll'a kopyalanır. targetProperties ise "özellik veren"
+  // (SubcontractorCategory.appliesProperty=true) adımda kopyalanır — aynı adım
+  // her ikisini de yapabilir (Boyahane gibi).
   // ORDER_PRODUCTION: orderLine.itemId/colorId/properties'den otomatik
   // STOCK_PRODUCTION: zorunlu (manuel seçilir)
   // SERVICE_PRODUCTION: opsiyonel (müşteri malı, item rolldan gelir)
@@ -834,10 +837,7 @@ model WorkOrder {
   /// Tambur ekranında **bilgi olarak** gösterilir; nihai kararı operatör verir
   /// (finalize sırasında override edebilir, gerçek değer RollOperation
   /// metadata'sına yazılır).
-  foldType   String?
-  /// Tambur planlama bilgisi — toplam katman sayısı (opsiyonel; foldType ile
-  /// birlikte ya da ayrı kullanılabilir).
-  layerCount Int?
+  foldType String?
 
   // Relations
   steps            WorkOrderStep[]
@@ -1494,11 +1494,18 @@ model SubcontractorCategory {
   isActive    Boolean @default(true)
 
   /// "Renk veren" kategori bayrağı. true ise bu kategorideki Fason Kabul
-  /// başarıyla tamamlandığında, kabul edilen rulonun colorId ve özellikleri
-  /// WO.targetColorId / WO.targetProperties'tan otomatik kopyalanır. Bir
-  /// rotada tek bir adımın bu flag'li kategoride olması beklenir (sistem ilk
-  /// kabul'de uygular; aynı rota içinde ikinci kez uygulanmaz).
+  /// başarıyla tamamlandığında, kabul edilen rulonun colorId'si
+  /// WO.targetColorId'den otomatik kopyalanır. Bir rotada tek bir adımın
+  /// bu flag'li kategoride olması beklenir (sistem ilk kabul'de uygular;
+  /// aynı rota içinde ikinci kez uygulanmaz). Örn. Boyahane.
   appliesColor Boolean @default(false)
+
+  /// "Özellik veren" kategori bayrağı. true ise bu kategorideki Fason Kabul
+  /// başarıyla tamamlandığında, kabul edilen rulonun özellikleri
+  /// WO.targetProperties'tan otomatik kopyalanır. appliesColor'dan bağımsızdır
+  /// — Boyahane ikisini de uygular; Zımpara/Kurşun gibi adımlar ileride
+  /// yalnız özellik uygulayabilir ("zımparalanmış", "kurşunlanmış").
+  appliesProperty Boolean @default(false)
 
   // Relations
   subcontractors  SubcontractorToCategory[]
@@ -1689,7 +1696,7 @@ model Color {
   itemAllowed         ItemAllowedColor[]
   rolls               Roll[]
   orderLines          OrderLine[]
-  workOrderTargets    WorkOrder[]        @relation("WorkOrderTargetColor")
+  workOrderTargets    WorkOrder[]            @relation("WorkOrderTargetColor")
   swatches            Swatch[]
   stationCapabilities StationColor[]
   /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
@@ -1859,8 +1866,8 @@ model WorkOrderTargetProperty {
 }
 
 /// Roll ↔ FabricProperty M:N — bir rulonun fiilen sahip olduğu özellikler.
-/// "Renk veren" fason adımının (SubcontractorCategory.appliesColor=true) Fason
-/// Kabul'ünde WO.targetProperties'tan kopyalanır. Sonradan
+/// "Özellik veren" fason adımının (SubcontractorCategory.appliesProperty=true)
+/// Fason Kabul'ünde WO.targetProperties'tan kopyalanır. Sonradan
 /// inventory.applyManualProperties ile düzenlenebilir.
 model RollProperty {
   id         String @id @default(uuid())

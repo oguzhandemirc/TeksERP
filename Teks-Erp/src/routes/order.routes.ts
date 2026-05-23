@@ -22,11 +22,10 @@ const service = new OrderService({
       include: {
         item: {
           include: {
-            color: true,
             allowedProperties: { include: { property: true } },
           },
         },
-        variant: true,
+        color: true,
         requiredProperties: { include: { property: true } },
       },
     },

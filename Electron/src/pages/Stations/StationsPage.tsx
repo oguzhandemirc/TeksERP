@@ -13,6 +13,7 @@ const buildPayload = (v: StationFormValues, initial: Station | null): Partial<St
   kind: v.kind,
   department: v.department || null,
   isActive: v.isActive,
+  defaultCategoryId: v.type === "EXTERNAL" ? v.defaultCategoryId ?? null : null,
 });
 
 export function StationsPage() {

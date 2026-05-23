@@ -1,11 +1,15 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, X } from "lucide-react";
+import { Check, X, Tag } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadge";
+import { PermissionGate } from "@/components/PermissionGate";
+import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
 import { rollStatusLabels, RollOperationType } from "@/types/enums";
 import { rollService } from "./service";
 import type { Roll, RollOperationLogEntry } from "./types";
@@ -59,6 +63,8 @@ function OperationStatus({
 }
 
 export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
+  const [labelRollId, setLabelRollId] = useState<string | null>(null);
+
   // Liste cevabı `operations` taşımıyor — detay endpoint'i (`/api/rolls/:id`)
   // operation log'unu select ile döndürüyor. Sheet açıldığında lazy fetch.
   const detailQuery = useQuery({
@@ -90,22 +96,54 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
         </SheetHeader>
 
         {roll && (
+          <div className="mt-3">
+            <PermissionGate permission="label:read">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-1"
+                onClick={() => setLabelRollId(roll.id)}
+              >
+                <Tag className="h-3.5 w-3.5" /> Etiket
+              </Button>
+            </PermissionGate>
+          </div>
+        )}
+
+        <RollLabelDialog
+          rollId={labelRollId}
+          onOpenChange={(open) => !open && setLabelRollId(null)}
+        />
+
+        {roll && (
           <div className="mt-4 space-y-4">
-            <Card>
-              <CardContent className="flex items-center gap-4 p-3">
-                <div className="rounded bg-white p-2">
-                  <QRCodeSVG value={roll.barcode} size={112} level="M" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Top Barkodu
+            {roll.barcode ? (
+              <Card>
+                <CardContent className="flex items-center gap-4 p-3">
+                  <div className="rounded bg-white p-2">
+                    <QRCodeSVG value={roll.barcode} size={112} level="M" />
                   </div>
-                  <div className="mt-1 break-all font-mono text-sm font-semibold">
-                    {roll.barcode}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Top Barkodu
+                    </div>
+                    <div className="mt-1 break-all font-mono text-sm font-semibold">
+                      {roll.barcode}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="p-3 text-xs text-muted-foreground">
+                  <Badge variant="outline" className="mr-2 text-[10px]">
+                    Açık Kumaş
+                  </Badge>
+                  Bu rulonun fiziksel barkodu yok — boyahane dönüşü açık kumaş, Kurşun/KK2'de işlenirken üretiliyor.
+                </CardContent>
+              </Card>
+            )}
 
             <div className="grid grid-cols-3 gap-2 text-sm">
               <Card>
@@ -147,12 +185,6 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                   <div>
                     <span className="font-mono text-xs">{roll.item?.code}</span> · {roll.item?.name}
                   </div>
-                  {roll.variant && (
-                    <>
-                      <div className="text-xs text-muted-foreground">Variant</div>
-                      <div>{roll.variant.name}</div>
-                    </>
-                  )}
                   <div className="text-xs text-muted-foreground">Giriş Kaynağı</div>
                   <div>
                     <Badge variant="muted" className="text-[10px]">
@@ -177,17 +209,17 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       <div className="text-xs">{roll.customerDescription}</div>
                     </>
                   )}
-                  {roll.item?.color && (
+                  {roll.color && (
                     <>
                       <div className="text-xs text-muted-foreground">Renk</div>
                       <div className="flex items-center gap-1.5 text-xs">
-                        {roll.item.color.hex && (
+                        {roll.color.hex && (
                           <span
                             className="h-3 w-3 rounded-full"
-                            style={{ backgroundColor: roll.item.color.hex }}
+                            style={{ backgroundColor: roll.color.hex }}
                           />
                         )}
-                        {roll.item.color.name}
+                        {roll.color.name}
                       </div>
                     </>
                   )}

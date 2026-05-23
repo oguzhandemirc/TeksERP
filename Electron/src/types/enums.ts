@@ -1,18 +1,24 @@
 export const ItemType = {
+  FABRIC: "FABRIC",
   YARN: "YARN",
   WARP: "WARP",
-  RAW_FABRIC: "RAW_FABRIC",
-  DYED_FABRIC: "DYED_FABRIC",
   CONSUMABLE: "CONSUMABLE",
 } as const;
 export type ItemType = (typeof ItemType)[keyof typeof ItemType];
 
 export const itemTypeLabels: Record<ItemType, string> = {
+  FABRIC: "Kumaş",
   YARN: "İplik",
   WARP: "Çözgü",
-  RAW_FABRIC: "Ham Kumaş",
-  DYED_FABRIC: "Boyalı Kumaş",
   CONSUMABLE: "Sarf Malzeme",
+};
+
+/** Her ürün tipi için kullanılan birim — kullanıcı düzenleyemez. */
+export const unitForItemType: Record<ItemType, string> = {
+  FABRIC: "MT",
+  YARN: "KG",
+  WARP: "MT",
+  CONSUMABLE: "ADET",
 };
 
 export const CompanyType = {
@@ -42,8 +48,6 @@ export const StationKind = {
   PROCESS_QC: "PROCESS_QC",
   TAMBUR: "TAMBUR",
   SUBCONTRACTOR: "SUBCONTRACTOR",
-  PACKAGING: "PACKAGING",
-  SHIPPING: "SHIPPING",
   OTHER: "OTHER",
 } as const;
 export type StationKind = (typeof StationKind)[keyof typeof StationKind];
@@ -52,9 +56,7 @@ export const stationKindLabels: Record<StationKind, string> = {
   RAW_QC: "Ham Kalite Kontrol (KK1)",
   PROCESS_QC: "Kurşun + Kalite Kontrol 2",
   TAMBUR: "Tambur",
-  SUBCONTRACTOR: "Fason / Boyahane",
-  PACKAGING: "Paketleme",
-  SHIPPING: "Sevkiyat",
+  SUBCONTRACTOR: "Fason / Dış İşlem",
   OTHER: "Diğer",
 };
 
@@ -112,8 +114,6 @@ export const workOrderStatusLabels: Record<WorkOrderStatus, string> = {
 export const WorkOrderType = {
   ORDER_PRODUCTION: "ORDER_PRODUCTION",
   STOCK_PRODUCTION: "STOCK_PRODUCTION",
-  SAMPLE_PRODUCTION: "SAMPLE_PRODUCTION",
-  REPAIR_REWORK: "REPAIR_REWORK",
   SERVICE_PRODUCTION: "SERVICE_PRODUCTION",
 } as const;
 export type WorkOrderType = (typeof WorkOrderType)[keyof typeof WorkOrderType];
@@ -121,8 +121,6 @@ export type WorkOrderType = (typeof WorkOrderType)[keyof typeof WorkOrderType];
 export const workOrderTypeLabels: Record<WorkOrderType, string> = {
   ORDER_PRODUCTION: "Siparişe Özel",
   STOCK_PRODUCTION: "Stoka",
-  SAMPLE_PRODUCTION: "Numune",
-  REPAIR_REWORK: "Tamir / Yeniden",
   SERVICE_PRODUCTION: "Fason Üretim Kabul",
 };
 
@@ -154,6 +152,7 @@ export const RollStatus = {
   RETURNED_FROM_SUBCONTRACTOR: "RETURNED_FROM_SUBCONTRACTOR",
   WAREHOUSE: "WAREHOUSE",
   TAMBUR_CONSUMED: "TAMBUR_CONSUMED",
+  SUBCONTRACTOR_CONSUMED: "SUBCONTRACTOR_CONSUMED",
 } as const;
 export type RollStatus = (typeof RollStatus)[keyof typeof RollStatus];
 
@@ -169,7 +168,8 @@ export const rollStatusLabels: Record<RollStatus, string> = {
   A1_STOCK: "A1 (2. Kalite)",
   RETURNED_FROM_SUBCONTRACTOR: "Fasondan Döndü",
   WAREHOUSE: "Depoda",
-  TAMBUR_CONSUMED: "Bölündü",
+  TAMBUR_CONSUMED: "Tamburda Bölündü",
+  SUBCONTRACTOR_CONSUMED: "Fasonda Tüketildi",
 };
 
 export const RollOperationType = {

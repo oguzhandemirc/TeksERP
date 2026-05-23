@@ -186,4 +186,112 @@ export class ItemService extends BaseService {
 
     return { success: true, data: updated, message: "Kayıt güncellendi" };
   }
+
+  /**
+   * Tek bir rengi ürünün izinli listesine ekle. Mevcutsa idempotent (zaten dahil).
+   * UI'da "Listeden Dahil Et" akışı için — tüm allowedColorIds göndermek yerine
+   * tek satır insert, race condition riski yok.
+   */
+  async addAllowedColor(
+    itemId: string,
+    colorId: string,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const [item, color, existing] = await Promise.all([
+      prisma.item.findUnique({
+        where: { id: itemId },
+        select: { id: true, isActive: true },
+      }),
+      prisma.color.findUnique({
+        where: { id: colorId },
+        select: { id: true, name: true, isActive: true },
+      }),
+      prisma.itemAllowedColor.findUnique({
+        where: { itemId_colorId: { itemId, colorId } },
+        include: { color: true },
+      }),
+    ]);
+
+    if (!item || !item.isActive) {
+      throw AppError.notFound("Ürün bulunamadı veya pasif");
+    }
+    if (!color) {
+      throw AppError.notFound("Renk bulunamadı");
+    }
+    if (!color.isActive) {
+      throw AppError.badRequest(`'${color.name}' rengi pasif`);
+    }
+
+    if (existing) {
+      return { success: true, data: existing, message: "Renk zaten dahil" };
+    }
+
+    const created = await prisma.itemAllowedColor.create({
+      data: { itemId, colorId },
+      include: { color: true },
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: this.config.tableName,
+      recordId: itemId,
+      newData: { allowedColorAdded: colorId },
+    });
+
+    return { success: true, data: created, message: "Renk dahil edildi" };
+  }
+
+  /**
+   * Tek bir özelliği ürünün izinli listesine ekle. Mevcutsa idempotent.
+   */
+  async addAllowedProperty(
+    itemId: string,
+    propertyId: string,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const [item, property, existing] = await Promise.all([
+      prisma.item.findUnique({
+        where: { id: itemId },
+        select: { id: true, isActive: true },
+      }),
+      prisma.fabricProperty.findUnique({
+        where: { id: propertyId },
+        select: { id: true, name: true, isActive: true },
+      }),
+      prisma.itemAllowedProperty.findUnique({
+        where: { itemId_propertyId: { itemId, propertyId } },
+        include: { property: true },
+      }),
+    ]);
+
+    if (!item || !item.isActive) {
+      throw AppError.notFound("Ürün bulunamadı veya pasif");
+    }
+    if (!property) {
+      throw AppError.notFound("Özellik bulunamadı");
+    }
+    if (!property.isActive) {
+      throw AppError.badRequest(`'${property.name}' özelliği pasif`);
+    }
+
+    if (existing) {
+      return { success: true, data: existing, message: "Özellik zaten dahil" };
+    }
+
+    const created = await prisma.itemAllowedProperty.create({
+      data: { itemId, propertyId },
+      include: { property: true },
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: this.config.tableName,
+      recordId: itemId,
+      newData: { allowedPropertyAdded: propertyId },
+    });
+
+    return { success: true, data: created, message: "Özellik dahil edildi" };
+  }
 }

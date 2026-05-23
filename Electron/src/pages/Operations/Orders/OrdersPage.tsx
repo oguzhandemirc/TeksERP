@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
@@ -9,8 +9,9 @@ import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
+import { usePricingEnabled } from "@/hooks/usePricingEnabled";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
-import { orderColumns } from "./columns";
+import { buildOrderColumns } from "./columns";
 import { orderService } from "./service";
 import { OrderDetailSheet } from "./OrderDetailSheet";
 import { OrderFormDialog } from "./OrderFormDialog";
@@ -49,13 +50,16 @@ interface CreatePayload {
   orderNumber: string;
   customerId: string;
   branchId: string | null;
-  currency: string;
+  currency?: string;
   deadline: string | null;
   lines: {
     itemId: string;
+    colorId: string | null;
     quantity: number;
     width: number | null;
-    unitPrice: string | null;
+    unitPrice?: string | null;
+    customerItemName?: string | null;
+    customerColorName?: string | null;
     requiredPropertyIds: string[];
   }[];
 }
@@ -67,28 +71,33 @@ interface UpdatePayload {
   deadline?: string | null;
 }
 
-function buildCreatePayload(v: OrderFormValues): CreatePayload {
+function buildCreatePayload(v: OrderFormValues, pricingEnabled: boolean): CreatePayload {
   return {
     orderNumber: generateOrderNumber(),
     customerId: v.customerId,
     branchId: v.branchId || null,
-    currency: v.currency.trim().toUpperCase(),
+    ...(pricingEnabled ? { currency: v.currency.trim().toUpperCase() } : {}),
     deadline: v.deadline ? new Date(v.deadline).toISOString() : null,
     lines: v.lines.map((l) => ({
       itemId: l.itemId,
+      colorId: l.colorId ?? null,
       quantity: l.quantity,
       width: l.width ?? null,
-      unitPrice: l.unitPrice ? String(l.unitPrice) : null,
+      ...(pricingEnabled
+        ? { unitPrice: l.unitPrice ? String(l.unitPrice) : null }
+        : {}),
+      customerItemName: l.customerItemName?.trim() ? l.customerItemName.trim() : null,
+      customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
       requiredPropertyIds: l.requiredPropertyIds ?? [],
     })),
   };
 }
 
-function buildUpdatePayload(v: OrderFormValues): UpdatePayload {
+function buildUpdatePayload(v: OrderFormValues, pricingEnabled: boolean): UpdatePayload {
   return {
     customerId: v.customerId,
     branchId: v.branchId ?? null,
-    currency: v.currency.trim().toUpperCase(),
+    ...(pricingEnabled ? { currency: v.currency.trim().toUpperCase() } : {}),
     deadline: v.deadline ? new Date(v.deadline).toISOString() : null,
   };
 }
@@ -99,10 +108,13 @@ export function OrdersPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
 
+  const pricingEnabled = usePricingEnabled();
+  const columns = useMemo(() => buildOrderColumns(pricingEnabled), [pricingEnabled]);
+
   const { table, query, search, setSearch, pagination } = useDataTable<Order>({
     queryKey: QUERY_KEY,
     fetchFn: orderService.listCursor,
-    columns: orderColumns,
+    columns,
     defaultPageSize: 50,
   });
 
@@ -186,10 +198,10 @@ export function OrdersPage() {
           if (editing) {
             await updateMut.mutateAsync({
               id: editing.id,
-              payload: buildUpdatePayload(v),
+              payload: buildUpdatePayload(v, pricingEnabled),
             });
           } else {
-            await createMut.mutateAsync(buildCreatePayload(v));
+            await createMut.mutateAsync(buildCreatePayload(v, pricingEnabled));
           }
         }}
         isSubmitting={createMut.isPending || updateMut.isPending}

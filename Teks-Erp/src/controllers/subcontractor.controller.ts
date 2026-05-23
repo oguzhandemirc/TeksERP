@@ -40,10 +40,22 @@ const receiveSchema = z.object({
     .min(1, "En az bir dönüş kaydı girin"),
   notes: z.string().max(1000).optional(),
   // Receipt seviyesinde uygulanan kimlik (boyahane gibi açık kumaş döndüren
-  // fason için). Verilmezse: appliesColor=true kategoride WO.targetColor /
-  // targetProperties otomatik kullanılır; değilse null/[].
+  // fason için). Renk: appliesColor=true kategoride WO.targetColor otomatik;
+  // özellik: appliesProperty=true kategoride WO.targetProperties otomatik.
   appliedColorId: z.string().uuid().nullish(),
   appliedPropertyIds: z.array(z.string().uuid()).optional(),
+  // Fasondan gelen açık kumaş parçaları — verilirse Receipt anında yeni
+  // open-fabric Roll'lar otomatik doğar ve rotadaki bir sonraki adıma bağlanır.
+  // Verilmezse: Kurşun/KK2 operatörü manuel open-fabric ile açar (eski akış).
+  newRolls: z
+    .array(
+      z.object({
+        qty: z.number().positive("Metraj pozitif olmalı"),
+        weightKg: z.number().positive().nullish(),
+        notes: z.string().max(500).nullish(),
+      })
+    )
+    .optional(),
 });
 
 export class SubcontractorController {
@@ -104,6 +116,11 @@ export class SubcontractorController {
           })),
           appliedColorId: body.appliedColorId,
           appliedPropertyIds: body.appliedPropertyIds,
+          newRolls: body.newRolls?.map((nr) => ({
+            qty: nr.qty,
+            weightKg: nr.weightKg ?? null,
+            notes: nr.notes ?? null,
+          })),
         },
         req.user?.userId
       );
@@ -207,4 +224,5 @@ export class SubcontractorController {
       next(err);
     }
   }
+
 }

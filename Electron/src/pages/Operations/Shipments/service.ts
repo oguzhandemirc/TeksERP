@@ -106,7 +106,7 @@ export const shipmentService = {
 export interface ReadyOrderRoll {
   allocationId: string;
   rollId: string;
-  barcode: string;
+  barcode: string | null;
   allocatedQty: number;
   rollStatus: string;
   packageId: string | null;
@@ -121,7 +121,6 @@ export interface ReadyOrderLine {
   itemCode: string;
   itemName: string;
   color: { id: string; code: string; name: string; hex: string | null } | null;
-  variant: { id: string; code: string; name: string } | null;
   width: number | null;
   unitPrice: string | null;
   requestedQty: number;
@@ -145,11 +144,11 @@ export interface ReadyOrder {
 
 export interface ReadyFasonRoll {
   rollId: string;
-  barcode: string;
+  barcode: string | null;
   itemCode: string;
   itemName: string;
-  variantCode: string | null;
-  variantName: string | null;
+  colorCode: string | null;
+  colorName: string | null;
   currentQty: number;
   weightKg: number | null;
   width: number | null;

@@ -40,7 +40,7 @@ const router = Router({ mergeParams: true });
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: { itemAlias, colorAlias } (her ikisi de null olabilir)
+ *         description: "{ itemAlias, colorAlias } (her ikisi de null olabilir)"
  */
 router.get(
   "/aliases/suggest",

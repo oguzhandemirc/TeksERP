@@ -9,8 +9,7 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { navGroups } from "./nav-config";
-import { definitionTiles } from "@/pages/Definitions/tile-config";
+import { commandSections, type CommandEntry } from "./command-entries";
 
 interface Props {
   open: boolean;
@@ -20,7 +19,6 @@ interface Props {
 export function CommandPalette({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
   const { isAdmin, hasPermission } = useRoleAccess();
-  void isAdmin;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -38,36 +36,48 @@ export function CommandPalette({ open, onOpenChange }: Props) {
     navigate(to);
   };
 
+  const isVisible = (entry: CommandEntry) => {
+    if (entry.permission) return hasPermission(entry.permission);
+    if (entry.adminOnly) return isAdmin;
+    return true;
+  };
+
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
       <CommandInput placeholder="Komut yaz veya ara..." />
       <CommandList>
         <CommandEmpty>Sonuç yok.</CommandEmpty>
 
-        {navGroups.map((group) => (
-          <CommandGroup key={group.label} heading={group.label}>
-            {group.items.map((item) => {
-              if (item.adminOnly && !hasPermission("admin:users") && !hasPermission("admin:settings") && !hasPermission("admin:*")) return null;
-              if (item.permission && !hasPermission(item.permission)) return null;
-              const Icon = item.icon;
-              return (
-                <CommandItem key={item.to} onSelect={() => go(item.to)}>
-                  <Icon className="mr-2 h-4 w-4" />
-                  {item.label}
-                </CommandItem>
-              );
-            })}
-          </CommandGroup>
-        ))}
+        {commandSections.map((section) => {
+          const entries = section.entries.filter(isVisible);
+          if (entries.length === 0) return null;
 
-        <CommandGroup heading="Tanımlar">
-          {definitionTiles.map((tile) => (
-            <CommandItem key={tile.to} onSelect={() => go(tile.to)}>
-              <tile.icon className="mr-2 h-4 w-4" />
-              {tile.title}
-            </CommandItem>
-          ))}
-        </CommandGroup>
+          return (
+            <CommandGroup key={section.heading} heading={section.heading}>
+              {entries.map((entry) => {
+                const Icon = entry.icon;
+                const value = [entry.label, entry.description, section.heading]
+                  .filter(Boolean)
+                  .join(" ");
+                return (
+                  <CommandItem
+                    key={entry.key}
+                    value={value}
+                    onSelect={() => go(entry.to)}
+                  >
+                    <Icon className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="truncate">{entry.label}</span>
+                    {entry.description && (
+                      <span className="ml-2 truncate text-xs text-muted-foreground">
+                        {entry.description}
+                      </span>
+                    )}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          );
+        })}
       </CommandList>
     </CommandDialog>
   );

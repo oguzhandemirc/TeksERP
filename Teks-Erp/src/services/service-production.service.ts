@@ -142,13 +142,7 @@ export class ServiceProductionService {
     }
 
     // Rota adımlarını StationKind → gerçek Station'a çevir.
-    // PACKAGING/SHIPPING rotaya KONULMAZ — paket/sevkiyat WO'dan bağımsız
-    // fulfillment akışı. Bu yüzden müşteri istese bile filtreleriz.
-    const desiredKinds = new Set<StationKind>(
-      data.routeStationKinds.filter(
-        (k) => k !== StationKind.PACKAGING && k !== StationKind.SHIPPING
-      )
-    );
+    const desiredKinds = new Set<StationKind>(data.routeStationKinds);
 
     const candidateStations = await prisma.station.findMany({
       where: { kind: { in: Array.from(desiredKinds) }, isActive: true },

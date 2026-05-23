@@ -1,25 +1,41 @@
+import { useQuery } from "@tanstack/react-query";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { generateCode } from "@/lib/code-generator";
+import { nextSortOrder } from "@/lib/sort-order";
 import { fabricPropertyColumns } from "./columns";
 import { fabricPropertyService } from "./service";
 import { FabricPropertyFormDialog } from "./FabricPropertyFormDialog";
 import type { FabricProperty } from "./types";
 import type { FabricPropertyFormValues } from "./schema";
 
-const buildPayload = (
-  v: FabricPropertyFormValues,
-  initial: FabricProperty | null,
-): Partial<FabricProperty> => ({
-  code: initial?.code ?? generateCode("OZL"),
-  name: v.name,
-  category: v.category?.trim() || null,
-  description: v.description?.trim() || null,
-  color: v.color?.trim() || null,
-  sortOrder: v.sortOrder,
-  isActive: v.isActive,
-});
-
 export function FabricPropertiesPage() {
+  const allQ = useQuery({
+    queryKey: ["fabric-properties", "all-for-sort"],
+    queryFn: () =>
+      fabricPropertyService.getAll({
+        page: 1,
+        pageSize: 500,
+        sortBy: "sortOrder",
+        sortOrder: "desc",
+        filters: {},
+      }),
+    staleTime: 60_000,
+  });
+  const nextOrder = nextSortOrder(allQ.data?.data ?? []);
+
+  const buildPayload = (
+    v: FabricPropertyFormValues,
+    initial: FabricProperty | null,
+  ): Partial<FabricProperty> => ({
+    code: initial?.code ?? generateCode("OZL"),
+    name: v.name,
+    category: v.category?.trim() || null,
+    description: v.description?.trim() || null,
+    color: v.color?.trim() || null,
+    sortOrder: initial?.sortOrder ?? nextOrder,
+    isActive: v.isActive,
+  });
+
   return (
     <CrudPage<FabricProperty>
       title="Kumaş Özellikleri"

@@ -9,6 +9,22 @@ export type MobilePermission =
   | 'mobile:fason-kabul'
   | 'mobile:*';
 
+/**
+ * Etiket sistemi (Refactor 6 + 7) yetkileri. Backend `requirePermission` ile
+ * istiyor; mobil ekranlar UI gating için kontrol eder.
+ *   label:read    → etiket payload'unu görüntüleme + template fetch
+ *   label:print   → POST /labels/rolls/:id/print (audit izi)
+ *   label:edit    → PATCH /labels/order-lines/:id (müşteri-isim override)
+ *   label-template:read  → template listele + catalog
+ *   label-template:write → template oluştur/güncelle/default değiştir/pasifleştir
+ */
+export type LabelPermission =
+  | 'label:read'
+  | 'label:print'
+  | 'label:edit'
+  | 'label-template:read'
+  | 'label-template:write';
+
 export type MobileScreenKey =
   | 'KK1'
   | 'KursunQc'

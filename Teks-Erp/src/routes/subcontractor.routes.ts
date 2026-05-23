@@ -54,9 +54,9 @@ router.post(
  *       `appliedColorId` + `appliedPropertyIds` yazılır — Kurşun/KK2'de operatör
  *       açık kumaş Roll oluşturduğunda bu kimliği inherit eder.
  *
- *       `appliedColorId`/`appliedPropertyIds` verilmezse: fason kategorisi
- *       `appliesColor=true` ise WO.targetColor / targetProperties otomatik
- *       kullanılır; değilse null/[] olur.
+ *       `appliedColorId` verilmezse fason kategorisi `appliesColor=true` ise
+ *       WO.targetColor otomatik; değilse null. `appliedPropertyIds` verilmezse
+ *       `appliesProperty=true` ise WO.targetProperties otomatik; değilse [].
  *
  *       Bu adımın tüm outstanding'i consumed olunca step COMPLETED. Sonraki step
  *       PENDING kalır (Roll yok); Kurşun/KK2'de ilk açık kumaş açıldığında ACTIVE.
@@ -78,11 +78,11 @@ router.post(
  *                 type: string
  *                 format: uuid
  *                 nullable: true
- *                 description: Receipt seviyesinde uygulanan renk (UI override; verilmezse appliesColor kategoride WO.targetColor otomatik)
+ *                 description: Receipt seviyesinde uygulanan renk (UI override; verilmezse appliesColor=true kategoride WO.targetColor otomatik)
  *               appliedPropertyIds:
  *                 type: array
  *                 items: { type: string, format: uuid }
- *                 description: Receipt seviyesinde uygulanan özellikler (UI override; verilmezse appliesColor kategoride WO.targetProperties otomatik)
+ *                 description: Receipt seviyesinde uygulanan özellikler (UI override; verilmezse appliesProperty=true kategoride WO.targetProperties otomatik)
  *               returns:
  *                 type: array
  *                 items:
@@ -91,6 +91,20 @@ router.post(
  *                   properties:
  *                     rollId: { type: string, format: uuid }
  *                     notes:  { type: string, nullable: true, description: "Bu topa dair kabul notu" }
+ *               newRolls:
+ *                 type: array
+ *                 description: |
+ *                   Opsiyonel — fasondan gelen açık kumaş parçaları. Verilirse
+ *                   Receipt anında yeni open-fabric Roll'lar otomatik doğar ve
+ *                   rotadaki bir sonraki adıma (fason veya internal) bağlanır.
+ *                   Verilmezse Kurşun/KK2 operatörü manuel `open-fabric` çağırır.
+ *                 items:
+ *                   type: object
+ *                   required: [qty]
+ *                   properties:
+ *                     qty:      { type: number, description: Açık kumaş metresi }
+ *                     weightKg: { type: number, nullable: true }
+ *                     notes:    { type: string, nullable: true }
  *     responses:
  *       201: { description: Mal kabul oluşturuldu (orijinal Roll'lar consumed) }
  *       400: { description: Validasyon hatası / top bu adımda fason'da değil }

@@ -37,6 +37,8 @@ const createCategorySchema = z.object({
   code: z.string().trim().min(1).max(64),
   name: z.string().trim().min(1).max(128),
   description: z.string().trim().max(500).optional(),
+  appliesColor: z.boolean().optional(),
+  appliesProperty: z.boolean().optional(),
 });
 
 const updateCategorySchema = z.object({
@@ -44,6 +46,8 @@ const updateCategorySchema = z.object({
   name: z.string().trim().min(1).max(128).optional(),
   description: z.string().trim().max(500).nullish(),
   isActive: z.boolean().optional(),
+  appliesColor: z.boolean().optional(),
+  appliesProperty: z.boolean().optional(),
 });
 
 // ─── Controllers ────────────────────────────────────────────────────────────

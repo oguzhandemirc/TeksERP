@@ -23,6 +23,8 @@ import { SubcontractorCategoriesPage } from "@/pages/SubcontractorCategories/Sub
 import { SubcontractorsPage } from "@/pages/Subcontractors/SubcontractorsPage";
 import { StationCapabilitiesPage } from "@/pages/StationCapabilities/StationCapabilitiesPage";
 import { ShippingTolerancePage } from "@/pages/ShippingTolerance/ShippingTolerancePage";
+import { GeneralSettingsPage } from "@/pages/GeneralSettings/GeneralSettingsPage";
+import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
 import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
 import { OrdersPage } from "@/pages/Operations/Orders/OrdersPage";
 import { WorkOrdersPage } from "@/pages/Operations/WorkOrders/WorkOrdersPage";
@@ -92,6 +94,22 @@ export const router = createHashRouter([
         element: (
           <ProtectedRoute requirePermission="admin:settings">
             <ShippingTolerancePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "definitions/general-settings",
+        element: (
+          <ProtectedRoute requirePermission="admin:settings">
+            <GeneralSettingsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "definitions/label-templates",
+        element: (
+          <ProtectedRoute requirePermission="label-template:read">
+            <LabelTemplatesPage />
           </ProtectedRoute>
         ),
       },

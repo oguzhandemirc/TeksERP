@@ -129,9 +129,13 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
             {lines.map((link, i) => {
               const ol = link.orderLine;
               if (!ol) return null;
-              const itemLabel = ol.variant
-                ? `${ol.item?.name ?? '—'} · ${ol.variant.name}`
-                : (ol.item?.name ?? '—');
+              const colorLabel =
+                ol.customerColorName ?? ol.color?.name ?? null;
+              const itemNameBase =
+                ol.customerItemName ?? ol.item?.name ?? '—';
+              const itemLabel = colorLabel
+                ? `${itemNameBase} · ${colorLabel}`
+                : itemNameBase;
               return (
                 <View key={`${ol.id}-${i}`} style={styles.orderLine}>
                   <View style={styles.orderLineTop}>
@@ -160,7 +164,7 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
         </View>
       )}
 
-      {(wo.targetColor || wo.recipeNo || externalStations.length > 0) && (
+      {(wo.targetColor || externalStations.length > 0) && (
         <View style={styles.card}>
           {wo.targetColor && (
             <View style={styles.row}>
@@ -171,12 +175,6 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
                 ]}
               />
               <Text style={styles.rowText}>{wo.targetColor.name}</Text>
-            </View>
-          )}
-          {wo.recipeNo && (
-            <View style={styles.row}>
-              <Icon source="flask" size={14} color="#64748b" />
-              <Text style={styles.rowText}>Reçete {wo.recipeNo}</Text>
             </View>
           )}
           {externalStations.map((s) => (

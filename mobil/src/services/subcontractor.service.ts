@@ -10,6 +10,7 @@ import type {
   ReceiveRequest,
   SubcontractorReceipt,
   SubcontractorReceiptListItem,
+  CancelReceiptRequest,
 } from '../types/models';
 
 interface ListDispatchesParams {
@@ -129,5 +130,21 @@ export const subcontractorService = {
   getReceipt: (id: string): Promise<ApiResponse<SubcontractorReceipt>> =>
     apiClient
       .get<ApiResponse<SubcontractorReceipt>>(`/subcontractor/receipts/${id}`)
+      .then((r) => r.data),
+
+  /**
+   * Fason kabulü iptal et (soft cancel). Receipt'teki rulolar AT_SUBCONTRACTOR'a
+   * geri döner; renk uygulandıysa Roll.colorId/RollProperty silinir. Sonraki
+   * adımda iz varsa backend 409 atar; çağıran toast/banner ile mesajı göster.
+   */
+  cancelReceipt: (
+    id: string,
+    data: CancelReceiptRequest
+  ): Promise<ApiResponse<{ id: string; receiptNo: string }>> =>
+    apiClient
+      .post<ApiResponse<{ id: string; receiptNo: string }>>(
+        `/subcontractor/receipts/${id}/cancel`,
+        data
+      )
       .then((r) => r.data),
 };

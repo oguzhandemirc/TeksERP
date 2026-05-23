@@ -7,6 +7,9 @@ import type {
   TamburReportErrorRequest,
   TamburSwatchRequest,
   TamburPostSplitRequest,
+  TamburContext,
+  TamburCutRequest,
+  TamburFinalizeOpenFabricRequest,
   Roll,
 } from '../types/models';
 
@@ -88,5 +91,41 @@ export const tamburService = {
         '/tambur/post-production-split',
         data
       )
+      .then((r) => r.data),
+
+  /**
+   * Yeni açık kumaş modeli — boyahane dönüşü. WO + sipariş progress + LIFO açık
+   * kumaş listesini tek atışta döner. Kart pasif veya WO Tambur'da değilse 400.
+   */
+  getContext: (cardBarcode: string): Promise<ApiResponse<TamburContext>> =>
+    apiClient
+      .get<ApiResponse<TamburContext>>(
+        `/tambur/context/${encodeURIComponent(cardBarcode)}`
+      )
+      .then((r) => r.data),
+
+  /**
+   * Açık kumaşta tek kesim — child Roll (barkodlu) oluşur, parent açık kumaşın
+   * currentQty'i kalan metreye düşer. Status WAREHOUSE/SCRAP/A1_STOCK.
+   */
+  cutOpenFabric: (
+    rollId: string,
+    data: TamburCutRequest
+  ): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/tambur/${rollId}/cut`, data)
+      .then((r) => r.data),
+
+  /**
+   * Açık kumaşı bitir — parent Roll TAMBUR_CONSUMED'a çekilir. scrapRemaining=
+   * true ise kalan metre fire child Roll olarak kaydedilir. foldType/layerCount
+   * verilmezse WO planlanan değerleri kullanılır.
+   */
+  finalizeOpenFabric: (
+    rollId: string,
+    data: TamburFinalizeOpenFabricRequest
+  ): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/tambur/${rollId}/finalize-open-fabric`, data)
       .then((r) => r.data),
 };

@@ -50,6 +50,11 @@ export function useLinkedLinesAutoFill(form: UseFormReturn<WorkOrderFormValues>)
 
     form.setValue("targetItemId", first.itemId);
 
+    const allSameColor = lines.every((l) => l.colorId === first.colorId);
+    if (allSameColor) {
+      form.setValue("targetColorId", first.colorId);
+    }
+
     const propIds = new Set<string>();
     for (const line of lines) {
       for (const prop of line.requiredProperties) propIds.add(prop.id);

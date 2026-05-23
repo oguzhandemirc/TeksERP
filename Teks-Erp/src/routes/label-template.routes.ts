@@ -60,7 +60,7 @@ router.get("/", verifyToken, requirePermission("label-template:read"), controlle
  *         required: true
  *         schema: { type: string, enum: [ROLL, SWATCH, SHIPMENT_DOCKET] }
  *     responses:
- *       200: { description: { kind, fields: FieldDef[] } }
+ *       200: { description: "{ kind, fields: FieldDef[] }" }
  *       400: { description: Geçersiz kind }
  */
 router.get("/catalog/:kind", verifyToken, requirePermission("label-template:read"), controller.catalog);

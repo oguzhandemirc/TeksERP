@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
@@ -25,6 +26,8 @@ interface Props<T extends { id: string }> {
   extraFilters?: Record<string, string>;
   /** Toolbar yanında render edilecek ek UI (filtre dropdown'ları vb.). */
   filterBar?: ReactNode;
+  /** Toolbar'a "Pasifleri Göster" toggle'ı ekler — açıkken isActive filtresi düşer. */
+  showInactiveControl?: boolean;
   renderForm: (params: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -45,21 +48,26 @@ export function CrudPage<T extends { id: string }>({
   writePermission,
   extraFilters,
   filterBar,
+  showInactiveControl,
   renderForm,
 }: Props<T>) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<T | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
+
+  const forceFilters = useMemo<Record<string, string>>(
+    () => ({
+      ...(showInactive ? {} : { isActive: "true" }),
+      ...extraFilters,
+    }),
+    [showInactive, extraFilters],
+  );
 
   const { table, query, search, setSearch, pagination } = useDataTable<T>({
-    queryKey: extraFilters
-      ? `${queryKey}::${Object.entries(extraFilters)
-          .map(([k, v]) => `${k}=${v}`)
-          .sort()
-          .join("&")}`
-      : queryKey,
+    queryKey,
     fetchFn: service.listCursor,
-    forceFilters: { isActive: "true", ...extraFilters },
+    forceFilters,
     columns: [
       ...columns,
       {
@@ -139,6 +147,15 @@ export function CrudPage<T extends { id: string }>({
         <div className="flex-1">
           <DataTableToolbar search={search} onSearchChange={setSearch} placeholder={searchPlaceholder} />
         </div>
+        {showInactiveControl && (
+          <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border bg-background px-3 py-2 text-xs">
+            <Checkbox
+              checked={showInactive}
+              onCheckedChange={(c) => setShowInactive(Boolean(c))}
+            />
+            Pasifleri göster
+          </label>
+        )}
         {filterBar}
       </div>
 

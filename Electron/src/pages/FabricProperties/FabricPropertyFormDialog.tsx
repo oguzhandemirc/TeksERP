@@ -31,7 +31,6 @@ export function FabricPropertyFormDialog({
         category: initial.category ?? "",
         description: initial.description ?? "",
         color: initial.color ?? "",
-        sortOrder: initial.sortOrder,
         isActive: initial.isActive,
       }
     : fabricPropertyFormDefaults;
@@ -53,14 +52,9 @@ export function FabricPropertyFormDialog({
               Kod: <span className="font-mono">{initial.code}</span>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
-              <Input id="name" autoFocus placeholder="Yanmazlık, Su Geçirmezlik..." {...form.register("name")} />
-            </FormField>
-            <FormField label="Sıra" htmlFor="sortOrder" error={form.formState.errors.sortOrder} required>
-              <Input id="sortOrder" type="number" min={0} {...form.register("sortOrder")} />
-            </FormField>
-          </div>
+          <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
+            <Input id="name" autoFocus placeholder="Yanmazlık, Su Geçirmezlik..." {...form.register("name")} />
+          </FormField>
           <FormField
             label="Kategori"
             htmlFor="category"

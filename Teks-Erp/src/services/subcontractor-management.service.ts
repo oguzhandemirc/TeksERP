@@ -65,7 +65,13 @@ export class SubcontractorCategoryService {
   }
 
   async create(
-    data: { code: string; name: string; description?: string },
+    data: {
+      code: string;
+      name: string;
+      description?: string;
+      appliesColor?: boolean;
+      appliesProperty?: boolean;
+    },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     const cat = await prisma.subcontractorCategory.create({ data });
@@ -74,14 +80,26 @@ export class SubcontractorCategoryService {
       action: "CREATE",
       tableName: "SUBCONTRACTOR_CATEGORY",
       recordId: cat.id,
-      newData: { code: cat.code, name: cat.name },
+      newData: {
+        code: cat.code,
+        name: cat.name,
+        appliesColor: cat.appliesColor,
+        appliesProperty: cat.appliesProperty,
+      },
     });
     return { success: true, data: cat, message: `Kategori oluşturuldu: ${cat.name}` };
   }
 
   async update(
     id: string,
-    data: { code?: string; name?: string; description?: string | null; isActive?: boolean },
+    data: {
+      code?: string;
+      name?: string;
+      description?: string | null;
+      isActive?: boolean;
+      appliesColor?: boolean;
+      appliesProperty?: boolean;
+    },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     const cat = await prisma.subcontractorCategory.update({ where: { id }, data });

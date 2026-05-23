@@ -9,14 +9,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 interface OpenSackRoll {
   id: string;
-  barcode: string;
+  barcode: string | null;
   currentQty: number;
   weightKg: number | null;
   width: number | null;
   qualityGrade: string;
   itemCode: string;
   itemName: string;
-  variantName: string | null;
+  colorName: string | null;
   orderNumber: string | null;
   allocatedQty: number | null;
 }
@@ -61,7 +61,7 @@ export function OpenSacksTab() {
         s.sackNumber.toLocaleLowerCase("tr").includes(q) ||
         s.customer.name.toLocaleLowerCase("tr").includes(q) ||
         s.rolls.some((r) =>
-          r.barcode.toLocaleLowerCase("tr").includes(q),
+          (r.barcode ?? "").toLocaleLowerCase("tr").includes(q),
         ),
     );
   }, [sacks, search]);
@@ -238,10 +238,10 @@ export function OpenSacksTab() {
                                           {roll.itemCode}
                                         </span>
                                         {roll.itemName}
-                                        {roll.variantName && (
+                                        {roll.colorName && (
                                           <span className="text-muted-foreground">
                                             {" "}
-                                            · {roll.variantName}
+                                            · {roll.colorName}
                                           </span>
                                         )}
                                       </td>

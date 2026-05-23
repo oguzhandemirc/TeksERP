@@ -1,23 +1,16 @@
 import type { RollStatus, RollOperationType } from "@/types/enums";
 
-export interface RollItemColor {
+export interface RollColor {
   id: string;
   code: string;
   name: string;
   hex: string | null;
 }
 
-export interface RollItemProperty {
-  property?: { id: string; code: string; name: string };
-}
-
 export interface RollItem {
   id: string;
   code: string;
   name: string;
-  isDerived?: boolean;
-  baseItem?: { id: string; code: string; name: string } | null;
-  color?: RollItemColor | null;
 }
 
 export interface RollPropertyLink {
@@ -27,9 +20,10 @@ export interface RollPropertyLink {
 
 export interface Roll {
   id: string;
-  barcode: string;
+  /** Açık kumaş Roll'larında null — fiziksel etiket basılmaz. */
+  barcode: string | null;
   itemId: string;
-  variantId: string | null;
+  colorId: string | null;
   ownerCustomerId: string | null;
   customerDescription: string | null;
   initialQty: number;
@@ -40,16 +34,18 @@ export interface Roll {
   qualityGrade: string;
   entrySource: string;
   parentRollId: string | null;
+  /** Açık kumaş Roll'lar için fason kabul referansı. */
+  parentReceiptId: string | null;
   packageId: string | null;
   grossWeightKg: number | null;
   netWeightKg: number | null;
   packagingDate: string | null;
   item?: RollItem;
-  variant?: { id: string; code: string; name: string } | null;
+  color?: RollColor | null;
   ownerCustomer?: { id: string; code: string; name: string } | null;
-  /** Roll'a bindirilmiş özellikler (Tambur'da WO.targetProperties'tan kopyalanır). */
+  /** Roll'a bindirilmiş özellikler (Fason Kabul / Tambur kopyalar). */
   properties?: RollPropertyLink[];
-  /** Per-roll operasyon logu (KURSUN_APPLIED, QC2_COMPLETED, ...). Sadece detay endpoint'inden gelir. */
+  /** Per-roll operasyon logu. Sadece detay endpoint'inden gelir. */
   operations?: RollOperationLogEntry[];
   createdAt: string;
   updatedAt: string;
@@ -72,4 +68,3 @@ export interface RollMovement {
   fromStep?: { station?: { name: string } };
   toStep?: { station?: { name: string } };
 }
-

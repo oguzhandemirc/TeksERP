@@ -13,6 +13,8 @@ export interface SystemSetting {
 
 export const SETTING_KEYS = {
   SHIPPING_TOLERANCE_METERS: "shipping.toleranceMeters",
+  ORDER_DEFAULT_DEADLINE_DAYS: "order.defaultDeadlineDays",
+  WORKORDER_DEFAULT_PLAN_DURATION_DAYS: "workorder.defaultPlanDurationDays",
 } as const;
 
 export const systemSettingService = {

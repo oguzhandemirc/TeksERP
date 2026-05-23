@@ -3,55 +3,112 @@ import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadg
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat } from "@/lib/format";
-import { rollStatusLabels } from "@/types/enums";
-import type { Roll, RollItem } from "./types";
+import { rollStatusLabels, RollStatus } from "@/types/enums";
+import type { Roll } from "./types";
 
-function ItemIdentityCell({ item }: { item?: RollItem }) {
-  if (!item) return <span className="text-muted-foreground">—</span>;
-  const isDerived = item.isDerived === true;
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      <span className="text-xs font-medium">{item.name}</span>
-      {!isDerived && (
-        <Badge
-          variant="outline"
-          className="h-4 border-muted-foreground/40 px-1 py-0 text-[9px] text-muted-foreground"
-        >
-          Ham
-        </Badge>
-      )}
-      {isDerived && item.color ? (
-        <span
-          className="inline-flex items-center gap-1 rounded border px-1 py-0 text-[10px]"
-          title={item.color.name}
-        >
-          <span
-            className="h-2 w-2 rounded-full border border-black/10"
-            style={{ backgroundColor: item.color.hex ?? "#999" }}
-          />
-          {item.color.name}
-        </span>
-      ) : null}
-    </div>
-  );
+/**
+ * Roll'un fiziksel/işlenmiş durumunu renk ve duruma göre türet.
+ * - Ham: renk yok (boyahaneye girmemiş veya sevkten dönmemiş)
+ * - Bitmiş: WAREHOUSE veya READY_FOR_SHIP'e ulaşmış
+ * - İşleniyor: rengi var ama henüz depoya inmemiş
+ */
+function rollProcessingState(roll: Roll): "ham" | "isleniyor" | "bitmis" {
+  if (
+    roll.status === RollStatus.WAREHOUSE ||
+    roll.status === RollStatus.READY_FOR_SHIP ||
+    roll.status === RollStatus.SHIPPED ||
+    roll.status === RollStatus.A1_STOCK
+  ) {
+    return "bitmis";
+  }
+  if (roll.colorId) return "isleniyor";
+  return "ham";
 }
+
+const processingLabels: Record<ReturnType<typeof rollProcessingState>, string> = {
+  ham: "Ham",
+  isleniyor: "İşleniyor",
+  bitmis: "Bitmiş",
+};
 
 export const rollColumns: ColumnDef<Roll>[] = [
   {
     accessorKey: "barcode",
     header: () => <SortableHeader field="barcode" label="Barkod" />,
-    cell: ({ row }) => <span className="font-mono text-xs">{row.original.barcode}</span>,
+    cell: ({ row }) =>
+      row.original.barcode ? (
+        <span className="font-mono text-xs">{row.original.barcode}</span>
+      ) : (
+        <Badge variant="outline" className="text-[10px]">
+          Açık Kumaş
+        </Badge>
+      ),
   },
   {
     id: "item",
-    header: "Ürün / Özellik",
-    cell: ({ row }) => <ItemIdentityCell item={row.original.item} />,
+    header: "Ürün",
+    cell: ({ row }) => (
+      <span className="text-xs font-medium">
+        {row.original.item?.name ?? "—"}
+      </span>
+    ),
   },
   {
-    id: "variant",
-    header: "Variant",
+    id: "color",
+    header: "Renk",
     cell: ({ row }) =>
-      row.original.variant?.name ?? <span className="text-muted-foreground">—</span>,
+      row.original.color ? (
+        <span className="inline-flex items-center gap-1 text-xs">
+          {row.original.color.hex && (
+            <span
+              className="h-2.5 w-2.5 rounded-full border border-black/10"
+              style={{ backgroundColor: row.original.color.hex }}
+            />
+          )}
+          {row.original.color.name}
+        </span>
+      ) : (
+        <span className="text-muted-foreground text-xs">—</span>
+      ),
+  },
+  {
+    id: "properties",
+    header: "Özellikler",
+    cell: ({ row }) => {
+      const props = row.original.properties ?? [];
+      if (props.length === 0) {
+        return <span className="text-muted-foreground text-xs">—</span>;
+      }
+      return (
+        <div className="flex flex-wrap gap-0.5">
+          {props.slice(0, 2).map((p) => (
+            <Badge key={p.propertyId} variant="muted" className="text-[10px]">
+              {p.property.name}
+            </Badge>
+          ))}
+          {props.length > 2 && (
+            <Badge variant="muted" className="text-[10px]">
+              +{props.length - 2}
+            </Badge>
+          )}
+        </div>
+      );
+    },
+  },
+  {
+    id: "processing",
+    header: "Tip",
+    cell: ({ row }) => {
+      const state = rollProcessingState(row.original);
+      return (
+        <Badge
+          variant={state === "bitmis" ? "default" : "outline"}
+          className="text-[10px]"
+        >
+          {processingLabels[state]}
+        </Badge>
+      );
+    },
   },
   {
     accessorKey: "currentQty",

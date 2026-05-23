@@ -105,19 +105,31 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
 
         {wo && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {wo.status === "PLANNED" && wo.type !== "SERVICE_PRODUCTION" && onEdit && (
-              <PermissionGate permission="workorder:write">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onEdit(wo)}
-                  className="gap-1"
-                >
-                  <Pencil className="h-3.5 w-3.5" /> İş Emrini Düzenle
-                </Button>
-              </PermissionGate>
-            )}
+            {(wo.status === "PLANNED" || wo.status === "IN_PROGRESS") &&
+              wo.type !== "SERVICE_PRODUCTION" &&
+              onEdit && (
+                <PermissionGate permission="workorder:write">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onEdit(wo)}
+                    className="gap-1"
+                    title={
+                      wo.status === "IN_PROGRESS"
+                        ? "Üretim devam ediyor — değişiklik bağlı rulolara yansıyabilir"
+                        : undefined
+                    }
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> İş Emrini Düzenle
+                    {wo.status === "IN_PROGRESS" && (
+                      <span className="text-amber-600" aria-label="üretim devam ediyor">
+                        ⚠
+                      </span>
+                    )}
+                  </Button>
+                </PermissionGate>
+              )}
             <Button
               type="button"
               size="sm"
@@ -169,12 +181,6 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                   <div className="text-xs">{safeFormat(wo.plannedStartDate, "dd.MM.yyyy")}</div>
                   <div className="text-xs text-muted-foreground">Oluşturma</div>
                   <div className="text-xs">{safeFormat(wo.createdAt, "dd.MM.yyyy HH:mm")}</div>
-                  {wo.recipeNo && (
-                    <>
-                      <div className="text-xs text-muted-foreground">Reçete No</div>
-                      <div className="font-mono text-xs">{wo.recipeNo}</div>
-                    </>
-                  )}
                   {wo.targetItem && (
                     <>
                       <div className="text-xs text-muted-foreground">Hedef Ürün</div>
@@ -184,18 +190,24 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       </div>
                     </>
                   )}
-                  {wo.targetItem?.color && (
+                  {wo.targetColor && (
                     <>
                       <div className="text-xs text-muted-foreground">Renk</div>
                       <div className="flex items-center gap-1.5 text-xs">
-                        {wo.targetItem.color.hex && (
+                        {wo.targetColor.hex && (
                           <span
                             className="h-3 w-3 rounded-full"
-                            style={{ backgroundColor: wo.targetItem.color.hex }}
+                            style={{ backgroundColor: wo.targetColor.hex }}
                           />
                         )}
-                        {wo.targetItem.color.name}
+                        {wo.targetColor.name}
                       </div>
+                    </>
+                  )}
+                  {wo.foldType && (
+                    <>
+                      <div className="text-xs text-muted-foreground">Kat Tipi</div>
+                      <div className="text-xs">{wo.foldType}</div>
                     </>
                   )}
                   {wo.servicePricePerMeter && (
@@ -315,22 +327,16 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                                   <span className="font-medium">
                                     {ol?.item?.name ?? "—"}
                                   </span>
-                                  {ol?.variant && (
-                                    <span className="text-muted-foreground">
-                                      {" · "}
-                                      {ol.variant.name}
-                                    </span>
-                                  )}
-                                  {ol?.item?.color && (
+                                  {ol?.color && (
                                     <span className="ml-1.5 inline-flex items-center gap-1">
-                                      {ol.item.color.hex && (
+                                      {ol.color.hex && (
                                         <span
                                           className="h-2.5 w-2.5 rounded-full ring-1 ring-border"
-                                          style={{ backgroundColor: ol.item.color.hex }}
+                                          style={{ backgroundColor: ol.color.hex }}
                                         />
                                       )}
                                       <span className="text-muted-foreground">
-                                        {ol.item.color.name}
+                                        {ol.color.name}
                                       </span>
                                     </span>
                                   )}

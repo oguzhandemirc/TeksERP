@@ -6,7 +6,7 @@ export interface Swatch {
   cardNumber: string;
   barcode: string;
   itemId: string;
-  variantId: string | null;
+  colorId: string | null;
   width: number | null;
   length: number;
   workOrderId: string | null;
@@ -14,9 +14,9 @@ export interface Swatch {
   purpose: string | null;
   createdById: string | null;
   item?: { id: string; code: string; name: string } | null;
-  variant?: { id: string; code: string; name: string } | null;
+  color?: { id: string; code: string; name: string; hex: string | null } | null;
   workOrder?: { id: string; batchNumber: string } | null;
-  parentRoll?: { id: string; barcode: string } | null;
+  parentRoll?: { id: string; barcode: string | null } | null;
   createdAt: string;
   updatedAt: string;
 }

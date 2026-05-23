@@ -14,6 +14,8 @@ const buildPayload = (
   name: v.name,
   description: v.description?.trim() || null,
   isActive: v.isActive,
+  appliesColor: v.appliesColor,
+  appliesProperty: v.appliesProperty,
 });
 
 export function SubcontractorCategoriesPage() {

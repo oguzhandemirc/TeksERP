@@ -14,10 +14,27 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { RefreshButton } from "@/components/RefreshButton";
+import { StationKind, stationKindLabels } from "@/types/enums";
 import { stationCapabilityService } from "./service";
 import { CapabilitiesEditSheet } from "./CapabilitiesEditSheet";
 import type { StationCapabilitySummary } from "./types";
+
+function disabledHint(cap: StationCapabilitySummary): string {
+  if (cap.stationKind !== StationKind.SUBCONTRACTOR) {
+    return "Renk ve özellik yetkinliği yalnızca fason istasyonlarına atanabilir";
+  }
+  if (!cap.hasDefaultCategory) {
+    return "Bu istasyona varsayılan fason kategorisi atanmamış — İstasyonlar sayfasından atayın";
+  }
+  return "Varsayılan fason kategorisi renk veya özellik uygulamıyor (appliesColor / appliesProperty kapalı)";
+}
 
 const QUERY_KEY = "station-capabilities";
 
@@ -45,7 +62,7 @@ export function StationCapabilitiesPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="İstasyon Yetenekleri"
-        description="Hangi istasyon hangi rengi uygulayabiliyor, hangi özelliği kazandırıyor — burada atanır."
+        description="Fason istasyonlarının uygulayabileceği renk ve kazandırabileceği özellikler burada atanır."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
@@ -62,73 +79,111 @@ export function StationCapabilitiesPage() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        <Table>
-          <TableHeader className="sticky top-0 z-10 bg-card">
-            <TableRow>
-              <TableHead>Kod</TableHead>
-              <TableHead>İstasyon</TableHead>
-              <TableHead>
-                <span className="flex items-center gap-1.5">
-                  <Palette className="h-3.5 w-3.5" /> Renk
-                </span>
-              </TableHead>
-              <TableHead>
-                <span className="flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5" /> Özellik
-                </span>
-              </TableHead>
-              <TableHead className="text-right">İşlem</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {query.isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: 5 }).map((_, j) => (
-                    <TableCell key={j}>
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : filtered.length === 0 ? (
+        <TooltipProvider delayDuration={150}>
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                  İstasyon bulunamadı.
-                </TableCell>
+                <TableHead>Kod</TableHead>
+                <TableHead>İstasyon</TableHead>
+                <TableHead>Tür</TableHead>
+                <TableHead>
+                  <span className="flex items-center gap-1.5">
+                    <Palette className="h-3.5 w-3.5" /> Renk
+                  </span>
+                </TableHead>
+                <TableHead>
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" /> Özellik
+                  </span>
+                </TableHead>
+                <TableHead className="text-right">İşlem</TableHead>
               </TableRow>
-            ) : (
-              filtered.map((cap) => (
-                <TableRow key={cap.stationId}>
-                  <TableCell className="font-mono text-xs">{cap.stationCode}</TableCell>
-                  <TableCell className="font-medium">{cap.stationName}</TableCell>
-                  <TableCell>
-                    <Badge variant={cap.colorCount === 0 ? "secondary" : "muted"}>
-                      {cap.colorCount}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={cap.propertyCount === 0 ? "secondary" : "muted"}>
-                      {cap.propertyCount}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5"
-                        onClick={() => setEditing(cap)}
-                      >
-                        <Settings2 className="h-3.5 w-3.5" /> Yetenekleri Düzenle
-                      </Button>
-                    </div>
+            </TableHeader>
+            <TableBody>
+              {query.isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <TableCell key={j}>
+                        <Skeleton className="h-4 w-full" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                    İstasyon bulunamadı.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                filtered.map((cap) => {
+                  const editable = cap.canApplyColor || cap.canApplyProperty;
+                  return (
+                    <TableRow
+                      key={cap.stationId}
+                      className={editable ? undefined : "opacity-60"}
+                    >
+                      <TableCell className="font-mono text-xs">{cap.stationCode}</TableCell>
+                      <TableCell className="font-medium">{cap.stationName}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {stationKindLabels[cap.stationKind]}
+                      </TableCell>
+                      <TableCell>
+                        {cap.canApplyColor ? (
+                          <Badge variant={cap.colorCount === 0 ? "secondary" : "muted"}>
+                            {cap.colorCount}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {cap.canApplyProperty ? (
+                          <Badge variant={cap.propertyCount === 0 ? "secondary" : "muted"}>
+                            {cap.propertyCount}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end">
+                          {editable ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5"
+                              onClick={() => setEditing(cap)}
+                            >
+                              <Settings2 className="h-3.5 w-3.5" /> Yetenekleri Düzenle
+                            </Button>
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span tabIndex={0}>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="gap-1.5"
+                                    disabled
+                                  >
+                                    <Settings2 className="h-3.5 w-3.5" /> Yetenekleri Düzenle
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>{disabledHint(cap)}</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </TooltipProvider>
       </div>
 
       <CapabilitiesEditSheet

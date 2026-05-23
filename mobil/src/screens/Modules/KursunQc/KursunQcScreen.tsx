@@ -23,11 +23,14 @@ import { NumpadHost } from '../../../components/NumpadProvider';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { kursunQcService } from '../../../services/kursunQc.service';
 import { defectTypeService } from '../../../services/defectType.service';
+import { rollService } from '../../../services/roll.service';
+import { subcontractorService } from '../../../services/subcontractor.service';
 import type {
   KursunStepSummary,
   KursunRollSummary,
   KursunOpenCard,
   DefectType,
+  SubcontractorReceiptListItem,
 } from '../../../types/models';
 
 // =============================================================================
@@ -70,6 +73,12 @@ export default function KursunQcScreen() {
   const [errorEntry, setErrorEntry] = useState<ErrorEntryState>(EMPTY_ERROR_ENTRY);
   const [listModalOpen, setListModalOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  /** Refactor 4 — "yanlış istasyon" / kart bulunamadı backend mesajı banner. */
+  const [cardError, setCardError] = useState<string | null>(null);
+  /** Refactor 9 — açık kumaş aç modalı (receiptId seçimi). */
+  const [openFabricModalVisible, setOpenFabricModalVisible] = useState(false);
+  /** Refactor 9 — kursun-finish modalı (totalMeters + errors). */
+  const [finishFabricRollId, setFinishFabricRollId] = useState<string | null>(null);
 
   // Açık kart listesi (sadece liste modalı açıkken çekilir)
   const openCardsQuery = useQuery({
@@ -131,11 +140,17 @@ export default function KursunQcScreen() {
     }
 
     setResolvingCard(true);
+    setCardError(null);
     try {
+      // Refactor 4 — backend artık yanlış istasyonda 400 atıyor:
+      //   "Bu iş emrinin 'Kurşun + KK2' adımında şu an açık top yok.
+      //    Mevcut konum: Boyahane (4 rulo)."
+      // Mesaj catch block'unda banner'a yansıtılır.
       let res = await kursunQcService.getByCardBarcode(barcode);
       let step = res.data as KursunStepSummary | undefined;
       if (!step) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setCardError(`Kart bulunamadı: ${barcode}`);
         Toast.show({ type: 'error', text1: 'Kart bulunamadı', text2: barcode });
         return;
       }
@@ -185,6 +200,7 @@ export default function KursunQcScreen() {
       }
     } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setCardError((err as Error).message);
       Toast.show({
         type: 'error',
         text1: 'Kart çözülemedi',
@@ -328,6 +344,75 @@ export default function KursunQcScreen() {
     },
     onError: (err: Error) =>
       Toast.show({ type: 'error', text1: 'Silinemedi', text2: err.message }),
+  });
+
+  // Refactor 9 — Açık kumaş aç (open-fabric)
+  const openFabricMutation = useMutation({
+    mutationFn: (receiptId: string) =>
+      rollService.createOpenFabric({
+        receiptId,
+        stepId: activeJob!.stepSummary.workOrderStepId,
+      }),
+    onSuccess: async () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Açık kumaş oluşturuldu' });
+      setOpenFabricModalVisible(false);
+      await refetchActiveJob();
+    },
+    onError: (err: Error) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({
+        type: 'error',
+        text1: 'Açık kumaş oluşturulamadı',
+        text2: err.message,
+      });
+    },
+  });
+
+  // Refactor 9 — Kursun finish (totalMeters + errors → Tambur'a ilerlet)
+  const kursunFinishMutation = useMutation({
+    mutationFn: ({
+      rollId,
+      totalMeters,
+      errors,
+      notes,
+    }: {
+      rollId: string;
+      totalMeters: number;
+      errors: Array<{ startMeter: number; endMeter?: number | null; defectTypeId?: string | null }>;
+      notes?: string | null;
+    }) =>
+      rollService.kursunFinish(rollId, { totalMeters, errors, notes }),
+    onSuccess: async () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({
+        type: 'success',
+        text1: 'Kumaş bitirildi',
+        text2: 'Roll Tambur adımına geçti',
+      });
+      setFinishFabricRollId(null);
+      await refetchActiveJob();
+    },
+    onError: (err: Error) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({ type: 'error', text1: 'Kumaş bitirilemedi', text2: err.message });
+    },
+  });
+
+  // Açık kumaş aç modalı için WO'nun receipt listesi
+  const woReceiptsQuery = useQuery({
+    queryKey: [
+      'kursun-qc',
+      'receipts',
+      activeJob?.stepSummary.workOrderId,
+    ],
+    queryFn: () =>
+      subcontractorService.listReceipts({
+        workOrderId: activeJob!.stepSummary.workOrderId,
+        pageSize: 20,
+      }),
+    enabled: openFabricModalVisible && !!activeJob,
+    staleTime: 30 * 1000,
   });
 
   const finishStepMutation = useMutation({
@@ -482,12 +567,13 @@ export default function KursunQcScreen() {
               <Surface style={styles.headerBand} elevation={2}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.headerBatch} numberOfLines={1}>
-                    {selectedRoll.barcode}
+                    {selectedRoll.barcode ?? `Açık Kumaş · ${selectedRoll.rollId.slice(0, 8)}`}
                   </Text>
                   <Text style={styles.headerSub} numberOfLines={1}>
                     {activeJob.stepSummary.batchNumber} ·{' '}
                     {activeJob.stepSummary.stationName} ·{' '}
                     {selectedRoll.currentQty.toFixed(1)} mt
+                    {selectedRoll.colorName ? ` · ${selectedRoll.colorName}` : ''}
                   </Text>
                 </View>
                 <View style={styles.statusRow}>
@@ -564,9 +650,10 @@ export default function KursunQcScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.defectName}>{d.errorType ?? '—'}</Text>
                           <Text style={styles.defectRange}>
-                            {d.startMeter.toFixed(1)} – {d.endMeter.toFixed(1)} mt
-                            {' · '}
-                            {(d.endMeter - d.startMeter).toFixed(1)} mt
+                            {d.startMeter.toFixed(1)}
+                            {d.endMeter != null
+                              ? ` – ${d.endMeter.toFixed(1)} mt · ${(d.endMeter - d.startMeter).toFixed(1)} mt`
+                              : ' mt (nokta)'}
                           </Text>
                         </View>
                         <IconButton
@@ -685,9 +772,22 @@ export default function KursunQcScreen() {
                   </Surface>
               </ScrollView>
 
-              {/* Sticky footer — QC2 tamamla / geri al toggle */}
+              {/* Sticky footer — açık kumaş ise "Kumaş Bitir", barkodlu ise QC2 */}
               <Surface style={styles.footer} elevation={4}>
-                {selectedRoll.qc2Completed ? (
+                {!selectedRoll.barcode ? (
+                  // Refactor 9 — açık kumaş: totalMeters + errors → kursun-finish
+                  <Button
+                    mode="contained"
+                    icon="package-check"
+                    onPress={() => setFinishFabricRollId(selectedRoll.rollId)}
+                    buttonColor="#7c3aed"
+                    style={styles.footerBtn}
+                    contentStyle={styles.footerBtnContent}
+                    labelStyle={styles.footerBtnLabel}
+                  >
+                    Kumaşı Bitir (Tambur'a)
+                  </Button>
+                ) : selectedRoll.qc2Completed ? (
                   <Button
                     mode="outlined"
                     icon="undo"
@@ -774,6 +874,40 @@ export default function KursunQcScreen() {
               />
             </View>
           </View>
+
+          {/* Banner — Refactor 4 yanlış istasyon mesajı */}
+          {cardError && (
+            <Surface style={styles.errorBanner} elevation={1}>
+              <Icon source="alert-circle" size={20} color="#b91c1c" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.errorBannerTitle}>Yanlış istasyon</Text>
+                <Text style={styles.errorBannerText}>{cardError}</Text>
+              </View>
+              <IconButton
+                icon="close"
+                size={18}
+                onPress={() => setCardError(null)}
+                accessibilityLabel="Hata mesajını kapat"
+                style={{ margin: 0 }}
+              />
+            </Surface>
+          )}
+
+          {/* Refactor 9 — açık kumaş aç butonu (aktif job varsa) */}
+          {activeJob && (
+            <View style={styles.openFabricRow}>
+              <Button
+                mode="contained"
+                icon="plus-box-multiple"
+                onPress={() => setOpenFabricModalVisible(true)}
+                buttonColor="#7c3aed"
+                compact
+                style={{ flex: 1 }}
+              >
+                Yeni Açık Kumaş Aç
+              </Button>
+            </View>
+          )}
 
           {/* Tab bar — açık işler */}
           {openJobs.length > 0 && (
@@ -876,9 +1010,470 @@ export default function KursunQcScreen() {
         onDismiss={() => setScannerOpen(false)}
         onScan={handleScannerResult}
       />
+
+      {/* Refactor 9 — Açık kumaş aç modal (receipt picker) */}
+      <OpenFabricModal
+        visible={openFabricModalVisible}
+        loading={woReceiptsQuery.isLoading}
+        receipts={woReceiptsQuery.data?.data ?? []}
+        submitting={openFabricMutation.isPending}
+        onDismiss={() => setOpenFabricModalVisible(false)}
+        onSelect={(receiptId) => openFabricMutation.mutate(receiptId)}
+      />
+
+      {/* Refactor 9 — Kumaş bitir modal (totalMeters + errors → kursun-finish) */}
+      <KursunFinishModal
+        visible={!!finishFabricRollId}
+        defectTypes={defectTypes}
+        submitting={kursunFinishMutation.isPending}
+        onDismiss={() => setFinishFabricRollId(null)}
+        onSubmit={(payload) => {
+          if (!finishFabricRollId) return;
+          kursunFinishMutation.mutate({
+            rollId: finishFabricRollId,
+            ...payload,
+          });
+        }}
+      />
     </ScreenChrome>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Refactor 9 — Açık kumaş aç modal
+// ─────────────────────────────────────────────────────────────────────────────
+function OpenFabricModal({
+  visible,
+  loading,
+  receipts,
+  submitting,
+  onDismiss,
+  onSelect,
+}: {
+  visible: boolean;
+  loading: boolean;
+  receipts: SubcontractorReceiptListItem[];
+  submitting: boolean;
+  onDismiss: () => void;
+  onSelect: (receiptId: string) => void;
+}) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  // Yalnız iptal edilmemiş kabuller
+  const activeReceipts = receipts.filter((r) => !r.cancelledAt);
+  return (
+    <RNModal
+      isVisible={visible}
+      onBackdropPress={submitting ? undefined : onDismiss}
+      onBackButtonPress={submitting ? undefined : onDismiss}
+      backdropOpacity={0.55}
+      useNativeDriver
+      hideModalContentWhileAnimating
+      deviceWidth={winW}
+      deviceHeight={winH}
+      statusBarTranslucent
+      style={openFabricStyles.modal}
+    >
+      <View
+        style={[openFabricStyles.sheet, { width: winW * 0.65, maxHeight: winH * 0.8 }]}
+      >
+        <View style={openFabricStyles.header}>
+          <Icon source="plus-box-multiple" size={22} color="#7c3aed" />
+          <Text variant="titleMedium" style={openFabricStyles.title}>
+            Açık Kumaş Aç
+          </Text>
+          <View style={{ flex: 1 }} />
+          <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
+        </View>
+        <Text style={openFabricStyles.body}>
+          Hangi fason kabulden yeni açık kumaş oluşturacağınızı seçin. Renk +
+          özellikler bu kabulden inherit edilir, barkod basılmaz (sistem ID).
+        </Text>
+        {loading ? (
+          <View style={openFabricStyles.empty}>
+            <ActivityIndicator size="large" color="#7c3aed" />
+          </View>
+        ) : activeReceipts.length === 0 ? (
+          <View style={openFabricStyles.empty}>
+            <Icon source="package-down" size={48} color="#cbd5e1" />
+            <Text style={openFabricStyles.emptyText}>
+              Bu WO için aktif fason kabul yok
+            </Text>
+          </View>
+        ) : (
+          <FlashList
+            data={activeReceipts}
+            keyExtractor={(r) => r.id}
+            contentContainerStyle={{ paddingVertical: 6 }}
+            renderItem={({ item }) => (
+              <Surface style={openFabricStyles.row} elevation={1}>
+                <TouchableRipple
+                  borderless
+                  onPress={() => onSelect(item.id)}
+                  style={openFabricStyles.rowTouch}
+                  disabled={submitting}
+                >
+                  <View style={openFabricStyles.rowInner}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={openFabricStyles.rowTitle}>
+                        {item.receiptNo}
+                        {item.appliedColor
+                          ? ` · ${item.appliedColor.name}`
+                          : ''}
+                      </Text>
+                      <Text style={openFabricStyles.rowMeta} numberOfLines={1}>
+                        {item.subcontractor?.name ?? '—'}
+                        {' · '}
+                        {item._count?.items ?? 0} top
+                      </Text>
+                    </View>
+                    <Icon source="chevron-right" size={22} color="#94a3b8" />
+                  </View>
+                </TouchableRipple>
+              </Surface>
+            )}
+          />
+        )}
+      </View>
+    </RNModal>
+  );
+}
+
+const openFabricStyles = StyleSheet.create({
+  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
+  sheet: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 18,
+    gap: 12,
+  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { fontWeight: '700', color: '#0f172a' },
+  body: { fontSize: 13, color: '#475569', lineHeight: 18 },
+  empty: {
+    paddingVertical: 36,
+    alignItems: 'center',
+    gap: 6,
+  },
+  emptyText: { fontSize: 13, color: '#94a3b8' },
+  row: {
+    backgroundColor: '#faf5ff',
+    borderRadius: 10,
+    marginVertical: 3,
+    overflow: 'hidden',
+  },
+  rowTouch: { borderRadius: 10 },
+  rowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  rowTitle: { fontSize: 14, fontWeight: '700', color: '#5b21b6' },
+  rowMeta: { fontSize: 12, color: '#6b21a8', marginTop: 2 },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Refactor 9 — Kumaş bitir modal (kursun-finish)
+// ─────────────────────────────────────────────────────────────────────────────
+interface FinishErrorEntry {
+  startMeter: string;
+  endMeter: string;
+  defectTypeId: string;
+}
+
+function KursunFinishModal({
+  visible,
+  defectTypes,
+  submitting,
+  onDismiss,
+  onSubmit,
+}: {
+  visible: boolean;
+  defectTypes: DefectType[];
+  submitting: boolean;
+  onDismiss: () => void;
+  onSubmit: (data: {
+    totalMeters: number;
+    errors: Array<{ startMeter: number; endMeter?: number | null; defectTypeId?: string | null }>;
+    notes?: string | null;
+  }) => void;
+}) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  const [totalMeters, setTotalMeters] = useState('');
+  const [notes, setNotes] = useState('');
+  const [errors, setErrors] = useState<FinishErrorEntry[]>([]);
+
+  useEffect(() => {
+    if (!visible) {
+      setTotalMeters('');
+      setNotes('');
+      setErrors([]);
+    }
+  }, [visible]);
+
+  const addError = () =>
+    setErrors((prev) => [...prev, { startMeter: '', endMeter: '', defectTypeId: '' }]);
+
+  const updateError = (idx: number, patch: Partial<FinishErrorEntry>) =>
+    setErrors((prev) => prev.map((e, i) => (i === idx ? { ...e, ...patch } : e)));
+
+  const removeError = (idx: number) =>
+    setErrors((prev) => prev.filter((_, i) => i !== idx));
+
+  const handleSubmit = () => {
+    const total = parseFloat(totalMeters);
+    if (Number.isNaN(total) || total <= 0) {
+      Toast.show({ type: 'error', text1: 'Toplam metre zorunlu', text2: 'Pozitif sayı girin' });
+      return;
+    }
+    const parsedErrors: Array<{
+      startMeter: number;
+      endMeter?: number | null;
+      defectTypeId?: string | null;
+    }> = [];
+    for (let i = 0; i < errors.length; i++) {
+      const e = errors[i];
+      const start = parseFloat(e.startMeter);
+      if (Number.isNaN(start) || start < 0) {
+        Toast.show({
+          type: 'error',
+          text1: `Hata #${i + 1} geçersiz`,
+          text2: 'Başlangıç metre sayı olmalı',
+        });
+        return;
+      }
+      const end = e.endMeter.trim() ? parseFloat(e.endMeter) : null;
+      if (end !== null && (Number.isNaN(end) || end <= start)) {
+        Toast.show({
+          type: 'error',
+          text1: `Hata #${i + 1} geçersiz`,
+          text2: 'Bitiş başlangıçtan büyük olmalı',
+        });
+        return;
+      }
+      parsedErrors.push({
+        startMeter: start,
+        endMeter: end,
+        defectTypeId: e.defectTypeId || null,
+      });
+    }
+    onSubmit({
+      totalMeters: total,
+      errors: parsedErrors,
+      notes: notes.trim() || null,
+    });
+  };
+
+  return (
+    <RNModal
+      isVisible={visible}
+      onBackdropPress={submitting ? undefined : onDismiss}
+      onBackButtonPress={submitting ? undefined : onDismiss}
+      backdropOpacity={0.55}
+      useNativeDriver
+      hideModalContentWhileAnimating
+      deviceWidth={winW}
+      deviceHeight={winH}
+      statusBarTranslucent
+      style={finishStyles.modal}
+    >
+      <View
+        style={[finishStyles.sheet, { width: winW * 0.7, maxHeight: winH * 0.9 }]}
+      >
+        <View style={finishStyles.header}>
+          <Icon source="package-check" size={22} color="#7c3aed" />
+          <Text variant="titleMedium" style={finishStyles.title}>
+            Kumaşı Bitir
+          </Text>
+          <View style={{ flex: 1 }} />
+          <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={finishStyles.body}>
+          <Text style={finishStyles.bodyText}>
+            Cihazda gözüken toplam metreyi girin. Hata noktaları opsiyonel —
+            bitiş metresi boş bırakılabilir (operatör çoğu zaman sadece
+            başlangıç metresini girer).
+          </Text>
+
+          <Text style={finishStyles.label}>Toplam Metre *</Text>
+          <TextInput
+            mode="outlined"
+            value={totalMeters}
+            onChangeText={setTotalMeters}
+            placeholder="örn. 500"
+            keyboardType="numeric"
+            dense
+            style={finishStyles.input}
+          />
+
+          <View style={finishStyles.errorsHeader}>
+            <Text style={finishStyles.label}>Hatalar (opsiyonel)</Text>
+            <Button mode="text" icon="plus-circle" onPress={addError} compact>
+              Hata Ekle
+            </Button>
+          </View>
+
+          {errors.map((e, idx) => (
+            <Surface key={idx} style={finishStyles.errorRow} elevation={1}>
+              <View style={finishStyles.errorTop}>
+                <Text style={finishStyles.errorIndex}>#{idx + 1}</Text>
+                <IconButton
+                  icon="trash-can-outline"
+                  size={18}
+                  iconColor="#dc2626"
+                  onPress={() => removeError(idx)}
+                  style={{ margin: 0 }}
+                />
+              </View>
+              <View style={finishStyles.errorMeterRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={finishStyles.subLabel}>Başlangıç (mt)</Text>
+                  <TextInput
+                    mode="outlined"
+                    value={e.startMeter}
+                    onChangeText={(v) => updateError(idx, { startMeter: v })}
+                    placeholder="60"
+                    keyboardType="numeric"
+                    dense
+                    style={finishStyles.input}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={finishStyles.subLabel}>Bitiş (mt) — boş ok</Text>
+                  <TextInput
+                    mode="outlined"
+                    value={e.endMeter}
+                    onChangeText={(v) => updateError(idx, { endMeter: v })}
+                    placeholder="opsiyonel"
+                    keyboardType="numeric"
+                    dense
+                    style={finishStyles.input}
+                  />
+                </View>
+              </View>
+              <Text style={finishStyles.subLabel}>Hata Tipi (opsiyonel)</Text>
+              <View style={finishStyles.defectChipRow}>
+                {defectTypes.map((dt) => {
+                  const active = e.defectTypeId === dt.id;
+                  return (
+                    <TouchableRipple
+                      key={dt.id}
+                      borderless
+                      onPress={() =>
+                        updateError(idx, {
+                          defectTypeId: active ? '' : dt.id,
+                        })
+                      }
+                      style={[
+                        finishStyles.defectChip,
+                        active && finishStyles.defectChipActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          finishStyles.defectChipText,
+                          active && finishStyles.defectChipTextActive,
+                        ]}
+                      >
+                        {dt.name}
+                      </Text>
+                    </TouchableRipple>
+                  );
+                })}
+              </View>
+            </Surface>
+          ))}
+
+          <Text style={finishStyles.label}>Not (opsiyonel)</Text>
+          <TextInput
+            mode="outlined"
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Kumaşın geneline dair not"
+            multiline
+            numberOfLines={2}
+            style={finishStyles.input}
+          />
+        </ScrollView>
+
+        <View style={finishStyles.actions}>
+          <Button mode="outlined" onPress={onDismiss} disabled={submitting}>
+            Vazgeç
+          </Button>
+          <Button
+            mode="contained"
+            buttonColor="#7c3aed"
+            onPress={handleSubmit}
+            loading={submitting}
+            disabled={submitting}
+            icon="check"
+          >
+            Bitir & Tambur'a Yolla
+          </Button>
+        </View>
+      </View>
+    </RNModal>
+  );
+}
+
+const finishStyles = StyleSheet.create({
+  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
+  sheet: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingTop: 16,
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { fontWeight: '700', color: '#0f172a' },
+  body: { gap: 8, paddingBottom: 8 },
+  bodyText: { fontSize: 12, color: '#475569', lineHeight: 16, marginBottom: 6 },
+  label: { fontSize: 13, fontWeight: '700', color: '#0f172a', marginTop: 4 },
+  subLabel: { fontSize: 11, fontWeight: '600', color: '#475569', marginBottom: 4 },
+  input: { backgroundColor: '#fff' },
+  errorsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  errorRow: {
+    backgroundColor: '#fef3c7',
+    padding: 10,
+    borderRadius: 10,
+    marginVertical: 4,
+    gap: 6,
+  },
+  errorTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  errorIndex: { fontSize: 12, fontWeight: '700', color: '#92400e' },
+  errorMeterRow: { flexDirection: 'row', gap: 8 },
+  defectChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  defectChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#fbbf24',
+    backgroundColor: '#fff',
+  },
+  defectChipActive: { backgroundColor: '#d97706', borderColor: '#d97706' },
+  defectChipText: { fontSize: 11, fontWeight: '600', color: '#92400e' },
+  defectChipTextActive: { color: '#fff' },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 8,
+  },
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Yardımcı bileşenler
@@ -1086,10 +1681,11 @@ function RollListItem({
           </View>
           <View style={{ flex: 1 }}>
             <Text style={helperStyles.rollBarcode} numberOfLines={1}>
-              {roll.barcode}
+              {roll.barcode ?? `Açık · ${roll.rollId.slice(0, 8)}`}
             </Text>
             <Text style={helperStyles.rollMeta}>
               {roll.currentQty.toFixed(1)} mt
+              {roll.colorName ? ` · ${roll.colorName}` : ''}
             </Text>
             <View style={helperStyles.rollChips}>
               {roll.kursunApplied && (
@@ -1125,6 +1721,33 @@ function RollListItem({
 // ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   body: { flex: 1, flexDirection: 'row', backgroundColor: '#f8fafc' },
+
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingLeft: 14,
+    paddingRight: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    margin: 10,
+  },
+  errorBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#991b1b',
+    marginBottom: 2,
+  },
+  errorBannerText: { fontSize: 12, color: '#7f1d1d', lineHeight: 16 },
+
+  openFabricRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 10,
+    paddingTop: 8,
+  },
 
   // Sol — form
   formCol: { flex: 1.4 },

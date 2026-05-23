@@ -1,15 +1,26 @@
 import { z } from "zod";
 
 export const fabricPropertyFormSchema = z.object({
-  name: z.string().min(1, "Ad gerekli").max(80),
-  category: z.string().max(60).optional().or(z.literal("")),
-  description: z.string().max(300).optional().or(z.literal("")),
-  color: z
+  name: z
     .string()
-    .regex(/^#[0-9a-fA-F]{6}$/, "Renk #RRGGBB formatında olmalı")
+    .trim()
+    .min(1, "Özellik adı boş bırakılamaz")
+    .max(80, "Özellik adı en fazla 80 karakter olabilir"),
+  category: z
+    .string()
+    .max(60, "Kategori adı en fazla 60 karakter olabilir")
     .optional()
     .or(z.literal("")),
-  sortOrder: z.coerce.number().int().min(0).max(9999),
+  description: z
+    .string()
+    .max(300, "Açıklama en fazla 300 karakter olabilir")
+    .optional()
+    .or(z.literal("")),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Renk kodu #RRGGBB formatında olmalı (örn. #1A2B3C)")
+    .optional()
+    .or(z.literal("")),
   isActive: z.boolean(),
 });
 
@@ -20,6 +31,5 @@ export const fabricPropertyFormDefaults: FabricPropertyFormValues = {
   category: "",
   description: "",
   color: "",
-  sortOrder: 0,
   isActive: true,
 };

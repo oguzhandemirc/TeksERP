@@ -25,7 +25,7 @@ const router = Router();
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: { code, name, symbol } dizisi
+ *         description: "{ code, name, symbol } dizisi"
  */
 router.get("/", verifyToken, (_req: Request, res: Response) => {
   res.status(200).json({ success: true, data: CURRENCIES });

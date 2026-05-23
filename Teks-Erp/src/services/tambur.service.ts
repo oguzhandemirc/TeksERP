@@ -332,7 +332,6 @@ export class TamburService {
       decisions: ErrorDecision[];
       voluntaryCuts: VoluntaryCut[];
       foldType?: "2-KAT" | "4-KAT";
-      layerCount?: number | null;
       cutMode?: CutMode | null;
       cutLengthM?: number | null;
     },
@@ -357,7 +356,6 @@ export class TamburService {
                 targetItemId: true,
                 targetColorId: true,
                 foldType: true,
-                layerCount: true,
               },
             },
           },
@@ -378,7 +376,6 @@ export class TamburService {
     const totalQty = roll.currentQty;
     const wo = roll.producedInStep?.workOrder ?? null;
     const plannedFoldType = wo?.foldType ?? null;
-    const plannedLayerCount = wo?.layerCount ?? null;
 
     // Renk kontrolü — Tambur'a gelen rulonun renk kazanmış olması beklenir
     // (boyahane Fason Kabul'ünde set edilir). Renksiz rulo Tambur'da operatöre
@@ -610,7 +607,6 @@ export class TamburService {
       // Tambur parametrelerini (kat, kesim tipi vs.) step.stepData'ya yaz.
       const hasStepData =
         data.foldType !== undefined ||
-        data.layerCount != null ||
         data.cutMode != null ||
         data.cutLengthM != null;
       if (hasStepData && roll.currentStepId) {
@@ -624,7 +620,6 @@ export class TamburService {
           tamburDecidedAt: new Date().toISOString(),
         };
         if (data.foldType !== undefined) merged.foldType = data.foldType;
-        if (data.layerCount != null) merged.layerCount = data.layerCount;
         if (data.cutMode != null) merged.cutMode = data.cutMode;
         if (data.cutLengthM != null) merged.cutLengthM = data.cutLengthM;
         await tx.workOrderStep.update({
@@ -701,12 +696,10 @@ export class TamburService {
             operatorId: userId ?? null,
             createdAt: now,
             metadata: {
-              // Planlanan (WO.foldType/layerCount) — Tambur ekranına bilgi olarak gelir.
+              // Planlanan (WO.foldType) — Tambur ekranına bilgi olarak gelir.
               plannedFoldType,
-              plannedLayerCount,
               // Operatörün gerçek seçimi (override etmiş olabilir).
               foldType: data.foldType ?? null,
-              layerCount: data.layerCount ?? null,
               cutMode: data.cutMode ?? null,
               cutLengthM: data.cutLengthM ?? null,
               childRollCount: segments.length,
@@ -1671,8 +1664,6 @@ export class TamburService {
       /// Tambur kararı — WO.foldType (planlama) override. Verilmezse planlanan
       /// kullanılır (WO.foldType). Bu değer audit/RollOperation metadata'ya yazılır.
       foldType?: string | null;
-      /// Tambur kararı — WO.layerCount override. Verilmezse planlanan kullanılır.
-      layerCount?: number | null;
     },
     userId?: string,
   ): Promise<ApiResponse<{ rollId: string; scrapChildId: string | null; remainingQty: number }>> {
@@ -1713,19 +1704,13 @@ export class TamburService {
     const woId = parent.currentStep.workOrderId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
 
-    // Planlanan foldType/layerCount WO'dan — operatör override etmemişse
-    // bunlar kullanılır. Override + planlanan ikisini de metadata'ya yaz ki
-    // sapma izlenebilsin. (WO scalar alanları include ile zaten geldi.)
+    // Planlanan foldType WO'dan — operatör override etmemişse bu kullanılır.
+    // Override + planlanan ikisini de metadata'ya yaz ki sapma izlenebilsin.
     const plannedFoldType = parent.currentStep.workOrder.foldType ?? null;
-    const plannedLayerCount = parent.currentStep.workOrder.layerCount ?? null;
     const actualFoldType =
       data.foldType !== undefined ? data.foldType : plannedFoldType;
-    const actualLayerCount =
-      data.layerCount !== undefined ? data.layerCount : plannedLayerCount;
     const overriddenFoldType =
       data.foldType !== undefined && data.foldType !== plannedFoldType;
-    const overriddenLayerCount =
-      data.layerCount !== undefined && data.layerCount !== plannedLayerCount;
 
     const result = await prisma.$transaction(async (tx) => {
       let scrapChildId: string | null = null;
@@ -1808,11 +1793,8 @@ export class TamburService {
             remainingQty,
             notes: data.notes ?? null,
             plannedFoldType,
-            plannedLayerCount,
             actualFoldType,
-            actualLayerCount,
             overriddenFoldType,
-            overriddenLayerCount,
           } as Prisma.InputJsonValue,
         },
         update: {},
@@ -1885,7 +1867,6 @@ export class TamburService {
       stationName: string;
       /// Tambur planlama bilgisi — operatöre ekranda gösterilir, override edilebilir.
       plannedFoldType: string | null;
-      plannedLayerCount: number | null;
       orders: Array<{
         orderId: string;
         orderNumber: string;
@@ -1933,7 +1914,6 @@ export class TamburService {
             id: true,
             batchNumber: true,
             foldType: true,
-            layerCount: true,
           },
         },
       },
@@ -2084,7 +2064,6 @@ export class TamburService {
         stepId: step.id,
         stationName: step.station.name,
         plannedFoldType: step.workOrder.foldType,
-        plannedLayerCount: step.workOrder.layerCount,
         orders,
         openFabricRolls,
       },

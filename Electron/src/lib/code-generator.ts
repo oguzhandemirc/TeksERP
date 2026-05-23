@@ -27,4 +27,5 @@ export const CODE_PREFIXES = {
   QUALITY_GRADE: "KAL",
   COLOR: "RNK",
   ROUTE: "ROT",
+  FABRIC_PROPERTY: "OZL",
 } as const;

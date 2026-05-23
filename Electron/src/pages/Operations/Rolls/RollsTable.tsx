@@ -15,20 +15,21 @@ import type { Roll } from "./types";
 const FILTERS: FilterDef[] = [
   {
     kind: "select",
-    key: "isDerived",
-    label: "Stok Tipi",
+    key: "processingStatus",
+    label: "İşlem Durumu",
     options: [
-      { value: "false", label: "Ham" },
-      { value: "true", label: "İşlenmiş" },
+      { value: "raw", label: "Ham" },
+      { value: "processed", label: "İşleniyor" },
+      { value: "finished", label: "Bitmiş" },
+      { value: "open_fabric", label: "Açık Kumaş" },
     ],
   },
   {
     kind: "lookup",
-    key: "baseItemId",
-    label: "Ham Ürün",
+    key: "itemId",
+    label: "Ürün",
     service: itemService,
-    queryKey: "base-items",
-    extraFilters: { isDerived: "false" },
+    queryKey: "items",
   },
   { kind: "lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
   {

@@ -47,10 +47,10 @@ const router = Router();
  *                 description: Metre başı hizmet bedeli (₺/m)
  *               routeStationKinds:
  *                 type: array
- *                 description: Müşteri talebine göre seçilen istasyon kind'ları. PACKAGING her zaman zorunludur, verilmese de server ekler.
+ *                 description: Müşteri talebine göre seçilen üretim istasyonu kind'ları (paket/sevkiyat fulfillment akışıdır, rotaya konulmaz).
  *                 items:
  *                   type: string
- *                   enum: [RAW_QC, PROCESS_QC, SUBCONTRACTOR, TAMBUR, PACKAGING, SHIPPING, OTHER]
+ *                   enum: [RAW_QC, PROCESS_QC, SUBCONTRACTOR, TAMBUR, OTHER]
  *               batchNumber:
  *                 type: string
  *                 nullable: true

@@ -2,11 +2,13 @@
 // TeksERP - Item (Stok Kartı) Routes
 // =============================================================================
 
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
+import { z } from "zod";
 import { BaseController } from "../controllers/base.controller";
 import { ItemService } from "../services/item.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
+import "../types/express-augment";
 
 const service = new ItemService({
   modelName: "item",
@@ -20,6 +22,13 @@ const service = new ItemService({
 
 const controller = new BaseController(service);
 const router = Router();
+
+const addAllowedColorBody = z.object({
+  colorId: z.string().uuid("Geçersiz renk ID"),
+});
+const addAllowedPropertyBody = z.object({
+  propertyId: z.string().uuid("Geçersiz özellik ID"),
+});
 
 /**
  * @openapi
@@ -178,5 +187,97 @@ router.delete("/:id", verifyToken, requirePermission("item:write"), controller.r
  *         description: Kayıt bulunamadı
  */
 router.delete("/:id/permanent", verifyToken, requirePermission("item:write"), controller.hardRemove);
+
+/**
+ * @openapi
+ * /api/items/{id}/allowed-colors:
+ *   post:
+ *     tags: [Items]
+ *     summary: Ürüne tek bir izinli renk ekle
+ *     description: Mevcut ise idempotent — yeni satır oluşturulmaz, başarı döner.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [colorId]
+ *             properties:
+ *               colorId: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Eklendi veya zaten dahil
+ */
+router.post(
+  "/:id/allowed-colors",
+  verifyToken,
+  requirePermission("item:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { colorId } = addAllowedColorBody.parse(req.body);
+      const result = await service.addAllowedColor(
+        String(req.params.id),
+        colorId,
+        req.user?.userId,
+      );
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/items/{id}/allowed-properties:
+ *   post:
+ *     tags: [Items]
+ *     summary: Ürüne tek bir izinli özellik ekle
+ *     description: Mevcut ise idempotent.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [propertyId]
+ *             properties:
+ *               propertyId: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Eklendi veya zaten dahil
+ */
+router.post(
+  "/:id/allowed-properties",
+  verifyToken,
+  requirePermission("item:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { propertyId } = addAllowedPropertyBody.parse(req.body);
+      const result = await service.addAllowedProperty(
+        String(req.params.id),
+        propertyId,
+        req.user?.userId,
+      );
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 export default router;
