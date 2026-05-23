@@ -773,14 +773,20 @@ npx tsc --noEmit             # Type-check (build'siz)
 
 ## 13. Test Kullanıcıları (Seed)
 
-| Username | Şifre | Rol | Ana Yetkiler |
+| Username | Şifre | Hedef Rol | Seed Sonrası Yetkiler |
 |---|---|---|---|
-| `admin` | `admin123` | Admin | TÜM |
-| `mehmet.planlama` | `test123` | Planlama Şefi | workorder, roll, order, allocation |
-| `ali.operator` | `test123` | Üretim Operatörü | workorder:read, roll, station:read |
-| `ayse.kalite` | `test123` | Kalite Kontrol | quality, roll, workorder:read |
-| `fatma.satis` | `test123` | Satış | order, customer, allocation:read |
-| `veli.sevkiyat` | `test123` | Sevkiyat | shipment, order:read, roll:read |
+| `admin` | `admin123` | Admin | ✅ TÜM (~50 permission) |
+| `mehmet.planlama` | `test123` | Planlama Şefi | ⚠️ Boş — admin UI'dan atayın |
+| `ali.operator` | `test123` | Üretim Operatörü | ⚠️ Boş — admin UI'dan atayın |
+| `ayse.kalite` | `test123` | Kalite Kontrol | ⚠️ Boş — admin UI'dan atayın |
+| `fatma.satis` | `test123` | Satış | ⚠️ Boş — admin UI'dan atayın |
+| `veli.sevkiyat` | `test123` | Sevkiyat | ⚠️ Boş — admin UI'dan atayın |
+| `ali.kursun` | `test123` | Mobil — Kurşun/KK2 | ⚠️ Boş — admin UI'dan atayın |
+| `ahmet.depo` | `test123` | Mobil — Depo/Sevkiyat/Tambur | ⚠️ Boş — admin UI'dan atayın |
+
+> **Tasarım kararı:** `prisma/seed.ts` yalnız `admin`'e seed'de yetki veriyor (line 163-173). Diğer test kullanıcıları "boş başlar, admin atar" prensibiyle yaratılıyor — production'da rol atamaları runtime yapılır, dev'de de aynı yol izlenir.
+>
+> "Hedef Rol" kolonu, kullanıcının ileride hangi yetki setine sahip olması beklendiğini gösterir — seed'de değil, admin UI'sındaki atamada karşılık bulur.
 
 ---
 

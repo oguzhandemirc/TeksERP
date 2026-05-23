@@ -38,6 +38,11 @@ apiClient.interceptors.response.use(
       const body = error.response?.data as ApiErrorBody | undefined;
 
       if (status === 401) {
+        const isLoginRequest = error.config?.url?.includes("/api/auth/login");
+        if (isLoginRequest) {
+          toast.error(buildErrorMessage(body));
+          return Promise.reject(error);
+        }
         await tokenStore.clear();
         toast.error("Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
         window.location.hash = "#/login";

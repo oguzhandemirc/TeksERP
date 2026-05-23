@@ -96,8 +96,21 @@
       "out/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": ".",
+        "filter": [
+          "TeksERP-LOGO.png",
+          "TeksERP-LOGO.ico",
+          "TeksERP-INTRO.mp4",
+          "splash.html"
+        ]
+      }
+    ],
     "mac": {
       "category": "public.app-category.business",
+      "icon": "resources/TeksERP-LOGO.icns",
       "target": [
         {
           "target": "dmg",
@@ -110,6 +123,7 @@
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "win": {
+      "icon": "resources/TeksERP-LOGO.ico",
       "target": [
         {
           "target": "nsis",
@@ -128,6 +142,7 @@
       "shortcutName": "Adnan Şahin ERP"
     },
     "linux": {
+      "icon": "resources/TeksERP-LOGO.png",
       "target": [
         "AppImage"
       ],

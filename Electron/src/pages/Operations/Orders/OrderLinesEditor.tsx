@@ -86,7 +86,11 @@ export function OrderLinesEditor({ value, onChange, error, customerId }: Props) 
                 {idx + 1}
               </Badge>
               <div className="grid flex-1 grid-cols-12 gap-2">
-                <div className="col-span-12 sm:col-span-5 flex gap-1">
+                <div
+                  className={`col-span-12 flex gap-1 ${
+                    pricingEnabled ? "sm:col-span-3" : "sm:col-span-5"
+                  }`}
+                >
                   <div className="flex-1">
                     <ReferenceSelect<Item>
                       value={line.itemId || undefined}
@@ -145,8 +149,11 @@ export function OrderLinesEditor({ value, onChange, error, customerId }: Props) 
                 />
                 {pricingEnabled && (
                   <Input
-                    className="col-span-12 sm:col-span-12 text-sm"
-                    placeholder="Birim fiyat (opsiyonel)"
+                    className="col-span-4 sm:col-span-2 text-sm"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    placeholder="Birim fiyat"
                     value={line.unitPrice ?? ""}
                     onChange={(e) => updateLine(line.clientId, { unitPrice: e.target.value })}
                   />

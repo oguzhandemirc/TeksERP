@@ -44,6 +44,39 @@ export class OrderService extends BaseService {
   }
 
   /**
+   * Sipariş kalemleri için finansal sınırlar:
+   *   - quantity > 0 (pozitif metraj/adet)
+   *   - unitPrice >= 0 ya da null (null = "fiyatlandırılmamış", iş kuralı)
+   * Negatif/sıfır metraj veya negatif fiyat finansal kayıt + üretim akışını
+   * bozacağı için service seviyesinde reddedilir (Zod yerine inline AppError,
+   * mevcut validateBranch / isValidCurrency deseniyle uyumlu).
+   */
+  private validateLines(lines: unknown): void {
+    if (!Array.isArray(lines)) return;
+    lines.forEach((rawLine, idx) => {
+      if (rawLine == null || typeof rawLine !== "object") return;
+      const line = rawLine as Record<string, unknown>;
+      const qty = Number(line.quantity);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        throw AppError.badRequest(
+          `Sipariş kalemi #${idx + 1}: miktar pozitif olmalı (0'dan büyük).`
+        );
+      }
+      if (line.unitPrice != null) {
+        const price =
+          typeof line.unitPrice === "string"
+            ? Number(line.unitPrice)
+            : (line.unitPrice as number);
+        if (!Number.isFinite(price) || price < 0) {
+          throw AppError.badRequest(
+            `Sipariş kalemi #${idx + 1}: birim fiyat negatif olamaz.`
+          );
+        }
+      }
+    });
+  }
+
+  /**
    * Hedef şubenin müşteriye ait + aktif olduğunu doğrular.
    * Aynı validasyon deseni shipping.service.ts:createShipment'te kullanılır.
    */
@@ -62,10 +95,34 @@ export class OrderService extends BaseService {
     if (!branch.isActive) throw AppError.badRequest("Şube pasif durumda");
   }
 
+  /**
+   * Müşterinin varlığını + aktifliğini doğrular. Pasif (soft-deleted) müşteriye
+   * yeni sipariş açılamaz — satış temsilcisi yanlış kayıt seçimini fark etmesin
+   * diye iş kuralı seviyesinde reddedilir.
+   */
+  private async validateCustomer(customerId: string): Promise<void> {
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true, isActive: true },
+    });
+    if (!customer) throw AppError.notFound("Müşteri bulunamadı");
+    if (!customer.isActive) {
+      throw AppError.badRequest(
+        "Müşteri pasif durumda. Aktif olmayan müşteriye sipariş açılamaz."
+      );
+    }
+  }
+
   async create(
     data: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    this.validateLines(data.lines);
+
+    if (data.customerId) {
+      await this.validateCustomer(data.customerId as string);
+    }
+
     if (data.branchId && data.customerId) {
       await this.validateBranch(
         data.branchId as string,

@@ -45,16 +45,20 @@ npm run dev
 
 ### Test Kullanıcıları
 
-| Kullanıcı | Şifre | Rol | Erişim |
+| Kullanıcı | Şifre | Hedef Rol | Seed Sonrası Yetki Durumu |
 |-----------|-------|-----|--------|
-| `admin` | `admin123` | Admin | **Tam yetki** — tüm endpoint'lere erişim |
-| `mehmet.planlama` | `test123` | Planlama Şefi | İş emri, sipariş okuma, top, tahsis |
-| `ali.operator` | `test123` | Üretim Operatörü | İş emri/top okuma, top yazma |
-| `ayse.kalite` | `test123` | Kalite Kontrol | Kalite, top okuma/yazma |
-| `fatma.satis` | `test123` | Satış Temsilcisi | Sipariş, müşteri |
-| `veli.sevkiyat` | `test123` | Sevkiyatçı | Sevkiyat, sipariş/top okuma |
+| `admin` | `admin123` | Admin | ✅ **Tam yetki** — tüm endpoint'lere erişim (~50 permission seed'de atanıyor) |
+| `mehmet.planlama` | `test123` | Planlama Şefi (hedef) | ⚠️ **Yetkisiz başlar** — login olur ama her endpoint'te `403` alır |
+| `ali.operator` | `test123` | Üretim Operatörü (hedef) | ⚠️ **Yetkisiz başlar** |
+| `ayse.kalite` | `test123` | Kalite Kontrol (hedef) | ⚠️ **Yetkisiz başlar** |
+| `fatma.satis` | `test123` | Satış Temsilcisi (hedef) | ⚠️ **Yetkisiz başlar** |
+| `veli.sevkiyat` | `test123` | Sevkiyatçı (hedef) | ⚠️ **Yetkisiz başlar** |
+| `ali.kursun` | `test123` | Mobil — Kurşun/KK2 (hedef) | ⚠️ **Yetkisiz başlar** |
+| `ahmet.depo` | `test123` | Mobil — Depo/Sevkiyat/Tambur (hedef) | ⚠️ **Yetkisiz başlar** |
 
-> ⚠️ **Öneri:** İlk testleri `admin` ile yapın — tüm yetkilere sahiptir.
+> ⚠️ **ÖNEMLİ:** Yalnız `admin` seed'de yetkilendiriliyor. Diğer kullanıcılar yetkisiz başlar — admin UI'sından (`/admin/users/:id/permissions`) tek tek atanmalı. Bu bilinçli tasarım: production'da rol atamaları runtime yapılır. `prisma/seed.ts:163-173` ve `seed.ts:185` notlarına bakın.
+>
+> **Test ipucu:** Çoğu testi `admin` ile koşturun. Permission/RBAC testleri için belirli bir test kullanıcısına ihtiyacınız varsa, önce `admin` ile login olup `POST /api/admin/users/:id/permissions` ile atama yapın.
 
 ---
 
@@ -664,7 +668,7 @@ Bu senaryoları test ederek hata mesajlarının doğruluğunu kontrol edin:
 |---|------|---------------|
 | 1 | Login yanlış şifre ile | `401` — Kullanıcı adı veya şifre hatalı |
 | 2 | Token olmadan herhangi bir endpoint çağır | `401` — Token gerekli |
-| 3 | `ali.operator` ile `POST /api/orders` çağır | `403` — order:write yetkisi yok |
+| 3 | `ali.operator` ile `POST /api/orders` çağır | `403` — `order:write` yetkisi yok (seed'de hiç yetki verilmiyor; bkz. §1) |
 | 4 | `POST /api/items` aynı `code` ile iki kez | `409` — unique constraint |
 | 5 | `POST /api/orders` aynı `orderNumber` ile | `409` — unique constraint |
 | 6 | `POST /api/rolls/initial-entry` olmayan `itemId` ile | `404` — Ürün bulunamadı |

@@ -1,0 +1,83 @@
+import { Activity, Archive, FileCode2, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+
+export type SystemTileGroup = "activity" | "archive" | "config";
+
+export interface SystemTile {
+  key: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  to: string;
+  group: SystemTileGroup;
+  adminOnly?: boolean;
+}
+
+export interface SystemTileSection {
+  group: SystemTileGroup;
+  title: string;
+  description: string;
+}
+
+export const systemTileSections: SystemTileSection[] = [
+  {
+    group: "activity",
+    title: "Aktivite & Denetim",
+    description: "Sistemde ne olduğunu izlemek için canlı log görünümleri",
+  },
+  {
+    group: "archive",
+    title: "Arşiv",
+    description: "Eski log'ları arşive taşı veya geçmiş kayıtları ara",
+  },
+  {
+    group: "config",
+    title: "Yapılandırma",
+    description: "Sistem geneli ayarlar",
+  },
+];
+
+export const systemTiles: SystemTile[] = [
+  {
+    key: "activity",
+    title: "Aktivite Günlüğü",
+    description: "Son aylarda kim hangi kaydı değiştirdi (aktif tablo)",
+    icon: Activity,
+    to: "/system/activity",
+    group: "activity",
+  },
+  {
+    key: "logs",
+    title: "Sistem Kayıtları",
+    description: "Kimlik doğrulama ve sistem olayları (login, başlatma, hata)",
+    icon: FileCode2,
+    to: "/system/logs",
+    group: "activity",
+    adminOnly: true,
+  },
+  {
+    key: "archive",
+    title: "Aktivite Arşivi",
+    description: "Eski log'ları arşive taşı; tablo boyutu istatistikleri",
+    icon: Archive,
+    to: "/system/archive",
+    group: "archive",
+    adminOnly: true,
+  },
+  {
+    key: "archive-search",
+    title: "Arşiv Tarama",
+    description: "Aktivite Günlüğü'nün arşivlenmiş eski kayıtlarını ara",
+    icon: Search,
+    to: "/system/archive/search",
+    group: "archive",
+    adminOnly: true,
+  },
+  {
+    key: "settings",
+    title: "Görünüm Ayarları",
+    description: "Fiyat alanlarının arayüzde gösterilip gizlenmesi",
+    icon: SettingsIcon,
+    to: "/system/settings",
+    group: "config",
+  },
+];

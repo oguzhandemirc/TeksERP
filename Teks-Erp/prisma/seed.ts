@@ -79,6 +79,14 @@ async function main() {
     { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
     { code: "admin:settings", module: "ADMIN", category: "admin", description: "Sistem ayarları + log arşiv" },
     { code: "admin:*", module: "ADMIN", category: "admin", description: "Tüm admin yetkileri (wildcard)" },
+    // REPORTS — domain bazlı okuma yetkisi (her rapor sayfası kendi domain'inde)
+    { code: "report:production", module: "REPORTS", category: "web", description: "Üretim raporları" },
+    { code: "report:sales", module: "REPORTS", category: "web", description: "Sipariş & sevkiyat raporları" },
+    { code: "report:quality", module: "REPORTS", category: "web", description: "Kalite raporları" },
+    { code: "report:inventory", module: "REPORTS", category: "web", description: "Stok & depo raporları" },
+    { code: "report:subcontract", module: "REPORTS", category: "web", description: "Fason raporları" },
+    { code: "report:customer", module: "REPORTS", category: "web", description: "Müşteri / satış profil raporları" },
+    { code: "report:audit", module: "REPORTS", category: "web", description: "Sistem / audit raporları" },
 
     // ----- MOBİL EKRAN izinleri -----
     { code: "mobile:dokuma", module: "MOBILE", category: "mobile", description: "Dokuma ekranı" },

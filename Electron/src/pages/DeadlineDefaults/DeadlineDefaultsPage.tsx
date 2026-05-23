@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Save } from "lucide-react";
+import { CalendarClock, Save } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { RefreshButton } from "@/components/RefreshButton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,7 +24,7 @@ function parseSetting(value: string | undefined): number {
   return n;
 }
 
-export function PlanningDefaultsCard() {
+export function DeadlineDefaultsPage() {
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: [QUERY_KEY],
@@ -72,56 +74,77 @@ export function PlanningDefaultsCard() {
   });
 
   return (
-    <Card>
-      <CardHeader className="border-b">
-        <div className="text-sm font-medium">Termin Varsayılanları</div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Sipariş veya iş emri açılırken termin alanı boş bırakılırsa otomatik olarak bu gün sayısı eklenir.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4 p-5">
-        {query.isLoading ? (
-          <Skeleton className="h-24 w-full" />
-        ) : (
-          <PermissionGate
-            permission="admin:settings"
-            fallback={
-              <ReadOnlyView
-                orderValue={orderSaved}
-                woValue={woSaved}
-              />
-            }
-          >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <NumberSettingField
-                label="Sipariş termini"
-                hint="Sipariş açılışında deadline boşsa orderDate + N gün"
-                value={orderDraft}
-                onChange={setOrderDraft}
-              />
-              <NumberSettingField
-                label="İş emri planlama süresi"
-                hint="WO açılışında plannedEndDate boşsa start + N gün"
-                value={woDraft}
-                onChange={setWoDraft}
-              />
-            </div>
+    <div className="flex h-full flex-col">
+      <PageHeader
+        title="Termin Varsayılanları"
+        description="Sipariş ve iş emri açılışında termin alanı boş bırakılırsa kullanılacak gün sayıları."
+        actions={<RefreshButton queryKey={QUERY_KEY} />}
+      />
 
-            <div className="flex justify-end border-t pt-4">
-              <Button
-                size="sm"
-                disabled={!dirty || mut.isPending}
-                onClick={() => mut.mutate()}
-                className="gap-1.5"
-              >
-                <Save className="h-4 w-4" />
-                {mut.isPending ? "Kaydediliyor..." : "Kaydet"}
-              </Button>
-            </div>
-          </PermissionGate>
-        )}
-      </CardContent>
-    </Card>
+      <div className="flex-1 overflow-auto">
+        <div className="mx-auto max-w-2xl space-y-4 p-6">
+          <Card>
+            <CardContent className="flex gap-4 p-5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
+                <CalendarClock className="h-5 w-5" />
+              </div>
+              <div className="space-y-1.5 text-sm">
+                <p className="font-medium">Termin varsayılanı ne işe yarar?</p>
+                <p className="text-muted-foreground">
+                  Sipariş veya iş emri açılırken termin alanı boş bırakılırsa, bu sayılar otomatik olarak başlangıç tarihine eklenir.
+                </p>
+                <div className="mt-2 rounded-md border border-dashed bg-muted/40 p-3 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Örnek:</span> Sipariş tarihi 23.05.2026, sipariş termini 7 gün → otomatik termin <span className="font-medium text-foreground">30.05.2026</span>.
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="border-b">
+              <div className="text-sm font-medium">Varsayılan değerler</div>
+            </CardHeader>
+            <CardContent className="space-y-4 p-5">
+              {query.isLoading ? (
+                <Skeleton className="h-24 w-full" />
+              ) : (
+                <PermissionGate
+                  permission="admin:settings"
+                  fallback={<ReadOnlyView orderValue={orderSaved} woValue={woSaved} />}
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <NumberSettingField
+                      label="Sipariş termini"
+                      hint="Sipariş açılışında deadline boşsa orderDate + N gün"
+                      value={orderDraft}
+                      onChange={setOrderDraft}
+                    />
+                    <NumberSettingField
+                      label="İş emri planlama süresi"
+                      hint="WO açılışında plannedEndDate boşsa start + N gün"
+                      value={woDraft}
+                      onChange={setWoDraft}
+                    />
+                  </div>
+
+                  <div className="flex justify-end border-t pt-4">
+                    <Button
+                      size="sm"
+                      disabled={!dirty || mut.isPending}
+                      onClick={() => mut.mutate()}
+                      className="gap-1.5"
+                    >
+                      <Save className="h-4 w-4" />
+                      {mut.isPending ? "Kaydediliyor..." : "Kaydet"}
+                    </Button>
+                  </div>
+                </PermissionGate>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
   );
 }
 

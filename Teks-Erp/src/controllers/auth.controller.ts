@@ -50,9 +50,29 @@ export class AuthController {
    *         description: Geçersiz kimlik bilgisi
    */
   static async login(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const body = (() => {
+      try {
+        return loginSchema.parse(req.body);
+      } catch (error) {
+        next(error);
+        return null;
+      }
+    })();
+    if (!body) return;
+
+    const ipAddress = req.ip ?? null;
+
     try {
-      const body = loginSchema.parse(req.body);
       const result = await AuthService.login(body.username, body.password);
+
+      // SystemLog'a AUTH event (Sistem Kayıtları sayfası bunu okur).
+      void AuditService.logEvent({
+        category: "AUTH",
+        action: "LOGIN_SUCCESS",
+        userId: result.user.userId,
+        recordId: body.username,
+        ipAddress,
+      });
 
       res.status(200).json({
         success: true,
@@ -63,6 +83,13 @@ export class AuthController {
         message: "Giriş başarılı",
       });
     } catch (error) {
+      void AuditService.logEvent({
+        category: "AUTH",
+        action: "LOGIN_FAILED",
+        recordId: body.username,
+        ipAddress,
+        payload: { reason: error instanceof Error ? error.message : "unknown" },
+      });
       next(error);
     }
   }

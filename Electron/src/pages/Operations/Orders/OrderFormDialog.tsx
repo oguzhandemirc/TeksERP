@@ -90,7 +90,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className={pricingEnabled ? "max-w-5xl" : "max-w-3xl"}>
         <DialogHeader>
           <DialogTitle>{isEdit ? "Sipariş Düzenle" : "Yeni Sipariş"}</DialogTitle>
           <DialogDescription>

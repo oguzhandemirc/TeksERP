@@ -73,7 +73,11 @@ export class ProductionController {
   async stepAction(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = stepActionSchema.parse(req.body);
-      const result = await this.service.executeStepAction(body, req.user?.userId);
+      const result = await this.service.executeStepAction(
+        body,
+        req.user?.userId,
+        req.device?.machineId ?? null
+      );
       res.status(200).json(result);
     } catch (error) {
       next(error);

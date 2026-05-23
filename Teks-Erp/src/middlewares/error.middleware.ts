@@ -4,10 +4,12 @@
 
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "../utils/app-error";
+import { AuditService } from "../services/audit.service";
+import "../types/express-augment";
 
 export const errorHandler = (
   err: Error,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void => {
@@ -81,8 +83,25 @@ export const errorHandler = (
     return;
   }
 
-  // Unknown / unexpected errors
+  // Unknown / unexpected errors → SystemLog'a SYSTEM/ERROR yaz.
+  // AppError ve bilinen validation/Prisma error'ları yukarıda 4xx olarak
+  // dönmüş; buraya düşen her şey gerçek 5xx olarak değerlendirilir.
   console.error("Unhandled Exception:", err);
+
+  void AuditService.logEvent({
+    category: "SYSTEM",
+    action: "ERROR",
+    userId: req.user?.userId,
+    recordId: err.name || "UnhandledException",
+    ipAddress: req.ip ?? null,
+    payload: {
+      message: err.message,
+      stack: err.stack?.split("\n").slice(0, 8).join("\n"),
+      method: req.method,
+      path: req.originalUrl,
+    },
+  });
+
   res.status(500).json({
     success: false,
     message: "Sunucu hatası oluştu.",

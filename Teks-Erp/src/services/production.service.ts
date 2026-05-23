@@ -49,7 +49,8 @@ export class ProductionService {
       newWeight?: number;
       reason?: string; // SKIP için zorunlu
     },
-    userId?: string
+    userId?: string,
+    machineId?: string | null
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const roll = await prisma.roll.findUnique({ where: { barcode: data.barcode } });
     if (!roll) {
@@ -102,11 +103,11 @@ export class ProductionService {
 
     switch (data.action) {
       case "START":
-        return this.handleStepStart(currentStep, roll, userId);
+        return this.handleStepStart(currentStep, roll, userId, machineId);
       case "FINISH":
-        return this.handleStepFinish(currentStep, roll, data, userId);
+        return this.handleStepFinish(currentStep, roll, data, userId, machineId);
       case "SKIP":
-        return this.handleStepSkip(currentStep, roll, data.reason ?? "", userId);
+        return this.handleStepSkip(currentStep, roll, data.reason ?? "", userId, machineId);
       default:
         throw AppError.badRequest(`Bilinmeyen action: ${data.action}`);
     }
@@ -265,7 +266,8 @@ export class ProductionService {
   private async handleStepStart(
     step: WorkOrderStep & { station: { name: string } },
     roll: { id: string; currentQty: number; weightKg: number | null },
-    userId?: string
+    userId?: string,
+    machineId?: string | null
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const { active, completed } = await getRollStepState(
       prisma as unknown as Prisma.TransactionClient,
@@ -303,7 +305,19 @@ export class ProductionService {
             qtyIn: roll.currentQty,
             weightIn: roll.weightKg,
             operatorId: userId ?? null,
+            machineId: machineId ?? null,
           },
+        });
+      } else if (machineId) {
+        // Movement zaten açıksa ama machineId boşsa, START anında doldur
+        await tx.rollMovement.updateMany({
+          where: {
+            rollId: roll.id,
+            workOrderStepId: step.id,
+            exitedAt: null,
+            machineId: null,
+          },
+          data: { machineId },
         });
       }
       await recomputeStepStatus(tx, step.id);
@@ -337,7 +351,8 @@ export class ProductionService {
     },
     roll: { id: string; currentQty: number; weightKg: number | null },
     data: { newQty?: number; newWeight?: number },
-    userId?: string
+    userId?: string,
+    machineId?: string | null
   ): Promise<ApiResponse<Record<string, unknown>>> {
     // Roll bazlı kontrol: bu top bu step'te gerçekten aktif mi?
     const active = await isRollActiveInStep(
@@ -377,7 +392,9 @@ export class ProductionService {
     const newWeight = data.newWeight ?? roll.weightKg;
 
     await prisma.$transaction(async (tx) => {
-      // Açık RollMovement'i kapat
+      // Açık RollMovement'i kapat — FINISH anında machineId boşsa doldur,
+      // doluysa overwrite etme (rulo birden fazla makineden geçmedi varsayımıyla
+      // başlangıçtaki makine kaydı korunur).
       await tx.rollMovement.updateMany({
         where: {
           rollId: roll.id,
@@ -390,6 +407,16 @@ export class ProductionService {
           weightOut: newWeight,
         },
       });
+      if (machineId) {
+        await tx.rollMovement.updateMany({
+          where: {
+            rollId: roll.id,
+            workOrderStepId: step.id,
+            machineId: null,
+          },
+          data: { machineId },
+        });
+      }
 
       // Top miktar/kilo güncelle
       await tx.roll.update({
@@ -493,7 +520,8 @@ export class ProductionService {
     },
     roll: { id: string; currentQty: number; weightKg: number | null },
     reason: string,
-    userId?: string
+    userId?: string,
+    machineId?: string | null
   ): Promise<ApiResponse<Record<string, unknown>>> {
     if (reason.trim().length < 3) {
       throw AppError.badRequest("Atlama için gerekçe zorunlu (en az 3 karakter)");
@@ -537,8 +565,19 @@ export class ProductionService {
             weightOut: roll.weightKg,
             exitedAt: new Date(),
             operatorId: userId ?? null,
+            machineId: machineId ?? null,
             notes: `SKIPPED: ${reason}`,
           },
+        });
+      } else if (machineId) {
+        await tx.rollMovement.updateMany({
+          where: {
+            rollId: roll.id,
+            workOrderStepId: step.id,
+            exitedAt: null,
+            machineId: null,
+          },
+          data: { machineId },
         });
       }
 

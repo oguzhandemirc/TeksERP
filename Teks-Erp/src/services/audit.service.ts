@@ -14,6 +14,7 @@ const ARCHIVE_BATCH_SIZE = 5000;
 export class AuditService {
   /**
    * Log a Create/Update/Delete operation to SystemLog.
+   * Bu yol DOMAIN kategorisini doldurur (Activity Page'in beslendiği kanal).
    */
   static async log(params: {
     userId: string | undefined;
@@ -27,6 +28,7 @@ export class AuditService {
       await prisma.systemLog.create({
         data: {
           userId: params.userId ?? null,
+          category: "DOMAIN",
           action: params.action,
           tableName: params.tableName,
           recordId: params.recordId,
@@ -37,6 +39,41 @@ export class AuditService {
     } catch (error) {
       // Audit logging should never crash the main operation
       console.error("[audit]: Failed to write SystemLog:", error);
+    }
+  }
+
+  /**
+   * Log non-CUD system events (auth, startup, errors). Sistem Kayıtları
+   * sayfasının beslendiği kanal.
+   *
+   * - category="AUTH": tableName="AUTH", recordId=username, action="LOGIN_SUCCESS"/"LOGIN_FAILED"
+   * - category="SYSTEM": tableName="SYSTEM", recordId="-" veya error code, action="STARTUP"/"ERROR"
+   *
+   * newData payload'ı serbest — username, reason, stack özeti, env vs.
+   */
+  static async logEvent(params: {
+    category: "AUTH" | "SYSTEM";
+    action: string;
+    userId?: string | null;
+    tableName?: string;
+    recordId?: string;
+    ipAddress?: string | null;
+    payload?: Record<string, unknown> | null;
+  }): Promise<void> {
+    try {
+      await prisma.systemLog.create({
+        data: {
+          userId: params.userId ?? null,
+          category: params.category,
+          action: params.action,
+          tableName: params.tableName ?? params.category,
+          recordId: params.recordId ?? "-",
+          ipAddress: params.ipAddress ?? null,
+          newData: (params.payload ?? Prisma.JsonNull) as JsonValue,
+        },
+      });
+    } catch (error) {
+      console.error("[audit]: Failed to write event SystemLog:", error);
     }
   }
 

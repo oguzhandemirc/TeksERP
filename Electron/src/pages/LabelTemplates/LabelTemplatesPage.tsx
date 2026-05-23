@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Star, StarOff, Trash2, Pencil } from "lucide-react";
@@ -16,16 +17,18 @@ import {
   labelTemplateService,
   type LabelTemplate,
 } from "@/services/labelTemplateService";
-import { LabelTemplateEditor } from "./LabelTemplateEditor";
 import { NewTemplateDialog } from "./NewTemplateDialog";
 
 const QUERY_KEY = "label-templates";
 
 export function LabelTemplatesPage() {
+  const navigate = useNavigate();
   const [activeKind, setActiveKind] = useState<LabelKind>(LabelKind.ROLL);
   const [newOpen, setNewOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleEdit = (id: string) =>
+    navigate(`/definitions/label-templates/${id}`);
 
   return (
     <div className="flex h-full flex-col">
@@ -58,7 +61,7 @@ export function LabelTemplatesPage() {
             <TabsContent key={k} value={k} className="mt-3">
               <TemplateList
                 kind={k}
-                onEdit={setEditingId}
+                onEdit={handleEdit}
                 onDelete={setDeletingId}
               />
             </TabsContent>
@@ -70,11 +73,6 @@ export function LabelTemplatesPage() {
         open={newOpen}
         onOpenChange={setNewOpen}
         defaultKind={activeKind}
-      />
-
-      <LabelTemplateEditor
-        templateId={editingId}
-        onClose={() => setEditingId(null)}
       />
 
       <DeleteConfirm

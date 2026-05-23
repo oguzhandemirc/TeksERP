@@ -42,6 +42,10 @@ import labelTemplateRoutes from "./routes/label-template.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
 import adminRoutes from "./routes/admin.routes";
+import dashboardRoutes from "./routes/dashboard.routes";
+import reportsRoutes from "./routes/reports.routes";
+import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
+import { resolveDevice } from "./middlewares/device.middleware";
 
 const app: Express = express();
 
@@ -55,6 +59,9 @@ app.use(cors());
 app.use(compression({ threshold: 1024 }));
 app.use(express.json());
 app.use(morgan("dev"));
+
+// x-device-id header'ı varsa req.device'a Device + machineId çöz
+app.use(resolveDevice);
 
 // =============================================================================
 // Swagger UI Documentation
@@ -105,6 +112,10 @@ app.use("/api/label-templates", labelTemplateRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/reports", reportsRoutes);
+app.use("/api/devices", devicePublicRouter);
+app.use("/api/admin/devices", deviceAdminRouter);
 
 // =============================================================================
 // Global Error Handler (must be LAST middleware)

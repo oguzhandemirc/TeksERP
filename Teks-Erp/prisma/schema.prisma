@@ -200,6 +200,7 @@ model User {
   manualClosedOrders     Order[]                 @relation("OrderManualClosedBy")
   systemSettingsUpdates  SystemSetting[]
   shipmentPlanItemsAdded ShipmentPlannedOrder[]  @relation("ShipmentPlannedOrderAddedBy")
+  createdPairingCodes    PairingCode[]           @relation("PairingCodeCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -332,14 +333,61 @@ model Machine {
   isActive  Boolean @default(true)
 
   // Relations
-  station Station      @relation(fields: [stationId], references: [id])
-  logs    MachineLog[]
+  station        Station         @relation(fields: [stationId], references: [id])
+  logs           MachineLog[]
+  devices        Device[]
+  pairingCodes   PairingCode[]
+  rollOperations RollOperation[]
+  rollMovements  RollMovement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([stationId])
   @@map("machines")
+}
+
+/// Sahada makinenin yanında sabit duran tablet/cihaz.
+/// `deviceId` tablet ilk açılışta üretilen, AsyncStorage'da kalıcı UUID.
+/// `machineId` null ise cihaz henüz eşlenmemiş — pairing ekranı gerekir.
+/// Cihaz değişmedikçe operatör değişse bile hangi makinede işlendiği bilinir.
+model Device {
+  id         String    @id @default(uuid())
+  deviceId   String    @unique // Tablet local UUID
+  name       String // Admin'in verdiği etiket — "Tambur-1 Tablet"
+  machineId  String?
+  lastSeenAt DateTime?
+  isActive   Boolean   @default(true)
+
+  // Relations
+  machine Machine? @relation(fields: [machineId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([machineId])
+  @@map("devices")
+}
+
+/// Tablet eşleştirmesi için admin tarafından üretilen tek seferlik 6 haneli kod.
+/// `expiresAt` sonrası geçersiz; `usedAt` doldurulduğunda yeniden kullanılamaz.
+model PairingCode {
+  code         String    @id // 6 haneli (000000-999999)
+  machineId    String
+  deviceName   String // Eşleşmeden önce admin'in girdiği etiket
+  createdById  String?
+  expiresAt    DateTime
+  usedAt       DateTime?
+  usedDeviceId String?
+
+  machine   Machine @relation(fields: [machineId], references: [id])
+  createdBy User?   @relation("PairingCodeCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([machineId])
+  @@index([expiresAt])
+  @@map("pairing_codes")
 }
 
 model Route {
@@ -1026,6 +1074,9 @@ model RollOperation {
   workOrderStepId           String
   operationType             RollOperationType
   operatorId                String?
+  /// Aynı istasyonda birden fazla makine varsa hangisinde işlendiğinin kaydı.
+  /// İşlemin tabletten geldiği durumlarda Device→Machine üzerinden otomatik dolar.
+  machineId                 String?
   metadata                  Json? // Operasyona özgü veri (qty, weight, cutPoints, foldType vb.)
   /// Tambur bölünmesinde parent'tan kopyalanan op'larda parent.id; orijinal kayıtlarda null.
   /// Aggregation/istatistik sorguları bu satırları "WHERE inheritedFromParentRollId IS NULL"
@@ -1036,6 +1087,7 @@ model RollOperation {
   roll                Roll          @relation(fields: [rollId], references: [id])
   step                WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
   operator            User?         @relation(fields: [operatorId], references: [id])
+  machine             Machine?      @relation(fields: [machineId], references: [id])
   inheritedFromParent Roll?         @relation("RollOperationInherited", fields: [inheritedFromParentRollId], references: [id])
 
   createdAt DateTime @default(now())
@@ -1045,6 +1097,7 @@ model RollOperation {
   @@index([workOrderStepId])
   @@index([operationType])
   @@index([operatorId])
+  @@index([machineId])
   @@index([inheritedFromParentRollId])
   @@map("roll_operations")
 }
@@ -1296,12 +1349,15 @@ model RollMovement {
   enteredAt       DateTime  @default(now())
   exitedAt        DateTime?
   operatorId      String?
+  /// Aynı istasyonda birden fazla makine varsa hangisinde işlendiğinin kaydı.
+  machineId       String?
   notes           String?
 
   // Relations
   roll     Roll          @relation(fields: [rollId], references: [id])
   step     WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
   operator User?         @relation(fields: [operatorId], references: [id])
+  machine  Machine?      @relation(fields: [machineId], references: [id])
 
   createdAt DateTime @default(now())
 
@@ -1309,6 +1365,7 @@ model RollMovement {
   @@index([workOrderStepId])
   @@index([enteredAt])
   @@index([operatorId])
+  @@index([machineId])
   @@map("roll_movements")
 }
 
@@ -1927,9 +1984,12 @@ model StationProperty {
 model SystemLog {
   id        String  @id @default(uuid())
   userId    String?
-  action    String // "CREATE", "UPDATE", "DELETE"
-  tableName String // e.g. "ORDER", "WORK_ORDER" (entityType in spec)
-  recordId  String // ID of the affected record
+  // "DOMAIN" (CUD audit, default) | "AUTH" (login_success/failed) | "SYSTEM" (startup/error)
+  category  String  @default("DOMAIN")
+  action    String // DOMAIN: CREATE/UPDATE/DELETE — AUTH: LOGIN_SUCCESS/LOGIN_FAILED — SYSTEM: STARTUP/ERROR
+  tableName String // domain table OR event source (e.g. "AUTH", "SYSTEM")
+  recordId  String // record id OR target identifier (username, error code, "-")
+  ipAddress String? // AUTH/SYSTEM event'leri için kaynak IP
   oldData   Json?
   newData   Json?
 
@@ -1943,6 +2003,9 @@ model SystemLog {
   @@index([tableName, recordId])
   // Audit tablosu en hızlı büyüyen tablodur — zaman aralığı sorguları için
   @@index([createdAt])
+  // Activity Page (DOMAIN) ve Sistem Kayıtları (AUTH/SYSTEM) ayrı liste sorgularını
+  // tek index scan ile karşılar.
+  @@index([category, createdAt])
   @@map("system_logs")
 }
 
@@ -1952,9 +2015,11 @@ model SystemLog {
 model SystemLogArchive {
   id         String   @id // Orijinal UUID — arşivleme sonrası aynı kalır
   userId     String?
+  category   String   @default("DOMAIN")
   action     String
   tableName  String
   recordId   String
+  ipAddress  String?
   oldData    Json?
   newData    Json?
   archivedAt DateTime @default(now())
@@ -1963,5 +2028,6 @@ model SystemLogArchive {
 
   @@index([tableName, recordId])
   @@index([createdAt])
+  @@index([category, createdAt])
   @@map("system_log_archives")
 }

@@ -89,7 +89,8 @@ export class KursunQcController {
       const body = applyKursunSchema.parse(req.body);
       const result = await this.service.applyKursun(
         { rollId: body.rollId, stepId: body.stepId, notes: body.notes ?? null },
-        req.user?.userId
+        req.user?.userId,
+        req.device?.machineId ?? null
       );
       res.status(201).json(result);
     } catch (err) {
@@ -117,7 +118,8 @@ export class KursunQcController {
       const body = completeQc2Schema.parse(req.body);
       const result = await this.service.completeQc2(
         { rollId: body.rollId, stepId: body.stepId, notes: body.notes ?? null },
-        req.user?.userId
+        req.user?.userId,
+        req.device?.machineId ?? null
       );
       res.status(201).json(result);
     } catch (err) {

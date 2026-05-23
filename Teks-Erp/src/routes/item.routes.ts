@@ -68,7 +68,7 @@ const addAllowedPropertyBody = z.object({
  *       401:
  *         description: Yetkisiz erişim
  */
-router.get("/", verifyToken, controller.findAll);
+router.get("/", verifyToken, requirePermission("item:read"), controller.findAll);
 
 /**
  * @openapi
@@ -89,7 +89,7 @@ router.get("/", verifyToken, controller.findAll);
  *       404:
  *         description: Kayıt bulunamadı
  */
-router.get("/:id", verifyToken, controller.findById);
+router.get("/:id", verifyToken, requirePermission("item:read"), controller.findById);
 
 /**
  * @openapi

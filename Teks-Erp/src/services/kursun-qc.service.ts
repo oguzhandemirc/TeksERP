@@ -176,7 +176,8 @@ export class KursunQcService {
    */
   async applyKursun(
     data: { rollId: string; stepId: string; notes?: string | null },
-    userId?: string
+    userId?: string,
+    machineId?: string | null
   ): Promise<ApiResponse<RollOperation>> {
     await this.assertRollInStep(data.rollId, data.stepId, StationKind.PROCESS_QC);
 
@@ -193,6 +194,7 @@ export class KursunQcService {
         workOrderStepId: data.stepId,
         operationType: RollOperationType.KURSUN_APPLIED,
         operatorId: userId ?? null,
+        machineId: machineId ?? null,
         metadata: data.notes ? { notes: data.notes } : undefined,
       },
       update: {}, // idempotent
@@ -273,7 +275,8 @@ export class KursunQcService {
    */
   async completeQc2(
     data: { rollId: string; stepId: string; notes?: string | null },
-    userId?: string
+    userId?: string,
+    machineId?: string | null
   ): Promise<ApiResponse<RollOperation>> {
     await this.assertRollInStep(data.rollId, data.stepId, StationKind.PROCESS_QC);
 
@@ -290,6 +293,7 @@ export class KursunQcService {
         workOrderStepId: data.stepId,
         operationType: RollOperationType.QC2_COMPLETED,
         operatorId: userId ?? null,
+        machineId: machineId ?? null,
         metadata: data.notes ? { notes: data.notes } : undefined,
       },
       update: {},

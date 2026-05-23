@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { storage } from '../utils/storage';
 import { API_URL } from '../constants/api';
+import { getOrCreateDeviceId } from '../utils/deviceId';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -16,6 +17,13 @@ export const setUnauthorizedHandler = (fn: () => void) => {
 apiClient.interceptors.request.use(async (config) => {
   const token = await storage.getItem('auth_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Backend bu header'ı Device → Machine'a çözer; rolMovement/rollOperation kayıtlarına yazılır.
+  try {
+    const deviceId = await getOrCreateDeviceId();
+    if (deviceId) config.headers['x-device-id'] = deviceId;
+  } catch {
+    // header yoksa backend normal çalışmaya devam eder
+  }
   return config;
 });
 

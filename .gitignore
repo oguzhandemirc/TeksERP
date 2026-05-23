@@ -6,3 +6,7 @@ build
 coverage
 .cursor/
 React/
+
+# Test artefaktları (token, raporlar)
+test-results/
+TEST_BUG_REPORT.md

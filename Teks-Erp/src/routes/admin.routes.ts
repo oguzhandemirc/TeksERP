@@ -9,6 +9,7 @@ import { AuditService } from "../services/audit.service";
 import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
 import { systemSettingService } from "../services/system-setting.service";
+import { SystemLogService } from "../services/system-log.service";
 import { AppError } from "../utils/app-error";
 import prisma from "../lib/prisma";
 import { z } from "zod";
@@ -560,18 +561,185 @@ router.get(
   requirePermission("admin:settings"),
   async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const [activeCount, archiveCount, oldest] = await Promise.all([
+      const [activeCount, archiveCount, oldest, lastRun] = await Promise.all([
         prisma.systemLog.count(),
         prisma.systemLogArchive.count(),
         prisma.systemLog.findFirst({
           orderBy: { createdAt: "asc" },
           select: { createdAt: true },
         }),
+        prisma.systemSetting.findUnique({
+          where: { key: "audit.lastArchiveAt" },
+          select: { value: true },
+        }),
       ]);
       res.status(200).json({
         success: true,
-        data: { activeCount, archiveCount, oldestLog: oldest?.createdAt ?? null },
+        data: {
+          activeCount,
+          archiveCount,
+          oldestLog: oldest?.createdAt ?? null,
+          lastAutoArchiveAt: lastRun?.value ?? null,
+        },
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================================================
+// SYSTEM LOG READ (Aktivite Günlüğü)
+// =============================================================================
+// Yüksek hacimli tablo — cursor pagination, count yok, payload listede yok.
+// =============================================================================
+
+const systemLogListQuerySchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  userId: z.string().uuid().optional(),
+  tableName: z.string().min(1).max(100).optional(),
+  // category: tekil "DOMAIN" / "AUTH" / "SYSTEM" veya virgülle ayrılmış "AUTH,SYSTEM".
+  category: z
+    .string()
+    .regex(/^[A-Z_,]+$/i, "Geçersiz kategori")
+    .max(60)
+    .optional(),
+  // action artık DOMAIN için CREATE/UPDATE/DELETE, AUTH için LOGIN_*, SYSTEM için STARTUP/ERROR.
+  // Listede serbest string kabul edilir (frontend hardcoded enum gönderir).
+  action: z.string().min(1).max(40).optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
+});
+
+/**
+ * @openapi
+ * /api/admin/system-logs:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Sistem log listesi (cursor pagination, JSON payload listede yok)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/system-logs",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const params = systemLogListQuerySchema.parse(req.query);
+      const result = await SystemLogService.list(params);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/system-logs/users:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Filter dropdown — log'u olan kullanıcılar
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/system-logs/users",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const data = await SystemLogService.listActiveUsers();
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/system-logs/tables:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Filter dropdown — sistemde log'u olan tablo adları
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/system-logs/tables",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const data = await SystemLogService.listActiveTables();
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/system-logs/archive:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Arşivlenmiş log listesi (cursor pagination)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/system-logs/archive",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const params = systemLogListQuerySchema.parse(req.query);
+      const result = await SystemLogService.listArchive(params);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/system-logs/archive/{id}:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Tek arşiv kaydı (oldData/newData JSON dahil)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/system-logs/archive/:id",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await SystemLogService.findArchiveById(req.params.id as string);
+      res.status(result.success ? 200 : 404).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/system-logs/{id}:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Tek log kaydı (oldData/newData JSON dahil)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/system-logs/:id",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await SystemLogService.findById(req.params.id as string);
+      res.status(result.success ? 200 : 404).json(result);
     } catch (error) {
       next(error);
     }

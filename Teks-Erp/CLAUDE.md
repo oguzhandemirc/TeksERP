@@ -18,6 +18,19 @@ npm run lint                 # ESLint
 npx tsc --noEmit             # Type-check
 ```
 
+### Pull sonrası senkronizasyon (yeni dev / `git pull` sonrası ZORUNLU sıra)
+
+Eksik adım = sessiz bozulma. `prisma generate` atlanırsa TS derlenmez (`Property 'X' does not exist on type Y`); `migrate dev` atlanırsa runtime'da `P2022 — column X does not exist` ile audit log sessizce kaybolur ve server çalışmaya devam eder (best-effort audit). Doğru sıra:
+
+```bash
+npm install                  # package.json değiştiyse
+npm run prisma:generate      # schema.prisma güncellendiyse client yenilensin
+npx prisma migrate dev       # pending migration varsa DB'ye uygula (dev)
+npm run dev                  # sunucuyu kaldır
+```
+
+Production'da `migrate dev` yerine `npm run prisma:migrate` (= `prisma migrate deploy`) kullanılır.
+
 ## Environment (`.env`)
 
 ```

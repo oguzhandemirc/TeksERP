@@ -12,6 +12,17 @@ import { JwtPayload } from "./api.types";
 declare module "express-serve-static-core" {
   interface Request {
     user?: JwtPayload;
+    /**
+     * Mobil tabletten gelen x-device-id header'ı çözümlendiğinde dolu olur.
+     * machineId null ise cihaz eşleşmemiş demektir; ilgili işlem yine de kaydedilebilir
+     * (geriye uyum) ama hangi makineye ait olduğu bilinmez.
+     */
+    device?: {
+      id: string;
+      deviceId: string;
+      name: string;
+      machineId: string | null;
+    };
   }
 }
 
