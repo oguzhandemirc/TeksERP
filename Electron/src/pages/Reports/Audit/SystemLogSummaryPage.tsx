@@ -9,18 +9,17 @@ import {
   SimplePieChart,
 } from "../_components";
 import { fmtDayShort, fmtInt } from "../_components/formatters";
+import { actionLabel, tableLabel } from "../_components/audit-labels";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { auditReportsApi } from "./service";
 
-const ACTION_LABEL: Record<string, string> = {
-  CREATE: "Oluştur",
-  UPDATE: "Güncelle",
-  DELETE: "Sil",
-};
-
 interface TableRow { tableName: string; count: number }
 const tableColumns: ColumnDef<TableRow>[] = [
-  { accessorKey: "tableName", header: "Tablo" },
+  {
+    accessorKey: "tableName",
+    header: "Tablo",
+    cell: ({ getValue }) => tableLabel(getValue() as string),
+  },
   { accessorKey: "count", header: "Kayıt", cell: ({ getValue }) => fmtInt(getValue() as number) },
 ];
 
@@ -35,7 +34,7 @@ export function SystemLogSummaryPage() {
 
   const s = data?.data;
   const pieData = (s?.byAction ?? []).map((a) => ({
-    name: ACTION_LABEL[a.action] ?? a.action,
+    name: actionLabel(a.action),
     value: a.count,
   }));
 
