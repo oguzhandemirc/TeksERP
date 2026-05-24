@@ -117,7 +117,7 @@ export async function getOpenDispatches(): Promise<OpenDispatchRow[]> {
       sd."dispatchNo"                                           AS "dispatchNo",
       sd."dispatchedAt"                                         AS "dispatchedAt",
       sub.name                                                  AS "subcontractorName",
-      wo."workOrderNumber"                                      AS "workOrderNumber",
+      wo."batchNumber"                                          AS "workOrderNumber",
       COUNT(*) FILTER (WHERE r."sourceDispatchItemId" IS NULL)  AS "openItems",
       COUNT(*)                                                  AS "totalItems"
     FROM subcontractor_dispatches sd
@@ -126,7 +126,7 @@ export async function getOpenDispatches(): Promise<OpenDispatchRow[]> {
     JOIN subcontractor_dispatch_items sdi         ON sdi."dispatchId" = sd.id
     LEFT JOIN subcontractor_receipt_items r       ON r."sourceDispatchItemId" = sdi.id
     WHERE sd."cancelledAt" IS NULL
-    GROUP BY sd.id, sd."dispatchNo", sd."dispatchedAt", sub.name, wo."workOrderNumber"
+    GROUP BY sd.id, sd."dispatchNo", sd."dispatchedAt", sub.name, wo."batchNumber"
     HAVING COUNT(*) FILTER (WHERE r."sourceDispatchItemId" IS NULL) > 0
     ORDER BY sd."dispatchedAt" ASC
     LIMIT 200
