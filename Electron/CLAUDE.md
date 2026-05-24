@@ -126,6 +126,34 @@ Sidebar'da **her tanım ayrı satır YOK.** Tek "Tanımlar" girişi var; tıklay
 - **Page bileşeni 200 satırı geçmesin.** Form/tablo/dialog ayrı dosyaya çıkar.
 - **`columns.tsx`, `schema.ts`, `service.ts`, `types.ts` ayrı tut** — yeniden kullanılabilir.
 
+## Picker / Dropdown Veri Çekme Kuralı
+
+Master data picker'ları ("tümünü tek seferde göster" davranışı: renk seçici,
+özellik seçici, izinli ürün listesi, vb.) için **`loadAllForPicker(service)`**
+helper'ı kullan (`src/lib/picker-loader.ts`).
+
+```tsx
+// ✓ DOĞRU
+const { data } = useQuery({
+  queryKey: ["colors", "picker"],
+  queryFn: () => loadAllForPicker(colorService),
+});
+
+// ✗ YANLIŞ — backend MAX_PAGE_SIZE değiştiğinde 400 alır
+const { data } = useQuery({
+  queryFn: () => colorService.getAll({ page: 1, pageSize: 500, ... }),
+});
+```
+
+**Neden:** Backend `MAX_PAGE_SIZE` zamanla değişti (100 → 200 → 500); inline
+`pageSize: N` kullanan picker'lar her değişiklikte 400 üretti. Helper backend
+sınırıyla senkron tek kaynak (`PICKER_MAX_PAGE_SIZE`). Aşılırsa explicit
+hata fırlatır — sessiz kesilmiş veri yerine cursor mode'a yönlendirir.
+
+**Picker dataset > 500:** Master data normalde bu sınırı aşmaz. Aşıyorsa
+dropdown UX zaten bozulur; arama tabanlı combobox (filter-as-you-type +
+`listCursor`) gerek. `loadAllForPicker` Error fırlatıyor — UI'da yakalanmalı.
+
 ## Allowed Packages
 
 Yenisi için onay al. Mevcutlar:
