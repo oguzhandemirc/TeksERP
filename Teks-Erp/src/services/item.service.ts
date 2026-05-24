@@ -15,6 +15,7 @@ import { AuditService } from "./audit.service";
 import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
+import { validateName, validateCode } from "../lib/string-validators";
 
 export interface ItemCreateInput {
   code: string;
@@ -36,12 +37,17 @@ export class ItemService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     const input = data as unknown as ItemCreateInput;
 
-    if (!input.code || !input.code.trim()) {
-      throw AppError.badRequest("Ürün kodu zorunlu");
-    }
-    if (!input.name || !input.name.trim()) {
-      throw AppError.badRequest("Ürün ismi zorunlu");
-    }
+    // Code + name: trim, required, max length (paylaşımlı validator)
+    const validatedCode = validateCode(input.code, {
+      label: "Ürün kodu",
+      required: true,
+    });
+    if (typeof validatedCode === "string") input.code = validatedCode;
+    const validatedName = validateName(input.name, {
+      label: "Ürün ismi",
+      required: true,
+    });
+    if (typeof validatedName === "string") input.name = validatedName;
 
     const allowedColorIds = [...new Set(input.allowedColorIds ?? [])];
     const allowedPropertyIds = [...new Set(input.allowedPropertyIds ?? [])];
@@ -131,6 +137,15 @@ export class ItemService extends BaseService {
           `'${k}' alanı güncellenemez. Yeni bir ürün tanımlayın.`,
         );
       }
+    }
+
+    // name güncelleniyorsa length + trim kontrolü
+    if (data.name !== undefined) {
+      const validated = validateName(data.name, {
+        label: "Ürün ismi",
+        required: true,
+      });
+      if (typeof validated === "string") data.name = validated;
     }
 
     const allowedColorIds = data.allowedColorIds as string[] | undefined;

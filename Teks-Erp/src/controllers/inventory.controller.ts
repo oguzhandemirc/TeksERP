@@ -200,8 +200,20 @@ export class InventoryController {
    */
   async findRollByBarcode(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const barcode = req.params.barcode as string;
-      const result = await this.service.findRollByBarcode(barcode);
+      // `/barcode/` (trailing slash, boş) Express'te `:barcode` param'ını
+      // hiç route etmiyor; başka bir route'a düşüp (örn. `/:id`) yanıltıcı
+      // "Top bulunamadı" mesajı veriyordu. Şu kontrol explicit 400 verir.
+      // (Bu method'a giriyorsak param zaten matched ama yine de güvenlik
+      // ağı — whitespace-only veya bekleneneden farklı bir string).
+      const rawBarcode = req.params.barcode;
+      if (typeof rawBarcode !== "string" || rawBarcode.trim() === "") {
+        res.status(400).json({
+          success: false,
+          message: "Barkod parametresi gerekli",
+        });
+        return;
+      }
+      const result = await this.service.findRollByBarcode(rawBarcode.trim());
       if (!result.success) {
         res.status(404).json(result);
         return;

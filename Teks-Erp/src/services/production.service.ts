@@ -93,11 +93,12 @@ export class ProductionService {
     }
 
     // Fason (EXTERNAL) istasyonlarda operator START/FINISH yapamaz.
-    // Bu adımlar /api/subcontractor/dispatch ve /api/subcontractor/receive ile yönetilir.
+    // Sevk: POST /api/subcontractor/dispatch — Mal kabul: POST /api/subcontractor/receive
     if (currentStep.station.type === StationType.EXTERNAL && data.action !== "SKIP") {
       throw AppError.badRequest(
-        `"${currentStep.station.name}" fason/dış istasyonudur. ` +
-        `Bu adım için "Fason Sevk" veya "Fason Mal Kabul" ekranını kullanın.`
+        `"${currentStep.station.name}" fason/dış istasyonudur. step-action ` +
+          `bu adıma uygulanmaz. Sevk için POST /api/subcontractor/dispatch, ` +
+          `mal kabul için POST /api/subcontractor/receive kullanın.`
       );
     }
 
@@ -690,7 +691,6 @@ export class ProductionService {
     data: {
       rollId: string;
       startMeter: number;
-      endMeter: number;
       errorType?: string;
     },
     userId?: string
@@ -701,13 +701,11 @@ export class ProductionService {
       throw AppError.notFound("Top bulunamadı");
     }
 
-    if (data.startMeter >= data.endMeter) {
-      throw AppError.badRequest("Başlangıç metresi bitiş metresinden küçük olmalı");
-    }
-
-    if (data.endMeter > roll.currentQty) {
+    // Hata noktası top metrajı içinde olmalı (operatörden 999. metrede hata,
+    // ama top 500m gibi tutarsız giriş yakalanır).
+    if (data.startMeter > roll.currentQty) {
       throw AppError.badRequest(
-        `Bitiş metresi (${data.endMeter}) toplam metrajdan (${roll.currentQty}) büyük olamaz`
+        `Hata metresi (${data.startMeter}) toplam metrajdan (${roll.currentQty}) büyük olamaz`
       );
     }
 
@@ -715,7 +713,6 @@ export class ProductionService {
       data: {
         rollId: data.rollId,
         startMeter: data.startMeter,
-        endMeter: data.endMeter,
         errorType: data.errorType ?? null,
         isProcessed: false,
         // Lifecycle — top hangi adımdaysa orada tespit edildi varsay
@@ -732,7 +729,6 @@ export class ProductionService {
       newData: {
         rollId: data.rollId,
         startMeter: data.startMeter,
-        endMeter: data.endMeter,
         errorType: data.errorType,
       },
     });
@@ -740,7 +736,7 @@ export class ProductionService {
     return {
       success: true,
       data: rollError,
-      message: `Hata kaydı oluşturuldu: ${data.startMeter}m - ${data.endMeter}m`,
+      message: `Hata kaydı oluşturuldu: ${data.startMeter}. metrede`,
     };
   }
 

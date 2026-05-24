@@ -7,27 +7,40 @@ import { z } from "zod";
 import { TamburService } from "../services/tambur.service";
 import "../types/express-augment";
 
+// Tambur finalize — yeni model (cumulative length-based):
+//   cuts[]: operatörün tambur makinesinde yaptığı kesim sıralı listesi.
+//   Her kesim → yeni child Roll. `length` = o kesimin uzunluğu (sayaç
+//   sıfırdan başladığı için cumulative değil her cut bağımsız uzunluk).
+//   `relatedErrorIds` opsiyonel — operatör hangi defect için kestiğini
+//   belirtir (audit zinciri). Toplam(lengths) ≤ parent.currentQty; kalan
+//   kısım otomatik son top olur (parent.qualityGrade ile).
+//
+//   cuts boş gönderilirse: kesim yok, parent'ın tüm metrajı tek child top
+//   olarak depoya geçer (parent.qualityGrade).
+//
+//   decisions[]: defect lifecycle marker (NO_CUT veya CUT). Defect'ler
+//   `cuts[].relatedErrorIds`'da geçtiyse CUT işaretlenir; geçmediyse
+//   operatör defect'i bilerek bırakmış (NO_CUT, top içinde defect kalır).
 const finalizeSchema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
-  decisions: z.array(
-    z.object({
-      errorId: z.string().uuid("Geçersiz hata ID"),
-      decision: z.enum(["CUT", "NO_CUT"], { message: "Karar CUT veya NO_CUT olmalı" }),
-      qualityGrade: z.string().optional(),
-    })
-  ),
-  voluntaryCuts: z
+  cuts: z
     .array(
       z.object({
-        start: z.number().min(0, "Başlangıç 0 veya daha büyük olmalı"),
-        end: z.number().positive("Bitiş pozitif olmalı"),
+        length: z.number().positive("Kesim uzunluğu pozitif olmalı"),
         qualityGrade: z.string().min(1, "Kalite seçilmelidir"),
+        relatedErrorIds: z.array(z.string().uuid()).default([]),
+      })
+    )
+    .default([]),
+  decisions: z
+    .array(
+      z.object({
+        errorId: z.string().uuid("Geçersiz hata ID"),
+        decision: z.enum(["CUT", "NO_CUT"], { message: "Karar CUT veya NO_CUT olmalı" }),
       })
     )
     .default([]),
   foldType: z.enum(["2-KAT", "4-KAT"]).optional(),
-  cutMode: z.enum(["BY_DEFECT", "FIXED_LENGTH"]).nullish(),
-  cutLengthM: z.number().positive().nullish(),
 });
 
 const allocateSchema = z.object({
@@ -59,11 +72,11 @@ const swatchSchema = z.object({
   colorId: z.string().uuid().nullish(),
 });
 
+// Hata sadece NOKTA olarak girilir (startMeter); endMeter artık tutulmuyor.
 const reportErrorSchema = z.object({
   rollId: z.string().uuid(),
   stepId: z.string().uuid(),
   startMeter: z.number().min(0),
-  endMeter: z.number().positive(),
   defectTypeId: z.string().uuid(),
 });
 
@@ -274,16 +287,26 @@ export class TamburController {
   }
 
   /**
-   * POST /api/tambur/allocate
+   * POST /api/tambur/allocate — DEPRECATED.
+   *
+   * Eski allocate akışı `Roll.status === PRODUCED` bekliyordu; ancak tambur
+   * finalize (v3 cumulative length model) WAREHOUSE child Roll'lar üretiyor.
+   * State machine artık çakışıyor; ayrıca sack flow `assign-roll {orderLineId}`
+   * zaten OrderAllocation oluşturuyor (müşteri uyumu + eski allocation'ları
+   * temizleme dahil).
+   *
+   * Tek doğru yol: çuvala atarken sipariş bağla → `POST /api/sacks/assign-roll
+   * {sackId, rollId, orderLineId}`.
+   *
+   * Endpoint 410 Gone döner; service çağrılmaz.
    */
-  async allocate(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = allocateSchema.parse(req.body);
-      const result = await this.service.allocate(body, req.user?.userId);
-      res.status(201).json(result);
-    } catch (error) {
-      next(error);
-    }
+  async allocate(_req: Request, res: Response): Promise<void> {
+    res.status(410).json({
+      success: false,
+      message:
+        "Bu endpoint kullanım dışı (v3). Sipariş tahsisi için çuvala atarken " +
+        "orderLineId gönderin: POST /api/sacks/assign-roll {sackId, rollId, orderLineId}",
+    });
   }
 
   /** POST /api/tambur/split-allocate */

@@ -1027,14 +1027,14 @@ model DefectType {
 model RollError {
   id           String  @id @default(uuid())
   rollId       String
+  /// Hatanın tespit edildiği metre noktası (KK2 operatörü "60. metrede hata"
+  /// girer). Hata sadece NOKTA olarak takip edilir; aralık bilgisi tutulmaz.
+  /// Tambur operatörü ekranda bu noktayı görüp fiziksel kesim kararı verir.
   startMeter   Float
-  /// Hata bitiş metresi (cm/mt). Kurşun/KK2 operatörü çoğunlukla sadece
-  /// başlangıç metresi girer ("60. metrede hata") — bu yüzden NULL olabilir.
-  endMeter     Float?
   defectTypeId String?
   errorType    String? // DefectType.name snapshot (kayıt anında kopyalanır)
   isProcessed  Boolean @default(false) // Tambur kararı verildi mi?
-  actionTaken  String? // "CUT_FOR_SCRAP", "KEPT_AS_A1", "NO_ACTION"
+  actionTaken  String? // "CUT", "NO_CUT" (Tambur kararı)
 
   // Lifecycle — tespit (Kurşun/QC2) ve işlem (Tambur) ayrı izlenir.
   detectedAtStepId  String?

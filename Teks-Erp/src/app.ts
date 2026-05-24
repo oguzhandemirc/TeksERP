@@ -118,6 +118,22 @@ app.use("/api/devices", devicePublicRouter);
 app.use("/api/admin/devices", deviceAdminRouter);
 
 // =============================================================================
+// JSON 404 — tanımsız /api/* route'lar için
+// =============================================================================
+// Express default 404'ü HTML döner ("Cannot GET /api/foo") — JSON API contract'ı
+// bozar (frontend res.json() üzerinde parse hatası alır). Bu catch-all tüm
+// tanımsız /api path'leri için tutarlı JSON yanıt verir.
+//
+// Yalnız /api altına bind edildi — Swagger UI (/api-docs/*) ve /health
+// etkilenmez.
+app.use("/api", (req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    message: `Endpoint bulunamadı: ${req.method} ${req.originalUrl}`,
+  });
+});
+
+// =============================================================================
 // Global Error Handler (must be LAST middleware)
 // =============================================================================
 app.use(errorHandler);

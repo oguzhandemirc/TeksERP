@@ -23,10 +23,10 @@ const stepActionSchema = z
     { message: "SKIP action için reason zorunlu (en az 3 karakter)", path: ["reason"] }
   );
 
+// Hata sadece NOKTA olarak girilir (startMeter); aralık (endMeter) artık yok.
 const reportErrorSchema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
-  startMeter: z.number().min(0, "Başlangıç metresi 0 veya daha büyük olmalı"),
-  endMeter: z.number().positive("Bitiş metresi pozitif olmalı"),
+  startMeter: z.number().min(0, "Hata metresi 0 veya daha büyük olmalı"),
   errorType: z.string().optional(),
 });
 

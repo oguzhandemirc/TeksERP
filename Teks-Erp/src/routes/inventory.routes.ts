@@ -128,6 +128,19 @@ router.get("/", verifyToken, requirePermission("roll:read"), controller.findAllR
  */
 router.get("/barcode/:barcode", verifyToken, requirePermission("roll:read"), controller.findRollByBarcode);
 
+// `/barcode` veya `/barcode/` (boş param) — Express trailing slash'i strip
+// edip `/barcode` route'una yönlendirir; ardından `/:id` route'u "barcode"
+// string'ini UUID olarak doğrulamaya çalışır (BUG-17 sonrası 400 verir
+// ama mesajı yanıltıcı: "Geçersiz UUID 'barcode'"). Bu explicit route net
+// "Barkod parametresi gerekli" 400 verir, kullanıcı doğru endpoint'i
+// kullanmaya yönlenir.
+router.get("/barcode", verifyToken, requirePermission("roll:read"), (_req, res) => {
+  res.status(400).json({
+    success: false,
+    message: "Barkod parametresi gerekli. Kullanım: GET /api/rolls/barcode/<barkod>",
+  });
+});
+
 /**
  * @openapi
  * /api/rolls/{id}:

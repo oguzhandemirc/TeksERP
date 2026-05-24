@@ -2,7 +2,6 @@ import { app, BrowserWindow, nativeImage, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import log from "electron-log/main.js";
-import windowStateKeeper from "electron-window-state";
 import { registerIpcHandlers } from "./ipc/index.js";
 import { buildAppMenu } from "./menu.js";
 
@@ -36,13 +35,11 @@ async function loadRendererInto(window: BrowserWindow): Promise<void> {
 }
 
 async function createMainWindow(): Promise<void> {
-  const state = windowStateKeeper({ defaultWidth: 1440, defaultHeight: 900 });
-
   mainWindow = new BrowserWindow({
-    x: state.x,
-    y: state.y,
-    width: state.width,
-    height: state.height,
+    width: 1280,
+    height: 720,
+    center: true,
+    resizable: false,
     minWidth: 1100,
     minHeight: 700,
     title: "Adnan Şahin ERP",
@@ -59,12 +56,7 @@ async function createMainWindow(): Promise<void> {
     },
   });
 
-  state.manage(mainWindow);
-
-  mainWindow.once("ready-to-show", () => {
-    mainWindow?.maximize();
-    mainWindow?.show();
-  });
+  mainWindow.once("ready-to-show", () => mainWindow?.show());
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -75,6 +67,8 @@ async function createMainWindow(): Promise<void> {
   const finishSplash = async () => {
     if (splashFinished || !mainWindow || mainWindow.isDestroyed()) return;
     splashFinished = true;
+    mainWindow.setResizable(true);
+    mainWindow.maximize();
     await loadRendererInto(mainWindow);
   };
 

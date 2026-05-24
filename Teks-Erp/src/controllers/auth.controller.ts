@@ -180,9 +180,72 @@ export class AuthController {
    */
   static async me(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      // JWT payload (req.user) ham `iat`/`exp` claim'lerini içeriyor — domain
+      // modelinde anlamı yok, response'a sızdırmıyoruz. `fullName` UI için
+      // gerekli ama JWT'de tutulmuyor; tek küçük DB hit (PK by id) ile çekiyoruz.
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, message: "Token bulunamadı" });
+        return;
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, username: true, fullName: true, isActive: true },
+      });
+      if (!user || !user.isActive) {
+        res.status(401).json({ success: false, message: "Kullanıcı bulunamadı veya pasif" });
+        return;
+      }
+
       res.status(200).json({
         success: true,
-        data: req.user,
+        data: {
+          userId: user.id,
+          username: user.username,
+          fullName: user.fullName,
+          permissions: req.user?.permissions ?? [],
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/auth/logout:
+   *   post:
+   *     tags: [Auth]
+   *     summary: Çıkış (stateless — frontend token'ı silmeli)
+   *     description: |
+   *       Stateless logout: backend tarafında bir state tutulmaz çünkü JWT
+   *       self-contained ve revoke edilmez. Frontend bu endpoint'i çağırdıktan
+   *       sonra token'ı local storage'dan silmeli. Audit log için kullanıcı
+   *       çıkış event'i yazılır.
+   *
+   *       Çalınan/sızan token'ı erken iptal etme ihtiyacı doğarsa blacklist
+   *       (in-memory ya da DB) veya refresh-token mimarisi gerek. Şu an Phase 1
+   *       kapsamında değil.
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200: { description: Çıkış kaydedildi }
+   *       401: { description: Token yok ya da geçersiz }
+   */
+  static async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      void AuditService.logEvent({
+        category: "AUTH",
+        action: "LOGOUT",
+        userId: req.user?.userId,
+        recordId: req.user?.username ?? "-",
+        ipAddress: req.ip ?? null,
+      });
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Çıkış kaydedildi. Token'ı istemci tarafında silin (stateless logout).",
       });
     } catch (error) {
       next(error);

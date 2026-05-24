@@ -161,6 +161,22 @@ export class OrderService extends BaseService {
       const deadline = new Date(baseDate);
       deadline.setDate(deadline.getDate() + days);
       data.deadline = deadline;
+    } else {
+      // İş kuralı: deadline >= orderDate olmalı (geçmişe teslim anlamsız).
+      // orderDate verilmediyse şema default'u (now()); bu durumda da deadline
+      // bugünden önce olmamalı.
+      const deadlineDate = new Date(data.deadline as string);
+      if (Number.isNaN(deadlineDate.getTime())) {
+        throw AppError.badRequest("Termin tarihi geçersiz");
+      }
+      const orderDateRef = data.orderDate
+        ? new Date(data.orderDate as string)
+        : new Date();
+      if (deadlineDate.getTime() < orderDateRef.getTime()) {
+        throw AppError.badRequest(
+          "Termin tarihi sipariş tarihinden önce olamaz"
+        );
+      }
     }
 
     const today = new Date();
@@ -169,16 +185,29 @@ export class OrderService extends BaseService {
       String(today.getMonth() + 1).padStart(2, "0") +
       String(today.getDate()).padStart(2, "0");
 
-    const lastOrder = await prisma.order.findFirst({
+    // orderNumber server-tarafında otomatik üretilir; istemci gönderse de
+    // göz ardı edilir (doc-code uyumu için açıkça siliyoruz).
+    if ("orderNumber" in data) {
+      delete data.orderNumber;
+    }
+
+    // Numeric tail sort: "20260523-9" > "20260523-10" hatası (lex sort) için
+    // bugünün tüm orderNumber'larını çekip JS'te numeric max alıyoruz. Tek-gün
+    // sipariş sayısı sınırlı (yüzler), maliyet ihmal edilebilir.
+    //
+    // Race condition: iki eşzamanlı POST aynı seq'i hesaplayabilir → P2002.
+    // Bunu Postgres SERIAL kolonu ile veya retry-on-conflict ile çözmek
+    // ayrı bir iyileştirme. Tipik kullanımda eşzamanlı insert nadir.
+    const todaysOrders = await prisma.order.findMany({
       where: { orderNumber: { startsWith: prefix } },
-      orderBy: { orderNumber: "desc" },
+      select: { orderNumber: true },
     });
-
-    const seq = lastOrder
-      ? parseInt(lastOrder.orderNumber.split("-")[1], 10) + 1
-      : 1;
-
-    const orderNumber = `${prefix}-${seq}`;
+    const maxSeq = todaysOrders.reduce((max, o) => {
+      const tail = o.orderNumber.split("-")[1] ?? "";
+      const n = parseInt(tail, 10);
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 0);
+    const orderNumber = `${prefix}-${maxSeq + 1}`;
 
     const prismaData: Record<string, unknown> = {
       ...data,

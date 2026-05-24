@@ -17,11 +17,15 @@ export const verifyToken = (
 ): void => {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  // RFC 6750 §2.1: scheme adı case-insensitive ("Bearer" = "bearer" = "BEARER").
+  // Header: `<scheme> <token>` — scheme'i case-insensitive doğrula, sonra
+  // boşluktan sonraki token'ı al.
+  const match = authHeader?.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
     return next(AppError.unauthorized("Token bulunamadı. Authorization header gerekli."));
   }
 
-  const token = authHeader.split(" ")[1];
+  const token = match[1].trim();
 
   try {
     req.user = AuthService.verifyToken(token);

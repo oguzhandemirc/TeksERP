@@ -324,7 +324,6 @@ export class SackService {
       rollId: string;
       sackId: string;
       orderLineId?: string | null;
-      weightKg?: number | null;
     },
     userId?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
@@ -368,6 +367,40 @@ export class SackService {
       throw AppError.conflict(
         "Bu çuval sevk edilmiş — top eklenemez"
       );
+    }
+
+    // Duplicate / transfer kontrolü:
+    //  - Aynı çuvala tekrar atılmaya çalışıyorsa 409 (operatör hatası, scanner
+    //    çift okuma veya UI tıklama hatası — sessizce kabul ettirip audit'i
+    //    şişirmemek için açık hata).
+    //  - Farklı çuvala atılmaya çalışıyorsa: sessiz transfer. Eski sack'tan
+    //    çıkar (Roll.sackId = yeni), audit'te eski sack referansı tutulur.
+    //    Müşteri uyumu zaten aşağıda kontrol ediliyor; başka müşteri çuvalına
+    //    transfer otomatik engellenir.
+    let transferredFromSack: { id: string; sackNumber: string } | null = null;
+    if (roll.sackId === data.sackId) {
+      throw AppError.conflict(
+        `Top ${roll.barcode} zaten ${sack.sackNumber} çuvalında`
+      );
+    }
+    if (roll.sackId && roll.sackId !== data.sackId) {
+      const oldSack = await prisma.sack.findUnique({
+        where: { id: roll.sackId },
+        select: {
+          id: true,
+          sackNumber: true,
+          shipmentId: true,
+          shipment: { select: { status: true } },
+        },
+      });
+      if (oldSack?.shipmentId && oldSack.shipment?.status === ShipmentStatus.SHIPPED) {
+        throw AppError.conflict(
+          `Top zaten sevk edilmiş çuvala (${oldSack.sackNumber}) bağlı — transfer edilemez`
+        );
+      }
+      transferredFromSack = oldSack
+        ? { id: oldSack.id, sackNumber: oldSack.sackNumber }
+        : null;
     }
 
     // Müşteri-malı top kontrolü (sıkı)
@@ -424,7 +457,9 @@ export class SackService {
         if (newOrderId) orderIds.push(newOrderId);
       }
 
-      // 3) Top'un sackId'sini güncelle + status READY_FOR_SHIP + (varsa) ağırlık
+      // 3) Top'un sackId'sini güncelle + status READY_FOR_SHIP.
+      // Roll-level tartı YOK — kilo çuval brütü olarak Sack.weightKg'de tutulur
+      // (POST /api/sacks/weigh ile operatör çuvalı doldurduktan sonra girer).
       await tx.roll.update({
         where: { id: data.rollId },
         data: {
@@ -432,9 +467,6 @@ export class SackService {
           status: RollStatus.READY_FOR_SHIP,
           packagingDate:
             roll.status === RollStatus.WAREHOUSE ? new Date() : undefined,
-          ...(data.weightKg != null && data.weightKg >= 0
-            ? { weightKg: data.weightKg, netWeightKg: data.weightKg }
-            : {}),
         },
       });
 
@@ -458,6 +490,9 @@ export class SackService {
         sackNumber: sack.sackNumber,
         orderLineId: validatedOrderLineId,
         affectedOrderIds,
+        // Transfer ise eski sack referansı (audit zinciri için)
+        transferredFromSackId: transferredFromSack?.id ?? null,
+        transferredFromSackNumber: transferredFromSack?.sackNumber ?? null,
       },
     });
 
@@ -468,8 +503,11 @@ export class SackService {
         sackId: data.sackId,
         sackNumber: sack.sackNumber,
         affectedOrders: affectedOrderIds.length,
+        transferredFromSackNumber: transferredFromSack?.sackNumber ?? null,
       },
-      message: `Top ${roll.barcode} → çuval ${sack.sackNumber}`,
+      message: transferredFromSack
+        ? `Top ${roll.barcode}: ${transferredFromSack.sackNumber} → ${sack.sackNumber} (transfer)`
+        : `Top ${roll.barcode} → çuval ${sack.sackNumber}`,
     };
   }
 

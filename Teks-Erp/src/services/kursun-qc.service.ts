@@ -27,9 +27,10 @@ import { assertWoAtStepKind } from "./helpers/roll-step.helper";
 
 interface RollDefectSummary {
   id: string;
+  /// Hata noktası (tek metre değeri). KK2/Kurşun operatörü "60. metrede hata"
+  /// olarak girer; aralık bilgisi tutulmaz. Tambur operatörü ekranda görüp
+  /// fiziksel kesim kararı verir.
   startMeter: number;
-  /// Bitiş metresi opsiyonel — operatör çoğunlukla sadece başlangıç metresi girer.
-  endMeter: number | null;
   defectTypeId: string | null;
   errorType: string | null; // snapshot'lanmış ad (DefectType.name)
 }
@@ -370,7 +371,6 @@ export class KursunQcService {
       rollId: string;
       stepId: string;
       startMeter: number;
-      endMeter: number;
       defectTypeId: string;
     },
     userId?: string
@@ -378,14 +378,9 @@ export class KursunQcService {
     const roll = await prisma.roll.findUnique({ where: { id: data.rollId } });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
-    if (data.startMeter >= data.endMeter) {
+    if (data.startMeter > roll.currentQty) {
       throw AppError.badRequest(
-        "Başlangıç metresi bitiş metresinden küçük olmalı"
-      );
-    }
-    if (data.endMeter > roll.currentQty) {
-      throw AppError.badRequest(
-        `Bitiş metresi (${data.endMeter}) topun metrajını (${roll.currentQty}) aşıyor`
+        `Hata metresi (${data.startMeter}) topun metrajını (${roll.currentQty}) aşıyor`
       );
     }
 
@@ -405,7 +400,6 @@ export class KursunQcService {
       data: {
         rollId: data.rollId,
         startMeter: data.startMeter,
-        endMeter: data.endMeter,
         defectTypeId: defectType.id,
         errorType: defectType.name, // snapshot — katalog rename olsa bile sabit kalır
         isProcessed: false,
@@ -423,7 +417,6 @@ export class KursunQcService {
         rollId: data.rollId,
         stepId: data.stepId,
         startMeter: data.startMeter,
-        endMeter: data.endMeter,
         defectTypeId: defectType.id,
         errorType: defectType.name,
       },
@@ -432,7 +425,7 @@ export class KursunQcService {
     return {
       success: true,
       data: err,
-      message: `${defectType.name} · ${data.startMeter}m–${data.endMeter}m`,
+      message: `${defectType.name} · ${data.startMeter}. metrede`,
     };
   }
 
@@ -461,7 +454,6 @@ export class KursunQcService {
       oldData: {
         rollId: err.rollId,
         startMeter: err.startMeter,
-        endMeter: err.endMeter,
         errorType: err.errorType,
       },
     });
@@ -809,7 +801,6 @@ export class KursunQcService {
           id: true,
           rollId: true,
           startMeter: true,
-          endMeter: true,
           defectTypeId: true,
           errorType: true,
         },
@@ -828,7 +819,6 @@ export class KursunQcService {
       defectsByRoll.get(e.rollId)!.push({
         id: e.id,
         startMeter: e.startMeter,
-        endMeter: e.endMeter,
         defectTypeId: e.defectTypeId,
         errorType: e.errorType,
       });

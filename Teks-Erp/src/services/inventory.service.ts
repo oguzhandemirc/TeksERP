@@ -1459,7 +1459,6 @@ export class InventoryService {
       totalMeters: number;
       errors?: Array<{
         startMeter: number;
-        endMeter?: number | null;
         defectTypeId?: string | null;
       }>;
       notes?: string | null;
@@ -1506,20 +1505,13 @@ export class InventoryService {
       throw AppError.conflict("Bu Roll'un Kurşun/KK2 ölçümü zaten tamamlanmış");
     }
 
-    // Hata validasyonu
+    // Hata validasyonu — sadece nokta (startMeter)
     const errors = data.errors ?? [];
     for (const e of errors) {
       if (e.startMeter < 0 || e.startMeter > data.totalMeters) {
         throw AppError.badRequest(
-          `Hata startMeter (${e.startMeter}) 0 ile ${data.totalMeters} arasında olmalı`,
+          `Hata metresi (${e.startMeter}) 0 ile ${data.totalMeters} arasında olmalı`,
         );
-      }
-      if (e.endMeter != null) {
-        if (e.endMeter < e.startMeter || e.endMeter > data.totalMeters) {
-          throw AppError.badRequest(
-            `Hata endMeter (${e.endMeter}) startMeter (${e.startMeter}) ile ${data.totalMeters} arasında olmalı`,
-          );
-        }
       }
     }
 
@@ -1566,7 +1558,6 @@ export class InventoryService {
           data: errors.map((e) => ({
             rollId,
             startMeter: e.startMeter,
-            endMeter: e.endMeter ?? null,
             defectTypeId: e.defectTypeId ?? null,
             errorType: e.defectTypeId ? defectMap.get(e.defectTypeId) ?? null : null,
             detectedAtStepId: stepId,

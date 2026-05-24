@@ -8,12 +8,13 @@
 import { Request, Response, NextFunction } from "express";
 import { BaseService } from "../services/base.service";
 import { AppError } from "../utils/app-error";
+import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 
-/** Safely extract a single string param from Express 5 params */
+/** Safely extract `:id` param and doğrula UUID format. */
 function getParamId(req: Request): string {
   const id = req.params.id;
   if (Array.isArray(id)) throw AppError.badRequest("Geçersiz ID parametresi");
-  return id;
+  return assertValidUuid(id, "id");
 }
 
 export class BaseController {

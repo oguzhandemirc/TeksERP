@@ -14,10 +14,16 @@ const DAY_MS = 86_400_000;
 const DEFAULT_RANGE_DAYS = 30;
 const MAX_RANGE_MS = 366 * DAY_MS;
 
-export const dateRangeSchema = z.object({
-  dateFrom: z.string().datetime().optional(),
-  dateTo: z.string().datetime().optional(),
-});
+// Reports için tarih aralığı parametreleri. `.strict()` ile yanlış isimli
+// query string'leri (örn. `from`, `to`, `startDate`) 400 ile reddeder —
+// operatör doğru parametre adını hemen öğrenir, sessiz default 30 günlük
+// aralık tuzağına düşmez.
+export const dateRangeSchema = z
+  .object({
+    dateFrom: z.string().datetime().optional(),
+    dateTo: z.string().datetime().optional(),
+  })
+  .strict();
 
 export type DateRangeInput = z.infer<typeof dateRangeSchema>;
 

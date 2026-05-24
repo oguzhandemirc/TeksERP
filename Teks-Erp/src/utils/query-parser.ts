@@ -32,7 +32,12 @@ export interface CursorParams {
 export function parseCursorParams(req: Request): CursorParams {
   const cursor = decodeCursor(req.query.cursor as string | undefined);
   const rawLimit = parseInt(req.query.limit as string, 10) || DEFAULT_PAGE_SIZE;
-  const limit = Math.min(Math.max(1, rawLimit), MAX_PAGE_SIZE);
+  if (rawLimit > MAX_PAGE_SIZE) {
+    throw AppError.badRequest(
+      `Limit (limit=${rawLimit}) en fazla ${MAX_PAGE_SIZE} olabilir.`
+    );
+  }
+  const limit = Math.max(1, rawLimit);
   return { cursor, limit };
 }
 
@@ -45,11 +50,23 @@ export function isCursorRequested(req: Request): boolean {
 
 /**
  * Parse query parameters from the Express request.
+ *
+ * `pageSize` üst sınırı (`MAX_PAGE_SIZE`) ile clamp ETMİYOR — aşan istek 400.
+ * Sessiz clamp yanıltıcıdır: istemci `pageSize=99999` istese 100 alır, eksik
+ * kayıt görür, "kayıp veri" sanır. Açık hata ile sayfa boyutu küçültmeye
+ * yönlendirilir. Çok büyük listeler için cursor pagination (`?mode=cursor`)
+ * kullanılmalı.
  */
 export function parseQueryParams(req: Request): QueryParams {
   const page = Math.max(1, parseInt(req.query.page as string, 10) || DEFAULT_PAGE);
   const rawPageSize = parseInt(req.query.pageSize as string, 10) || DEFAULT_PAGE_SIZE;
-  const pageSize = Math.min(Math.max(1, rawPageSize), MAX_PAGE_SIZE);
+  if (rawPageSize > MAX_PAGE_SIZE) {
+    throw AppError.badRequest(
+      `Sayfa boyutu (pageSize=${rawPageSize}) en fazla ${MAX_PAGE_SIZE} olabilir. ` +
+        `Daha büyük listeler için cursor pagination kullanın (?mode=cursor).`
+    );
+  }
+  const pageSize = Math.max(1, rawPageSize);
 
   const sortBy = (req.query.sortBy as string) || "createdAt";
   const sortOrder = (req.query.sortOrder as string)?.toLowerCase() === "asc" ? "asc" : "desc";

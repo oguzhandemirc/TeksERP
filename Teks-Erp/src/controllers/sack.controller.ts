@@ -22,12 +22,18 @@ const weighSackSchema = z.object({
   weightKg: z.number().nonnegative(),
 });
 
-const assignRollSchema = z.object({
-  rollId: z.string().uuid(),
-  sackId: z.string().uuid(),
-  orderLineId: z.string().uuid().nullish(),
-  weightKg: z.number().nonnegative().nullish(),
-});
+// assign-roll roll-level tartı YAPMAZ. Operatör çuvalı doldurduktan sonra
+// `POST /api/sacks/weigh` ile çuval brütünü tek seferde girer; tartı çuval
+// seviyesinde (Sack.weightKg). Bu nedenle body'de weightKg artık yok —
+// strict() ile yanlışlıkla gönderilen weightKg/netWeightKg/grossWeightKg
+// silently strip yerine 400 verir.
+const assignRollSchema = z
+  .object({
+    rollId: z.string().uuid(),
+    sackId: z.string().uuid(),
+    orderLineId: z.string().uuid().nullish(),
+  })
+  .strict();
 
 const removeRollSchema = z.object({
   rollId: z.string().uuid(),
@@ -112,7 +118,6 @@ export class SackController {
           rollId: body.rollId,
           sackId: body.sackId,
           orderLineId: body.orderLineId ?? null,
-          weightKg: body.weightKg ?? null,
         },
         req.user?.userId
       );

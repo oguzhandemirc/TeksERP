@@ -292,16 +292,29 @@ export class ShippingController {
   }
 
   /**
-   * POST /api/shipping/prepare-package
+   * POST /api/shipping/prepare-package — DEPRECATED.
+   *
+   * Eski top-bazlı paketleme akışı (`Roll.packageId`) artık kullanılmıyor.
+   * Tekstil iş akışında paketleme çuval-bazlı: birden çok top tek çuvala
+   * konur, çuval brütü tek seferde tartılır.
+   *
+   * Yeni akış:
+   *   POST /api/sacks                         → çuval aç
+   *   POST /api/sacks/assign-roll             → topu çuvala at (her roll için)
+   *   POST /api/sacks/weigh                   → çuval brütünü gir
+   *   POST /api/shipping/shipments            → sevkiyat oluştur, çuvalları bağla
+   *   POST /api/shipping/shipments/:id/finalize → sevk
+   *
+   * Endpoint 410 Gone döner; backend service'i çağrılmaz (legacy davranış
+   * tetiklenmez). Eski Roll.packageId verisi okunmaya devam edebilir.
    */
-  async preparePackage(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = preparePackageSchema.parse(req.body);
-      const result = await this.service.preparePackage(body, req.user?.userId);
-      res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
+  async preparePackage(_req: Request, res: Response): Promise<void> {
+    res.status(410).json({
+      success: false,
+      message:
+        "Bu endpoint kullanım dışı (v3). Çuval akışını kullanın: " +
+        "POST /api/sacks → POST /api/sacks/assign-roll → POST /api/sacks/weigh",
+    });
   }
 
   /**

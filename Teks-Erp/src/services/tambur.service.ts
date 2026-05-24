@@ -58,64 +58,27 @@ function generateTamburChildBarcode(): string {
 interface ErrorDecision {
   errorId: string;
   decision: "CUT" | "NO_CUT";
-  qualityGrade?: string; // "FIRE", "A1" etc. Only relevant for CUT
-}
-
-/** Operatörün defectten bağımsız olarak fiziksel kestiği aralık. */
-interface VoluntaryCut {
-  start: number;
-  end: number; // strictly greater than start
-  qualityGrade: string;
-}
-
-/** Cut strategy: operator either cuts only at reported defects, or at a fixed meter interval. */
-type CutMode = "BY_DEFECT" | "FIXED_LENGTH";
-
-/** Birleşik kesim modeli — defect ve voluntary kesimleri tek bir listeye toplar. */
-interface UnifiedCut {
-  source: "DEFECT" | "VOLUNTARY";
-  errorId: string | null;
-  start: number;
-  end: number;
-  qualityGrade: string;
 }
 
 /**
- * Verilen kesimleri sıralayıp dokunulmamış aralıkları döner.
- * Validasyon: aralıklar [0, totalQty] içinde, start < end, çakışma yok.
+ * Yeni cumulative-length model — operatör tambur makinesinde sayaç sıfırdan
+ * başlatılarak her kesim ayrı uzunluk olarak girer. Sıralı; cumulative pozisyon
+ * backend tarafından hesaplanır.
+ *
+ * Senaryo örneği (parent 500m, 2 defect @60 ve @150):
+ *   [
+ *     { length: 59,  qualityGrade: "1.KALITE" },
+ *     { length: 10,  qualityGrade: "A2", relatedErrorIds: ["err-60m"] },
+ *     { length: 149, qualityGrade: "1.KALITE" },
+ *     { length: 10,  qualityGrade: "A2", relatedErrorIds: ["err-150m"] }
+ *     // kalan 272m otomatik son top (parent.qualityGrade)
+ *   ]
+ *   Toplam = 59 + 10 + 149 + 10 = 228 ≤ 500; kalan 272m → 1.KALITE child.
  */
-function computeSegments(
-  cuts: UnifiedCut[],
-  totalQty: number
-): { sortedCuts: UnifiedCut[]; untouched: Array<{ start: number; end: number }> } {
-  for (const c of cuts) {
-    if (c.start < 0 || c.end > totalQty) {
-      throw AppError.badRequest(
-        `Kesim aralığı top sınırları dışında: ${c.start}-${c.end} (top: 0-${totalQty})`
-      );
-    }
-    if (c.end <= c.start) {
-      throw AppError.badRequest(
-        `Kesim bitiş metresi başlangıçtan büyük olmalı: ${c.start}-${c.end}`
-      );
-    }
-  }
-  const sorted = [...cuts].sort((a, b) => a.start - b.start);
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].start < sorted[i - 1].end) {
-      throw AppError.badRequest(
-        `Kesim aralıkları çakışıyor: ${sorted[i - 1].start}-${sorted[i - 1].end} ile ${sorted[i].start}-${sorted[i].end}`
-      );
-    }
-  }
-  const untouched: Array<{ start: number; end: number }> = [];
-  let cursor = 0;
-  for (const c of sorted) {
-    if (c.start > cursor) untouched.push({ start: cursor, end: c.start });
-    cursor = c.end;
-  }
-  if (cursor < totalQty) untouched.push({ start: cursor, end: totalQty });
-  return { sortedCuts: sorted, untouched };
+interface CutInput {
+  length: number;
+  qualityGrade: string;
+  relatedErrorIds: string[];
 }
 
 /**
@@ -133,9 +96,9 @@ function resolveCutStatus(
 
 interface TamburRollErrorSummary {
   id: string;
+  /// Hata noktası (tek metre). KK2/Kurşun veya tambur operatörü "60. metrede
+  /// hata" olarak girer; aralık tutulmaz. Tambur kesim kararı operatörün.
   startMeter: number;
-  /// Bitiş metresi opsiyonel.
-  endMeter: number | null;
   errorType: string | null;
 }
 
@@ -165,14 +128,23 @@ interface TamburStepSummary {
 
 export class TamburService {
   /**
-   * Get rolls pending at Tambur station with their unprocessed errors.
+   * Get rolls pending at Tambur station.
+   *
+   * Filtre kuralı: `currentStep.station.kind === TAMBUR` zorunlu. Bu sayede
+   * önceki istasyonlarda (Boyahane, KK2) takılı olan ve sadece hatası olan
+   * roll'lar yanlışlıkla listede çıkmıyor (BUG-36 fix).
+   *
+   * Hatası olsun olmasın **tüm** tambur-step roll'ları döner — operatör
+   * hatasız roll'ları da sarıp `finalize` çağırmak zorunda (cumulative
+   * length model ile child Roll'ları yaratır). UI hatalı/hatasız ayrımı
+   * için `errors.length` üzerinden filtreleme yapabilir.
    */
   async getPendingRolls(): Promise<ApiResponse<Roll[]>> {
     const rolls = await prisma.roll.findMany({
       where: {
         status: RollStatus.IN_PRODUCTION,
-        errors: {
-          some: { isProcessed: false },
+        currentStep: {
+          station: { kind: StationKind.TAMBUR },
         },
       },
       include: {
@@ -265,7 +237,7 @@ export class TamburService {
               select: {
                 id: true,
                 startMeter: true,
-                endMeter: true,
+                
                 errorType: true,
               },
             },
@@ -305,35 +277,38 @@ export class TamburService {
   /**
    * Finalize a roll at Tambur station.
    *
-   * MODEL:
-   *   - Top fiziksel olarak N kesim aralığıyla N+1 parçaya bölünür.
-   *   - Kesim aralıkları: defect kararları (CUT) + operatörün gönüllü kesimleri.
-   *   - Aralıkların DIŞINDA kalan dokunulmamış segmentler = iyi parçalar (A1, WAREHOUSE).
-   *   - **Tüm segmentler** (cut + untouched) yeni Roll olur (`entrySource: TAMBUR_SPLIT`,
-   *     `parentRollId: parent.id`). Parent retire olur: `status=TAMBUR_CONSUMED`,
-   *     `currentQty=0`, `currentStepId=null`. Keeper kavramı yok.
-   *   - Kesim aralığının kalitesi operatör tarafından belirlenir (FIRE→SCRAP,
-   *     A1/2.KALITE→A1_STOCK, diğer→SCRAP).
-   *   - NO_CUT defectleri kayıt olarak işlenir (isProcessed=true) ama kesim
-   *     üretmez.
-   *   - Çocuk topların KURSUN_APPLIED ve QC2_COMPLETED RollOperation kayıtları
-   *     parent'tan kopyalanır (`inheritedFromParentRollId=parent.id`). Parent
-   *     fiziksel olarak o istasyonlardan geçti, sadece bölündü; çocuklar aynı
-   *     yaşam döngüsünü paylaşır.
-   *   - Parent'ın `OrderAllocation`'ları koşulsuz silinir; etkilenen Order
-   *     status'ları yeniden hesaplanır (operatör tartı/paket sırasında çocuk
-   *     toplara yeniden allocation yapar).
-   *   - `RollError`'lar parent'ta kalır; cut'ler defectli aralıkları zaten
-   *     ayırdı, "iyi" çocuklar fiziksel olarak temiz.
+   * YENİ MODEL (cumulative length-based):
+   *   - Tambur operatörü makinede kumaşı sarar; sayaç sıfırdan başlar.
+   *   - Her "kes" tuşu basışında: o ana kadar sarılan uzunluk yeni bir top
+   *     olur (parent'ın 0 metresinden itibaren), sayaç sıfırlanır, devam edilir.
+   *   - API'de `cuts: [{ length, qualityGrade, relatedErrorIds }]` sıralı liste.
+   *     Backend cumulative offset hesaplar:
+   *        cut1: 0     ..  cut1.length
+   *        cut2: cut1.length .. cut1.length+cut2.length
+   *        ...
+   *     Son cut'tan sonra kalan kısım otomatik son child top
+   *     (parent.qualityGrade ile, sum(lengths) < totalQty ise).
+   *   - sum(lengths) > totalQty → hata. sum(lengths) ≤ totalQty zorunlu.
+   *   - cuts boş ise → tüm metraj tek child top (parent.qualityGrade).
+   *
+   *   Defect lifecycle:
+   *   - `decisions[]` her defect için karar (CUT veya NO_CUT). CUT kararı bir
+   *     `cuts[].relatedErrorIds`'da görünen defect'i ifade eder. NO_CUT defect
+   *     işlenmiş ama kesilmemiş — top içinde kayıtlı kalır.
+   *   - `RollError.isProcessed=true`, `actionTaken="CUT"` veya `"NO_CUT"`.
+   *
+   *   Parent retire: `status=TAMBUR_CONSUMED`, `currentQty=0`, `currentStepId=null`.
+   *   Çocuk topların KURSUN_APPLIED ve QC2_COMPLETED RollOperation kayıtları
+   *   parent'tan kopyalanır (`inheritedFromParentRollId`).
+   *   Parent'ın `OrderAllocation`'ları silinir; etkilenen Order status'ları
+   *   yeniden hesaplanır (tartı/paket sırasında çocuk toplara yeniden allocate).
    */
   async finalize(
     data: {
       rollId: string;
       decisions: ErrorDecision[];
-      voluntaryCuts: VoluntaryCut[];
+      cuts: CutInput[];
       foldType?: "2-KAT" | "4-KAT";
-      cutMode?: CutMode | null;
-      cutLengthM?: number | null;
     },
     userId?: string
   ): Promise<
@@ -386,8 +361,8 @@ export class TamburService {
         ? "Bu rulo henüz renk kazanmadı (boyahane atlandı veya başarısız oldu). Ham olarak depoya geçecek."
         : null;
 
-    // Defect kararlarını topla — CUT olanlardan birleşik cut listesi oluşacak,
-    // NO_CUT'lar sadece RollError lifecycle alanlarına işlenecek.
+    // Defect kararlarını topla — sadece lifecycle marker (isProcessed, actionTaken).
+    // Kesim üretmez — kesimler `data.cuts` listesinden geliyor.
     const errorDecisions = data.decisions ?? [];
     const errorIds = errorDecisions.map((d) => d.errorId);
     const errors = errorIds.length
@@ -397,36 +372,31 @@ export class TamburService {
       : [];
     const errorById = new Map(errors.map((e) => [e.id, e]));
 
-    const cuts: UnifiedCut[] = [];
-    for (const d of errorDecisions) {
-      const err = errorById.get(d.errorId);
-      if (!err) continue; // başka topun hatası — sessizce atla
-      if (d.decision === "CUT") {
-        if (err.endMeter == null) {
+    // cuts validasyonu: cumulative length toplamı totalQty'yi aşmasın.
+    const inputCuts = data.cuts ?? [];
+    let cumulativeLen = 0;
+    for (const c of inputCuts) {
+      if (c.length <= 0) {
+        throw AppError.badRequest("Kesim uzunluğu pozitif olmalı");
+      }
+      cumulativeLen += c.length;
+    }
+    if (cumulativeLen > totalQty) {
+      throw AppError.badRequest(
+        `Kesim uzunlukları toplamı (${cumulativeLen}m) topun metrajını (${totalQty}m) aşıyor`
+      );
+    }
+    // Defect ID referansları parent'a ait olmalı.
+    for (const c of inputCuts) {
+      for (const eid of c.relatedErrorIds) {
+        const err = errorById.get(eid);
+        if (!err) {
           throw AppError.badRequest(
-            `Hata bitiş metresi yok (id ${err.id}); kesim için endMeter gereklidir.`
+            `Kesim relatedErrorIds içindeki hata ID'si decisions listesinde yok veya başka topa ait: ${eid}`
           );
         }
-        cuts.push({
-          source: "DEFECT",
-          errorId: err.id,
-          start: err.startMeter,
-          end: err.endMeter,
-          qualityGrade: d.qualityGrade ?? "FIRE",
-        });
       }
     }
-    for (const v of data.voluntaryCuts ?? []) {
-      cuts.push({
-        source: "VOLUNTARY",
-        errorId: null,
-        start: v.start,
-        end: v.end,
-        qualityGrade: v.qualityGrade,
-      });
-    }
-
-    const { sortedCuts, untouched } = computeSegments(cuts, totalQty);
 
     // Item ve renk artık fason kabul aşamasında set edilmiş durumda. Tambur
     // kimlik değişikliği yapmaz — sadece bölme + Roll.properties parent'tan
@@ -444,12 +414,14 @@ export class TamburService {
       select: { workOrderStepId: true, operationType: true, operatorId: true, metadata: true },
     });
 
-    // Cut'lardaki kalite kodlarını topla → katalogtan targetStatus'u oku.
+    // Cut'lardaki + parent qualityGrade'lerini topla → katalog target status'larını çek.
     // Map<code, RollStatus> — katalogda yoksa SCRAP fallback'i resolveCutStatus'ta.
-    const cutQualityCodes = Array.from(new Set(sortedCuts.map((c) => c.qualityGrade)));
-    const qualityGradeRows = cutQualityCodes.length
+    const allQualityCodes = Array.from(
+      new Set([...inputCuts.map((c) => c.qualityGrade), roll.qualityGrade])
+    );
+    const qualityGradeRows = allQualityCodes.length
       ? await prisma.qualityGrade.findMany({
-          where: { code: { in: cutQualityCodes } },
+          where: { code: { in: allQualityCodes } },
           select: { code: true, targetStatus: true },
         })
       : [];
@@ -461,18 +433,24 @@ export class TamburService {
     let processedCount = 0;
 
     const updatedRoll = await prisma.$transaction(async (tx) => {
-      // Önce defect karar lifecycle alanlarını işle (CUT veya NO_CUT fark etmez).
+      // Defect lifecycle — relatedErrorIds'da geçen defect'ler CUT, diğerleri NO_CUT.
+      // decisions[].decision sadece operatörün niyetini bildirir; gerçek aksiyon
+      // cuts.relatedErrorIds ile eşleştirilir.
+      const cutErrorIds = new Set<string>(
+        inputCuts.flatMap((c) => c.relatedErrorIds)
+      );
       for (const d of errorDecisions) {
         const err = errorById.get(d.errorId);
         if (!err) continue;
+        const actuallyCut = cutErrorIds.has(d.errorId);
+        // decisions ile relatedErrorIds tutarsız olabilir; gerçek aksiyon
+        // relatedErrorIds'a göre (CUT işaretlenenler kesildi).
+        const actionTaken = actuallyCut ? "CUT" : "NO_CUT";
         await tx.rollError.update({
           where: { id: d.errorId },
           data: {
             isProcessed: true,
-            actionTaken:
-              d.decision === "CUT"
-                ? `CUT_FOR_${(d.qualityGrade ?? "SCRAP").toUpperCase()}`
-                : "KEPT_NO_CUT",
+            actionTaken,
             processedAtStepId: roll.currentStepId,
             processedByUserId: userId ?? null,
             processedAt: new Date(),
@@ -489,45 +467,56 @@ export class TamburService {
         select: { propertyId: true },
       });
 
-      // Birleşik segment listesi: cut'lar (kalitesi operatörden) + untouched'lar
-      // (parent'ın qualityGrade'i, WAREHOUSE). Hepsi yeni Roll olarak doğar.
+      // Cumulative length-based segment'leri oluştur.
+      // inputCuts sıralı (operatörün makinede yaptığı sırayla); her cut bir
+      // child Roll. Kalan kısım son child Roll (parent.qualityGrade ile).
       type Segment = {
-        start: number;
-        end: number;
+        start: number; // parent metresinde başlangıç offset
+        end: number; // parent metresinde bitiş offset
         qty: number;
         status: RollStatus;
         qualityGrade: string;
         inheritProperties: boolean;
         auditSource: string;
-        auditErrorId: string | null;
+        auditErrorIds: string[];
       };
 
-      const segments: Segment[] = [
-        ...sortedCuts.map((c) => {
-          const cutStatus = resolveCutStatus(c.qualityGrade, targetStatusByCode);
-          return {
-            start: c.start,
-            end: c.end,
-            qty: c.end - c.start,
-            status: cutStatus,
-            qualityGrade: c.qualityGrade,
-            // SCRAP'a giden parça özellik miras almaz (kullanılmaz)
-            inheritProperties: cutStatus === RollStatus.WAREHOUSE,
-            auditSource: c.source,
-            auditErrorId: c.errorId,
-          };
-        }),
-        ...untouched.map((seg) => ({
-          start: seg.start,
-          end: seg.end,
-          qty: seg.end - seg.start,
-          status: RollStatus.WAREHOUSE,
+      const segments: Segment[] = [];
+      let offset = 0;
+      for (const c of inputCuts) {
+        const cutStatus = resolveCutStatus(c.qualityGrade, targetStatusByCode);
+        segments.push({
+          start: offset,
+          end: offset + c.length,
+          qty: c.length,
+          status: cutStatus,
+          qualityGrade: c.qualityGrade,
+          // Sadece WAREHOUSE'a giden good child'lar özellik miras alır;
+          // SCRAP/A1_STOCK gibi farklı status'lara giden parçalar almaz.
+          inheritProperties: cutStatus === RollStatus.WAREHOUSE,
+          auditSource: "OPERATOR_CUT",
+          auditErrorIds: c.relatedErrorIds,
+        });
+        offset += c.length;
+      }
+      // Kalan kısım (sum(lengths) < totalQty) otomatik son child top.
+      if (offset < totalQty) {
+        const remaining = totalQty - offset;
+        const remainStatus = resolveCutStatus(
+          roll.qualityGrade,
+          targetStatusByCode
+        );
+        segments.push({
+          start: offset,
+          end: totalQty,
+          qty: remaining,
+          status: remainStatus,
           qualityGrade: roll.qualityGrade,
-          inheritProperties: true,
-          auditSource: "UNTOUCHED_SEGMENT",
-          auditErrorId: null,
-        })),
-      ];
+          inheritProperties: remainStatus === RollStatus.WAREHOUSE,
+          auditSource: "REMAINING_TAIL",
+          auditErrorIds: [],
+        });
+      }
 
       // Her segment için yeni Roll + property + kalıtım op'ları + audit.
       for (const seg of segments) {
@@ -594,22 +583,18 @@ export class TamburService {
             status: splitRoll.status,
             qualityGrade: splitRoll.qualityGrade,
             currentQty: splitRoll.currentQty,
-            startMeter: seg.start,
-            endMeter: seg.end,
+            parentOffsetStart: seg.start,
+            parentOffsetEnd: seg.end,
             source: seg.auditSource,
-            errorId: seg.auditErrorId,
+            relatedErrorIds: seg.auditErrorIds,
             splitFromRollId: data.rollId,
             inheritedOpCount: inheritedOps.length,
           },
         });
       }
 
-      // Tambur parametrelerini (kat, kesim tipi vs.) step.stepData'ya yaz.
-      const hasStepData =
-        data.foldType !== undefined ||
-        data.cutMode != null ||
-        data.cutLengthM != null;
-      if (hasStepData && roll.currentStepId) {
+      // Tambur parametrelerini (kat tipi vs.) step.stepData'ya yaz.
+      if (data.foldType !== undefined && roll.currentStepId) {
         const step = await tx.workOrderStep.findUnique({
           where: { id: roll.currentStepId },
           select: { stepData: true },
@@ -618,10 +603,8 @@ export class TamburService {
         const merged: Record<string, unknown> = {
           ...existing,
           tamburDecidedAt: new Date().toISOString(),
+          foldType: data.foldType,
         };
-        if (data.foldType !== undefined) merged.foldType = data.foldType;
-        if (data.cutMode != null) merged.cutMode = data.cutMode;
-        if (data.cutLengthM != null) merged.cutLengthM = data.cutLengthM;
         await tx.workOrderStep.update({
           where: { id: roll.currentStepId },
           data: { stepData: merged as Prisma.InputJsonValue },
@@ -700,11 +683,9 @@ export class TamburService {
               plannedFoldType,
               // Operatörün gerçek seçimi (override etmiş olabilir).
               foldType: data.foldType ?? null,
-              cutMode: data.cutMode ?? null,
-              cutLengthM: data.cutLengthM ?? null,
               childRollCount: segments.length,
-              cutCount: sortedCuts.length,
-              untouchedCount: untouched.length,
+              cutCount: inputCuts.length,
+              tailCount: offset < totalQty ? 1 : 0,
               processedErrors: processedCount,
             } as Prisma.InputJsonValue,
           },
@@ -748,12 +729,13 @@ export class TamburService {
         currentQty: 0,
         status: updatedRoll.status,
         splitRollCount: splitRolls.length,
-        cutCount: sortedCuts.length,
-        untouchedCount: untouched.length,
+        cutCount: inputCuts.length,
+        hadRemainingTail: cumulativeLen < totalQty,
       },
     });
 
-    const baseMsg = `Tambur tamamlandı. Parent bölündü, ${splitRolls.length} yeni top oluşturuldu (${sortedCuts.length} kesim, ${untouched.length} sağlam parça, ${processedCount} hata işlendi).`;
+    const tailNote = cumulativeLen < totalQty ? " + kalan kuyruk top" : "";
+    const baseMsg = `Tambur tamamlandı. Parent bölündü, ${splitRolls.length} yeni top oluşturuldu (${inputCuts.length} kesim${tailNote}, ${processedCount} hata işlendi).`;
     return {
       success: true,
       data: {
@@ -1163,7 +1145,7 @@ export class TamburService {
               select: {
                 id: true,
                 startMeter: true,
-                endMeter: true,
+                
                 errorType: true,
               },
             },
@@ -1211,7 +1193,6 @@ export class TamburService {
       rollId: string;
       stepId: string;
       startMeter: number;
-      endMeter: number;
       defectTypeId: string;
     },
     userId?: string
@@ -1219,14 +1200,9 @@ export class TamburService {
     const roll = await prisma.roll.findUnique({ where: { id: data.rollId } });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
-    if (data.startMeter >= data.endMeter) {
+    if (data.startMeter > roll.currentQty) {
       throw AppError.badRequest(
-        "Başlangıç metresi bitiş metresinden küçük olmalı"
-      );
-    }
-    if (data.endMeter > roll.currentQty) {
-      throw AppError.badRequest(
-        `Bitiş metresi (${data.endMeter}) topun metrajını (${roll.currentQty}) aşıyor`
+        `Hata metresi (${data.startMeter}) topun metrajını (${roll.currentQty}) aşıyor`
       );
     }
 
@@ -1258,7 +1234,6 @@ export class TamburService {
       data: {
         rollId: data.rollId,
         startMeter: data.startMeter,
-        endMeter: data.endMeter,
         defectTypeId: defectType.id,
         errorType: defectType.name,
         isProcessed: false,
@@ -1276,7 +1251,6 @@ export class TamburService {
         rollId: data.rollId,
         stepId: data.stepId,
         startMeter: data.startMeter,
-        endMeter: data.endMeter,
         defectTypeId: defectType.id,
         errorType: defectType.name,
         source: "TAMBUR",
@@ -1286,7 +1260,7 @@ export class TamburService {
     return {
       success: true,
       data: err,
-      message: `${defectType.name} · ${data.startMeter}m–${data.endMeter}m`,
+      message: `${defectType.name} · ${data.startMeter}. metrede`,
     };
   }
 
@@ -2030,7 +2004,7 @@ export class TamburService {
               select: {
                 id: true,
                 startMeter: true,
-                endMeter: true,
+                
                 errorType: true,
               },
             },

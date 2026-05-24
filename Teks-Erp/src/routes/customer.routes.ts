@@ -4,13 +4,13 @@
 
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
-import { BaseService } from "../services/base.service";
+import { CustomerService } from "../services/customer.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import branchRoutes from "./customer-branch.routes";
 import aliasRoutes from "./customer-alias.routes";
 
-const service = new BaseService({
+const service = new CustomerService({
   modelName: "customer",
   tableName: "CUSTOMER",
   searchFields: ["code", "name", "taxNumber"],

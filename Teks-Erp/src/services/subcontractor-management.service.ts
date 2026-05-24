@@ -9,6 +9,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
+import { validateName, validateCode } from "../lib/string-validators";
 import {
   parseQueryParams,
   buildWhereClause,
@@ -133,6 +134,67 @@ export class SubcontractorCategoryService {
 // SUBCONTRACTOR (Fason firma)
 // =============================================================================
 
+/**
+ * Subcontractor giriş alanları için format kontrolleri.
+ * `taxNumber` regex'i `CustomerService` ile aynı (10-15 hane sayı; VKN/TCKN/
+ * yabancı VAT). `phone` ve `address` için minimum gerçeklik kontrolü —
+ * seed verisinde `phone:"1", address:"1"` gibi çöp değerler vardı.
+ *
+ * Helper'lar saf fonksiyon: hem create hem update'ten çağrılıyor. Üçü de
+ * `null`'a izin verir (alan optional, schema `String?`).
+ */
+const SUB_TAX_REGEX = /^\d{10,15}$/;
+const SUB_PHONE_REGEX = /^[+0-9 ()/-]{7,20}$/;
+const SUB_ADDRESS_MIN_LENGTH = 5;
+
+function normalizeAndValidateTaxNumber(raw: unknown): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw !== "string") {
+    throw AppError.badRequest("Vergi numarası metin olmalı");
+  }
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  if (!SUB_TAX_REGEX.test(trimmed)) {
+    throw AppError.badRequest(
+      "Vergi numarası 10-15 hane sayı olmalı (VKN: 10, TCKN: 11)"
+    );
+  }
+  return trimmed;
+}
+
+function normalizeAndValidatePhone(raw: unknown): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw !== "string") {
+    throw AppError.badRequest("Telefon metin olmalı");
+  }
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  if (!SUB_PHONE_REGEX.test(trimmed)) {
+    throw AppError.badRequest(
+      "Telefon 7-20 karakter olmalı (sayılar, +, boşluk, parantez, tire, eğik çizgi)"
+    );
+  }
+  return trimmed;
+}
+
+function normalizeAndValidateAddress(raw: unknown): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw !== "string") {
+    throw AppError.badRequest("Adres metin olmalı");
+  }
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  if (trimmed.length < SUB_ADDRESS_MIN_LENGTH) {
+    throw AppError.badRequest(
+      `Adres en az ${SUB_ADDRESS_MIN_LENGTH} karakter olmalı`
+    );
+  }
+  return trimmed;
+}
+
 export class SubcontractorManagementService {
   async findAll(req: Request): Promise<PaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
@@ -201,6 +263,21 @@ export class SubcontractorManagementService {
   ): Promise<ApiResponse<unknown>> {
     const { categoryIds = [], ...rest } = data;
 
+    // Required + length kontrolleri (paylaşımlı validator)
+    const code = validateCode(rest.code, { label: "Fason kodu", required: true });
+    if (typeof code === "string") rest.code = code;
+    const name = validateName(rest.name, { label: "Fason adı", required: true });
+    if (typeof name === "string") rest.name = name;
+
+    // Format validasyonları — create'te tüm 3 alan optional, ama verilirse
+    // format şartı uygulanır. Sonuç (trim'lenmiş ya da null) yazılır.
+    const tax = normalizeAndValidateTaxNumber(rest.taxNumber);
+    if (tax !== undefined) rest.taxNumber = tax ?? undefined;
+    const phone = normalizeAndValidatePhone(rest.phone);
+    if (phone !== undefined) rest.phone = phone ?? undefined;
+    const address = normalizeAndValidateAddress(rest.address);
+    if (address !== undefined) rest.address = address ?? undefined;
+
     const sub = await prisma.$transaction(async (tx) => {
       const created = await tx.subcontractor.create({ data: rest });
       if (categoryIds.length > 0) {
@@ -242,6 +319,27 @@ export class SubcontractorManagementService {
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     const { categoryIds, ...rest } = data;
+
+    // Update'te her alan tamamen optional. Gönderilmemişse undefined kalır
+    // (Prisma update no-op). Gönderildiyse format şartı uygulanır; sonuç
+    // (string ya da null) doğrudan yazılır.
+    if (rest.code !== undefined) {
+      const v = validateCode(rest.code, { label: "Fason kodu", required: true });
+      if (typeof v === "string") rest.code = v;
+    }
+    if (rest.name !== undefined) {
+      const v = validateName(rest.name, { label: "Fason adı", required: true });
+      if (typeof v === "string") rest.name = v;
+    }
+    if (rest.taxNumber !== undefined) {
+      rest.taxNumber = normalizeAndValidateTaxNumber(rest.taxNumber) as string | null;
+    }
+    if (rest.phone !== undefined) {
+      rest.phone = normalizeAndValidatePhone(rest.phone) as string | null;
+    }
+    if (rest.address !== undefined) {
+      rest.address = normalizeAndValidateAddress(rest.address) as string | null;
+    }
 
     const sub = await prisma.$transaction(async (tx) => {
       await tx.subcontractor.update({ where: { id }, data: rest });

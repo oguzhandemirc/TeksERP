@@ -15,5 +15,6 @@ router.post("/login", AuthController.login);
 // Protected
 router.post("/register", verifyToken, requirePermission("admin:users"), AuthController.register);
 router.get("/me", verifyToken, AuthController.me);
+router.post("/logout", verifyToken, AuthController.logout);
 
 export default router;

@@ -15,11 +15,12 @@ const applyKursunSchema = z.object({
 
 const completeQc2Schema = applyKursunSchema;
 
+// Hata sadece NOKTA olarak girilir (startMeter); endMeter artık tutulmuyor.
+// Tambur operatörü ekranda bu noktayı görüp fiziksel kesim kararı verir.
 const reportErrorSchema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
   stepId: z.string().uuid("Geçersiz adım ID"),
-  startMeter: z.number().min(0, "Başlangıç metresi 0 veya daha büyük olmalı"),
-  endMeter: z.number().positive("Bitiş metresi pozitif olmalı"),
+  startMeter: z.number().min(0, "Hata metresi 0 veya daha büyük olmalı"),
   defectTypeId: z.string().uuid("Hata tipi seçilmelidir"),
 });
 
@@ -150,7 +151,6 @@ export class KursunQcController {
           rollId: body.rollId,
           stepId: body.stepId,
           startMeter: body.startMeter,
-          endMeter: body.endMeter,
           defectTypeId: body.defectTypeId,
         },
         req.user?.userId

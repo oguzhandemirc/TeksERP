@@ -1,3 +1,4 @@
+import "./lib/zod-locale"; // Zod tr locale — diğer importlardan ÖNCE
 import app from './app';
 import dotenv from 'dotenv';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
