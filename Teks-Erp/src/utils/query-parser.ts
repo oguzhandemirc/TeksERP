@@ -13,11 +13,11 @@ import type { Cursor } from "./cursor";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
-// 200: Electron tarafındaki dropdown lookup'ları (FilterBar, form dialog'larda
-// allowedColors/allowedProperties seçimi) tüm aktif kayıtları tek istekte
-// çekiyor. 200 fabrikadaki tipik master data hacmini karşılıyor; üstü zaten
-// dropdown UX'ini bozar — cursor mode kullanılmalı. DoS koruması koruşuk.
-const MAX_PAGE_SIZE = 200;
+// 500: Electron tarafındaki master data picker'ları (renk seçici, özellik
+// seçici, izinli ürün listesi, istasyon yetenekleri, vb.) "tümünü çek" davranışı
+// kullanır; 500 tipik fabrika master data hacmini karşılar. Daha büyük listeler
+// için cursor mode (?mode=cursor). DoS koruması (501+ → 400) korunur.
+const MAX_PAGE_SIZE = 500;
 // Yıllar süren operasyonda derin offset (skip) sorguları PostgreSQL'i her sayfada
 // O(n) tarama yapmaya zorlar. UI'da hiç kimse 5K satırdan sonrasına gitmez —
 // gidiyorsa filtre eksiktir. Erken hata fırlatıp kullanıcıyı filtre kullanmaya yönlendir.
