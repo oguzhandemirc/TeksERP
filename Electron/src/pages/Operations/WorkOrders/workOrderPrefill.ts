@@ -12,7 +12,6 @@ function dateToInput(iso: string | null | undefined): string {
 
 function pickFormType(t: WorkOrder["type"]): WorkOrderFormValues["type"] {
   if (t === WorkOrderType.STOCK_PRODUCTION) return t;
-  // SERVICE_PRODUCTION ayrı bir akış — bu form'da düzenlenmez.
   return WorkOrderType.ORDER_PRODUCTION;
 }
 

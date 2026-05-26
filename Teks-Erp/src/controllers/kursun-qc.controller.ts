@@ -7,13 +7,11 @@ import { z } from "zod";
 import { KursunQcService } from "../services/kursun-qc.service";
 import "../types/express-augment";
 
-const applyKursunSchema = z.object({
+const completeQc2Schema = z.object({
   rollId: z.string().uuid("Geçersiz top ID"),
   stepId: z.string().uuid("Geçersiz adım ID"),
   notes: z.string().max(500).nullish(),
 });
-
-const completeQc2Schema = applyKursunSchema;
 
 // Hata sadece NOKTA olarak girilir (startMeter); endMeter artık tutulmuyor.
 // Tambur operatörü ekranda bu noktayı görüp fiziksel kesim kararı verir.
@@ -36,6 +34,21 @@ const reopenStepSchema = z.object({
   stepId: z.string().uuid("Geçersiz adım ID"),
 });
 
+const reorderQueueSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        id: z.string().uuid("Geçersiz adım ID"),
+        priority: z.number().int().min(0).max(1_000_000),
+      }),
+    )
+    .min(1, "En az bir kayıt gönderilmelidir"),
+});
+
+const setUrgentSchema = z.object({
+  isUrgent: z.boolean(),
+});
+
 export class KursunQcController {
   private service: KursunQcService;
 
@@ -44,14 +57,15 @@ export class KursunQcController {
     this.getByCardBarcode = this.getByCardBarcode.bind(this);
     this.getStep = this.getStep.bind(this);
     this.listOpenCards = this.listOpenCards.bind(this);
-    this.applyKursun = this.applyKursun.bind(this);
-    this.undoKursun = this.undoKursun.bind(this);
     this.completeQc2 = this.completeQc2.bind(this);
     this.undoQc2 = this.undoQc2.bind(this);
     this.reportError = this.reportError.bind(this);
     this.deleteError = this.deleteError.bind(this);
     this.finishStep = this.finishStep.bind(this);
     this.reopenStep = this.reopenStep.bind(this);
+    this.listQueue = this.listQueue.bind(this);
+    this.reorderQueue = this.reorderQueue.bind(this);
+    this.setQueueUrgent = this.setQueueUrgent.bind(this);
   }
 
   /** GET /api/kursun-qc/by-card/:barcode */
@@ -78,35 +92,6 @@ export class KursunQcController {
   async listOpenCards(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.listOpenCards();
-      res.status(200).json(result);
-    } catch (err) {
-      next(err);
-    }
-  }
-
-  /** POST /api/kursun-qc/apply-kursun */
-  async applyKursun(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = applyKursunSchema.parse(req.body);
-      const result = await this.service.applyKursun(
-        { rollId: body.rollId, stepId: body.stepId, notes: body.notes ?? null },
-        req.user?.userId,
-        req.device?.machineId ?? null
-      );
-      res.status(201).json(result);
-    } catch (err) {
-      next(err);
-    }
-  }
-
-  /** POST /api/kursun-qc/undo-kursun */
-  async undoKursun(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = z.object({
-        rollId: z.string().uuid(),
-        stepId: z.string().uuid(),
-      }).parse(req.body);
-      const result = await this.service.undoKursun(body, req.user?.userId);
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -188,6 +173,42 @@ export class KursunQcController {
     try {
       const body = reopenStepSchema.parse(req.body);
       const result = await this.service.reopenStep(body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/kursun-qc/queue */
+  async listQueue(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.listQueue();
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** PATCH /api/kursun-qc/queue/reorder */
+  async reorderQueue(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = reorderQueueSchema.parse(req.body);
+      const result = await this.service.reorderQueue(body.items, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** PATCH /api/kursun-qc/queue/:stepId/urgent */
+  async setQueueUrgent(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = setUrgentSchema.parse(req.body);
+      const result = await this.service.setQueueUrgent(
+        req.params.stepId as string,
+        body.isUrgent,
+        req.user?.userId,
+      );
       res.status(200).json(result);
     } catch (err) {
       next(err);

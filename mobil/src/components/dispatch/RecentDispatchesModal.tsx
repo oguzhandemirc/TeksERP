@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -20,7 +20,6 @@ import Toast from 'react-native-toast-message';
 
 import type { SubcontractorDispatchListItem } from '../../types/models';
 import DispatchRow from './DispatchRow';
-import DispatchDetailModal from './DispatchDetailModal';
 import RefreshButton from '../RefreshButton';
 
 interface Props {
@@ -47,7 +46,9 @@ interface CancelTarget {
 /**
  * Sevk geçmişi modalı.
  *
- * - Detay görüntüleme: `DispatchDetailModal` overlay'i (lazy fetch).
+ * - Detay görüntüleme: satıra tıklayınca aşağıda inline panel açılır
+ *   (`DispatchRow` lazy fetch). Önceki ayrı overlay (DispatchDetailModal)
+ *   küçük ekranda kenardan taşıyordu — inline yapı taşmayı önler.
  * - İptal akışı: modal **içinde** absolute overlay (RNModal nesting yerine).
  *   Paper Dialog/Portal yaklaşımı RNModal'ın altında kalıyordu; overlay
  *   pattern bu sorunu çözer.
@@ -70,7 +71,34 @@ export default function RecentDispatchesModal({
   const { width: winW, height: winH } = useWindowDimensions();
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
   const [cancelReason, setCancelReason] = useState('');
-  const [detailDispatchId, setDetailDispatchId] = useState<string | null>(null);
+  // Aynı anda yalnız bir satır açık — operatör başkasına tıklayınca eski kapanır.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Stable handler'lar: DispatchRow memo'lu olduğu için referans sabit kalmalı.
+  const handleToggleExpand = useCallback((id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  }, []);
+  const handleCancelDispatch = useCallback(
+    (item: SubcontractorDispatchListItem) => {
+      setCancelTarget({ id: item.id, no: item.dispatchNo });
+    },
+    [],
+  );
+  const renderItem = useCallback(
+    ({ item }: { item: SubcontractorDispatchListItem }) => (
+      <DispatchRow
+        dispatch={item}
+        expanded={expandedId === item.id}
+        onToggleExpand={handleToggleExpand}
+        onCancel={handleCancelDispatch}
+      />
+    ),
+    [expandedId, handleToggleExpand, handleCancelDispatch],
+  );
+
+  // Dikey/dar ekranda modal genişliği winW'in büyük çoğunluğu olsun
+  // (önceki %78 ekran kenarından taşıyordu). Geniş ekran tabletlerde %78 yeterli.
+  const sheetWidth = winW < 700 ? winW * 0.96 : winW * 0.78;
 
   const closeCancelOverlay = () => {
     setCancelTarget(null);
@@ -80,7 +108,7 @@ export default function RecentDispatchesModal({
   // Backdrop / geri tuşu önce overlay'leri kapatır, hepsi kapalıysa modalı.
   const handleBackdropPress = () => {
     if (cancelTarget) closeCancelOverlay();
-    else if (detailDispatchId) setDetailDispatchId(null);
+    else if (expandedId) setExpandedId(null);
     else onDismiss();
   };
 
@@ -113,7 +141,7 @@ export default function RecentDispatchesModal({
       statusBarTranslucent
       avoidKeyboard
     >
-      <View style={[styles.sheet, { width: winW * 0.78, height: winH * 0.88 }]}>
+      <View style={[styles.sheet, { width: sheetWidth, height: winH * 0.88 }]}>
         {/* Sade header */}
         <View style={styles.header}>
           <Text variant="titleLarge" style={styles.title}>
@@ -162,15 +190,7 @@ export default function RecentDispatchesModal({
             <FlashList
               data={dispatches}
               keyExtractor={(d) => d.id}
-              renderItem={({ item }) => (
-                <DispatchRow
-                  dispatch={item}
-                  onShowDetail={(id) => setDetailDispatchId(id)}
-                  onCancel={() =>
-                    setCancelTarget({ id: item.id, no: item.dispatchNo })
-                  }
-                />
-              )}
+              renderItem={renderItem}
               contentContainerStyle={styles.listContent}
             />
           )}
@@ -207,12 +227,6 @@ export default function RecentDispatchesModal({
             )}
           </View>
         )}
-
-        {/* Detay overlay (modal içinde — lazy fetch) */}
-        <DispatchDetailModal
-          dispatchId={detailDispatchId}
-          onDismiss={() => setDetailDispatchId(null)}
-        />
 
         {/* İptal onay overlay (Portal/Dialog kullanmaz, RNModal altında kalmaz) */}
         {cancelTarget && (

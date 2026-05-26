@@ -47,8 +47,6 @@ export const rollStatusTones = {
   STOCK: "info",
   IN_PRODUCTION: "info",
   PRODUCED: "info",
-  READY_FOR_SHIP: "success",
-  SHIPPED: "neutral",
   SCRAP: "danger",
   CANCELLED: "muted",
   AT_SUBCONTRACTOR: "warning",
@@ -56,26 +54,6 @@ export const rollStatusTones = {
   RETURNED_FROM_SUBCONTRACTOR: "muted",
   WAREHOUSE: "info",
   TAMBUR_CONSUMED: "muted",
-} as const satisfies Record<string, Tone>;
-
-export const shipmentStatusTones = {
-  PREPARING: "warning",
-  SHIPPED: "success",
-  CANCELLED: "muted",
-} as const satisfies Record<string, Tone>;
-
-export const packagingQueueTones = {
-  WAITING: "warning",
-  TAKEN: "info",
-  DONE: "success",
-  CANCELLED: "muted",
-} as const satisfies Record<string, Tone>;
-
-export const shippingQueueTones = {
-  WAITING: "warning",
-  TAKEN: "info",
-  DONE: "success",
-  CANCELLED: "muted",
 } as const satisfies Record<string, Tone>;
 
 export const stepStatusTones = {

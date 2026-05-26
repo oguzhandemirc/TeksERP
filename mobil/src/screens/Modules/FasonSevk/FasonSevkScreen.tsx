@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import RNModal from 'react-native-modal';
 import {
@@ -20,6 +20,7 @@ import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
+import { useDeviceType } from '../../../hooks/useDeviceType';
 import WorkOrderDetailPanel from '../../../components/workOrder/WorkOrderDetailPanel';
 import { RecentDispatchesModal } from '../../../components/dispatch';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
@@ -55,6 +56,8 @@ interface ScannedRoll {
 
 export default function FasonSevkScreen() {
   const qc = useQueryClient();
+  const device = useDeviceType();
+  const isPhone = device === 'phone';
 
   // ── Form state ──
   const [workOrderId, setWorkOrderId] = useState('');
@@ -71,6 +74,9 @@ export default function FasonSevkScreen() {
   const [barcodeInput, setBarcodeInput] = useState('');
   const [scannedRolls, setScannedRolls] = useState<ScannedRoll[]>([]);
   const [scanning, setScanning] = useState(false);
+  // Telefon modunda alttaki "İş Emri Detayları" paneli daraltılabilir.
+  // Daraltıldığında sadece başlık satırı görünür → operatör form alanına yer açar.
+  const [detailsCollapsed, setDetailsCollapsed] = useState(false);
   // Refakat kartı: manuel input + kamera + liste — üçü de aynı WO seçim akışına bağlı.
   const [cardScannerOpen, setCardScannerOpen] = useState(false);
   const [resolvingCard, setResolvingCard] = useState(false);
@@ -124,77 +130,85 @@ export default function FasonSevkScreen() {
   });
 
   // Sadece açık fason (EXTERNAL + PENDING/ACTIVE) adımı olan WO'ları göster.
+  const externalOpenWOs = useMemo(() => {
+    const list = woQuery.data?.data ?? [];
+    return list.filter((w) =>
+      (w.steps ?? []).some(
+        (s) =>
+          s.station?.type === 'EXTERNAL' &&
+          s.status !== 'COMPLETED' &&
+          s.status !== 'SKIPPED' &&
+          s.status !== 'CANCELLED',
+      ),
+    );
+  }, [woQuery.data]);
+
   // Kompakt picker: tarih · termin · ürün · hedef metraj. Müşteri/renk/reçete
   // detayları seçim sonrası sağdaki "İş Emri Detayları" panelinde görünür.
   const woOptions = useMemo<PickerOption[]>(() => {
-    const list = woQuery.data?.data ?? [];
-    return list
-      .filter((w) =>
-        (w.steps ?? []).some(
-          (s) =>
-            s.station?.type === 'EXTERNAL' &&
-            s.status !== 'COMPLETED' &&
-            s.status !== 'SKIPPED' &&
-            s.status !== 'CANCELLED'
-        )
-      )
-      .map((w) => {
-        const details: string[] = [];
+    return externalOpenWOs.map((w) => {
+      const details: string[] = [];
 
-        // En erken termin
-        const deadlines = (w.orderLinks ?? [])
-          .map((l) => l.orderLine?.order?.deadline)
-          .filter((d): d is string => !!d)
-          .map((d) => dayjs(d))
-          .sort((a, b) => a.valueOf() - b.valueOf());
-        const earliestDeadline = w.plannedEndDate
-          ? dayjs(w.plannedEndDate)
-          : (deadlines[0] ?? null);
+      // En erken termin — sort yerine reduce ile min (küçük array, temiz)
+      let earliestDeadlineMs: number | null = null;
+      for (const link of w.orderLinks ?? []) {
+        const d = link.orderLine?.order?.deadline;
+        if (!d) continue;
+        const ms = new Date(d).getTime();
+        if (earliestDeadlineMs === null || ms < earliestDeadlineMs) {
+          earliestDeadlineMs = ms;
+        }
+      }
+      const earliestDeadline = w.plannedEndDate
+        ? dayjs(w.plannedEndDate)
+        : earliestDeadlineMs !== null
+          ? dayjs(earliestDeadlineMs)
+          : null;
 
-        // Ürünler — ilk 2 unique
-        const itemMap = new Map<string, string>();
-        for (const link of w.orderLinks ?? []) {
-          const item = link.orderLine?.item;
-          if (item) itemMap.set(item.id, item.name);
-        }
-        const items = Array.from(itemMap.values());
-        const itemLabel =
-          items.length > 0
-            ? items.slice(0, 2).join(', ') +
-              (items.length > 2 ? ` +${items.length - 2}` : '')
-            : null;
+      // Ürünler — ilk 2 unique
+      const itemMap = new Map<string, string>();
+      for (const link of w.orderLinks ?? []) {
+        const item = link.orderLine?.item;
+        if (item) itemMap.set(item.id, item.name);
+      }
+      const items = Array.from(itemMap.values());
+      const itemLabel =
+        items.length > 0
+          ? items.slice(0, 2).join(', ') +
+            (items.length > 2 ? ` +${items.length - 2}` : '')
+          : null;
 
-        // Tek satır: tarih · termin · ürün(ler) — dikey yer tasarrufu
-        const line1: string[] = [];
-        if (w.createdAt) {
-          line1.push(`📅 ${dayjs(w.createdAt).format('DD.MM.YYYY')}`);
-        }
-        if (earliestDeadline) {
-          line1.push(`⏳ ${earliestDeadline.format('DD.MM.YYYY')}`);
-        }
-        if (itemLabel) {
-          line1.push(`🧵 ${itemLabel}`);
-        }
-        if (line1.length > 0) details.push(line1.join('  ·  '));
+      // Tek satır: tarih · termin · ürün(ler) — dikey yer tasarrufu
+      const line1: string[] = [];
+      if (w.createdAt) {
+        line1.push(`📅 ${dayjs(w.createdAt).format('DD.MM.YYYY')}`);
+      }
+      if (earliestDeadline) {
+        line1.push(`⏳ ${earliestDeadline.format('DD.MM.YYYY')}`);
+      }
+      if (itemLabel) {
+        line1.push(`🧵 ${itemLabel}`);
+      }
+      if (line1.length > 0) details.push(line1.join('  ·  '));
 
-        // 2. satır (opsiyonel): hedef metraj — alt referans bilgisi
-        if (w.targetQuantity) {
-          details.push(
-            `📐 ${w.targetQuantity} mt${w.width ? ` · ${w.width} cm` : ''}`
-          );
-        }
+      // 2. satır (opsiyonel): hedef metraj — alt referans bilgisi
+      if (w.targetQuantity) {
+        details.push(
+          `📐 ${w.targetQuantity} mt${w.width ? ` · ${w.width} cm` : ''}`,
+        );
+      }
 
-        return {
-          value: w.id,
-          label: w.batchNumber,
-          details,
-          badge: {
-            text: trLabel(WORK_ORDER_STATUS_LABEL, w.status),
-            color: WORK_ORDER_STATUS_COLOR[w.status] ?? '#64748b',
-          },
-        } as PickerOption;
-      });
-  }, [woQuery.data]);
+      return {
+        value: w.id,
+        label: w.batchNumber,
+        details,
+        badge: {
+          text: trLabel(WORK_ORDER_STATUS_LABEL, w.status),
+          color: WORK_ORDER_STATUS_COLOR[w.status] ?? '#64748b',
+        },
+      } as PickerOption;
+    });
+  }, [externalOpenWOs]);
 
   // ── Seçilen iş emri detayı (steps dahil) ──
   const woDetailQuery = useQuery({
@@ -446,6 +460,30 @@ export default function FasonSevkScreen() {
     },
   });
 
+  // RecentDispatchesModal'a giden array referansını sabitle: query.data undefined
+  // iken `?? []` her render'da yeni dizi yaratıyordu → modal'a yeni prop → FlashList
+  // gereksiz re-process. useMemo yalnızca query.data değişimde yeni referans verir.
+  const recentDispatches = useMemo(
+    () => dispatchesQuery.data?.data ?? [],
+    [dispatchesQuery.data],
+  );
+  const handleRecentDispatchesDismiss = useCallback(
+    () => setRecentDispatchesOpen(false),
+    [],
+  );
+  const handleRecentDispatchesRefresh = useCallback(
+    () => {
+      void dispatchesQuery.refetch();
+    },
+    [dispatchesQuery],
+  );
+  const handleCancelDispatchMutation = useCallback(
+    async (id: string, reason: string) => {
+      await cancelMutation.mutateAsync({ id, reason });
+    },
+    [cancelMutation],
+  );
+
   // ── Barkod ekleme ──
   const addRollToList = (r: Roll): boolean => {
     if (scannedRolls.some((s) => s.barcode === r.barcode)) {
@@ -504,9 +542,17 @@ export default function FasonSevkScreen() {
     }
   };
 
-  const handleRemoveRoll = (id: string) => {
+  const handleRemoveRoll = useCallback((id: string) => {
     setScannedRolls((prev) => prev.filter((r) => r.id !== id));
-  };
+  }, []);
+
+  // Sevk listesindeki toplam metraj — her render'da reduce çalışmasın.
+  // currentQty backend'den string (Prisma Decimal) gelebilir; Number()'a sarmadan
+  // `0 + "5.5"` string concat yapar, sonuç string olur ve `.toFixed` undefined.
+  const scannedRollsTotal = useMemo(
+    () => scannedRolls.reduce((s, r) => s + Number(r.currentQty ?? 0), 0),
+    [scannedRolls],
+  );
 
   // ── Sevk gönderme ──
   const canDispatch =
@@ -530,7 +576,7 @@ export default function FasonSevkScreen() {
 
   return (
     <ScreenChrome title="Fason Sevk" subtitle="Toplara fason firmaya sevk oluştur">
-      <View style={styles.body}>
+      <View style={[styles.body, isPhone && styles.bodyPhone]}>
         {/* ── SOL: Yeni Sevk ── */}
         <ScrollView style={styles.formCol} contentContainerStyle={styles.formContent}>
           <Surface style={styles.card} elevation={1}>
@@ -747,44 +793,10 @@ export default function FasonSevkScreen() {
               <View style={styles.rollList}>
                 <Text style={styles.rollListHeader}>
                   Sevk listesi ({scannedRolls.length} top,{' '}
-                  {scannedRolls.reduce((s, r) => s + r.currentQty, 0).toFixed(1)} mt)
+                  {scannedRollsTotal.toFixed(1)} mt)
                 </Text>
                 {scannedRolls.map((r) => (
-                  <Surface key={r.id} style={styles.rollItem} elevation={1}>
-                    <View style={{ flex: 1 }}>
-                      <View style={styles.rollItemTop}>
-                        <Text style={styles.rollBarcode}>{r.barcode ?? '—'}</Text>
-                        <Chip compact style={styles.rollStatusChip}>
-                          {trLabel(ROLL_STATUS_LABEL, r.status)}
-                        </Chip>
-                      </View>
-                      <Text style={styles.rollItemName} numberOfLines={1}>
-                        {r.itemName}
-                        {r.colorName ? ` · ${r.colorName}` : ''}
-                      </Text>
-                      <View style={styles.rollBadgeRow}>
-                        <View style={styles.rollBadge}>
-                          <Icon source="arrow-expand-vertical" size={14} color="#0f172a" />
-                          <Text style={styles.rollBadgeText}>{r.currentQty} mt</Text>
-                        </View>
-                        {r.width != null && (
-                          <View style={styles.rollBadge}>
-                            <Icon source="arrow-expand-horizontal" size={14} color="#0f172a" />
-                            <Text style={styles.rollBadgeText}>{r.width} cm</Text>
-                          </View>
-                        )}
-                        <View style={styles.rollBadge}>
-                          <Icon source="star-circle" size={14} color="#0f172a" />
-                          <Text style={styles.rollBadgeText}>{r.qualityGrade}</Text>
-                        </View>
-                      </View>
-                    </View>
-                    <IconButton
-                      icon="close"
-                      onPress={() => handleRemoveRoll(r.id)}
-                      iconColor="#dc2626"
-                    />
-                  </Surface>
+                  <ScannedRollRow key={r.id} roll={r} onRemove={handleRemoveRoll} />
                 ))}
               </View>
             )}
@@ -842,7 +854,13 @@ export default function FasonSevkScreen() {
         </ScrollView>
 
         {/* ── SAĞ: Seçili İş Emri Detayları ── */}
-        <View style={styles.recentsCol}>
+        <View
+          style={[
+            styles.recentsCol,
+            isPhone && styles.recentsColPhone,
+            isPhone && detailsCollapsed && styles.recentsColCollapsed,
+          ]}
+        >
           <View style={styles.recentsHeader}>
             <View style={{ flex: 1 }}>
               <Text variant="titleMedium" style={styles.recentsTitle}>
@@ -854,32 +872,44 @@ export default function FasonSevkScreen() {
                   : 'İş emri seçildikçe burada görünür'}
               </Text>
             </View>
-            <Button
-              mode="contained-tonal"
-              icon="history"
-              compact
-              onPress={() => setRecentDispatchesOpen(true)}
-            >
-              Son Sevkler
-            </Button>
+            {isPhone && (
+              <IconButton
+                icon={detailsCollapsed ? 'chevron-up' : 'chevron-down'}
+                size={22}
+                onPress={() => setDetailsCollapsed((v) => !v)}
+                style={{ margin: 0 }}
+              />
+            )}
+            {!detailsCollapsed && (
+              <Button
+                mode="contained-tonal"
+                icon="history"
+                compact
+                onPress={() => setRecentDispatchesOpen(true)}
+              >
+                Son Sevkler
+              </Button>
+            )}
           </View>
 
-          <ScrollView
-            style={styles.recentsList}
-            contentContainerStyle={styles.detailScrollContent}
-          >
-            {selectedWo ? (
-              <WorkOrderDetailPanel wo={selectedWo} />
-            ) : (
-              <View style={styles.empty}>
-                <Icon source="clipboard-text-outline" size={56} color="#cbd5e1" />
-                <Text style={styles.emptyText}>İş emri seçilmedi</Text>
-                <Text style={styles.emptyHint}>
-                  Sol taraftan bir iş emri seçtikten sonra detaylar burada görünecek
-                </Text>
-              </View>
-            )}
-          </ScrollView>
+          {!(isPhone && detailsCollapsed) && (
+            <ScrollView
+              style={styles.recentsList}
+              contentContainerStyle={styles.detailScrollContent}
+            >
+              {selectedWo ? (
+                <WorkOrderDetailPanel wo={selectedWo} />
+              ) : (
+                <View style={styles.empty}>
+                  <Icon source="clipboard-text-outline" size={56} color="#cbd5e1" />
+                  <Text style={styles.emptyText}>İş emri seçilmedi</Text>
+                  <Text style={styles.emptyHint}>
+                    Sol taraftan bir iş emri seçtikten sonra detaylar burada görünecek
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          )}
         </View>
       </View>
 
@@ -1004,7 +1034,7 @@ export default function FasonSevkScreen() {
 
       <RecentDispatchesModal
         visible={recentDispatchesOpen}
-        dispatches={dispatchesQuery.data?.data ?? []}
+        dispatches={recentDispatches}
         loading={dispatchesQuery.isLoading}
         fetching={dispatchesQuery.isFetching}
         error={dispatchesQuery.isError ? (dispatchesQuery.error as Error) : null}
@@ -1012,12 +1042,10 @@ export default function FasonSevkScreen() {
         page={dispatchesQuery.data?.pagination.page ?? 1}
         totalPages={dispatchesQuery.data?.pagination.totalPages ?? 1}
         total={dispatchesQuery.data?.pagination.total ?? 0}
-        onDismiss={() => setRecentDispatchesOpen(false)}
-        onRefresh={() => dispatchesQuery.refetch()}
+        onDismiss={handleRecentDispatchesDismiss}
+        onRefresh={handleRecentDispatchesRefresh}
         onPageChange={setDispatchesPage}
-        onCancelDispatch={async (id, reason) => {
-          await cancelMutation.mutateAsync({ id, reason });
-        }}
+        onCancelDispatch={handleCancelDispatchMutation}
       />
     </ScreenChrome>
   );
@@ -1040,16 +1068,23 @@ function RollPickerModal({
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
   const [search, setSearch] = useState('');
+  // 300ms debounce: her tuş darbesinde HTTP isteği yerine kullanıcı yazmayı
+  // bitirdikten 300ms sonra tek request.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const rollsQuery = useQuery({
-    queryKey: ['rolls', 'fason-picker', search],
+    queryKey: ['rolls', 'fason-picker', debouncedSearch],
     queryFn: () =>
       rollService.getAll({
         page: 1,
         pageSize: ROLL_PICKER_PAGE_SIZE,
         sortBy: 'createdAt',
         sortOrder: 'desc',
-        search: search.trim() || undefined,
+        search: debouncedSearch.trim() || undefined,
         // Sadece sevke uygun statüler — backend validasyonu da bu ikisini kabul ediyor
         // (subcontractor.service.ts:240-250). SCRAP/CANCELLED/SHIPPED/AT_SUBCONTRACTOR
         // vb. picker'da görünmemeli.
@@ -1230,6 +1265,7 @@ const pickerStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   body: { flex: 1, flexDirection: 'row' },
+  bodyPhone: { flexDirection: 'column' },
 
   // Sol — Form
   formCol: { flex: 1.4, backgroundColor: '#f8fafc' },
@@ -1398,6 +1434,14 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderLeftColor: '#e2e8f0',
   },
+  recentsColPhone: {
+    borderLeftWidth: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  // Telefon modunda daraltıldığında — sadece başlık görünür; flex sıfır olur
+  // ki üstteki form bölümü kalan alanı kapsasın.
+  recentsColCollapsed: { flex: 0, flexGrow: 0 },
   recentsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1414,4 +1458,50 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, color: '#94a3b8', fontWeight: '600' },
   emptyHint: { fontSize: 13, color: '#cbd5e1', textAlign: 'center', maxWidth: 240 },
   detailScrollContent: { padding: 10, gap: 8, paddingBottom: 24 },
+});
+
+// Sevk listesindeki tek top satırı — React.memo ile parent state değişimlerinde
+// gereksiz re-render'ları kesiyoruz (yeni top ekleme/silme sırasında mevcut
+// satırlar prop referansı korunduğu için skip edilir).
+const ScannedRollRow = React.memo(function ScannedRollRow({
+  roll,
+  onRemove,
+}: {
+  roll: ScannedRoll;
+  onRemove: (id: string) => void;
+}) {
+  const handleRemove = useCallback(() => onRemove(roll.id), [onRemove, roll.id]);
+  return (
+    <Surface style={styles.rollItem} elevation={1}>
+      <View style={{ flex: 1 }}>
+        <View style={styles.rollItemTop}>
+          <Text style={styles.rollBarcode}>{roll.barcode ?? '—'}</Text>
+          <Chip compact style={styles.rollStatusChip}>
+            {trLabel(ROLL_STATUS_LABEL, roll.status)}
+          </Chip>
+        </View>
+        <Text style={styles.rollItemName} numberOfLines={1}>
+          {roll.itemName}
+          {roll.colorName ? ` · ${roll.colorName}` : ''}
+        </Text>
+        <View style={styles.rollBadgeRow}>
+          <View style={styles.rollBadge}>
+            <Icon source="arrow-expand-vertical" size={14} color="#0f172a" />
+            <Text style={styles.rollBadgeText}>{roll.currentQty} mt</Text>
+          </View>
+          {roll.width != null && (
+            <View style={styles.rollBadge}>
+              <Icon source="arrow-expand-horizontal" size={14} color="#0f172a" />
+              <Text style={styles.rollBadgeText}>{roll.width} cm</Text>
+            </View>
+          )}
+          <View style={styles.rollBadge}>
+            <Icon source="star-circle" size={14} color="#0f172a" />
+            <Text style={styles.rollBadgeText}>{roll.qualityGrade}</Text>
+          </View>
+        </View>
+      </View>
+      <IconButton icon="close" onPress={handleRemove} iconColor="#dc2626" />
+    </Surface>
+  );
 });

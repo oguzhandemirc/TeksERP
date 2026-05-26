@@ -41,7 +41,6 @@ export interface SackPoolRoll {
   width: number | null;
   qualityGrade: string;
   status: string;
-  ownerCustomerId: string | null;
   item?: { id: string; code: string; name: string };
   variant?: { id: string; code: string; name: string } | null;
   allocations: Array<{

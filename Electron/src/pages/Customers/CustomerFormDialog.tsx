@@ -107,8 +107,19 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
                   />
                 </FormField>
               </div>
-              <FormField label="Vergi No" htmlFor="taxNumber" error={form.formState.errors.taxNumber}>
-                <Input id="taxNumber" {...form.register("taxNumber")} />
+              <FormField
+                label="Vergi No"
+                htmlFor="taxNumber"
+                error={form.formState.errors.taxNumber}
+                hint="İsteğe bağlı — 10-15 haneli VKN/TCKN"
+              >
+                <Input
+                  id="taxNumber"
+                  inputMode="numeric"
+                  maxLength={32}
+                  placeholder="örn: 1234567890"
+                  {...form.register("taxNumber")}
+                />
               </FormField>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" {...form.register("isActive")} /> Aktif

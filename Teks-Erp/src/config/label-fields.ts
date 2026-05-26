@@ -35,41 +35,61 @@ export interface TemplateField {
 }
 
 // =============================================================================
-// ROLL — Tambur output / Packaging label / standalone reprint
+// ROLL_RAW — KK1 ham mal kabul etiketi
 // =============================================================================
-export const ROLL_FIELDS: readonly FieldDef[] = [
-  { key: "barcode",         defaultLabel: "Barkod",            type: "barcode", required: true },
+// Sade etiket: renk yok, müşteri/sipariş bağı yok. KK1'de basılır, ham kumaş
+// stoğa girerken yapışır. Üretim akışında Kurşun/Tambur'da topla beraber gezer.
+// =============================================================================
+export const ROLL_RAW_FIELDS: readonly FieldDef[] = [
+  { key: "barcode",         defaultLabel: "Barkod",            type: "barcode" },
   { key: "qrCode",          defaultLabel: "QR Kod",            type: "qr" },
   { key: "itemName",        defaultLabel: "Ürün",              type: "text" },
-  { key: "itemNameDefault", defaultLabel: "Ürün (bizdeki ad)", type: "text" },
   { key: "itemCode",        defaultLabel: "Ürün Kodu",         type: "text" },
-  { key: "colorName",        defaultLabel: "Renk",              type: "text" },
-  { key: "colorNameDefault", defaultLabel: "Renk (bizdeki ad)", type: "text" },
-  { key: "colorCode",        defaultLabel: "Renk Kodu",         type: "text" },
-  { key: "qualityGrade",     defaultLabel: "Kalite",            type: "text" },
+  { key: "qualityGrade",    defaultLabel: "Kalite",            type: "text" },
   { key: "widthCm",         defaultLabel: "En (cm)",           type: "number" },
   { key: "lengthMeters",    defaultLabel: "Metraj (m)",        type: "number" },
   { key: "weightKg",        defaultLabel: "Ağırlık (kg)",      type: "number" },
-  { key: "customerName",    defaultLabel: "Müşteri",           type: "text" },
-  { key: "orderNumber",     defaultLabel: "Sipariş No",        type: "text" },
-  { key: "batchNumber",     defaultLabel: "Parti No",          type: "text" },
-  { key: "packagingDate",   defaultLabel: "Paketleme Tarihi",  type: "date" },
   { key: "printedAt",       defaultLabel: "Baskı Tarihi",      type: "date" },
+] as const;
+
+// =============================================================================
+// ROLL_FINISHED — Tambur sonrası bitmiş kumaş etiketi
+// =============================================================================
+// Renk + müşteri + sipariş + alias dahil tam set. Tambur'dan finalize çıkışında
+// her top için ayrı basılır; sevkiyat öncesi son fiziksel iz.
+// =============================================================================
+export const ROLL_FINISHED_FIELDS: readonly FieldDef[] = [
+  { key: "barcode",          defaultLabel: "Barkod",                 type: "barcode" },
+  { key: "qrCode",           defaultLabel: "QR Kod",                 type: "qr" },
+  { key: "itemName",         defaultLabel: "Ürün (müşterideki ad)",  type: "text" },
+  { key: "itemNameDefault",  defaultLabel: "Ürün (bizdeki ad)",      type: "text" },
+  { key: "itemCode",         defaultLabel: "Ürün Kodu",              type: "text" },
+  { key: "colorName",        defaultLabel: "Renk (müşterideki ad)",  type: "text" },
+  { key: "colorNameDefault", defaultLabel: "Renk (bizdeki ad)",      type: "text" },
+  { key: "colorCode",        defaultLabel: "Renk Kodu",              type: "text" },
+  { key: "qualityGrade",     defaultLabel: "Kalite",                 type: "text" },
+  { key: "widthCm",          defaultLabel: "En (cm)",                type: "number" },
+  { key: "lengthMeters",     defaultLabel: "Metraj (m)",             type: "number" },
+  { key: "weightKg",         defaultLabel: "Ağırlık (kg)",           type: "number" },
+  { key: "customerName",     defaultLabel: "Müşteri",                type: "text" },
+  { key: "orderNumber",      defaultLabel: "Sipariş No",             type: "text" },
+  { key: "batchNumber",      defaultLabel: "Parti No",               type: "text" },
+  { key: "printedAt",        defaultLabel: "Baskı Tarihi",           type: "date" },
 ] as const;
 
 // =============================================================================
 // SWATCH — Kartela
 // =============================================================================
 export const SWATCH_FIELDS: readonly FieldDef[] = [
-  { key: "barcode",           defaultLabel: "Barkod",           type: "barcode", required: true },
-  { key: "qrCode",            defaultLabel: "QR Kod",           type: "qr" },
-  { key: "cardNumber",        defaultLabel: "Kart No",           type: "text" },
-  { key: "itemName",          defaultLabel: "Ürün",              type: "text" },
-  { key: "itemNameDefault",   defaultLabel: "Ürün (bizdeki ad)", type: "text" },
-  { key: "itemCode",          defaultLabel: "Ürün Kodu",         type: "text" },
-  { key: "colorName",         defaultLabel: "Renk",              type: "text" },
-  { key: "colorNameDefault",  defaultLabel: "Renk (bizdeki ad)", type: "text" },
-  { key: "colorCode",         defaultLabel: "Renk Kodu",         type: "text" },
+  { key: "barcode",           defaultLabel: "Barkod",                 type: "barcode" },
+  { key: "qrCode",            defaultLabel: "QR Kod",                 type: "qr" },
+  { key: "cardNumber",        defaultLabel: "Kart No",                type: "text" },
+  { key: "itemName",          defaultLabel: "Ürün (müşterideki ad)",  type: "text" },
+  { key: "itemNameDefault",   defaultLabel: "Ürün (bizdeki ad)",      type: "text" },
+  { key: "itemCode",          defaultLabel: "Ürün Kodu",              type: "text" },
+  { key: "colorName",         defaultLabel: "Renk (müşterideki ad)",  type: "text" },
+  { key: "colorNameDefault",  defaultLabel: "Renk (bizdeki ad)",      type: "text" },
+  { key: "colorCode",         defaultLabel: "Renk Kodu",              type: "text" },
   { key: "widthCm",           defaultLabel: "En (cm)",          type: "number" },
   { key: "lengthCm",          defaultLabel: "Boy (cm)",         type: "number" },
   { key: "weightKg",          defaultLabel: "Ağırlık (kg)",     type: "number" },
@@ -80,29 +100,13 @@ export const SWATCH_FIELDS: readonly FieldDef[] = [
 ] as const;
 
 // =============================================================================
-// SHIPMENT_DOCKET — Sevkiyat irsaliyesi
-// =============================================================================
-export const SHIPMENT_DOCKET_FIELDS: readonly FieldDef[] = [
-  { key: "shipmentNumber", defaultLabel: "İrsaliye No",    type: "text", required: true },
-  { key: "shippedAt",      defaultLabel: "Sevk Tarihi",    type: "date" },
-  { key: "customerName",   defaultLabel: "Müşteri",        type: "text", required: true },
-  { key: "customerCode",   defaultLabel: "Müşteri Kodu",   type: "text" },
-  { key: "branchName",     defaultLabel: "Şube",           type: "text" },
-  { key: "driverName",     defaultLabel: "Şoför",          type: "text" },
-  { key: "plateNumber",    defaultLabel: "Plaka",          type: "text" },
-  { key: "carrier",        defaultLabel: "Nakliye Firması", type: "text" },
-  { key: "items",          defaultLabel: "Ürün Tablosu",   type: "table" },
-  { key: "totals",         defaultLabel: "Toplamlar",      type: "text" },
-] as const;
-
-// =============================================================================
 // Aggregation + lookup
 // =============================================================================
 
 export const FIELD_CATALOG: Record<LabelKind, readonly FieldDef[]> = {
-  [LabelKind.ROLL]:            ROLL_FIELDS,
-  [LabelKind.SWATCH]:          SWATCH_FIELDS,
-  [LabelKind.SHIPMENT_DOCKET]: SHIPMENT_DOCKET_FIELDS,
+  [LabelKind.ROLL_RAW]:      ROLL_RAW_FIELDS,
+  [LabelKind.ROLL_FINISHED]: ROLL_FINISHED_FIELDS,
+  [LabelKind.SWATCH]:        SWATCH_FIELDS,
 };
 
 export function getAllowedKeys(kind: LabelKind): Set<string> {

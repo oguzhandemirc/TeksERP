@@ -184,7 +184,7 @@ export function WorkOrderFormDialog({
           <DialogTitle>{isEdit ? "İş Emrini Düzenle" : "Yeni İş Emri"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "PLANNED ve IN_PROGRESS iş emirleri düzenlenebilir. COMPLETED/CANCELLED için kapalıdır."
+              ? "Planlandı ve Devam Ediyor durumundaki iş emirleri düzenlenebilir. Tamamlandı/İptal için kapalıdır."
               : "Üretim partisi tanımı. Rota şablonu seç, hedefleri belirle."}
           </DialogDescription>
         </DialogHeader>
@@ -223,6 +223,7 @@ export function WorkOrderFormDialog({
                     lines={pickedLines}
                     onChange={handleLinesChange}
                     onPickerConfirm={handlePickerConfirm}
+                    excludeWorkOrderId={workOrder?.id}
                   />
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center p-6 text-center text-xs text-muted-foreground">
@@ -247,6 +248,7 @@ export function WorkOrderFormDialog({
                       lines={pickedLines}
                       onChange={handleLinesChange}
                       onPickerConfirm={handlePickerConfirm}
+                      excludeWorkOrderId={workOrder?.id}
                     />
                   </div>
                 )}

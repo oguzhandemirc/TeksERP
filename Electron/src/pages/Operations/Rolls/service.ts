@@ -14,16 +14,45 @@ import type { Roll } from "./types";
  * Top yaşam döngüsü sekmeleri — backend `filter[status]` CSV olarak alır,
  * `buildWhereClause` virgülü `{ in: [...] }`'a çevirir. Sekme her zaman
  * forceFilters üzerinden gönderilir; `withDefault*` artık gerekmiyor.
+ *
+ * Station-bazlı sekmeler (`KURSUN_PENDING` ve `TAMBUR_PENDING`) status
+ * filtrelemez — sırasıyla `currentStepKind=PROCESS_QC` (KK2/Kurşun) ve
+ * `currentStepKind=TAMBUR` ile `rollKind=OPEN_FABRIC` filtreleri uygulanır
+ * (RollsTable.tsx içinde). Her iki ekranda da fasondan dönen ve istasyonda
+ * sıra bekleyen açık kumaş kayıtları listelenir.
+ */
+/**
+ * Sekme → backend filter. Null değerli sekmeler `status` filter göndermez,
+ * RollsTable.tsx `forceFilters` üzerinden farklı parametre (rollScope,
+ * currentStepKind, rollKind) ile çalışır.
+ *
+ * Eski "STOCK" sekmesi iki ayrı sekmeye bölündü:
+ *   - RAW_STOCK: KK1 ham, henüz üretime girmemiş (rollScope=RAW_STOCK)
+ *   - FINISHED_STOCK: Tambur sonrası depoda (rollScope=FINISHED_STOCK)
+ * "PRODUCTION" sekmesi super-set: tüm WO akışındaki toplar (Fasonda + Kurşun
+ * Bekleyen + Tambur Bekleyen + IN_PRODUCTION). Diğer sekmeler alt-küme.
  */
 const STATUS_GROUPS = {
-  STOCK: "STOCK,WAREHOUSE",
-  PRODUCTION: "IN_PRODUCTION",
+  RAW_STOCK: null,
+  PRODUCTION: null,
   SUBCONTRACTOR: "AT_SUBCONTRACTOR",
-  READY: "READY_FOR_SHIP",
-  ARCHIVE: "SHIPPED,SCRAP,A1_STOCK,PRODUCED,RETURNED_FROM_SUBCONTRACTOR,TAMBUR_CONSUMED",
+  KURSUN_PENDING: null,
+  TAMBUR_PENDING: null,
+  FINISHED_STOCK: null,
+  ARCHIVE: "RETURNED_FROM_SUBCONTRACTOR,TAMBUR_CONSUMED,SUBCONTRACTOR_CONSUMED",
 } as const;
 
 const base = createCrudService<Roll>("/api/rolls");
+
+export interface InitialEntryPayload {
+  itemId: string;
+  colorId?: string | null;
+  initialQty: number;
+  weightKg?: number;
+  qualityGrade?: string;
+  width?: number | null;
+  propertyIds?: string[];
+}
 
 export const rollService = {
   ...base,
@@ -38,6 +67,10 @@ export const rollService = {
   getByBarcode: (barcode: string): Promise<ApiResponse<Roll>> =>
     apiClient
       .get<ApiResponse<Roll>>(`/api/rolls/barcode/${encodeURIComponent(barcode)}`)
+      .then((r) => r.data),
+  createInitialEntry: (payload: InitialEntryPayload): Promise<ApiResponse<Roll>> =>
+    apiClient
+      .post<ApiResponse<Roll>>("/api/rolls/initial-entry", payload)
       .then((r) => r.data),
 };
 

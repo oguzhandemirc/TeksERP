@@ -34,7 +34,7 @@ const router = Router();
  *     parameters:
  *       - in: query
  *         name: kind
- *         schema: { type: string, enum: [ROLL, SWATCH, SHIPMENT_DOCKET] }
+ *         schema: { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH] }
  *       - in: query
  *         name: includeInactive
  *         schema: { type: boolean }
@@ -58,7 +58,7 @@ router.get("/", verifyToken, requirePermission("label-template:read"), controlle
  *       - in: path
  *         name: kind
  *         required: true
- *         schema: { type: string, enum: [ROLL, SWATCH, SHIPMENT_DOCKET] }
+ *         schema: { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH] }
  *     responses:
  *       200: { description: "{ kind, fields: FieldDef[] }" }
  *       400: { description: Geçersiz kind }
@@ -100,7 +100,7 @@ router.get("/:id", verifyToken, requirePermission("label-template:read"), contro
  *             required: [name, kind]
  *             properties:
  *               name:      { type: string, maxLength: 200 }
- *               kind:      { type: string, enum: [ROLL, SWATCH, SHIPMENT_DOCKET] }
+ *               kind:      { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH] }
  *               isDefault: { type: boolean }
  *               isActive:  { type: boolean }
  *               fields:

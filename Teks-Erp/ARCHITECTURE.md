@@ -27,9 +27,9 @@
 ```
 Teks-Erp/
 ├── prisma/
-│   ├── schema.prisma          # 38 model, 13 enum
-│   ├── seed.ts                # Test verisi (6 kullanıcı)
-│   └── migrations/
+│   ├── schema.prisma          # 52 model, 14 enum
+│   ├── seed.ts                # Tek dosya: 42 permission + 9 template + 7 kullanıcı + 3 kalite + master demo
+│   └── migrations/            # 2026-05-25: baseline reset (tek `init` migration)
 │
 ├── src/
 │   ├── server.ts              # Entry point
@@ -39,16 +39,18 @@ Teks-Erp/
 │   │   └── swagger.ts         # OpenAPI 3.0
 │   │
 │   ├── lib/
-│   │   └── prisma.ts          # PrismaClient singleton (pg adapter)
+│   │   └── prisma.ts          # PrismaClient singleton (pg adapter, pool=20)
 │   │
 │   ├── middlewares/
-│   │   ├── auth.middleware.ts  # verifyToken → req.user
-│   │   ├── rbac.middleware.ts  # requirePermission, requireAnyPermission
-│   │   └── error.middleware.ts # AppError + Prisma error mapping + Zod
+│   │   ├── auth.middleware.ts        # verifyToken → req.user
+│   │   ├── rbac.middleware.ts        # requirePermission, requireAnyPermission
+│   │   ├── error.middleware.ts       # AppError + Prisma + Zod mapping
+│   │   ├── device.middleware.ts      # Pairing / device-token auth (mobil)
+│   │   └── uuid-param.middleware.ts  # UUID path param validate
 │   │
-│   ├── controllers/           # 12 dosya — HTTP layer
-│   ├── services/              # 17 dosya — iş mantığı
-│   ├── routes/                # 21 dosya — Swagger JSDoc + middleware
+│   ├── controllers/           # 15 dosya — HTTP layer
+│   ├── services/              # 22 dosya + helpers/ + reports/ — iş mantığı
+│   ├── routes/                # 31 dosya + reports/ — Swagger JSDoc + middleware
 │   │
 │   ├── types/
 │   │   ├── api.types.ts       # ApiResponse, PaginatedResponse, JwtPayload
@@ -82,43 +84,49 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 
 ---
 
-## 4. Schema — 38 Model + 13 Enum
+## 4. Schema — 52 Model + 14 Enum
 
 ### Modeller (gruplandırılmış)
 
 | Grup | Modeller | Adet |
 |---|---|---|
-| RBAC | User, Role, Permission, UserRole, RolePermission | 5 |
-| Master Data | Station, Machine, Route, RouteStep | 4 |
-| Item & Variant | Item, ItemVariant, CustomerVariantAlias | 3 |
-| Inventory | Roll, RollMovement, RollOperation | 3 |
-| Sales | Customer, CustomerBranch, Order, OrderLine | 4 |
+| RBAC | User, Permission, UserPermission, PermissionTemplate, PermissionTemplateItem | 5 |
+| Station & Device | Station, Machine, Device, PairingCode | 4 |
+| Routing | Route, RouteStep | 2 |
+| Item & Properties | Item, FabricProperty, Color, ItemAllowedProperty, ItemAllowedColor | 5 |
+| Sales | Customer, CustomerBranch | 2 |
+| Customer Mapping | CustomerItemAlias, CustomerColorAlias | 2 |
+| Orders | Order, OrderLine, OrderLineRequiredProperty | 3 |
 | Production | WorkOrder, WorkOrderStep, WorkOrderToOrderLine | 3 |
+| Production Config | WorkOrderTargetProperty, StationColor, StationProperty | 3 |
+| Inventory | Roll, RollMovement, RollOperation, RollProperty | 4 |
 | Quality | QualityGrade, DefectType, RollError | 3 |
-| Logistics | OrderAllocation, Shipment, ShipmentItem | 3 |
-| Subcontractor | SubcontractorDispatch, SubcontractorDispatchItem, SubcontractorReceipt, SubcontractorReceiptItem | 4 |
-| Documents | TravelerCard, TravelerCardScan, Manifest, Swatch | 4 |
-| Finance / Logs | CurrentAccount, MachineLog | 2 |
-| Audit | SystemLog | 1 |
-| **TOPLAM** | | **38** |
+| Subcontractor | Subcontractor, SubcontractorCategory, SubcontractorToCategory, SubcontractorDispatch, SubcontractorDispatchItem, SubcontractorReceipt, SubcontractorReceiptItem, SubcontractorReceiptProperty | 8 |
+| Documents | TravelerCard, TravelerCardScan, Swatch, Manifest, LabelTemplate | 5 |
+| System | SystemSetting | 1 |
+| Audit | SystemLog, SystemLogArchive | 2 |
+| **TOPLAM** | | **52** |
+
+> `Manifest` modeli şemada hâlâ tanımlı ama sevkiyat modülü yeniden yazılırken kullanımı askıda; yeni sevkiyat tasarımıyla birlikte revize edilebilir. `CurrentAccount` ve `MachineLog` modelleri 2026-05-25 cleanup'ında silindi (finans modülü ve loom monitoring için kullanılmıyordu).
 
 ### Enum'lar
 
 | Enum | Değerler |
 |---|---|
 | `StationType` | INTERNAL, EXTERNAL |
-| `StationKind` | RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, OTHER (paket/sevkiyat istasyon değildir — fulfillment akışı) |
-| `RollOperationType` | KURSUN_APPLIED, QC2_COMPLETED, TAMBUR_PROCESSED, PACKAGED, SUBCONTRACTOR_SENT, SUBCONTRACTOR_RETURNED |
-| `ItemType` | YARN, WARP, RAW_FABRIC, DYED_FABRIC, CONSUMABLE |
-| `RollStatus` | STOCK, IN_PRODUCTION, PRODUCED, READY_FOR_SHIP, SHIPPED, SCRAP, AT_SUBCONTRACTOR, A1_STOCK, RETURNED_FROM_SUBCONTRACTOR, WAREHOUSE |
+| `StationKind` | RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, OTHER |
+| `RollOperationType` | KURSUN_APPLIED, QC2_COMPLETED, TAMBUR_PROCESSED, SUBCONTRACTOR_SENT, SUBCONTRACTOR_RETURNED |
+| `ItemType` | YARN, WARP, FABRIC, CONSUMABLE |
+| `RollEntrySource` | SUPPLIER_RECEIPT, TAMBUR_SPLIT, SUBCONTRACTOR_RETURN |
+| `RollStatus` | STOCK, IN_PRODUCTION, PRODUCED, SCRAP, CANCELLED, AT_SUBCONTRACTOR, A1_STOCK, RETURNED_FROM_SUBCONTRACTOR, WAREHOUSE, TAMBUR_CONSUMED, SUBCONTRACTOR_CONSUMED |
 | `CompanyType` | CUSTOMER, SUPPLIER, SUBCONTRACTOR, DYEHOUSE |
 | `OrderStatus` | PENDING, APPROVED, IN_PRODUCTION, PARTIAL_SHIPPED, COMPLETED, CANCELLED |
-| `WorkOrderType` | ORDER_PRODUCTION, STOCK_PRODUCTION, SERVICE_PRODUCTION |
+| `WorkOrderType` | ORDER_PRODUCTION, STOCK_PRODUCTION |
 | `WorkOrderStatus` | PLANNED, IN_PROGRESS, PAUSED, COMPLETED, CANCELLED |
 | `StepStatus` | PENDING, ACTIVE, COMPLETED, SKIPPED |
-| `ShipmentStatus` | PREPARING, SHIPPED, CANCELLED |
 | `TravelerCardStatus` | ACTIVE, REPRINTED, VOIDED, COMPLETED |
 | `ScanType` | ARRIVAL, DEPARTURE, INFO |
+| `LabelKind` | (bkz. `schema.prisma` — etiket türleri) |
 
 ### Schema Kuralları
 
@@ -127,6 +135,7 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 - **Soft delete:** Fiziksel DELETE yok — `isActive: false` veya status değişikliği
 - **Audit:** Her CUD `SystemLog`'a yazılır → `AuditService.log()` üzerinden
 - **`StationKind`** — istasyon **domain rolü**; API davranışını dispatch eder (PROCESS_QC için Kurşun+QC2 akışı vb.)
+- **`Station.allowAsWorkOrderStep`** — WO step picker'da gösterilsin mi? **KK1 gibi giriş noktaları için false**: KK1 sadece Roll oluşturma noktası, WorkOrderStep olarak rotaya eklenmez.
 
 ### Roll Yaşam Döngüsü
 
@@ -137,20 +146,20 @@ STOCK ─┬─→ IN_PRODUCTION ─→ AT_SUBCONTRACTOR ─→ RETURNED_FROM_SU
                                                                               ↓
                                                 ┌──── SCRAP / A1_STOCK (Tambur kesim)
                                                 ↓
-                                            WAREHOUSE  (depo — tartı/paket bekliyor)
-                                                ↓
-                                        READY_FOR_SHIP  (tartı/paket tamamlandı)
-                                                ↓
-                                             SHIPPED
+                                            WAREHOUSE  (depo)
 ```
 
-`PRODUCED` statüsü artık yalnızca yedek/legacy yol içindir — normal akışta
-Tambur sonrası top doğrudan `WAREHOUSE`'a düşer ve paketleme sonrası
-`READY_FOR_SHIP` olur.
+`PRODUCED` statüsü, Roll'un son üretim adımını bitirdiği ama Tambur'dan
+geçmediği durumlarda kullanılır (tek-adımlı WO veya rota Tambur içermiyor).
+Normal Tambur'lu akışta top doğrudan child Roll'lar olarak `WAREHOUSE`'a düşer.
+
+> **NOT:** Tartı / paket / sevkiyat akışı yeniden yazılıyor; `READY_FOR_SHIP` ve `SHIPPED` enum değerleri yeni modül için saklı.
 
 ---
 
 ## 5. API Endpoint Haritası
+
+`app.ts` üzerinden mount edilen tüm route prefix'leri (32 mount).
 
 ### Public (auth gerekmez)
 
@@ -158,15 +167,30 @@ Tambur sonrası top doğrudan `WAREHOUSE`'a düşer ve paketleme sonrası
 |---|---|---|
 | POST | `/api/auth/login` | JWT döndürür |
 | GET | `/health` | Health check |
+| ANY | `/api/devices/*` | Mobil cihaz pairing public uçları (`devicePublicRouter`) |
 
-### Master Data (BaseController CRUD)
+### Auth & Admin
 
 | Endpoint | Permission |
 |---|---|
-| `/api/items` (+`/api/items/:itemId/variants`) | `item:read` / `item:write` |
+| `/api/auth/*` | (login public, diğerleri token) |
+| `/api/admin/*` | `admin:users` / `admin:settings` / `admin:*` |
+| `/api/admin/devices/*` | `admin:users` |
+
+### Master Data (çoğu BaseController CRUD)
+
+| Endpoint | Permission |
+|---|---|
+| `/api/items` | `item:read` / `item:write` |
 | `/api/customers` | `customer:read` / `customer:write` |
-| `/api/stations` (+`/api/machines`) | `station:read` / `station:write` |
+| `/api/customers/:customerId/branches` | `customer:read` / `customer:write` |
+| `/api/customers/:customerId/aliases` (item + color) | `customer-alias:read` / `customer-alias:write` |
+| `/api/stations` (+ `/api/machines`) | `station:read` / `station:write` |
+| `/api/station-capabilities` | `station:read` / `station:write` |
 | `/api/routes` | `station:read` / `station:write` |
+| `/api/colors`, `/api/fabric-properties` | `property:read` / `property:write` |
+| `/api/quality-grades`, `/api/defect-types` | `quality:read` / `quality:write` |
+| `/api/currencies`, `/api/feature-flags` | (read public veya admin — bkz. route) |
 
 ### Envanter
 
@@ -180,29 +204,36 @@ Tambur sonrası top doğrudan `WAREHOUSE`'a düşer ve paketleme sonrası
 | Endpoint | Permission |
 |---|---|
 | `/api/orders` (CRUD) | `order:read` / `order:write` |
-| `/api/work-orders` (+ `/attach-rolls`, `/detach-rolls`, `/lock`, `/manifest`, `/travel-card`, `/rolls`, `/shipments`) | `workorder:read` / `workorder:write` |
+| `/api/work-orders` (+ `/attach-rolls`, `/detach-rolls`, `/lock`, `/manifest`, `/travel-card`, `/rolls`) | `workorder:read` / `workorder:write` |
 | `/api/production/active-steps`, `/step-info` | `workorder:read` |
 | `/api/production/step-action` | `roll:write` |
 | `/api/production/report-error` | `quality:write` |
 | `/api/kursun-qc/*` | `quality:read` / `quality:write` |
 | `/api/tambur/*` | `quality:read` / `quality:write` |
-| `/api/packaging/*` | `roll:read` / `roll:write` |
-| `/api/service-production/*` | `roll:read` / `roll:write` |
 
-### Sevkiyat / Lojistik
+### Fason (Subcontractor)
 
 | Endpoint | Permission |
 |---|---|
-| `/api/shipping/ready-orders`, `/ready-fason`, `/shipments` (CRUD + `/finalize`, `/print`, `/add-items`) | `shipment:read` / `shipment:write` |
-| `/api/subcontractor/dispatches`, `/receipts` | `workorder:read` / `workorder:write` |
+| `/api/subcontractor/dispatch`, `/receive` (workflow) | `workorder:write` |
+| `/api/subcontractors` (master data CRUD) | `subcontractor:read` / `subcontractor:write` |
+| `/api/subcontractor-categories` | `subcontractor:read` / `subcontractor:write` |
 
-### Dokümanlar / Master
+### Dokümanlar / Etiket
 
 | Endpoint | Permission |
 |---|---|
 | `/api/traveler-cards/*` | `workorder:read` / `workorder:write` |
 | `/api/swatches` | `quality:read` |
-| `/api/defect-types`, `/api/quality-grades` | `quality:read` / `quality:write` |
+| `/api/labels` (önizleme + basma) | `label:read` / `label:print` / `label:edit` |
+| `/api/label-templates` | `label-template:read` / `label-template:write` |
+
+### Dashboard & Rapor
+
+| Endpoint | Permission |
+|---|---|
+| `/api/dashboard` | (rol bazlı — bkz. route dosyası) |
+| `/api/reports/*` (production, sales, quality, inventory, subcontract, customer, audit) | `report:<scope>` |
 
 Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`, `parameters`, `requestBody`, `responses` (200/201 + 400/401/500) zorunlu.
 
@@ -210,52 +241,62 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 
 ## 6. RBAC Permission Kodları
 
-`requirePermission(code)` middleware'i `req.user.permissions[]` array'ini kontrol eder. Toplam **20 permission**, 6 modül.
+`requirePermission(code)` middleware'i `req.user.permissions[]` array'ini kontrol eder. Toplam **42 permission**, 9 modül. Permissions doğrudan kullanıcıya bağlanır (`UserPermission` modeli); ayrıca tekrar kullanılabilir setler için `PermissionTemplate` / `PermissionTemplateItem` var (rol modeli **yok**).
 
 | Modül | Permissions |
 |---|---|
-| SALES | `order:read`, `order:write`, `customer:read`, `customer:write` |
+| SALES | `order:read`, `order:write`, `customer:read`, `customer:write`, `customer-alias:read`, `customer-alias:write` |
 | PRODUCTION | `workorder:read`, `workorder:write`, `roll:read`, `roll:write`, `station:read`, `station:write` |
 | MASTER_DATA | `item:read`, `item:write` |
-| QUALITY | `quality:read`, `quality:write` |
-| LOGISTICS | `shipment:read`, `shipment:write`, `allocation:write` |
-| ADMIN | `admin:users`, `admin:roles`, `admin:settings` |
+| QUALITY | `quality:read`, `quality:write`, `property:read`, `property:write` |
+| SUBCONTRACTOR | `subcontractor:read`, `subcontractor:write` |
+| LOGISTICS | `label:read`, `label:print`, `label:edit`, `label-template:read`, `label-template:write` |
+| REPORTS | `report:production`, `report:sales`, `report:quality`, `report:inventory`, `report:subcontract`, `report:customer`, `report:audit` |
+| ADMIN | `admin:users`, `admin:settings`, `admin:*` (wildcard) |
+| MOBILE | `mobile:kk1`, `mobile:kk2-kursun`, `mobile:tambur`, `mobile:depo`, `mobile:fason-sevk`, `mobile:fason-kabul`, `mobile:*` (wildcard) |
 
-### Rol → Permission Atamaları
+> Eski `LOGISTICS | shipment:*, allocation:*` permission'ları sevkiyat modülü ile birlikte kaldırıldı. Yeni LOGISTICS sadece etiket modülünü kapsar.
 
-| Rol | Permissions |
-|---|---|
-| Admin | TÜM 20 permission |
-| Planlama Şefi | `workorder:read/write`, `roll:read/write`, `station:read`, `item:read/write`, `order:read`, `allocation:write` |
-| Üretim Operatörü | `workorder:read`, `roll:read/write`, `station:read`, `item:read` |
-| Kalite Kontrol | `quality:read/write`, `roll:read/write`, `workorder:read`, `item:read` |
-| Satış Temsilcisi | `order:read/write`, `customer:read/write`, `item:read` |
-| Sevkiyatçı | `shipment:read/write`, `order:read`, `roll:read`, `item:read` |
+### Seed Sonrası Yetki Dağılımı
+
+`seed.ts` **yalnız `admin`'e tüm 42 permission'ı atar** (`prisma/seed.ts` §4). Diğer test kullanıcıları (`mehmet.planlama`, `ali.operator`, `ayse.kalite`, `fatma.satis`, `ali.kursun`, `ahmet.depo`) yetkisiz başlar — admin web UI'sından (`POST /api/admin/users/:id/permissions`) tek tek atanır.
 
 ### Yeni Endpoint Yazarken
 
 Yeni `requirePermission(code)` çağrısında:
 1. `code` `seed.ts`'in `permissionData` listesinde **olmalı** — yoksa Admin dışı kullanıcılar 403 alır
-2. Ekleyen rolde de o permission **olmalı** — yoksa o rol erişemez
-3. Hem `seed.ts`'i güncelle hem de canlı DB'yi güncelle (yeni permission INSERT + role_permissions INSERT)
+2. Hem `seed.ts`'i güncelle hem de canlı DB'ye yeni permission INSERT + ihtiyacı olan kullanıcı/template'lere bağla
 
 ---
 
 ## 7. Kritik İş Kuralları
 
-### 7.1 Roll Splitting (Tambur — `tambur.service.ts`)
+### 7.1 Roll Splitting — Cumulative Length Model (Tambur — `tambur.service.ts`)
+
+Tambur operatörü makinede kumaşı sarar, sayaç **sıfırdan başlar**. Her "kes" tuşunda sayaca kadar sarılmış uzunluk yeni bir child Roll olur, sayaç sıfırlanır.
+
+API: `POST /api/tambur/finalize` `{ rollId, cuts: [{ length, qualityGrade, relatedErrorIds }], decisions, foldType }`
 
 ```
-Kurşun'da hata tespit edildi → Tambur'da karar verildi: "KES"
+Parent (currentQty=500m, hatalar @60m + @150m)
   ↓
-Orijinal topun metrajı AZALTILMAZ.
-Kesilen parça için YENİ Roll kaydı oluşturulur (yeni barcode).
-Yeni Roll → status: SCRAP veya A1_STOCK, parentRollId set
-Orijinal Roll → currentQty güncellenir, status: WAREHOUSE,
-                currentStepId: null  (saf statü modeli — depo bir istasyon değil;
-                paketleme RollMovement'i tartı/paket finalize anında atomic
-                açılır + kapanır, READY_FOR_SHIP'e geçer)
+cuts = [
+  { length: 59,  quality: 1.KALITE },   // 0–59m
+  { length: 10,  quality: FIRE, relatedErrorIds: [ERR_60M] },
+  { length: 149, quality: 1.KALITE },   // 70–219m
+  { length: 10,  quality: FIRE, relatedErrorIds: [ERR_150M] },
+]
+sum(cuts) = 228m
+Kalan = 500 - 228 = 272m  → otomatik son child (parent.qualityGrade=1.KALITE)
+  ↓
+Toplam 5 child Roll yaratılır, hepsinde parentRollId set, yeni barcode
+Quality → Status mapping QualityGrade kataloğundan:
+  1.KALITE → WAREHOUSE, FIRE → SCRAP (katalogda yoksa SCRAP fallback)
+Parent retire: status = TAMBUR_CONSUMED, currentQty = 0, currentStepId = null
+İlişkili RollError'lar: actionTaken = CUT | NO_CUT, isProcessed = true
 ```
+
+**Validasyon:** `sum(cuts[].length) ≤ parent.currentQty`. cuts boş gönderilirse tüm metraj tek child top olur (parent.qualityGrade ile).
 
 ### 7.2 Fason Dönüş — Ölçüm YOKKEN
 
@@ -266,34 +307,14 @@ Roll'lar AT_SUBCONTRACTOR → RETURNED_FROM_SUBCONTRACTOR'a geçer (yeni barkod 
 (RollMovement.qtyOut/weightOut alanlarına yazılır).
 ```
 
-### 7.3 Esnek Müşteri Ataması (`shipping.service.ts`)
+### 7.3 İş Emri Esnekliği (`workorder.service.ts`)
 
 ```
-Müşteri A'ya tahsisli top → Müşteri B'nin sevkiyatına eklenebilir:
-  → Eski OrderAllocation silinir
-  → Top yeni Shipment'a ShipmentItem olarak eklenir
-İSTİSNA: Roll.ownerCustomerId varsa (SERVICE_PRODUCTION) o müşteriden
-        çıkarılamaz — fason üretim kabulü.
-```
-
-### 7.4 Otomatik Sipariş Tamamlama (`shipping.service.ts`)
-
-```
-Shipment finalize → SHIPPED:
-  → Etkilenen her Order için toplam shippedQty hesaplanır
-  → shippedQty >= quantity → Order.status = COMPLETED
-  → Aksi halde → Order.status = PARTIAL_SHIPPED
-```
-
-### 7.5 İş Emri Esnekliği (`workorder.service.ts`)
-
-```
-- WorkOrder siparişsiz olabilir (STOCK_PRODUCTION, SERVICE_PRODUCTION)
+- WorkOrder siparişsiz olabilir (STOCK_PRODUCTION)
 - WorkOrder birden fazla OrderLine'a bağlanabilir (WorkOrderToOrderLine N:N)
-- Sevkiyat WO görmez, sadece Order/ShipmentItem üzerinden çalışır
 ```
 
-### 7.6 Refakat Kartı (`TravelerCard`)
+### 7.4 Refakat Kartı (`TravelerCard`)
 
 ```
 WorkOrder finalize edildiğinde TravelerCard üretilir (cardNumber, barcode).
@@ -303,7 +324,7 @@ Reprint → eski kart REPRINTED'e döner, yeni kart ACTIVE.
 WO COMPLETED → tüm kartlar COMPLETED'a düşer.
 ```
 
-### 7.7 RollOperation Idempotent
+### 7.5 RollOperation Idempotent
 
 ```
 @@unique([rollId, workOrderStepId, operationType])
@@ -523,7 +544,7 @@ Tek-kolon `orderBy` için yeterli; çok-kolon sırada `(createdAt, id) > (?, ?)`
 
 ### 9.6 JSON Alan Sorguları → GIN Index
 
-Schema'da Json alanları: `WorkOrder.parameters`, `WorkOrderStep.stepData`, `Shipment.printSnapshot`, `RollOperation.metadata`, `MachineLog.details`, `SystemLog.oldData/newData`, `Manifest.snapshot`.
+Schema'da Json alanları: `WorkOrder.parameters`, `WorkOrderStep.stepData`, `RollOperation.metadata`, `MachineLog.details`, `SystemLog.oldData/newData`, `Manifest.snapshot`.
 
 Eğer içinde sorgulanmıyorsa (yalnızca okunuyor) — index gerekmez.  
 Eğer sorgulanacaksa raw migration ile GIN index:
@@ -621,17 +642,15 @@ Tüm hot-path tablolarında indeks durumu:
 
 | Tablo | Doğrulanmış İndeksler |
 |---|---|
-| `rolls` | `itemId`, `variantId`, `status`, `parentRollId`, `currentStepId`, `producedInStepId`, `ownerCustomerId`, **composite `[status, createdAt]`** |
+| `rolls` | `itemId`, `colorId`, `status`, `parentRollId`, `parentReceiptId`, `currentStepId`, `producedInStepId`, `createdById`, **composite `[status, createdAt]`** |
 | `roll_movements` | `rollId`, `workOrderStepId`, `enteredAt` |
 | `roll_operations` | `@@unique([rollId, workOrderStepId, operationType])`, `rollId`, `workOrderStepId`, `operationType` |
 | `roll_errors` | `rollId`, `detectedAtStepId`, `processedAtStepId`, `isProcessed`, `defectTypeId`, **composite `[rollId, isProcessed]`** |
 | `work_order_steps` | `[workOrderId, stepSequence]`, `stationId`, **composite `[workOrderId, status]`** |
 | `system_logs` | `userId`, `[tableName, recordId]`, **`[createdAt]`** |
 | `traveler_card_scans` | `cardId`, `[stationId, scannedAt]`, `workOrderStepId` |
-| `orders` | `customerId`, `status` |
+| `orders` | `customerId`, `branchId`, `status` |
 | `work_orders` | `status`, `routeTemplateId`, `dyehouseCompanyId` |
-| `shipments` | `customerId`, `status` |
-| `shipment_items` | `shipmentId`, `rollId @unique` |
 
 ### Aktif Partial / Conditional İndeksler (raw SQL migration)
 
@@ -650,11 +669,11 @@ Tüm hot-path tablolarında indeks durumu:
 
 ---
 
-## 10.1 DB Runtime Safety (her zaman aktif)
+## 10.1 DB Runtime Safety (DB-level, manuel uygulanır)
 
-Yıllarca yerel sunucuda çalışacak ERP'de tek bir kötü sorgu DB'yi kilitlememeli. Migration: `20260427160000_db_runtime_safety`.
+Yıllarca yerel sunucuda çalışacak ERP'de tek bir kötü sorgu DB'yi kilitlememeli. **Bu ayarlar migration ile değil, doğrudan DB'ye `ALTER DATABASE` ile uygulanır** — `src/lib/prisma.ts` connection pool'unun comment'inde referans alınır (`statement_timeout: DB-level (30s)`).
 
-| Ayar | Değer | Amaç |
+| Ayar | Önerilen Değer | Amaç |
 |---|---|---|
 | `statement_timeout` | `30s` | Tek sorgu 30 saniyeyi aşarsa otomatik iptal — runaway query koruması |
 | `idle_in_transaction_session_timeout` | `5min` | Açık kalmış transaction'lar tablo lock'ı tutmasın |
@@ -670,10 +689,14 @@ WHERE name IN ('statement_timeout','idle_in_transaction_session_timeout',
                'log_min_duration_statement','log_lock_waits','log_temp_files');
 ```
 
-**Tekrar uygulamak gerekirse** (DB taşıma, kurulum vb.):
-```bash
-psql -h <host> -p <port> -U postgres -d TeksErpDb -f \
-  prisma/migrations/20260427160000_db_runtime_safety/migration.sql
+**Yeni kurulum / DB taşıma sonrası uygulamak için:**
+```sql
+ALTER DATABASE "TeksErpDb" SET statement_timeout = '30s';
+ALTER DATABASE "TeksErpDb" SET idle_in_transaction_session_timeout = '5min';
+ALTER DATABASE "TeksErpDb" SET log_min_duration_statement = '500ms';
+ALTER DATABASE "TeksErpDb" SET log_lock_waits = 'on';
+ALTER DATABASE "TeksErpDb" SET log_temp_files = '10MB';
+-- Session düzeyi için tekrar bağlan veya pg_reload_conf() çağır.
 ```
 
 ---
@@ -775,18 +798,40 @@ npx tsc --noEmit             # Type-check (build'siz)
 
 | Username | Şifre | Hedef Rol | Seed Sonrası Yetkiler |
 |---|---|---|---|
-| `admin` | `admin123` | Admin | ✅ TÜM (~50 permission) |
+| `admin` | `admin123` | Admin | ✅ TÜM 42 permission (seed §4) |
 | `mehmet.planlama` | `test123` | Planlama Şefi | ⚠️ Boş — admin UI'dan atayın |
 | `ali.operator` | `test123` | Üretim Operatörü | ⚠️ Boş — admin UI'dan atayın |
 | `ayse.kalite` | `test123` | Kalite Kontrol | ⚠️ Boş — admin UI'dan atayın |
 | `fatma.satis` | `test123` | Satış | ⚠️ Boş — admin UI'dan atayın |
-| `veli.sevkiyat` | `test123` | Sevkiyat | ⚠️ Boş — admin UI'dan atayın |
 | `ali.kursun` | `test123` | Mobil — Kurşun/KK2 | ⚠️ Boş — admin UI'dan atayın |
-| `ahmet.depo` | `test123` | Mobil — Depo/Sevkiyat/Tambur | ⚠️ Boş — admin UI'dan atayın |
+| `ahmet.depo` | `test123` | Mobil — Depo/Tambur | ⚠️ Boş — admin UI'dan atayın |
 
-> **Tasarım kararı:** `prisma/seed.ts` yalnız `admin`'e seed'de yetki veriyor (line 163-173). Diğer test kullanıcıları "boş başlar, admin atar" prensibiyle yaratılıyor — production'da rol atamaları runtime yapılır, dev'de de aynı yol izlenir.
+> **Tasarım kararı:** `prisma/seed.ts` yalnız `admin`'e seed'de yetki veriyor. Diğer test kullanıcıları "boş başlar, admin atar" prensibiyle yaratılıyor — production'da rol atamaları runtime yapılır, dev'de de aynı yol izlenir.
 >
 > "Hedef Rol" kolonu, kullanıcının ileride hangi yetki setine sahip olması beklendiğini gösterir — seed'de değil, admin UI'sındaki atamada karşılık bulur.
+
+### Seed Sonrası Yüklü Master Data
+
+`npm run seed` test ortamı için aşağıdaki demo veriyi de yükler (production'a girmemeli):
+
+| Kategori | Adet | İçerik |
+|---|---|---|
+| Müşteri | 4 | Arda Tekstil, Moda Konfeksiyon, Beyaz Giyim, Yeşil Tekstil |
+| Müşteri Şubesi | 3 | ARDA (İstanbul Merkez + Ankara), Moda Konfeksiyon (İzmir Merkez) |
+| Customer-Item alias | 4 | Patos → Soft Patos / Premium Pamuk / Klasik Patos / Eco Patos |
+| Customer-Color alias | 3 | MAVI=Royal Blue, LACIVERT=Navy, BEYAZ=Saf Beyaz |
+| Renk | 6 | Beyaz, Siyah, Lacivert, Kırmızı, Mavi, Bej |
+| Kumaş Özelliği | 7 | Antibakteriyel, Su Geçirmez, Yanmaz, Elastik, Zımparalı, Parlak, **Kurşunlu** |
+| Fason Kategori | 2 | **BOYA** (Boyahane — `appliesColor=true, appliesProperty=true`), **ZIMPARA** (Zımpara — yalnız `appliesProperty=true`) |
+| Fason Firma | 2 | **BOYER** (Boyer Boyacılık → BOYA), **KESTEL** (Kestel Zımpara → ZIMPARA) |
+| İstasyon | 5 | **KK1_1** (RAW_QC, entry-only `allowAsWorkOrderStep=false`), Kurşun+KK2 (PROCESS_QC), Tambur (TAMBUR), Boya Fason, Zımpara Fason |
+| Makine | 3 | KK1-M1 (tablet pair için), KK2-M1, TAMBUR-M1 |
+| İstasyon yeteneği | 6 renk + 7 özellik | Boya = 6 renk + 5 özellik · Kurşun = KURSUN · Zımpara = ZIMPARALI · Tambur = yok |
+| Hata tipi | 2 | YIRTIK (MAJOR), LEKE (MINOR) |
+| Rota şablonu | 3 (9 step) | "Standart Boyama" (generic), "Boya + Zımpara" (generic), "ARDA — Hızlı" (ARDA-özel) |
+| Ürün | 1 | **Patos** (FABRIC, tüm renk + özellik izinli) |
+| Label template | 2 | ROLL default, SWATCH default |
+| Kalite Sınıfı | 3 | 1.KALITE, A1, FIRE |
 
 ---
 

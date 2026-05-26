@@ -1,643 +1,621 @@
-import React, { useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  TouchableWithoutFeedback,
-  Keyboard,
-  TouchableOpacity,
-  ScrollView,
-} from 'react-native';
-import { Text, TextInput } from 'react-native-paper';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, StyleSheet, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Text, TouchableRipple, ActivityIndicator, Icon, IconButton } from 'react-native-paper';
+import { useQuery } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Toast from 'react-native-toast-message';
+import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
 import { authService } from '../../services/auth.service';
+import PickerModal, { type PickerOption } from '../../components/PickerModal';
+import { useDeviceType, useIsPortrait } from '../../hooks/useDeviceType';
+import type { MobileUser } from '../../types/auth';
+import type { RootStackParamList } from '../../navigation/types';
 
-// ──────────────── Sabitler ────────────────
 const COLORS = {
-  brandBg: '#0f172a',
-  brandAccent: '#4f46e5',
-  brandAccentLight: '#6366f1',
-  brandText: '#f1f5f9',
-  brandSubtext: '#94a3b8',
-  formBg: '#f8fafc',
-  white: '#ffffff',
-  inputBg: '#ffffff',
-  textPrimary: '#0f172a',
-  textSecondary: '#475569',
-  textMuted: '#94a3b8',
+  bg: '#0f172a',
+  bgSoft: '#1e293b',
+  bgDarker: '#0a1120',
+  accent: '#4f46e5',
+  accentLight: '#6366f1',
+  text: '#f1f5f9',
+  subtext: '#94a3b8',
+  border: '#334155',
+  borderDark: '#1e293b',
   error: '#ef4444',
-  errorBg: '#fef2f2',
-  borderDefault: '#e2e8f0',
-  borderFocus: '#4f46e5',
-  btnPrimary: '#4f46e5',
+  pinEmpty: '#334155',
+  backspaceBg: '#3f1d1f',
+  backspaceBorder: '#7f1d1d',
+  backspaceIcon: '#fecaca',
 };
 
-const INPUT_THEME = {
-  colors: {
-    primary: '#4f46e5',
-    onSurfaceVariant: '#475569',
-    background: '#ffffff',
-  },
-  roundness: 10,
-};
+const PIN_LENGTH = 6;
 
-// ──────────────── InputField — bileşen dışında tanımlı ────────────────
+type Cell = { key: string; type: 'digit' | 'backspace' | 'empty' };
+const NUMPAD_ROWS: Cell[][] = [
+  [{ key: '1', type: 'digit' }, { key: '2', type: 'digit' }, { key: '3', type: 'digit' }],
+  [{ key: '4', type: 'digit' }, { key: '5', type: 'digit' }, { key: '6', type: 'digit' }],
+  [{ key: '7', type: 'digit' }, { key: '8', type: 'digit' }, { key: '9', type: 'digit' }],
+  [{ key: '_', type: 'empty' }, { key: '0', type: 'digit' }, { key: '⌫', type: 'backspace' }],
+];
 
-interface InputFieldProps {
-  label: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  icon: string;
-  secureTextEntry?: boolean;
-  rightIcon?: string;
-  onRightIconPress?: () => void;
-  disabled?: boolean;
-  onSubmitEditing?: () => void;
-  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function InputField({
-  label,
-  value,
-  onChangeText,
-  icon,
-  secureTextEntry,
-  rightIcon,
-  onRightIconPress,
-  disabled,
-  onSubmitEditing,
-  autoCapitalize = 'none',
-}: InputFieldProps) {
-  return (
-    <TextInput
-      label={label}
-      value={value}
-      onChangeText={onChangeText}
-      mode="outlined"
-      autoCapitalize={autoCapitalize}
-      autoCorrect={false}
-      secureTextEntry={secureTextEntry}
-      style={styles.input}
-      outlineStyle={styles.inputOutline}
-      contentStyle={styles.inputContent}
-      disabled={disabled}
-      onSubmitEditing={onSubmitEditing}
-      left={<TextInput.Icon icon={icon} color={COLORS.textSecondary} />}
-      right={
-        rightIcon ? (
-          <TextInput.Icon
-            icon={rightIcon}
-            color={COLORS.textMuted}
-            onPress={onRightIconPress}
-          />
-        ) : undefined
+export default function LoginScreen() {
+  const setAuth = useAuthStore((s) => s.setAuth);
+  const device = useDeviceType();
+  const portrait = useIsPortrait();
+  const isCompact = device === 'phone' || portrait;
+
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
+
+  const usersQuery = useQuery({
+    queryKey: ['auth', 'mobile-users'],
+    queryFn: () => authService.getMobileUsers(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const users = usersQuery.data?.data ?? [];
+  const selectedUser = useMemo<MobileUser | null>(
+    () => users.find((u) => u.id === selectedUserId) ?? null,
+    [users, selectedUserId]
+  );
+
+  useEffect(() => {
+    if (!selectedUserId && users.length === 1) setSelectedUserId(users[0].id);
+  }, [users, selectedUserId]);
+
+  useEffect(() => {
+    if (selectedUserId && users.length > 0 && !users.some((u) => u.id === selectedUserId)) {
+      setSelectedUserId(null);
+      setPin('');
+    }
+  }, [users, selectedUserId]);
+
+  const pickerOptions: PickerOption[] = useMemo(
+    () => users.map((u) => ({ value: u.id, label: u.fullName, sublabel: `@${u.username}` })),
+    [users]
+  );
+
+  // Ref pattern: handleKey'i ömür boyu sabit fonksiyon referansı yapıyoruz ki
+  // memo'lu NumpadKey'ler her tuş basışında re-render olmasın.
+  const pinRef = useRef(pin);
+  const submittingRef = useRef(submitting);
+  const selectedUserRef = useRef(selectedUser);
+  useEffect(() => {
+    pinRef.current = pin;
+  }, [pin]);
+  useEffect(() => {
+    submittingRef.current = submitting;
+  }, [submitting]);
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
+
+  const submit = useCallback(
+    async (rawPin: string, user: MobileUser) => {
+      setSubmitting(true);
+      setError('');
+      try {
+        const res = await authService.login({ username: user.username, password: rawPin });
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Toast.show({ type: 'success', text1: 'Hoş geldin', text2: user.fullName });
+        await setAuth(res.data.user, res.data.token);
+      } catch (e) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        const msg = e instanceof Error ? e.message : 'Hatalı PIN.';
+        setError(msg);
+        setPin('');
+        Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg });
+      } finally {
+        setSubmitting(false);
       }
-      theme={INPUT_THEME}
-    />
+    },
+    [setAuth],
+  );
+
+  const handleKey = useCallback(
+    (cell: Cell) => {
+      const currentPin = pinRef.current;
+      const currentSubmitting = submittingRef.current;
+      const currentUser = selectedUserRef.current;
+      if (currentSubmitting || !currentUser || cell.type === 'empty') return;
+      if (cell.type === 'backspace') {
+        if (currentPin.length === 0) return;
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setPin(currentPin.slice(0, -1));
+        setError('');
+        return;
+      }
+      if (currentPin.length >= PIN_LENGTH) return;
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const next = currentPin + cell.key;
+      setPin(next);
+      setError('');
+      if (next.length === PIN_LENGTH) void submit(next, currentUser);
+    },
+    [submit],
+  );
+
+  const numpadDisabled = !selectedUser || submitting;
+
+  const userSection = (
+    <>
+      <Text style={styles.sectionLabel}>1 · KULLANICI</Text>
+      {selectedUser ? (
+        <UserCard user={selectedUser} disabled={submitting} onChange={() => setPickerVisible(true)} />
+      ) : (
+        <SelectPrompt
+          loading={usersQuery.isLoading}
+          error={usersQuery.isError}
+          count={users.length}
+          onPress={() => setPickerVisible(true)}
+        />
+      )}
+
+      {usersQuery.isError && (
+        <TouchableRipple
+          onPress={() => void usersQuery.refetch()}
+          style={styles.retryBtn}
+          rippleColor="rgba(255,255,255,0.2)"
+        >
+          <View style={styles.retryBtnInner}>
+            {usersQuery.isRefetching ? (
+              <ActivityIndicator size={16} color="#fff" />
+            ) : (
+              <Icon source="refresh" size={18} color="#fff" />
+            )}
+            <Text style={styles.retryBtnText}>Listeyi yenile</Text>
+          </View>
+        </TouchableRipple>
+      )}
+    </>
+  );
+
+  const pinSection = (
+    <>
+      <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>2 · PIN (6 HANE)</Text>
+      <View style={[styles.pinRow, isCompact && styles.pinRowCompact]}>
+        {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.pinDot,
+              i < pin.length && styles.pinDotFilled,
+              i === pin.length && !!selectedUser && !submitting && styles.pinDotActive,
+              !!error && styles.pinDotError,
+            ]}
+          />
+        ))}
+      </View>
+
+      <View style={[styles.statusRow, isCompact && styles.statusRowCompact]}>
+        {submitting ? (
+          <>
+            <ActivityIndicator size={16} color={COLORS.accentLight} />
+            <Text style={styles.statusText}>Giriş yapılıyor...</Text>
+          </>
+        ) : error ? (
+          <>
+            <Icon source="alert-circle" size={18} color={COLORS.error} />
+            <Text style={styles.errorText}>{error}</Text>
+          </>
+        ) : (
+          <Text style={styles.statusText}>
+            {!selectedUser
+              ? 'Önce kullanıcı seç'
+              : pin.length === 0
+                ? '6 haneli PIN gir'
+                : `${pin.length} / ${PIN_LENGTH}`}
+          </Text>
+        )}
+      </View>
+    </>
+  );
+
+  const numpad = (
+    <View style={[styles.numpad, isCompact && styles.numpadCompact]}>
+      {NUMPAD_ROWS.map((row, ri) => (
+        <View key={ri} style={[styles.numpadRow, isCompact && styles.numpadRowCompact]}>
+          {row.map((cell, ci) => {
+            if (cell.type === 'empty') {
+              return (
+                <View
+                  key={ci}
+                  style={[styles.numpadKeyPlaceholder, isCompact && styles.numpadKeyCompact]}
+                />
+              );
+            }
+            const isBack = cell.type === 'backspace';
+            const keyDisabled = numpadDisabled || (isBack && pin.length === 0);
+            return (
+              <NumpadKey
+                key={ci}
+                cell={cell}
+                isCompact={isCompact}
+                disabled={keyDisabled}
+                onPress={handleKey}
+              />
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
+
+  return (
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.root}>
+      <TopBar compact={isCompact} />
+
+      {isCompact ? (
+        <ScrollView
+          contentContainerStyle={styles.compactContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.compactSection}>{userSection}</View>
+          <View style={styles.compactSection}>{pinSection}</View>
+          <View style={styles.compactNumpadWrap}>{numpad}</View>
+        </ScrollView>
+      ) : (
+        <View style={styles.main}>
+          <View style={styles.leftPanel}>
+            {userSection}
+            {pinSection}
+          </View>
+          <View style={styles.rightPanel}>{numpad}</View>
+        </View>
+      )}
+
+      <PickerModal
+        visible={pickerVisible}
+        title="Kullanıcı Seç"
+        options={pickerOptions}
+        selectedValue={selectedUserId}
+        numColumns={isCompact ? 1 : 3}
+        onRefresh={() => void usersQuery.refetch()}
+        refreshing={usersQuery.isRefetching}
+        refreshError={usersQuery.isError}
+        refreshErrorMessage={
+          usersQuery.error instanceof Error ? usersQuery.error.message : undefined
+        }
+        onSelect={(val) => {
+          setSelectedUserId(val);
+          setPin('');
+          setError('');
+        }}
+        onDismiss={() => setPickerVisible(false)}
+        emptyText="Aktif mobil kullanıcı yok"
+        loading={usersQuery.isLoading}
+      />
+    </SafeAreaView>
   );
 }
 
-// ──────────────── BrandPanel — bileşen dışında tanımlı ────────────────
-
-const FEATURES = [
-  { icon: '⚡', text: 'Gerçek zamanlı üretim takibi' },
-  { icon: '🔗', text: 'Entegre tedarik zinciri' },
-  { icon: '📊', text: 'Kapsamlı raporlama' },
-] as const;
-
-const GRID_H = Array.from({ length: 8 }, (_, i) => i);
-const GRID_V = Array.from({ length: 6 }, (_, i) => i);
-
-function BrandPanel() {
+// Numpad tek tuş — React.memo ile sarılı, parent her tuş basışında render olsa
+// bile props (cell sabit, isCompact/disabled değişmediği sürece, onPress stable)
+// aynı kaldığında bu cell hiç yeniden render olmaz.
+const NumpadKey = React.memo(function NumpadKey({
+  cell,
+  isCompact,
+  disabled,
+  onPress,
+}: {
+  cell: Cell;
+  isCompact: boolean;
+  disabled: boolean;
+  onPress: (cell: Cell) => void;
+}) {
+  const isBack = cell.type === 'backspace';
+  const handlePress = useCallback(() => onPress(cell), [cell, onPress]);
   return (
-    <View style={styles.brandPanel}>
-      {/* Dekoratif grid */}
-      <View style={styles.brandGrid} pointerEvents="none">
-        {GRID_H.map((i) => (
-          <View key={`h-${i}`} style={[styles.gridLineH, { top: `${i * 14}%` as any }]} />
-        ))}
-        {GRID_V.map((i) => (
-          <View key={`v-${i}`} style={[styles.gridLineV, { left: `${i * 20}%` as any }]} />
-        ))}
+    <TouchableRipple
+      onPress={handlePress}
+      disabled={disabled}
+      rippleColor="rgba(99,102,241,0.3)"
+      style={[
+        styles.numpadKey,
+        isCompact && styles.numpadKeyCompact,
+        isBack && styles.numpadKeyBackspace,
+        disabled && styles.numpadKeyDisabled,
+      ]}
+    >
+      <View style={styles.numpadKeyContent}>
+        {isBack ? (
+          <Icon
+            source="backspace-outline"
+            size={isCompact ? 30 : 36}
+            color={disabled ? '#7f1d1d' : COLORS.backspaceIcon}
+          />
+        ) : (
+          <Text
+            style={[
+              styles.numpadKeyText,
+              isCompact && styles.numpadKeyTextCompact,
+              disabled && styles.numpadKeyTextDisabled,
+            ]}
+          >
+            {cell.key}
+          </Text>
+        )}
       </View>
+    </TouchableRipple>
+  );
+});
 
-      <View style={styles.brandContent}>
-        {/* Logo */}
-        <View style={styles.logoOuter}>
-          <View style={styles.logoInner}>
-            <Text style={styles.logoLetter}>T</Text>
-          </View>
-        </View>
-
-        {/* Başlık */}
-        <View style={styles.brandTextGroup}>
-          <Text style={styles.brandName}>TeksERP</Text>
-          <View style={styles.brandDivider} />
-          <Text style={styles.brandTagline}>Tekstil Üretim Yönetim Sistemi</Text>
-        </View>
-
-        {/* Özellikler */}
-        <View style={styles.featureList}>
-          {FEATURES.map((f) => (
-            <View key={f.text} style={styles.featureItem}>
-              <Text style={styles.featureIcon}>{f.icon}</Text>
-              <Text style={styles.featureText}>{f.text}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Alt bilgi */}
-        <View style={styles.brandFooter}>
-          <View style={styles.brandFooterBadge}>
-            <Text style={styles.brandFooterBadgeText}>v2.1</Text>
-          </View>
-          <Text style={styles.brandFooterText}>© 2025 TeksERP. Tüm hakları saklıdır.</Text>
-        </View>
+function TopBar({ compact }: { compact: boolean }) {
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  return (
+    <View style={[styles.topBar, compact && styles.topBarCompact]}>
+      <View style={styles.logoBox}>
+        <Text style={styles.logoLetter}>T</Text>
       </View>
+      <View style={styles.brandTextGroup}>
+        <Text style={styles.brandName}>TeksERP</Text>
+        <Text style={styles.brandSub}>Üretim Yönetim Sistemi</Text>
+      </View>
+      {!compact && (
+        <Text style={styles.shiftHint}>Vardiya değişimi · adına dokun, 6 haneli PIN gir</Text>
+      )}
+      <IconButton
+        icon="cog"
+        iconColor={COLORS.subtext}
+        size={24}
+        onPress={() => navigation.navigate('Settings')}
+        accessibilityLabel="Sunucu ayarları"
+      />
     </View>
   );
 }
 
-// ──────────────── Ana Bileşen ────────────────
-
-export default function LoginScreen() {
-  const setAuth = useAuthStore((s) => s.setAuth);
-
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const isWeb = Platform.OS === 'web';
-
-  const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      setError('Kullanıcı adı ve şifre giriniz.');
-      Toast.show({
-        type: 'error',
-        text1: 'Eksik Bilgi',
-        text2: 'Lütfen kullanıcı adı ve şifrenizi girin.',
-      });
-      return;
-    }
-    setError('');
-    setLoading(true);
-    try {
-      const res = await authService.login({ username: username.trim(), password });
-      await setAuth(res.data.user, res.data.token);
-      Toast.show({
-        type: 'success',
-        text1: 'Başarılı',
-        text2: 'Hoş geldiniz!',
-      });
-    } catch (e: any) {
-      const msg = e.message || 'Kullanıcı adı veya şifre hatalı.';
-      setError(msg);
-      Toast.show({
-        type: 'error',
-        text1: 'Giriş Başarısız',
-        text2: msg,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Form JSX — bileşen içinde ama alt bileşen OLARAK TANIMLANMADI,
-  // doğrudan render içinde yer alıyor (re-mount sorunu olmaz)
-  const formContent = (
-    <KeyboardAvoidingView
-      style={styles.formPanel}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      enabled={!isWeb}
-    >
-      <ScrollView
-        contentContainerStyle={styles.formScrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.formCard}>
-          {/* Başlık */}
-          <View style={styles.formHeader}>
-            <View style={styles.formHeaderIcon}>
-              <Text style={styles.formHeaderIconText}>🔐</Text>
-            </View>
-            <Text style={styles.formTitle}>Sisteme Giriş</Text>
-            <Text style={styles.formSubtitle}>
-              Yetkili erişim için kimlik bilgilerinizi girin
-            </Text>
-          </View>
-
-          {/* Hata */}
-          {error ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorIcon}>⚠</Text>
-              <Text style={styles.errorMessage}>{error}</Text>
-            </View>
-          ) : null}
-
-          {/* Alanlar */}
-          <View style={styles.formFields}>
-            <View style={styles.fieldWrapper}>
-              <Text style={styles.fieldLabel}>Kullanıcı Adı</Text>
-              <InputField
-                label="Kullanıcı adınızı girin"
-                value={username}
-                onChangeText={setUsername}
-                icon="account-outline"
-                disabled={loading}
-              />
-            </View>
-
-            <View style={styles.fieldWrapper}>
-              <Text style={styles.fieldLabel}>Şifre</Text>
-              <InputField
-                label="Şifrenizi girin"
-                value={password}
-                onChangeText={setPassword}
-                icon="lock-outline"
-                secureTextEntry={!showPassword}
-                rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                onRightIconPress={() => setShowPassword((p) => !p)}
-                disabled={loading}
-                onSubmitEditing={handleLogin}
-              />
-            </View>
-          </View>
-
-          {/* Buton */}
-          <TouchableOpacity
-            style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.loginBtnText}>
-              {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
-            </Text>
-            {!loading && <Text style={styles.loginBtnArrow}>→</Text>}
-          </TouchableOpacity>
-
-          {/* Alt Bilgi */}
-          <View style={styles.formFooter}>
-            <Text style={styles.formFooterText}>
-              Erişim sorunlarınız için sistem yöneticisiyle iletişime geçin.
-            </Text>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-
-  // ── Web görünümü ──
-  if (isWeb) {
-    return (
-      <View style={styles.root}>
-        <BrandPanel />
-        {formContent}
-      </View>
-    );
-  }
-
-  // ── Mobil görünümü ──
+function UserCard({
+  user,
+  disabled,
+  onChange,
+}: {
+  user: MobileUser;
+  disabled: boolean;
+  onChange: () => void;
+}) {
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={[styles.root, styles.rootMobile]}>
-        {/* Kompakt marka başlığı */}
-        <View style={styles.mobileBrand}>
-          <View style={styles.mobileLogoRow}>
-            <View style={styles.mobileLogoBox}>
-              <Text style={styles.logoLetter}>T</Text>
-            </View>
-            <View>
-              <Text style={styles.mobileBrandName}>TeksERP</Text>
-              <Text style={styles.mobileBrandSub}>Üretim Yönetim Sistemi</Text>
-            </View>
-          </View>
+    <TouchableRipple
+      onPress={onChange}
+      disabled={disabled}
+      rippleColor="rgba(99,102,241,0.2)"
+      style={styles.userCard}
+    >
+      <View style={styles.userCardInner}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initials(user.fullName)}</Text>
         </View>
-
-        {/* Form */}
-        <View style={styles.mobileFormArea}>
-          {formContent}
+        <View style={styles.userCardText}>
+          <Text style={styles.userName} numberOfLines={1}>{user.fullName}</Text>
+          <Text style={styles.userUsername} numberOfLines={1}>@{user.username}</Text>
+        </View>
+        <View style={styles.changeChip}>
+          <Icon source="account-switch" size={18} color={COLORS.accentLight} />
+          <Text style={styles.changeChipText}>Değiştir</Text>
         </View>
       </View>
-    </TouchableWithoutFeedback>
+    </TouchableRipple>
   );
 }
 
-// ──────────────── Stiller ────────────────
+function SelectPrompt({
+  loading,
+  error,
+  count,
+  onPress,
+}: {
+  loading: boolean;
+  error: boolean;
+  count: number;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableRipple
+      onPress={onPress}
+      disabled={loading || count === 0}
+      rippleColor="rgba(99,102,241,0.2)"
+      style={styles.selectPrompt}
+    >
+      <View style={styles.selectPromptInner}>
+        {loading ? (
+          <ActivityIndicator color={COLORS.accent} />
+        ) : (
+          <>
+            <Icon source="account-circle-outline" size={48} color={COLORS.accentLight} />
+            <Text style={styles.selectPromptText}>Kullanıcı Seç</Text>
+            <Text style={styles.selectPromptHint}>
+              {error
+                ? 'Liste alınamadı — tekrar dene'
+                : count === 0
+                  ? 'Aktif mobil kullanıcı yok'
+                  : `${count} kullanıcı`}
+            </Text>
+          </>
+        )}
+      </View>
+    </TouchableRipple>
+  );
+}
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: COLORS.brandBg,
-  },
-  rootMobile: {
-    flexDirection: 'column',
-  },
+  root: { flex: 1, backgroundColor: COLORS.bg },
 
-  // Marka Paneli
-  brandPanel: {
-    flex: 2,
-    backgroundColor: COLORS.brandBg,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  brandGrid: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    opacity: 0.06,
-  },
-  gridLineH: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: COLORS.brandText,
-  },
-  gridLineV: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 1,
-    backgroundColor: COLORS.brandText,
-  },
-  brandContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    paddingHorizontal: 56,
-    paddingVertical: 48,
-    gap: 36,
-  },
-  logoOuter: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: 'rgba(79, 70, 229, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(79, 70, 229, 0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 14,
-    backgroundColor: COLORS.brandAccent,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoLetter: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  brandTextGroup: {
-    gap: 12,
-  },
-  brandName: {
-    color: COLORS.brandText,
-    fontSize: 38,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  brandDivider: {
-    width: 48,
-    height: 3,
-    backgroundColor: COLORS.brandAccent,
-    borderRadius: 2,
-  },
-  brandTagline: {
-    color: COLORS.brandSubtext,
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  featureList: {
-    gap: 16,
-  },
-  featureItem: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    gap: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderDark,
+    backgroundColor: COLORS.bgDarker,
   },
-  featureIcon: {
-    fontSize: 18,
-    width: 32,
-    textAlign: 'center',
-  },
-  featureText: {
-    color: COLORS.brandSubtext,
-    fontSize: 14,
-  },
-  brandFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    position: 'absolute' as any,
-    bottom: 32,
-    left: 56,
-  },
-  brandFooterBadge: {
-    backgroundColor: 'rgba(79,70,229,0.2)',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(79,70,229,0.3)',
-  },
-  brandFooterBadgeText: {
-    color: COLORS.brandAccentLight,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  brandFooterText: {
-    color: COLORS.brandSubtext,
-    fontSize: 12,
-  },
-
-  // Form Paneli
-  formPanel: {
-    flex: 3,
-    backgroundColor: COLORS.formBg,
-  },
-  formScrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 48,
-    paddingVertical: 48,
-  },
-  formCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    padding: 40,
-    maxWidth: 480,
-    width: '100%',
-    alignSelf: 'center',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 8,
-  },
-  formHeader: {
-    alignItems: 'flex-start',
-    marginBottom: 28,
-    gap: 8,
-  },
-  formHeaderIcon: {
+  topBarCompact: { paddingHorizontal: 16, paddingVertical: 10 },
+  logoBox: {
     width: 44,
     height: 44,
-    backgroundColor: '#eef2ff',
-    borderRadius: 12,
+    borderRadius: 11,
+    backgroundColor: COLORS.accent,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
   },
-  formHeaderIconText: {
-    fontSize: 22,
-  },
-  formTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    letterSpacing: -0.3,
-  },
-  formSubtitle: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
-  },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.errorBg,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
-    gap: 8,
-  },
-  errorIcon: {
-    fontSize: 16,
-    color: COLORS.error,
-  },
-  errorMessage: {
-    color: COLORS.error,
-    fontSize: 14,
+  logoLetter: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  brandTextGroup: { flex: 1 },
+  brandName: { color: COLORS.text, fontSize: 18, fontWeight: '800' },
+  brandSub: { color: COLORS.subtext, fontSize: 12 },
+  shiftHint: { color: COLORS.subtext, fontSize: 13, fontStyle: 'italic' },
+
+  main: { flex: 1, flexDirection: 'row' },
+  leftPanel: { flex: 1, padding: 32, justifyContent: 'center' },
+  rightPanel: {
     flex: 1,
-    fontWeight: '500',
-  },
-  formFields: {
-    gap: 4,
-    marginBottom: 24,
-  },
-  fieldWrapper: {
-    gap: 4,
-    marginBottom: 8,
-  },
-  fieldLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.textSecondary,
-    letterSpacing: 0.8,
-    marginLeft: 4,
-    textTransform: 'uppercase',
-  },
-  input: {
-    backgroundColor: COLORS.inputBg,
-    fontSize: 15,
-  },
-  inputOutline: {
-    borderColor: COLORS.borderDefault,
-    borderRadius: 10,
-  },
-  inputContent: {
-    paddingVertical: 4,
-  },
-  loginBtn: {
-    backgroundColor: COLORS.btnPrimary,
-    borderRadius: 12,
-    height: 54,
-    flexDirection: 'row',
+    padding: 24,
     justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: COLORS.brandAccent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  loginBtnDisabled: {
-    opacity: 0.7,
-  },
-  loginBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  loginBtnArrow: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  formFooter: {
-    marginTop: 24,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderDefault,
-    alignItems: 'center',
-  },
-  formFooterText: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    lineHeight: 18,
+    backgroundColor: COLORS.bgSoft,
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.borderDark,
   },
 
-  // Mobil
-  mobileBrand: {
-    backgroundColor: COLORS.brandBg,
-    paddingHorizontal: 24,
-    paddingTop: 56,
-    paddingBottom: 32,
+  compactContent: { padding: 20, paddingBottom: 32, gap: 16 },
+  compactSection: {},
+  compactNumpadWrap: { marginTop: 4 },
+
+  sectionLabel: {
+    color: COLORS.subtext,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 10,
   },
-  mobileLogoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
+  sectionLabelSpaced: { marginTop: 28 },
+
+  userCard: {
+    backgroundColor: COLORS.bgSoft,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    borderRadius: 14,
+    padding: 14,
   },
-  mobileLogoBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 13,
-    backgroundColor: COLORS.brandAccent,
+  userCardInner: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  userCardText: { flex: 1 },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  mobileBrandName: {
-    color: COLORS.brandText,
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: -0.3,
+  avatarText: { color: '#fff', fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
+  userName: { color: COLORS.text, fontSize: 20, fontWeight: '700' },
+  userUsername: { color: COLORS.subtext, fontSize: 13, marginTop: 2 },
+  changeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.bgDarker,
   },
-  mobileBrandSub: {
-    color: COLORS.brandSubtext,
-    fontSize: 12,
+  changeChipText: { color: COLORS.accentLight, fontSize: 12, fontWeight: '700' },
+
+  selectPrompt: {
+    backgroundColor: COLORS.bgSoft,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    minHeight: 124,
   },
-  mobileFormArea: {
+  selectPromptInner: {
     flex: 1,
-    backgroundColor: COLORS.formBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    padding: 16,
   },
+  selectPromptText: { color: COLORS.text, fontSize: 18, fontWeight: '700' },
+  selectPromptHint: { color: COLORS.subtext, fontSize: 13 },
+
+  retryBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    backgroundColor: COLORS.accent,
+    borderRadius: 10,
+  },
+  retryBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  retryBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+
+  pinRow: { flexDirection: 'row', gap: 14 },
+  pinRowCompact: { gap: 10, justifyContent: 'center' },
+  pinDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: COLORS.pinEmpty,
+    backgroundColor: 'transparent',
+  },
+  pinDotFilled: { backgroundColor: COLORS.accentLight, borderColor: COLORS.accentLight },
+  pinDotActive: { borderColor: COLORS.accentLight },
+  pinDotError: { borderColor: COLORS.error },
+
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    minHeight: 24,
+  },
+  statusRowCompact: { justifyContent: 'center' },
+  statusText: { color: COLORS.subtext, fontSize: 14 },
+  errorText: { color: COLORS.error, fontSize: 14, fontWeight: '600', flex: 1 },
+
+  numpad: { gap: 14, maxWidth: 460, alignSelf: 'center', width: '100%' },
+  numpadCompact: { gap: 10, maxWidth: 360 },
+  numpadRow: { flexDirection: 'row', gap: 14 },
+  numpadRowCompact: { gap: 10 },
+  numpadKey: {
+    flex: 1,
+    height: 84,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.bg,
+    overflow: 'hidden',
+  },
+  numpadKeyCompact: { height: 68, borderRadius: 12 },
+  numpadKeyBackspace: {
+    backgroundColor: COLORS.backspaceBg,
+    borderColor: COLORS.backspaceBorder,
+  },
+  numpadKeyDisabled: { opacity: 0.4 },
+  numpadKeyPlaceholder: { flex: 1, height: 84 },
+  numpadKeyContent: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  numpadKeyText: { color: COLORS.text, fontSize: 34, fontWeight: '700' },
+  numpadKeyTextCompact: { fontSize: 28 },
+  numpadKeyTextDisabled: { color: '#475569' },
 });

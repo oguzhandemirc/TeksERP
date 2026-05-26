@@ -11,9 +11,14 @@ export function safeFormat(
   return format(d, fmt);
 }
 
-export function formatNumber(n: number | null | undefined, fractionDigits = 2): string {
-  if (n == null || !Number.isFinite(n)) return "—";
+export function formatNumber(
+  n: number | string | null | undefined,
+  fractionDigits = 2,
+): string {
+  if (n == null) return "—";
+  const num = typeof n === "number" ? n : Number(n);
+  if (!Number.isFinite(num)) return "—";
   return new Intl.NumberFormat("tr-TR", {
     maximumFractionDigits: fractionDigits,
-  }).format(n);
+  }).format(num);
 }

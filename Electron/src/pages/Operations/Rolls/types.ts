@@ -24,8 +24,6 @@ export interface Roll {
   barcode: string | null;
   itemId: string;
   colorId: string | null;
-  ownerCustomerId: string | null;
-  customerDescription: string | null;
   initialQty: number;
   currentQty: number;
   weightKg: number | null;
@@ -42,7 +40,6 @@ export interface Roll {
   packagingDate: string | null;
   item?: RollItem;
   color?: RollColor | null;
-  ownerCustomer?: { id: string; code: string; name: string } | null;
   /** Roll'a bindirilmiş özellikler (Fason Kabul / Tambur kopyalar). */
   properties?: RollPropertyLink[];
   /** Per-roll operasyon logu. Sadece detay endpoint'inden gelir. */

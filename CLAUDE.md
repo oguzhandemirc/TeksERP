@@ -1,48 +1,50 @@
-# TeksERP — Monorepo Root
+# TeksERP — Monorepo Kökü
 
-Textile factory ERP system. Two sub-projects:
+Tekstil fabrikası ERP sistemi. Üç alt proje:
 
-| Project | Stack | Port |
+| Proje | Stack | Port |
 |---|---|---|
-| `Teks-Erp/` | Express 5 + Prisma 7 + PostgreSQL | 4000 |
-| `React/` | React 19 + Vite + TypeScript | 5173 |
+| `Teks-Erp/` | Express 5 + Prisma 7 + PostgreSQL backend | 4000 |
+| `Electron/` | Electron 33 + React 19 + Vite yönetim paneli | 5174 |
+| `mobil/` | React Native + Expo 54, Android tablet (yatay) + telefon (dikey) — saha | — |
 
-Each sub-project has its own `CLAUDE.md` with detailed guidance.
+Her alt projenin kendi `CLAUDE.md`'si vardır. **Admin frontend değişiklikleri `Electron/`'a yazılır** — `React/` dizini artık yok.
 
-## Production Flow
+## Üretim Akışı
 
 ```
-Inventory (Rolls) → Work Orders → Production (Stations/Machines) → Tambur (QC2)
-  → Depo (RollStatus.WAREHOUSE) → Tartı/Paket → Shipping
+Stok (Roll) → İş Emri → KK1 (RAW_QC) → [opsiyonel Fason] →
+  Kurşun + KK2 (PROCESS_QC) → Tambur (final karar) →
+  Depo (RollStatus.WAREHOUSE)
 ```
 
-Tambur'dan çıkan top **kesinlikle önce depoya** geçer (`status=WAREHOUSE`).
-Depo bir istasyon değil, tartı/paket öncesi bekleme statüsüdür. Tartı/paket
-operatörü depodan çekip tartar + paketler; rulo doğrudan `READY_FOR_SHIP`
-olur — sevkiyatta tekrar barkod okutulmaz.
+Fabrika **çözgü/dokuma yapmaz** — kumaş hazır gelir, sadece process + QC + tambur yapılır.
 
-## Domain Facts
+Tambur'dan çıkan top **kesinlikle önce depoya** geçer (`status=WAREHOUSE`). Depo bir istasyon değil, tartı/paket öncesi bekleme statüsüdür.
 
-- **Phase 1:** COM port / hardware integrations are simulated only — never implement real hardware.
-- **All data is test data** — optimize for long-term correctness, not backwards compat with seeded rows.
-- **Work order flexibility:** A work order can link to multiple orders OR be produced for stock without any order. Shipping an order does NOT require a work order — stock can be shipped directly.
-- **Order completion trigger:** When a shipment is confirmed, if `shippedQty >= quantity` the order status MUST auto-update to `COMPLETED`; otherwise `PARTIAL_SHIPPED`.
-- **Traveler Card (Refakat Kartı):** Barcoded card generated when a work order is finalized; physically travels with goods and triggers station processes when scanned.
-- **Kurşun + QC2 = one physical station (`StationKind.PROCESS_QC`):** Modeled as ONE `WorkOrderStep`. Per-roll `RollOperation` log tracks `KURSUN_APPLIED` / `QC2_COMPLETED` — not every roll gets Kurşun.
-- **Defect lifecycle:** `RollError` opened at PROCESS_QC, closed at Tambur (`isProcessed = true`).
-- **Fason return:** Original rolls' status transitions in place (no new `Roll` records). Qty/weight is **NOT** measured at receipt — next station's `FINISH` records it via `RollMovement`.
-- **Roll split:** Only happens at Tambur (`CUT` decision) — creates child roll with `parentRollId` + new barcode.
-- **Flexible shipping:** Goods can be reassigned from customer A to B at shipping time. **EXCEPTION:** if `Roll.ownerCustomerId` is set (SERVICE_PRODUCTION — customer brought their own goods), it can NEVER be reassigned to another customer.
-- **Finance module (`CurrentAccount`):** Schema placeholder only — no UI.
-- **Loom Monitoring:** Manual dashboard only, no automation.
+> **NOT:** Tartı / paket / sevkiyat modülü sıfırdan yeniden yazılıyor — eski sevkiyat kodu silindi. Yeni akış tasarlanırken bu kısım güncellenecek.
 
-## Shared Conventions
+## Domain Kuralları
 
-- UUID primary keys, `createdAt`/`updatedAt` on all models.
-- Soft deletes only — `isActive: false` or `RollStatus.SCRAP`; never physical DELETE.
-- Every CUD operation → `AuditService.log()` → `SystemLog` table.
-- Validation error messages in Turkish.
+- **Phase 1:** COM port / donanım entegrasyonları sadece simüle edilir — gerçek donanım kodu yazma.
+- **Tüm veriler test verisi** — uzun vadeli doğruluk için optimize et, seed satırlarıyla backwards compat derdine girme.
+- **İş emri esnekliği:** Bir iş emri birden fazla siparişe bağlanabilir veya hiçbir siparişe bağlı olmadan stok için üretilebilir.
+- **WO kapsamı = sadece üretim:** `WorkOrder` yalnızca üretimi (istasyonlar, kurşun/QC2, tambur) yönetir. Tartı / paket / sevkiyat sonradan yeniden yazılacak ayrı bir domain.
+- **Şube bazlı planlama:** `Order.branchId` opsiyonel (eski kayıtlar `null`). Yeni siparişler tek bir şubeye yönlendirilir.
+- **Refakat Kartı (Traveler Card):** İş emri finalize edildiğinde üretilen barkodlu kart; fiziksel olarak malla birlikte hareket eder ve okutulduğunda istasyon süreçlerini tetikler.
+- **Kurşun + QC2 = tek fiziksel istasyon (`StationKind.PROCESS_QC`):** Tek bir `WorkOrderStep` olarak modellenir. Per-roll `RollOperation` log'u `KURSUN_APPLIED` / `QC2_COMPLETED` olarak iz tutar — her top kurşun görmez.
+- **Hata yaşam döngüsü:** `RollError` PROCESS_QC'de açılır, Tambur'da kapanır (`isProcessed = true`).
+- **Fason dönüş:** Orijinal rulolar yerinde status değiştirir (yeni `Roll` kaydı **yok**). Kabulde miktar/ağırlık **ölçülmez**; sonraki istasyonun `FINISH`'i `RollMovement` üzerinden kaydeder.
+- **Roll split:** Sadece Tambur'da (`CUT` kararı) olur — `parentRollId` + yeni barkod ile çocuk roll yaratılır.
 
-## Test Credentials
+## Ortak Konvansiyonlar
 
-Most-used: `admin` / `admin123` (full access). All 6 seeded users (planning, production, quality, sales, shipping operators) listed in `Teks-Erp/ARCHITECTURE.md §13`. All non-admin users use password `test123`.
+- UUID primary key, tüm modellerde `createdAt`/`updatedAt` (M:N pivot ve append-only log tabloları hariç — bunlarda sadece `createdAt`).
+- Sadece soft delete — `isActive: false` veya `RollStatus.SCRAP`; **asla** fiziksel DELETE.
+- Her CUD operasyonu → `AuditService.log()` → `SystemLog` tablosu.
+- Validation hata mesajları Türkçe.
+- **Yıkıcı işlemlerde detaylı onay zorunlu** (iptal/sil/scrap): confirm dialog'unda etkilenen her kaydı (WO, rulo, sipariş vb.) somut olarak listele. Backend tarafında preview endpoint döner, frontend per-record seçim sunar — "X kayıt etkilenecek" gibi soyut sayı yetmez.
+
+## Test Kullanıcıları
+
+En sık kullanılan: `admin` / `admin123` (tam yetki). Seed kullanıcılar `Teks-Erp/ARCHITECTURE.md §13`'te listeli. Admin dışı tüm kullanıcılar `test123` şifresini kullanır.

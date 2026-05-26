@@ -2,9 +2,13 @@
 // TeksERP - Station Capability Service
 // =============================================================================
 // Bir istasyonun uygulayabileceği renk + özellik yetkinliklerini yönetir.
-// İş Kuralı: WO planlamada hedef rengin/özelliğin atandığı adımın istasyonu
-// bu yetkinliğe sahip OLMAK ZORUNDA. Yetkinlik = StationColor / StationProperty
-// tablolarındaki kayıt.
+// İç istasyon ve fason istasyonu ayrımı YOK — her istasyon buradan yönetilir.
+//
+// Davranış: Bir istasyondan geçen rulo, o istasyonun propertyCapabilities
+// listesindeki tüm özellikleri otomatik kazanır (per-roll action içinde
+// `copyStationCapabilitiesToRoll` helper'ı çağırır). Fason kabul akışında
+// aynı transfer kategori bayraklarına (appliesColor/appliesProperty)
+// göre WO target'larından kopyalama olarak çalışır.
 //
 // API: GET ve PUT — bulk get / bulk replace pattern.
 // =============================================================================
@@ -20,11 +24,11 @@ export interface StationCapabilityDto {
   stationCode: string;
   stationName: string;
   stationKind: StationKind;
-  /** İstasyona varsayılan fason kategorisi atanmış mı? */
+  /** İstasyona varsayılan kategori atanmış mı? */
   hasDefaultCategory: boolean;
-  /** Bu istasyon renk uygulayabilir mi? (defaultCategory.appliesColor=true) */
+  /** Bu istasyon renk uygulayabilir mi? Kategori varsa appliesColor; yoksa true. */
   canApplyColor: boolean;
-  /** Bu istasyon özellik uygulayabilir mi? (defaultCategory.appliesProperty=true) */
+  /** Bu istasyon özellik uygulayabilir mi? Kategori varsa appliesProperty; yoksa true. */
   canApplyProperty: boolean;
   colors: { id: string; code: string; name: string; hex: string | null }[];
   properties: {
@@ -36,8 +40,9 @@ export interface StationCapabilityDto {
 }
 
 /**
- * Bir istasyon için renk/özellik uygulayabilirliği — kind ve defaultCategory
- * flag'lerinden türetilir. UI gating'in (sebep dahil) tek kaynağıdır.
+ * Renk/özellik uygulayabilirliği — kategori varsa bayraklarından türetilir
+ * (fason kabul otomatik kopyalama mekanizması için anlamlı), yoksa ikisi de
+ * açık kabul edilir (operatör manuel atayabilir).
  */
 function deriveCapabilityFlags(station: {
   kind: StationKind;
@@ -48,12 +53,8 @@ function deriveCapabilityFlags(station: {
   canApplyProperty: boolean;
 } {
   const hasDefaultCategory = !!station.defaultCategory;
-  if (station.kind !== StationKind.SUBCONTRACTOR || !station.defaultCategory) {
-    return {
-      hasDefaultCategory,
-      canApplyColor: false,
-      canApplyProperty: false,
-    };
+  if (!station.defaultCategory) {
+    return { hasDefaultCategory, canApplyColor: true, canApplyProperty: true };
   }
   return {
     hasDefaultCategory,
@@ -167,18 +168,18 @@ export class StationCapabilityService {
       throw AppError.badRequest("Pasif istasyona yetkinlik atanamaz");
     }
 
-    // Renk/özellik atama, varsayılan fason kategorisinin renk/özellik veren
-    // (appliesColor / appliesProperty) bayraklarına bağlıdır. Boş listeye izin
+    // Renk/özellik atama, varsayılan kategorinin appliesColor / appliesProperty
+    // bayraklarına bağlıdır (kategori yoksa ikisi de açık). Boş listeye izin
     // var (mevcut kayıtları silmek için).
     const { canApplyColor, canApplyProperty } = deriveCapabilityFlags(station);
     if (data.colorIds.length > 0 && !canApplyColor) {
       throw AppError.badRequest(
-        "Bu istasyona renk yetkinliği atanamaz — varsayılan fason kategorisi 'renk veren' (appliesColor=true) olmalı",
+        "Bu istasyona renk atanamaz — atanmış kategori 'renk veren' (appliesColor=true) değil",
       );
     }
     if (data.propertyIds.length > 0 && !canApplyProperty) {
       throw AppError.badRequest(
-        "Bu istasyona özellik yetkinliği atanamaz — varsayılan fason kategorisi 'özellik veren' (appliesProperty=true) olmalı",
+        "Bu istasyona özellik atanamaz — atanmış kategori 'özellik veren' (appliesProperty=true) değil",
       );
     }
 

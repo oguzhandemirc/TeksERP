@@ -28,6 +28,7 @@ const service = new BaseService({
       orderBy: { sequence: "asc" },
     },
   },
+  uniqueField: "code",
 });
 
 const controller = new BaseController(service);

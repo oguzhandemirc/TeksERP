@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  useWindowDimensions,
+} from 'react-native';
 import RNModal from 'react-native-modal';
 import {
   Text,
@@ -10,16 +15,21 @@ import {
   ActivityIndicator,
   TouchableRipple,
   Icon,
+  Appbar,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
 import NumpadInput from '../../../components/NumpadInput';
+import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
+import { useDeviceType } from '../../../hooks/useDeviceType';
 import { NumpadHost } from '../../../components/NumpadProvider';
+import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { tamburService } from '../../../services/tambur.service';
@@ -34,8 +44,8 @@ import type {
   TamburDecision,
   TamburFoldType,
   TamburContext,
-  TamburCutRequest,
-  TamburFinalizeOpenFabricRequest,
+  TamburContextOrder,
+  TamburFinalizeRemainingAction,
   DefectType,
   QualityGrade,
   Roll,
@@ -58,30 +68,23 @@ interface OpenJob {
 }
 
 interface ErrorEntryState {
+  // Hata nokta (aralık değil): operatör sadece "kaç. metrede" girer.
+  // Tambur kesim kararını voluntaryCuts üzerinden verir; defect listesi rehber.
   startMeter: string;
-  endMeter: string;
   defectTypeId: string;
 }
 
-interface SwatchEntryState {
-  open: boolean;
-  startMeter: string;
-  endMeter: string;
-  count: string; // adet
-  purpose: string;
-}
-
+// Yeni model: kesim = tek metre (uzunluk). Sayaç sıfırdan başladığı için
+// her kesim bağımsız uzunlukta; toplam(lengths) ≤ Roll.currentQty olmalı.
 interface VoluntaryCutDraft {
-  id: string;        // local — uuid / counter
-  start: number;
-  end: number;       // > start
-  qualityGrade: string;
+  id: string;
+  length: number;       // bu parçanın uzunluğu (cihaz sayaç değeri)
+  qualityGrade: string; // 1.KALITE / A1 / FIRE — operatör seçer
   qualityName?: string; // display only
 }
 
 interface VoluntaryEntryState {
-  start: string;
-  end: string;
+  length: string;
   qualityGrade: string;
   qualityName?: string;
 }
@@ -92,26 +95,18 @@ interface RollWorkState {
   voluntaryCuts: VoluntaryCutDraft[];
   voluntaryEntry: VoluntaryEntryState;
   errorEntry: ErrorEntryState;
-  swatchEntry: SwatchEntryState;
 }
 
 const EMPTY_ERROR_ENTRY: ErrorEntryState = {
   startMeter: '',
-  endMeter: '',
   defectTypeId: '',
 };
-const EMPTY_SWATCH_ENTRY: SwatchEntryState = {
-  open: false,
-  startMeter: '',
-  endMeter: '',
-  count: '1',
-  purpose: '',
-};
+// Default kesim girişi: kalite "1.KALITE" pre-select (seed sabit kayıt).
+// Operatör çoğunlukla 1. kalite kesim yapar; A1/Fire ihtiyaç anında değiştirir.
 const EMPTY_VOLUNTARY_ENTRY: VoluntaryEntryState = {
-  start: '',
-  end: '',
-  qualityGrade: '',
-  qualityName: undefined,
+  length: '',
+  qualityGrade: '1.KALITE',
+  qualityName: '1. Kalite',
 };
 const EMPTY_WORK: RollWorkState = {
   decisions: {},
@@ -119,10 +114,22 @@ const EMPTY_WORK: RollWorkState = {
   voluntaryCuts: [],
   voluntaryEntry: EMPTY_VOLUNTARY_ENTRY,
   errorEntry: EMPTY_ERROR_ENTRY,
-  swatchEntry: EMPTY_SWATCH_ENTRY,
 };
 
 export default function TamburScreen() {
+  // Telefon ekranında landscape kilidi kaldırılır + sağ panel drawer'a alınır.
+  // Tabletlerde önceki davranış aynen korunur.
+  const device = useDeviceType();
+  const compact = device === 'phone';
+  useLandscapeLock(!compact);
+  const insets = useSafeAreaInsets();
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  // Drawer kapanış animasyonu bittikten sonra açılacak ardışık modal queue'su —
+  // react-native-modal stack sorununu önler.
+  const [pendingDrawerAction, setPendingDrawerAction] = useState<
+    'scanner' | 'list' | 'recentOutput' | 'recut' | null
+  >(null);
+
   const qc = useQueryClient();
 
   const [cardBarcode, setCardBarcode] = useState('');
@@ -147,15 +154,30 @@ export default function TamburScreen() {
   // hazır olur. Per-row "Bas" butonu bu state'i set eder.
   const [activePrintRoll, setActivePrintRoll] = useState<Roll | null>(null);
 
-  // Yeniden Kesim (post-production split) modal state
-  const [resplitOpen, setResplitOpen] = useState(false);
+  // Top Kesme — sağdaki "Top Kesme" butonu → top-level kamera modal → barkod
+  // tara → sol panelde "WAREHOUSE topu modu" açılır. Normal Tambur cutOpenFabric
+  // akışıyla yapısal olarak aynı: multi-cut + finalize. Her kesim child doğurur,
+  // parent.currentQty düşer; Bitir → parent TAMBUR_CONSUMED (arşive).
+  const [recutResolvedRollId, setRecutResolvedRollId] = useState<string | null>(null);
+  const [recutRollMeta, setRecutRollMeta] = useState<{
+    barcode: string | null;
+    currentQty: number;
+    item: string;
+  } | null>(null);
+  const [recutCutLength, setRecutCutLength] = useState('');
+  const [recutQualityGrade, setRecutQualityGrade] = useState<string>('1.KALITE');
+  const [recutScannerOpen, setRecutScannerOpen] = useState(false);
+  const [recutFinalizeOpen, setRecutFinalizeOpen] = useState(false);
+  // Son kesimden dönen güncel parent — X kapat sırasında etiketi basıma kuyruğa
+  // atılır (operatör fiziksel etiketi yenilemeli, eski metraj artık geçersiz).
+  const [recutLastParentRoll, setRecutLastParentRoll] = useState<Roll | null>(null);
+  // İş emri siparişleri modal'ı — operatör kalan ihtiyaçları görmek için açar
+  const [ordersModalOpen, setOrdersModalOpen] = useState(false);
 
   // Refactor 4 — yanlış istasyon mesajı banner
   const [cardError, setCardError] = useState<string | null>(null);
 
   // Refactor 9 — açık kumaş cut / finalize modal state
-  const [cutModalRollId, setCutModalRollId] = useState<string | null>(null);
-  const [finishFabricRollId, setFinishFabricRollId] = useState<string | null>(null);
 
   // ── Kataloglar ──
   const defectTypesQuery = useQuery({
@@ -193,10 +215,15 @@ export default function TamburScreen() {
     );
   }, [activeJob]);
 
-  // Top/sekme değişimi → çalışma state'i temizlenir
+  // Top/sekme değişimi → çalışma state'i temizlenir. Planlamada belirtilen
+  // katlama (2-KAT / 4-KAT) varsa otomatik seçili gelir; operatör değiştirebilir.
   useEffect(() => {
-    setWork(EMPTY_WORK);
-  }, [activeCardId, activeJob?.selectedRollId]);
+    const planned = activeJob?.context?.plannedFoldType;
+    const defaultFold: TamburFoldType | null =
+      planned === '2-KAT' || planned === '4-KAT' ? planned : null;
+    setWork({ ...EMPTY_WORK, foldType: defaultFold });
+  }, [activeCardId, activeJob?.selectedRollId, activeJob?.context?.plannedFoldType]);
+
 
   // ── Backend re-fetch helper ──
   const refetchActiveJob = async () => {
@@ -303,7 +330,14 @@ export default function TamburScreen() {
       )
     );
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Compact'ta top seçilince drawer kapanır — operatör sol form'da çalışsın.
+    if (compact) setRightDrawerOpen(false);
   };
+
+  // Compact'ta aktif kart değiştiğinde (yeni kart çözüldü / tab değişti) drawer kapanır.
+  useEffect(() => {
+    if (compact && activeCardId) setRightDrawerOpen(false);
+  }, [compact, activeCardId]);
 
   // ── Mutations ──
   const finalizeMutation = useMutation({
@@ -316,16 +350,13 @@ export default function TamburScreen() {
         text2: 'Top depoya gönderildi',
       });
 
-      // Yeni Roll'lar varsa etiket basımı modal'ını aç (orijinal + split'ler)
+      // Etiket basımı: sadece child Roll'lar (parent TAMBUR_CONSUMED, qty=0 —
+      // artık fiziksel olarak yok, etiketi basılmaz).
       const data = res.data as
         | { originalRoll?: Roll; splitRolls?: Roll[] }
         | undefined;
-      if (data) {
-        const rolls: Roll[] = [];
-        if (data.originalRoll) rolls.push(data.originalRoll);
-        for (const r of data.splitRolls ?? []) rolls.push(r);
-        if (rolls.length > 0) setPendingPrintRolls(rolls);
-      }
+      const splitRolls = data?.splitRolls ?? [];
+      if (splitRolls.length > 0) setPendingPrintRolls(splitRolls);
 
       // Sıradaki finalize edilmemiş topa atla
       await refetchActiveJob();
@@ -349,47 +380,94 @@ export default function TamburScreen() {
     },
   });
 
-  // Refactor 9 — açık kumaşta tek kesim (child Roll oluşur, parent qty düşer)
-  const cutMutation = useMutation({
-    mutationFn: ({
-      rollId,
-      data,
-    }: {
+  // Gerçek saha akışı: operatör kesimi yapar, anında sisteme girer + etiket
+  // basılır. Bulk submit değil, her "Top Oluştur" anında backend'e gider.
+  const cutOpenFabricMutation = useMutation({
+    mutationFn: (data: {
       rollId: string;
-      data: TamburCutRequest;
-    }) => tamburService.cutOpenFabric(rollId, data),
+      lengthMeters: number;
+      status: 'WAREHOUSE' | 'SCRAP' | 'A1_STOCK';
+      qualityGrade: string;
+    }) =>
+      tamburService.cutOpenFabric(data.rollId, {
+        lengthMeters: data.lengthMeters,
+        status: data.status,
+        qualityGrade: data.qualityGrade,
+      }),
     onSuccess: async (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Top kesildi' });
-      const newRoll = (res.data as { newRoll?: Roll } | undefined)?.newRoll;
-      if (newRoll && newRoll.barcode) setPendingPrintRolls((p) => [...p, newRoll]);
-      setCutModalRollId(null);
+      Toast.show({ type: 'success', text1: 'Top oluşturuldu' });
+      const data = res.data as { childRoll?: Roll } | undefined;
+      if (data?.childRoll?.barcode) {
+        // Hemen etiket basma modal'ını aç — operatör sayaç başında basar
+        setPendingPrintRolls((prev) => [...prev, data.childRoll!]);
+      }
+      // Uzunluk input'unu sıfırla; kalite aynen kalsın (operatör çoğu zaman
+      // aynı kaliteyi devam ettirir).
+      setWork((w) => ({
+        ...w,
+        voluntaryEntry: { ...w.voluntaryEntry, length: '' },
+      }));
       await refetchActiveJob();
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Kesim başarısız', text2: err.message });
+      Toast.show({ type: 'error', text1: 'Top oluşturulamadı', text2: err.message });
     },
   });
 
-  // Refactor 9 + 11 — açık kumaşı bitir (parent TAMBUR_CONSUMED, foldType override)
   const finalizeOpenFabricMutation = useMutation({
-    mutationFn: ({
-      rollId,
-      data,
-    }: {
+    mutationFn: (data: {
       rollId: string;
-      data: TamburFinalizeOpenFabricRequest;
-    }) => tamburService.finalizeOpenFabric(rollId, data),
+      remainingAction: TamburFinalizeRemainingAction;
+      foldType: string | null;
+    }) =>
+      tamburService.finalizeOpenFabric(data.rollId, {
+        remainingAction: data.remainingAction,
+        foldType: data.foldType,
+      }),
     onSuccess: async () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Açık kumaş bitirildi' });
-      setFinishFabricRollId(null);
-      await refetchActiveJob();
+      Toast.show({ type: 'success', text1: 'Tambur tamamlandı' });
+      if (!activeJob) {
+        qc.invalidateQueries({ queryKey: ['rolls'] });
+        return;
+      }
+      // Backend'den güncel step'i çek; bitirilen roll listeden düşmüş olmalı
+      const stepRes = await tamburService.getStep(
+        activeJob.stepSummary.workOrderStepId,
+      );
+      const step = stepRes.data as TamburStepSummary | undefined;
+      const remainingRolls = step?.rolls ?? [];
+      if (remainingRolls.length === 0) {
+        // Kartta başka top yok → kartı kapat (otomatik X)
+        setOpenJobs((prev) => {
+          const next = prev.filter((j) => j.cardId !== activeJob.cardId);
+          setActiveCardId(next[0]?.cardId ?? null);
+          return next;
+        });
+      } else {
+        // Hâlâ top varsa sıradakini otomatik seç
+        const next = remainingRolls.find(
+          (r) => r.rollId !== activeJob.selectedRollId,
+        );
+        setOpenJobs((prev) =>
+          prev.map((j) =>
+            j.cardId === activeJob.cardId
+              ? {
+                  ...j,
+                  stepSummary: step!,
+                  selectedRollId: next?.rollId ?? null,
+                }
+              : j,
+          ),
+        );
+      }
+      qc.invalidateQueries({ queryKey: ['rolls'] });
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Bitirme başarısız', text2: err.message });
+      Toast.show({ type: 'error', text1: 'Tamamlanamadı', text2: err.message });
     },
   });
 
@@ -421,26 +499,42 @@ export default function TamburScreen() {
       Toast.show({ type: 'error', text1: 'Silinemedi', text2: err.message }),
   });
 
-  // Post-production split — depodaki topu istenen metrede ikiye böl
-  const resplitMutation = useMutation({
-    mutationFn: tamburService.postProductionSplit,
+  // Top Kesme — multi-cut: her kesim child Roll doğurur, parent currentQty
+  // düşer, etiket otomatik basılır. Operatör istediği kadar tekrarlar.
+  const cutWarehouseRollMutation = useMutation({
+    mutationFn: ({
+      rollId,
+      cutLength,
+      qualityGrade,
+    }: {
+      rollId: string;
+      cutLength: number;
+      qualityGrade: string;
+    }) => tamburService.cutWarehouseRoll(rollId, { cutLength, qualityGrade }),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const data = res.data;
+      if (data?.childRoll) {
+        // Otomatik etiket basımı — LabelPrintModal pendingPrintRolls'ı dinler
+        setPendingPrintRolls((prev) => [...prev, data.childRoll]);
+      }
+      // Parent metraj güncelle (sticky header anında yansır)
+      if (data && typeof data.parentRemainingQty === 'number' && recutRollMeta) {
+        setRecutRollMeta({ ...recutRollMeta, currentQty: data.parentRemainingQty });
+      }
+      // Güncel parent'ı tut — X kapat sırasında etiket yenilenmek için kuyruğa
+      // atılır (backend initialQty'yi de reset etti, etiket fiziksel olarak da
+      // yenilenmeli).
+      if (data?.parentRoll) {
+        setRecutLastParentRoll(data.parentRoll);
+      }
+      // Form reset — operatör hemen yeni kesim yapabilsin
+      setRecutCutLength('');
       Toast.show({
         type: 'success',
-        text1: 'Kesim yapıldı',
-        text2: 'İki top depoya hazır',
+        text1: 'Top oluşturuldu',
+        text2: `Kalan: ${data?.parentRemainingQty.toFixed(1)} m`,
       });
-      const data = res.data as
-        | { original?: Roll; newRoll?: Roll }
-        | undefined;
-      if (data) {
-        const rolls: Roll[] = [];
-        if (data.original) rolls.push(data.original);
-        if (data.newRoll) rolls.push(data.newRoll);
-        if (rolls.length > 0) setPendingPrintRolls(rolls);
-      }
-      setResplitOpen(false);
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -448,15 +542,111 @@ export default function TamburScreen() {
     },
   });
 
+  // Top Kesme — kartela üretimi (depo topundan, multi-cut akışı sırasında).
+  // Backend createSwatch metraj düşürür; frontend recutRollMeta'yı local günceller.
+  const recutSwatchMutation = useMutation({
+    mutationFn: ({
+      sourceRollId,
+      length,
+    }: {
+      sourceRollId: string;
+      length: number;
+    }) =>
+      tamburService.createSwatch({
+        sourceRollId,
+        length,
+        count: 1,
+        purpose: null,
+        workOrderId: null,
+      }),
+    onSuccess: (_res, vars) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Kartela oluşturuldu' });
+      if (recutRollMeta) {
+        setRecutRollMeta({
+          ...recutRollMeta,
+          currentQty: Math.max(0, recutRollMeta.currentQty - vars.length),
+        });
+      }
+      setRecutCutLength('');
+    },
+    onError: (err: Error) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({ type: 'error', text1: 'Kartela başarısız', text2: err.message });
+    },
+  });
+
+  const handleRecutKartela = () => {
+    if (!recutResolvedRollId || !recutRollMeta) return;
+    const cut = parseFloat(recutCutLength);
+    if (Number.isNaN(cut) || cut <= 0) {
+      Toast.show({ type: 'error', text1: 'Uzunluk pozitif olmalı' });
+      return;
+    }
+    if (cut > recutRollMeta.currentQty + 0.001) {
+      Toast.show({
+        type: 'error',
+        text1: 'Kalan metrajı aşıyor',
+        text2: `Kalan ${recutRollMeta.currentQty.toFixed(1)} mt`,
+      });
+      return;
+    }
+    recutSwatchMutation.mutate({
+      sourceRollId: recutResolvedRollId,
+      length: cut,
+    });
+  };
+
+  // Top Kesme'yi bitir — parent retire (TAMBUR_CONSUMED), kalan için karar
+  const finalizeWarehouseCutMutation = useMutation({
+    mutationFn: ({
+      rollId,
+      remainingAction,
+    }: {
+      rollId: string;
+      remainingAction: 'keep_1kalite' | 'keep_a1' | 'scrap' | 'discard';
+    }) => tamburService.finalizeWarehouseCut(rollId, { remainingAction }),
+    onSuccess: (res) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Top Kesme bitti', text2: 'Top arşivlendi' });
+      // Önce FinalizeRemainingModal'ı kapat — RN nested modal sorunu (iki
+      // RNModal aynı anda mount/unmount edilemez); LabelPrintModal hemen
+      // açılırsa state stuck olur ve yeni Top Kesme akışı bug'lı çalışır.
+      setRecutFinalizeOpen(false);
+      const remainingChild = res.data?.remainingChild ?? null;
+      // Modal kapanma animasyonu (~250ms) bittikten sonra state reset + etiket
+      // basım kuyruğu güncelle. setTimeout pattern: pendingDrawerAction ile aynı.
+      setTimeout(() => {
+        if (remainingChild) {
+          setPendingPrintRolls((prev) => [...prev, remainingChild as Roll]);
+        }
+        setRecutResolvedRollId(null);
+        setRecutRollMeta(null);
+        setRecutCutLength('');
+        setRecutQualityGrade('1.KALITE');
+        setRecutLastParentRoll(null);
+        qc.invalidateQueries({ queryKey: ['rolls'] });
+      }, 300);
+    },
+    onError: (err: Error) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({ type: 'error', text1: 'Bitirilemedi', text2: err.message });
+    },
+  });
+
   const swatchMutation = useMutation({
     mutationFn: tamburService.createSwatch,
-    onSuccess: () => {
+    onSuccess: async () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Kartela basıldı' });
-      setWork((w) => ({ ...w, swatchEntry: EMPTY_SWATCH_ENTRY }));
+      Toast.show({ type: 'success', text1: 'Kartela oluşturuldu' });
+      setWork((w) => ({
+        ...w,
+        voluntaryEntry: { ...w.voluntaryEntry, length: '' },
+      }));
+      await refetchActiveJob();
     },
     onError: (err: Error) =>
-      Toast.show({ type: 'error', text1: 'Kartela basılamadı', text2: err.message }),
+      Toast.show({ type: 'error', text1: 'Kartela oluşturulamadı', text2: err.message }),
   });
 
   // ── Decision helpers ──
@@ -489,134 +679,60 @@ export default function TamburScreen() {
   const handleAddError = () => {
     if (!activeJob || !selectedRoll) return;
     const start = parseFloat(work.errorEntry.startMeter);
-    const end = parseFloat(work.errorEntry.endMeter);
-    if (Number.isNaN(start) || Number.isNaN(end)) {
+    if (!Number.isFinite(start) || start < 0) {
       Toast.show({ type: 'error', text1: 'Metraj sayı olmalı' });
       return;
     }
-    if (start < 0 || end <= start) {
+    // Hata tipi seçilmediyse listenin ilkini kullan (admin "default" eklemeli)
+    const defectTypeId = work.errorEntry.defectTypeId || defectTypes[0]?.id;
+    if (!defectTypeId) {
       Toast.show({
         type: 'error',
-        text1: 'Geçersiz aralık',
-        text2: 'Bitiş başlangıçtan büyük olmalı',
+        text1: 'Hata tipi yok',
+        text2: 'Admin önce hata tipi tanımlamalı',
       });
-      return;
-    }
-    if (!work.errorEntry.defectTypeId) {
-      Toast.show({ type: 'error', text1: 'Hata tipi seçin' });
       return;
     }
     reportErrorMutation.mutate({
       rollId: selectedRoll.rollId,
       stepId: activeJob.stepSummary.workOrderStepId,
       startMeter: start,
-      endMeter: end,
-      defectTypeId: work.errorEntry.defectTypeId,
+      defectTypeId,
     });
   };
 
-  // Tüm kesimleri (defect CUT + gönüllü + açık kartela formu) tek listede topla,
-  // sırala, çakışma kontrolü yap; dokunulmamış segmentleri hesapla. Operatör
-  // için canlı önizleme. Kartela "Bas" ile commit olur; commit sonrası form
-  // sıfırlanır, kartela rolün currentQty'sinden düşer.
+  // Per-cut akış: kalan metre = parent'ın güncel currentQty (backend tutar).
+  // Top / Kartela aynı uzunluk input'unu paylaşır; her ikisi de parent'ın
+  // currentQty'sinden düşer (2 mt → 200 mt 198'e iner).
   const segmentPreview = useMemo(() => {
     if (!selectedRoll) return null;
-    const total = selectedRoll.currentQty;
-    type C = {
-      start: number;
-      end: number;
-      qualityGrade: string;
-      source: 'DEFECT' | 'VOLUNTARY' | 'SWATCH';
-    };
-    const cuts: C[] = [];
-    for (const e of selectedRoll.errors) {
-      const dec = work.decisions[e.id];
-      // Nokta hatası (endMeter null) için CUT kararı verilemez — aralık yok.
-      if (dec?.decision === 'CUT' && e.endMeter != null) {
-        cuts.push({
-          start: e.startMeter,
-          end: e.endMeter,
-          qualityGrade: dec.qualityGrade ?? 'FIRE',
-          source: 'DEFECT',
-        });
-      }
-    }
-    for (const v of work.voluntaryCuts) {
-      cuts.push({
-        start: v.start,
-        end: v.end,
-        qualityGrade: v.qualityGrade,
-        source: 'VOLUNTARY',
-      });
-    }
-    // Açık kartela entry formu — start/end/count geçerliyse preview'a dahil et.
-    // Adet>1 ise bitişik kabul: range = [start, start + (end-start)*count].
-    if (work.swatchEntry.open) {
-      const s = parseFloat(work.swatchEntry.startMeter);
-      const e = parseFloat(work.swatchEntry.endMeter);
-      const n = parseInt(work.swatchEntry.count, 10);
-      if (
-        !Number.isNaN(s) &&
-        !Number.isNaN(e) &&
-        e > s &&
-        !Number.isNaN(n) &&
-        n >= 1
-      ) {
-        const len = e - s;
-        cuts.push({
-          start: s,
-          end: s + len * n,
-          qualityGrade: `Kartela ${n}×${len.toFixed(1)}m`,
-          source: 'SWATCH',
-        });
-      }
-    }
-    const sorted = [...cuts].sort((a, b) => a.start - b.start);
-    for (const c of sorted) {
-      if (c.start < 0 || c.end > total) {
-        return { error: `Kesim aralığı top sınırları dışında (${c.start}-${c.end})`, cuts: sorted };
-      }
-    }
-    for (let i = 1; i < sorted.length; i++) {
-      if (sorted[i].start < sorted[i - 1].end) {
-        return {
-          error: `Çakışan aralıklar: ${sorted[i - 1].start}-${sorted[i - 1].end} ile ${sorted[i].start}-${sorted[i].end}`,
-          cuts: sorted,
-        };
-      }
-    }
-    const untouched: Array<{ start: number; end: number }> = [];
-    let cursor = 0;
-    for (const c of sorted) {
-      if (c.start > cursor) untouched.push({ start: cursor, end: c.start });
-      cursor = c.end;
-    }
-    if (cursor < total) untouched.push({ start: cursor, end: total });
-
     return {
       error: null as string | null,
-      cuts: sorted,
-      untouched,
+      cuts: [] as Array<{ length: number; qualityGrade: string; qualityName?: string }>,
+      remaining: selectedRoll.currentQty,
     };
-  }, [selectedRoll, work.decisions, work.voluntaryCuts, work.swatchEntry]);
+  }, [selectedRoll]);
 
   const addVoluntaryCut = () => {
     if (!selectedRoll) return;
-    const start = parseFloat(work.voluntaryEntry.start);
-    const end = parseFloat(work.voluntaryEntry.end);
-    if (Number.isNaN(start) || Number.isNaN(end)) {
-      Toast.show({ type: 'error', text1: 'Başlangıç ve bitiş sayı olmalı' });
-      return;
-    }
-    if (end <= start) {
-      Toast.show({ type: 'error', text1: 'Bitiş başlangıçtan büyük olmalı' });
-      return;
-    }
-    if (start < 0 || end > selectedRoll.currentQty) {
+    if (selectedRoll.barcode) {
       Toast.show({
         type: 'error',
-        text1: 'Aralık top sınırları içinde olmalı',
-        text2: `0 - ${selectedRoll.currentQty.toFixed(1)} mt`,
+        text1: 'Bu ekran açık kumaş için',
+        text2: 'Barkodlu top için Yeniden Kes kullanın',
+      });
+      return;
+    }
+    const length = parseFloat(work.voluntaryEntry.length);
+    if (!Number.isFinite(length) || length <= 0) {
+      Toast.show({ type: 'error', text1: 'Uzunluk pozitif sayı olmalı' });
+      return;
+    }
+    if (length > selectedRoll.currentQty + 0.001) {
+      Toast.show({
+        type: 'error',
+        text1: 'Kalan metrajı aşıyor',
+        text2: `Kalan ${selectedRoll.currentQty.toFixed(1)} mt`,
       });
       return;
     }
@@ -624,20 +740,40 @@ export default function TamburScreen() {
       Toast.show({ type: 'error', text1: 'Kalite seçin' });
       return;
     }
-    const id = `vc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    // Kalite kodu → RollStatus mapping (qualityGrade.targetStatus)
+    const qg = qualityGrades.find(
+      (q) => q.code === work.voluntaryEntry.qualityGrade,
+    );
+    const status = (qg?.targetStatus ?? 'WAREHOUSE') as
+      | 'WAREHOUSE'
+      | 'SCRAP'
+      | 'A1_STOCK';
+    cutOpenFabricMutation.mutate({
+      rollId: selectedRoll.rollId,
+      lengthMeters: length,
+      status,
+      qualityGrade: qg?.code ?? '1.KALITE',
+    });
+  };
+
+  // "Makineden Çek" — sayaç entegrasyonu yok; simülasyon olarak makul rastgele
+  // bir değer üret. Kalan metraja göre clamp et.
+  const fetchFromMachine = () => {
+    if (!selectedRoll) return;
+    const usedSoFar = work.voluntaryCuts.reduce((s, c) => s + c.length, 0);
+    const remaining = Math.max(0, selectedRoll.currentQty - usedSoFar);
+    if (remaining <= 0) {
+      Toast.show({ type: 'info', text1: 'Kesim için kalan metraj yok' });
+      return;
+    }
+    // 5–80 mt arası rastgele; kalan azsa kalana clamp
+    const min = Math.min(5, remaining);
+    const max = Math.min(80, remaining);
+    const raw = min + Math.random() * (max - min);
+    const simulated = Math.round(raw * 10) / 10; // 1 ondalık
     setWork((w) => ({
       ...w,
-      voluntaryCuts: [
-        ...w.voluntaryCuts,
-        {
-          id,
-          start,
-          end,
-          qualityGrade: w.voluntaryEntry.qualityGrade,
-          qualityName: w.voluntaryEntry.qualityName,
-        },
-      ],
-      voluntaryEntry: EMPTY_VOLUNTARY_ENTRY,
+      voluntaryEntry: { ...w.voluntaryEntry, length: simulated.toString() },
     }));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -649,79 +785,71 @@ export default function TamburScreen() {
     }));
   };
 
-  // Kartela: end - start, capture buttons just open numpad target — UI'ya gerek yok
-  const swatchLength = useMemo(() => {
-    const start = parseFloat(work.swatchEntry.startMeter);
-    const end = parseFloat(work.swatchEntry.endMeter);
-    if (Number.isNaN(start) || Number.isNaN(end)) return null;
-    return end - start;
-  }, [work.swatchEntry]);
-
-  const handleCreateSwatch = () => {
+  // Kartela: top kesimiyle aynı uzunluk input'u; tek kayıt, amaç/adet sorulmaz.
+  const addKartela = () => {
     if (!activeJob || !selectedRoll) return;
-    if (swatchLength == null || swatchLength <= 0) {
-      Toast.show({ type: 'error', text1: 'Kartela uzunluğu pozitif olmalı' });
+    if (selectedRoll.barcode) {
+      Toast.show({
+        type: 'error',
+        text1: 'Bu ekran açık kumaş için',
+      });
       return;
     }
-    const count = parseInt(work.swatchEntry.count, 10);
-    if (Number.isNaN(count) || count < 1) {
-      Toast.show({ type: 'error', text1: 'Adet 1 veya daha büyük olmalı' });
+    const length = parseFloat(work.voluntaryEntry.length);
+    if (!Number.isFinite(length) || length <= 0) {
+      Toast.show({ type: 'error', text1: 'Uzunluk pozitif sayı olmalı' });
+      return;
+    }
+    if (length > selectedRoll.currentQty + 0.001) {
+      Toast.show({
+        type: 'error',
+        text1: 'Kalan metrajı aşıyor',
+        text2: `Kalan ${selectedRoll.currentQty.toFixed(1)} mt`,
+      });
       return;
     }
     swatchMutation.mutate({
       sourceRollId: selectedRoll.rollId,
-      length: swatchLength,
-      count,
-      purpose: work.swatchEntry.purpose.trim() || null,
+      length,
+      count: 1,
+      purpose: null,
       workOrderId: activeJob.stepSummary.workOrderId,
     });
   };
 
-  // ── Finalize ──
+  // Tamamla'ya basınca, kalan metre varsa operatöre 4 seçenekli modal sun.
+  // Kalan = 0 ise modal yok, doğrudan kapat (action önemsiz — backend no-op).
+  const [finalizeModalOpen, setFinalizeModalOpen] = useState(false);
+
   const handleFinalize = () => {
     if (!activeJob || !selectedRoll) return;
-    // Validate decisions
-    const decisions: TamburErrorDecision[] = [];
-    for (const e of selectedRoll.errors) {
-      const dec = work.decisions[e.id];
-      if (!dec || !dec.decision) {
-        Toast.show({
-          type: 'error',
-          text1: 'Karar eksik',
-          text2: `Tüm hatalar için KES/KESME işaretlenmeli`,
-        });
-        return;
-      }
-      if (dec.decision === 'CUT' && !dec.qualityGrade) {
-        Toast.show({
-          type: 'error',
-          text1: 'Kalite seçilmedi',
-          text2: 'Kesilen parçaların kalitesi belirtilmeli',
-        });
-        return;
-      }
-      decisions.push({
-        errorId: e.id,
-        decision: dec.decision,
-        qualityGrade: dec.decision === 'CUT' ? dec.qualityGrade : undefined,
+    if (selectedRoll.barcode) {
+      Toast.show({
+        type: 'error',
+        text1: 'Bu ekran açık kumaş için',
       });
-    }
-
-    if (segmentPreview?.error) {
-      Toast.show({ type: 'error', text1: 'Kesim hatası', text2: segmentPreview.error });
       return;
     }
+    const remaining = selectedRoll.currentQty;
+    if (remaining <= 0.001) {
+      // Kalan yok → modal'a gerek yok, direkt kapat
+      finalizeOpenFabricMutation.mutate({
+        rollId: selectedRoll.rollId,
+        remainingAction: 'discard',
+        foldType: work.foldType ?? null,
+      });
+      return;
+    }
+    setFinalizeModalOpen(true);
+  };
 
-    finalizeMutation.mutate({
+  const submitFinalize = (action: TamburFinalizeRemainingAction) => {
+    if (!activeJob || !selectedRoll) return;
+    setFinalizeModalOpen(false);
+    finalizeOpenFabricMutation.mutate({
       rollId: selectedRoll.rollId,
-      decisions,
-      voluntaryCuts: work.voluntaryCuts.map((v) => ({
-        start: v.start,
-        end: v.end,
-        qualityGrade: v.qualityGrade,
-      })),
-      foldType: work.foldType ?? undefined,
-      cutMode: 'BY_DEFECT', // sade akış — fixed-length sahada kullanılmıyor
+      remainingAction: action,
+      foldType: work.foldType ?? null,
     });
   };
 
@@ -729,21 +857,437 @@ export default function TamburScreen() {
     activeJob &&
     activeJob.stepSummary.rolls.length === 0;
 
+  // Sağ panel içeriği — tablet inline rightCol ve telefon drawer'ı için ortak.
+  // NumpadHost ayrı render edilir; compact'ta native klavye kullanıldığı için
+  // drawer içinde NumpadHost yoktur.
+  // Compact'ta drawer açıkken modal açan butonlar pendingDrawerAction'a yazar
+  // ve drawer'ı kapatır — onClosed callback'i drawer kapandıktan sonra hedef
+  // modalı açar (react-native-modal stack sorunu workaround'u).
+  const openModalOrQueue = (
+    action: 'scanner' | 'list' | 'recentOutput' | 'recut',
+  ) => {
+    if (compact && rightDrawerOpen) {
+      setPendingDrawerAction(action);
+      setRightDrawerOpen(false);
+      return;
+    }
+    if (action === 'scanner') setScannerOpen(true);
+    else if (action === 'list') setListModalOpen(true);
+    else if (action === 'recentOutput') setRecentOutputOpen(true);
+    else if (action === 'recut') setRecutScannerOpen(true);
+  };
+
+  // Top Kesme akışı: kamera modal'ından tarama → roll resolve → inline section aktif.
+  // Manuel input yok; sadece kameralı barkod okutma.
+  const handleRecutScanned = async (barcode: string) => {
+    setRecutScannerOpen(false);
+    const trimmed = barcode.trim();
+    if (!trimmed) return;
+    try {
+      const { rollService } = await import('../../../services/roll.service');
+      const res = await rollService.getByBarcode(trimmed);
+      const r = res.data;
+      if (!r) {
+        Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: trimmed });
+        return;
+      }
+      if (r.status !== 'WAREHOUSE') {
+        Toast.show({
+          type: 'error',
+          text1: 'Top kesime uygun değil',
+          text2: `Durum: ${r.status} (depodaki toplar kesilebilir)`,
+        });
+        return;
+      }
+      setRecutResolvedRollId(r.id);
+      setRecutRollMeta({
+        barcode: r.barcode,
+        currentQty: r.currentQty,
+        item: r.item?.name ?? '—',
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      Toast.show({
+        type: 'error',
+        text1: 'Top sorgulanamadı',
+        text2: (err as Error).message,
+      });
+    }
+  };
+
+  const handleRecutSubmit = () => {
+    if (!recutResolvedRollId || !recutRollMeta) return;
+    const cut = parseFloat(recutCutLength);
+    if (Number.isNaN(cut) || cut <= 0) {
+      Toast.show({ type: 'error', text1: 'Kesim metresi pozitif olmalı' });
+      return;
+    }
+    if (cut > recutRollMeta.currentQty) {
+      Toast.show({
+        type: 'error',
+        text1: 'Geçersiz metraj',
+        text2: `Mevcut metrajdan (${recutRollMeta.currentQty}m) küçük olmalı`,
+      });
+      return;
+    }
+    if (!recutQualityGrade) {
+      Toast.show({ type: 'error', text1: 'Kalite seçilmedi' });
+      return;
+    }
+    cutWarehouseRollMutation.mutate({
+      rollId: recutResolvedRollId,
+      cutLength: cut,
+      qualityGrade: recutQualityGrade,
+    });
+  };
+
+  const resetRecut = () => {
+    // X kapat: kesim yapıldıysa parent etiketini otomatik basım kuyruğuna at —
+    // operatör fiziksel etiketi söküp güncel metraj/barkodlu yenisini yapıştırır.
+    if (recutLastParentRoll) {
+      setPendingPrintRolls((prev) => [...prev, recutLastParentRoll]);
+    }
+    setRecutResolvedRollId(null);
+    setRecutRollMeta(null);
+    setRecutCutLength('');
+    setRecutQualityGrade('1.KALITE');
+    setRecutLastParentRoll(null);
+  };
+
+  const renderRightContent = () => (
+    <>
+      <View style={styles.cardInputWrap}>
+        <View style={styles.cardInputRow}>
+          <TextInput
+            mode="outlined"
+            value={cardBarcode}
+            onChangeText={setCardBarcode}
+            placeholder="Refakat kartı barkodu okut/yaz..."
+            dense
+            autoCapitalize="characters"
+            autoCorrect={false}
+            left={<TextInput.Icon icon="card-search-outline" />}
+            right={
+              resolvingCard ? (
+                <TextInput.Icon
+                  icon={() => <ActivityIndicator size={18} color="#1e40af" />}
+                />
+              ) : cardBarcode.trim() ? (
+                <TextInput.Icon
+                  icon="check"
+                  onPress={handleResolveCard}
+                  color="#1e40af"
+                />
+              ) : undefined
+            }
+            onSubmitEditing={handleResolveCard}
+            returnKeyType="search"
+            style={[styles.cardInput, { flex: 1 }]}
+          />
+          <IconButton
+            icon="format-list-bulleted"
+            mode="contained-tonal"
+            containerColor="#e2e8f0"
+            iconColor="#0f172a"
+            size={26}
+            onPress={() => openModalOrQueue('list')}
+            accessibilityLabel="Açık kartları listele"
+            style={styles.cameraBtn}
+          />
+          <IconButton
+            icon="camera"
+            mode="contained-tonal"
+            containerColor="#dbeafe"
+            iconColor="#1e40af"
+            size={26}
+            onPress={() => openModalOrQueue('scanner')}
+            accessibilityLabel="Kamera ile refakat kartı tara"
+            style={styles.cameraBtn}
+          />
+        </View>
+        {cardError && (
+          <Surface style={styles.errorBanner} elevation={1}>
+            <Icon source="alert-circle" size={20} color="#b91c1c" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.errorBannerTitle}>Yanlış istasyon</Text>
+              <Text style={styles.errorBannerText}>{cardError}</Text>
+            </View>
+            <IconButton
+              icon="close"
+              size={18}
+              onPress={() => setCardError(null)}
+              accessibilityLabel="Hata mesajını kapat"
+              style={{ margin: 0 }}
+            />
+          </Surface>
+        )}
+        <View style={styles.actionBtnRow}>
+          <Button
+            mode="outlined"
+            icon="printer-search"
+            compact
+            onPress={() => openModalOrQueue('recentOutput')}
+            textColor="#0f172a"
+          >
+            Çıkan Toplar
+          </Button>
+          <Button
+            mode="outlined"
+            icon="content-cut"
+            compact
+            onPress={() => openModalOrQueue('recut')}
+            textColor="#b91c1c"
+          >
+            Top Kesme
+          </Button>
+        </View>
+      </View>
+
+      {openJobs.length > 0 && (
+        <View style={styles.tabBar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabScroll}
+          >
+            {openJobs.map((job) => (
+              <JobTab
+                key={job.cardId}
+                job={job}
+                active={job.cardId === activeCardId}
+                onPress={() => setActiveCardId(job.cardId)}
+                onClose={() => closeJob(job.cardId)}
+              />
+            ))}
+          </ScrollView>
+          <View style={styles.tabRefreshWrap}>
+            <RefreshButton onPress={refetchActiveJob} refreshing={false} />
+          </View>
+        </View>
+      )}
+
+      {!activeJob ? (
+        <View style={styles.paneEmpty}>
+          <Icon source="package-variant-closed" size={48} color="#cbd5e1" />
+          <Text style={styles.paneEmptyText}>Henüz açık iş yok</Text>
+        </View>
+      ) : activeJob.stepSummary.rolls.length === 0 ? (
+        <View style={styles.paneEmpty}>
+          <Icon source="check-circle-outline" size={48} color="#10b981" />
+          <Text style={styles.paneEmptyText}>Tüm toplar finalize</Text>
+          <Text style={styles.paneEmptyHint}>Sekmeyi kapatabilirsin</Text>
+        </View>
+      ) : (
+        <FlashList
+          data={activeJob.stepSummary.rolls}
+          keyExtractor={(r) => r.rollId}
+          contentContainerStyle={{ padding: 8 }}
+          renderItem={({ item, index }) => (
+            <RollListItem
+              roll={item}
+              index={index}
+              selected={activeJob.selectedRollId === item.rollId}
+              onPress={() => selectRoll(item.rollId)}
+            />
+          )}
+        />
+      )}
+    </>
+  );
+
   // ── Render ──
   return (
     <ScreenChrome
       title="Tambur"
-      subtitle="Kesim kararı + final + depoya gönderim"
+      subtitle={compact ? undefined : 'Kesim kararı + final + depoya gönderim'}
+      headerExtras={
+        compact ? (
+          <Appbar.Action
+            icon="format-list-bulleted"
+            color="#fff"
+            onPress={() => setRightDrawerOpen(true)}
+            accessibilityLabel={
+              activeJob
+                ? `Açık iş: ${activeJob.stepSummary.batchNumber}`
+                : 'Açık İşler / Kart Okut'
+            }
+          />
+        ) : undefined
+      }
     >
-      <View style={styles.body}>
+      <View
+        style={[
+          styles.body,
+          compact && {
+            paddingLeft: Math.max(insets.left, 12) + 12,
+            paddingRight: Math.max(insets.right, 12) + 12,
+          },
+        ]}
+      >
         {/* ════════ SOL: form ════════ */}
         <View style={styles.formCol}>
-          {!activeJob ? (
+          {recutResolvedRollId && recutRollMeta ? (
+            // Top Kesme akışı — sağdaki "Top Kesme" tetikleyince top okutulur,
+            // burada normal Tambur akışının basit bir varyantı: sticky header
+            // (top bilgisi + kalan metre) + tek alan (kesim metresi) + "Kes" buton.
+            // activeJob/refakat kartından bağımsız, exclusive bir mod.
+            // Wrap padding: header/footer ekran kenarlarından nefes alır, form
+            // ortada → "bir bütün" görünür, dağınık değil.
+            <View style={styles.recutWrap}>
+              <Surface style={styles.headerBand} elevation={2}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.headerBarcode}>
+                    {recutRollMeta.barcode ?? '—'}
+                  </Text>
+                  <Text style={styles.headerSub}>{recutRollMeta.item}</Text>
+                </View>
+                <View style={styles.remainingBadge}>
+                  <Text style={styles.remainingBadgeValue}>
+                    {recutRollMeta.currentQty.toFixed(1)}
+                  </Text>
+                  <Text style={styles.remainingBadgeLabel}>mt kalan</Text>
+                </View>
+                <IconButton
+                  icon="close"
+                  size={22}
+                  iconColor="#fff"
+                  onPress={resetRecut}
+                  accessibilityLabel="Top Kesme'yi kapat"
+                  style={{ margin: 0 }}
+                />
+              </Surface>
+
+              {/* ScrollView'siz: form kısa, scroll gerekmez. Header, section ve
+                  footer peş peşe yerleşir — gap ile birbirine yakın, bütünleşik. */}
+              <Surface style={styles.section} elevation={1}>
+                  <Text style={styles.sectionTitle}>Kesim</Text>
+                  <Text style={styles.entryLabel}>Uzunluk (mt)</Text>
+                  <NumpadInput
+                    mode="outlined"
+                    value={recutCutLength}
+                    onChangeText={setRecutCutLength}
+                    numpadLabel="Kesim uzunluğu"
+                    allowDecimal
+                    autoActivate
+                    numpadMaxLength={8}
+                    placeholder="örn: 60"
+                    dense
+                    style={styles.input}
+                    useNativeKeyboard={compact}
+                  />
+
+                  <View style={styles.qualityActionRow}>
+                    <View style={styles.qualityGridInline}>
+                      {qualityGrades.map((qg) => {
+                        const active = recutQualityGrade === qg.code;
+                        return (
+                          <TouchableRipple
+                            key={qg.id}
+                            borderless
+                            onPress={() => setRecutQualityGrade(qg.code)}
+                            style={[
+                              styles.qualityChip,
+                              active && styles.qualityChipActive,
+                              active && qg.color
+                                ? { backgroundColor: qg.color, borderColor: qg.color }
+                                : null,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.qualityChipText,
+                                active && styles.qualityChipTextActive,
+                              ]}
+                            >
+                              {qg.name}
+                            </Text>
+                          </TouchableRipple>
+                        );
+                      })}
+                    </View>
+                    <View style={styles.createActionRow}>
+                      <Button
+                        mode="contained"
+                        icon="plus-circle"
+                        onPress={handleRecutSubmit}
+                        buttonColor="#7c3aed"
+                        compact
+                        loading={cutWarehouseRollMutation.isPending}
+                        disabled={
+                          cutWarehouseRollMutation.isPending ||
+                          recutSwatchMutation.isPending ||
+                          !recutCutLength.trim() ||
+                          parseFloat(recutCutLength) <= 0 ||
+                          parseFloat(recutCutLength) > recutRollMeta.currentQty ||
+                          !recutQualityGrade
+                        }
+                        style={styles.createTopBtn}
+                      >
+                        Top Oluştur
+                      </Button>
+                      <Button
+                        mode="contained-tonal"
+                        icon="content-copy"
+                        onPress={handleRecutKartela}
+                        compact
+                        loading={recutSwatchMutation.isPending}
+                        disabled={
+                          cutWarehouseRollMutation.isPending ||
+                          recutSwatchMutation.isPending ||
+                          !recutCutLength.trim() ||
+                          parseFloat(recutCutLength) <= 0 ||
+                          parseFloat(recutCutLength) > recutRollMeta.currentQty
+                        }
+                        style={styles.createTopBtn}
+                      >
+                        Kartela Oluştur
+                      </Button>
+                    </View>
+                  </View>
+                </Surface>
+
+              {/* Footer — Top Kesme bitir; kalan varsa karar modal, yoksa
+                  direkt arşivle (discard, kayıp 0). Beyaz card kaldırıldı —
+                  sadece buton görünür. */}
+              <Surface style={styles.recutFooter} elevation={0}>
+                <Button
+                  mode="contained"
+                  icon="archive"
+                  onPress={() => {
+                    if (recutRollMeta.currentQty <= 0.001) {
+                      // Kalan yok — modal'a gerek yok, direkt parent'ı arşivle
+                      finalizeWarehouseCutMutation.mutate({
+                        rollId: recutResolvedRollId,
+                        remainingAction: 'discard',
+                      });
+                    } else {
+                      setRecutFinalizeOpen(true);
+                    }
+                  }}
+                  buttonColor="#1e40af"
+                  style={styles.footerBtn}
+                  contentStyle={styles.footerBtnContent}
+                  labelStyle={styles.footerBtnLabel}
+                  loading={finalizeWarehouseCutMutation.isPending}
+                  disabled={
+                    cutWarehouseRollMutation.isPending ||
+                    finalizeWarehouseCutMutation.isPending
+                  }
+                >
+                  {recutRollMeta.currentQty > 0.001
+                    ? `Bitir (Kalan ${recutRollMeta.currentQty.toFixed(1)}m için seç)`
+                    : 'Bitir ve Arşivle'}
+                </Button>
+              </Surface>
+            </View>
+          ) : !activeJob ? (
             <View style={styles.emptyState}>
               <Icon source="card-search-outline" size={64} color="#cbd5e1" />
               <Text style={styles.emptyTitle}>Kart açılmadı</Text>
               <Text style={styles.emptyHint}>
-                Sağdan refakat kartını okutarak başlayın
+                {compact
+                  ? 'Üstten "Açık İşler" butonuyla kart okutarak başlayın'
+                  : 'Sağdan refakat kartını okutarak başlayın'}
               </Text>
             </View>
           ) : !selectedRoll ? (
@@ -756,7 +1300,7 @@ export default function TamburScreen() {
             </View>
           ) : (
             <>
-              {/* Sticky header */}
+              {/* Sticky header — kalan metre + siparişler butonu prominent */}
               <Surface style={styles.headerBand} elevation={2}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.headerBarcode}>
@@ -765,11 +1309,9 @@ export default function TamburScreen() {
                   <Text style={styles.headerSub}>
                     {selectedRoll.itemName}
                     {selectedRoll.colorName ? ` · ${selectedRoll.colorName}` : ''}
-                    {' · '}
-                    Giriş: {selectedRoll.currentQty.toFixed(1)} mt
                     {selectedRoll.width != null ? ` · ${selectedRoll.width} cm` : ''}
                   </Text>
-                  {/* Refactor 11 — planlanan foldType / layerCount info chip */}
+                  {/* Planlanan foldType / layerCount info chip */}
                   {activeJob?.context &&
                     (activeJob.context.plannedFoldType ||
                       activeJob.context.plannedLayerCount != null) && (
@@ -785,29 +1327,43 @@ export default function TamburScreen() {
                       </View>
                     )}
                 </View>
-                {/* Açık kumaş Roll'lar için cut / bitir butonları */}
-                {!selectedRoll.barcode && (
-                  <View style={styles.openFabricActions}>
-                    <Button
-                      mode="contained"
-                      compact
-                      icon="content-cut"
-                      buttonColor="#0ea5e9"
-                      onPress={() => setCutModalRollId(selectedRoll.rollId)}
+
+                {/* Kalan metre rozeti — sürekli görünür, operatörün ana ölçeği */}
+                <View
+                  style={[
+                    styles.remainingBadge,
+                    (segmentPreview?.remaining ?? 0) <= 0.001 &&
+                      styles.remainingBadgeDanger,
+                  ]}
+                >
+                  <Text style={styles.remainingBadgeValue}>
+                    {(segmentPreview?.remaining ?? selectedRoll.currentQty).toFixed(1)}
+                  </Text>
+                  <Text style={styles.remainingBadgeLabel}>
+                    mt kalan
+                  </Text>
+                  <Text style={styles.remainingBadgeMeta}>
+                    / {selectedRoll.currentQty.toFixed(1)} giriş
+                  </Text>
+                </View>
+
+                {/* Siparişler butonu — operatör tıklayınca modal'da görür */}
+                {activeJob?.context?.orders &&
+                  activeJob.context.orders.length > 0 && (
+                    <TouchableRipple
+                      onPress={() => setOrdersModalOpen(true)}
+                      borderless
+                      style={styles.ordersHeaderBtn}
                     >
-                      Kes
-                    </Button>
-                    <Button
-                      mode="contained"
-                      compact
-                      icon="package-check"
-                      buttonColor="#7c3aed"
-                      onPress={() => setFinishFabricRollId(selectedRoll.rollId)}
-                    >
-                      Bitir
-                    </Button>
-                  </View>
-                )}
+                      <View style={styles.ordersHeaderBtnInner}>
+                        <Icon source="clipboard-list-outline" size={20} color="#fff" />
+                        <Text style={styles.ordersHeaderBtnLabel}>
+                          {activeJob.context.orders.length}
+                        </Text>
+                        <Text style={styles.ordersHeaderBtnSub}>sipariş</Text>
+                      </View>
+                    </TouchableRipple>
+                  )}
               </Surface>
 
               <ScrollView
@@ -815,231 +1371,165 @@ export default function TamburScreen() {
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
               >
-                {/* Kesim listesi */}
-                <Surface style={styles.section} elevation={1}>
-                  <Text style={styles.sectionTitle}>
-                    Kesim Listesi ({selectedRoll.errors.length})
+                {/* Hata noktaları — sadece referans, kompakt yan yana chip'ler */}
+                <Surface style={styles.defectGuideSection} elevation={1}>
+                  <Text style={styles.defectGuideTitle}>
+                    Hata Noktaları ({selectedRoll.errors.length})
                   </Text>
-                  {selectedRoll.errors.length === 0 && (
-                    <Text style={styles.muted}>
-                      Hata kaydı yok. Aşağıdan ekleyebilir veya doğrudan finalize edebilirsiniz.
-                    </Text>
-                  )}
-                  {selectedRoll.errors.map((e, idx) => {
-                    const dec = work.decisions[e.id];
-                    const isCut = dec?.decision === 'CUT';
-                    const isNoCut = dec?.decision === 'NO_CUT';
-                    const defectType = defectTypes.find(
-                      (d) => d.name === e.errorType
-                    );
-                    const isCritical = defectType?.severity === 'CRITICAL';
-                    return (
-                      <View
-                        key={e.id}
-                        style={[
-                          styles.errorCard,
-                          isCritical && styles.errorCardCritical,
-                          isCut && styles.errorCardCut,
-                        ]}
-                      >
-                        <View style={styles.errorHeader}>
-                          <View style={styles.errorIndex}>
-                            <Text style={styles.errorIndexText}>{idx + 1}</Text>
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.errorTitle}>
-                              {e.errorType ?? '—'}
-                              {isCritical && (
-                                <Text style={styles.criticalBadge}> ⚠ KES öner</Text>
-                              )}
-                            </Text>
-                            <Text style={styles.errorRange}>
-                              {e.startMeter.toFixed(1)}
-                              {e.endMeter != null
-                                ? ` – ${e.endMeter.toFixed(1)} mt · ${(e.endMeter - e.startMeter).toFixed(1)} mt`
-                                : ' mt (nokta)'}
-                            </Text>
-                          </View>
-                          <IconButton
-                            icon="trash-can-outline"
-                            size={20}
-                            iconColor="#dc2626"
-                            onPress={() =>
-                              deleteErrorMutation.mutate({ errorId: e.id })
-                            }
-                            style={{ margin: 0 }}
-                            accessibilityLabel="Hatayı sil"
-                          />
-                        </View>
-
-                        {/* KES/KESME toggle */}
-                        <View style={styles.decisionRow}>
-                          <Button
-                            mode={isCut ? 'contained' : 'outlined'}
-                            icon="content-cut"
-                            buttonColor={isCut ? '#dc2626' : undefined}
-                            textColor={isCut ? '#fff' : '#dc2626'}
-                            onPress={() => setDecision(e.id, 'CUT')}
-                            style={[styles.decisionBtn, { borderColor: '#dc2626' }]}
-                            contentStyle={styles.decisionBtnContent}
-                          >
-                            KES
-                          </Button>
-                          <Button
-                            mode={isNoCut ? 'contained' : 'outlined'}
-                            icon="check"
-                            buttonColor={isNoCut ? '#059669' : undefined}
-                            textColor={isNoCut ? '#fff' : '#059669'}
-                            onPress={() => setDecision(e.id, 'NO_CUT')}
-                            style={[styles.decisionBtn, { borderColor: '#059669' }]}
-                            contentStyle={styles.decisionBtnContent}
-                          >
-                            KESME
-                          </Button>
-                        </View>
-
-                        {/* KES ise kalite seçimi */}
-                        {isCut && (
-                          <View style={styles.qualityRow}>
-                            <Text style={styles.qualityLabel}>Kesilen parça kalitesi:</Text>
-                            <View style={styles.qualityGrid}>
-                              {qualityGrades.map((qg) => {
-                                const active = dec?.qualityGrade === qg.code;
-                                return (
-                                  <TouchableRipple
-                                    key={qg.id}
-                                    borderless
-                                    onPress={() => setQualityGrade(e.id, qg.code)}
-                                    style={[
-                                      styles.qualityChip,
-                                      active && styles.qualityChipActive,
-                                      active && qg.color
-                                        ? { backgroundColor: qg.color, borderColor: qg.color }
-                                        : null,
-                                    ]}
-                                  >
-                                    <Text
-                                      style={[
-                                        styles.qualityChipText,
-                                        active && styles.qualityChipTextActive,
-                                      ]}
-                                    >
-                                      {qg.name}
-                                    </Text>
-                                  </TouchableRipple>
-                                );
-                              })}
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                </Surface>
-
-                {/* Yeni kesim gir — sürekli açık */}
-                <Surface style={styles.entrySection} elevation={1}>
-                  <Text style={styles.sectionTitle}>Yeni Kesim Gir</Text>
-                  <View style={styles.meterRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.entryLabel}>Başlangıç (mt)</Text>
-                      <NumpadInput
-                        mode="outlined"
-                        value={work.errorEntry.startMeter}
-                        onChangeText={(v) =>
-                          setWork((w) => ({
-                            ...w,
-                            errorEntry: { ...w.errorEntry, startMeter: v },
-                          }))
-                        }
-                        numpadLabel="Kesim başlangıç"
-                        allowDecimal
-                        numpadMaxLength={8}
-                        placeholder="0"
-                        dense
-                        style={styles.input}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.entryLabel}>Bitiş (mt)</Text>
-                      <NumpadInput
-                        mode="outlined"
-                        value={work.errorEntry.endMeter}
-                        onChangeText={(v) =>
-                          setWork((w) => ({
-                            ...w,
-                            errorEntry: { ...w.errorEntry, endMeter: v },
-                          }))
-                        }
-                        numpadLabel="Kesim bitiş"
-                        allowDecimal
-                        numpadMaxLength={8}
-                        placeholder="0"
-                        dense
-                        style={styles.input}
-                      />
-                    </View>
-                  </View>
-
-                  <Text style={[styles.entryLabel, { marginTop: 4 }]}>Hata Tipi</Text>
-                  {defectTypes.length === 0 ? (
-                    <Text style={styles.muted}>
-                      Hata tipi tanımlı değil — admin'den ekleyin
-                    </Text>
+                  {selectedRoll.errors.length === 0 ? (
+                    <Text style={styles.defectGuideEmpty}>Kayıtlı hata yok</Text>
                   ) : (
-                    <View style={styles.chipGrid}>
-                      {defectTypes.map((dt) => {
-                        const active = work.errorEntry.defectTypeId === dt.id;
+                    <View style={styles.defectGuideRow}>
+                      {selectedRoll.errors.map((e) => {
+                        const defectType = defectTypes.find(
+                          (d) => d.name === e.errorType
+                        );
+                        const isCritical = defectType?.severity === 'CRITICAL';
                         return (
-                          <TouchableRipple
-                            key={dt.id}
-                            borderless
-                            onPress={() =>
-                              setWork((w) => ({
-                                ...w,
-                                errorEntry: {
-                                  ...w.errorEntry,
-                                  defectTypeId: active ? '' : dt.id,
-                                },
-                              }))
-                            }
+                          <View
+                            key={e.id}
                             style={[
-                              styles.defectChip,
-                              active && styles.defectChipActive,
+                              styles.defectGuideChip,
+                              isCritical && styles.defectGuideChipCritical,
                             ]}
                           >
                             <Text
                               style={[
-                                styles.defectChipText,
-                                active && styles.defectChipTextActive,
+                                styles.defectGuideChipMeter,
+                                isCritical && styles.defectGuideChipTextCritical,
                               ]}
                             >
-                              {dt.name}
+                              {e.startMeter.toFixed(1)}m
+                            </Text>
+                            {e.errorType && (
+                              <Text
+                                style={[
+                                  styles.defectGuideChipLabel,
+                                  isCritical && styles.defectGuideChipTextCritical,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {e.errorType}
+                              </Text>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </Surface>
+
+                {/* Kesim — operatör fiziksel kesim yapar, anında sisteme girer.
+                    Her "Top Oluştur" tıklaması child Roll oluşturur + etiket basar. */}
+                <Surface style={styles.section} elevation={1}>
+                  <Text style={styles.sectionTitle}>Kesim</Text>
+
+                  <Text style={styles.entryLabel}>Uzunluk (mt)</Text>
+                  <View style={styles.cutInputRow}>
+                    <View style={{ flex: 1 }}>
+                      <NumpadInput
+                        mode="outlined"
+                        value={work.voluntaryEntry.length}
+                        onChangeText={(v) =>
+                          setWork((w) => ({
+                            ...w,
+                            voluntaryEntry: { ...w.voluntaryEntry, length: v },
+                          }))
+                        }
+                        numpadLabel="Kesim uzunluğu"
+                        allowDecimal
+                        autoActivate
+                        numpadMaxLength={8}
+                        placeholder="örn: 60"
+                        dense
+                        style={styles.input}
+                        useNativeKeyboard={compact}
+                      />
+                    </View>
+                    <IconButton
+                      icon="counter"
+                      mode="contained-tonal"
+                      size={24}
+                      iconColor="#7c3aed"
+                      containerColor="#ede9fe"
+                      onPress={fetchFromMachine}
+                      accessibilityLabel="Makineden çek (simülasyon)"
+                      style={{ margin: 0 }}
+                    />
+                  </View>
+
+                  <View style={styles.qualityActionRow}>
+                    <View style={styles.qualityGridInline}>
+                      {qualityGrades.map((qg) => {
+                        const active =
+                          work.voluntaryEntry.qualityGrade === qg.code;
+                        return (
+                          <TouchableRipple
+                            key={qg.id}
+                            borderless
+                            onPress={() =>
+                              setWork((w) => ({
+                                ...w,
+                                voluntaryEntry: {
+                                  ...w.voluntaryEntry,
+                                  qualityGrade: active ? '' : qg.code,
+                                  qualityName: active ? undefined : qg.name,
+                                },
+                              }))
+                            }
+                            style={[
+                              styles.qualityChip,
+                              active && styles.qualityChipActive,
+                              active && qg.color
+                                ? { backgroundColor: qg.color, borderColor: qg.color }
+                                : null,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.qualityChipText,
+                                active && styles.qualityChipTextActive,
+                              ]}
+                            >
+                              {qg.name}
                             </Text>
                           </TouchableRipple>
                         );
                       })}
                     </View>
-                  )}
-
-                  <Button
-                    mode="contained"
-                    icon="plus-circle"
-                    onPress={handleAddError}
-                    loading={reportErrorMutation.isPending}
-                    disabled={
-                      reportErrorMutation.isPending ||
-                      !work.errorEntry.defectTypeId ||
-                      !work.errorEntry.startMeter ||
-                      !work.errorEntry.endMeter
-                    }
-                    buttonColor="#d97706"
-                    style={styles.addBtn}
-                    contentStyle={styles.addBtnContent}
-                    labelStyle={styles.addBtnLabel}
-                  >
-                    Listeye Ekle
-                  </Button>
+                    <View style={styles.createActionRow}>
+                      <Button
+                        mode="contained"
+                        icon="plus-circle"
+                        onPress={addVoluntaryCut}
+                        buttonColor="#7c3aed"
+                        compact
+                        loading={cutOpenFabricMutation.isPending}
+                        disabled={
+                          cutOpenFabricMutation.isPending ||
+                          !work.voluntaryEntry.length ||
+                          !work.voluntaryEntry.qualityGrade
+                        }
+                        style={styles.createTopBtn}
+                      >
+                        Top Oluştur
+                      </Button>
+                      <Button
+                        mode="contained-tonal"
+                        icon="content-copy"
+                        onPress={addKartela}
+                        compact
+                        loading={swatchMutation.isPending}
+                        disabled={
+                          swatchMutation.isPending ||
+                          !work.voluntaryEntry.length
+                        }
+                        style={styles.createTopBtn}
+                      >
+                        Kartela Oluştur
+                      </Button>
+                    </View>
+                  </View>
                 </Surface>
 
                 {/* Katlama */}
@@ -1074,496 +1564,42 @@ export default function TamburScreen() {
                   </View>
                 </Surface>
 
-                {/* Gönüllü Kesim — defect dışı, operatörün belirlediği aralıklar */}
-                <Surface style={styles.section} elevation={1}>
-                  <Text style={styles.sectionTitle}>Gönüllü Kesim</Text>
-                  <Text style={styles.muted}>
-                    Defect'ten bağımsız olarak topu istediğin aralıkta böl. Aralık
-                    aynı topta kesimle ayrılmış yeni bir parça olur.
-                  </Text>
-
-                  {work.voluntaryCuts.length > 0 && (
-                    <View style={{ gap: 4, marginTop: 4 }}>
-                      {work.voluntaryCuts.map((vc) => (
-                        <View key={vc.id} style={styles.defectRow}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.defectName}>
-                              {vc.start.toFixed(1)} – {vc.end.toFixed(1)} mt ·{' '}
-                              {(vc.end - vc.start).toFixed(1)} mt
-                            </Text>
-                            <Text style={styles.defectRange}>
-                              {vc.qualityName ?? vc.qualityGrade}
-                            </Text>
-                          </View>
-                          <IconButton
-                            icon="trash-can-outline"
-                            size={20}
-                            iconColor="#dc2626"
-                            onPress={() => removeVoluntaryCut(vc.id)}
-                            accessibilityLabel="Kesimi sil"
-                            style={{ margin: 0 }}
-                          />
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  <View style={styles.meterRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.entryLabel}>Başlangıç (mt)</Text>
-                      <NumpadInput
-                        mode="outlined"
-                        value={work.voluntaryEntry.start}
-                        onChangeText={(v) =>
-                          setWork((w) => ({
-                            ...w,
-                            voluntaryEntry: { ...w.voluntaryEntry, start: v },
-                          }))
-                        }
-                        numpadLabel="Gönüllü kesim başlangıç"
-                        allowDecimal
-                        numpadMaxLength={8}
-                        placeholder="0"
-                        dense
-                        style={styles.input}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.entryLabel}>Bitiş (mt)</Text>
-                      <NumpadInput
-                        mode="outlined"
-                        value={work.voluntaryEntry.end}
-                        onChangeText={(v) =>
-                          setWork((w) => ({
-                            ...w,
-                            voluntaryEntry: { ...w.voluntaryEntry, end: v },
-                          }))
-                        }
-                        numpadLabel="Gönüllü kesim bitiş"
-                        allowDecimal
-                        numpadMaxLength={8}
-                        placeholder="0"
-                        dense
-                        style={styles.input}
-                      />
-                    </View>
-                  </View>
-
-                  <Text style={[styles.qualityLabel, { marginTop: 4 }]}>
-                    Kalite
-                  </Text>
-                  <View style={styles.qualityGrid}>
-                    {qualityGrades.map((qg) => {
-                      const active =
-                        work.voluntaryEntry.qualityGrade === qg.code;
-                      return (
-                        <TouchableRipple
-                          key={qg.id}
-                          borderless
-                          onPress={() =>
-                            setWork((w) => ({
-                              ...w,
-                              voluntaryEntry: {
-                                ...w.voluntaryEntry,
-                                qualityGrade: active ? '' : qg.code,
-                                qualityName: active ? undefined : qg.name,
-                              },
-                            }))
-                          }
-                          style={[
-                            styles.qualityChip,
-                            active && styles.qualityChipActive,
-                            active && qg.color
-                              ? { backgroundColor: qg.color, borderColor: qg.color }
-                              : null,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.qualityChipText,
-                              active && styles.qualityChipTextActive,
-                            ]}
-                          >
-                            {qg.name}
-                          </Text>
-                        </TouchableRipple>
-                      );
-                    })}
-                  </View>
-
-                  <Button
-                    mode="contained"
-                    icon="plus-circle"
-                    onPress={addVoluntaryCut}
-                    buttonColor="#7c3aed"
-                    style={styles.addBtn}
-                    contentStyle={styles.addBtnContent}
-                    disabled={
-                      !work.voluntaryEntry.start ||
-                      !work.voluntaryEntry.end ||
-                      !work.voluntaryEntry.qualityGrade
-                    }
-                  >
-                    Listeye Ekle
-                  </Button>
-                </Surface>
-
-                {/* Çıkış Önizleme — kesimler sonrası parçalar */}
-                {segmentPreview && (
-                  <Surface style={styles.section} elevation={1}>
-                    <Text style={styles.sectionTitle}>Çıkış Önizleme</Text>
-                    {segmentPreview.error ? (
-                      <Text style={[styles.muted, { color: '#dc2626' }]}>
-                        {segmentPreview.error}
-                      </Text>
-                    ) : (
-                      <View style={{ gap: 4 }}>
-                        <Text style={styles.muted}>
-                          Top giriş: {selectedRoll.currentQty.toFixed(1)} mt · Parent bölünecek (Bölündü)
-                        </Text>
-                        {segmentPreview.untouched!.map((s, i) => (
-                          <View key={`u-${i}`} style={styles.defectRow}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.defectName}>
-                                Yeni iyi parça {i + 1}: {(s.end - s.start).toFixed(1)} mt
-                              </Text>
-                              <Text style={styles.defectRange}>
-                                [{s.start.toFixed(1)} – {s.end.toFixed(1)}] · WAREHOUSE
-                              </Text>
-                            </View>
-                          </View>
-                        ))}
-                        {segmentPreview.cuts.map((c, i) => (
-                          <View key={`cut-${i}`} style={styles.defectRow}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.defectName}>
-                                {c.source === 'DEFECT'
-                                  ? 'Defect kesim'
-                                  : c.source === 'VOLUNTARY'
-                                    ? 'Gönüllü kesim'
-                                    : 'Kartela (taslak)'}: {(c.end - c.start).toFixed(1)} mt
-                              </Text>
-                              <Text style={styles.defectRange}>
-                                [{c.start.toFixed(1)} – {c.end.toFixed(1)}] · {c.qualityGrade}
-                              </Text>
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </Surface>
-                )}
-
-                {/* Kartela */}
-                <Surface style={styles.section} elevation={1}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.sectionTitle}>Kartela (opsiyonel)</Text>
-                    {!work.swatchEntry.open ? (
-                      <Button
-                        mode="contained-tonal"
-                        icon="content-copy"
-                        compact
-                        onPress={() =>
-                          setWork((w) => ({
-                            ...w,
-                            swatchEntry: { ...EMPTY_SWATCH_ENTRY, open: true },
-                          }))
-                        }
-                      >
-                        Kartela Bas
-                      </Button>
-                    ) : (
-                      <IconButton
-                        icon="close"
-                        size={20}
-                        onPress={() =>
-                          setWork((w) => ({ ...w, swatchEntry: EMPTY_SWATCH_ENTRY }))
-                        }
-                        style={{ margin: 0 }}
-                      />
-                    )}
-                  </View>
-
-                  {work.swatchEntry.open && (
-                    <>
-                      <Text style={styles.muted}>
-                        Sarımdayken metreyi çek: başlangıçta tek tıkla, kartela
-                        bittiğinde tekrar tıkla.
-                      </Text>
-                      <View style={styles.meterRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.entryLabel}>Başlangıç (mt)</Text>
-                          <NumpadInput
-                            mode="outlined"
-                            value={work.swatchEntry.startMeter}
-                            onChangeText={(v) =>
-                              setWork((w) => ({
-                                ...w,
-                                swatchEntry: { ...w.swatchEntry, startMeter: v },
-                              }))
-                            }
-                            numpadLabel="Kartela başlangıç"
-                            allowDecimal
-                            numpadMaxLength={8}
-                            placeholder="0"
-                            dense
-                            style={styles.input}
-                          />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.entryLabel}>Bitiş (mt)</Text>
-                          <NumpadInput
-                            mode="outlined"
-                            value={work.swatchEntry.endMeter}
-                            onChangeText={(v) =>
-                              setWork((w) => ({
-                                ...w,
-                                swatchEntry: { ...w.swatchEntry, endMeter: v },
-                              }))
-                            }
-                            numpadLabel="Kartela bitiş"
-                            allowDecimal
-                            numpadMaxLength={8}
-                            placeholder="0"
-                            dense
-                            style={styles.input}
-                          />
-                        </View>
-                      </View>
-                      {swatchLength != null && swatchLength > 0 && (
-                        <Text style={styles.swatchInfo}>
-                          Uzunluk: {swatchLength.toFixed(2)} mt
-                        </Text>
-                      )}
-                      <View style={styles.meterRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.entryLabel}>Adet</Text>
-                          <NumpadInput
-                            mode="outlined"
-                            value={work.swatchEntry.count}
-                            onChangeText={(v) =>
-                              setWork((w) => ({
-                                ...w,
-                                swatchEntry: { ...w.swatchEntry, count: v },
-                              }))
-                            }
-                            numpadLabel="Kartela adet"
-                            allowDecimal={false}
-                            numpadMaxLength={4}
-                            placeholder="1"
-                            dense
-                            style={styles.input}
-                          />
-                        </View>
-                        <View style={{ flex: 2 }}>
-                          <Text style={styles.entryLabel}>Amaç (ops)</Text>
-                          <TextInput
-                            mode="outlined"
-                            value={work.swatchEntry.purpose}
-                            onChangeText={(v) =>
-                              setWork((w) => ({
-                                ...w,
-                                swatchEntry: { ...w.swatchEntry, purpose: v },
-                              }))
-                            }
-                            placeholder="Müşteri numune..."
-                            dense
-                            style={styles.input}
-                          />
-                        </View>
-                      </View>
-                      <Button
-                        mode="contained"
-                        icon="content-copy"
-                        onPress={handleCreateSwatch}
-                        loading={swatchMutation.isPending}
-                        disabled={
-                          swatchMutation.isPending ||
-                          swatchLength == null ||
-                          swatchLength <= 0
-                        }
-                        buttonColor="#7c3aed"
-                        style={styles.addBtn}
-                        contentStyle={styles.addBtnContent}
-                      >
-                        Kartelayı Bas
-                      </Button>
-                    </>
-                  )}
-                </Surface>
               </ScrollView>
 
-              {/* Sticky footer */}
+              {/* Sticky footer — açık kumaş bitirme. Kalan varsa fire işaretlenir. */}
               <Surface style={styles.footer} elevation={4}>
                 <Button
                   mode="contained"
                   icon="warehouse"
                   onPress={handleFinalize}
-                  loading={finalizeMutation.isPending}
-                  disabled={
-                    finalizeMutation.isPending || !!segmentPreview?.error
-                  }
+                  loading={finalizeOpenFabricMutation.isPending}
+                  disabled={finalizeOpenFabricMutation.isPending}
                   buttonColor="#1e40af"
                   style={styles.footerBtn}
                   contentStyle={styles.footerBtnContent}
                   labelStyle={styles.footerBtnLabel}
                 >
-                  Tamburu Bitir → Depoya Gönder
+                  {selectedRoll.currentQty > 0.001
+                    ? `Tamamla (Kalan ${selectedRoll.currentQty.toFixed(1)}m için seç)`
+                    : 'Tamamla'}
                 </Button>
               </Surface>
             </>
           )}
+
         </View>
 
         {/* ════════ SAĞ: card scan + tab + roll list + numpad ════════ */}
-        <View style={styles.rightCol}>
-          <View style={styles.cardInputWrap}>
-            <View style={styles.cardInputRow}>
-              <TextInput
-                mode="outlined"
-                value={cardBarcode}
-                onChangeText={setCardBarcode}
-                placeholder="Refakat kartı barkodu okut/yaz..."
-                dense
-                autoCapitalize="characters"
-                autoCorrect={false}
-                left={<TextInput.Icon icon="card-search-outline" />}
-                right={
-                  resolvingCard ? (
-                    <TextInput.Icon
-                      icon={() => <ActivityIndicator size={18} color="#1e40af" />}
-                    />
-                  ) : cardBarcode.trim() ? (
-                    <TextInput.Icon
-                      icon="check"
-                      onPress={handleResolveCard}
-                      color="#1e40af"
-                    />
-                  ) : undefined
-                }
-                onSubmitEditing={handleResolveCard}
-                returnKeyType="search"
-                style={[styles.cardInput, { flex: 1 }]}
-              />
-              <IconButton
-                icon="format-list-bulleted"
-                mode="contained-tonal"
-                containerColor="#e2e8f0"
-                iconColor="#0f172a"
-                size={26}
-                onPress={() => setListModalOpen(true)}
-                accessibilityLabel="Açık kartları listele"
-                style={styles.cameraBtn}
-              />
-              <IconButton
-                icon="camera"
-                mode="contained-tonal"
-                containerColor="#dbeafe"
-                iconColor="#1e40af"
-                size={26}
-                onPress={() => setScannerOpen(true)}
-                accessibilityLabel="Kamera ile refakat kartı tara"
-                style={styles.cameraBtn}
-              />
-            </View>
-            {/* Banner — Refactor 4 yanlış istasyon mesajı */}
-            {cardError && (
-              <Surface style={styles.errorBanner} elevation={1}>
-                <Icon source="alert-circle" size={20} color="#b91c1c" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.errorBannerTitle}>Yanlış istasyon</Text>
-                  <Text style={styles.errorBannerText}>{cardError}</Text>
-                </View>
-                <IconButton
-                  icon="close"
-                  size={18}
-                  onPress={() => setCardError(null)}
-                  accessibilityLabel="Hata mesajını kapat"
-                  style={{ margin: 0 }}
-                />
-              </Surface>
-            )}
-            {/* Eylem butonları: sol → Yeniden Kes · sağ → Çıkan Toplar */}
-            <View style={styles.actionBtnRow}>
-              <Button
-                mode="outlined"
-                icon="content-cut"
-                compact
-                onPress={() => setResplitOpen(true)}
-                textColor="#0f172a"
-              >
-                Yeniden Kes
-              </Button>
-              <Button
-                mode="outlined"
-                icon="printer-search"
-                compact
-                onPress={() => setRecentOutputOpen(true)}
-                textColor="#0f172a"
-              >
-                Çıkan Toplar
-              </Button>
-            </View>
+        {!compact && (
+          <View style={styles.rightCol}>
+            {renderRightContent()}
+            <NumpadHost style={styles.numpadHost} />
           </View>
+        )}
 
-          {openJobs.length > 0 && (
-            <View style={styles.tabBar}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.tabScroll}
-              >
-                {openJobs.map((job) => (
-                  <JobTab
-                    key={job.cardId}
-                    job={job}
-                    active={job.cardId === activeCardId}
-                    onPress={() => setActiveCardId(job.cardId)}
-                    onClose={() => closeJob(job.cardId)}
-                  />
-                ))}
-              </ScrollView>
-              <View style={styles.tabRefreshWrap}>
-                <RefreshButton
-                  onPress={refetchActiveJob}
-                  refreshing={false}
-                />
-              </View>
-            </View>
-          )}
-
-          {!activeJob ? (
-            <View style={styles.paneEmpty}>
-              <Icon source="package-variant-closed" size={48} color="#cbd5e1" />
-              <Text style={styles.paneEmptyText}>Henüz açık iş yok</Text>
-            </View>
-          ) : activeJob.stepSummary.rolls.length === 0 ? (
-            <View style={styles.paneEmpty}>
-              <Icon source="check-circle-outline" size={48} color="#10b981" />
-              <Text style={styles.paneEmptyText}>Tüm toplar finalize</Text>
-              <Text style={styles.paneEmptyHint}>
-                Sekmeyi kapatabilirsin
-              </Text>
-            </View>
-          ) : (
-            <FlashList
-              data={activeJob.stepSummary.rolls}
-              keyExtractor={(r) => r.rollId}
-              contentContainerStyle={{ padding: 8 }}
-              renderItem={({ item, index }) => (
-                <RollListItem
-                  roll={item}
-                  index={index}
-                  selected={activeJob.selectedRollId === item.rollId}
-                  onPress={() => selectRoll(item.rollId)}
-                />
-              )}
-            />
-          )}
-
-          {/* Sabit numpad */}
-          <NumpadHost style={styles.numpadHost} />
-        </View>
+        {/* Compact (telefon) + native klavye açık → floating dismiss butonu.
+            Operatör NumpadInput'tan sonra klavyeyi kapatmak için form'a basmak
+            yerine tek tıkla indirir. Tablet'te numpad kullanıldığı için yok. */}
       </View>
 
       {/* Açık kart listesi — hızlı seçim için */}
@@ -1583,12 +1619,20 @@ export default function TamburScreen() {
         onScan={handleScannerResult}
       />
 
-      {/* Yeniden kesim modal'ı */}
-      <ResplitModal
-        visible={resplitOpen}
-        loading={resplitMutation.isPending}
-        onDismiss={() => setResplitOpen(false)}
-        onSubmit={(payload) => resplitMutation.mutate(payload)}
+      {/* Top Kesme — kamera ile depo topu barkodu okut. Büyük top-level modal,
+          okuma sonrası RecutInlineSection (sol panel) doludur. */}
+      <BarcodeScannerModal
+        visible={recutScannerOpen}
+        title="Top Kesme — Barkod Okut"
+        onDismiss={() => setRecutScannerOpen(false)}
+        onScan={handleRecutScanned}
+      />
+
+      {/* İş Emri Siparişleri modal'ı — operatör kesim planı için açar */}
+      <OrdersDetailModal
+        visible={ordersModalOpen}
+        orders={activeJob?.context?.orders ?? []}
+        onDismiss={() => setOrdersModalOpen(false)}
       />
 
       {/* Etiket basımı modal'ı — finalize/post-split sonrası */}
@@ -1600,6 +1644,21 @@ export default function TamburScreen() {
         printingRollId={activePrintRoll?.id ?? null}
       />
 
+      {/* Top Kesme bitir — kalan kumaş için karar (1.KALITE/A1/FIRE/discard) */}
+      <FinalizeRemainingModal
+        visible={recutFinalizeOpen}
+        remainingQty={recutRollMeta?.currentQty ?? 0}
+        onDismiss={() => setRecutFinalizeOpen(false)}
+        loading={finalizeWarehouseCutMutation.isPending}
+        onChoose={(action) => {
+          if (!recutResolvedRollId) return;
+          finalizeWarehouseCutMutation.mutate({
+            rollId: recutResolvedRollId,
+            remainingAction: action,
+          });
+        }}
+      />
+
       {/* Tambur'dan çıkmış toplar listesi — geçmişten etiket yeniden basımı */}
       <RecentOutputModal
         visible={recentOutputOpen}
@@ -1608,740 +1667,41 @@ export default function TamburScreen() {
         printingRollId={activePrintRoll?.id ?? null}
       />
 
+      {/* Compact'ta sağdan kayan iş paneli — telefon ekranında sağ kolonun yerine */}
+      {compact && (
+        <RightPanelDrawer
+          visible={rightDrawerOpen}
+          onDismiss={() => setRightDrawerOpen(false)}
+          insets={insets}
+          title="Tambur İşleri"
+          onClosed={() => {
+            if (pendingDrawerAction === 'scanner') setScannerOpen(true);
+            else if (pendingDrawerAction === 'list') setListModalOpen(true);
+            else if (pendingDrawerAction === 'recentOutput') setRecentOutputOpen(true);
+            else if (pendingDrawerAction === 'recut') setRecutScannerOpen(true);
+            setPendingDrawerAction(null);
+          }}
+        >
+          {renderRightContent()}
+        </RightPanelDrawer>
+      )}
+
       {/* Aktif yazdırma — LabelPrinter expo-print ile PDF/sistem yazdırma açar */}
       <LabelPrinter
         roll={activePrintRoll}
-        batchNumber={
-          activePrintRoll
-            ? (activeJob?.stepSummary.batchNumber ?? null)
-            : null
-        }
+        kind="ROLL_FINISHED"
         onDone={() => setActivePrintRoll(null)}
       />
 
-      {/* Refactor 9 — açık kumaş cut modal'ı */}
-      <OpenFabricCutModal
-        visible={!!cutModalRollId}
-        qualityGrades={qualityGrades}
-        submitting={cutMutation.isPending}
-        onDismiss={() => setCutModalRollId(null)}
-        onSubmit={(data) => {
-          if (!cutModalRollId) return;
-          cutMutation.mutate({ rollId: cutModalRollId, data });
-        }}
+      <FinalizeRemainingModal
+        visible={finalizeModalOpen}
+        remainingQty={selectedRoll?.currentQty ?? 0}
+        onDismiss={() => setFinalizeModalOpen(false)}
+        onChoose={submitFinalize}
+        loading={finalizeOpenFabricMutation.isPending}
       />
 
-      {/* Refactor 9 + 11 — açık kumaş finalize modal'ı (foldType / layerCount default planlanan) */}
-      <OpenFabricFinishModal
-        visible={!!finishFabricRollId}
-        plannedFoldType={activeJob?.context?.plannedFoldType ?? null}
-        plannedLayerCount={activeJob?.context?.plannedLayerCount ?? null}
-        submitting={finalizeOpenFabricMutation.isPending}
-        onDismiss={() => setFinishFabricRollId(null)}
-        onSubmit={(data) => {
-          if (!finishFabricRollId) return;
-          finalizeOpenFabricMutation.mutate({ rollId: finishFabricRollId, data });
-        }}
-      />
     </ScreenChrome>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Refactor 9 — Açık kumaş cut modal
-// ─────────────────────────────────────────────────────────────────────────────
-function OpenFabricCutModal({
-  visible,
-  qualityGrades,
-  submitting,
-  onDismiss,
-  onSubmit,
-}: {
-  visible: boolean;
-  qualityGrades: QualityGrade[];
-  submitting: boolean;
-  onDismiss: () => void;
-  onSubmit: (data: TamburCutRequest) => void;
-}) {
-  const { width: winW, height: winH } = useWindowDimensions();
-  const [lengthMeters, setLengthMeters] = useState('');
-  const [status, setStatus] = useState<'WAREHOUSE' | 'SCRAP' | 'A1_STOCK'>('WAREHOUSE');
-  const [qualityGrade, setQualityGrade] = useState('');
-  const [notes, setNotes] = useState('');
-
-  useEffect(() => {
-    if (!visible) {
-      setLengthMeters('');
-      setStatus('WAREHOUSE');
-      setQualityGrade('');
-      setNotes('');
-    }
-  }, [visible]);
-
-  const handleSubmit = () => {
-    const len = parseFloat(lengthMeters);
-    if (Number.isNaN(len) || len <= 0) {
-      Toast.show({ type: 'error', text1: 'Metre zorunlu', text2: 'Pozitif sayı girin' });
-      return;
-    }
-    onSubmit({
-      lengthMeters: len,
-      status,
-      qualityGrade: qualityGrade || null,
-      notes: notes.trim() || null,
-    });
-  };
-
-  const STATUS_OPTIONS: Array<{ value: 'WAREHOUSE' | 'SCRAP' | 'A1_STOCK'; label: string; color: string }> = [
-    { value: 'WAREHOUSE', label: 'Depo', color: '#059669' },
-    { value: 'A1_STOCK', label: 'A1 Stok', color: '#d97706' },
-    { value: 'SCRAP', label: 'Fire', color: '#dc2626' },
-  ];
-
-  return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={submitting ? undefined : onDismiss}
-      onBackButtonPress={submitting ? undefined : onDismiss}
-      backdropOpacity={0.55}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
-      style={openFabricCutStyles.modal}
-    >
-      <View style={[openFabricCutStyles.sheet, { width: winW * 0.55 }]}>
-        <View style={openFabricCutStyles.header}>
-          <Icon source="content-cut" size={22} color="#0ea5e9" />
-          <Text variant="titleMedium" style={openFabricCutStyles.title}>
-            Açık Kumaş Kes
-          </Text>
-          <View style={{ flex: 1 }} />
-          <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
-        </View>
-        <Text style={openFabricCutStyles.body}>
-          Çocuk Roll (barkodlu, gerçek top) oluşturulacak. Parent açık kumaşın
-          metresi kalan metreye düşer.
-        </Text>
-
-        <Text style={openFabricCutStyles.label}>Uzunluk (mt) *</Text>
-        <TextInput
-          mode="outlined"
-          value={lengthMeters}
-          onChangeText={setLengthMeters}
-          placeholder="örn. 100"
-          keyboardType="numeric"
-          dense
-          style={openFabricCutStyles.input}
-        />
-
-        <Text style={openFabricCutStyles.label}>Durum *</Text>
-        <View style={openFabricCutStyles.statusRow}>
-          {STATUS_OPTIONS.map((o) => {
-            const active = status === o.value;
-            return (
-              <TouchableRipple
-                key={o.value}
-                borderless
-                onPress={() => setStatus(o.value)}
-                style={[
-                  openFabricCutStyles.statusBtn,
-                  active && { backgroundColor: o.color, borderColor: o.color },
-                ]}
-              >
-                <Text
-                  style={[
-                    openFabricCutStyles.statusBtnText,
-                    active && { color: '#fff' },
-                  ]}
-                >
-                  {o.label}
-                </Text>
-              </TouchableRipple>
-            );
-          })}
-        </View>
-
-        <Text style={openFabricCutStyles.label}>Kalite (opsiyonel)</Text>
-        <View style={openFabricCutStyles.qgridRow}>
-          {qualityGrades.map((qg) => {
-            const active = qualityGrade === qg.code;
-            return (
-              <TouchableRipple
-                key={qg.id}
-                borderless
-                onPress={() => setQualityGrade(active ? '' : qg.code)}
-                style={[
-                  openFabricCutStyles.qChip,
-                  active && qg.color
-                    ? { backgroundColor: qg.color, borderColor: qg.color }
-                    : null,
-                ]}
-              >
-                <Text
-                  style={[
-                    openFabricCutStyles.qChipText,
-                    active && { color: '#fff' },
-                  ]}
-                >
-                  {qg.name}
-                </Text>
-              </TouchableRipple>
-            );
-          })}
-        </View>
-
-        <Text style={openFabricCutStyles.label}>Not (opsiyonel)</Text>
-        <TextInput
-          mode="outlined"
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Bu kesime dair not"
-          dense
-          multiline
-          numberOfLines={2}
-          style={openFabricCutStyles.input}
-        />
-
-        <View style={openFabricCutStyles.actions}>
-          <Button mode="outlined" onPress={onDismiss} disabled={submitting}>
-            Vazgeç
-          </Button>
-          <Button
-            mode="contained"
-            buttonColor="#0ea5e9"
-            icon="check"
-            onPress={handleSubmit}
-            loading={submitting}
-            disabled={submitting}
-          >
-            Kes
-          </Button>
-        </View>
-      </View>
-    </RNModal>
-  );
-}
-
-const openFabricCutStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
-  sheet: { backgroundColor: '#fff', borderRadius: 16, padding: 18, gap: 8 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { fontWeight: '700', color: '#0f172a' },
-  body: { fontSize: 12, color: '#475569', lineHeight: 16 },
-  label: { fontSize: 13, fontWeight: '700', color: '#0f172a', marginTop: 6 },
-  input: { backgroundColor: '#fff' },
-  statusRow: { flexDirection: 'row', gap: 6 },
-  statusBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusBtnText: { fontSize: 13, fontWeight: '700', color: '#475569' },
-  qgridRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  qChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#fff',
-  },
-  qChipText: { fontSize: 12, fontWeight: '600', color: '#0f172a' },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 8,
-  },
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Refactor 9 + 11 — Açık kumaş finalize modal (scrapRemaining + foldType/layerCount override)
-// ─────────────────────────────────────────────────────────────────────────────
-function OpenFabricFinishModal({
-  visible,
-  plannedFoldType,
-  plannedLayerCount,
-  submitting,
-  onDismiss,
-  onSubmit,
-}: {
-  visible: boolean;
-  plannedFoldType: string | null;
-  plannedLayerCount: number | null;
-  submitting: boolean;
-  onDismiss: () => void;
-  onSubmit: (data: TamburFinalizeOpenFabricRequest) => void;
-}) {
-  const { width: winW, height: winH } = useWindowDimensions();
-  const [scrapRemaining, setScrapRemaining] = useState(false);
-  const [foldType, setFoldType] = useState('');
-  const [layerCount, setLayerCount] = useState('');
-  const [notes, setNotes] = useState('');
-
-  useEffect(() => {
-    if (visible) {
-      setScrapRemaining(false);
-      setFoldType(plannedFoldType ?? '');
-      setLayerCount(plannedLayerCount != null ? String(plannedLayerCount) : '');
-      setNotes('');
-    }
-  }, [visible, plannedFoldType, plannedLayerCount]);
-
-  const handleSubmit = () => {
-    const layer = layerCount.trim() ? parseInt(layerCount, 10) : null;
-    if (layer !== null && (Number.isNaN(layer) || layer < 1 || layer > 20)) {
-      Toast.show({
-        type: 'error',
-        text1: 'Katman geçersiz',
-        text2: '1 ile 20 arasında olmalı',
-      });
-      return;
-    }
-    onSubmit({
-      scrapRemaining,
-      foldType: foldType.trim() || null,
-      layerCount: layer,
-      notes: notes.trim() || null,
-    });
-  };
-
-  const FOLD_OPTIONS = ['2-KAT', '4-KAT'];
-
-  return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={submitting ? undefined : onDismiss}
-      onBackButtonPress={submitting ? undefined : onDismiss}
-      backdropOpacity={0.55}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
-      style={openFabricFinishStyles.modal}
-    >
-      <View style={[openFabricFinishStyles.sheet, { width: winW * 0.55 }]}>
-        <View style={openFabricFinishStyles.header}>
-          <Icon source="package-check" size={22} color="#7c3aed" />
-          <Text variant="titleMedium" style={openFabricFinishStyles.title}>
-            Açık Kumaşı Bitir
-          </Text>
-          <View style={{ flex: 1 }} />
-          <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
-        </View>
-        <Text style={openFabricFinishStyles.body}>
-          Parent Roll TAMBUR_CONSUMED'a çekilir. WO'nun tüm step'leri kapalıysa
-          WO COMPLETED olur.
-        </Text>
-
-        <TouchableRipple
-          borderless
-          onPress={() => setScrapRemaining((v) => !v)}
-          style={openFabricFinishStyles.toggleRow}
-        >
-          <View style={openFabricFinishStyles.toggleInner}>
-            <Icon
-              source={scrapRemaining ? 'checkbox-marked' : 'checkbox-blank-outline'}
-              size={22}
-              color={scrapRemaining ? '#dc2626' : '#94a3b8'}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={openFabricFinishStyles.toggleTitle}>
-                Kalan metreyi fire (SCRAP) olarak kaydet
-              </Text>
-              <Text style={openFabricFinishStyles.toggleHint}>
-                Açık kumaşın kalan metresi varsa fire child Roll oluşturulur
-              </Text>
-            </View>
-          </View>
-        </TouchableRipple>
-
-        <Text style={openFabricFinishStyles.label}>
-          Kat Tipi
-          {plannedFoldType ? ` · Planlanan: ${plannedFoldType}` : ''}
-        </Text>
-        <View style={openFabricFinishStyles.foldRow}>
-          {FOLD_OPTIONS.map((opt) => {
-            const active = foldType === opt;
-            return (
-              <TouchableRipple
-                key={opt}
-                borderless
-                onPress={() => setFoldType(active ? '' : opt)}
-                style={[
-                  openFabricFinishStyles.foldBtn,
-                  active && openFabricFinishStyles.foldBtnActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    openFabricFinishStyles.foldBtnText,
-                    active && openFabricFinishStyles.foldBtnTextActive,
-                  ]}
-                >
-                  {opt}
-                </Text>
-              </TouchableRipple>
-            );
-          })}
-          <TextInput
-            mode="outlined"
-            value={FOLD_OPTIONS.includes(foldType) ? '' : foldType}
-            onChangeText={setFoldType}
-            placeholder="Diğer..."
-            dense
-            style={openFabricFinishStyles.foldInput}
-          />
-        </View>
-
-        <Text style={openFabricFinishStyles.label}>
-          Katman Sayısı (1-20)
-          {plannedLayerCount != null ? ` · Planlanan: ${plannedLayerCount}` : ''}
-        </Text>
-        <TextInput
-          mode="outlined"
-          value={layerCount}
-          onChangeText={setLayerCount}
-          placeholder="opsiyonel"
-          keyboardType="numeric"
-          dense
-          style={openFabricFinishStyles.input}
-        />
-
-        <Text style={openFabricFinishStyles.label}>Not (opsiyonel)</Text>
-        <TextInput
-          mode="outlined"
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Bitirme notu"
-          dense
-          multiline
-          numberOfLines={2}
-          style={openFabricFinishStyles.input}
-        />
-
-        <View style={openFabricFinishStyles.actions}>
-          <Button mode="outlined" onPress={onDismiss} disabled={submitting}>
-            Vazgeç
-          </Button>
-          <Button
-            mode="contained"
-            buttonColor="#7c3aed"
-            icon="check"
-            onPress={handleSubmit}
-            loading={submitting}
-            disabled={submitting}
-          >
-            Bitir
-          </Button>
-        </View>
-      </View>
-    </RNModal>
-  );
-}
-
-const openFabricFinishStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
-  sheet: { backgroundColor: '#fff', borderRadius: 16, padding: 18, gap: 8 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { fontWeight: '700', color: '#0f172a' },
-  body: { fontSize: 12, color: '#475569', lineHeight: 16 },
-  label: { fontSize: 13, fontWeight: '700', color: '#0f172a', marginTop: 6 },
-  input: { backgroundColor: '#fff' },
-  toggleRow: {
-    backgroundColor: '#fef2f2',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginTop: 6,
-  },
-  toggleInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  toggleTitle: { fontSize: 13, fontWeight: '700', color: '#7f1d1d' },
-  toggleHint: { fontSize: 11, color: '#991b1b', marginTop: 2 },
-  foldRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  foldBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#fff',
-  },
-  foldBtnActive: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
-  foldBtnText: { fontSize: 12, fontWeight: '700', color: '#475569' },
-  foldBtnTextActive: { color: '#fff' },
-  foldInput: { flex: 1, backgroundColor: '#fff', minWidth: 100 },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 8,
-  },
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Yeniden Kesim Modal — depodaki topu istenen metrede ikiye böl
-// ─────────────────────────────────────────────────────────────────────────────
-function ResplitModal({
-  visible,
-  loading,
-  onDismiss,
-  onSubmit,
-}: {
-  visible: boolean;
-  loading: boolean;
-  onDismiss: () => void;
-  onSubmit: (payload: {
-    rollId: string;
-    cutLength: number;
-    originalKeepsLarger: boolean;
-  }) => void;
-}) {
-  const { width: winW, height: winH } = useWindowDimensions();
-  const [rollBarcode, setRollBarcode] = useState('');
-  const [resolvedRollId, setResolvedRollId] = useState<string | null>(null);
-  const [rollMeta, setRollMeta] = useState<{
-    barcode: string | null;
-    currentQty: number;
-    item: string;
-  } | null>(null);
-  const [cutLength, setCutLength] = useState('');
-  const [originalKeepsLarger, setOriginalKeepsLarger] = useState(true);
-  const [resolving, setResolving] = useState(false);
-
-  useEffect(() => {
-    if (!visible) {
-      setRollBarcode('');
-      setResolvedRollId(null);
-      setRollMeta(null);
-      setCutLength('');
-      setOriginalKeepsLarger(true);
-    }
-  }, [visible]);
-
-  const handleResolve = async () => {
-    const barcode = rollBarcode.trim();
-    if (!barcode) return;
-    setResolving(true);
-    try {
-      const { rollService } = await import('../../../services/roll.service');
-      const res = await rollService.getByBarcode(barcode);
-      const r = res.data;
-      if (!r) {
-        Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: barcode });
-        return;
-      }
-      if (r.status !== 'WAREHOUSE' && r.status !== 'A1_STOCK') {
-        Toast.show({
-          type: 'error',
-          text1: 'Top kesime uygun değil',
-          text2: `Durum: ${r.status} (depodaki toplar kesilebilir)`,
-        });
-        return;
-      }
-      setResolvedRollId(r.id);
-      setRollMeta({
-        barcode: r.barcode,
-        currentQty: r.currentQty,
-        item: r.item?.name ?? '—',
-      });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err) {
-      Toast.show({
-        type: 'error',
-        text1: 'Top sorgulanamadı',
-        text2: (err as Error).message,
-      });
-    } finally {
-      setResolving(false);
-    }
-  };
-
-  const handleSubmit = () => {
-    if (!resolvedRollId || !rollMeta) return;
-    const cut = parseFloat(cutLength);
-    if (Number.isNaN(cut) || cut <= 0) {
-      Toast.show({ type: 'error', text1: 'Kesim metresi pozitif olmalı' });
-      return;
-    }
-    if (cut >= rollMeta.currentQty) {
-      Toast.show({
-        type: 'error',
-        text1: 'Geçersiz metraj',
-        text2: `Topun toplam metrajından (${rollMeta.currentQty}m) küçük olmalı`,
-      });
-      return;
-    }
-    onSubmit({
-      rollId: resolvedRollId,
-      cutLength: cut,
-      originalKeepsLarger,
-    });
-  };
-
-  const remainingPart = rollMeta
-    ? originalKeepsLarger
-      ? rollMeta.currentQty - (parseFloat(cutLength) || 0)
-      : parseFloat(cutLength) || 0
-    : 0;
-  const cutPart = rollMeta
-    ? originalKeepsLarger
-      ? parseFloat(cutLength) || 0
-      : rollMeta.currentQty - (parseFloat(cutLength) || 0)
-    : 0;
-
-  return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.55}
-      style={cameraStyles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
-      avoidKeyboard
-    >
-      <View style={[cameraStyles.sheet, { width: winW * 0.65, maxHeight: winH * 0.85 }]}>
-        <View style={[cameraStyles.header, { backgroundColor: '#fef2f2' }]}>
-          <Icon source="content-cut" size={22} color="#b91c1c" />
-          <Text variant="titleMedium" style={cameraStyles.title}>
-            Depo Topu Yeniden Kes
-          </Text>
-          <View style={{ flex: 1 }} />
-          <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
-        </View>
-
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
-          <Text style={resplitStyles.muted}>
-            Depodaki bir topu istenen metrede ikiye böler. Aynı kalitede iki top
-            oluşur, ikisi de WAREHOUSE'da kalır. Çuvallanmış toplar kesilemez.
-          </Text>
-
-          {!resolvedRollId ? (
-            <>
-              <Text style={resplitStyles.label}>Top Barkodu</Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TextInput
-                  mode="outlined"
-                  value={rollBarcode}
-                  onChangeText={setRollBarcode}
-                  placeholder="Top barkodu okut/yaz..."
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  onSubmitEditing={handleResolve}
-                  returnKeyType="search"
-                  style={[resplitStyles.input, { flex: 1 }]}
-                />
-                <Button
-                  mode="contained"
-                  onPress={handleResolve}
-                  loading={resolving}
-                  disabled={resolving || !rollBarcode.trim()}
-                  buttonColor="#1e40af"
-                >
-                  Bul
-                </Button>
-              </View>
-            </>
-          ) : (
-            <>
-              <Surface style={resplitStyles.rollCard} elevation={1}>
-                <Text style={resplitStyles.rollBarcode}>{rollMeta?.barcode}</Text>
-                <Text style={resplitStyles.rollItem}>{rollMeta?.item}</Text>
-                <Text style={resplitStyles.rollQty}>
-                  Mevcut metraj: {rollMeta?.currentQty.toFixed(1)} m
-                </Text>
-              </Surface>
-
-              <Text style={resplitStyles.label}>Kesim Metresi</Text>
-              <NumpadInput
-                mode="outlined"
-                value={cutLength}
-                onChangeText={setCutLength}
-                numpadLabel="Kesim metresi"
-                allowDecimal
-                placeholder="0"
-                style={resplitStyles.input}
-              />
-
-              <Text style={resplitStyles.label}>Hangi parça orijinal top kalsın?</Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TouchableRipple
-                  borderless
-                  onPress={() => setOriginalKeepsLarger(true)}
-                  style={[
-                    resplitStyles.choiceChip,
-                    originalKeepsLarger && resplitStyles.choiceChipActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      resplitStyles.choiceChipText,
-                      originalKeepsLarger && resplitStyles.choiceChipTextActive,
-                    ]}
-                  >
-                    Büyük parça orijinal
-                  </Text>
-                </TouchableRipple>
-                <TouchableRipple
-                  borderless
-                  onPress={() => setOriginalKeepsLarger(false)}
-                  style={[
-                    resplitStyles.choiceChip,
-                    !originalKeepsLarger && resplitStyles.choiceChipActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      resplitStyles.choiceChipText,
-                      !originalKeepsLarger && resplitStyles.choiceChipTextActive,
-                    ]}
-                  >
-                    Küçük parça orijinal
-                  </Text>
-                </TouchableRipple>
-              </View>
-
-              {cutLength && rollMeta && (
-                <Surface style={resplitStyles.preview} elevation={0}>
-                  <Text style={resplitStyles.previewTitle}>Sonuç:</Text>
-                  <Text style={resplitStyles.previewText}>
-                    Orijinal top: {remainingPart.toFixed(1)} m
-                  </Text>
-                  <Text style={resplitStyles.previewText}>
-                    Yeni top: {cutPart.toFixed(1)} m
-                  </Text>
-                </Surface>
-              )}
-
-              <Button
-                mode="contained"
-                icon="content-cut"
-                onPress={handleSubmit}
-                loading={loading}
-                disabled={loading || !cutLength}
-                buttonColor="#b91c1c"
-                style={{ marginTop: 4 }}
-                contentStyle={{ height: 52 }}
-                labelStyle={{ fontSize: 15, fontWeight: '700' }}
-              >
-                Kesimi Onayla
-              </Button>
-            </>
-          )}
-        </ScrollView>
-      </View>
-    </RNModal>
   );
 }
 
@@ -2435,6 +1795,11 @@ function LabelPrintModal({
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
   if (rolls.length === 0) return null;
+  // Compact (telefon dik) ekranda %45 modal çok dar — operatör barkod + ürün +
+  // "Bas" satırlarını okumakta zorlanıyor. Portrait'te 92% ver, tablet/yatayda
+  // 45% kalsın (kalan ekranı bloklamasın).
+  const isCompactPortrait = winH > winW;
+  const sheetWidth = isCompactPortrait ? winW * 0.92 : winW * 0.45;
 
   return (
     <RNModal
@@ -2448,7 +1813,7 @@ function LabelPrintModal({
       deviceHeight={winH}
       statusBarTranslucent
     >
-      <View style={[cameraStyles.sheet, { width: winW * 0.45, maxHeight: winH * 0.85 }]}>
+      <View style={[cameraStyles.sheet, { width: sheetWidth, maxHeight: winH * 0.85 }]}>
         <View style={[cameraStyles.header, { backgroundColor: '#dcfce7', paddingVertical: 8 }]}>
           <Icon source="printer" size={20} color="#059669" />
           <Text variant="titleMedium" style={cameraStyles.title}>
@@ -2475,6 +1840,170 @@ function LabelPrintModal({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// İş Emri Siparişleri Detay Modal'ı — operatör kesim planı için referans alır.
+// Her sipariş kalemi: müşteri + ürün + renk + sipariş - sevk = kalan (mt).
+// ─────────────────────────────────────────────────────────────────────────────
+function OrdersDetailModal({
+  visible,
+  orders,
+  onDismiss,
+}: {
+  visible: boolean;
+  orders: TamburContextOrder[];
+  onDismiss: () => void;
+}) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  return (
+    <RNModal
+      isVisible={visible}
+      onBackdropPress={onDismiss}
+      onBackButtonPress={onDismiss}
+      backdropOpacity={0.55}
+      useNativeDriver
+      hideModalContentWhileAnimating
+      deviceWidth={winW}
+      deviceHeight={winH}
+      statusBarTranslucent
+      style={ordersModalStyles.modal}
+    >
+      <View
+        style={[
+          ordersModalStyles.sheet,
+          { width: winW * 0.7, maxHeight: winH * 0.85 },
+        ]}
+      >
+        <View style={ordersModalStyles.header}>
+          <Icon source="clipboard-list-outline" size={22} color="#7c3aed" />
+          <Text variant="titleMedium" style={ordersModalStyles.title}>
+            İş Emri Siparişleri ({orders.length})
+          </Text>
+          <View style={{ flex: 1 }} />
+          <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 16, gap: 10 }}>
+          {orders.length === 0 ? (
+            <Text style={ordersModalStyles.empty}>
+              Bu iş emrine bağlı sipariş yok (stok üretimi).
+            </Text>
+          ) : (
+            orders.map((o) => (
+              <Surface
+                key={o.orderId}
+                style={ordersModalStyles.orderCard}
+                elevation={1}
+              >
+                <Text style={ordersModalStyles.orderHeader}>
+                  {o.customerName} · {o.orderNumber}
+                </Text>
+                {o.lines.map((line) => {
+                  const remaining = Math.max(0, line.orderedQty - line.shippedQty);
+                  return (
+                    <View key={line.lineId} style={ordersModalStyles.lineRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={ordersModalStyles.lineItem}>
+                          {line.itemName}
+                          {line.colorName ? ` · ${line.colorName}` : ''}
+                        </Text>
+                        <Text style={ordersModalStyles.lineMeta}>
+                          Sipariş: {line.orderedQty.toFixed(1)} mt · Sevk:{' '}
+                          {line.shippedQty.toFixed(1)} mt
+                        </Text>
+                      </View>
+                      <View style={ordersModalStyles.lineRemaining}>
+                        <Text style={ordersModalStyles.lineRemainingValue}>
+                          {remaining.toFixed(1)}
+                        </Text>
+                        <Text style={ordersModalStyles.lineRemainingLabel}>
+                          mt kalan
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </Surface>
+            ))
+          )}
+        </ScrollView>
+      </View>
+    </RNModal>
+  );
+}
+
+const ordersModalStyles = StyleSheet.create({
+  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
+  sheet: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  title: { fontWeight: '700', color: '#0f172a' },
+  empty: {
+    textAlign: 'center',
+    color: '#94a3b8',
+    fontSize: 13,
+    fontStyle: 'italic',
+    padding: 24,
+  },
+  orderCard: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    padding: 10,
+    gap: 4,
+  },
+  orderHeader: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  lineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  lineItem: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  lineMeta: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  lineRemaining: {
+    alignItems: 'center',
+    minWidth: 70,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#7c3aed',
+  },
+  lineRemainingValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#fff',
+    lineHeight: 18,
+  },
+  lineRemainingLabel: {
+    fontSize: 10,
+    color: '#ede9fe',
+    fontWeight: '600',
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tambur'dan çıkmış son toplar listesi — etiketleri sonradan tekrar basmak için
 // ─────────────────────────────────────────────────────────────────────────────
 function RecentOutputModal({
@@ -2489,6 +2018,8 @@ function RecentOutputModal({
   printingRollId: string | null;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const isCompactPortrait = winH > winW;
+  const sheetWidth = isCompactPortrait ? winW * 0.92 : winW * 0.5;
   const q = useQuery({
     queryKey: ['tambur', 'recent-output-rolls'],
     queryFn: () => tamburService.recentOutputRolls({ limit: 50 }),
@@ -2509,7 +2040,7 @@ function RecentOutputModal({
       deviceHeight={winH}
       statusBarTranslucent
     >
-      <View style={[cameraStyles.sheet, { width: winW * 0.5, height: winH * 0.85 }]}>
+      <View style={[cameraStyles.sheet, { width: sheetWidth, height: winH * 0.85 }]}>
         <View style={[cameraStyles.header, { backgroundColor: '#dbeafe', paddingVertical: 8 }]}>
           <Icon source="printer-search" size={20} color="#1e40af" />
           <Text variant="titleMedium" style={cameraStyles.title}>
@@ -2564,50 +2095,6 @@ function RecentOutputModal({
 }
 
 const resplitStyles = StyleSheet.create({
-  muted: { fontSize: 12, color: '#475569', lineHeight: 18 },
-  label: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0f172a',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  input: { backgroundColor: '#fff' },
-  rollCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 10,
-    padding: 12,
-    gap: 4,
-  },
-  rollBarcode: {
-    fontFamily: 'monospace',
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  rollItem: { fontSize: 13, color: '#475569' },
-  rollQty: { fontSize: 13, color: '#0f172a', fontWeight: '600', marginTop: 4 },
-  choiceChip: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#cbd5e1',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  choiceChipActive: { backgroundColor: '#1e40af', borderColor: '#1e3a8a' },
-  choiceChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
-  choiceChipTextActive: { color: '#fff' },
-  preview: {
-    backgroundColor: '#dbeafe',
-    borderRadius: 8,
-    padding: 10,
-    gap: 4,
-  },
-  previewTitle: { fontSize: 11, fontWeight: '700', color: '#1e40af' },
-  previewText: { fontSize: 13, color: '#0f172a', fontWeight: '600' },
-
   labelCard: {
     backgroundColor: '#fff',
     borderRadius: 8,
@@ -2660,6 +2147,10 @@ function CameraScanModal({
   onSelect: (card: TamburOpenCard) => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
+  // Compact portrait (telefon dik) ekranda 70% genişlik dar — operatör kart
+  // listesini taramakta zorlanıyor. Portrait'te 92% ver, tablet/yatayda 70%.
+  const isCompactPortrait = winH > winW;
+  const sheetWidth = isCompactPortrait ? winW * 0.92 : winW * 0.7;
   return (
     <RNModal
       isVisible={visible}
@@ -2673,7 +2164,7 @@ function CameraScanModal({
       deviceHeight={winH}
       statusBarTranslucent
     >
-      <View style={[cameraStyles.sheet, { width: winW * 0.7, height: winH * 0.8 }]}>
+      <View style={[cameraStyles.sheet, { width: sheetWidth, height: winH * 0.8 }]}>
         <View style={cameraStyles.header}>
           <Icon source="format-list-bulleted" size={22} color="#0f172a" />
           <Text variant="titleMedium" style={cameraStyles.title}>
@@ -2846,10 +2337,133 @@ function RollListItem({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Tamamla modal'ı — açık kumaşın kalan metresi için operatör kararı.
+// 4 seçenek: 1.Kalite top, A1 top, Fire top, At (kayıp).
+function FinalizeRemainingModal({
+  visible,
+  remainingQty,
+  onDismiss,
+  onChoose,
+  loading,
+}: {
+  visible: boolean;
+  remainingQty: number;
+  onDismiss: () => void;
+  onChoose: (action: TamburFinalizeRemainingAction) => void;
+  loading: boolean;
+}) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  const qtyText = `${remainingQty.toFixed(1)} mt`;
+
+  return (
+    <RNModal
+      isVisible={visible}
+      onBackdropPress={loading ? undefined : onDismiss}
+      onBackButtonPress={loading ? undefined : onDismiss}
+      backdropOpacity={0.55}
+      style={cameraStyles.modal}
+      useNativeDriver
+      deviceWidth={winW}
+      deviceHeight={winH}
+      statusBarTranslucent
+    >
+      <View
+        style={[
+          cameraStyles.sheet,
+          { width: winW * 0.5, maxHeight: winH * 0.85 },
+        ]}
+      >
+        <View
+          style={[
+            cameraStyles.header,
+            { backgroundColor: '#dbeafe', paddingVertical: 10 },
+          ]}
+        >
+          <Icon source="warehouse" size={20} color="#1e40af" />
+          <Text variant="titleMedium" style={cameraStyles.title}>
+            Kalan {qtyText} için karar
+          </Text>
+          <View style={{ flex: 1 }} />
+          {!loading && (
+            <IconButton
+              icon="close"
+              size={20}
+              onPress={onDismiss}
+              style={{ margin: 0 }}
+            />
+          )}
+        </View>
+
+        <View style={{ padding: 16, gap: 10 }}>
+          <Text style={{ color: '#475569', fontSize: 13 }}>
+            Bu açık kumaştan kalan {qtyText} kumaşı nasıl kaydedeyim?
+          </Text>
+          <Button
+            mode="contained"
+            icon="check-circle"
+            onPress={() => onChoose('keep_1kalite')}
+            disabled={loading}
+            loading={loading}
+            buttonColor="#059669"
+            contentStyle={{ paddingVertical: 6 }}
+            labelStyle={{ fontSize: 15, fontWeight: '700' }}
+          >
+            1. Kalite Top Yap ({qtyText})
+          </Button>
+          <Button
+            mode="contained"
+            icon="alpha-a-circle"
+            onPress={() => onChoose('keep_a1')}
+            disabled={loading}
+            buttonColor="#d97706"
+            contentStyle={{ paddingVertical: 6 }}
+            labelStyle={{ fontSize: 15, fontWeight: '700' }}
+          >
+            A1 (2. Kalite) Top Yap ({qtyText})
+          </Button>
+          <Button
+            mode="contained"
+            icon="fire"
+            onPress={() => onChoose('scrap')}
+            disabled={loading}
+            buttonColor="#dc2626"
+            contentStyle={{ paddingVertical: 6 }}
+            labelStyle={{ fontSize: 15, fontWeight: '700' }}
+          >
+            Fire Top Yap ({qtyText})
+          </Button>
+          <Button
+            mode="outlined"
+            icon="delete-outline"
+            onPress={() => onChoose('discard')}
+            disabled={loading}
+            textColor="#475569"
+            contentStyle={{ paddingVertical: 6 }}
+            labelStyle={{ fontSize: 14 }}
+          >
+            Kayıt Dışı (Operatör Attı)
+          </Button>
+        </View>
+      </View>
+    </RNModal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  body: { flex: 1, flexDirection: 'row', backgroundColor: '#f8fafc' },
+  body: { flex: 1, flexDirection: 'row', backgroundColor: '#f8fafc', position: 'relative' },
+  // recutMode wrap — header / form / footer doğal akışta yan yana, gap ile
+  // birbirine yakın. paddingTop ekran üstünden nefes alır.
+  recutWrap: { flex: 1, paddingTop: 24, gap: 12 },
 
   formCol: { flex: 1.4 },
+  // Compact (telefon) — form üstü sağa yaslı sağ panel tetiği
+  compactTriggerBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
 
   emptyState: {
     flex: 1,
@@ -2888,6 +2502,60 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   plannedChipText: { fontSize: 10, color: '#cbd5e1', fontWeight: '600' },
+
+  // Kalan metre rozeti — header'da prominent
+  remainingBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#059669',
+    alignItems: 'center',
+    minWidth: 90,
+  },
+  remainingBadgeDanger: {
+    backgroundColor: '#dc2626',
+  },
+  remainingBadgeValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#fff',
+    lineHeight: 24,
+  },
+  remainingBadgeLabel: {
+    fontSize: 10,
+    color: '#d1fae5',
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  remainingBadgeMeta: {
+    fontSize: 9,
+    color: '#a7f3d0',
+    marginTop: 1,
+  },
+
+  // Siparişler butonu — header'da modal trigger
+  ordersHeaderBtn: {
+    borderRadius: 10,
+    backgroundColor: '#1e293b',
+    overflow: 'hidden',
+  },
+  ordersHeaderBtnInner: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+    minWidth: 70,
+  },
+  ordersHeaderBtnLabel: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#fff',
+    lineHeight: 22,
+  },
+  ordersHeaderBtnSub: {
+    fontSize: 10,
+    color: '#cbd5e1',
+    fontWeight: '600',
+  },
   openFabricActions: {
     flexDirection: 'column',
     gap: 6,
@@ -2923,12 +2591,134 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
-  rowBetween: {
+  muted: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' },
+
+  // Hata noktaları rehber chip'leri — kompakt yan yana
+  defectGuideSection: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 8,
+    gap: 6,
+  },
+  defectGuideTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748b',
+    letterSpacing: 0.3,
+  },
+  defectGuideEmpty: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontStyle: 'italic',
+  },
+  defectGuideRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  defectGuideChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f1f5f9',
   },
-  muted: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' },
+  defectGuideChipCritical: {
+    borderColor: '#fca5a5',
+    backgroundColor: '#fef2f2',
+  },
+  defectGuideChipMeter: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  defectGuideChipLabel: {
+    fontSize: 11,
+    color: '#475569',
+    maxWidth: 100,
+  },
+  defectGuideChipTextCritical: {
+    color: '#b91c1c',
+  },
+
+  // Kesim — uzunluk input + Makineden Çek ikonu
+  cutInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  // Kalite chip'leri + Top Oluştur butonu yan yana, yer tasarrufu
+  qualityActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  qualityGridInline: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  createTopBtn: {
+    borderRadius: 8,
+  },
+  createActionRow: { flexDirection: 'column', gap: 6 },
+
+  // İş Emri Siparişleri — operatörün kesim planı yapması için
+  orderItem: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    padding: 8,
+    gap: 4,
+    marginTop: 4,
+  },
+  orderHeader: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  orderLineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  orderLineItem: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  orderLineMeta: {
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  orderLineRemaining: {
+    alignItems: 'center',
+    minWidth: 60,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#7c3aed',
+  },
+  orderLineRemainingValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#fff',
+    lineHeight: 16,
+  },
+  orderLineRemainingLabel: {
+    fontSize: 9,
+    color: '#ede9fe',
+    fontWeight: '600',
+  },
 
   // Hata kartı
   errorCard: {
@@ -3012,7 +2802,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  meterRow: { flexDirection: 'row', gap: 10 },
   input: { backgroundColor: '#fff' },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   defectChip: {
@@ -3049,14 +2838,14 @@ const styles = StyleSheet.create({
   foldChipText: { fontSize: 15, fontWeight: '700', color: '#475569' },
   foldChipTextActive: { color: '#fff' },
 
-  swatchInfo: { fontSize: 13, fontWeight: '700', color: '#7c3aed' },
-
   footer: {
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
     padding: 10,
   },
+  // Top Kesme footer'ı — beyaz card yok, sadece buton kendisi görünür
+  recutFooter: { backgroundColor: 'transparent', padding: 10 },
   footerBtn: { borderRadius: 12 },
   footerBtnContent: { height: 60 },
   footerBtnLabel: { fontSize: 17, fontWeight: '700' },

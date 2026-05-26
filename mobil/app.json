@@ -1,21 +1,21 @@
 {
   "expo": {
-    "name": "TeksERP Mobil",
+    "name": "TeksERP",
     "slug": "teks-erp-mobil",
     "version": "1.0.0",
-    "orientation": "landscape",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1a1a2e"
+      "backgroundColor": "#FFFFFF"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1a1a2e"
+        "backgroundColor": "#FFFFFF"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -43,12 +43,6 @@
     "plugins": [
       [
         "expo-camera",
-        {
-          "cameraPermission": "Barkod okumak için kamera gereklidir."
-        }
-      ],
-      [
-        "expo-barcode-scanner",
         {
           "cameraPermission": "Barkod okumak için kamera gereklidir."
         }

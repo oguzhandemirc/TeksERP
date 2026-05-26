@@ -20,6 +20,7 @@ const stationService = new BaseService({
     machines: true,
     defaultCategory: { select: { id: true, code: true, name: true } },
   },
+  uniqueField: "code",
 });
 
 const stationController = new BaseController(stationService);
@@ -30,6 +31,7 @@ const machineService = new BaseService({
   tableName: "MACHINE",
   searchFields: ["code", "name"],
   defaultInclude: { station: true },
+  uniqueField: "code",
 });
 
 const machineController = new BaseController(machineService);
@@ -215,18 +217,13 @@ async function stationHardRemove(
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1. Makine loglarını sil
-      const machines = await tx.machine.findMany({ where: { stationId: id } });
-      for (const m of machines) {
-        await tx.machineLog.deleteMany({ where: { machineId: m.id } });
-      }
-      // 2. Makineleri sil
+      // 1. Makineleri sil
       await tx.machine.deleteMany({ where: { stationId: id } });
 
-      // 3. Rota adımlarını sil (RouteStep)
+      // 2. Rota adımlarını sil (RouteStep)
       await tx.routeStep.deleteMany({ where: { stationId: id } });
 
-      // 4. İş emri adımlarını sil (WorkOrderStep) — sadece tamamlanmamış olanlar
+      // 3. İş emri adımlarını sil (WorkOrderStep) — sadece tamamlanmamış olanlar
       await tx.workOrderStep.deleteMany({ where: { stationId: id } });
 
       // 5. İstasyonu sil
@@ -315,7 +312,6 @@ machineRouter.get("/:id", verifyToken, requirePermission("station:read"), machin
  *               stationId: { type: string, format: uuid }
  *               code: { type: string, example: "TEZGAH_04" }
  *               name: { type: string, example: "Dokuma Tezgah 4" }
- *               deviceIp: { type: string, example: "192.168.1.104" }
  *     responses:
  *       201:
  *         description: Makine oluşturuldu

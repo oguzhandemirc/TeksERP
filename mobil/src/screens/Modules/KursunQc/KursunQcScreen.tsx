@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import RNModal from 'react-native-modal';
 import {
   Text,
@@ -11,26 +11,28 @@ import {
   TouchableRipple,
   Icon,
 } from 'react-native-paper';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
 import NumpadInput from '../../../components/NumpadInput';
+import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
+import { useDeviceType } from '../../../hooks/useDeviceType';
 import { NumpadHost } from '../../../components/NumpadProvider';
+import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { kursunQcService } from '../../../services/kursunQc.service';
 import { defectTypeService } from '../../../services/defectType.service';
 import { rollService } from '../../../services/roll.service';
-import { subcontractorService } from '../../../services/subcontractor.service';
 import type {
   KursunStepSummary,
   KursunRollSummary,
   KursunOpenCard,
   DefectType,
-  SubcontractorReceiptListItem,
 } from '../../../types/models';
 
 // =============================================================================
@@ -51,19 +53,38 @@ interface OpenJob {
 // Hata giriş alanı sürekli açık — yeni-hata butonu yok.
 // rollId tutmuyoruz: top değişimi state'i sıfırlar, "yanlış topa yazılmış"
 // senaryosu olamaz.
+//
+// Yeni model: hata aralık değil NOKTA. Operatör yalnız "kaç. metrede hata
+// başladı" girer; bitiş Tambur'da kesim kararıyla belirlenir.
 interface ErrorEntryState {
   defectTypeId: string;
   startMeter: string;
-  endMeter: string;
 }
 
 const EMPTY_ERROR_ENTRY: ErrorEntryState = {
   defectTypeId: '',
   startMeter: '',
-  endMeter: '',
 };
 
+/** Açık kart listesinin otomatik yenileme aralığı (modal başlığında gösterilir). */
+const OPEN_CARDS_REFETCH_MS = 15 * 1000;
+
 export default function KursunQcScreen() {
+  // Telefon ekranında landscape kilidi kaldırılır + sağ panel drawer'a alınır.
+  // Tabletlerde önceki davranış aynen korunur.
+  const device = useDeviceType();
+  const compact = device === 'phone';
+  useLandscapeLock(!compact);
+  const insets = useSafeAreaInsets();
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  // Drawer kapandıktan sonra açılacak ardışık modal — react-native-modal
+  // aynı anda iki modal'ı doğru stack edemiyor (drawer açıkken kamera modalı
+  // arkada kalıyor). Buton drawer'ı kapatıp queue'ya yazar, onModalHide
+  // hedef modalı açar.
+  const [pendingDrawerAction, setPendingDrawerAction] = useState<
+    'scanner' | 'list' | null
+  >(null);
+
   const qc = useQueryClient();
 
   const [cardBarcode, setCardBarcode] = useState('');
@@ -75,18 +96,56 @@ export default function KursunQcScreen() {
   const [scannerOpen, setScannerOpen] = useState(false);
   /** Refactor 4 — "yanlış istasyon" / kart bulunamadı backend mesajı banner. */
   const [cardError, setCardError] = useState<string | null>(null);
-  /** Refactor 9 — açık kumaş aç modalı (receiptId seçimi). */
-  const [openFabricModalVisible, setOpenFabricModalVisible] = useState(false);
-  /** Refactor 9 — kursun-finish modalı (totalMeters + errors). */
-  const [finishFabricRollId, setFinishFabricRollId] = useState<string | null>(null);
 
-  // Açık kart listesi (sadece liste modalı açıkken çekilir)
+  // Açık kart listesi — modal açılmadan da (acil rozeti için) tazelenir.
+  // OPEN_CARDS_REFETCH_MS polling: planlama acil işaretlediğinde tablet en geç
+  // o sürede görür. Aynı sabit modal başlığında operatöre gösterilir.
   const openCardsQuery = useQuery({
     queryKey: ['kursun-qc', 'open-cards'],
     queryFn: () => kursunQcService.listOpenCards(),
-    enabled: listModalOpen,
-    staleTime: 30 * 1000,
+    staleTime: 10 * 1000,
+    refetchInterval: OPEN_CARDS_REFETCH_MS,
+    refetchOnWindowFocus: true,
   });
+  const urgentCount = useMemo(
+    () => (openCardsQuery.data?.data ?? []).filter((c) => c.isUrgent).length,
+    [openCardsQuery.data],
+  );
+
+  // Yeni acil iş geldiğinde operatörü uyar (toast + haptic).
+  // İlk render'da (prev=undefined) sessiz: zaten badge görünür. Sadece artış
+  // anında "yeni acil var" bildirimi at — düşüşte (operatör bitirdiği için
+  // azaldı) bildirim yok.
+  const prevUrgentRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevUrgentRef.current;
+    prevUrgentRef.current = urgentCount;
+    if (prev === null) return; // ilk yükleme
+    if (urgentCount > prev) {
+      const diff = urgentCount - prev;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Toast.show({
+        type: 'error',
+        text1: diff === 1 ? 'Yeni acil iş geldi' : `${diff} yeni acil iş geldi`,
+        text2: 'Açık Kartlar listesinden kontrol et.',
+        visibilityTime: 5000,
+      });
+    }
+  }, [urgentCount]);
+
+  // Modal her açıldığında listeyi tazele: planlama acil işaretlediyse veya
+  // sırayı değiştirdiyse operatör güncel sırayı görsün (badge zaten polling
+  // yapıyor, ama liste açıldı = "operatör şu an karar verecek" → fresh data).
+  useEffect(() => {
+    if (listModalOpen) void openCardsQuery.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listModalOpen]);
+
+  // Compact'ta aktif kart değiştiğinde (yeni kart çözüldü / tab değişti) drawer
+  // kapanır — operatör sol form alanını görsün.
+  useEffect(() => {
+    if (compact && activeCardId) setRightDrawerOpen(false);
+  }, [compact, activeCardId]);
 
   // Defect type kataloğu — uygulama hayat boyu cache'lenebilir.
   const defectTypesQuery = useQuery({
@@ -252,31 +311,14 @@ export default function KursunQcScreen() {
     // hata yazılmasın.
     setErrorEntry(EMPTY_ERROR_ENTRY);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Compact'ta top seçilince drawer kapanır — operatör sol form'da çalışsın.
+    if (compact) setRightDrawerOpen(false);
   };
 
   // ── Mutations ──────────────────────────────────────────────────────────────
-  const applyKursunMutation = useMutation({
-    mutationFn: kursunQcService.applyKursun,
-    onSuccess: async () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      await refetchActiveJob();
-    },
-    onError: (err: Error) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Kurşun işareti başarısız', text2: err.message });
-    },
-  });
-
-  const undoKursunMutation = useMutation({
-    mutationFn: kursunQcService.undoKursun,
-    onSuccess: async () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await refetchActiveJob();
-    },
-    onError: (err: Error) =>
-      Toast.show({ type: 'error', text1: 'Geri alınamadı', text2: err.message }),
-  });
-
+  // Per-roll "Kurşun geçtim/geçmedim" toggle'ı yok — istasyon yeteneği tek
+  // doğruluk kaynağı. İstasyona KURSUN özelliği atanmışsa, QC2 tamamlanan
+  // her top otomatik kurşunlanır (backend completeQc2 / kursunFinish).
   const completeQc2Mutation = useMutation({
     mutationFn: kursunQcService.completeQc2,
     onSuccess: async (res) => {
@@ -326,8 +368,8 @@ export default function KursunQcScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: 'Hata kaydedildi' });
       // Aynı türden ardışık hata girişi için defectTypeId korunur, sadece
-      // metraj alanları temizlenir.
-      setErrorEntry((prev) => ({ ...prev, startMeter: '', endMeter: '' }));
+      // metraj alanı temizlenir.
+      setErrorEntry((prev) => ({ ...prev, startMeter: '' }));
       await refetchActiveJob();
     },
     onError: (err: Error) => {
@@ -346,73 +388,54 @@ export default function KursunQcScreen() {
       Toast.show({ type: 'error', text1: 'Silinemedi', text2: err.message }),
   });
 
-  // Refactor 9 — Açık kumaş aç (open-fabric)
-  const openFabricMutation = useMutation({
-    mutationFn: (receiptId: string) =>
-      rollService.createOpenFabric({
-        receiptId,
-        stepId: activeJob!.stepSummary.workOrderStepId,
-      }),
-    onSuccess: async () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Açık kumaş oluşturuldu' });
-      setOpenFabricModalVisible(false);
-      await refetchActiveJob();
-    },
-    onError: (err: Error) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({
-        type: 'error',
-        text1: 'Açık kumaş oluşturulamadı',
-        text2: err.message,
-      });
-    },
-  });
-
-  // Refactor 9 — Kursun finish (totalMeters + errors → Tambur'a ilerlet)
+  // Açık kumaşı Tambur'a iletir. Metre fason kabulden gelen değer, hatalar
+  // operatörün "Hata Ekle" ile eklediği kayıtlar — bu çağrı sadece roll'u
+  // ilerletir + Kurşun/QC2 operation log'larını yazar.
   const kursunFinishMutation = useMutation({
-    mutationFn: ({
-      rollId,
-      totalMeters,
-      errors,
-      notes,
-    }: {
-      rollId: string;
-      totalMeters: number;
-      errors: Array<{ startMeter: number; endMeter?: number | null; defectTypeId?: string | null }>;
-      notes?: string | null;
-    }) =>
-      rollService.kursunFinish(rollId, { totalMeters, errors, notes }),
-    onSuccess: async () => {
+    mutationFn: (rollId: string) => rollService.kursunFinish(rollId, {}),
+    onSuccess: async (_res, finishedRollId) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
         text1: 'Kumaş bitirildi',
         text2: 'Roll Tambur adımına geçti',
       });
-      setFinishFabricRollId(null);
-      await refetchActiveJob();
+      // 1) Backend'den güncel step'i çek (bitirilen roll listeden düşmüş olmalı)
+      if (!activeJob) return;
+      const res = await kursunQcService.getStep(
+        activeJob.stepSummary.workOrderStepId,
+      );
+      const step = res.data as KursunStepSummary | undefined;
+      const remainingRolls = step?.rolls ?? [];
+      // 2) Step'te başka açık kumaş kalmadıysa kartı kapat (otomatik çarpı)
+      if (remainingRolls.length === 0) {
+        setOpenJobs((prev) => {
+          const next = prev.filter((j) => j.cardId !== activeJob.cardId);
+          setActiveCardId(next[0]?.cardId ?? null);
+          return next;
+        });
+        qc.invalidateQueries({ queryKey: ['rolls'] });
+        return;
+      }
+      // 3) Kart açık kalır; bir sonraki kumaşı otomatik seç
+      const next = remainingRolls.find((r) => r.rollId !== finishedRollId);
+      setOpenJobs((prev) =>
+        prev.map((j) =>
+          j.cardId === activeJob.cardId
+            ? {
+                ...j,
+                stepSummary: step!,
+                selectedRollId: next?.rollId ?? null,
+              }
+            : j,
+        ),
+      );
+      qc.invalidateQueries({ queryKey: ['rolls'] });
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Kumaş bitirilemedi', text2: err.message });
     },
-  });
-
-  // Açık kumaş aç modalı için WO'nun receipt listesi
-  const woReceiptsQuery = useQuery({
-    queryKey: [
-      'kursun-qc',
-      'receipts',
-      activeJob?.stepSummary.workOrderId,
-    ],
-    queryFn: () =>
-      subcontractorService.listReceipts({
-        workOrderId: activeJob!.stepSummary.workOrderId,
-        pageSize: 20,
-      }),
-    enabled: openFabricModalVisible && !!activeJob,
-    staleTime: 30 * 1000,
   });
 
   const finishStepMutation = useMutation({
@@ -438,37 +461,6 @@ export default function KursunQcScreen() {
   });
 
   // ── Handler shortcuts ──────────────────────────────────────────────────────
-  const handleApplyKursun = () => {
-    if (!activeJob || !selectedRoll) return;
-    applyKursunMutation.mutate({
-      rollId: selectedRoll.rollId,
-      stepId: activeJob.stepSummary.workOrderStepId,
-    });
-  };
-
-  const handleSkipKursun = () => {
-    // Backend'de ayrı bir "kurşun gerekmedi" işareti yok — o yüzden bu sadece
-    // local state'te "operatör karar verdi" anlamına gelir. QC2 tamamlama
-    // sırasında bu durum loglanır (notes alanı). Yine de operatör kasıtlı
-    // bir karar verdiği için undoKursun çağrısı yaparız (idempotent — eğer
-    // önceden basıldıysa siler; basılmadıysa backend 200 döner).
-    if (!activeJob || !selectedRoll) return;
-    if (selectedRoll.kursunApplied) {
-      undoKursunMutation.mutate({
-        rollId: selectedRoll.rollId,
-        stepId: activeJob.stepSummary.workOrderStepId,
-      });
-    }
-    // "kurşun gerekmedi" bilinçli kararını işaretlemek için local UI flag
-    // gerekirse rollId bazlı bir set tutabiliriz; şimdilik QC2 butonu üzerinden
-    // bilgi netleşir.
-    Toast.show({
-      type: 'info',
-      text1: 'Kurşun atlanacak',
-      text2: 'QC2 tamamla butonu ile devam et',
-    });
-  };
-
   const handleCompleteQc2 = () => {
     if (!activeJob || !selectedRoll) return;
     completeQc2Mutation.mutate({
@@ -487,21 +479,19 @@ export default function KursunQcScreen() {
 
   const handleAddError = () => {
     if (!activeJob || !selectedRoll) return;
-    if (!errorEntry.defectTypeId) {
-      Toast.show({ type: 'error', text1: 'Hata tipi seçin' });
-      return;
-    }
     const start = parseFloat(errorEntry.startMeter);
-    const end = parseFloat(errorEntry.endMeter);
-    if (Number.isNaN(start) || Number.isNaN(end)) {
+    if (!Number.isFinite(start) || start < 0) {
       Toast.show({ type: 'error', text1: 'Metraj sayı olmalı' });
       return;
     }
-    if (start < 0 || end <= start) {
+    // Hata tipi seçilmemişse listenin ilkini kullan (admin tarafından "default"
+    // olarak eklenmesi beklenen kayıt). Liste boşsa kullanıcıya hata göster.
+    const defectTypeId = errorEntry.defectTypeId || defectTypes[0]?.id;
+    if (!defectTypeId) {
       Toast.show({
         type: 'error',
-        text1: 'Geçersiz aralık',
-        text2: 'Bitiş metrajı başlangıçtan büyük olmalı',
+        text1: 'Hata tipi yok',
+        text2: 'Admin önce hata tipi tanımlamalı',
       });
       return;
     }
@@ -509,8 +499,7 @@ export default function KursunQcScreen() {
       rollId: selectedRoll.rollId,
       stepId: activeJob.stepSummary.workOrderStepId,
       startMeter: start,
-      endMeter: end,
-      defectTypeId: errorEntry.defectTypeId,
+      defectTypeId,
     });
   };
 
@@ -537,20 +526,212 @@ export default function KursunQcScreen() {
     activeJob.stepSummary.rolls.length > 0 &&
     activeJob.stepSummary.rolls.every((r) => r.qc2Completed);
 
+  // Sağ panel içeriği — hem inline rightCol'da (tablet) hem RightDrawer'da
+  // (telefon compact) aynı kullanılır. NumpadHost ayrı render edilir; compact'ta
+  // native klavye kullanıldığı için drawer içinde NumpadHost yoktur.
+  const renderRightContent = () => (
+    <>
+      {/* Kart input + kamera */}
+      <View style={styles.cardInputWrap}>
+        <View style={styles.cardInputRow}>
+          <TextInput
+            mode="outlined"
+            value={cardBarcode}
+            onChangeText={setCardBarcode}
+            placeholder="Refakat kartı barkodu okut/yaz..."
+            dense
+            autoCapitalize="characters"
+            autoCorrect={false}
+            left={<TextInput.Icon icon="card-search-outline" />}
+            right={
+              resolvingCard ? (
+                <TextInput.Icon
+                  icon={() => <ActivityIndicator size={18} color="#059669" />}
+                />
+              ) : cardBarcode.trim() ? (
+                <TextInput.Icon
+                  icon="check"
+                  onPress={handleResolveCard}
+                  color="#059669"
+                />
+              ) : undefined
+            }
+            onSubmitEditing={handleResolveCard}
+            returnKeyType="search"
+            style={[styles.cardInput, { flex: 1 }]}
+          />
+          <View style={styles.cameraBtn}>
+            <IconButton
+              icon="format-list-bulleted"
+              mode="contained-tonal"
+              containerColor={urgentCount > 0 ? '#fee2e2' : '#e2e8f0'}
+              iconColor={urgentCount > 0 ? '#b91c1c' : '#0f172a'}
+              size={26}
+              onPress={() => {
+                if (compact && rightDrawerOpen) {
+                  setPendingDrawerAction('list');
+                  setRightDrawerOpen(false);
+                } else {
+                  setListModalOpen(true);
+                }
+              }}
+              accessibilityLabel={
+                urgentCount > 0
+                  ? `${urgentCount} acil kart var, açık kartları listele`
+                  : 'Açık kartları listele'
+              }
+              style={{ margin: 0 }}
+            />
+            <UrgentBadge count={urgentCount} />
+          </View>
+          <IconButton
+            icon="camera"
+            mode="contained-tonal"
+            containerColor="#dbeafe"
+            iconColor="#1e40af"
+            size={26}
+            onPress={() => {
+              if (compact && rightDrawerOpen) {
+                setPendingDrawerAction('scanner');
+                setRightDrawerOpen(false);
+              } else {
+                setScannerOpen(true);
+              }
+            }}
+            accessibilityLabel="Kamera ile refakat kartı tara"
+            style={styles.cameraBtn}
+          />
+        </View>
+      </View>
+
+      {cardError && (
+        <Surface style={styles.errorBanner} elevation={1}>
+          <Icon source="alert-circle" size={20} color="#b91c1c" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.errorBannerTitle}>Yanlış istasyon</Text>
+            <Text style={styles.errorBannerText}>{cardError}</Text>
+          </View>
+          <IconButton
+            icon="close"
+            size={18}
+            onPress={() => setCardError(null)}
+            accessibilityLabel="Hata mesajını kapat"
+            style={{ margin: 0 }}
+          />
+        </Surface>
+      )}
+
+      {openJobs.length > 0 && (
+        <View style={styles.tabBar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabScroll}
+          >
+            {openJobs.map((job) => (
+              <JobTab
+                key={job.cardId}
+                job={job}
+                active={job.cardId === activeCardId}
+                onPress={() => setActiveCardId(job.cardId)}
+                onClose={() => closeJob(job.cardId)}
+              />
+            ))}
+          </ScrollView>
+          <View style={styles.tabRefreshWrap}>
+            <RefreshButton onPress={refetchActiveJob} refreshing={false} />
+          </View>
+        </View>
+      )}
+
+      {!activeJob ? (
+        <View style={styles.paneEmpty}>
+          <Icon source="package-variant-closed" size={48} color="#cbd5e1" />
+          <Text style={styles.paneEmptyText}>Henüz açık iş yok</Text>
+          <Text style={styles.paneEmptyHint}>
+            Yukarıdan kart okutarak başlayın
+          </Text>
+        </View>
+      ) : activeJob.stepSummary.rolls.length === 0 ? (
+        <View style={styles.paneEmpty}>
+          <Text style={styles.paneEmptyText}>Bu adımda bekleyen top yok</Text>
+        </View>
+      ) : (
+        <FlashList
+          data={activeJob.stepSummary.rolls}
+          keyExtractor={(r) => r.rollId}
+          contentContainerStyle={{ padding: 8 }}
+          renderItem={({ item, index }) => (
+            <RollListItem
+              roll={item}
+              index={index}
+              selected={activeJob.selectedRollId === item.rollId}
+              onPress={() => selectRoll(item.rollId)}
+            />
+          )}
+        />
+      )}
+
+      {activeJob && activeJob.stepSummary.rolls.length > 0 && (
+        <Surface style={styles.finishWrap} elevation={3}>
+          <Button
+            mode="contained"
+            icon="flag-checkered"
+            onPress={handleFinishStep}
+            disabled={!allQc2Done || finishStepMutation.isPending}
+            loading={finishStepMutation.isPending}
+            buttonColor="#1e40af"
+            style={styles.finishBtn}
+            contentStyle={styles.finishBtnContent}
+          >
+            {allQc2Done
+              ? 'Adımı Kapat — Toplar Tambur\'a'
+              : `${activeJob.stepSummary.rolls.filter((r) => !r.qc2Completed).length} top QC2 bekliyor`}
+          </Button>
+        </Surface>
+      )}
+    </>
+  );
+
   return (
     <ScreenChrome
       title="Kurşun + QC2"
       subtitle="Refakat kartı okut, top seç, kurşun + hata gir"
     >
-      <View style={styles.body}>
+      <View
+        style={[
+          styles.body,
+          compact && {
+            paddingLeft: Math.max(insets.left, 12) + 12,
+            paddingRight: Math.max(insets.right, 12) + 12,
+          },
+        ]}
+      >
         {/* ════════ SOL: aktif top işlem ════════ */}
         <View style={styles.formCol}>
+          {compact && (
+            <View style={styles.compactTriggerBar}>
+              <Button
+                mode="contained-tonal"
+                icon="format-list-bulleted"
+                compact
+                onPress={() => setRightDrawerOpen(true)}
+              >
+                {activeJob
+                  ? `${activeJob.cardNumber} · ${activeJob.stepSummary.rolls.length} top`
+                  : 'Açık İşler / Kart Okut'}
+                {urgentCount > 0 ? ` · ${urgentCount} acil` : ''}
+              </Button>
+            </View>
+          )}
           {!activeJob ? (
             <View style={styles.emptyState}>
               <Icon source="card-search-outline" size={64} color="#cbd5e1" />
               <Text style={styles.emptyTitle}>Kart açılmadı</Text>
               <Text style={styles.emptyHint}>
-                Sağ üstten refakat kartı barkodunu okutarak başlayın
+                {compact
+                  ? 'Üstten "Açık İşler" butonuyla kart okutarak başlayın'
+                  : 'Sağ üstten refakat kartı barkodunu okutarak başlayın'}
               </Text>
             </View>
           ) : !selectedRoll ? (
@@ -578,12 +759,6 @@ export default function KursunQcScreen() {
                 </View>
                 <View style={styles.statusRow}>
                   <StatusPill
-                    label={
-                      selectedRoll.kursunApplied ? 'Kurşun ✓' : 'Kurşun —'
-                    }
-                    tone={selectedRoll.kursunApplied ? 'green' : 'neutral'}
-                  />
-                  <StatusPill
                     label={`${selectedRoll.errorCount} hata`}
                     tone={selectedRoll.errorCount > 0 ? 'amber' : 'neutral'}
                   />
@@ -596,46 +771,20 @@ export default function KursunQcScreen() {
                 </View>
               </Surface>
 
+              {activeJob.stepSummary.appliesKursun && (
+                <Surface style={styles.kursunBanner} elevation={1}>
+                  <Icon source="shield-check" size={20} color="#059669" />
+                  <Text style={styles.kursunBannerText}>
+                    Bu istasyonda her top otomatik kurşunlanır
+                  </Text>
+                </Surface>
+              )}
+
               <ScrollView
                 style={{ flex: 1 }}
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
               >
-                {/* Kurşun kararı */}
-                <Surface style={styles.section} elevation={1}>
-                  <Text style={styles.sectionTitle}>Kurşun Kararı</Text>
-                  <View style={styles.kursunRow}>
-                    <Button
-                      mode={selectedRoll.kursunApplied ? 'contained' : 'outlined'}
-                      icon="check-bold"
-                      buttonColor={selectedRoll.kursunApplied ? '#059669' : undefined}
-                      textColor={selectedRoll.kursunApplied ? '#fff' : '#059669'}
-                      onPress={handleApplyKursun}
-                      loading={applyKursunMutation.isPending}
-                      disabled={applyKursunMutation.isPending}
-                      style={[styles.kursunBtn, { borderColor: '#059669' }]}
-                      contentStyle={styles.kursunBtnContent}
-                      labelStyle={styles.kursunBtnLabel}
-                    >
-                      Kurşun Uygulandı
-                    </Button>
-                    <Button
-                      mode={!selectedRoll.kursunApplied ? 'contained' : 'outlined'}
-                      icon="close-circle-outline"
-                      buttonColor={!selectedRoll.kursunApplied ? '#64748b' : undefined}
-                      textColor={!selectedRoll.kursunApplied ? '#fff' : '#64748b'}
-                      onPress={handleSkipKursun}
-                      loading={undoKursunMutation.isPending}
-                      disabled={undoKursunMutation.isPending}
-                      style={[styles.kursunBtn, { borderColor: '#64748b' }]}
-                      contentStyle={styles.kursunBtnContent}
-                      labelStyle={styles.kursunBtnLabel}
-                    >
-                      Kurşun Gerekmedi
-                    </Button>
-                  </View>
-                </Surface>
-
                 {/* Mevcut hatalar — sade liste */}
                 {selectedRoll.defects.length > 0 && (
                   <Surface style={styles.section} elevation={1}>
@@ -650,10 +799,7 @@ export default function KursunQcScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.defectName}>{d.errorType ?? '—'}</Text>
                           <Text style={styles.defectRange}>
-                            {d.startMeter.toFixed(1)}
-                            {d.endMeter != null
-                              ? ` – ${d.endMeter.toFixed(1)} mt · ${(d.endMeter - d.startMeter).toFixed(1)} mt`
-                              : ' mt (nokta)'}
+                            {d.startMeter.toFixed(1)} mt
                           </Text>
                         </View>
                         <IconButton
@@ -673,41 +819,24 @@ export default function KursunQcScreen() {
                 <Surface style={styles.entrySection} elevation={1}>
                   <Text style={styles.sectionTitle}>Yeni Hata Gir</Text>
 
-                    {/* Metraj aralığı — NumpadInput ile sağ alttaki numpada bağlı */}
-                    <View style={styles.meterRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.entryLabel}>Başlangıç (mt)</Text>
-                        <NumpadInput
-                          mode="outlined"
-                          value={errorEntry.startMeter}
-                          onChangeText={(v) =>
-                            setErrorEntry((p) => ({ ...p, startMeter: v }))
-                          }
-                          numpadLabel="Başlangıç metraj"
-                          allowDecimal
-                          numpadMaxLength={8}
-                          placeholder="0"
-                          dense
-                          style={styles.meterInput}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.entryLabel}>Bitiş (mt)</Text>
-                        <NumpadInput
-                          mode="outlined"
-                          value={errorEntry.endMeter}
-                          onChangeText={(v) =>
-                            setErrorEntry((p) => ({ ...p, endMeter: v }))
-                          }
-                          numpadLabel="Bitiş metraj"
-                          allowDecimal
-                          numpadMaxLength={8}
-                          placeholder="0"
-                          dense
-                          style={styles.meterInput}
-                        />
-                      </View>
-                    </View>
+                    {/* Hata metresi — tek nokta (aralık değil). Tambur kesim kararı verir.
+                        autoActivate: input'a tıklamadan numpad doğrudan buraya yazsın. */}
+                    <Text style={styles.entryLabel}>Hata Metresi (mt)</Text>
+                    <NumpadInput
+                      mode="outlined"
+                      value={errorEntry.startMeter}
+                      onChangeText={(v) =>
+                        setErrorEntry((p) => ({ ...p, startMeter: v }))
+                      }
+                      numpadLabel="Hata metresi"
+                      allowDecimal
+                      autoActivate
+                      numpadMaxLength={8}
+                      placeholder="örn: 60"
+                      dense
+                      style={styles.meterInput}
+                      useNativeKeyboard={compact}
+                    />
 
                     {/* Defect chips — sürekli açık grid */}
                     <Text style={[styles.entryLabel, { marginTop: 4 }]}>
@@ -758,9 +887,8 @@ export default function KursunQcScreen() {
                       loading={reportErrorMutation.isPending}
                       disabled={
                         reportErrorMutation.isPending ||
-                        !errorEntry.defectTypeId ||
                         !errorEntry.startMeter ||
-                        !errorEntry.endMeter
+                        defectTypes.length === 0
                       }
                       buttonColor="#d97706"
                       style={styles.addBtn}
@@ -775,11 +903,15 @@ export default function KursunQcScreen() {
               {/* Sticky footer — açık kumaş ise "Kumaş Bitir", barkodlu ise QC2 */}
               <Surface style={styles.footer} elevation={4}>
                 {!selectedRoll.barcode ? (
-                  // Refactor 9 — açık kumaş: totalMeters + errors → kursun-finish
+                  // Açık kumaş: direkt Tambur'a iletir (KK2'de ölçüm yok)
                   <Button
                     mode="contained"
                     icon="package-check"
-                    onPress={() => setFinishFabricRollId(selectedRoll.rollId)}
+                    onPress={() =>
+                      kursunFinishMutation.mutate(selectedRoll.rollId)
+                    }
+                    loading={kursunFinishMutation.isPending}
+                    disabled={kursunFinishMutation.isPending}
                     buttonColor="#7c3aed"
                     style={styles.footerBtn}
                     contentStyle={styles.footerBtnContent}
@@ -813,7 +945,7 @@ export default function KursunQcScreen() {
                     contentStyle={styles.footerBtnContent}
                     labelStyle={styles.footerBtnLabel}
                   >
-                    {`QC2 Tamamla (${selectedRoll.errorCount} hata${selectedRoll.kursunApplied ? ' · kurşunlu' : ''})`}
+                    {`QC2 Tamamla (${selectedRoll.errorCount} hata)`}
                   </Button>
                 )}
               </Surface>
@@ -822,176 +954,12 @@ export default function KursunQcScreen() {
         </View>
 
         {/* ════════ SAĞ: kart input + tab bar + roll list ════════ */}
-        <View style={styles.rightCol}>
-          {/* Kart input + kamera */}
-          <View style={styles.cardInputWrap}>
-            <View style={styles.cardInputRow}>
-              <TextInput
-                mode="outlined"
-                value={cardBarcode}
-                onChangeText={setCardBarcode}
-                placeholder="Refakat kartı barkodu okut/yaz..."
-                dense
-                autoCapitalize="characters"
-                autoCorrect={false}
-                left={<TextInput.Icon icon="card-search-outline" />}
-                right={
-                  resolvingCard ? (
-                    <TextInput.Icon
-                      icon={() => <ActivityIndicator size={18} color="#059669" />}
-                    />
-                  ) : cardBarcode.trim() ? (
-                    <TextInput.Icon
-                      icon="check"
-                      onPress={handleResolveCard}
-                      color="#059669"
-                    />
-                  ) : undefined
-                }
-                onSubmitEditing={handleResolveCard}
-                returnKeyType="search"
-                style={[styles.cardInput, { flex: 1 }]}
-              />
-              <IconButton
-                icon="format-list-bulleted"
-                mode="contained-tonal"
-                containerColor="#e2e8f0"
-                iconColor="#0f172a"
-                size={26}
-                onPress={() => setListModalOpen(true)}
-                accessibilityLabel="Açık kartları listele"
-                style={styles.cameraBtn}
-              />
-              <IconButton
-                icon="camera"
-                mode="contained-tonal"
-                containerColor="#dbeafe"
-                iconColor="#1e40af"
-                size={26}
-                onPress={() => setScannerOpen(true)}
-                accessibilityLabel="Kamera ile refakat kartı tara"
-                style={styles.cameraBtn}
-              />
-            </View>
+        {!compact && (
+          <View style={styles.rightCol}>
+            {renderRightContent()}
+            <NumpadHost style={styles.numpadHost} />
           </View>
-
-          {/* Banner — Refactor 4 yanlış istasyon mesajı */}
-          {cardError && (
-            <Surface style={styles.errorBanner} elevation={1}>
-              <Icon source="alert-circle" size={20} color="#b91c1c" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.errorBannerTitle}>Yanlış istasyon</Text>
-                <Text style={styles.errorBannerText}>{cardError}</Text>
-              </View>
-              <IconButton
-                icon="close"
-                size={18}
-                onPress={() => setCardError(null)}
-                accessibilityLabel="Hata mesajını kapat"
-                style={{ margin: 0 }}
-              />
-            </Surface>
-          )}
-
-          {/* Refactor 9 — açık kumaş aç butonu (aktif job varsa) */}
-          {activeJob && (
-            <View style={styles.openFabricRow}>
-              <Button
-                mode="contained"
-                icon="plus-box-multiple"
-                onPress={() => setOpenFabricModalVisible(true)}
-                buttonColor="#7c3aed"
-                compact
-                style={{ flex: 1 }}
-              >
-                Yeni Açık Kumaş Aç
-              </Button>
-            </View>
-          )}
-
-          {/* Tab bar — açık işler */}
-          {openJobs.length > 0 && (
-            <View style={styles.tabBar}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.tabScroll}
-              >
-                {openJobs.map((job) => (
-                  <JobTab
-                    key={job.cardId}
-                    job={job}
-                    active={job.cardId === activeCardId}
-                    onPress={() => setActiveCardId(job.cardId)}
-                    onClose={() => closeJob(job.cardId)}
-                  />
-                ))}
-              </ScrollView>
-              <View style={styles.tabRefreshWrap}>
-                <RefreshButton
-                  onPress={refetchActiveJob}
-                  refreshing={false}
-                />
-              </View>
-            </View>
-          )}
-
-          {/* Top kuyruğu */}
-          {!activeJob ? (
-            <View style={styles.paneEmpty}>
-              <Icon source="package-variant-closed" size={48} color="#cbd5e1" />
-              <Text style={styles.paneEmptyText}>
-                Henüz açık iş yok
-              </Text>
-              <Text style={styles.paneEmptyHint}>
-                Yukarıdan kart okutarak başlayın
-              </Text>
-            </View>
-          ) : activeJob.stepSummary.rolls.length === 0 ? (
-            <View style={styles.paneEmpty}>
-              <Text style={styles.paneEmptyText}>
-                Bu adımda bekleyen top yok
-              </Text>
-            </View>
-          ) : (
-            <FlashList
-              data={activeJob.stepSummary.rolls}
-              keyExtractor={(r) => r.rollId}
-              contentContainerStyle={{ padding: 8 }}
-              renderItem={({ item, index }) => (
-                <RollListItem
-                  roll={item}
-                  index={index}
-                  selected={activeJob.selectedRollId === item.rollId}
-                  onPress={() => selectRoll(item.rollId)}
-                />
-              )}
-            />
-          )}
-
-          {/* Adımı kapat butonu */}
-          {activeJob && activeJob.stepSummary.rolls.length > 0 && (
-            <Surface style={styles.finishWrap} elevation={3}>
-              <Button
-                mode="contained"
-                icon="flag-checkered"
-                onPress={handleFinishStep}
-                disabled={!allQc2Done || finishStepMutation.isPending}
-                loading={finishStepMutation.isPending}
-                buttonColor="#1e40af"
-                style={styles.finishBtn}
-                contentStyle={styles.finishBtnContent}
-              >
-                {allQc2Done
-                  ? 'Adımı Kapat — Toplar Tambur\'a'
-                  : `${activeJob.stepSummary.rolls.filter((r) => !r.qc2Completed).length} top QC2 bekliyor`}
-              </Button>
-            </Surface>
-          )}
-
-          {/* Sabit numpad — sol kolondaki NumpadInput'lar tetikler */}
-          <NumpadHost style={styles.numpadHost} />
-        </View>
+        )}
       </View>
 
       {/* Açık kart listesi — hızlı seçim için */}
@@ -1001,6 +969,13 @@ export default function KursunQcScreen() {
         cards={openCardsQuery.data?.data ?? []}
         onDismiss={() => setListModalOpen(false)}
         onSelect={handleCameraSelect}
+        refreshIntervalMs={OPEN_CARDS_REFETCH_MS}
+        dataUpdatedAt={openCardsQuery.dataUpdatedAt}
+        isFetching={openCardsQuery.isFetching}
+        onRefresh={() => {
+          Haptics.selectionAsync();
+          void openCardsQuery.refetch();
+        }}
       />
 
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
@@ -1011,469 +986,27 @@ export default function KursunQcScreen() {
         onScan={handleScannerResult}
       />
 
-      {/* Refactor 9 — Açık kumaş aç modal (receipt picker) */}
-      <OpenFabricModal
-        visible={openFabricModalVisible}
-        loading={woReceiptsQuery.isLoading}
-        receipts={woReceiptsQuery.data?.data ?? []}
-        submitting={openFabricMutation.isPending}
-        onDismiss={() => setOpenFabricModalVisible(false)}
-        onSelect={(receiptId) => openFabricMutation.mutate(receiptId)}
-      />
+      {/* Compact'ta sağdan kayan iş paneli — telefon ekranında sağ kolonun yerine */}
+      {compact && (
+        <RightPanelDrawer
+          visible={rightDrawerOpen}
+          onDismiss={() => setRightDrawerOpen(false)}
+          insets={insets}
+          title="Kurşun · QC2 İşleri"
+          onClosed={() => {
+            if (pendingDrawerAction === 'scanner') setScannerOpen(true);
+            else if (pendingDrawerAction === 'list') setListModalOpen(true);
+            setPendingDrawerAction(null);
+          }}
+        >
+          {renderRightContent()}
+        </RightPanelDrawer>
+      )}
 
-      {/* Refactor 9 — Kumaş bitir modal (totalMeters + errors → kursun-finish) */}
-      <KursunFinishModal
-        visible={!!finishFabricRollId}
-        defectTypes={defectTypes}
-        submitting={kursunFinishMutation.isPending}
-        onDismiss={() => setFinishFabricRollId(null)}
-        onSubmit={(payload) => {
-          if (!finishFabricRollId) return;
-          kursunFinishMutation.mutate({
-            rollId: finishFabricRollId,
-            ...payload,
-          });
-        }}
-      />
     </ScreenChrome>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Refactor 9 — Açık kumaş aç modal
-// ─────────────────────────────────────────────────────────────────────────────
-function OpenFabricModal({
-  visible,
-  loading,
-  receipts,
-  submitting,
-  onDismiss,
-  onSelect,
-}: {
-  visible: boolean;
-  loading: boolean;
-  receipts: SubcontractorReceiptListItem[];
-  submitting: boolean;
-  onDismiss: () => void;
-  onSelect: (receiptId: string) => void;
-}) {
-  const { width: winW, height: winH } = useWindowDimensions();
-  // Yalnız iptal edilmemiş kabuller
-  const activeReceipts = receipts.filter((r) => !r.cancelledAt);
-  return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={submitting ? undefined : onDismiss}
-      onBackButtonPress={submitting ? undefined : onDismiss}
-      backdropOpacity={0.55}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
-      style={openFabricStyles.modal}
-    >
-      <View
-        style={[openFabricStyles.sheet, { width: winW * 0.65, maxHeight: winH * 0.8 }]}
-      >
-        <View style={openFabricStyles.header}>
-          <Icon source="plus-box-multiple" size={22} color="#7c3aed" />
-          <Text variant="titleMedium" style={openFabricStyles.title}>
-            Açık Kumaş Aç
-          </Text>
-          <View style={{ flex: 1 }} />
-          <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
-        </View>
-        <Text style={openFabricStyles.body}>
-          Hangi fason kabulden yeni açık kumaş oluşturacağınızı seçin. Renk +
-          özellikler bu kabulden inherit edilir, barkod basılmaz (sistem ID).
-        </Text>
-        {loading ? (
-          <View style={openFabricStyles.empty}>
-            <ActivityIndicator size="large" color="#7c3aed" />
-          </View>
-        ) : activeReceipts.length === 0 ? (
-          <View style={openFabricStyles.empty}>
-            <Icon source="package-down" size={48} color="#cbd5e1" />
-            <Text style={openFabricStyles.emptyText}>
-              Bu WO için aktif fason kabul yok
-            </Text>
-          </View>
-        ) : (
-          <FlashList
-            data={activeReceipts}
-            keyExtractor={(r) => r.id}
-            contentContainerStyle={{ paddingVertical: 6 }}
-            renderItem={({ item }) => (
-              <Surface style={openFabricStyles.row} elevation={1}>
-                <TouchableRipple
-                  borderless
-                  onPress={() => onSelect(item.id)}
-                  style={openFabricStyles.rowTouch}
-                  disabled={submitting}
-                >
-                  <View style={openFabricStyles.rowInner}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={openFabricStyles.rowTitle}>
-                        {item.receiptNo}
-                        {item.appliedColor
-                          ? ` · ${item.appliedColor.name}`
-                          : ''}
-                      </Text>
-                      <Text style={openFabricStyles.rowMeta} numberOfLines={1}>
-                        {item.subcontractor?.name ?? '—'}
-                        {' · '}
-                        {item._count?.items ?? 0} top
-                      </Text>
-                    </View>
-                    <Icon source="chevron-right" size={22} color="#94a3b8" />
-                  </View>
-                </TouchableRipple>
-              </Surface>
-            )}
-          />
-        )}
-      </View>
-    </RNModal>
-  );
-}
-
-const openFabricStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
-  sheet: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
-    gap: 12,
-  },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { fontWeight: '700', color: '#0f172a' },
-  body: { fontSize: 13, color: '#475569', lineHeight: 18 },
-  empty: {
-    paddingVertical: 36,
-    alignItems: 'center',
-    gap: 6,
-  },
-  emptyText: { fontSize: 13, color: '#94a3b8' },
-  row: {
-    backgroundColor: '#faf5ff',
-    borderRadius: 10,
-    marginVertical: 3,
-    overflow: 'hidden',
-  },
-  rowTouch: { borderRadius: 10 },
-  rowInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    gap: 8,
-  },
-  rowTitle: { fontSize: 14, fontWeight: '700', color: '#5b21b6' },
-  rowMeta: { fontSize: 12, color: '#6b21a8', marginTop: 2 },
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Refactor 9 — Kumaş bitir modal (kursun-finish)
-// ─────────────────────────────────────────────────────────────────────────────
-interface FinishErrorEntry {
-  startMeter: string;
-  endMeter: string;
-  defectTypeId: string;
-}
-
-function KursunFinishModal({
-  visible,
-  defectTypes,
-  submitting,
-  onDismiss,
-  onSubmit,
-}: {
-  visible: boolean;
-  defectTypes: DefectType[];
-  submitting: boolean;
-  onDismiss: () => void;
-  onSubmit: (data: {
-    totalMeters: number;
-    errors: Array<{ startMeter: number; endMeter?: number | null; defectTypeId?: string | null }>;
-    notes?: string | null;
-  }) => void;
-}) {
-  const { width: winW, height: winH } = useWindowDimensions();
-  const [totalMeters, setTotalMeters] = useState('');
-  const [notes, setNotes] = useState('');
-  const [errors, setErrors] = useState<FinishErrorEntry[]>([]);
-
-  useEffect(() => {
-    if (!visible) {
-      setTotalMeters('');
-      setNotes('');
-      setErrors([]);
-    }
-  }, [visible]);
-
-  const addError = () =>
-    setErrors((prev) => [...prev, { startMeter: '', endMeter: '', defectTypeId: '' }]);
-
-  const updateError = (idx: number, patch: Partial<FinishErrorEntry>) =>
-    setErrors((prev) => prev.map((e, i) => (i === idx ? { ...e, ...patch } : e)));
-
-  const removeError = (idx: number) =>
-    setErrors((prev) => prev.filter((_, i) => i !== idx));
-
-  const handleSubmit = () => {
-    const total = parseFloat(totalMeters);
-    if (Number.isNaN(total) || total <= 0) {
-      Toast.show({ type: 'error', text1: 'Toplam metre zorunlu', text2: 'Pozitif sayı girin' });
-      return;
-    }
-    const parsedErrors: Array<{
-      startMeter: number;
-      endMeter?: number | null;
-      defectTypeId?: string | null;
-    }> = [];
-    for (let i = 0; i < errors.length; i++) {
-      const e = errors[i];
-      const start = parseFloat(e.startMeter);
-      if (Number.isNaN(start) || start < 0) {
-        Toast.show({
-          type: 'error',
-          text1: `Hata #${i + 1} geçersiz`,
-          text2: 'Başlangıç metre sayı olmalı',
-        });
-        return;
-      }
-      const end = e.endMeter.trim() ? parseFloat(e.endMeter) : null;
-      if (end !== null && (Number.isNaN(end) || end <= start)) {
-        Toast.show({
-          type: 'error',
-          text1: `Hata #${i + 1} geçersiz`,
-          text2: 'Bitiş başlangıçtan büyük olmalı',
-        });
-        return;
-      }
-      parsedErrors.push({
-        startMeter: start,
-        endMeter: end,
-        defectTypeId: e.defectTypeId || null,
-      });
-    }
-    onSubmit({
-      totalMeters: total,
-      errors: parsedErrors,
-      notes: notes.trim() || null,
-    });
-  };
-
-  return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={submitting ? undefined : onDismiss}
-      onBackButtonPress={submitting ? undefined : onDismiss}
-      backdropOpacity={0.55}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
-      style={finishStyles.modal}
-    >
-      <View
-        style={[finishStyles.sheet, { width: winW * 0.7, maxHeight: winH * 0.9 }]}
-      >
-        <View style={finishStyles.header}>
-          <Icon source="package-check" size={22} color="#7c3aed" />
-          <Text variant="titleMedium" style={finishStyles.title}>
-            Kumaşı Bitir
-          </Text>
-          <View style={{ flex: 1 }} />
-          <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
-        </View>
-
-        <ScrollView contentContainerStyle={finishStyles.body}>
-          <Text style={finishStyles.bodyText}>
-            Cihazda gözüken toplam metreyi girin. Hata noktaları opsiyonel —
-            bitiş metresi boş bırakılabilir (operatör çoğu zaman sadece
-            başlangıç metresini girer).
-          </Text>
-
-          <Text style={finishStyles.label}>Toplam Metre *</Text>
-          <TextInput
-            mode="outlined"
-            value={totalMeters}
-            onChangeText={setTotalMeters}
-            placeholder="örn. 500"
-            keyboardType="numeric"
-            dense
-            style={finishStyles.input}
-          />
-
-          <View style={finishStyles.errorsHeader}>
-            <Text style={finishStyles.label}>Hatalar (opsiyonel)</Text>
-            <Button mode="text" icon="plus-circle" onPress={addError} compact>
-              Hata Ekle
-            </Button>
-          </View>
-
-          {errors.map((e, idx) => (
-            <Surface key={idx} style={finishStyles.errorRow} elevation={1}>
-              <View style={finishStyles.errorTop}>
-                <Text style={finishStyles.errorIndex}>#{idx + 1}</Text>
-                <IconButton
-                  icon="trash-can-outline"
-                  size={18}
-                  iconColor="#dc2626"
-                  onPress={() => removeError(idx)}
-                  style={{ margin: 0 }}
-                />
-              </View>
-              <View style={finishStyles.errorMeterRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={finishStyles.subLabel}>Başlangıç (mt)</Text>
-                  <TextInput
-                    mode="outlined"
-                    value={e.startMeter}
-                    onChangeText={(v) => updateError(idx, { startMeter: v })}
-                    placeholder="60"
-                    keyboardType="numeric"
-                    dense
-                    style={finishStyles.input}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={finishStyles.subLabel}>Bitiş (mt) — boş ok</Text>
-                  <TextInput
-                    mode="outlined"
-                    value={e.endMeter}
-                    onChangeText={(v) => updateError(idx, { endMeter: v })}
-                    placeholder="opsiyonel"
-                    keyboardType="numeric"
-                    dense
-                    style={finishStyles.input}
-                  />
-                </View>
-              </View>
-              <Text style={finishStyles.subLabel}>Hata Tipi (opsiyonel)</Text>
-              <View style={finishStyles.defectChipRow}>
-                {defectTypes.map((dt) => {
-                  const active = e.defectTypeId === dt.id;
-                  return (
-                    <TouchableRipple
-                      key={dt.id}
-                      borderless
-                      onPress={() =>
-                        updateError(idx, {
-                          defectTypeId: active ? '' : dt.id,
-                        })
-                      }
-                      style={[
-                        finishStyles.defectChip,
-                        active && finishStyles.defectChipActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          finishStyles.defectChipText,
-                          active && finishStyles.defectChipTextActive,
-                        ]}
-                      >
-                        {dt.name}
-                      </Text>
-                    </TouchableRipple>
-                  );
-                })}
-              </View>
-            </Surface>
-          ))}
-
-          <Text style={finishStyles.label}>Not (opsiyonel)</Text>
-          <TextInput
-            mode="outlined"
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Kumaşın geneline dair not"
-            multiline
-            numberOfLines={2}
-            style={finishStyles.input}
-          />
-        </ScrollView>
-
-        <View style={finishStyles.actions}>
-          <Button mode="outlined" onPress={onDismiss} disabled={submitting}>
-            Vazgeç
-          </Button>
-          <Button
-            mode="contained"
-            buttonColor="#7c3aed"
-            onPress={handleSubmit}
-            loading={submitting}
-            disabled={submitting}
-            icon="check"
-          >
-            Bitir & Tambur'a Yolla
-          </Button>
-        </View>
-      </View>
-    </RNModal>
-  );
-}
-
-const finishStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
-  sheet: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    paddingTop: 16,
-    paddingHorizontal: 18,
-    paddingBottom: 12,
-    gap: 8,
-  },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { fontWeight: '700', color: '#0f172a' },
-  body: { gap: 8, paddingBottom: 8 },
-  bodyText: { fontSize: 12, color: '#475569', lineHeight: 16, marginBottom: 6 },
-  label: { fontSize: 13, fontWeight: '700', color: '#0f172a', marginTop: 4 },
-  subLabel: { fontSize: 11, fontWeight: '600', color: '#475569', marginBottom: 4 },
-  input: { backgroundColor: '#fff' },
-  errorsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  errorRow: {
-    backgroundColor: '#fef3c7',
-    padding: 10,
-    borderRadius: 10,
-    marginVertical: 4,
-    gap: 6,
-  },
-  errorTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  errorIndex: { fontSize: 12, fontWeight: '700', color: '#92400e' },
-  errorMeterRow: { flexDirection: 'row', gap: 8 },
-  defectChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
-  defectChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#fbbf24',
-    backgroundColor: '#fff',
-  },
-  defectChipActive: { backgroundColor: '#d97706', borderColor: '#d97706' },
-  defectChipText: { fontSize: 11, fontWeight: '600', color: '#92400e' },
-  defectChipTextActive: { color: '#fff' },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 8,
-  },
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Yardımcı bileşenler
@@ -1490,14 +1023,41 @@ function CameraScanModal({
   cards,
   onDismiss,
   onSelect,
+  refreshIntervalMs,
+  dataUpdatedAt,
+  isFetching,
+  onRefresh,
 }: {
   visible: boolean;
   loading: boolean;
   cards: KursunOpenCard[];
   onDismiss: () => void;
   onSelect: (card: KursunOpenCard) => void;
+  /** Otomatik yenileme periyodu (ms) — başlıkta saniye olarak gösterilir. */
+  refreshIntervalMs: number;
+  /** TanStack Query `dataUpdatedAt` — son başarılı fetch epoch ms. */
+  dataUpdatedAt: number;
+  /** Manuel "Yenile" ile tetiklenen veya polling fetch sürüyor mu. */
+  isFetching: boolean;
+  /** Manuel yenile butonu — `query.refetch()` çağırır. */
+  onRefresh: () => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
+
+  // FlashList sıralama değiştiğinde "en üstteki kart yukarı kaçar" davranışını
+  // engellemek için: kartların order'ını imzalayan key'i her refetch'te
+  // güncelle ve modal her açıldığında başa scroll et.
+  const listRef = useRef<FlashListRef<KursunOpenCard>>(null);
+  const orderSignature = cards.map((c) => c.cardId).join("|");
+  useEffect(() => {
+    if (!visible) return;
+    // Bir sonraki frame'de scroll et — FlashList yeni datayla render ettikten sonra.
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    });
+  }, [visible, orderSignature]);
+
+  const refreshIntervalSec = Math.round(refreshIntervalMs / 1000);
   return (
     <RNModal
       isVisible={visible}
@@ -1518,6 +1078,20 @@ function CameraScanModal({
             Açık Kartlar
           </Text>
           <View style={{ flex: 1 }} />
+          <RefreshMeta
+            visible={visible}
+            refreshIntervalSec={refreshIntervalSec}
+            dataUpdatedAt={dataUpdatedAt}
+            isFetching={isFetching}
+          />
+          <IconButton
+            icon="refresh"
+            size={20}
+            onPress={onRefresh}
+            disabled={isFetching}
+            loading={isFetching}
+            style={{ margin: 0 }}
+          />
           <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
         </View>
 
@@ -1543,11 +1117,18 @@ function CameraScanModal({
             </View>
           ) : (
             <FlashList
+              ref={listRef}
               data={cards}
               keyExtractor={(c) => c.cardId}
               contentContainerStyle={{ padding: 10 }}
               renderItem={({ item }) => (
-                <Surface style={cameraStyles.row} elevation={1}>
+                <Surface
+                  style={[
+                    cameraStyles.row,
+                    item.isUrgent && cameraStyles.rowUrgent,
+                  ]}
+                  elevation={1}
+                >
                   <TouchableRipple
                     borderless
                     onPress={() => onSelect(item)}
@@ -1555,7 +1136,23 @@ function CameraScanModal({
                   >
                     <View style={cameraStyles.rowInner}>
                       <View style={{ flex: 1 }}>
-                        <Text style={cameraStyles.rowBatch}>{item.batchNumber}</Text>
+                        <View style={cameraStyles.rowTitle}>
+                          <Text style={cameraStyles.rowBatch}>
+                            {item.batchNumber}
+                          </Text>
+                          {item.isUrgent && (
+                            <View style={cameraStyles.urgentBadge}>
+                              <Icon
+                                source="alert-octagon"
+                                size={12}
+                                color="#ffffff"
+                              />
+                              <Text style={cameraStyles.urgentBadgeText}>
+                                ACİL
+                              </Text>
+                            </View>
+                          )}
+                        </View>
                         <View style={cameraStyles.rowMeta}>
                           <Icon source="card-account-details" size={12} color="#475569" />
                           <Text style={cameraStyles.rowMetaText} numberOfLines={1}>
@@ -1586,6 +1183,103 @@ function CameraScanModal({
     </RNModal>
   );
 }
+
+// Modal header'da "X sn önce" sayacı — kendi nowTick state'i olduğu için modal
+// veya FlashList'i her saniye re-render etmez. Sadece bu küçük Text yenilenir.
+function RefreshMeta({
+  visible,
+  refreshIntervalSec,
+  dataUpdatedAt,
+  isFetching,
+}: {
+  visible: boolean;
+  refreshIntervalSec: number;
+  dataUpdatedAt: number;
+  isFetching: boolean;
+}) {
+  const [nowTick, setNowTick] = useState(Date.now());
+  useEffect(() => {
+    if (!visible) return;
+    setNowTick(Date.now());
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [visible]);
+  const secondsSinceUpdate =
+    dataUpdatedAt > 0
+      ? Math.max(0, Math.floor((nowTick - dataUpdatedAt) / 1000))
+      : null;
+  return (
+    <Text style={cameraStyles.refreshMeta}>
+      {refreshIntervalSec}sn ·{' '}
+      {isFetching
+        ? 'şimdi'
+        : secondsSinceUpdate === null
+          ? '—'
+          : secondsSinceUpdate < 5
+            ? 'az önce'
+            : `${secondsSinceUpdate}sn`}
+    </Text>
+  );
+}
+
+// Açık Kartlar butonunun üstünde duran kırmızı badge — planlama bir kartı
+// "Acil" işaretlediğinde tablet operatörü modal'ı açmadan görsün diye.
+// Opacity loop ile yanıp söner; sayı 0 ise hiç render edilmez.
+function UrgentBadge({ count }: { count: number }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (count === 0) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0.35,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [count, opacity]);
+
+  if (count === 0) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[urgentBadgeStyles.dot, { opacity }]}
+    >
+      <Text style={urgentBadgeStyles.text}>{count}</Text>
+    </Animated.View>
+  );
+}
+
+const urgentBadgeStyles = StyleSheet.create({
+  dot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  text: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 14,
+  },
+});
 
 function StatusPill({
   label,
@@ -1688,11 +1382,6 @@ function RollListItem({
               {roll.colorName ? ` · ${roll.colorName}` : ''}
             </Text>
             <View style={helperStyles.rollChips}>
-              {roll.kursunApplied && (
-                <View style={helperStyles.chipGreen}>
-                  <Text style={helperStyles.chipText}>Kurşun</Text>
-                </View>
-              )}
               {roll.errorCount > 0 && (
                 <View style={helperStyles.chipAmber}>
                   <Text style={helperStyles.chipText}>{roll.errorCount} hata</Text>
@@ -1743,14 +1432,16 @@ const styles = StyleSheet.create({
   },
   errorBannerText: { fontSize: 12, color: '#7f1d1d', lineHeight: 16 },
 
-  openFabricRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 10,
-    paddingTop: 8,
-  },
 
   // Sol — form
   formCol: { flex: 1.4 },
+  // Compact (telefon) — form üstü sağa yaslı sağ panel tetiği
+  compactTriggerBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
 
   emptyState: {
     flex: 1,
@@ -1792,10 +1483,20 @@ const styles = StyleSheet.create({
   },
   muted: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' },
 
-  kursunRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  kursunBtn: { flex: 1, borderRadius: 10, borderWidth: 2 },
-  kursunBtnContent: { height: 56 },
-  kursunBtnLabel: { fontSize: 14, fontWeight: '700' },
+  kursunBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginHorizontal: 12,
+    marginTop: 8,
+    borderRadius: 8,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  kursunBannerText: { fontSize: 13, fontWeight: '600', color: '#047857', flex: 1 },
 
   defectRow: {
     flexDirection: 'row',
@@ -2009,12 +1710,6 @@ const helperStyles = StyleSheet.create({
   },
   rollMeta: { fontSize: 11, color: '#64748b', marginTop: 1 },
   rollChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  chipGreen: {
-    backgroundColor: '#dcfce7',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
   chipAmber: {
     backgroundColor: '#fef3c7',
     paddingHorizontal: 6,
@@ -2051,6 +1746,7 @@ const cameraStyles = StyleSheet.create({
     backgroundColor: '#eff6ff',
   },
   title: { fontWeight: '700', color: '#0f172a' },
+  refreshMeta: { fontSize: 11, color: '#475569', fontVariant: ['tabular-nums'] },
 
   hint: {
     flexDirection: 'row',
@@ -2089,12 +1785,36 @@ const cameraStyles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
+  rowUrgent: {
+    borderColor: '#dc2626',
+    backgroundColor: '#fef2f2',
+  },
+  rowTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
   rowBatch: {
     fontFamily: 'monospace',
     fontSize: 14,
     fontWeight: '700',
     color: '#0f172a',
-    marginBottom: 4,
+  },
+  urgentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  urgentBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   rowMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   rowMetaText: { fontSize: 12, color: '#475569', fontWeight: '500', flex: 1 },

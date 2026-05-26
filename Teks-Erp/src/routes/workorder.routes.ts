@@ -5,7 +5,7 @@
 import { Router } from "express";
 import { WorkOrderController } from "../controllers/workorder.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { workOrderTravelerRouter } from "./traveler-card.routes";
 
 const controller = new WorkOrderController();
@@ -39,12 +39,12 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *         schema: { type: string, enum: [PLANNED, IN_PROGRESS, PAUSED, COMPLETED, CANCELLED] }
  *       - in: query
  *         name: filter[type]
- *         schema: { type: string, enum: [ORDER_PRODUCTION, STOCK_PRODUCTION, SERVICE_PRODUCTION] }
+ *         schema: { type: string, enum: [ORDER_PRODUCTION, STOCK_PRODUCTION] }
  *     responses:
  *       200:
  *         description: Sayfalanmış iş emri listesi
  */
-router.get("/", verifyToken, requirePermission("workorder:read"), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk"), controller.findAll);
 
 /**
  * @openapi
@@ -80,7 +80,7 @@ router.get("/available-for-attach", verifyToken, requirePermission("workorder:wr
  *       404:
  *         description: İş emri bulunamadı
  */
-router.get("/:id", verifyToken, requirePermission("workorder:read"), controller.findById);
+router.get("/:id", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk"), controller.findById);
 
 /**
  * @openapi
@@ -189,25 +189,6 @@ router.get("/manifest-by-id/:manifestId", verifyToken, requirePermission("workor
 
 /**
  * @openapi
- * /api/work-orders/{id}/shipments:
- *   get:
- *     tags: [WorkOrders]
- *     summary: İş emrine bağlı irsaliye (sevkiyat) belgeleri
- *     description: İş emrinin adımlarından geçmiş tüm topların dahil olduğu sevkiyatları, sadece bu WO'ya ait kalemlerle filtrelenmiş şekilde döner.
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       200: { description: Sevkiyat listesi }
- *       404: { description: İş emri bulunamadı }
- */
-router.get("/:id/shipments", verifyToken, requirePermission("workorder:read"), controller.listShipments);
-
-/**
- * @openapi
  * /api/work-orders:
  *   post:
  *     tags: [WorkOrders]
@@ -230,8 +211,8 @@ router.get("/:id/shipments", verifyToken, requirePermission("workorder:read"), c
  *                 example: "PARTI-2026-001"
  *               type:
  *                 type: string
- *                 enum: [WEAVING, WARPING, FABRIC_DYEING, RE_PROCESS]
- *                 default: FABRIC_DYEING
+ *                 enum: [ORDER_PRODUCTION, STOCK_PRODUCTION]
+ *                 default: ORDER_PRODUCTION
  *               width:
  *                 type: number
  *                 description: Kumaş eni (cm)

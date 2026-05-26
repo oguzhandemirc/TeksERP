@@ -11,6 +11,7 @@ import type {
   SubcontractorReceipt,
   SubcontractorReceiptListItem,
   CancelReceiptRequest,
+  ReceiptCancelPreview,
 } from '../types/models';
 
 interface ListDispatchesParams {
@@ -133,9 +134,22 @@ export const subcontractorService = {
       .then((r) => r.data),
 
   /**
+   * Fason kabul iptal önizlemesi — receipt'ten türeyen açık kumaş Roll'larını
+   * ve her birinin cascade güvenliğini döner. UI bunu kullanarak operatöre
+   * "şu top'lar da iptal edilecek" onay listesini gösterir.
+   */
+  getCancelPreview: (id: string): Promise<ApiResponse<ReceiptCancelPreview>> =>
+    apiClient
+      .get<ApiResponse<ReceiptCancelPreview>>(
+        `/subcontractor/receipts/${id}/cancel-preview`
+      )
+      .then((r) => r.data),
+
+  /**
    * Fason kabulü iptal et (soft cancel). Receipt'teki rulolar AT_SUBCONTRACTOR'a
-   * geri döner; renk uygulandıysa Roll.colorId/RollProperty silinir. Sonraki
-   * adımda iz varsa backend 409 atar; çağıran toast/banner ile mesajı göster.
+   * geri döner; renk uygulandıysa Roll.colorId/RollProperty silinir.
+   * bornRoll türemişse `cascadeRollIds` zorunlu (preview'den alınan tam liste);
+   * downstream'i olan roll varsa 409.
    */
   cancelReceipt: (
     id: string,

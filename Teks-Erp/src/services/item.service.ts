@@ -11,6 +11,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { ItemUnit } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
@@ -52,6 +53,15 @@ export class ItemService extends BaseService {
     const allowedColorIds = [...new Set(input.allowedColorIds ?? [])];
     const allowedPropertyIds = [...new Set(input.allowedPropertyIds ?? [])];
 
+    // Reactivate kontrolü: aynı code ile pasif kayıt varsa diriltir.
+    const existing = await prisma.item.findFirst({
+      where: { code: input.code.trim() },
+      select: { id: true, isActive: true },
+    });
+    if (existing?.isActive) {
+      throw AppError.badRequest("Bu kod ile aktif ürün zaten var");
+    }
+
     if (allowedColorIds.length > 0) {
       const colors = await prisma.color.findMany({
         where: { id: { in: allowedColorIds } },
@@ -81,12 +91,37 @@ export class ItemService extends BaseService {
     }
 
     const created = await prisma.$transaction(async (tx) => {
+      if (existing && !existing.isActive) {
+        // Reactivate: M:N'leri replace + diriltme + güncel veri.
+        await tx.itemAllowedColor.deleteMany({ where: { itemId: existing.id } });
+        await tx.itemAllowedProperty.deleteMany({ where: { itemId: existing.id } });
+        return tx.item.update({
+          where: { id: existing.id },
+          data: {
+            name: input.name.trim(),
+            unit: (input.unit ?? "MT") as ItemUnit,
+            isActive: true,
+            allowedColors:
+              allowedColorIds.length > 0
+                ? { create: allowedColorIds.map((colorId) => ({ colorId })) }
+                : undefined,
+            allowedProperties:
+              allowedPropertyIds.length > 0
+                ? { create: allowedPropertyIds.map((propertyId) => ({ propertyId })) }
+                : undefined,
+          },
+          include: {
+            allowedColors: { include: { color: true } },
+            allowedProperties: { include: { property: true } },
+          },
+        });
+      }
       return tx.item.create({
         data: {
           code: input.code.trim(),
           name: input.name.trim(),
           itemType: input.itemType as never,
-          unit: input.unit ?? "MT",
+          unit: (input.unit ?? "MT") as ItemUnit,
           isActive: input.isActive ?? true,
           allowedColors:
             allowedColorIds.length > 0
@@ -106,7 +141,7 @@ export class ItemService extends BaseService {
 
     await AuditService.log({
       userId,
-      action: "CREATE",
+      action: existing ? "UPDATE" : "CREATE",
       tableName: this.config.tableName,
       recordId: created.id,
       newData: {
@@ -115,10 +150,15 @@ export class ItemService extends BaseService {
         itemType: created.itemType,
         allowedColorIds,
         allowedPropertyIds,
+        ...(existing ? { reactivated: true } : {}),
       },
     });
 
-    return { success: true, data: created, message: "Ürün oluşturuldu" };
+    return {
+      success: true,
+      data: created,
+      message: existing ? "Pasif ürün yeniden aktive edildi" : "Ürün oluşturuldu",
+    };
   }
 
   /**

@@ -106,13 +106,12 @@ export async function recomputeStepStatus(
       movements: { some: { step: { workOrderId: step.workOrderId } } },
       // Bu step için movement yok
       NOT: { movements: { some: { workOrderStepId: stepId } } },
-      // Hala aktif üretimdeyse (PRODUCED/SCRAP dışı)
+      // Hala aktif üretimdeyse (PRODUCED dışı)
       status: {
         in: [
           RollStatus.IN_PRODUCTION,
           RollStatus.AT_SUBCONTRACTOR,
           RollStatus.RETURNED_FROM_SUBCONTRACTOR,
-          RollStatus.A1_STOCK,
         ],
       },
     },

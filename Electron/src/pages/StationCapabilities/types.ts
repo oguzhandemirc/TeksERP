@@ -6,11 +6,11 @@ export interface StationCapabilitySummary {
   stationCode: string;
   stationName: string;
   stationKind: StationKind;
-  /** İstasyona varsayılan fason kategorisi atanmış mı? */
+  /** İstasyona varsayılan kategori atanmış mı? */
   hasDefaultCategory: boolean;
-  /** İstasyon renk uygulayabilir mi? (defaultCategory.appliesColor=true) */
+  /** İstasyon renk uygulayabilir mi? Kategori varsa appliesColor; yoksa true. */
   canApplyColor: boolean;
-  /** İstasyon özellik uygulayabilir mi? (defaultCategory.appliesProperty=true) */
+  /** İstasyon özellik uygulayabilir mi? Kategori varsa appliesProperty; yoksa true. */
   canApplyProperty: boolean;
   colorCount: number;
   propertyCount: number;

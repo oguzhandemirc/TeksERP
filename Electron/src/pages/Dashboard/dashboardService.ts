@@ -2,8 +2,6 @@ import apiClient from "@/services/apiClient";
 import { orderService } from "@/pages/Operations/Orders/service";
 import { workOrderService } from "@/pages/Operations/WorkOrders/service";
 import { rollService } from "@/pages/Operations/Rolls/service";
-import { shippingQueueService } from "@/pages/Operations/ShippingQueue/service";
-import type { ShippingQueueItem } from "@/pages/Operations/ShippingQueue/types";
 import type { ApiResponse, QueryParams } from "@/types/api";
 import type { Order } from "@/pages/Operations/Orders/types";
 import type { WorkOrder } from "@/pages/Operations/WorkOrders/types";
@@ -33,24 +31,6 @@ export async function fetchOpenWorkOrderCount(): Promise<number> {
 export async function fetchRollCount(status: string): Promise<number> {
   const res = await rollService.getAll(countParams({ status }));
   return res.pagination.total;
-}
-
-interface ShipmentListResponse {
-  success: boolean;
-  data: unknown[];
-  pagination: { total: number; limit: number; offset: number; hasMore: boolean };
-}
-
-export async function fetchPreparingShipmentCount(): Promise<number> {
-  const params = new URLSearchParams({
-    limit: "1",
-    offset: "0",
-    status: "PREPARING",
-  });
-  const res = await apiClient.get<ShipmentListResponse>(
-    `/api/shipping/shipments?${params.toString()}`,
-  );
-  return res.data.pagination.total;
 }
 
 export async function fetchUpcomingOrders(): Promise<Order[]> {
@@ -97,23 +77,6 @@ export async function fetchUpcomingWorkOrders(): Promise<WorkOrder[]> {
     dateTo: in7.toISOString(),
   });
   return res.data;
-}
-
-// Sevkiyat/Paketleme kuyrukları flat array dönüyor — count = data.length.
-export async function fetchShippingQueueCount(): Promise<number> {
-  const res = await shippingQueueService.list();
-  return res.data.length;
-}
-
-export async function fetchPackagingQueueCount(): Promise<number> {
-  const res = await apiClient.get<ApiResponse<unknown[]>>("/api/packaging-queue");
-  return res.data.data.length;
-}
-
-export async function fetchShippingQueueItems(): Promise<ShippingQueueItem[]> {
-  // Backend ordering: isUrgent DESC → urgentMarkedAt → priority → createdAt.
-  const res = await shippingQueueService.list();
-  return res.data.slice(0, 8);
 }
 
 interface DefectSummary {

@@ -4,20 +4,11 @@ import type { KursunStepSummary, KursunOpenCard } from '../types/models';
 
 // Kurşun + QC2 (PROCESS_QC istasyonu) operatör akışı.
 // Backend tarafı: src/services/kursun-qc.service.ts
-// Refakat kartı çözümü → step özeti + per-roll durum (kurşun, qc2, hatalar) döner.
-// Operatör her aksiyon sonrası mobil tarafta job'ı yeniden çekmeli — local state
-// gerçek state'in shadow'u olarak güncel kalsın.
-
-export interface ApplyKursunRequest {
-  rollId: string;
-  stepId: string;
-  notes?: string | null;
-}
-
-export interface UndoKursunRequest {
-  rollId: string;
-  stepId: string;
-}
+// Refakat kartı çözümü → step özeti + per-roll durum (qc2, hatalar) döner.
+// Per-roll Kurşun toggle'ı yoktur — kurşun istasyon yeteneğidir
+// (istasyona KURSUN özelliği atanmışsa, QC2 tamamlanan her top otomatik
+// kurşunlanır). Operatör her aksiyon sonrası mobil tarafta job'ı yeniden
+// çekmeli — local state gerçek state'in shadow'u olarak güncel kalsın.
 
 export interface CompleteQc2Request {
   rollId: string;
@@ -25,11 +16,15 @@ export interface CompleteQc2Request {
   notes?: string | null;
 }
 
+export interface UndoQc2Request {
+  rollId: string;
+  stepId: string;
+}
+
 export interface ReportErrorRequest {
   rollId: string;
   stepId: string;
   startMeter: number;
-  endMeter: number;
   defectTypeId: string;
 }
 
@@ -62,22 +57,12 @@ export const kursunQcService = {
       .get<ApiResponse<KursunOpenCard[]>>('/kursun-qc/open-cards')
       .then((r) => r.data),
 
-  applyKursun: (data: ApplyKursunRequest): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>('/kursun-qc/apply-kursun', data)
-      .then((r) => r.data),
-
-  undoKursun: (data: UndoKursunRequest): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>('/kursun-qc/undo-kursun', data)
-      .then((r) => r.data),
-
   completeQc2: (data: CompleteQc2Request): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>('/kursun-qc/complete-qc2', data)
       .then((r) => r.data),
 
-  undoQc2: (data: UndoKursunRequest): Promise<ApiResponse<{ removed: boolean }>> =>
+  undoQc2: (data: UndoQc2Request): Promise<ApiResponse<{ removed: boolean }>> =>
     apiClient
       .post<ApiResponse<{ removed: boolean }>>('/kursun-qc/undo-qc2', data)
       .then((r) => r.data),

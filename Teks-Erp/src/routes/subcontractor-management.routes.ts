@@ -9,7 +9,9 @@ import {
   SubcontractorCategoryController,
 } from "../controllers/subcontractor-management.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+
+const MOBILE_FASON_READ = ["mobile:fason-sevk", "mobile:fason-kabul"] as const;
 
 // ─── /api/subcontractors ────────────────────────────────────────────────────
 const subcontractorRouter = Router();
@@ -32,8 +34,8 @@ const subCtrl = new SubcontractorManagementController();
  *     responses:
  *       200: { description: Liste }
  */
-subcontractorRouter.get("/", verifyToken, requirePermission("subcontractor:read"), subCtrl.findAll);
-subcontractorRouter.get("/:id", verifyToken, requirePermission("subcontractor:read"), subCtrl.findById);
+subcontractorRouter.get("/", verifyToken, requireAnyPermission("subcontractor:read", ...MOBILE_FASON_READ), subCtrl.findAll);
+subcontractorRouter.get("/:id", verifyToken, requireAnyPermission("subcontractor:read", ...MOBILE_FASON_READ), subCtrl.findById);
 subcontractorRouter.post("/", verifyToken, requirePermission("subcontractor:write"), subCtrl.create);
 subcontractorRouter.patch("/:id", verifyToken, requirePermission("subcontractor:write"), subCtrl.update);
 subcontractorRouter.delete("/:id", verifyToken, requirePermission("subcontractor:write"), subCtrl.remove);
@@ -42,8 +44,8 @@ subcontractorRouter.delete("/:id", verifyToken, requirePermission("subcontractor
 const categoryRouter = Router();
 const catCtrl = new SubcontractorCategoryController();
 
-categoryRouter.get("/", verifyToken, requirePermission("subcontractor:read"), catCtrl.findAll);
-categoryRouter.get("/:id", verifyToken, requirePermission("subcontractor:read"), catCtrl.findById);
+categoryRouter.get("/", verifyToken, requireAnyPermission("subcontractor:read", ...MOBILE_FASON_READ), catCtrl.findAll);
+categoryRouter.get("/:id", verifyToken, requireAnyPermission("subcontractor:read", ...MOBILE_FASON_READ), catCtrl.findById);
 categoryRouter.post("/", verifyToken, requirePermission("subcontractor:write"), catCtrl.create);
 categoryRouter.patch("/:id", verifyToken, requirePermission("subcontractor:write"), catCtrl.update);
 categoryRouter.delete("/:id", verifyToken, requirePermission("subcontractor:write"), catCtrl.remove);

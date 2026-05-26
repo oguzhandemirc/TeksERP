@@ -16,6 +16,7 @@ const service = new BaseService({
   tableName: "FABRIC_PROPERTY",
   searchFields: ["code", "name", "category", "description"],
   defaultInclude: undefined,
+  uniqueField: "code",
 });
 
 const controller = new BaseController(service);

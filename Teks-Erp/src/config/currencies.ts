@@ -18,10 +18,3 @@ export const CURRENCIES: readonly CurrencyDef[] = [
   { code: "EUR", name: "Euro",           symbol: "€" },
   { code: "GBP", name: "İngiliz Sterlini", symbol: "£" },
 ] as const;
-
-export const CURRENCY_CODES: readonly string[] = CURRENCIES.map((c) => c.code);
-
-export function isValidCurrency(code: string | null | undefined): boolean {
-  if (!code) return false;
-  return CURRENCY_CODES.includes(code);
-}

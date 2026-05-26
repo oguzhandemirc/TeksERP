@@ -165,6 +165,62 @@ export class AuthController {
 
   /**
    * @openapi
+   * /api/auth/mobile-users:
+   *   get:
+   *     tags: [Auth]
+   *     summary: Mobil login ekranı için kullanıcı listesi
+   *     description: |
+   *       Eşleştirilmiş tabletin login ekranında gösterilecek aktif mobil
+   *       kullanıcıları döner — vardiya değişiminde işçi kendi adına dokunup
+   *       6 haneli PIN'ini girer. Auth gerekmez ama `x-device-id` header'ı
+   *       zorunlu; sadece aktif Device kaydı olan tablet bu listeyi çekebilir.
+   *
+   *       Listede yalnızca `mobile:*` veya `mobile:<screen>` yetkisi olan
+   *       aktif kullanıcılar bulunur; saf admin/web kullanıcıları sızdırılmaz.
+   *     parameters:
+   *       - in: header
+   *         name: x-device-id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Mobil kullanıcı listesi }
+   *       401: { description: Eşleştirilmiş cihaz değil }
+   */
+  static async mobileUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.device) {
+        res.status(401).json({
+          success: false,
+          message: "Bu endpoint sadece eşleştirilmiş tabletlerden çağrılabilir.",
+          code: "DEVICE_REQUIRED",
+        });
+        return;
+      }
+
+      const users = await prisma.user.findMany({
+        where: {
+          isActive: true,
+          permissions: {
+            some: {
+              permission: { code: { startsWith: "mobile:" } },
+            },
+          },
+        },
+        select: { id: true, username: true, fullName: true },
+        orderBy: { fullName: "asc" },
+      });
+
+      res.status(200).json({
+        success: true,
+        data: users,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * @openapi
    * /api/auth/me:
    *   get:
    *     tags: [Auth]

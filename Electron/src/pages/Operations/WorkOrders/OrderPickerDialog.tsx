@@ -47,6 +47,12 @@ interface Props {
   /** Açılışta önceden seçili kalemler — Confirm öncesi tam veri (orderNumber, customer vb.) gerekir. */
   initialSelected: PickedOrderLine[];
   onConfirm: (lines: PickedOrderLine[]) => void;
+  /**
+   * Düzenleme modunda mevcut WO'nun kendi bağlarını "müsait" sayacak şekilde
+   * backend'e iletilir. Olmazsa picker WO'nun zaten bağladığı kalemleri "başka
+   * WO'ya bağlı" sayar ve listeden düşürür.
+   */
+  excludeWorkOrderId?: string | null;
 }
 
 type DeadlinePreset = "all" | "week" | "month" | "overdue";
@@ -126,7 +132,13 @@ const SORT_PRESETS: { value: SortKey; label: string }[] = [
   { value: "orderNumber", label: "Sipariş No" },
 ];
 
-export function OrderPickerDialog({ open, onOpenChange, initialSelected, onConfirm }: Props) {
+export function OrderPickerDialog({
+  open,
+  onOpenChange,
+  initialSelected,
+  onConfirm,
+  excludeWorkOrderId,
+}: Props) {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [customerId, setCustomerId] = useState<string | null>(null);
@@ -167,26 +179,30 @@ export function OrderPickerDialog({ open, onOpenChange, initialSelected, onConfi
       customerId,
       deadlinePreset,
       backendSortBy,
+      excludeWorkOrderId ?? null,
     ],
     queryFn: () =>
-      orderService.getAll({
-        page: 1,
-        pageSize: 100,
-        sortBy: backendSortBy,
-        sortOrder: sortBy === "orderNumber" ? "desc" : "asc",
-        search: debounced || undefined,
-        filters: {
-          status: "APPROVED,PARTIAL_SHIPPED",
-          ...(customerId ? { customerId } : {}),
+      orderService.getAvailableForWorkOrder(
+        {
+          page: 1,
+          pageSize: 100,
+          sortBy: backendSortBy,
+          sortOrder: sortBy === "orderNumber" ? "desc" : "asc",
+          search: debounced || undefined,
+          filters: {
+            status: "APPROVED,PARTIAL_SHIPPED",
+            ...(customerId ? { customerId } : {}),
+          },
+          ...(range
+            ? {
+                dateField: "deadline",
+                ...(range.dateFrom ? { dateFrom: range.dateFrom } : {}),
+                ...(range.dateTo ? { dateTo: range.dateTo } : {}),
+              }
+            : {}),
         },
-        ...(range
-          ? {
-              dateField: "deadline",
-              ...(range.dateFrom ? { dateFrom: range.dateFrom } : {}),
-              ...(range.dateTo ? { dateTo: range.dateTo } : {}),
-            }
-          : {}),
-      }),
+        excludeWorkOrderId ?? undefined,
+      ),
     enabled: open && !showOnlySelected,
     staleTime: 30_000,
   });
@@ -200,7 +216,7 @@ export function OrderPickerDialog({ open, onOpenChange, initialSelected, onConfi
   }, [fetchedOrders, sortBy]);
 
   const selectedArray = useMemo(() => Array.from(selectedMap.values()), [selectedMap]);
-  const totalQty = selectedArray.reduce((s, l) => s + l.quantity, 0);
+  const totalQty = selectedArray.reduce((s, l) => s + Number(l.quantity), 0);
   const customerCount = new Set(selectedArray.map((l) => l.customerId)).size;
 
   const anchor: Anchor | null = useMemo(() => {
@@ -315,7 +331,7 @@ export function OrderPickerDialog({ open, onOpenChange, initialSelected, onConfi
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Sipariş no ara..."
+                placeholder="Sipariş no, müşteri veya kumaş ara..."
                 className="h-10 pl-9"
               />
             </div>

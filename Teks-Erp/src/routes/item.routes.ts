@@ -7,7 +7,7 @@ import { z } from "zod";
 import { BaseController } from "../controllers/base.controller";
 import { ItemService } from "../services/item.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import "../types/express-augment";
 
 const service = new ItemService({
@@ -58,7 +58,7 @@ const addAllowedPropertyBody = z.object({
  *         description: Kod veya isimde arama
  *       - in: query
  *         name: filter[itemType]
- *         schema: { type: string, enum: [YARN, WARP, FABRIC, CONSUMABLE] }
+ *         schema: { type: string, enum: [YARN, FABRIC, CONSUMABLE] }
  *       - in: query
  *         name: filter[isActive]
  *         schema: { type: string, enum: [true, false] }
@@ -68,7 +68,7 @@ const addAllowedPropertyBody = z.object({
  *       401:
  *         description: Yetkisiz erişim
  */
-router.get("/", verifyToken, requirePermission("item:read"), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("item:read", "mobile:kk1"), controller.findAll);
 
 /**
  * @openapi
@@ -89,7 +89,7 @@ router.get("/", verifyToken, requirePermission("item:read"), controller.findAll)
  *       404:
  *         description: Kayıt bulunamadı
  */
-router.get("/:id", verifyToken, requirePermission("item:read"), controller.findById);
+router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"), controller.findById);
 
 /**
  * @openapi
@@ -109,8 +109,8 @@ router.get("/:id", verifyToken, requirePermission("item:read"), controller.findB
  *             properties:
  *               code: { type: string, example: "MAM-010" }
  *               name: { type: string, example: "Boyalı Saten Kumaş" }
- *               itemType: { type: string, enum: [YARN, WARP, RAW_FABRIC, DYED_FABRIC, CONSUMABLE] }
- *               unit: { type: string, default: "MT" }
+ *               itemType: { type: string, enum: [YARN, FABRIC, CONSUMABLE] }
+ *               unit: { type: string, enum: [MT, KG, ADET], default: "MT" }
  *     responses:
  *       201:
  *         description: Ürün oluşturuldu

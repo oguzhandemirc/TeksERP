@@ -1,19 +1,4 @@
-import {
-  DndContext,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -28,20 +13,12 @@ interface Props {
   onChange: (next: TemplateField[]) => void;
 }
 
+/**
+ * Şablon alan listesi — sade düz liste. Sürükle-bırak kaldırıldı: backend
+ * etiket HTML render'ı hardcoded layout kullanıyor, alan sırasının görsel
+ * etkisi yok. Sıralama gerekirse render'ı dinamikleştirip yeniden eklenir.
+ */
 export function FieldsPanel({ fields, catalogByKey, onChange }: Props) {
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIdx = fields.findIndex((f) => f.key === active.id);
-    const newIdx = fields.findIndex((f) => f.key === over.id);
-    if (oldIdx < 0 || newIdx < 0) return;
-    onChange(arrayMove(fields, oldIdx, newIdx));
-  };
-
   const updateField = (key: string, patch: Partial<TemplateField>) => {
     onChange(fields.map((f) => (f.key === key ? { ...f, ...patch } : f)));
   };
@@ -56,37 +33,23 @@ export function FieldsPanel({ fields, catalogByKey, onChange }: Props) {
         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Şablon Alanları ({fields.length})
         </div>
-        <div className="text-[10px] text-muted-foreground">
-          Sürükle-bırak ile sırala
-        </div>
       </div>
       {fields.length === 0 ? (
         <div className="rounded border border-dashed p-6 text-center text-xs italic text-muted-foreground">
           Soldaki listeden alan ekleyerek başla.
         </div>
       ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={fields.map((f) => f.key)}
-            strategy={verticalListSortingStrategy}
-          >
-            <ul className="space-y-1.5">
-              {fields.map((f) => (
-                <FieldRow
-                  key={f.key}
-                  field={f}
-                  meta={catalogByKey.get(f.key)}
-                  onUpdate={updateField}
-                  onRemove={removeField}
-                />
-              ))}
-            </ul>
-          </SortableContext>
-        </DndContext>
+        <ul className="space-y-1.5">
+          {fields.map((f) => (
+            <FieldRow
+              key={f.key}
+              field={f}
+              meta={catalogByKey.get(f.key)}
+              onUpdate={updateField}
+              onRemove={removeField}
+            />
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -103,39 +66,17 @@ function FieldRow({
   onUpdate: (key: string, patch: Partial<TemplateField>) => void;
   onRemove: (key: string) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: field.key });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
   const required = meta?.required;
 
   return (
-    <li
-      ref={setNodeRef}
-      style={style}
-      className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-2 text-xs"
-    >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="cursor-grab text-muted-foreground hover:text-foreground"
-        aria-label="Sürükle"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
+    <li className="flex flex-nowrap items-center gap-2 rounded-md border bg-background px-2 py-2 text-xs">
       <Badge variant="outline" className="font-mono text-[9px]">
         {field.key}
       </Badge>
       <Input
         value={field.label}
         onChange={(e) => onUpdate(field.key, { label: e.target.value })}
-        className="h-7 w-44 text-xs"
+        className="h-7 min-w-0 flex-1 text-xs"
         placeholder={meta?.defaultLabel}
       />
       <label className="flex items-center gap-1 text-[10px]">
@@ -181,7 +122,7 @@ function FieldRow({
           size="icon"
           variant="ghost"
           onClick={() => onRemove(field.key)}
-          className="ml-auto h-6 w-6 text-destructive"
+          className="h-6 w-6 shrink-0 text-destructive"
           title="Alanı kaldır"
         >
           <Trash2 className="h-3 w-3" />

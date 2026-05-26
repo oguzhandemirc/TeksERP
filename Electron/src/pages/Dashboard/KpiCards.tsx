@@ -2,12 +2,8 @@ import { useQueries } from "@tanstack/react-query";
 import {
   ClipboardList,
   Factory,
-  PackageCheck,
   Warehouse,
   Truck,
-  ClipboardCheck,
-  ListChecks,
-  Package,
   AlertTriangle,
   Cog,
   type LucideIcon,
@@ -19,9 +15,6 @@ import {
   fetchOpenOrderCount,
   fetchOpenWorkOrderCount,
   fetchRollCount,
-  fetchPreparingShipmentCount,
-  fetchShippingQueueCount,
-  fetchPackagingQueueCount,
   fetchTodayDefectCount,
 } from "./dashboardService";
 import { useDashboardLayout } from "./useDashboardLayout";
@@ -50,13 +43,6 @@ const KPIS: KpiDef[] = [
     query: fetchOpenWorkOrderCount,
   },
   {
-    key: "readyToShip",
-    label: "Sevke Hazır",
-    icon: PackageCheck,
-    tone: "text-emerald-600 dark:text-emerald-400",
-    query: () => fetchRollCount("READY_FOR_SHIP"),
-  },
-  {
     key: "warehouse",
     label: "Depoda Bekleyen",
     icon: Warehouse,
@@ -69,27 +55,6 @@ const KPIS: KpiDef[] = [
     icon: Truck,
     tone: "text-orange-600 dark:text-orange-400",
     query: () => fetchRollCount("AT_SUBCONTRACTOR"),
-  },
-  {
-    key: "preparingShipments",
-    label: "Bekleyen Sevkiyat",
-    icon: ClipboardCheck,
-    tone: "text-rose-600 dark:text-rose-400",
-    query: fetchPreparingShipmentCount,
-  },
-  {
-    key: "shippingQueue",
-    label: "Sevkiyat Kuyruğu",
-    icon: ListChecks,
-    tone: "text-sky-600 dark:text-sky-400",
-    query: fetchShippingQueueCount,
-  },
-  {
-    key: "packagingQueue",
-    label: "Paketleme Kuyruğu",
-    icon: Package,
-    tone: "text-fuchsia-600 dark:text-fuchsia-400",
-    query: fetchPackagingQueueCount,
   },
   {
     key: "todayDefects",

@@ -330,4 +330,14 @@ function validateFields(kind: LabelKind, fields: TemplateField[]): void {
       );
     }
   }
+
+  // Scanner-okur en az bir alan zorunlu: barkod VEYA QR kodu görünür olmalı.
+  // Aksi halde basılan etiket fabrika içi takip edilemez — fiziksel iz kalmaz.
+  const hasBarcode = fields.some((f) => f.key === "barcode" && f.isVisible);
+  const hasQr = fields.some((f) => f.key === "qrCode" && f.isVisible);
+  if (!hasBarcode && !hasQr) {
+    throw AppError.badRequest(
+      "Barkod veya QR kodundan en az biri görünür olmalı (taranabilir alan zorunlu)"
+    );
+  }
 }

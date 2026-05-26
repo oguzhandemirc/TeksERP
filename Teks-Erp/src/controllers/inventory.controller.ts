@@ -18,7 +18,7 @@ const initialEntrySchema = z.object({
   weightKg:     z.number().positive("Ağırlık pozitif olmalı").optional(),
   qualityGrade: z.string().optional(),
   width:        z.number().positive("En pozitif olmalı").optional().nullable(),
-  workOrderId:  z.string().uuid("Geçersiz iş emri ID").optional().nullable(),
+  propertyIds:  z.array(z.string().uuid("Geçersiz özellik ID")).optional().default([]),
 });
 
 const applyPropertiesSchema = z.object({
@@ -32,13 +32,16 @@ const openFabricSchema = z.object({
   notes:     z.string().max(1000).optional().nullable(),
 });
 
+// Yeni model: KK2 ölçüm yapmaz; totalMeters opsiyonel — verilmezse roll'un
+// mevcut currentQty'si (fason kabulden gelen irsaliye değeri) kullanılır.
+// Hata aralık değil nokta (endMeter kaldırıldı). Hatalar genelde "Hata Ekle"
+// (reportError) ile tek tek girilir; bu endpoint sadece roll'u ilerletir.
 const kursunFinishSchema = z.object({
-  totalMeters: z.number().positive("Toplam metraj pozitif olmalı"),
+  totalMeters: z.number().positive("Toplam metraj pozitif olmalı").optional(),
   errors: z
     .array(
       z.object({
         startMeter:   z.number().nonnegative("startMeter negatif olamaz"),
-        endMeter:     z.number().nonnegative().optional().nullable(),
         defectTypeId: z.string().uuid().optional().nullable(),
       }),
     )
@@ -61,7 +64,6 @@ export class InventoryController {
     this.softDelete = this.softDelete.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
     this.applyManualProperties = this.applyManualProperties.bind(this);
-    this.getKk1ContextByCard = this.getKk1ContextByCard.bind(this);
     this.createOpenFabric = this.createOpenFabric.bind(this);
     this.kursunFinish = this.kursunFinish.bind(this);
   }
@@ -89,24 +91,6 @@ export class InventoryController {
       const id = req.params.id as string;
       const body = kursunFinishSchema.parse(req.body);
       const result = await this.service.kursunFinish(id, body, req.user?.userId);
-      res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
-   * GET /api/inventory/kk1-context/:cardBarcode
-   * KK1 tabletinde refakat kartı okutulduğunda WO context döner.
-   */
-  async getKk1ContextByCard(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const cardBarcode = req.params.cardBarcode as string;
-      if (!cardBarcode) {
-        res.status(400).json({ success: false, message: "cardBarcode parametresi gerekli" });
-        return;
-      }
-      const result = await this.service.getKk1ContextByCard(cardBarcode);
       res.status(200).json(result);
     } catch (error) {
       next(error);

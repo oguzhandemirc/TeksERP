@@ -9,8 +9,9 @@ import { requirePermission } from "../middlewares/rbac.middleware";
 
 const router = Router();
 
-// Public
+// Public (device-gated — global resolveDevice middleware + handler check)
 router.post("/login", AuthController.login);
+router.get("/mobile-users", AuthController.mobileUsers);
 
 // Protected
 router.post("/register", verifyToken, requirePermission("admin:users"), AuthController.register);

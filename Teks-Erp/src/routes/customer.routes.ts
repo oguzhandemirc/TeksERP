@@ -6,7 +6,9 @@ import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { CustomerService } from "../services/customer.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+
+const MOBILE_CUSTOMER_READ = ["mobile:tarti-paket", "mobile:sevkiyat", "mobile:fason-sevk", "mobile:fason-kabul"] as const;
 import branchRoutes from "./customer-branch.routes";
 import aliasRoutes from "./customer-alias.routes";
 
@@ -15,6 +17,7 @@ const service = new CustomerService({
   tableName: "CUSTOMER",
   searchFields: ["code", "name", "taxNumber"],
   defaultInclude: undefined,
+  uniqueField: "code",
 });
 
 const controller = new BaseController(service);
@@ -54,7 +57,7 @@ router.use("/:customerId", aliasRoutes);
  *       200:
  *         description: Sayfalanmış müşteri listesi
  */
-router.get("/", verifyToken, requirePermission("customer:read"), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("customer:read", ...MOBILE_CUSTOMER_READ), controller.findAll);
 
 /**
  * @openapi
@@ -75,7 +78,7 @@ router.get("/", verifyToken, requirePermission("customer:read"), controller.find
  *       404:
  *         description: Kayıt bulunamadı
  */
-router.get("/:id", verifyToken, requirePermission("customer:read"), controller.findById);
+router.get("/:id", verifyToken, requireAnyPermission("customer:read", ...MOBILE_CUSTOMER_READ), controller.findById);
 
 /**
  * @openapi

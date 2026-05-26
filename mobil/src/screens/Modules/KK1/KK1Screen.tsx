@@ -16,29 +16,29 @@ import {
   IconButton,
   Icon,
   TouchableRipple,
-  TextInput,
 } from 'react-native-paper';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import Modal from 'react-native-modal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import NumpadInput from '../../../components/NumpadInput';
+import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
+import { useDeviceType } from '../../../hooks/useDeviceType';
 import { NumpadHost, useNumpadContext } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
 import { toastConfig } from '../../../components/ToastConfig';
 import { LabelPrinter } from '../../../components/LabelPrinter';
-import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { itemService } from '../../../services/item.service';
 import { rollService, InitialEntryRequest } from '../../../services/roll.service';
 import { hardwareService } from '../../../services/hardware.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
-import { travelerCardService } from '../../../services/travelerCard.service';
-import type { Roll, Kk1Context } from '../../../types/models';
+import type { QualityGrade, Roll } from '../../../types/models';
 
 const RECENT_PAGE_SIZE = 6;
 const HISTORY_PAGE_SIZE = 20;
@@ -48,7 +48,6 @@ interface FormState {
   itemLabel: string;
   initialQty: string;
   width: string;
-  weightKg: string;
   qualityGrade: string;
 }
 
@@ -57,41 +56,31 @@ const EMPTY_FORM: FormState = {
   itemLabel: '',
   initialQty: '',
   width: '',
-  weightKg: '',
   qualityGrade: '',
 };
 
 export default function KK1Screen() {
+  // Telefon ekranında (kısa kenar < 600px) landscape kilidini kaldır —
+  // kullanıcı portrait/landscape arasında serbestçe dönebilsin. Tabletlerde
+  // önceki gibi landscape sabit.
+  const device = useDeviceType();
+  const compact = device === 'phone';
+  useLandscapeLock(!compact);
+
   const qc = useQueryClient();
+  const insets = useSafeAreaInsets();
+  // Compact'ta sağ panel drawer'a taşınır.
+  const [recentsDrawerOpen, setRecentsDrawerOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [pickerOpen, setPickerOpen] = useState<'item' | null>(null);
   const [pulling, setPulling] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
-  // Refakat kartı (opsiyonel) — okutulursa girilen toplar otomatik WO'ya bağlanır.
-  // Boşsa eski free-entry akışı çalışır.
-  const [cardBarcode, setCardBarcode] = useState('');
-  const [resolvingCard, setResolvingCard] = useState(false);
-  /**
-   * KK1 context — `GET /api/rolls/kk1-context/:cardBarcode` cevabı. KK1 step ACTIVE
-   * iken döner; başka adımdaysa backend 400 atar (operatöre yanlış istasyon mesajı
-   * gösterilir, banner state'i altta tutulur).
-   */
-  const [resolvedCard, setResolvedCard] = useState<Kk1Context | null>(null);
-  /** "Yanlış istasyon" / 409 KK1 kapalı / kart bulunamadı → operatöre banner. */
-  const [cardError, setCardError] = useState<string | null>(null);
   // Etiket basımı — null değilse LabelPrinter QR + PDF üretir, sistem print menüsünü açar.
   const [printRoll, setPrintRoll] = useState<Roll | null>(null);
-  // Kart okutma modalı (kamera).
-  const [scannerOpen, setScannerOpen] = useState(false);
-  // Kart liste modalı (PickerModal) — kameraya gerek olmadığında elle seçim.
-  const [cardListOpen, setCardListOpen] = useState(false);
-  const [cardListPage, setCardListPage] = useState(1);
-  const [cardListSearch, setCardListSearch] = useState('');
 
   const qtyRef = useRef<RNTextInput>(null);
   const widthRef = useRef<RNTextInput>(null);
-  const weightRef = useRef<RNTextInput>(null);
   const recentsListRef = useRef<FlashListRef<Roll>>(null);
 
   const { closeTarget } = useNumpadContext();
@@ -99,7 +88,6 @@ export default function KK1Screen() {
   const blurAll = useCallback(() => {
     qtyRef.current?.blur();
     widthRef.current?.blur();
-    weightRef.current?.blur();
     Keyboard.dismiss();
     closeTarget();
   }, [closeTarget]);
@@ -133,7 +121,11 @@ export default function KK1Screen() {
     queryFn: () => qualityGradeService.list({ pageSize: 100 }),
     staleTime: 10 * 60 * 1000,
   });
-  const qualityGrades = qualityGradesQuery.data?.data ?? [];
+  // Stable referans: query.data undefined iken her render'da yeni `[]` üretmesin.
+  const qualityGrades = useMemo(
+    () => qualityGradesQuery.data?.data ?? [],
+    [qualityGradesQuery.data],
+  );
 
   // Liste yüklendiğinde / form sıfırlandığında ilk kaliteyi default seç
   useEffect(() => {
@@ -142,54 +134,18 @@ export default function KK1Screen() {
     }
   }, [qualityGrades, form.qualityGrade]);
 
-  // ── Refakat kartları (kart seç modalı) — ACTIVE liste, server-side arama+sayfalama
-  const cardListQuery = useQuery({
-    queryKey: ['traveler-cards', 'kk1-picker', cardListPage, cardListSearch],
-    queryFn: () =>
-      travelerCardService.list({
-        page: cardListPage,
-        pageSize: 12,
-        search: cardListSearch || undefined,
-        filters: { status: 'ACTIVE' },
-      }),
-    enabled: cardListOpen,
-    placeholderData: (prev) => prev,
-  });
-
-  const cardOptions = useMemo<PickerOption[]>(
-    () =>
-      (cardListQuery.data?.data ?? []).map((c) => {
-        const wo = c.workOrder;
-        const ti = wo?.targetItem;
-        const tc = wo?.targetColor;
-        const details: string[] = [];
-        if (ti) {
-          details.push(tc ? `${ti.name} · ${tc.name}` : ti.name);
-        }
-        if (c.version > 1) details.push(`Versiyon: v${c.version}`);
-        return {
-          value: c.id,
-          label: wo?.batchNumber ?? c.cardNumber,
-          sublabel: c.cardNumber,
-          details,
-        };
-      }),
-    [cardListQuery.data]
+  const handleQualityGradeSelect = useCallback(
+    (code: string) => {
+      blurAll();
+      setForm((f) => ({ ...f, qualityGrade: code }));
+    },
+    [blurAll],
   );
 
-  /**
-   * Kart listeden seçimde de yeni kk1-context endpoint'ini çağırırız ki
-   * "yanlış istasyon" doğrulaması yapılsın. Liste sadece ACTIVE kartları
-   * filtreliyor ama WO başka adımda olabilir.
-   */
-  const handleSelectCardFromList = (cardId: string) => {
-    const picked = cardListQuery.data?.data.find((c) => c.id === cardId);
-    if (!picked) return;
-    void resolveCardBarcode(picked.barcode);
-  };
-
   // ── Son kayıtlar (inline): SADECE 1. sayfa, az kayıt ──
-  // entrySource=PRODUCTION → KK1'den girilen ham kumaş topları
+  // entrySource=SUPPLIER_RECEIPT → KK1/manuel girişle gelen toplar (ham + bitmiş).
+  // Backend enum'unda 'ALL' / 'PRODUCTION' YOK — status filtresi vermiyoruz ki
+  // tüm statüsler (STOCK ham, WAREHOUSE renkli, vs.) görünsün.
   const recentRollsQuery = useQuery({
     queryKey: ['rolls', 'kk1', 'recent'],
     queryFn: () =>
@@ -198,7 +154,7 @@ export default function KK1Screen() {
         pageSize: RECENT_PAGE_SIZE,
         sortBy: 'createdAt',
         sortOrder: 'desc',
-        filters: { entrySource: 'PRODUCTION', status: 'ALL' },
+        filters: { entrySource: 'SUPPLIER_RECEIPT' },
       }),
   });
 
@@ -211,7 +167,7 @@ export default function KK1Screen() {
         pageSize: HISTORY_PAGE_SIZE,
         sortBy: 'createdAt',
         sortOrder: 'desc',
-        filters: { entrySource: 'PRODUCTION', status: 'ALL' },
+        filters: { entrySource: 'SUPPLIER_RECEIPT' },
       }),
     enabled: historyOpen,
     placeholderData: (prev) => prev,
@@ -263,10 +219,6 @@ export default function KK1Screen() {
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      // Backend KK1 step COMPLETED ise 409 atar: "Bu iş emrinin ilk adımı (KK1)
-      // tamamlanmış. Yeni rulo eklemek için önce o adımı yeniden açın."
-      // Mesajı banner'a da yansıt — operatör yöneticiyle yeniden açtırır.
-      setCardError(err.message);
       Toast.show({
         type: 'error',
         text1: 'Kayıt başarısız',
@@ -323,6 +275,7 @@ export default function KK1Screen() {
       const m = await hardwareService.readMeterage();
       setForm((f) => ({ ...f, initialQty: String(m) }));
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      widthRef.current?.focus();
     } finally {
       setPulling(false);
     }
@@ -350,63 +303,9 @@ export default function KK1Screen() {
     createMutation.mutate({
       itemId: form.itemId,
       initialQty: qty,
-      weightKg: form.weightKg ? Number(form.weightKg) : undefined,
       width,
       qualityGrade: form.qualityGrade,
-      workOrderId: resolvedCard?.workOrderId ?? null,
     });
-  };
-
-  const resolveCardBarcode = async (raw: string) => {
-    const barcode = raw.trim();
-    if (!barcode) return;
-    blurAll();
-    setResolvingCard(true);
-    setCardError(null);
-    try {
-      // Yeni endpoint — KK1 step ACTIVE değilse backend net 400 mesajı döner
-      // ("Bu iş emrinin 'KK1' adımı tamamlanmış. Mevcut konum: Boyahane (4 rulo)").
-      const res = await rollService.getKk1Context(barcode);
-      const ctx = res.data;
-      if (!ctx) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setCardError('Kart için context bulunamadı');
-        return;
-      }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setResolvedCard(ctx);
-      setCardListOpen(false);
-      setCardBarcode('');
-      // Item picker'ı WO.targetItemId ile otomatik doldur — operatör daha hızlı kaydeder
-      if (ctx.targetItem) {
-        setForm((f) => ({
-          ...f,
-          itemId: ctx.targetItem!.id,
-          itemLabel: `${ctx.targetItem!.name} — ${ctx.targetItem!.code}`,
-        }));
-      }
-      Toast.show({
-        type: 'success',
-        text1: 'İş emri seçildi',
-        text2: ctx.batchNumber,
-      });
-    } catch (err) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = (err as Error).message;
-      // Backend mesajı genelde multi-line, banner'da göster
-      setCardError(msg);
-      Toast.show({ type: 'error', text1: 'Kart okunamadı', text2: msg });
-    } finally {
-      setResolvingCard(false);
-    }
-  };
-
-  const handleResolveCard = () => resolveCardBarcode(cardBarcode);
-
-  const handleClearCard = () => {
-    setResolvedCard(null);
-    setCardBarcode('');
-    setCardError(null);
   };
 
   const handlePrintLabel = (barcode: string) => {
@@ -423,117 +322,38 @@ export default function KK1Screen() {
   };
 
   return (
-    <ScreenChrome title="KK1 — Ham Giriş" subtitle="Dokuma çıkışı ham kumaş top kayıt">
-      <View style={styles.body}>
+    <ScreenChrome title="KK1 — Ham Giriş" subtitle="Fabrikaya gelen ham kumaş top kayıt">
+      <View
+        style={[
+          styles.body,
+          compact && {
+            paddingLeft: Math.max(insets.left, 12) + 12,
+            paddingRight: Math.max(insets.right, 12) + 12,
+          },
+        ]}
+      >
         {/* ── SOL: Form (kaydırılabilir — küçük ekranda taşmasın) ── */}
         <ScrollView
           style={styles.formCol}
-          contentContainerStyle={styles.formContent}
+          contentContainerStyle={[
+            styles.formContent,
+            compact && styles.formContentCompact,
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator
         >
-          {/* ── Refakat Kartı (opsiyonel): okutursa toplar otomatik WO'ya bağlanır ── */}
-          {resolvedCard ? (
-            <Surface style={styles.cardScanResolved} elevation={1}>
-              <Icon source="card-account-details-outline" size={20} color="#0d9488" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardScanResolvedTitle} numberOfLines={1}>
-                  {resolvedCard.batchNumber}
-                </Text>
-                {resolvedCard.targetItem && (
-                  <Text style={styles.cardScanResolvedSubtitle} numberOfLines={1}>
-                    {resolvedCard.targetItem.name}
-                    {resolvedCard.targetColor
-                      ? ` · ${resolvedCard.targetColor.name}`
-                      : ''}
-                  </Text>
-                )}
-                <Text style={styles.cardScanResolvedHint} numberOfLines={1}>
-                  KK1 · {resolvedCard.rollCount} top
-                </Text>
-              </View>
-              <IconButton
-                icon="close"
-                size={20}
-                onPress={handleClearCard}
-                accessibilityLabel="Refakat kartını temizle"
-                style={{ margin: 0 }}
-              />
-            </Surface>
-          ) : (
-            <Surface style={styles.cardScanBar} elevation={1}>
-              <TextInput
-                mode="outlined"
-                value={cardBarcode}
-                onChangeText={setCardBarcode}
-                placeholder="Refakat kartı (opsiyonel — okutmazsan STOCK'a düşer)"
-                dense
-                autoCapitalize="characters"
-                autoCorrect={false}
-                left={<TextInput.Icon icon="card-search-outline" />}
-                right={
-                  resolvingCard ? (
-                    <TextInput.Icon
-                      icon={() => <ActivityIndicator size={18} color="#0d9488" />}
-                    />
-                  ) : cardBarcode.trim() ? (
-                    <TextInput.Icon
-                      icon="check"
-                      color="#0d9488"
-                      onPress={handleResolveCard}
-                    />
-                  ) : undefined
-                }
-                onSubmitEditing={handleResolveCard}
-                returnKeyType="search"
-                style={[styles.cardScanInput, { flex: 1 }]}
-              />
-              <IconButton
-                icon="camera"
+          {/* Compact'ta sağ panel yok — sağa kayan drawer aç/kapa tetiği */}
+          {compact && (
+            <View style={styles.drawerTriggerBar}>
+              <Button
                 mode="contained-tonal"
-                containerColor="#dbeafe"
-                iconColor="#1e40af"
-                size={22}
-                onPress={() => setScannerOpen(true)}
-                accessibilityLabel="Kamera ile kart tara"
-                style={styles.cardScanCameraBtn}
-              />
-              <IconButton
                 icon="format-list-bulleted"
-                mode="contained-tonal"
-                containerColor="#dcfce7"
-                iconColor="#0d9488"
-                size={22}
-                onPress={() => {
-                  blurAll();
-                  setCardListPage(1);
-                  setCardListSearch('');
-                  setCardListOpen(true);
-                }}
-                accessibilityLabel="Refakat kartı listesinden seç"
-                style={styles.cardScanCameraBtn}
-              />
-            </Surface>
-          )}
-
-          {/* Hata banner'ı — yanlış istasyon / KK1 kapalı / 409 (KK1 tamamlanmış) */}
-          {cardError && (
-            <Surface style={styles.errorBanner} elevation={1}>
-              <Icon source="alert-circle" size={20} color="#b91c1c" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.errorBannerTitle}>
-                  {resolvedCard ? 'Yeni rulo eklenemedi' : 'Yanlış istasyon'}
-                </Text>
-                <Text style={styles.errorBannerText}>{cardError}</Text>
-              </View>
-              <IconButton
-                icon="close"
-                size={18}
-                onPress={() => setCardError(null)}
-                accessibilityLabel="Hata mesajını kapat"
-                style={{ margin: 0 }}
-              />
-            </Surface>
+                compact
+                onPress={() => setRecentsDrawerOpen(true)}
+              >
+                Son Kayıtlar · {totalCount}
+              </Button>
+            </View>
           )}
 
           <Surface style={styles.card} elevation={1}>
@@ -574,6 +394,7 @@ export default function KK1Screen() {
                 placeholder="0.0"
                 style={[styles.input, styles.qtyInput]}
                 contentStyle={styles.qtyInputContent}
+                useNativeKeyboard={compact}
               />
               <Button
                 mode="outlined"
@@ -587,34 +408,20 @@ export default function KK1Screen() {
               </Button>
             </View>
 
-            <View style={[styles.row, styles.rowSpaced]}>
-              <View style={styles.col}>
-                <Text style={styles.label}>
-                  En (cm) <Text style={styles.required}>*</Text>
-                </Text>
-                <NumpadInput
-                  ref={widthRef}
-                  mode="outlined"
-                  value={form.width}
-                  onChangeText={(v) => setForm((f) => ({ ...f, width: v }))}
-                  numpadLabel="En (cm)"
-                  placeholder="örn: 280"
-                  style={styles.input}
-                />
-              </View>
-              <View style={styles.col}>
-                <Text style={styles.label}>Ağırlık (kg)</Text>
-                <NumpadInput
-                  ref={weightRef}
-                  mode="outlined"
-                  value={form.weightKg}
-                  onChangeText={(v) => setForm((f) => ({ ...f, weightKg: v }))}
-                  numpadLabel="Ağırlık (kg)"
-                  placeholder="örn: 45.2"
-                  style={styles.input}
-                />
-              </View>
-            </View>
+            <Text style={[styles.label, styles.labelSpaced]}>
+              En (cm) <Text style={styles.required}>*</Text>
+            </Text>
+            <NumpadInput
+              ref={widthRef}
+              mode="outlined"
+              value={form.width}
+              onChangeText={(v) => setForm((f) => ({ ...f, width: v }))}
+              numpadLabel="En (cm)"
+              placeholder="örn: 280"
+              style={styles.input}
+              useNativeKeyboard={compact}
+              autoActivate={!compact}
+            />
 
             <Text style={[styles.label, styles.labelSpaced]}>Kalite Sınıfı</Text>
             {qualityGradesQuery.isLoading ? (
@@ -629,37 +436,14 @@ export default function KK1Screen() {
               </Text>
             ) : (
               <View style={styles.segmentRow}>
-                {qualityGrades.map((qg) => {
-                  const selected = form.qualityGrade === qg.code;
-                  return (
-                    <TouchableRipple
-                      key={qg.id}
-                      onPress={() => {
-                        blurAll();
-                        setForm((f) => ({ ...f, qualityGrade: qg.code }));
-                      }}
-                      borderless
-                      rippleColor="rgba(79, 70, 229, 0.15)"
-                      style={[
-                        styles.segment,
-                        selected && styles.segmentSelected,
-                        selected && qg.color
-                          ? { backgroundColor: qg.color, borderColor: qg.color }
-                          : null,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.segmentLabel,
-                          selected && styles.segmentLabelSelected,
-                          selected && qg.color ? { color: '#fff' } : null,
-                        ]}
-                      >
-                        {qg.name}
-                      </Text>
-                    </TouchableRipple>
-                  );
-                })}
+                {qualityGrades.map((qg) => (
+                  <QualitySegment
+                    key={qg.id}
+                    grade={qg}
+                    selected={form.qualityGrade === qg.code}
+                    onPress={handleQualityGradeSelect}
+                  />
+                ))}
               </View>
             )}
           </Surface>
@@ -679,6 +463,7 @@ export default function KK1Screen() {
         </ScrollView>
 
         {/* ── SAĞ: Üstte son 6 kayıt + altta Numpad ── */}
+        {!compact && (
         <View style={styles.recentsCol}>
           <View style={styles.recentsHeader}>
             <View style={{ flex: 1 }}>
@@ -747,7 +532,29 @@ export default function KK1Screen() {
 
           <NumpadHost style={styles.numpadHost} />
         </View>
+        )}
       </View>
+
+      {/* Compact modda sağdan kayan son kayıtlar drawer'ı */}
+      {compact && (
+        <RecentsDrawer
+          visible={recentsDrawerOpen}
+          onDismiss={() => setRecentsDrawerOpen(false)}
+          totalCount={totalCount}
+          rolls={recentRolls}
+          loading={recentRollsQuery.isLoading}
+          error={recentRollsQuery.isError ? (recentRollsQuery.error as Error) : null}
+          fetching={recentRollsQuery.isFetching}
+          onRefresh={() => recentRollsQuery.refetch()}
+          onOpenHistory={() => {
+            setRecentsDrawerOpen(false);
+            setHistoryPage(1);
+            setHistoryOpen(true);
+          }}
+          onPrint={handlePrintLabel}
+          onScrap={handleScrapRoll}
+        />
+      )}
 
       {/* ── Tüm kayıtlar modal'ı ── */}
       <RollHistoryModal
@@ -785,56 +592,161 @@ export default function KK1Screen() {
       />
 
       {/* ── Etiket yazıcı (headless): printRoll set olunca QR + A4 PDF üretir ── */}
-      <LabelPrinter
-        roll={printRoll}
-        batchNumber={resolvedCard?.batchNumber ?? null}
-        onDone={() => setPrintRoll(null)}
-      />
-
-      {/* ── Kart okuma: tablet kamerasıyla QR/barcode ── */}
-      <BarcodeScannerModal
-        visible={scannerOpen}
-        onDismiss={() => setScannerOpen(false)}
-        onScan={(data) => {
-          setScannerOpen(false);
-          setCardBarcode(data);
-          void resolveCardBarcode(data);
-        }}
-        title="Refakat Kartı Okut"
-      />
-
-      {/* ── Aktif refakat kartı / iş emri seçim modalı (paginated server) ── */}
-      <PickerModal
-        visible={cardListOpen}
-        title="Refakat Kartı / İş Emri Seç"
-        options={cardOptions}
-        loading={cardListQuery.isLoading}
-        emptyText={
-          cardListQuery.isError
-            ? 'Liste yüklenemedi'
-            : 'Aktif refakat kartı bulunamadı'
-        }
-        numColumns={2}
-        onDismiss={() => setCardListOpen(false)}
-        onSelect={handleSelectCardFromList}
-        paginated
-        searchValue={cardListSearch}
-        onSearchSubmit={(q) => {
-          setCardListPage(1);
-          setCardListSearch(q);
-        }}
-        page={cardListPage}
-        totalPages={cardListQuery.data?.pagination.totalPages ?? 1}
-        onPageChange={setCardListPage}
-        fetching={cardListQuery.isFetching}
-        onRefresh={() => cardListQuery.refetch()}
-        refreshing={cardListQuery.isFetching}
-        refreshError={cardListQuery.isError}
-        refreshErrorMessage={(cardListQuery.error as Error | undefined)?.message}
-      />
+      <LabelPrinter roll={printRoll} kind="ROLL_RAW" onDone={() => setPrintRoll(null)} />
     </ScreenChrome>
   );
 }
+
+// ── Son Kayıtlar Drawer (compact / telefon) ──
+interface RecentsDrawerProps {
+  visible: boolean;
+  onDismiss: () => void;
+  totalCount: number;
+  rolls: Roll[];
+  loading: boolean;
+  error: Error | null;
+  fetching: boolean;
+  onRefresh: () => void;
+  onOpenHistory: () => void;
+  onPrint: (barcode: string) => void;
+  onScrap: (roll: Roll) => void;
+}
+
+function RecentsDrawer({
+  visible,
+  onDismiss,
+  totalCount,
+  rolls,
+  loading,
+  error,
+  fetching,
+  onRefresh,
+  onOpenHistory,
+  onPrint,
+  onScrap,
+}: RecentsDrawerProps) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // Telefon dar; drawer genişliği ekranın %85'i veya max 380px
+  const drawerWidth = Math.min(winW * 0.85, 380);
+
+  return (
+    <Modal
+      isVisible={visible}
+      onBackdropPress={onDismiss}
+      onBackButtonPress={onDismiss}
+      backdropOpacity={0.4}
+      animationIn="slideInRight"
+      animationOut="slideOutRight"
+      style={drawerStyles.modal}
+      useNativeDriver
+      hideModalContentWhileAnimating
+      deviceWidth={winW}
+      deviceHeight={winH}
+      statusBarTranslucent
+    >
+      <View
+        style={[
+          drawerStyles.sheet,
+          {
+            width: drawerWidth,
+            height: winH,
+            paddingTop: insets.top + 8,
+            paddingBottom: insets.bottom + 12,
+            paddingRight: Math.max(insets.right, 12),
+          },
+        ]}
+      >
+        <View style={drawerStyles.header}>
+          <View style={{ flex: 1 }}>
+            <Text variant="titleLarge" style={drawerStyles.title}>
+              Son Kayıtlar
+            </Text>
+            <Text variant="bodySmall" style={drawerStyles.subtitle}>
+              Toplam {totalCount} kayıt
+            </Text>
+          </View>
+          <RefreshButton
+            onPress={onRefresh}
+            refreshing={fetching}
+            isError={!!error}
+            errorMessage={error?.message}
+          />
+          <IconButton icon="close" size={24} onPress={onDismiss} accessibilityLabel="Kapat" />
+        </View>
+
+        <View style={drawerStyles.listBox}>
+          {loading ? (
+            <View style={drawerStyles.empty}>
+              <ActivityIndicator size="large" color="#4f46e5" />
+              <Text style={drawerStyles.emptyText}>Yükleniyor...</Text>
+            </View>
+          ) : error ? (
+            <View style={drawerStyles.empty}>
+              <Text style={drawerStyles.emptyText}>Liste yüklenemedi</Text>
+              <Text style={drawerStyles.emptyHint}>{error.message}</Text>
+              <Button mode="outlined" onPress={onRefresh} style={{ marginTop: 12 }}>
+                Tekrar dene
+              </Button>
+            </View>
+          ) : rolls.length === 0 ? (
+            <View style={drawerStyles.empty}>
+              <Text style={drawerStyles.emptyText}>Henüz kayıt yok</Text>
+              <Text style={drawerStyles.emptyHint}>
+                Kaydedilen toplar burada görünecek
+              </Text>
+            </View>
+          ) : (
+            <FlashList
+              data={rolls}
+              keyExtractor={(r) => r.id}
+              renderItem={({ item }) => (
+                <RollListItem roll={item} onPrint={onPrint} onScrap={onScrap} />
+              )}
+              contentContainerStyle={drawerStyles.listContent}
+              showsVerticalScrollIndicator
+            />
+          )}
+        </View>
+
+        <Button
+          mode="outlined"
+          icon="format-list-bulleted"
+          onPress={onOpenHistory}
+          style={drawerStyles.historyBtn}
+        >
+          Tümünü Gör
+        </Button>
+      </View>
+    </Modal>
+  );
+}
+
+const drawerStyles = StyleSheet.create({
+  modal: { margin: 0, padding: 0, justifyContent: 'flex-end', flexDirection: 'row' },
+  sheet: {
+    backgroundColor: '#fff',
+    paddingLeft: 16,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    marginBottom: 8,
+  },
+  title: { fontWeight: '700', color: '#0f172a' },
+  subtitle: { color: '#64748b', marginTop: 2 },
+  listBox: { flex: 1, minHeight: 0 },
+  listContent: { paddingVertical: 8 },
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 4 },
+  emptyText: { fontSize: 16, color: '#94a3b8', fontWeight: '600' },
+  emptyHint: { fontSize: 13, color: '#cbd5e1' },
+  historyBtn: { marginTop: 10 },
+});
 
 // ── Tüm Kayıtlar Modal ──
 interface RollHistoryModalProps {
@@ -1083,63 +995,15 @@ const styles = StyleSheet.create({
   // Sol — Form
   formCol: { flex: 1.4, backgroundColor: '#f8fafc' },
   formContent: { padding: 16, gap: 12, flexGrow: 1, paddingBottom: 16 },
+  formContentCompact: { padding: 10, gap: 8, paddingBottom: 12 },
   card: { padding: 14, borderRadius: 12, backgroundColor: '#fff', gap: 4 },
 
-  // Refakat kartı bandı (opsiyonel) — kompakt, tek satır
-  cardScanBar: {
+  // Compact (telefon) — form üstü sağa yaslı drawer tetiği
+  drawerTriggerBar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  cardScanInput: { backgroundColor: '#fff' },
-  cardScanCameraBtn: { margin: 0 },
-  cardScanResolved: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingLeft: 14,
-    paddingRight: 6,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: '#ecfdf5',
-    borderWidth: 1,
-    borderColor: '#0d9488',
-  },
-  cardScanResolvedTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#064e3b',
-    fontFamily: 'monospace',
-  },
-  cardScanResolvedSubtitle: { fontSize: 12, color: '#0f766e', marginTop: 1 },
-  cardScanResolvedHint: { fontSize: 11, color: '#0f766e', marginTop: 1, fontWeight: '500' },
-
-  // Yanlış istasyon / KK1 kapalı / kart bulunamadı banner
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingLeft: 14,
-    paddingRight: 6,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fca5a5',
-  },
-  errorBannerTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#991b1b',
+    justifyContent: 'flex-end',
     marginBottom: 2,
   },
-  errorBannerText: { fontSize: 12, color: '#7f1d1d', lineHeight: 16 },
 
   label: { fontSize: 14, fontWeight: '600', color: '#334155', marginBottom: 4 },
   labelSpaced: { marginTop: 8 },
@@ -1335,4 +1199,45 @@ const styles = StyleSheet.create({
     marginTop: 0,
     backgroundColor: '#f8fafc',
   },
+});
+
+// Kalite seçim segmenti — React.memo ile form'un başka alanları (qty, width)
+// değişirken bu kartlar yeniden render olmasın diye izole.
+const QualitySegment = React.memo(function QualitySegment({
+  grade,
+  selected,
+  onPress,
+}: {
+  grade: QualityGrade;
+  selected: boolean;
+  onPress: (code: string) => void;
+}) {
+  const handlePress = useCallback(
+    () => onPress(grade.code),
+    [onPress, grade.code],
+  );
+  return (
+    <TouchableRipple
+      onPress={handlePress}
+      borderless
+      rippleColor="rgba(79, 70, 229, 0.15)"
+      style={[
+        styles.segment,
+        selected && styles.segmentSelected,
+        selected && grade.color
+          ? { backgroundColor: grade.color, borderColor: grade.color }
+          : null,
+      ]}
+    >
+      <Text
+        style={[
+          styles.segmentLabel,
+          selected && styles.segmentLabelSelected,
+          selected && grade.color ? { color: '#fff' } : null,
+        ]}
+      >
+        {grade.name}
+      </Text>
+    </TouchableRipple>
+  );
 });

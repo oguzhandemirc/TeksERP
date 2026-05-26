@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Lock, User, Home, Printer, Pencil, X } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
+import { Printer, Pencil, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,15 +12,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import {
-  labelService,
-  type LabelNameSource,
-  type RollLabelPayload,
-} from "@/services/labelService";
+import { labelService } from "@/services/labelService";
 
 interface Props {
   rollId: string | null;
@@ -32,11 +26,22 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
   const open = Boolean(rollId);
   const qc = useQueryClient();
   const { hasPermission } = useRoleAccess();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const query = useQuery({
+  // Payload — orderLineId (Edit gating) ve LabelEditDialog için master adlar.
+  const payloadQuery = useQuery({
     queryKey: ["label-roll", rollId],
     queryFn: () => labelService.getRollLabel(rollId!),
     enabled: open,
+  });
+
+  // Etiket HTML'i — backend LabelTemplate config'iyle render edilir; mobil
+  // basımı ve LabelTemplates önizlemesiyle birebir aynı çıktı.
+  const htmlQuery = useQuery({
+    queryKey: ["label-roll-html", rollId],
+    queryFn: () => labelService.getRollLabelHtml(rollId!),
+    enabled: open,
+    staleTime: 0,
   });
 
   const [editOpen, setEditOpen] = useState(false);
@@ -49,13 +54,14 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
   });
 
   const handlePrint = () => {
-    window.print();
+    iframeRef.current?.contentWindow?.print();
     printMut.mutate();
   };
 
-  const payload = query.data?.data;
+  const payload = payloadQuery.data?.data;
   const canEdit = Boolean(payload?.orderLineId) && hasPermission("label:edit");
   const canPrint = hasPermission("label:print");
+  const hasBarcode = Boolean(payload?.barcode);
 
   return (
     <>
@@ -64,7 +70,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
           <DialogHeader>
             <DialogTitle>Top Etiketi</DialogTitle>
             <DialogDescription>
-              Etiket önizlemesi. Müşteri tarafındaki ad veriler bu siparişe özel veya master alias'tan gelir.
+              Bas tuşuna basınca bu etiket olduğu gibi yazıcıya gider.
             </DialogDescription>
           </DialogHeader>
 
@@ -76,12 +82,20 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
               </div>
             }
           >
-            {query.isLoading ? (
-              <Skeleton className="h-64 w-full" />
-            ) : payload ? (
-              <LabelPreview payload={payload} />
+            {htmlQuery.isLoading ? (
+              <Skeleton className="h-[640px] w-full" />
+            ) : htmlQuery.isError ? (
+              <div className="rounded-md border border-dashed p-6 text-center text-sm text-destructive">
+                Etiket alınamadı: {(htmlQuery.error as Error).message}
+              </div>
             ) : (
-              <div className="text-sm text-muted-foreground">Etiket bilgisi bulunamadı.</div>
+              <iframe
+                ref={iframeRef}
+                title="Top etiketi"
+                srcDoc={htmlQuery.data ?? ""}
+                sandbox="allow-same-origin allow-modals"
+                className="h-[640px] w-full rounded border bg-white"
+              />
             )}
 
             <DialogFooter className="flex flex-wrap items-center justify-between gap-2">
@@ -108,7 +122,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
                   <Button
                     type="button"
                     size="sm"
-                    disabled={!payload.barcode || printMut.isPending}
+                    disabled={!hasBarcode || htmlQuery.isLoading || printMut.isPending}
                     onClick={handlePrint}
                     className="gap-1"
                   >
@@ -139,120 +153,11 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
           masterColorName={payload.colorName}
           onSaved={() => {
             void qc.invalidateQueries({ queryKey: ["label-roll", rollId] });
+            void qc.invalidateQueries({ queryKey: ["label-roll-html", rollId] });
           }}
         />
       )}
     </>
-  );
-}
-
-const SOURCE_LABELS: Record<LabelNameSource, { icon: typeof Lock; tip: string }> = {
-  OVERRIDE: { icon: Lock, tip: "Bu sipariş için sabitlenmiş ad" },
-  MASTER: { icon: User, tip: "Müşteri tanımı (master alias)" },
-  DEFAULT: { icon: Home, tip: "Standart ad" },
-};
-
-function SourceBadge({
-  source,
-  defaultName,
-}: {
-  source: LabelNameSource;
-  defaultName: string | null;
-}) {
-  const conf = SOURCE_LABELS[source];
-  const Icon = conf.icon;
-  return (
-    <span
-      title={`${conf.tip}${defaultName ? ` (Bizdeki ad: ${defaultName})` : ""}`}
-      className="inline-flex items-center gap-1 rounded border px-1 py-0 text-[10px] text-muted-foreground"
-    >
-      <Icon className="h-2.5 w-2.5" />
-      {source}
-    </span>
-  );
-}
-
-function LabelPreview({ payload }: { payload: RollLabelPayload }) {
-  return (
-    <div className="print-area space-y-3 rounded-lg border bg-background p-4">
-      <div className="flex items-start gap-4">
-        {payload.barcode && (
-          <div className="shrink-0 rounded bg-white p-2">
-            <QRCodeSVG value={payload.barcode} size={96} level="M" />
-          </div>
-        )}
-        <div className="min-w-0 flex-1 space-y-2">
-          {payload.barcode ? (
-            <div className="break-all font-mono text-sm font-semibold">
-              {payload.barcode}
-            </div>
-          ) : (
-            <Badge variant="outline">Açık Kumaş — Barkodsuz</Badge>
-          )}
-          <div className="flex flex-wrap items-baseline gap-2">
-            <span className="text-lg font-semibold">{payload.itemName}</span>
-            <SourceBadge
-              source={payload.itemNameSource}
-              defaultName={payload.itemNameDefault}
-            />
-          </div>
-          {payload.colorName && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm">{payload.colorName}</span>
-              {payload.colorNameSource && (
-                <SourceBadge
-                  source={payload.colorNameSource}
-                  defaultName={payload.colorNameDefault}
-                />
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 border-t pt-3 text-xs sm:grid-cols-4">
-        <Field label="En" value={payload.widthCm ? `${payload.widthCm} cm` : "—"} />
-        <Field
-          label="Metre"
-          value={payload.lengthMeters.toLocaleString("tr-TR")}
-        />
-        <Field
-          label="Kalite"
-          value={<Badge variant="muted">{payload.qualityGrade}</Badge>}
-        />
-        <Field
-          label="Ağırlık"
-          value={payload.weightKg != null ? `${payload.weightKg} kg` : "—"}
-        />
-      </div>
-
-      {payload.customerName && (
-        <div className="border-t pt-3 text-xs">
-          <div className="text-muted-foreground">Müşteri</div>
-          <div className="font-medium">{payload.customerName}</div>
-          {payload.orderNumber && (
-            <div className="font-mono text-[10px] text-muted-foreground">
-              {payload.orderNumber}
-            </div>
-          )}
-        </div>
-      )}
-
-      {payload.ownerCustomerName && (
-        <div className="rounded border border-dashed bg-muted/30 p-2 text-xs">
-          <span className="font-medium">Fason mal:</span> {payload.ownerCustomerName}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="font-medium">{value}</div>
-    </div>
   );
 }
 

@@ -28,7 +28,7 @@ let running = false;
 
 async function getLastRun(): Promise<Date | null> {
   const row = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEY } });
-  if (!row?.value) return null;
+  if (typeof row?.value !== "string") return null;
   const d = new Date(row.value);
   return Number.isNaN(d.getTime()) ? null : d;
 }

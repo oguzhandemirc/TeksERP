@@ -43,6 +43,11 @@ export interface OrderLine {
   color?: OrderLineColor | null;
   /** Müşterinin istediği özellikler — WO açılırken targetProperties önerisi olur. */
   requiredProperties?: OrderLineRequiredPropertyLink[];
+  /** Kalemin bağlandığı WO'lar. Boş veya hepsi CANCELLED ise kalem düzenlenebilir. */
+  workOrderLinks?: Array<{
+    workOrderId: string;
+    workOrder: { status: "PLANNED" | "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "CANCELLED" };
+  }>;
 }
 
 export interface Order {

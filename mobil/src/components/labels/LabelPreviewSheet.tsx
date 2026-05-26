@@ -33,6 +33,8 @@ import type { LabelPayload, NameSource } from '../../types/models';
 interface Props {
   visible: boolean;
   rollId: string | null;
+  /** Hangi etiket türünün default şablonu kullanılsın — KK1 → ROLL_RAW, Tambur → ROLL_FINISHED. */
+  kind: 'ROLL_RAW' | 'ROLL_FINISHED';
   onDismiss: () => void;
   /** Operatör "Bas" deyince çağrılır — print için parent yazıcı tetikler. */
   onPrint?: (payload: LabelPayload) => void;
@@ -44,14 +46,14 @@ function sourceIcon(s: NameSource | null): { emoji: string; label: string } {
   return { emoji: '🏠', label: 'Standart ad' };
 }
 
-export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint }: Props) {
+export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   const { has } = usePermissions();
   const canRead = has('label:read');
   const canEdit = has('label:edit');
   const canPrint = has('label:print');
   const qc = useQueryClient();
-  const { template } = useLabelTemplate('ROLL');
+  const { template } = useLabelTemplate(kind);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editItemName, setEditItemName] = useState('');
@@ -378,12 +380,6 @@ function PreviewBody({
         <View style={styles.line}>
           <Text style={styles.k}>Parti</Text>
           <Text style={styles.v}>{payload.batchNumber}</Text>
-        </View>
-      )}
-      {payload.ownerCustomerName && (
-        <View style={styles.line}>
-          <Text style={styles.k}>Sahibi (Fason)</Text>
-          <Text style={[styles.v, { color: '#92400e' }]}>{payload.ownerCustomerName}</Text>
         </View>
       )}
     </Surface>

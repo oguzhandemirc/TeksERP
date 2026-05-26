@@ -25,6 +25,7 @@ import dayjs from 'dayjs';
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
 import { NumpadHost } from '../../../components/NumpadProvider';
+import { useDeviceType } from '../../../hooks/useDeviceType';
 import {
   shippingService,
   type ShipmentDetail,
@@ -53,6 +54,8 @@ type RightTab = 'sacks' | 'preparing' | 'history';
 
 export default function SevkiyatScreen() {
   const qc = useQueryClient();
+  const device = useDeviceType();
+  const isPhone = device === 'phone';
 
   const [openTabs, setOpenTabs] = useState<ShipTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -219,7 +222,7 @@ export default function SevkiyatScreen() {
       title="Sevkiyat"
       subtitle="Çuvalları sevkiyata bağla, irsaliye kes, yola çıkar"
     >
-      <View style={styles.body}>
+      <View style={[styles.body, isPhone && styles.bodyPhone]}>
         {/* ════════ SOL: aktif sevkiyat ════════ */}
         <View style={styles.formCol}>
           {!activeTab ? (
@@ -292,7 +295,7 @@ export default function SevkiyatScreen() {
         </View>
 
         {/* ════════ SAĞ: tab + paneller + numpad ════════ */}
-        <View style={styles.rightCol}>
+        <View style={[styles.rightCol, isPhone && styles.rightColPhone]}>
           {/* Açık sevkiyat tab bar'ı */}
           <View style={styles.shipTabBar}>
             <ScrollView
@@ -1340,6 +1343,7 @@ function NewShipmentModal({
 // =============================================================================
 const styles = StyleSheet.create({
   body: { flex: 1, flexDirection: 'row', backgroundColor: '#f8fafc' },
+  bodyPhone: { flexDirection: 'column' },
 
   formCol: { flex: 1.4 },
 
@@ -1436,6 +1440,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderLeftWidth: 1,
     borderLeftColor: '#e2e8f0',
+  },
+  rightColPhone: {
+    borderLeftWidth: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
   },
   shipTabBar: {
     backgroundColor: '#f8fafc',

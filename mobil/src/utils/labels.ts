@@ -12,7 +12,6 @@ export const WORK_ORDER_STATUS_LABEL: Record<string, string> = {
 export const WORK_ORDER_TYPE_LABEL: Record<string, string> = {
   ORDER_PRODUCTION: 'Sipariş Üretimi',
   STOCK_PRODUCTION: 'Stoğa Üretim',
-  SERVICE_PRODUCTION: 'Fason Üretim',
 };
 
 export const STEP_STATUS_LABEL: Record<string, string> = {

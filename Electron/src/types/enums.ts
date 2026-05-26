@@ -114,14 +114,12 @@ export const workOrderStatusLabels: Record<WorkOrderStatus, string> = {
 export const WorkOrderType = {
   ORDER_PRODUCTION: "ORDER_PRODUCTION",
   STOCK_PRODUCTION: "STOCK_PRODUCTION",
-  SERVICE_PRODUCTION: "SERVICE_PRODUCTION",
 } as const;
 export type WorkOrderType = (typeof WorkOrderType)[keyof typeof WorkOrderType];
 
 export const workOrderTypeLabels: Record<WorkOrderType, string> = {
   ORDER_PRODUCTION: "Siparişe Özel",
   STOCK_PRODUCTION: "Stoka",
-  SERVICE_PRODUCTION: "Fason Üretim Kabul",
 };
 
 export const StepStatus = {
@@ -143,8 +141,6 @@ export const RollStatus = {
   STOCK: "STOCK",
   IN_PRODUCTION: "IN_PRODUCTION",
   PRODUCED: "PRODUCED",
-  READY_FOR_SHIP: "READY_FOR_SHIP",
-  SHIPPED: "SHIPPED",
   SCRAP: "SCRAP",
   CANCELLED: "CANCELLED",
   AT_SUBCONTRACTOR: "AT_SUBCONTRACTOR",
@@ -160,8 +156,6 @@ export const rollStatusLabels: Record<RollStatus, string> = {
   STOCK: "Stokta",
   IN_PRODUCTION: "Üretimde",
   PRODUCED: "Üretildi",
-  READY_FOR_SHIP: "Sevke Hazır",
-  SHIPPED: "Sevk Edildi",
   SCRAP: "Fire",
   CANCELLED: "İptal Edildi",
   AT_SUBCONTRACTOR: "Fasonda",
@@ -191,30 +185,16 @@ export const rollOperationTypeLabels: Record<RollOperationType, string> = {
   SUBCONTRACTOR_RETURNED: "Fasondan Döndü",
 };
 
-export const ShipmentStatus = {
-  PREPARING: "PREPARING",
-  SHIPPED: "SHIPPED",
-  CANCELLED: "CANCELLED",
+export const RollEntrySource = {
+  SUPPLIER_RECEIPT: "SUPPLIER_RECEIPT",
+  TAMBUR_SPLIT: "TAMBUR_SPLIT",
+  SUBCONTRACTOR_RETURN: "SUBCONTRACTOR_RETURN",
 } as const;
-export type ShipmentStatus = (typeof ShipmentStatus)[keyof typeof ShipmentStatus];
+export type RollEntrySource = (typeof RollEntrySource)[keyof typeof RollEntrySource];
 
-export const shipmentStatusLabels: Record<ShipmentStatus, string> = {
-  PREPARING: "Hazırlanıyor",
-  SHIPPED: "Sevk Edildi",
-  CANCELLED: "İptal",
+export const rollEntrySourceLabels: Record<RollEntrySource, string> = {
+  SUPPLIER_RECEIPT: "Tedarikçi Mal Kabulü",
+  TAMBUR_SPLIT: "Tambur Kesim",
+  SUBCONTRACTOR_RETURN: "Fason Dönüşü",
 };
 
-export const PackagingQueueStatus = {
-  WAITING: "WAITING",
-  TAKEN: "TAKEN",
-  DONE: "DONE",
-  CANCELLED: "CANCELLED",
-} as const;
-export type PackagingQueueStatus = (typeof PackagingQueueStatus)[keyof typeof PackagingQueueStatus];
-
-export const packagingQueueStatusLabels: Record<PackagingQueueStatus, string> = {
-  WAITING: "Bekliyor",
-  TAKEN: "Alındı",
-  DONE: "Tamamlandı",
-  CANCELLED: "İptal",
-};

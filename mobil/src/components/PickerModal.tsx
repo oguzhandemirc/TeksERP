@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import RefreshButton from './RefreshButton';
 import Modal from 'react-native-modal';
+import { useDeviceType } from '../hooks/useDeviceType';
 import {
   Text,
   TextInput,
@@ -98,6 +99,9 @@ export default function PickerModal(props: Props) {
 
   const paginated = props.paginated === true;
   const { width: winW, height: winH } = useWindowDimensions();
+  const device = useDeviceType();
+  const isPhone = device === 'phone';
+  const effectiveColumns = isPhone ? 1 : numColumns;
   const searchRef = useRef<RNTextInput>(null);
 
   // Client-mode: in-memory arama
@@ -119,20 +123,26 @@ export default function PickerModal(props: Props) {
     }
   }, [visible, paginated]);
 
-  // Liste verisi: paginated ise olduğu gibi; değilse sırala + filtrele
-  const listData = useMemo(() => {
+  // Sort yalnızca options değişiminde — her tuş basışında yeniden sıralanmasın
+  // (localeCompare 'tr' büyük listelerde O(n log n) yüksek sabit faktörlü).
+  const sortedOptions = useMemo(() => {
     if (paginated) return options;
-    const sorted = [...options].sort((a, b) =>
-      a.label.localeCompare(b.label, 'tr', { sensitivity: 'base' })
+    return [...options].sort((a, b) =>
+      a.label.localeCompare(b.label, 'tr', { sensitivity: 'base' }),
     );
+  }, [paginated, options]);
+
+  // Filter ayrı useMemo: arama değiştikçe yalnızca filtreyi tekrar uygula.
+  const listData = useMemo(() => {
+    if (paginated) return sortedOptions;
     const q = clientSearch.trim().toLocaleLowerCase('tr');
-    if (!q) return sorted;
-    return sorted.filter(
+    if (!q) return sortedOptions;
+    return sortedOptions.filter(
       (o) =>
         o.label.toLocaleLowerCase('tr').includes(q) ||
-        (o.sublabel?.toLocaleLowerCase('tr').includes(q) ?? false)
+        (o.sublabel?.toLocaleLowerCase('tr').includes(q) ?? false),
     );
-  }, [paginated, options, clientSearch]);
+  }, [paginated, sortedOptions, clientSearch]);
 
   // Paginated submit handler
   const submitSearch = () => {
@@ -155,14 +165,20 @@ export default function PickerModal(props: Props) {
       deviceHeight={winH}
       statusBarTranslucent
     >
-      <View style={[styles.sheet, { width: winW * 0.82, height: winH * 0.88 }]}>
-        {/* Başlık + arama + kapat */}
+      <View
+        style={[
+          styles.sheet,
+          isPhone
+            ? { width: winW * 0.95, height: winH * 0.92 }
+            : { width: winW * 0.82, height: winH * 0.88 },
+        ]}
+      >
+        {/* Başlık satırı — telefonda search ayrı satıra düşer */}
         <View style={styles.header}>
-          <Text variant="titleLarge" style={styles.title}>
+          <Text variant="titleLarge" style={styles.title} numberOfLines={1}>
             {title}
           </Text>
 
-          {/* Refresh: başlık tarafında — close'tan uzakta, yanlış tap riskini azalt */}
           {onRefresh && (
             <RefreshButton
               onPress={onRefresh}
@@ -172,54 +188,19 @@ export default function PickerModal(props: Props) {
             />
           )}
 
-          {paginated ? (
-            <View style={styles.searchGroup}>
-              <TextInput
-                ref={searchRef as React.Ref<any>}
-                mode="outlined"
-                dense
-                placeholder="Batch no..."
-                value={pendingSearch}
-                onChangeText={setPendingSearch}
-                onSubmitEditing={submitSearch}
-                returnKeyType="search"
-                left={<TextInput.Icon icon="magnify" />}
-                right={
-                  pendingSearch.length > 0 ? (
-                    <TextInput.Icon
-                      icon="close"
-                      onPress={() => {
-                        setPendingSearch('');
-                        (props as PaginatedProps).onSearchSubmit('');
-                      }}
-                    />
-                  ) : undefined
-                }
-                style={styles.searchInput}
-                showSoftInputOnFocus
-              />
-              <Button
-                mode="contained"
-                icon="magnify"
-                onPress={submitSearch}
-                style={styles.searchBtn}
-                contentStyle={styles.searchBtnContent}
-                labelStyle={styles.searchBtnLabel}
-              >
-                Ara
-              </Button>
-            </View>
-          ) : (
-            <TextInput
-              ref={searchRef as React.Ref<any>}
-              mode="outlined"
-              dense
-              placeholder="Ara..."
-              value={clientSearch}
-              onChangeText={setClientSearch}
-              left={<TextInput.Icon icon="magnify" />}
-              style={styles.searchInput}
-              showSoftInputOnFocus
+          {!isPhone && (
+            <SearchControls
+              paginated={paginated}
+              isPhone={false}
+              searchRef={searchRef}
+              pendingSearch={pendingSearch}
+              setPendingSearch={setPendingSearch}
+              clientSearch={clientSearch}
+              setClientSearch={setClientSearch}
+              submitSearch={submitSearch}
+              onSearchSubmit={
+                paginated ? (props as PaginatedProps).onSearchSubmit : undefined
+              }
             />
           )}
 
@@ -230,6 +211,24 @@ export default function PickerModal(props: Props) {
             style={styles.headerBtn}
           />
         </View>
+
+        {isPhone && (
+          <View style={styles.headerSearchRow}>
+            <SearchControls
+              paginated={paginated}
+              isPhone
+              searchRef={searchRef}
+              pendingSearch={pendingSearch}
+              setPendingSearch={setPendingSearch}
+              clientSearch={clientSearch}
+              setClientSearch={setClientSearch}
+              submitSearch={submitSearch}
+              onSearchSubmit={
+                paginated ? (props as PaginatedProps).onSearchSubmit : undefined
+              }
+            />
+          </View>
+        )}
 
         {/* Sort segments — sadece paginated modda */}
         {paginated &&
@@ -274,7 +273,7 @@ export default function PickerModal(props: Props) {
             <FlashList
               data={listData}
               keyExtractor={(item) => item.value}
-              numColumns={numColumns}
+              numColumns={effectiveColumns}
               renderItem={({ item }) => (
                 <PickerCard
                   option={item}
@@ -336,6 +335,82 @@ export default function PickerModal(props: Props) {
         )}
       </View>
     </Modal>
+  );
+}
+
+function SearchControls({
+  paginated,
+  isPhone,
+  searchRef,
+  pendingSearch,
+  setPendingSearch,
+  clientSearch,
+  setClientSearch,
+  submitSearch,
+  onSearchSubmit,
+}: {
+  paginated: boolean;
+  isPhone: boolean;
+  searchRef: React.RefObject<RNTextInput | null>;
+  pendingSearch: string;
+  setPendingSearch: (v: string) => void;
+  clientSearch: string;
+  setClientSearch: (v: string) => void;
+  submitSearch: () => void;
+  onSearchSubmit?: (q: string) => void;
+}) {
+  if (paginated) {
+    return (
+      <View style={[styles.searchGroup, isPhone && styles.searchGroupPhone]}>
+        <TextInput
+          ref={searchRef as React.Ref<any>}
+          mode="outlined"
+          dense
+          placeholder="Batch no..."
+          value={pendingSearch}
+          onChangeText={setPendingSearch}
+          onSubmitEditing={submitSearch}
+          returnKeyType="search"
+          left={<TextInput.Icon icon="magnify" />}
+          right={
+            pendingSearch.length > 0 ? (
+              <TextInput.Icon
+                icon="close"
+                onPress={() => {
+                  setPendingSearch('');
+                  onSearchSubmit?.('');
+                }}
+              />
+            ) : undefined
+          }
+          style={[styles.searchInput, isPhone && styles.searchInputPhone]}
+          showSoftInputOnFocus
+        />
+        <Button
+          mode="contained"
+          icon="magnify"
+          onPress={submitSearch}
+          style={styles.searchBtn}
+          contentStyle={styles.searchBtnContent}
+          labelStyle={styles.searchBtnLabel}
+        >
+          Ara
+        </Button>
+      </View>
+    );
+  }
+  return (
+    <TextInput
+      ref={searchRef as React.Ref<any>}
+      mode="outlined"
+      dense
+      placeholder="Ara..."
+      value={clientSearch}
+      onChangeText={setClientSearch}
+      left={<TextInput.Icon icon="magnify" />}
+      style={[styles.searchInput, isPhone && styles.searchInputPhone]}
+      showSoftInputOnFocus
+    />
   );
 }
 
@@ -405,6 +480,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 2,
   },
+  headerSearchRow: { paddingTop: 2, paddingBottom: 8 },
   title: { fontWeight: '700', color: '#0f172a', flex: 1, fontSize: 16 },
   headerBtn: { margin: 0, width: 32, height: 32 },
 
@@ -414,12 +490,17 @@ const styles = StyleSheet.create({
     gap: 6,
     height: SEARCH_HEIGHT,
   },
+  searchGroupPhone: { width: '100%' },
   searchInput: {
     backgroundColor: '#fff',
     width: 240,
     height: SEARCH_HEIGHT,
     fontSize: 13,
   },
+  // Phone'da TextInput standalone (parent flex container yok); flex:1 height
+  // verir ama width verme garantisi yok → kartların altına düşüyordu. '100%'
+  // ile container width'i kesin alır.
+  searchInputPhone: { width: '100%' },
   searchBtn: {
     borderRadius: 8,
     height: SEARCH_HEIGHT,

@@ -10,12 +10,64 @@
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { BaseService, BaseServiceConfig } from "./base.service";
-import { ApiResponse } from "../types/api.types";
+import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
-import { OrderStatus } from "@prisma/client";
-import { isValidCurrency, CURRENCY_CODES } from "../config/currencies";
+import { OrderStatus, Prisma, WorkOrderStatus } from "@prisma/client";
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
+import {
+  applyDateRange,
+  buildOrderByClause,
+  buildPagination,
+  buildWhereClause,
+  parseQueryParams,
+} from "../utils/query-parser";
+import { Request } from "express";
+
+// ─── Cancel Akışı Karar Matrisi ─────────────────────────────────────────────
+//
+// Operatör sipariş iptal ederken, etkilenecek her WO için üç olası aksiyon:
+//   - UNLINK_ONLY     : sadece order-WO join'ini sil, WO yaşamaya devam
+//   - CONVERT_TO_STOCK: join sil + WO.type = STOCK_PRODUCTION (kalan üretim
+//                       stoğa düşer; ORDER_PRODUCTION'dı, müşteri iptal etti)
+//   - CANCEL_WO       : WorkOrderService.softDelete (rolls STOCK'a, traveler
+//                       VOID, fason kayıtlar sil vb. tam kaskat)
+//
+// İzin matrisi WO.status + tek/çoklu sipariş durumuna göre değişir.
+// "Tek-sipariş" = bu WO'ya bağlı tek sipariş bu — diğer order link yok.
+
+export type CancelAction = "UNLINK_ONLY" | "CONVERT_TO_STOCK" | "CANCEL_WO";
+
+function computeAllowedActions(
+  woStatus: string,
+  isSoleOrder: boolean
+): CancelAction[] {
+  if (woStatus === "PLANNED") {
+    // Üretim başlamadı; CONVERT/CANCEL anlamsız.
+    return ["UNLINK_ONLY"];
+  }
+  if (woStatus === "COMPLETED") {
+    // Üretim bitti, rulolar var. CANCEL_WO yasak (workorder.service zaten
+    // reddeder). Tek-sipariş ise CONVERT açık (müşteri kaydı silinir).
+    return isSoleOrder ? ["UNLINK_ONLY", "CONVERT_TO_STOCK"] : ["UNLINK_ONLY"];
+  }
+  if (woStatus === "IN_PROGRESS" || woStatus === "PAUSED") {
+    return isSoleOrder
+      ? ["UNLINK_ONLY", "CONVERT_TO_STOCK", "CANCEL_WO"]
+      : ["UNLINK_ONLY"];
+  }
+  // CANCELLED WO bağı zaten anlamsız — gelmemesi gerek ama defansif.
+  return ["UNLINK_ONLY"];
+}
+
+function pickDefaultAction(
+  woStatus: string,
+  isSoleOrder: boolean
+): CancelAction {
+  if (woStatus === "PLANNED") return "UNLINK_ONLY";
+  if (isSoleOrder) return "CONVERT_TO_STOCK"; // en sık vaka: malı stoğa al
+  return "UNLINK_ONLY";
+}
 
 /**
  * Lines üzerinden totalAmount hesaplar. unitPrice null olan satırlar toplama
@@ -78,7 +130,6 @@ export class OrderService extends BaseService {
 
   /**
    * Hedef şubenin müşteriye ait + aktif olduğunu doğrular.
-   * Aynı validasyon deseni shipping.service.ts:createShipment'te kullanılır.
    */
   private async validateBranch(
     branchId: string,
@@ -113,6 +164,109 @@ export class OrderService extends BaseService {
     }
   }
 
+  /**
+   * İş emri picker'ı için müsait sipariş listesi.
+   *
+   * Standart `findAll`'dan iki farkı var:
+   *   1. Sipariş kalemlerini `workOrderLinks`'e göre filtreler. Aktif bir WO'ya
+   *      (PLANNED / IN_PROGRESS / PAUSED / COMPLETED) bağlı kalemler hem
+   *      `include`'dan çıkarılır hem de "hiç müsait kalemi yok" olan siparişler
+   *      tamamen listeden düşer. CANCELLED WO'ya bağlı kalemler tekrar müsait
+   *      sayılır (WO iptal olduysa kalem serbest).
+   *   2. `excludeWorkOrderId` verilirse o WO'nun kendi bağları "bağ değilmiş
+   *      gibi" sayılır. Edit modunda picker mevcut WO'nun seçimlerini gösterip
+   *      kontrol edebilsin diye.
+   *
+   * Standart `filters` (status, customerId), `search`, `dateFrom/dateTo`,
+   * `sortBy` ve sayfalama parametreleri `findAll` ile aynı şekilde çalışır.
+   */
+  async findAvailableForWorkOrder(
+    req: Request,
+    excludeWorkOrderId?: string
+  ): Promise<PaginatedResponse<unknown>> {
+    const params = parseQueryParams(req);
+    // Search'i `buildWhereClause`'a vermiyoruz; picker'da arama relation'lara
+    // (müşteri adı, kalem ürün adı) genişletiliyor — kendi OR'umuzu kuruyoruz.
+    const baseWhere = buildWhereClause(
+      params.filters,
+      this.config.searchFields
+    );
+    applyDateRange(baseWhere, params, this.config.dateFields ?? []);
+
+    const search = params.search?.trim();
+    if (search) {
+      baseWhere.OR = [
+        { orderNumber: { contains: search, mode: "insensitive" } },
+        { customer: { name: { contains: search, mode: "insensitive" } } },
+        { lines: { some: { item: { name: { contains: search, mode: "insensitive" } } } } },
+        { lines: { some: { customerItemName: { contains: search, mode: "insensitive" } } } },
+      ];
+    }
+
+    // "Bloklayıcı" WO statüleri — kalemi başkasına ayırılmış kabul ettirir.
+    // CANCELLED hariç: iptal edilmiş WO'ya bağlı kalem tekrar müsait.
+    const BLOCKING: WorkOrderStatus[] = [
+      WorkOrderStatus.PLANNED,
+      WorkOrderStatus.IN_PROGRESS,
+      WorkOrderStatus.PAUSED,
+      WorkOrderStatus.COMPLETED,
+    ];
+    const lineAvailableFilter = {
+      workOrderLinks: {
+        none: {
+          ...(excludeWorkOrderId
+            ? { workOrderId: { not: excludeWorkOrderId } }
+            : {}),
+          workOrder: {
+            status: { in: BLOCKING },
+          },
+        },
+      },
+    };
+
+    const where = {
+      ...baseWhere,
+      lines: { some: lineAvailableFilter },
+    };
+
+    // include — sadece müsait kalemleri döner
+    const include = {
+      customer: true,
+      branch: { select: { id: true, name: true, city: true, district: true } },
+      lines: {
+        where: lineAvailableFilter,
+        include: {
+          item: {
+            include: {
+              allowedProperties: { include: { property: true } },
+            },
+          },
+          color: true,
+          requiredProperties: { include: { property: true } },
+        },
+      },
+    };
+
+    const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
+    const { skip, take } = buildPagination(params.page, params.pageSize);
+
+    const [data, total] = await Promise.all([
+      prisma.order.findMany({ where, orderBy, skip, take, include }),
+      prisma.order.count({ where }),
+    ]);
+
+    return {
+      success: true,
+      data,
+      pagination: {
+        page: params.page,
+        pageSize: params.pageSize,
+        total,
+        totalPages: Math.ceil(total / params.pageSize),
+      },
+    };
+  }
+
   async create(
     data: Record<string, unknown>,
     userId?: string
@@ -127,13 +281,6 @@ export class OrderService extends BaseService {
       await this.validateBranch(
         data.branchId as string,
         data.customerId as string
-      );
-    }
-
-    // Currency whitelist (varsa). Boş bırakılırsa şema default "TRY" kullanır.
-    if (data.currency != null && !isValidCurrency(data.currency as string)) {
-      throw AppError.badRequest(
-        `Geçersiz para birimi: ${data.currency}. İzinli: ${CURRENCY_CODES.join(", ")}`
       );
     }
 
@@ -261,17 +408,17 @@ export class OrderService extends BaseService {
   }
 
   /**
-   * Update override — status-gated header editi.
+   * Update override — status-gated header + lines editi.
    *
    * Kurallar:
    * - COMPLETED / CANCELLED → değiştirilemez (409).
-   * - PARTIAL_SHIPPED → sadece `deadline` güncellenir; diğer alanlar yoksayılır.
-   * - APPROVED → header alanları (customerId, branchId, currency, totalAmount,
-   *   deadline) açık; ancak aktif (PLANNED dışı) iş emri bağlıysa customerId/
-   *   branchId değiştirilemez (409). Currency whitelist kontrolü de yapılır.
-   * - Lines (kalemler) HİÇBİR durumda güncellenmez — yanlışlıkla gelmiş olsa
-   *   bile data'dan silinir. Kalem değişikliği için sipariş iptal + yeniden
-   *   oluşturma akışı kullanılır.
+   * - PARTIAL_SHIPPED → sadece `deadline` güncellenir; lines forbidden.
+   * - APPROVED / PENDING → header alanları açık. Aktif WO (IN_PROGRESS/PAUSED/
+   *   COMPLETED) bağlıysa customerId/branchId değiştirilemez.
+   * - Lines: CANCELLED dışı herhangi bir WO bağı yoksa düzenlenebilir.
+   *   Diff stratejisi: id eşleşene update, eşleşmeyene create, mevcut'ta var
+   *   incoming'de yok ise delete. customerItemName/customerColorName + property
+   *   referansları id korunduğu için bozulmaz.
    */
   async update(
     id: string,
@@ -286,8 +433,12 @@ export class OrderService extends BaseService {
         status: true,
         lines: {
           select: {
+            id: true,
+            requiredProperties: { select: { propertyId: true } },
             workOrderLinks: {
-              select: { workOrder: { select: { status: true } } },
+              select: {
+                workOrder: { select: { status: true } },
+              },
             },
           },
         },
@@ -304,18 +455,21 @@ export class OrderService extends BaseService {
       );
     }
 
-    // Kalem güncellemesi hiçbir koşulda kabul edilmez.
+    const incomingLines = Array.isArray(data.lines)
+      ? (data.lines as Array<Record<string, unknown>>)
+      : null;
+
     const cleanData: Record<string, unknown> = { ...data };
     delete cleanData.lines;
 
-    // Currency whitelist (varsa). PARTIAL_SHIPPED'de zaten allowlist filtrele.
-    if (cleanData.currency != null && !isValidCurrency(cleanData.currency as string)) {
-      throw AppError.badRequest(
-        `Geçersiz para birimi: ${cleanData.currency}. İzinli: ${CURRENCY_CODES.join(", ")}`
-      );
-    }
-
+    // PARTIAL_SHIPPED: sadece deadline. Lines kabul edilmez, diğer header
+    // alanları sessizce yutulur (eski davranış korunur).
     if (current.status === OrderStatus.PARTIAL_SHIPPED) {
+      if (incomingLines) {
+        throw AppError.conflict(
+          "Kısmi sevk edilmiş siparişin kalemleri değiştirilemez"
+        );
+      }
       const allowed = new Set(["deadline"]);
       for (const key of Object.keys(cleanData)) {
         if (!allowed.has(key)) delete cleanData[key];
@@ -330,7 +484,6 @@ export class OrderService extends BaseService {
     const customerChanging = Object.prototype.hasOwnProperty.call(cleanData, "customerId");
 
     if (branchChanging || customerChanging) {
-      // Aktif (PLANNED dışı) WO bağlıysa müşteri/şube değiştirilemez.
       const blockingStatuses = new Set(["IN_PROGRESS", "PAUSED", "COMPLETED"]);
       const hasBlockingWO = current.lines.some((line) =>
         line.workOrderLinks.some((link) =>
@@ -355,7 +508,125 @@ export class OrderService extends BaseService {
       }
     }
 
-    return super.update(id, cleanData, userId);
+    // Lines payload geldiyse: WO bağı kontrolü + diff uygula.
+    if (incomingLines) {
+      // CANCELLED WO bağları sayılmaz (iptal edilmiş, kalem serbest).
+      const hasActiveWoLink = current.lines.some((line) =>
+        line.workOrderLinks.some((link) => link.workOrder.status !== "CANCELLED")
+      );
+      if (hasActiveWoLink) {
+        throw AppError.conflict(
+          "İş emri açılmış siparişin kalemleri değiştirilemez. Önce iş emrini iptal edin."
+        );
+      }
+      this.validateLines(incomingLines);
+
+      // totalAmount auto-recompute (cleanData'da explicit yoksa)
+      if (cleanData.totalAmount === undefined) {
+        cleanData.totalAmount = computeTotalAmount(
+          incomingLines as Array<{ quantity?: number; unitPrice?: number | null | string }>
+        );
+      }
+    }
+
+    // Tek transaction: lines diff + header update + final fetch.
+    const updated = await prisma.$transaction(async (tx) => {
+      if (incomingLines) {
+        const existingById = new Map(current.lines.map((l) => [l.id, l]));
+        const incomingIds = new Set(
+          incomingLines
+            .filter((l) => typeof l.id === "string" && (l.id as string).length > 0)
+            .map((l) => l.id as string)
+        );
+
+        // Delete: existing - incoming. Cascade ile requiredProperties otomatik siler.
+        const toDelete = [...existingById.keys()].filter((eid) => !incomingIds.has(eid));
+        if (toDelete.length > 0) {
+          await tx.orderLine.deleteMany({ where: { id: { in: toDelete } } });
+        }
+
+        for (const raw of incomingLines) {
+          const propertyIds: string[] = Array.isArray(raw.requiredPropertyIds)
+            ? [...new Set((raw.requiredPropertyIds as string[]).filter(Boolean))]
+            : [];
+
+          const lineData: Record<string, unknown> = { ...raw };
+          delete lineData.id;
+          delete lineData.requiredPropertyIds;
+          // clientId frontend-internal — Prisma'da kolon yok, sızdırma.
+          delete lineData.clientId;
+
+          const existingLine =
+            typeof raw.id === "string" ? existingById.get(raw.id as string) : undefined;
+
+          if (existingLine) {
+            const lineId = existingLine.id;
+            await tx.orderLine.update({ where: { id: lineId }, data: lineData });
+
+            const currentPropIds = new Set(
+              existingLine.requiredProperties.map((p) => p.propertyId)
+            );
+            const incomingPropIds = new Set(propertyIds);
+            const propsToDelete = [...currentPropIds].filter(
+              (pid) => !incomingPropIds.has(pid)
+            );
+            const propsToAdd = [...incomingPropIds].filter(
+              (pid) => !currentPropIds.has(pid)
+            );
+
+            if (propsToDelete.length > 0) {
+              await tx.orderLineRequiredProperty.deleteMany({
+                where: { orderLineId: lineId, propertyId: { in: propsToDelete } },
+              });
+            }
+            if (propsToAdd.length > 0) {
+              await tx.orderLineRequiredProperty.createMany({
+                data: propsToAdd.map((propertyId) => ({ orderLineId: lineId, propertyId })),
+                skipDuplicates: true,
+              });
+            }
+          } else {
+            await tx.orderLine.create({
+              data: {
+                ...(lineData as Prisma.OrderLineUncheckedCreateInput),
+                orderId: id,
+                ...(propertyIds.length > 0
+                  ? {
+                      requiredProperties: {
+                        create: propertyIds.map((propertyId) => ({ propertyId })),
+                      },
+                    }
+                  : {}),
+              },
+            });
+          }
+        }
+      }
+
+      if (Object.keys(cleanData).length > 0) {
+        await tx.order.update({ where: { id }, data: cleanData });
+      }
+
+      return tx.order.findUnique({
+        where: { id },
+        ...(this.config.defaultInclude
+          ? { include: this.config.defaultInclude as Prisma.OrderInclude }
+          : {}),
+      });
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: this.config.tableName,
+      recordId: id,
+      newData: {
+        ...cleanData,
+        ...(incomingLines ? { linesCount: incomingLines.length } : {}),
+      },
+    });
+
+    return { success: true, data: updated, message: "Sipariş güncellendi" };
   }
 
   /**
@@ -443,6 +714,244 @@ export class OrderService extends BaseService {
         plannedLinkIds.length > 0
           ? `Sipariş iptal edildi. ${plannedLinkIds.length} planlı iş emri bağlantısı koparıldı.`
           : "Sipariş iptal edildi",
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // İptal Akışı (Preview + Per-WO Action) — R1.2
+  //
+  // Operatör "Sipariş Sil" derken katı 409 yerine WO başına seçim sunulur:
+  //   - PLANNED WO          → otomatik UNLINK_ONLY (üretim yok, sessiz kopar)
+  //   - IN_PROGRESS/PAUSED ya da COMPLETED + tek-sipariş WO
+  //                         → UNLINK_ONLY | CONVERT_TO_STOCK | CANCEL_WO
+  //                           (CANCEL_WO sadece IN_PROGRESS/PAUSED için)
+  //   - IN_PROGRESS/PAUSED ya da COMPLETED + çoklu-sipariş WO
+  //                         → sadece UNLINK_ONLY (diğer siparişler ayakta)
+  //
+  // Frontend önce `getCancelPreview` ile etkilenecek WO listesini alır,
+  // operatör seçimini yapar, `cancelWithActions` ile uygular.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * İptal "dry-run" — operatöre detaylı onay göstermek için.
+   * Aksiyon belirlenmemiş ham bilgi döner; karar matrisi de döner ki frontend
+   * tek noktadan default'u alabilsin.
+   */
+  async getCancelPreview(orderId: string): Promise<ApiResponse<unknown>> {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        lines: {
+          select: {
+            id: true,
+            workOrderLinks: {
+              select: {
+                allocatedQty: true,
+                workOrder: {
+                  select: {
+                    id: true,
+                    batchNumber: true,
+                    status: true,
+                    type: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) throw AppError.notFound("Sipariş bulunamadı");
+
+    if (
+      order.status === OrderStatus.CANCELLED ||
+      order.status === OrderStatus.COMPLETED
+    ) {
+      throw AppError.conflict(
+        `Sipariş ${order.status === "CANCELLED" ? "zaten iptal" : "tamamlanmış"} — iptal edilemez`
+      );
+    }
+
+    // WO bazında grupla — bir WO'ya birden fazla satırdan bağ olabilir.
+    const woMap = new Map<
+      string,
+      {
+        id: string;
+        batchNumber: string;
+        status: string;
+        allocatedQty: number;
+      }
+    >();
+    for (const line of order.lines) {
+      for (const link of line.workOrderLinks) {
+        const wo = link.workOrder;
+        const existing = woMap.get(wo.id);
+        if (existing) {
+          existing.allocatedQty += Number(link.allocatedQty);
+        } else {
+          woMap.set(wo.id, {
+            id: wo.id,
+            batchNumber: wo.batchNumber,
+            status: wo.status,
+            allocatedQty: Number(link.allocatedQty),
+          });
+        }
+      }
+    }
+
+    // Her WO için: diğer siparişlere de bağlı mı + üretilen rulo sayısı.
+    const affectedWorkOrders = await Promise.all(
+      Array.from(woMap.values()).map(async (wo) => {
+        const [otherOrders, producedRollCount] = await Promise.all([
+          prisma.order.findMany({
+            where: {
+              id: { not: orderId },
+              lines: {
+                some: { workOrderLinks: { some: { workOrderId: wo.id } } },
+              },
+            },
+            select: { id: true, orderNumber: true },
+          }),
+          prisma.roll.count({
+            where: { producedInStep: { workOrderId: wo.id } },
+          }),
+        ]);
+
+        const isSoleOrder = otherOrders.length === 0;
+        const allowedActions = computeAllowedActions(wo.status, isSoleOrder);
+        const defaultAction = pickDefaultAction(wo.status, isSoleOrder);
+
+        return {
+          id: wo.id,
+          batchNumber: wo.batchNumber,
+          status: wo.status,
+          allocatedQty: wo.allocatedQty,
+          isSoleOrder,
+          otherOrdersCount: otherOrders.length,
+          otherOrderNumbers: otherOrders.map((o) => o.orderNumber),
+          producedRollCount,
+          allowedActions,
+          defaultAction,
+        };
+      })
+    );
+
+    return {
+      success: true,
+      data: {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        affectedWorkOrders,
+      },
+    };
+  }
+
+  /**
+   * Planlamacı: Preview'ı görüp her WO için seçim yaptıktan sonra çağrılır.
+   * `workOrderActions` boş gelirse default davranış uygulanır (preview ile
+   * aynı): PLANNED → UNLINK_ONLY, IN_PROGRESS+ tek-sipariş → CONVERT_TO_STOCK,
+   * çoklu-sipariş → UNLINK_ONLY.
+   *
+   * Sıra: önce CANCEL_WO aksiyonları (WorkOrderService.softDelete cascadeleriyle),
+   * sonra tek transaction içinde join temizliği + WO type değişimi + order
+   * iptal. CANCEL_WO öncesi başarılı, sonrası başarısız olursa orphan WO
+   * iptal kalır — operatör tekrar denerse idempotent (zaten iptal).
+   */
+  async cancelWithActions(
+    orderId: string,
+    workOrderActions: Array<{ workOrderId: string; action: CancelAction }>,
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    const previewRes = await this.getCancelPreview(orderId);
+    const preview = previewRes.data as {
+      orderId: string;
+      orderNumber: string;
+      affectedWorkOrders: Array<{
+        id: string;
+        status: string;
+        isSoleOrder: boolean;
+        allowedActions: CancelAction[];
+        defaultAction: CancelAction;
+      }>;
+    };
+
+    // Her WO için seçilen aksiyonu belirle (operatör vermediyse default).
+    const actionByWO = new Map<string, CancelAction>();
+    for (const wo of preview.affectedWorkOrders) {
+      const provided = workOrderActions.find((a) => a.workOrderId === wo.id);
+      if (provided) {
+        if (!wo.allowedActions.includes(provided.action)) {
+          throw AppError.badRequest(
+            `WO ${wo.id} için '${provided.action}' geçersiz. İzinli: ${wo.allowedActions.join(", ")}`
+          );
+        }
+        actionByWO.set(wo.id, provided.action);
+      } else {
+        actionByWO.set(wo.id, wo.defaultAction);
+      }
+    }
+
+    // 1) CANCEL_WO aksiyonları — WorkOrderService.softDelete cascadeleriyle.
+    //    Dynamic import: workorder.service.ts → order.service.ts döngüsünden
+    //    kaçınmak için.
+    const cancelWoIds = preview.affectedWorkOrders
+      .filter((wo) => actionByWO.get(wo.id) === "CANCEL_WO")
+      .map((wo) => wo.id);
+    if (cancelWoIds.length > 0) {
+      const { WorkOrderService } = await import("./workorder.service");
+      const woService = new WorkOrderService();
+      for (const woId of cancelWoIds) {
+        await woService.softDelete(woId, userId);
+      }
+    }
+
+    // 2) Tek transaction: convert + unlink + order cancel.
+    await prisma.$transaction(async (tx) => {
+      for (const wo of preview.affectedWorkOrders) {
+        const action = actionByWO.get(wo.id)!;
+        if (action === "CONVERT_TO_STOCK") {
+          await tx.workOrder.update({
+            where: { id: wo.id },
+            data: { type: "STOCK_PRODUCTION" },
+          });
+        }
+        // UNLINK_ONLY / CONVERT_TO_STOCK / CANCEL_WO hepsi join'i temizler.
+        await tx.workOrderToOrderLine.deleteMany({
+          where: {
+            workOrderId: wo.id,
+            orderLine: { orderId },
+          },
+        });
+      }
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.CANCELLED },
+      });
+    });
+
+    await AuditService.log({
+      userId,
+      action: "DELETE",
+      tableName: this.config.tableName,
+      recordId: orderId,
+      newData: {
+        status: "CANCELLED",
+        actions: Array.from(actionByWO.entries()).map(([woId, a]) => ({
+          workOrderId: woId,
+          action: a,
+        })),
+      },
+    });
+
+    const updated = await prisma.order.findUnique({ where: { id: orderId } });
+    return {
+      success: true,
+      data: updated,
+      message: `Sipariş iptal edildi (${preview.affectedWorkOrders.length} iş emri etkilendi)`,
     };
   }
 

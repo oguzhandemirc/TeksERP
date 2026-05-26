@@ -32,9 +32,11 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
+  /** Optional prefill — "Yeni Kod Üret" row action'ından gelen değerler. */
+  defaults?: { machineId?: string; deviceName?: string };
 }
 
-export function PairingCodeDialog({ open, onOpenChange, onCreated }: Props) {
+export function PairingCodeDialog({ open, onOpenChange, onCreated, defaults }: Props) {
   const [generated, setGenerated] = useState<PairingCode | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -45,11 +47,14 @@ export function PairingCodeDialog({ open, onOpenChange, onCreated }: Props) {
 
   useEffect(() => {
     if (open) {
-      form.reset({ machineId: "", deviceName: "" });
+      form.reset({
+        machineId: defaults?.machineId ?? "",
+        deviceName: defaults?.deviceName ?? "",
+      });
       setGenerated(null);
       setCopied(false);
     }
-  }, [open, form]);
+  }, [open, form, defaults]);
 
   const mutation = useMutation({
     mutationFn: deviceService.createPairingCode,

@@ -9,7 +9,7 @@ export const customerFormSchema = z.object({
     .max(200, "Müşteri adı en fazla 200 karakter olabilir"),
   taxNumber: z
     .string()
-    .max(40, "Vergi numarası en fazla 40 karakter olabilir")
+    .max(32, "Vergi numarası en fazla 32 karakter olabilir")
     .optional()
     .or(z.literal("")),
   type: z.enum([CompanyType.CUSTOMER, CompanyType.SUPPLIER], {

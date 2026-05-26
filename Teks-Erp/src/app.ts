@@ -5,6 +5,12 @@ import morgan from "morgan";
 import compression from "compression";
 import { setupSwagger } from "./config/swagger";
 import { errorHandler } from "./middlewares/error.middleware";
+import { installDecimalNumberSerializer } from "./utils/json-replacer";
+
+// Tüm res.json() çıktısında Prisma Decimal → number çevirir
+// (Decimal.prototype.toJSON override'ı). Aksi halde Decimal'ler client'a string
+// olarak gider, frontend `toFixed`/aritmetik hataları alır. Bkz. json-replacer.ts.
+installDecimalNumberSerializer();
 
 // Routes
 import authRoutes from "./routes/auth.routes";
@@ -17,26 +23,19 @@ import orderRoutes from "./routes/order.routes";
 import workOrderRoutes from "./routes/workorder.routes";
 import productionRoutes from "./routes/production.routes";
 import tamburRoutes from "./routes/tambur.routes";
-import packagingRoutes from "./routes/packaging.routes";
 import kursunQcRoutes from "./routes/kursun-qc.routes";
-import shippingRoutes from "./routes/shipping.routes";
 import travelerCardRoutes from "./routes/traveler-card.routes";
 import subcontractorRoutes from "./routes/subcontractor.routes";
 import {
   subcontractorRouter,
   subcontractorCategoryRouter,
 } from "./routes/subcontractor-management.routes";
-import serviceProductionRoutes from "./routes/service-production.routes";
 import swatchRoutes from "./routes/swatch.routes";
 import defectTypeRoutes from "./routes/defect-type.routes";
 import qualityGradeRoutes from "./routes/quality-grade.routes";
 import colorRoutes from "./routes/color.routes";
 import fabricPropertyRoutes from "./routes/fabric-property.routes";
 import stationCapabilityRoutes from "./routes/station-capability.routes";
-import allocationRoutes from "./routes/allocation.routes";
-import packagingQueueRoutes from "./routes/packaging-queue.routes";
-import shippingQueueRoutes from "./routes/shipping-queue.routes";
-import sackRoutes from "./routes/sack.routes";
 import labelRoutes from "./routes/label.routes";
 import labelTemplateRoutes from "./routes/label-template.routes";
 import currencyRoutes from "./routes/currency.routes";
@@ -48,6 +47,7 @@ import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
 
 const app: Express = express();
+
 
 // =============================================================================
 // Core Middlewares
@@ -89,24 +89,17 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/work-orders", workOrderRoutes);
 app.use("/api/production", productionRoutes);
 app.use("/api/tambur", tamburRoutes);
-app.use("/api/packaging", packagingRoutes);
 app.use("/api/kursun-qc", kursunQcRoutes);
-app.use("/api/shipping", shippingRoutes);
 app.use("/api/traveler-cards", travelerCardRoutes);
 app.use("/api/subcontractor", subcontractorRoutes);
 app.use("/api/subcontractors", subcontractorRouter);
 app.use("/api/subcontractor-categories", subcontractorCategoryRouter);
-app.use("/api/service-production", serviceProductionRoutes);
 app.use("/api/swatches", swatchRoutes);
 app.use("/api/defect-types", defectTypeRoutes);
 app.use("/api/quality-grades", qualityGradeRoutes);
 app.use("/api/colors", colorRoutes);
 app.use("/api/fabric-properties", fabricPropertyRoutes);
 app.use("/api/station-capabilities", stationCapabilityRoutes);
-app.use("/api/allocations", allocationRoutes);
-app.use("/api/packaging-queue", packagingQueueRoutes);
-app.use("/api/shipping-queue", shippingQueueRoutes);
-app.use("/api/sacks", sackRoutes);
 app.use("/api/labels", labelRoutes);
 app.use("/api/label-templates", labelTemplateRoutes);
 app.use("/api/currencies", currencyRoutes);

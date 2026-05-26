@@ -1,38 +1,48 @@
-import React, { useEffect, useRef } from 'react';
-import { View } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
+import { useEffect, useRef } from 'react';
 import * as Print from 'expo-print';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import { buildRollLabelHtml } from '../utils/labelHtml';
 import { labelService } from '../services/label.service';
+import { apiClient } from '../services/api';
 import type { Roll } from '../types/models';
 
 interface Props {
   /** Etiketi basılacak top. null ise hiçbir şey yapılmaz. */
   roll: Roll | null;
-  /** Top WO'ya bağlı ise üst başlıkta gösterilecek parti no (opsiyonel). */
-  batchNumber?: string | null;
+  /** Etiket türü — KK1 → ROLL_RAW, Tambur → ROLL_FINISHED. Backend hangi
+   *  default şablonun uygulanacağını belirler. */
+  kind: 'ROLL_RAW' | 'ROLL_FINISHED';
   /** Print akışı bittiğinde (başarılı / hatalı) parent state'ini temizler. */
   onDone: () => void;
 }
 
 /**
- * "Headless" yazdırma bileşeni — top etiketi A4 PDF olarak basar.
+ * Etiket basma — backend `/labels/rolls/:id/html` endpoint'inden hazır HTML
+ * çeker, expo-print'e verir. Tüm render mantığı (barcode SVG, QR SVG, şablon
+ * uygulama, alan visibility/label/bold) backend'de.
  *
- * Akış:
- *   1. Off-screen QRCode component mount edilir
- *   2. toDataURL → base64 PNG
- *   3. HTML template'i üret
- *   4. Print.printAsync → sistem print dialog'u (Save as PDF / paylaş)
- *
- * Parent: `<LabelPrinter roll={pending} onDone={() => setPending(null)} />`
- * pending=null → render edilmez.
+ * "Mobil ile Electron'daki etiket farklı" sorunu yapısal olarak çözülür —
+ * Electron LabelPreview de iframe ile aynı HTML'i tüketir.
  */
-export function LabelPrinter({ roll, batchNumber, onDone }: Props) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const qrRef = useRef<any>(null);
+export function LabelPrinter({ roll, kind, onDone }: Props) {
   const firedRef = useRef(false);
+
+  // onDone parent'tan inline arrow gelebilir → effect deps'inden çıkarmak için
+  // ref'le sabitliyoruz. Böylece print akışı yarıda re-tetiklenmez.
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
+
+  // Async print akışı saniyeler sürer; bu sırada parent unmount olursa
+  // onDone çağrısı ve Toast/Haptic side-effect'leri anlamsız → mounted bayrağı.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!roll) {
@@ -40,61 +50,63 @@ export function LabelPrinter({ roll, batchNumber, onDone }: Props) {
       return;
     }
     if (!roll.barcode) {
-      // Açık kumaş Roll'lar (barkodsuz) için etiket basılmaz.
       Toast.show({
         type: 'info',
         text1: 'Bu top için etiket basılamaz',
         text2: 'Açık kumaş (Kurşun/KK2 öncesi) fiziksel etiket almaz.',
       });
-      onDone();
+      onDoneRef.current();
       return;
     }
     if (firedRef.current) return;
-    // QR component'in mount olup ref'i set etmesi için kısa bir tick bekle.
-    const t = setTimeout(() => {
-      if (!qrRef.current) {
-        Toast.show({ type: 'error', text1: 'QR oluşturulamadı' });
-        onDone();
-        return;
-      }
-      firedRef.current = true;
-      qrRef.current.toDataURL(async (base64: string) => {
-        try {
-          const html = buildRollLabelHtml({
-            roll,
-            qrDataUrl: `data:image/png;base64,${base64}`,
-            batchNumber,
-          });
-          await Print.printAsync({ html });
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          // Refactor 6 — audit izi (label:print yetkisi backend'de zorlanır).
-          // Hata baskı akışını engellemez — sessiz log.
-          labelService.recordPrintEvent(roll.id).catch((e) => {
-            console.warn('Print audit failed', (e as Error).message);
-          });
-        } catch (err) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          Toast.show({
-            type: 'error',
-            text1: 'Yazdırma hatası',
-            text2: (err as Error).message,
-          });
-        } finally {
-          onDone();
+    firedRef.current = true;
+
+    (async () => {
+      try {
+        const r = await apiClient.get<string>(`/labels/rolls/${roll.id}/html`, {
+          params: { kind },
+          responseType: 'text',
+          transformResponse: [(d) => d],
+        });
+        const html = String(r.data ?? '');
+        if (!html.startsWith('<')) {
+          throw new Error('Etiket HTML alınamadı');
         }
-      });
-    }, 80);
-    return () => clearTimeout(t);
-  }, [roll, batchNumber, onDone]);
+        // margins: 0 → expo-print default kenar payını sıfırlar. Aksi halde
+        // HTML'deki @page { margin: 0 } iOS/Android WebKit print preview'a
+        // tam yansımıyor, etiket sayfanın sol üst köşesinden 4-5mm aşağıda
+        // başlıyor. Fiziksel yazıcı yine de küçük donanım payı bırakabilir.
+        await Print.printAsync({
+          html,
+          margins: { left: 0, top: 0, right: 0, bottom: 0 },
+        });
+        if (!mountedRef.current) return;
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Audit izi — başarısızlığı baskı akışını engellemez.
+        labelService.recordPrintEvent(roll.id).catch((e) => {
+          console.warn('Print audit failed', (e as Error).message);
+        });
+      } catch (err) {
+        if (!mountedRef.current) return;
+        // expo-print iptal: kullanıcı yazdırma diyalogunu kapattı → hata değil,
+        // info toast göster. "did not complete" expo-print'in iptal mesajı.
+        const msg = (err as Error).message ?? '';
+        const isCancel = /did not complete|cancel/i.test(msg);
+        void Haptics.notificationAsync(
+          isCancel
+            ? Haptics.NotificationFeedbackType.Warning
+            : Haptics.NotificationFeedbackType.Error,
+        );
+        Toast.show({
+          type: isCancel ? 'info' : 'error',
+          text1: isCancel ? 'Yazdırma iptal edildi' : 'Yazdırma hatası',
+          text2: isCancel ? 'Etiket basılmadı' : 'Yazıcıya gönderilemedi',
+        });
+      } finally {
+        if (mountedRef.current) onDoneRef.current();
+      }
+    })();
+  }, [roll, kind]);
 
-  if (!roll || !roll.barcode) return null;
-
-  return (
-    <View
-      style={{ position: 'absolute', left: -10000, top: -10000, opacity: 0 }}
-      pointerEvents="none"
-    >
-      <QRCode value={roll.barcode} size={400} ecl="M" getRef={(c) => (qrRef.current = c)} />
-    </View>
-  );
+  return null;
 }

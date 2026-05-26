@@ -22,13 +22,10 @@ interface Props {
 }
 
 function emptyStateMessage(station: StationCapabilitySummary): string {
-  if (station.stationKind !== "SUBCONTRACTOR") {
-    return "Renk ve özellik yetkinliği yalnızca fason istasyonlarına atanabilir.";
-  }
   if (!station.hasDefaultCategory) {
-    return "Bu istasyona varsayılan fason kategorisi atanmamış. İstasyonlar sayfasından bir kategori seçin (örn. Boyahane).";
+    return "Bu istasyonun atanmış kategorisi yok. Kategori atanmadan da renk/özellik atanabilir — sayfayı yenileyin.";
   }
-  return "Varsayılan fason kategorisinin renk veren (appliesColor) veya özellik veren (appliesProperty) olması gerekir.";
+  return "Atanmış kategori renk veren (appliesColor) veya özellik veren (appliesProperty) değil. Kategori bayraklarını Fason Kategorileri sayfasından değiştirin.";
 }
 
 export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {

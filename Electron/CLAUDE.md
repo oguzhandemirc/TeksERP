@@ -3,7 +3,6 @@
 Electron 33 + React 19 + TypeScript + Vite. Yönetim paneli; saha akışı yok. Backend `Teks-Erp/` (Express 5 + Prisma 7) ile HTTP üzerinden konuşur.
 
 > Root `CLAUDE.md` ve `Teks-Erp/ARCHITECTURE.md` domain referansıdır.
-> Frontend `React/` mevcut UI'ı **referans değildir** — tipler ve API kontratı dışında ondan kopyalama.
 
 ## Komutlar
 
@@ -70,8 +69,6 @@ Electron/
 3. **`electron/preload.ts`'ye köprü ekle** — sadece serializable veri geçer.
 4. **Renderer'da `window.api.<domain>.<action>(...)` ile çağır.**
 
-`.claude/skills/electron-ipc-handler` skill'i bu dört adımı atomik yapar — yeni IPC kanalı eklerken kullan.
-
 ## API Kontratı
 
 Backend `Teks-Erp/` döndüğü şekiller — `src/types/api.ts`:
@@ -92,15 +89,17 @@ Sonuç: mutation'larda `onError` ile generic toast atma — duplicate olur.
 
 ## RBAC
 
-JWT `roles[]` ve `permissions[]` taşır. `useRoleAccess` ile UI kontrol:
+JWT yalnız `permissions[]` taşır (rol modeli **yok** — backend `UserPermission` ile doğrudan kullanıcıya bağlar). `useRoleAccess` ile UI kontrol:
 
 ```tsx
-const { isAdmin, hasPermission, hasRole } = useRoleAccess();
+const { isAdmin, hasPermission, hasAnyPermission, hasAllPermissions } = useRoleAccess();
 {isAdmin && <Button>Sil</Button>}
 <PermissionGate permission="admin:users"><Button>Yeni</Button></PermissionGate>
 ```
 
-**Uygulamaya kabul:** Admin rolü VEYA Planlama Şefi rolü. Phase 1'de Planlama Şefi tüm sayfaları görüyor; Admin-only sayfalar `<ProtectedRoute requirePermission="admin:*">` ile kilitli.
+`isAdmin = hasAdminAccess(permissions)` → `admin:users | admin:settings | admin:*` permission'larından herhangi biri varsa true. **`hasRole` yok** — tüm yetki kontrolü permission bazlı.
+
+**Uygulamaya kabul (`canEnterApp`):** Kullanıcının en az bir permission'ı olmalı. Admin-only sayfalar `<ProtectedRoute requirePermission="admin:*">` ile kilitli.
 
 ## CRUD Pattern (yeni Master Data sayfası 5 dosya)
 
@@ -114,7 +113,6 @@ pages/<Module>/
 └── <Module>Page.tsx     # useDataTable + useCrudMutations + DataTable
 ```
 
-**Yeni page yazarken `.claude/skills/electron-admin-page` skill'i bu iskeleti üretir.**
 
 ## Sidebar Kuralı (KRİTİK)
 
@@ -170,10 +168,12 @@ Yenisi için onay al. Mevcutlar:
 | HTTP | `axios` |
 | Date | `date-fns` |
 | Charts | `recharts` |
+| Drag & Drop | `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities` |
+| QR / Renk | `qrcode.react`, `react-colorful` |
 
 ## Test Kullanıcıları
 
-`admin / admin123` (Admin), `planlama / test123` (Planlama Şefi). Diğer 4 rol Phase 1'de uygulamaya giremez.
+`admin / admin123` (seed'de 42 permission). Diğer 6 test kullanıcısı (`mehmet.planlama, ali.operator, ayse.kalite, fatma.satis, ali.kursun, ahmet.depo` — şifre `test123`) **yetkisiz başlar** ve admin UI'sından (`/admin/users/:id/permissions`) tek tek izin atanmadıkça uygulamaya giremez (`canEnterApp` false).
 
 ## Yeni Sayfa Kontrol Listesi
 

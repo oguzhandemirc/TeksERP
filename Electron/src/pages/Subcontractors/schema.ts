@@ -8,17 +8,17 @@ export const subcontractorFormSchema = z.object({
     .max(120, "Fason firma adı en fazla 120 karakter olabilir"),
   taxNumber: z
     .string()
-    .max(40, "Vergi numarası en fazla 40 karakter olabilir")
+    .max(32, "Vergi numarası en fazla 32 karakter olabilir")
     .optional()
     .or(z.literal("")),
   phone: z
     .string()
-    .max(40, "Telefon en fazla 40 karakter olabilir")
+    .max(32, "Telefon en fazla 32 karakter olabilir")
     .optional()
     .or(z.literal("")),
   address: z
     .string()
-    .max(300, "Adres en fazla 300 karakter olabilir")
+    .max(500, "Adres en fazla 500 karakter olabilir")
     .optional()
     .or(z.literal("")),
   isActive: z.boolean(),

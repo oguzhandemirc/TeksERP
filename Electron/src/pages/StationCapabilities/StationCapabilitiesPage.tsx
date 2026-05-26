@@ -21,19 +21,16 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { RefreshButton } from "@/components/RefreshButton";
-import { StationKind, stationKindLabels } from "@/types/enums";
+import { stationKindLabels } from "@/types/enums";
 import { stationCapabilityService } from "./service";
 import { CapabilitiesEditSheet } from "./CapabilitiesEditSheet";
 import type { StationCapabilitySummary } from "./types";
 
 function disabledHint(cap: StationCapabilitySummary): string {
-  if (cap.stationKind !== StationKind.SUBCONTRACTOR) {
-    return "Renk ve özellik yetkinliği yalnızca fason istasyonlarına atanabilir";
-  }
   if (!cap.hasDefaultCategory) {
-    return "Bu istasyona varsayılan fason kategorisi atanmamış — İstasyonlar sayfasından atayın";
+    return "Bu istasyonun atanmış kategorisi yok — kategori atanmadan da renk/özellik atanabilir";
   }
-  return "Varsayılan fason kategorisi renk veya özellik uygulamıyor (appliesColor / appliesProperty kapalı)";
+  return "Atanmış kategori renk veya özellik uygulamıyor (appliesColor / appliesProperty kapalı)";
 }
 
 const QUERY_KEY = "station-capabilities";
@@ -62,7 +59,7 @@ export function StationCapabilitiesPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="İstasyon Yetenekleri"
-        description="Fason istasyonlarının uygulayabileceği renk ve kazandırabileceği özellikler burada atanır."
+        description="Tüm istasyonların (iç + fason) uygulayabileceği renk ve kazandırabileceği özellikler burada atanır. Buradan geçen ruloya otomatik aktarılır."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 

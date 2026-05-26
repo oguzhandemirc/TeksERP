@@ -27,8 +27,6 @@ const TABLE_LABEL: Record<string, string> = {
 
   // Sipariş & İş Emri
   ORDER: "Sipariş",
-  ORDER_ALLOCATION: "Sipariş Tahsisi",
-  OrderAllocation: "Sipariş Tahsisi",
   WORK_ORDER: "İş Emri",
   WORK_ORDER_STEP: "İş Emri Adımı",
 

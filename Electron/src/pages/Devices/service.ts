@@ -28,4 +28,14 @@ export const deviceService = {
 
   deactivate: (id: string): Promise<ApiResponse<DeviceListItem>> =>
     apiClient.delete<ApiResponse<DeviceListItem>>(`${BASE}/${id}`).then((r) => r.data),
+
+  reactivate: (id: string): Promise<ApiResponse<DeviceListItem>> =>
+    apiClient
+      .post<ApiResponse<DeviceListItem>>(`${BASE}/${id}/reactivate`)
+      .then((r) => r.data),
+
+  hardDelete: (id: string): Promise<ApiResponse<{ id: string }>> =>
+    apiClient
+      .delete<ApiResponse<{ id: string }>>(`${BASE}/${id}/permanent`)
+      .then((r) => r.data),
 };

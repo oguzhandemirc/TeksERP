@@ -82,8 +82,8 @@ export function buildNextCursor(
 // =============================================================================
 // Generic (dinamik) cursor — keyfi sortBy / sortOrder destekli.
 // Yukarıdaki createdAt-only cursor base.service'te artık bu fonksiyonlarla
-// genelleştirildi. Diğer service'ler (workorder/inventory/shipping/allocation)
-// hâlâ eski createdAt-cursor kullanıyor — onlara dokunulmadı.
+// genelleştirildi. Diğer service'ler (workorder/inventory) hâlâ eski
+// createdAt-cursor kullanıyor — onlara dokunulmadı.
 // =============================================================================
 
 const NULL_MARKER = "\u0000NULL\u0000";

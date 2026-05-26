@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, useWindowDimensions } from 'react-native';
 import RNModal from 'react-native-modal';
 import {
@@ -18,6 +18,7 @@ import Toast from 'react-native-toast-message';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
+import { useDeviceType } from '../../../hooks/useDeviceType';
 import { rollService } from '../../../services/roll.service';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 
@@ -26,13 +27,14 @@ import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 // Read-only liste + barkod scan + filtre + detay.
 // =============================================================================
 
-type StatusFilter = 'ALL' | 'WAREHOUSE' | 'READY_FOR_SHIP' | 'A1_STOCK';
+// Sevkiyat domain'i sıfırlandı — READY_FOR_SHIP enum'u kaldırıldı. Depo'da
+// şu an sadece WAREHOUSE statüsü anlamlı (Tambur sonrası + manuel renkli giriş).
+// Sevkiyat modülü yeniden yazılınca buraya yeni durumlar eklenecek.
+type StatusFilter = 'ALL' | 'WAREHOUSE';
 
 const STATUS_TABS: { key: StatusFilter; label: string; color: string }[] = [
   { key: 'ALL', label: 'Tümü', color: '#475569' },
-  { key: 'WAREHOUSE', label: 'Depoda (Ham)', color: '#d97706' },
-  { key: 'READY_FOR_SHIP', label: 'Paketlenmiş', color: '#059669' },
-  { key: 'A1_STOCK', label: 'A1 Stok', color: '#7c3aed' },
+  { key: 'WAREHOUSE', label: 'Depoda', color: '#d97706' },
 ];
 
 interface RollListItem {
@@ -52,16 +54,17 @@ interface RollListItem {
 }
 
 export default function DepoScreen() {
+  const device = useDeviceType();
+  const isPhone = device === 'phone';
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [search, setSearch] = useState('');
   const [scanInput, setScanInput] = useState('');
   const [scanning, setScanning] = useState(false);
   const [detailRoll, setDetailRoll] = useState<RollListItem | null>(null);
+  const handleDetailDismiss = useCallback(() => setDetailRoll(null), []);
 
   const filterStatus =
-    statusFilter === 'ALL'
-      ? 'WAREHOUSE,READY_FOR_SHIP,A1_STOCK'
-      : statusFilter;
+    statusFilter === 'ALL' ? 'WAREHOUSE' : statusFilter;
 
   const rollsQuery = useQuery({
     queryKey: ['rolls', 'depo', statusFilter, search],
@@ -86,15 +89,17 @@ export default function DepoScreen() {
       totalQty: 0,
       totalWeight: 0,
       warehouse: 0,
-      readyForShip: 0,
-      a1Stock: 0,
+      a1Quality: 0,
+      fireQuality: 0,
     };
     for (const r of rolls) {
-      sums.totalQty += r.currentQty;
-      if (r.weightKg != null) sums.totalWeight += r.weightKg;
+      // Backend Decimal alanları string döner — Number() ile coerce şart, aksi
+      // halde `+=` string concat yapıp .toFixed çağrılarını bozar.
+      sums.totalQty += Number(r.currentQty ?? 0);
+      if (r.weightKg != null) sums.totalWeight += Number(r.weightKg);
       if (r.status === 'WAREHOUSE') sums.warehouse++;
-      else if (r.status === 'READY_FOR_SHIP') sums.readyForShip++;
-      else if (r.status === 'A1_STOCK') sums.a1Stock++;
+      if (r.qualityGrade === 'A1') sums.a1Quality++;
+      else if (r.qualityGrade === 'FIRE') sums.fireQuality++;
     }
     return sums;
   }, [rolls]);
@@ -132,27 +137,57 @@ export default function DepoScreen() {
     >
       <View style={styles.container}>
         {/* Üst — istatistik özet */}
-        <Surface style={styles.statsCard} elevation={1}>
-          <StatBox label="Toplam Top" value={stats.count} color="#0f172a" />
-          <View style={styles.statDivider} />
-          <StatBox
-            label="Toplam Metre"
-            value={`${stats.totalQty.toFixed(0)} m`}
-            color="#0f172a"
-          />
-          <View style={styles.statDivider} />
-          <StatBox
-            label="Toplam Brüt"
-            value={`${stats.totalWeight.toFixed(0)} kg`}
-            color="#0f172a"
-          />
-          <View style={styles.statDivider} />
-          <StatBox label="Depoda" value={stats.warehouse} color="#d97706" />
-          <View style={styles.statDivider} />
-          <StatBox label="Paketli" value={stats.readyForShip} color="#059669" />
-          <View style={styles.statDivider} />
-          <StatBox label="A1" value={stats.a1Stock} color="#7c3aed" />
-        </Surface>
+        {isPhone ? (
+          <Surface style={styles.statsCardPhone} elevation={1}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.statsScrollContent}
+            >
+              <StatBox label="Toplam Top" value={stats.count} color="#0f172a" />
+              <View style={styles.statDivider} />
+              <StatBox
+                label="Metre"
+                value={`${stats.totalQty.toFixed(0)} m`}
+                color="#0f172a"
+              />
+              <View style={styles.statDivider} />
+              <StatBox
+                label="Brüt"
+                value={`${stats.totalWeight.toFixed(0)} kg`}
+                color="#0f172a"
+              />
+              <View style={styles.statDivider} />
+              <StatBox label="Depoda" value={stats.warehouse} color="#d97706" />
+              <View style={styles.statDivider} />
+              <StatBox label="A1" value={stats.a1Quality} color="#7c3aed" />
+              <View style={styles.statDivider} />
+              <StatBox label="Fire" value={stats.fireQuality} color="#ef4444" />
+            </ScrollView>
+          </Surface>
+        ) : (
+          <Surface style={styles.statsCard} elevation={1}>
+            <StatBox label="Toplam Top" value={stats.count} color="#0f172a" />
+            <View style={styles.statDivider} />
+            <StatBox
+              label="Toplam Metre"
+              value={`${stats.totalQty.toFixed(0)} m`}
+              color="#0f172a"
+            />
+            <View style={styles.statDivider} />
+            <StatBox
+              label="Toplam Brüt"
+              value={`${stats.totalWeight.toFixed(0)} kg`}
+              color="#0f172a"
+            />
+            <View style={styles.statDivider} />
+            <StatBox label="Depoda" value={stats.warehouse} color="#d97706" />
+            <View style={styles.statDivider} />
+            <StatBox label="A1" value={stats.a1Quality} color="#7c3aed" />
+            <View style={styles.statDivider} />
+            <StatBox label="Fire" value={stats.fireQuality} color="#ef4444" />
+          </Surface>
+        )}
 
         {/* Üst — barkod scan + arama */}
         <Surface style={styles.toolbar} elevation={1}>
@@ -161,12 +196,12 @@ export default function DepoScreen() {
               mode="outlined"
               value={scanInput}
               onChangeText={setScanInput}
-              placeholder="Barkod okut → detay aç"
+              placeholder={isPhone ? 'Barkod' : 'Barkod okut → detay aç'}
               autoCapitalize="characters"
               autoCorrect={false}
               onSubmitEditing={handleScan}
               returnKeyType="search"
-              style={[styles.input, { flex: 1 }]}
+              style={[styles.input, styles.inputRow]}
               dense
               left={<TextInput.Icon icon="qrcode-scan" />}
             />
@@ -174,8 +209,8 @@ export default function DepoScreen() {
               mode="outlined"
               value={search}
               onChangeText={setSearch}
-              placeholder="Ürün/varyant ara..."
-              style={[styles.input, { flex: 1 }]}
+              placeholder={isPhone ? 'Kumaş ara' : 'Kumaş adı/kodu ara...'}
+              style={[styles.input, styles.inputRow]}
               dense
               left={<TextInput.Icon icon="magnify" />}
             />
@@ -245,11 +280,10 @@ export default function DepoScreen() {
         </View>
       </View>
 
-      {/* Detay modal */}
-      <RollDetailModal
-        roll={detailRoll}
-        onDismiss={() => setDetailRoll(null)}
-      />
+      {/* Detay modal — yalnızca seçili top varken mount: hook'lar/query'ler boşa çalışmasın */}
+      {detailRoll && (
+        <RollDetailModal roll={detailRoll} onDismiss={handleDetailDismiss} />
+      )}
     </ScreenChrome>
   );
 }
@@ -292,14 +326,22 @@ function RollListRow({
                 style={[
                   styles.statusPill,
                   roll.status === 'WAREHOUSE' && styles.statusPillWarehouse,
-                  roll.status === 'READY_FOR_SHIP' && styles.statusPillReady,
-                  roll.status === 'A1_STOCK' && styles.statusPillA1,
                 ]}
               >
                 <Text style={styles.statusPillText}>
                   {trLabel(ROLL_STATUS_LABEL, roll.status)}
                 </Text>
               </View>
+              {roll.qualityGrade === 'A1' && (
+                <View style={[styles.statusPill, styles.statusPillA1]}>
+                  <Text style={styles.statusPillText}>A1</Text>
+                </View>
+              )}
+              {roll.qualityGrade === 'FIRE' && (
+                <View style={[styles.statusPill, styles.statusPillFire]}>
+                  <Text style={styles.statusPillText}>Fire</Text>
+                </View>
+              )}
             </View>
             <Text style={styles.rollItem} numberOfLines={1}>
               {roll.item?.name ?? '—'}
@@ -307,13 +349,13 @@ function RollListRow({
             </Text>
             <View style={styles.rollMeta}>
               <Text style={styles.rollMetaText}>
-                {roll.currentQty.toFixed(1)} m
+                {Number(roll.currentQty ?? 0).toFixed(1)} m
               </Text>
               {roll.weightKg != null && (
                 <>
                   <Text style={styles.rollMetaSep}>·</Text>
                   <Text style={styles.rollMetaText}>
-                    {roll.weightKg.toFixed(2)} kg
+                    {Number(roll.weightKg).toFixed(2)} kg
                   </Text>
                 </>
               )}
@@ -396,7 +438,7 @@ function RollDetailModal({
               <Icon source="ruler" size={14} color="#475569" />
               <Text style={modalStyles.summaryLabel}>Mevcut Metraj:</Text>
               <Text style={modalStyles.summaryValue}>
-                {roll.currentQty.toFixed(1)} m
+                {Number(roll.currentQty ?? 0).toFixed(1)} m
               </Text>
             </View>
             {roll.weightKg != null && (
@@ -404,7 +446,7 @@ function RollDetailModal({
                 <Icon source="scale-balance" size={14} color="#475569" />
                 <Text style={modalStyles.summaryLabel}>Ağırlık:</Text>
                 <Text style={modalStyles.summaryValue}>
-                  {roll.weightKg.toFixed(2)} kg
+                  {Number(roll.weightKg).toFixed(2)} kg
                 </Text>
               </View>
             )}
@@ -474,7 +516,13 @@ const styles = StyleSheet.create({
     padding: 10,
     alignItems: 'center',
   },
-  statBox: { flex: 1, alignItems: 'center' },
+  statsCardPhone: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 8,
+  },
+  statsScrollContent: { alignItems: 'center', paddingHorizontal: 10, gap: 0 },
+  statBox: { flex: 1, alignItems: 'center', minWidth: 80, paddingHorizontal: 6 },
   statValue: { fontSize: 18, fontWeight: '700' },
   statLabel: { fontSize: 10, color: '#64748b', marginTop: 2 },
   statDivider: { width: 1, height: 32, backgroundColor: '#e2e8f0' },
@@ -487,6 +535,7 @@ const styles = StyleSheet.create({
   },
   toolbarRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   input: { backgroundColor: '#fff' },
+  inputRow: { flex: 1 },
 
   statusTabs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   statusChip: {
@@ -541,6 +590,7 @@ const styles = StyleSheet.create({
   statusPillWarehouse: { backgroundColor: '#fed7aa' },
   statusPillReady: { backgroundColor: '#bbf7d0' },
   statusPillA1: { backgroundColor: '#ddd6fe' },
+  statusPillFire: { backgroundColor: '#fecaca' },
   statusPillText: { fontSize: 10, fontWeight: '700', color: '#0f172a' },
   rollItem: { fontSize: 12, color: '#475569', marginTop: 4 },
   rollMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },

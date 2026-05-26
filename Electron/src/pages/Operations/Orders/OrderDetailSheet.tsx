@@ -2,19 +2,26 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { safeFormat } from "@/lib/format";
-import { Lock, Pencil, Ban, Truck } from "lucide-react";
+import { Lock, Pencil, Ban } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { orderStatusLabels } from "@/types/enums";
 import { orderService } from "./service";
-import { shippingQueueService } from "@/pages/Operations/ShippingQueue/service";
+import { OrderCancelDialog } from "./OrderCancelDialog";
 import type { Order } from "./types";
 
 interface Props {
@@ -41,25 +48,7 @@ export function OrderDetailSheet({ order, open, onOpenChange, onEdit }: Props) {
     },
   });
 
-  const cancelMut = useMutation({
-    mutationFn: (id: string) => orderService.remove(id),
-    onSuccess: (res) => {
-      toast.success(res.message ?? "Sipariş iptal edildi.");
-      void qc.invalidateQueries({ queryKey: ["orders"] });
-      setCancelOpen(false);
-      onOpenChange(false);
-    },
-  });
-
-  const enqueueMut = useMutation({
-    mutationFn: (orderId: string) => shippingQueueService.enqueue({ orderId }),
-    onSuccess: (res) => {
-      toast.success(res.message ?? "Sipariş sevkiyat kuyruğuna alındı.");
-      void qc.invalidateQueries({ queryKey: ["shipping-queue"] });
-    },
-  });
-
-  const totalQty = order?.lines.reduce((acc, l) => acc + l.quantity, 0) ?? 0;
+  const totalQty = order?.lines.reduce((acc, l) => acc + Number(l.quantity), 0) ?? 0;
   const isEditable = order && (order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
   const isCancellable = order && order.status !== "COMPLETED" && order.status !== "CANCELLED";
   const canClose = order && (order.status === "PENDING" || order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
@@ -212,21 +201,6 @@ export function OrderDetailSheet({ order, open, onOpenChange, onEdit }: Props) {
                     <Pencil className="h-3.5 w-3.5" /> Düzenle
                   </Button>
                 )}
-                {isEditable && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => enqueueMut.mutate(order.id)}
-                    disabled={enqueueMut.isPending}
-                    className="gap-1.5"
-                  >
-                    <Truck className="h-3.5 w-3.5" />{" "}
-                    {enqueueMut.isPending
-                      ? "Ekleniyor..."
-                      : "Sevkiyat Kuyruğuna Al"}
-                  </Button>
-                )}
                 {canClose && (
                   <Button
                     type="button"
@@ -259,74 +233,56 @@ export function OrderDetailSheet({ order, open, onOpenChange, onEdit }: Props) {
           </div>
         )}
 
-        <ConfirmDialog
+        <OrderCancelDialog
           open={cancelOpen}
           onOpenChange={setCancelOpen}
-          title="Siparişi iptal et"
-          description="Bu siparişi iptal etmek istediğinize emin misiniz? Bağlı planlı iş emirleri otomatik koparılır. Üretimi başlamış iş emri varsa iptal reddedilir."
-          confirmLabel="İptal Et"
-          destructive
-          isPending={cancelMut.isPending}
-          onConfirm={() => {
-            if (!order) return;
-            cancelMut.mutate(order.id);
-          }}
+          orderId={order?.id ?? null}
+          orderNumber={order?.orderNumber}
+          onCancelled={() => onOpenChange(false)}
         />
 
-        <ConfirmDialog
+        <Dialog
           open={closeOpen}
-          onOpenChange={setCloseOpen}
-          title="Siparişi manuel kapat"
-          description="Bu işlem siparişi 'Tamamlandı' duruma alır ve audit log'a düşer. Sebep yaz:"
-          confirmLabel="Kapat"
-          isPending={closeMut.isPending}
-          onConfirm={() => {
-            if (!order || !reason.trim()) return;
-            closeMut.mutate({ id: order.id, r: reason.trim() });
+          onOpenChange={(open) => {
+            setCloseOpen(open);
+            if (!open) setReason("");
           }}
-        />
-        {closeOpen && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 pointer-events-none">
-            <Card className="pointer-events-auto w-full max-w-sm shadow-2xl">
-              <CardContent className="p-4 space-y-3">
-                <div>
-                  <div className="text-sm font-semibold">Manuel Kapatma Sebebi</div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Sebep audit log'a yazılır.
-                  </p>
-                </div>
-                <Input
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Örn: müşteri talebi, fire kabul edildi..."
-                  autoFocus
-                />
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setCloseOpen(false);
-                      setReason("");
-                    }}
-                  >
-                    İptal
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={!reason.trim() || closeMut.isPending}
-                    onClick={() => {
-                      if (!order) return;
-                      closeMut.mutate({ id: order.id, r: reason.trim() });
-                    }}
-                  >
-                    {closeMut.isPending ? "Kapatılıyor..." : "Kapat"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Siparişi manuel kapat</DialogTitle>
+              <DialogDescription>
+                Bu işlem siparişi "Tamamlandı" duruma alır ve audit log'a düşer. Sebep zorunludur.
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Örn: müşteri talebi, fire kabul edildi..."
+              autoFocus
+            />
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCloseOpen(false);
+                  setReason("");
+                }}
+              >
+                İptal
+              </Button>
+              <Button
+                disabled={!reason.trim() || closeMut.isPending}
+                onClick={() => {
+                  if (!order) return;
+                  closeMut.mutate({ id: order.id, r: reason.trim() });
+                }}
+              >
+                {closeMut.isPending ? "Kapatılıyor..." : "Kapat"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </SheetContent>
     </Sheet>
   );

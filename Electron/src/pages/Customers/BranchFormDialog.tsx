@@ -75,8 +75,19 @@ export function BranchFormDialog({ open, onOpenChange, initial, onSubmit, isSubm
             <FormField label="İletişim Kişisi" htmlFor="contactName" error={form.formState.errors.contactName}>
               <Input id="contactName" {...form.register("contactName")} />
             </FormField>
-            <FormField label="Telefon" htmlFor="contactPhone" error={form.formState.errors.contactPhone}>
-              <Input id="contactPhone" {...form.register("contactPhone")} />
+            <FormField
+              label="Telefon"
+              htmlFor="contactPhone"
+              error={form.formState.errors.contactPhone}
+              hint="İsteğe bağlı"
+            >
+              <Input
+                id="contactPhone"
+                inputMode="tel"
+                maxLength={32}
+                placeholder="0212 555 0000"
+                {...form.register("contactPhone")}
+              />
             </FormField>
           </div>
 

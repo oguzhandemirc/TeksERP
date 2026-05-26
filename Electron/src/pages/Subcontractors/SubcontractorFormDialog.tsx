@@ -74,16 +74,43 @@ export function SubcontractorFormDialog({
             <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
               <Input id="name" autoFocus {...form.register("name")} />
             </FormField>
-            <FormField label="Vergi No" htmlFor="taxNumber" error={form.formState.errors.taxNumber}>
-              <Input id="taxNumber" {...form.register("taxNumber")} />
+            <FormField
+              label="Vergi No"
+              htmlFor="taxNumber"
+              error={form.formState.errors.taxNumber}
+              hint="İsteğe bağlı — 10-15 haneli VKN/TCKN"
+            >
+              <Input
+                id="taxNumber"
+                inputMode="numeric"
+                maxLength={32}
+                placeholder="örn: 1234567890"
+                {...form.register("taxNumber")}
+              />
             </FormField>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <FormField label="Telefon" htmlFor="phone" error={form.formState.errors.phone}>
-              <Input id="phone" placeholder="0212 555 0000" {...form.register("phone")} />
+            <FormField
+              label="Telefon"
+              htmlFor="phone"
+              error={form.formState.errors.phone}
+              hint="İsteğe bağlı"
+            >
+              <Input
+                id="phone"
+                inputMode="tel"
+                maxLength={32}
+                placeholder="0212 555 0000"
+                {...form.register("phone")}
+              />
             </FormField>
-            <FormField label="Adres" htmlFor="address" error={form.formState.errors.address}>
-              <Input id="address" {...form.register("address")} />
+            <FormField
+              label="Adres"
+              htmlFor="address"
+              error={form.formState.errors.address}
+              hint="İsteğe bağlı"
+            >
+              <Input id="address" maxLength={500} {...form.register("address")} />
             </FormField>
           </div>
 

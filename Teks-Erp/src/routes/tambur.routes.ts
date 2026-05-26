@@ -5,7 +5,7 @@
 import { Router } from "express";
 import { TamburController } from "../controllers/tambur.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const controller = new TamburController();
 const router = Router();
@@ -23,7 +23,7 @@ const router = Router();
  *       200:
  *         description: Bekleyen toplar ve hata listesi
  */
-router.get("/pending-rolls", verifyToken, requirePermission("quality:read"), controller.getPendingRolls);
+router.get("/pending-rolls", verifyToken, requireAnyPermission("quality:read", "mobile:tambur"), controller.getPendingRolls);
 
 /**
  * @openapi
@@ -45,7 +45,7 @@ router.get("/pending-rolls", verifyToken, requirePermission("quality:read"), con
 router.get(
   "/recent-output-rolls",
   verifyToken,
-  requirePermission("quality:read"),
+  requireAnyPermission("quality:read", "mobile:tambur"),
   controller.listRecentOutputRolls
 );
 
@@ -75,7 +75,7 @@ router.get(
 router.get(
   "/by-card/:barcode",
   verifyToken,
-  requirePermission("quality:read"),
+  requireAnyPermission("quality:read", "mobile:tambur"),
   controller.getByCardBarcode
 );
 
@@ -99,7 +99,7 @@ router.get(
 router.get(
   "/step/:stepId",
   verifyToken,
-  requirePermission("quality:read"),
+  requireAnyPermission("quality:read", "mobile:tambur"),
   controller.getStep
 );
 
@@ -116,7 +116,7 @@ router.get(
 router.get(
   "/open-cards",
   verifyToken,
-  requirePermission("quality:read"),
+  requireAnyPermission("quality:read", "mobile:tambur"),
   controller.listOpenCards
 );
 
@@ -152,47 +152,8 @@ router.get(
 router.post(
   "/report-error",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission("quality:write", "mobile:tambur"),
   controller.reportError
-);
-
-/**
- * @openapi
- * /api/tambur/post-production-split:
- *   post:
- *     tags: [Tambur]
- *     summary: Post-production split — depodaki topu istenen metrede ikiye böl
- *     description: |
- *       Hata kesimi DEĞİL — aynı kalitede fonksiyonel kesim. Senaryo: 500m'lik
- *       depodaki top → 300m yeni siparişe + 200m geride kalan top depoda.
- *       İkisi de aynı qualityGrade ve WAREHOUSE'da kalır. Çuvallanmış top
- *       (sackId dolu) kesime gitmez.
- *     security: [{ bearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [rollId, cutLength, originalKeepsLarger]
- *             properties:
- *               rollId: { type: string, format: uuid }
- *               cutLength: { type: number, description: Kesim metresi (orijinalden ayrılan parça) }
- *               originalKeepsLarger:
- *                 type: boolean
- *                 description: |
- *                   true: orijinal büyük kalır (qty-cutLength), yeni roll küçük (cutLength)
- *                   false: orijinal küçük (cutLength), yeni roll büyük (qty-cutLength)
- *     responses:
- *       200: { description: 2 top — original + newRoll }
- *       400: { description: Geçersiz parametreler veya çuvallanmış top }
- *       404: { description: Top bulunamadı }
- */
-router.post(
-  "/post-production-split",
-  verifyToken,
-  requirePermission("quality:write"),
-  controller.postProductionSplit
 );
 
 /**
@@ -215,7 +176,7 @@ router.post(
  *       404:
  *         description: Top bulunamadı
  */
-router.get("/rolls/:rollId", verifyToken, requirePermission("quality:read"), controller.getRollForDecision);
+router.get("/rolls/:rollId", verifyToken, requireAnyPermission("quality:read", "mobile:tambur"), controller.getRollForDecision);
 
 /**
  * @openapi
@@ -283,61 +244,7 @@ router.get("/rolls/:rollId", verifyToken, requirePermission("quality:read"), con
  *       404:
  *         description: Top bulunamadı
  */
-router.post("/finalize", verifyToken, requirePermission("quality:write"), controller.finalize);
-
-/**
- * @openapi
- * /api/tambur/allocate:
- *   post:
- *     tags: [Tambur]
- *     summary: Sipariş tahsisi
- *     description: |
- *       PRODUCED durumundaki bir topu sipariş kalemine tahsis eder.
- *       Topun yeterli net metrajı olması gerekir.
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [rollId, orderLineId, allocatedQty]
- *             properties:
- *               rollId:
- *                 type: string
- *                 format: uuid
- *               orderLineId:
- *                 type: string
- *                 format: uuid
- *               allocatedQty:
- *                 type: number
- *                 description: Tahsis edilecek metraj
- *                 example: 100.0
- *     responses:
- *       201:
- *         description: Tahsis oluşturuldu
- *       400:
- *         description: Yetersiz miktar veya uygun olmayan status
- *       404:
- *         description: Top veya sipariş kalemi bulunamadı
- */
-router.post("/allocate", verifyToken, requirePermission("allocation:write"), controller.allocate);
-
-/**
- * @openapi
- * /api/tambur/split-allocate:
- *   post:
- *     tags: [Tambur]
- *     summary: Tek çağrıda çoklu sipariş + stok paylaştırması
- *     security: [{ bearerAuth: [] }]
- */
-router.post(
-  "/split-allocate",
-  verifyToken,
-  requirePermission("allocation:write"),
-  controller.splitAllocate
-);
+router.post("/finalize", verifyToken, requireAnyPermission("quality:write", "mobile:tambur"), controller.finalize);
 
 /**
  * @openapi
@@ -350,7 +257,7 @@ router.post(
 router.post(
   "/swatch",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission("quality:write", "mobile:tambur"),
   controller.createSwatch
 );
 
@@ -381,7 +288,7 @@ router.post(
 router.get(
   "/context/:cardBarcode",
   verifyToken,
-  requirePermission("quality:read"),
+  requireAnyPermission("quality:read", "mobile:tambur"),
   controller.getTamburContext,
 );
 
@@ -427,7 +334,7 @@ router.get(
 router.post(
   "/:id/cut",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission("quality:write", "mobile:tambur"),
   controller.cutOpenFabric,
 );
 
@@ -473,8 +380,60 @@ router.post(
 router.post(
   "/:id/finalize-open-fabric",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission("quality:write", "mobile:tambur"),
   controller.finalizeOpenFabric,
+);
+
+/**
+ * @swagger
+ * /api/tambur/{id}/cut-warehouse:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: Top Kesme — depo (WAREHOUSE) topundan parça kes
+ *     description: |
+ *       Barkodlu depo topundan istenen metrede yeni child Roll oluşturur. Parent
+ *       özellikleri (color, width, RollProperty, KURSUN_APPLIED, QC2_COMPLETED)
+ *       inherit edilir. Multi-cut: aynı parent için tekrar tekrar çağrılabilir.
+ *       Parent.currentQty düşer, parent yaşamaya devam eder (finalize'a kadar).
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       201: { description: Kesim başarılı, child barkodlu top oluştu }
+ *       400: { description: Parent açık kumaş / status WAREHOUSE değil / metre yetmiyor }
+ */
+router.post(
+  "/:id/cut-warehouse",
+  verifyToken,
+  requireAnyPermission("quality:write", "mobile:tambur"),
+  controller.cutWarehouseRoll,
+);
+
+/**
+ * @swagger
+ * /api/tambur/{id}/finalize-warehouse-cut:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: Top Kesme bitir — parent topu arşivle, kalan için karar
+ *     description: |
+ *       Top Kesme oturumunu kapatır: parent Roll TAMBUR_CONSUMED'a çekilir.
+ *       Kalan kumaş varsa `remainingAction`'a göre 1.KALITE/A1/FIRE child Roll
+ *       oluşturulur veya discard edilir.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Top arşivlendi, kalan karar uygulandı }
+ */
+router.post(
+  "/:id/finalize-warehouse-cut",
+  verifyToken,
+  requireAnyPermission("quality:write", "mobile:tambur"),
+  controller.finalizeWarehouseCut,
 );
 
 export default router;

@@ -73,7 +73,7 @@ export const orderColumns: ColumnDef<Order>[] = [
     header: "Sevk",
     cell: ({ row }) => {
       const o = row.original;
-      const requested = (o.lines ?? []).reduce((s, l) => s + (l.quantity ?? 0), 0);
+      const requested = (o.lines ?? []).reduce((s, l) => s + Number(l.quantity ?? 0), 0);
       if (requested === 0) {
         return <span className="text-muted-foreground text-xs">—</span>;
       }

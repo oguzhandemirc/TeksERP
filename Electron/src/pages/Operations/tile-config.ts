@@ -2,8 +2,7 @@ import {
   ShoppingCart,
   Factory,
   Package,
-  Truck,
-  ListChecks,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,19 +41,11 @@ export const operationsTiles: OperationsTile[] = [
     permission: "roll:read",
   },
   {
-    key: "shipments",
-    title: "Sevkiyatlar",
-    description: "Çıkış belgeleri ve gönderiler",
-    icon: Truck,
-    to: "/operations/shipments",
-    permission: "shipment:read",
-  },
-  {
-    key: "shipping-queue",
-    title: "Sevkiyat Kuyruğu",
-    description: "Sipariş seviyesinde sevkiyat akışını yönet",
-    icon: ListChecks,
-    to: "/operations/shipping-queue",
-    permission: "allocation:write",
+    key: "kursun-queue",
+    title: "Kurşun Sırası",
+    description: "Fasondan dönen toplar için Kurşun + KK2 sırasını planla",
+    icon: Layers,
+    to: "/operations/kursun-queue",
+    permission: "quality:write",
   },
 ];

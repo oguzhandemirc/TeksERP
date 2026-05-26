@@ -38,7 +38,6 @@ import {
   WorkOrder,
   WorkOrderStatus,
   RollStatus,
-  Shipment,
   Prisma,
 } from "@prisma/client";
 import {
@@ -262,7 +261,6 @@ export class WorkOrderService {
     // ── Hedef ürün (targetItem) doğrulaması ─────────────────────────────────
     // STOCK_PRODUCTION: zorunlu — planlamacı ne üretiyoruz onu söylemeli.
     // ORDER_PRODUCTION: bağlı sipariş satırlarındaki ürün ile tutarlı olmalı.
-    // SERVICE_PRODUCTION: opsiyonel (top'lar müşteriden gelir).
     let resolvedTargetItemId: string | null = data.targetItemId ?? null;
 
     if (type === "STOCK_PRODUCTION" && !resolvedTargetItemId) {
@@ -457,10 +455,10 @@ export class WorkOrderService {
             );
           }
           const alreadyReserved = line.workOrderLinks.reduce(
-            (sum, l) => sum + (l.allocatedQty ?? 0),
+            (sum, l) => sum + Number(l.allocatedQty ?? 0),
             0
           );
-          const remaining = line.quantity - alreadyReserved;
+          const remaining = Number(line.quantity) - alreadyReserved;
           if (alloc.allocatedQty > remaining + 0.0001 /* float tolerance */) {
             throw AppError.conflict(
               `Bir sipariş kalemi için kalan kapasite ${remaining.toFixed(2)} m, talep edilen ${alloc.allocatedQty.toFixed(2)} m bunu aşıyor.`
@@ -603,7 +601,6 @@ export class WorkOrderService {
       routeTemplateId: true,
       targetItemId: true,
       targetColorId: true,
-      servicePricePerMeter: true,
       createdAt: true,
       updatedAt: true,
       steps: {
@@ -701,8 +698,6 @@ export class WorkOrderService {
 
   /**
    * Get single work order by ID.
-   * SERVICE_PRODUCTION iş emirleri için `serviceOwnerCustomer` alanı eklenir:
-   * topların `ownerCustomerId`'si üzerinden müşteri bilgisi türetilir.
    */
   async findById(id: string): Promise<ApiResponse<Record<string, unknown> | null>> {
     const wo = await prisma.workOrder.findUnique({
@@ -738,27 +733,6 @@ export class WorkOrderService {
       return { success: false, data: null, message: "İş emri bulunamadı" };
     }
 
-    // SERVICE_PRODUCTION: topların ownerCustomerId'sinden mal sahibini türet
-    let serviceOwnerCustomer: { id: string; code: string; name: string } | null = null;
-    if (wo.type === "SERVICE_PRODUCTION") {
-      const stepIds = wo.steps.map((s) => s.id);
-      if (stepIds.length > 0) {
-        const rollWithOwner = await prisma.roll.findFirst({
-          where: {
-            ownerCustomerId: { not: null },
-            OR: [
-              { producedInStepId: { in: stepIds } },
-              { currentStepId: { in: stepIds } },
-            ],
-          },
-          select: {
-            ownerCustomer: { select: { id: true, code: true, name: true } },
-          },
-        });
-        serviceOwnerCustomer = rollWithOwner?.ownerCustomer ?? null;
-      }
-    }
-
     // dispatchedTotalQty: iptal edilmemiş fason sevklerinin toplam metrajı
     // (detay panelinde "Sevk: X / Y mt · kaldı Z" gösterimi için)
     const dispatchSum = await prisma.subcontractorDispatch.aggregate({
@@ -767,9 +741,106 @@ export class WorkOrderService {
     });
     const dispatchedTotalQty = dispatchSum._sum.totalQty ?? 0;
 
+    // Adım bazlı anlık ürün özeti + WO geneli üretilen nihai toplar.
+    // currentStepId = şu an o adımda fiziksel olarak bekleyen rulolar (ham/boyalı/açık kumaş).
+    // producedInStepId + depo/sevk statüsü = WO'nun ürettiği nihai çıktı.
+    const stepIds = wo.steps.map((s) => s.id);
+    const stepRollSummaries = new Map<
+      string,
+      {
+        count: number;
+        totalMeters: number;
+        rawCount: number;
+        rawMeters: number;
+        dyedCount: number;
+        dyedMeters: number;
+        openFabricCount: number;
+        openFabricMeters: number;
+      }
+    >();
+    let producedRolls = { count: 0, totalMeters: 0 };
+
+    if (stepIds.length > 0) {
+      const currentRolls = await prisma.roll.findMany({
+        where: { currentStepId: { in: stepIds } },
+        select: {
+          currentStepId: true,
+          colorId: true,
+          parentReceiptId: true,
+          currentQty: true,
+        },
+      });
+      for (const r of currentRolls) {
+        const key = r.currentStepId!;
+        const s =
+          stepRollSummaries.get(key) ??
+          {
+            count: 0,
+            totalMeters: 0,
+            rawCount: 0,
+            rawMeters: 0,
+            dyedCount: 0,
+            dyedMeters: 0,
+            openFabricCount: 0,
+            openFabricMeters: 0,
+          };
+        s.count += 1;
+        s.totalMeters += Number(r.currentQty);
+        if (r.parentReceiptId) {
+          s.openFabricCount += 1;
+          s.openFabricMeters += Number(r.currentQty);
+        } else if (r.colorId == null) {
+          s.rawCount += 1;
+          s.rawMeters += Number(r.currentQty);
+        } else {
+          s.dyedCount += 1;
+          s.dyedMeters += Number(r.currentQty);
+        }
+        stepRollSummaries.set(key, s);
+      }
+
+      const producedAgg = await prisma.roll.aggregate({
+        where: {
+          producedInStepId: { in: stepIds },
+          status: {
+            in: [
+              RollStatus.WAREHOUSE,
+              RollStatus.A1_STOCK,
+            ],
+          },
+        },
+        _count: { _all: true },
+        _sum: { currentQty: true },
+      });
+      producedRolls = {
+        count: producedAgg._count._all,
+        totalMeters: Number(producedAgg._sum.currentQty ?? 0),
+      };
+    }
+
+    const stepsWithRollSummary = wo.steps.map((step) => ({
+      ...step,
+      currentRolls:
+        stepRollSummaries.get(step.id) ?? {
+          count: 0,
+          totalMeters: 0,
+          rawCount: 0,
+          rawMeters: 0,
+          dyedCount: 0,
+          dyedMeters: 0,
+          openFabricCount: 0,
+          openFabricMeters: 0,
+        },
+    }));
+
     return {
       success: true,
-      data: { ...wo, serviceOwnerCustomer, dispatchedTotalQty },
+      data: {
+        ...wo,
+        steps: stepsWithRollSummary,
+        dispatchedTotalQty,
+        producedRolls,
+      },
     };
   }
 
@@ -777,10 +848,9 @@ export class WorkOrderService {
    * Soft-delete: sets status = CANCELLED (WorkOrder has no isActive field).
    * Veritabanı mantığı:
    * 1. İş Emri iptal edilir.
-   * 2. İş Emrine bağlı kumaş topları (currentStepId veya producedInStepId üzerinden bağlanmış) bulunur.
-   * 3. Fabrika topları STOCK'a geri çekilir.
-   * 4. Fason (müşteri-malı) toplar fiziksel olarak silinir — WO sadece bu iş için açıldığı
-   *    ve müşteri malı bu iş bazında var olduğu için iptalle birlikte kaldırılır.
+   * 2. İş Emrine bağlı kumaş topları (currentStepId veya producedInStepId
+   *    üzerinden bağlanmış) bulunur ve STOCK'a geri çekilir.
+   * 3. ACTIVE refakat kartları VOIDED'a düşer.
    * Tüm bu işlemler güvenli bir transaction bloğunda gerçekleşir.
    */
   async softDelete(id: string, userId?: string): Promise<ApiResponse<WorkOrder>> {
@@ -804,104 +874,42 @@ export class WorkOrderService {
     }
 
     const stepIds = existing.steps.map((step) => step.id);
-    const affectedOrderIds = [
-      ...new Set(existing.orderLinks.map((l) => l.orderLine.orderId)),
-    ];
 
-    const { updated, deletedFasonRollCount } = await prisma.$transaction(
-      async (tx) => {
-        const cancelledWO = await tx.workOrder.update({
-          where: { id },
-          data: { status: WorkOrderStatus.CANCELLED },
-        });
+    const { updated } = await prisma.$transaction(async (tx) => {
+      const cancelledWO = await tx.workOrder.update({
+        where: { id },
+        data: { status: WorkOrderStatus.CANCELLED },
+      });
 
-        let fasonRollIds: string[] = [];
-
-        if (stepIds.length > 0) {
-          // Fason (müşteri-malı) topları ayır — bunlar silinecek
-          const fasonRolls = await tx.roll.findMany({
-            where: {
-              ownerCustomerId: { not: null },
-              OR: [
-                { producedInStepId: { in: stepIds } },
-                { currentStepId: { in: stepIds } },
-              ],
-            },
-            select: { id: true },
-          });
-          fasonRollIds = fasonRolls.map((r) => r.id);
-
-          // Fabrika topları STOCK'a geri çek
-          await tx.roll.updateMany({
-            where: {
-              ownerCustomerId: null,
-              OR: [
-                { producedInStepId: { in: stepIds } },
-                { currentStepId: { in: stepIds } },
-              ],
-            },
-            data: {
-              status: RollStatus.STOCK,
-              producedInStepId: null,
-              currentStepId: null,
-            },
-          });
-
-          // Fason toplara ait step-FK'lerini ve roll-FK'lerini temizle,
-          // sonra rolleri sil. (hardDelete ile aynı sıralama mantığı.)
-          if (fasonRollIds.length > 0) {
-            // Step-FK'ler (RESTRICT): RollOperation sil, RollError step refs nullla, movement sil
-            await tx.rollOperation.deleteMany({
-              where: { rollId: { in: fasonRollIds } },
-            });
-            await tx.rollError.updateMany({
-              where: {
-                rollId: { in: fasonRollIds },
-                detectedAtStepId: { in: stepIds },
-              },
-              data: { detectedAtStepId: null },
-            });
-            await tx.rollError.updateMany({
-              where: {
-                rollId: { in: fasonRollIds },
-                processedAtStepId: { in: stepIds },
-              },
-              data: { processedAtStepId: null },
-            });
-            await tx.rollMovement.deleteMany({
-              where: { rollId: { in: fasonRollIds } },
-            });
-
-            // Fason belgeleri: dispatch/receipt sadece bu roller için değil
-            // WO geneli için silinmeli (iptal = WO bitiyor). Önce WO bazında sil.
-            await tx.subcontractorReceipt.deleteMany({ where: { workOrderId: id } });
-            await tx.subcontractorDispatch.deleteMany({ where: { workOrderId: id } });
-
-            // Roll-FK'ler (RESTRICT)
-            await tx.rollError.deleteMany({ where: { rollId: { in: fasonRollIds } } });
-            await tx.orderAllocation.deleteMany({ where: { rollId: { in: fasonRollIds } } });
-            await tx.shipmentItem.deleteMany({ where: { rollId: { in: fasonRollIds } } });
-
-            await tx.roll.deleteMany({ where: { id: { in: fasonRollIds } } });
-          }
-        }
-
-        // WO iptal olunca tüm ACTIVE refakat kartlarını VOIDED'a çek
-        await tx.travelerCard.updateMany({
-          where: { workOrderId: id, status: "ACTIVE" },
+      if (stepIds.length > 0) {
+        // Bağlı tüm topları STOCK'a geri çek
+        await tx.roll.updateMany({
+          where: {
+            OR: [
+              { producedInStepId: { in: stepIds } },
+              { currentStepId: { in: stepIds } },
+            ],
+          },
           data: {
-            status: "VOIDED",
-            voidedAt: new Date(),
-            voidReason: "WO_CANCELLED",
+            status: RollStatus.STOCK,
+            producedInStepId: null,
+            currentStepId: null,
           },
         });
+      }
 
-        return {
-          updated: cancelledWO,
-          deletedFasonRollCount: fasonRollIds.length,
-        };
-      },
-    );
+      // WO iptal olunca tüm ACTIVE refakat kartlarını VOIDED'a çek
+      await tx.travelerCard.updateMany({
+        where: { workOrderId: id, status: "ACTIVE" },
+        data: {
+          status: "VOIDED",
+          voidedAt: new Date(),
+          voidReason: "WO_CANCELLED",
+        },
+      });
+
+      return { updated: cancelledWO };
+    });
 
     await AuditService.log({
       userId,
@@ -909,21 +917,13 @@ export class WorkOrderService {
       tableName: "WORK_ORDER",
       recordId: id,
       oldData: { batchNumber: existing.batchNumber, status: existing.status },
-      newData: {
-        status: WorkOrderStatus.CANCELLED,
-        deletedFasonRollCount,
-      },
+      newData: { status: WorkOrderStatus.CANCELLED },
     });
-
-    const fasonNote =
-      deletedFasonRollCount > 0
-        ? `, ${deletedFasonRollCount} müşteri-malı top silindi`
-        : "";
 
     return {
       success: true,
       data: updated,
-      message: `İş emri iptal edildi, bağlı fabrika topları STOCK'a çekildi${fasonNote}: ${existing.batchNumber}`,
+      message: `İş emri iptal edildi, bağlı toplar STOCK'a çekildi: ${existing.batchNumber}`,
     };
   }
 
@@ -963,34 +963,12 @@ export class WorkOrderService {
     }
 
     const stepIds = existing.steps.map((s) => s.id);
-    const affectedOrderIds = [
-      ...new Set(existing.orderLinks.map((l) => l.orderLine.orderId)),
-    ];
 
-    const isServiceProduction = existing.type === "SERVICE_PRODUCTION";
-
-    const { deletedFasonRollCount } = await prisma.$transaction(async (tx) => {
-      // 1. Bu WO'ya bağlı tüm topları bul: fason (müşteri-malı) vs fabrika.
-      //    Fason toplar WO ile birlikte silinir (müşteri malı, sadece bu iş için var).
-      //    Fabrika topları STOCK'a geri döner.
-      let fasonRollIds: string[] = [];
+    await prisma.$transaction(async (tx) => {
       if (stepIds.length > 0) {
-        const fasonRolls = await tx.roll.findMany({
-          where: {
-            ownerCustomerId: { not: null },
-            OR: [
-              { producedInStepId: { in: stepIds } },
-              { currentStepId: { in: stepIds } },
-            ],
-          },
-          select: { id: true },
-        });
-        fasonRollIds = fasonRolls.map((r) => r.id);
-
-        // Fabrika topları — STOCK'a geri çek
+        // Bağlı tüm topları STOCK'a geri çek
         await tx.roll.updateMany({
           where: {
-            ownerCustomerId: null,
             OR: [
               { producedInStepId: { in: stepIds } },
               { currentStepId: { in: stepIds } },
@@ -1003,12 +981,10 @@ export class WorkOrderService {
           },
         });
 
-        // 2. Step-level FK'leri temizle (RESTRICT):
-        //    - RollOperation (her operasyon bir step'e RESTRICT bağlı)
+        // Step-level FK'leri temizle (RESTRICT)
         await tx.rollOperation.deleteMany({
           where: { workOrderStepId: { in: stepIds } },
         });
-        //    - RollError.detectedAtStepId / processedAtStepId (optional, SET NULL yaklaşımı)
         await tx.rollError.updateMany({
           where: { detectedAtStepId: { in: stepIds } },
           data: { detectedAtStepId: null },
@@ -1017,45 +993,26 @@ export class WorkOrderService {
           where: { processedAtStepId: { in: stepIds } },
           data: { processedAtStepId: null },
         });
-        //    - RollMovement (RESTRICT)
         await tx.rollMovement.deleteMany({
           where: { workOrderStepId: { in: stepIds } },
         });
       }
 
-      // 3. Fason belgeleri (stepId ve workOrderId RESTRICT) — önce mal kabul
-      //    (receipt_items cascade ile siliniyor, newRollId referansı düşüyor),
-      //    sonra sevk (dispatch_items cascade ile siliniyor).
+      // Fason belgeleri (stepId ve workOrderId RESTRICT)
       await tx.subcontractorReceipt.deleteMany({ where: { workOrderId: id } });
       await tx.subcontractorDispatch.deleteMany({ where: { workOrderId: id } });
 
-      // 4. Fason topları tamamen sil (SERVICE_PRODUCTION için müşteri-malı toplar).
-      //    Önce topa bağlı RESTRICT FK'ler temizlenmeli.
-      if (fasonRollIds.length > 0) {
-        // RollError → Roll RESTRICT
-        await tx.rollError.deleteMany({ where: { rollId: { in: fasonRollIds } } });
-        // OrderAllocation → Roll RESTRICT (normalde fason'da olmaz ama güvenlik)
-        await tx.orderAllocation.deleteMany({ where: { rollId: { in: fasonRollIds } } });
-        // ShipmentItem → Roll RESTRICT (cancel öncesi sevk yapılmış olabilir)
-        await tx.shipmentItem.deleteMany({ where: { rollId: { in: fasonRollIds } } });
-        // Son olarak rolları sil
-        await tx.roll.deleteMany({ where: { id: { in: fasonRollIds } } });
-      }
-
-      // 5. Swatch (kartela) RESTRICT — iş emrine bağlı olanları sil
+      // Swatch (kartela) RESTRICT — iş emrine bağlı olanları sil
       await tx.swatch.deleteMany({ where: { workOrderId: id } });
-
-      // 6. TravelerCard RESTRICT — kart ve (cascade ile) scan'leri sil
+      // TravelerCard RESTRICT — kart ve (cascade ile) scan'leri sil
       await tx.travelerCard.deleteMany({ where: { workOrderId: id } });
-      // 7. Manifest RESTRICT — belgeleri sil
+      // Manifest RESTRICT — belgeleri sil
       await tx.manifest.deleteMany({ where: { workOrderId: id } });
 
-      // 8. Steps + WO link + WO
+      // Steps + WO link + WO
       await tx.workOrderStep.deleteMany({ where: { workOrderId: id } });
       await tx.workOrderToOrderLine.deleteMany({ where: { workOrderId: id } });
       await tx.workOrder.delete({ where: { id } });
-
-      return { deletedFasonRollCount: fasonRollIds.length };
     });
 
     await AuditService.log({
@@ -1069,18 +1026,12 @@ export class WorkOrderService {
         status: existing.status,
         stepCount: existing.steps.length,
       },
-      newData: { deletedFasonRollCount },
     });
-
-    const fasonNote =
-      isServiceProduction && deletedFasonRollCount > 0
-        ? ` (${deletedFasonRollCount} müşteri-malı top da kaldırıldı)`
-        : "";
 
     return {
       success: true,
       data: existing,
-      message: `İş emri kalıcı olarak silindi: ${existing.batchNumber}${fasonNote}`,
+      message: `İş emri kalıcı olarak silindi: ${existing.batchNumber}`,
     };
   }
 
@@ -1218,7 +1169,7 @@ export class WorkOrderService {
               id: r.id,
               barcode: r.barcode,
               prevStatus: r.status,
-              qtyIn: r.currentQty,
+              qtyIn: Number(r.currentQty),
             });
           }
         }
@@ -1371,8 +1322,7 @@ export class WorkOrderService {
    *   hiçbir bağlı kayıt (rulo, movement, dispatch, vb.) yoksa silinir;
    *   aksi halde "tamamlanmış/aktif/bağlı adım silinemez" hatası.
    *
-   * orderLinks ve targetProperties drop-and-recreate (sadece M:N kayıtları;
-   * OrderAllocation'lar dokunulmaz, fulfillment ayrı katmandadır).
+   * orderLinks ve targetProperties drop-and-recreate.
    */
   async replace(
     id: string,
@@ -1646,10 +1596,10 @@ export class WorkOrderService {
             );
           }
           const alreadyReserved = line.workOrderLinks.reduce(
-            (sum, l) => sum + (l.allocatedQty ?? 0),
+            (sum, l) => sum + Number(l.allocatedQty ?? 0),
             0,
           );
-          const remaining = line.quantity - alreadyReserved;
+          const remaining = Number(line.quantity) - alreadyReserved;
           if (alloc.allocatedQty > remaining + 0.0001) {
             throw AppError.conflict(
               `Bir sipariş kalemi için kalan kapasite ${remaining.toFixed(2)} m, talep edilen ${alloc.allocatedQty.toFixed(2)} m bunu aşıyor.`,
@@ -1737,7 +1687,6 @@ export class WorkOrderService {
 
       // ── orderLinks ve targetProperties drop-and-recreate ────────────────
       // Bunlar başka tablolardan FK ile referanslanmaz — güvenli.
-      // OrderAllocation (Roll → OrderLine) AYRIDIR, dokunulmaz.
       await tx.workOrderToOrderLine.deleteMany({ where: { workOrderId: id } });
       await tx.workOrderTargetProperty.deleteMany({ where: { workOrderId: id } });
 
@@ -1935,7 +1884,7 @@ export class WorkOrderService {
       prisma.roll.count({
         where: {
           producedInStep: { workOrderId: id },
-          status: { in: [RollStatus.WAREHOUSE, RollStatus.PRODUCED, RollStatus.READY_FOR_SHIP, RollStatus.SHIPPED, RollStatus.A1_STOCK] },
+          status: { in: [RollStatus.WAREHOUSE, RollStatus.PRODUCED] },
         },
       }),
       prisma.roll.count({
@@ -2296,7 +2245,7 @@ export class WorkOrderService {
     const rolls = await prisma.roll.findMany({
       where: {
         parentRollId: null,
-        status: { notIn: [RollStatus.SCRAP, RollStatus.CANCELLED, RollStatus.A1_STOCK, RollStatus.SHIPPED] },
+        status: { notIn: [RollStatus.CANCELLED] },
         OR: [
           { producedInStepId: { in: wo.steps.map((s) => s.id) } },
           { currentStepId: { in: wo.steps.map((s) => s.id) } },
@@ -2322,8 +2271,8 @@ export class WorkOrderService {
       type: wo.type,
       width: wo.width,
       totalRolls: rolls.length,
-      totalMeterage: rolls.reduce((sum, r) => sum + r.currentQty, 0),
-      totalWeight: rolls.reduce((sum, r) => sum + (r.weightKg ?? 0), 0),
+      totalMeterage: rolls.reduce((sum, r) => sum + Number(r.currentQty), 0),
+      totalWeight: rolls.reduce((sum, r) => sum + Number(r.weightKg ?? 0), 0),
       rolls: rolls.map((r) => ({
         barcode: r.barcode,
         itemName: r.item.name,
@@ -2485,53 +2434,6 @@ export class WorkOrderService {
     }
 
     return { success: true, data: manifest };
-  }
-
-  /**
-   * Bu iş emrine ait topların geçtiği tüm sevkiyat (irsaliye) belgelerini döner.
-   * WO.steps → Roll (producedInStep/currentStep) → ShipmentItem → Shipment zinciri.
-   *
-   * items alanı, yalnızca bu WO'dan gelen satırlara filtrelenir (aynı irsaliyede
-   * başka WO'lardan gelen toplar da olabilir; onlar listeye sızmaz).
-   */
-  async getShipments(workOrderId: string): Promise<ApiResponse<Shipment[]>> {
-    const wo = await prisma.workOrder.findUnique({
-      where: { id: workOrderId },
-      select: { id: true, steps: { select: { id: true } } },
-    });
-
-    if (!wo) {
-      throw AppError.notFound("İş emri bulunamadı");
-    }
-
-    const stepIds = wo.steps.map((s) => s.id);
-    if (stepIds.length === 0) {
-      return { success: true, data: [] };
-    }
-
-    const rollFromThisWO: Prisma.RollWhereInput = {
-      OR: [
-        { producedInStepId: { in: stepIds } },
-        { currentStepId: { in: stepIds } },
-      ],
-    };
-
-    const shipments = await prisma.shipment.findMany({
-      where: { items: { some: { roll: rollFromThisWO } } },
-      include: {
-        customer: true,
-        items: {
-          where: { roll: rollFromThisWO },
-          include: {
-            roll: { include: { item: true } },
-          },
-          orderBy: { createdAt: "asc" },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    return { success: true, data: shipments };
   }
 
   /**

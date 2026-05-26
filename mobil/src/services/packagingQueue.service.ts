@@ -18,10 +18,8 @@ export interface QueueRollInfo {
   weightKg: number | null;
   width: number | null;
   qualityGrade: string;
-  ownerCustomerId: string | null;
   item: { id: string; code: string; name: string };
   variant: { id: string; code: string; name: string } | null;
-  ownerCustomer: { id: string; code: string; name: string } | null;
 }
 
 export interface QueuePlannedOrderInfo {

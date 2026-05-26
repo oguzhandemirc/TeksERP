@@ -7,8 +7,9 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { StyleSheet, StyleProp, ViewStyle } from 'react-native';
-import { Surface } from 'react-native-paper';
+import { StyleSheet, StyleProp, View, ViewStyle, useWindowDimensions } from 'react-native';
+import { Button, Surface, Text } from 'react-native-paper';
+import Modal from 'react-native-modal';
 import Numpad from './Numpad';
 
 interface NumpadTarget {
@@ -131,10 +132,95 @@ export function NumpadHost({ style }: NumpadHostProps) {
 
 const noop = () => {};
 
+/**
+ * Bottom-sheet numpad — küçük ekranda (telefon landscape) sabit `NumpadHost`
+ * yerine kullanılır. `target` set olunca açılır, dış tıklama/Tamam kapatır.
+ * Modal-only davranır; ekrandan yer ayırmaz.
+ */
+export function NumpadModalHost() {
+  const { target, closeTarget, notifier } = useNumpadContext();
+  useSyncExternalStore(notifier.subscribe, notifier.getSnapshot);
+  const { width: winW, height: winH } = useWindowDimensions();
+
+  const value = target ? target.getValue() : '';
+  const onChange = target?.onChange ?? noop;
+  const allowDecimal = target?.allowDecimal ?? true;
+  const maxLength = target?.maxLength;
+  const compactKeys = winH < 500;
+
+  return (
+    <Modal
+      isVisible={!!target}
+      onBackdropPress={() => closeTarget()}
+      onBackButtonPress={() => closeTarget()}
+      backdropOpacity={0.3}
+      style={modalStyles.modal}
+      useNativeDriver
+      hideModalContentWhileAnimating
+      deviceWidth={winW}
+      deviceHeight={winH}
+      statusBarTranslucent
+      animationIn="slideInUp"
+      animationOut="slideOutDown"
+    >
+      <Surface style={modalStyles.sheet} elevation={4}>
+        <View style={modalStyles.header}>
+          <View style={{ flex: 1 }}>
+            {target?.label ? (
+              <Text style={modalStyles.label}>{target.label}</Text>
+            ) : null}
+            <Text style={modalStyles.value} numberOfLines={1}>
+              {value || '0'}
+            </Text>
+          </View>
+          <Button mode="contained" icon="check" onPress={() => closeTarget()}>
+            Tamam
+          </Button>
+        </View>
+        <View style={modalStyles.numpadWrap}>
+          <Numpad
+            value={value}
+            onChange={onChange}
+            allowDecimal={allowDecimal}
+            maxLength={maxLength}
+            compact={compactKeys}
+          />
+        </View>
+      </Surface>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   host: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 12,
   },
+});
+
+const modalStyles = StyleSheet.create({
+  modal: { justifyContent: 'flex-end', margin: 0, padding: 0 },
+  sheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  label: { fontSize: 12, color: '#64748b', fontWeight: '500' },
+  value: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#0f172a',
+    fontFamily: 'monospace',
+  },
+  numpadWrap: { width: '100%', maxWidth: 480, alignSelf: 'center' },
 });

@@ -81,6 +81,11 @@ router.get(
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
 
+      // RAW_QC (KK1) istasyonu üretim akışına step olarak girmez — `currentStepId`
+      // hiçbir Roll'da bu istasyona bağlanmaz. Bu yüzden q/a/t join'leri RAW_QC
+      // için her zaman 0 döner. Kullanıcı için anlamlı tek metrik "bugün giren
+      // ham mal sayısı" — bunu entrySource=SUPPLIER_RECEIPT + createdAt>=today
+      // ile e join'iyle hesaplıyoruz ve RAW_QC station'lara yapıştırıyoruz.
       const rows = await prisma.$queryRaw<StationLiveStateRow[]>`
         SELECT
           s."id"                                    AS "id",
@@ -90,7 +95,7 @@ router.get(
           s."type"::text                            AS "type",
           COALESCE(q.cnt, 0)::int                   AS "queueCount",
           COALESCE(a.cnt, 0)::int                   AS "activeCount",
-          COALESCE(t.cnt, 0)::int                   AS "todayCompletedCount"
+          COALESCE(t.cnt, e.cnt, 0)::int            AS "todayCompletedCount"
         FROM "stations" s
         LEFT JOIN (
           SELECT wos."stationId" AS "stationId", COUNT(r."id")::int AS cnt
@@ -112,6 +117,13 @@ router.get(
           WHERE rm."exitedAt" IS NOT NULL AND rm."exitedAt" >= ${startOfToday}
           GROUP BY wos."stationId"
         ) t ON t."stationId" = s."id"
+        LEFT JOIN (
+          SELECT COUNT("id")::int AS cnt
+          FROM "rolls"
+          WHERE "entrySource" = 'SUPPLIER_RECEIPT'
+            AND "createdAt" >= ${startOfToday}
+            AND "colorId" IS NULL
+        ) e ON s."kind" = 'RAW_QC'
         WHERE s."isActive" = true
         ORDER BY s."code" ASC
       `;

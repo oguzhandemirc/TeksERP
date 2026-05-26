@@ -106,7 +106,6 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
         {wo && (
           <div className="mt-3 flex flex-wrap gap-2">
             {(wo.status === "PLANNED" || wo.status === "IN_PROGRESS") &&
-              wo.type !== "SERVICE_PRODUCTION" &&
               onEdit && (
                 <PermissionGate permission="workorder:write">
                   <Button
@@ -210,12 +209,6 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       <div className="text-xs">{wo.foldType}</div>
                     </>
                   )}
-                  {wo.servicePricePerMeter && (
-                    <>
-                      <div className="text-xs text-muted-foreground">Hizmet Fiyatı</div>
-                      <div className="text-xs">{wo.servicePricePerMeter} ₺/m</div>
-                    </>
-                  )}
                 </div>
               </CardContent>
             </Card>
@@ -254,6 +247,24 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               </CardContent>
             </Card>
 
+            {wo.producedRolls && wo.producedRolls.count > 0 && (
+              <Card>
+                <CardContent className="p-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Üretilen Nihai Toplar
+                  </div>
+                  <div className="mt-1 text-sm font-medium tabular-nums">
+                    {wo.producedRolls.count} top
+                    <span className="ml-1 text-muted-foreground">·</span>
+                    <span className="ml-1">{formatNumber(wo.producedRolls.totalMeters, 0)} m</span>
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    Depo / sevk hazır / sevk edilen toplar dahil.
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <div>
               <button
                 type="button"
@@ -287,6 +298,36 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                         className="text-[10px]"
                       />
                     </div>
+                    {step.currentRolls && step.currentRolls.count > 0 && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1 pl-7 text-[11px]">
+                        <span className="text-muted-foreground">Şu an:</span>
+                        <span className="font-medium tabular-nums">
+                          {step.currentRolls.count} parça
+                        </span>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="font-medium tabular-nums">
+                          {formatNumber(step.currentRolls.totalMeters, 0)} m
+                        </span>
+                        {step.currentRolls.rawCount > 0 && (
+                          <Badge variant="outline" className="font-normal">
+                            Ham: {step.currentRolls.rawCount} ·{" "}
+                            {formatNumber(step.currentRolls.rawMeters, 0)} m
+                          </Badge>
+                        )}
+                        {step.currentRolls.dyedCount > 0 && (
+                          <Badge variant="outline" className="font-normal">
+                            Boyalı: {step.currentRolls.dyedCount} ·{" "}
+                            {formatNumber(step.currentRolls.dyedMeters, 0)} m
+                          </Badge>
+                        )}
+                        {step.currentRolls.openFabricCount > 0 && (
+                          <Badge variant="outline" className="font-normal">
+                            Açık kumaş: {step.currentRolls.openFabricCount} ·{" "}
+                            {formatNumber(step.currentRolls.openFabricMeters, 0)} m
+                          </Badge>
+                        )}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ol>
@@ -385,11 +426,6 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
             {wo.type === "STOCK_PRODUCTION" && (
               <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
                 Stoğa üretim — siparişe bağlı değil.
-              </div>
-            )}
-            {wo.type === "SERVICE_PRODUCTION" && (
-              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                Fason üretim kabul — müşteri kendi malını işletiyor (Roll.ownerCustomer).
               </div>
             )}
           </div>

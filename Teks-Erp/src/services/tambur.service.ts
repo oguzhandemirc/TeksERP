@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP - Tambur Service
 // =============================================================================
-// Handles final quality decisions, roll splitting, and order allocation.
+// Handles final quality decisions and roll splitting.
 //
 // CRITICAL BUSINESS RULES:
 //   - Kurşun'da tespit edilen hatalar Tambur'da karar verme noktasına gelir.
@@ -18,6 +18,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
+import { resolveQualityGradeId } from "./helpers/quality-grade.helper";
 import {
   Prisma,
   Roll,
@@ -33,7 +34,6 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { buildPrefixedBarcode, buildPrefixedCardNumber } from "../utils/barcode";
 import { assertWoAtStepKind, recomputeStepStatus } from "./helpers/roll-step.helper";
-import { recomputeOrderStatus } from "./helpers/order-status.helper";
 
 /** Generate a barcode for a split-off roll */
 function generateSplitBarcode(originalBarcode: string): string {
@@ -83,15 +83,16 @@ interface CutInput {
 
 /**
  * qualityGrade kodu → RollStatus eşlemesi.
- * QualityGrade kataloğundan okur; admin tarafından eklenen auto-generated
- * kodlu (KAL-YYMM-XXXX) kalitelerle uyumlu. Katalogda bulunmayan ya da
- * targetStatus alanı set edilmemiş kayıtlar SCRAP fallback'i alır.
+ * Yeni kurguda kalite (qualityGrade) ile durum (status) ayrıdır: tüm yeni
+ * üretim rulolar varsayılan olarak WAREHOUSE'a iner; kalite farkı yalnız
+ * `Roll.qualityGrade` alanında yaşar. Katalogda explicit farklı bir
+ * targetStatus tanımlanmadıkça WAREHOUSE döner.
  */
 function resolveCutStatus(
   qualityGradeCode: string,
   targetStatusByCode: Map<string, RollStatus>
 ): RollStatus {
-  return targetStatusByCode.get(qualityGradeCode) ?? RollStatus.SCRAP;
+  return targetStatusByCode.get(qualityGradeCode) ?? RollStatus.WAREHOUSE;
 }
 
 interface TamburRollErrorSummary {
@@ -253,11 +254,15 @@ export class TamburService {
       itemName: m.roll.item.name,
       colorCode: m.roll.color?.code ?? null,
       colorName: m.roll.color?.name ?? null,
-      currentQty: m.roll.currentQty,
-      width: m.roll.width,
+      currentQty: Number(m.roll.currentQty),
+      width: m.roll.width !== null ? Number(m.roll.width) : null,
       qualityGrade: m.roll.qualityGrade,
       errorCount: m.roll.errors.length,
-      errors: m.roll.errors,
+      errors: m.roll.errors.map((e) => ({
+        id: e.id,
+        startMeter: Number(e.startMeter),
+        errorType: e.errorType,
+      })),
     }));
 
     return {
@@ -300,8 +305,6 @@ export class TamburService {
    *   Parent retire: `status=TAMBUR_CONSUMED`, `currentQty=0`, `currentStepId=null`.
    *   Çocuk topların KURSUN_APPLIED ve QC2_COMPLETED RollOperation kayıtları
    *   parent'tan kopyalanır (`inheritedFromParentRollId`).
-   *   Parent'ın `OrderAllocation`'ları silinir; etkilenen Order status'ları
-   *   yeniden hesaplanır (tartı/paket sırasında çocuk toplara yeniden allocate).
    */
   async finalize(
     data: {
@@ -322,7 +325,6 @@ export class TamburService {
       where: { id: data.rollId },
       include: {
         item: true,
-        allocations: { include: { orderLine: { select: { orderId: true } } } },
         producedInStep: {
           select: {
             workOrder: {
@@ -341,14 +343,11 @@ export class TamburService {
     if (!roll) {
       throw AppError.notFound("Top bulunamadı");
     }
-    if (!roll.barcode) {
-      throw AppError.badRequest(
-        "Açık kumaş Roll için klasik CUT endpoint'i kullanılamaz; yeni Tambur cut/finalize endpoint'leri ile bölün."
-      );
-    }
+    // Parent barkodlu (klasik) ise child barkodlar parent prefix'i ile üretilir;
+    // açık kumaş (barcode=null, boyahane dönüşü) ise TEKS-YYYYMMDD-XXXX formatı.
     const parentBarcode = roll.barcode;
 
-    const totalQty = roll.currentQty;
+    const totalQty = Number(roll.currentQty);
     const wo = roll.producedInStep?.workOrder ?? null;
     const plannedFoldType = wo?.foldType ?? null;
 
@@ -405,11 +404,12 @@ export class TamburService {
     // Parent'tan çocuklara kopyalanacak operasyon kalıtımı (Kurşun + KK2).
     // Parent o istasyonlardan geçtiyse çocuklar da geçmiş sayılır. TAMBUR_PROCESSED
     // kopyalanmaz; bu Tambur'un parent üzerindeki kararıdır.
+    // Filter YOK: zincirleme inherit destekle (parent depo topundaysa op'lar
+    // zaten kendi parent'tan inherit'lidir; sadece orijinal'e bakmak chain'i koparır).
     const inheritedOps = await prisma.rollOperation.findMany({
       where: {
         rollId: data.rollId,
         operationType: { in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED] },
-        inheritedFromParentRollId: null,
       },
       select: { workOrderStepId: true, operationType: true, operatorId: true, metadata: true },
     });
@@ -422,11 +422,14 @@ export class TamburService {
     const qualityGradeRows = allQualityCodes.length
       ? await prisma.qualityGrade.findMany({
           where: { code: { in: allQualityCodes } },
-          select: { code: true, targetStatus: true },
+          select: { id: true, code: true, targetStatus: true },
         })
       : [];
     const targetStatusByCode = new Map<string, RollStatus>(
       qualityGradeRows.map((q) => [q.code, q.targetStatus])
+    );
+    const qualityGradeIdByCode = new Map<string, string>(
+      qualityGradeRows.map((q) => [q.code, q.id])
     );
 
     const splitRolls: Roll[] = [];
@@ -491,8 +494,8 @@ export class TamburService {
           qty: c.length,
           status: cutStatus,
           qualityGrade: c.qualityGrade,
-          // Sadece WAREHOUSE'a giden good child'lar özellik miras alır;
-          // SCRAP/A1_STOCK gibi farklı status'lara giden parçalar almaz.
+          // Tüm kalite seviyeleri (1.KALITE/A1/FIRE) WAREHOUSE'a iner; fabric
+          // özellikleri kalite seviyesinden bağımsız olduğu için her child miras alır.
           inheritProperties: cutStatus === RollStatus.WAREHOUSE,
           auditSource: "OPERATOR_CUT",
           auditErrorIds: c.relatedErrorIds,
@@ -520,20 +523,21 @@ export class TamburService {
 
       // Her segment için yeni Roll + property + kalıtım op'ları + audit.
       for (const seg of segments) {
-        const splitBarcode = generateSplitBarcode(parentBarcode);
+        const splitBarcode = parentBarcode
+          ? generateSplitBarcode(parentBarcode)
+          : generateTamburChildBarcode();
         const splitRoll = await tx.roll.create({
           data: {
             barcode: splitBarcode,
             itemId: roll.itemId,
             colorId: roll.colorId,
-            ownerCustomerId: roll.ownerCustomerId,
-            customerDescription: roll.customerDescription,
             width: roll.width,
             initialQty: seg.qty,
             currentQty: seg.qty,
             weightKg: null,
             status: seg.status,
             qualityGrade: seg.qualityGrade,
+            qualityGradeId: qualityGradeIdByCode.get(seg.qualityGrade) ?? null,
             producedInStepId: roll.producedInStepId,
             parentRollId: roll.id,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
@@ -648,20 +652,6 @@ export class TamburService {
       // Parent retire olduğu için RollProperty bindirme gereksiz — sil.
       await tx.rollProperty.deleteMany({ where: { rollId: data.rollId } });
 
-      // Parent'ın allocation'ları koşulsuz silinir (currentQty=0). Etkilenen
-      // Order status'ları yeniden hesaplanır; operatör tartı/paket sırasında
-      // çocuk toplara yeniden allocation yapar.
-      const affectedOrderIds = new Set<string>();
-      for (const a of roll.allocations) {
-        affectedOrderIds.add(a.orderLine.orderId);
-      }
-      if (roll.allocations.length > 0) {
-        await tx.orderAllocation.deleteMany({ where: { rollId: roll.id } });
-      }
-      for (const orderId of affectedOrderIds) {
-        await recomputeOrderStatus(tx, orderId);
-      }
-
       // Per-roll Tambur işlem log'u (parent üzerinde — kopyalanmaz).
       if (oldStepId) {
         await tx.rollOperation.upsert({
@@ -747,205 +737,6 @@ export class TamburService {
     };
   }
 
-  /**
-   * Allocate a produced roll to an order line.
-   * Business Rule: Roll must be in PRODUCED status with sufficient currentQty.
-   */
-  async allocate(
-    data: {
-      rollId: string;
-      orderLineId: string;
-      allocatedQty: number;
-    },
-    userId?: string
-  ): Promise<ApiResponse<Record<string, unknown>>> {
-    const roll = await prisma.roll.findUnique({ where: { id: data.rollId } });
-    if (!roll) {
-      throw AppError.notFound("Top bulunamadı");
-    }
-
-    if (roll.status !== RollStatus.PRODUCED) {
-      throw AppError.badRequest(
-        `Top PRODUCED durumunda değil (mevcut: ${roll.status}). Tahsis yapılamaz.`
-      );
-    }
-
-    // Check existing allocations for this roll
-    const existingAllocations = await prisma.orderAllocation.findMany({
-      where: { rollId: data.rollId },
-    });
-
-    const totalAllocated = existingAllocations.reduce(
-      (sum, a) => sum + a.allocatedQty,
-      0
-    );
-
-    if (totalAllocated + data.allocatedQty > roll.currentQty) {
-      throw AppError.badRequest(
-        `Yetersiz miktar. Kalan: ${roll.currentQty - totalAllocated}m, İstenen: ${data.allocatedQty}m`
-      );
-    }
-
-    // Verify order line exists
-    const orderLine = await prisma.orderLine.findUnique({
-      where: { id: data.orderLineId },
-      include: { order: { include: { customer: true } } },
-    });
-
-    if (!orderLine) {
-      throw AppError.notFound("Sipariş kalemi bulunamadı");
-    }
-
-    const allocation = await prisma.orderAllocation.create({
-      data: {
-        rollId: data.rollId,
-        orderLineId: data.orderLineId,
-        allocatedQty: data.allocatedQty,
-      },
-    });
-
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: "ORDER_ALLOCATION",
-      recordId: allocation.id,
-      newData: {
-        rollId: data.rollId,
-        orderLineId: data.orderLineId,
-        allocatedQty: data.allocatedQty,
-        customerName: orderLine.order.customer.name,
-      },
-    });
-
-    return {
-      success: true,
-      data: {
-        allocationId: allocation.id,
-        rollBarcode: roll.barcode,
-        orderNumber: orderLine.order.orderNumber,
-        customerName: orderLine.order.customer.name,
-        allocatedQty: data.allocatedQty,
-      },
-      message: `${data.allocatedQty}m ${orderLine.order.customer.name} siparişine tahsis edildi`,
-    };
-  }
-
-  // ===========================================================================
-  // SPLIT ALLOCATE — Tek çağrıda N sipariş + stok paylaştırması
-  // ===========================================================================
-  /**
-   * PRODUCED / A1_STOCK durumundaki bir rolü birden çok sipariş satırı ve/veya
-   * stok hedefine paylaştırır. Stok hedefi için allocation oluşturulmaz —
-   * kalan miktar rollede kalır.
-   */
-  async splitAllocate(
-    data: {
-      rollId: string;
-      allocations: Array<{
-        orderLineId?: string | null;
-        targetStock?: boolean;
-        qty: number;
-      }>;
-    },
-    userId?: string
-  ): Promise<ApiResponse<unknown>> {
-    if (!data.allocations || data.allocations.length === 0) {
-      throw AppError.badRequest("En az bir paylaştırma satırı girin");
-    }
-
-    for (const a of data.allocations) {
-      if (a.qty <= 0) {
-        throw AppError.badRequest("Paylaştırma miktarı pozitif olmalı");
-      }
-      if (!a.targetStock && !a.orderLineId) {
-        throw AppError.badRequest(
-          "Her satırda sipariş kalemi seçilmeli veya 'Stok' işaretlenmeli"
-        );
-      }
-      if (a.targetStock && a.orderLineId) {
-        throw AppError.badRequest(
-          "Bir satır aynı anda hem stok hem sipariş olamaz"
-        );
-      }
-    }
-
-    const roll = await prisma.roll.findUnique({
-      where: { id: data.rollId },
-      include: { allocations: true },
-    });
-    if (!roll) throw AppError.notFound("Top bulunamadı");
-    if (
-      roll.status !== RollStatus.PRODUCED &&
-      roll.status !== RollStatus.A1_STOCK
-    ) {
-      throw AppError.badRequest(
-        `Bu top paylaştırmaya uygun değil (status: ${roll.status}). PRODUCED veya A1_STOCK olmalı.`
-      );
-    }
-
-    const existingAllocated = roll.allocations.reduce((s, a) => s + a.allocatedQty, 0);
-    const remaining = roll.currentQty - existingAllocated;
-    const requestedTotal = data.allocations.reduce((s, a) => s + a.qty, 0);
-
-    if (requestedTotal > remaining + 1e-6) {
-      throw AppError.badRequest(
-        `Toplam paylaştırma (${requestedTotal.toFixed(1)}m) kalan metrajı (${remaining.toFixed(1)}m) aşıyor`
-      );
-    }
-
-    // OrderLine'ların varlığını doğrula
-    const orderLineIds = data.allocations
-      .filter((a) => a.orderLineId)
-      .map((a) => a.orderLineId as string);
-    const orderLines = await prisma.orderLine.findMany({
-      where: { id: { in: orderLineIds } },
-      include: { order: { include: { customer: true } } },
-    });
-    if (orderLines.length !== new Set(orderLineIds).size) {
-      throw AppError.notFound("Bir veya birden çok sipariş kalemi bulunamadı");
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      const createdAllocations = [];
-      for (const a of data.allocations) {
-        if (a.targetStock) {
-          continue; // Stok tarafı için allocation yok
-        }
-        const alloc = await tx.orderAllocation.create({
-          data: {
-            rollId: data.rollId,
-            orderLineId: a.orderLineId as string,
-            allocatedQty: a.qty,
-          },
-        });
-        createdAllocations.push(alloc);
-      }
-      return { createdAllocations };
-    });
-
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: "ORDER_ALLOCATION",
-      recordId: data.rollId,
-      newData: {
-        rollBarcode: roll.barcode,
-        splits: data.allocations,
-        createdCount: result.createdAllocations.length,
-      },
-    });
-
-    return {
-      success: true,
-      data: {
-        rollBarcode: roll.barcode,
-        allocations: result.createdAllocations,
-        splits: data.allocations,
-      },
-      message: `${result.createdAllocations.length} sipariş tahsisi, ${data.allocations.filter((a) => a.targetStock).length} stok dilimi kaydedildi`,
-    };
-  }
-
   // ===========================================================================
   // SWATCH — Kartela üretimi
   // ===========================================================================
@@ -973,13 +764,12 @@ export class TamburService {
 
     const roll = await prisma.roll.findUnique({
       where: { id: data.sourceRollId },
-      include: { item: true, allocations: true },
+      include: { item: true },
     });
     if (!roll) throw AppError.notFound("Kaynak top bulunamadı");
 
     const totalDeduct = data.length * data.count;
-    const existingAllocated = roll.allocations.reduce((s, a) => s + a.allocatedQty, 0);
-    const remaining = roll.currentQty - existingAllocated;
+    const remaining = Number(roll.currentQty);
     if (totalDeduct > remaining + 1e-6) {
       throw AppError.badRequest(
         `Kartela için yeterli metraj yok. Kalan: ${remaining.toFixed(1)}m, Gereken: ${totalDeduct.toFixed(1)}m`
@@ -1014,7 +804,7 @@ export class TamburService {
       // Kaynak rolden düş
       await tx.roll.update({
         where: { id: roll.id },
-        data: { currentQty: roll.currentQty - totalDeduct },
+        data: { currentQty: Number(roll.currentQty) - totalDeduct },
       });
 
       return list;
@@ -1083,7 +873,7 @@ export class TamburService {
       include: {
         item: { select: { id: true, code: true, name: true } },
         color: { select: { id: true, code: true, name: true } },
-        parentRoll: { select: { id: true, barcode: true, ownerCustomerId: true } },
+        parentRoll: { select: { id: true, barcode: true } },
       },
     });
     if (!swatch) {
@@ -1132,8 +922,12 @@ export class TamburService {
       throw AppError.badRequest("Bu adım Tambur tipinde değil");
     }
 
+    // LIFO sıralama: KK2'nin sepete son koyduğu açık kumaş Tambur'a ilk önce
+    // gelir (operatör en üstten alır). `enteredAt DESC` ile son giren listenin
+    // başında olur.
     const openMovements = await prisma.rollMovement.findMany({
       where: { workOrderStepId: stepId, exitedAt: null },
+      orderBy: { enteredAt: "desc" },
       select: {
         roll: {
           include: {
@@ -1145,7 +939,6 @@ export class TamburService {
               select: {
                 id: true,
                 startMeter: true,
-                
                 errorType: true,
               },
             },
@@ -1161,11 +954,15 @@ export class TamburService {
       itemName: m.roll.item.name,
       colorCode: m.roll.color?.code ?? null,
       colorName: m.roll.color?.name ?? null,
-      currentQty: m.roll.currentQty,
-      width: m.roll.width,
+      currentQty: Number(m.roll.currentQty),
+      width: m.roll.width !== null ? Number(m.roll.width) : null,
       qualityGrade: m.roll.qualityGrade,
       errorCount: m.roll.errors.length,
-      errors: m.roll.errors,
+      errors: m.roll.errors.map((e) => ({
+        id: e.id,
+        startMeter: Number(e.startMeter),
+        errorType: e.errorType,
+      })),
     }));
 
     return {
@@ -1200,7 +997,7 @@ export class TamburService {
     const roll = await prisma.roll.findUnique({ where: { id: data.rollId } });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
-    if (data.startMeter > roll.currentQty) {
+    if (data.startMeter > Number(roll.currentQty)) {
       throw AppError.badRequest(
         `Hata metresi (${data.startMeter}) topun metrajını (${roll.currentQty}) aşıyor`
       );
@@ -1329,156 +1126,314 @@ export class TamburService {
     return { success: true, data };
   }
 
-  /**
-   * Post-production split — depodaki bir topu **istenen metrede** ikiye böler.
-   *
-   * Hata kesimi (FIRE/A1) DEĞİL; aynı kalitede fonksiyonel kesim. Senaryo:
-   * 500m'lik depodaki top → yeni 300m'lik sipariş için 300m kes, 200m geride
-   * kalan top depoya geri.
-   *
-   * İş kuralları:
-   *   - Top WAREHOUSE veya A1_STOCK statüsünde olmalı (paketlenmiş çuvallanmış
-   *     toplara dokunulmaz — user kuralı).
-   *   - Top'un sackId NULL olmalı (çuvallanmış top kesime gitmez).
-   *   - cutLength: 0 < cutLength < currentQty
-   *   - Sonuç: 2 top WAREHOUSE'da, ikisi de aynı qualityGrade, ikisi de
-   *     1.KALITE (varsayılan).
-   *   - Yeni Roll: parentRollId orijinal, entrySource TAMBUR_SPLIT.
-   *   - currentQty düşeceğinden fazla OrderAllocation varsa silinir →
-   *     etkilenen siparişlerin durumu yeniden hesaplanır (READY → SHORT olabilir).
-   */
-  async postProductionSplit(
+
+  // ===========================================================================
+  // WAREHOUSE ROLL CUT — Top Kesme akışı
+  // ===========================================================================
+  // Senaryo: depodaki barkodlu bir topun Tambur operatörü tarafından birden çok
+  // parçaya kesilmesi (cutOpenFabric pattern'inin WAREHOUSE topu varyantı).
+  //
+  //  - Her cutWarehouseRoll çağrısı: child Roll doğar (parent özellikleri inherit),
+  //    parent.currentQty düşer. Multi-cut: operatör istediği kadar çağırır.
+  //  - finalizeWarehouseCut: parent TAMBUR_CONSUMED'a çekilir (arşive),
+  //    kalan kumaş için karar (1.KALITE/A1/FIRE/discard).
+  //
+  // Farklar (vs cutOpenFabric):
+  //  - Parent WAREHOUSE'da (currentStepId null), step/movement işlemi yok
+  //  - producedInStepId parent'tan değil null olarak yazılır (depo topu, Tambur
+  //    step'inin parçası değil)
+  // ===========================================================================
+
+  async cutWarehouseRoll(
+    rollId: string,
     data: {
-      rollId: string;
       cutLength: number;
-      // true: orijinal büyük kalır (currentQty=qty-cut), yeni roll küçük (cut)
-      // false: orijinal küçük (currentQty=cut), yeni roll büyük (qty-cut)
-      originalKeepsLarger: boolean;
+      qualityGrade?: string | null;
+      notes?: string | null;
     },
-    userId?: string
-  ): Promise<
-    ApiResponse<{
-      original: Roll;
-      newRoll: Roll;
-    }>
-  > {
-    if (data.cutLength <= 0) {
+    userId?: string,
+  ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
+    if (!(data.cutLength > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
     }
 
-    const roll = await prisma.roll.findUnique({
-      where: { id: data.rollId },
+    const parent = await prisma.roll.findUnique({
+      where: { id: rollId },
       include: {
-        item: true,
-        allocations: { include: { orderLine: { select: { orderId: true } } } },
+        properties: { select: { propertyId: true } },
       },
     });
-    if (!roll) throw AppError.notFound("Top bulunamadı");
-    if (!roll.barcode) {
+    if (!parent) throw AppError.notFound("Top bulunamadı");
+    if (parent.barcode === null) {
       throw AppError.badRequest(
-        "Açık kumaş Roll için klasik kesim endpoint'i kullanılamaz."
+        "Bu Roll açık kumaş; cutWarehouseRoll sadece barkodlu depo topu için",
       );
     }
-    const parentBarcode = roll.barcode;
-
-    if (
-      roll.status !== RollStatus.WAREHOUSE &&
-      roll.status !== RollStatus.A1_STOCK
-    ) {
+    if (parent.status !== RollStatus.WAREHOUSE) {
       throw AppError.badRequest(
-        `Top kesim için uygun değil (${roll.status}). Sadece depodaki toplar kesilebilir.`
+        `Top depoda değil (${parent.status}); kesime uygun değil`,
       );
     }
-    if (roll.sackId) {
+    if (data.cutLength > Number(parent.currentQty)) {
       throw AppError.badRequest(
-        `Top zaten paketlenmiş (çuvalda) — kesim için önce çuvaldan çıkarın`
-      );
-    }
-    if (data.cutLength >= roll.currentQty) {
-      throw AppError.badRequest(
-        `Kesim metresi (${data.cutLength}) topun toplam metrajından (${roll.currentQty}) küçük olmalı`
+        `Kesim metresi (${data.cutLength}) topun kalan metresinden (${parent.currentQty}) büyük olamaz`,
       );
     }
 
-    const originalNewQty = data.originalKeepsLarger
-      ? roll.currentQty - data.cutLength
-      : data.cutLength;
-    const newRollQty = data.originalKeepsLarger
-      ? data.cutLength
-      : roll.currentQty - data.cutLength;
+    const resolvedQualityGrade = data.qualityGrade ?? parent.qualityGrade;
+    const resolvedQualityGradeId =
+      data.qualityGrade && data.qualityGrade !== parent.qualityGrade
+        ? await resolveQualityGradeId(resolvedQualityGrade)
+        : parent.qualityGradeId;
+    const propertyIds = parent.properties.map((p) => p.propertyId);
+    const childBarcode = generateTamburChildBarcode();
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1) Yeni Roll oluştur (parent ile aynı kalite, WAREHOUSE)
-      const splitBarcode = generateSplitBarcode(parentBarcode);
-      const newRoll = await tx.roll.create({
+      const child = await tx.roll.create({
         data: {
-          barcode: splitBarcode,
-          itemId: roll.itemId,
-          colorId: roll.colorId,
-          width: roll.width,
-          initialQty: newRollQty,
-          currentQty: newRollQty,
+          barcode: childBarcode,
+          itemId: parent.itemId,
+          colorId: parent.colorId,
+          width: parent.width,
+          initialQty: data.cutLength,
+          currentQty: data.cutLength,
           weightKg: null,
-          status: roll.status, // aynı kalite tipi (WAREHOUSE veya A1_STOCK)
-          qualityGrade: roll.qualityGrade,
-          producedInStepId: roll.producedInStepId,
-          parentRollId: roll.id,
-          entrySource: "TAMBUR_SPLIT",
-          ownerCustomerId: roll.ownerCustomerId,
-          customerDescription: roll.customerDescription,
+          status: RollStatus.WAREHOUSE,
+          qualityGrade: resolvedQualityGrade,
+          qualityGradeId: resolvedQualityGradeId,
+          parentRollId: parent.id,
+          entrySource: RollEntrySource.TAMBUR_SPLIT,
+          createdById: userId ?? null,
         },
       });
 
-      // 2) Orijinal Roll currentQty güncelle
-      await tx.roll.update({
-        where: { id: roll.id },
-        data: { currentQty: originalNewQty },
+      if (propertyIds.length > 0) {
+        await tx.rollProperty.createMany({
+          data: propertyIds.map((propertyId) => ({
+            rollId: child.id,
+            propertyId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent topta yapılmış operasyonlar
+      // child'a `inheritedFromParentRollId=parent.id` ile kopyalanır. Aksi halde
+      // child Bitmiş Depo'da "kurşun/KK2 yapılmadı" gözüküyor.
+      // Filter KALDIRILDI: zincirleme inherit destekle. Depo topundaki KURSUN/QC2
+      // op'ları zaten parent'tan inherit edilmiştir (inheritedFromParentRollId
+      // set). Sadece "orijinal" op'lara bakarsak chain kopar, child'da hiç op
+      // kalmaz. Çoklu kayıt olabilir; sorun değil — UI find() ilki bulur.
+      const inheritedOps = await tx.rollOperation.findMany({
+        where: {
+          rollId: parent.id,
+          operationType: {
+            in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
+          },
+        },
+        select: {
+          workOrderStepId: true,
+          operationType: true,
+          operatorId: true,
+          metadata: true,
+        },
+      });
+      if (inheritedOps.length > 0) {
+        await tx.rollOperation.createMany({
+          data: inheritedOps.map((op) => ({
+            rollId: child.id,
+            workOrderStepId: op.workOrderStepId,
+            operationType: op.operationType,
+            operatorId: op.operatorId,
+            metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+            inheritedFromParentRollId: parent.id,
+          })),
+        });
+      }
+
+      // Parent kısalıyor — initialQty'i de güncelle (her kesim sonrası reset).
+      // UI "currentQty / initialQty" ayrımı Top Kesme'de anlamsız: kesim
+      // sonrası eski etiket fiziksel olarak da geçersiz, operatör yenisini
+      // basar; sistemde "70 / 100" gösterimi yanıltıcı.
+      const newParentQty = Number(parent.currentQty) - data.cutLength;
+      const updatedParent = await tx.roll.update({
+        where: { id: parent.id },
+        data: { currentQty: newParentQty, initialQty: newParentQty },
       });
 
-      // 3) Mevcut allocation'ları doğrula — orijinalin currentQty'si düştüğünde
-      //    fazla allocation varsa fazla olanlar silinir (en yeni allocation öncelik).
-      const totalAllocated = roll.allocations.reduce(
-        (s, a) => s + a.allocatedQty,
-        0
-      );
-      const affectedOrderIds = new Set<string>();
-      if (totalAllocated > originalNewQty) {
-        // Fazla allocation var, hepsini sil — operatör çuvallarken yeniden atayabilir.
-        for (const a of roll.allocations) {
-          affectedOrderIds.add(a.orderLine.orderId);
-        }
-        await tx.orderAllocation.deleteMany({ where: { rollId: roll.id } });
-      }
-
-      // 4) Etkilenen siparişlerin status'unu yeniden hesapla
-      for (const orderId of affectedOrderIds) {
-        await recomputeOrderStatus(tx, orderId);
-      }
-
-      const updated = await tx.roll.findUnique({ where: { id: roll.id } });
-      return { original: updated as Roll, newRoll };
+      return { child, newParentQty, updatedParent };
     });
 
     await AuditService.log({
       userId,
       action: "CREATE",
       tableName: "ROLL",
-      recordId: result.newRoll.id,
+      recordId: result.child.id,
       newData: {
-        barcode: result.newRoll.barcode,
-        currentQty: result.newRoll.currentQty,
-        parentRollId: roll.id,
-        parentBarcode: roll.barcode,
-        event: "TAMBUR_POST_PRODUCTION_SPLIT",
+        kind: "TAMBUR_CUT_FROM_WAREHOUSE",
+        parentRollId: parent.id,
+        parentBarcode: parent.barcode,
         cutLength: data.cutLength,
-        originalKeepsLarger: data.originalKeepsLarger,
+        childBarcode: result.child.barcode,
+        childQualityGrade: result.child.qualityGrade,
+        parentRemainingQty: result.newParentQty,
+        notes: data.notes ?? null,
       },
     });
 
     return {
       success: true,
-      data: result,
-      message: `Top ${roll.barcode} bölündü → ${result.original.currentQty}m + ${result.newRoll.currentQty}m`,
+      data: {
+        childRoll: result.child,
+        parentRoll: result.updatedParent as Roll,
+        parentRemainingQty: result.newParentQty,
+      },
+      message: `Kesim: ${data.cutLength} mt → ${result.child.barcode}. Top kalan: ${result.newParentQty} mt.`,
+    };
+  }
+
+  /**
+   * Top Kesme akışını bitir — parent topu TAMBUR_CONSUMED'a (arşive) çek, kalan
+   * kumaş için karar uygula (1.KALITE/A1/FIRE/discard).
+   *
+   * `remainingAction`:
+   *  - "keep_1kalite" → kalan için 1.KALITE child Roll oluştur (WAREHOUSE)
+   *  - "keep_a1"      → A1 child Roll
+   *  - "scrap"        → FIRE child Roll (stokta kalır)
+   *  - "discard"      → kalan tamamen kayıp
+   *  - remainingQty=0 → no-op
+   */
+  async finalizeWarehouseCut(
+    rollId: string,
+    data: {
+      remainingAction?: "keep_1kalite" | "keep_a1" | "scrap" | "discard";
+      notes?: string | null;
+    },
+    userId?: string,
+  ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> {
+    const parent = await prisma.roll.findUnique({
+      where: { id: rollId },
+      include: {
+        properties: { select: { propertyId: true } },
+      },
+    });
+    if (!parent) throw AppError.notFound("Top bulunamadı");
+    if (parent.barcode === null) {
+      throw AppError.badRequest("Bu Roll açık kumaş; finalizeWarehouseCut sadece barkodlu depo topu için");
+    }
+    if (parent.status !== RollStatus.WAREHOUSE) {
+      throw AppError.badRequest(`Top depoda değil (${parent.status})`);
+    }
+
+    const remainingQty = Number(parent.currentQty);
+    const action = data.remainingAction ?? "discard";
+    const wantChild = remainingQty > 0 && action !== "discard";
+    const childQualityGrade =
+      action === "keep_1kalite" ? "1.KALITE" : action === "keep_a1" ? "A1" : "FIRE";
+    const propertyIds = parent.properties.map((p) => p.propertyId);
+
+    const childQualityGradeId = wantChild
+      ? await resolveQualityGradeId(childQualityGrade)
+      : null;
+
+    const result = await prisma.$transaction(async (tx) => {
+      let remainingChild: Roll | null = null;
+
+      if (wantChild) {
+        const child = await tx.roll.create({
+          data: {
+            barcode: generateTamburChildBarcode(),
+            itemId: parent.itemId,
+            colorId: parent.colorId,
+            width: parent.width,
+            initialQty: remainingQty,
+            currentQty: remainingQty,
+            weightKg: null,
+            status: RollStatus.WAREHOUSE,
+            qualityGrade: childQualityGrade,
+            qualityGradeId: childQualityGradeId,
+            parentRollId: parent.id,
+            entrySource: RollEntrySource.TAMBUR_SPLIT,
+            createdById: userId ?? null,
+          },
+        });
+        if (propertyIds.length > 0) {
+          await tx.rollProperty.createMany({
+            data: propertyIds.map((propertyId) => ({
+              rollId: child.id,
+              propertyId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+        // Kalan child'a da KURSUN/QC2 kalıtımı uygula. Filter YOK — zincirleme
+        // inherit (depo topundaki op'lar zaten inherit'li).
+        const inheritedOps = await tx.rollOperation.findMany({
+          where: {
+            rollId: parent.id,
+            operationType: {
+              in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
+            },
+          },
+          select: {
+            workOrderStepId: true,
+            operationType: true,
+            operatorId: true,
+            metadata: true,
+          },
+        });
+        if (inheritedOps.length > 0) {
+          await tx.rollOperation.createMany({
+            data: inheritedOps.map((op) => ({
+              rollId: child.id,
+              workOrderStepId: op.workOrderStepId,
+              operationType: op.operationType,
+              operatorId: op.operatorId,
+              metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+              inheritedFromParentRollId: parent.id,
+            })),
+          });
+        }
+        remainingChild = child as Roll;
+      }
+
+      // Parent retire — TAMBUR_CONSUMED (arşive)
+      await tx.roll.update({
+        where: { id: parent.id },
+        data: {
+          status: RollStatus.TAMBUR_CONSUMED,
+          currentQty: 0,
+        },
+      });
+
+      return { remainingChild };
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: parent.id,
+      newData: {
+        kind: "WAREHOUSE_CUT_FINALIZED",
+        parentBarcode: parent.barcode,
+        remainingAction: action,
+        remainingChildId: result.remainingChild?.id ?? null,
+        remainingQty,
+        notes: data.notes ?? null,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        rollId: parent.id,
+        remainingChild: result.remainingChild,
+        remainingQty,
+      },
+      message: result.remainingChild
+        ? `Top Kesme bitti: ${parent.barcode} arşivlendi · kalan ${remainingQty}m ${childQualityGrade} olarak kayıtlı`
+        : `Top Kesme bitti: ${parent.barcode} arşivlendi${remainingQty > 0 ? ` · ${remainingQty}m fire` : ""}`,
     };
   }
 
@@ -1498,8 +1453,9 @@ export class TamburService {
 
   /**
    * Tek kesim — açık kumaştan child Roll oluştur.
-   * Operatör status seçer: WAREHOUSE (sevk-hazır) | SCRAP (fire) | A1_STOCK (2.kalite).
-   * qualityGrade manuel; default "1.KALITE".
+   * Tüm yeni rulolar WAREHOUSE statüsünde doğar; kalite ayrımı `qualityGrade`
+   * alanında. Geri uyum: tablet eski `status` enum'unu (A1_STOCK/SCRAP)
+   * göndermeye devam edebilir; karşılık gelen qualityGrade'e otomatik dönüşür.
    */
   async cutOpenFabric(
     openFabricRollId: string,
@@ -1538,16 +1494,28 @@ export class TamburService {
         `Açık kumaş aktif değil (${parent.status})`,
       );
     }
-    if (data.lengthMeters > parent.currentQty) {
+    if (data.lengthMeters > Number(parent.currentQty)) {
       throw AppError.badRequest(
         `Kesim metresi (${data.lengthMeters}) açık kumaşın kalan metresinden (${parent.currentQty}) büyük olamaz`,
       );
     }
 
-    const childStatus = RollStatus[data.status];
+    // Geri uyum: tablet eski input'u (status A1_STOCK/SCRAP) gönderebilir.
+    // Yeni kurguda status her zaman WAREHOUSE; eski status değerleri
+    // qualityGrade'e dönüştürülür (explicit qualityGrade override eder).
+    const statusToQuality: Record<string, string> = {
+      WAREHOUSE: "1.KALITE",
+      A1_STOCK: "A1",
+      SCRAP: "FIRE",
+    };
+    const resolvedQualityGrade =
+      data.qualityGrade ?? statusToQuality[data.status] ?? "1.KALITE";
+    const childStatus = RollStatus.WAREHOUSE;
     const tamburStepId = parent.currentStep.id;
     const propertyIds = parent.properties.map((p) => p.propertyId);
     const childBarcode = generateTamburChildBarcode();
+
+    const resolvedQualityGradeId = await resolveQualityGradeId(resolvedQualityGrade);
 
     const result = await prisma.$transaction(async (tx) => {
       // Child Roll oluştur
@@ -1556,14 +1524,13 @@ export class TamburService {
           barcode: childBarcode,
           itemId: parent.itemId,
           colorId: parent.colorId,
-          ownerCustomerId: parent.ownerCustomerId,
-          customerDescription: parent.customerDescription,
           width: parent.width,
           initialQty: data.lengthMeters,
           currentQty: data.lengthMeters,
           weightKg: null,
           status: childStatus,
-          qualityGrade: data.qualityGrade ?? "1.KALITE",
+          qualityGrade: resolvedQualityGrade,
+          qualityGradeId: resolvedQualityGradeId,
           producedInStepId: tamburStepId,
           parentRollId: parent.id,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
@@ -1582,13 +1549,45 @@ export class TamburService {
         });
       }
 
-      // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent.id'yi inheritedFromParentRollId
-      // olarak yaz (geçmiş izi: bu işlemler aslında parent'ta yapıldı).
-      // İşlem ZorunluZ değil bence, ama parent'taki op'lar listelenirken doğru
-      // gözükmesi için tasarlandı. Şimdilik atla — gerekirse sonraki refactorda eklerim.
+      // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent açık kumaşta yapılan
+      // işlemler child top'a `inheritedFromParentRollId=parent.id` ile kopyalanır.
+      // Aksi halde child Bitmiş Depo'da "kurşun/KK2 yapılmadı" gözüküyor; oysa
+      // operasyonlar fiziksel olarak parent üzerinde yapılmış ve sonucu child'a
+      // geçmiş. Bulk split (satır 407-414 / 561-575) bunu yapıyor — open fabric
+      // split'te de aynı semantik gerek.
+      // Filter KALDIRILDI: zincirleme inherit destekle. Depo topundaki KURSUN/QC2
+      // op'ları zaten parent'tan inherit edilmiştir (inheritedFromParentRollId
+      // set). Sadece "orijinal" op'lara bakarsak chain kopar, child'da hiç op
+      // kalmaz. Çoklu kayıt olabilir; sorun değil — UI find() ilki bulur.
+      const inheritedOps = await tx.rollOperation.findMany({
+        where: {
+          rollId: parent.id,
+          operationType: {
+            in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
+          },
+        },
+        select: {
+          workOrderStepId: true,
+          operationType: true,
+          operatorId: true,
+          metadata: true,
+        },
+      });
+      if (inheritedOps.length > 0) {
+        await tx.rollOperation.createMany({
+          data: inheritedOps.map((op) => ({
+            rollId: child.id,
+            workOrderStepId: op.workOrderStepId,
+            operationType: op.operationType,
+            operatorId: op.operatorId,
+            metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+            inheritedFromParentRollId: parent.id,
+          })),
+        });
+      }
 
       // Parent currentQty düşür
-      const newParentQty = parent.currentQty - data.lengthMeters;
+      const newParentQty = Number(parent.currentQty) - data.lengthMeters;
       await tx.roll.update({
         where: { id: parent.id },
         data: { currentQty: newParentQty },
@@ -1627,12 +1626,23 @@ export class TamburService {
 
   /**
    * Açık kumaşı bitir — parent CONSUMED_AT_TAMBUR'a çek, Tambur movement'ı kapat.
-   * scrapRemaining=true verilirse kalan metre için fire (SCRAP) child Roll oluşturulur.
-   * scrapRemaining=false ise kalan metre sadece notta kalır (operatör fiziksel olarak attı).
+   *
+   * `remainingAction` operatörün kalan metre (currentQty) için kararı:
+   *   - "keep_1kalite" → 1.KALITE barkodlu top oluştur (status=WAREHOUSE)
+   *   - "keep_a1"      → A1 barkodlu top oluştur (status=WAREHOUSE)
+   *   - "scrap"        → FIRE barkodlu top oluştur (status=WAREHOUSE, fiziksel olarak fire ama stokta kalır)
+   *   - "discard"      → kalan metre tamamen kayıp (eski scrapRemaining=false davranışı)
+   *
+   * Geri uyum: `remainingAction` verilmezse, eski `scrapRemaining` boolean'ından
+   * türetir (true→"scrap", false/undefined→"discard"). Mobile yeni param'a geçince
+   * scrapRemaining deprecate edilir.
+   *
+   * remainingQty=0 ise hiçbir child oluşmaz (action verilse bile no-op).
    */
   async finalizeOpenFabric(
     openFabricRollId: string,
     data: {
+      remainingAction?: "keep_1kalite" | "keep_a1" | "scrap" | "discard";
       scrapRemaining?: boolean;
       notes?: string | null;
       /// Tambur kararı — WO.foldType (planlama) override. Verilmezse planlanan
@@ -1640,7 +1650,7 @@ export class TamburService {
       foldType?: string | null;
     },
     userId?: string,
-  ): Promise<ApiResponse<{ rollId: string; scrapChildId: string | null; remainingQty: number }>> {
+  ): Promise<ApiResponse<{ rollId: string; remainingChildId: string | null; remainingQty: number }>> {
     const parent = await prisma.roll.findUnique({
       where: { id: openFabricRollId },
       include: {
@@ -1672,8 +1682,13 @@ export class TamburService {
       throw AppError.badRequest(`Açık kumaş aktif değil (${parent.status})`);
     }
 
-    const remainingQty = parent.currentQty;
-    const wantScrap = data.scrapRemaining === true && remainingQty > 0;
+    const remainingQty = Number(parent.currentQty);
+    // remainingAction varsa onu kullan; yoksa eski scrapRemaining'den türet.
+    const action: "keep_1kalite" | "keep_a1" | "scrap" | "discard" =
+      data.remainingAction ?? (data.scrapRemaining === true ? "scrap" : "discard");
+    const wantChild = remainingQty > 0 && action !== "discard";
+    const childQualityGrade: string =
+      action === "keep_1kalite" ? "1.KALITE" : action === "keep_a1" ? "A1" : "FIRE";
     const tamburStepId = parent.currentStep.id;
     const woId = parent.currentStep.workOrderId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
@@ -1686,24 +1701,28 @@ export class TamburService {
     const overriddenFoldType =
       data.foldType !== undefined && data.foldType !== plannedFoldType;
 
-    const result = await prisma.$transaction(async (tx) => {
-      let scrapChildId: string | null = null;
+    const childQualityGradeId = wantChild
+      ? await resolveQualityGradeId(childQualityGrade)
+      : null;
 
-      // Opsiyonel: kalan metre için fire (SCRAP) child Roll
-      if (wantScrap) {
-        const scrap = await tx.roll.create({
+    const result = await prisma.$transaction(async (tx) => {
+      let remainingChildId: string | null = null;
+
+      // Kalan metre için child Roll oluştur (action != discard ve kalan > 0).
+      // Kalite operatörün seçimine göre: 1.KALITE / A1 / FIRE. Hepsi WAREHOUSE'a iner.
+      if (wantChild) {
+        const child = await tx.roll.create({
           data: {
             barcode: generateTamburChildBarcode(),
             itemId: parent.itemId,
             colorId: parent.colorId,
-            ownerCustomerId: parent.ownerCustomerId,
-            customerDescription: parent.customerDescription,
             width: parent.width,
             initialQty: remainingQty,
             currentQty: remainingQty,
             weightKg: null,
-            status: RollStatus.SCRAP,
-            qualityGrade: "FIRE",
+            status: RollStatus.WAREHOUSE,
+            qualityGrade: childQualityGrade,
+            qualityGradeId: childQualityGradeId,
             producedInStepId: tamburStepId,
             parentRollId: parent.id,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
@@ -1713,13 +1732,13 @@ export class TamburService {
         if (propertyIds.length > 0) {
           await tx.rollProperty.createMany({
             data: propertyIds.map((propertyId) => ({
-              rollId: scrap.id,
+              rollId: child.id,
               propertyId,
             })),
             skipDuplicates: true,
           });
         }
-        scrapChildId = scrap.id;
+        remainingChildId = child.id;
       }
 
       // Parent CONSUMED_AT_TAMBUR — currentQty=0, currentStepId=null
@@ -1733,6 +1752,10 @@ export class TamburService {
       });
 
       // Tambur movement'ı kapat
+      const movementNote =
+        wantChild && remainingChildId
+          ? `TAMBUR_FINALIZED:REMAINING_${remainingQty}_${childQualityGrade}`
+          : "TAMBUR_FINALIZED";
       await tx.rollMovement.updateMany({
         where: {
           rollId: parent.id,
@@ -1742,7 +1765,7 @@ export class TamburService {
         data: {
           qtyOut: parent.initialQty,
           exitedAt: new Date(),
-          notes: `TAMBUR_FINALIZED${wantScrap ? `:SCRAP_REMAINING_${remainingQty}` : ""}`,
+          notes: movementNote,
         },
       });
 
@@ -1762,8 +1785,9 @@ export class TamburService {
           operatorId: userId ?? null,
           metadata: {
             finalizedAt: new Date().toISOString(),
-            scrapRemaining: wantScrap,
-            scrapChildId,
+            remainingAction: action,
+            remainingChildId,
+            remainingChildQuality: wantChild ? childQualityGrade : null,
             remainingQty,
             notes: data.notes ?? null,
             plannedFoldType,
@@ -1795,7 +1819,7 @@ export class TamburService {
         });
       }
 
-      return { scrapChildId };
+      return { remainingChildId };
     });
 
     await AuditService.log({
@@ -1805,23 +1829,28 @@ export class TamburService {
       recordId: parent.id,
       newData: {
         finalizedAt: new Date().toISOString(),
-        scrapRemaining: wantScrap,
-        scrapChildId: result.scrapChildId,
+        remainingAction: action,
+        remainingChildId: result.remainingChildId,
+        remainingChildQuality: wantChild ? childQualityGrade : null,
         remainingQty,
         notes: data.notes ?? null,
       },
     });
 
+    const message = wantChild
+      ? `Açık kumaş finalize: kalan ${remainingQty} mt ${childQualityGrade} kalitede top olarak kaydedildi.`
+      : action === "discard" && remainingQty > 0
+        ? `Açık kumaş finalize: kalan ${remainingQty} mt kayıt dışı (operatör attı).`
+        : "Açık kumaş finalize edildi.";
+
     return {
       success: true,
       data: {
         rollId: parent.id,
-        scrapChildId: result.scrapChildId,
+        remainingChildId: result.remainingChildId,
         remainingQty,
       },
-      message: wantScrap
-        ? `Açık kumaş finalize: kalan ${remainingQty} mt fire olarak ayrıldı.`
-        : `Açık kumaş finalize edildi.`,
+      message,
     };
   }
 
@@ -1894,7 +1923,7 @@ export class TamburService {
     });
     if (!step) throw AppError.notFound("Tambur adımı bulunamadı");
 
-    // WO'ya bağlı OrderLine'lar (allocation + shipment ile shippedQty hesaplama)
+    // WO'ya bağlı OrderLine'lar
     const links = await prisma.workOrderToOrderLine.findMany({
       where: { workOrderId: card.workOrderId },
       select: {
@@ -1910,18 +1939,6 @@ export class TamburService {
                 id: true,
                 orderNumber: true,
                 customer: { select: { id: true, name: true } },
-              },
-            },
-            allocations: {
-              select: {
-                roll: {
-                  select: {
-                    shipmentItems: {
-                      where: { shipment: { status: "SHIPPED" } },
-                      select: { shippedQty: true },
-                    },
-                  },
-                },
               },
             },
           },
@@ -1952,11 +1969,7 @@ export class TamburService {
     for (const link of links) {
       const ol = link.orderLine;
       const order = ol.order;
-      const shippedQty = ol.allocations.reduce(
-        (sum, a) =>
-          sum + a.roll.shipmentItems.reduce((s, si) => s + si.shippedQty, 0),
-        0,
-      );
+      const shippedQty = 0;
       if (!ordersMap.has(order.id)) {
         ordersMap.set(order.id, {
           orderId: order.id,
@@ -1973,7 +1986,7 @@ export class TamburService {
         itemName: ol.item.name,
         colorCode: ol.color?.code ?? null,
         colorName: ol.color?.name ?? null,
-        orderedQty: ol.quantity,
+        orderedQty: Number(ol.quantity),
         shippedQty,
       });
     }
@@ -2021,13 +2034,17 @@ export class TamburService {
 
     const openFabricRolls = openMovements.map((m) => ({
       rollId: m.roll.id,
-      currentQty: m.roll.currentQty,
-      initialQty: m.roll.initialQty,
+      currentQty: Number(m.roll.currentQty),
+      initialQty: Number(m.roll.initialQty),
       receiptNo: m.roll.parentReceipt?.receiptNo ?? null,
       colorCode: m.roll.color?.code ?? null,
       colorName: m.roll.color?.name ?? null,
       kursunFinishedAt: m.roll.operations[0]?.createdAt.toISOString() ?? null,
-      errors: m.roll.errors,
+      errors: m.roll.errors.map((e) => ({
+        id: e.id,
+        startMeter: Number(e.startMeter),
+        errorType: e.errorType,
+      })),
     }));
 
     return {

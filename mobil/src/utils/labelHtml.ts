@@ -1,20 +1,29 @@
 import dayjs from 'dayjs';
-import type { Roll } from '../types/models';
+import type { LabelTemplate, Roll } from '../types/models';
 
 interface BuildLabelArgs {
   roll: Roll;
   qrDataUrl: string;
+  /** Backend `/labels/barcode` endpoint'inden auth'lu çekilen Code128 SVG'nin
+   *  base64 data-URL'i. null → fallback olarak sadece mono font text. */
+  barcodeDataUrl: string | null;
+  /** Electron "Etiket Standartları"nda admin'in tanımladığı default şablon.
+   *  null → mevcut hardcoded tüm-alanlar davranışı (geriye uyumluluk). */
+  template: LabelTemplate | null;
   batchNumber?: string | null;
 }
 
 /**
- * Top etiketi — A6 portrait (105×148mm). Label yazıcılarına uygun, normal
- * yazıcıda "sayfaya sığdır" ile basılır.
- * İçerik: ürün adı, renk, metraj, en, kalite, QR + barkod metni.
+ * Top etiketi — A6 portrait (105×148mm). Şablon kontrolü altında alan
+ * visibility + label override + bold + fontSize uygulanır. Görsel iskelet
+ * (qty merkez, qr alt, vs.) sabit; admin sadece "hangi alan görünür, ne
+ * etiketle, ne kalınlıkta/boyutta" yönetir.
  */
 export function buildRollLabelHtml({
   roll,
   qrDataUrl,
+  barcodeDataUrl,
+  template,
   batchNumber,
 }: BuildLabelArgs): string {
   const itemName = escapeHtml(roll.item?.name ?? '—');
@@ -28,6 +37,11 @@ export function buildRollLabelHtml({
   const date = dayjs(roll.createdAt ?? new Date()).format('DD.MM.YYYY HH:mm');
   const safeBatch = batchNumber ? escapeHtml(batchNumber) : '';
   const barcode = escapeHtml(roll.barcode ?? '');
+
+  // Şablon helper'ları — template null ise tüm alanlar görünür (geriye uyum).
+  const vis = (key: string) => isVisible(template, key);
+  const lbl = (key: string, fallback: string) => fieldLabel(template, key, fallback);
+  const sty = (key: string) => fieldStyle(template, key);
 
   return `<!doctype html>
 <html lang="tr">
@@ -72,12 +86,6 @@ export function buildRollLabelHtml({
     text-align: center;
     line-height: 1.2;
   }
-  .variant {
-    font-size: 9pt;
-    color: #475569;
-    text-align: center;
-    margin-top: -1mm;
-  }
   .color-line {
     display: flex;
     align-items: center;
@@ -111,10 +119,19 @@ export function buildRollLabelHtml({
     gap: 1mm;
     min-width: 0;
   }
-  .barcode {
+  .barcode-img {
+    width: 100%;
+    max-height: 14mm;
+    object-fit: contain;
+    display: block;
+  }
+  .barcode-text {
     font-family: ui-monospace, monospace;
-    font-size: 10pt;
+    font-size: 8pt;
     font-weight: 700;
+    text-align: center;
+    letter-spacing: 0.5px;
+    margin-top: 0.5mm;
     word-break: break-all;
     line-height: 1.1;
   }
@@ -139,38 +156,78 @@ export function buildRollLabelHtml({
   <div class="label">
     <div class="top">
       <span class="brand">A.Şahin Tekstil</span>
-      ${safeBatch ? `<span class="batch">${safeBatch}</span>` : ''}
+      ${safeBatch && vis('batchNumber') ? `<span class="batch">${safeBatch}</span>` : ''}
     </div>
 
-    <div class="item-name">${itemName}</div>
+    ${vis('itemName') ? `<div class="item-name" style="${sty('itemName')}">${itemName}</div>` : ''}
 
     ${
-      colorName
-        ? `<div class="color-line">
+      colorName && vis('colorName')
+        ? `<div class="color-line" style="${sty('colorName')}">
              <span class="color-dot" style="background:${escapeHtml(colorHex)};"></span>
              <span>${colorName}</span>
            </div>`
         : ''
     }
 
-    <div class="qty">${qty}<span class="unit"> mt</span></div>
+    ${vis('lengthMeters') ? `<div class="qty" style="${sty('lengthMeters')}">${qty}<span class="unit"> mt</span></div>` : ''}
 
     <div class="qr-row">
-      <img class="qr" src="${qrDataUrl}" alt="QR" />
+      ${vis('qrCode') ? `<img class="qr" src="${qrDataUrl}" alt="QR" />` : ''}
       <div class="qr-info">
-        <div class="barcode">${barcode || '—'}</div>
-        <div class="meta-row"><span class="k">En</span><span>${widthLabel}</span></div>
-        <div class="meta-row"><span class="k">Kalite</span><span>${quality}</span></div>
+        ${vis('widthCm') ? `<div class="meta-row" style="${sty('widthCm')}"><span class="k">${lbl('widthCm', 'En')}</span><span>${widthLabel}</span></div>` : ''}
+        ${vis('qualityGrade') ? `<div class="meta-row" style="${sty('qualityGrade')}"><span class="k">${lbl('qualityGrade', 'Kalite')}</span><span>${quality}</span></div>` : ''}
+        ${vis('itemCode') && roll.item?.code ? `<div class="meta-row"><span class="k">${lbl('itemCode', 'Kod')}</span><span>${escapeHtml(roll.item.code)}</span></div>` : ''}
       </div>
     </div>
 
+    ${
+      vis('barcode')
+        ? `<div class="barcode-block" style="${sty('barcode')}">
+             ${barcodeDataUrl ? `<img class="barcode-img" src="${barcodeDataUrl}" alt="${barcode || ''}" />` : ''}
+             <div class="barcode-text">${barcode || '—'}</div>
+           </div>`
+        : ''
+    }
+
     <div class="footer">
-      <span>${date}</span>
-      <span>${escapeHtml(roll.status ?? '')}</span>
+      ${vis('printedAt') ? `<span>${date}</span>` : '<span></span>'}
     </div>
   </div>
 </body>
 </html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Template helpers
+// ---------------------------------------------------------------------------
+
+function isVisible(template: LabelTemplate | null, key: string): boolean {
+  if (!template) return true;
+  const f = template.fields.find((x) => x.key === key);
+  return f ? f.isVisible : false;
+}
+
+function fieldLabel(template: LabelTemplate | null, key: string, fallback: string): string {
+  if (!template) return fallback;
+  return template.fields.find((x) => x.key === key)?.label ?? fallback;
+}
+
+const FONT_SIZE_MAP: Record<string, string> = {
+  sm: '8pt',
+  md: '10pt',
+  lg: '14pt',
+  xl: '20pt',
+};
+
+function fieldStyle(template: LabelTemplate | null, key: string): string {
+  if (!template) return '';
+  const f = template.fields.find((x) => x.key === key);
+  if (!f) return '';
+  const parts: string[] = [];
+  if (f.isBold) parts.push('font-weight:700');
+  if (f.fontSize) parts.push(`font-size:${FONT_SIZE_MAP[f.fontSize] ?? '10pt'}`);
+  return parts.join(';');
 }
 
 function escapeHtml(s: string): string {
@@ -182,7 +239,9 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function formatNumber(n: number): string {
-  if (!Number.isFinite(n)) return '—';
-  return Number(n).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+function formatNumber(n: number | string | null | undefined): string {
+  if (n == null) return '—';
+  const num = typeof n === 'string' ? Number(n) : n;
+  if (!Number.isFinite(num)) return '—';
+  return num.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 }

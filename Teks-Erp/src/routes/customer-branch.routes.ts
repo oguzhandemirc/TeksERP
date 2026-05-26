@@ -8,7 +8,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { CustomerBranchService } from "../services/customer-branch.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const service = new CustomerBranchService();
 
@@ -49,7 +49,7 @@ const router = Router({ mergeParams: true });
 router.get(
   "/",
   verifyToken,
-  requirePermission("customer:read"),
+  requireAnyPermission("customer:read", "mobile:tarti-paket", "mobile:sevkiyat", "mobile:fason-sevk", "mobile:fason-kabul"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const customerId = req.params.customerId as string;

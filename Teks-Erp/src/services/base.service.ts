@@ -7,6 +7,7 @@
 
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
+import { AppError } from "../utils/app-error";
 import {
   parseQueryParams,
   buildWhereClause,
@@ -39,6 +40,7 @@ export interface CursorPaginatedResponse<T> {
 type PrismaDelegate = {
   findMany: (args: Record<string, unknown>) => Promise<unknown[]>;
   findUnique: (args: Record<string, unknown>) => Promise<unknown | null>;
+  findFirst: (args: Record<string, unknown>) => Promise<unknown | null>;
   create: (args: Record<string, unknown>) => Promise<unknown>;
   update: (args: Record<string, unknown>) => Promise<unknown>;
   delete: (args: Record<string, unknown>) => Promise<unknown>;
@@ -53,6 +55,14 @@ export interface BaseServiceConfig {
   dateFields?: readonly string[];
   defaultInclude?: Record<string, unknown>; // Default relations to include
   nestedCreateFields?: string[]; // Array fields to wrap in { create: [...] } for Prisma nested writes
+  /**
+   * Soft-delete edilmiş kayıdın yeniden eklenmesini desteklemek için kullanılır.
+   * Verilirse create() önce bu alan üzerinden pasif eş arar:
+   *   - Aktif eş varsa: hata fırlatır (kullanıcı zaten var olanı görmeli).
+   *   - Pasif eş varsa: update ile isActive=true yapıp güncel veriyi yazar (reactivate).
+   * Genelde "code" (Color, Item, Station vb.). User için "username" olabilir.
+   */
+  uniqueField?: string;
 }
 
 export class BaseService {
@@ -203,11 +213,34 @@ export class BaseService {
 
   /**
    * Create a new record.
+   *
+   * uniqueField config'i verilmişse, aynı değere sahip pasif kayıt varsa
+   * yeni kayıt yerine reactivate eder (eski ID + tarihçe korunur).
+   * Aynı değere sahip aktif kayıt varsa AppError fırlatır.
    */
   async create(
     data: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    if (this.config.uniqueField) {
+      const key = this.config.uniqueField;
+      const incomingValue = data[key];
+      if (typeof incomingValue === "string" && incomingValue.length > 0) {
+        const existing = (await this.delegate.findFirst({
+          where: { [key]: incomingValue },
+        })) as Record<string, unknown> | null;
+
+        if (existing) {
+          if (existing.isActive === true) {
+            throw AppError.badRequest(
+              `Bu ${key} ile aktif kayıt zaten var`,
+            );
+          }
+          return this.reactivate(existing.id as string, data, userId);
+        }
+      }
+    }
+
     // Transform nested array fields to Prisma's { create: [...] } format
     const prismaData = { ...data };
     if (this.config.nestedCreateFields) {
@@ -232,6 +265,51 @@ export class BaseService {
     });
 
     return { success: true, data: record, message: "Kayıt oluşturuldu" };
+  }
+
+  /**
+   * Pasif kaydı reactive eder + gelen veriyi günceller.
+   * create() içinden çağrılır; nested create alanları desteklenmez (M:N replace
+   * gibi karmaşık ihtiyaçlarda servis kendi override'ını yazsın).
+   */
+  protected async reactivate(
+    id: string,
+    data: Record<string, unknown>,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const oldRecord = await this.delegate.findUnique({ where: { id } });
+
+    const updateData: Record<string, unknown> = { ...data, isActive: true };
+    if (this.config.nestedCreateFields) {
+      for (const field of this.config.nestedCreateFields) {
+        // Reactivate sırasında nested array'leri sessizce atla — servis
+        // override etmeden M:N replace yapmak güvenli değil.
+        delete updateData[field];
+      }
+    }
+
+    const updated = await this.delegate.update({
+      where: { id },
+      data: updateData,
+      ...(this.config.defaultInclude
+        ? { include: this.config.defaultInclude }
+        : {}),
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: this.config.tableName,
+      recordId: id,
+      oldData: oldRecord as Record<string, unknown> | null,
+      newData: updateData,
+    });
+
+    return {
+      success: true,
+      data: updated,
+      message: "Pasif kayıt yeniden aktive edildi",
+    };
   }
 
   /**

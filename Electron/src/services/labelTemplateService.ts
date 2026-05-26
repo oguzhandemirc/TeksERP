@@ -2,16 +2,16 @@ import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
 
 export const LabelKind = {
-  ROLL: "ROLL",
+  ROLL_RAW: "ROLL_RAW",
+  ROLL_FINISHED: "ROLL_FINISHED",
   SWATCH: "SWATCH",
-  SHIPMENT_DOCKET: "SHIPMENT_DOCKET",
 } as const;
 export type LabelKind = (typeof LabelKind)[keyof typeof LabelKind];
 
 export const labelKindLabels: Record<LabelKind, string> = {
-  ROLL: "Top Etiketi",
+  ROLL_RAW: "Ham Kumaş Etiketi",
+  ROLL_FINISHED: "Bitmiş Kumaş Etiketi",
   SWATCH: "Kartela Etiketi",
-  SHIPMENT_DOCKET: "Sevkiyat İrsaliyesi",
 };
 
 export type FieldType = "text" | "number" | "date" | "qr" | "barcode" | "table";
@@ -97,5 +97,22 @@ export const labelTemplateService = {
   remove: (id: string): Promise<ApiResponse<void>> =>
     apiClient
       .delete<ApiResponse<void>>(`/api/label-templates/${id}`)
+      .then((r) => r.data),
+
+  /**
+   * Şablon düzenleme önizleme HTML'i — backend mock payload + verilen field
+   * listesi ile tam HTML üretir. Iframe srcDoc kaynağı; mobil ve Electron
+   * preview tek doğru renderdan beslenir.
+   */
+  previewHtml: (
+    kind: LabelKind,
+    fields: TemplateField[],
+  ): Promise<string> =>
+    apiClient
+      .post<string>(
+        "/api/labels/preview/html",
+        { kind, fields },
+        { responseType: "text", transformResponse: [(d) => d] },
+      )
       .then((r) => r.data),
 };

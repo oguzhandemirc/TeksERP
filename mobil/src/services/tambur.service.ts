@@ -6,7 +6,6 @@ import type {
   TamburFinalizeRequest,
   TamburReportErrorRequest,
   TamburSwatchRequest,
-  TamburPostSplitRequest,
   TamburContext,
   TamburCutRequest,
   TamburFinalizeOpenFabricRequest,
@@ -82,17 +81,6 @@ export const tamburService = {
       .then((r) => r.data);
   },
 
-  // Post-production split — depodaki topu istenen metrede ikiye böl (aynı kalite)
-  postProductionSplit: (
-    data: TamburPostSplitRequest
-  ): Promise<ApiResponse<{ original: unknown; newRoll: unknown }>> =>
-    apiClient
-      .post<ApiResponse<{ original: unknown; newRoll: unknown }>>(
-        '/tambur/post-production-split',
-        data
-      )
-      .then((r) => r.data),
-
   /**
    * Yeni açık kumaş modeli — boyahane dönüşü. WO + sipariş progress + LIFO açık
    * kumaş listesini tek atışta döner. Kart pasif veya WO Tambur'da değilse 400.
@@ -127,5 +115,39 @@ export const tamburService = {
   ): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>(`/tambur/${rollId}/finalize-open-fabric`, data)
+      .then((r) => r.data),
+
+  /**
+   * Top Kesme — depo (WAREHOUSE) topundan çoklu kesim. Her çağrı child Roll
+   * doğurur, parent.currentQty düşer (parent yaşamaya devam eder). Parent
+   * özellikleri ve KURSUN/QC2 operasyonları child'a inherit edilir.
+   */
+  cutWarehouseRoll: (
+    rollId: string,
+    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null }
+  ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> =>
+    apiClient
+      .post<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>>(
+        `/tambur/${rollId}/cut-warehouse`,
+        data
+      )
+      .then((r) => r.data),
+
+  /**
+   * Top Kesme bitir — parent TAMBUR_CONSUMED'a (arşiv) çekilir; kalan kumaş için
+   * remainingAction'a göre 1.KALITE/A1/FIRE child Roll oluşur veya discard.
+   */
+  finalizeWarehouseCut: (
+    rollId: string,
+    data: {
+      remainingAction?: 'keep_1kalite' | 'keep_a1' | 'scrap' | 'discard';
+      notes?: string | null;
+    }
+  ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> =>
+    apiClient
+      .post<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>>(
+        `/tambur/${rollId}/finalize-warehouse-cut`,
+        data
+      )
       .then((r) => r.data),
 };

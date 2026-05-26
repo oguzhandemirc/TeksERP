@@ -15,7 +15,6 @@ export function ItemsPage() {
       columns={itemColumns}
       writePermission="item:write"
       searchPlaceholder="Kod veya ad ara..."
-      showInactiveControl
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <ItemFormDialog
           open={open}

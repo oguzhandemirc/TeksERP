@@ -271,7 +271,7 @@ export async function getTravelerTrace(rollId: string): Promise<TravelerTraceRes
       operatorId: m.operator?.id ?? null,
       operatorName: m.operator?.fullName ?? m.operator?.username ?? null,
       machineName: m.machine?.name ?? null,
-      qty: m.qtyIn,
+      qty: Number(m.qtyIn),
       operationType: null,
       notes: m.notes,
     });
@@ -285,7 +285,7 @@ export async function getTravelerTrace(rollId: string): Promise<TravelerTraceRes
         operatorId: m.operator?.id ?? null,
         operatorName: m.operator?.fullName ?? m.operator?.username ?? null,
         machineName: m.machine?.name ?? null,
-        qty: m.qtyOut,
+        qty: m.qtyOut !== null ? Number(m.qtyOut) : null,
         operationType: null,
         notes: null,
       });
@@ -308,7 +308,15 @@ export async function getTravelerTrace(rollId: string): Promise<TravelerTraceRes
   }
   events.sort((a, b) => a.at.getTime() - b.at.getTime());
 
-  return { roll, events };
+  return {
+    roll: {
+      ...roll,
+      initialQty: Number(roll.initialQty),
+      currentQty: Number(roll.currentQty),
+      width: roll.width !== null ? Number(roll.width) : null,
+    },
+    events,
+  };
 }
 
 // ---------- 5) Scrap / Fire --------------------------------------------------

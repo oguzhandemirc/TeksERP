@@ -17,3 +17,14 @@ export interface LoginResponse {
   };
   message: string;
 }
+
+export interface MobileUser {
+  id: string;
+  username: string;
+  fullName: string;
+}
+
+export interface MobileUsersResponse {
+  success: boolean;
+  data: MobileUser[];
+}

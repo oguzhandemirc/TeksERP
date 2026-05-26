@@ -175,24 +175,80 @@ export class DeviceService {
   }
 
   /**
-   * Admin: cihazı pasife al (soft delete).
+   * Admin: pasif cihazı tekrar aktifleştir. machineId sıfır kalır — admin
+   * tabletin tekrar bir makineye eşlenmesini istiyorsa yeni pairing kodu
+   * üretmeli; tablet de o anda pairing ekranında olur (deaktifte 401 yedi).
    */
-  static async deactivate(id: string, userId?: string) {
+  static async reactivate(id: string, userId?: string) {
     const existing = await prisma.device.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
+    if (existing.isActive) throw AppError.badRequest("Cihaz zaten aktif");
     const updated = await prisma.device.update({
       where: { id },
-      data: { isActive: false, machineId: null },
+      data: { isActive: true },
     });
     await AuditService.log({
       userId,
       action: "UPDATE",
       tableName: "devices",
       recordId: id,
-      oldData: { isActive: existing.isActive, machineId: existing.machineId },
-      newData: { isActive: false, machineId: null },
+      oldData: { isActive: false },
+      newData: { isActive: true },
     });
     return updated;
+  }
+
+  /**
+   * Admin: cihazı pasife al (soft delete). Sadece isActive=false; machineId
+   * korunur. Pasif cihaz middleware tarafından 401'lenir; aktifleştirilince
+   * eski makinesine otomatik geri bağlanır. Eşleşmeyi gerçekten koparmak için
+   * ayrı "Eşleşmeyi Kaldır" (unpair) aksiyonu kullanılır.
+   */
+  static async deactivate(id: string, userId?: string) {
+    const existing = await prisma.device.findUnique({ where: { id } });
+    if (!existing) throw AppError.notFound("Cihaz bulunamadı");
+    const updated = await prisma.device.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "devices",
+      recordId: id,
+      oldData: { isActive: existing.isActive },
+      newData: { isActive: false },
+    });
+    return updated;
+  }
+
+  /**
+   * Admin: cihazı kalıcı olarak sil (hard delete). Sadece eşleşmemiş
+   * (machineId=null) cihazlar silinebilir; aktif eşleşmeli cihaz silinmek
+   * istenirse önce "Eşleşmeyi Kaldır" çağrılmalı. PairingCode.usedDeviceId
+   * FK değil — yalın string olarak audit geçmişinde kalır.
+   */
+  static async hardDelete(id: string, userId?: string) {
+    const existing = await prisma.device.findUnique({ where: { id } });
+    if (!existing) throw AppError.notFound("Cihaz bulunamadı");
+    if (existing.machineId) {
+      throw AppError.badRequest(
+        "Cihaz şu anda bir makineye eşli. Önce eşleşmeyi kaldırın."
+      );
+    }
+    await prisma.device.delete({ where: { id } });
+    await AuditService.log({
+      userId,
+      action: "DELETE",
+      tableName: "devices",
+      recordId: id,
+      oldData: {
+        deviceId: existing.deviceId,
+        name: existing.name,
+        isActive: existing.isActive,
+      },
+    });
+    return { id };
   }
 
   /**

@@ -43,25 +43,6 @@ const finalizeSchema = z.object({
   foldType: z.enum(["2-KAT", "4-KAT"]).optional(),
 });
 
-const allocateSchema = z.object({
-  rollId: z.string().uuid("Geçersiz top ID"),
-  orderLineId: z.string().uuid("Geçersiz sipariş kalemi ID"),
-  allocatedQty: z.number().positive("Tahsis miktarı pozitif olmalı"),
-});
-
-const splitAllocateSchema = z.object({
-  rollId: z.string().uuid(),
-  allocations: z
-    .array(
-      z.object({
-        orderLineId: z.string().uuid().nullish(),
-        targetStock: z.boolean().optional(),
-        qty: z.number().positive(),
-      })
-    )
-    .min(1),
-});
-
 const swatchSchema = z.object({
   sourceRollId: z.string().uuid(),
   length: z.number().positive(),
@@ -80,12 +61,6 @@ const reportErrorSchema = z.object({
   defectTypeId: z.string().uuid(),
 });
 
-const postProductionSplitSchema = z.object({
-  rollId: z.string().uuid(),
-  cutLength: z.number().positive(),
-  originalKeepsLarger: z.boolean(),
-});
-
 const cutOpenFabricSchema = z.object({
   lengthMeters: z.number().positive("Kesim metresi pozitif olmalı"),
   status: z.enum(["WAREHOUSE", "SCRAP", "A1_STOCK"], {
@@ -96,10 +71,28 @@ const cutOpenFabricSchema = z.object({
 });
 
 const finalizeOpenFabricSchema = z.object({
+  // Yeni: kalan metre için operatör kararı. Verilmezse scrapRemaining'den türetilir.
+  remainingAction: z
+    .enum(["keep_1kalite", "keep_a1", "scrap", "discard"])
+    .optional(),
+  // Eski param — geri uyum (mobile geçince kaldırılabilir).
   scrapRemaining: z.boolean().optional(),
   notes: z.string().max(1000).optional().nullable(),
   // Tambur kararı — WO planlaması override (verilmezse WO.foldType kullanılır).
   foldType: z.string().trim().max(32).optional().nullable(),
+});
+
+const cutWarehouseRollSchema = z.object({
+  cutLength: z.number().positive("Kesim metresi pozitif olmalı"),
+  qualityGrade: z.string().max(50).optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+const finalizeWarehouseCutSchema = z.object({
+  remainingAction: z
+    .enum(["keep_1kalite", "keep_a1", "scrap", "discard"])
+    .optional(),
+  notes: z.string().max(1000).optional().nullable(),
 });
 
 export class TamburController {
@@ -112,18 +105,41 @@ export class TamburController {
     this.getByCardBarcode = this.getByCardBarcode.bind(this);
     this.getStep = this.getStep.bind(this);
     this.finalize = this.finalize.bind(this);
-    this.allocate = this.allocate.bind(this);
-    this.splitAllocate = this.splitAllocate.bind(this);
     this.createSwatch = this.createSwatch.bind(this);
     this.listSwatches = this.listSwatches.bind(this);
     this.reportError = this.reportError.bind(this);
     this.listOpenCards = this.listOpenCards.bind(this);
-    this.postProductionSplit = this.postProductionSplit.bind(this);
     this.getSwatchByBarcode = this.getSwatchByBarcode.bind(this);
     this.listRecentOutputRolls = this.listRecentOutputRolls.bind(this);
     this.cutOpenFabric = this.cutOpenFabric.bind(this);
     this.finalizeOpenFabric = this.finalizeOpenFabric.bind(this);
+    this.cutWarehouseRoll = this.cutWarehouseRoll.bind(this);
+    this.finalizeWarehouseCut = this.finalizeWarehouseCut.bind(this);
     this.getTamburContext = this.getTamburContext.bind(this);
+  }
+
+  /** POST /api/tambur/:id/cut-warehouse */
+  async cutWarehouseRoll(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const body = cutWarehouseRollSchema.parse(req.body);
+      const result = await this.service.cutWarehouseRoll(id, body, req.user?.userId);
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/tambur/:id/finalize-warehouse-cut */
+  async finalizeWarehouseCut(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const body = finalizeWarehouseCutSchema.parse(req.body);
+      const result = await this.service.finalizeWarehouseCut(id, body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
   }
 
   /** POST /api/tambur/:id/cut */
@@ -184,17 +200,6 @@ export class TamburController {
       const result = await this.service.getSwatchByBarcode(
         (req.params.barcode as string).trim()
       );
-      res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /** POST /api/tambur/post-production-split */
-  async postProductionSplit(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = postProductionSplitSchema.parse(req.body);
-      const result = await this.service.postProductionSplit(body, req.user?.userId);
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -281,50 +286,6 @@ export class TamburController {
       const body = finalizeSchema.parse(req.body);
       const result = await this.service.finalize(body, req.user?.userId);
       res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
-   * POST /api/tambur/allocate — DEPRECATED.
-   *
-   * Eski allocate akışı `Roll.status === PRODUCED` bekliyordu; ancak tambur
-   * finalize (v3 cumulative length model) WAREHOUSE child Roll'lar üretiyor.
-   * State machine artık çakışıyor; ayrıca sack flow `assign-roll {orderLineId}`
-   * zaten OrderAllocation oluşturuyor (müşteri uyumu + eski allocation'ları
-   * temizleme dahil).
-   *
-   * Tek doğru yol: çuvala atarken sipariş bağla → `POST /api/sacks/assign-roll
-   * {sackId, rollId, orderLineId}`.
-   *
-   * Endpoint 410 Gone döner; service çağrılmaz.
-   */
-  async allocate(_req: Request, res: Response): Promise<void> {
-    res.status(410).json({
-      success: false,
-      message:
-        "Bu endpoint kullanım dışı (v3). Sipariş tahsisi için çuvala atarken " +
-        "orderLineId gönderin: POST /api/sacks/assign-roll {sackId, rollId, orderLineId}",
-    });
-  }
-
-  /** POST /api/tambur/split-allocate */
-  async splitAllocate(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = splitAllocateSchema.parse(req.body);
-      const result = await this.service.splitAllocate(
-        {
-          rollId: body.rollId,
-          allocations: body.allocations.map((a) => ({
-            orderLineId: a.orderLineId ?? null,
-            targetStock: a.targetStock ?? false,
-            qty: a.qty,
-          })),
-        },
-        req.user?.userId
-      );
-      res.status(201).json(result);
     } catch (error) {
       next(error);
     }

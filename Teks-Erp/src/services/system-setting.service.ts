@@ -2,14 +2,34 @@
 // TeksERP - System Setting Service
 // =============================================================================
 // Runtime'da güncellenebilir konfigürasyon (key-value).
-// Şu anda kullanılan key'ler:
-//   - shipping.toleranceMeters: sevk metraj fire payı (string → float)
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { Prisma } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
+
+/**
+ * SystemSetting.value bir JsonValue. Reader yardımcıları: gelen değer
+ * hangi tipte olursa olsun beklenen tipe çevirmeye çalışır (backward
+ * compatible — eski string-encoded değerleri de okur).
+ */
+function asNumber(value: Prisma.JsonValue | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function asBoolean(value: Prisma.JsonValue | null | undefined): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value === "true";
+  return false;
+}
 
 const TABLE = "SYSTEM_SETTING";
 
@@ -58,7 +78,7 @@ export class SystemSettingService {
    */
   async set(
     key: string,
-    value: string,
+    value: Prisma.InputJsonValue,
     description: string | undefined,
     userId: string | undefined
   ): Promise<ApiResponse<unknown>> {
@@ -85,8 +105,8 @@ export class SystemSettingService {
       action: existing ? "UPDATE" : "CREATE",
       tableName: TABLE,
       recordId: key,
-      oldData: existing ? { value: existing.value } : null,
-      newData: { value: updated.value },
+      oldData: existing ? { value: existing.value as Prisma.InputJsonValue } : null,
+      newData: { value: updated.value as Prisma.InputJsonValue },
     });
 
     return { success: true, data: updated, message: "Ayar güncellendi" };
@@ -102,8 +122,8 @@ export class SystemSettingService {
       select: { value: true },
     });
     if (!setting) return 5;
-    const parsed = parseFloat(setting.value);
-    if (!Number.isFinite(parsed) || parsed < 0) return 5;
+    const parsed = asNumber(setting.value);
+    if (parsed === null || parsed < 0) return 5;
     return parsed;
   }
 
@@ -134,7 +154,7 @@ export class SystemSettingService {
       }
       await this.set(
         SETTING_KEYS.FINANCE_PRICING_ENABLED,
-        input.pricingEnabled ? "true" : "false",
+        input.pricingEnabled,
         "Sipariş/sevkiyat ekranlarında para birimi + fiyat alanlarını göster",
         userId
       );
@@ -160,8 +180,8 @@ export async function readShippingToleranceMeters(
     select: { value: true },
   });
   if (!setting) return 5;
-  const parsed = parseFloat(setting.value);
-  if (!Number.isFinite(parsed) || parsed < 0) return 5;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < 0) return 5;
   return parsed;
 }
 
@@ -175,7 +195,7 @@ export async function readPricingEnabled(): Promise<boolean> {
     where: { key: SETTING_KEYS.FINANCE_PRICING_ENABLED },
     select: { value: true },
   });
-  return setting?.value === "true";
+  return asBoolean(setting?.value);
 }
 
 /**
@@ -193,8 +213,8 @@ async function readPositiveIntSetting(
     select: { value: true },
   });
   if (!setting) return fallback;
-  const parsed = parseFloat(setting.value);
-  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < 1) return fallback;
   return Math.floor(parsed);
 }
 

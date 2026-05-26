@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Unlink, Power, MoreHorizontal } from "lucide-react";
+import {
+  Plus,
+  Unlink,
+  Power,
+  PowerOff,
+  MoreHorizontal,
+  Trash2,
+  KeyRound,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -13,6 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { safeFormat } from "@/lib/format";
@@ -22,9 +31,18 @@ import { PairingCodeDialog } from "./PairingCodeDialog";
 
 const QUERY_KEY = "admin-devices";
 
+interface PairingDefaults {
+  machineId?: string;
+  deviceName?: string;
+}
+
 export function DevicesPage() {
   const qc = useQueryClient();
   const [pairingOpen, setPairingOpen] = useState(false);
+  const [pairingDefaults, setPairingDefaults] = useState<PairingDefaults | undefined>(
+    undefined
+  );
+  const [deleteTarget, setDeleteTarget] = useState<DeviceListItem | null>(null);
 
   const query = useQuery({
     queryKey: [QUERY_KEY],
@@ -47,6 +65,32 @@ export function DevicesPage() {
     },
   });
 
+  const reactivate = useMutation({
+    mutationFn: deviceService.reactivate,
+    onSuccess: (res) => {
+      toast.success(
+        res.data.machineId
+          ? "Cihaz aktifleştirildi — eski eşleşmesiyle çalışmaya devam edebilir"
+          : "Cihaz aktifleştirildi — yeni eşleştirme kodu gerekir"
+      );
+      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
+    },
+  });
+
+  const hardDelete = useMutation({
+    mutationFn: deviceService.hardDelete,
+    onSuccess: () => {
+      toast.success("Cihaz kalıcı olarak silindi");
+      setDeleteTarget(null);
+      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
+    },
+  });
+
+  const openPairing = (defaults?: PairingDefaults) => {
+    setPairingDefaults(defaults);
+    setPairingOpen(true);
+  };
+
   const devices = query.data?.data ?? [];
 
   return (
@@ -58,7 +102,7 @@ export function DevicesPage() {
           <div className="flex gap-2">
             <RefreshButton queryKey={QUERY_KEY} />
             <PermissionGate permission="admin:settings">
-              <Button onClick={() => setPairingOpen(true)} className="gap-1.5">
+              <Button onClick={() => openPairing()} className="gap-1.5">
                 <Plus className="h-4 w-4" />
                 Yeni Eşleştirme Kodu
               </Button>
@@ -75,16 +119,24 @@ export function DevicesPage() {
             ))}
           </div>
         ) : devices.length === 0 ? (
-          <EmptyState onCreate={() => setPairingOpen(true)} />
+          <EmptyState onCreate={() => openPairing()} />
         ) : (
           <div className="space-y-2">
             {devices.map((d) => (
               <DeviceRow
                 key={d.id}
                 device={d}
+                onGenerateCode={() => openPairing({ deviceName: d.name })}
                 onUnpair={() => unpair.mutate(d.id)}
                 onDeactivate={() => deactivate.mutate(d.id)}
-                isPending={unpair.isPending || deactivate.isPending}
+                onReactivate={() => reactivate.mutate(d.id)}
+                onDelete={() => setDeleteTarget(d)}
+                isPending={
+                  unpair.isPending ||
+                  deactivate.isPending ||
+                  reactivate.isPending ||
+                  hardDelete.isPending
+                }
               />
             ))}
           </div>
@@ -95,6 +147,26 @@ export function DevicesPage() {
         open={pairingOpen}
         onOpenChange={setPairingOpen}
         onCreated={() => void qc.invalidateQueries({ queryKey: [QUERY_KEY] })}
+        defaults={pairingDefaults}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Cihazı kalıcı olarak sil"
+        description={
+          deleteTarget
+            ? `"${deleteTarget.name}" cihazı listeden tamamen kaldırılacak. Aynı tablet tekrar eşleşirse yeni kayıt oluşturulur. Bu işlem geri alınamaz.`
+            : undefined
+        }
+        confirmLabel="Kalıcı olarak sil"
+        destructive
+        isPending={hardDelete.isPending}
+        onConfirm={() => {
+          if (deleteTarget) hardDelete.mutate(deleteTarget.id);
+        }}
       />
     </div>
   );
@@ -102,19 +174,27 @@ export function DevicesPage() {
 
 function DeviceRow({
   device,
+  onGenerateCode,
   onUnpair,
   onDeactivate,
+  onReactivate,
+  onDelete,
   isPending,
 }: {
   device: DeviceListItem;
+  onGenerateCode: () => void;
   onUnpair: () => void;
   onDeactivate: () => void;
+  onReactivate: () => void;
+  onDelete: () => void;
   isPending: boolean;
 }) {
   const paired = !!device.machine;
   const lastSeen = device.lastSeenAt
     ? safeFormat(device.lastSeenAt, "dd.MM.yyyy HH:mm")
     : "—";
+  const canGenerateCode = device.isActive && !paired;
+  const canDelete = !paired;
 
   return (
     <Card>
@@ -155,16 +235,33 @@ function DeviceRow({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {paired && device.isActive && (
+              {canGenerateCode && (
+                <DropdownMenuItem onClick={onGenerateCode}>
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  Yeni Kod Üret
+                </DropdownMenuItem>
+              )}
+              {paired && (
                 <DropdownMenuItem onClick={onUnpair}>
                   <Unlink className="mr-2 h-4 w-4" />
                   Eşleşmeyi Kaldır
                 </DropdownMenuItem>
               )}
-              {device.isActive && (
+              {device.isActive ? (
                 <DropdownMenuItem onClick={onDeactivate} className="text-destructive">
-                  <Power className="mr-2 h-4 w-4" />
+                  <PowerOff className="mr-2 h-4 w-4" />
                   Pasife Al
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onClick={onReactivate}>
+                  <Power className="mr-2 h-4 w-4" />
+                  Aktifleştir
+                </DropdownMenuItem>
+              )}
+              {canDelete && (
+                <DropdownMenuItem onClick={onDelete} className="text-destructive">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Kalıcı Olarak Sil
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>

@@ -126,31 +126,100 @@ export default function ReceiptDetailModal({ receiptId, onDismiss }: Props) {
                 )}
               </Surface>
 
-              {/* Toplar */}
+              {/* Fasona gönderilen orijinal toplar (items.newRoll = original Roll) */}
               <Text style={styles.sectionTitle}>
-                Kabul Edilen Toplar ({receipt.items?.length ?? 0})
+                Fasona Giden Toplar ({receipt.items?.length ?? 0})
               </Text>
-              {(receipt.items ?? []).map((item, idx) => (
-                <Surface key={item.id} style={styles.rollItem} elevation={1}>
-                  <View style={styles.rollIndex}>
-                    <Text style={styles.rollIndexText}>{idx + 1}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.rollBarcode}>
-                      {item.newRoll?.barcode ?? '—'}
-                    </Text>
-                    <Text style={styles.rollItemName} numberOfLines={1}>
-                      {item.newRoll?.item?.name ?? '—'}
-                      {item.newRoll?.color?.name ? ` · ${item.newRoll.color.name}` : ''}
-                    </Text>
-                    {item.notes && (
-                      <Text style={styles.rollNote} numberOfLines={2}>
-                        ✏ {item.notes}
+              {(receipt.items ?? []).map((item, idx) => {
+                const qty = item.newRoll?.currentQty;
+                const width = item.newRoll?.width;
+                const weight = item.newRoll?.weightKg;
+                return (
+                  <Surface key={item.id} style={styles.rollItem} elevation={1}>
+                    <View style={styles.rollIndex}>
+                      <Text style={styles.rollIndexText}>{idx + 1}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rollBarcode}>
+                        {item.newRoll?.barcode ?? '—'}
                       </Text>
-                    )}
-                  </View>
-                </Surface>
-              ))}
+                      <View style={styles.nameRow}>
+                        <Text style={[styles.rollItemName, { flex: 1 }]} numberOfLines={1}>
+                          {item.newRoll?.item?.name ?? '—'}
+                          {item.newRoll?.color?.name ? ` · ${item.newRoll.color.name}` : ''}
+                        </Text>
+                        <View style={styles.metricsRow}>
+                          {qty != null && (
+                            <Text style={styles.metric}>
+                              <Text style={styles.metricLabel}>📏 </Text>
+                              {Number(qty).toFixed(1)} m
+                            </Text>
+                          )}
+                          {width != null && (
+                            <Text style={styles.metric}>
+                              <Text style={styles.metricLabel}>↔ </Text>
+                              {Number(width).toFixed(0)} cm
+                            </Text>
+                          )}
+                          {weight != null && (
+                            <Text style={styles.metric}>
+                              <Text style={styles.metricLabel}>⚖ </Text>
+                              {Number(weight).toFixed(1)} kg
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      {item.notes && (
+                        <Text style={styles.rollNote} numberOfLines={2}>
+                          ✏ {item.notes}
+                        </Text>
+                      )}
+                    </View>
+                  </Surface>
+                );
+              })}
+
+              {/* Fasondan dönen yeni açık kumaş parçaları (split senaryosu) */}
+              {receipt.bornRolls && receipt.bornRolls.length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>
+                    Fasondan Gelen Açık Kumaşlar ({receipt.bornRolls.length})
+                  </Text>
+                  {receipt.bornRolls.map((br, idx) => (
+                    <Surface key={br.id} style={styles.bornRollItem} elevation={1}>
+                      <View style={styles.bornRollIndex}>
+                        <Text style={styles.bornRollIndexText}>{idx + 1}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.nameRow}>
+                          <Text style={[styles.rollItemName, { flex: 1 }]} numberOfLines={1}>
+                            {br.item?.name ?? 'Açık kumaş'}
+                            {br.color?.name ? ` · ${br.color.name}` : ''}
+                          </Text>
+                          <View style={styles.metricsRow}>
+                            <Text style={styles.metric}>
+                              <Text style={styles.metricLabel}>📏 </Text>
+                              {Number(br.currentQty ?? 0).toFixed(1)} m
+                            </Text>
+                            {br.width != null && (
+                              <Text style={styles.metric}>
+                                <Text style={styles.metricLabel}>↔ </Text>
+                                {Number(br.width).toFixed(0)} cm
+                              </Text>
+                            )}
+                            {br.weightKg != null && (
+                              <Text style={styles.metric}>
+                                <Text style={styles.metricLabel}>⚖ </Text>
+                                {Number(br.weightKg).toFixed(1)} kg
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                    </Surface>
+                  ))}
+                </>
+              )}
             </ScrollView>
           ) : null}
         </View>
@@ -238,4 +307,40 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontStyle: 'italic',
   },
+  // Kumaş ismi + metric'ler tek satır, isim flex:1 ile sıkışır, metric'ler sağa
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    alignItems: 'center',
+  },
+  metric: { fontSize: 12, color: '#0f172a', fontWeight: '600' },
+  metricLabel: { color: '#94a3b8', fontWeight: '400' },
+
+  // Bornroll (fasondan dönen açık kumaş) — items'tan görsel olarak ayır
+  bornRollItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    padding: 10,
+    gap: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3b82f6',
+  },
+  bornRollIndex: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#dbeafe',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bornRollIndexText: { fontSize: 12, fontWeight: '700', color: '#1d4ed8' },
 });

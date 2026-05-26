@@ -3,7 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { MultiSelectCheckboxList, type MultiSelectItem } from "@/components/forms/MultiSelectCheckboxList";
 import { itemService } from "@/pages/Items/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
@@ -91,28 +98,31 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange }: Props)
           </button>
         </Badge>
       ))}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-5 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-          >
-            <Plus className="h-3 w-3" />
-            {selectedById.length === 0 ? "Özellik isteği ekle" : "Düzenle"}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-80 p-2" align="start">
-          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Müşteri İstenen Özellikler
-          </div>
-          <div className="h-56">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => setOpen(true)}
+        className="h-5 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+      >
+        <Plus className="h-3 w-3" />
+        {selectedById.length === 0 ? "Özellik isteği ekle" : "Düzenle"}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col">
+          <DialogHeader>
+            <DialogTitle>Müşteri İstenen Özellikler</DialogTitle>
+            <DialogDescription>
+              Bu sipariş satırı için istenen özellikleri seç. Üründe izinli özelliklerle sınırlı.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1">
             <MultiSelectCheckboxList
               items={propMultiItems}
               value={value}
               onChange={onChange}
               placeholder="Özellik ara..."
+              columns={3}
               emptyHint={
                 candidateProps.length === 0 && allowedIds.length > 0
                   ? "Bu ürün için tanımlı özellik yok."
@@ -120,8 +130,13 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange }: Props)
               }
             />
           </div>
-        </PopoverContent>
-      </Popover>
+          <DialogFooter>
+            <Button type="button" onClick={() => setOpen(false)}>
+              Tamam
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

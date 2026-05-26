@@ -5,7 +5,23 @@
 import { Router } from "express";
 import { InventoryController } from "../controllers/inventory.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+
+// Mobil ekran yetkileri web yetkilerine alternatif olarak kabul edilir:
+// `mobile:depo` operatörü `roll:read` web yetkisi olmadan da depo ekranını
+// kullanabilsin diye. Listeler her ekrana servis veriyor, bu yüzden geniş set.
+const MOBILE_ROLL_READ = [
+  "mobile:kk1",
+  "mobile:kk2-kursun",
+  "mobile:tambur",
+  "mobile:depo",
+  "mobile:tarti-paket",
+  "mobile:sevkiyat",
+  "mobile:fason-sevk",
+  "mobile:fason-kabul",
+] as const;
+const MOBILE_ROLL_WRITE_KK1 = ["mobile:kk1"] as const;
+const MOBILE_ROLL_WRITE_KURSUN = ["mobile:kk2-kursun"] as const;
 
 const controller = new InventoryController();
 const router = Router();
@@ -41,7 +57,7 @@ const router = Router();
  *         description: Barkod ile arama
  *       - in: query
  *         name: filter[status]
- *         schema: { type: string, enum: [STOCK, IN_PRODUCTION, PRODUCED, READY_FOR_SHIP, SHIPPED, SCRAP, AT_SUBCONTRACTOR, WAREHOUSE, A1_STOCK, ALL] }
+ *         schema: { type: string, enum: [STOCK, IN_PRODUCTION, PRODUCED, AT_SUBCONTRACTOR, WAREHOUSE, ALL] }
  *       - in: query
  *         name: filter[statusIn]
  *         schema: { type: string }
@@ -50,10 +66,6 @@ const router = Router();
  *         name: filter[itemId]
  *         schema: { type: string, format: uuid }
  *       - in: query
- *         name: filter[ownerType]
- *         schema: { type: string, enum: [FACTORY, CUSTOMER] }
- *         description: FACTORY = fabrika stoğu, CUSTOMER = müşteri malları (fason)
- *       - in: query
  *         name: filter[processingStatus]
  *         schema: { type: string, enum: [raw, processed, open_fabric, finished] }
  *         description: |
@@ -61,7 +73,17 @@ const router = Router();
  *           raw = colorId IS NULL (henüz renk almamış);
  *           processed = colorId IS NOT NULL ve henüz Tambur'a ulaşmamış;
  *           open_fabric = barcode IS NULL + status=IN_PRODUCTION (Kurşun/KK2/Tambur'da bekleyen açık kumaş);
- *           finished = WAREHOUSE/READY_FOR_SHIP (Tambur'dan çıkmış).
+ *           finished = WAREHOUSE (Tambur'dan çıkmış, sevke hazır).
+ *       - in: query
+ *         name: filter[qualityGrade]
+ *         schema: { type: string }
+ *         description: Kalite kodu (1.KALITE / A1 / FIRE / admin-tanımlı). Exact match.
+ *       - in: query
+ *         name: filter[includeFire]
+ *         schema: { type: boolean }
+ *         description: |
+ *           Varsayılan false — FIRE kalitesindeki rulolar gizlenir.
+ *           true ile birlikte fire rulolar da listelenir. `qualityGrade` parametresi verildiyse bu toggle yok sayılır.
  *       - in: query
  *         name: filter[rollKind]
  *         schema: { type: string, enum: [OPEN_FABRIC, WOUND_ROLL] }
@@ -103,7 +125,7 @@ const router = Router();
  *       401:
  *         description: Yetkisiz erişim
  */
-router.get("/", verifyToken, requirePermission("roll:read"), controller.findAllRolls);
+router.get("/", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.findAllRolls);
 
 /**
  * @openapi
@@ -126,7 +148,7 @@ router.get("/", verifyToken, requirePermission("roll:read"), controller.findAllR
  *       404:
  *         description: Barkod bulunamadı
  */
-router.get("/barcode/:barcode", verifyToken, requirePermission("roll:read"), controller.findRollByBarcode);
+router.get("/barcode/:barcode", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.findRollByBarcode);
 
 // `/barcode` veya `/barcode/` (boş param) — Express trailing slash'i strip
 // edip `/barcode` route'una yönlendirir; ardından `/:id` route'u "barcode"
@@ -134,7 +156,7 @@ router.get("/barcode/:barcode", verifyToken, requirePermission("roll:read"), con
 // ama mesajı yanıltıcı: "Geçersiz UUID 'barcode'"). Bu explicit route net
 // "Barkod parametresi gerekli" 400 verir, kullanıcı doğru endpoint'i
 // kullanmaya yönlenir.
-router.get("/barcode", verifyToken, requirePermission("roll:read"), (_req, res) => {
+router.get("/barcode", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), (_req, res) => {
   res.status(400).json({
     success: false,
     message: "Barkod parametresi gerekli. Kullanım: GET /api/rolls/barcode/<barkod>",
@@ -160,7 +182,7 @@ router.get("/barcode", verifyToken, requirePermission("roll:read"), (_req, res) 
  *       404:
  *         description: Top bulunamadı
  */
-router.get("/:id", verifyToken, requirePermission("roll:read"), controller.findRollById);
+router.get("/:id", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.findRollById);
 
 /**
  * @openapi
@@ -185,7 +207,7 @@ router.get("/:id", verifyToken, requirePermission("roll:read"), controller.findR
  *       404:
  *         description: Top bulunamadı
  */
-router.get("/:id/history", verifyToken, requirePermission("roll:read"), controller.getRollHistory);
+router.get("/:id/history", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.getRollHistory);
 
 /**
  * @openapi
@@ -235,22 +257,15 @@ router.get("/:id/history", verifyToken, requirePermission("roll:read"), controll
  *                   bırakılabilir; sonra Tambur veya manuel düzenleme ile
  *                   doldurulur. Pozitif olmalı (verildiyse).
  *                 example: 150
- *               workOrderId:
- *                 type: string
- *                 format: uuid
- *                 nullable: true
- *                 description: Opsiyonel — verilirse top doğrudan iş emrinin ilk adımına bağlanır
  *     responses:
  *       201:
  *         description: Top oluşturuldu
  *       400:
  *         description: Validasyon hatası
- *       409:
- *         description: İş emrinin KK1 adımı tamamlanmış — yeni rulo eklenemez
  *       404:
  *         description: Ürün bulunamadı
  */
-router.post("/initial-entry", verifyToken, requirePermission("roll:write"), controller.createInitialEntry);
+router.post("/initial-entry", verifyToken, requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KK1), controller.createInitialEntry);
 
 /**
  * @openapi
@@ -315,7 +330,7 @@ router.post("/initial-entry", verifyToken, requirePermission("roll:write"), cont
  */
 router.patch("/:id/identity", verifyToken, requirePermission("roll:write"), controller.applyManualProperties);
 
-router.delete("/:id", verifyToken, requirePermission("roll:write"), controller.softDelete);
+router.delete("/:id", verifyToken, requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KK1), controller.softDelete);
 
 /**
  * @openapi
@@ -342,37 +357,6 @@ router.delete("/:id", verifyToken, requirePermission("roll:write"), controller.s
  *         description: Top bulunamadı
  */
 router.delete("/:id/permanent", verifyToken, requirePermission("roll:write"), controller.hardDelete);
-
-/**
- * @openapi
- * /api/rolls/kk1-context/{cardBarcode}:
- *   get:
- *     tags: [Inventory]
- *     summary: KK1 tabletinde kart okutarak WO context al
- *     description: |
- *       Mobile KK1 tabletinde refakat kartı okutulduğunda çağrılır. Kart aktif
- *       ise ve WO'nun KK1 (RAW_QC) adımı şu an açıksa, WO context'i (batchNumber,
- *       targetItem, targetColor) döner. KK1 zaten tamamlanmış veya WO başka
- *       adımdaysa multi-batch destekli net 400 mesajı: "Mevcut konum: Boyahane
- *       (4 rulo). Tabletinizi yanlış istasyonda okutmuş olabilirsiniz."
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: cardBarcode
- *         required: true
- *         schema: { type: string, example: "RK-2605-939944-C" }
- *     responses:
- *       200: { description: WO context }
- *       400: { description: Kart pasif veya WO başka adımda }
- *       404: { description: Kart bulunamadı veya WO'da KK1 adımı yok }
- */
-router.get(
-  "/kk1-context/:cardBarcode",
-  verifyToken,
-  requirePermission("roll:read"),
-  controller.getKk1ContextByCard
-);
 
 /**
  * @openapi
@@ -412,7 +396,7 @@ router.get(
 router.post(
   "/open-fabric",
   verifyToken,
-  requirePermission("roll:write"),
+  requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KURSUN),
   controller.createOpenFabric,
 );
 
@@ -429,7 +413,8 @@ router.post(
  *       Yapılan işlemler:
  *       - Roll.initialQty / currentQty = totalMeters
  *       - RollError'lar insert (sadece startMeter zorunlu, endMeter opsiyonel)
- *       - RollOperation: KURSUN_APPLIED + QC2_COMPLETED
+ *       - RollOperation: QC2_COMPLETED her zaman; KURSUN_APPLIED istasyonun KURSUN yeteneği varsa
+ *       - İstasyonun propertyCapabilities listesi Roll'a RollProperty olarak kopyalanır
  *       - Kurşun/KK2 movement'ı kapatılır (qtyOut = totalMeters)
  *       - Sonraki step (Tambur) için movement açılır + Roll.currentStepId güncellenir
  *
@@ -468,7 +453,7 @@ router.post(
 router.post(
   "/:id/kursun-finish",
   verifyToken,
-  requirePermission("roll:write"),
+  requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KURSUN),
   controller.kursunFinish,
 );
 

@@ -12,7 +12,19 @@ export type MockValue = string | number | MockTableRow[] | null;
 
 export type MockLabelData = Record<string, MockValue>;
 
-const ROLL_MOCK: MockLabelData = {
+const ROLL_RAW_MOCK: MockLabelData = {
+  barcode: "TR-2026-05-23-R0481",
+  qrCode: "TR-2026-05-23-R0481",
+  itemName: "Pamuk Astar 60s",
+  itemCode: "PA-60S",
+  qualityGrade: "1. Kalite",
+  widthCm: 152,
+  lengthMeters: 47.5,
+  weightKg: 14.8,
+  printedAt: "2026-05-23T14:32",
+};
+
+const ROLL_FINISHED_MOCK: MockLabelData = {
   barcode: "TR-2026-05-23-R0481",
   qrCode: "TR-2026-05-23-R0481",
   itemName: "Pamuk Astar 60s",
@@ -28,7 +40,6 @@ const ROLL_MOCK: MockLabelData = {
   customerName: "Demo Tekstil A.Ş.",
   orderNumber: "SIP-2026-00123",
   batchNumber: "PRT-A24",
-  packagingDate: "2026-05-23",
   printedAt: "2026-05-23T14:32",
 };
 
@@ -51,25 +62,8 @@ const SWATCH_MOCK: MockLabelData = {
   printedAt: "2026-05-23T11:08",
 };
 
-const SHIPMENT_MOCK: MockLabelData = {
-  shipmentNumber: "İRS-2026-00045",
-  shippedAt: "2026-05-23",
-  customerName: "Demo Tekstil A.Ş.",
-  customerCode: "MS-001",
-  branchName: "Merter Şube",
-  driverName: "Mehmet Yılmaz",
-  plateNumber: "34 ABC 1234",
-  carrier: "Yıldız Nakliyat",
-  items: [
-    { code: "PA-60S", name: "Pamuk Astar 60s", colorName: "Bej", qty: 12, weightKg: 178.4 },
-    { code: "VL-220", name: "Velvet 220", colorName: "Petrol", qty: 8, weightKg: 92.5 },
-    { code: "JK-90", name: "Jakar 90s", colorName: "Antrasit", qty: 5, weightKg: 47.2 },
-  ] satisfies MockTableRow[],
-  totals: "25 top · 318.1 kg",
-};
-
 export const MOCK_DATA: Record<LabelKind, MockLabelData> = {
-  ROLL: ROLL_MOCK,
+  ROLL_RAW: ROLL_RAW_MOCK,
+  ROLL_FINISHED: ROLL_FINISHED_MOCK,
   SWATCH: SWATCH_MOCK,
-  SHIPMENT_DOCKET: SHIPMENT_MOCK,
 };

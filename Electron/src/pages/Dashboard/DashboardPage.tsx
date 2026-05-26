@@ -3,12 +3,12 @@ import type { ReactNode } from "react";
 import { Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { RefreshButton } from "@/components/RefreshButton";
 import { useAuthStore } from "@/store/auth";
 import { KpiCards } from "./KpiCards";
 import { StationLoad } from "./StationLoad";
 import { UpcomingOrders } from "./UpcomingOrders";
 import { OverdueWorkOrders } from "./OverdueWorkOrders";
-import { UrgentShippingQueue } from "./UrgentShippingQueue";
 import { UpcomingWorkOrders } from "./UpcomingWorkOrders";
 import { DashboardSettingsDialog } from "./DashboardSettingsDialog";
 import { useDashboardLayout } from "./useDashboardLayout";
@@ -17,7 +17,6 @@ import type { GroupKey } from "./widgetRegistry";
 const PANEL_RENDERERS: Record<string, ReactNode> = {
   "panel:upcomingOrders": <UpcomingOrders />,
   "panel:overdueWorkOrders": <OverdueWorkOrders />,
-  "panel:urgentShippingQueue": <UrgentShippingQueue />,
   "panel:upcomingWorkOrders": <UpcomingWorkOrders />,
 };
 
@@ -53,15 +52,18 @@ export function DashboardPage() {
         title="Anasayfa"
         description={`Hoş geldin, ${user?.username ?? ""}.`}
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setSettingsOpen(true)}
-            className="gap-2"
-          >
-            <Settings className="h-4 w-4" />
-            Düzenle
-          </Button>
+          <>
+            <RefreshButton queryKey="dashboard" successMessage="Anasayfa yenilendi" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSettingsOpen(true)}
+              className="gap-2"
+            >
+              <Settings className="h-4 w-4" />
+              Düzenle
+            </Button>
+          </>
         }
       />
       <div className="space-y-6 p-6">

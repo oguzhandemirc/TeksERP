@@ -5,7 +5,7 @@
 import { Router } from "express";
 import { KursunQcController } from "../controllers/kursun-qc.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 
 const controller = new KursunQcController();
 const router = Router();
@@ -31,7 +31,7 @@ const router = Router();
 router.get(
   "/by-card/:barcode",
   verifyToken,
-  requirePermission("quality:read"),
+  requireAnyPermission("quality:read", "mobile:kk2-kursun"),
   controller.getByCardBarcode
 );
 
@@ -56,7 +56,7 @@ router.get(
 router.get(
   "/step/:stepId",
   verifyToken,
-  requirePermission("quality:read"),
+  requireAnyPermission("quality:read", "mobile:kk2-kursun"),
   controller.getStep
 );
 
@@ -78,69 +78,8 @@ router.get(
 router.get(
   "/open-cards",
   verifyToken,
-  requirePermission("quality:read"),
+  requireAnyPermission("quality:read", "mobile:kk2-kursun"),
   controller.listOpenCards
-);
-
-/**
- * @openapi
- * /api/kursun-qc/apply-kursun:
- *   post:
- *     tags: [KursunQc]
- *     summary: Bir topa "Kurşun geçildi" işareti koy (idempotent)
- *     security: [{ bearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [rollId, stepId]
- *             properties:
- *               rollId: { type: string, format: uuid }
- *               stepId: { type: string, format: uuid }
- *               notes:  { type: string }
- *     responses:
- *       201: { description: İşlem kaydedildi }
- *       400: { description: Top bu adımda değil veya adım PROCESS_QC değil }
- *       401: { description: Yetkisiz }
- *       500: { description: Sunucu hatası }
- */
-router.post(
-  "/apply-kursun",
-  verifyToken,
-  requirePermission("quality:write"),
-  controller.applyKursun
-);
-
-/**
- * @openapi
- * /api/kursun-qc/undo-kursun:
- *   post:
- *     tags: [KursunQc]
- *     summary: Yanlış konulmuş Kurşun işaretini geri al
- *     security: [{ bearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [rollId, stepId]
- *             properties:
- *               rollId: { type: string, format: uuid }
- *               stepId: { type: string, format: uuid }
- *     responses:
- *       200: { description: İşaret kaldırıldı veya zaten yoktu }
- *       400: { description: QC2 tamamlandıysa geri alınamaz }
- *       401: { description: Yetkisiz }
- *       500: { description: Sunucu hatası }
- */
-router.post(
-  "/undo-kursun",
-  verifyToken,
-  requirePermission("quality:write"),
-  controller.undoKursun
 );
 
 /**
@@ -148,7 +87,11 @@ router.post(
  * /api/kursun-qc/complete-qc2:
  *   post:
  *     tags: [KursunQc]
- *     summary: Bir topun QC2'sini tamamlandı olarak işaretle
+ *     summary: Bir topun QC2'sini tamamlandı olarak işaretle (kurşun yeteneği varsa otomatik uygular)
+ *     description: |
+ *       İstasyonun propertyCapabilities listesindeki tüm özellikler Roll'a
+ *       otomatik RollProperty olarak kopyalanır. KURSUN yetenek olarak atanmışsa
+ *       KURSUN_APPLIED log'u da otomatik atılır.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -170,7 +113,7 @@ router.post(
 router.post(
   "/complete-qc2",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
   controller.completeQc2
 );
 
@@ -200,7 +143,7 @@ router.post(
 router.post(
   "/undo-qc2",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
   controller.undoQc2
 );
 
@@ -237,7 +180,7 @@ router.post(
 router.post(
   "/report-error",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
   controller.reportError
 );
 
@@ -267,7 +210,7 @@ router.post(
 router.delete(
   "/error",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
   controller.deleteError
 );
 
@@ -299,7 +242,7 @@ router.delete(
 router.post(
   "/finish-step",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
   controller.finishStep
 );
 
@@ -333,8 +276,107 @@ router.post(
 router.post(
   "/reopen-step",
   verifyToken,
-  requirePermission("quality:write"),
+  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
   controller.reopenStep
+);
+
+// =============================================================================
+// KURŞUN KUYRUĞU — Planlama (Electron) ekranı için
+// =============================================================================
+
+/**
+ * @openapi
+ * /api/kursun-qc/queue:
+ *   get:
+ *     tags: [KursunQc]
+ *     summary: Tüm açık PROCESS_QC adımlarındaki bekleyen rollerin birleşik kuyruğu
+ *     description: |
+ *       Planlama drag-drop sayfası ve tablet operatörü tarafından okunur.
+ *       Sıra: önce acil (isUrgent), sonra priority desc, sonra enteredAt asc.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Kuyruk listesi }
+ *       500: { description: Sunucu hatası }
+ */
+router.get(
+  "/queue",
+  verifyToken,
+  requireAnyPermission("quality:read", "mobile:kk2-kursun"),
+  controller.listQueue,
+);
+
+/**
+ * @openapi
+ * /api/kursun-qc/queue/reorder:
+ *   patch:
+ *     tags: [KursunQc]
+ *     summary: Kuyruktaki rollerin önceliklerini batch güncelle
+ *     description: |
+ *       Drag-drop sonrası planlama yeni sırayı (yüksek priority = yukarıda)
+ *       gönderir. Yalnızca exitedAt IS NULL olan kayıtlar güncellenir.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [items]
+ *             properties:
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [id, priority]
+ *                   properties:
+ *                     id:       { type: string, format: uuid, description: RollMovement.id }
+ *                     priority: { type: integer, minimum: 0 }
+ *     responses:
+ *       200: { description: Güncellenen kayıt sayısı }
+ *       400: { description: Geçersiz gövde }
+ *       401: { description: Yetkisiz }
+ *       500: { description: Sunucu hatası }
+ */
+router.patch(
+  "/queue/reorder",
+  verifyToken,
+  requirePermission("quality:write"),
+  controller.reorderQueue,
+);
+
+/**
+ * @openapi
+ * /api/kursun-qc/queue/{stepId}/urgent:
+ *   patch:
+ *     tags: [KursunQc]
+ *     summary: Kurşun kuyruğunda bir WO'nun (WorkOrderStep) "acil" rozetini aç/kapat
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: stepId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [isUrgent]
+ *             properties:
+ *               isUrgent: { type: boolean }
+ *     responses:
+ *       200: { description: Güncel kayıt }
+ *       400: { description: Adım PROCESS_QC değil veya tamamlanmış }
+ *       401: { description: Yetkisiz }
+ *       404: { description: Adım bulunamadı }
+ *       500: { description: Sunucu hatası }
+ */
+router.patch(
+  "/queue/:stepId/urgent",
+  verifyToken,
+  requirePermission("quality:write"),
+  controller.setQueueUrgent,
 );
 
 export default router;

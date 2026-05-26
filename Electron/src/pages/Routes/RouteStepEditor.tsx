@@ -135,9 +135,10 @@ function StepRow({ step, index, onUpdate, onRemove }: RowProps) {
           value={step.stationId || undefined}
           onChange={(v) => onUpdate({ stationId: v ?? "" })}
           service={stationService}
-          queryKey="stations"
+          queryKey="stations-route-step"
           getLabel={(s) => `${s.code} — ${s.name}`}
           placeholder="İstasyon seç..."
+          extraFilters={{ allowAsWorkOrderStep: "true" }}
         />
         <Input
           value={step.defaultNotes ?? ""}

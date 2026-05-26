@@ -5,7 +5,6 @@ import { LoginPage } from "@/pages/Login/LoginPage";
 import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { DashboardPage } from "@/pages/Dashboard/DashboardPage";
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
-import { PlaceholderPage } from "@/pages/Placeholder/PlaceholderPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
 import { AccessUsersPage } from "@/pages/Access/Users/AccessUsersPage";
 import { TemplatesPage } from "@/pages/Access/Templates/TemplatesPage";
@@ -22,7 +21,6 @@ import { FabricPropertiesPage } from "@/pages/FabricProperties/FabricPropertiesP
 import { SubcontractorCategoriesPage } from "@/pages/SubcontractorCategories/SubcontractorCategoriesPage";
 import { SubcontractorsPage } from "@/pages/Subcontractors/SubcontractorsPage";
 import { StationCapabilitiesPage } from "@/pages/StationCapabilities/StationCapabilitiesPage";
-import { ShippingTolerancePage } from "@/pages/ShippingTolerance/ShippingTolerancePage";
 import { DeadlineDefaultsPage } from "@/pages/DeadlineDefaults/DeadlineDefaultsPage";
 import { GeneralSettingsPage } from "@/pages/GeneralSettings/GeneralSettingsPage";
 import { SystemHubPage } from "@/pages/System/SystemHubPage";
@@ -44,7 +42,6 @@ import { ScrapPage } from "@/pages/Reports/Production/ScrapPage";
 import { SalesReportsHubPage } from "@/pages/Reports/Sales/SalesReportsHubPage";
 import { OrderFulfillmentPage } from "@/pages/Reports/Sales/OrderFulfillmentPage";
 import { LateDeliveryPage } from "@/pages/Reports/Sales/LateDeliveryPage";
-import { CustomerShipmentsPage } from "@/pages/Reports/Sales/CustomerShipmentsPage";
 import { QualityReportsHubPage } from "@/pages/Reports/Quality/QualityReportsHubPage";
 import { DefectDistributionPage } from "@/pages/Reports/Quality/DefectDistributionPage";
 import { StationDefectRatePage } from "@/pages/Reports/Quality/StationDefectRatePage";
@@ -53,7 +50,6 @@ import { KursunApplicationPage } from "@/pages/Reports/Quality/KursunApplication
 import { InventoryReportsHubPage } from "@/pages/Reports/Inventory/InventoryReportsHubPage";
 import { RollAgingPage } from "@/pages/Reports/Inventory/RollAgingPage";
 import { StockDistributionPage } from "@/pages/Reports/Inventory/StockDistributionPage";
-import { CustomerOwnedPage } from "@/pages/Reports/Inventory/CustomerOwnedPage";
 import { MovementsPage } from "@/pages/Reports/Inventory/MovementsPage";
 import { SubcontractReportsHubPage } from "@/pages/Reports/Subcontract/SubcontractReportsHubPage";
 import { PerformancePage as SubcontractPerformancePage } from "@/pages/Reports/Subcontract/PerformancePage";
@@ -67,10 +63,7 @@ import { UserActivityPage } from "@/pages/Reports/Audit/UserActivityPage";
 import { OrdersPage } from "@/pages/Operations/Orders/OrdersPage";
 import { WorkOrdersPage } from "@/pages/Operations/WorkOrders/WorkOrdersPage";
 import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
-import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
-import { ShipmentEditPage } from "@/pages/Operations/Shipments/ShipmentEditPage";
-import { ShipFromOrderPage } from "@/pages/Operations/Shipments/ShipFromOrderPage";
-import { ShippingQueuePage } from "@/pages/Operations/ShippingQueue/ShippingQueuePage";
+import { KursunQueuePage } from "@/pages/Operations/KursunQueue/KursunQueuePage";
 
 export const router = createHashRouter([
   { path: "/login", element: <LoginPage /> },
@@ -124,14 +117,6 @@ export const router = createHashRouter([
         element: (
           <ProtectedRoute requirePermission="station:read">
             <StationCapabilitiesPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "definitions/shipping-tolerance",
-        element: (
-          <ProtectedRoute requirePermission="admin:settings">
-            <ShippingTolerancePage />
           </ProtectedRoute>
         ),
       },
@@ -279,34 +264,10 @@ export const router = createHashRouter([
         ),
       },
       {
-        path: "operations/shipments",
+        path: "operations/kursun-queue",
         element: (
-          <ProtectedRoute requirePermission="shipment:read">
-            <ShipmentsPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "operations/shipments/from-order/:orderId",
-        element: (
-          <ProtectedRoute requirePermission="shipment:write">
-            <ShipFromOrderPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "operations/shipments/:id/edit",
-        element: (
-          <ProtectedRoute requirePermission="shipment:write">
-            <ShipmentEditPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "operations/shipping-queue",
-        element: (
-          <ProtectedRoute requirePermission="allocation:write">
-            <ShippingQueuePage />
+          <ProtectedRoute requirePermission="quality:write">
+            <KursunQueuePage />
           </ProtectedRoute>
         ),
       },
@@ -386,14 +347,6 @@ export const router = createHashRouter([
         ),
       },
       {
-        path: "reports/sales/customer-shipments",
-        element: (
-          <ProtectedRoute requirePermission="report:sales">
-            <CustomerShipmentsPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
         path: "reports/quality",
         element: (
           <ProtectedRoute requirePermission="report:quality">
@@ -454,14 +407,6 @@ export const router = createHashRouter([
         element: (
           <ProtectedRoute requirePermission="report:inventory">
             <StockDistributionPage />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "reports/inventory/customer-owned",
-        element: (
-          <ProtectedRoute requirePermission="report:inventory">
-            <CustomerOwnedPage />
           </ProtectedRoute>
         ),
       },

@@ -1,6 +1,6 @@
 # TeksERP Mobil (`mobil/`)
 
-React Native + Expo 54, **yalnızca Android tablet** (landscape). Backend: `Teks-Erp/` (port 4000).
+React Native + Expo 54, **Android tablet (yatay) + telefon (dikey)**. Yön kilidi yok; UI her iki form factor'u responsive desteklemeli. Backend: `Teks-Erp/` (port 4000).
 
 Kök `CLAUDE.md` domain kuralları bu projede de geçerlidir.
 
@@ -34,7 +34,7 @@ src/
 ## Donanım Katmanı
 
 ### Kamera (Barkod Okuma)
-- **Kütüphane:** `expo-camera` v17 (CameraView + `onBarcodeScanned`)
+- **Kütüphane:** `expo-camera` v17 (CameraView + `onBarcodeScanned`) — `expo-barcode-scanner` deprecated, kullanma
 - **Kullanım:** Refakat Kartı, top barkodu, iş emri QR okuma
 - **Simülasyon:** Geliştirme modunda elle barkod girişi ile aynı sonuç
 
@@ -53,11 +53,12 @@ src/
 
 | Kategori | Paketler |
 |---|---|
-| Core | `expo`, `react-native`, `react`, `typescript` |
-| Navigation | `@react-navigation/native`, `@react-navigation/native-stack`, `@react-navigation/bottom-tabs` |
+| Core | `expo`, `react-native`, `react`, `react-dom`, `typescript`, `react-native-web`, `react-native-worklets` |
+| Expo runtime | `expo-constants`, `expo-status-bar`, `expo-screen-orientation`, `expo-build-properties`, `expo-haptics` |
+| Navigation | `@react-navigation/native`, `@react-navigation/native-stack`, `@react-navigation/bottom-tabs`, `react-native-safe-area-context`, `react-native-screens` |
 | UI | `react-native-paper`, `@expo/vector-icons`, `react-native-gesture-handler`, `react-native-reanimated` |
-| Camera | `expo-camera`, `expo-barcode-scanner` |
-| Bluetooth | `react-native-ble-plx`, `expo-build-properties` |
+| Camera | `expo-camera` (CameraView + onBarcodeScanned) |
+| Bluetooth | `react-native-ble-plx` |
 | State | `zustand` |
 | API | `axios`, `@tanstack/react-query` |
 | Storage | `expo-secure-store`, `@react-native-async-storage/async-storage` |
@@ -65,10 +66,12 @@ src/
 | List | `@shopify/flash-list` |
 | SVG/QR | `react-native-svg`, `react-native-qrcode-svg` |
 | Network | `@react-native-community/netinfo` |
-| UX | `expo-haptics`, `react-native-modal` |
+| UX | `react-native-modal`, `react-native-toast-message` |
 | Util | `dayjs` |
 
 **Yeni paket eklemeden önce onay al.**
+
+> ⚠️ Şu an hem `@expo/vector-icons` hem `react-native-vector-icons` kurulu. İkincisi muhtemelen redundant (Paper / Navigation'ın peer dep'i olarak gelmiş olabilir). Yeni icon kullanımı için `@expo/vector-icons` tercih et; doğrulandığında `react-native-vector-icons` kaldırılabilir.
 
 ## API Bağlantısı
 
@@ -88,17 +91,18 @@ export const API_URL = 'http://192.168.X.X:4000/api'; // Tablet ve sunucu aynı 
 3. **KursunQC** — Hata metraj girişi (sayısal klavye)
 4. **Tambur** — Kesim kararı, fire/A1 işaretleme
 5. **Fason** — Sevk oluştur / mal kabul
-6. **Paketleme/Tartı** — Top oku, ağırlık gir, paketle
-7. **Dashboard** — İş emri özet görünümü
+6. **Dashboard** — İş emri özet görünümü
 
-## UI/UX Kuralları (Tablet)
+> NOT: Tartı / paket / sevkiyat mobil ekranları yeni sevkiyat modülü tasarlanınca eklenecek — backend tarafı şu an yok.
+
+## UI/UX Kuralları (Tablet + Telefon)
 
 - Minimum dokunma hedefi: **56dp** (parmak kolay basabilmeli)
 - Barkod okuma ekranı: kamera preview tam ekran, minimal UI overlay
 - Sayısal veri girişi: büyük tuş takımı (`react-native-paper` `TextInput` + numpad)
 - Hata mesajları Türkçe
 - `react-native-paper` tema: koyu header, açık içerik (fabrika ortamı için yüksek kontrast)
-- Landscape orientation sabit — portrait ASLA
+- **Responsive layout** — tablet yatayda iki sütun / split view, telefon dikeyde tek sütun. Yön kilidi yok; her ekran her iki yönde de çalışmalı.
 - Font boyutu minimum 16sp, kritik bilgiler 20sp+
 
 ### Dokunma / Tıklama bileşenleri

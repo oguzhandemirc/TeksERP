@@ -41,14 +41,12 @@ enum RollOperationType {
   KURSUN_APPLIED // PROCESS_QC: bu topa kurşun geçildi
   QC2_COMPLETED // PROCESS_QC: bu topun kalite kontrolü bitti
   TAMBUR_PROCESSED // TAMBUR: bu top için kesim/karar alındı
-  PACKAGED // Paketlendi (fulfillment audit — Station'a bağlı değil)
   SUBCONTRACTOR_SENT // SUBCONTRACTOR: fasona sevk edildi
   SUBCONTRACTOR_RETURNED // SUBCONTRACTOR: fasondan döndü
 }
 
 enum ItemType {
   YARN
-  WARP
   FABRIC
   CONSUMABLE
 }
@@ -56,9 +54,7 @@ enum ItemType {
 /// Top'un sisteme nasıl girdiğini ifade eder — raporlama ayrımı için kritik.
 /// itemType "ne olduğunu", entrySource "nereden geldiğini" söyler.
 enum RollEntrySource {
-  PRODUCTION // Dahili üretim — ham kumaş dokuma/Devere çıktısı
-  SUPPLIER_RECEIPT // Tedarikçiden satın alınan mal kabul (yarn, consumable, dış kaynaklı kumaş)
-  CUSTOMER_SUPPLIED // Müşteri kendi malını getirdi (SERVICE_PRODUCTION) — Roll.ownerCustomerId dolu
+  SUPPLIER_RECEIPT // Tedarikçiden satın alınan mal kabul (kumaş, yarn, consumable)
   TAMBUR_SPLIT // Tambur'da KES kararı sonucu ayrılan parça (parentRollId dolu)
   SUBCONTRACTOR_RETURN // Boyahane vb. fason dönüşü — açık kumaş Roll (parentReceiptId dolu, barcode null)
 }
@@ -66,17 +62,15 @@ enum RollEntrySource {
 enum RollStatus {
   STOCK
   IN_PRODUCTION
-  PRODUCED
-  READY_FOR_SHIP
-  SHIPPED
+  PRODUCED // Son üretim adımı bitti, Tambur'a girmedi (tek-adımlı WO veya rotada Tambur yok)
   SCRAP // Gerçek fire — Tambur kalite reddi vb. fiziksel hurda
   CANCELLED // Operatör iptali (yanlış giriş) — fire değil, sadece kayıt geri alındı
   AT_SUBCONTRACTOR // Fason/boyahanede işlem görüyor
   A1_STOCK // 2. Kalite satılabilir stok
   RETURNED_FROM_SUBCONTRACTOR // Fason dönüşünde yeni barkodlar üretildi, eski kapatıldı
-  WAREHOUSE // Paketleme sonrası depoya kaldırıldı — satışa / sevke hazır
+  WAREHOUSE // Tambur sonrası depoya kaldırıldı — satışa / sevke hazır
   TAMBUR_CONSUMED // Tambur'da bölündü; tüm metraj çocuk topları olarak doğdu — parent retire
-  SUBCONTRACTOR_CONSUMED // Fason kabulde kapandı — yeni "açık kumaş" Roll'ları receipt üzerinden doğacak (örn. boyahane top→açık kumaş dönüşü)
+  SUBCONTRACTOR_CONSUMED // Fason kabulde kapandı — yeni "açık kumaş" Roll'ları receipt üzerinden doğacak
 }
 
 enum CompanyType {
@@ -99,7 +93,6 @@ enum OrderStatus {
 enum WorkOrderType {
   ORDER_PRODUCTION // Siparişe Özel Üretim
   STOCK_PRODUCTION // Stoka Üretim
-  SERVICE_PRODUCTION // Fason Üretim Kabul — müşterinin getirdiği malı işleyip iade ederiz
 }
 
 enum WorkOrderStatus {
@@ -117,12 +110,6 @@ enum StepStatus {
   SKIPPED
 }
 
-enum ShipmentStatus {
-  PREPARING
-  SHIPPED
-  CANCELLED
-}
-
 enum TravelerCardStatus {
   ACTIVE // Mal ile birlikte gezen geçerli kart
   REPRINTED // Yeniden basıldı, bu kopya artık geçersiz
@@ -136,32 +123,58 @@ enum ScanType {
   INFO // Bilgi amaçlı tarama (istasyon hareketi değil)
 }
 
-/// Paketleme kuyruğu kaydının yaşam döngüsü.
-/// Planlamacı kuyruğa ekler (WAITING) → operatör çeker (TAKEN) →
-/// sipariş tamamen sevk edildiğinde otomatik DONE; planlamacı kuyruğu
-/// iptal ederse CANCELLED.
-enum PackagingQueueStatus {
-  WAITING
-  TAKEN
-  DONE
-  CANCELLED
-}
-
-enum ShippingQueueStatus {
-  WAITING
-  TAKEN
-  DONE
-  CANCELLED
-}
-
 /// Etiket türü — her tür için ayrı template havuzu var, default da ayrı.
-/// ROLL: Tambur output / Packaging label / standalone reprint (ortak veri).
+/// ROLL_RAW: KK1 ham mal kabul (renksiz, sade alanlar).
+/// ROLL_FINISHED: Tambur sonrası bitmiş kumaş (renk + müşteri + sipariş + alias).
 /// SWATCH: Kartela etiketi.
-/// SHIPMENT_DOCKET: Sevkiyat irsaliyesi belge başlık/tablo düzeni.
 enum LabelKind {
-  ROLL
+  ROLL_RAW
+  ROLL_FINISHED
   SWATCH
-  SHIPMENT_DOCKET
+}
+
+/// Tambur kararında bir hata için yapılan aksiyon.
+enum RollErrorAction {
+  CUT
+  NO_CUT
+}
+
+/// Hata tipinin görsel/operasyonel önceliği — UI renklendirmesi.
+enum DefectSeverity {
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+/// SystemLog event türü. DOMAIN = CUD audit, AUTH = login event'leri,
+/// SYSTEM = startup/error gibi sistem olayları.
+enum SystemLogCategory {
+  DOMAIN
+  AUTH
+  SYSTEM
+}
+
+/// Yetki katalogunun UI'da gruplanma kategorisi.
+enum PermissionCategory {
+  web
+  mobile
+  admin
+}
+
+/// Ürün birim cinsi — sipariş/üretim hesaplarında kullanılır.
+enum ItemUnit {
+  MT
+  KG
+  ADET
+}
+
+/// Sipariş para birimi — config/currencies.ts ile senkron tutulur.
+/// Yeni currency eklemek için: enum'a ekle + currencies.ts'i güncelle + migration.
+enum Currency {
+  TRY
+  USD
+  EUR
+  GBP
 }
 
 // =============================================================================
@@ -170,9 +183,9 @@ enum LabelKind {
 
 model User {
   id           String  @id @default(uuid())
-  username     String  @unique
+  username     String  @unique @db.VarChar(50)
   passwordHash String
-  fullName     String
+  fullName     String  @db.VarChar(100)
   isActive     Boolean @default(true)
 
   // Relations
@@ -192,20 +205,13 @@ model User {
   detectedRollErrors     RollError[]             @relation("RollErrorDetectedBy")
   processedRollErrors    RollError[]             @relation("RollErrorProcessedBy")
   createdRolls           Roll[]                  @relation("RollCreatedBy")
-  shippedShipments       Shipment[]              @relation("ShipmentShippedBy")
-  queuedPackagingJobs    PackagingQueue[]        @relation("PackagingQueueAddedBy")
-  takenPackagingJobs     PackagingQueue[]        @relation("PackagingQueueAssigned")
-  queuedShippingJobs     ShippingQueue[]         @relation("ShippingQueueAddedBy")
-  takenShippingJobs      ShippingQueue[]         @relation("ShippingQueueOperator")
   manualClosedOrders     Order[]                 @relation("OrderManualClosedBy")
   systemSettingsUpdates  SystemSetting[]
-  shipmentPlanItemsAdded ShipmentPlannedOrder[]  @relation("ShipmentPlannedOrderAddedBy")
   createdPairingCodes    PairingCode[]           @relation("PairingCodeCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([username])
   @@map("users")
 }
 
@@ -214,9 +220,9 @@ model User {
 /// (mobil ekran), "admin" (admin operasyonları).
 model Permission {
   id          String  @id @default(uuid())
-  code        String  @unique // "order:read", "mobile:kk2", "admin:users", "mobile:*"
+  code        String  @unique @db.VarChar(64) // "order:read", "mobile:kk2", "admin:users", "mobile:*"
   module      String // "SALES", "PRODUCTION", "FINANCE", "MOBILE"
-  category    String  @default("web") // "web" | "mobile" | "admin"
+  category    PermissionCategory @default(web)
   description String?
 
   // Relations
@@ -263,8 +269,8 @@ model UserPermission {
 /// Bu sayede şablonu sonradan değiştirmek mevcut kullanıcıları etkilemez.
 model PermissionTemplate {
   id          String  @id @default(uuid())
-  name        String  @unique
-  description String?
+  name        String  @unique @db.VarChar(64)
+  description String? @db.VarChar(200)
   isActive    Boolean @default(true)
 
   permissions PermissionTemplateItem[]
@@ -295,12 +301,17 @@ model PermissionTemplateItem {
 
 model Station {
   id         String      @id @default(uuid())
-  code       String      @unique // e.g. "BOYAHANE_DIS", "KURSUN_1"
-  name       String
+  code       String      @unique @db.VarChar(32) // e.g. "BOYAHANE_DIS", "KURSUN_1"
+  name       String      @db.VarChar(100)
   type       StationType // INTERNAL or EXTERNAL
   kind       StationKind @default(OTHER) // Domain rolü — API davranış dispatch'i
   department String? // DOKUMA, DEVERE, TERBIYE, SEVKIYAT etc.
   isActive   Boolean     @default(true)
+
+  /// İş emri adım picker'ında bu istasyon gösterilsin mi?
+  /// false → KK1 gibi giriş noktası istasyonları (sadece Roll oluşturma için
+  /// kullanılır, üretim akışına WorkOrderStep olarak girmez).
+  allowAsWorkOrderStep Boolean @default(true)
 
   // EXTERNAL istasyonlar için varsayılan fason kategorisi. WO oluşturulurken
   // fason planlama modalında otomatik önerilir (kullanıcı değiştirebilir).
@@ -327,14 +338,12 @@ model Station {
 model Machine {
   id        String  @id @default(uuid())
   stationId String
-  code      String  @unique
-  name      String
-  deviceIp  String? // COM port, scale or device connection
+  code      String  @unique @db.VarChar(32)
+  name      String  @db.VarChar(100)
   isActive  Boolean @default(true)
 
   // Relations
   station        Station         @relation(fields: [stationId], references: [id])
-  logs           MachineLog[]
   devices        Device[]
   pairingCodes   PairingCode[]
   rollOperations RollOperation[]
@@ -353,8 +362,8 @@ model Machine {
 /// Cihaz değişmedikçe operatör değişse bile hangi makinede işlendiği bilinir.
 model Device {
   id         String    @id @default(uuid())
-  deviceId   String    @unique // Tablet local UUID
-  name       String // Admin'in verdiği etiket — "Tambur-1 Tablet"
+  deviceId   String    @unique @db.VarChar(64) // Tablet local UUID
+  name       String    @db.VarChar(100) // Admin'in verdiği etiket — "Tambur-1 Tablet"
   machineId  String?
   lastSeenAt DateTime?
   isActive   Boolean   @default(true)
@@ -372,9 +381,9 @@ model Device {
 /// Tablet eşleştirmesi için admin tarafından üretilen tek seferlik 6 haneli kod.
 /// `expiresAt` sonrası geçersiz; `usedAt` doldurulduğunda yeniden kullanılamaz.
 model PairingCode {
-  code         String    @id // 6 haneli (000000-999999)
+  code         String    @id @db.VarChar(50) // 6 haneli (000000-999999)
   machineId    String
-  deviceName   String // Eşleşmeden önce admin'in girdiği etiket
+  deviceName   String    @db.VarChar(100) // Eşleşmeden önce admin'in girdiği etiket
   createdById  String?
   expiresAt    DateTime
   usedAt       DateTime?
@@ -392,8 +401,8 @@ model PairingCode {
 
 model Route {
   id          String  @id @default(uuid())
-  code        String? @unique // Opsiyonel kısa kod: "BKT-STD"
-  name        String // e.g. "Boyahane + Kursun + Tambur"
+  code        String? @unique @db.VarChar(32) // Opsiyonel kısa kod: "BKT-STD"
+  name        String  @db.VarChar(100) // e.g. "Boyahane + Kursun + Tambur"
   description String?
   isFavorite  Boolean @default(false) // Sık kullanılan şablon
   customerId  String? // Müşteriye özel default rota (opsiyonel)
@@ -440,10 +449,10 @@ model RouteStep {
 /// Boş liste = tüm aktif renk/özelliğe izin var.
 model Item {
   id       String   @id @default(uuid())
-  code     String   @unique
-  name     String
-  itemType ItemType // YARN, WARP, FABRIC, CONSUMABLE
-  unit     String   @default("MT") // MT, KG, ADET
+  code     String   @unique @db.VarChar(32)
+  name     String   @db.VarChar(100)
+  itemType ItemType // YARN, FABRIC, CONSUMABLE
+  unit     ItemUnit @default(MT)
   isActive Boolean  @default(true)
 
   // Relations
@@ -470,7 +479,7 @@ model Roll {
   /// Fiziksel barkod. KK1 girişinde + Tambur kesim çıktısında basılır.
   /// Açık kumaş Roll'ları (Kurşun/KK2'de doğan) için NULL — fiziksel etiket basılmaz.
   /// Unique constraint: PostgreSQL'de NULL'lar tek olabilir (multiple NULLs allowed).
-  barcode String? @unique
+  barcode String? @unique @db.VarChar(64)
   itemId  String
   /// Rulonun kazandığı renk. Üretim sürecinde "renk veren" fason adımı (örn.
   /// boyahane) başarıyla tamamlandıktan sonra WO.targetColorId'den kopyalanır.
@@ -478,19 +487,20 @@ model Roll {
   /// kaynak doğrusudur.
   colorId String?
 
-  // Fason Üretim Kabul — müşteri-malı toplar (factory sadece hizmet uygular, iade eder)
-  ownerCustomerId     String? // dolu ise top bu müşterinin malı; sadece bu müşteriye sevk edilebilir
-  customerDescription String? // müşterinin kendi desen kodu/tanımı (opsiyonel serbest metin)
-
   // Measurements
-  initialQty Float // Initial measurement (meters)
-  currentQty Float // Remaining/net quantity
-  weightKg   Float?
+  initialQty Decimal  @db.Decimal(12, 3) // Initial measurement (meters)
+  currentQty Decimal  @db.Decimal(12, 3) // Remaining/net quantity
+  weightKg   Decimal? @db.Decimal(12, 3)
 
   // Status & Quality
-  status       RollStatus @default(STOCK)
-  qualityGrade String     @default("1.KALITE") // 1.Kalite, A1, Fire
-  width        Float? // En (cm) — KK1 girişinde ölçülen kumaş eni
+  status         RollStatus @default(STOCK)
+  /// Snapshot — yazıldığı andaki kalite kodu (katalog değişse bile sabit).
+  /// Service-level zorunlu (inventory/tambur/subcontractor explicit set eder).
+  qualityGrade   String
+  /// Canonical — QualityGrade kataloğundaki gerçek kayda referans.
+  /// Eski satırlarda null kalabilir; yeni Tambur finalize kayıtlarında doldurulur.
+  qualityGradeId String?
+  width          Decimal?   @db.Decimal(12, 3) // En (cm) — KK1 girişinde ölçülen kumaş eni
 
   // Top'un sisteme nasıl girdiği — raporlama ayrımı için.
   // itemType "ne olduğunu", entrySource "nereden geldiğini" söyler.
@@ -512,52 +522,33 @@ model Roll {
   // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
   createdById String?
 
-  // Packaging
-  packageId     String? // Package/sack barcode ID
-  grossWeightKg Float? // Gross weight from scale
-  netWeightKg   Float? // Fabric-only weight
-  packagingDate DateTime? // When packaging happened
-
-  // Tartı/Paket: top hangi çuvalda — null ise depodadır (henüz çuvallanmamış)
-  sackId String?
-
   // Relations
-  item                  Item                        @relation(fields: [itemId], references: [id])
-  color                 Color?                      @relation(fields: [colorId], references: [id])
-  ownerCustomer         Customer?                   @relation("RollOwnerCustomer", fields: [ownerCustomerId], references: [id])
-  sack                  Sack?                       @relation(fields: [sackId], references: [id])
-  errors                RollError[]
-  allocations           OrderAllocation[]
-  shipmentItems         ShipmentItem[]
-  movements             RollMovement[]
-  operations            RollOperation[]
-  parent                Roll?                       @relation("RollLineage", fields: [parentRollId], references: [id])
-  children              Roll[]                      @relation("RollLineage")
-  parentReceipt         SubcontractorReceipt?       @relation("RollFromReceipt", fields: [parentReceiptId], references: [id])
+  item                Item                        @relation(fields: [itemId], references: [id])
+  color               Color?                      @relation(fields: [colorId], references: [id])
+  qualityGradeRef     QualityGrade?               @relation(fields: [qualityGradeId], references: [id])
+  errors              RollError[]
+  movements           RollMovement[]
+  operations          RollOperation[]
+  parent              Roll?                       @relation("RollLineage", fields: [parentRollId], references: [id])
+  children            Roll[]                      @relation("RollLineage")
+  parentReceipt       SubcontractorReceipt?       @relation("RollFromReceipt", fields: [parentReceiptId], references: [id])
   /// Bu rol parent olarak hangi RollOperation kayıtlarına kaynak — Tambur kalıtım izi
-  inheritedOperations   RollOperation[]             @relation("RollOperationInherited")
-  dispatchItems         SubcontractorDispatchItem[]
-  receiptItems          SubcontractorReceiptItem[]
-  swatchesFrom          Swatch[]                    @relation("SwatchParentRoll")
-  currentStep           WorkOrderStep?              @relation("RollCurrentStep", fields: [currentStepId], references: [id])
-  producedInStep        WorkOrderStep?              @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
-  createdBy             User?                       @relation("RollCreatedBy", fields: [createdById], references: [id])
-  properties            RollProperty[]
-  packagingQueueEntries PackagingQueue[]            @relation("PackagingQueueRoll")
+  inheritedOperations RollOperation[]             @relation("RollOperationInherited")
+  dispatchItems       SubcontractorDispatchItem[]
+  receiptItems        SubcontractorReceiptItem[]
+  swatchesFrom        Swatch[]                    @relation("SwatchParentRoll")
+  currentStep         WorkOrderStep?              @relation("RollCurrentStep", fields: [currentStepId], references: [id])
+  producedInStep      WorkOrderStep?              @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
+  createdBy           User?                       @relation("RollCreatedBy", fields: [createdById], references: [id])
+  properties          RollProperty[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([itemId])
-  @@index([colorId])
-  @@index([status])
   @@index([parentRollId])
   @@index([parentReceiptId])
-  @@index([currentStepId])
-  @@index([producedInStepId])
-  @@index([ownerCustomerId])
   @@index([createdById])
-  @@index([sackId])
   // Liste sayfaları: status filter + createdAt desc sort
   @@index([status, createdAt])
   // Ham/işlenmiş filter: WHERE "colorId" IS NULL (ham) — yüksek seçicilikli partial index
@@ -566,6 +557,11 @@ model Roll {
   @@index([colorId, status])
   // Raporlama: kaynak bazlı dönem sorguları (örn. "Mart 2027 ham kumaş üretimi")
   @@index([entrySource, createdAt])
+  // WO detayı: "şu adımda üretilen + WAREHOUSE/A1_STOCK" sorgusu
+  @@index([producedInStepId, status])
+  // Fason kuyruğu: "bu adımda + AT_SUBCONTRACTOR" listeleme
+  @@index([currentStepId, status])
+  @@index([qualityGradeId])
   @@map("rolls")
 }
 
@@ -575,19 +571,15 @@ model Roll {
 
 model Customer {
   id        String      @id @default(uuid())
-  code      String      @unique
-  name      String
+  code      String      @unique @db.VarChar(32)
+  name      String      @db.VarChar(100)
   taxNumber String?
   type      CompanyType @default(CUSTOMER)
   isActive  Boolean     @default(true)
 
   // Relations
   orders        Order[]
-  accounts      CurrentAccount[]
-  shipments     Shipment[]
   defaultRoutes Route[]              @relation("CustomerDefaultRoutes")
-  ownedRolls    Roll[]               @relation("RollOwnerCustomer")
-  sacks         Sack[]
   branches      CustomerBranch[]
   itemAliases   CustomerItemAlias[]
   colorAliases  CustomerColorAlias[]
@@ -608,8 +600,8 @@ model Customer {
 model CustomerBranch {
   id           String  @id @default(uuid())
   customerId   String
-  code         String? // Müşterinin iç şube kodu (opsiyonel)
-  name         String // "Ankara Şubesi", "Merkez Depo" gibi
+  code         String? @db.VarChar(50) // Müşterinin iç şube kodu (opsiyonel)
+  name         String  @db.VarChar(100) // "Ankara Şubesi", "Merkez Depo" gibi
   address      String?
   city         String?
   district     String?
@@ -619,26 +611,24 @@ model CustomerBranch {
   isActive     Boolean @default(true)
 
   customer  Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  shipments Shipment[]
   orders    Order[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([customerId])
   @@index([customerId, isActive])
   @@map("customer_branches")
 }
 
 model Order {
   id          String  @id @default(uuid())
-  orderNumber String  @unique
+  orderNumber String  @unique @db.VarChar(64)
   customerId  String
   branchId    String? // Hedef şube — opsiyonel; bir sipariş tek bir şubeye gider. Mevcut kayıtlar için null kabul.
 
   // Finance & Pricing
-  currency    String   @default("TRY")
-  totalAmount Decimal? @db.Decimal(10, 2)
+  currency    Currency @default(TRY)
+  totalAmount Decimal? @db.Decimal(14, 2)
 
   status    OrderStatus @default(PENDING)
   orderDate DateTime    @default(now())
@@ -646,7 +636,7 @@ model Order {
 
   /// Denormalize sevk toplamı (m). Tek yazma noktası: recomputeOrderStatus.
   /// Liste sayfasında "shippedQty / sum(lines.quantity)" gösterimi için.
-  shippedQty Float @default(0)
+  shippedQty Decimal @default(0) @db.Decimal(12, 3)
 
   // Tamamlanma kaydı
   completedAt       DateTime? // İlk COMPLETED'a düştüğü an (otomatik veya manuel)
@@ -658,16 +648,12 @@ model Order {
   branch         CustomerBranch?        @relation(fields: [branchId], references: [id])
   manualClosedBy User?                  @relation("OrderManualClosedBy", fields: [manualClosedById], references: [id])
   lines          OrderLine[]
-  packagingQueue PackagingQueue[]       @relation("PackagingQueuePlannedOrder")
-  shippingQueue  ShippingQueue?         @relation("ShippingQueueOrder")
-  shipmentPlans  ShipmentPlannedOrder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([customerId])
   @@index([branchId])
-  @@index([status])
   @@index([manualClosedById])
   @@index([status, createdAt(sort: Desc)])
   @@index([deadline])
@@ -685,9 +671,9 @@ model OrderLine {
   /// Müşterinin istediği renk. NULL = ham talep (ileride satılabilir; bugün
   /// default akış değil). Item.allowedColors dolu ise bu listeden olmalı.
   colorId   String?
-  quantity  Float // Requested quantity (meters)
-  unitPrice Decimal? @db.Decimal(10, 2) // For future finance module
-  width     Float? // İstenen en (cm)
+  quantity  Decimal  @db.Decimal(12, 3) // Requested quantity (meters)
+  unitPrice Decimal? @db.Decimal(12, 2) // For future finance module
+  width     Decimal? @db.Decimal(12, 3) // İstenen en (cm)
 
   /// "Müşterideki adı" — sipariş satırı bazlı override (1-shot).
   /// NULL ise effective name CustomerItemAlias.alias'tan (master, live) okunur;
@@ -701,9 +687,7 @@ model OrderLine {
   order               Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   item                Item                        @relation(fields: [itemId], references: [id])
   color               Color?                      @relation(fields: [colorId], references: [id])
-  allocations         OrderAllocation[]
   workOrderLinks      WorkOrderToOrderLine[]
-  reproductionBacklog ReproductionBacklog[]
   requiredProperties  OrderLineRequiredProperty[]
 
   createdAt DateTime @default(now())
@@ -733,129 +717,15 @@ model OrderLineRequiredProperty {
 }
 
 // =============================================================================
-// Yeniden üretim borç kuyruğu (Phase 2)
-// =============================================================================
-// Bir allocation başka siparişe taşındığında (reassignAllocation) kaynak
-// OrderLine için bir "borç" kaydı oluşur: "X siparişe N metre üretmemiz lazım".
-// Yeni bir allocation eklenip ihtiyaç karşılanınca resolvedAt set edilir.
-// =============================================================================
-
-model ReproductionBacklog {
-  id           String    @id @default(uuid())
-  orderLineId  String
-  qtyDeficit   Float // Geri üretilmesi gereken miktar (m)
-  reason       String    @db.Text // "ORD-002 acil sevk nedeniyle taşındı" vb.
-  createdAt    DateTime  @default(now())
-  resolvedAt   DateTime?
-  resolvedNote String?   @db.Text
-
-  orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
-
-  @@index([orderLineId, resolvedAt])
-  @@index([resolvedAt])
-  @@map("reproduction_backlog")
-}
-
-// =============================================================================
-// Paketleme kuyruğu (Phase 3) — rulo seviyesinde
-// =============================================================================
-// Planlamacı, depodaki (WAREHOUSE) rulları açık siparişlerle eşler ve
-// paketleme önceliklerini buradan yönetir. Bir satır = bir rulonun paketleme
-// görevi. plannedOrderId boş bırakılabilir (stoğa paketleme — sonradan
-// siparişe atanabilir). Operatör kendisi seçmez — kuyruğun en üstündeki ruloyu
-// "alır" (TAKEN); SKIP LOCKED ile yarış önlenir. Paketleme bitince status=DONE
-// olur ve rulo READY_FOR_SHIP'e geçer.
-// SERVICE_PRODUCTION kuralı: Roll.ownerCustomerId dolu ise plannedOrderId
-// ancak aynı customer'ın siparişi olabilir (service layer'da enforce edilir).
-// =============================================================================
-
-model PackagingQueue {
-  id                 String               @id @default(uuid())
-  rollId             String // Depodaki rulo — kuyrukta bekleyen iş bu rulonun paketlenmesi
-  plannedOrderId     String? // Planlamacının atadığı sipariş; null = stoğa paketleme
-  priority           Int                  @default(0) // Küçük = önce; sürükle-bırak ile güncellenir
-  isUrgent           Boolean              @default(false) // Acil → tepeye taşınır; aralarında priority+createdAt sıralı
-  status             PackagingQueueStatus @default(WAITING)
-  assignedOperatorId String? // İlk alan operatör (info amaçlı, kilit değil)
-  addedByUserId      String
-  note               String?              @db.Text // Planlamacı notu ("acil", müşteri açıklaması vb.)
-  urgentMarkedAt     DateTime? // Acil işaretlendiği an — birden fazla acil arasında FIFO sırası için
-  takenAt            DateTime?
-  completedAt        DateTime?
-  cancelledAt        DateTime?
-  cancelReason       String?              @db.Text
-
-  // Relations
-  roll             Roll   @relation("PackagingQueueRoll", fields: [rollId], references: [id], onDelete: Cascade)
-  plannedOrder     Order? @relation("PackagingQueuePlannedOrder", fields: [plannedOrderId], references: [id], onDelete: SetNull)
-  addedBy          User   @relation("PackagingQueueAddedBy", fields: [addedByUserId], references: [id])
-  assignedOperator User?  @relation("PackagingQueueAssigned", fields: [assignedOperatorId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // NOTE: aktif (WAITING/TAKEN) kayıtlar için rollId benzersiz olmalı —
-  // bir rulo aynı anda iki kuyruk satırında olamaz. Partial unique index
-  // migration'da CREATE UNIQUE INDEX ile eklenir (Prisma şema seviyesinde
-  // partial unique desteği yok).
-  @@index([status, priority, createdAt])
-  // Acil sıralama: isUrgent DESC önce, sonra acillerin kendi içinde FIFO
-  // (urgentMarkedAt ASC), normallerin priority + createdAt ASC.
-  @@index([status, isUrgent, urgentMarkedAt, priority, createdAt])
-  @@index([rollId])
-  @@index([plannedOrderId])
-  @@index([assignedOperatorId])
-  @@map("packaging_queue")
-}
-
-// =============================================================================
-// Sevkiyat kuyruğu (Phase 4) — sipariş seviyesinde
-// =============================================================================
-// Planlamacı bir siparişi sevkiyat akışına ekler. Saha personeli (tablet)
-// kuyruktan sırayı alır, depodan kumaşları kendisi tarayarak çuvallara
-// koyar, tartar ve sevkiyata gönderir. Bir sipariş aynı anda yalnız bir
-// kez kuyrukta olabilir (orderId @unique).
-// =============================================================================
-
-model ShippingQueue {
-  id                 String              @id @default(uuid())
-  orderId            String              @unique
-  priority           Int                 @default(0)
-  isUrgent           Boolean             @default(false)
-  urgentMarkedAt     DateTime?
-  status             ShippingQueueStatus @default(WAITING)
-  assignedOperatorId String?
-  addedByUserId      String
-  note               String?             @db.Text
-  takenAt            DateTime?
-  completedAt        DateTime?
-  cancelledAt        DateTime?
-  cancelReason       String?             @db.Text
-
-  // Relations
-  order            Order @relation("ShippingQueueOrder", fields: [orderId], references: [id], onDelete: Cascade)
-  addedBy          User  @relation("ShippingQueueAddedBy", fields: [addedByUserId], references: [id])
-  assignedOperator User? @relation("ShippingQueueOperator", fields: [assignedOperatorId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([status, priority, createdAt])
-  @@index([status, isUrgent, urgentMarkedAt, priority, createdAt])
-  @@index([assignedOperatorId])
-  @@map("shipping_queue")
-}
-
-// =============================================================================
 // 5. WORK ORDER (BATCH) & DYNAMIC ROUTING
 // =============================================================================
 
 model WorkOrder {
   id               String          @id @default(uuid())
-  batchNumber      String          @unique // Parti Numarası
+  batchNumber      String          @unique @db.VarChar(64) // Parti Numarası
   type             WorkOrderType   @default(ORDER_PRODUCTION)
-  width            Float? // En (cm) — kumaş eni
-  targetQuantity   Float? // Hedef uzunluk/metraj
+  width            Decimal?        @db.Decimal(12, 3) // En (cm) — kumaş eni
+  targetQuantity   Decimal?        @db.Decimal(12, 3) // Hedef uzunluk/metraj
   parameters       Json? // Dynamic params: serbest meta
   status           WorkOrderStatus @default(PLANNED)
   plannedStartDate DateTime? // Planlanan başlangıç tarihi
@@ -865,19 +735,14 @@ model WorkOrder {
   routeTemplateId String?
   routeTemplate   Route?  @relation(fields: [routeTemplateId], references: [id])
 
-  // Fason Üretim Kabul — metre başı hizmet bedeli (sadece type=SERVICE_PRODUCTION için doldurulur)
-  servicePricePerMeter Decimal? @db.Decimal(10, 2)
-
   // Hedef ürün — planlamacının "ne üretiyoruz" cevabı. Item'ın kendisini işaret
-  // eder (artık türetilmiş Item yok). Renk ve özellikler ayrı alanlardadır:
-  // targetColorId + targetProperties M:N. targetColorId, rotadaki
-  // "renk veren" (SubcontractorCategory.appliesColor=true) Fason Kabul'ünde
-  // Roll'a kopyalanır. targetProperties ise "özellik veren"
+  // eder. Renk ve özellikler ayrı alanlardadır: targetColorId + targetProperties M:N.
+  // targetColorId, rotadaki "renk veren" (SubcontractorCategory.appliesColor=true)
+  // Fason Kabul'ünde Roll'a kopyalanır. targetProperties ise "özellik veren"
   // (SubcontractorCategory.appliesProperty=true) adımda kopyalanır — aynı adım
   // her ikisini de yapabilir (Boyahane gibi).
   // ORDER_PRODUCTION: orderLine.itemId/colorId/properties'den otomatik
   // STOCK_PRODUCTION: zorunlu (manuel seçilir)
-  // SERVICE_PRODUCTION: opsiyonel (müşteri malı, item rolldan gelir)
   targetItemId  String?
   targetColorId String?
 
@@ -902,7 +767,6 @@ model WorkOrder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([status])
   @@index([routeTemplateId])
   @@index([targetItemId])
   @@index([targetColorId])
@@ -931,6 +795,14 @@ model WorkOrderStep {
   requiredCategoryId     String?
   plannedSubcontractorId String?
 
+  /// Planlamanın atadığı sıralama önceliği (Kurşun/KK2 kuyruğu gibi WO bazlı
+  /// kuyruklar için). Düşük değer önce işlenir; tablet `open-cards`
+  /// listesi ve Electron Kurşun Sırası bu alanı ortak okur.
+  priority       Int       @default(0)
+  /// Acil rozeti — planlama işaretler, operatör tablette kırmızı görür.
+  isUrgent       Boolean   @default(false)
+  urgentMarkedAt DateTime?
+
   // Relations
   workOrder            WorkOrder               @relation(fields: [workOrderId], references: [id])
   station              Station                 @relation(fields: [stationId], references: [id])
@@ -950,10 +822,11 @@ model WorkOrderStep {
   updatedAt DateTime @updatedAt
 
   @@index([workOrderId, stepSequence])
-  @@index([stationId])
   @@index([workOrderId, status])
   @@index([requiredCategoryId])
   @@index([plannedSubcontractorId])
+  // Kurşun kuyruğu: PROCESS_QC istasyonu + bekleyen step filtreleri için
+  @@index([stationId, status, isUrgent, priority, startedAt])
   @@map("work_order_steps")
 }
 
@@ -962,7 +835,7 @@ model WorkOrderStep {
 model WorkOrderToOrderLine {
   workOrderId  String
   orderLineId  String
-  allocatedQty Float  @default(0) // Metraj/kg cinsinden tahsis (sipariş birimiyle aynı)
+  allocatedQty Decimal @default(0) @db.Decimal(12, 3) // Metraj/kg cinsinden tahsis (sipariş birimiyle aynı)
 
   workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
   orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
@@ -983,17 +856,20 @@ model WorkOrderToOrderLine {
 /// seçilen code'un snapshot'ıdır (katalog değişse bile eski toplar bozulmaz).
 model QualityGrade {
   id           String     @id @default(uuid())
-  code         String     @unique // "1.KALITE", "A1", "A2", "FIRE" (eski) veya KAL-YYMM-XXXX (admin)
-  name         String // UI'da görünen etiket
+  code         String     @unique @db.VarChar(32) // "1.KALITE", "A1", "A2", "FIRE" (eski) veya KAL-YYMM-XXXX (admin)
+  name         String     @db.VarChar(100) // UI'da görünen etiket
   description  String?
-  color        String? // "#10b981" vb. — UI rozeti için opsiyonel
+  color        String? @db.VarChar(7) // "#10b981" vb. — UI rozeti için opsiyonel
   sortOrder    Int        @default(0)
   isActive     Boolean    @default(true)
   /// Tambur'da bu kalite seçildiğinde çocuk top'un alacağı hedef RollStatus.
   /// 1. Kalite → WAREHOUSE, alt kaliteler (A1/A2/2.K) → A1_STOCK, FİRE → SCRAP.
   targetStatus RollStatus @default(SCRAP)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+
+  rolls Roll[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([isActive, sortOrder])
   @@map("quality_grades")
@@ -1003,10 +879,10 @@ model QualityGrade {
 /// Yönetici ekranı üzerinden eklenir/silinir. severity hataya görsel öncelik verir.
 model DefectType {
   id          String   @id @default(uuid())
-  code        String   @unique
-  name        String
+  code        String   @unique @db.VarChar(32)
+  name        String   @db.VarChar(100)
   description String?
-  severity    String? // "MINOR" | "MAJOR" | "CRITICAL" — UI renklendirme için
+  severity    DefectSeverity? // UI renklendirme için
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -1030,11 +906,11 @@ model RollError {
   /// Hatanın tespit edildiği metre noktası (KK2 operatörü "60. metrede hata"
   /// girer). Hata sadece NOKTA olarak takip edilir; aralık bilgisi tutulmaz.
   /// Tambur operatörü ekranda bu noktayı görüp fiziksel kesim kararı verir.
-  startMeter   Float
+  startMeter   Decimal @db.Decimal(12, 3)
   defectTypeId String?
   errorType    String? // DefectType.name snapshot (kayıt anında kopyalanır)
   isProcessed  Boolean @default(false) // Tambur kararı verildi mi?
-  actionTaken  String? // "CUT", "NO_CUT" (Tambur kararı)
+  actionTaken  RollErrorAction? // Tambur kararı
 
   // Lifecycle — tespit (Kurşun/QC2) ve işlem (Tambur) ayrı izlenir.
   detectedAtStepId  String?
@@ -1055,13 +931,14 @@ model RollError {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([rollId])
   @@index([detectedAtStepId])
   @@index([processedAtStepId])
   @@index([isProcessed])
   @@index([defectTypeId])
   // Tambur ekranı: bir topun bekleyen hatalarını listele
   @@index([rollId, isProcessed])
+  // Operatör performans raporu: kim hangi tarihte hata kapadı
+  @@index([processedByUserId, processedAt])
   @@map("roll_errors")
 }
 
@@ -1094,119 +971,25 @@ model RollOperation {
 
   @@unique([rollId, workOrderStepId, operationType])
   @@index([rollId])
-  @@index([workOrderStepId])
   @@index([operationType])
   @@index([operatorId])
   @@index([machineId])
   @@index([inheritedFromParentRollId])
+  // Bir adımın işlem log'u (workOrderStepId filtreli + zaman sıralı)
+  @@index([workOrderStepId, createdAt])
   @@map("roll_operations")
-}
-
-// =============================================================================
-// 7. LOGISTICS & ALLOCATION
-// =============================================================================
-
-model OrderAllocation {
-  id           String @id @default(uuid())
-  orderLineId  String
-  rollId       String
-  allocatedQty Float
-
-  // Relations
-  orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
-  roll      Roll      @relation(fields: [rollId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orderLineId])
-  @@index([rollId])
-  @@map("order_allocations")
-}
-
-model Shipment {
-  id             String         @id @default(uuid())
-  shipmentNumber String         @unique // Irsaliye No / Sevk No
-  customerId     String
-  branchId       String? // Hedef şube — opsiyonel (eski kayıtlar için null kabul)
-  driverName     String? // Driver name
-  plateNumber    String? // Vehicle plate
-  carrier        String? // Carrier company
-  status         ShipmentStatus @default(PREPARING)
-  priority       Int            @default(0) // Planlamacı sırası — küçük = önce
-  plannedDate    DateTime? // Planlanan sevk tarihi (planlamacı belirler)
-  shippedAt      DateTime? // Actual departure time
-  shippedById    String? // finalize (SHIPPED) işlemini yapan kullanıcı
-
-  // Snapshot — müşteri/ürün sonradan değişse/silinse bile irsaliye belgesi bozulmaz
-  customerCodeSnapshot String?
-  customerNameSnapshot String?
-  branchNameSnapshot   String? // şube adı (silinse bile belge bozulmasın)
-
-  /// Finalize (SHIPPED) anında tüm yazdırma verisinin tam kopyası.
-  /// Variant kodu, customer alias, fason notu, WO parti no gibi canlı JOIN'lerle
-  /// değişebilen tüm alanlar bu JSON içinde dondurulur — ileride ürün/WO/alias
-  /// değişse/silinse bile belge aynı kalır. PREPARING iken null.
-  printSnapshot Json?
-
-  // Relations
-  customer      Customer               @relation(fields: [customerId], references: [id])
-  branch        CustomerBranch?        @relation(fields: [branchId], references: [id])
-  shippedBy     User?                  @relation("ShipmentShippedBy", fields: [shippedById], references: [id])
-  items         ShipmentItem[]
-  sacks         Sack[]
-  plannedOrders ShipmentPlannedOrder[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([customerId])
-  @@index([branchId])
-  @@index([status])
-  @@index([status, priority, plannedDate])
-  @@index([status, createdAt(sort: Desc)])
-  @@index([shippedAt])
-  @@index([shippedById])
-  @@map("shipments")
-}
-
-// =============================================================================
-// SHIPMENT PLANNED ORDER — sevkiyata planlanan sipariş ilişkisi (m:n)
-// =============================================================================
-// Planlamacı bir sevkiyatta hangi siparişler gidecek belirler. Saha çuvalları
-// doldururken bu plan rehber olur. Metraj burada tutulmaz — sahada çuvallar
-// dolduruldukça gerçek metraj allocation üzerinden hesaplanır.
-// =============================================================================
-model ShipmentPlannedOrder {
-  id            String  @id @default(uuid())
-  shipmentId    String
-  orderId       String
-  sortOrder     Int     @default(0) // sevkiyat içinde planlamacının siparişler arası sıralaması (opsiyonel görsel)
-  note          String? @db.Text
-  addedByUserId String
-
-  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  addedBy  User     @relation("ShipmentPlannedOrderAddedBy", fields: [addedByUserId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([shipmentId, orderId]) // Aynı sevkiyatta aynı sipariş bir kez
-  @@index([shipmentId])
-  @@index([orderId])
-  @@map("shipment_planned_orders")
 }
 
 // =============================================================================
 // SYSTEM SETTING — runtime'da güncellenebilir konfigürasyon (key-value)
 // =============================================================================
-// Örn: shipping.toleranceMeters = "5"  (sevk eksiklik tölerans payı, m)
-// Admin (admin:settings) okur/yazar. recomputeOrderStatus runtime'da DB'den okur.
+// Admin (admin:settings) okur/yazar.
 // =============================================================================
 model SystemSetting {
-  key         String  @id // örn: "shipping.toleranceMeters"
-  value       String // string-encoded; ihtiyaç tipine göre runtime parse
+  key         String @id @db.VarChar(100)
+  /// Tip-güvenli değer: boolean, number, string, array veya object.
+  /// Reader fonksiyonları JsonValue'dan beklenen tipi çıkarır.
+  value       Json
   description String?
   updatedById String?
 
@@ -1218,74 +1001,14 @@ model SystemSetting {
   @@map("system_settings")
 }
 
-model ShipmentItem {
-  id            String @id @default(uuid())
-  shipmentId    String
-  rollId        String @unique // A roll can only be in one shipment at a time
-  shippedQty    Float // Shipment meterage/weight (historical record for invoicing)
-  shippedWeight Float?
-
-  // Snapshot — belge dondurma için
-  rollBarcodeSnapshot String?
-  itemCodeSnapshot    String?
-  itemNameSnapshot    String?
-  orderNumberSnapshot String?
-
-  // Relations
-  shipment Shipment @relation(fields: [shipmentId], references: [id])
-  roll     Roll     @relation(fields: [rollId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([shipmentId])
-  @@map("shipment_items")
-}
-
 // =============================================================================
-// 8. FINANCE & MACHINE LOGS (Future Investment)
-// =============================================================================
-
-model CurrentAccount {
-  id         String  @id @default(uuid())
-  customerId String
-  balance    Decimal @default(0.00) @db.Decimal(12, 2)
-  currency   String  @default("TRY")
-
-  // Relations
-  customer Customer @relation(fields: [customerId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([customerId])
-  @@map("current_accounts")
-}
-
-model MachineLog {
-  id        String @id @default(uuid())
-  machineId String
-  logType   String // "STATUS_UPDATE", "MAINTENANCE"
-  details   Json // e.g. { "workingItemCode": "LINE_DESEN_1", "speed": 400 }
-
-  // Relations
-  machine Machine @relation(fields: [machineId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([machineId])
-  @@map("machine_logs")
-}
-
-// =============================================================================
-// 9. REFAKAT KARTI (Traveler Card) — Adım 5
+// 8. REFAKAT KARTI (Traveler Card) — Adım 5
 // =============================================================================
 
 model TravelerCard {
   id          String             @id @default(uuid())
-  cardNumber  String             @unique // İnsan okur: RK-YYMM-000123
-  barcode     String             @unique // Tarama: RK-YYMM-XXXXXX-C (Code128 uyumlu)
+  cardNumber  String             @unique @db.VarChar(64) // İnsan okur: RK-YYMM-000123
+  barcode     String             @unique @db.VarChar(64) // Tarama: RK-YYMM-XXXXXX-C (Code128 uyumlu)
   workOrderId String
   version     Int                @default(1) // Aynı WO için kaçıncı basım (reprint)
   status      TravelerCardStatus @default(ACTIVE)
@@ -1303,7 +1026,6 @@ model TravelerCard {
   updatedAt DateTime @updatedAt
 
   @@index([workOrderId])
-  @@index([barcode])
   @@index([status])
   @@map("traveler_cards")
 }
@@ -1327,10 +1049,11 @@ model TravelerCardScan {
 
   createdAt DateTime @default(now())
 
-  @@index([cardId])
   @@index([stationId, scannedAt])
   @@index([workOrderStepId])
   @@index([scannedById])
+  // Bir kartın taramaları (cardId filtreli + zaman sıralı)
+  @@index([cardId, scannedAt(sort: Desc)])
   @@map("traveler_card_scans")
 }
 
@@ -1342,10 +1065,10 @@ model RollMovement {
   id              String    @id @default(uuid())
   rollId          String
   workOrderStepId String
-  qtyIn           Float // İstasyona girişteki metraj
-  qtyOut          Float? // İstasyon çıkışındaki metraj (FINISH/SKIP'te doldurulur)
-  weightIn        Float?
-  weightOut       Float?
+  qtyIn           Decimal   @db.Decimal(12, 3) // İstasyona girişteki metraj
+  qtyOut          Decimal?  @db.Decimal(12, 3) // İstasyon çıkışındaki metraj (FINISH/SKIP'te doldurulur)
+  weightIn        Decimal?  @db.Decimal(12, 3)
+  weightOut       Decimal?  @db.Decimal(12, 3)
   enteredAt       DateTime  @default(now())
   exitedAt        DateTime?
   operatorId      String?
@@ -1361,11 +1084,12 @@ model RollMovement {
 
   createdAt DateTime @default(now())
 
-  @@index([rollId])
   @@index([workOrderStepId])
   @@index([enteredAt])
   @@index([operatorId])
   @@index([machineId])
+  // Bir topun hareket geçmişi (rollId filtreli + zaman sıralı)
+  @@index([rollId, enteredAt(sort: Desc)])
   @@map("roll_movements")
 }
 
@@ -1375,7 +1099,7 @@ model RollMovement {
 
 model SubcontractorDispatch {
   id                     String   @id @default(uuid())
-  dispatchNo             String   @unique // SD-YYMM-NNNNNN
+  dispatchNo             String   @unique @db.VarChar(64) // SD-YYMM-NNNNNN
   workOrderId            String
   stepId                 String
   subcontractorId        String // Gerçekleşen fason firma
@@ -1387,7 +1111,7 @@ model SubcontractorDispatch {
   dispatchedAt           DateTime @default(now())
   dispatchedById         String?
   notes                  String?
-  totalQty               Float    @default(0) // Toplam sevk edilen metraj (snapshot)
+  totalQty               Decimal  @default(0) @db.Decimal(12, 3) // Toplam sevk edilen metraj (snapshot)
   printSnapshot          Json? // Sevk anında dondurulan irsaliye verisi
 
   // İptal — soft cancel (kayıt silinmez, izlenebilirlik korunur)
@@ -1407,9 +1131,6 @@ model SubcontractorDispatch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([workOrderId])
-  @@index([stepId])
-  @@index([subcontractorId])
   @@index([plannedSubcontractorId])
   @@index([cancelledById])
   // Liste sayfasında ORDER BY dispatchedAt DESC için — derin sayfalama hızlanır
@@ -1418,6 +1139,8 @@ model SubcontractorDispatch {
   @@index([workOrderId, dispatchedAt])
   // Composite: Fason firma-filtreli + tarih sıralı liste (firma raporları için)
   @@index([subcontractorId, dispatchedAt])
+  // Composite: Step-filtreli + tarih sıralı (step başına son sevkiyat)
+  @@index([stepId, dispatchedAt(sort: Desc)])
   @@index([dispatchedById])
   @@map("subcontractor_dispatches")
 }
@@ -1426,8 +1149,8 @@ model SubcontractorDispatchItem {
   id               String @id @default(uuid())
   dispatchId       String
   rollId           String
-  dispatchedQty    Float
-  dispatchedWeight Float?
+  dispatchedQty    Decimal  @db.Decimal(12, 3)
+  dispatchedWeight Decimal? @db.Decimal(12, 3)
 
   // Relations
   dispatch     SubcontractorDispatch      @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
@@ -1443,8 +1166,8 @@ model SubcontractorDispatchItem {
 
 model SubcontractorReceipt {
   id              String   @id @default(uuid())
-  receiptNo       String   @unique // SR-YYMM-NNNNNN
-  manifestNo      String? // İrsaliye no (fason firma tarafından verilir, opsiyonel)
+  receiptNo       String   @unique @db.VarChar(64) // SR-YYMM-NNNNNN
+  manifestNo      String?  @db.VarChar(64) // İrsaliye no (fason firma tarafından verilir, opsiyonel)
   workOrderId     String
   stepId          String
   subcontractorId String
@@ -1483,9 +1206,7 @@ model SubcontractorReceipt {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([workOrderId])
   @@index([stepId])
-  @@index([subcontractorId])
   @@index([manifestNo])
   @@index([appliedColorId])
   // Mobil/web liste sayfası ORDER BY receivedAt DESC için — milyon satırda kritik
@@ -1519,7 +1240,12 @@ model SubcontractorReceiptProperty {
 model SubcontractorReceiptItem {
   id                   String  @id @default(uuid())
   receiptId            String
-  newRollId            String  @unique // Fason dönüşünde kabul edilen orijinal top (yeni etiket basılmaz)
+  /// Fason dönüşünde kabul edilen orijinal top (yeni etiket basılmaz).
+  /// Composite unique ile (receiptId, newRollId) — aynı top birden fazla
+  /// CANCELLED receipt'te audit izi olarak kalabilir, sadece aktif receipt
+  /// içinde tek satır olur. Globally @unique idi → cancel sonrası tekrar
+  /// kabul "Unique constraint" ile patlıyordu.
+  newRollId            String
   sourceDispatchItemId String? // Göz kontrolü ile eşleştirilen kaynak sevk kalemi
   notes                String?
 
@@ -1530,6 +1256,7 @@ model SubcontractorReceiptItem {
 
   createdAt DateTime @default(now())
 
+  @@unique([receiptId, newRollId])
   @@index([receiptId])
   @@index([newRollId])
   @@index([sourceDispatchItemId])
@@ -1545,8 +1272,8 @@ model SubcontractorReceiptItem {
 
 model SubcontractorCategory {
   id          String  @id @default(uuid())
-  code        String  @unique // DYE_HOUSE, SANDING, PRINTING...
-  name        String // "Boyahane", "Zımpara"
+  code        String  @unique @db.VarChar(32) // DYE_HOUSE, SANDING, PRINTING...
+  name        String  @db.VarChar(100) // "Boyahane", "Zımpara"
   description String?
   isActive    Boolean @default(true)
 
@@ -1577,8 +1304,8 @@ model SubcontractorCategory {
 
 model Subcontractor {
   id        String  @id @default(uuid())
-  code      String  @unique
-  name      String
+  code      String  @unique @db.VarChar(32)
+  name      String  @db.VarChar(100)
   taxNumber String?
   phone     String?
   address   String?
@@ -1618,19 +1345,18 @@ model SubcontractorToCategory {
 
 model Swatch {
   id           String  @id @default(uuid())
-  cardNumber   String  @unique // SW-YYMM-NNN
-  barcode      String  @unique // SW-YYMM-XXXXXX-C (Crockford checksum)
+  cardNumber   String  @unique @db.VarChar(64) // SW-YYMM-NNN
+  barcode      String  @unique @db.VarChar(64) // SW-YYMM-XXXXXX-C (Crockford checksum)
   itemId       String
   /// Kartelanın rengi — kaynak rolden veya manuel girilir.
   colorId      String?
-  width        Float? // cm
-  length       Float // cm (örneğin 30cm)
-  weightKg     Float? // tartı/paket sırasında girilir (ihracat araç kg kapasitesi için kritik)
+  width        Decimal? @db.Decimal(12, 3) // cm
+  length       Decimal  @db.Decimal(12, 3) // cm (örneğin 30cm)
+  weightKg     Decimal? @db.Decimal(12, 3) // tartı/paket sırasında girilir (ihracat araç kg kapasitesi için kritik)
   workOrderId  String?
   parentRollId String?
   purpose      String? // Müşteri sunumu, arşiv, laboratuvar vb.
   createdById  String?
-  sackId       String? // Hangi çuvalda — null ise depodadır
 
   // Relations
   item       Item       @relation(fields: [itemId], references: [id])
@@ -1638,7 +1364,6 @@ model Swatch {
   workOrder  WorkOrder? @relation(fields: [workOrderId], references: [id])
   parentRoll Roll?      @relation("SwatchParentRoll", fields: [parentRollId], references: [id])
   createdBy  User?      @relation("SwatchCreatedBy", fields: [createdById], references: [id])
-  sack       Sack?      @relation(fields: [sackId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1647,47 +1372,7 @@ model Swatch {
   @@index([colorId])
   @@index([workOrderId])
   @@index([parentRollId])
-  @@index([barcode])
-  @@index([sackId])
   @@map("swatches")
-}
-
-// =============================================================================
-// SACK (Çuval) — Tartı/Paket çıktısı; bir müşteriye ait, içinde N top ve N kartela
-// =============================================================================
-// İş kuralları:
-//   - Bir çuval **bir müşteriye** aittir (`customerId` zorunlu).
-//   - Çuvalda farklı ürün/varyant/kalite olabilir; tek kısıt müşteridir.
-//   - Status alanı yok: depodaki çuvallar `shipmentId IS NULL`, sevkiyata
-//     atananlar `shipmentId` dolu. Operatör çuvala her an top/kartela ekleyip
-//     çıkarabilir (sevkiyatta finalize olana kadar).
-//   - `weightKg` opsiyonel — çuval brüt ağırlığı (tartı/paket sonunda
-//     operatör isterse tartar). İhracat araç kg kapasitesi kontrolünde kullanılır.
-//   - `notes` operatörün çuval üzerine kalemle yazdığı notun (varsa) dijital
-//     karşılığı. Sahada genellikle müşteri adı yazılır → otomatik gösterilir.
-// =============================================================================
-model Sack {
-  id         String    @id @default(uuid())
-  sackNumber String    @unique // ÇVL-YYMM-NNNNNN — otomatik üretilir
-  customerId String
-  weightKg   Float? // çuval brüt — opsiyonel
-  notes      String?
-  shipmentId String? // sevkiyata atandığında dolar; null ise depoda
-  shippedAt  DateTime?
-
-  customer Customer  @relation(fields: [customerId], references: [id])
-  shipment Shipment? @relation(fields: [shipmentId], references: [id])
-  rolls    Roll[]
-  swatches Swatch[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([customerId])
-  @@index([shipmentId])
-  // Depodaki açık çuvallar listesi: (customer, !shipped) sorgusu
-  @@index([customerId, shipmentId])
-  @@map("sacks")
 }
 
 // =============================================================================
@@ -1696,7 +1381,7 @@ model Sack {
 
 model Manifest {
   id          String   @id @default(uuid())
-  manifestNo  String   @unique
+  manifestNo  String   @unique @db.VarChar(64)
   workOrderId String
   printedAt   DateTime @default(now())
   printedById String?
@@ -1711,7 +1396,6 @@ model Manifest {
   updatedAt DateTime @updatedAt
 
   @@index([workOrderId])
-  @@index([manifestNo])
   @@map("manifests")
 }
 
@@ -1741,9 +1425,9 @@ model Manifest {
 /// referans alır.
 model Color {
   id        String   @id @default(uuid())
-  code      String   @unique // "MAVI", "KIRMIZI"
-  name      String
-  hex       String? // UI rozeti için #RRGGBB
+  code      String   @unique @db.VarChar(32) // "MAVI", "KIRMIZI"
+  name      String   @db.VarChar(100)
+  hex       String? @db.VarChar(7) // UI rozeti için #RRGGBB
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -1772,11 +1456,11 @@ model Color {
 ///   - RollProperty   : bir rulonun fiilen sahip olduğu özellikler
 model FabricProperty {
   id          String   @id @default(uuid())
-  code        String   @unique // "YANMAZLIK", "KAYGAN"
-  name        String
+  code        String   @unique @db.VarChar(32) // "YANMAZLIK", "KAYGAN"
+  name        String   @db.VarChar(100)
   category    String? // "Dayanıklılık", "Yüzey", "Kimyasal" vb. (UI gruplama için)
   description String?
-  color       String? // UI badge hex
+  color       String? @db.VarChar(7) // UI badge hex
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -1888,7 +1572,7 @@ model CustomerColorAlias {
 ///   ]
 model LabelTemplate {
   id        String    @id @default(uuid())
-  name      String // "Standart Top Etiketi", "Müşteri X Özel"
+  name      String    @db.VarChar(100) // "Standart Top Etiketi", "Müşteri X Özel"
   kind      LabelKind
   isDefault Boolean   @default(false)
   isActive  Boolean   @default(true)
@@ -1984,8 +1668,7 @@ model StationProperty {
 model SystemLog {
   id        String  @id @default(uuid())
   userId    String?
-  // "DOMAIN" (CUD audit, default) | "AUTH" (login_success/failed) | "SYSTEM" (startup/error)
-  category  String  @default("DOMAIN")
+  category  SystemLogCategory @default(DOMAIN)
   action    String // DOMAIN: CREATE/UPDATE/DELETE — AUTH: LOGIN_SUCCESS/LOGIN_FAILED — SYSTEM: STARTUP/ERROR
   tableName String // domain table OR event source (e.g. "AUTH", "SYSTEM")
   recordId  String // record id OR target identifier (username, error code, "-")
@@ -1999,13 +1682,14 @@ model SystemLog {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([userId])
   @@index([tableName, recordId])
   // Audit tablosu en hızlı büyüyen tablodur — zaman aralığı sorguları için
   @@index([createdAt])
   // Activity Page (DOMAIN) ve Sistem Kayıtları (AUTH/SYSTEM) ayrı liste sorgularını
   // tek index scan ile karşılar.
   @@index([category, createdAt])
+  // Kullanıcı aktivite raporu (userId filtreli + zaman sıralı)
+  @@index([userId, createdAt])
   @@map("system_logs")
 }
 
@@ -2013,9 +1697,9 @@ model SystemLog {
 /// system_logs tablosundan X aydan eski kayıtlar buraya taşınır.
 /// Arşiv sorgulanmaz, sadece yasal/uyum amaçlı saklanır.
 model SystemLogArchive {
-  id         String   @id // Orijinal UUID — arşivleme sonrası aynı kalır
+  id         String            @id // Orijinal UUID — arşivleme sonrası aynı kalır
   userId     String?
-  category   String   @default("DOMAIN")
+  category   SystemLogCategory @default(DOMAIN)
   action     String
   tableName  String
   recordId   String

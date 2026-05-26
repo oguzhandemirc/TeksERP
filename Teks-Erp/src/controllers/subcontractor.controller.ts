@@ -23,6 +23,9 @@ const cancelDispatchSchema = z.object({
 
 const cancelReceiptSchema = z.object({
   reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(500),
+  /** Receipt'ten doğan açık kumaş roll'larını cascade iptal et. Liste backend
+   *  preview'den alınıp aynen geri gönderilmeli; eksik/fazla id → 409. */
+  cascadeRollIds: z.array(z.string().uuid()).optional(),
 });
 
 const receiveSchema = z.object({
@@ -44,9 +47,11 @@ const receiveSchema = z.object({
   // özellik: appliesProperty=true kategoride WO.targetProperties otomatik.
   appliedColorId: z.string().uuid().nullish(),
   appliedPropertyIds: z.array(z.string().uuid()).optional(),
-  // Fasondan gelen açık kumaş parçaları — verilirse Receipt anında yeni
-  // open-fabric Roll'lar otomatik doğar ve rotadaki bir sonraki adıma bağlanır.
-  // Verilmezse: Kurşun/KK2 operatörü manuel open-fabric ile açar (eski akış).
+  // Fasondan gelen açık kumaş parçaları — ZORUNLU. Receipt anında her parça
+  // için open-fabric Roll kaydı (barcode=null) doğar ve rotadaki bir sonraki
+  // adıma (genelde Kurşun/KK2) bağlanır. Boş geçilirse KK2 ekranına ve stok
+  // listelerine kart yansımaz; operatör/depo sorumluları açık kumaşı göremez.
+  // İrsaliyede kaç parça/metre geldiği zaten yazıyor; receive sırasında girilir.
   newRolls: z
     .array(
       z.object({
@@ -55,7 +60,7 @@ const receiveSchema = z.object({
         notes: z.string().max(500).nullish(),
       })
     )
-    .optional(),
+    .min(1, "En az bir açık kumaş parçası girilmeli (metraj zorunlu)"),
 });
 
 export class SubcontractorController {
@@ -74,6 +79,7 @@ export class SubcontractorController {
     this.getReceiptPrint = this.getReceiptPrint.bind(this);
     this.getReceipt = this.getReceipt.bind(this);
     this.cancelReceipt = this.cancelReceipt.bind(this);
+    this.getCancelPreview = this.getCancelPreview.bind(this);
   }
 
   /** POST /api/subcontractor/dispatch */
@@ -213,12 +219,28 @@ export class SubcontractorController {
     }
   }
 
+  /** GET /api/subcontractor/receipts/:id/cancel-preview */
+  async getCancelPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const result = await this.service.getCancelPreview(id);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** POST /api/subcontractor/receipts/:id/cancel */
   async cancelReceipt(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
       const body = cancelReceiptSchema.parse(req.body);
-      const result = await this.service.cancelReceipt(id, body.reason, req.user?.userId);
+      const result = await this.service.cancelReceipt(
+        id,
+        body.reason,
+        req.user?.userId,
+        body.cascadeRollIds ?? [],
+      );
       res.status(200).json(result);
     } catch (err) {
       next(err);

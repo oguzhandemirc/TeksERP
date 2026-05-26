@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Save } from "lucide-react";
+import { Save, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGrid } from "@/components/admin/PermissionGrid";
 import { permissionCatalogService } from "@/services/permissionCatalogService";
 import { adminUserService } from "@/services/adminUserService";
+import { permissionTemplateService } from "@/services/permissionTemplateService";
+
+const MOBILE_TEMPLATE_PREFIX = "Mobil —";
 
 interface Props {
   userId: string;
@@ -31,8 +34,29 @@ export function PermissionsTab({ userId }: Props) {
     staleTime: 0,
   });
 
+  const templates = useQuery({
+    queryKey: ["permission-templates"],
+    queryFn: permissionTemplateService.list,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const mobileTemplates = useMemo(
+    () =>
+      (templates.data?.data ?? []).filter((t) => t.name.startsWith(MOBILE_TEMPLATE_PREFIX)),
+    [templates.data],
+  );
+
   const initialIds = userPerms.data?.data?.map((g) => g.permissionId) ?? [];
   const [selected, setSelected] = useState<string[]>(initialIds);
+
+  const applyMobileTemplate = (templateId: string) => {
+    const tpl = mobileTemplates.find((t) => t.id === templateId);
+    if (!tpl) return;
+    const ids = new Set(selected);
+    for (const p of tpl.permissions) ids.add(p.permissionId);
+    setSelected(Array.from(ids));
+    toast.success(`${tpl.name} eklendi (kaydetmeyi unutmayın)`);
+  };
 
   useEffect(() => {
     if (userPerms.data) setSelected(userPerms.data.data.map((g) => g.permissionId));
@@ -63,6 +87,29 @@ export function PermissionsTab({ userId }: Props) {
 
   return (
     <div className="flex h-[calc(100vh-220px)] flex-col gap-3">
+      {mobileTemplates.length > 0 && (
+        <div className="rounded-md border bg-muted/30 p-2">
+          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <Smartphone className="h-3.5 w-3.5" /> Mobil rol hızlı seç (mevcut yetkilere ekler)
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {mobileTemplates.map((t) => (
+              <Button
+                key={t.id}
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={mutation.isPending}
+                onClick={() => applyMobileTemplate(t.id)}
+                title={t.description ?? undefined}
+              >
+                {t.name.replace(`${MOBILE_TEMPLATE_PREFIX} `, "")}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="min-h-0 flex-1">
         <PermissionGrid
           permissions={catalog.data?.data ?? []}

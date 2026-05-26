@@ -1,4 +1,4 @@
-import { ClipboardCheck, Clock, PackageCheck } from "lucide-react";
+import { ClipboardCheck, Clock } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 export const salesReportTiles: HubTile[] = [
@@ -15,12 +15,5 @@ export const salesReportTiles: HubTile[] = [
     description: "Termin geçen siparişler ve gecikme süresi",
     icon: Clock,
     to: "/reports/sales/late-delivery",
-  },
-  {
-    key: "customer-shipments",
-    title: "Müşteri Sevkiyatları",
-    description: "Müşteri bazında sevk hacmi (metraj/kg/adet)",
-    icon: PackageCheck,
-    to: "/reports/sales/customer-shipments",
   },
 ];

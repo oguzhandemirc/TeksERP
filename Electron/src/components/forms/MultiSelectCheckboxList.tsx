@@ -25,7 +25,15 @@ interface Props {
   emptyHint?: string;
   disabled?: boolean;
   className?: string;
+  /** Liste sütun sayısı — geniş modallarda 2/3 kullanılabilir. Default 1. */
+  columns?: 1 | 2 | 3;
 }
+
+const COLUMN_CLASSES: Record<1 | 2 | 3, string> = {
+  1: "",
+  2: "grid grid-cols-2 gap-x-2",
+  3: "grid grid-cols-2 lg:grid-cols-3 gap-x-2",
+};
 
 export function MultiSelectCheckboxList({
   items,
@@ -35,6 +43,7 @@ export function MultiSelectCheckboxList({
   emptyHint,
   disabled,
   className,
+  columns = 1,
 }: Props) {
   const [search, setSearch] = useState("");
 
@@ -135,7 +144,7 @@ export function MultiSelectCheckboxList({
                       </Badge>
                     </div>
                   )}
-                  <ul className="px-1 py-1">
+                  <ul className={cn("px-1 py-1", COLUMN_CLASSES[columns])}>
                     {list.map((it) => {
                       const checked = selected.has(it.id);
                       return (

@@ -8,13 +8,16 @@ import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { BaseService } from "../services/base.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+
+const MOBILE_QUALITY_READ = ["mobile:kk1", "mobile:kk2-kursun", "mobile:tambur"] as const;
 
 const service = new BaseService({
   modelName: "qualityGrade",
   tableName: "QUALITY_GRADE",
   searchFields: ["code", "name", "description"],
   defaultInclude: undefined,
+  uniqueField: "code",
 });
 
 const controller = new BaseController(service);
@@ -47,7 +50,7 @@ const router = Router();
  *     responses:
  *       200: { description: Sayfalanmış kalite derecesi listesi }
  */
-router.get("/", verifyToken, requirePermission("quality:read"), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("quality:read", ...MOBILE_QUALITY_READ), controller.findAll);
 
 /**
  * @openapi
@@ -65,7 +68,7 @@ router.get("/", verifyToken, requirePermission("quality:read"), controller.findA
  *       200: { description: Kalite derecesi detayı }
  *       404: { description: Kayıt bulunamadı }
  */
-router.get("/:id", verifyToken, requirePermission("quality:read"), controller.findById);
+router.get("/:id", verifyToken, requireAnyPermission("quality:read", ...MOBILE_QUALITY_READ), controller.findById);
 
 /**
  * @openapi

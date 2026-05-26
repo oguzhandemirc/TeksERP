@@ -75,10 +75,23 @@ export class SubcontractorCategoryService {
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
-    const cat = await prisma.subcontractorCategory.create({ data });
+    const existing = await prisma.subcontractorCategory.findFirst({
+      where: { code: data.code },
+    });
+    if (existing?.isActive) {
+      throw AppError.badRequest("Bu kod ile aktif kategori zaten var");
+    }
+
+    const cat = existing
+      ? await prisma.subcontractorCategory.update({
+          where: { id: existing.id },
+          data: { ...data, isActive: true },
+        })
+      : await prisma.subcontractorCategory.create({ data });
+
     await AuditService.log({
       userId,
-      action: "CREATE",
+      action: existing ? "UPDATE" : "CREATE",
       tableName: "SUBCONTRACTOR_CATEGORY",
       recordId: cat.id,
       newData: {
@@ -86,9 +99,16 @@ export class SubcontractorCategoryService {
         name: cat.name,
         appliesColor: cat.appliesColor,
         appliesProperty: cat.appliesProperty,
+        ...(existing ? { reactivated: true } : {}),
       },
     });
-    return { success: true, data: cat, message: `Kategori oluşturuldu: ${cat.name}` };
+    return {
+      success: true,
+      data: cat,
+      message: existing
+        ? `Pasif kategori yeniden aktive edildi: ${cat.name}`
+        : `Kategori oluşturuldu: ${cat.name}`,
+    };
   }
 
   async update(
@@ -254,32 +274,63 @@ export class SubcontractorManagementService {
     data: {
       code: string;
       name: string;
-      taxNumber?: string;
-      phone?: string;
-      address?: string;
+      taxNumber?: string | null;
+      phone?: string | null;
+      address?: string | null;
       categoryIds?: string[];
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     const { categoryIds = [], ...rest } = data;
+    const payload: {
+      code: string;
+      name: string;
+      taxNumber?: string | null;
+      phone?: string | null;
+      address?: string | null;
+    } = { code: rest.code, name: rest.name };
 
     // Required + length kontrolleri (paylaşımlı validator)
     const code = validateCode(rest.code, { label: "Fason kodu", required: true });
-    if (typeof code === "string") rest.code = code;
+    if (typeof code === "string") payload.code = code;
     const name = validateName(rest.name, { label: "Fason adı", required: true });
-    if (typeof name === "string") rest.name = name;
+    if (typeof name === "string") payload.name = name;
 
     // Format validasyonları — create'te tüm 3 alan optional, ama verilirse
-    // format şartı uygulanır. Sonuç (trim'lenmiş ya da null) yazılır.
+    // format şartı uygulanır. Boş/null gelirse null'a normalize edilir.
     const tax = normalizeAndValidateTaxNumber(rest.taxNumber);
-    if (tax !== undefined) rest.taxNumber = tax ?? undefined;
+    if (tax !== undefined) payload.taxNumber = tax;
     const phone = normalizeAndValidatePhone(rest.phone);
-    if (phone !== undefined) rest.phone = phone ?? undefined;
+    if (phone !== undefined) payload.phone = phone;
     const address = normalizeAndValidateAddress(rest.address);
-    if (address !== undefined) rest.address = address ?? undefined;
+    if (address !== undefined) payload.address = address;
+
+    const existing = await prisma.subcontractor.findFirst({
+      where: { code: payload.code },
+      select: { id: true, isActive: true },
+    });
+    if (existing?.isActive) {
+      throw AppError.badRequest("Bu kod ile aktif fason firma zaten var");
+    }
 
     const sub = await prisma.$transaction(async (tx) => {
-      const created = await tx.subcontractor.create({ data: rest });
+      let created: { id: string };
+      if (existing && !existing.isActive) {
+        // Reactivate: M:N kategorileri replace + diriltme + güncel veri.
+        await tx.subcontractorToCategory.deleteMany({
+          where: { subcontractorId: existing.id },
+        });
+        created = await tx.subcontractor.update({
+          where: { id: existing.id },
+          data: { ...payload, isActive: true },
+          select: { id: true },
+        });
+      } else {
+        created = await tx.subcontractor.create({
+          data: payload,
+          select: { id: true },
+        });
+      }
       if (categoryIds.length > 0) {
         await tx.subcontractorToCategory.createMany({
           data: categoryIds.map((categoryId) => ({
@@ -296,13 +347,24 @@ export class SubcontractorManagementService {
 
     await AuditService.log({
       userId,
-      action: "CREATE",
+      action: existing ? "UPDATE" : "CREATE",
       tableName: "SUBCONTRACTOR",
       recordId: sub!.id,
-      newData: { code: sub!.code, name: sub!.name, categoryIds },
+      newData: {
+        code: sub!.code,
+        name: sub!.name,
+        categoryIds,
+        ...(existing ? { reactivated: true } : {}),
+      },
     });
 
-    return { success: true, data: sub, message: `Fason firma oluşturuldu: ${sub!.name}` };
+    return {
+      success: true,
+      data: sub,
+      message: existing
+        ? `Pasif fason firma yeniden aktive edildi: ${sub!.name}`
+        : `Fason firma oluşturuldu: ${sub!.name}`,
+    };
   }
 
   async update(

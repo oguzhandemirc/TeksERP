@@ -23,8 +23,7 @@ export type WorkOrderType =
   | 'ORDER_PRODUCTION'
   | 'STOCK_PRODUCTION'
   | 'SAMPLE_PRODUCTION'
-  | 'REPAIR_REWORK'
-  | 'SERVICE_PRODUCTION';
+  | 'REPAIR_REWORK';
 
 export type RollStatus =
   | 'STOCK'
@@ -43,8 +42,7 @@ export type RollEntrySource =
   | 'KK1_INITIAL'
   | 'TAMBUR_SPLIT'
   | 'SUBCONTRACTOR_RETURN'
-  | 'MANUAL'
-  | 'SERVICE_PRODUCTION';
+  | 'MANUAL';
 
 // =============================================================================
 // Master data — Color, FabricProperty
@@ -219,10 +217,7 @@ export interface SubcontractorDispatchItem {
   rollId: string;
   dispatchedQty: number;
   dispatchedWeight: number | null;
-  roll?: Pick<Roll, 'id' | 'barcode' | 'item' | 'qualityGrade' | 'width' | 'color'> & {
-    ownerCustomerId?: string | null;
-    ownerCustomer?: { id: string; code: string; name: string } | null;
-  };
+  roll?: Pick<Roll, 'id' | 'barcode' | 'item' | 'qualityGrade' | 'width' | 'color'>;
 }
 
 export interface SubcontractorDispatchListItem {
@@ -293,12 +288,10 @@ export interface Roll {
   qualityGrade: string;
   status: RollStatus;
   entrySource?: RollEntrySource;
-  ownerCustomerId?: string | null;
   parentReceiptId?: string | null;
   item?: { id: string; code: string; name: string };
   color?: Color | null;
   properties?: RollProperty[];
-  ownerCustomer?: { id: string; code: string; name: string } | null;
   producedInStep?: {
     workOrder?: { id: string; batchNumber: string } | null;
   } | null;
@@ -346,6 +339,12 @@ export interface ReceiveReturnInput {
   notes?: string | null;
 }
 
+export interface ReceiveNewRollInput {
+  qty: number;
+  weightKg?: number | null;
+  notes?: string | null;
+}
+
 export interface ReceiveRequest {
   workOrderId: string;
   stepId: string;
@@ -357,6 +356,20 @@ export interface ReceiveRequest {
   /** Receipt seviyesinde uygulanan özellikler (override; appliesColor=true kategoride boş bırakılabilir → WO.targetProperties). */
   appliedPropertyIds?: string[];
   returns: ReceiveReturnInput[];
+  /** Fasondan dönen açık kumaş parçaları — backend min(1) zorunlu. */
+  newRolls: ReceiveNewRollInput[];
+}
+
+export interface ReceiptBornRoll {
+  id: string;
+  initialQty: number;
+  currentQty: number;
+  weightKg: number | null;
+  width: number | null;
+  status: string;
+  qualityGrade: string;
+  item?: { code: string; name: string } | null;
+  color?: { code: string; name: string } | null;
 }
 
 export interface SubcontractorReceiptItem {
@@ -364,7 +377,10 @@ export interface SubcontractorReceiptItem {
   receiptId: string;
   newRollId: string;
   notes: string | null;
-  newRoll?: Pick<Roll, 'id' | 'barcode' | 'item' | 'qualityGrade' | 'color'>;
+  newRoll?: Pick<
+    Roll,
+    'id' | 'barcode' | 'item' | 'qualityGrade' | 'color' | 'currentQty' | 'initialQty' | 'width' | 'weightKg'
+  >;
 }
 
 export interface SubcontractorReceiptListItem {
@@ -390,10 +406,37 @@ export interface SubcontractorReceiptListItem {
 export interface SubcontractorReceipt extends SubcontractorReceiptListItem {
   items?: SubcontractorReceiptItem[];
   appliedProperties?: FabricProperty[];
+  /** Fasondan dönen yeni açık kumaş parçaları (split varsa N adet). */
+  bornRolls?: ReceiptBornRoll[];
 }
 
 export interface CancelReceiptRequest {
   reason: string;
+  /** Receipt'ten doğan açık kumaş Roll'larını cascade iptal et. Preview'den
+   *  alınıp aynen geri gönderilir; eksik/fazla → 409. */
+  cascadeRollIds?: string[];
+}
+
+/** GET /receipts/:id/cancel-preview — UI cascade onay listesini bunu kullanarak çizer. */
+export interface BornRollPreviewItem {
+  id: string;
+  itemCode: string;
+  itemName: string;
+  colorName: string | null;
+  currentQty: number;
+  status: string;
+  /** Boş ise cascade güvenli. Dolu ise her satır operatöre tooltip olarak gösterilir. */
+  blockingReasons: string[];
+  safeToCancel: boolean;
+}
+
+export interface ReceiptCancelPreview {
+  receiptNo: string;
+  receivedAt: string;
+  bornRolls: BornRollPreviewItem[];
+  /** Tüm bornRoll'ları cascade iptal güvenli mi. False ise iptal butonu disabled. */
+  allSafe: boolean;
+  totalBornRolls: number;
 }
 
 // =============================================================================
@@ -435,7 +478,6 @@ export interface DefectType {
 export interface KursunRollDefectSummary {
   id: string;
   startMeter: number;
-  endMeter: number | null;
   defectTypeId: string | null;
   errorType: string | null;
 }
@@ -444,7 +486,6 @@ export interface KursunRollSummary {
   rollId: string;
   barcode: string | null;
   currentQty: number;
-  kursunApplied: boolean;
   qc2Completed: boolean;
   errorCount: number;
   defects: KursunRollDefectSummary[];
@@ -460,6 +501,8 @@ export interface KursunStepSummary {
   workOrderId: string;
   batchNumber: string;
   status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'SKIPPED';
+  /** İstasyona KURSUN özelliği yetenek olarak atanmış mı? */
+  appliesKursun: boolean;
   rolls: KursunRollSummary[];
 }
 
@@ -473,6 +516,10 @@ export interface KursunOpenCard {
   stationName: string;
   stationCode: string;
   openRollCount: number;
+  /// Planlamanın atadığı sıra (Electron Kurşun Sırası ile aynı kaynak).
+  /// Liste backend tarafında bu alanlara göre sıralanmış gelir.
+  priority: number;
+  isUrgent: boolean;
 }
 
 /** Açık kumaş aç (Kurşun/KK2) — `POST /api/rolls/open-fabric` */
@@ -484,10 +531,10 @@ export interface OpenFabricCreateRequest {
 
 /** Açık kumaş kapanışı (Kurşun/KK2) — `POST /api/rolls/:id/kursun-finish` */
 export interface KursunFinishRequest {
-  totalMeters: number;
+  /** Opsiyonel — backend verilmezse `Roll.currentQty`'yi kullanır. */
+  totalMeters?: number;
   errors?: Array<{
     startMeter: number;
-    endMeter?: number | null;
     defectTypeId?: string | null;
   }>;
   notes?: string | null;
@@ -500,7 +547,6 @@ export interface KursunFinishRequest {
 export interface TamburRollDefect {
   id: string;
   startMeter: number;
-  endMeter: number | null;
   errorType: string | null;
 }
 
@@ -538,28 +584,24 @@ export interface TamburErrorDecision {
 
 export type TamburFoldType = string; // serbest string ("2-KAT" / "4-KAT" / özel)
 
-export interface TamburVoluntaryCut {
-  start: number;
-  end: number;
+/** Yeni cumulative-length kesim modeli (backend `cuts[]`). */
+export interface TamburCut {
+  length: number;
   qualityGrade: string;
+  relatedErrorIds?: string[];
 }
 
-/** Eski model — barkodlu Roll (boyahaneye gitmemiş) için. */
 export interface TamburFinalizeRequest {
   rollId: string;
   decisions: TamburErrorDecision[];
-  voluntaryCuts: TamburVoluntaryCut[];
+  cuts: TamburCut[];
   foldType?: TamburFoldType;
-  layerCount?: number | null;
-  cutMode?: 'BY_DEFECT' | 'FIXED_LENGTH' | null;
-  cutLengthM?: number | null;
 }
 
 export interface TamburReportErrorRequest {
   rollId: string;
   stepId: string;
   startMeter: number;
-  endMeter: number;
   defectTypeId: string;
 }
 
@@ -572,11 +614,6 @@ export interface TamburSwatchRequest {
   workOrderId?: string | null;
 }
 
-export interface TamburPostSplitRequest {
-  rollId: string;
-  cutLength: number;
-  originalKeepsLarger: boolean;
-}
 
 export interface TamburSplitRollLabel {
   id: string;
@@ -662,7 +699,22 @@ export interface TamburCutRequest {
 }
 
 /** `POST /api/tambur/:id/finalize-open-fabric` — açık kumaşı bitir */
+export type TamburFinalizeRemainingAction =
+  | "keep_1kalite"
+  | "keep_a1"
+  | "scrap"
+  | "discard";
+
 export interface TamburFinalizeOpenFabricRequest {
+  /**
+   * Kalan metre (parent.currentQty) için operatör kararı:
+   *   - keep_1kalite → 1.KALITE barkodlu top oluştur
+   *   - keep_a1      → A1 barkodlu top oluştur
+   *   - scrap        → FIRE barkodlu top oluştur (stokta kalır)
+   *   - discard      → kalan metre kayıt dışı (operatör fiziksel olarak attı)
+   */
+  remainingAction?: TamburFinalizeRemainingAction;
+  /** Deprecated — `remainingAction` kullan. true ≈ "scrap", false ≈ "discard". */
   scrapRemaining?: boolean;
   notes?: string | null;
   foldType?: string | null;
@@ -680,21 +732,7 @@ export interface QualityGrade {
   color: string | null;
   sortOrder: number;
   isActive: boolean;
-}
-
-// =============================================================================
-// KK1 context — `GET /api/rolls/kk1-context/:cardBarcode`
-// =============================================================================
-
-export interface Kk1Context {
-  workOrderId: string;
-  batchNumber: string;
-  stepId: string;
-  stationCode: string;
-  stationName: string;
-  targetItem: { id: string; code: string; name: string } | null;
-  targetColor: Color | null;
-  rollCount: number;
+  targetStatus: RollStatus;
 }
 
 // =============================================================================
@@ -727,8 +765,6 @@ export interface LabelPayload {
   orderNumber: string | null;
   orderLineId: string | null;
 
-  ownerCustomerName: string | null;
-
   batchNumber: string | null;
   printedAt: string;
 }
@@ -752,7 +788,6 @@ export interface SwatchLabelPayload {
   customerId: string | null;
   orderNumber: string | null;
   orderLineId: string | null;
-  ownerCustomerName: string | null;
   batchNumber: string | null;
   parentRollBarcode: string | null;
   printedAt: string;
@@ -765,7 +800,7 @@ export interface UpdateOrderLineCustomerNamesRequest {
 
 // === Label Template ===
 
-export type LabelKind = 'ROLL' | 'SWATCH' | 'SHIPMENT_DOCKET';
+export type LabelKind = 'ROLL_RAW' | 'ROLL_FINISHED' | 'SWATCH';
 
 export type LabelFontSize = 'sm' | 'md' | 'lg' | 'xl';
 

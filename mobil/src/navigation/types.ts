@@ -5,6 +5,7 @@ export type RootStackParamList = {
   Login: undefined;
   Main: undefined;
   NoAccess: undefined;
+  Settings: undefined;
 };
 
 export type MainStackParamList = {

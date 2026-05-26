@@ -135,16 +135,35 @@ function ExpandedItem({ item }: { item: NavItem }) {
 }
 
 function Footer({ collapsed }: { collapsed: boolean }) {
+  const handleClick = () => {
+    void window.api?.system?.openExternal("https://etkiliyazilim.com");
+  };
+
   if (collapsed) {
     return (
       <div className="flex justify-center border-t border-border/50 py-3">
-        <p className="text-[10px] font-medium tracking-wider text-muted-foreground/50">EY</p>
+        <button
+          type="button"
+          onClick={handleClick}
+          aria-label="Etkili Yazılım"
+          title="etkiliyazilim.com"
+          className="text-[10px] font-medium tracking-wider text-muted-foreground/50 transition-colors hover:text-foreground"
+        >
+          EY
+        </button>
       </div>
     );
   }
   return (
     <div className="border-t border-border/50 py-3">
-      <p className="px-4 text-[10px] text-muted-foreground/50">by Etkili Yazılım</p>
+      <button
+        type="button"
+        onClick={handleClick}
+        title="etkiliyazilim.com"
+        className="px-4 text-[10px] text-muted-foreground/50 transition-colors hover:text-foreground"
+      >
+        by Etkili Yazılım
+      </button>
     </div>
   );
 }

@@ -5,7 +5,7 @@
 import { Router } from "express";
 import { TamburController } from "../controllers/tambur.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const controller = new TamburController();
 const router = Router();
@@ -18,7 +18,7 @@ const router = Router();
  *     summary: Kartela envanteri (listele)
  *     security: [{ bearerAuth: [] }]
  */
-router.get("/", verifyToken, requirePermission("quality:read"), controller.listSwatches);
+router.get("/", verifyToken, requireAnyPermission("quality:read", "mobile:tambur", "mobile:tarti-paket"), controller.listSwatches);
 
 /**
  * @openapi
@@ -38,7 +38,7 @@ router.get("/", verifyToken, requirePermission("quality:read"), controller.listS
 router.get(
   "/by-barcode/:barcode",
   verifyToken,
-  requirePermission("quality:read"),
+  requireAnyPermission("quality:read", "mobile:tarti-paket"),
   controller.getSwatchByBarcode
 );
 

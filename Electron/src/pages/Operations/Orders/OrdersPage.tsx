@@ -64,11 +64,26 @@ interface CreatePayload {
   }[];
 }
 
+interface UpdateLinePayload {
+  /** Mevcut OrderLine.id (update). Yeni satırda undefined (create). */
+  id?: string;
+  itemId: string;
+  colorId: string | null;
+  quantity: number;
+  width: number | null;
+  unitPrice?: string | null;
+  customerItemName?: string | null;
+  customerColorName?: string | null;
+  requiredPropertyIds: string[];
+}
+
 interface UpdatePayload {
   customerId?: string;
   branchId?: string | null;
   currency?: string;
   deadline?: string | null;
+  /** Kalem listesi (sipariş WO'ya bağlı değilse). Diff backend'de yapılır. */
+  lines?: UpdateLinePayload[];
 }
 
 function buildCreatePayload(v: OrderFormValues, pricingEnabled: boolean): CreatePayload {
@@ -93,12 +108,46 @@ function buildCreatePayload(v: OrderFormValues, pricingEnabled: boolean): Create
   };
 }
 
-function buildUpdatePayload(v: OrderFormValues, pricingEnabled: boolean): UpdatePayload {
+function buildUpdatePayload(
+  v: OrderFormValues,
+  pricingEnabled: boolean,
+  editing: Order,
+): UpdatePayload {
+  // Kalemler ne zaman gönderilir: sipariş PARTIAL_SHIPPED değil + hiçbir kalem
+  // aktif (CANCELLED dışı) bir WO'ya bağlı değil. Dialog aynı kontrolü yapıp
+  // editor'u açıyor; backend de aynı kontrolü tekrar enforce ediyor.
+  const linesEditable =
+    editing.status !== "PARTIAL_SHIPPED" &&
+    editing.lines.every((l) =>
+      (l.workOrderLinks ?? []).every((link) => link.workOrder.status === "CANCELLED"),
+    );
+
+  const existingIds = new Set(editing.lines.map((l) => l.id));
+
   return {
     customerId: v.customerId,
     branchId: v.branchId ?? null,
     ...(pricingEnabled ? { currency: v.currency.trim().toUpperCase() } : {}),
     deadline: v.deadline ? new Date(v.deadline).toISOString() : null,
+    ...(linesEditable
+      ? {
+          lines: v.lines.map((l) => ({
+            // Form'daki clientId existing line id'siyle eşleşiyorsa update,
+            // değilse yeni satır (id verilmez).
+            ...(existingIds.has(l.clientId) ? { id: l.clientId } : {}),
+            itemId: l.itemId,
+            colorId: l.colorId ?? null,
+            quantity: l.quantity,
+            width: l.width ?? null,
+            ...(pricingEnabled
+              ? { unitPrice: l.unitPrice ? String(l.unitPrice) : null }
+              : {}),
+            customerItemName: l.customerItemName?.trim() ? l.customerItemName.trim() : null,
+            customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
+            requiredPropertyIds: l.requiredPropertyIds ?? [],
+          })),
+        }
+      : {}),
   };
 }
 
@@ -198,7 +247,7 @@ export function OrdersPage() {
           if (editing) {
             await updateMut.mutateAsync({
               id: editing.id,
-              payload: buildUpdatePayload(v, pricingEnabled),
+              payload: buildUpdatePayload(v, pricingEnabled, editing),
             });
           } else {
             await createMut.mutateAsync(buildCreatePayload(v, pricingEnabled));

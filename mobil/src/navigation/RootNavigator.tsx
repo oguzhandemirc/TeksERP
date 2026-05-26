@@ -4,11 +4,13 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { useDeviceStore } from '../store/deviceStore';
+import { useBaseUrlStore } from '../store/baseUrlStore';
 import { setUnauthorizedHandler } from '../services/api';
 import { usePermissions } from '../hooks/usePermission';
 import LoginScreen from '../screens/Auth/LoginScreen';
 import PairingScreen from '../screens/Auth/PairingScreen';
 import NoAccessScreen from '../screens/Common/NoAccessScreen';
+import SettingsScreen from '../screens/Common/SettingsScreen';
 import MainNavigator from './MainNavigator';
 import type { RootStackParamList } from './types';
 
@@ -16,18 +18,28 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
   const { user, isLoading: authLoading, loadStoredAuth, clearAuth } = useAuthStore();
-  const { paired, isLoading: deviceLoading, init: initDevice } = useDeviceStore();
+  const {
+    paired,
+    isLoading: deviceLoading,
+    init: initDevice,
+  } = useDeviceStore();
+  const initBaseUrl = useBaseUrlStore((s) => s.init);
+  const baseUrlLoaded = useBaseUrlStore((s) => s.isLoaded);
   const { hasAnyMobileScreen } = usePermissions();
 
   useEffect(() => {
+    void initBaseUrl();
     void initDevice();
     loadStoredAuth();
     setUnauthorizedHandler(() => {
+      // 401 → sadece kullanıcıyı çıkar, eşleşmeyi koru. Cihaz pasifleştirilirse
+      // login ekranında "Cihaz pasif" hatası görünür; admin aktif yapınca operatör
+      // yeniden login olup devam eder — eşleşme kodu sorulmaz.
       void clearAuth();
     });
   }, []);
 
-  if (authLoading || deviceLoading) {
+  if (authLoading || deviceLoading || !baseUrlLoaded) {
     return (
       <View
         style={{
@@ -54,6 +66,11 @@ export default function RootNavigator() {
         ) : (
           <Stack.Screen name="Main" component={MainNavigator} />
         )}
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

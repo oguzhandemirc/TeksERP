@@ -97,4 +97,26 @@ export class DeviceController {
       next(error);
     }
   }
+
+  /** DELETE /api/admin/devices/:id/permanent (hard delete) */
+  static async hardDelete(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const data = await DeviceService.hardDelete(id, req.user?.userId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/admin/devices/:id/reactivate */
+  static async reactivate(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const data = await DeviceService.reactivate(id, req.user?.userId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

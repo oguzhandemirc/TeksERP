@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, RotateCcw } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,8 +26,6 @@ interface Props<T extends { id: string }> {
   extraFilters?: Record<string, string>;
   /** Toolbar yanında render edilecek ek UI (filtre dropdown'ları vb.). */
   filterBar?: ReactNode;
-  /** Toolbar'a "Pasifleri Göster" toggle'ı ekler — açıkken isActive filtresi düşer. */
-  showInactiveControl?: boolean;
   renderForm: (params: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -48,7 +46,6 @@ export function CrudPage<T extends { id: string }>({
   writePermission,
   extraFilters,
   filterBar,
-  showInactiveControl,
   renderForm,
 }: Props<T>) {
   const [formOpen, setFormOpen] = useState(false);
@@ -64,6 +61,12 @@ export function CrudPage<T extends { id: string }>({
     [showInactive, extraFilters],
   );
 
+  const { createMutation, updateMutation, removeMutation, restoreMutation } = useCrudMutations<T>({
+    service,
+    queryKey,
+    entityName,
+  });
+
   const { table, query, search, setSearch, pagination } = useDataTable<T>({
     queryKey,
     fetchFn: service.listCursor,
@@ -74,43 +77,56 @@ export function CrudPage<T extends { id: string }>({
         id: "actions",
         header: "",
         size: 80,
-        cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            <PermissionGate permission={writePermission}>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditing(row.original);
-                  setFormOpen(true);
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setRemovingId(row.original.id);
-                }}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </PermissionGate>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const isActive = (row.original as { isActive?: boolean }).isActive !== false;
+          return (
+            <div className="flex justify-end gap-1">
+              <PermissionGate permission={writePermission}>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditing(row.original);
+                    setFormOpen(true);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                {isActive ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRemovingId(row.original.id);
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                ) : (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-primary"
+                    title="Aktifleştir"
+                    disabled={restoreMutation.isPending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      restoreMutation.mutate(row.original.id);
+                    }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </PermissionGate>
+            </div>
+          );
+        },
       },
     ],
-  });
-
-  const { createMutation, updateMutation, removeMutation } = useCrudMutations<T>({
-    service,
-    queryKey,
-    entityName,
   });
 
   const onSubmit = async (values: Partial<T>) => {
@@ -143,21 +159,23 @@ export function CrudPage<T extends { id: string }>({
         }
       />
 
-      <div className="flex items-center gap-2">
-        <div className="flex-1">
-          <DataTableToolbar search={search} onSearchChange={setSearch} placeholder={searchPlaceholder} />
-        </div>
-        {showInactiveControl && (
-          <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border bg-background px-3 py-2 text-xs">
-            <Checkbox
-              checked={showInactive}
-              onCheckedChange={(c) => setShowInactive(Boolean(c))}
-            />
-            Pasifleri göster
-          </label>
-        )}
-        {filterBar}
-      </div>
+      <DataTableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder={searchPlaceholder}
+        actions={
+          <>
+            {filterBar}
+            <label className="flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border bg-background px-3 text-xs">
+              <Checkbox
+                checked={showInactive}
+                onCheckedChange={(c) => setShowInactive(Boolean(c))}
+              />
+              Pasifleri göster
+            </label>
+          </>
+        }
+      />
 
       <DataTable<T>
         table={table}

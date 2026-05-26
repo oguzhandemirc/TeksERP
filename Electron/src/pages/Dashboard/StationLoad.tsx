@@ -75,7 +75,12 @@ export function StationLoad() {
 
 function StationCell({ station }: { station: StationLiveState }) {
   const kindLabel = stationKindLabels[station.kind as StationKind] ?? station.kind;
-  const isBusy = station.queueCount > 0 || station.activeCount > 0;
+  // KK1 (RAW_QC) üretim akışına step olarak girmez — kuyruk/aktif kavramı yok.
+  // Sadece "bugün giren ham mal" sayacı anlamlı.
+  const isEntryStation = station.kind === "RAW_QC";
+  const isBusy = isEntryStation
+    ? station.todayCompletedCount > 0
+    : station.queueCount > 0 || station.activeCount > 0;
   return (
     <div
       className={cn(
@@ -95,15 +100,25 @@ function StationCell({ station }: { station: StationLiveState }) {
         )}
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-1 text-center">
-        <Metric label="Kuyruk" value={station.queueCount} tone="text-amber-600 dark:text-amber-400" />
-        <Metric label="Aktif" value={station.activeCount} tone="text-sky-600 dark:text-sky-400" />
-        <Metric
-          label="Bugün"
-          value={station.todayCompletedCount}
-          tone="text-emerald-600 dark:text-emerald-400"
-        />
-      </div>
+      {isEntryStation ? (
+        <div className="mt-3 text-center">
+          <Metric
+            label="Bugün Giren"
+            value={station.todayCompletedCount}
+            tone="text-emerald-600 dark:text-emerald-400"
+          />
+        </div>
+      ) : (
+        <div className="mt-3 grid grid-cols-3 gap-1 text-center">
+          <Metric label="Kuyruk" value={station.queueCount} tone="text-amber-600 dark:text-amber-400" />
+          <Metric label="Aktif" value={station.activeCount} tone="text-sky-600 dark:text-sky-400" />
+          <Metric
+            label="Bugün"
+            value={station.todayCompletedCount}
+            tone="text-emerald-600 dark:text-emerald-400"
+          />
+        </div>
+      )}
     </div>
   );
 }

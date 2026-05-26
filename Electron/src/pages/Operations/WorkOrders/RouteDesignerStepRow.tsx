@@ -91,9 +91,10 @@ export function RouteDesignerStepRow({
             value={step.stationId || undefined}
             onChange={onStationPick}
             service={stationService}
-            queryKey="stations"
+            queryKey="stations-wo-step"
             getLabel={(s) => `${s.name} (${s.code})`}
             placeholder="İstasyon seç..."
+            extraFilters={{ allowAsWorkOrderStep: "true" }}
           />
           {step.stationType === "EXTERNAL" && (
             <Badge variant="outline" className="mt-0.5 text-[10px]">

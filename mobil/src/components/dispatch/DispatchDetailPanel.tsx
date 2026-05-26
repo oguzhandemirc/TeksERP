@@ -150,14 +150,6 @@ export default function DispatchDetailPanel({
                     {itemLabel}
                   </Text>
                 </View>
-                {r?.ownerCustomer && (
-                  <View style={styles.ownerRow}>
-                    <Icon source="alert-circle" size={12} color="#92400e" />
-                    <Text style={styles.ownerText} numberOfLines={1}>
-                      Müşteri Malı: {r.ownerCustomer.name}
-                    </Text>
-                  </View>
-                )}
                 <View style={styles.rollBadgeRow}>
                   <View style={styles.badge}>
                     <Icon source="arrow-expand-vertical" size={12} color="#0f172a" />

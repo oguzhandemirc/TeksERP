@@ -42,15 +42,18 @@ import dayjs from 'dayjs';
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import { useDeviceType } from '../../../hooks/useDeviceType';
 import { ReceiptRow, ReceiptDetailModal } from '../../../components/receipt';
 import { subcontractorService } from '../../../services/subcontractor.service';
 import { travelerCardService } from '../../../services/travelerCard.service';
 import type {
   PendingReturnGroup,
   ReceiveRequest,
+  ReceiveNewRollInput,
   TravelerCardLookup,
   Color,
   FabricProperty,
+  ReceiptCancelPreview,
 } from '../../../types/models';
 
 const RECEIPTS_PAGE_SIZE = 12;
@@ -73,6 +76,8 @@ interface RollRow {
 type RightTab = 'pending' | 'history';
 
 export default function FasonKabulScreen() {
+  const device = useDeviceType();
+  const isPhone = device === 'phone';
   const qc = useQueryClient();
 
   // ── Form state ──
@@ -89,12 +94,43 @@ export default function FasonKabulScreen() {
   const [appliedColor, setAppliedColor] = useState<Color | null>(null);
   const [appliedProperties, setAppliedProperties] = useState<FabricProperty[]>([]);
 
+  /**
+   * Fasondan dönen açık kumaş parçaları — backend min(1) zorunlu.
+   * Boyahane gibi açık kumaş döndüren fasonlarda irsaliyede kaç parça/metre
+   * geldiği yazılı; operatör buradan girer. KK2/Kurşun ekranı bu kayıtları
+   * doğar doğmaz görür. Birden fazla parça varsa "Parça ekle" ile artırılır.
+   *
+   * UX: Sevkedilen her top için 1 satır + metre = topun sevk metresi
+   * otomatik dolar (`prefilled=true`). Operatör değiştirirse rozet düşer ve
+   * gerçek doğrulamanın yapıldığı izlenebilir. Ağırlık alanı yok —
+   * fason kabul terazide tartılmıyor, sonraki istasyon ölçer.
+   */
+  interface NewRollRow {
+    key: string;
+    qty: string; // string state — TextInput; submit'te number'a çevir
+    notes: string;
+    noteOpen: boolean;
+    prefilled: boolean; // sevkten otomatik gelen, henüz dokunulmamış
+  }
+  let nrCounter = 0;
+  const makeNewRollRow = (qty = '', prefilled = false): NewRollRow => ({
+    key: `nr-${Date.now()}-${nrCounter++}`,
+    qty,
+    notes: '',
+    noteOpen: false,
+    prefilled,
+  });
+  const [newRolls, setNewRolls] = useState<NewRollRow[]>([]);
+
   // Kabul iptal modalı
   const [cancelTargetReceiptId, setCancelTargetReceiptId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
 
   // ── Right column ──
   const [rightTab, setRightTab] = useState<RightTab>('pending');
+  // Telefon modunda alttaki "Bekleyen / Geçmiş" paneli daraltılabilir —
+  // operatör formla çalışırken dikey alan kazansın.
+  const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [cardBarcode, setCardBarcode] = useState('');
   const [resolvingCard, setResolvingCard] = useState(false);
   const [highlightedWorkOrderId, setHighlightedWorkOrderId] = useState<string | null>(null);
@@ -159,9 +195,27 @@ export default function FasonKabulScreen() {
     },
   });
 
+  // İptal modali açıldığında backend'den preview çek — operatöre türeyen
+  // açık kumaş Roll'larını ve cascade güvenliğini göster.
+  const cancelPreviewQuery = useQuery({
+    queryKey: ['receipt-cancel-preview', cancelTargetReceiptId],
+    queryFn: () => subcontractorService.getCancelPreview(cancelTargetReceiptId!),
+    enabled: !!cancelTargetReceiptId,
+    staleTime: 0,
+  });
+  const cancelPreview: ReceiptCancelPreview | null =
+    cancelPreviewQuery.data?.data ?? null;
+
   const cancelReceiptMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      subcontractorService.cancelReceipt(id, { reason }),
+    mutationFn: ({
+      id,
+      reason,
+      cascadeRollIds,
+    }: {
+      id: string;
+      reason: string;
+      cascadeRollIds: string[];
+    }) => subcontractorService.cancelReceipt(id, { reason, cascadeRollIds }),
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: 'Mal kabul iptal edildi' });
@@ -188,8 +242,30 @@ export default function FasonKabulScreen() {
     setRows([]);
     setManifestNo('');
     setNotes('');
+    setNewRolls([]);
     setSubmitArmed(false);
     setHighlightedWorkOrderId(null);
+  };
+
+  const updateNewRoll = (key: string, patch: Partial<NewRollRow>) => {
+    // qty/notes değiştiyse prefilled rozeti düşer; noteOpen toggle sayılmaz.
+    const touchesValue = "qty" in patch || "notes" in patch;
+    setNewRolls((prev) =>
+      prev.map((r) =>
+        r.key === key
+          ? { ...r, ...patch, ...(touchesValue ? { prefilled: false } : {}) }
+          : r
+      )
+    );
+    if (touchesValue) setSubmitArmed(false);
+  };
+  const addNewRoll = () => {
+    setNewRolls((prev) => [...prev, makeNewRollRow()]);
+    setSubmitArmed(false);
+  };
+  const removeNewRoll = (key: string) => {
+    setNewRolls((prev) => prev.filter((r) => r.key !== key));
+    setSubmitArmed(false);
   };
 
   const selectGroup = (g: PendingReturnGroup) => {
@@ -211,6 +287,15 @@ export default function FasonKabulScreen() {
     // applied color/properties default → WO.targetColor / targetProperties
     setAppliedColor(g.workOrder.targetColor ?? null);
     setAppliedProperties(g.workOrder.targetProperties ?? []);
+    // Açık kumaş pre-fill: sevkten her top için 1 satır + metre = sevk metresi.
+    // Aynen geldiyse operatör hiç dokunmadan submit eder. Sapma varsa düzeltir.
+    setNewRolls(
+      g.rolls.length > 0
+        ? g.rolls.map((r) =>
+            makeNewRollRow(r.currentQty > 0 ? String(r.currentQty) : '', true)
+          )
+        : [makeNewRollRow()]
+    );
     setSubmitArmed(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -307,7 +392,26 @@ export default function FasonKabulScreen() {
 
   const checkedCount = rows.filter((r) => r.checked).length;
   const missingCount = rows.length - checkedCount;
-  const canSubmit = !!selectedGroup && checkedCount > 0 && !receiveMutation.isPending;
+
+  const parsedNewRolls = useMemo<ReceiveNewRollInput[]>(() => {
+    const out: ReceiveNewRollInput[] = [];
+    for (const r of newRolls) {
+      const qty = parseFloat(r.qty.replace(',', '.'));
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      out.push({
+        qty,
+        notes: r.notes.trim() || null,
+      });
+    }
+    return out;
+  }, [newRolls]);
+  const hasValidNewRolls = parsedNewRolls.length > 0;
+
+  const canSubmit =
+    !!selectedGroup &&
+    checkedCount > 0 &&
+    hasValidNewRolls &&
+    !receiveMutation.isPending;
   const hasMissing = missingCount > 0;
 
   const buildPayload = (): ReceiveRequest | null => {
@@ -337,14 +441,25 @@ export default function FasonKabulScreen() {
       returns: rows
         .filter((r) => r.checked)
         .map((r) => ({ rollId: r.rollId, notes: r.notes.trim() || null })),
+      newRolls: parsedNewRolls,
     };
   };
 
   const handleSubmitClick = () => {
-    if (!canSubmit) {
+    if (!selectedGroup) return;
+    if (checkedCount === 0) {
       Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'Hiçbir top işaretlenmedi' });
       return;
     }
+    if (!hasValidNewRolls) {
+      Toast.show({
+        type: 'error',
+        text1: 'Açık kumaş eksik',
+        text2: 'En az bir parça için metraj gir',
+      });
+      return;
+    }
+    if (!canSubmit) return;
     if (hasMissing && !submitArmed) {
       // Two-stage: ilk tıklama silahlar, ikinci tıklama gönderir
       setSubmitArmed(true);
@@ -376,9 +491,9 @@ export default function FasonKabulScreen() {
   return (
     <ScreenChrome
       title="Fason Mal Kabul"
-      subtitle="Refakat kartı okut, dönen topları onayla"
+      subtitle="Refakat kartı okut, dönen açık kumaşı kaydet"
     >
-      <View style={styles.body}>
+      <View style={[styles.body, isPhone && styles.bodyPhone]}>
         {/* ════════ SOL: form ════════ */}
         <View style={styles.formCol}>
           {!selectedGroup ? (
@@ -477,6 +592,7 @@ export default function FasonKabulScreen() {
                 style={styles.rollsScroll}
                 contentContainerStyle={styles.rollsContent}
                 keyboardShouldPersistTaps="handled"
+                automaticallyAdjustKeyboardInsets
               >
                 <View style={styles.rollsHeaderRow}>
                   <View style={styles.statusBadge}>
@@ -550,7 +666,7 @@ export default function FasonKabulScreen() {
                           </Text>
                           <View style={styles.rollBadges}>
                             <Badge icon="arrow-expand-vertical">
-                              {`${row.dispatchedQty.toFixed(1)} mt`}
+                              {`${Number(row.dispatchedQty ?? 0).toFixed(1)} mt`}
                             </Badge>
                             {row.width != null && (
                               <Badge icon="arrow-expand-horizontal">
@@ -589,6 +705,121 @@ export default function FasonKabulScreen() {
                     )}
                   </Surface>
                 ))}
+
+                {/* ── Dönen Açık Kumaş ── */}
+                <View style={styles.newRollSection}>
+                  <View style={styles.newRollHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.newRollTitle}>Dönen Açık Kumaş</Text>
+                      <Text style={styles.newRollHint}>
+                        İrsaliyede yazılı her parça için metraj gir. KK2/Kurşun ekranı
+                        ve stok bu kayıtlardan beslenir.
+                      </Text>
+                    </View>
+                    <Button
+                      mode="contained-tonal"
+                      icon="plus"
+                      onPress={addNewRoll}
+                      compact
+                    >
+                      Parça Ekle
+                    </Button>
+                  </View>
+                  {newRolls.length === 0 ? (
+                    <Surface style={styles.newRollEmpty} elevation={0}>
+                      <Text style={styles.newRollEmptyText}>
+                        En az bir açık kumaş parçası gerekli — "Parça Ekle"
+                      </Text>
+                    </Surface>
+                  ) : (
+                    newRolls.map((r, idx) => {
+                      const qtyNum = parseFloat(r.qty.replace(',', '.'));
+                      const qtyValid = Number.isFinite(qtyNum) && qtyNum > 0;
+                      return (
+                        <Surface
+                          key={r.key}
+                          style={[
+                            styles.newRollItem,
+                            !qtyValid && styles.newRollItemInvalid,
+                          ]}
+                          elevation={0}
+                        >
+                          <View style={styles.newRollRow}>
+                            <View style={styles.newRollIndex}>
+                              <Text style={styles.newRollIndexText}>{idx + 1}</Text>
+                            </View>
+                            <TextInput
+                              mode="outlined"
+                              label="Metre (m)"
+                              value={r.qty}
+                              onChangeText={(v) => updateNewRoll(r.key, { qty: v })}
+                              keyboardType="decimal-pad"
+                              dense
+                              style={styles.newRollQty}
+                              error={!qtyValid && r.qty.length > 0}
+                            />
+                            {r.prefilled && (
+                              <View style={styles.prefilledBadge}>
+                                <Text style={styles.prefilledBadgeText}>SEVKTEN</Text>
+                              </View>
+                            )}
+                            <IconButton
+                              icon={
+                                r.noteOpen
+                                  ? 'chevron-up'
+                                  : r.notes
+                                    ? 'note-text'
+                                    : 'note-plus-outline'
+                              }
+                              size={22}
+                              iconColor={r.notes ? '#0369a1' : '#64748b'}
+                              onPress={() =>
+                                updateNewRoll(r.key, { noteOpen: !r.noteOpen })
+                              }
+                              accessibilityLabel="Parçaya not ekle"
+                              style={{ margin: 0 }}
+                            />
+                            <IconButton
+                              icon="close"
+                              size={22}
+                              iconColor="#dc2626"
+                              onPress={() => removeNewRoll(r.key)}
+                              disabled={newRolls.length === 1}
+                              accessibilityLabel="Parçayı sil"
+                            />
+                          </View>
+                          {r.noteOpen && (
+                            <View style={styles.newRollNoteWrap}>
+                              <TextInput
+                                mode="outlined"
+                                value={r.notes}
+                                onChangeText={(v) =>
+                                  updateNewRoll(r.key, { notes: v })
+                                }
+                                placeholder="Örn: ikinci yarı leke var"
+                                dense
+                                autoFocus
+                                returnKeyType="done"
+                                onSubmitEditing={() =>
+                                  updateNewRoll(r.key, { noteOpen: false })
+                                }
+                                style={styles.input}
+                              />
+                            </View>
+                          )}
+                          {!r.noteOpen && r.notes && (
+                            <Text
+                              style={styles.newRollNotePreview}
+                              numberOfLines={1}
+                            >
+                              Not: {r.notes}
+                            </Text>
+                          )}
+                        </Surface>
+                      );
+                    })
+                  )}
+                </View>
               </ScrollView>
 
               {/* Sticky footer */}
@@ -636,8 +867,8 @@ export default function FasonKabulScreen() {
                   {submitArmed
                     ? `Eksik kabulü ONAYLA — tekrar bas (${checkedCount}/${rows.length})`
                     : hasMissing
-                      ? `${checkedCount} top kabul · ${missingCount} EKSİK`
-                      : `${checkedCount} Top Kabul Et`}
+                      ? `Mal Kabulü Yap · ${missingCount} EKSİK`
+                      : `Mal Kabulü Yap (${checkedCount} top → ${newRolls.length} parça)`}
                 </Button>
               </Surface>
             </>
@@ -645,7 +876,31 @@ export default function FasonKabulScreen() {
         </View>
 
         {/* ════════ SAĞ: bekleyen + geçmiş ════════ */}
-        <View style={styles.rightCol}>
+        <View
+          style={[
+            styles.rightCol,
+            isPhone && styles.rightColPhone,
+            isPhone && bottomCollapsed && styles.rightColCollapsed,
+          ]}
+        >
+          {isPhone && (
+            <View style={styles.collapseStrip}>
+              <Icon source="format-list-bulleted" size={16} color="#0f172a" />
+              <Text style={styles.collapseStripText}>
+                Sevk Listesi · Bekleyen {allGroups.length}
+              </Text>
+              <View style={{ flex: 1 }} />
+              <IconButton
+                icon={bottomCollapsed ? 'chevron-up' : 'chevron-down'}
+                size={22}
+                onPress={() => setBottomCollapsed((v) => !v)}
+                style={{ margin: 0 }}
+              />
+            </View>
+          )}
+
+          {!(isPhone && bottomCollapsed) && (
+          <>
           {/* Kart input + kamera — sticky top, her tab'da görünür */}
           <View style={styles.cardInputWrap}>
             <View style={styles.cardInputRow}>
@@ -759,6 +1014,8 @@ export default function FasonKabulScreen() {
               onRefresh={() => receiptsQuery.refetch()}
             />
           )}
+          </>
+          )}
         </View>
       </View>
 
@@ -791,9 +1048,16 @@ export default function FasonKabulScreen() {
         }}
       />
 
-      {/* Mal kabul iptal modalı (Refactor 3 — per-action undo) */}
+      {/* Mal kabul iptal modalı (Refactor 3 — per-action undo + cascade preview) */}
       <CancelReceiptModal
         visible={!!cancelTargetReceiptId}
+        preview={cancelPreview}
+        previewLoading={cancelPreviewQuery.isLoading}
+        previewError={
+          cancelPreviewQuery.error
+            ? (cancelPreviewQuery.error as Error).message
+            : null
+        }
         onDismiss={() => {
           setCancelTargetReceiptId(null);
           setCancelReason('');
@@ -811,9 +1075,19 @@ export default function FasonKabulScreen() {
             });
             return;
           }
+          if (cancelPreview && !cancelPreview.allSafe) {
+            Toast.show({
+              type: 'error',
+              text1: 'İptal güvenli değil',
+              text2: 'Bazı açık kumaş topları işlenmiş — önce onları temizleyin',
+            });
+            return;
+          }
           cancelReceiptMutation.mutate({
             id: cancelTargetReceiptId,
             reason: cancelReason.trim(),
+            cascadeRollIds:
+              cancelPreview?.bornRolls.map((b) => b.id) ?? [],
           });
         }}
       />
@@ -823,6 +1097,9 @@ export default function FasonKabulScreen() {
 
 function CancelReceiptModal({
   visible,
+  preview,
+  previewLoading,
+  previewError,
   onDismiss,
   reason,
   onReasonChange,
@@ -830,6 +1107,9 @@ function CancelReceiptModal({
   onConfirm,
 }: {
   visible: boolean;
+  preview: ReceiptCancelPreview | null;
+  previewLoading: boolean;
+  previewError: string | null;
   onDismiss: () => void;
   reason: string;
   onReasonChange: (v: string) => void;
@@ -837,6 +1117,13 @@ function CancelReceiptModal({
   onConfirm: () => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const canSubmit =
+    !submitting &&
+    reason.trim().length >= 3 &&
+    !previewLoading &&
+    !previewError &&
+    (preview ? preview.allSafe : true);
+
   return (
     <RNModal
       isVisible={visible}
@@ -850,28 +1137,113 @@ function CancelReceiptModal({
       statusBarTranslucent
       style={cancelStyles.modal}
     >
-      <View style={[cancelStyles.sheet, { maxWidth: winW * 0.6 }]}>
+      <View
+        style={[
+          cancelStyles.sheet,
+          { maxWidth: winW * 0.7, maxHeight: winH * 0.85 },
+        ]}
+      >
         <View style={cancelStyles.header}>
           <Icon source="alert-circle" size={22} color="#dc2626" />
           <Text variant="titleMedium" style={cancelStyles.title}>
             Mal Kabulü İptal Et
+            {preview?.receiptNo ? ` — ${preview.receiptNo}` : ''}
           </Text>
         </View>
-        <Text style={cancelStyles.body}>
-          Bu kabul iptal edilecek. Rulolar boyahaneye/fason firmaya geri
-          dönecek, renk/özellik bilgisi (uygulandıysa) silinecek. Sonraki
-          adımda işlem yapılmışsa iptal reddedilir.
-        </Text>
-        <TextInput
-          mode="outlined"
-          label="İptal sebebi"
-          value={reason}
-          onChangeText={onReasonChange}
-          placeholder="Örn. operatör yanlış receipt seçti"
-          multiline
-          numberOfLines={3}
-          style={cancelStyles.input}
-        />
+
+        <ScrollView
+          style={cancelStyles.scrollArea}
+          contentContainerStyle={{ gap: 12 }}
+        >
+          <Text style={cancelStyles.body}>
+            Bu kabul iptal edilecek. Orijinal rulolar fason firmaya geri
+            dönecek, renk/özellik bilgisi (uygulandıysa) silinecek.
+          </Text>
+
+          {previewLoading && (
+            <View style={cancelStyles.loadingBox}>
+              <ActivityIndicator size="small" />
+              <Text style={cancelStyles.loadingText}>
+                İptal etkileri hesaplanıyor…
+              </Text>
+            </View>
+          )}
+
+          {previewError && (
+            <View style={cancelStyles.errorBox}>
+              <Icon source="alert" size={16} color="#dc2626" />
+              <Text style={cancelStyles.errorText}>{previewError}</Text>
+            </View>
+          )}
+
+          {preview && preview.totalBornRolls > 0 && (
+            <View style={cancelStyles.bornBox}>
+              <View style={cancelStyles.bornHeader}>
+                <Icon
+                  source={preview.allSafe ? 'cancel' : 'alert-octagon'}
+                  size={18}
+                  color={preview.allSafe ? '#0f172a' : '#dc2626'}
+                />
+                <Text style={cancelStyles.bornTitle}>
+                  Türeyen {preview.totalBornRolls} açık kumaş top'u da iptal
+                  edilecek:
+                </Text>
+              </View>
+
+              {preview.bornRolls.map((roll, idx) => (
+                <View
+                  key={roll.id}
+                  style={[
+                    cancelStyles.rollRow,
+                    !roll.safeToCancel && cancelStyles.rollRowUnsafe,
+                  ]}
+                >
+                  <View style={cancelStyles.rollLine}>
+                    <Text style={cancelStyles.rollIdx}>{idx + 1}.</Text>
+                    <Text style={cancelStyles.rollMain}>
+                      {roll.itemCode} · {roll.itemName}
+                      {roll.colorName ? ` · ${roll.colorName}` : ''}
+                    </Text>
+                    <Text style={cancelStyles.rollQty}>
+                      {Number(roll.currentQty ?? 0).toFixed(1)} m
+                    </Text>
+                  </View>
+                  {roll.blockingReasons.length > 0 && (
+                    <View style={cancelStyles.blockReasons}>
+                      {roll.blockingReasons.map((r, j) => (
+                        <Text key={j} style={cancelStyles.blockReason}>
+                          ⚠ {r}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
+
+              {!preview.allSafe && (
+                <View style={cancelStyles.unsafeBanner}>
+                  <Icon source="alert-octagon" size={16} color="#b91c1c" />
+                  <Text style={cancelStyles.unsafeBannerText}>
+                    Bazı toplar işlenmiş — iptal güvenli değil. Önce o topları
+                    Kurşun/KK2/Tambur'da geri al, sonra iptal et.
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          <TextInput
+            mode="outlined"
+            label="İptal sebebi"
+            value={reason}
+            onChangeText={onReasonChange}
+            placeholder="Örn. operatör yanlış receipt seçti"
+            multiline
+            numberOfLines={3}
+            style={cancelStyles.input}
+          />
+        </ScrollView>
+
         <View style={cancelStyles.actions}>
           <Button mode="outlined" onPress={onDismiss} disabled={submitting}>
             Vazgeç
@@ -881,7 +1253,7 @@ function CancelReceiptModal({
             buttonColor="#dc2626"
             onPress={onConfirm}
             loading={submitting}
-            disabled={submitting || reason.trim().length < 3}
+            disabled={!canSubmit}
           >
             İptal Et
           </Button>
@@ -900,8 +1272,9 @@ const cancelStyles = StyleSheet.create({
     gap: 12,
     width: '90%',
   },
+  scrollArea: { flexShrink: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { fontWeight: '700', color: '#0f172a' },
+  title: { fontWeight: '700', color: '#0f172a', flexShrink: 1 },
   body: { fontSize: 13, color: '#475569', lineHeight: 18 },
   input: { backgroundColor: '#fff' },
   actions: {
@@ -910,6 +1283,63 @@ const cancelStyles = StyleSheet.create({
     gap: 10,
     marginTop: 4,
   },
+
+  loadingBox: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
+  loadingText: { fontSize: 13, color: '#64748b' },
+
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+  },
+  errorText: { fontSize: 13, color: '#b91c1c', flexShrink: 1 },
+
+  bornBox: {
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 8,
+  },
+  bornHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  bornTitle: { fontSize: 13, fontWeight: '700', color: '#0f172a', flexShrink: 1 },
+
+  rollRow: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#fff',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 4,
+  },
+  rollRowUnsafe: { borderColor: '#fecaca', backgroundColor: '#fffbfb' },
+  rollLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rollIdx: { fontSize: 12, fontWeight: '700', color: '#64748b', width: 22 },
+  rollMain: { fontSize: 13, color: '#0f172a', flex: 1 },
+  rollQty: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
+
+  blockReasons: { paddingLeft: 28, gap: 2 },
+  blockReason: { fontSize: 12, color: '#b91c1c' },
+
+  unsafeBanner: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+  },
+  unsafeBannerText: { fontSize: 12, color: '#991b1b', flexShrink: 1, lineHeight: 17 },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1006,7 +1436,7 @@ function CameraScanModal({
                         </View>
                         <View style={cameraStyles.rowFooter}>
                           <Text style={cameraStyles.rowQty}>
-                            {item.rollCount} top · {item.totalQty.toFixed(1)} mt
+                            {item.rollCount} parça · {Number(item.totalQty ?? 0).toFixed(1)} mt
                           </Text>
                           {item.lastDispatch && (
                             <Text style={cameraStyles.rowDate}>
@@ -1097,7 +1527,7 @@ function PendingPane({
     return (
       <View style={styles.paneEmpty}>
         <Icon source="package-variant" size={48} color="#cbd5e1" />
-        <Text style={styles.paneEmptyText}>Fasonda bekleyen top yok</Text>
+        <Text style={styles.paneEmptyText}>Fasonda bekleyen sevk yok</Text>
       </View>
     );
   }
@@ -1173,7 +1603,7 @@ function PendingCard({
           </View>
           <View style={styles.pendingFooter}>
             <Text style={styles.pendingQty}>
-              {group.rollCount} top · {group.totalQty.toFixed(1)} mt
+              {group.rollCount} parça · {Number(group.totalQty ?? 0).toFixed(1)} mt
             </Text>
             {group.lastDispatch && (
               <Text style={styles.pendingDate}>
@@ -1282,6 +1712,7 @@ function HistoryPane({
 // ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   body: { flex: 1, flexDirection: 'row', backgroundColor: '#f8fafc' },
+  bodyPhone: { flexDirection: 'column' },
 
   // Sol — form
   formCol: { flex: 1.4, backgroundColor: '#f8fafc' },
@@ -1465,6 +1896,75 @@ const styles = StyleSheet.create({
   noteWrap: { paddingHorizontal: 10, paddingBottom: 8 },
   input: { backgroundColor: '#fff' },
 
+  // Dönen Açık Kumaş
+  newRollSection: {
+    marginTop: 16,
+    marginHorizontal: 4,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  newRollHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  newRollTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
+  newRollHint: { fontSize: 11, color: '#64748b', marginTop: 2 },
+  newRollEmpty: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#f59e0b',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'center',
+  },
+  newRollEmptyText: { fontSize: 12, color: '#92400e', fontWeight: '600' },
+  newRollItem: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 8,
+    gap: 6,
+  },
+  newRollItemInvalid: { borderColor: '#fca5a5', backgroundColor: '#fef2f2' },
+  newRollRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  newRollIndex: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#0f172a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  newRollIndexText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  newRollQty: { flex: 1, backgroundColor: '#fff' },
+  prefilledBadge: {
+    backgroundColor: '#e0e7ff',
+    borderColor: '#6366f1',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  prefilledBadgeText: {
+    color: '#3730a3',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  newRollNoteWrap: { marginTop: 4 },
+  newRollNotePreview: {
+    fontSize: 11,
+    color: '#0369a1',
+    fontStyle: 'italic',
+    marginTop: 2,
+    paddingLeft: 4,
+  },
+
   // Sticky footer
   footer: {
     backgroundColor: '#fff',
@@ -1486,6 +1986,26 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderLeftColor: '#e2e8f0',
   },
+  rightColPhone: {
+    borderLeftWidth: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  // Telefon modunda daraltıldığında — sadece kollaps şeridi görünür;
+  // form üst kolonu kalan alanı kapsasın diye flex sıfır.
+  rightColCollapsed: { flex: 0, flexGrow: 0 },
+  collapseStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 14,
+    paddingRight: 4,
+    paddingVertical: 4,
+    backgroundColor: '#eff6ff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbeafe',
+  },
+  collapseStripText: { fontSize: 13, color: '#0f172a', fontWeight: '600' },
   cardInputWrap: {
     paddingHorizontal: 10,
     paddingVertical: 8,

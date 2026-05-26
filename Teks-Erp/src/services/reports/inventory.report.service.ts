@@ -9,7 +9,7 @@ import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 
-const STOCK_STATUSES = ["WAREHOUSE", "STOCK", "A1_STOCK", "READY_FOR_SHIP", "PRODUCED"] as const;
+const STOCK_STATUSES = ["WAREHOUSE", "STOCK", "PRODUCED"] as const;
 
 // ---------- 1) Roll Aging (snapshot) -----------------------------------------
 
@@ -107,7 +107,7 @@ export async function getStockDistribution(): Promise<StockDistribution> {
     FROM rolls r
     JOIN items i        ON r."itemId" = i.id
     LEFT JOIN colors c  ON r."colorId" = c.id
-    WHERE r.status IN ('WAREHOUSE','STOCK','A1_STOCK','READY_FOR_SHIP','PRODUCED')
+    WHERE r.status IN ('WAREHOUSE','STOCK','PRODUCED')
     GROUP BY i.name, COALESCE(c.name, 'Ham')
     ORDER BY "totalQty" DESC NULLS LAST
     LIMIT 100
@@ -136,7 +136,7 @@ export async function getStockDistribution(): Promise<StockDistribution> {
       COUNT(*)                  AS "rollCount",
       SUM(r."currentQty")::float AS "totalQty"
     FROM rolls r
-    WHERE r.status IN ('WAREHOUSE','STOCK','A1_STOCK','READY_FOR_SHIP','PRODUCED')
+    WHERE r.status IN ('WAREHOUSE','STOCK','PRODUCED')
     GROUP BY 1, 2
     ORDER BY 2
   `);
@@ -160,50 +160,7 @@ export async function getStockDistribution(): Promise<StockDistribution> {
   return { totalRolls, totalQty, byItemColor, byWidth };
 }
 
-// ---------- 3) Customer Owned (snapshot) -------------------------------------
-
-export interface CustomerOwnedRow {
-  customerId: string;
-  customerCode: string;
-  customerName: string;
-  rollCount: number;
-  totalQty: number;
-}
-
-export async function getCustomerOwnedStock(): Promise<CustomerOwnedRow[]> {
-  const rows = await prisma.$queryRaw<
-    Array<{
-      customerId: string;
-      customerCode: string;
-      customerName: string;
-      rollCount: bigint;
-      totalQty: number | null;
-    }>
-  >(Prisma.sql`
-    SELECT
-      c.id                     AS "customerId",
-      c.code                   AS "customerCode",
-      c.name                   AS "customerName",
-      COUNT(*)                 AS "rollCount",
-      SUM(r."currentQty")::float AS "totalQty"
-    FROM rolls r
-    JOIN customers c ON r."ownerCustomerId" = c.id
-    WHERE r."ownerCustomerId" IS NOT NULL
-      AND r.status NOT IN ('SHIPPED','CANCELLED','SCRAP','TAMBUR_CONSUMED','SUBCONTRACTOR_CONSUMED')
-    GROUP BY c.id, c.code, c.name
-    ORDER BY "totalQty" DESC NULLS LAST
-  `);
-
-  return rows.map((r) => ({
-    customerId: r.customerId,
-    customerCode: r.customerCode,
-    customerName: r.customerName,
-    rollCount: Number(r.rollCount),
-    totalQty: Math.round(Number(r.totalQty ?? 0) * 10) / 10,
-  }));
-}
-
-// ---------- 4) Daily Movements -----------------------------------------------
+// ---------- 3) Daily Movements -----------------------------------------------
 
 export interface DailyMovementRow {
   day: string;

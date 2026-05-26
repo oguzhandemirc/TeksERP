@@ -11,7 +11,6 @@ import {
   resolveDateRange,
 } from "../../services/reports/_shared";
 import {
-  getCustomerOwnedStock,
   getDailyMovements,
   getRollAging,
   getStockDistribution,
@@ -32,15 +31,6 @@ router.get("/roll-aging", ...guard, async (_req: Request, res: Response, next: N
 router.get("/stock-distribution", ...guard, async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const data = await getStockDistribution();
-    res.status(200).json({ success: true, data });
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get("/customer-owned", ...guard, async (_req: Request, res: Response, next: NextFunction) => {
-  try {
-    const data = await getCustomerOwnedStock();
     res.status(200).json({ success: true, data });
   } catch (e) {
     next(e);

@@ -23,7 +23,7 @@ const QUERY_KEY = "label-templates";
 
 export function LabelTemplatesPage() {
   const navigate = useNavigate();
-  const [activeKind, setActiveKind] = useState<LabelKind>(LabelKind.ROLL);
+  const [activeKind, setActiveKind] = useState<LabelKind>(LabelKind.ROLL_FINISHED);
   const [newOpen, setNewOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 

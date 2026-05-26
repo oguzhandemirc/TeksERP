@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Star } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Star, Copy } from "lucide-react";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +12,7 @@ import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import { RouteStepEditor } from "./RouteStepEditor";
+import { routeService } from "./service";
 import {
   newClientId,
   routeFormDefaults,
@@ -44,6 +47,23 @@ function buildDefaults(initial?: ProductionRoute | null): RouteFormValues {
   };
 }
 
+function buildCopyValues(source: ProductionRoute): RouteFormValues {
+  return {
+    name: `${source.name} (kopya)`,
+    description: source.description ?? "",
+    customerId: source.customerId,
+    isFavorite: false,
+    isActive: true,
+    steps: [...source.steps]
+      .sort((a, b) => a.sequence - b.sequence)
+      .map((s) => ({
+        clientId: newClientId(),
+        stationId: s.stationId,
+        defaultNotes: s.defaultNotes ?? "",
+      })),
+  };
+}
+
 export function RouteFormDialog({
   open,
   onOpenChange,
@@ -60,14 +80,34 @@ export function RouteFormDialog({
   });
 
   const [stepsError, setStepsError] = useState<string | null>(null);
+  const [copySourceId, setCopySourceId] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       form.reset(buildDefaults(initial));
       setStepsError(null);
+      setCopySourceId(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
+
+  // "Şuradan kopyala" — yalnızca yeni rota oluştururken aktif.
+  // Seçilen rotanın detayını çek, sonra formu reset et.
+  const copySourceQuery = useQuery({
+    queryKey: ["routes", "copy-source", copySourceId],
+    queryFn: () => routeService.getById(copySourceId as string),
+    enabled: !isEdit && !!copySourceId,
+  });
+
+  useEffect(() => {
+    if (!copySourceId) return;
+    const source = copySourceQuery.data?.data;
+    if (!source) return;
+    form.reset(buildCopyValues(source));
+    setStepsError(null);
+    toast.success(`"${source.name}" rotası kopyalandı — adı ve adımları düzenleyebilirsin.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [copySourceQuery.data?.data, copySourceId]);
 
   const handleSubmit = form.handleSubmit(
     async (values) => {
@@ -93,6 +133,31 @@ export function RouteFormDialog({
             <div className="text-xs text-muted-foreground">
               Kod: <span className="font-mono">{initial.code}</span>
             </div>
+          )}
+
+          {!isEdit && (
+            <FormField
+              label="Şuradan kopyala"
+              hint="Mevcut bir rotayı seç — ad, açıklama, müşteri ve tüm adımlar forma yüklenir. İstediğin gibi düzenle, yeni kayıt olarak kaydet."
+            >
+              <div className="flex items-center gap-2">
+                <Copy className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="flex-1">
+                  <ReferenceSelect<ProductionRoute>
+                    value={copySourceId}
+                    onChange={(id) => setCopySourceId(id)}
+                    service={routeService}
+                    queryKey="routes"
+                    getLabel={(r) =>
+                      r.customer ? `${r.name} — ${r.customer.name}` : r.name
+                    }
+                    placeholder={copySourceQuery.isFetching ? "Yükleniyor..." : "Sıfırdan başla"}
+                    nullable
+                    noneLabel="— Sıfırdan başla"
+                  />
+                </div>
+              </div>
+            </FormField>
           )}
 
           <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>

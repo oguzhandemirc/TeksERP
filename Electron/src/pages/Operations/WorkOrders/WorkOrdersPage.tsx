@@ -39,7 +39,6 @@ const FILTERS: FilterDef[] = [
     options: [
       { value: "ORDER_PRODUCTION", label: "Siparişe Özel" },
       { value: "STOCK_PRODUCTION", label: "Stoka" },
-      { value: "SERVICE_PRODUCTION", label: "Fason" },
     ],
   },
   {

@@ -157,7 +157,7 @@ export function LabelTemplateEditPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)_360px]">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[200px_minmax(0,500px)_minmax(0,1fr)]">
               <CatalogPanel available={availableCatalog} onAdd={addField} />
               <FieldsPanel
                 fields={orderedFields}
@@ -168,7 +168,6 @@ export function LabelTemplateEditPage() {
                 <LabelPreview
                   kind={template.kind}
                   fields={orderedFields}
-                  catalogByKey={catalogByKey}
                 />
               </div>
             </div>

@@ -136,3 +136,40 @@ export function validateLongText(
     defaultMax: LONGTEXT_MAX,
   });
 }
+
+/**
+ * Hex renk kodu validatörü — Color.hex, QualityGrade.color, FabricProperty.color
+ * gibi UI rozetlerinde kullanılan alanlar için.
+ *   ✓ "#10b981", "#FF00AA", "#abc" (3 veya 6 hane)
+ *   ✗ "kirmizi", "#GG0000", "10b981" (# yok)
+ */
+const HEX_COLOR_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+export function validateHexColor(
+  raw: unknown,
+  opts: { required?: boolean; label?: string } = {},
+): string | null | undefined {
+  const { required = false, label = "Renk kodu" } = opts;
+  if (raw === undefined) {
+    if (required) throw AppError.badRequest(`${label} zorunlu`);
+    return undefined;
+  }
+  if (raw === null) {
+    if (required) throw AppError.badRequest(`${label} zorunlu`);
+    return null;
+  }
+  if (typeof raw !== "string") {
+    throw AppError.badRequest(`${label} metin olmalı`);
+  }
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    if (required) throw AppError.badRequest(`${label} boş olamaz`);
+    return null;
+  }
+  if (!HEX_COLOR_REGEX.test(trimmed)) {
+    throw AppError.badRequest(
+      `${label} geçerli bir hex değeri olmalı (#RRGGBB veya #RGB)`,
+    );
+  }
+  return trimmed;
+}

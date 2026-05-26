@@ -18,7 +18,6 @@ export interface SwatchByBarcode {
   parentRoll?: {
     id: string;
     barcode: string;
-    ownerCustomerId: string | null;
   } | null;
 }
 

@@ -2,7 +2,7 @@
 
 Express 5 + Prisma 7 + PostgreSQL. See root `CLAUDE.md` for domain facts.
 
-> **Deep reference:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) — full schema (38 models, 13 enums), API endpoint map, pattern examples, business rules, performance playbook. Read it when starting non-trivial work.
+> **Deep reference:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) — full schema (52 models, 14 enums), API endpoint map, pattern examples, business rules, performance playbook. Read it when starting non-trivial work.
 
 ## Commands
 
@@ -43,11 +43,11 @@ JWT_SECRET="..."
 
 **Routes → Controllers → Services → Prisma** — alt katman atlamak yasak.
 
-- `controllers/` (12 dosya) — HTTP layer, Zod validate, service çağırır
-- `services/` (17 dosya) — iş mantığı, transaction, `AuditService.log()`
-- `routes/` (21 dosya) — Swagger JSDoc + `verifyToken` + `requirePermission`
-- `middlewares/` — auth, RBAC, global error handler (`AppError` + Prisma + Zod mapping)
-- `prisma/schema.prisma` — 38 model, 13 enum, `@prisma/adapter-pg`
+- `controllers/` (15 dosya) — HTTP layer, Zod validate, service çağırır
+- `services/` (22 dosya + `helpers/` + `reports/`) — iş mantığı, transaction, `AuditService.log()`
+- `routes/` (31 dosya + `reports/`) — Swagger JSDoc + `verifyToken` + `requirePermission`
+- `middlewares/` — `auth` (verifyToken), `rbac` (requirePermission), `error` (AppError + Prisma + Zod mapping), `device` (mobil pairing/token), `uuid-param` (UUID path validate)
+- `prisma/schema.prisma` — 52 model, 14 enum, `@prisma/adapter-pg`
 
 **Master Data CRUD** için yeni kod yazmadan `BaseController` + `BaseService` kullan (`searchFields` config'i yeterli). Detay: ARCHITECTURE.md §8.1.
 
@@ -57,28 +57,34 @@ Sadece bunlar. Alternatif tanıtma.
 
 | Category | Packages |
 |---|---|
-| Core | `express`, `dotenv`, `cors`, `helmet` |
+| Core | `express`, `dotenv`, `cors`, `helmet`, `compression` |
 | Database | `prisma`, `@prisma/client`, `pg`, `@prisma/adapter-pg` |
 | Auth | `jsonwebtoken`, `bcryptjs` |
 | Validation | `zod` |
 | Docs | `swagger-ui-express`, `swagger-jsdoc` |
 | Logging | `morgan` |
 | Util | `uuid` |
+| Test data | `@faker-js/faker` (dev only) |
 
 ## RBAC Permission Kodları
 
-`requirePermission(code)` → `req.user.permissions[]` array. Toplam 20 permission, 6 modül:
+`requirePermission(code)` → `req.user.permissions[]` array. Permissions doğrudan kullanıcıya bağlanır (`UserPermission`), tekrar kullanım için `PermissionTemplate` var (rol modeli **yok**). Toplam **42 permission**, **9 modül**:
 
 | Modül | Permissions |
 |---|---|
-| SALES | `order:read/write`, `customer:read/write` |
+| SALES | `order:read/write`, `customer:read/write`, `customer-alias:read/write` |
 | PRODUCTION | `workorder:read/write`, `roll:read/write`, `station:read/write` |
 | MASTER_DATA | `item:read/write` |
-| QUALITY | `quality:read/write` |
-| LOGISTICS | `shipment:read/write`, `allocation:write` |
-| ADMIN | `admin:users`, `admin:roles`, `admin:settings` |
+| QUALITY | `quality:read/write`, `property:read/write` |
+| SUBCONTRACTOR | `subcontractor:read/write` |
+| LOGISTICS | `label:read`, `label:print`, `label:edit`, `label-template:read/write` |
+| REPORTS | `report:production/sales/quality/inventory/subcontract/customer/audit` |
+| ADMIN | `admin:users`, `admin:settings`, `admin:*` (wildcard) |
+| MOBILE | `mobile:kk1/kk2-kursun/tambur/depo/fason-sevk/fason-kabul`, `mobile:*` (wildcard) |
 
-Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmalı** (yoksa Admin dışı kullanıcılar 403 alır). Yeni permission ekliyorsan: hem `seed.ts`'i güncelle, hem de canlı DB'ye `INSERT permissions + role_permissions` SQL çalıştır. Detay: ARCHITECTURE.md §6.
+> Eski LOGISTICS `shipment:*` ve `allocation:*` permission'ları sevkiyat modülü ile birlikte kaldırıldı. Yeni sevkiyat permission'ları yeniden yazımla birlikte gelecek.
+
+Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmalı** (yoksa Admin dışı kullanıcılar 403 alır). Yeni permission ekliyorsan: hem `seed.ts`'i güncelle, hem de canlı DB'ye permission + ilgili kullanıcı/template atamalarını INSERT et. Detay: ARCHITECTURE.md §6.
 
 ## Database Performance Rules (her zaman uygula)
 
@@ -96,16 +102,12 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmal�
 10. **Transaction süresi kısa.** External I/O (HTTP, file) tx içinde **yapma** — lock uzar, deadlock riski. DB-level `idle_in_transaction_session_timeout=5min` aktif.
 11. **`tx.*` ile `Promise.all` YASAK.** pg adapter tek connection seri çalıştırır; ESLint kuralı yakalar (`eslint.config.mjs`).
 12. **EXPLAIN ile doğrula.** Yeni endpoint büyük tabloya değiyorsa `EXPLAIN ANALYZE` koş. `Seq Scan` görürsen index eksik.
-13. **Snapshot JSON'ları liste sorgusunda çekme.** `Manifest.snapshot`, `Shipment.printSnapshot`, `SubcontractorDispatch.printSnapshot` — sadece detay/print endpoint'i `select`'ine al.
-14. **Canlı DB'de index migration → `CREATE INDEX CONCURRENTLY` + `psql`.** `prisma migrate dev` regular `CREATE INDEX` üretir → milyon-satır tabloda yazma kilidi dakikalarca sürer (operatör mal kabul edemez). Çözüm: SQL'i `CREATE INDEX CONCURRENTLY IF NOT EXISTS` ile yaz; Prisma migrate ve `db execute` transaction'a sarıyor (CONCURRENTLY orada çalışmaz). Uygulama tek komutla:
-    ```bash
-    npm run migrate:concurrent <migration-adı>
-    ```
-    Wrapper script (`scripts/migrate-concurrent.sh`) önce SQL'i `psql` ile çalıştırır, sonra Prisma'ya "applied" işaretletir. Migration'da `CONCURRENTLY` yoksa script reddeder — sadece concurrent index migration'ları için. Şema değişiklikleri (`ALTER TABLE`, kolon ekle/sil) normal `migrate dev`/`migrate deploy` akışında. Boş DB'ye baseline kurarken (yeni kurulum) gerek yok — fark yaratmaz.
+13. **Snapshot JSON'ları liste sorgusunda çekme.** `Manifest.snapshot`, `SubcontractorDispatch.printSnapshot` — sadece detay/print endpoint'i `select`'ine al.
+14. **Canlı DB'de index migration → vardiya dışında deploy et.** `CREATE INDEX` büyük tabloda yazma kilidi alır (milyon satırda dakikalarca). `prisma migrate deploy` komutunu gece veya hafta sonu çalıştır — operatörler farkına bile varmaz, sabah index hazır olur. Vardiya saatinde index ekleme yasak. (Sıfır-downtime gerekirse `CREATE INDEX CONCURRENTLY` + psql manuel akışı kurulabilir, şu an ihtiyaç yok.)
 
 ## Operasyonel Bakım
 
-- **`statement_timeout=50s`** aktif (uzun sorgu otomatik iptal). DB-level: `ALTER DATABASE adnansahin_db SET statement_timeout = '50s'`.
+- **`statement_timeout=30s`** aktif (uzun sorgu otomatik iptal). DB-level: `ALTER DATABASE "TeksErpDb" SET statement_timeout = '30s'` — migration ile değil, manuel uygulanır. Detay: ARCHITECTURE.md §10.1.
 - **Slow query log** (`>500ms`) PostgreSQL log dosyasına düşer.
 - **6 ayda bir** `POST /api/admin/system-logs/archive { "monthsToKeep": 6 }` — `archived=0` dönene kadar tekrar et.
 - **3 ayda bir** ARCHITECTURE.md §10.2 sağlık kontrol SQL'lerini çalıştır.

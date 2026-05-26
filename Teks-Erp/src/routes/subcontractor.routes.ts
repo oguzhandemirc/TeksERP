@@ -5,7 +5,9 @@
 import { Router } from "express";
 import { SubcontractorController } from "../controllers/subcontractor.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+
+const MOBILE_FASON_READ = ["mobile:fason-sevk", "mobile:fason-kabul"] as const;
 
 const controller = new SubcontractorController();
 const router = Router();
@@ -38,7 +40,7 @@ const router = Router();
 router.post(
   "/dispatch",
   verifyToken,
-  requirePermission("workorder:write"),
+  requireAnyPermission("workorder:write", "mobile:fason-sevk"),
   controller.dispatch
 );
 
@@ -114,7 +116,7 @@ router.post(
 router.post(
   "/receive",
   verifyToken,
-  requirePermission("workorder:write"),
+  requireAnyPermission("workorder:write", "mobile:fason-kabul"),
   controller.receive
 );
 
@@ -131,21 +133,21 @@ router.post(
 router.get(
   "/pending-returns",
   verifyToken,
-  requirePermission("workorder:read"),
+  requireAnyPermission("workorder:read", ...MOBILE_FASON_READ),
   controller.pendingReturns
 );
 
 router.get(
   "/dispatches",
   verifyToken,
-  requirePermission("workorder:read"),
+  requireAnyPermission("workorder:read", ...MOBILE_FASON_READ),
   controller.listDispatches
 );
 
 router.get(
   "/dispatches/:id",
   verifyToken,
-  requirePermission("workorder:read"),
+  requireAnyPermission("workorder:read", ...MOBILE_FASON_READ),
   controller.getDispatch
 );
 
@@ -169,7 +171,7 @@ router.get(
 router.get(
   "/dispatches/:id/print",
   verifyToken,
-  requirePermission("workorder:read"),
+  requireAnyPermission("workorder:read", ...MOBILE_FASON_READ),
   controller.getDispatchPrint
 );
 
@@ -207,28 +209,28 @@ router.get(
 router.post(
   "/dispatches/:id/cancel",
   verifyToken,
-  requirePermission("workorder:write"),
+  requireAnyPermission("workorder:write", "mobile:fason-sevk"),
   controller.cancelDispatch
 );
 
 router.get(
   "/receipts",
   verifyToken,
-  requirePermission("workorder:read"),
+  requireAnyPermission("workorder:read", ...MOBILE_FASON_READ),
   controller.listReceipts
 );
 
 router.get(
   "/receipts/:id/print",
   verifyToken,
-  requirePermission("workorder:read"),
+  requireAnyPermission("workorder:read", ...MOBILE_FASON_READ),
   controller.getReceiptPrint
 );
 
 router.get(
   "/receipts/:id",
   verifyToken,
-  requirePermission("workorder:read"),
+  requireAnyPermission("workorder:read", ...MOBILE_FASON_READ),
   controller.getReceipt
 );
 
@@ -269,8 +271,36 @@ router.get(
 router.post(
   "/receipts/:id/cancel",
   verifyToken,
-  requirePermission("workorder:write"),
+  requireAnyPermission("workorder:write", "mobile:fason-kabul"),
   controller.cancelReceipt
+);
+
+/**
+ * @swagger
+ * /api/subcontractor/receipts/{id}/cancel-preview:
+ *   get:
+ *     tags: [Subcontractor]
+ *     summary: Fason kabul iptal önizlemesi
+ *     description: |
+ *       Receipt'ten türeyen "açık kumaş" Roll'larını ve her birinin downstream
+ *       durumunu (operasyon/movement/tambur split/başka dispatch) listeler.
+ *       Frontend, allSafe=true ise cascade iptal onayı sunar; false ise hangi
+ *       roll'lar üzerinde işlem yapıldığını gösterip iptali engeller.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Önizleme verisi }
+ *       404: { description: Kabul belgesi bulunamadı }
+ *       409: { description: Zaten iptal edilmiş veya WO COMPLETED }
+ */
+router.get(
+  "/receipts/:id/cancel-preview",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:fason-kabul"),
+  controller.getCancelPreview
 );
 
 export default router;

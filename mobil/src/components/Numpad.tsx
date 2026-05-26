@@ -9,6 +9,7 @@ interface NumpadProps {
   maxLength?: number;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  compact?: boolean;
 }
 
 const ROWS: ReadonlyArray<ReadonlyArray<string>> = [
@@ -25,6 +26,7 @@ export default function Numpad({
   maxLength,
   disabled,
   style,
+  compact = false,
 }: NumpadProps) {
   const handlePress = useCallback(
     (key: string) => {
@@ -73,15 +75,16 @@ export default function Numpad({
                 rippleColor="rgba(79, 70, 229, 0.18)"
                 style={[
                   styles.key,
+                  compact && styles.keyCompact,
                   isBackspace && styles.keyBackspace,
                   keyDisabled && styles.keyDisabled,
                 ]}
               >
                 <View style={styles.keyContent}>
                   {isBackspace ? (
-                    <Icon source="backspace-outline" size={30} color="#dc2626" />
+                    <Icon source="backspace-outline" size={compact ? 22 : 30} color="#dc2626" />
                   ) : (
-                    <Text style={styles.keyText}>{key}</Text>
+                    <Text style={[styles.keyText, compact && styles.keyTextCompact]}>{key}</Text>
                   )}
                 </View>
               </TouchableRipple>
@@ -105,6 +108,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     overflow: 'hidden',
   },
+  keyCompact: { height: 48, borderRadius: 10 },
   keyContent: {
     flex: 1,
     alignItems: 'center',
@@ -122,4 +126,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0f172a',
   },
+  keyTextCompact: { fontSize: 22 },
 });

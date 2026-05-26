@@ -102,13 +102,19 @@ export class ProductionService {
       );
     }
 
+    const rollForHandler = {
+      id: roll.id,
+      currentQty: Number(roll.currentQty),
+      weightKg: roll.weightKg !== null ? Number(roll.weightKg) : null,
+    };
+
     switch (data.action) {
       case "START":
-        return this.handleStepStart(currentStep, roll, userId, machineId);
+        return this.handleStepStart(currentStep, rollForHandler, userId, machineId);
       case "FINISH":
-        return this.handleStepFinish(currentStep, roll, data, userId, machineId);
+        return this.handleStepFinish(currentStep, rollForHandler, data, userId, machineId);
       case "SKIP":
-        return this.handleStepSkip(currentStep, roll, data.reason ?? "", userId, machineId);
+        return this.handleStepSkip(currentStep, rollForHandler, data.reason ?? "", userId, machineId);
       default:
         throw AppError.badRequest(`Bilinmeyen action: ${data.action}`);
     }
@@ -703,7 +709,7 @@ export class ProductionService {
 
     // Hata noktası top metrajı içinde olmalı (operatörden 999. metrede hata,
     // ama top 500m gibi tutarsız giriş yakalanır).
-    if (data.startMeter > roll.currentQty) {
+    if (data.startMeter > Number(roll.currentQty)) {
       throw AppError.badRequest(
         `Hata metresi (${data.startMeter}) toplam metrajdan (${roll.currentQty}) büyük olamaz`
       );

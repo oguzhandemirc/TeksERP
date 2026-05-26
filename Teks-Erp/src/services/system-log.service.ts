@@ -10,7 +10,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, SystemLogCategory } from "@prisma/client";
 import { decodeCursor, cursorWhere, buildNextCursor } from "../utils/cursor";
 
 export interface SystemLogListParams {
@@ -37,13 +37,14 @@ const LIST_SELECT = {
   user: { select: { id: true, username: true, fullName: true } },
 } as const;
 
-function parseCategories(raw: string | undefined): string[] | undefined {
+function parseCategories(raw: string | undefined): SystemLogCategory[] | undefined {
   if (!raw) return undefined;
+  const allowed = new Set<string>(Object.values(SystemLogCategory));
   const parts = raw
     .split(",")
     .map((s) => s.trim())
-    .filter(Boolean);
-  return parts.length ? parts : undefined;
+    .filter((s) => s.length > 0 && allowed.has(s));
+  return parts.length ? (parts as SystemLogCategory[]) : undefined;
 }
 
 export class SystemLogService {

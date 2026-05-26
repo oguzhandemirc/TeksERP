@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
-import { rollStatusLabels, RollOperationType } from "@/types/enums";
+import { rollStatusLabels, RollOperationType, rollEntrySourceLabels } from "@/types/enums";
 import { rollService } from "./service";
 import type { Roll, RollOperationLogEntry } from "./types";
 
@@ -188,25 +188,15 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                   <div className="text-xs text-muted-foreground">Giriş Kaynağı</div>
                   <div>
                     <Badge variant="muted" className="text-[10px]">
-                      {roll.entrySource}
+                      {rollEntrySourceLabels[
+                        roll.entrySource as keyof typeof rollEntrySourceLabels
+                      ] ?? roll.entrySource}
                     </Badge>
                   </div>
                   {roll.weightKg != null && (
                     <>
                       <div className="text-xs text-muted-foreground">Ağırlık</div>
                       <div>{roll.weightKg.toLocaleString("tr-TR")} kg</div>
-                    </>
-                  )}
-                  {roll.ownerCustomer && (
-                    <>
-                      <div className="text-xs text-muted-foreground">Müşteri Malı</div>
-                      <div>{roll.ownerCustomer.name}</div>
-                    </>
-                  )}
-                  {roll.customerDescription && (
-                    <>
-                      <div className="text-xs text-muted-foreground">Müşteri Açıklaması</div>
-                      <div className="text-xs">{roll.customerDescription}</div>
                     </>
                   )}
                   {roll.color && (

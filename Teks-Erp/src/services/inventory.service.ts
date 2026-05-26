@@ -2,14 +2,15 @@
 // TeksERP - Inventory Service
 // =============================================================================
 // Handles initial goods receipt (Ham Mal Girişi / QC1) and inventory queries.
-// Business Rule: Rolls default to STOCK status. IN_PRODUCTION or SHIPPED
-// rolls are excluded from inventory queries unless explicitly filtered.
+// Business Rule: Rolls default to STOCK status. IN_PRODUCTION rolls
+// are excluded from inventory queries unless explicitly filtered.
 // =============================================================================
 
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
+import { resolveQualityGradeId } from "./helpers/quality-grade.helper";
 import {
   parseQueryParams,
   buildWhereClause,
@@ -60,11 +61,11 @@ import {
   WorkOrderStatus,
 } from "@prisma/client";
 import {
-  assertWoAtStepKind,
   ensureWorkOrderInProgress,
   openMovementForNextStep,
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
+import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
 
 export type RollHistoryEventKind =
   | "CREATED"
@@ -72,8 +73,7 @@ export type RollHistoryEventKind =
   | "MOVEMENT_OUT"
   | "OPERATION"
   | "SUBCONTRACTOR_DISPATCH"
-  | "SUBCONTRACTOR_RECEIPT"
-  | "SHIPPED";
+  | "SUBCONTRACTOR_RECEIPT";
 
 export interface RollHistoryEvent {
   kind: RollHistoryEventKind;
@@ -108,8 +108,6 @@ function operationLabel(type: RollOperationType): string {
       return "QC2 Tamamlandı";
     case "TAMBUR_PROCESSED":
       return "Tambur İşlendi";
-    case "PACKAGED":
-      return "Paketlendi";
     case "SUBCONTRACTOR_SENT":
       return "Fasona Gönderildi";
     case "SUBCONTRACTOR_RETURNED":
@@ -134,86 +132,10 @@ function generateBarcode(): string {
 
 export class InventoryService {
   /**
-   * KK1 (RAW_QC) tabletinde refakat kartı okutulduğunda WO context'i döner.
-   * Mobile operatör bu endpoint'le hangi WO için ham kabul yapacağını teyit
-   * eder, sonra `createInitialEntry(workOrderId=...)` ile rolleri kaydeder.
+   * Initial goods receipt — creates a new Roll in STOCK status.
    *
-   * `assertWoAtStepKind` ile kontrol: KK1 step'i tanımlı olmalı; eğer WO bu
-   * adımdan geçtiyse (çoklu istasyona dağılmışsa) net mesaj döner — operatör
-   * yanlış kart/yanlış zaman okuttuğunu anlar.
-   */
-  async getKk1ContextByCard(
-    cardBarcode: string,
-  ): Promise<ApiResponse<{
-    workOrderId: string;
-    batchNumber: string;
-    stepId: string;
-    stationCode: string;
-    stationName: string;
-    targetItem: { id: string; code: string; name: string } | null;
-    targetColor: { id: string; code: string; name: string } | null;
-    rollCount: number;
-  }>> {
-    const card = await prisma.travelerCard.findUnique({
-      where: { barcode: cardBarcode },
-      select: { id: true, status: true, workOrderId: true },
-    });
-    if (!card) {
-      throw AppError.notFound(`Refakat kartı bulunamadı: ${cardBarcode}`);
-    }
-    if (card.status !== "ACTIVE") {
-      throw AppError.badRequest(
-        `Bu refakat kartı aktif değil (durum: ${card.status})`,
-      );
-    }
-
-    // Multi-batch destekli doğrulama. KK1 zaten bittiyse "mevcut konum X" mesajı döner.
-    const { stepId, openRollCount } = await assertWoAtStepKind(
-      card.workOrderId,
-      StationKind.RAW_QC,
-    );
-
-    const step = await prisma.workOrderStep.findUnique({
-      where: { id: stepId },
-      include: {
-        station: { select: { code: true, name: true } },
-        workOrder: {
-          select: {
-            id: true,
-            batchNumber: true,
-            targetItem: { select: { id: true, code: true, name: true } },
-            targetColor: { select: { id: true, code: true, name: true } },
-          },
-        },
-      },
-    });
-    if (!step) throw AppError.notFound("KK1 adımı bulunamadı");
-
-    return {
-      success: true,
-      data: {
-        workOrderId: step.workOrder.id,
-        batchNumber: step.workOrder.batchNumber,
-        stepId: step.id,
-        stationCode: step.station.code,
-        stationName: step.station.name,
-        targetItem: step.workOrder.targetItem ?? null,
-        targetColor: step.workOrder.targetColor ?? null,
-        rollCount: openRollCount,
-      },
-    };
-  }
-
-  /**
-   * Initial goods receipt — creates a new Roll.
-   *
-   * - `workOrderId` verilmezse: klasik STOCK girişi (sonra attach-rolls ile bağlanır).
-   * - `workOrderId` verilirse: aynı transaction'da WO'nun ilk step'ine bağlanır
-   *   (IN_PRODUCTION + currentStepId/producedInStepId = firstStepId). INTERNAL ilk
-   *   step için RollMovement açılır (KK1 girişi). EXTERNAL ilk step için movement
-   *   sevk anında açılır (attach-rolls ile aynı semantik).
-   *
-   * Yalnız PLANNED iş emirlerine bağlama yapılabilir.
+   * Fabrikaya gelen ham kumaş girişi: barkod + temel meta veri. Top hep STOCK'a
+   * düşer; iş emrine bağlama daha sonra `attach-rolls` ile yapılır.
    */
   async createInitialEntry(
     data: {
@@ -223,7 +145,7 @@ export class InventoryService {
       weightKg?:     number;
       qualityGrade?: string;
       width?:        number | null;  // En (cm) — opsiyonel, ölçülmediyse null
-      workOrderId?:  string | null;
+      propertyIds?:  string[];
     },
     userId?: string
   ): Promise<ApiResponse<Roll>> {
@@ -257,84 +179,61 @@ export class InventoryService {
       }
     }
 
-    // WO sağlandıysa: validasyon + ilk + sonraki step bilgisi.
-    let attach: {
-      workOrderId: string;
-      firstStepId: string;
-      firstStepIsExternal: boolean;
-      nextStepId: string | null;
-      nextStepIsExternal: boolean;
-    } | null = null;
-    if (data.workOrderId) {
-      const wo = await prisma.workOrder.findUnique({
-        where: { id: data.workOrderId },
-        include: {
-          steps: {
-            orderBy: { stepSequence: "asc" },
-            include: { station: { select: { type: true } } },
-          },
-        },
+    // Özellikler: dedupe, var ve aktif olmalı + Item'ın allowed listesindeyse listede
+    const dedupedProps = [...new Set(data.propertyIds ?? [])];
+    if (dedupedProps.length > 0) {
+      const props = await prisma.fabricProperty.findMany({
+        where: { id: { in: dedupedProps }, isActive: true },
+        select: { id: true },
       });
-      if (!wo) throw AppError.notFound("İş emri bulunamadı");
-      // PLANNED ve IN_PROGRESS kabul: KK1'de seri top girişi yapılır, ilk top
-      // sonrası WO IN_PROGRESS'e çekilir ama operatör başka top eklemeye devam
-      // edebilmeli (iptal edilenler yeniden girilecek vb.).
-      if (
-        wo.status !== WorkOrderStatus.PLANNED &&
-        wo.status !== WorkOrderStatus.IN_PROGRESS
-      ) {
-        throw AppError.conflict(
-          `Bu durumdaki iş emrine top bağlanamaz (${wo.status}). Sadece PLANNED veya IN_PROGRESS.`,
-        );
+      if (props.length !== dedupedProps.length) {
+        throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
       }
-      if (wo.steps.length === 0) {
-        throw AppError.badRequest("İş emrinde rota adımı yok");
+      const allowedPropCount = await prisma.itemAllowedProperty.count({
+        where: { itemId: data.itemId },
+      });
+      if (allowedPropCount > 0) {
+        const inAllowed = await prisma.itemAllowedProperty.findMany({
+          where: { itemId: data.itemId, propertyId: { in: dedupedProps } },
+          select: { propertyId: true },
+        });
+        if (inAllowed.length !== dedupedProps.length) {
+          throw AppError.badRequest(
+            "Seçilen özelliklerden biri bu ürüne uygulanabilir listesinde değil",
+          );
+        }
       }
-      const firstStep = wo.steps[0];
-      // KK1 (ilk step) zaten tamamlanmışsa yeni rulo yaratmayı reddet — operatör
-      // önce reopen veya planlamacı rotayı düzeltmeli. Aksi halde mevcut step
-      // status'u sessizce ACTIVE'e döner ki bu kafa karıştırır.
-      if (firstStep.status === StepStatus.COMPLETED) {
-        throw AppError.conflict(
-          "Bu iş emrinin ilk adımı (KK1) tamamlanmış. Yeni rulo eklemek için önce o adımı yeniden açın.",
-        );
-      }
-      const nextStep = wo.steps[1] ?? null;
-      attach = {
-        workOrderId: wo.id,
-        firstStepId: firstStep.id,
-        firstStepIsExternal: firstStep.station.type === "EXTERNAL",
-        nextStepId: nextStep?.id ?? null,
-        nextStepIsExternal: nextStep?.station.type === "EXTERNAL",
-      };
     }
 
     const barcode = generateBarcode();
 
-    // FABRIC içeride dokunarak üretilir → PRODUCTION.
-    // Diğer item tipleri (yarn, consumable, vb) tedarikçiden gelir → SUPPLIER_RECEIPT.
-    // CUSTOMER_SUPPLIED yolu service-production endpoint'inde set edilir, burada değil.
-    const entrySource: RollEntrySource =
-      item.itemType === ItemType.FABRIC
-        ? RollEntrySource.PRODUCTION
-        : RollEntrySource.SUPPLIER_RECEIPT;
+    // Tüm item tipleri (fabric, yarn, consumable, vb) tedarikçiden gelir → SUPPLIER_RECEIPT.
+    const entrySource: RollEntrySource = RollEntrySource.SUPPLIER_RECEIPT;
+
+    const qualityGradeCode = data.qualityGrade ?? "1.KALITE";
+    const qualityGradeId = await resolveQualityGradeId(qualityGradeCode);
+
+    // Renkli manuel giriş = hazır/işlenmiş kumaş (dışarıdan boyalı/işlemli geldi),
+    // doğrudan depoya gider. Renksiz giriş = ham kumaş, üretim akışına girecek
+    // (STOCK'ta bekler, KK1/Kurşun/Tambur'da işlenir).
+    const initialStatus =
+      data.colorId != null ? RollStatus.WAREHOUSE : RollStatus.STOCK;
 
     const roll = await prisma.$transaction(async (tx) => {
       const created = await tx.roll.create({
         data: {
           barcode,
-          itemId:       data.itemId,
-          colorId:      data.colorId ?? null,
-          initialQty:   data.initialQty,
-          currentQty:   data.initialQty,
-          weightKg:     data.weightKg ?? null,
-          status:       attach ? RollStatus.IN_PRODUCTION : RollStatus.STOCK,
-          qualityGrade: data.qualityGrade ?? "1.KALITE",
-          width:        data.width ?? null,
+          itemId:         data.itemId,
+          colorId:        data.colorId ?? null,
+          initialQty:     data.initialQty,
+          currentQty:     data.initialQty,
+          weightKg:       data.weightKg ?? null,
+          status:         initialStatus,
+          qualityGrade:   qualityGradeCode,
+          qualityGradeId,
+          width:          data.width ?? null,
           entrySource,
-          createdById:  userId ?? null,
-          currentStepId:    attach?.firstStepId ?? null,
-          producedInStepId: attach?.firstStepId ?? null,
+          createdById:    userId ?? null,
         },
         include: {
           item: true,
@@ -342,68 +241,11 @@ export class InventoryService {
           createdBy: { select: { id: true, username: true, fullName: true } },
         },
       });
-
-      if (attach) {
-        if (attach.firstStepIsExternal) {
-          // EXTERNAL ilk step (örn: rota boyahane ile başlıyor): roller henüz
-          // fasonda değil, sevk anında movement açılır. currentStepId firstStep'te
-          // kalır (attachRolls semantiği ile aynı).
-        } else {
-          // INTERNAL ilk step (örn: KK1 — ham mal kabul). Bu istasyon "intake-only"
-          // davranışı: girişin kendisi işleme. Aynı transaction'da auto-finish ile
-          // sonraki step'e ilerlet ki operatör hemen Fason Sevk'ten dispatch yapabilsin.
-          //   - First step movement: qtyIn = qtyOut = initialQty (passed-through audit)
-          //   - Next INTERNAL step varsa: openMovementForNextStep ile ilerlet
-          //   - Next EXTERNAL step varsa: currentStepId next'e atanır, movement yok
-          //     (sevk anında movement açılır)
-          //   - Next step yoksa: top PRODUCED → currentStepId=null
-          const now = new Date();
-          await tx.rollMovement.create({
-            data: {
-              rollId: created.id,
-              workOrderStepId: attach.firstStepId,
-              qtyIn: data.initialQty,
-              qtyOut: data.initialQty,
-              weightIn: data.weightKg ?? null,
-              weightOut: data.weightKg ?? null,
-              exitedAt: now,
-              operatorId: userId ?? null,
-              notes: "AUTO_INTAKE",
-            },
-          });
-
-          if (attach.nextStepId) {
-            if (attach.nextStepIsExternal) {
-              // EXTERNAL sonraki step: movement açma, sadece currentStepId taşı.
-              // Sevk endpoint'i bu durumu görüp dispatch sırasında movement açar.
-              await tx.roll.update({
-                where: { id: created.id },
-                data: { currentStepId: attach.nextStepId },
-              });
-              await recomputeStepStatus(tx, attach.nextStepId);
-            } else {
-              await openMovementForNextStep(tx, {
-                rollId: created.id,
-                nextStepId: attach.nextStepId,
-                qty: data.initialQty,
-                weight: data.weightKg ?? null,
-                userId: userId ?? null,
-                notes: `AUTO_FROM_STEP:${attach.firstStepId}`,
-              });
-            }
-          } else {
-            // Tek-adımlı WO: KK1 son adım da → top üretim hattından çıktı.
-            await tx.roll.update({
-              where: { id: created.id },
-              data: { currentStepId: null, status: RollStatus.PRODUCED },
-            });
-          }
-
-          await recomputeStepStatus(tx, attach.firstStepId);
-          await ensureWorkOrderInProgress(tx, attach.workOrderId);
-        }
+      if (dedupedProps.length > 0) {
+        await tx.rollProperty.createMany({
+          data: dedupedProps.map((propertyId) => ({ rollId: created.id, propertyId })),
+        });
       }
-
       return created;
     });
 
@@ -413,25 +255,22 @@ export class InventoryService {
       tableName: "ROLL",
       recordId: roll.id,
       newData: {
-        barcode:       roll.barcode,
-        itemId:        roll.itemId,
-        colorId:       roll.colorId,
-        initialQty:    roll.initialQty,
-        currentQty:    roll.currentQty,
-        weightKg:      roll.weightKg,
-        status:        roll.status,
-        entrySource:   roll.entrySource,
-        workOrderId:   attach?.workOrderId ?? null,
-        firstStepId:   attach?.firstStepId ?? null,
+        barcode:     roll.barcode,
+        itemId:      roll.itemId,
+        colorId:     roll.colorId,
+        initialQty:  roll.initialQty,
+        currentQty:  roll.currentQty,
+        weightKg:    roll.weightKg,
+        status:      roll.status,
+        entrySource: roll.entrySource,
+        propertyIds: dedupedProps,
       },
     });
 
     return {
       success: true,
       data: roll,
-      message: attach
-        ? `Top oluşturuldu ve iş emrine bağlandı. Barkod: ${roll.barcode}`
-        : `Top oluşturuldu. Barkod: ${roll.barcode}`,
+      message: `Top oluşturuldu. Barkod: ${roll.barcode}`,
     };
   }
 
@@ -454,8 +293,19 @@ export class InventoryService {
     // filtreleri (item.isDerived, item.colorId, item.properties...) ve range
     // alanları (width, currentQty) aşağıda explicit compose ediliyor — generic
     // helper'a relation bilgisi sızdırmamak için.
-    const where = buildWhereClause(f, ["barcode"], params.search);
+    // Search'i `buildWhereClause`'a vermiyoruz; ruloyu sadece barkoda göre değil,
+    // bağlı kumaş adı/kodu üzerinden de aramak için OR'u explicit kuruyoruz.
+    const where = buildWhereClause(f, ["barcode"]);
     applyDateRange(where, params, ROLL_DATE_FIELDS);
+
+    const search = params.search?.trim();
+    if (search) {
+      where.OR = [
+        { barcode: { contains: search, mode: "insensitive" } },
+        { item: { name: { contains: search, mode: "insensitive" } } },
+        { item: { code: { contains: search, mode: "insensitive" } } },
+      ];
+    }
 
     // --- Status: statusIn[] > status > default STOCK ---
     const statusIn = readList(f["statusIn"]);
@@ -468,15 +318,6 @@ export class InventoryService {
       where.status = RollStatus.STOCK;
     }
 
-    // --- ownerType: müşteri malı vs fabrika stoğu ---
-    const ownerType = f["ownerType"] as string | undefined;
-    if (ownerType === "CUSTOMER") {
-      where.ownerCustomerId = { not: null };
-    } else if (ownerType === "FACTORY") {
-      where.ownerCustomerId = null;
-    }
-    delete where.ownerType;
-
     // --- Roll-level renk + processingStatus filtreleri ---
     // colorId = belirli renkteki rolleri filtrele
     const colorIdFilter = typeof f["colorId"] === "string" ? f["colorId"] : null;
@@ -487,9 +328,10 @@ export class InventoryService {
 
     // processingStatus: ham / işleniyor / açık kumaş / bitmiş — Roll seviyesinde derive
     //   raw         = colorId IS NULL (henüz renk almamış)
-    //   processed   = colorId IS NOT NULL && status NOT IN (WAREHOUSE, READY_FOR_SHIP, SHIPPED)
+    //   processed   = colorId IS NOT NULL && status NOT IN (WAREHOUSE,
+    //                 TAMBUR_CONSUMED, SUBCONTRACTOR_CONSUMED, SCRAP) — kapanmış/elden çıkmış parent'lar hariç
     //   open_fabric = barcode IS NULL && status = IN_PRODUCTION (Kurşun/KK2/Tambur'da bekleyen açık kumaş)
-    //   finished    = status IN (WAREHOUSE, READY_FOR_SHIP)
+    //   finished    = status = WAREHOUSE
     const processingStatus = f["processingStatus"] as string | undefined;
     delete where.processingStatus;
     if (processingStatus === "raw") {
@@ -499,17 +341,33 @@ export class InventoryService {
       where.status = {
         notIn: [
           RollStatus.WAREHOUSE,
-          RollStatus.READY_FOR_SHIP,
-          RollStatus.SHIPPED,
+          RollStatus.TAMBUR_CONSUMED,
+          RollStatus.SUBCONTRACTOR_CONSUMED,
+          RollStatus.SCRAP,
         ],
       };
     } else if (processingStatus === "open_fabric") {
       where.barcode = null;
       where.status = RollStatus.IN_PRODUCTION;
     } else if (processingStatus === "finished") {
-      where.status = {
-        in: [RollStatus.WAREHOUSE, RollStatus.READY_FOR_SHIP],
-      };
+      where.status = RollStatus.WAREHOUSE;
+    }
+
+    // qualityGrade: kalite seviyesi (1.KALITE / A1 / FIRE / admin-tanımlı kodlar).
+    // Durumdan bağımsız bir attribute; A1/FIRE rulolar artık WAREHOUSE altında.
+    // includeFire toggle ile birlikte değerlendirilir.
+    const qualityGradeFilter =
+      typeof f["qualityGrade"] === "string" ? (f["qualityGrade"] as string) : null;
+    delete where.qualityGrade;
+    const includeFireRaw = f["includeFire"];
+    const includeFire = includeFireRaw === "true";
+    delete where.includeFire;
+    if (qualityGradeFilter) {
+      where.qualityGrade = qualityGradeFilter;
+    } else if (!includeFire) {
+      // Varsayılan: FIRE kalitesindeki rulolar listede görünmez. Operatör
+      // "Fireleri göster" toggle ile (`filter[includeFire]=true`) açar.
+      where.qualityGrade = { not: "FIRE" };
     }
 
     // rollKind: barkod varlığına göre — fiziksel form ayrımı
@@ -533,6 +391,47 @@ export class InventoryService {
     ) {
       where.currentStep = {
         is: { station: { kind: currentStepKindRaw as StationKind } },
+      };
+    }
+
+    // rollScope: yüksek seviye gruplar — sekme bazlı süper-set/alt-set ayrımı.
+    //   RAW_STOCK         = KK1 ham, henüz hiçbir adıma girmemiş (renksiz, akış dışı)
+    //   PRODUCTION_ACTIVE = WO akışındaki her top (Fasonda + Kurşun/Tambur bekleyen
+    //                       açık kumaş + aktif IN_PRODUCTION hepsi). currentStepId
+    //                       set + status terminal değil.
+    //   FINISHED_STOCK    = Tambur'dan çıkmış, depoya alınmış (sevke hazır)
+    const rollScope = f["rollScope"] as string | undefined;
+    delete where.rollScope;
+    if (rollScope === "RAW_STOCK") {
+      // Ham = henüz hiçbir WO step'inde değil. Renk filtre dışı — KK1 girişi
+      // renkli hazır kumaş da olabilir; "ham" ayrımı akış-bazlı (currentStepId
+      // null), kompozisyon-bazlı değil.
+      where.AND = [
+        ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+        { currentStepId: null },
+        { status: RollStatus.STOCK },
+      ];
+    } else if (rollScope === "PRODUCTION_ACTIVE") {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+        { currentStepId: { not: null } },
+        {
+          status: {
+            notIn: [
+              RollStatus.WAREHOUSE,
+              RollStatus.A1_STOCK,
+              RollStatus.SCRAP,
+              RollStatus.CANCELLED,
+              RollStatus.TAMBUR_CONSUMED,
+              RollStatus.SUBCONTRACTOR_CONSUMED,
+              RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+            ],
+          },
+        },
+      ];
+    } else if (rollScope === "FINISHED_STOCK") {
+      where.status = {
+        in: [RollStatus.WAREHOUSE, RollStatus.A1_STOCK, RollStatus.PRODUCED],
       };
     }
 
@@ -570,7 +469,6 @@ export class InventoryService {
     const include = {
       item: { select: { id: true, code: true, name: true, itemType: true, unit: true } },
       color: { select: { id: true, code: true, name: true, hex: true } },
-      ownerCustomer: true,
       operations: { select: { operationType: true } },
       createdBy: { select: { id: true, username: true, fullName: true } },
       properties: {
@@ -657,7 +555,6 @@ export class InventoryService {
       include: {
         item: true,
         color: true,
-        ownerCustomer: true,
         errors: true,
         operations: {
           select: {
@@ -669,13 +566,6 @@ export class InventoryService {
           orderBy: { createdAt: "asc" },
         },
         properties: { include: { property: true } },
-        allocations: {
-          include: {
-            orderLine: {
-              include: { order: true },
-            },
-          },
-        },
       },
     });
 
@@ -695,15 +585,7 @@ export class InventoryService {
       include: {
         item: true,
         color: true,
-        ownerCustomer: true,
         errors: true,
-        allocations: {
-          include: {
-            orderLine: {
-              include: { order: true },
-            },
-          },
-        },
       },
     });
 
@@ -716,7 +598,7 @@ export class InventoryService {
 
   /**
    * Get a roll's full lifecycle history — station movements, discrete operations,
-   * subcontractor dispatches/receipts and shipment — merged into one chronological timeline.
+   * subcontractor dispatches/receipts — merged into one chronological timeline.
    */
   async getRollHistory(id: string): Promise<ApiResponse<RollHistoryPayload | null>> {
     const roll = await prisma.roll.findUnique({
@@ -759,7 +641,7 @@ export class InventoryService {
       return { success: false, data: null, message: "Top bulunamadı" };
     }
 
-    const [movements, operations, dispatchItems, receiptItems, shipmentItems] =
+    const [movements, operations, dispatchItems, receiptItems] =
       await Promise.all([
         prisma.rollMovement.findMany({
           where: { rollId: id },
@@ -801,19 +683,6 @@ export class InventoryService {
           },
           orderBy: { createdAt: "asc" },
         }),
-        prisma.shipmentItem.findMany({
-          where: { rollId: id },
-          include: {
-            shipment: {
-              include: {
-                customer: { select: { id: true, code: true, name: true } },
-                shippedBy: {
-                  select: { id: true, username: true, fullName: true },
-                },
-              },
-            },
-          },
-        }),
       ]);
 
     const events: RollHistoryEvent[] = [];
@@ -821,10 +690,6 @@ export class InventoryService {
     // Top'un sisteme nasıl girdiğine göre başlık — itemType'tan değil entrySource'tan türer.
     const entryTitle = ((): string => {
       switch (roll.entrySource) {
-        case RollEntrySource.PRODUCTION:
-          return "Ham Kumaş Üretimi (Giriş)";
-        case RollEntrySource.CUSTOMER_SUPPLIED:
-          return "Müşteri Malı Kabul (Hizmet Üretimi)";
         case RollEntrySource.TAMBUR_SPLIT:
           return "Tambur Kesimi (Yeni Parça)";
         case RollEntrySource.SUPPLIER_RECEIPT:
@@ -962,35 +827,6 @@ export class InventoryService {
       });
     }
 
-    for (const si of shipmentItems) {
-      const when = si.shipment.shippedAt ?? si.shipment.createdAt;
-      events.push({
-        kind: "SHIPPED",
-        at: when.toISOString(),
-        title:
-          si.shipment.status === "SHIPPED"
-            ? `Sevk Edildi: ${si.shipment.customer?.name ?? "-"}`
-            : `İrsaliyeye Eklendi: ${si.shipment.customer?.name ?? "-"}`,
-        stationName: null,
-        details: {
-          shipmentNumber: si.shipment.shipmentNumber,
-          shipmentStatus: si.shipment.status,
-          customerCode: si.shipment.customer?.code,
-          customerName: si.shipment.customer?.name,
-          shippedQty: si.shippedQty,
-          shippedWeight: si.shippedWeight,
-        },
-        // Sadece finalize edilmiş (SHIPPED) sevkler için operator gösterilir.
-        // PREPARING aşamasında shippedById null olur.
-        operatorName:
-          si.shipment.status === "SHIPPED"
-            ? (si.shipment.shippedBy?.fullName ??
-              si.shipment.shippedBy?.username ??
-              null)
-            : null,
-      });
-    }
-
     // Sort: first by timestamp, then by kind order (MOVEMENT_OUT before MOVEMENT_IN
     // before OPERATION) to correctly represent process flow when timestamps coincide.
     // Stable sort preserves original relative order for equal keys.
@@ -1002,8 +838,7 @@ export class InventoryService {
       MOVEMENT_IN: 2,
       SUBCONTRACTOR_DISPATCH: 3,
       SUBCONTRACTOR_RECEIPT: 4,
-      SHIPPED: 5,
-      CREATED: 6,
+      CREATED: 5,
     };
     events.sort((a, b) => {
       if (a.at < b.at) return -1;
@@ -1018,9 +853,9 @@ export class InventoryService {
           id: roll.id,
           barcode: roll.barcode,
           status: roll.status,
-          currentQty: roll.currentQty,
-          initialQty: roll.initialQty,
-          weightKg: roll.weightKg,
+          currentQty: Number(roll.currentQty),
+          initialQty: Number(roll.initialQty),
+          weightKg: roll.weightKg !== null ? Number(roll.weightKg) : null,
           item: roll.item,
           color: roll.color,
         },
@@ -1034,11 +869,10 @@ export class InventoryService {
    * Bu fire (SCRAP) DEĞİL — sadece operatör kaydı geri alıyor. Gerçek fire
    * (kalite reddi vb.) için Tambur akışı SCRAP set eder.
    *
-   * **İzin verilen statüler:** STOCK, IN_PRODUCTION, PRODUCED, READY_FOR_SHIP,
+   * **İzin verilen statüler:** STOCK, IN_PRODUCTION, PRODUCED,
    * A1_STOCK, WAREHOUSE, RETURNED_FROM_SUBCONTRACTOR.
    *
    * **Blok:**
-   * - SHIPPED — müşteride, geri alınamaz
    * - SCRAP / CANCELLED — zaten kapalı (idempotent başarı döner)
    * - AT_SUBCONTRACTOR — fasonda; önce mal kabul yapılmalı
    * - Açık bir SubcontractorDispatch'e bağlı top
@@ -1063,11 +897,6 @@ export class InventoryService {
         data: existing,
         message: `Top zaten iptal/hurda: ${existing.barcode}`,
       };
-    }
-    if (existing.status === RollStatus.SHIPPED) {
-      throw AppError.conflict(
-        "Sevk edilmiş top iptal edilemez (müşteride)",
-      );
     }
     if (existing.status === RollStatus.AT_SUBCONTRACTOR) {
       throw AppError.conflict(
@@ -1158,7 +987,7 @@ export class InventoryService {
   async hardDelete(id: string, userId?: string): Promise<ApiResponse<Roll>> {
     const existing = await prisma.roll.findUnique({
       where: { id },
-      include: { errors: true, allocations: true, shipmentItems: true },
+      include: { errors: true },
     });
 
     if (!existing) {
@@ -1178,8 +1007,6 @@ export class InventoryService {
     await prisma.$transaction(async (tx) => {
       // Delete related records first
       await tx.rollError.deleteMany({ where: { rollId: id } });
-      await tx.orderAllocation.deleteMany({ where: { rollId: id } });
-      await tx.shipmentItem.deleteMany({ where: { rollId: id } });
       // Delete the roll
       await tx.roll.delete({ where: { id } });
     });
@@ -1372,6 +1199,7 @@ export class InventoryService {
     }
 
     const propertyIds = receipt.appliedProperties.map((p) => p.propertyId);
+    const defaultQualityGradeId = await resolveQualityGradeId("1.KALITE");
 
     const roll = await prisma.$transaction(async (tx) => {
       const created = await tx.roll.create({
@@ -1383,6 +1211,7 @@ export class InventoryService {
           currentQty: 0,
           status: RollStatus.IN_PRODUCTION,
           qualityGrade: "1.KALITE",
+          qualityGradeId: defaultQualityGradeId,
           entrySource: RollEntrySource.SUBCONTRACTOR_RETURN,
           createdById: userId ?? null,
           currentStepId: step.id,
@@ -1449,14 +1278,27 @@ export class InventoryService {
   // Açık kumaş Roll'unun ölçümü tamamlanır:
   //   - currentQty / initialQty = totalMeters (cihazda gözüken)
   //   - RollError'lar toplu insert (sadece startMeter zorunlu)
-  //   - RollOperation: KURSUN_APPLIED + QC2_COMPLETED
+  //   - RollOperation: QC2_COMPLETED her zaman, KURSUN_APPLIED istasyonun
+  //     KURSUN yeteneği varsa
+  //   - İstasyonun propertyCapabilities listesi Roll'a RollProperty olarak kopyalanır
   //   - Kurşun/KK2 movement'ı kapatılır (qtyOut=totalMeters, exitedAt=now)
   //   - Sonraki step (Tambur) için RollMovement açılır + Roll.currentStepId güncellenir
   //
   async kursunFinish(
     rollId: string,
     data: {
-      totalMeters: number;
+      /**
+       * Opsiyonel. Yeni model: açık kumaş Roll fason kabulden zaten metrajlı
+       * doğar (irsaliye değeri). KK2'de ölçüm yapılmadığı için `totalMeters`
+       * verilmezse mevcut `currentQty` kullanılır. Boya'da fire/çekme varsa
+       * operatör bunu manuel girebilir.
+       */
+      totalMeters?: number;
+      /**
+       * Opsiyonel batch hata kaydı. Yeni akışta operatör hataları KK2 ekranında
+       * "Hata Ekle" ile tek tek girer (reportError endpoint'i); burası genelde
+       * boş gönderilir. Verilirse RollError olarak eklenir.
+       */
       errors?: Array<{
         startMeter: number;
         defectTypeId?: string | null;
@@ -1465,10 +1307,6 @@ export class InventoryService {
     },
     userId?: string,
   ): Promise<ApiResponse<{ rollId: string; totalMeters: number; nextStepId: string | null }>> {
-    if (!(data.totalMeters > 0)) {
-      throw AppError.badRequest("Toplam metraj pozitif olmalı");
-    }
-
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
       include: {
@@ -1501,16 +1339,25 @@ export class InventoryService {
         `Roll PROCESS_QC step'inde değil (mevcut: ${roll.currentStep.station.kind})`,
       );
     }
-    if (roll.initialQty > 0) {
-      throw AppError.conflict("Bu Roll'un Kurşun/KK2 ölçümü zaten tamamlanmış");
+
+    // totalMeters opsiyonel — verilmezse mevcut currentQty (fason kabulden gelen
+    // irsaliye değeri) kullanılır. Verilirse pozitif olmalı.
+    if (data.totalMeters !== undefined && !(data.totalMeters > 0)) {
+      throw AppError.badRequest("Toplam metraj pozitif olmalı");
+    }
+    const totalMeters = data.totalMeters ?? Number(roll.currentQty);
+    if (totalMeters <= 0) {
+      throw AppError.badRequest(
+        "Roll metrajı sıfır — fason kabulde açık kumaş metresi girilmedi mi?",
+      );
     }
 
     // Hata validasyonu — sadece nokta (startMeter)
     const errors = data.errors ?? [];
     for (const e of errors) {
-      if (e.startMeter < 0 || e.startMeter > data.totalMeters) {
+      if (e.startMeter < 0 || e.startMeter > totalMeters) {
         throw AppError.badRequest(
-          `Hata metresi (${e.startMeter}) 0 ile ${data.totalMeters} arasında olmalı`,
+          `Hata metresi (${e.startMeter}) 0 ile ${totalMeters} arasında olmalı`,
         );
       }
     }
@@ -1540,15 +1387,23 @@ export class InventoryService {
     const nextStep = currentIndex < allSteps.length - 1 ? allSteps[currentIndex + 1] : null;
 
     const stepId = roll.currentStep.id;
+    const stationId = roll.currentStep.stationId;
     const woId = roll.currentStep.workOrderId;
+
+    // Kurşun yeteneği per-station: istasyona KURSUN özelliği atanmışsa
+    // KURSUN_APPLIED log'u atılır + RollProperty(KURSUN) otomatik kazanılır.
+    const hasKursunCap = await prisma.stationProperty.findFirst({
+      where: { stationId, property: { code: "KURSUN" } },
+      select: { id: true },
+    });
 
     await prisma.$transaction(async (tx) => {
       // 1) Roll metraj güncelle
       await tx.roll.update({
         where: { id: rollId },
         data: {
-          initialQty: data.totalMeters,
-          currentQty: data.totalMeters,
+          initialQty: totalMeters,
+          currentQty: totalMeters,
         },
       });
 
@@ -1566,30 +1421,35 @@ export class InventoryService {
         });
       }
 
-      // 3) RollOperation: KURSUN_APPLIED + QC2_COMPLETED
-      await tx.rollOperation.createMany({
-        data: [
-          {
-            rollId,
-            workOrderStepId: stepId,
-            operationType: RollOperationType.KURSUN_APPLIED,
-            operatorId: userId ?? null,
-            metadata: { totalMeters: data.totalMeters } as Prisma.InputJsonValue,
-          },
-          {
-            rollId,
-            workOrderStepId: stepId,
-            operationType: RollOperationType.QC2_COMPLETED,
-            operatorId: userId ?? null,
-            metadata: {
-              totalMeters: data.totalMeters,
-              errorCount: errors.length,
-              notes: data.notes ?? null,
-            } as Prisma.InputJsonValue,
-          },
-        ],
-        skipDuplicates: true,
-      });
+      // 3) RollOperation: QC2_COMPLETED (her zaman) + KURSUN_APPLIED (istasyonda
+      //    KURSUN özelliği yetenek olarak atanmışsa). Eskiden ikisi de koşulsuzdu;
+      //    per-roll Kurşun toggle'ı kaldırıldı, kurşun artık istasyon yeteneği.
+      const ops: Prisma.RollOperationCreateManyInput[] = [
+        {
+          rollId,
+          workOrderStepId: stepId,
+          operationType: RollOperationType.QC2_COMPLETED,
+          operatorId: userId ?? null,
+          metadata: {
+            totalMeters: totalMeters,
+            errorCount: errors.length,
+            notes: data.notes ?? null,
+          } as Prisma.InputJsonValue,
+        },
+      ];
+      if (hasKursunCap) {
+        ops.push({
+          rollId,
+          workOrderStepId: stepId,
+          operationType: RollOperationType.KURSUN_APPLIED,
+          operatorId: userId ?? null,
+          metadata: { totalMeters: totalMeters } as Prisma.InputJsonValue,
+        });
+      }
+      await tx.rollOperation.createMany({ data: ops, skipDuplicates: true });
+
+      // 3b) İstasyon yetenekleri (propertyCapabilities) Roll'a kopyalanır.
+      await copyStationCapabilitiesToRoll(tx, { stationId, rollId });
 
       // 4) Kurşun/KK2 movement'ı kapat (qtyOut = ölçülen toplam metre)
       await tx.rollMovement.updateMany({
@@ -1599,20 +1459,22 @@ export class InventoryService {
           exitedAt: null,
         },
         data: {
-          qtyOut: data.totalMeters,
+          qtyOut: totalMeters,
           exitedAt: new Date(),
         },
       });
 
-      // 5) Sonraki step (Tambur) için movement aç + Roll.currentStepId
+      // 5) Sonraki step (Tambur) için movement aç + Roll.currentStepId.
+      // Status IN_PRODUCTION — Tambur cutOpenFabric bunu zorunlu kılar.
       if (nextStep) {
         await openMovementForNextStep(tx, {
           rollId,
           nextStepId: nextStep.id,
-          qty: data.totalMeters,
+          qty: totalMeters,
           weight: null,
           userId: userId ?? null,
           notes: `KURSUN_FINISHED:${stepId}`,
+          rollStatus: RollStatus.IN_PRODUCTION,
         });
       } else {
         // Sonraki step yok — son step'ten çıkış. Açık kumaşın Tambur'a girmesi
@@ -1638,7 +1500,7 @@ export class InventoryService {
       recordId: rollId,
       newData: {
         kursunFinished: true,
-        totalMeters: data.totalMeters,
+        totalMeters: totalMeters,
         errorCount: errors.length,
         nextStepId: nextStep?.id ?? null,
       },
@@ -1648,12 +1510,12 @@ export class InventoryService {
       success: true,
       data: {
         rollId,
-        totalMeters: data.totalMeters,
+        totalMeters: totalMeters,
         nextStepId: nextStep?.id ?? null,
       },
       message: nextStep
-        ? `Kurşun/KK2 tamamlandı (${data.totalMeters} mt). Roll Tambur step'ine ilerletildi.`
-        : `Kurşun/KK2 tamamlandı (${data.totalMeters} mt). Sonraki step yok — Roll PRODUCED.`,
+        ? `Kurşun/KK2 tamamlandı (${totalMeters} mt). Roll Tambur step'ine ilerletildi.`
+        : `Kurşun/KK2 tamamlandı (${totalMeters} mt). Sonraki step yok — Roll PRODUCED.`,
     };
   }
 }

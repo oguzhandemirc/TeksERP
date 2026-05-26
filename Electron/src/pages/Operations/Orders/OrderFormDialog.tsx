@@ -61,6 +61,14 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
   const isEdit = Boolean(order);
   const partialShipped = order?.status === "PARTIAL_SHIPPED";
   const headerLocked = partialShipped;
+  // Kalem düzenleme: PARTIAL_SHIPPED değil + hiçbir kalem aktif (CANCELLED dışı)
+  // bir WO'ya bağlı değil. Aksi halde kalemler kilitli — bilgi notu gösterilir.
+  const linesEditable =
+    !isEdit ||
+    (!partialShipped &&
+      (order?.lines ?? []).every((l) =>
+        (l.workOrderLinks ?? []).every((link) => link.workOrder.status === "CANCELLED"),
+      ));
   const pricingEnabled = usePricingEnabled();
 
   const currenciesQ = useQuery({
@@ -84,7 +92,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
 
   const lineSummary = useMemo(() => {
     if (!order) return "";
-    const totalQty = order.lines.reduce((acc, l) => acc + l.quantity, 0);
+    const totalQty = order.lines.reduce((acc, l) => acc + Number(l.quantity), 0);
     return `${order.lines.length} kalem · toplam ${totalQty.toLocaleString("tr-TR")} m`;
   }, [order]);
 
@@ -97,7 +105,9 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
             {isEdit
               ? partialShipped
                 ? "Sipariş kısmi sevk edilmiş — sadece termin güncellenebilir."
-                : "Üst-düzey alanlar güncellenebilir. Kalemler için iptal + yeniden oluştur."
+                : linesEditable
+                  ? "İş emri açılmadığı için kalemler hâlâ düzenlenebilir."
+                  : "İş emri açılmış — sadece üst-düzey alanlar güncellenebilir."
               : "Müşteri sipariş bilgisi + en az bir kalem. Sipariş numarası otomatik atanır."}
           </DialogDescription>
         </DialogHeader>
@@ -189,12 +199,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
             )}
           </div>
 
-          {isEdit ? (
-            <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Kalemler kilitli</span> · {lineSummary}.
-              Değiştirmek için bu siparişi iptal edip yeniden oluştur.
-            </div>
-          ) : (
+          {linesEditable ? (
             <div className="border-t pt-3">
               <Controller
                 control={form.control}
@@ -208,6 +213,11 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
                   />
                 )}
               />
+            </div>
+          ) : (
+            <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Kalemler kilitli</span> · {lineSummary}.
+              İş emri açılmış kalemleri değiştirmek için önce iş emrini iptal et.
             </div>
           )}
 

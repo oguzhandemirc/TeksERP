@@ -1,9 +1,8 @@
 // =============================================================================
 // TeksERP - Customer Name Cascade Helper
 // =============================================================================
-// Etiket / irsaliye / kartela basımında "müşterinin gördüğü ad" cascade'i.
-// Tek yerde tutulur ki packaging, shipping, swatch, label endpoint'leri aynı
-// mantıkla çalışsın.
+// Etiket / kartela basımında "müşterinin gördüğü ad" cascade'i.
+// Tek yerde tutulur ki swatch, label endpoint'leri aynı mantıkla çalışsın.
 //
 // Sıra:
 //   OrderLine.customerItemName  (1-shot override)  →  source: "OVERRIDE"
@@ -53,7 +52,7 @@ export function normalizeOverride(v: string | null | undefined): string | null {
 
 // =============================================================================
 // Toplu master alias çekme — N rulolu listelerde 2N query yerine 2 query.
-// shipping.buildShipmentPrintSnapshot gibi snapshot inşa eden yerler için.
+// Snapshot inşa eden yerler için.
 // =============================================================================
 
 export interface BatchAliasResult {

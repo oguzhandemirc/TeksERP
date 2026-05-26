@@ -28,7 +28,6 @@ export interface RollLabelPayload {
   orderNumber: string | null;
   orderLineId: string | null;
 
-  ownerCustomerName: string | null;
   batchNumber: string | null;
   printedAt: string | null;
 }
@@ -42,6 +41,18 @@ export const labelService = {
   getRollLabel: (rollId: string): Promise<ApiResponse<RollLabelPayload>> =>
     apiClient
       .get<ApiResponse<RollLabelPayload>>(`/api/labels/rolls/${rollId}`)
+      .then((r) => r.data),
+
+  /**
+   * Etiketin tam HTML'i — backend `LabelTemplate` config'ine göre render edilir,
+   * mobil basım ve LabelTemplates önizlemesi ile birebir aynı çıktı.
+   */
+  getRollLabelHtml: (rollId: string): Promise<string> =>
+    apiClient
+      .get<string>(`/api/labels/rolls/${rollId}/html`, {
+        responseType: "text",
+        transformResponse: [(d) => d],
+      })
       .then((r) => r.data),
 
   updateOrderLineOverride: (

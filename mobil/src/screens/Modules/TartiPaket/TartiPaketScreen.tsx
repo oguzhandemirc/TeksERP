@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button, IconButton, Surface } from 'react-native-paper';
+import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
@@ -29,6 +30,8 @@ import SacksPanel from './components/SacksPanel';
 
 export default function TartiPaketScreen() {
   const qc = useQueryClient();
+  const device = useDeviceType();
+  const isPhone = device === 'phone';
   const activeQueueId = useShippingSessionStore((s) => s.activeQueueId);
   const startSession = useShippingSessionStore((s) => s.startSession);
   const endSession = useShippingSessionStore((s) => s.endSession);
@@ -160,15 +163,6 @@ export default function TartiPaketScreen() {
           type: 'error',
           text1: 'Top için barkod yok',
           text2: 'Açık kumaş Roll tartılamaz',
-        });
-        return;
-      }
-
-      // Fason kuralı
-      if (roll.ownerCustomerId && roll.ownerCustomerId !== activeJob.order.customer.id) {
-        Toast.show({
-          type: 'error',
-          text1: 'Fason top başka müşteriye ait',
         });
         return;
       }
@@ -330,18 +324,32 @@ export default function TartiPaketScreen() {
               </Button>
             </Surface>
 
-            {/* İki sütun: ihtiyaçlar + çuvallar */}
-            <View style={S.twoColumn}>
-              <View style={S.leftCol}>
-                <RequirementsPanel job={activeJob} />
+            {/* İhtiyaçlar + çuvallar — telefonda dikey, tablette iki sütun */}
+            {isPhone ? (
+              <ScrollView style={S.phoneScroll} contentContainerStyle={S.phoneScrollContent}>
+                <View style={S.phoneSection}>
+                  <RequirementsPanel job={activeJob} />
+                </View>
+                <View style={S.phoneSection}>
+                  <SacksPanel
+                    job={activeJob}
+                    onOpenScanner={() => setScannerOpen(true)}
+                  />
+                </View>
+              </ScrollView>
+            ) : (
+              <View style={S.twoColumn}>
+                <View style={S.leftCol}>
+                  <RequirementsPanel job={activeJob} />
+                </View>
+                <View style={S.rightCol}>
+                  <SacksPanel
+                    job={activeJob}
+                    onOpenScanner={() => setScannerOpen(true)}
+                  />
+                </View>
               </View>
-              <View style={S.rightCol}>
-                <SacksPanel
-                  job={activeJob}
-                  onOpenScanner={() => setScannerOpen(true)}
-                />
-              </View>
-            </View>
+            )}
           </View>
         )}
 
@@ -392,4 +400,7 @@ const S = StyleSheet.create({
   twoColumn: { flex: 1, flexDirection: 'row' },
   leftCol: { width: 380 },
   rightCol: { flex: 1 },
+  phoneScroll: { flex: 1 },
+  phoneScrollContent: { paddingBottom: 16 },
+  phoneSection: { minHeight: 280 },
 });

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Icon } from 'react-native-paper';
 
@@ -20,31 +20,37 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
   const remaining = target != null ? Math.max(0, target - dispatched) : null;
   const overshoot = target != null && dispatched > target;
 
-  const externalStations = (wo.steps ?? [])
-    .filter((s) => s.station?.type === 'EXTERNAL')
-    .map((s) => ({
-      id: s.id,
-      name: s.station?.name ?? '—',
-      status: s.status,
-      seq: s.stepSequence,
-    }));
+  const externalStations = useMemo(
+    () =>
+      (wo.steps ?? [])
+        .filter((s) => s.station?.type === 'EXTERNAL')
+        .map((s) => ({
+          id: s.id,
+          name: s.station?.name ?? '—',
+          status: s.status,
+          seq: s.stepSequence,
+        })),
+    [wo.steps],
+  );
 
-  const linesByCustomer = new Map<
-    string,
-    {
-      customer: { id: string; name: string };
-      lines: NonNullable<typeof wo.orderLinks>[number][];
+  const customerGroups = useMemo(() => {
+    const m = new Map<
+      string,
+      {
+        customer: { id: string; name: string };
+        lines: NonNullable<typeof wo.orderLinks>[number][];
+      }
+    >();
+    for (const link of wo.orderLinks ?? []) {
+      const c = link.orderLine?.order?.customer;
+      if (!c) continue;
+      const entry = m.get(c.id) ?? { customer: c, lines: [] };
+      entry.lines.push(link);
+      m.set(c.id, entry);
     }
-  >();
-  for (const link of wo.orderLinks ?? []) {
-    const c = link.orderLine?.order?.customer;
-    if (!c) continue;
-    const entry = linesByCustomer.get(c.id) ?? { customer: c, lines: [] };
-    entry.lines.push(link);
-    linesByCustomer.set(c.id, entry);
-  }
+    return Array.from(m.values());
+  }, [wo.orderLinks]);
 
-  const isService = wo.type === 'SERVICE_PRODUCTION';
   const isStock = wo.type === 'STOCK_PRODUCTION';
 
   return (
@@ -59,12 +65,6 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
         <Text style={styles.statusText}>
           {trLabel(WORK_ORDER_STATUS_LABEL, wo.status)}
         </Text>
-        {isService && (
-          <View style={[styles.typeTag, styles.serviceTag]}>
-            <Icon source="alert-circle" size={12} color="#92400e" />
-            <Text style={[styles.typeTagText, { color: '#92400e' }]}>Müşteri Malı</Text>
-          </View>
-        )}
         {isStock && (
           <View style={[styles.typeTag, styles.stockTag]}>
             <Icon source="package-variant" size={12} color="#1e40af" />
@@ -116,8 +116,8 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
         </View>
       )}
 
-      {linesByCustomer.size > 0 &&
-        Array.from(linesByCustomer.values()).map(({ customer, lines }) => (
+      {customerGroups.length > 0 &&
+        customerGroups.map(({ customer, lines }) => (
           <View key={customer.id} style={styles.card}>
             <View style={styles.customerHeader}>
               <Icon source="account" size={14} color="#4f46e5" />
@@ -155,7 +155,7 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
           </View>
         ))}
 
-      {linesByCustomer.size === 0 && wo.type === 'STOCK_PRODUCTION' && (
+      {customerGroups.length === 0 && wo.type === 'STOCK_PRODUCTION' && (
         <View style={styles.card}>
           <View style={styles.row}>
             <Icon source="package-variant" size={14} color="#64748b" />

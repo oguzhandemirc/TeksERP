@@ -16,14 +16,6 @@ export interface StockDistribution {
   byWidth: { widthBucket: string; rollCount: number; totalQty: number }[];
 }
 
-export interface CustomerOwnedRow {
-  customerId: string;
-  customerCode: string;
-  customerName: string;
-  rollCount: number;
-  totalQty: number;
-}
-
 export interface DailyMovementRow {
   day: string;
   stationName: string;
@@ -38,7 +30,6 @@ async function getSnapshot<T>(path: string) {
 export const inventoryReportsApi = {
   rollAging: () => getSnapshot<RollAgingSummary>("inventory/roll-aging"),
   stockDistribution: () => getSnapshot<StockDistribution>("inventory/stock-distribution"),
-  customerOwned: () => getSnapshot<CustomerOwnedRow[]>("inventory/customer-owned"),
   dailyMovements: (p: ReportDateParams) =>
     reportsClient.get<DailyMovementRow[]>("inventory/movements", p),
 };

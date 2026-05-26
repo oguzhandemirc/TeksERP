@@ -16,6 +16,7 @@ const service = new BaseService({
   tableName: "COLOR",
   searchFields: ["code", "name"],
   defaultInclude: undefined,
+  uniqueField: "code",
 });
 
 const controller = new BaseController(service);

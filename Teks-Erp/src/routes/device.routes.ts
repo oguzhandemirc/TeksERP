@@ -113,3 +113,33 @@ deviceAdminRouter.delete(
   requirePermission("admin:settings"),
   DeviceController.deactivate
 );
+
+/**
+ * @openapi
+ * /api/admin/devices/{id}/reactivate:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Pasif cihazı tekrar aktifleştir (eşleşme kurulmaz — yeni pairing kodu gerekir)
+ *     security: [{ bearerAuth: [] }]
+ */
+deviceAdminRouter.post(
+  "/:id/reactivate",
+  verifyToken,
+  requirePermission("admin:settings"),
+  DeviceController.reactivate
+);
+
+/**
+ * @openapi
+ * /api/admin/devices/{id}/permanent:
+ *   delete:
+ *     tags: [Admin]
+ *     summary: Cihazı kalıcı olarak sil (yalnız eşleşmemiş cihazlar)
+ *     security: [{ bearerAuth: [] }]
+ */
+deviceAdminRouter.delete(
+  "/:id/permanent",
+  verifyToken,
+  requirePermission("admin:settings"),
+  DeviceController.hardDelete
+);

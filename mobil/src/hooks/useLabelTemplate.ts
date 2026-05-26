@@ -5,11 +5,15 @@ import { labelTemplateService } from '../services/labelTemplate.service';
 import type { LabelKind, LabelTemplate } from '../types/models';
 
 // =============================================================================
-// Etiket template fetch + AsyncStorage cache (Refactor 7)
+// Etiket template fetch + AsyncStorage cache
 // =============================================================================
 // App açılışında veya kind görünür olduğunda template listesi fetch edilir;
 // kind içindeki default template seçilir. Network kapalıysa cache'ten okur.
 // Backend `label-template:read` yetkisi gerektirir; yetki yoksa fallback null.
+//
+// staleTime=0 + refetchOnMount: planlama Electron'da şablonu güncelledikten
+// sonra mobil ekran her açılışta/her print'te güncel default'u alır. Print
+// anında LabelPrinter ayrıca `refetch()` çağırarak ekstra güvence sağlar.
 // =============================================================================
 
 const CACHE_PREFIX = '@label-template:';
@@ -34,11 +38,16 @@ async function writeCache(kind: LabelKind, tpl: LabelTemplate): Promise<void> {
 /**
  * Verilen LabelKind için aktif default template'i döner. Önce network'ten alır,
  * başarısızsa cache'ten fallback. Cache her başarılı fetch'te güncellenir.
+ *
+ * `refetch()` — caller (LabelPrinter) print anında çağırır; Promise döner ve
+ * sonuçtaki fresh default'u kullanır. Bu sayede Electron'da yeni yapılan
+ * değişiklikler 5 dakika cache beklemeden yansır.
  */
 export function useLabelTemplate(kind: LabelKind): {
   template: LabelTemplate | null;
   isLoading: boolean;
   isError: boolean;
+  refetch: () => Promise<LabelTemplate | null>;
 } {
   const [cached, setCached] = useState<LabelTemplate | null>(null);
 
@@ -55,7 +64,8 @@ export function useLabelTemplate(kind: LabelKind): {
   const q = useQuery({
     queryKey: ['label-templates', kind],
     queryFn: () => labelTemplateService.list({ kind }),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
     retry: 0,
   });
 
@@ -65,9 +75,17 @@ export function useLabelTemplate(kind: LabelKind): {
     if (fetched) void writeCache(kind, fetched);
   }, [fetched, kind]);
 
+  const refetch = async (): Promise<LabelTemplate | null> => {
+    const result = await q.refetch();
+    const fresh = (result.data?.data ?? []).find((t) => t.isDefault) ?? null;
+    if (fresh) await writeCache(kind, fresh);
+    return fresh;
+  };
+
   return {
     template: fetched ?? cached,
     isLoading: q.isLoading,
     isError: q.isError,
+    refetch,
   };
 }

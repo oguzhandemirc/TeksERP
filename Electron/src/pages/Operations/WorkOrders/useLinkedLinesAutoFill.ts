@@ -22,7 +22,7 @@ export function useLinkedLinesAutoFill(form: UseFormReturn<WorkOrderFormValues>)
     if (!first) return null;
     const allSameWidth = pickedLines.every((l) => l.width === first.width);
     return {
-      totalQuantity: pickedLines.reduce((sum, l) => sum + l.quantity, 0),
+      totalQuantity: pickedLines.reduce((sum, l) => sum + Number(l.quantity), 0),
       width: allSameWidth && first.width != null ? first.width : null,
     };
   }, [pickedLines]);

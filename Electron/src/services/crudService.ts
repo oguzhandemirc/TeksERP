@@ -18,6 +18,7 @@ export interface CrudService<T> {
   update: (id: string, data: Partial<T>) => Promise<ApiResponse<T>>;
   remove: (id: string) => Promise<ApiResponse<T>>;
   hardRemove: (id: string) => Promise<ApiResponse<T>>;
+  restore: (id: string) => Promise<ApiResponse<T>>;
 }
 
 export function createCrudService<T>(basePath: string): CrudService<T> {
@@ -33,5 +34,9 @@ export function createCrudService<T>(basePath: string): CrudService<T> {
     update: (id, data) => apiClient.patch<ApiResponse<T>>(`${basePath}/${id}`, data).then((r) => r.data),
     remove: (id) => apiClient.delete<ApiResponse<T>>(`${basePath}/${id}`).then((r) => r.data),
     hardRemove: (id) => apiClient.delete<ApiResponse<T>>(`${basePath}/${id}/permanent`).then((r) => r.data),
+    restore: (id) =>
+      apiClient
+        .patch<ApiResponse<T>>(`${basePath}/${id}`, { isActive: true })
+        .then((r) => r.data),
   };
 }

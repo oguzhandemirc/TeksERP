@@ -9,7 +9,7 @@
 import { Router } from "express";
 import { TravelerCardController } from "../controllers/traveler-card.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const controller = new TravelerCardController();
 
@@ -127,7 +127,7 @@ const travelerCardRouter = Router();
 travelerCardRouter.get(
   "/",
   verifyToken,
-  requirePermission("workorder:read"),
+  requireAnyPermission("workorder:read", "mobile:kk1", "mobile:fason-sevk"),
   controller.list
 );
 
@@ -183,7 +183,7 @@ travelerCardRouter.post(
 travelerCardRouter.get(
   "/by-barcode/:barcode",
   verifyToken,
-  requirePermission("workorder:read"),
+  requireAnyPermission("workorder:read", "mobile:fason-kabul", "mobile:fason-sevk"),
   controller.findByBarcode
 );
 

@@ -27,7 +27,7 @@ export function StockDistributionPage() {
   return (
     <ReportPageLayout
       title="Stok Dağılımı"
-      description="Mevcut stokta (WAREHOUSE, READY_FOR_SHIP vb.) renk, ürün ve en kırılımı."
+      description="Mevcut stokta (WAREHOUSE vb.) renk, ürün ve en kırılımı."
       showDateRange={false}
     >
       <div className="grid gap-3 sm:grid-cols-2">

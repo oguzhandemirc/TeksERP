@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   Award,
   Palette,
-  Truck,
   Sparkles,
   Tag,
   Building2,
@@ -139,15 +138,6 @@ export const definitionTiles: DefinitionTile[] = [
     permission: "quality:read",
   },
   {
-    key: "shipping-tolerance",
-    title: "Sevk Eksiklik Toleransı",
-    description: "Sipariş kapatma için izin verilen eksik metraj",
-    icon: Truck,
-    to: "/definitions/shipping-tolerance",
-    group: "system",
-    permission: "admin:settings",
-  },
-  {
     key: "deadline-defaults",
     title: "Termin Varsayılanları",
     description: "Sipariş ve iş emri açılışında otomatik atanan termin günleri",
@@ -159,7 +149,7 @@ export const definitionTiles: DefinitionTile[] = [
   {
     key: "label-templates",
     title: "Etiket Standartları",
-    description: "Top, kartela ve sevkiyat etiketleri için alan listesi ve görünüm",
+    description: "Top ve kartela etiketleri için alan listesi ve görünüm",
     icon: Tags,
     to: "/definitions/label-templates",
     group: "system",

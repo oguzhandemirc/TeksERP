@@ -8,18 +8,34 @@ import type { Roll } from "./types";
 
 /**
  * Roll'un fiziksel/işlenmiş durumunu renk ve duruma göre türet.
- * - Ham: renk yok (boyahaneye girmemiş veya sevkten dönmemiş)
- * - Bitmiş: WAREHOUSE veya READY_FOR_SHIP'e ulaşmış
- * - İşleniyor: rengi var ama henüz depoya inmemiş
+ * - Ham:        renk yok ve aktif üretimde değil (stokta bekleyen çiğ kumaş)
+ * - İşleniyor:  aktif üretimde (IN_PRODUCTION / AT_SUBCONTRACTOR / PRODUCED)
+ * - Açık Kumaş: fason dönüşü açık kumaş (parentReceiptId set, henüz Tambur'a
+ *               girmemiş — boyalı olsa bile "Bitmiş" değildir, Tambur kararı
+ *               bekliyor)
+ * - Bitmiş:     WAREHOUSE (Tambur'dan çıkmış, depoya alınmış)
+ * - Arşiv:      tambur'da bölünmüş, fasonda tüketilmiş veya sevkten dönmüş
  */
-function rollProcessingState(roll: Roll): "ham" | "isleniyor" | "bitmis" {
+function rollProcessingState(
+  roll: Roll,
+): "ham" | "isleniyor" | "acik" | "bitmis" | "arsiv" {
   if (
-    roll.status === RollStatus.WAREHOUSE ||
-    roll.status === RollStatus.READY_FOR_SHIP ||
-    roll.status === RollStatus.SHIPPED ||
-    roll.status === RollStatus.A1_STOCK
+    roll.status === RollStatus.TAMBUR_CONSUMED ||
+    roll.status === RollStatus.SUBCONTRACTOR_CONSUMED ||
+    roll.status === RollStatus.RETURNED_FROM_SUBCONTRACTOR
   ) {
+    return "arsiv";
+  }
+  if (roll.status === RollStatus.WAREHOUSE) {
     return "bitmis";
+  }
+  // Fason dönüşü açık kumaş — boyalı bile olsa Tambur'a girmediği için "Bitmiş"
+  // değildir. parentReceiptId tek başına yeterli sinyal (KK1 girişi vb. yok).
+  if (roll.parentReceiptId) {
+    return "acik";
+  }
+  if (roll.status === RollStatus.STOCK) {
+    return roll.colorId ? "bitmis" : "ham";
   }
   if (roll.colorId) return "isleniyor";
   return "ham";
@@ -28,7 +44,9 @@ function rollProcessingState(roll: Roll): "ham" | "isleniyor" | "bitmis" {
 const processingLabels: Record<ReturnType<typeof rollProcessingState>, string> = {
   ham: "Ham",
   isleniyor: "İşleniyor",
+  acik: "Açık Kumaş",
   bitmis: "Bitmiş",
+  arsiv: "Arşiv",
 };
 
 export const rollColumns: ColumnDef<Roll>[] = [
@@ -100,11 +118,10 @@ export const rollColumns: ColumnDef<Roll>[] = [
     header: "Tip",
     cell: ({ row }) => {
       const state = rollProcessingState(row.original);
+      const variant =
+        state === "bitmis" ? "default" : state === "arsiv" ? "muted" : "outline";
       return (
-        <Badge
-          variant={state === "bitmis" ? "default" : "outline"}
-          className="text-[10px]"
-        >
+        <Badge variant={variant} className="text-[10px]">
           {processingLabels[state]}
         </Badge>
       );
@@ -137,7 +154,27 @@ export const rollColumns: ColumnDef<Roll>[] = [
   {
     accessorKey: "qualityGrade",
     header: () => <SortableHeader field="qualityGrade" label="Kalite" />,
-    cell: ({ row }) => <span className="text-xs">{row.original.qualityGrade}</span>,
+    cell: ({ row }) => {
+      const grade = row.original.qualityGrade;
+      if (grade === "FIRE") {
+        return (
+          <Badge variant="destructive" className="text-[10px]">
+            Fire
+          </Badge>
+        );
+      }
+      if (grade === "A1") {
+        return (
+          <Badge
+            variant="outline"
+            className="text-[10px] border-amber-500 text-amber-700"
+          >
+            A1
+          </Badge>
+        );
+      }
+      return <span className="text-xs">{grade}</span>;
+    },
   },
   {
     accessorKey: "status",
@@ -153,18 +190,14 @@ export const rollColumns: ColumnDef<Roll>[] = [
   {
     accessorKey: "createdAt",
     header: () => <SortableHeader field="createdAt" label="Tarih" />,
-    cell: ({ row }) => (
-      <span className="text-xs tabular-nums">{safeFormat(row.original.createdAt, "dd.MM.yyyy")}</span>
-    ),
-  },
-  {
-    id: "owner",
-    header: "Sahibi",
-    cell: ({ row }) =>
-      row.original.ownerCustomer ? (
-        <span className="text-xs">{row.original.ownerCustomer.name}</span>
-      ) : (
-        <span className="text-muted-foreground">— (firma)</span>
-      ),
+    cell: ({ row }) => {
+      const d = row.original.createdAt;
+      return (
+        <span className="text-xs tabular-nums leading-tight">
+          {safeFormat(d, "dd.MM.yyyy")}
+          <span className="ml-1 text-muted-foreground">{safeFormat(d, "HH:mm")}</span>
+        </span>
+      );
+    },
   },
 ];

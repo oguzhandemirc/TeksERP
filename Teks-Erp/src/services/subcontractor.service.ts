@@ -21,6 +21,7 @@ import {
   Prisma,
   RollOperationType,
   RollStatus,
+  StationKind,
   StationType,
   StepStatus,
   TravelerCardStatus,
@@ -33,6 +34,7 @@ import {
   recomputeStepStatus,
   ensureWorkOrderInProgress,
 } from "./helpers/roll-step.helper";
+import { resolveQualityGradeId } from "./helpers/quality-grade.helper";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -133,6 +135,61 @@ async function logTravelerScan(
       notes: note,
     },
   });
+}
+
+// -----------------------------------------------------------------------------
+// Cascade cancel — receipt'ten doğan açık kumaş roll'larının iptal güvenlik kontrolü
+// -----------------------------------------------------------------------------
+
+/** Frontend'in iptal preview ekranında listelediği her bornRoll için döner. */
+export interface BornRollPreviewItem {
+  id: string;
+  itemCode: string;
+  itemName: string;
+  colorName: string | null;
+  currentQty: number;
+  status: RollStatus;
+  /** Boş ise cascade iptal güvenli. Dolu ise her satır operatöre gösterilir. */
+  blockingReasons: string[];
+  safeToCancel: boolean;
+}
+
+type BornRollDownstreamShape = {
+  status: RollStatus;
+  operations: { id: string }[];
+  movements: { exitedAt: Date | null }[];
+  children: { id: string }[];
+  dispatchItems: { id: string }[];
+};
+
+/**
+ * Bir bornRoll cascade iptal edilebilir mi? Downstream'i olan (operasyon
+ * görmüş, sonraki istasyona geçmiş, Tambur'da bölünmüş, başka fasona
+ * gönderilmiş) Roll'lar iptal edilemez — önce manuel temizlik gerekir.
+ *
+ * SAFE statüler: STOCK, IN_PRODUCTION. Diğerleri (TAMBUR_CONSUMED,
+ * WAREHOUSE, SCRAP, A1_STOCK, AT_SUBCONTRACTOR vb.) cascade'i tetiklerse
+ * iz tutarsızlığı yaratır.
+ */
+function computeBornRollBlockingReasons(roll: BornRollDownstreamShape): string[] {
+  const reasons: string[] = [];
+  if (roll.operations.length > 0) {
+    reasons.push("Üzerinde işlem yapılmış");
+  }
+  if (roll.movements.some((m) => m.exitedAt !== null)) {
+    reasons.push("Sonraki istasyona geçmiş");
+  }
+  if (roll.children.length > 0) {
+    reasons.push("Tambur'da bölünmüş");
+  }
+  if (roll.dispatchItems.length > 0) {
+    reasons.push("Başka fason sevkinde");
+  }
+  const safeStatuses: RollStatus[] = [RollStatus.STOCK, RollStatus.IN_PRODUCTION];
+  if (!safeStatuses.includes(roll.status)) {
+    reasons.push(`Durum: ${roll.status}`);
+  }
+  return reasons;
 }
 
 // -----------------------------------------------------------------------------
@@ -241,7 +298,7 @@ export class SubcontractorService {
         autoAttachIds.add(r.id);
         continue;
       }
-      // 2) Zaten bu adıma bağlı → eski mantık (geç)
+      // 2) Zaten bu adıma bağlı → geç
       if (r.currentStepId !== data.stepId) {
         throw AppError.badRequest(
           `Top ${r.barcode} bu adımda değil (mevcut step: ${r.currentStepId ?? "yok"})`
@@ -254,7 +311,7 @@ export class SubcontractorService {
       }
     }
 
-    const totalQty = rolls.reduce((s, r) => s + r.currentQty, 0);
+    const totalQty = rolls.reduce((s, r) => s + Number(r.currentQty), 0);
 
     const result = await prisma.$transaction(async (tx) => {
       // Otomatik attach: serbest stoktaki toplar bu adıma bağlanır.
@@ -304,7 +361,7 @@ export class SubcontractorService {
         width: r.width ?? null,
       }));
 
-      const totalWeight = rollSnapshots.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
+      const totalWeight = rollSnapshots.reduce((s, r) => s + Number(r.dispatchedWeight ?? 0), 0);
 
       const printSnapshot = {
         dispatchNo,
@@ -667,6 +724,7 @@ export class SubcontractorService {
         id: true,
         targetItemId: true,
         targetColorId: true,
+        width: true,
         targetProperties: { select: { propertyId: true } },
       },
     });
@@ -897,25 +955,34 @@ export class SubcontractorService {
         }
       }
 
-      // 5) newRolls verildiyse açık kumaş Roll'larını burada doğur. Sonraki
-      //    adım rotadaki bir sonraki adım — fason ise oraya bağlanır (kullanıcı
-      //    sonra Dispatch çağırır), değilse Kurşun/KK2 gibi internal step'e.
-      //    nextStep yoksa Roll'lar serbest stokta kalır.
+      // 5) newRolls açık kumaş Roll'larını burada doğur. Controller seviyesinde
+      //    min(1) zorunlu — fason kabul her zaman en az bir açık kumaş parçasıyla
+      //    yapılır. Sonraki adım rotadaki bir sonraki adım: fason ise oraya
+      //    bağlanır (kullanıcı sonra Dispatch çağırır), değilse Kurşun/KK2 gibi
+      //    internal step'e. nextStep yoksa Roll'lar serbest stokta kalır.
       if (data.newRolls && data.newRolls.length > 0) {
-        // itemId: WO target varsa onu, yoksa orijinal kaynak Roll'lardan al.
-        let bornItemId = wo.targetItemId;
-        if (!bornItemId) {
-          const sourceRoll = await tx.roll.findFirst({
-            where: { id: { in: returnRollIds } },
-            select: { itemId: true },
-          });
-          bornItemId = sourceRoll?.itemId ?? null;
-        }
+        // Kaynak roll'lardan inherit: itemId + width (kumaş eni boyahanede
+        // değişmez, fasondan dönen açık kumaş orijinaldekiyle aynı en'dedir).
+        // WO.targetItemId / WO.width varsa öncelik onlarda.
+        const sourceRoll = await tx.roll.findFirst({
+          where: { id: { in: returnRollIds } },
+          select: { itemId: true, width: true },
+        });
+        const bornItemId = wo.targetItemId ?? sourceRoll?.itemId ?? null;
+        const bornWidth = wo.width ?? sourceRoll?.width ?? null;
         if (!bornItemId) {
           throw AppError.badRequest(
             "Yeni Roll için item belirlenemedi (WO.targetItemId ve kaynak Roll itemId yok)"
           );
         }
+
+        // Açık kumaş Roll'ları için varsayılan kalite — Tambur kararı verilene kadar
+        // "1.KALITE" başlangıç değeri (KK1 girişi pattern'i ile aynı).
+        const defaultQualityGradeCode = "1.KALITE";
+        const defaultQualityGradeId = await resolveQualityGradeId(
+          defaultQualityGradeCode,
+          tx,
+        );
 
         for (const nr of data.newRolls) {
           if (!Number.isFinite(nr.qty) || nr.qty <= 0) {
@@ -928,7 +995,10 @@ export class SubcontractorService {
               initialQty: nr.qty,
               currentQty: nr.qty,
               weightKg: nr.weightKg ?? null,
+              width: bornWidth,
               status: RollStatus.STOCK,
+              qualityGrade: defaultQualityGradeCode,
+              qualityGradeId: defaultQualityGradeId,
               entrySource: "SUBCONTRACTOR_RETURN",
               parentReceiptId: receipt.id,
               currentStepId: nextStep ? nextStep.id : null,
@@ -964,9 +1034,7 @@ export class SubcontractorService {
           await recomputeStepStatus(tx, nextStep.id);
         }
       }
-      // newRolls verilmediyse: sonraki step PENDING'te kalır — Roll yok henüz.
-      // Operatör Kurşun/KK2'de ilk açık kumaş Roll'unu açtığında step ACTIVE olur
-      // (open-fabric endpoint kendisi recomputeStepStatus çağırır).
+      // newRolls boş senaryosu artık geçersiz (controller min(1) ile reddediyor).
 
       // Refakat kartı ARRIVAL
       await logTravelerScan(
@@ -1146,7 +1214,7 @@ export class SubcontractorService {
       const stepRolls = outstandingRolls.filter((r) => r.currentStepId === step.id);
       const stepDispatches = byStep.get(step.id) ?? [];
       const lastDispatch = stepDispatches[0] ?? null;
-      const totalQty = stepRolls.reduce((s, r) => s + r.currentQty, 0);
+      const totalQty = stepRolls.reduce((s, r) => s + Number(r.currentQty), 0);
 
       return {
         step: {
@@ -1192,7 +1260,7 @@ export class SubcontractorService {
     const { skip } = buildPagination(page, pageSize);
 
     // Liste için ÇOK HAFIF select — detay endpoint (`getDispatch`) tam veriyi döner.
-    // Müşteri/orderLinks/ownerCustomer gibi N+ join'ler list response'unu şişiriyordu;
+    // Müşteri/orderLinks gibi N+ join'ler list response'unu şişiriyordu;
     // operatör detaya tıkladığında lazy fetch ile zenginleşir.
     const [dispatches, total] = await Promise.all([
       prisma.subcontractorDispatch.findMany({
@@ -1255,14 +1323,12 @@ export class SubcontractorService {
           },
         },
         step: { include: { station: true } },
-        // Roll-level müşteri sahipliği (SERVICE_PRODUCTION müşteri-malı uyarısı)
         items: {
           include: {
             roll: {
               include: {
                 item: true,
                 color: true,
-                ownerCustomer: true,
               },
             },
           },
@@ -1334,7 +1400,7 @@ export class SubcontractorService {
     const enriched = receipts.map(({ items, ...rest }) => ({
       ...rest,
       totalQty: items.reduce(
-        (sum, it) => sum + (it.sourceDispatchItem?.dispatchedQty ?? 0),
+        (sum, it) => sum + Number(it.sourceDispatchItem?.dispatchedQty ?? 0),
         0
       ),
     }));
@@ -1363,6 +1429,22 @@ export class SubcontractorService {
             newRoll: { include: { item: true, color: true } },
             sourceDispatchItem: { include: { roll: true } },
           },
+        },
+        // Fasondan dönen yeni açık kumaş parçaları (split senaryosu için kritik).
+        // UI bunları ayrı section'da listeler; orijinal items ile karıştırılmaz.
+        bornRolls: {
+          select: {
+            id: true,
+            initialQty: true,
+            currentQty: true,
+            weightKg: true,
+            width: true,
+            status: true,
+            qualityGrade: true,
+            item: { select: { code: true, name: true } },
+            color: { select: { code: true, name: true } },
+          },
+          orderBy: { createdAt: "asc" },
         },
         receivedBy: { select: { id: true, username: true, fullName: true } },
       },
@@ -1417,7 +1499,7 @@ export class SubcontractorService {
       width: item.roll.width ?? null,
     }));
 
-    const totalWeight = rolls.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
+    const totalWeight = rolls.reduce((s, r) => s + Number(r.dispatchedWeight ?? 0), 0);
 
     return {
       success: true,
@@ -1473,11 +1555,87 @@ export class SubcontractorService {
   //   - Step status recompute (genelde COMPLETED → ACTIVE'e döner).
   //   - WO COMPLETED iken iptal yasak.
   //
+  /**
+   * Receipt iptal preview — bornRoll'ları ve her birinin downstream durumunu
+   * döner. Frontend bunu kullanarak operatöre "şu açık kumaş roll'ları da
+   * iptal edilecek" onayı sunar. allSafe=false ise iptal disabled olmalı.
+   */
+  async getCancelPreview(receiptId: string): Promise<
+    ApiResponse<{
+      receiptNo: string;
+      receivedAt: Date;
+      bornRolls: BornRollPreviewItem[];
+      allSafe: boolean;
+      totalBornRolls: number;
+    }>
+  > {
+    const receipt = await prisma.subcontractorReceipt.findUnique({
+      where: { id: receiptId },
+      select: {
+        id: true,
+        receiptNo: true,
+        receivedAt: true,
+        cancelledAt: true,
+        workOrder: { select: { status: true } },
+        bornRolls: {
+          select: {
+            id: true,
+            currentQty: true,
+            status: true,
+            item: { select: { code: true, name: true } },
+            color: { select: { name: true } },
+            // Downstream check: bu roll üzerinde herhangi bir RollOperation var mı
+            operations: { select: { id: true }, take: 1 },
+            // Sonraki istasyona çıkmış mı (exitedAt set olmuş RollMovement)
+            movements: { select: { exitedAt: true } },
+            // Tambur'da bölünmüş mü (çocuk roll türemiş)
+            children: { select: { id: true }, take: 1 },
+            // Başka fason sevkinde mi
+            dispatchItems: { select: { id: true }, take: 1 },
+          },
+        },
+      },
+    });
+    if (!receipt) throw AppError.notFound("Mal kabul belgesi bulunamadı");
+    if (receipt.cancelledAt) {
+      throw AppError.conflict("Bu mal kabul zaten iptal edilmiş");
+    }
+    if (receipt.workOrder.status === "COMPLETED") {
+      throw AppError.conflict("Tamamlanmış iş emrinin mal kabulü iptal edilemez");
+    }
+
+    const bornRolls: BornRollPreviewItem[] = receipt.bornRolls.map((roll) => {
+      const blockingReasons = computeBornRollBlockingReasons(roll);
+      return {
+        id: roll.id,
+        itemCode: roll.item.code,
+        itemName: roll.item.name,
+        colorName: roll.color?.name ?? null,
+        currentQty: Number(roll.currentQty),
+        status: roll.status,
+        blockingReasons,
+        safeToCancel: blockingReasons.length === 0,
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        receiptNo: receipt.receiptNo,
+        receivedAt: receipt.receivedAt,
+        bornRolls,
+        allSafe: bornRolls.every((b) => b.safeToCancel),
+        totalBornRolls: bornRolls.length,
+      },
+    };
+  }
+
   async cancelReceipt(
     receiptId: string,
     reason: string,
     userId?: string,
-  ): Promise<ApiResponse<{ receiptNo: string; revertedRollCount: number }>> {
+    cascadeRollIds: string[] = [],
+  ): Promise<ApiResponse<{ receiptNo: string; revertedRollCount: number; cascadedRollCount: number }>> {
     const trimmedReason = reason?.trim();
     if (!trimmedReason || trimmedReason.length < 3) {
       throw AppError.badRequest("İptal sebebi en az 3 karakter olmalı");
@@ -1498,6 +1656,17 @@ export class SubcontractorService {
             },
           },
         },
+        bornRolls: {
+          select: {
+            id: true,
+            currentStepId: true,
+            status: true,
+            operations: { select: { id: true }, take: 1 },
+            movements: { select: { exitedAt: true } },
+            children: { select: { id: true }, take: 1 },
+            dispatchItems: { select: { id: true }, take: 1 },
+          },
+        },
       },
     });
     if (!receipt) throw AppError.notFound("Mal kabul belgesi bulunamadı");
@@ -1513,18 +1682,68 @@ export class SubcontractorService {
       throw AppError.badRequest("Bu kabul belgesinde rulo yok");
     }
 
-    // Receipt'ten doğmuş "açık kumaş" Roll'ları varsa iptal yasak —
-    // önce o Roll'lar elle silinmeli (Kurşun/KK2 operatörü temizlemeli).
-    const bornRollCount = await prisma.roll.count({
-      where: { parentReceiptId: receiptId },
-    });
-    if (bornRollCount > 0) {
-      throw AppError.conflict(
-        `Bu receipt'ten ${bornRollCount} açık kumaş Roll'u doğmuş — önce onları silin/iptal edin.`
-      );
+    // Cascade kontrolü: bornRoll varsa cascadeRollIds tüm bornRoll'ları kapsamalı
+    // ve hepsi safety check'ten geçmeli. Aksi halde frontend preview göstermemiş
+    // veya bayat veri ile çağırmış demektir → conflict.
+    const bornRollIds = receipt.bornRolls.map((b) => b.id);
+    if (bornRollIds.length > 0) {
+      const cascadeSet = new Set(cascadeRollIds);
+      const missing = bornRollIds.filter((id) => !cascadeSet.has(id));
+      if (missing.length > 0) {
+        throw AppError.conflict(
+          `Bu receipt'ten ${bornRollIds.length} açık kumaş Roll'u türemiş. İptal için tümünün onaylanması gerek (${missing.length} eksik). Önce iptal önizlemesini yenileyin.`,
+        );
+      }
+      const extra = cascadeRollIds.filter((id) => !bornRollIds.includes(id));
+      if (extra.length > 0) {
+        throw AppError.badRequest("Receipt'e ait olmayan Roll id'si gönderildi");
+      }
+      // Race koruması: preview'den sonra başka oturumda işlem yapılmış olabilir
+      for (const roll of receipt.bornRolls) {
+        const reasons = computeBornRollBlockingReasons(roll);
+        if (reasons.length > 0) {
+          throw AppError.conflict(
+            `Top işlenmiş, iptal güvenli değil (Roll ${roll.id.slice(0, 8)}…): ${reasons.join(", ")}`,
+          );
+        }
+      }
     }
 
     await prisma.$transaction(async (tx) => {
+      // 0) Cascade: bornRoll'ları iptal et (varsa)
+      if (bornRollIds.length > 0) {
+        // RollMovement: bu roll'lara ait, receipt'in açtığı open-fabric movement
+        await tx.rollMovement.deleteMany({
+          where: {
+            rollId: { in: bornRollIds },
+            notes: `RECEIPT_OPEN_FABRIC:${receipt.receiptNo}`,
+          },
+        });
+        // RollProperty: receipt'ten inherit edilmişti, sil
+        await tx.rollProperty.deleteMany({
+          where: { rollId: { in: bornRollIds } },
+        });
+        // Roll status → CANCELLED, currentStepId temizle
+        await tx.roll.updateMany({
+          where: { id: { in: bornRollIds } },
+          data: {
+            status: RollStatus.CANCELLED,
+            currentStepId: null,
+          },
+        });
+        // Nextstep recompute (cascade roll'lar oradan çıktı, status değişebilir)
+        const nextStepIds = [
+          ...new Set(
+            receipt.bornRolls
+              .map((b) => b.currentStepId)
+              .filter((id): id is string => !!id),
+          ),
+        ];
+        for (const stepId of nextStepIds) {
+          await recomputeStepStatus(tx, stepId);
+        }
+      }
+
       // 1) Receipt'i soft-cancel
       await tx.subcontractorReceipt.update({
         where: { id: receiptId },
@@ -1598,13 +1817,21 @@ export class SubcontractorService {
         cancelled: true,
         cancelReason: trimmedReason,
         revertedRollCount: rollIds.length,
+        cascadedRollCount: bornRollIds.length,
       },
     });
 
+    const cascadeMsg = bornRollIds.length > 0
+      ? ` · ${bornRollIds.length} açık kumaş iptal edildi`
+      : "";
     return {
       success: true,
-      data: { receiptNo: receipt.receiptNo, revertedRollCount: rollIds.length },
-      message: `Fason kabul iptal edildi: ${receipt.receiptNo} (${rollIds.length} rulo geri çekildi)`,
+      data: {
+        receiptNo: receipt.receiptNo,
+        revertedRollCount: rollIds.length,
+        cascadedRollCount: bornRollIds.length,
+      },
+      message: `Fason kabul iptal edildi: ${receipt.receiptNo} (${rollIds.length} rulo geri çekildi${cascadeMsg})`,
     };
   }
 

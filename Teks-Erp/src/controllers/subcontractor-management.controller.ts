@@ -13,20 +13,20 @@ import "../types/express-augment";
 // ─── Subcontractor Schemas ──────────────────────────────────────────────────
 
 const createSubcontractorSchema = z.object({
-  code: z.string().trim().min(1).max(64),
-  name: z.string().trim().min(1).max(255),
-  taxNumber: z.string().trim().max(32).optional(),
-  phone: z.string().trim().max(32).optional(),
-  address: z.string().trim().max(500).optional(),
+  code: z.string().trim().min(1, "Kod boş bırakılamaz").max(64, "Kod en fazla 64 karakter olabilir"),
+  name: z.string().trim().min(1, "Fason adı boş bırakılamaz").max(255, "Fason adı en fazla 255 karakter olabilir"),
+  taxNumber: z.string().trim().max(32, "Vergi numarası en fazla 32 karakter olabilir").nullish(),
+  phone: z.string().trim().max(32, "Telefon en fazla 32 karakter olabilir").nullish(),
+  address: z.string().trim().max(500, "Adres en fazla 500 karakter olabilir").nullish(),
   categoryIds: z.array(z.string().uuid()).optional(),
 });
 
 const updateSubcontractorSchema = z.object({
-  code: z.string().trim().min(1).max(64).optional(),
-  name: z.string().trim().min(1).max(255).optional(),
-  taxNumber: z.string().trim().max(32).nullish(),
-  phone: z.string().trim().max(32).nullish(),
-  address: z.string().trim().max(500).nullish(),
+  code: z.string().trim().min(1, "Kod boş bırakılamaz").max(64, "Kod en fazla 64 karakter olabilir").optional(),
+  name: z.string().trim().min(1, "Fason adı boş bırakılamaz").max(255, "Fason adı en fazla 255 karakter olabilir").optional(),
+  taxNumber: z.string().trim().max(32, "Vergi numarası en fazla 32 karakter olabilir").nullish(),
+  phone: z.string().trim().max(32, "Telefon en fazla 32 karakter olabilir").nullish(),
+  address: z.string().trim().max(500, "Adres en fazla 500 karakter olabilir").nullish(),
   isActive: z.boolean().optional(),
   categoryIds: z.array(z.string().uuid()).optional(),
 });

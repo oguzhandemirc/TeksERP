@@ -1,4 +1,4 @@
-import { Hourglass, Boxes, UserCircle2, ArrowLeftRight } from "lucide-react";
+import { Hourglass, Boxes, ArrowLeftRight } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 export const inventoryReportTiles: HubTile[] = [
@@ -15,13 +15,6 @@ export const inventoryReportTiles: HubTile[] = [
     description: "Renk, desen ve en bazında stok metrajı",
     icon: Boxes,
     to: "/reports/inventory/stock-distribution",
-  },
-  {
-    key: "customer-owned",
-    title: "Müşteri Mülkü Stok",
-    description: "ownerCustomerId dolu rulolar — müşterinin getirdiği mal",
-    icon: UserCircle2,
-    to: "/reports/inventory/customer-owned",
   },
   {
     key: "movements",

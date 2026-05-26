@@ -9,6 +9,8 @@ interface Props {
   onChange: (next: PickedOrderLine[]) => void;
   /** Picker onayında çağrılır. Auto-fill için (kalem silmede tetiklenmez). */
   onPickerConfirm?: (lines: PickedOrderLine[]) => void;
+  /** Edit modunda mevcut WO'nun kendi bağladığı kalemler picker'da müsait görünsün. */
+  excludeWorkOrderId?: string | null;
 }
 
 function earliestDeadline(lines: PickedOrderLine[]): string | null {
@@ -24,7 +26,12 @@ function earliestDeadline(lines: PickedOrderLine[]): string | null {
  * Bağlı sipariş kalemleri için sol panel. Kendi header + scroll body'sini taşır
  * ki ana formdan bağımsız scroll'lansın.
  */
-export function LinkedOrderLinesField({ lines, onChange, onPickerConfirm }: Props) {
+export function LinkedOrderLinesField({
+  lines,
+  onChange,
+  onPickerConfirm,
+  excludeWorkOrderId,
+}: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const handleConfirm = (next: PickedOrderLine[]) => {
@@ -34,7 +41,7 @@ export function LinkedOrderLinesField({ lines, onChange, onPickerConfirm }: Prop
   const handleRemove = (lineId: string) =>
     onChange(lines.filter((l) => l.lineId !== lineId));
 
-  const totalQty = lines.reduce((s, l) => s + l.quantity, 0);
+  const totalQty = lines.reduce((s, l) => s + Number(l.quantity), 0);
   const uniqueCustomers = new Set(lines.map((l) => l.customerId)).size;
   const deadline = earliestDeadline(lines);
 
@@ -161,6 +168,7 @@ export function LinkedOrderLinesField({ lines, onChange, onPickerConfirm }: Prop
         onOpenChange={setPickerOpen}
         initialSelected={lines}
         onConfirm={handleConfirm}
+        excludeWorkOrderId={excludeWorkOrderId}
       />
     </div>
   );

@@ -3,7 +3,6 @@ import { buildQueryString } from '../utils/queryBuilder';
 import type { ApiResponse, PaginatedResponse, QueryParams } from '../types/api';
 import type {
   Roll,
-  Kk1Context,
   OpenFabricCreateRequest,
   KursunFinishRequest,
 } from '../types/models';
@@ -16,8 +15,6 @@ export interface InitialEntryRequest {
   weightKg?: number;
   qualityGrade?: string;
   width?: number;
-  /** Refakat kartı ile WO seçildiyse: top doğrudan WO ilk step'ine bağlanır. */
-  workOrderId?: string | null;
 }
 
 export const rollService = {
@@ -62,18 +59,6 @@ export const rollService = {
           }>;
         }>
       >(`/rolls/${rollId}/history`)
-      .then((r) => r.data),
-
-  /**
-   * KK1 tabletinde refakat kartı okutulduğunda WO context'i döner. KK1 zaten
-   * tamamlanmış veya WO başka adımdaysa backend 400 atar (mevcut konum mesajı
-   * dahil) — çağıran try/catch ile yakalayıp banner'da göstermeli.
-   */
-  getKk1Context: (cardBarcode: string): Promise<ApiResponse<Kk1Context>> =>
-    apiClient
-      .get<ApiResponse<Kk1Context>>(
-        `/rolls/kk1-context/${encodeURIComponent(cardBarcode)}`
-      )
       .then((r) => r.data),
 
   /**

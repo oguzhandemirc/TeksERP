@@ -1,5 +1,17 @@
 import type { StepStatus, WorkOrderStatus, WorkOrderType } from "@/types/enums";
 
+/** findById response'unda her adım için anlık rulo özeti. List view'de boş gelir. */
+export interface StepRollSummary {
+  count: number;
+  totalMeters: number;
+  rawCount: number;
+  rawMeters: number;
+  dyedCount: number;
+  dyedMeters: number;
+  openFabricCount: number;
+  openFabricMeters: number;
+}
+
 export interface WorkOrderStepLite {
   id: string;
   stepSequence: number;
@@ -9,6 +21,8 @@ export interface WorkOrderStepLite {
   notes?: string | null;
   requiredCategoryId?: string | null;
   plannedSubcontractorId?: string | null;
+  /** Sadece findById response'unda — şu an bu adımda bekleyen rulolar. */
+  currentRolls?: StepRollSummary;
 }
 
 export interface WorkOrderTargetItem {
@@ -43,7 +57,6 @@ export interface WorkOrder {
   targetColorId: string | null;
   /** Tambur planlama bilgisi — operatöre default olarak gelir. */
   foldType: string | null;
-  servicePricePerMeter: string | null;
   steps: WorkOrderStepLite[];
   routeTemplate?: { id: string; code: string | null; name: string } | null;
   targetItem?: WorkOrderTargetItem | null;
@@ -74,6 +87,8 @@ export interface WorkOrder {
       }[];
     };
   }[];
+  /** Sadece findById response'unda — bu WO'nun ürettiği nihai toplar (depo+sevk). */
+  producedRolls?: { count: number; totalMeters: number };
   createdAt: string;
   updatedAt: string;
 }

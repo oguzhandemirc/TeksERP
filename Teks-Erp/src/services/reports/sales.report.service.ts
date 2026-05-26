@@ -1,11 +1,8 @@
 // =============================================================================
-// TeksERP - Sales & Shipment Reports
+// TeksERP - Sales Reports
 // =============================================================================
-// 3 alt-rapor: sipariş gerçekleşme, geç teslimat, müşteri sevkiyat hacmi.
-// Performans yaklaşımı:
-//   - Order toplamları için tek $queryRaw (lines outer join + groupBy).
-//   - Shipment hacmi için indeksli (shippedAt + status) filtre.
-//   - Late delivery: snapshot view (date filter koşulsuz açıklar).
+// 2 alt-rapor: sipariş gerçekleşme, geç teslimat.
+// Sevkiyat raporu yeniden yazılana kadar kaldırıldı.
 // =============================================================================
 
 import prisma from "../../lib/prisma";
@@ -187,55 +184,3 @@ export async function getLateDeliveries(): Promise<LateDeliveryRow[]> {
   });
 }
 
-// ---------- 3) Customer Shipments --------------------------------------------
-
-export interface CustomerShipmentRow {
-  customerId: string;
-  customerName: string;
-  customerCode: string;
-  shipmentCount: number;
-  totalQty: number;
-  totalWeightKg: number | null;
-  rollCount: number;
-}
-
-export async function getCustomerShipments(range: DateRange): Promise<CustomerShipmentRow[]> {
-  const rows = await prisma.$queryRaw<
-    Array<{
-      customerId: string;
-      customerName: string;
-      customerCode: string;
-      shipmentCount: bigint;
-      totalQty: number | null;
-      totalWeightKg: number | null;
-      rollCount: bigint;
-    }>
-  >(Prisma.sql`
-    SELECT
-      c.id           AS "customerId",
-      c.name         AS "customerName",
-      c.code         AS "customerCode",
-      COUNT(DISTINCT s.id)                AS "shipmentCount",
-      SUM(si."shippedQty")::float         AS "totalQty",
-      SUM(si."shippedWeight")::float      AS "totalWeightKg",
-      COUNT(si.id)                        AS "rollCount"
-    FROM shipments s
-    JOIN customers c        ON s."customerId" = c.id
-    LEFT JOIN shipment_items si ON si."shipmentId" = s.id
-    WHERE s.status = 'SHIPPED'
-      AND s."shippedAt" >= ${range.from} AND s."shippedAt" <= ${range.to}
-    GROUP BY c.id, c.name, c.code
-    ORDER BY "totalQty" DESC NULLS LAST, c.name
-    LIMIT 100
-  `);
-
-  return rows.map((r) => ({
-    customerId: r.customerId,
-    customerName: r.customerName,
-    customerCode: r.customerCode,
-    shipmentCount: Number(r.shipmentCount),
-    totalQty: Math.round(Number(r.totalQty ?? 0) * 10) / 10,
-    totalWeightKg: r.totalWeightKg !== null ? Math.round(Number(r.totalWeightKg) * 10) / 10 : null,
-    rollCount: Number(r.rollCount),
-  }));
-}

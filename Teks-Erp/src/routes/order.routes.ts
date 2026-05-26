@@ -27,6 +27,14 @@ const service = new OrderService({
         },
         color: true,
         requiredProperties: { include: { property: true } },
+        // Frontend "Kalemler düzenlenebilir mi?" kararı için: kalem bir WO'ya
+        // bağlıysa kilit. CANCELLED WO bağı sayılmaz (frontend status'e bakar).
+        workOrderLinks: {
+          select: {
+            workOrderId: true,
+            workOrder: { select: { status: true } },
+          },
+        },
       },
     },
   },
@@ -42,7 +50,7 @@ const reasonSchema = z.object({
 
 /**
  * @openapi
- * /api/orders/{id}/manual-complete:
+ * /api/orders/{id}/manual-close:
  *   post:
  *     tags: [Orders]
  *     summary: Siparişi manuel tamamla (planlamacı)
@@ -70,9 +78,9 @@ const reasonSchema = z.object({
  *       400: { description: Onaysız/iptal/zaten tamamlanmış sipariş }
  */
 router.post(
-  "/:id/manual-complete",
+  "/:id/manual-close",
   verifyToken,
-  requirePermission("allocation:write"),
+  requirePermission("order:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { reason } = reasonSchema.parse(req.body);
@@ -102,13 +110,96 @@ router.post(
 router.post(
   "/:id/reopen",
   verifyToken,
-  requirePermission("allocation:write"),
+  requirePermission("order:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { reason } = reasonSchema.parse(req.body);
       const result = await service.reopen(
         req.params.id as string,
         reason,
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/orders/{id}/cancel-preview:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Sipariş iptal preview — etkilenecek WO listesi
+ *     description: |
+ *       Operatöre detaylı onay göstermek için çağrılır. Her etkilenecek WO için
+ *       statü, üretilen rulo sayısı, diğer bağlı sipariş sayısı ve izinli
+ *       aksiyonları (UNLINK_ONLY / CONVERT_TO_STOCK / CANCEL_WO) döner.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/:id/cancel-preview",
+  verifyToken,
+  requirePermission("order:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await service.getCancelPreview(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/orders/{id}/cancel:
+ *   post:
+ *     tags: [Orders]
+ *     summary: Sipariş iptal et (per-WO aksiyonlu)
+ *     description: |
+ *       Operatör preview'ı görüp her WO için aksiyon seçtikten sonra çağrılır.
+ *       `workOrderActions` boş gelirse default davranış uygulanır (PLANNED →
+ *       UNLINK_ONLY, IN_PROGRESS+ tek-sipariş → CONVERT_TO_STOCK, çoklu →
+ *       UNLINK_ONLY).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               workOrderActions:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [workOrderId, action]
+ *                   properties:
+ *                     workOrderId: { type: string, format: uuid }
+ *                     action: { type: string, enum: [UNLINK_ONLY, CONVERT_TO_STOCK, CANCEL_WO] }
+ */
+const cancelBodySchema = z.object({
+  workOrderActions: z
+    .array(
+      z.object({
+        workOrderId: z.string().uuid(),
+        action: z.enum(["UNLINK_ONLY", "CONVERT_TO_STOCK", "CANCEL_WO"]),
+      })
+    )
+    .optional()
+    .default([]),
+});
+router.post(
+  "/:id/cancel",
+  verifyToken,
+  requirePermission("order:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { workOrderActions } = cancelBodySchema.parse(req.body ?? {});
+      const result = await service.cancelWithActions(
+        req.params.id as string,
+        workOrderActions,
         req.user?.userId
       );
       res.status(200).json(result);
@@ -149,6 +240,48 @@ router.post(
  *         description: Sayfalanmış sipariş listesi
  */
 router.get("/", verifyToken, requirePermission("order:read"), controller.findAll);
+
+/**
+ * @openapi
+ * /api/orders/wo-picker:
+ *   get:
+ *     tags: [Orders]
+ *     summary: İş emri picker'ı için müsait sipariş kalemleri
+ *     description: |
+ *       Aktif WO'ya (PLANNED/IN_PROGRESS/PAUSED/COMPLETED) bağlı kalemler
+ *       hem `lines`'tan çıkarılır hem de hiç müsait satırı kalmayan sipariş
+ *       tamamen düşer. CANCELLED WO blok değildir. `excludeWorkOrderId`
+ *       verilirse o WO'nun kendi bağları "bağ değil gibi" sayılır
+ *       (edit modu).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: excludeWorkOrderId
+ *         schema: { type: string, format: uuid }
+ *         description: Düzenleme modunda mevcut WO'nun kendi bağlarını yoksay
+ *       - in: query
+ *         name: filter[status]
+ *         schema: { type: string }
+ *       - in: query
+ *         name: filter[customerId]
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Müsait kalemleri olan siparişler }
+ */
+router.get(
+  "/wo-picker",
+  verifyToken,
+  requirePermission("order:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const excludeWorkOrderId = req.query.excludeWorkOrderId as string | undefined;
+      const result = await service.findAvailableForWorkOrder(req, excludeWorkOrderId);
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  }
+);
 
 /**
  * @openapi

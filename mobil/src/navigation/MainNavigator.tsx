@@ -3,27 +3,21 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { MainStackParamList } from './types';
 import { usePermissions } from '../hooks/usePermission';
 import ModuleSelectScreen from '../screens/Common/ModuleSelectScreen';
-import TartiPaketScreen from '../screens/Modules/TartiPaket/TartiPaketScreen';
-import SevkiyatScreen from '../screens/Modules/Sevkiyat/SevkiyatScreen';
-import DepoScreen from '../screens/Modules/Depo/DepoScreen';
-import KK1Screen from '../screens/Modules/KK1/KK1Screen';
-import FasonSevkScreen from '../screens/Modules/FasonSevk/FasonSevkScreen';
-import FasonKabulScreen from '../screens/Modules/FasonKabul/FasonKabulScreen';
-import KursunQcScreen from '../screens/Modules/KursunQc/KursunQcScreen';
-import TamburScreen from '../screens/Modules/Tambur/TamburScreen';
 import type { MobileScreenKey } from '../types/permissions';
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
 
-const SCREEN_COMPONENTS: Record<MobileScreenKey, React.ComponentType<any>> = {
-  KK1: KK1Screen,
-  KursunQc: KursunQcScreen,
-  Tambur: TamburScreen,
-  Depo: DepoScreen,
-  TartiPaket: TartiPaketScreen,
-  Sevkiyat: SevkiyatScreen,
-  FasonSevk: FasonSevkScreen,
-  FasonKabul: FasonKabulScreen,
+// Her modül ekranı yalnızca o ekrana navigate edildiğinde require ediliyor.
+// Operatörün yetkisi olmayan ekranların modül-level kodu hiç parse edilmez.
+const SCREEN_LOADERS: Record<MobileScreenKey, () => React.ComponentType<any>> = {
+  KK1: () => require('../screens/Modules/KK1/KK1Screen').default,
+  KursunQc: () => require('../screens/Modules/KursunQc/KursunQcScreen').default,
+  Tambur: () => require('../screens/Modules/Tambur/TamburScreen').default,
+  Depo: () => require('../screens/Modules/Depo/DepoScreen').default,
+  TartiPaket: () => require('../screens/Modules/TartiPaket/TartiPaketScreen').default,
+  Sevkiyat: () => require('../screens/Modules/Sevkiyat/SevkiyatScreen').default,
+  FasonSevk: () => require('../screens/Modules/FasonSevk/FasonSevkScreen').default,
+  FasonKabul: () => require('../screens/Modules/FasonKabul/FasonKabulScreen').default,
 };
 
 export default function MainNavigator() {
@@ -43,7 +37,7 @@ export default function MainNavigator() {
         <Stack.Screen name="ModuleSelect" component={ModuleSelectScreen} />
       )}
       {allowedScreens.map((s) => (
-        <Stack.Screen key={s.key} name={s.key} component={SCREEN_COMPONENTS[s.key]} />
+        <Stack.Screen key={s.key} name={s.key} getComponent={SCREEN_LOADERS[s.key]} />
       ))}
     </Stack.Navigator>
   );

@@ -26,9 +26,6 @@ export const GROUPS: GroupDef[] = [
       { key: "kpi:readyToShip", label: "Sevke Hazır" },
       { key: "kpi:warehouse", label: "Depoda Bekleyen" },
       { key: "kpi:atSubcontractor", label: "Fason'da" },
-      { key: "kpi:preparingShipments", label: "Bekleyen Sevkiyat" },
-      { key: "kpi:shippingQueue", label: "Sevkiyat Kuyruğu" },
-      { key: "kpi:packagingQueue", label: "Paketleme Kuyruğu" },
       { key: "kpi:todayDefects", label: "Günlük Hata" },
       { key: "kpi:inProduction", label: "Üretimde" },
     ],
@@ -44,7 +41,6 @@ export const GROUPS: GroupDef[] = [
     items: [
       { key: "panel:upcomingOrders", label: "Vadesi Yaklaşan Siparişler" },
       { key: "panel:overdueWorkOrders", label: "Geciken İş Emirleri" },
-      { key: "panel:urgentShippingQueue", label: "Sevkiyat Kuyruğu" },
       { key: "panel:upcomingWorkOrders", label: "Yakında Başlayacak İş Emirleri" },
     ],
   },
