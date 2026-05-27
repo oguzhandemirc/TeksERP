@@ -733,6 +733,27 @@ export class SubcontractorService {
       throw AppError.badRequest("En az bir dönüş kaydı girin");
     }
 
+    // IDEMPOTENCY: Bir WO step'i bir kez receive edilir — ikinci çağrı offline
+    // sync replay'i demektir (ilk receive step.status'ü COMPLETED'a çekti ve
+    // aşağıdaki ACTIVE guard'ı normalde fırlatırdı). Mevcut receipt varsa
+    // cached response döndür, duplicate SubcontractorReceipt yaratma.
+    const existingReceipt = await prisma.subcontractorReceipt.findFirst({
+      where: { stepId: data.stepId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        subcontractor: true,
+        step: { include: { station: true } },
+        items: { include: { newRoll: true } },
+      },
+    });
+    if (existingReceipt) {
+      return {
+        success: true,
+        data: existingReceipt,
+        message: `Mal kabul zaten yapılmış (idempotent retry). Makbuz: ${existingReceipt.receiptNo}`,
+      };
+    }
+
     const subcontractor = await prisma.subcontractor.findUnique({
       where: { id: data.subcontractorId },
       select: { id: true },

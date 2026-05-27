@@ -15,13 +15,15 @@ import {
 } from '../services/kursunQc.service';
 import { rollService, type InitialEntryRequest } from '../services/roll.service';
 import { tamburService } from '../services/tambur.service';
-import type { TamburFinalizeRemainingAction } from '../types/models';
+import { subcontractorService } from '../services/subcontractor.service';
+import type { TamburFinalizeRemainingAction, ReceiveRequest } from '../types/models';
 
 export const STATION_MUT = {
   QC2_COMPLETE: ['station', 'qc2-complete'] as const,
   KURSUN_FINISH: ['station', 'kursun-finish'] as const,
   TAMBUR_FINALIZE_OPEN_FABRIC: ['station', 'tambur-finalize-open-fabric'] as const,
   KK1_CREATE_ENTRY: ['station', 'kk1-create-entry'] as const,
+  FASON_KABUL_RECEIVE: ['station', 'fason-kabul-receive'] as const,
 } as const;
 
 export interface TamburFinalizeOpenFabricVars {
@@ -67,6 +69,14 @@ export function registerStationMutationDefaults(): void {
   queryClient.setMutationDefaults(STATION_MUT.KK1_CREATE_ENTRY, {
     mutationFn: (vars: InitialEntryRequest) =>
       rollService.createInitialEntry(vars),
+    ...OFFLINE_AWARE,
+  });
+  // Fason Kabul — boyahaneden dönen malın kabul kaydı. Backend idempotent:
+  // bir step'te bir kez receive olur, 2. çağrı mevcut SubcontractorReceipt'i
+  // cached döner. Per-cut fason sevki (dispatch) hala online-only —
+  // kamyon irsaliyesi anlık doğrulama bekler.
+  queryClient.setMutationDefaults(STATION_MUT.FASON_KABUL_RECEIVE, {
+    mutationFn: (vars: ReceiveRequest) => subcontractorService.receive(vars),
     ...OFFLINE_AWARE,
   });
 }

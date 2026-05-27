@@ -41,7 +41,12 @@ import {
   Icon,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  onlineManager,
+} from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import dayjs from 'dayjs';
@@ -58,6 +63,8 @@ import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { ReceiptRow, ReceiptDetailModal } from '../../../components/receipt';
 import { subcontractorService } from '../../../services/subcontractor.service';
 import { travelerCardService } from '../../../services/travelerCard.service';
+import { STATION_MUT } from '../../../offline/mutations';
+import { useIsOnline, usePendingStationOps } from '../../../offline/hooks';
 import type {
   PendingReturnGroup,
   ReceiveRequest,
@@ -193,22 +200,37 @@ export default function FasonKabulScreen() {
   useRefetchOnOpen(receiptsQuery.refetch, historyModalOpen);
 
   // ── Mutations ──
-  const receiveMutation = useMutation({
-    mutationFn: (data: ReceiveRequest) => subcontractorService.receive(data),
-    onSuccess: (res) => {
+  // OFFLINE-AWARE: mutationFn `setMutationDefaults`'ta tanımlı; persist sonrası
+  // app restart'ında resolve. Backend idempotent: bir step bir kez receive olur
+  // (subcontractor.service.ts:receive() başında step-based check + cached
+  // SubcontractorReceipt dönüşü). onMutate'te form anında temizlenir + toast
+  // (offline ise "sync bekliyor"). Form rollback kompleks olduğu için
+  // yapılmadı — operatör offline hatasında yeniden seçim/giriş yapar.
+  const receiveMutation = useMutation<
+    Awaited<ReturnType<typeof subcontractorService.receive>>,
+    Error,
+    ReceiveRequest
+  >({
+    mutationKey: STATION_MUT.FASON_KABUL_RECEIVE,
+    onMutate: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
         text1: 'Mal kabul tamamlandı',
-        text2: res.data?.receiptNo,
+        text2: onlineManager.isOnline()
+          ? undefined
+          : 'Çevrimdışı — sync bekliyor',
       });
       resetForm();
+    },
+    onSuccess: () => {
+      // Server confirm — query'leri tazele (kalan dönüşler, kabul geçmişi vs.)
       qc.invalidateQueries({ queryKey: ['pending-returns'] });
       qc.invalidateQueries({ queryKey: ['receipts'] });
       qc.invalidateQueries({ queryKey: ['rolls'] });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
     },
-    onError: (err: Error) => {
+    onError: (err) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Kabul başarısız', text2: err.message });
       setSubmitArmed(false);
@@ -473,8 +495,10 @@ export default function FasonKabulScreen() {
   const canSubmit =
     !!selectedGroup &&
     checkedCount > 0 &&
-    hasValidNewRolls &&
-    !receiveMutation.isPending;
+    hasValidNewRolls;
+  // NOT: receiveMutation.isPending bilerek dahil edilmedi — offline'da paused
+  // mutation hook'un isPending'i true kalır ve sıradaki kabul aksiyonunu
+  // engelleyebilir. Optimistic onMutate zaten form'u temizliyor.
   const hasMissing = missingCount > 0;
 
   const buildPayload = (): ReceiveRequest | null => {
@@ -557,6 +581,7 @@ export default function FasonKabulScreen() {
       title="Fason Kabul"
       // Telefon: tüm aksiyonlar (Liste / Kamera / Geçmiş) ekran altındaki sabit
       // bar'da → header'da sadece başlık + profil kalır.
+      headerExtras={<SyncStatusChip />}
     >
       <View style={[styles.body, isPhone && styles.bodyPhone]}>
         {/* ════════ SOL: form ════════ */}
@@ -934,7 +959,6 @@ export default function FasonKabulScreen() {
                   }
                   onPress={handleSubmitClick}
                   disabled={!canSubmit}
-                  loading={receiveMutation.isPending}
                   style={styles.submitBtn}
                   contentStyle={styles.submitBtnContent}
                   labelStyle={styles.submitBtnLabel}
@@ -1217,6 +1241,38 @@ export default function FasonKabulScreen() {
         />
       )}
     </ScreenChrome>
+  );
+}
+
+// Çevrimdışı / sync bekleyen istasyon işlemi rozeti (KursunQc/Tambur/KK1 ile aynı).
+function SyncStatusChip() {
+  const online = useIsOnline();
+  const pending = usePendingStationOps();
+  const pendingCount = pending.length;
+  if (online && pendingCount === 0) return null;
+  let bg = '#1e40af';
+  let label = `${pendingCount} sync`;
+  if (!online && pendingCount === 0) {
+    bg = '#b45309';
+    label = 'Çevrimdışı';
+  } else if (!online && pendingCount > 0) {
+    bg = '#b91c1c';
+    label = `Çevrimdışı · ${pendingCount}`;
+  }
+  return (
+    <View
+      style={{
+        backgroundColor: bg,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        marginRight: 8,
+      }}
+    >
+      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+        {label}
+      </Text>
+    </View>
   );
 }
 
