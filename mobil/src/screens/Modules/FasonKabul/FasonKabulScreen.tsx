@@ -154,8 +154,10 @@ export default function FasonKabulScreen() {
   const [rightTab, setRightTab] = useState<RightTab>('pending');
   // Phone modal'da gösterilen alt sekme. Tablet'te bu state kullanılmaz
   // (rightTab zaten 3 değer ile aynı işi yapar), sadece phone HistoryReceiptsModal'a.
+  // Default 'history' — operatörün asıl ihtiyacı tüm kabul geçmişi; iptal-edilebilir
+  // filtre ikincil bir alt-küme görünümü.
   const [modalSubTab, setModalSubTab] = useState<'cancellable' | 'history'>(
-    'cancellable',
+    'history',
   );
   // Telefon modunda alttaki "Bekleyen / Geçmiş" paneli daraltılabilir —
   // operatör formla çalışırken dikey alan kazansın.
@@ -206,15 +208,16 @@ export default function FasonKabulScreen() {
     staleTime: 30 * 1000,
   });
 
-  // GEÇMİŞ KABULLER (cancellable:'no') — settled receipts, artık iptal edilemez.
-  // UI'da İptal Et butonu YOK — sadece detay görüntüleme.
+  // TÜM KABULLER (cancellable filtresi yok) — iptal edilmemiş tüm receipts.
+  // Backend zaten cancelledAt:null koşulu uyguluyor; cancellable filtresi olmadan
+  // hem hala-iptal-edilebilir hem settled olanlar tek listede dönüyor.
+  // UI'da iptal butonu YOK — sadece detay görüntüleme (iptal aksiyonu ayrı tab).
   const receiptsQuery = useQuery({
-    queryKey: ['receipts', 'settled', receiptsPage],
+    queryKey: ['receipts', 'all', receiptsPage],
     queryFn: () =>
       subcontractorService.listReceipts({
         page: receiptsPage,
         pageSize: RECEIPTS_PAGE_SIZE,
-        cancellable: 'no',
       }),
     placeholderData: (prev) => prev,
     // Tablet'te tab history iken, telefonda Geçmiş modal açıkken aktif
@@ -1040,8 +1043,8 @@ export default function FasonKabulScreen() {
           <>
           {/* Tab bar + aktif tab'ı yenileyen buton. Üç tab:
               - Bekleyen: fasondan dönen ama henüz kabul edilmemiş kartlar
-              - İptal Edilebilirler: kabul edilmiş, born roll'lar henüz işlenmedi
-              - Geçmiş Kabuller: kabul edilmiş + born roll'lar işleme girmiş (settled) */}
+              - İptal Edilebilirler: kabul edilmiş, born roll'lar henüz işlenmedi (filtre)
+              - Tüm Kabuller: iptal edilmemiş tüm kabuller (settled + hala-iptal-edilebilir) */}
           <View style={styles.tabBar}>
             <Tab
               label="Bekleyen"
@@ -1057,7 +1060,7 @@ export default function FasonKabulScreen() {
               activeColor="#dc2626"
             />
             <Tab
-              label="Geçmiş Kabuller"
+              label="Tüm Kabuller"
               active={rightTab === 'history'}
               onPress={() => setRightTab('history')}
               activeColor="#059669"
@@ -1784,9 +1787,9 @@ function Badge({ icon, children }: { icon: string; children: React.ReactNode }) 
   );
 }
 
-// Telefon dikeyde sağ paneldeki kabul geçmişi sekmesinin modal sürümü. Header'da
-// iki sub-tab: İptal Edilebilirler / Geçmiş Kabuller. RemoteListSheet generic
-// kabuğunu kullanır; sayfalama footer'da render edilir.
+// Telefon dikeyde sağ paneldeki kabul geçmişi sekmesinin modal sürümü. Header'ın
+// altında iki sub-tab: İptal Edilebilirler (filtre) / Tüm Kabuller (default).
+// RemoteListSheet generic kabuğunu kullanır; sayfalama footer'da render edilir.
 function HistoryReceiptsModal({
   visible,
   onDismiss,
@@ -1841,7 +1844,7 @@ function HistoryReceiptsModal({
       items={receipts}
       keyExtractor={(r) => r.id}
       overlay={overlay}
-      headerExtras={
+      subHeader={
         <View style={modalTabStyles.tabRow}>
           <TouchableRipple
             onPress={() => onTabChange('cancellable')}
@@ -1874,7 +1877,7 @@ function HistoryReceiptsModal({
                 tab === 'history' && { color: '#059669', fontWeight: '700' },
               ]}
             >
-              Geçmiş Kabuller
+              Tüm Kabuller
             </Text>
           </TouchableRipple>
         </View>
@@ -1892,7 +1895,7 @@ function HistoryReceiptsModal({
       emptyText={
         tab === 'cancellable'
           ? 'İptal edilebilir kabul yok'
-          : 'Henüz mal kabul yok'
+          : 'Henüz kabul yapılmamış'
       }
       footer={
         <Pager
@@ -1916,12 +1919,13 @@ const modalTabStyles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 16,
     alignItems: 'center',
+    justifyContent: 'center',
     borderBottomWidth: 3,
     borderBottomColor: 'transparent',
   },
-  tabLabel: { fontSize: 13, color: '#64748b', fontWeight: '600' },
+  tabLabel: { fontSize: 14, color: '#64748b', fontWeight: '600' },
 });
 
 function PendingPane({

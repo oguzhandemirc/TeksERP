@@ -77,8 +77,12 @@ interface Props<T> {
   widthRatio?: number;
   heightRatio?: number;
 
-  // Header'a ekstra aksiyon (refresh/close öncesi)
+  // Header'a ekstra aksiyon (refresh/close öncesi) — küçük ikon/chip için.
+  // Tab bar gibi tam genişlik kullanan UI için `subHeader` kullan.
   headerExtras?: React.ReactNode;
+  // Header satırının ALTINA, hint/listenin üstüne render edilen tam genişlik
+  // slot (örn. sub-tab bar). Telefonda header'a sığmayan UI buraya konur.
+  subHeader?: React.ReactNode;
   // Liste altına opsiyonel footer (pager, toplam vb.)
   footer?: React.ReactNode;
 
@@ -114,6 +118,7 @@ export default function RemoteListSheet<T>({
   widthRatio = 0.85,
   heightRatio = 0.8,
   headerExtras,
+  subHeader,
   footer,
   contentStyle,
   overlay,
@@ -165,6 +170,8 @@ export default function RemoteListSheet<T>({
             style={styles.headerBtn}
           />
         </View>
+
+        {subHeader}
 
         {hint && (
           <View style={styles.hint}>
