@@ -64,6 +64,12 @@ export interface InitialEntryRequest {
   weightKg?: number;
   qualityGrade?: string;
   width?: number;
+  /**
+   * Opsiyonel client-üretimi barkod (offline KK1 girişi için). Format:
+   * TEKS-YYYYMMDD-XXXXXXXX. Verilirse backend onu kullanır + idempotent
+   * retry desteklenir (aynı barkodla 2. çağrı cached Roll döner).
+   */
+  clientBarcode?: string;
 }
 
 export const rollService = {

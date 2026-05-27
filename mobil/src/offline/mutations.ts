@@ -13,7 +13,7 @@ import {
   kursunQcService,
   type CompleteQc2Request,
 } from '../services/kursunQc.service';
-import { rollService } from '../services/roll.service';
+import { rollService, type InitialEntryRequest } from '../services/roll.service';
 import { tamburService } from '../services/tambur.service';
 import type { TamburFinalizeRemainingAction } from '../types/models';
 
@@ -21,6 +21,7 @@ export const STATION_MUT = {
   QC2_COMPLETE: ['station', 'qc2-complete'] as const,
   KURSUN_FINISH: ['station', 'kursun-finish'] as const,
   TAMBUR_FINALIZE_OPEN_FABRIC: ['station', 'tambur-finalize-open-fabric'] as const,
+  KK1_CREATE_ENTRY: ['station', 'kk1-create-entry'] as const,
 } as const;
 
 export interface TamburFinalizeOpenFabricVars {
@@ -57,6 +58,15 @@ export function registerStationMutationDefaults(): void {
         remainingAction: vars.remainingAction,
         foldType: vars.foldType,
       }),
+    ...OFFLINE_AWARE,
+  });
+  // KK1 ham mal girişi — client-üretimi barkod (TEKS-YYYYMMDD-XXXXXXXX) vars'ta.
+  // Backend idempotent: Roll.barcode @unique + P2002 catch → cached Roll dönüş.
+  // Etiket basımı onSuccess'te tetiklenir (LabelPrinter backend HTML çeker) —
+  // offline pause durumunda etiket online dönünce basılır.
+  queryClient.setMutationDefaults(STATION_MUT.KK1_CREATE_ENTRY, {
+    mutationFn: (vars: InitialEntryRequest) =>
+      rollService.createInitialEntry(vars),
     ...OFFLINE_AWARE,
   });
 }

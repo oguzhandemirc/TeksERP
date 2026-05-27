@@ -18,7 +18,12 @@ import {
   Appbar,
 } from 'react-native-paper';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  onlineManager,
+} from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import Modal from 'react-native-modal';
@@ -39,6 +44,9 @@ import { itemService } from '../../../services/item.service';
 import { rollService, InitialEntryRequest } from '../../../services/roll.service';
 import { hardwareService } from '../../../services/hardware.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
+import { STATION_MUT } from '../../../offline/mutations';
+import { generateClientBarcode } from '../../../offline/barcode';
+import { useIsOnline, usePendingStationOps } from '../../../offline/hooks';
 import type { QualityGrade, Roll } from '../../../types/models';
 
 const RECENT_PAGE_SIZE = 6;
@@ -80,8 +88,30 @@ export default function KK1Screen() {
   const [pulling, setPulling] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
-  // Etiket basımı — null değilse LabelPrinter QR + PDF üretir, sistem print menüsünü açar.
-  const [printRoll, setPrintRoll] = useState<Roll | null>(null);
+  // Etiket basımı — sıralı kuyruk. activePrintRoll = şu an LabelPrinter'a verilen
+  // (null = boşta). printQueue = sırada bekleyenler. Offline'da N entry toplu
+  // sync olduğunda hepsi print edilebilsin diye queue mantığı; ayrıca manuel
+  // "Bas" tetikleri de aynı kuyruğa düşer.
+  const [activePrintRoll, setActivePrintRoll] = useState<Roll | null>(null);
+  const [printQueue, setPrintQueue] = useState<Roll[]>([]);
+
+  // activePrint null ve queue dolu ise → bir sonrakini başlat. Print finish'te
+  // activePrint = null olur, bu effect bir sonrakini alır. Sonsuz cycle yok
+  // (queue boşalırsa effect no-op).
+  useEffect(() => {
+    if (activePrintRoll === null && printQueue.length > 0) {
+      setActivePrintRoll(printQueue[0]);
+      setPrintQueue((q) => q.slice(1));
+    }
+  }, [activePrintRoll, printQueue]);
+
+  const enqueuePrint = useCallback((roll: Roll) => {
+    setPrintQueue((q) => [...q, roll]);
+  }, []);
+
+  const handlePrintDone = useCallback(() => {
+    setActivePrintRoll(null); // useEffect bir sonrakini alır
+  }, []);
   // Scrap onay modal'ı — native Alert yerine kendi modalımız (alert telefon yönünü değiştiriyordu).
   const [scrapTarget, setScrapTarget] = useState<Roll | null>(null);
   // react-native-modal aynı anda iki modal'ı doğru stack edemiyor (Android Dialog
@@ -208,15 +238,30 @@ export default function KK1Screen() {
   }, [recentRolls]);
 
   // ── Mutation ──
-  const createMutation = useMutation({
-    mutationFn: (data: InitialEntryRequest) => rollService.createInitialEntry(data),
-    onSuccess: (res) => {
-      if (!res.data) return;
+  // OFFLINE-AWARE: mutationFn `setMutationDefaults`'ta tanımlı; persist sonrası
+  // app restart'ında resolve. Client-üretimi barkod (TEKS-YYYYMMDD-XXXXXXXX)
+  // handleSubmit içinde üretilip vars.clientBarcode'a gömülür — backend
+  // idempotency anchor (Roll.barcode @unique + P2002 catch → cached Roll).
+  // onMutate'te form anında temizlenir + barkod toast'la operatöre gösterilir
+  // (sahada fiziksel mal'a not düşmek için). onError'da form geri yüklenir.
+  // Etiket basımı onSuccess'te tetiklenir — offline'da paused mutation online
+  // dönünce gerçek Roll backend'den geldiğinde LabelPrinter çalışır.
+  const createMutation = useMutation<
+    Awaited<ReturnType<typeof rollService.createInitialEntry>>,
+    Error,
+    InitialEntryRequest,
+    { prevForm: FormState; clientBarcode: string | undefined } | undefined
+  >({
+    mutationKey: STATION_MUT.KK1_CREATE_ENTRY,
+    onMutate: (vars) => {
+      const prevForm = form;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
         text1: 'Top kaydedildi',
-        text2: `Barkod: ${res.data.barcode}`,
+        text2: onlineManager.isOnline()
+          ? `Barkod: ${vars.clientBarcode ?? '...'}`
+          : `Çevrimdışı — sync bekliyor · ${vars.clientBarcode ?? ''}`,
       });
       // Form temizlenir, item ve kalite seçimi korunur (operatör hızlı seri girer)
       setForm((f) => ({
@@ -225,13 +270,23 @@ export default function KK1Screen() {
         itemLabel: f.itemLabel,
         qualityGrade: f.qualityGrade,
       }));
+      return { prevForm, clientBarcode: vars.clientBarcode };
+    },
+    onSuccess: (res) => {
+      if (!res.data) return;
       // "Kaydet ve Etiket Bas" — başarılı kayıttan sonra otomatik etiket basımı.
-      setPrintRoll(res.data);
-      // Hem inline (recent) hem modal (history) sorgularını yenile
-      // (scroll-to-top, recentRolls güncellendiğinde useEffect içinde tetiklenir)
+      // Offline'da pause olduysa burası ancak online dönünce çalışır.
+      // Queue'ya at: birden fazla mutation sırayla resume olduğunda hepsi basılır
+      // (eskiden setPrintRoll overwrite ediyordu, sadece son etiket basıyordu).
+      enqueuePrint(res.data);
       qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
     },
-    onError: (err: Error) => {
+    onError: (err, _vars, context) => {
+      // Form'u geri yükle ki operatör veriyi kaybetmesin (özellikle offline'da
+      // beklenmedik backend reddi — yanlış item id vs. — durumunda kritik).
+      if (context) {
+        setForm(context.prevForm);
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({
         type: 'error',
@@ -324,11 +379,16 @@ export default function KK1Screen() {
       Toast.show({ type: 'error', text1: 'Kalite sınıfı seçilmedi' });
       return;
     }
+    // Offline-aware: clientBarcode burada üretilir. Mutate paused olursa
+    // persist edilen vars sabit kalır → retry'da aynı barkod gönderilir →
+    // backend P2002 yakalayıp cached Roll döner (idempotent).
+    const clientBarcode = generateClientBarcode();
     createMutation.mutate({
       itemId: form.itemId,
       initialQty: qty,
       width,
       qualityGrade: form.qualityGrade,
+      clientBarcode,
     });
   };
 
@@ -342,7 +402,7 @@ export default function KK1Screen() {
       Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: barcode });
       return;
     }
-    setPrintRoll(roll);
+    enqueuePrint(roll);
   };
 
   return (
@@ -350,14 +410,17 @@ export default function KK1Screen() {
       title="KK1 — Ham Giriş"
       subtitle="Ham kumaş top kayıt"
       headerExtras={
-        portraitPhone ? (
-          <Appbar.Action
-            icon="format-list-bulleted"
-            color="#fff"
-            onPress={() => setRecentsDrawerOpen(true)}
-            accessibilityLabel={`Son kayıtlar (${totalCount})`}
-          />
-        ) : undefined
+        <View style={styles.headerExtrasRow}>
+          <SyncStatusChip />
+          {portraitPhone ? (
+            <Appbar.Action
+              icon="format-list-bulleted"
+              color="#fff"
+              onPress={() => setRecentsDrawerOpen(true)}
+              accessibilityLabel={`Son kayıtlar (${totalCount})`}
+            />
+          ) : null}
+        </View>
       }
     >
       <View
@@ -486,12 +549,13 @@ export default function KK1Screen() {
             )}
           </Surface>
 
+          {/* OFFLINE-AWARE: loading/disabled binding'i YOK — paused mutation
+              isPending true kalır, sıradaki kayıt engellenmesin. Optimistic
+              onMutate zaten form'u temizliyor + toast atıyor. */}
           <Button
             mode="contained"
             icon="package-check"
             onPress={handleSubmit}
-            loading={createMutation.isPending}
-            disabled={createMutation.isPending}
             style={styles.submitBtn}
             contentStyle={styles.submitBtnContent}
             labelStyle={styles.submitBtnLabel}
@@ -631,8 +695,16 @@ export default function KK1Screen() {
         }}
       />
 
-      {/* ── Etiket yazıcı (headless): printRoll set olunca QR + A4 PDF üretir ── */}
-      <LabelPrinter roll={printRoll} kind="ROLL_RAW" onDone={() => setPrintRoll(null)} />
+      {/* ── Etiket yazıcı (headless): activePrintRoll set olunca QR + A4 PDF üretir.
+            onDone queue'dan bir sonrakini alır. Roll değişimi LabelPrinter'ın
+            firedRef'ini reset edebilmesi için 'key' prop'una roll.id veriyoruz —
+            her print için fresh mount. */}
+      <LabelPrinter
+        key={activePrintRoll?.id ?? 'idle'}
+        roll={activePrintRoll}
+        kind="ROLL_RAW"
+        onDone={handlePrintDone}
+      />
 
       {/* ── Scrap onay modal'ı (kendi modalımız; native Alert'i değiştirdi) ── */}
       <ScrapConfirmModal
@@ -660,6 +732,38 @@ interface RecentsDrawerProps {
   onOpenHistory: () => void;
   onPrint: (barcode: string) => void;
   onScrap: (roll: Roll) => void;
+}
+
+// Çevrimdışı / sync bekleyen istasyon işlemi rozeti (Kurşun/Tambur ile aynı).
+function SyncStatusChip() {
+  const online = useIsOnline();
+  const pending = usePendingStationOps();
+  const pendingCount = pending.length;
+  if (online && pendingCount === 0) return null;
+  let bg = '#1e40af';
+  let label = `${pendingCount} sync`;
+  if (!online && pendingCount === 0) {
+    bg = '#b45309';
+    label = 'Çevrimdışı';
+  } else if (!online && pendingCount > 0) {
+    bg = '#b91c1c';
+    label = `Çevrimdışı · ${pendingCount}`;
+  }
+  return (
+    <View
+      style={{
+        backgroundColor: bg,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        marginRight: 8,
+      }}
+    >
+      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+        {label}
+      </Text>
+    </View>
+  );
 }
 
 function RecentsDrawer({
@@ -1201,6 +1305,7 @@ function RollListItem({
 
 const styles = StyleSheet.create({
   body: { flex: 1, flexDirection: 'row' },
+  headerExtrasRow: { flexDirection: 'row', alignItems: 'center' },
 
   // Sol — Form
   formCol: { flex: 1.4, backgroundColor: '#f8fafc' },

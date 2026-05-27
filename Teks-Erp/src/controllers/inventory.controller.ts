@@ -19,6 +19,12 @@ const initialEntrySchema = z.object({
   qualityGrade: z.string().optional(),
   width:        z.number().positive("En pozitif olmalı").optional().nullable(),
   propertyIds:  z.array(z.string().uuid("Geçersiz özellik ID")).optional().default([]),
+  // Offline KK1 girişi için opsiyonel client-üretimi barkod (sync replay
+  // idempotency anchor — aynı barkodla 2. çağrı cached Roll döner).
+  clientBarcode: z
+    .string()
+    .regex(/^TEKS-\d{8}-[0-9A-F]{8}$/, "Geçersiz barkod formatı")
+    .optional(),
 });
 
 const applyPropertiesSchema = z.object({

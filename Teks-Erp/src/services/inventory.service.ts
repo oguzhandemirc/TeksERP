@@ -158,6 +158,14 @@ export class InventoryService {
       qualityGrade?: string;
       width?: number | null;  // En (cm) — opsiyonel, ölçülmediyse null
       propertyIds?: string[];
+      /**
+       * Opsiyonel client-üretimi barkod. Offline KK1 girişi için mobil tarafta
+       * üretilir (generateBarcode ile aynı format: TEKS-YYYYMMDD-XXXXXXXX).
+       * Verilmezse backend üretir (default davranış). Verilirse retry/dedup
+       * doğal anchor olarak Roll.barcode @unique kullanılır — aynı barkodla
+       * 2. çağrı cached Roll döner.
+       */
+      clientBarcode?: string;
     },
     userId?: string
   ): Promise<ApiResponse<Roll>> {
@@ -217,7 +225,14 @@ export class InventoryService {
       }
     }
 
-    const barcode = generateBarcode();
+    // Barkod: client verdiyse onu kullan (offline retry idempotency), yoksa üret.
+    // Client format validasyonu: TEKS-YYYYMMDD-XXXXXXXX (uppercase hex 8 char).
+    if (data.clientBarcode && !/^TEKS-\d{8}-[0-9A-F]{8}$/.test(data.clientBarcode)) {
+      throw AppError.badRequest(
+        "Geçersiz client-üretimi barkod formatı (beklenen: TEKS-YYYYMMDD-XXXXXXXX)",
+      );
+    }
+    const barcode = data.clientBarcode ?? generateBarcode();
 
     // Tüm item tipleri (fabric, yarn, consumable, vb) tedarikçiden gelir → SUPPLIER_RECEIPT.
     const entrySource: RollEntrySource = RollEntrySource.SUPPLIER_RECEIPT;
@@ -231,35 +246,64 @@ export class InventoryService {
     const initialStatus =
       data.colorId != null ? RollStatus.WAREHOUSE : RollStatus.STOCK;
 
-    const roll = await prisma.$transaction(async (tx) => {
-      const created = await tx.roll.create({
-        data: {
-          barcode,
-          itemId: data.itemId,
-          colorId: data.colorId ?? null,
-          initialQty: data.initialQty,
-          currentQty: data.initialQty,
-          weightKg: data.weightKg ?? null,
-          status: initialStatus,
-          qualityGrade: qualityGradeCode,
-          qualityGradeId,
-          width: data.width ?? null,
-          entrySource,
-          createdById: userId ?? null,
-        },
-        include: {
-          item: true,
-          color: true,
-          createdBy: { select: { id: true, username: true, fullName: true } },
-        },
-      });
-      if (dedupedProps.length > 0) {
-        await tx.rollProperty.createMany({
-          data: dedupedProps.map((propertyId) => ({ rollId: created.id, propertyId })),
+    let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
+    try {
+      roll = await prisma.$transaction(async (tx) => {
+        const created = await tx.roll.create({
+          data: {
+            barcode,
+            itemId: data.itemId,
+            colorId: data.colorId ?? null,
+            initialQty: data.initialQty,
+            currentQty: data.initialQty,
+            weightKg: data.weightKg ?? null,
+            status: initialStatus,
+            qualityGrade: qualityGradeCode,
+            qualityGradeId,
+            width: data.width ?? null,
+            entrySource,
+            createdById: userId ?? null,
+          },
+          include: {
+            item: true,
+            color: true,
+            createdBy: { select: { id: true, username: true, fullName: true } },
+          },
         });
+        if (dedupedProps.length > 0) {
+          await tx.rollProperty.createMany({
+            data: dedupedProps.map((propertyId) => ({ rollId: created.id, propertyId })),
+          });
+        }
+        return created;
+      });
+    } catch (err) {
+      // Offline retry idempotency: aynı clientBarcode ile 2. çağrı geldi.
+      // Roll.barcode @unique → P2002 → mevcut Roll'u dön (audit log atılmaz,
+      // ilk çağrıda zaten yazılmış).
+      if (
+        data.clientBarcode &&
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        const existing = await prisma.roll.findUnique({
+          where: { barcode },
+          include: {
+            item: true,
+            color: true,
+            createdBy: { select: { id: true, username: true, fullName: true } },
+          },
+        });
+        if (existing) {
+          return {
+            success: true,
+            data: existing,
+            message: `Top zaten kayıtlı (idempotent retry). Barkod: ${existing.barcode}`,
+          };
+        }
       }
-      return created;
-    });
+      throw err;
+    }
 
     await AuditService.log({
       userId,
