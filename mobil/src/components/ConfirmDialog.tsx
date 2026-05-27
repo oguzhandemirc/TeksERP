@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View,
+  ScrollView,
   StyleSheet,
   useWindowDimensions,
   KeyboardAvoidingView,
@@ -182,7 +183,14 @@ export default function ConfirmDialog(props: Props) {
           </Text>
         </View>
 
-        <View style={styles.body}>
+        {/* Body ScrollView içinde — uzun affected listesi veya uzun açıklama
+            butonları ekran dışına itmesin. Sheet'te overflow:'hidden' + sınırlı
+            maxHeight olduğu için body'nin shrink+scroll olması şart. */}
+        <ScrollView
+          style={styles.bodyScroll}
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+        >
           {typeof props.description === 'string' ? (
             <Text style={styles.descText}>{props.description}</Text>
           ) : (
@@ -218,7 +226,7 @@ export default function ConfirmDialog(props: Props) {
               style={styles.reasonInput}
             />
           )}
-        </View>
+        </ScrollView>
 
         <View style={styles.actions}>
           <Button
@@ -302,6 +310,9 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   title: { fontWeight: '700', color: '#0f172a', flex: 1 },
+  // ScrollView wrapper — flexShrink:1 ile sheet maxHeight'i aşan içerikte
+  // shrink edip internal scroll olur; header + actions sabit kalır.
+  bodyScroll: { flexShrink: 1 },
   body: { paddingHorizontal: 16, gap: 12, paddingBottom: 8 },
   descText: { fontSize: 14, color: '#475569', lineHeight: 20 },
 

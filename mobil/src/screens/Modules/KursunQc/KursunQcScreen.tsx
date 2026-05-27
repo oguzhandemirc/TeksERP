@@ -42,6 +42,7 @@ import { defectTypeService } from '../../../services/defectType.service';
 import { rollService } from '../../../services/roll.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import { useIsOnline, usePendingStationOps } from '../../../offline/hooks';
+import { formatRelativeWait } from '../../../utils/relativeTime';
 import type {
   KursunStepSummary,
   KursunRollSummary,
@@ -1267,6 +1268,11 @@ function CameraScanModal({
                           <Text style={cameraStyles.rowQty}>
                             {item.openRollCount} top bekliyor
                           </Text>
+                          {item.oldestEnteredAt && (
+                            <Text style={cameraStyles.rowWait}>
+                              · {formatRelativeWait(item.oldestEnteredAt)} bekliyor
+                            </Text>
+                          )}
                         </View>
                       </View>
                       <Icon source="chevron-right" size={22} color="#94a3b8" />
@@ -1913,6 +1919,7 @@ const cameraStyles = StyleSheet.create({
   },
   rowMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   rowMetaText: { fontSize: 12, color: '#475569', fontWeight: '500', flex: 1 },
-  rowFooter: { marginTop: 6 },
+  rowFooter: { marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' },
   rowQty: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
+  rowWait: { fontSize: 11, fontWeight: '600', color: '#b45309' },
 });

@@ -209,6 +209,13 @@ export class SubcontractorService {
       plateNumber?: string;
       driverName?: string;
       notes?: string;
+      /**
+       * Operatör WO ürünü ile uyuşmayan top sevkini bilinçli olarak onayladı.
+       * Frontend mismatch modal'ında onayladıktan sonra true gönderir.
+       * Bu durumda mismatch warning audit'e ITEM_MISMATCH_OVERRIDE olarak
+       * yazılır, sevk normal işler.
+       */
+      allowItemOverride?: boolean;
     },
     userId?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
@@ -326,6 +333,60 @@ export class SubcontractorService {
       const foundIds = new Set(rolls.map((r) => r.id));
       const missing = data.rollIds.filter((id) => !foundIds.has(id));
       throw AppError.notFound(`Top bulunamadı: ${missing.join(", ")}`);
+    }
+
+    // Item mismatch kontrolü: WO.targetItemId varsa, tüm seçilen rulolar bu
+    // ürünle eşleşmeli. Uyuşmazsa: allowItemOverride=true ise warning + audit
+    // ile devam; yoksa hata fırlat (frontend modal'da onaya gönderir).
+    // wo.targetItemId null olabilir (stok üretim için targetItem zorunlu değil) —
+    // o durumda check atlanır.
+    if (wo.targetItemId) {
+      const mismatchedRolls = rolls.filter((r) => r.itemId !== wo.targetItemId);
+      if (mismatchedRolls.length > 0) {
+        // İsimleri client'a göstermek için bir kez çek
+        const itemIdSet = new Set<string>([
+          wo.targetItemId,
+          ...mismatchedRolls.map((r) => r.itemId),
+        ]);
+        const items = await prisma.item.findMany({
+          where: { id: { in: [...itemIdSet] } },
+          select: { id: true, code: true, name: true },
+        });
+        const itemMap = new Map(
+          items.map((i) => [i.id, { code: i.code, name: i.name }] as const),
+        );
+        const expected = itemMap.get(wo.targetItemId);
+        const expectedLabel = expected
+          ? `${expected.code} - ${expected.name}`
+          : wo.targetItemId;
+
+        if (!data.allowItemOverride) {
+          throw AppError.badRequest(
+            `İş emri ürünü (${expectedLabel}) ile uyuşmayan ${mismatchedRolls.length} top var. "Yine de gönder" seçeneğiyle onaylayın.`,
+            {
+              code: "ITEM_MISMATCH",
+              expectedItemId: wo.targetItemId,
+              expectedItemLabel: expectedLabel,
+              mismatchedRolls: mismatchedRolls.map((r) => {
+                const i = itemMap.get(r.itemId);
+                return {
+                  id: r.id,
+                  barcode: r.barcode,
+                  itemId: r.itemId,
+                  itemLabel: i ? `${i.code} - ${i.name}` : r.itemId,
+                };
+              }),
+            },
+          );
+        }
+        // Override aktif — audit log için bilgi sakla (assign ilerde dispatch
+        // metadata'ya eklenecek)
+        console.warn(
+          `[dispatch] Item mismatch override by user ${userId ?? "?"}: ` +
+            `WO ${data.workOrderId} expects ${wo.targetItemId}, ` +
+            `${mismatchedRolls.length} mismatched rolls accepted`,
+        );
+      }
     }
 
     // Sevk anında otomatik attach edilecek toplar (mobil sahada tek-adım akış için).
@@ -758,8 +819,14 @@ export class SubcontractorService {
     // sync replay'i demektir (ilk receive step.status'ü COMPLETED'a çekti ve
     // aşağıdaki ACTIVE guard'ı normalde fırlatırdı). Mevcut receipt varsa
     // cached response döndür, duplicate SubcontractorReceipt yaratma.
+    //
+    // KRİTİK: cancelledAt: null filtresi şart — iptal edilmiş receipt'leri
+    // cached olarak GERİ DÖNDÜRMEMELİ. İptal sonrası tekrar kabul çağrısı
+    // operatörün "bunu yeniden kabul et" niyetiyle gelir; cached iptal kaydı
+    // dönerse silent failure (toast başarılı ama hiçbir şey olmaz, roller
+    // AT_SUBCONTRACTOR'da kalır). cancelReceipt soft-delete (cancelledAt ts).
     const existingReceipt = await prisma.subcontractorReceipt.findFirst({
-      where: { stepId: data.stepId },
+      where: { stepId: data.stepId, cancelledAt: null },
       orderBy: { createdAt: "desc" },
       include: {
         subcontractor: true,
@@ -1423,14 +1490,52 @@ export class SubcontractorService {
     subcontractorId?: string;
     page?: number;
     pageSize?: number;
+    /**
+     * İptal edilebilirlik filtresi — mobil "İptal Edilebilirler" vs "Geçmiş
+     * Kabuller" sekmelerini ayırır. Mantık: bir receipt iptal edilebilir <=>
+     * tüm bornRoll'ları "güvenli durumda" (üzerinde işlem yok, sonraki adıma
+     * geçmemiş, bölünmemiş, başka sevkte değil, status STOCK/IN_PRODUCTION).
+     *   - 'yes' → tüm bornRoll'ları güvenli
+     *   - 'no'  → en az bir bornRoll bloklu (settled)
+     *   - undefined → her ikisi (varsayılan, eski davranış)
+     * BornRoll'sız receipt'ler her zaman cancellable sayılır (none: vacuously true).
+     */
+    cancellable?: "yes" | "no";
   }): Promise<{
     success: true;
     data: unknown[];
     pagination: { page: number; pageSize: number; total: number; totalPages: number };
   }> {
-    const where: Prisma.SubcontractorReceiptWhereInput = {};
+    // Default: iptal edilmiş receipt'ler listede görünmez — operatörün geçmiş
+    // kabuller ekranında kafası karışmasın. Cancel sonrası soft-delete olduğu
+    // için kayıt durur ama listelenmez. İleride admin "iptaller dahil" görünümü
+    // isterse explicit query param ile açılır.
+    const where: Prisma.SubcontractorReceiptWhereInput = { cancelledAt: null };
     if (params?.workOrderId) where.workOrderId = params.workOrderId;
     if (params?.subcontractorId) where.subcontractorId = params.subcontractorId;
+
+    // computeBornRollBlockingReasons ile aynı şartlar — burada Prisma where
+    // ile ifade ediliyor ki count + findMany pagination doğru olsun.
+    const blockingCondition: Prisma.RollWhereInput = {
+      OR: [
+        { operations: { some: {} } },
+        { movements: { some: { exitedAt: { not: null } } } },
+        { children: { some: {} } },
+        { dispatchItems: { some: {} } },
+        {
+          status: {
+            notIn: [RollStatus.STOCK, RollStatus.IN_PRODUCTION],
+          },
+        },
+      ],
+    };
+    if (params?.cancellable === "yes") {
+      // Tüm bornRoll'lar güvenli → bloklu bornRoll yok
+      where.bornRolls = { none: blockingCondition };
+    } else if (params?.cancellable === "no") {
+      // En az bir bornRoll bloklu (settled)
+      where.bornRolls = { some: blockingCondition };
+    }
 
     const page = Math.max(1, params?.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, params?.pageSize ?? 10));

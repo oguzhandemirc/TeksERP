@@ -92,7 +92,11 @@ interface RollRow {
   noteOpen: boolean;
 }
 
-type RightTab = 'pending' | 'history';
+// İptal Edilebilirler = receipts whose all bornRolls are safe (still cancellable).
+// Geçmiş Kabuller = settled receipts (at least one bornRoll has moved on / been
+// processed). İki sekme ayırması operatörün kafa karışıklığını engeller —
+// "iptal edebilir miyim?" sorusu artık tab seçimiyle yanıtlanır.
+type RightTab = 'pending' | 'cancellable' | 'history';
 
 export default function FasonKabulScreen() {
   const device = useDeviceType();
@@ -148,6 +152,11 @@ export default function FasonKabulScreen() {
 
   // ── Right column ──
   const [rightTab, setRightTab] = useState<RightTab>('pending');
+  // Phone modal'da gösterilen alt sekme. Tablet'te bu state kullanılmaz
+  // (rightTab zaten 3 değer ile aynı işi yapar), sadece phone HistoryReceiptsModal'a.
+  const [modalSubTab, setModalSubTab] = useState<'cancellable' | 'history'>(
+    'cancellable',
+  );
   // Telefon modunda alttaki "Bekleyen / Geçmiş" paneli daraltılabilir —
   // operatör formla çalışırken dikey alan kazansın.
   const [cardBarcode, setCardBarcode] = useState('');
@@ -182,12 +191,30 @@ export default function FasonKabulScreen() {
     staleTime: 30 * 1000,
   });
 
-  const receiptsQuery = useQuery({
-    queryKey: ['receipts', 'recent', receiptsPage],
+  // İPTAL EDİLEBİLİRLER (cancellable:'yes') — born rolls güvenli durumda.
+  // Operatör hala iptal edebilir; UI'da İptal Et butonu gösterilir.
+  const cancellableReceiptsQuery = useQuery({
+    queryKey: ['receipts', 'cancellable', receiptsPage],
     queryFn: () =>
       subcontractorService.listReceipts({
         page: receiptsPage,
         pageSize: RECEIPTS_PAGE_SIZE,
+        cancellable: 'yes',
+      }),
+    placeholderData: (prev) => prev,
+    enabled: rightTab === 'cancellable' || historyModalOpen,
+    staleTime: 30 * 1000,
+  });
+
+  // GEÇMİŞ KABULLER (cancellable:'no') — settled receipts, artık iptal edilemez.
+  // UI'da İptal Et butonu YOK — sadece detay görüntüleme.
+  const receiptsQuery = useQuery({
+    queryKey: ['receipts', 'settled', receiptsPage],
+    queryFn: () =>
+      subcontractorService.listReceipts({
+        page: receiptsPage,
+        pageSize: RECEIPTS_PAGE_SIZE,
+        cancellable: 'no',
       }),
     placeholderData: (prev) => prev,
     // Tablet'te tab history iken, telefonda Geçmiş modal açıkken aktif
@@ -1011,7 +1038,10 @@ export default function FasonKabulScreen() {
 
           {!isPhone && (
           <>
-          {/* Tab bar + aktif tab'ı yenileyen buton */}
+          {/* Tab bar + aktif tab'ı yenileyen buton. Üç tab:
+              - Bekleyen: fasondan dönen ama henüz kabul edilmemiş kartlar
+              - İptal Edilebilirler: kabul edilmiş, born roll'lar henüz işlenmedi
+              - Geçmiş Kabuller: kabul edilmiş + born roll'lar işleme girmiş (settled) */}
           <View style={styles.tabBar}>
             <Tab
               label="Bekleyen"
@@ -1019,6 +1049,12 @@ export default function FasonKabulScreen() {
               active={rightTab === 'pending'}
               onPress={() => setRightTab('pending')}
               activeColor="#d97706"
+            />
+            <Tab
+              label="İptal Edilebilirler"
+              active={rightTab === 'cancellable'}
+              onPress={() => setRightTab('cancellable')}
+              activeColor="#dc2626"
             />
             <Tab
               label="Geçmiş Kabuller"
@@ -1030,29 +1066,36 @@ export default function FasonKabulScreen() {
               <RefreshButton
                 onPress={() => {
                   if (rightTab === 'pending') pendingQuery.refetch();
+                  else if (rightTab === 'cancellable') cancellableReceiptsQuery.refetch();
                   else receiptsQuery.refetch();
                 }}
                 refreshing={
                   rightTab === 'pending'
                     ? pendingQuery.isFetching
-                    : receiptsQuery.isFetching
+                    : rightTab === 'cancellable'
+                      ? cancellableReceiptsQuery.isFetching
+                      : receiptsQuery.isFetching
                 }
                 isError={
                   rightTab === 'pending'
                     ? pendingQuery.isError
-                    : receiptsQuery.isError
+                    : rightTab === 'cancellable'
+                      ? cancellableReceiptsQuery.isError
+                      : receiptsQuery.isError
                 }
                 errorMessage={
                   rightTab === 'pending'
                     ? (pendingQuery.error as Error | undefined)?.message
-                    : (receiptsQuery.error as Error | undefined)?.message
+                    : rightTab === 'cancellable'
+                      ? (cancellableReceiptsQuery.error as Error | undefined)?.message
+                      : (receiptsQuery.error as Error | undefined)?.message
                 }
               />
             </View>
           </View>
 
           {/* Tab içeriği */}
-          {rightTab === 'pending' ? (
+          {rightTab === 'pending' && (
             <PendingPane
               loading={pendingQuery.isLoading}
               groups={sortedGroups}
@@ -1060,7 +1103,26 @@ export default function FasonKabulScreen() {
               highlightedWorkOrderId={highlightedWorkOrderId}
               onSelect={selectGroup}
             />
-          ) : (
+          )}
+          {rightTab === 'cancellable' && (
+            <HistoryPane
+              loading={cancellableReceiptsQuery.isLoading}
+              fetching={cancellableReceiptsQuery.isFetching}
+              error={cancellableReceiptsQuery.isError ? (cancellableReceiptsQuery.error as Error) : null}
+              receipts={cancellableReceiptsQuery.data?.data ?? []}
+              page={cancellableReceiptsQuery.data?.pagination?.page ?? 1}
+              totalPages={cancellableReceiptsQuery.data?.pagination?.totalPages ?? 1}
+              total={cancellableReceiptsQuery.data?.pagination?.total ?? 0}
+              onShowDetail={setDetailReceiptId}
+              onCancel={(id) => {
+                setCancelTargetReceiptId(id);
+                setCancelReason('');
+              }}
+              onPageChange={setReceiptsPage}
+              onRefresh={() => cancellableReceiptsQuery.refetch()}
+            />
+          )}
+          {rightTab === 'history' && (
             <HistoryPane
               loading={receiptsQuery.isLoading}
               fetching={receiptsQuery.isFetching}
@@ -1070,10 +1132,8 @@ export default function FasonKabulScreen() {
               totalPages={receiptsQuery.data?.pagination?.totalPages ?? 1}
               total={receiptsQuery.data?.pagination?.total ?? 0}
               onShowDetail={setDetailReceiptId}
-              onCancel={(id) => {
-                setCancelTargetReceiptId(id);
-                setCancelReason('');
-              }}
+              /* onCancel verilmedi → ReceiptRow iptal butonunu gizler.
+                 Geçmiş kabuller artık iptal edilemez (born roll'lar işleme girdi). */
               onPageChange={setReceiptsPage}
               onRefresh={() => receiptsQuery.refetch()}
             />
@@ -1164,20 +1224,65 @@ export default function FasonKabulScreen() {
       <HistoryReceiptsModal
         visible={historyModalOpen}
         onDismiss={() => setHistoryModalOpen(false)}
-        loading={receiptsQuery.isLoading}
-        fetching={receiptsQuery.isFetching}
-        error={receiptsQuery.isError ? (receiptsQuery.error as Error) : null}
-        receipts={receiptsQuery.data?.data ?? []}
-        page={receiptsQuery.data?.pagination?.page ?? 1}
-        totalPages={receiptsQuery.data?.pagination?.totalPages ?? 1}
-        total={receiptsQuery.data?.pagination?.total ?? 0}
-        onShowDetail={setDetailReceiptId}
-        onCancel={(id) => {
-          setCancelTargetReceiptId(id);
-          setCancelReason('');
+        tab={modalSubTab}
+        onTabChange={(t) => {
+          setModalSubTab(t);
+          setReceiptsPage(1); // tab değiştiğinde sayfa sıfırla
         }}
+        loading={
+          modalSubTab === 'cancellable'
+            ? cancellableReceiptsQuery.isLoading
+            : receiptsQuery.isLoading
+        }
+        fetching={
+          modalSubTab === 'cancellable'
+            ? cancellableReceiptsQuery.isFetching
+            : receiptsQuery.isFetching
+        }
+        error={
+          modalSubTab === 'cancellable'
+            ? cancellableReceiptsQuery.isError
+              ? (cancellableReceiptsQuery.error as Error)
+              : null
+            : receiptsQuery.isError
+              ? (receiptsQuery.error as Error)
+              : null
+        }
+        receipts={
+          modalSubTab === 'cancellable'
+            ? (cancellableReceiptsQuery.data?.data ?? [])
+            : (receiptsQuery.data?.data ?? [])
+        }
+        page={
+          modalSubTab === 'cancellable'
+            ? (cancellableReceiptsQuery.data?.pagination?.page ?? 1)
+            : (receiptsQuery.data?.pagination?.page ?? 1)
+        }
+        totalPages={
+          modalSubTab === 'cancellable'
+            ? (cancellableReceiptsQuery.data?.pagination?.totalPages ?? 1)
+            : (receiptsQuery.data?.pagination?.totalPages ?? 1)
+        }
+        total={
+          modalSubTab === 'cancellable'
+            ? (cancellableReceiptsQuery.data?.pagination?.total ?? 0)
+            : (receiptsQuery.data?.pagination?.total ?? 0)
+        }
+        onShowDetail={setDetailReceiptId}
+        onCancel={
+          modalSubTab === 'cancellable'
+            ? (id) => {
+                setCancelTargetReceiptId(id);
+                setCancelReason('');
+              }
+            : undefined
+        }
         onPageChange={setReceiptsPage}
-        onRefresh={() => receiptsQuery.refetch()}
+        onRefresh={() =>
+          modalSubTab === 'cancellable'
+            ? cancellableReceiptsQuery.refetch()
+            : receiptsQuery.refetch()
+        }
         overlay={
           <>
             <ReceiptDetailModal
@@ -1679,8 +1784,9 @@ function Badge({ icon, children }: { icon: string; children: React.ReactNode }) 
   );
 }
 
-// Telefon dikeyde sağ paneldeki "Geçmiş Kabuller" sekmesinin modal sürümü.
-// RemoteListSheet generic kabuğunu kullanır; sayfalama footer'da render edilir.
+// Telefon dikeyde sağ paneldeki kabul geçmişi sekmesinin modal sürümü. Header'da
+// iki sub-tab: İptal Edilebilirler / Geçmiş Kabuller. RemoteListSheet generic
+// kabuğunu kullanır; sayfalama footer'da render edilir.
 function HistoryReceiptsModal({
   visible,
   onDismiss,
@@ -1696,6 +1802,8 @@ function HistoryReceiptsModal({
   onPageChange,
   onRefresh,
   overlay,
+  tab,
+  onTabChange,
 }: {
   visible: boolean;
   onDismiss: () => void;
@@ -1707,18 +1815,22 @@ function HistoryReceiptsModal({
   totalPages: number;
   total: number;
   onShowDetail: (id: string) => void;
-  onCancel: (id: string) => void;
+  /** Yalnız 'cancellable' tab'da görünür — settled tab'da undefined. */
+  onCancel?: (id: string) => void;
   onPageChange: (page: number) => void;
   onRefresh: () => void;
   /** Sheet'in üstüne render edilen overlay (detay modal) — aynı RNModal
    *  portal'ında olduğu için detay listeyi örtüp listeye geri dönüyor. */
   overlay?: React.ReactNode;
+  /** Sub-tab: 'cancellable' = iptal butonu görünür, 'history' = sadece detay. */
+  tab: 'cancellable' | 'history';
+  onTabChange: (t: 'cancellable' | 'history') => void;
 }) {
   return (
     <RemoteListSheet
       visible={visible}
       onDismiss={onDismiss}
-      title="Geçmiş Kabuller"
+      title="Kabul Geçmişi"
       icon="history"
       widthRatio={0.9}
       loading={loading}
@@ -1729,6 +1841,44 @@ function HistoryReceiptsModal({
       items={receipts}
       keyExtractor={(r) => r.id}
       overlay={overlay}
+      headerExtras={
+        <View style={modalTabStyles.tabRow}>
+          <TouchableRipple
+            onPress={() => onTabChange('cancellable')}
+            borderless
+            style={[
+              modalTabStyles.tab,
+              tab === 'cancellable' && { borderBottomColor: '#dc2626' },
+            ]}
+          >
+            <Text
+              style={[
+                modalTabStyles.tabLabel,
+                tab === 'cancellable' && { color: '#dc2626', fontWeight: '700' },
+              ]}
+            >
+              İptal Edilebilirler
+            </Text>
+          </TouchableRipple>
+          <TouchableRipple
+            onPress={() => onTabChange('history')}
+            borderless
+            style={[
+              modalTabStyles.tab,
+              tab === 'history' && { borderBottomColor: '#059669' },
+            ]}
+          >
+            <Text
+              style={[
+                modalTabStyles.tabLabel,
+                tab === 'history' && { color: '#059669', fontWeight: '700' },
+              ]}
+            >
+              Geçmiş Kabuller
+            </Text>
+          </TouchableRipple>
+        </View>
+      }
       renderItem={(item) => (
         <ReceiptRow
           receipt={item}
@@ -1739,7 +1889,11 @@ function HistoryReceiptsModal({
         />
       )}
       emptyIcon="package-check"
-      emptyText="Henüz mal kabul yok"
+      emptyText={
+        tab === 'cancellable'
+          ? 'İptal edilebilir kabul yok'
+          : 'Henüz mal kabul yok'
+      }
       footer={
         <Pager
           page={page}
@@ -1752,6 +1906,23 @@ function HistoryReceiptsModal({
     />
   );
 }
+
+const modalTabStyles = StyleSheet.create({
+  tabRow: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  tabLabel: { fontSize: 13, color: '#64748b', fontWeight: '600' },
+});
 
 function PendingPane({
   loading,
@@ -1888,7 +2059,9 @@ function HistoryPane({
   totalPages: number;
   total: number;
   onShowDetail: (id: string) => void;
-  onCancel: (id: string) => void;
+  /** Verilirse her satırda İptal Et butonu görünür. Settled tab'ında verilmez
+      → ReceiptRow iptal butonunu otomatik gizler. */
+  onCancel?: (id: string) => void;
   onPageChange: (page: number) => void;
   onRefresh: () => void;
 }) {

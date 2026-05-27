@@ -61,22 +61,16 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
 
   const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
 
-  const customerGroups = useMemo(() => {
-    const m = new Map<
-      string,
-      {
-        customer: { id: string; name: string };
-        lines: NonNullable<typeof wo.orderLinks>[number][];
-      }
-    >();
+  // Sipariş listesi — müşteri grubu YOK. Fason Sevk aşamasında operatörün
+  // müşteri adına ihtiyacı yok; o aşamada öncelikli olan BİZİM iç ürün adı
+  // (planlanan kumaş). Müşteri-spesifik ürün/renk isimleri (customerItemName,
+  // customerColorName) da gizli — sadece üretim/sevk için iç katalog adı.
+  const orderLines = useMemo(() => {
+    const out: Array<NonNullable<typeof wo.orderLinks>[number]> = [];
     for (const link of wo.orderLinks ?? []) {
-      const c = link.orderLine?.order?.customer;
-      if (!c) continue;
-      const entry = m.get(c.id) ?? { customer: c, lines: [] };
-      entry.lines.push(link);
-      m.set(c.id, entry);
+      if (link.orderLine) out.push(link);
     }
-    return Array.from(m.values());
+    return out;
   }, [wo.orderLinks]);
 
   const isStock = wo.type === 'STOCK_PRODUCTION';
@@ -144,56 +138,21 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
         </View>
       )}
 
-      {customerGroups.length > 0 &&
-        customerGroups.map(({ customer, lines }) => (
-          <View key={customer.id} style={styles.card}>
-            <View style={styles.customerHeader}>
-              <Icon source="account" size={14} color="#4f46e5" />
-              <Text style={styles.customerName} numberOfLines={1}>
-                {customer.name}
-              </Text>
-              <Text style={styles.lineCount}>{lines.length} sipariş</Text>
-            </View>
-            {lines.map((link, i) => {
-              const ol = link.orderLine;
-              if (!ol) return null;
-              const colorLabel =
-                ol.customerColorName ?? ol.color?.name ?? null;
-              const itemNameBase =
-                ol.customerItemName ?? ol.item?.name ?? '—';
-              const itemLabel = colorLabel
-                ? `${itemNameBase} · ${colorLabel}`
-                : itemNameBase;
-              return (
-                <View key={`${ol.id}-${i}`} style={styles.orderLine}>
-                  <View style={styles.orderLineTop}>
-                    <Text style={styles.orderNo}>
-                      {ol.order?.orderNumber ?? '—'}
-                    </Text>
-                    <Text style={styles.orderQty}>
-                      {ol.quantity} mt{ol.width != null ? ` · ${ol.width} cm` : ''}
-                    </Text>
-                  </View>
-                  <Text style={styles.orderItem} numberOfLines={2}>
-                    {itemLabel}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        ))}
-
-      {customerGroups.length === 0 && wo.type === 'STOCK_PRODUCTION' && (
+      {/* Üretilen Kumaş — fason sevk aşamasında en kritik bilgi.
+          wo.targetItem (bizim katalogtaki iç ürün) + wo.targetColor.
+          Müşteri adı/sipariş ürün adı GÖSTERİLMEZ. */}
+      {(wo.targetItem || wo.targetColor) && (
         <View style={styles.card}>
-          <View style={styles.row}>
-            <Icon source="package-variant" size={14} color="#64748b" />
-            <Text style={styles.rowText}>Siparişe bağlı değil — stoğa üretim</Text>
+          <View style={styles.targetHeader}>
+            <Icon source="cube-outline" size={14} color="#4f46e5" />
+            <Text style={styles.targetTitle}>Üretilen Kumaş</Text>
           </View>
-        </View>
-      )}
-
-      {(wo.targetColor || externalStations.length > 0) && (
-        <View style={styles.card}>
+          {wo.targetItem && (
+            <Text style={styles.targetItemName} numberOfLines={2}>
+              {wo.targetItem.name}
+              {wo.targetItem.code ? ` · ${wo.targetItem.code}` : ''}
+            </Text>
+          )}
           {wo.targetColor && (
             <View style={styles.row}>
               <View
@@ -205,6 +164,43 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
               <Text style={styles.rowText}>{wo.targetColor.name}</Text>
             </View>
           )}
+        </View>
+      )}
+
+      {orderLines.length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.linkedOrdersTitle}>
+            {orderLines.length} bağlı sipariş
+          </Text>
+          {orderLines.map((link, i) => {
+            const ol = link.orderLine!;
+            return (
+              <View key={`${ol.id}-${i}`} style={styles.orderLine}>
+                <View style={styles.orderLineTop}>
+                  <Text style={styles.orderNo}>
+                    {ol.order?.orderNumber ?? '—'}
+                  </Text>
+                  <Text style={styles.orderQty}>
+                    {ol.quantity} mt{ol.width != null ? ` · ${ol.width} cm` : ''}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {orderLines.length === 0 && wo.type === 'STOCK_PRODUCTION' && (
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <Icon source="package-variant" size={14} color="#64748b" />
+            <Text style={styles.rowText}>Siparişe bağlı değil — stoğa üretim</Text>
+          </View>
+        </View>
+      )}
+
+      {externalStations.length > 0 && (
+        <View style={styles.card}>
           {externalStations.map((s) => {
             const dispatch = openDispatchByStep.get(s.id);
             const expanded = expandedStepId === s.id;
@@ -327,7 +323,7 @@ const styles = StyleSheet.create({
   },
   metricLabel: { fontSize: 10, color: '#64748b', fontWeight: '600' },
   metricValue: { fontSize: 15, color: '#0f172a', fontWeight: '700' },
-  customerHeader: {
+  targetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -335,8 +331,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
-  customerName: { flex: 1, fontSize: 13, fontWeight: '700', color: '#4f46e5' },
-  lineCount: { fontSize: 11, color: '#94a3b8', fontWeight: '600' },
+  targetTitle: { fontSize: 11, fontWeight: '700', color: '#4f46e5', letterSpacing: 0.3 },
+  targetItemName: { fontSize: 14, fontWeight: '700', color: '#0f172a', paddingTop: 4 },
+  linkedOrdersTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+    letterSpacing: 0.3,
+    paddingBottom: 2,
+  },
   orderLine: { gap: 2, paddingVertical: 2 },
   orderLineTop: {
     flexDirection: 'row',
@@ -345,7 +348,6 @@ const styles = StyleSheet.create({
   },
   orderNo: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
   orderQty: { fontSize: 11, color: '#475569', fontWeight: '600' },
-  orderItem: { fontSize: 12, color: '#475569' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
   rowText: { fontSize: 12, color: '#0f172a', flex: 1 },
   stepStatus: { fontSize: 11, color: '#64748b', fontWeight: '600' },

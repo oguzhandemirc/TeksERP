@@ -48,6 +48,15 @@ apiClient.interceptors.response.use(
 
     const message =
       error.response?.data?.message || error.message || 'Sunucu hatası';
-    return Promise.reject(new Error(message));
+    // Backend AppError.details payload'ı koru — frontend "ITEM_MISMATCH" gibi
+    // özel handling için (modal göster, override ile retry) bu yapıya bakar.
+    const details = error.response?.data?.details;
+    const wrapped = new Error(message) as Error & {
+      details?: Record<string, unknown>;
+      status?: number;
+    };
+    if (details) wrapped.details = details;
+    if (status) wrapped.status = status;
+    return Promise.reject(wrapped);
   }
 );

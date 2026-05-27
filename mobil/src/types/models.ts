@@ -524,6 +524,9 @@ export interface KursunOpenCard {
   /// Liste backend tarafında bu alanlara göre sıralanmış gelir.
   priority: number;
   isUrgent: boolean;
+  /** Kurşun adımına ilk roll'un giriş tarihi (en eski açık RollMovement.enteredAt) —
+   *  liste ekranında "ne zamandır bekliyor" göstergesi için. */
+  oldestEnteredAt?: string | null;
 }
 
 /** Açık kumaş aç (Kurşun/KK2) — `POST /api/rolls/open-fabric` */
@@ -641,6 +644,8 @@ export interface TamburOpenCard {
   stationName: string;
   stationCode: string;
   openRollCount: number;
+  /** Tambur adımına ilk roll'un giriş tarihi — liste'de "ne zamandır bekliyor". */
+  oldestEnteredAt?: string | null;
 }
 
 // =============================================================================

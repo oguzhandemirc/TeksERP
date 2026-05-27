@@ -1269,6 +1269,9 @@ export class TamburService {
         stationName: string;
         stationCode: string;
         openRollCount: number;
+        /** Tambur'a giriş tarihi — en eski açık RollMovement.enteredAt. Liste
+         *  ekranında operatöre "ne kadar zamandır bekliyor" göstergesi için. */
+        oldestEnteredAt: Date | null;
       }>
     >
   > {
@@ -1293,6 +1296,10 @@ export class TamburService {
           },
         },
         _count: { select: { currentRolls: true } },
+        movements: {
+          where: { exitedAt: null },
+          select: { enteredAt: true },
+        },
       },
       orderBy: { updatedAt: "desc" },
     });
@@ -1301,6 +1308,10 @@ export class TamburService {
       .map((s) => {
         const card = s.workOrder.travelerCards[0];
         if (!card) return null;
+        const oldest = s.movements.reduce<Date | null>((acc, m) => {
+          if (acc === null) return m.enteredAt;
+          return m.enteredAt < acc ? m.enteredAt : acc;
+        }, null);
         return {
           cardId: card.id,
           cardNumber: card.cardNumber,
@@ -1311,6 +1322,7 @@ export class TamburService {
           stationName: s.station.name,
           stationCode: s.station.code,
           openRollCount: s._count.currentRolls,
+          oldestEnteredAt: oldest,
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);

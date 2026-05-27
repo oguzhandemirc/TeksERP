@@ -15,6 +15,8 @@ const dispatchSchema = z.object({
   plateNumber: z.string().max(32).optional(),
   driverName: z.string().max(128).optional(),
   notes: z.string().max(1000).optional(),
+  /** Operatör WO ürünü vs rulo ürünü uyuşmazlığını bilinçli onayladı. */
+  allowItemOverride: z.boolean().optional(),
 });
 
 const cancelDispatchSchema = z.object({
@@ -187,11 +189,17 @@ export class SubcontractorController {
   /** GET /api/subcontractor/receipts */
   async listReceipts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const cancellableRaw = req.query.cancellable;
+      const cancellable =
+        cancellableRaw === "yes" || cancellableRaw === "no"
+          ? (cancellableRaw as "yes" | "no")
+          : undefined;
       const result = await this.service.listReceipts({
         workOrderId:     typeof req.query.workOrderId     === "string" ? req.query.workOrderId     : undefined,
         subcontractorId: typeof req.query.subcontractorId === "string" ? req.query.subcontractorId : undefined,
         page:            typeof req.query.page            === "string" ? Number(req.query.page)     : undefined,
         pageSize:        typeof req.query.pageSize        === "string" ? Number(req.query.pageSize) : undefined,
+        cancellable,
       });
       res.status(200).json(result);
     } catch (err) {

@@ -33,12 +33,14 @@ import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import WorkOrderDetailPanel from '../../../components/workOrder/WorkOrderDetailPanel';
 import { RecentDispatchesModal } from '../../../components/dispatch';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 import { workOrderService } from '../../../services/workOrder.service';
 import { rollService } from '../../../services/roll.service';
 import { travelerCardService } from '../../../services/travelerCard.service';
 import {
   subcontractorService,
   DispatchRequest,
+  type ItemMismatchDetails,
 } from '../../../services/subcontractor.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import { useIsOnline, usePendingStationOps } from '../../../offline/hooks';
@@ -440,19 +442,28 @@ export default function FasonSevkScreen() {
   // Son Sevkler modal'ı her açılışta taze veri çek.
   useRefetchOnOpen(dispatchesQuery.refetch, recentDispatchesOpen);
 
+  // Item mismatch modal state — backend "ITEM_MISMATCH" döndüğünde set edilir,
+  // kullanıcı onayla → retry with allowItemOverride. Vars saklanır ki retry
+  // aynı payload + override flag ile yapılabilsin.
+  const [itemMismatch, setItemMismatch] = useState<{
+    details: ItemMismatchDetails;
+    originalVars: DispatchRequest;
+  } | null>(null);
+
   // ── Mutations ──
   // OFFLINE-AWARE: mutationFn `setMutationDefaults`'ta tanımlı; persist sonrası
   // app restart'ında resolve. Backend idempotent: aynı stepId + rollIds +
-  // subcontractorId payload ile 2. çağrı cached openDispatch döner; farklı
-  // payload → conflict (kullanıcı gerçek hatası).
+  // subcontractorId payload ile 2. çağrı cached openDispatch döner.
   //
-  // UX şartı: offline'da operatör irsaliyeyi ELLE yazıp şoföre verir (geçici
-  // numara veya numara yok). Online dönünce backend gerçek dispatchNo'yu
-  // verir, arşivlik baskı operatörün listesinde mevcut olur. Form anında
-  // temizlenir, operatör sıradaki sevki hazırlamaya geçer.
+  // UX şartı: offline'da operatör irsaliyeyi ELLE yazıp şoföre verir. Online
+  // dönünce backend gerçek dispatchNo'yu verir.
+  //
+  // FORM RESET STRATEGY: onMutate yerine onSuccess'te temizleme. Item mismatch
+  // gibi backend rejection durumunda form ayakta kalmalı ki operatör override
+  // veya düzeltebilsin.
   const dispatchMutation = useMutation<
     Awaited<ReturnType<typeof subcontractorService.dispatch>>,
-    Error,
+    Error & { details?: Record<string, unknown> },
     DispatchRequest
   >({
     mutationKey: STATION_MUT.FASON_SEVK_DISPATCH,
@@ -465,6 +476,8 @@ export default function FasonSevkScreen() {
           ? undefined
           : 'Çevrimdışı — irsaliyeyi ELLE yaz, sync olunca gerçek no gelecek',
       });
+    },
+    onSuccess: () => {
       // Form sıfırla — operatör yeni iş emri seçerek baştan başlar
       setWorkOrderId('');
       setWorkOrderLabel('');
@@ -478,17 +491,33 @@ export default function FasonSevkScreen() {
       setDriverName('');
       setNotes('');
       setDetailsCollapsed(true);
-    },
-    onSuccess: () => {
-      // Server confirm — listeleri tazele (yeni dispatch, WO statüsü)
+      // Listeleri tazele (yeni dispatch, WO statüsü)
       qc.invalidateQueries({ queryKey: ['dispatches'] });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
     },
-    onError: (err) => {
+    onError: (err, vars) => {
+      // Backend ITEM_MISMATCH özel durumu — modal göster, retry with override
+      const details = err.details as ItemMismatchDetails | undefined;
+      if (details?.code === 'ITEM_MISMATCH') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setItemMismatch({ details, originalVars: vars });
+        return;
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Sevk başarısız', text2: err.message });
     },
   });
+
+  // Item mismatch onaylanırsa aynı payload + override flag ile retry
+  const handleItemMismatchOverride = () => {
+    if (!itemMismatch) return;
+    const retryVars: DispatchRequest = {
+      ...itemMismatch.originalVars,
+      allowItemOverride: true,
+    };
+    setItemMismatch(null);
+    dispatchMutation.mutate(retryVars);
+  };
 
   const cancelMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
@@ -1045,6 +1074,46 @@ export default function FasonSevkScreen() {
         onRefresh={handleRecentDispatchesRefresh}
         onPageChange={setDispatchesPage}
         onCancelDispatch={handleCancelDispatchMutation}
+      />
+
+      {/* Item mismatch onay modal'ı — WO ürünü ile rulo ürünü uyuşmuyor.
+          Operatör "Yine de sevk et" derse allowItemOverride:true ile retry. */}
+      <ConfirmDialog
+        visible={itemMismatch !== null}
+        kind="destructive"
+        title="Ürün Uyuşmazlığı"
+        description={
+          itemMismatch ? (
+            <View>
+              <Text style={{ fontSize: 14, color: '#475569', lineHeight: 20 }}>
+                İş emri{' '}
+                <Text style={{ fontWeight: '700' }}>
+                  {itemMismatch.details.expectedItemLabel}
+                </Text>{' '}
+                için, ama seçilen {itemMismatch.details.mismatchedRolls.length} top farklı ürün:
+              </Text>
+              <View style={{ marginTop: 10, gap: 4 }}>
+                {itemMismatch.details.mismatchedRolls.map((r) => (
+                  <Text
+                    key={r.id}
+                    style={{ fontSize: 13, color: '#0f172a' }}
+                  >
+                    • {r.barcode ?? '(barkodsuz)'} — {r.itemLabel}
+                  </Text>
+                ))}
+              </View>
+              <Text style={{ marginTop: 12, fontSize: 13, color: '#b91c1c', fontWeight: '600' }}>
+                Devam edersen audit log'a "Ürün uyuşmazlığı override" olarak yazılır.
+              </Text>
+            </View>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel="Yine de Sevk Et"
+        cancelLabel="Vazgeç"
+        onDismiss={() => setItemMismatch(null)}
+        onConfirm={handleItemMismatchOverride}
       />
     </ScreenChrome>
   );

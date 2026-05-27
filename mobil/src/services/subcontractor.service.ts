@@ -29,6 +29,24 @@ export interface DispatchRequest {
   plateNumber?: string;
   driverName?: string;
   notes?: string;
+  /**
+   * WO ürünü ile rulo ürünü uyuşmazlığını bilinçli onayla. Frontend
+   * mismatch modal'da onayladıktan sonra true gönderir.
+   */
+  allowItemOverride?: boolean;
+}
+
+/** Backend `details.code === 'ITEM_MISMATCH'` durumunda dönen yapı. */
+export interface ItemMismatchDetails {
+  code: 'ITEM_MISMATCH';
+  expectedItemId: string;
+  expectedItemLabel: string;
+  mismatchedRolls: Array<{
+    id: string;
+    barcode: string | null;
+    itemId: string;
+    itemLabel: string;
+  }>;
 }
 
 export interface CancelDispatchRequest {
@@ -113,13 +131,21 @@ export const subcontractorService = {
       .then((r) => r.data),
 
   listReceipts: (
-    params: { workOrderId?: string; subcontractorId?: string; page?: number; pageSize?: number } = {}
+    params: {
+      workOrderId?: string;
+      subcontractorId?: string;
+      page?: number;
+      pageSize?: number;
+      /** 'yes' = iptal edilebilirler, 'no' = settled (artık iptal edilemez) */
+      cancellable?: 'yes' | 'no';
+    } = {},
   ): Promise<PaginatedResponse<SubcontractorReceiptListItem>> => {
     const sp = new URLSearchParams();
     if (params.workOrderId) sp.set('workOrderId', params.workOrderId);
     if (params.subcontractorId) sp.set('subcontractorId', params.subcontractorId);
     if (params.page) sp.set('page', String(params.page));
     if (params.pageSize) sp.set('pageSize', String(params.pageSize));
+    if (params.cancellable) sp.set('cancellable', params.cancellable);
     const qs = sp.toString();
     return apiClient
       .get<PaginatedResponse<SubcontractorReceiptListItem>>(
