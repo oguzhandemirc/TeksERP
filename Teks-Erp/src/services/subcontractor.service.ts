@@ -659,9 +659,15 @@ export class SubcontractorService {
       throw AppError.conflict("Bu sevk zaten iptal edilmiş");
     }
 
-    // Mal kabul edilmiş sevk iptal edilemez (ReceiptItem.sourceDispatchItem üzerinden bağlı)
+    // Mal kabul edilmiş sevk iptal edilemez (ReceiptItem.sourceDispatchItem
+    // üzerinden bağlı). cancelledAt:null filtresi şart — iptal edilmiş receipt
+    // ReceiptItem'larını da tutar; o durumda dispatch cancel'ı yanlış
+    // engellenirdi ("önce kabulü iptal edin" derken zaten iptal edilmiş).
     const acceptedReceiptItem = await prisma.subcontractorReceiptItem.findFirst({
-      where: { sourceDispatchItem: { is: { dispatchId } } },
+      where: {
+        sourceDispatchItem: { is: { dispatchId } },
+        receipt: { cancelledAt: null },
+      },
       select: { receipt: { select: { receiptNo: true } } },
     });
     if (acceptedReceiptItem?.receipt) {
@@ -671,6 +677,38 @@ export class SubcontractorService {
     }
 
     const rollIds = dispatch.items.map((i) => i.rollId);
+
+    // Defansif state check: dispatch'te listelenen tüm rolls hala
+    // AT_SUBCONTRACTOR + bu step'te olmalı. Bir şey "fason sevkten sonraki
+    // adıma" geçtiyse (receive sonrası, admin manuel taşıma, scrap vs.)
+    // dispatch iptali tutarsız state yaratır — engelle. ReceiptItem kontrolü
+    // çoğu durumu yakalar; bu ek kontrol exotic durumlar (manuel müdahale)
+    // ve cancelled-receipt-then-re-moved senaryoları için savunma derinliği.
+    const movedRolls = await prisma.roll.findMany({
+      where: {
+        id: { in: rollIds },
+        OR: [
+          { status: { not: RollStatus.AT_SUBCONTRACTOR } },
+          { currentStepId: { not: dispatch.stepId } },
+        ],
+      },
+      select: { id: true, barcode: true, status: true, currentStepId: true },
+    });
+    if (movedRolls.length > 0) {
+      throw AppError.conflict(
+        `${movedRolls.length} top fason sevkten sonra taşınmış veya statüsü değişmiş — sevk iptal edilemez. ` +
+          `Önce ilgili işlemleri (mal kabul / hareket) geri al.`,
+        {
+          code: "ROLLS_MOVED_PAST_DISPATCH",
+          movedRolls: movedRolls.map((r) => ({
+            id: r.id,
+            barcode: r.barcode,
+            status: r.status,
+            currentStepId: r.currentStepId,
+          })),
+        },
+      );
+    }
 
     await prisma.$transaction(async (tx) => {
       // 1) Dispatch'i soft-cancel
