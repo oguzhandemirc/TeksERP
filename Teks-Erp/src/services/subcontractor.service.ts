@@ -257,15 +257,36 @@ export class SubcontractorService {
     // henüz fason kabulü tam yapılmamış (en az bir item geri gelmemiş).
     // Meşru bir ikinci parti için operatör önce eski sevki iptal eder veya
     // mal kabul yapar; o zaman bu kontrol geçer.
+    //
+    // IDEMPOTENCY: Offline sync replay'de aynı çağrı tekrar gelirse open
+    // dispatch zaten varsa AYNI payload (rollIds + subcontractorId) ile
+    // gelmesi durumunda cached dispatch döner. Farklı payload = gerçek
+    // çakışma → orijinal hata fırlatılır.
     const openDispatch = await prisma.subcontractorDispatch.findFirst({
       where: {
         stepId: data.stepId,
         cancelledAt: null,
         items: { some: { receiptItems: { none: {} } } },
       },
-      select: { dispatchNo: true },
+      include: {
+        items: { select: { rollId: true } },
+      },
     });
     if (openDispatch) {
+      const existingRollIds = new Set(openDispatch.items.map((i) => i.rollId));
+      const incomingRollIds = new Set(data.rollIds);
+      const sameRolls =
+        existingRollIds.size === incomingRollIds.size &&
+        [...existingRollIds].every((id) => incomingRollIds.has(id));
+      const sameSubcontractor =
+        openDispatch.subcontractorId === data.subcontractorId;
+      if (sameRolls && sameSubcontractor) {
+        return {
+          success: true,
+          data: openDispatch,
+          message: `Fason sevki zaten oluşturulmuş (idempotent retry): ${openDispatch.dispatchNo}`,
+        };
+      }
       throw AppError.conflict(
         `Bu adım için açık fason sevki var (${openDispatch.dispatchNo}). ` +
           `Yeni sevk açmak için önce o sevki iptal edin veya mal kabul yapın.`

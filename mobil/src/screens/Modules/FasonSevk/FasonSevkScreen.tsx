@@ -14,7 +14,12 @@ import {
   Appbar,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  onlineManager,
+} from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import dayjs from 'dayjs';
@@ -35,6 +40,8 @@ import {
   subcontractorService,
   DispatchRequest,
 } from '../../../services/subcontractor.service';
+import { STATION_MUT } from '../../../offline/mutations';
+import { useIsOnline, usePendingStationOps } from '../../../offline/hooks';
 import type { Roll, WorkOrderStep } from '../../../types/models';
 import {
   WORK_ORDER_STATUS_LABEL,
@@ -434,16 +441,31 @@ export default function FasonSevkScreen() {
   useRefetchOnOpen(dispatchesQuery.refetch, recentDispatchesOpen);
 
   // ── Mutations ──
-  const dispatchMutation = useMutation({
-    mutationFn: (data: DispatchRequest) => subcontractorService.dispatch(data),
-    onSuccess: (res) => {
+  // OFFLINE-AWARE: mutationFn `setMutationDefaults`'ta tanımlı; persist sonrası
+  // app restart'ında resolve. Backend idempotent: aynı stepId + rollIds +
+  // subcontractorId payload ile 2. çağrı cached openDispatch döner; farklı
+  // payload → conflict (kullanıcı gerçek hatası).
+  //
+  // UX şartı: offline'da operatör irsaliyeyi ELLE yazıp şoföre verir (geçici
+  // numara veya numara yok). Online dönünce backend gerçek dispatchNo'yu
+  // verir, arşivlik baskı operatörün listesinde mevcut olur. Form anında
+  // temizlenir, operatör sıradaki sevki hazırlamaya geçer.
+  const dispatchMutation = useMutation<
+    Awaited<ReturnType<typeof subcontractorService.dispatch>>,
+    Error,
+    DispatchRequest
+  >({
+    mutationKey: STATION_MUT.FASON_SEVK_DISPATCH,
+    onMutate: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
-        text1: 'Sevk oluşturuldu',
-        text2: res.data?.dispatchNo,
+        text1: 'Sevk kaydedildi',
+        text2: onlineManager.isOnline()
+          ? undefined
+          : 'Çevrimdışı — irsaliyeyi ELLE yaz, sync olunca gerçek no gelecek',
       });
-      // Form tamamen sıfırla — operatör yeni iş emri seçerek baştan başlar
+      // Form sıfırla — operatör yeni iş emri seçerek baştan başlar
       setWorkOrderId('');
       setWorkOrderLabel('');
       setStepId('');
@@ -456,10 +478,13 @@ export default function FasonSevkScreen() {
       setDriverName('');
       setNotes('');
       setDetailsCollapsed(true);
+    },
+    onSuccess: () => {
+      // Server confirm — listeleri tazele (yeni dispatch, WO statüsü)
       qc.invalidateQueries({ queryKey: ['dispatches'] });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
     },
-    onError: (err: Error) => {
+    onError: (err) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Sevk başarısız', text2: err.message });
     },
@@ -600,14 +625,17 @@ export default function FasonSevkScreen() {
     <ScreenChrome
       title="Fason Sevk"
       headerExtras={
-        isPhone ? (
-          <Appbar.Action
-            icon="history"
-            color="#fff"
-            onPress={() => setRecentDispatchesOpen(true)}
-            accessibilityLabel="Son sevkler"
-          />
-        ) : undefined
+        <View style={styles.headerExtrasRow}>
+          <SyncStatusChip />
+          {isPhone ? (
+            <Appbar.Action
+              icon="history"
+              color="#fff"
+              onPress={() => setRecentDispatchesOpen(true)}
+              accessibilityLabel="Son sevkler"
+            />
+          ) : null}
+        </View>
       }
     >
       <View style={[styles.body, isPhone && styles.bodyPhone]}>
@@ -812,8 +840,7 @@ export default function FasonSevkScreen() {
             mode="contained"
             icon="truck-delivery"
             onPress={handleDispatch}
-            disabled={!canDispatch || dispatchMutation.isPending}
-            loading={dispatchMutation.isPending}
+            disabled={!canDispatch}
             style={styles.submitBtn}
             contentStyle={styles.submitBtnContent}
             labelStyle={styles.submitBtnLabel}
@@ -1023,6 +1050,38 @@ export default function FasonSevkScreen() {
   );
 }
 
+
+// Çevrimdışı / sync bekleyen istasyon işlemi rozeti (diğer ekranlarla aynı).
+function SyncStatusChip() {
+  const online = useIsOnline();
+  const pending = usePendingStationOps();
+  const pendingCount = pending.length;
+  if (online && pendingCount === 0) return null;
+  let bg = '#1e40af';
+  let label = `${pendingCount} sync`;
+  if (!online && pendingCount === 0) {
+    bg = '#b45309';
+    label = 'Çevrimdışı';
+  } else if (!online && pendingCount > 0) {
+    bg = '#b91c1c';
+    label = `Çevrimdışı · ${pendingCount}`;
+  }
+  return (
+    <View
+      style={{
+        backgroundColor: bg,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        marginRight: 8,
+      }}
+    >
+      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 // ── Top seçim modalı (kamera placeholder) ──
 const ROLL_PICKER_PAGE_SIZE = 30;
@@ -1370,6 +1429,7 @@ const pickerStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   body: { flex: 1, flexDirection: 'row' },
   bodyPhone: { flexDirection: 'column' },
+  headerExtrasRow: { flexDirection: 'row', alignItems: 'center' },
 
   // Sol — Form
   formCol: { flex: 1.4, backgroundColor: '#f8fafc' },

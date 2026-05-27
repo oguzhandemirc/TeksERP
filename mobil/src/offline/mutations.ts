@@ -15,8 +15,14 @@ import {
 } from '../services/kursunQc.service';
 import { rollService, type InitialEntryRequest } from '../services/roll.service';
 import { tamburService } from '../services/tambur.service';
-import { subcontractorService } from '../services/subcontractor.service';
-import type { TamburFinalizeRemainingAction, ReceiveRequest } from '../types/models';
+import {
+  subcontractorService,
+  type DispatchRequest,
+} from '../services/subcontractor.service';
+import type {
+  TamburFinalizeRemainingAction,
+  ReceiveRequest,
+} from '../types/models';
 
 export const STATION_MUT = {
   QC2_COMPLETE: ['station', 'qc2-complete'] as const,
@@ -24,6 +30,7 @@ export const STATION_MUT = {
   TAMBUR_FINALIZE_OPEN_FABRIC: ['station', 'tambur-finalize-open-fabric'] as const,
   KK1_CREATE_ENTRY: ['station', 'kk1-create-entry'] as const,
   FASON_KABUL_RECEIVE: ['station', 'fason-kabul-receive'] as const,
+  FASON_SEVK_DISPATCH: ['station', 'fason-sevk-dispatch'] as const,
 } as const;
 
 export interface TamburFinalizeOpenFabricVars {
@@ -73,10 +80,17 @@ export function registerStationMutationDefaults(): void {
   });
   // Fason Kabul — boyahaneden dönen malın kabul kaydı. Backend idempotent:
   // bir step'te bir kez receive olur, 2. çağrı mevcut SubcontractorReceipt'i
-  // cached döner. Per-cut fason sevki (dispatch) hala online-only —
-  // kamyon irsaliyesi anlık doğrulama bekler.
+  // cached döner.
   queryClient.setMutationDefaults(STATION_MUT.FASON_KABUL_RECEIVE, {
     mutationFn: (vars: ReceiveRequest) => subcontractorService.receive(vars),
+    ...OFFLINE_AWARE,
+  });
+  // Fason Sevk — boyahaneye sevk. UX şartı: operatör offline iken irsaliyeyi
+  // ELLE yazar, kamyona verir; online dönünce backend gerçek dispatchNo'yu
+  // oluşturur. Backend idempotent: aynı step+rollIds+subcontractor payload
+  // ile 2. çağrı openDispatch'i cached döner; farklı payload → conflict.
+  queryClient.setMutationDefaults(STATION_MUT.FASON_SEVK_DISPATCH, {
+    mutationFn: (vars: DispatchRequest) => subcontractorService.dispatch(vars),
     ...OFFLINE_AWARE,
   });
 }
