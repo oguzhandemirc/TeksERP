@@ -7,6 +7,55 @@ import type {
   KursunFinishRequest,
 } from '../types/models';
 
+export interface RollStats {
+  totalCount: number;
+  /** Filtreye uyan tüm rolların `currentQty` toplamı — metre. */
+  totalQty: number;
+  /** `weightKg` toplamı (null'lar atlanır) — kg. */
+  totalWeight: number;
+  /** RollStatus → adet. Eşleşmeyen status hiç yer almaz. */
+  byStatus: Record<string, number>;
+  /** Kalite kodu → adet (A1, FIRE, 1.KALITE …). */
+  byQuality: Record<string, number>;
+}
+
+export interface RollCursorPage {
+  success: boolean;
+  data: Roll[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    limit: number;
+    totalEstimate?: number;
+  };
+}
+
+export interface CursorListParams {
+  limit?: number;
+  cursor?: string | null;
+  search?: string;
+  filters?: Record<string, string | string[]>;
+  /** Backend `?withTotal=true` — ilk sayfada total döndürmek için. */
+  withTotal?: boolean;
+}
+
+function buildCursorQueryString(params: CursorListParams): string {
+  const sp = new URLSearchParams();
+  sp.set('mode', 'cursor');
+  if (params.limit) sp.set('limit', String(params.limit));
+  if (params.cursor) sp.set('cursor', params.cursor);
+  if (params.search) sp.set('search', params.search);
+  if (params.withTotal) sp.set('withTotal', 'true');
+  if (params.filters) {
+    for (const [k, v] of Object.entries(params.filters)) {
+      if (!v || (Array.isArray(v) && v.length === 0)) continue;
+      const val = Array.isArray(v) ? v.join(',') : v;
+      if (val) sp.set(`filter[${k}]`, val);
+    }
+  }
+  return `?${sp.toString()}`;
+}
+
 export interface InitialEntryRequest {
   itemId: string;
   /** Ham mal genelde NULL — boyahanede kazanır. Opsiyonel renk override. */
@@ -31,6 +80,33 @@ export const rollService = {
 
   getAll: (params: Partial<QueryParams>): Promise<PaginatedResponse<Roll>> =>
     apiClient.get<PaginatedResponse<Roll>>(`/rolls${buildQueryString(params)}`).then((r) => r.data),
+
+  /** Cursor-pagination liste — infinite scroll için. */
+  getAllCursor: (params: CursorListParams): Promise<RollCursorPage> =>
+    apiClient.get<RollCursorPage>(`/rolls${buildCursorQueryString(params)}`).then((r) => r.data),
+
+  /**
+   * Liste ile aynı filtre setini paylaşan TÜM-DB özeti.
+   * Sayfa toplamı değil; gerçek aggregate.
+   */
+  getStats: (params: {
+    search?: string;
+    filters?: Record<string, string | string[]>;
+  }): Promise<ApiResponse<RollStats>> => {
+    const sp = new URLSearchParams();
+    if (params.search) sp.set('search', params.search);
+    if (params.filters) {
+      for (const [k, v] of Object.entries(params.filters)) {
+        if (!v || (Array.isArray(v) && v.length === 0)) continue;
+        const val = Array.isArray(v) ? v.join(',') : v;
+        if (val) sp.set(`filter[${k}]`, val);
+      }
+    }
+    const qs = sp.toString();
+    return apiClient
+      .get<ApiResponse<RollStats>>(`/rolls/stats${qs ? `?${qs}` : ''}`)
+      .then((r) => r.data);
+  },
 
   getHistory: (
     rollId: string

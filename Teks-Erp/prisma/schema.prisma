@@ -752,6 +752,13 @@ model WorkOrder {
   /// metadata'sına yazılır).
   foldType String?
 
+  // Soft-delete bayrağı — hardDelete artık `isActive=false` yapar; bağlı
+  // RollOperation / TravelerCard / Manifest / Swatch / Dispatch / Receipt
+  // ve WorkOrderStep kayıtları korunur (izlenebilirlik + audit). Listeler
+  // default `isActive: true` filtreler. Detay endpoint (findById) arşivli
+  // WO'ları da getirir.
+  isActive Boolean @default(true)
+
   // Relations
   steps            WorkOrderStep[]
   orderLinks       WorkOrderToOrderLine[]
@@ -774,6 +781,8 @@ model WorkOrder {
   @@index([status, createdAt(sort: Desc)])
   // "Termini Yakın" sıralaması: WHERE status IN (...) ORDER BY plannedEndDate ASC
   @@index([status, plannedEndDate])
+  // Soft-delete filtreli listeler için
+  @@index([isActive])
   @@map("work_orders")
 }
 

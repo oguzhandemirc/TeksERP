@@ -177,6 +177,31 @@ export function WorkOrderFormDialog({
   const quantityLocked = derived !== null;
   const mixedWidths = derived !== null && derived.width == null;
 
+  // Backend findById response'unda gelir; material commitment durumuna göre
+  // hangi alanların değiştirilemediğini söyler.
+  const locks = workOrder?.locks;
+  const widthFullyLocked = widthLocked || Boolean(locks?.width);
+  const widthTooltip = locks?.width
+    ? locks.reasons.width
+    : "Sipariş kaleminden alındı";
+  // targetQuantity sertçe kilitli değil — sadece sipariş bağlıysa derived
+  // değerden gelir. Material committed iken kullanıcı bilinçli olarak
+  // değiştirebilir (fazla → Tambur stoğu, eksik → yeni sevk).
+  const quantityFullyLocked = quantityLocked;
+  const quantityTooltip = "Sipariş kalemleri toplamı";
+
+  // "Sevk edilen > yeni hedef" uyarısı için canlı izleme.
+  const watchedQuantity = form.watch("targetQuantity");
+  const dispatchedQty = workOrder?.dispatchedTotalQty ?? 0;
+  const quantityShortfall =
+    locks?.materialCommitted &&
+    dispatchedQty > 0 &&
+    watchedQuantity != null &&
+    Number(watchedQuantity) > 0 &&
+    Number(watchedQuantity) < dispatchedQty
+      ? dispatchedQty - Number(watchedQuantity)
+      : 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[85vh] max-h-[85vh] max-w-6xl flex-col gap-0 overflow-hidden p-0">
@@ -189,13 +214,16 @@ export function WorkOrderFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {isInProgress && (
+        {locks?.materialCommitted && (
           <div className="mx-6 mt-3 flex shrink-0 items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
-              <div className="font-medium">Üretim devam ediyor</div>
+              <div className="font-medium">
+                {locks.reasons.materialCommitted ?? "Fiziksel taahhüt var"}
+              </div>
               <div>
-                Renk veya özellik değişikliği yalnızca henüz boyahaneden gelmemiş rulolara uygulanır. Mevcut bağlı rulolar fiziksel olarak ne taşıyorsa onunla kalır.
+                Kumaş / en / hedef metraj sabit. Renk, üretim özellikleri ve kat
+                tipi yalnızca ilgili istasyon adımı tamamlanmadıysa değiştirilebilir.
               </div>
             </div>
           </div>
@@ -224,6 +252,12 @@ export function WorkOrderFormDialog({
                     onChange={handleLinesChange}
                     onPickerConfirm={handlePickerConfirm}
                     excludeWorkOrderId={workOrder?.id}
+                    requiredItemId={
+                      locks?.materialCommitted ? workOrder?.targetItemId : null
+                    }
+                    requiredWidth={
+                      locks?.materialCommitted ? workOrder?.width : null
+                    }
                   />
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center p-6 text-center text-xs text-muted-foreground">
@@ -308,14 +342,24 @@ export function WorkOrderFormDialog({
                         form.setValue("targetColorId", null);
                         form.setValue("targetPropertyIds", []);
                       }}
+                      disabled={Boolean(locks?.targetItem)}
+                      lockedTooltip={locks?.reasons.targetItem}
                     />
                   </FormField>
                   <FormField label="Hedef Renk (opsiyonel)">
-                    <TargetColorSelect control={form.control} />
+                    <TargetColorSelect
+                      control={form.control}
+                      disabled={Boolean(locks?.targetColor)}
+                      lockedTooltip={locks?.reasons.targetColor}
+                    />
                   </FormField>
                 </div>
 
-                <TargetPropertiesField control={form.control} />
+                <TargetPropertiesField
+                  control={form.control}
+                  lockedIds={locks?.lockedPropertyIds}
+                  applicableIds={locks?.applicablePropertyIds}
+                />
 
                 <div className="grid grid-cols-2 gap-3">
                   <FormField
@@ -330,8 +374,8 @@ export function WorkOrderFormDialog({
                       step="0.1"
                       min={0}
                       placeholder="150"
-                      locked={widthLocked}
-                      lockedTooltip="Sipariş kaleminden alındı"
+                      locked={widthFullyLocked}
+                      lockedTooltip={widthTooltip}
                       {...form.register("width")}
                     />
                   </FormField>
@@ -339,6 +383,11 @@ export function WorkOrderFormDialog({
                     label="Hedef Metraj"
                     htmlFor="targetQuantity"
                     error={form.formState.errors.targetQuantity}
+                    hint={
+                      locks?.materialCommitted && dispatchedQty > 0
+                        ? `Sevk edilen: ${dispatchedQty.toLocaleString("tr-TR")} m`
+                        : undefined
+                    }
                   >
                     <LockedInput
                       id="targetQuantity"
@@ -346,10 +395,16 @@ export function WorkOrderFormDialog({
                       step="0.1"
                       min={0}
                       placeholder="1000"
-                      locked={quantityLocked}
-                      lockedTooltip="Sipariş kalemleri toplamı"
+                      locked={quantityFullyLocked}
+                      lockedTooltip={quantityTooltip}
                       {...form.register("targetQuantity")}
                     />
+                    {quantityShortfall > 0 && (
+                      <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                        Yeni hedef sevk edilenden{" "}
+                        {quantityShortfall.toLocaleString("tr-TR")} m düşük.
+                      </p>
+                    )}
                   </FormField>
                 </div>
 
@@ -373,7 +428,11 @@ export function WorkOrderFormDialog({
                       <FormField
                         label="Kat Tipi"
                         error={form.formState.errors.foldType}
-                        hint="Tambur operatörüne bilgi; operatör gerekirse değiştirebilir."
+                        hint={
+                          locks?.foldType
+                            ? locks.reasons.foldType
+                            : "Tambur operatörüne bilgi; operatör gerekirse değiştirebilir."
+                        }
                       >
                         <Controller
                           control={form.control}
@@ -387,6 +446,12 @@ export function WorkOrderFormDialog({
                                     key={opt}
                                     type="button"
                                     variant={active ? "default" : "outline"}
+                                    disabled={Boolean(locks?.foldType)}
+                                    title={
+                                      locks?.foldType
+                                        ? locks.reasons.foldType
+                                        : undefined
+                                    }
                                     onClick={() => field.onChange(active ? "" : opt)}
                                   >
                                     {opt}

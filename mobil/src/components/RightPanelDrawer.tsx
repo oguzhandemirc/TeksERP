@@ -9,6 +9,8 @@ import {
 import RNModal from 'react-native-modal';
 import { IconButton, Text } from 'react-native-paper';
 import type { EdgeInsets } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
+import { toastConfig } from './ToastConfig';
 
 /**
  * Telefon (compact) modunda sağdan kayan iş paneli. KursunQc ve Tambur
@@ -84,6 +86,7 @@ export function RightPanelDrawer({
         >
           <View style={styles.content}>{children}</View>
         </TouchableWithoutFeedback>
+        <Toast config={toastConfig} />
       </View>
     </RNModal>
   );

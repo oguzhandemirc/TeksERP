@@ -8,7 +8,17 @@ import jwt from "jsonwebtoken";
 import { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 
-const JWT_SECRET = process.env.JWT_SECRET || "default_secret_change_me";
+function loadJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      "JWT_SECRET environment variable zorunlu ve en az 32 karakter olmalı. " +
+        ".env dosyanızı kontrol edin."
+    );
+  }
+  return secret;
+}
+const JWT_SECRET: string = loadJwtSecret();
 const JWT_EXPIRES_IN = "8h";
 
 export class AuthService {

@@ -252,6 +252,26 @@ export class SubcontractorService {
       );
     }
 
+    // Aynı adımda paralel açık sevk yasak — operatör yanlışlıkla aynı kartı
+    // tekrar okutup üstüne ekleme yapmasın. "Açık sevk" = iptal edilmemiş VE
+    // henüz fason kabulü tam yapılmamış (en az bir item geri gelmemiş).
+    // Meşru bir ikinci parti için operatör önce eski sevki iptal eder veya
+    // mal kabul yapar; o zaman bu kontrol geçer.
+    const openDispatch = await prisma.subcontractorDispatch.findFirst({
+      where: {
+        stepId: data.stepId,
+        cancelledAt: null,
+        items: { some: { receiptItems: { none: {} } } },
+      },
+      select: { dispatchNo: true },
+    });
+    if (openDispatch) {
+      throw AppError.conflict(
+        `Bu adım için açık fason sevki var (${openDispatch.dispatchNo}). ` +
+          `Yeni sevk açmak için önce o sevki iptal edin veya mal kabul yapın.`
+      );
+    }
+
     const subcontractor = await prisma.subcontractor.findUnique({
       where: { id: data.subcontractorId },
     });
@@ -311,7 +331,11 @@ export class SubcontractorService {
       }
     }
 
-    const totalQty = rolls.reduce((s, r) => s + Number(r.currentQty), 0);
+    // Decimal aritmetik — float drift olmasın; sevk kaydında string'e dökeriz.
+    const totalQty = rolls.reduce(
+      (s, r) => s.plus(r.currentQty),
+      new Prisma.Decimal(0)
+    );
 
     const result = await prisma.$transaction(async (tx) => {
       // Otomatik attach: serbest stoktaki toplar bu adıma bağlanır.
@@ -361,7 +385,10 @@ export class SubcontractorService {
         width: r.width ?? null,
       }));
 
-      const totalWeight = rollSnapshots.reduce((s, r) => s + Number(r.dispatchedWeight ?? 0), 0);
+      const totalWeight = rollSnapshots.reduce(
+        (s, r) => s.plus(r.dispatchedWeight ?? 0),
+        new Prisma.Decimal(0)
+      );
 
       const printSnapshot = {
         dispatchNo,
@@ -961,15 +988,17 @@ export class SubcontractorService {
       //    bağlanır (kullanıcı sonra Dispatch çağırır), değilse Kurşun/KK2 gibi
       //    internal step'e. nextStep yoksa Roll'lar serbest stokta kalır.
       if (data.newRolls && data.newRolls.length > 0) {
-        // Kaynak roll'lardan inherit: itemId + width (kumaş eni boyahanede
-        // değişmez, fasondan dönen açık kumaş orijinaldekiyle aynı en'dedir).
-        // WO.targetItemId / WO.width varsa öncelik onlarda.
+        // Kaynak roll'lardan inherit: itemId + width. Kumaş eni boyahanede
+        // değişmez — fiziksel gerçek source roll'da. WO.width (kullanıcı
+        // formdan değiştirmiş olabilir) bu fiziksel değeri override etmemeli.
+        // Width: source önce, WO sadece source'da yoksa fallback.
+        // ItemId: WO.targetItemId önce (rota hedefi belli) — değilse source.
         const sourceRoll = await tx.roll.findFirst({
           where: { id: { in: returnRollIds } },
           select: { itemId: true, width: true },
         });
         const bornItemId = wo.targetItemId ?? sourceRoll?.itemId ?? null;
-        const bornWidth = wo.width ?? sourceRoll?.width ?? null;
+        const bornWidth = sourceRoll?.width ?? wo.width ?? null;
         if (!bornItemId) {
           throw AppError.badRequest(
             "Yeni Roll için item belirlenemedi (WO.targetItemId ve kaynak Roll itemId yok)"
@@ -1214,7 +1243,10 @@ export class SubcontractorService {
       const stepRolls = outstandingRolls.filter((r) => r.currentStepId === step.id);
       const stepDispatches = byStep.get(step.id) ?? [];
       const lastDispatch = stepDispatches[0] ?? null;
-      const totalQty = stepRolls.reduce((s, r) => s + Number(r.currentQty), 0);
+      const totalQty = stepRolls.reduce(
+        (s, r) => s.plus(r.currentQty),
+        new Prisma.Decimal(0),
+      );
 
       return {
         step: {
@@ -1272,6 +1304,8 @@ export class SubcontractorService {
           totalQty: true,
           plateNumber: true,
           driverName: true,
+          notes: true,
+          stepId: true,
           cancelledAt: true,
           cancelReason: true,
           workOrder: { select: { id: true, batchNumber: true } },
@@ -1399,9 +1433,10 @@ export class SubcontractorService {
 
     const enriched = receipts.map(({ items, ...rest }) => ({
       ...rest,
+      // Decimal aritmetik — float drift olmasın; serializer number'a çevirir.
       totalQty: items.reduce(
-        (sum, it) => sum + Number(it.sourceDispatchItem?.dispatchedQty ?? 0),
-        0
+        (sum, it) => sum.plus(it.sourceDispatchItem?.dispatchedQty ?? 0),
+        new Prisma.Decimal(0)
       ),
     }));
 
@@ -1462,7 +1497,19 @@ export class SubcontractorService {
       where: { id },
       include: {
         subcontractor: true,
-        workOrder: { select: { id: true, batchNumber: true, parameters: true, type: true } },
+        workOrder: {
+          select: {
+            id: true,
+            batchNumber: true,
+            parameters: true,
+            type: true,
+            // Sevk fişinde "fasoncudan ne istiyoruz" → WO'nun hedef rengi.
+            // Snapshot içinde dondurulmuyor; her zaman canlı join'liyoruz.
+            // Fason istasyondan sonraki üretimde renk değişebilir; sevk fişi
+            // boyahanenin hangi renge boyaması gerektiğini söyler.
+            targetColor: { select: { id: true, code: true, name: true, hex: true } },
+          },
+        },
         step: { include: { station: { select: { name: true, code: true } } } },
         items: {
           include: {
@@ -1480,9 +1527,22 @@ export class SubcontractorService {
 
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
 
-    // Snapshot varsa döndür, yoksa live hesapla (geriye dönük uyumluluk)
+    const requestedColor = dispatch.workOrder.targetColor
+      ? {
+          id: dispatch.workOrder.targetColor.id,
+          code: dispatch.workOrder.targetColor.code,
+          name: dispatch.workOrder.targetColor.name,
+          hex: dispatch.workOrder.targetColor.hex,
+        }
+      : null;
+
+    // Snapshot varsa döndür, yoksa live hesapla (geriye dönük uyumluluk).
+    // requestedColor her iki dalda da canlı join — eski snapshot'larda bile yer alır.
     if (dispatch.printSnapshot) {
-      return { success: true, data: dispatch.printSnapshot };
+      return {
+        success: true,
+        data: { ...(dispatch.printSnapshot as object), requestedColor },
+      };
     }
 
     const rolls = dispatch.items.map((item, idx) => ({
@@ -1499,7 +1559,10 @@ export class SubcontractorService {
       width: item.roll.width ?? null,
     }));
 
-    const totalWeight = rolls.reduce((s, r) => s + Number(r.dispatchedWeight ?? 0), 0);
+    const totalWeight = rolls.reduce(
+      (s, r) => s.plus(r.dispatchedWeight ?? 0),
+      new Prisma.Decimal(0)
+    );
 
     return {
       success: true,
@@ -1534,6 +1597,7 @@ export class SubcontractorService {
           totalQty: dispatch.totalQty,
           totalWeight,
         },
+        requestedColor,
       },
     };
   }

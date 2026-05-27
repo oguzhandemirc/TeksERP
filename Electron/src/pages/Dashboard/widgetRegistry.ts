@@ -26,7 +26,6 @@ export const GROUPS: GroupDef[] = [
       { key: "kpi:readyToShip", label: "Sevke Hazır" },
       { key: "kpi:warehouse", label: "Depoda Bekleyen" },
       { key: "kpi:atSubcontractor", label: "Fason'da" },
-      { key: "kpi:todayDefects", label: "Günlük Hata" },
       { key: "kpi:inProduction", label: "Üretimde" },
     ],
   },

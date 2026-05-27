@@ -192,8 +192,10 @@ export const RollEntrySource = {
 } as const;
 export type RollEntrySource = (typeof RollEntrySource)[keyof typeof RollEntrySource];
 
+// SUPPLIER_RECEIPT enum değeri "tedarikçiden gelen" anlamı taşımaz; KK1 mobil
+// veya Electron'dan manuel girilen ham toplar bu kaynaktadır.
 export const rollEntrySourceLabels: Record<RollEntrySource, string> = {
-  SUPPLIER_RECEIPT: "Tedarikçi Mal Kabulü",
+  SUPPLIER_RECEIPT: "Ham Giriş",
   TAMBUR_SPLIT: "Tambur Kesim",
   SUBCONTRACTOR_RETURN: "Fason Dönüşü",
 };

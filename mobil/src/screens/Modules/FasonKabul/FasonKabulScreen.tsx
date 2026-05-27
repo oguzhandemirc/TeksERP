@@ -20,8 +20,15 @@
 // ============================================================================
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
-import RNModal from 'react-native-modal';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  useWindowDimensions,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import {
   Text,
   TextInput,
@@ -40,9 +47,14 @@ import Toast from 'react-native-toast-message';
 import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import RefreshButton from '../../../components/RefreshButton';
+import RemoteListSheet from '../../../components/RemoteListSheet';
+import ScannerEntryBar from '../../../components/ScannerEntryBar';
+import Pager from '../../../components/Pager';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { useDeviceType } from '../../../hooks/useDeviceType';
+import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { ReceiptRow, ReceiptDetailModal } from '../../../components/receipt';
 import { subcontractorService } from '../../../services/subcontractor.service';
 import { travelerCardService } from '../../../services/travelerCard.service';
@@ -78,6 +90,7 @@ type RightTab = 'pending' | 'history';
 export default function FasonKabulScreen() {
   const device = useDeviceType();
   const isPhone = device === 'phone';
+  const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   const qc = useQueryClient();
 
   // ── Form state ──
@@ -130,7 +143,6 @@ export default function FasonKabulScreen() {
   const [rightTab, setRightTab] = useState<RightTab>('pending');
   // Telefon modunda alttaki "Bekleyen / Geçmiş" paneli daraltılabilir —
   // operatör formla çalışırken dikey alan kazansın.
-  const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [cardBarcode, setCardBarcode] = useState('');
   const [resolvingCard, setResolvingCard] = useState(false);
   const [highlightedWorkOrderId, setHighlightedWorkOrderId] = useState<string | null>(null);
@@ -138,6 +150,9 @@ export default function FasonKabulScreen() {
   const [detailReceiptId, setDetailReceiptId] = useState<string | null>(null);
   const [listModalOpen, setListModalOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  // Telefon dikeyde Geçmiş Kabuller alt panelde değil, header butonundan
+  // açılan ayrı bir modal'da gösterilir.
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
 
   // ── Submit two-stage ──
   const [submitArmed, setSubmitArmed] = useState(false);
@@ -168,9 +183,14 @@ export default function FasonKabulScreen() {
         pageSize: RECEIPTS_PAGE_SIZE,
       }),
     placeholderData: (prev) => prev,
-    enabled: rightTab === 'history',
+    // Tablet'te tab history iken, telefonda Geçmiş modal açıkken aktif
+    enabled: rightTab === 'history' || historyModalOpen,
     staleTime: 30 * 1000,
   });
+
+  // Modal açılışında otomatik refresh — operatör manuel refresh basmasın.
+  useRefetchOnOpen(pendingQuery.refetch, listModalOpen);
+  useRefetchOnOpen(receiptsQuery.refetch, historyModalOpen);
 
   // ── Mutations ──
   const receiveMutation = useMutation({
@@ -235,6 +255,33 @@ export default function FasonKabulScreen() {
       });
     },
   });
+
+  // İki yerde mount edilen CancelReceiptModal'ın onConfirm handler'ı — iki ayrı
+  // inline yazsak validation kopyası çıkar. Tek noktadan.
+  const handleConfirmCancelReceipt = () => {
+    if (!cancelTargetReceiptId) return;
+    if (cancelReason.trim().length < 3) {
+      Toast.show({
+        type: 'error',
+        text1: 'Sebep çok kısa',
+        text2: 'En az 3 karakter gerekli',
+      });
+      return;
+    }
+    if (cancelPreview && !cancelPreview.allSafe) {
+      Toast.show({
+        type: 'error',
+        text1: 'İptal güvenli değil',
+        text2: 'Bazı açık kumaş topları işlenmiş — önce onları temizleyin',
+      });
+      return;
+    }
+    cancelReceiptMutation.mutate({
+      id: cancelTargetReceiptId,
+      reason: cancelReason.trim(),
+      cascadeRollIds: cancelPreview?.bornRolls.map((b) => b.id) ?? [],
+    });
+  };
 
   // ── Handlers ──
   const resetForm = () => {
@@ -407,6 +454,22 @@ export default function FasonKabulScreen() {
   }, [newRolls]);
   const hasValidNewRolls = parsedNewRolls.length > 0;
 
+  // Sevk edilen (checked) ile dönen (yeni açık kumaş) metraj farkı —
+  // operatör dalgın geçmesin diye gözüne sokulur ve onay arm edilir.
+  const sentTotal = useMemo(
+    () =>
+      rows
+        .filter((r) => r.checked)
+        .reduce((s, r) => s + Number(r.dispatchedQty ?? 0), 0),
+    [rows],
+  );
+  const returnedTotal = useMemo(
+    () => parsedNewRolls.reduce((s, r) => s + r.qty, 0),
+    [parsedNewRolls],
+  );
+  const qtyDiff = returnedTotal - sentTotal;
+  const hasQtyMismatch = Math.abs(qtyDiff) > 0.01;
+
   const canSubmit =
     !!selectedGroup &&
     checkedCount > 0 &&
@@ -460,8 +523,9 @@ export default function FasonKabulScreen() {
       return;
     }
     if (!canSubmit) return;
-    if (hasMissing && !submitArmed) {
-      // Two-stage: ilk tıklama silahlar, ikinci tıklama gönderir
+    if ((hasMissing || hasQtyMismatch) && !submitArmed) {
+      // Two-stage: ilk tıklama silahlar, ikinci tıklama gönderir.
+      // hasQtyMismatch operatöre fark'ı zorla göstertir.
       setSubmitArmed(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       return;
@@ -490,12 +554,13 @@ export default function FasonKabulScreen() {
   // ── Render ──
   return (
     <ScreenChrome
-      title="Fason Mal Kabul"
-      subtitle="Refakat kartı okut, dönen açık kumaşı kaydet"
+      title="Fason Kabul"
+      // Telefon: tüm aksiyonlar (Liste / Kamera / Geçmiş) ekran altındaki sabit
+      // bar'da → header'da sadece başlık + profil kalır.
     >
       <View style={[styles.body, isPhone && styles.bodyPhone]}>
         {/* ════════ SOL: form ════════ */}
-        <View style={styles.formCol}>
+        <View style={[styles.formCol, isPhone && styles.formColPhone]}>
           {!selectedGroup ? (
             <View style={styles.emptyState}>
               <Icon source="package-down" size={64} color="#cbd5e1" />
@@ -725,6 +790,19 @@ export default function FasonKabulScreen() {
                       Parça Ekle
                     </Button>
                   </View>
+                  {hasQtyMismatch && (
+                    <Surface style={styles.diffBanner} elevation={0}>
+                      <Text style={styles.diffBannerTitle}>
+                        {qtyDiff > 0 ? 'FAZLA DÖNEN' : 'EKSİK DÖNEN'}:{' '}
+                        {qtyDiff > 0 ? '+' : ''}
+                        {qtyDiff.toFixed(1)} m
+                      </Text>
+                      <Text style={styles.diffBannerBody}>
+                        Sevk: {sentTotal.toFixed(1)} m  ·  Dönen:{' '}
+                        {returnedTotal.toFixed(1)} m
+                      </Text>
+                    </Surface>
+                  )}
                   {newRolls.length === 0 ? (
                     <Surface style={styles.newRollEmpty} elevation={0}>
                       <Text style={styles.newRollEmptyText}>
@@ -850,7 +928,7 @@ export default function FasonKabulScreen() {
                   icon={
                     submitArmed
                       ? 'alert-decagram'
-                      : hasMissing
+                      : hasMissing || hasQtyMismatch
                         ? 'alert-circle-outline'
                         : 'package-check'
                   }
@@ -861,92 +939,54 @@ export default function FasonKabulScreen() {
                   contentStyle={styles.submitBtnContent}
                   labelStyle={styles.submitBtnLabel}
                   buttonColor={
-                    submitArmed ? '#dc2626' : hasMissing ? '#d97706' : '#059669'
+                    submitArmed
+                      ? '#dc2626'
+                      : hasMissing || hasQtyMismatch
+                        ? '#d97706'
+                        : '#059669'
                   }
                 >
                   {submitArmed
-                    ? `Eksik kabulü ONAYLA — tekrar bas (${checkedCount}/${rows.length})`
+                    ? hasMissing
+                      ? `Eksik kabulü ONAYLA — tekrar bas (${checkedCount}/${rows.length})`
+                      : `Fark'lı kabulü ONAYLA — tekrar bas (${qtyDiff > 0 ? '+' : ''}${qtyDiff.toFixed(1)} m)`
                     : hasMissing
                       ? `Mal Kabulü Yap · ${missingCount} EKSİK`
-                      : `Mal Kabulü Yap (${checkedCount} top → ${newRolls.length} parça)`}
+                      : hasQtyMismatch
+                        ? `Mal Kabulü Yap · FARK ${qtyDiff > 0 ? '+' : ''}${qtyDiff.toFixed(1)} m`
+                        : `Mal Kabulü Yap (${checkedCount} top → ${newRolls.length} parça)`}
                 </Button>
               </Surface>
             </>
           )}
         </View>
 
-        {/* ════════ SAĞ: bekleyen + geçmiş ════════ */}
-        <View
-          style={[
-            styles.rightCol,
-            isPhone && styles.rightColPhone,
-            isPhone && bottomCollapsed && styles.rightColCollapsed,
-          ]}
-        >
-          {isPhone && (
-            <View style={styles.collapseStrip}>
-              <Icon source="format-list-bulleted" size={16} color="#0f172a" />
-              <Text style={styles.collapseStripText}>
-                Sevk Listesi · Bekleyen {allGroups.length}
-              </Text>
-              <View style={{ flex: 1 }} />
-              <IconButton
-                icon={bottomCollapsed ? 'chevron-up' : 'chevron-down'}
-                size={22}
-                onPress={() => setBottomCollapsed((v) => !v)}
-                style={{ margin: 0 }}
-              />
-            </View>
-          )}
-
-          {!(isPhone && bottomCollapsed) && (
+        {/* ════════ SAĞ: bekleyen + geçmiş (tablet) / sadece manuel input (telefon + kamera arızalı) ════════
+            Telefon dikey + kamera-only modda kart okuma, liste ve geçmiş aksiyonları
+            header butonlarına taşındı → rightCol komple gizli. Manuel mode aktifse
+            sadece input bandı görünür, header butonları input ile birlikte çalışır. */}
+        {!(isPhone && !manualBarcodeEntry) && (
+        <View style={[styles.rightCol, isPhone && styles.rightColPhone]}>
           <>
-          {/* Kart input + kamera — sticky top, her tab'da görünür */}
+          {/* Kart input + kamera — sticky top, her tab'da görünür.
+              Telefonda Liste/Kamera alt sabit bar'da; bar burada sadece
+              manuel input render eder (compactCta + manualMode pattern). */}
           <View style={styles.cardInputWrap}>
-            <View style={styles.cardInputRow}>
-              <TextInput
-                mode="outlined"
-                value={cardBarcode}
-                onChangeText={setCardBarcode}
-                placeholder="Refakat kartı barkodu okut/yaz..."
-                dense
-                autoCapitalize="characters"
-                autoCorrect={false}
-                left={<TextInput.Icon icon="card-search-outline" />}
-                right={
-                  resolvingCard ? (
-                    <TextInput.Icon icon={() => <ActivityIndicator size={18} color="#059669" />} />
-                  ) : cardBarcode.trim() ? (
-                    <TextInput.Icon icon="check" onPress={() => handleResolveCard()} color="#059669" />
-                  ) : undefined
-                }
-                onSubmitEditing={() => handleResolveCard()}
-                returnKeyType="search"
-                style={[styles.cardInput, { flex: 1 }]}
-              />
-              <IconButton
-                icon="format-list-bulleted"
-                mode="contained-tonal"
-                containerColor="#e2e8f0"
-                iconColor="#0f172a"
-                size={26}
-                onPress={() => setListModalOpen(true)}
-                accessibilityLabel="Bekleyen sevkleri listele"
-                style={styles.cameraBtn}
-              />
-              <IconButton
-                icon="camera"
-                mode="contained-tonal"
-                containerColor="#dbeafe"
-                iconColor="#1e40af"
-                size={26}
-                onPress={() => setScannerOpen(true)}
-                accessibilityLabel="Kamera ile refakat kartı tara"
-                style={styles.cameraBtn}
-              />
-            </View>
+            <ScannerEntryBar
+              value={cardBarcode}
+              onChangeText={setCardBarcode}
+              placeholder="Refakat kartı barkodu okut/yaz..."
+              onResolve={() => handleResolveCard()}
+              resolving={resolvingCard}
+              onScan={() => setScannerOpen(true)}
+              onList={isPhone ? undefined : () => setListModalOpen(true)}
+              tone="green"
+              compactCta={isPhone}
+            />
           </View>
 
+          {!isPhone && (
+          <>
           {/* Tab bar + aktif tab'ı yenileyen buton */}
           <View style={styles.tabBar}>
             <Tab
@@ -1016,25 +1056,130 @@ export default function FasonKabulScreen() {
           )}
           </>
           )}
+          </>
         </View>
+        )}
+
+        {/* Telefon dikey — ekran altında sabit aksiyon barı: liste (sol) + kamera (sağ).
+            position:absolute body'nin içinde bottom:0 — modal'lar üstte kalır. */}
+        {isPhone && (
+          <View style={styles.bottomBar}>
+            <TouchableRipple
+              onPress={() => setListModalOpen(true)}
+              style={[styles.bottomBarBtn, styles.bottomBarBtnSide]}
+              rippleColor="rgba(15, 23, 42, 0.1)"
+              accessibilityLabel="Bekleyen sevkler"
+            >
+              <View style={styles.bottomBarBtnInner}>
+                <Icon source="format-list-bulleted" size={26} color="#0f172a" />
+                <Text style={styles.bottomBarBtnText}>Liste</Text>
+              </View>
+            </TouchableRipple>
+            <View style={styles.bottomBarDivider} />
+            <TouchableRipple
+              onPress={() => setScannerOpen(true)}
+              style={[styles.bottomBarBtn, styles.bottomBarBtnPrimary]}
+              rippleColor="rgba(30, 64, 175, 0.12)"
+              accessibilityLabel="Kamera ile refakat kartı tara"
+            >
+              <View style={styles.bottomBarBtnInner}>
+                <Icon source="camera" size={26} color="#1e40af" />
+                <Text style={[styles.bottomBarBtnText, { color: '#1e40af' }]}>
+                  Kamera
+                </Text>
+              </View>
+            </TouchableRipple>
+            <View style={styles.bottomBarDivider} />
+            <TouchableRipple
+              onPress={() => setHistoryModalOpen(true)}
+              style={[styles.bottomBarBtn, styles.bottomBarBtnSide]}
+              rippleColor="rgba(5, 150, 105, 0.12)"
+              accessibilityLabel="Geçmiş kabuller"
+            >
+              <View style={styles.bottomBarBtnInner}>
+                <Icon source="history" size={26} color="#059669" />
+                <Text style={[styles.bottomBarBtnText, { color: '#059669' }]}>
+                  Geçmiş
+                </Text>
+              </View>
+            </TouchableRipple>
+          </View>
+        )}
       </View>
 
-      {/* Geçmiş kabul detayı */}
-      <ReceiptDetailModal
-        receiptId={detailReceiptId}
-        onDismiss={() => setDetailReceiptId(null)}
-      />
+      {/* Detay modal — tablet'te sağ panelden veya telefon history modal
+          KAPALIYKEN üst seviyede mount. Telefon history modal AÇIKKEN detay
+          history'nin RNModal portal'ı içine `overlay` prop'uyla render
+          edilir (RNModal-içinde-RNModal çakışmasını önler). */}
+      {!historyModalOpen && (
+        <ReceiptDetailModal
+          receiptId={detailReceiptId}
+          onDismiss={() => setDetailReceiptId(null)}
+        />
+      )}
 
       {/* Bekleyen sevk listesi — hızlı seçim için */}
       <CameraScanModal
         visible={listModalOpen}
         loading={pendingQuery.isLoading}
+        fetching={pendingQuery.isFetching}
+        isError={pendingQuery.isError}
+        errorMessage={(pendingQuery.error as Error | undefined)?.message}
         groups={allGroups}
         onDismiss={() => setListModalOpen(false)}
         onSelect={(g) => {
           setListModalOpen(false);
           selectGroup(g);
         }}
+        onRefresh={() => pendingQuery.refetch()}
+      />
+
+      {/* Telefon dikeyde sağ paneldeki "Geçmiş Kabuller" sekmesi modal olarak açılır.
+          overlay: hem detay hem iptal modal'ı history'nin RNModal portal'ı içinde
+          render edilir → ikinci RNModal çakışması (invisible overlay tıklama yutuyor) yok. */}
+      <HistoryReceiptsModal
+        visible={historyModalOpen}
+        onDismiss={() => setHistoryModalOpen(false)}
+        loading={receiptsQuery.isLoading}
+        fetching={receiptsQuery.isFetching}
+        error={receiptsQuery.isError ? (receiptsQuery.error as Error) : null}
+        receipts={receiptsQuery.data?.data ?? []}
+        page={receiptsQuery.data?.pagination?.page ?? 1}
+        totalPages={receiptsQuery.data?.pagination?.totalPages ?? 1}
+        total={receiptsQuery.data?.pagination?.total ?? 0}
+        onShowDetail={setDetailReceiptId}
+        onCancel={(id) => {
+          setCancelTargetReceiptId(id);
+          setCancelReason('');
+        }}
+        onPageChange={setReceiptsPage}
+        onRefresh={() => receiptsQuery.refetch()}
+        overlay={
+          <>
+            <ReceiptDetailModal
+              receiptId={detailReceiptId}
+              onDismiss={() => setDetailReceiptId(null)}
+            />
+            <CancelReceiptModal
+              visible={!!cancelTargetReceiptId}
+              preview={cancelPreview}
+              previewLoading={cancelPreviewQuery.isLoading}
+              previewError={
+                cancelPreviewQuery.error
+                  ? (cancelPreviewQuery.error as Error).message
+                  : null
+              }
+              onDismiss={() => {
+                setCancelTargetReceiptId(null);
+                setCancelReason('');
+              }}
+              reason={cancelReason}
+              onReasonChange={setCancelReason}
+              submitting={cancelReceiptMutation.isPending}
+              onConfirm={handleConfirmCancelReceipt}
+            />
+          </>
+        }
       />
 
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
@@ -1048,49 +1193,29 @@ export default function FasonKabulScreen() {
         }}
       />
 
-      {/* Mal kabul iptal modalı (Refactor 3 — per-action undo + cascade preview) */}
-      <CancelReceiptModal
-        visible={!!cancelTargetReceiptId}
-        preview={cancelPreview}
-        previewLoading={cancelPreviewQuery.isLoading}
-        previewError={
-          cancelPreviewQuery.error
-            ? (cancelPreviewQuery.error as Error).message
-            : null
-        }
-        onDismiss={() => {
-          setCancelTargetReceiptId(null);
-          setCancelReason('');
-        }}
-        reason={cancelReason}
-        onReasonChange={setCancelReason}
-        submitting={cancelReceiptMutation.isPending}
-        onConfirm={() => {
-          if (!cancelTargetReceiptId) return;
-          if (cancelReason.trim().length < 3) {
-            Toast.show({
-              type: 'error',
-              text1: 'Sebep çok kısa',
-              text2: 'En az 3 karakter gerekli',
-            });
-            return;
+      {/* Mal kabul iptal modalı — telefon history modal AÇIK iken overlay olarak
+          render edilir (yukarıda); değilse üst seviyede mount. RNModal-içinde-
+          RNModal çakışmasını önler. */}
+      {!historyModalOpen && (
+        <CancelReceiptModal
+          visible={!!cancelTargetReceiptId}
+          preview={cancelPreview}
+          previewLoading={cancelPreviewQuery.isLoading}
+          previewError={
+            cancelPreviewQuery.error
+              ? (cancelPreviewQuery.error as Error).message
+              : null
           }
-          if (cancelPreview && !cancelPreview.allSafe) {
-            Toast.show({
-              type: 'error',
-              text1: 'İptal güvenli değil',
-              text2: 'Bazı açık kumaş topları işlenmiş — önce onları temizleyin',
-            });
-            return;
-          }
-          cancelReceiptMutation.mutate({
-            id: cancelTargetReceiptId,
-            reason: cancelReason.trim(),
-            cascadeRollIds:
-              cancelPreview?.bornRolls.map((b) => b.id) ?? [],
-          });
-        }}
-      />
+          onDismiss={() => {
+            setCancelTargetReceiptId(null);
+            setCancelReason('');
+          }}
+          reason={cancelReason}
+          onReasonChange={setCancelReason}
+          submitting={cancelReceiptMutation.isPending}
+          onConfirm={handleConfirmCancelReceipt}
+        />
+      )}
     </ScreenChrome>
   );
 }
@@ -1124,23 +1249,27 @@ function CancelReceiptModal({
     !previewError &&
     (preview ? preview.allSafe : true);
 
+  if (!visible) return null;
+
+  // RNModal SARMAZ — HistoryReceiptsModal overlay'i içine render edilebilsin
+  // diye absolute fill overlay pattern (ReceiptDetailModal ile aynı yapı).
+  // İki RNModal aynı anda mount edilince ikincisinin invisible overlay'i
+  // ilkinin tıklamalarını yutuyordu (FasonKabul telefon dikey bug'ı).
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={submitting ? undefined : onDismiss}
-      onBackButtonPress={submitting ? undefined : onDismiss}
-      backdropOpacity={0.55}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
-      style={cancelStyles.modal}
+    <KeyboardAvoidingView
+      style={cancelStyles.overlay}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      pointerEvents="auto"
     >
+      <Pressable
+        style={cancelStyles.backdrop}
+        onPress={submitting ? undefined : onDismiss}
+        accessibilityLabel="Kapat"
+      />
       <View
         style={[
           cancelStyles.sheet,
-          { maxWidth: winW * 0.7, maxHeight: winH * 0.85 },
+          { width: winW * 0.9, maxHeight: winH * 0.85 },
         ]}
       >
         <View style={cancelStyles.header}>
@@ -1259,18 +1388,29 @@ function CancelReceiptModal({
           </Button>
         </View>
       </View>
-    </RNModal>
+    </KeyboardAvoidingView>
   );
 }
 
 const cancelStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
+  // ReceiptDetailModal ile aynı overlay pattern'i
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    elevation: 10,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+  },
   sheet: {
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 20,
     gap: 12,
-    width: '90%',
+    overflow: 'hidden',
   },
   scrollArea: { flexShrink: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1347,114 +1487,94 @@ const cancelStyles = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bekleyen sevk listesi modal'ı.
-// Operatör liste ikonuna basınca açılır; fasondan dönecek sevkleri listeler,
-// tıklayanı seçer (kart barkodu okutmadan hızlı seçim için).
+// Bekleyen sevk listesi modal'ı — fasondan dönecek sevkleri listeler.
+// RemoteListSheet generic kabuğunu kullanır; sadece row render'ı ve hint
+// metni burada özelleşir.
 // ─────────────────────────────────────────────────────────────────────────────
 function CameraScanModal({
   visible,
   loading,
+  fetching,
+  isError,
+  errorMessage,
   groups,
   onDismiss,
   onSelect,
+  onRefresh,
 }: {
   visible: boolean;
   loading: boolean;
+  fetching: boolean;
+  isError: boolean;
+  errorMessage?: string;
   groups: PendingReturnGroup[];
   onDismiss: () => void;
   onSelect: (g: PendingReturnGroup) => void;
+  onRefresh: () => void;
 }) {
-  const { width: winW, height: winH } = useWindowDimensions();
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.55}
-      style={cameraStyles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
-    >
-      <View style={[cameraStyles.sheet, { width: winW * 0.7, height: winH * 0.8 }]}>
-        <View style={cameraStyles.header}>
-          <Icon source="format-list-bulleted" size={22} color="#0f172a" />
-          <Text variant="titleMedium" style={cameraStyles.title}>
-            Bekleyen Sevkler
-          </Text>
-          <View style={{ flex: 1 }} />
-          <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
-        </View>
+    <RemoteListSheet
+      visible={visible}
+      onDismiss={onDismiss}
+      title="Bekleyen Sevkler"
+      icon="format-list-bulleted"
+      loading={loading}
+      fetching={fetching}
+      isError={isError}
+      errorMessage={errorMessage}
+      onRefresh={onRefresh}
+      items={groups}
+      keyExtractor={(g) => g.step.id}
+      renderItem={(item) => (
+        <PendingDispatchRow group={item} onPress={() => onSelect(item)} />
+      )}
+      emptyIcon="package-variant"
+      emptyText="Fasonda bekleyen sevk yok"
+      hint={{ text: 'Refakat kartı yoksa aşağıdan dönecek sevki seçerek devam edin.' }}
+    />
+  );
+}
 
-        <View style={cameraStyles.hint}>
-          <Icon source="information-outline" size={14} color="#475569" />
-          <Text style={cameraStyles.hintText}>
-            Refakat kartı yoksa aşağıdan dönecek sevki seçerek devam edin.
-          </Text>
-        </View>
-
-        <View style={cameraStyles.listBox}>
-          {loading ? (
-            <View style={cameraStyles.empty}>
-              <ActivityIndicator size="large" color="#1e40af" />
+function PendingDispatchRow({
+  group,
+  onPress,
+}: {
+  group: PendingReturnGroup;
+  onPress: () => void;
+}) {
+  return (
+    <Surface style={cameraStyles.row} elevation={1}>
+      <TouchableRipple borderless onPress={onPress} style={cameraStyles.rowTouch}>
+        <View style={cameraStyles.rowInner}>
+          <View style={{ flex: 1 }}>
+            <Text style={cameraStyles.rowBatch}>{group.workOrder.batchNumber}</Text>
+            <View style={cameraStyles.rowMeta}>
+              <Icon source="map-marker-path" size={12} color="#475569" />
+              <Text style={cameraStyles.rowMetaText} numberOfLines={1}>
+                #{group.step.stepSequence} · {group.step.station.name}
+              </Text>
             </View>
-          ) : groups.length === 0 ? (
-            <View style={cameraStyles.empty}>
-              <Icon source="package-variant" size={48} color="#cbd5e1" />
-              <Text style={cameraStyles.emptyText}>Fasonda bekleyen sevk yok</Text>
+            <View style={cameraStyles.rowMeta}>
+              <Icon source="factory" size={12} color="#475569" />
+              <Text style={cameraStyles.rowMetaText} numberOfLines={1}>
+                {group.lastDispatch?.subcontractor?.name ?? '—'}
+              </Text>
             </View>
-          ) : (
-            <FlashList
-              data={groups}
-              keyExtractor={(g) => g.step.id}
-              contentContainerStyle={{ padding: 10 }}
-              renderItem={({ item }) => (
-                <Surface style={cameraStyles.row} elevation={1}>
-                  <TouchableRipple
-                    borderless
-                    onPress={() => onSelect(item)}
-                    style={cameraStyles.rowTouch}
-                  >
-                    <View style={cameraStyles.rowInner}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={cameraStyles.rowBatch}>
-                          {item.workOrder.batchNumber}
-                        </Text>
-                        <View style={cameraStyles.rowMeta}>
-                          <Icon source="map-marker-path" size={12} color="#475569" />
-                          <Text style={cameraStyles.rowMetaText} numberOfLines={1}>
-                            #{item.step.stepSequence} · {item.step.station.name}
-                          </Text>
-                        </View>
-                        <View style={cameraStyles.rowMeta}>
-                          <Icon source="factory" size={12} color="#475569" />
-                          <Text style={cameraStyles.rowMetaText} numberOfLines={1}>
-                            {item.lastDispatch?.subcontractor?.name ?? '—'}
-                          </Text>
-                        </View>
-                        <View style={cameraStyles.rowFooter}>
-                          <Text style={cameraStyles.rowQty}>
-                            {item.rollCount} parça · {Number(item.totalQty ?? 0).toFixed(1)} mt
-                          </Text>
-                          {item.lastDispatch && (
-                            <Text style={cameraStyles.rowDate}>
-                              {dayjs(item.lastDispatch.dispatchedAt).format('DD.MM HH:mm')}
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                      <Icon source="chevron-right" size={22} color="#94a3b8" />
-                    </View>
-                  </TouchableRipple>
-                </Surface>
+            <View style={cameraStyles.rowFooter}>
+              <Text style={cameraStyles.rowQty}>
+                {group.rollCount} parça · {Number(group.totalQty ?? 0).toFixed(1)} mt
+              </Text>
+              {group.lastDispatch && (
+                <Text style={cameraStyles.rowDate}>
+                  {dayjs(group.lastDispatch.dispatchedAt).format('DD.MM HH:mm')}
+                </Text>
               )}
-            />
-          )}
+            </View>
+          </View>
+          <Icon source="chevron-right" size={22} color="#94a3b8" />
         </View>
-      </View>
-    </RNModal>
+      </TouchableRipple>
+    </Surface>
   );
 }
 
@@ -1500,6 +1620,80 @@ function Badge({ icon, children }: { icon: string; children: React.ReactNode }) 
       <Icon source={icon} size={12} color="#0f172a" />
       <Text style={styles.badgeText}>{children}</Text>
     </View>
+  );
+}
+
+// Telefon dikeyde sağ paneldeki "Geçmiş Kabuller" sekmesinin modal sürümü.
+// RemoteListSheet generic kabuğunu kullanır; sayfalama footer'da render edilir.
+function HistoryReceiptsModal({
+  visible,
+  onDismiss,
+  loading,
+  fetching,
+  error,
+  receipts,
+  page,
+  totalPages,
+  total,
+  onShowDetail,
+  onCancel,
+  onPageChange,
+  onRefresh,
+  overlay,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  loading: boolean;
+  fetching: boolean;
+  error: Error | null;
+  receipts: import('../../../types/models').SubcontractorReceiptListItem[];
+  page: number;
+  totalPages: number;
+  total: number;
+  onShowDetail: (id: string) => void;
+  onCancel: (id: string) => void;
+  onPageChange: (page: number) => void;
+  onRefresh: () => void;
+  /** Sheet'in üstüne render edilen overlay (detay modal) — aynı RNModal
+   *  portal'ında olduğu için detay listeyi örtüp listeye geri dönüyor. */
+  overlay?: React.ReactNode;
+}) {
+  return (
+    <RemoteListSheet
+      visible={visible}
+      onDismiss={onDismiss}
+      title="Geçmiş Kabuller"
+      icon="history"
+      widthRatio={0.9}
+      loading={loading}
+      fetching={fetching}
+      isError={!!error}
+      errorMessage={error?.message}
+      onRefresh={onRefresh}
+      items={receipts}
+      keyExtractor={(r) => r.id}
+      overlay={overlay}
+      renderItem={(item) => (
+        <ReceiptRow
+          receipt={item}
+          // Geçmiş kabuller modalını kapatma — detay modal üstüne çıksın,
+          // kapanınca operatör listede kaldığı yerden devam etsin.
+          onShowDetail={onShowDetail}
+          onCancel={onCancel}
+        />
+      )}
+      emptyIcon="package-check"
+      emptyText="Henüz mal kabul yok"
+      footer={
+        <Pager
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          fetching={fetching}
+          onPageChange={onPageChange}
+        />
+      }
+    />
   );
 }
 
@@ -1682,29 +1876,13 @@ function HistoryPane({
           />
         )}
       />
-      {totalPages > 1 && (
-        <View style={styles.pager}>
-          <IconButton
-            icon="chevron-left"
-            mode="outlined"
-            size={18}
-            disabled={page <= 1 || fetching}
-            onPress={() => onPageChange(Math.max(1, page - 1))}
-            style={styles.pagerBtn}
-          />
-          <Text style={styles.pagerText}>
-            {page} / {totalPages} · {total} kayıt
-          </Text>
-          <IconButton
-            icon="chevron-right"
-            mode="outlined"
-            size={18}
-            disabled={page >= totalPages || fetching}
-            onPress={() => onPageChange(Math.min(totalPages, page + 1))}
-            style={styles.pagerBtn}
-          />
-        </View>
-      )}
+      <Pager
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        fetching={fetching}
+        onPageChange={onPageChange}
+      />
     </View>
   );
 }
@@ -1716,6 +1894,33 @@ const styles = StyleSheet.create({
 
   // Sol — form
   formCol: { flex: 1.4, backgroundColor: '#f8fafc' },
+  // Telefon dikey: scroll içeriği alt sabit bar'ın altına gizlenmesin.
+  formColPhone: { paddingBottom: 72 },
+
+  // Telefon dikey alt sabit aksiyon barı — liste (sol) + kamera (sağ).
+  bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 64,
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: -2 },
+    shadowRadius: 6,
+  },
+  bottomBarBtn: { justifyContent: 'center', alignItems: 'center' },
+  // 30 / 40 / 30 oranı — orta (kamera) ana eylem olarak vurgulanır.
+  bottomBarBtnSide: { flex: 3 },
+  bottomBarBtnPrimary: { flex: 4 },
+  bottomBarBtnInner: { alignItems: 'center', gap: 2 },
+  bottomBarBtnText: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
+  bottomBarDivider: { width: 1, backgroundColor: '#e2e8f0' },
 
   emptyState: {
     flex: 1,
@@ -1921,6 +2126,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   newRollEmptyText: { fontSize: 12, color: '#92400e', fontWeight: '600' },
+  diffBanner: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#d97706',
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+  },
+  diffBannerTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#92400e',
+    letterSpacing: 0.3,
+  },
+  diffBannerBody: {
+    fontSize: 12,
+    color: '#92400e',
+    marginTop: 2,
+    fontWeight: '600',
+  },
   newRollItem: {
     backgroundColor: '#f8fafc',
     borderColor: '#e2e8f0',
@@ -2121,18 +2347,6 @@ const styles = StyleSheet.create({
   pendingQty: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
   pendingDate: { fontSize: 10, color: '#94a3b8' },
 
-  // Pager
-  pager: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 6,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    gap: 8,
-  },
-  pagerBtn: { margin: 0, width: 32, height: 32 },
-  pagerText: { fontSize: 11, color: '#64748b', fontWeight: '600' },
 });
 
 const cameraStyles = StyleSheet.create({

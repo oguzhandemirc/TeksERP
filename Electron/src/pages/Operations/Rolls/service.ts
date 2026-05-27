@@ -54,6 +54,14 @@ export interface InitialEntryPayload {
   propertyIds?: string[];
 }
 
+export interface RollStats {
+  totalCount: number;
+  totalQty: number;
+  totalWeight: number;
+  byStatus: Record<string, number>;
+  byQuality: Record<string, number>;
+}
+
 export const rollService = {
   ...base,
   getAll: (params: QueryParams): Promise<PaginatedResponse<Roll>> =>
@@ -63,6 +71,10 @@ export const rollService = {
   listCursor: (params: CursorParams): Promise<CursorPaginatedResponse<Roll>> =>
     apiClient
       .get<CursorPaginatedResponse<Roll>>(`/api/rolls${buildCursorQueryString(params)}`)
+      .then((r) => r.data),
+  getStats: (params: QueryParams): Promise<ApiResponse<RollStats>> =>
+    apiClient
+      .get<ApiResponse<RollStats>>(`/api/rolls/stats${buildQueryString(params)}`)
       .then((r) => r.data),
   getByBarcode: (barcode: string): Promise<ApiResponse<Roll>> =>
     apiClient

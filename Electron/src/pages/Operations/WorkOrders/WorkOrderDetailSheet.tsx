@@ -1,20 +1,24 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, FileText, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Info, Pencil, Printer } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import type { StepDispatch } from "./types";
 import { StatusBadge, workOrderStatusTones, stepStatusTones } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { workOrderStatusLabels, workOrderTypeLabels, stepStatusLabels } from "@/types/enums";
 import { safeFormat, formatNumber } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { workOrderService } from "./service";
-import { WOTargetPropertiesEditDialog } from "./WOTargetPropertiesEditDialog";
 import { WorkOrderDocumentsDialog } from "./WorkOrderDocumentsDialog";
 import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
+import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import type { WorkOrder } from "./types";
 
 interface Props {
@@ -26,10 +30,11 @@ interface Props {
 }
 
 export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: Props) {
-  const [editTargetPropsOpen, setEditTargetPropsOpen] = useState(false);
   const [stepsExpanded, setStepsExpanded] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [travelerCardOpen, setTravelerCardOpen] = useState(false);
+  const [printDispatchId, setPrintDispatchId] = useState<string | null>(null);
+  const [inProgressConfirmOpen, setInProgressConfirmOpen] = useState(false);
 
   const detail = useQuery({
     queryKey: ["work-order-detail", workOrder?.id],
@@ -112,13 +117,14 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => onEdit(wo)}
+                    onClick={() => {
+                      if (wo.status === "IN_PROGRESS") {
+                        setInProgressConfirmOpen(true);
+                      } else {
+                        onEdit(wo);
+                      }
+                    }}
                     className="gap-1"
-                    title={
-                      wo.status === "IN_PROGRESS"
-                        ? "Üretim devam ediyor — değişiklik bağlı rulolara yansıyabilir"
-                        : undefined
-                    }
                   >
                     <Pencil className="h-3.5 w-3.5" /> İş Emrini Düzenle
                     {wo.status === "IN_PROGRESS" && (
@@ -215,21 +221,8 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
 
             <Card>
               <CardContent className="space-y-2 p-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Üretim Özellikleri
-                  </div>
-                  <PermissionGate permission="workorder:write">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 px-2 text-xs"
-                      onClick={() => setEditTargetPropsOpen(true)}
-                    >
-                      <Pencil className="mr-1 h-3 w-3" /> Düzenle
-                    </Button>
-                  </PermissionGate>
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Üretim Özellikleri
                 </div>
                 {wo.targetProperties && wo.targetProperties.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
@@ -247,23 +240,164 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               </CardContent>
             </Card>
 
-            {wo.producedRolls && wo.producedRolls.count > 0 && (
-              <Card>
-                <CardContent className="p-3">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Üretilen Nihai Toplar
-                  </div>
-                  <div className="mt-1 text-sm font-medium tabular-nums">
-                    {wo.producedRolls.count} top
-                    <span className="ml-1 text-muted-foreground">·</span>
-                    <span className="ml-1">{formatNumber(wo.producedRolls.totalMeters, 0)} m</span>
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    Depo / sevk hazır / sevk edilen toplar dahil.
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {wo.producedRolls &&
+              (wo.producedRolls.count > 0 || wo.producedRolls.swatch.count > 0) && (
+                <Card>
+                  <CardContent className="p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Üretilen Nihai Toplar
+                    </div>
+                    <div className="mt-1 text-sm font-medium tabular-nums">
+                      {wo.producedRolls.count} top
+                      <span className="ml-1 text-muted-foreground">·</span>
+                      <span className="ml-1">
+                        {formatNumber(wo.producedRolls.totalMeters, 0)} m
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                      {wo.producedRolls.warehouse.count > 0 && (
+                        <Badge variant="muted" className="font-normal">
+                          Bitmiş Depo: {wo.producedRolls.warehouse.count} top ·{" "}
+                          {formatNumber(wo.producedRolls.warehouse.totalMeters, 0)} m
+                        </Badge>
+                      )}
+                      {wo.producedRolls.a1.count > 0 && (
+                        <Badge variant="muted" className="font-normal">
+                          A1: {wo.producedRolls.a1.count} top ·{" "}
+                          {formatNumber(wo.producedRolls.a1.totalMeters, 0)} m
+                        </Badge>
+                      )}
+                      {wo.producedRolls.fire.count > 0 && (
+                        <Badge variant="outline" className="font-normal text-destructive">
+                          Fire: {wo.producedRolls.fire.count} top ·{" "}
+                          {formatNumber(wo.producedRolls.fire.totalMeters, 0)} m
+                        </Badge>
+                      )}
+                      {wo.producedRolls.swatch.count > 0 && (
+                        <Badge variant="outline" className="font-normal">
+                          Kartela: {wo.producedRolls.swatch.count} adet
+                        </Badge>
+                      )}
+                    </div>
+
+                    {wo.producedRolls.items.length > 0 && (
+                      <ul className="mt-2 max-h-64 divide-y overflow-auto rounded-md border bg-muted/30">
+                        {wo.producedRolls.items.map((r) => {
+                          const tone =
+                            r.qualityGrade === "FIRE"
+                              ? "text-destructive"
+                              : r.qualityGrade === "A1"
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-foreground";
+                          // Snapshot: fiziksel olarak yok olmuş ise (re-cut →
+                          // TAMBUR_CONSUMED, operatör iptal → CANCELLED) küçük
+                          // gri rozet + soluk satır.
+                          const removedFromStock =
+                            r.status === "TAMBUR_CONSUMED" ||
+                            r.status === "CANCELLED";
+                          const removedLabel =
+                            r.status === "TAMBUR_CONSUMED"
+                              ? "Bölündü"
+                              : r.status === "CANCELLED"
+                                ? "İptal"
+                                : null;
+                          return (
+                            <li
+                              key={r.id}
+                              className={cn(
+                                "flex items-center justify-between gap-2 px-2 py-1 text-[11px]",
+                                removedFromStock && "opacity-60",
+                              )}
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="font-mono">
+                                  {r.barcode ?? "—"}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[9px] font-normal ${tone}`}
+                                >
+                                  {r.qualityGrade}
+                                </Badge>
+                                {removedLabel && (
+                                  <Badge
+                                    variant="muted"
+                                    className="text-[9px] font-normal"
+                                  >
+                                    {removedLabel}
+                                  </Badge>
+                                )}
+                                {r.color && (
+                                  <span className="inline-flex items-center gap-1 text-muted-foreground">
+                                    {r.color.hex && (
+                                      <span
+                                        className="h-2 w-2 rounded-full border border-black/10"
+                                        style={{ backgroundColor: r.color.hex }}
+                                      />
+                                    )}
+                                    {r.color.name}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-medium tabular-nums">
+                                {formatNumber(r.currentQty, 0)} m
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+
+                    {wo.producedRolls.swatchItems.length > 0 && (
+                      <>
+                        <div className="mt-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Kartelalar
+                        </div>
+                        <ul className="mt-1 divide-y rounded-md border bg-muted/30">
+                          {wo.producedRolls.swatchItems.map((s) => (
+                            <li
+                              key={s.id}
+                              className="flex items-center justify-between gap-2 px-2 py-1 text-[11px]"
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="font-mono">{s.barcode}</span>
+                                {s.parentBarcode && (
+                                  <span className="font-mono text-muted-foreground">
+                                    ← {s.parentBarcode}
+                                  </span>
+                                )}
+                                {s.color && (
+                                  <span className="inline-flex items-center gap-1 text-muted-foreground">
+                                    {s.color.hex && (
+                                      <span
+                                        className="h-2 w-2 rounded-full border border-black/10"
+                                        style={{ backgroundColor: s.color.hex }}
+                                      />
+                                    )}
+                                    {s.color.name}
+                                  </span>
+                                )}
+                                {s.purpose && (
+                                  <span className="text-muted-foreground">
+                                    · {s.purpose}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-medium tabular-nums">
+                                {formatNumber(s.length, 0)} cm
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+
+                    <div className="mt-2 text-[11px] text-muted-foreground">
+                      Metraj toplamı sağlam (depo + A1); fire metresi hariç. Kartela ayrı.
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
             <div>
               <button
@@ -291,40 +425,102 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       <span className="flex-1 text-sm font-medium">
                         {step.station?.name ?? "—"}
                       </span>
+                      {step.dispatches && step.dispatches.length > 0 && (
+                        <DispatchInfoPopover
+                          dispatches={step.dispatches}
+                          onPrint={(id) => setPrintDispatchId(id)}
+                        />
+                      )}
                       <StatusBadge
                         status={step.status}
                         labels={stepStatusLabels}
                         tones={stepStatusTones}
-                        className="text-[10px]"
+                        className="h-6 text-[10px]"
                       />
                     </div>
                     {step.currentRolls && step.currentRolls.count > 0 && (
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1 pl-7 text-[11px]">
-                        <span className="text-muted-foreground">Şu an:</span>
-                        <span className="font-medium tabular-nums">
-                          {step.currentRolls.count} parça
-                        </span>
-                        <span className="text-muted-foreground">·</span>
-                        <span className="font-medium tabular-nums">
-                          {formatNumber(step.currentRolls.totalMeters, 0)} m
-                        </span>
-                        {step.currentRolls.rawCount > 0 && (
-                          <Badge variant="outline" className="font-normal">
-                            Ham: {step.currentRolls.rawCount} ·{" "}
-                            {formatNumber(step.currentRolls.rawMeters, 0)} m
-                          </Badge>
-                        )}
-                        {step.currentRolls.dyedCount > 0 && (
-                          <Badge variant="outline" className="font-normal">
-                            Boyalı: {step.currentRolls.dyedCount} ·{" "}
-                            {formatNumber(step.currentRolls.dyedMeters, 0)} m
-                          </Badge>
-                        )}
-                        {step.currentRolls.openFabricCount > 0 && (
-                          <Badge variant="outline" className="font-normal">
-                            Açık kumaş: {step.currentRolls.openFabricCount} ·{" "}
-                            {formatNumber(step.currentRolls.openFabricMeters, 0)} m
-                          </Badge>
+                      <div className="mt-1.5 pl-7">
+                        <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                          <span className="text-muted-foreground">Şu an:</span>
+                          <span className="font-medium tabular-nums">
+                            {step.currentRolls.count} parça
+                          </span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="font-medium tabular-nums">
+                            {formatNumber(step.currentRolls.totalMeters, 0)} m
+                          </span>
+                          {step.currentRolls.rawCount > 0 && (
+                            <Badge variant="outline" className="font-normal">
+                              Ham: {step.currentRolls.rawCount} ·{" "}
+                              {formatNumber(step.currentRolls.rawMeters, 0)} m
+                            </Badge>
+                          )}
+                          {step.currentRolls.dyedCount > 0 && (
+                            <Badge variant="outline" className="font-normal">
+                              Boyalı: {step.currentRolls.dyedCount} ·{" "}
+                              {formatNumber(step.currentRolls.dyedMeters, 0)} m
+                            </Badge>
+                          )}
+                          {step.currentRolls.openFabricCount > 0 && (
+                            <Badge variant="outline" className="font-normal">
+                              Açık kumaş: {step.currentRolls.openFabricCount} ·{" "}
+                              {formatNumber(step.currentRolls.openFabricMeters, 0)} m
+                            </Badge>
+                          )}
+                        </div>
+                        {step.currentRollList && step.currentRollList.length > 0 && (
+                          <ul className="mt-1.5 divide-y rounded-md border bg-muted/30">
+                            {step.currentRollList.map((r) => (
+                              <li
+                                key={r.id}
+                                className="flex items-center justify-between gap-2 px-2 py-1 text-[11px]"
+                              >
+                                <div className="flex min-w-0 items-center gap-2">
+                                  {r.barcode ? (
+                                    <span className="font-mono">{r.barcode}</span>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[9px]">
+                                      Açık Kumaş
+                                    </Badge>
+                                  )}
+                                  {r.item && (
+                                    <span className="truncate font-medium">
+                                      {r.item.name}
+                                    </span>
+                                  )}
+                                  {r.color && (
+                                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                                      {r.color.hex && (
+                                        <span
+                                          className="h-2 w-2 rounded-full border border-black/10"
+                                          style={{ backgroundColor: r.color.hex }}
+                                        />
+                                      )}
+                                      {r.color.name}
+                                    </span>
+                                  )}
+                                  {r.kind === "raw" && (
+                                    <Badge variant="outline" className="text-[9px] font-normal">
+                                      Ham
+                                    </Badge>
+                                  )}
+                                  {r.qualityGrade && r.qualityGrade !== "1.KALITE" && (
+                                    <Badge variant="outline" className="text-[9px] font-normal">
+                                      {r.qualityGrade}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <span className="font-medium tabular-nums">
+                                  {formatNumber(r.currentQty, 0)} m
+                                  {r.width != null && (
+                                    <span className="ml-1 font-normal text-muted-foreground">
+                                      · {r.width} cm
+                                    </span>
+                                  )}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
                         )}
                       </div>
                     )}
@@ -431,20 +627,17 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
           </div>
         )}
 
-        {wo && (
-          <WOTargetPropertiesEditDialog
-            workOrder={wo}
-            open={editTargetPropsOpen}
-            onOpenChange={setEditTargetPropsOpen}
-          />
-        )}
-
         <WorkOrderDocumentsDialog
           open={documentsOpen}
           onOpenChange={setDocumentsOpen}
           onPrintTravelerCard={() => {
             setDocumentsOpen(false);
             setTravelerCardOpen(true);
+          }}
+          steps={wo?.steps}
+          onPrintDispatch={(id) => {
+            setDocumentsOpen(false);
+            setPrintDispatchId(id);
           }}
         />
 
@@ -453,7 +646,116 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
           open={travelerCardOpen}
           onOpenChange={setTravelerCardOpen}
         />
+
+        <FasonSevkPrintDialog
+          dispatchId={printDispatchId}
+          open={Boolean(printDispatchId)}
+          onOpenChange={(open) => !open && setPrintDispatchId(null)}
+        />
+
+        <ConfirmDialog
+          open={inProgressConfirmOpen}
+          onOpenChange={setInProgressConfirmOpen}
+          title="Üretim devam ediyor"
+          description="Bu iş emri şu an üretimde. Yapacağın değişiklikler bağlı rulolara ve istasyon adımlarına yansıyabilir. Devam edilsin mi?"
+          confirmLabel="Devam Et"
+          cancelLabel="Vazgeç"
+          destructive
+          onConfirm={() => {
+            if (wo && onEdit) onEdit(wo);
+            setInProgressConfirmOpen(false);
+          }}
+        />
       </SheetContent>
     </Sheet>
+  );
+}
+
+function DispatchInfoPopover({
+  dispatches,
+  onPrint,
+}: {
+  dispatches: StepDispatch[];
+  onPrint: (id: string) => void;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-6 w-6 shrink-0 border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
+          title="Fason sevk bilgisi"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Info className="h-3.5 w-3.5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-96 border-2 border-primary/30 p-0 shadow-xl"
+      >
+        <div className="border-b-2 border-primary/20 bg-primary/5 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-primary">
+          {dispatches.length === 1
+            ? "Fason Sevk Bilgisi"
+            : `Fason Sevkler (${dispatches.length})`}
+        </div>
+        <ul className="max-h-80 divide-y overflow-auto">
+          {dispatches.map((d) => (
+            <li key={d.id} className="space-y-1.5 px-3 py-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[11px] font-semibold">
+                  {d.dispatchNo}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="tabular-nums font-semibold text-foreground">
+                    {formatNumber(d.totalQty, 0)} m
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-6 w-6"
+                    title="İrsaliyeyi yazdır"
+                    onClick={() => onPrint(d.id)}
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <div className="text-[11px] font-medium">
+                {d.subcontractor.name}
+                <span className="ml-1 font-normal text-muted-foreground">
+                  · {safeFormat(d.dispatchedAt, "dd.MM.yyyy HH:mm")}
+                </span>
+              </div>
+              <div className="grid grid-cols-[70px_1fr] gap-x-2 gap-y-0.5 rounded-md border bg-muted/40 px-2 py-1.5">
+                <span className="text-muted-foreground">Plaka</span>
+                <span className="font-mono font-semibold">
+                  {d.plateNumber || "—"}
+                </span>
+                <span className="text-muted-foreground">Sürücü</span>
+                <span className="font-medium">{d.driverName || "—"}</span>
+                {d.notes && (
+                  <>
+                    <span className="text-muted-foreground">Not</span>
+                    <span className="whitespace-pre-wrap">{d.notes}</span>
+                  </>
+                )}
+                {d.dispatchedBy && (
+                  <>
+                    <span className="text-muted-foreground">Sevkeden</span>
+                    <span>
+                      {d.dispatchedBy.fullName ?? d.dispatchedBy.username}
+                    </span>
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }

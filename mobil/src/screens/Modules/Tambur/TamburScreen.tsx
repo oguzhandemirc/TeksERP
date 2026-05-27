@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
   useWindowDimensions,
+  Keyboard,
 } from 'react-native';
 import RNModal from 'react-native-modal';
 import {
@@ -24,7 +25,12 @@ import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import RefreshButton from '../../../components/RefreshButton';
+import RemoteListSheet from '../../../components/RemoteListSheet';
+import ScannerEntryBar from '../../../components/ScannerEntryBar';
+import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
+import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
@@ -121,14 +127,16 @@ export default function TamburScreen() {
   // Tabletlerde önceki davranış aynen korunur.
   const device = useDeviceType();
   const compact = device === 'phone';
+  const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   useLandscapeLock(!compact);
   const insets = useSafeAreaInsets();
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
-  // Drawer kapanış animasyonu bittikten sonra açılacak ardışık modal queue'su —
-  // react-native-modal stack sorununu önler.
-  const [pendingDrawerAction, setPendingDrawerAction] = useState<
-    'scanner' | 'list' | 'recentOutput' | 'recut' | null
-  >(null);
+  // Drawer + RNModal stack çakışmasını çözen ortak queue (hook).
+  const drawerQueue = useDrawerActionQueue({
+    drawerOpen: rightDrawerOpen,
+    closeDrawer: () => setRightDrawerOpen(false),
+    compact,
+  });
 
   const qc = useQueryClient();
 
@@ -141,6 +149,8 @@ export default function TamburScreen() {
 
   // Aktif top'un çalışma state'i — top/sekme değişince sıfırlanır.
   const [work, setWork] = useState<RollWorkState>(EMPTY_WORK);
+  
+  const pendingRecutCleanupRef = useRef<{ remainingChild: Roll | null } | null>(null);
 
   // Etiket basımı modal state — finalize veya post-split sonrası yeni Roll'lar.
   // Roller tam obje olarak tutulur (item.color, variant dahil) → LabelPrinter
@@ -174,10 +184,7 @@ export default function TamburScreen() {
   // İş emri siparişleri modal'ı — operatör kalan ihtiyaçları görmek için açar
   const [ordersModalOpen, setOrdersModalOpen] = useState(false);
 
-  // Refactor 4 — yanlış istasyon mesajı banner
-  const [cardError, setCardError] = useState<string | null>(null);
 
-  // Refactor 9 — açık kumaş cut / finalize modal state
 
   // ── Kataloglar ──
   const defectTypesQuery = useQuery({
@@ -200,6 +207,9 @@ export default function TamburScreen() {
     enabled: listModalOpen,
     staleTime: 30 * 1000,
   });
+
+  // Açık Kartlar modal'ı her açılışta force refresh — 30s cache stale dönmesin.
+  useRefetchOnOpen(openCardsQuery.refetch, listModalOpen);
 
   const activeJob = useMemo(
     () => openJobs.find((j) => j.cardId === activeCardId) ?? null,
@@ -256,14 +266,12 @@ export default function TamburScreen() {
     }
 
     setResolvingCard(true);
-    setCardError(null);
     try {
       // Refactor 4 — yanlış istasyonda 400 mesajı catch ile yakalanır
       const res = await tamburService.getByCardBarcode(barcode);
       const step = res.data as TamburStepSummary | undefined;
       if (!step) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        setCardError(`Kart bulunamadı: ${barcode}`);
         Toast.show({ type: 'error', text1: 'Kart bulunamadı', text2: barcode });
         return;
       }
@@ -291,7 +299,6 @@ export default function TamburScreen() {
       });
     } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setCardError((err as Error).message);
       Toast.show({
         type: 'error',
         text1: 'Kart çözülemedi',
@@ -609,14 +616,16 @@ export default function TamburScreen() {
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: 'Top Kesme bitti', text2: 'Top arşivlendi' });
-      // Önce FinalizeRemainingModal'ı kapat — RN nested modal sorunu (iki
-      // RNModal aynı anda mount/unmount edilemez); LabelPrintModal hemen
-      // açılırsa state stuck olur ve yeni Top Kesme akışı bug'lı çalışır.
-      setRecutFinalizeOpen(false);
       const remainingChild = res.data?.remainingChild ?? null;
-      // Modal kapanma animasyonu (~250ms) bittikten sonra state reset + etiket
-      // basım kuyruğu güncelle. setTimeout pattern: pendingDrawerAction ile aynı.
-      setTimeout(() => {
+
+      if (recutFinalizeOpen) {
+        // Modal açıkken bitirildiyse (kalan > 0), kapanma animasyonu bittikten
+        // sonra (onModalHide) state sıfırlanıp LabelPrintModal açılmalı.
+        // Aksi halde "Top Kesme 2. tur" bug'ı oluşur (RNModal'lar çakışır).
+        pendingRecutCleanupRef.current = { remainingChild: remainingChild as Roll | null };
+        setRecutFinalizeOpen(false);
+      } else {
+        // Modal zaten kapalıysa (kalan = 0) hemen temizle.
         if (remainingChild) {
           setPendingPrintRolls((prev) => [...prev, remainingChild as Roll]);
         }
@@ -626,7 +635,7 @@ export default function TamburScreen() {
         setRecutQualityGrade('1.KALITE');
         setRecutLastParentRoll(null);
         qc.invalidateQueries({ queryKey: ['rolls'] });
-      }, 300);
+      }
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -860,27 +869,21 @@ export default function TamburScreen() {
   // Sağ panel içeriği — tablet inline rightCol ve telefon drawer'ı için ortak.
   // NumpadHost ayrı render edilir; compact'ta native klavye kullanıldığı için
   // drawer içinde NumpadHost yoktur.
-  // Compact'ta drawer açıkken modal açan butonlar pendingDrawerAction'a yazar
-  // ve drawer'ı kapatır — onClosed callback'i drawer kapandıktan sonra hedef
-  // modalı açar (react-native-modal stack sorunu workaround'u).
-  const openModalOrQueue = (
-    action: 'scanner' | 'list' | 'recentOutput' | 'recut',
-  ) => {
-    if (compact && rightDrawerOpen) {
-      setPendingDrawerAction(action);
-      setRightDrawerOpen(false);
-      return;
-    }
-    if (action === 'scanner') setScannerOpen(true);
-    else if (action === 'list') setListModalOpen(true);
-    else if (action === 'recentOutput') setRecentOutputOpen(true);
-    else if (action === 'recut') setRecutScannerOpen(true);
-  };
+  // Tek noktadan compact drawer queue. drawerQueue.run(handler) compact +
+  // drawerOpen iken drawer'ı kapatıp handler'ı queue'ya yazar; aksi halde
+  // direkt çağırır.
+  const openScanner = () => drawerQueue.run(() => setScannerOpen(true));
+  const openList = () => drawerQueue.run(() => setListModalOpen(true));
+  const openRecentOutput = () => drawerQueue.run(() => setRecentOutputOpen(true));
+  const openRecut = () => drawerQueue.run(() => setRecutScannerOpen(true));
 
-  // Top Kesme akışı: kamera modal'ından tarama → roll resolve → inline section aktif.
-  // Manuel input yok; sadece kameralı barkod okutma.
+  // Top Kesme akışı: kamera modal'ından tarama → onScan SADECE modal'ı kapatır
+  // ve barkod'u pending state'e atar. Asıl resolve modal tamamen kapandıktan
+  // (onModalHide) SONRA çalışır — aksi halde animation sırasında recutMode
+  // mount edilirse invisible modal overlay tıklamayı yutuyor (RN nested modal).
+  const [pendingRecutScan, setPendingRecutScan] = useState<string | null>(null);
+
   const handleRecutScanned = async (barcode: string) => {
-    setRecutScannerOpen(false);
     const trimmed = barcode.trim();
     if (!trimmed) return;
     try {
@@ -957,90 +960,85 @@ export default function TamburScreen() {
   const renderRightContent = () => (
     <>
       <View style={styles.cardInputWrap}>
-        <View style={styles.cardInputRow}>
-          <TextInput
-            mode="outlined"
-            value={cardBarcode}
-            onChangeText={setCardBarcode}
-            placeholder="Refakat kartı barkodu okut/yaz..."
-            dense
-            autoCapitalize="characters"
-            autoCorrect={false}
-            left={<TextInput.Icon icon="card-search-outline" />}
-            right={
-              resolvingCard ? (
-                <TextInput.Icon
-                  icon={() => <ActivityIndicator size={18} color="#1e40af" />}
-                />
-              ) : cardBarcode.trim() ? (
-                <TextInput.Icon
-                  icon="check"
-                  onPress={handleResolveCard}
-                  color="#1e40af"
-                />
-              ) : undefined
-            }
-            onSubmitEditing={handleResolveCard}
-            returnKeyType="search"
-            style={[styles.cardInput, { flex: 1 }]}
-          />
-          <IconButton
-            icon="format-list-bulleted"
-            mode="contained-tonal"
-            containerColor="#e2e8f0"
-            iconColor="#0f172a"
-            size={26}
-            onPress={() => openModalOrQueue('list')}
-            accessibilityLabel="Açık kartları listele"
-            style={styles.cameraBtn}
-          />
-          <IconButton
-            icon="camera"
-            mode="contained-tonal"
-            containerColor="#dbeafe"
-            iconColor="#1e40af"
-            size={26}
-            onPress={() => openModalOrQueue('scanner')}
-            accessibilityLabel="Kamera ile refakat kartı tara"
-            style={styles.cameraBtn}
-          />
-        </View>
-        {cardError && (
-          <Surface style={styles.errorBanner} elevation={1}>
-            <Icon source="alert-circle" size={20} color="#b91c1c" />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.errorBannerTitle}>Yanlış istasyon</Text>
-              <Text style={styles.errorBannerText}>{cardError}</Text>
-            </View>
-            <IconButton
-              icon="close"
-              size={18}
-              onPress={() => setCardError(null)}
-              accessibilityLabel="Hata mesajını kapat"
-              style={{ margin: 0 }}
+        {manualBarcodeEntry ? (
+          <>
+            <ScannerEntryBar
+              value={cardBarcode}
+              onChangeText={setCardBarcode}
+              placeholder="Refakat kartı barkodu okut/yaz..."
+              onResolve={handleResolveCard}
+              resolving={resolvingCard}
+              onScan={() => openScanner()}
+              onList={() => openList()}
+              tone="blue"
             />
-          </Surface>
+            <View style={styles.actionBtnRow}>
+              <Button
+                mode="outlined"
+                icon="printer-search"
+                compact
+                onPress={() => openRecentOutput()}
+                textColor="#0f172a"
+              >
+                Çıkan Toplar
+              </Button>
+              <Button
+                mode="outlined"
+                icon="content-cut"
+                compact
+                onPress={() => openRecut()}
+                textColor="#b91c1c"
+              >
+                Top Kesme
+              </Button>
+            </View>
+          </>
+        ) : (
+          // Kamera-only mod: 4 aksiyon tek satırda büyük ikon olarak.
+          // Input gizli olduğu için açılan alanı dokunma hedeflerini büyüterek değerlendiriyoruz.
+          <View style={styles.actionsCompactRow}>
+            <IconButton
+              icon="format-list-bulleted"
+              mode="contained-tonal"
+              containerColor="#e2e8f0"
+              iconColor="#0f172a"
+              size={32}
+              onPress={() => openList()}
+              accessibilityLabel="Açık kartları listele"
+              style={styles.compactActionBtn}
+            />
+            <IconButton
+              icon="camera"
+              mode="contained-tonal"
+              containerColor="#dbeafe"
+              iconColor="#1e40af"
+              size={32}
+              onPress={() => openScanner()}
+              accessibilityLabel="Kamera ile refakat kartı tara"
+              style={styles.compactActionBtn}
+            />
+            <IconButton
+              icon="printer-search"
+              mode="contained-tonal"
+              containerColor="#e0f2fe"
+              iconColor="#0369a1"
+              size={32}
+              onPress={() => openRecentOutput()}
+              accessibilityLabel="Çıkan toplar"
+              style={styles.compactActionBtn}
+            />
+            <IconButton
+              icon="content-cut"
+              mode="contained-tonal"
+              containerColor="#fee2e2"
+              iconColor="#b91c1c"
+              size={32}
+              onPress={() => openRecut()}
+              accessibilityLabel="Top kesme"
+              style={styles.compactActionBtn}
+            />
+          </View>
         )}
-        <View style={styles.actionBtnRow}>
-          <Button
-            mode="outlined"
-            icon="printer-search"
-            compact
-            onPress={() => openModalOrQueue('recentOutput')}
-            textColor="#0f172a"
-          >
-            Çıkan Toplar
-          </Button>
-          <Button
-            mode="outlined"
-            icon="content-cut"
-            compact
-            onPress={() => openModalOrQueue('recut')}
-            textColor="#b91c1c"
-          >
-            Top Kesme
-          </Button>
-        </View>
       </View>
 
       {openJobs.length > 0 && (
@@ -1123,6 +1121,17 @@ export default function TamburScreen() {
             paddingRight: Math.max(insets.right, 12) + 12,
           },
         ]}
+        // Compact (telefon dik) + native klavye açıkken: input dışına dokununca
+        // klavyeyi indir. Capture phase'de false döndüğümüz için child Pressable/
+        // Button'lar normal şekilde responder olur — basit "dış-tıkla-kapat" pattern.
+        onStartShouldSetResponderCapture={
+          compact
+            ? () => {
+                Keyboard.dismiss();
+                return false;
+              }
+            : undefined
+        }
       >
         {/* ════════ SOL: form ════════ */}
         <View style={styles.formCol}>
@@ -1311,6 +1320,15 @@ export default function TamburScreen() {
                     {selectedRoll.colorName ? ` · ${selectedRoll.colorName}` : ''}
                     {selectedRoll.width != null ? ` · ${selectedRoll.width} cm` : ''}
                   </Text>
+                  {selectedRoll.properties.length > 0 && (
+                    <View style={styles.headerPropRow}>
+                      {selectedRoll.properties.map((p) => (
+                        <View key={p.id} style={styles.headerPropChip}>
+                          <Text style={styles.headerPropChipText}>{p.name}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                   {/* Planlanan foldType / layerCount info chip */}
                   {activeJob?.context &&
                     (activeJob.context.plannedFoldType ||
@@ -1619,13 +1637,23 @@ export default function TamburScreen() {
         onScan={handleScannerResult}
       />
 
-      {/* Top Kesme — kamera ile depo topu barkodu okut. Büyük top-level modal,
-          okuma sonrası RecutInlineSection (sol panel) doludur. */}
+      {/* Top Kesme — kamera ile depo topu barkodu okut. onScan modal'ı kapatır,
+          asıl resolve onModalHide'da (modal tam kapandığında) çalışır. */}
       <BarcodeScannerModal
         visible={recutScannerOpen}
         title="Top Kesme — Barkod Okut"
         onDismiss={() => setRecutScannerOpen(false)}
-        onScan={handleRecutScanned}
+        onScan={(barcode) => {
+          setPendingRecutScan(barcode);
+          setRecutScannerOpen(false);
+        }}
+        onModalHide={() => {
+          if (pendingRecutScan) {
+            const b = pendingRecutScan;
+            setPendingRecutScan(null);
+            void handleRecutScanned(b);
+          }
+        }}
       />
 
       {/* İş Emri Siparişleri modal'ı — operatör kesim planı için açar */}
@@ -1657,6 +1685,21 @@ export default function TamburScreen() {
             remainingAction: action,
           });
         }}
+        onModalHide={() => {
+          if (pendingRecutCleanupRef.current) {
+            const { remainingChild } = pendingRecutCleanupRef.current;
+            pendingRecutCleanupRef.current = null;
+            if (remainingChild) {
+              setPendingPrintRolls((prev) => [...prev, remainingChild]);
+            }
+            setRecutResolvedRollId(null);
+            setRecutRollMeta(null);
+            setRecutCutLength('');
+            setRecutQualityGrade('1.KALITE');
+            setRecutLastParentRoll(null);
+            qc.invalidateQueries({ queryKey: ['rolls'] });
+          }
+        }}
       />
 
       {/* Tambur'dan çıkmış toplar listesi — geçmişten etiket yeniden basımı */}
@@ -1674,13 +1717,7 @@ export default function TamburScreen() {
           onDismiss={() => setRightDrawerOpen(false)}
           insets={insets}
           title="Tambur İşleri"
-          onClosed={() => {
-            if (pendingDrawerAction === 'scanner') setScannerOpen(true);
-            else if (pendingDrawerAction === 'list') setListModalOpen(true);
-            else if (pendingDrawerAction === 'recentOutput') setRecentOutputOpen(true);
-            else if (pendingDrawerAction === 'recut') setRecutScannerOpen(true);
-            setPendingDrawerAction(null);
-          }}
+          onClosed={drawerQueue.drain}
         >
           {renderRightContent()}
         </RightPanelDrawer>
@@ -1794,12 +1831,15 @@ function LabelPrintModal({
   printingRollId: string | null;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
-  if (rolls.length === 0) return null;
   // Compact (telefon dik) ekranda %45 modal çok dar — operatör barkod + ürün +
   // "Bas" satırlarını okumakta zorlanıyor. Portrait'te 92% ver, tablet/yatayda
   // 45% kalsın (kalan ekranı bloklamasın).
   const isCompactPortrait = winH > winW;
   const sheetWidth = isCompactPortrait ? winW * 0.92 : winW * 0.45;
+  // NOT: rolls.length === 0 iken `return null` YAPMA — RNModal kapanış
+  // animasyonu yarıda kalıyor, backdrop arkada saklı kalıp sonraki ekranın
+  // tıklamalarını yutuyor (Top Kesme 2. tur bug'ı). isVisible=false ile bırak,
+  // animasyon tamamlansın.
 
   return (
     <RNModal
@@ -1809,6 +1849,7 @@ function LabelPrintModal({
       backdropOpacity={0.55}
       style={cameraStyles.modal}
       useNativeDriver
+      hideModalContentWhileAnimating
       deviceWidth={winW}
       deviceHeight={winH}
       statusBarTranslucent
@@ -1905,9 +1946,23 @@ function OrdersDetailModal({
                           {line.colorName ? ` · ${line.colorName}` : ''}
                         </Text>
                         <Text style={ordersModalStyles.lineMeta}>
-                          Sipariş: {line.orderedQty.toFixed(1)} mt · Sevk:{' '}
-                          {line.shippedQty.toFixed(1)} mt
+                          Sipariş: {line.orderedQty.toFixed(1)} mt
+                          {line.width != null && ` · En: ${line.width} cm`}
                         </Text>
+                        {line.requiredProperties.length > 0 && (
+                          <View style={ordersModalStyles.linePropRow}>
+                            {line.requiredProperties.map((p) => (
+                              <View
+                                key={p.id}
+                                style={ordersModalStyles.linePropChip}
+                              >
+                                <Text style={ordersModalStyles.linePropChipText}>
+                                  {p.name}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
                       </View>
                       <View style={ordersModalStyles.lineRemaining}>
                         <Text style={ordersModalStyles.lineRemainingValue}>
@@ -1982,6 +2037,25 @@ const ordersModalStyles = StyleSheet.create({
     color: '#64748b',
     marginTop: 2,
   },
+  linePropRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
+  },
+  linePropChip: {
+    backgroundColor: '#ede9fe',
+    borderColor: '#c4b5fd',
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  linePropChipText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#5b21b6',
+  },
   lineRemaining: {
     alignItems: 'center',
     minWidth: 70,
@@ -2019,78 +2093,45 @@ function RecentOutputModal({
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
   const isCompactPortrait = winH > winW;
-  const sheetWidth = isCompactPortrait ? winW * 0.92 : winW * 0.5;
   const q = useQuery({
     queryKey: ['tambur', 'recent-output-rolls'],
     queryFn: () => tamburService.recentOutputRolls({ limit: 50 }),
     enabled: visible,
     staleTime: 30 * 1000,
   });
+  // Modal her açılışta force refetch — 30s cache stale dönmesin.
+  useRefetchOnOpen(q.refetch, visible);
   const rolls: Roll[] = q.data?.data ?? [];
 
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.55}
-      style={cameraStyles.modal}
-      useNativeDriver
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
-    >
-      <View style={[cameraStyles.sheet, { width: sheetWidth, height: winH * 0.85 }]}>
-        <View style={[cameraStyles.header, { backgroundColor: '#dbeafe', paddingVertical: 8 }]}>
-          <Icon source="printer-search" size={20} color="#1e40af" />
-          <Text variant="titleMedium" style={cameraStyles.title}>
-            Tambur Çıktı Toplar
-          </Text>
-          <View style={{ flex: 1 }} />
-          <IconButton
-            icon="refresh"
-            size={20}
-            onPress={() => q.refetch()}
-            disabled={q.isFetching}
-            style={{ margin: 0 }}
-          />
-          <IconButton icon="close" size={20} onPress={onDismiss} style={{ margin: 0 }} />
-        </View>
-
-        <View style={{ flex: 1 }}>
-          {q.isLoading ? (
-            <View style={cameraStyles.empty}>
-              <ActivityIndicator size="large" color="#1e40af" />
-            </View>
-          ) : q.isError ? (
-            <View style={cameraStyles.empty}>
-              <Text style={cameraStyles.emptyText}>
-                Liste yüklenemedi: {(q.error as Error).message}
-              </Text>
-            </View>
-          ) : rolls.length === 0 ? (
-            <View style={cameraStyles.empty}>
-              <Icon source="package-variant" size={48} color="#cbd5e1" />
-              <Text style={cameraStyles.emptyText}>
-                Henüz Tambur'dan çıkmış top yok
-              </Text>
-            </View>
-          ) : (
-            <ScrollView contentContainerStyle={{ padding: 8, gap: 6 }}>
-              {rolls.map((roll, idx) => (
-                <RollLabelCard
-                  key={roll.id}
-                  roll={roll}
-                  index={idx}
-                  isPrinting={printingRollId === roll.id}
-                  onPrint={onPrint}
-                />
-              ))}
-            </ScrollView>
-          )}
-        </View>
-      </View>
-    </RNModal>
+    <RemoteListSheet
+      visible={visible}
+      onDismiss={onDismiss}
+      title="Üretilen Toplar"
+      icon="printer-search"
+      iconColor="#1e40af"
+      headerTint="#dbeafe"
+      widthRatio={isCompactPortrait ? 0.92 : 0.5}
+      heightRatio={0.85}
+      loading={q.isLoading}
+      fetching={q.isFetching}
+      isError={q.isError}
+      errorMessage={(q.error as Error | undefined)?.message}
+      onRefresh={() => q.refetch()}
+      items={rolls}
+      keyExtractor={(r) => r.id}
+      useScrollView
+      renderItem={(roll) => (
+        <RollLabelCard
+          roll={roll}
+          index={rolls.indexOf(roll)}
+          isPrinting={printingRollId === roll.id}
+          onPrint={onPrint}
+        />
+      )}
+      emptyIcon="package-variant"
+      emptyText="Henüz Tambur'dan çıkmış top yok"
+    />
   );
 }
 
@@ -2313,19 +2354,19 @@ function RollListItem({
             <Text style={helperStyles.rollItemName} numberOfLines={1}>
               {roll.itemName}
               {roll.colorName ? ` · ${roll.colorName}` : ''}
+              {roll.properties.length > 0
+                ? ` · ${roll.properties.map((p) => p.name).join(', ')}`
+                : ''}
+              {roll.errorCount > 0 ? ` · ⚠ ${roll.errorCount} hata` : ''}
             </Text>
-            <View style={helperStyles.rollChips}>
-              <View style={helperStyles.chipNeutral}>
-                <Text style={helperStyles.chipText}>
-                  {roll.currentQty.toFixed(1)} mt
-                </Text>
-              </View>
-              {roll.errorCount > 0 && (
-                <View style={helperStyles.chipAmber}>
-                  <Text style={helperStyles.chipText}>{roll.errorCount} hata</Text>
-                </View>
-              )}
-            </View>
+          </View>
+          <View style={helperStyles.rollRight}>
+            <Text style={helperStyles.rollMeter}>
+              {roll.currentQty.toFixed(1)} mt
+            </Text>
+            {roll.width != null && (
+              <Text style={helperStyles.rollWidth}>{roll.width} cm</Text>
+            )}
           </View>
           {selected && (
             <Icon source="chevron-left" size={22} color="#1e40af" />
@@ -2345,14 +2386,17 @@ function FinalizeRemainingModal({
   onDismiss,
   onChoose,
   loading,
+  onModalHide,
 }: {
   visible: boolean;
   remainingQty: number;
   onDismiss: () => void;
   onChoose: (action: TamburFinalizeRemainingAction) => void;
   loading: boolean;
+  onModalHide?: () => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const isCompactPortrait = winH > winW;
   const qtyText = `${remainingQty.toFixed(1)} mt`;
 
   return (
@@ -2360,6 +2404,7 @@ function FinalizeRemainingModal({
       isVisible={visible}
       onBackdropPress={loading ? undefined : onDismiss}
       onBackButtonPress={loading ? undefined : onDismiss}
+      onModalHide={onModalHide}
       backdropOpacity={0.55}
       style={cameraStyles.modal}
       useNativeDriver
@@ -2370,7 +2415,10 @@ function FinalizeRemainingModal({
       <View
         style={[
           cameraStyles.sheet,
-          { width: winW * 0.5, maxHeight: winH * 0.85 },
+          {
+            width: winW * (isCompactPortrait ? 0.9 : 0.5),
+            maxHeight: winH * 0.85,
+          },
         ]}
       >
         <View
@@ -2490,6 +2538,26 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   headerSub: { fontSize: 12, color: '#cbd5e1', marginTop: 2 },
+  headerPropRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
+  },
+  headerPropChip: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderColor: 'rgba(255,255,255,0.28)',
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  headerPropChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.2,
+  },
   plannedChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2874,6 +2942,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 6,
   },
+  // Kamera-only mod: 4 aksiyon tek satırda. justifyContent space-around
+  // → ikonlar eşit aralıklı, dokunma hedefi 48dp+ contained-tonal sayesinde.
+  actionsCompactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: 4,
+  },
+  compactActionBtn: { margin: 0 },
 
   tabBar: {
     flexDirection: 'row',
@@ -2975,20 +3052,19 @@ const helperStyles = StyleSheet.create({
     color: '#0f172a',
   },
   rollItemName: { fontSize: 11, color: '#64748b', marginTop: 1 },
-  rollChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  chipAmber: {
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
+  rollRight: { alignItems: 'flex-end', marginLeft: 8 },
+  rollMeter: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+    fontVariant: ['tabular-nums'],
   },
-  chipNeutral: {
-    backgroundColor: '#e2e8f0',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
+  rollWidth: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 1,
+    fontVariant: ['tabular-nums'],
   },
-  chipText: { fontSize: 10, fontWeight: '700', color: '#0f172a' },
 });
 
 const cameraStyles = StyleSheet.create({

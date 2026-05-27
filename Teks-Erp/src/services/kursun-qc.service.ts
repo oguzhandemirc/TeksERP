@@ -912,9 +912,10 @@ export class KursunQcService {
         if (acc === null) return m.enteredAt;
         return m.enteredAt < acc ? m.enteredAt : acc;
       }, null);
+      // Decimal aritmetik — JS float drift'i önlenir; serializer number'a çevirir.
       const totalQty = s.movements.reduce(
-        (sum, m) => sum + Number(m.roll.currentQty),
-        0,
+        (sum, m) => sum.plus(m.roll.currentQty),
+        new Prisma.Decimal(0),
       );
       const card = s.workOrder.travelerCards[0] ?? null;
       return {
@@ -928,7 +929,7 @@ export class KursunQcService {
         colorName: s.workOrder.targetColor?.name ?? null,
         colorHex: s.workOrder.targetColor?.hex ?? null,
         openRollCount: s.movements.length,
-        totalCurrentQty: totalQty,
+        totalCurrentQty: totalQty.toNumber(),
         oldestEnteredAt: oldest,
         priority: s.priority,
         isUrgent: s.isUrgent,

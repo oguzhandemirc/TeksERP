@@ -1,26 +1,19 @@
 import React, { useCallback, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  useWindowDimensions,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-} from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import {
   Text,
-  TextInput,
   Button,
   IconButton,
   ActivityIndicator,
 } from 'react-native-paper';
 import RNModal from 'react-native-modal';
 import { FlashList } from '@shopify/flash-list';
-import Toast from 'react-native-toast-message';
 
 import type { SubcontractorDispatchListItem } from '../../types/models';
 import DispatchRow from './DispatchRow';
 import RefreshButton from '../RefreshButton';
+import ConfirmDialog from '../ConfirmDialog';
+import Pager from '../Pager';
 
 interface Props {
   visible: boolean;
@@ -70,7 +63,6 @@ export default function RecentDispatchesModal({
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
-  const [cancelReason, setCancelReason] = useState('');
   // Aynı anda yalnız bir satır açık — operatör başkasına tıklayınca eski kapanır.
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -100,28 +92,18 @@ export default function RecentDispatchesModal({
   // (önceki %78 ekran kenarından taşıyordu). Geniş ekran tabletlerde %78 yeterli.
   const sheetWidth = winW < 700 ? winW * 0.96 : winW * 0.78;
 
-  const closeCancelOverlay = () => {
-    setCancelTarget(null);
-    setCancelReason('');
-  };
-
-  // Backdrop / geri tuşu önce overlay'leri kapatır, hepsi kapalıysa modalı.
+  // Backdrop / geri tuşu: önce expanded row, sonra modal. (Cancel onayı ayrı
+  // bir ConfirmDialog modal'ında — kendi backdrop'unu yönetir.)
   const handleBackdropPress = () => {
-    if (cancelTarget) closeCancelOverlay();
-    else if (expandedId) setExpandedId(null);
+    if (expandedId) setExpandedId(null);
     else onDismiss();
   };
 
-  const handleConfirmCancel = async () => {
-    if (!cancelTarget) return;
-    const reason = cancelReason.trim();
-    if (reason.length < 3) {
-      Toast.show({ type: 'error', text1: 'Sebep en az 3 karakter olmalı' });
-      return;
-    }
+  const handleConfirmCancel = async (payload: { reason?: string }) => {
+    if (!cancelTarget || !payload.reason) return;
     try {
-      await onCancelDispatch(cancelTarget.id, reason);
-      closeCancelOverlay();
+      await onCancelDispatch(cancelTarget.id, payload.reason);
+      setCancelTarget(null);
     } catch {
       // Toast parent'taki error handler'da gösterilir
     }
@@ -200,97 +182,37 @@ export default function RecentDispatchesModal({
         {(totalPages > 1 || total > 0) && (
           <View style={styles.footer}>
             <Text style={styles.totalText}>{total} kayıt</Text>
-            {totalPages > 1 && (
-              <View style={styles.pager}>
-                <IconButton
-                  icon="chevron-left"
-                  mode="outlined"
-                  size={18}
-                  disabled={page <= 1 || fetching}
-                  onPress={() => onPageChange(Math.max(1, page - 1))}
-                  accessibilityLabel="Önceki sayfa"
-                  style={styles.pagerBtn}
-                />
-                <Text style={styles.pagerText}>
-                  {page} / {totalPages}
-                </Text>
-                <IconButton
-                  icon="chevron-right"
-                  mode="outlined"
-                  size={18}
-                  disabled={page >= totalPages || fetching}
-                  onPress={() => onPageChange(Math.min(totalPages, page + 1))}
-                  accessibilityLabel="Sonraki sayfa"
-                  style={styles.pagerBtn}
-                />
-              </View>
-            )}
+            <Pager
+              page={page}
+              totalPages={totalPages}
+              fetching={fetching}
+              onPageChange={onPageChange}
+            />
           </View>
         )}
 
-        {/* İptal onay overlay (Portal/Dialog kullanmaz, RNModal altında kalmaz) */}
-        {cancelTarget && (
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.overlay}
-            pointerEvents="auto"
-          >
-            <Pressable
-              style={styles.overlayBackdrop}
-              onPress={closeCancelOverlay}
-              accessibilityLabel="Vazgeç"
-            />
-            <View style={styles.cancelCard}>
-              <View style={styles.cancelHeader}>
-                <Text variant="titleMedium" style={styles.cancelTitle}>
-                  Sevki İptal Et
-                </Text>
-                <IconButton
-                  icon="close"
-                  size={20}
-                  onPress={closeCancelOverlay}
-                  accessibilityLabel="Vazgeç"
-                  style={{ margin: 0 }}
-                />
-              </View>
-              <Text style={styles.cancelDesc}>
-                <Text style={styles.cancelDispatchNo}>{cancelTarget.no}</Text> numaralı
-                sevk iptal edilecek. Toplar STOCK durumuna geri dönecek.
-              </Text>
-              <TextInput
-                mode="outlined"
-                label="İptal Sebebi"
-                value={cancelReason}
-                onChangeText={setCancelReason}
-                placeholder="Yanlış fason firma seçildi..."
-                multiline
-                numberOfLines={2}
-                autoFocus
-                style={styles.cancelInput}
-              />
-              <View style={styles.cancelActions}>
-                <Button
-                  mode="text"
-                  onPress={closeCancelOverlay}
-                  disabled={isCanceling}
-                >
-                  Vazgeç
-                </Button>
-                <Button
-                  mode="contained"
-                  buttonColor="#dc2626"
-                  onPress={handleConfirmCancel}
-                  loading={isCanceling}
-                  disabled={isCanceling || cancelReason.trim().length < 3}
-                >
-                  İptal Et
-                </Button>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        )}
       </View>
-      <Toast />
+
+      {/* İptal onayı — ConfirmDialog ayrı bir RNModal, parent modal'ın üstünde render olur */}
+      <ConfirmDialog
+        kind="destructive"
+        visible={!!cancelTarget}
+        onDismiss={() => setCancelTarget(null)}
+        title="Sevki İptal Et"
+        description={
+          <Text style={styles.cancelDesc}>
+            <Text style={styles.cancelDispatchNo}>{cancelTarget?.no}</Text> numaralı
+            sevk iptal edilecek. Toplar STOCK durumuna geri dönecek.
+          </Text>
+        }
+        confirmLabel="İptal Et"
+        confirming={isCanceling}
+        reason={{
+          label: 'İptal Sebebi',
+          placeholder: 'Yanlış fason firma seçildi...',
+        }}
+        onConfirm={handleConfirmCancel}
+      />
     </RNModal>
   );
 }
@@ -348,49 +270,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   totalText: { fontSize: 12, color: '#64748b', fontWeight: '600' },
-  pager: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  pagerBtn: { margin: 0, width: 32, height: 32 },
-  pagerText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0f172a',
-    minWidth: 44,
-    textAlign: 'center',
-  },
 
-  // İptal overlay
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  overlayBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
-  },
-  cancelCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    width: '100%',
-    maxWidth: 480,
-    gap: 10,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  cancelHeader: { flexDirection: 'row', alignItems: 'center' },
-  cancelTitle: { fontWeight: '700', color: '#0f172a', flex: 1 },
+  // ConfirmDialog description'a verilen inline JSX — sevk no monospace vurgu için
   cancelDesc: { fontSize: 13, color: '#475569', lineHeight: 19 },
   cancelDispatchNo: { fontFamily: 'monospace', fontWeight: '700', color: '#0f172a' },
-  cancelInput: { backgroundColor: '#fff' },
-  cancelActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 4,
-  },
 });

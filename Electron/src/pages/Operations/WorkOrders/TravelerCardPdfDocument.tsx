@@ -125,9 +125,6 @@ export function TravelerCardPdfDocument({ workOrder, card, qrDataUrl }: Props) {
               <View key={step.id} style={s.routeStep}>
                 <Text style={s.routeNum}>{step.stepSequence}</Text>
                 <Text style={s.routeName}>{step.station?.name ?? "—"}</Text>
-                {step.station?.type === "EXTERNAL" && (
-                  <Text style={s.routeFason}>FASON</Text>
-                )}
                 {idx < sortedSteps.length - 1 && (
                   <Text style={s.routeArrow}>→</Text>
                 )}
@@ -162,7 +159,7 @@ export function TravelerCardPdfDocument({ workOrder, card, qrDataUrl }: Props) {
                     {ol?.item?.name ?? "—"}
                   </Text>
                   <Text style={[s.ordersCol, s.ordersQty]}>
-                    {fmtNum(link.allocatedQty)} m
+                    {fmtNum(link.orderLine?.quantity)} m
                   </Text>
                 </View>
               );
@@ -219,7 +216,6 @@ const COLORS = {
   borderDot: "#bbb",
   mutedText: "#555",
   highlight: "#eee",
-  fasonBg: "#ffc107",
   rowAlt: "#f7f7f7",
 };
 
@@ -396,16 +392,6 @@ const s = StyleSheet.create({
     borderRadius: 5.5,
   },
   routeName: { fontSize: 8.5, fontWeight: 600, marginLeft: 1 },
-  routeFason: {
-    fontSize: 6,
-    fontWeight: 700,
-    backgroundColor: COLORS.fasonBg,
-    color: "#000",
-    paddingHorizontal: 2,
-    paddingVertical: 0.5,
-    borderRadius: 1.5,
-    marginLeft: 1,
-  },
   routeArrow: { color: COLORS.borderSoft, fontSize: 9, marginHorizontal: 1 },
 
   /* Orders */
@@ -456,7 +442,6 @@ const s = StyleSheet.create({
   emptyText: {
     fontSize: 9,
     color: COLORS.mutedText,
-    fontStyle: "italic",
   },
 
   pageNo: {

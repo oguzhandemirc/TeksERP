@@ -11,6 +11,7 @@ import {
   Chip,
   TouchableRipple,
   Icon,
+  Appbar,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -19,8 +20,11 @@ import Toast from 'react-native-toast-message';
 import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
+import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import { useDeviceType } from '../../../hooks/useDeviceType';
+import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import WorkOrderDetailPanel from '../../../components/workOrder/WorkOrderDetailPanel';
 import { RecentDispatchesModal } from '../../../components/dispatch';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
@@ -58,6 +62,7 @@ export default function FasonSevkScreen() {
   const qc = useQueryClient();
   const device = useDeviceType();
   const isPhone = device === 'phone';
+  const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
 
   // ── Form state ──
   const [workOrderId, setWorkOrderId] = useState('');
@@ -76,7 +81,8 @@ export default function FasonSevkScreen() {
   const [scanning, setScanning] = useState(false);
   // Telefon modunda alttaki "İş Emri Detayları" paneli daraltılabilir.
   // Daraltıldığında sadece başlık satırı görünür → operatör form alanına yer açar.
-  const [detailsCollapsed, setDetailsCollapsed] = useState(false);
+  // Default olarak kapalı gelir, WO seçildiğinde açılır.
+  const [detailsCollapsed, setDetailsCollapsed] = useState(true);
   // Refakat kartı: manuel input + kamera + liste — üçü de aynı WO seçim akışına bağlı.
   const [cardScannerOpen, setCardScannerOpen] = useState(false);
   const [resolvingCard, setResolvingCard] = useState(false);
@@ -124,7 +130,7 @@ export default function FasonSevkScreen() {
           filters: { status: 'PLANNED,IN_PROGRESS' },
           search: woSearch || undefined,
         },
-        { withOrderDetail: true }
+        { withOrderDetail: true, excludeWithOpenDispatch: true }
       ),
     placeholderData: (prev) => prev,
   });
@@ -279,6 +285,17 @@ export default function FasonSevkScreen() {
         });
         return;
       }
+      // Picker'la aynı kural: açık sevki varsa kart okutmaya izin verme.
+      // Operatör önce eski sevki iptal etmek veya mal kabul yapmak zorunda.
+      if (card.hasOpenDispatch) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        Toast.show({
+          type: 'error',
+          text1: 'Açık fason sevki var',
+          text2: 'Önce eski sevki iptal edin veya mal kabul yapın.',
+        });
+        return;
+      }
       // Picker filtresiyle aynı: en az 1 açık EXTERNAL adım olmalı.
       const hasOpenExternal = (wo.steps ?? []).some(
         (s) =>
@@ -304,6 +321,7 @@ export default function FasonSevkScreen() {
       setSubcontractorLabel('');
       setPlannedSubId(null);
       setCardInput('');
+      setDetailsCollapsed(false);
       Toast.show({
         type: 'success',
         text1: 'İş emri seçildi',
@@ -412,6 +430,9 @@ export default function FasonSevkScreen() {
     placeholderData: (prev) => prev,
   });
 
+  // Son Sevkler modal'ı her açılışta taze veri çek.
+  useRefetchOnOpen(dispatchesQuery.refetch, recentDispatchesOpen);
+
   // ── Mutations ──
   const dispatchMutation = useMutation({
     mutationFn: (data: DispatchRequest) => subcontractorService.dispatch(data),
@@ -434,6 +455,7 @@ export default function FasonSevkScreen() {
       setPlateNumber('');
       setDriverName('');
       setNotes('');
+      setDetailsCollapsed(true);
       qc.invalidateQueries({ queryKey: ['dispatches'] });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
     },
@@ -575,7 +597,19 @@ export default function FasonSevkScreen() {
   };
 
   return (
-    <ScreenChrome title="Fason Sevk" subtitle="Toplara fason firmaya sevk oluştur">
+    <ScreenChrome
+      title="Fason Sevk"
+      headerExtras={
+        isPhone ? (
+          <Appbar.Action
+            icon="history"
+            color="#fff"
+            onPress={() => setRecentDispatchesOpen(true)}
+            accessibilityLabel="Son sevkler"
+          />
+        ) : undefined
+      }
+    >
       <View style={[styles.body, isPhone && styles.bodyPhone]}>
         {/* ── SOL: Yeni Sevk ── */}
         <ScrollView style={styles.formCol} contentContainerStyle={styles.formContent}>
@@ -600,63 +634,23 @@ export default function FasonSevkScreen() {
                     setSubcontractorId('');
                     setSubcontractorLabel('');
                     setPlannedSubId(null);
+                    setDetailsCollapsed(true);
                   }}
                   accessibilityLabel="İş emrini kaldır"
                   style={{ margin: 0 }}
                 />
               </Surface>
             ) : (
-              <View style={styles.woRow}>
-                <TextInput
-                  mode="outlined"
-                  value={cardInput}
-                  onChangeText={setCardInput}
-                  placeholder="Refakat kartı (RK-2605-001 ya da tam barkod)"
-                  dense
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  left={<TextInput.Icon icon="card-search-outline" />}
-                  right={
-                    resolvingCard ? (
-                      <TextInput.Icon
-                        icon={() => <ActivityIndicator size={18} color="#0d9488" />}
-                      />
-                    ) : cardInput.trim() ? (
-                      <TextInput.Icon
-                        icon="check"
-                        color="#0d9488"
-                        onPress={() => handleCardScan(cardInput)}
-                      />
-                    ) : undefined
-                  }
-                  onSubmitEditing={() => handleCardScan(cardInput)}
-                  returnKeyType="search"
-                  style={[styles.woInput, { flex: 1 }]}
-                  disabled={resolvingCard}
-                />
-                <IconButton
-                  icon="camera"
-                  mode="contained-tonal"
-                  containerColor="#dbeafe"
-                  iconColor="#1e40af"
-                  size={22}
-                  onPress={() => setCardScannerOpen(true)}
-                  accessibilityLabel="Kamera ile kart tara"
-                  style={styles.woCameraBtn}
-                  disabled={resolvingCard}
-                />
-                <IconButton
-                  icon="format-list-bulleted"
-                  mode="contained-tonal"
-                  containerColor="#f1f5f9"
-                  iconColor="#475569"
-                  size={22}
-                  onPress={() => setPickerOpen('wo')}
-                  accessibilityLabel="İş emri listesinden seç"
-                  style={styles.woCameraBtn}
-                  disabled={resolvingCard}
-                />
-              </View>
+              <ScannerEntryBar
+                value={cardInput}
+                onChangeText={setCardInput}
+                placeholder="Refakat kartı (RK-2605-001 ya da tam barkod)"
+                onResolve={() => handleCardScan(cardInput)}
+                resolving={resolvingCard}
+                onScan={() => setCardScannerOpen(true)}
+                onList={() => setPickerOpen('wo')}
+                tone="blue"
+              />
             )}
 
             {/* Hangi fason istasyonu */}
@@ -742,51 +736,28 @@ export default function FasonSevkScreen() {
 
             {/* Barkod ekleme */}
             <Text style={[styles.label, styles.labelSpaced]}>Top Barkodu</Text>
-            <View style={styles.row}>
-              <TextInput
-                mode="outlined"
-                value={barcodeInput}
-                onChangeText={setBarcodeInput}
-                placeholder="Barkod gir veya okut..."
-                style={[styles.input, { flex: 1 }]}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                onSubmitEditing={handleAddBarcodeFromInput}
-                returnKeyType="done"
-              />
-              <IconButton
-                icon="camera"
-                mode="contained-tonal"
-                containerColor="#dbeafe"
-                iconColor="#1e40af"
-                size={26}
-                onPress={() => setRollScannerOpen(true)}
-                accessibilityLabel="Kamera ile top barkodu okut"
-                style={styles.cameraBtn}
-                disabled={scanning}
-              />
-              <IconButton
-                icon="format-list-bulleted"
-                mode="contained-tonal"
-                containerColor="#f1f5f9"
-                iconColor="#475569"
-                size={26}
-                onPress={() => setRollPickerOpen(true)}
-                accessibilityLabel="Stok listesinden top seç"
-                style={styles.cameraBtn}
-                disabled={scanning}
-              />
-              <Button
-                mode="contained"
-                icon={scanning ? undefined : 'plus'}
-                onPress={handleAddBarcodeFromInput}
-                disabled={scanning || !barcodeInput.trim()}
-                style={styles.addBtn}
-                contentStyle={styles.addBtnContent}
-              >
-                {scanning ? <ActivityIndicator size="small" color="#fff" /> : 'Ekle'}
-              </Button>
-            </View>
+            <ScannerEntryBar
+              value={barcodeInput}
+              onChangeText={setBarcodeInput}
+              placeholder="Barkod gir veya okut..."
+              inputLeftIcon="barcode-scan"
+              resolving={scanning}
+              onScan={() => setRollScannerOpen(true)}
+              onList={() => setRollPickerOpen(true)}
+              tone="blue"
+              extra={
+                <Button
+                  mode="contained"
+                  icon={scanning ? undefined : 'plus'}
+                  onPress={handleAddBarcodeFromInput}
+                  disabled={scanning || !barcodeInput.trim()}
+                  style={styles.addBtn}
+                  contentStyle={styles.addBtnContent}
+                >
+                  {scanning ? <ActivityIndicator size="small" color="#fff" /> : 'Ekle'}
+                </Button>
+              }
+            />
 
             {/* Eklenen toplar */}
             {scannedRolls.length > 0 && (
@@ -880,7 +851,7 @@ export default function FasonSevkScreen() {
                 style={{ margin: 0 }}
               />
             )}
-            {!detailsCollapsed && (
+            {!isPhone && !detailsCollapsed && (
               <Button
                 mode="contained-tonal"
                 icon="history"
@@ -960,6 +931,7 @@ export default function FasonSevkScreen() {
           setSubcontractorId('');
           setSubcontractorLabel('');
           setPlannedSubId(null);
+          setDetailsCollapsed(false);
         }}
       />
       <PickerModal
@@ -1067,6 +1039,8 @@ function RollPickerModal({
   onSelect: (r: Roll) => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const device = useDeviceType();
+  const isPhone = device === 'phone';
   const [search, setSearch] = useState('');
   // 300ms debounce: her tuş darbesinde HTTP isteği yerine kullanıcı yazmayı
   // bitirdikten 300ms sonra tek request.
@@ -1110,17 +1084,37 @@ function RollPickerModal({
       deviceHeight={winH}
       statusBarTranslucent
     >
-      <View style={[pickerStyles.sheet, { width: winW * 0.85, height: winH * 0.9 }]}>
-        <View style={pickerStyles.header}>
+      <View
+        style={[
+          pickerStyles.sheet,
+          isPhone && pickerStyles.sheetPhone,
+          {
+            width: isPhone ? winW * 0.95 : winW * 0.85,
+            height: winH * 0.85,
+          },
+        ]}
+      >
+        <View style={[pickerStyles.header, isPhone && pickerStyles.headerPhone]}>
           <View style={{ flex: 1 }}>
-            <Text variant="titleLarge" style={pickerStyles.title}>
-              Top Seç (Kamera Yerine)
+            <Text
+              variant={isPhone ? 'titleMedium' : 'titleLarge'}
+              style={pickerStyles.title}
+            >
+              Top Seç
             </Text>
-            <Text variant="bodySmall" style={pickerStyles.subtitle}>
-              Test için listeden seç · ileride kamera ile okutulacak
-            </Text>
+            {!isPhone && (
+              <Text variant="bodySmall" style={pickerStyles.subtitle}>
+                Test için listeden seç · ileride kamera ile okutulacak
+              </Text>
+            )}
           </View>
-          <IconButton icon="close" size={28} onPress={onDismiss} accessibilityLabel="Kapat" />
+          <IconButton
+            icon="close"
+            size={isPhone ? 22 : 28}
+            onPress={onDismiss}
+            accessibilityLabel="Kapat"
+            style={{ margin: 0 }}
+          />
         </View>
 
         <TextInput
@@ -1129,7 +1123,8 @@ function RollPickerModal({
           onChangeText={setSearch}
           placeholder="Barkod / ürün ara..."
           left={<TextInput.Icon icon="magnify" />}
-          style={pickerStyles.search}
+          style={[pickerStyles.search, isPhone && pickerStyles.searchPhone]}
+          dense={isPhone}
         />
 
         <View style={pickerStyles.listBox}>
@@ -1160,38 +1155,115 @@ function RollPickerModal({
                   onPress={() => onSelect(item)}
                   style={pickerStyles.row}
                 >
-                  <View style={pickerStyles.rowInner}>
-                    <View style={{ flex: 1 }}>
+                  <View
+                    style={[pickerStyles.rowInner, isPhone && pickerStyles.rowInnerPhone]}
+                  >
+                    <View style={{ flex: 1, gap: isPhone ? 2 : 4 }}>
                       <View style={pickerStyles.rowTop}>
-                        <Text style={pickerStyles.rowBarcode}>{item.barcode ?? '—'}</Text>
-                        <Chip compact style={pickerStyles.rowStatus}>
+                        <Text
+                          style={[
+                            pickerStyles.rowBarcode,
+                            isPhone && pickerStyles.rowBarcodePhone,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.barcode ?? '—'}
+                        </Text>
+                        <Chip
+                          compact
+                          style={pickerStyles.rowStatus}
+                          textStyle={
+                            isPhone ? pickerStyles.rowStatusTextPhone : undefined
+                          }
+                        >
                           {trLabel(ROLL_STATUS_LABEL, item.status)}
                         </Chip>
                       </View>
-                      <Text style={pickerStyles.rowName} numberOfLines={1}>
+                      <Text
+                        style={[
+                          pickerStyles.rowName,
+                          isPhone && pickerStyles.rowNamePhone,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {item.item?.name ?? '—'}
                         {item.color?.name ? ` · ${item.color.name}` : ''}
                       </Text>
-                      <View style={pickerStyles.rowBadgeRow}>
-                        <View style={pickerStyles.rowBadge}>
-                          <Icon source="arrow-expand-vertical" size={13} color="#0f172a" />
-                          <Text style={pickerStyles.rowBadgeText}>
+                      <View
+                        style={[
+                          pickerStyles.rowBadgeRow,
+                          isPhone && pickerStyles.rowBadgeRowPhone,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            pickerStyles.rowBadge,
+                            isPhone && pickerStyles.rowBadgePhone,
+                          ]}
+                        >
+                          <Icon
+                            source="arrow-expand-vertical"
+                            size={isPhone ? 11 : 13}
+                            color="#0f172a"
+                          />
+                          <Text
+                            style={[
+                              pickerStyles.rowBadgeText,
+                              isPhone && pickerStyles.rowBadgeTextPhone,
+                            ]}
+                          >
                             {item.currentQty} mt
                           </Text>
                         </View>
                         {item.width != null && (
-                          <View style={pickerStyles.rowBadge}>
-                            <Icon source="arrow-expand-horizontal" size={13} color="#0f172a" />
-                            <Text style={pickerStyles.rowBadgeText}>{item.width} cm</Text>
+                          <View
+                            style={[
+                              pickerStyles.rowBadge,
+                              isPhone && pickerStyles.rowBadgePhone,
+                            ]}
+                          >
+                            <Icon
+                              source="arrow-expand-horizontal"
+                              size={isPhone ? 11 : 13}
+                              color="#0f172a"
+                            />
+                            <Text
+                              style={[
+                                pickerStyles.rowBadgeText,
+                                isPhone && pickerStyles.rowBadgeTextPhone,
+                              ]}
+                            >
+                              {item.width} cm
+                            </Text>
                           </View>
                         )}
-                        <View style={pickerStyles.rowBadge}>
-                          <Icon source="star-circle" size={13} color="#0f172a" />
-                          <Text style={pickerStyles.rowBadgeText}>{item.qualityGrade}</Text>
+                        <View
+                          style={[
+                            pickerStyles.rowBadge,
+                            isPhone && pickerStyles.rowBadgePhone,
+                          ]}
+                        >
+                          <Icon
+                            source="star-circle"
+                            size={isPhone ? 11 : 13}
+                            color="#0f172a"
+                          />
+                          <Text
+                            style={[
+                              pickerStyles.rowBadgeText,
+                              isPhone && pickerStyles.rowBadgeTextPhone,
+                            ]}
+                          >
+                            {item.qualityGrade}
+                          </Text>
                         </View>
                       </View>
                     </View>
-                    <Icon source="chevron-right" size={24} color="#94a3b8" />
+                    <Icon
+                      source="chevron-right"
+                      size={isPhone ? 18 : 24}
+                      color="#94a3b8"
+                    />
                   </View>
                 </TouchableRipple>
               )}
@@ -1213,6 +1285,12 @@ const pickerStyles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16,
   },
+  sheetPhone: {
+    paddingHorizontal: 6,
+    paddingTop: 4,
+    paddingBottom: 4,
+    borderRadius: 12,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1221,9 +1299,14 @@ const pickerStyles = StyleSheet.create({
     borderBottomColor: '#e2e8f0',
     marginBottom: 8,
   },
+  headerPhone: {
+    paddingVertical: 2,
+    marginBottom: 6,
+  },
   title: { fontWeight: '700', color: '#0f172a' },
   subtitle: { color: '#64748b', marginTop: 2 },
   search: { backgroundColor: '#fff', marginBottom: 8 },
+  searchPhone: { marginBottom: 6 },
   listBox: { flex: 1 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 4 },
   emptyText: { fontSize: 16, color: '#94a3b8', fontWeight: '600' },
@@ -1237,6 +1320,11 @@ const pickerStyles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
   },
+  rowInnerPhone: {
+    gap: 4,
+    padding: 6,
+    borderRadius: 6,
+  },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rowBarcode: {
     fontFamily: 'monospace',
@@ -1248,9 +1336,18 @@ const pickerStyles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
+  rowBarcodePhone: {
+    fontSize: 10,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    flexShrink: 1,
+  },
   rowStatus: { backgroundColor: '#e0e7ff' },
+  rowStatusTextPhone: { fontSize: 10, lineHeight: 14, marginVertical: 0 },
   rowName: { fontSize: 13, color: '#475569', marginTop: 4 },
+  rowNamePhone: { fontSize: 11, marginTop: 0 },
   rowBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  rowBadgeRowPhone: { gap: 2, marginTop: 2 },
   rowBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1260,7 +1357,14 @@ const pickerStyles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
   },
+  rowBadgePhone: {
+    gap: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
   rowBadgeText: { fontSize: 12, color: '#0f172a', fontWeight: '600' },
+  rowBadgeTextPhone: { fontSize: 10 },
 });
 
 const styles = StyleSheet.create({
@@ -1381,6 +1485,14 @@ const styles = StyleSheet.create({
   addBtn: { borderRadius: 8 },
   addBtnContent: { height: 48, paddingHorizontal: 10 },
   cameraBtn: { margin: 0, height: 48, width: 48, borderRadius: 8 },
+  // Kamera-only mod: tek büyük CTA + yan liste icon. flex:1 ile satırı kaplar,
+  // 56dp yükseklik fabrika ortamında dokunma rahatlığı.
+  scanCtaBtn: { flex: 1, borderRadius: 10 },
+  scanCtaBtnContent: { height: 56 },
+  scanCtaBtnLabel: { fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
+  // Liste IconButton, CTA ile aynı yükseklik + aynı köşe yuvarlatma; iki
+  // kamera-only bloğunda da paylaşılır.
+  scanListBtn: { margin: 0, height: 56, width: 56, borderRadius: 10 },
 
   rollList: { marginTop: 8, gap: 4 },
   rollListHeader: {

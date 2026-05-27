@@ -22,10 +22,16 @@ import type { WorkOrderFormValues } from "./schema";
 export function TargetItemPicker({
   control,
   onItemChange,
+  disabled,
+  lockedTooltip,
 }: {
   control: Control<WorkOrderFormValues>;
   /** Ürün değiştiğinde renk ve özellikleri sıfırlamak için. */
   onItemChange?: () => void;
+  /** Düzenleme kilitliyse (örn. sevk yapılmış). */
+  disabled?: boolean;
+  /** disabled true ise neden — hover'da tooltip. */
+  lockedTooltip?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -70,11 +76,13 @@ export function TargetItemPicker({
         <>
           <button
             type="button"
+            disabled={disabled}
             onClick={() => {
               setSearch("");
               setOpen(true);
             }}
-            className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted/50"
+            title={disabled ? lockedTooltip : undefined}
+            className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Package className="h-4 w-4 text-muted-foreground" />
             <span className="font-medium">Hedef Ürün</span>

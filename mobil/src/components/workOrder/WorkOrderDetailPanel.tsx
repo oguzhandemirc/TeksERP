@@ -1,8 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, Icon } from 'react-native-paper';
+import { Text, Icon, IconButton } from 'react-native-paper';
+import { useQuery } from '@tanstack/react-query';
+import dayjs from 'dayjs';
 
-import type { WorkOrder } from '../../types/models';
+import type { WorkOrder, SubcontractorDispatchListItem } from '../../types/models';
+import { subcontractorService } from '../../services/subcontractor.service';
 import {
   WORK_ORDER_STATUS_LABEL,
   WORK_ORDER_STATUS_COLOR,
@@ -32,6 +35,31 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
         })),
     [wo.steps],
   );
+
+  // External step varsa WO'nun sevkleri çek — info butonuna basılınca plaka/sürücü/notlar göstermek için.
+  const hasExternal = externalStations.length > 0;
+  const dispatchesQuery = useQuery({
+    queryKey: ['dispatches', 'wo', wo.id],
+    queryFn: () =>
+      subcontractorService.listDispatches({ workOrderId: wo.id, pageSize: 100 }),
+    enabled: hasExternal,
+    staleTime: 30 * 1000,
+  });
+
+  // Step ID → o adımın açık (cancelledAt==null) en güncel sevki. Backend artık
+  // adım başına tek açık sevke izin verir (subcontractor.service dispatch guard).
+  const openDispatchByStep = useMemo(() => {
+    const map = new Map<string, SubcontractorDispatchListItem>();
+    const all = (dispatchesQuery.data?.data ?? []) as SubcontractorDispatchListItem[];
+    // listDispatches dispatchedAt desc sıralı → ilk eşleşme en güncel.
+    for (const d of all) {
+      if (d.cancelledAt) continue;
+      if (!map.has(d.stepId)) map.set(d.stepId, d);
+    }
+    return map;
+  }, [dispatchesQuery.data]);
+
+  const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
 
   const customerGroups = useMemo(() => {
     const m = new Map<
@@ -177,17 +205,72 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
               <Text style={styles.rowText}>{wo.targetColor.name}</Text>
             </View>
           )}
-          {externalStations.map((s) => (
-            <View key={s.id} style={styles.row}>
-              <Icon source="factory" size={14} color="#64748b" />
-              <Text style={styles.rowText}>
-                #{s.seq} {s.name}
-              </Text>
-              <Text style={styles.stepStatus}>
-                {trLabel(STEP_STATUS_LABEL, s.status)}
-              </Text>
-            </View>
-          ))}
+          {externalStations.map((s) => {
+            const dispatch = openDispatchByStep.get(s.id);
+            const expanded = expandedStepId === s.id;
+            return (
+              <View key={s.id}>
+                <View style={styles.row}>
+                  <Icon source="factory" size={14} color="#64748b" />
+                  <Text style={styles.rowText}>
+                    #{s.seq} {s.name}
+                  </Text>
+                  <Text style={styles.stepStatus}>
+                    {trLabel(STEP_STATUS_LABEL, s.status)}
+                  </Text>
+                  {dispatch && (
+                    <IconButton
+                      icon={expanded ? 'chevron-up' : 'information-outline'}
+                      size={16}
+                      iconColor="#4f46e5"
+                      onPress={() => setExpandedStepId(expanded ? null : s.id)}
+                      style={styles.infoBtn}
+                      accessibilityLabel="Sevk bilgisi"
+                    />
+                  )}
+                </View>
+                {expanded && dispatch && (
+                  <View style={styles.dispatchBox}>
+                    <View style={styles.dispatchRow}>
+                      <Icon source="package-variant" size={12} color="#64748b" />
+                      <Text style={styles.dispatchLabel}>Sevk No</Text>
+                      <Text style={styles.dispatchValue}>{dispatch.dispatchNo}</Text>
+                    </View>
+                    <View style={styles.dispatchRow}>
+                      <Icon source="calendar" size={12} color="#64748b" />
+                      <Text style={styles.dispatchLabel}>Tarih</Text>
+                      <Text style={styles.dispatchValue}>
+                        {dayjs(dispatch.dispatchedAt).format('DD.MM.YYYY HH:mm')}
+                      </Text>
+                    </View>
+                    <View style={styles.dispatchRow}>
+                      <Icon source="car" size={12} color="#64748b" />
+                      <Text style={styles.dispatchLabel}>Plaka</Text>
+                      <Text style={styles.dispatchValue}>
+                        {dispatch.plateNumber ?? '—'}
+                      </Text>
+                    </View>
+                    <View style={styles.dispatchRow}>
+                      <Icon source="account" size={12} color="#64748b" />
+                      <Text style={styles.dispatchLabel}>Sürücü</Text>
+                      <Text style={styles.dispatchValue}>
+                        {dispatch.driverName ?? '—'}
+                      </Text>
+                    </View>
+                    {dispatch.notes && (
+                      <View style={styles.dispatchRow}>
+                        <Icon source="note-text-outline" size={12} color="#64748b" />
+                        <Text style={styles.dispatchLabel}>Not</Text>
+                        <Text style={[styles.dispatchValue, styles.dispatchNotes]}>
+                          {dispatch.notes}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })}
         </View>
       )}
     </View>
@@ -266,6 +349,21 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
   rowText: { fontSize: 12, color: '#0f172a', flex: 1 },
   stepStatus: { fontSize: 11, color: '#64748b', fontWeight: '600' },
+  infoBtn: { margin: 0, padding: 0, width: 24, height: 24 },
+  dispatchBox: {
+    backgroundColor: '#eef2ff',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginLeft: 22,
+    marginTop: 4,
+    marginBottom: 4,
+    gap: 4,
+  },
+  dispatchRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dispatchLabel: { fontSize: 10, color: '#64748b', fontWeight: '600', minWidth: 50 },
+  dispatchValue: { fontSize: 11, color: '#0f172a', fontWeight: '600', flex: 1 },
+  dispatchNotes: { fontWeight: '500', fontStyle: 'italic' },
   colorSwatch: {
     width: 14,
     height: 14,

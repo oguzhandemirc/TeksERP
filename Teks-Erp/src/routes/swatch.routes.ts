@@ -16,9 +16,31 @@ const router = Router();
  *   get:
  *     tags: [Swatches]
  *     summary: Kartela envanteri (listele)
+ *     description: |
+ *       Legacy mode (default): `{ success, data: [] }` — `take: limit ?? 100`.
+ *       Cursor mode: `?cursor=...` veya `?mode=cursor` → `{ success, data, pagination: { nextCursor, hasMore, limit } }`.
+ *       Mobil infinite scroll cursor mode kullanır; mevcut Electron/tartı-paket çağrıları legacy moddadır.
  *     security: [{ bearerAuth: [] }]
  */
-router.get("/", verifyToken, requireAnyPermission("quality:read", "mobile:tambur", "mobile:tarti-paket"), controller.listSwatches);
+router.get("/", verifyToken, requireAnyPermission("quality:read", "mobile:tambur", "mobile:tarti-paket", "mobile:depo"), controller.listSwatches);
+
+/**
+ * @openapi
+ * /api/swatches/stats:
+ *   get:
+ *     tags: [Swatches]
+ *     summary: Kartela özet istatistikleri (TÜM filtreye uyan)
+ *     description: |
+ *       Liste sayfaya bağlıdır; bu endpoint filtreye uyan tüm kartelaların
+ *       aggregate'ini döner: `{ count, totalLength }`.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/stats",
+  verifyToken,
+  requireAnyPermission("quality:read", "mobile:tambur", "mobile:tarti-paket", "mobile:depo"),
+  controller.getSwatchStats
+);
 
 /**
  * @openapi
@@ -38,7 +60,7 @@ router.get("/", verifyToken, requireAnyPermission("quality:read", "mobile:tambur
 router.get(
   "/by-barcode/:barcode",
   verifyToken,
-  requireAnyPermission("quality:read", "mobile:tarti-paket"),
+  requireAnyPermission("quality:read", "mobile:tarti-paket", "mobile:depo"),
   controller.getSwatchByBarcode
 );
 

@@ -21,7 +21,7 @@ import type { WorkOrderFormValues } from "./schema";
 
 const FILTERS: FilterDef[] = [
   {
-    kind: "select",
+    kind: "multi-select",
     key: "status",
     label: "Durum",
     options: [

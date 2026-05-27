@@ -6,12 +6,19 @@ import type { WorkOrder } from '../types/models';
 export const workOrderService = {
   // withOrderDetail=true → orderLinks (customer + ürün), targetColor, dispatchedTotalQty
   // alanları zenginleştirilir. Fason Sevk picker'ı için kullanılır.
+  // excludeWithOpenDispatch=true → adımlarından birinde halen iptal edilmemiş ve
+  // mal kabulü tam yapılmamış bir sevki olan WO'ları liste-dışı bırakır
+  // (operatör önce eski sevki iptal etmek zorunda).
   getAll: (
     params: Partial<QueryParams>,
-    options?: { withOrderDetail?: boolean }
+    options?: { withOrderDetail?: boolean; excludeWithOpenDispatch?: boolean }
   ): Promise<PaginatedResponse<WorkOrder>> => {
     const qs = buildQueryString(params);
-    const extra = options?.withOrderDetail ? (qs ? '&' : '?') + 'withOrderDetail=true' : '';
+    const extras: string[] = [];
+    if (options?.withOrderDetail) extras.push('withOrderDetail=true');
+    if (options?.excludeWithOpenDispatch) extras.push('excludeWithOpenDispatch=true');
+    const sep = qs ? '&' : '?';
+    const extra = extras.length ? sep + extras.join('&') : '';
     return apiClient
       .get<PaginatedResponse<WorkOrder>>(`/work-orders${qs}${extra}`)
       .then((r) => r.data);

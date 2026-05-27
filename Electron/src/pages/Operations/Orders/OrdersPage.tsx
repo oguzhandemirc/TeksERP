@@ -21,7 +21,7 @@ import { generateOrderNumber, type OrderFormValues } from "./schema";
 
 const FILTERS: FilterDef[] = [
   {
-    kind: "select",
+    kind: "multi-select",
     key: "status",
     label: "Durum",
     options: [

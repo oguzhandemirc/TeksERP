@@ -1,20 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { Appbar, Text, Menu, TouchableRipple, Icon, Divider } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ScreenOrientation from 'expo-screen-orientation';
 import { useAuthStore } from '../store/authStore';
 import { usePermissions } from '../hooks/usePermission';
 import type { MainStackParamList, RootStackParamList } from '../navigation/types';
-
-function isLandscapeOrientation(o: ScreenOrientation.Orientation): boolean {
-  return (
-    o === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
-    o === ScreenOrientation.Orientation.LANDSCAPE_RIGHT
-  );
-}
 
 interface Props {
   title: string;
@@ -26,7 +18,13 @@ interface Props {
   children: React.ReactNode;
 }
 
-export default function ScreenChrome({ title, subtitle, onBack, headerExtras, children }: Props) {
+export default function ScreenChrome({
+  title,
+  subtitle,
+  onBack,
+  headerExtras,
+  children,
+}: Props) {
   const user = useAuthStore((s) => s.user);
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const { hasMultipleMobileScreens } = usePermissions();
@@ -52,29 +50,6 @@ export default function ScreenChrome({ title, subtitle, onBack, headerExtras, ch
   // ikonu olur; yer kazancı header'da diğer aksiyonlara nefes aldırır.
   const compactPortrait = winH > winW && winW < 600;
 
-  const [isLandscape, setIsLandscape] = useState(false);
-  useEffect(() => {
-    let mounted = true;
-    void ScreenOrientation.getOrientationAsync().then((o) => {
-      if (mounted) setIsLandscape(isLandscapeOrientation(o));
-    });
-    const sub = ScreenOrientation.addOrientationChangeListener((evt) => {
-      setIsLandscape(isLandscapeOrientation(evt.orientationInfo.orientation));
-    });
-    return () => {
-      mounted = false;
-      ScreenOrientation.removeOrientationChangeListener(sub);
-    };
-  }, []);
-
-  const toggleOrientation = () => {
-    void ScreenOrientation.lockAsync(
-      isLandscape
-        ? ScreenOrientation.OrientationLock.PORTRAIT_UP
-        : ScreenOrientation.OrientationLock.LANDSCAPE,
-    );
-  };
-
   return (
     <View style={styles.root}>
       <Appbar.Header style={styles.appbar} elevated statusBarHeight={insets.top}>
@@ -82,19 +57,20 @@ export default function ScreenChrome({ title, subtitle, onBack, headerExtras, ch
         {showHome && (
           <Appbar.Action icon="home" onPress={goHome} color="#fff" accessibilityLabel="Ana sayfa" />
         )}
-        <Appbar.Content
-          title={title}
-          subtitle={subtitle}
-          titleStyle={styles.title}
-          style={styles.appbarContent}
-        />
+        <View style={styles.appbarContent}>
+          <Text variant="titleLarge" style={styles.title} numberOfLines={1}>
+            {title}
+          </Text>
+          {subtitle && (
+            <Text variant="labelMedium" style={styles.subtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          )}
+        </View>
 
-        <Appbar.Action
-          icon={isLandscape ? 'phone-rotate-portrait' : 'phone-rotate-landscape'}
-          onPress={toggleOrientation}
-          color="#fff"
-          accessibilityLabel={isLandscape ? 'Dikey yap' : 'Yatay yap'}
-        />
+        {/* Ekran-spesifik tetikleyici — profilden önce, profil en sağda kalsın */}
+        {headerExtras}
+
         <Menu
           visible={menuVisible}
           onDismiss={() => setMenuVisible(false)}
@@ -123,16 +99,13 @@ export default function ScreenChrome({ title, subtitle, onBack, headerExtras, ch
           }
         >
           <Menu.Item
-            leadingIcon="server-network"
+            leadingIcon="cog"
             onPress={openSettings}
-            title="Sunucu Ayarları"
+            title="Ayarlar"
           />
           <Divider />
           <Menu.Item leadingIcon="logout" onPress={doLogout} title="Çıkış" />
         </Menu>
-
-        {/* Side-menu / ekran-spesifik tetikleyici en sağda */}
-        {headerExtras}
       </Appbar.Header>
       <View style={styles.content}>{children}</View>
     </View>
@@ -144,9 +117,12 @@ const styles = StyleSheet.create({
   appbar: { backgroundColor: '#0f172a' },
   // RN Paper Appbar.Content title bazı sürümlerde center hizalar; sola sabitle.
   title: { color: '#fff', fontWeight: '700', textAlign: 'left' },
-  // Content view'i sola hizala — title kenara dayalı. paddingLeft 15: tamamen
-  // yapışık olmasın, ufak nefes payı.
-  appbarContent: { alignItems: 'flex-start', paddingLeft: 15 },
+  subtitle: { textAlign: 'left', color: '#cbd5e1' },
+  // Content view'i sola hizala — title kenara dayalı. paddingLeft 4: ufak nefes
+  // payı, ev/back ikonuna yakın dursun (telefonda sağdaki aksiyon butonları için yer açar).
+  // flex: 1 de vererek available space'i kaplamasını garanti edelim.
+  // justifyContent: 'center' ekleyerek dikeyde ortalayalım.
+  appbarContent: { alignItems: 'flex-start', justifyContent: 'center', paddingLeft: 4, flex: 1 },
   userTrigger: { borderRadius: 8, marginHorizontal: 4 },
   userTriggerInner: {
     flexDirection: 'row',

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
@@ -8,10 +9,47 @@ import { useDataTable } from "@/hooks/useDataTable";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
+import { parseUrlToQueryParams } from "@/lib/query-builder";
 import { rollColumns } from "./columns";
-import { rollService, ROLL_STATUS_TABS, type RollStatusTabKey } from "./service";
+import {
+  rollService,
+  ROLL_STATUS_TABS,
+  type RollStats,
+  type RollStatusTabKey,
+} from "./service";
 import { RollDetailSheet } from "./RollDetailSheet";
 import type { Roll } from "./types";
+
+const NUM_FMT = new Intl.NumberFormat("tr-TR");
+const DEC_FMT = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+
+function RollsStats({ data, isLoading }: { data: RollStats | undefined; isLoading: boolean }) {
+  if (isLoading && !data) {
+    return <span className="text-xs text-muted-foreground">Yükleniyor…</span>;
+  }
+  if (!data) return null;
+  return (
+    <div className="flex items-center gap-3 text-xs">
+      <Stat label="Top" value={NUM_FMT.format(data.totalCount)} unit="adet" />
+      <Divider />
+      <Stat label="Metre" value={DEC_FMT.format(data.totalQty)} unit="mt" />
+    </div>
+  );
+}
+
+function Stat({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <div className="flex items-baseline gap-1">
+      <span className="text-muted-foreground">{label}:</span>
+      <span className="font-medium text-foreground tabular-nums">{value}</span>
+      <span className="text-[10px] text-muted-foreground">{unit}</span>
+    </div>
+  );
+}
+
+function Divider() {
+  return <span className="h-3 w-px bg-border" aria-hidden />;
+}
 
 const FILTERS: FilterDef[] = [
   {
@@ -102,6 +140,43 @@ export function RollsTable({ tab }: Props) {
     forceFilters,
   });
 
+  // Stats query — liste ile aynı filtreleri paylaşır (URL filtreleri + forceFilters
+  // + search). Backend /api/rolls/stats aynı buildRollWhere kullanır, listeden sapmaz.
+  const urlParams = useMemo(
+    () => parseUrlToQueryParams(searchParams.toString(), { pageSize: 100 }),
+    [searchParams],
+  );
+  const statsFilters = useMemo(
+    () => ({ ...urlParams.filters, ...forceFilters }),
+    [urlParams.filters, forceFilters],
+  );
+  // Tablo ile aynı string prefix (`rolls:${tab}`) — RollsPage'deki RefreshButton
+  // bu prefix'i invalidate eder, stats da tabloyla birlikte tazelenir.
+  const statsQuery = useQuery({
+    queryKey: [
+      `rolls:${tab}`,
+      "stats",
+      statsFilters,
+      urlParams.search,
+      urlParams.dateField,
+      urlParams.dateFrom,
+      urlParams.dateTo,
+    ],
+    queryFn: () =>
+      rollService.getStats({
+        page: 1,
+        pageSize: 1,
+        sortBy: "createdAt",
+        sortOrder: "desc",
+        filters: statsFilters,
+        search: urlParams.search,
+        dateField: urlParams.dateField,
+        dateFrom: urlParams.dateFrom,
+        dateTo: urlParams.dateTo,
+      }),
+    staleTime: 0,
+  });
+
   const toggleIncludeFire = (next: boolean) => {
     const sp = new URLSearchParams(searchParams);
     if (next) sp.set("filter[includeFire]", "true");
@@ -115,6 +190,12 @@ export function RollsTable({ tab }: Props) {
         search={search}
         onSearchChange={setSearch}
         placeholder="Barkod ara..."
+        actions={
+          <RollsStats
+            data={statsQuery.data?.data}
+            isLoading={statsQuery.isLoading}
+          />
+        }
       />
       <FilterBar filters={FILTERS} />
       <label className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground cursor-pointer select-none">

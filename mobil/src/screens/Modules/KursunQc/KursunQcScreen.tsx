@@ -18,6 +18,10 @@ import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
+import ScannerEntryBar from '../../../components/ScannerEntryBar';
+import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
+import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import RefreshButton from '../../../components/RefreshButton';
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
@@ -74,16 +78,16 @@ export default function KursunQcScreen() {
   // Tabletlerde önceki davranış aynen korunur.
   const device = useDeviceType();
   const compact = device === 'phone';
+  const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   useLandscapeLock(!compact);
   const insets = useSafeAreaInsets();
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
-  // Drawer kapandıktan sonra açılacak ardışık modal — react-native-modal
-  // aynı anda iki modal'ı doğru stack edemiyor (drawer açıkken kamera modalı
-  // arkada kalıyor). Buton drawer'ı kapatıp queue'ya yazar, onModalHide
-  // hedef modalı açar.
-  const [pendingDrawerAction, setPendingDrawerAction] = useState<
-    'scanner' | 'list' | null
-  >(null);
+  // Drawer + RNModal stack çakışmasını çözen ortak queue (hook).
+  const drawerQueue = useDrawerActionQueue({
+    drawerOpen: rightDrawerOpen,
+    closeDrawer: () => setRightDrawerOpen(false),
+    compact,
+  });
 
   const qc = useQueryClient();
 
@@ -136,10 +140,7 @@ export default function KursunQcScreen() {
   // Modal her açıldığında listeyi tazele: planlama acil işaretlediyse veya
   // sırayı değiştirdiyse operatör güncel sırayı görsün (badge zaten polling
   // yapıyor, ama liste açıldı = "operatör şu an karar verecek" → fresh data).
-  useEffect(() => {
-    if (listModalOpen) void openCardsQuery.refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listModalOpen]);
+  useRefetchOnOpen(openCardsQuery.refetch, listModalOpen);
 
   // Compact'ta aktif kart değiştiğinde (yeni kart çözüldü / tab değişti) drawer
   // kapanır — operatör sol form alanını görsün.
@@ -533,75 +534,19 @@ export default function KursunQcScreen() {
     <>
       {/* Kart input + kamera */}
       <View style={styles.cardInputWrap}>
-        <View style={styles.cardInputRow}>
-          <TextInput
-            mode="outlined"
-            value={cardBarcode}
-            onChangeText={setCardBarcode}
-            placeholder="Refakat kartı barkodu okut/yaz..."
-            dense
-            autoCapitalize="characters"
-            autoCorrect={false}
-            left={<TextInput.Icon icon="card-search-outline" />}
-            right={
-              resolvingCard ? (
-                <TextInput.Icon
-                  icon={() => <ActivityIndicator size={18} color="#059669" />}
-                />
-              ) : cardBarcode.trim() ? (
-                <TextInput.Icon
-                  icon="check"
-                  onPress={handleResolveCard}
-                  color="#059669"
-                />
-              ) : undefined
-            }
-            onSubmitEditing={handleResolveCard}
-            returnKeyType="search"
-            style={[styles.cardInput, { flex: 1 }]}
-          />
-          <View style={styles.cameraBtn}>
-            <IconButton
-              icon="format-list-bulleted"
-              mode="contained-tonal"
-              containerColor={urgentCount > 0 ? '#fee2e2' : '#e2e8f0'}
-              iconColor={urgentCount > 0 ? '#b91c1c' : '#0f172a'}
-              size={26}
-              onPress={() => {
-                if (compact && rightDrawerOpen) {
-                  setPendingDrawerAction('list');
-                  setRightDrawerOpen(false);
-                } else {
-                  setListModalOpen(true);
-                }
-              }}
-              accessibilityLabel={
-                urgentCount > 0
-                  ? `${urgentCount} acil kart var, açık kartları listele`
-                  : 'Açık kartları listele'
-              }
-              style={{ margin: 0 }}
-            />
-            <UrgentBadge count={urgentCount} />
-          </View>
-          <IconButton
-            icon="camera"
-            mode="contained-tonal"
-            containerColor="#dbeafe"
-            iconColor="#1e40af"
-            size={26}
-            onPress={() => {
-              if (compact && rightDrawerOpen) {
-                setPendingDrawerAction('scanner');
-                setRightDrawerOpen(false);
-              } else {
-                setScannerOpen(true);
-              }
-            }}
-            accessibilityLabel="Kamera ile refakat kartı tara"
-            style={styles.cameraBtn}
-          />
-        </View>
+        <ScannerEntryBar
+          value={cardBarcode}
+          onChangeText={setCardBarcode}
+          placeholder="Refakat kartı barkodu okut/yaz..."
+          onResolve={handleResolveCard}
+          resolving={resolvingCard}
+          onScan={() => drawerQueue.run(() => setScannerOpen(true))}
+          onList={() => drawerQueue.run(() => setListModalOpen(true))}
+          tone="green"
+          listContainerColor={urgentCount > 0 ? '#fee2e2' : undefined}
+          listIconColor={urgentCount > 0 ? '#b91c1c' : undefined}
+          listBadge={<UrgentBadge count={urgentCount} />}
+        />
       </View>
 
       {cardError && (
@@ -693,11 +638,28 @@ export default function KursunQcScreen() {
     </>
   );
 
+  // Telefonda "Açık İşler" header'a (profil ikonunun soluna) taşınır —
+  // ScreenChrome.headerExtras profilden önce render edilir. Acil top varsa
+  // ikon turuncuya döner — operatör drawer'ı açmadan da uyarıyı görsün.
+  const headerOpenJobsBtn = compact ? (
+    <IconButton
+      icon="format-list-bulleted"
+      iconColor={urgentCount > 0 ? '#f59e0b' : '#fff'}
+      size={22}
+      onPress={() => setRightDrawerOpen(true)}
+      accessibilityLabel={
+        activeJob
+          ? `${activeJob.cardNumber} · ${activeJob.stepSummary.rolls.length} top${
+              urgentCount > 0 ? ` · ${urgentCount} acil` : ''
+            }`
+          : 'Açık İşler'
+      }
+      style={styles.headerOpenJobsBtn}
+    />
+  ) : null;
+
   return (
-    <ScreenChrome
-      title="Kurşun + QC2"
-      subtitle="Refakat kartı okut, top seç, kurşun + hata gir"
-    >
+    <ScreenChrome title="Kurşun + QC2" headerExtras={headerOpenJobsBtn}>
       <View
         style={[
           styles.body,
@@ -709,21 +671,6 @@ export default function KursunQcScreen() {
       >
         {/* ════════ SOL: aktif top işlem ════════ */}
         <View style={styles.formCol}>
-          {compact && (
-            <View style={styles.compactTriggerBar}>
-              <Button
-                mode="contained-tonal"
-                icon="format-list-bulleted"
-                compact
-                onPress={() => setRightDrawerOpen(true)}
-              >
-                {activeJob
-                  ? `${activeJob.cardNumber} · ${activeJob.stepSummary.rolls.length} top`
-                  : 'Açık İşler / Kart Okut'}
-                {urgentCount > 0 ? ` · ${urgentCount} acil` : ''}
-              </Button>
-            </View>
-          )}
           {!activeJob ? (
             <View style={styles.emptyState}>
               <Icon source="card-search-outline" size={64} color="#cbd5e1" />
@@ -993,11 +940,7 @@ export default function KursunQcScreen() {
           onDismiss={() => setRightDrawerOpen(false)}
           insets={insets}
           title="Kurşun · QC2 İşleri"
-          onClosed={() => {
-            if (pendingDrawerAction === 'scanner') setScannerOpen(true);
-            else if (pendingDrawerAction === 'list') setListModalOpen(true);
-            setPendingDrawerAction(null);
-          }}
+          onClosed={drawerQueue.drain}
         >
           {renderRightContent()}
         </RightPanelDrawer>
@@ -1071,7 +1014,7 @@ function CameraScanModal({
       deviceHeight={winH}
       statusBarTranslucent
     >
-      <View style={[cameraStyles.sheet, { width: winW * 0.7, height: winH * 0.8 }]}>
+      <View style={[cameraStyles.sheet, { width: winW * 0.9, height: winH * 0.8 }]}>
         <View style={cameraStyles.header}>
           <Icon source="format-list-bulleted" size={22} color="#0f172a" />
           <Text variant="titleMedium" style={cameraStyles.title}>
@@ -1435,13 +1378,8 @@ const styles = StyleSheet.create({
 
   // Sol — form
   formCol: { flex: 1.4 },
-  // Compact (telefon) — form üstü sağa yaslı sağ panel tetiği
-  compactTriggerBar: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+  // Compact (telefon) — header'da profil ikonu solunda "Açık İşler" ikonu
+  headerOpenJobsBtn: { margin: 0 },
 
   emptyState: {
     flex: 1,

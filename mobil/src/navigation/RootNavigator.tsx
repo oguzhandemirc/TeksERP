@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { useDeviceStore } from '../store/deviceStore';
 import { useBaseUrlStore } from '../store/baseUrlStore';
+import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { setUnauthorizedHandler } from '../services/api';
 import { usePermissions } from '../hooks/usePermission';
 import LoginScreen from '../screens/Auth/LoginScreen';
@@ -25,11 +26,13 @@ export default function RootNavigator() {
   } = useDeviceStore();
   const initBaseUrl = useBaseUrlStore((s) => s.init);
   const baseUrlLoaded = useBaseUrlStore((s) => s.isLoaded);
+  const initDeviceSettings = useDeviceSettingsStore((s) => s.init);
   const { hasAnyMobileScreen } = usePermissions();
 
   useEffect(() => {
     void initBaseUrl();
     void initDevice();
+    void initDeviceSettings();
     loadStoredAuth();
     setUnauthorizedHandler(() => {
       // 401 → sadece kullanıcıyı çıkar, eşleşmeyi koru. Cihaz pasifleştirilirse

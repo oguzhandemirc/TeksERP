@@ -9,7 +9,7 @@
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
-import { ApiResponse, PaginatedResponse } from "../types/api.types";
+import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import { resolveQualityGradeId } from "./helpers/quality-grade.helper";
 import {
   parseQueryParams,
@@ -66,6 +66,18 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
+
+export interface RollStats {
+  totalCount: number;
+  /** Filtreye uyan tüm rolların `currentQty` toplamı — metre. */
+  totalQty: number;
+  /** Filtreye uyan tüm rolların `weightKg` toplamı — kg (null'lar atlanır). */
+  totalWeight: number;
+  /** RollStatus → adet. Filtreye uyan status'ler için 0+ döner; eşleşmeyen status hiç yer almaz. */
+  byStatus: Record<string, number>;
+  /** qualityGrade kodu → adet (A1, FIRE, 1.KALITE, …). */
+  byQuality: Record<string, number>;
+}
 
 export type RollHistoryEventKind =
   | "CREATED"
@@ -139,13 +151,13 @@ export class InventoryService {
    */
   async createInitialEntry(
     data: {
-      itemId:        string;
-      colorId?:      string | null;
-      initialQty:    number;
-      weightKg?:     number;
+      itemId: string;
+      colorId?: string | null;
+      initialQty: number;
+      weightKg?: number;
       qualityGrade?: string;
-      width?:        number | null;  // En (cm) — opsiyonel, ölçülmediyse null
-      propertyIds?:  string[];
+      width?: number | null;  // En (cm) — opsiyonel, ölçülmediyse null
+      propertyIds?: string[];
     },
     userId?: string
   ): Promise<ApiResponse<Roll>> {
@@ -223,17 +235,17 @@ export class InventoryService {
       const created = await tx.roll.create({
         data: {
           barcode,
-          itemId:         data.itemId,
-          colorId:        data.colorId ?? null,
-          initialQty:     data.initialQty,
-          currentQty:     data.initialQty,
-          weightKg:       data.weightKg ?? null,
-          status:         initialStatus,
-          qualityGrade:   qualityGradeCode,
+          itemId: data.itemId,
+          colorId: data.colorId ?? null,
+          initialQty: data.initialQty,
+          currentQty: data.initialQty,
+          weightKg: data.weightKg ?? null,
+          status: initialStatus,
+          qualityGrade: qualityGradeCode,
           qualityGradeId,
-          width:          data.width ?? null,
+          width: data.width ?? null,
           entrySource,
-          createdById:    userId ?? null,
+          createdById: userId ?? null,
         },
         include: {
           item: true,
@@ -255,13 +267,13 @@ export class InventoryService {
       tableName: "ROLL",
       recordId: roll.id,
       newData: {
-        barcode:     roll.barcode,
-        itemId:      roll.itemId,
-        colorId:     roll.colorId,
-        initialQty:  roll.initialQty,
-        currentQty:  roll.currentQty,
-        weightKg:    roll.weightKg,
-        status:      roll.status,
+        barcode: roll.barcode,
+        itemId: roll.itemId,
+        colorId: roll.colorId,
+        initialQty: roll.initialQty,
+        currentQty: roll.currentQty,
+        weightKg: roll.weightKg,
+        status: roll.status,
         entrySource: roll.entrySource,
         propertyIds: dedupedProps,
       },
@@ -275,18 +287,11 @@ export class InventoryService {
   }
 
   /**
-   * List rolls with dynamic filtering, sorting, pagination.
-   * Business Rule: By default only STOCK rolls are returned.
-   * Other statuses must be explicitly requested via filter[status].
-   *
-   * İki mod (geri uyumlu):
-   *   - Offset: ?page=1&pageSize=50 — eski sayfalama, küçük tablo gibi.
-   *   - Cursor: ?mode=cursor&limit=50 — büyük tablo (30k+) için sabit hız.
+   * Roll listesi + istatistiklerin paylaştığı tek filtre kaynağı.
+   * findAllRolls (liste) ve getRollStats (özet) bu metodu çağırır —
+   * filtre eşleşmediğinde istatistik listeden sapar.
    */
-  async findAllRolls(
-    req: Request
-  ): Promise<PaginatedResponse<Roll> | CursorPaginatedResponse<Roll>> {
-    const params = parseQueryParams(req);
+  private buildRollWhere(params: QueryParams): Record<string, unknown> {
     const f = params.filters;
 
     // Base where: buildWhereClause sadece düz Roll alanları için. Nested ilişki
@@ -319,19 +324,12 @@ export class InventoryService {
     }
 
     // --- Roll-level renk + processingStatus filtreleri ---
-    // colorId = belirli renkteki rolleri filtrele
     const colorIdFilter = typeof f["colorId"] === "string" ? f["colorId"] : null;
     delete where.colorId;
     if (colorIdFilter) {
       where.colorId = colorIdFilter;
     }
 
-    // processingStatus: ham / işleniyor / açık kumaş / bitmiş — Roll seviyesinde derive
-    //   raw         = colorId IS NULL (henüz renk almamış)
-    //   processed   = colorId IS NOT NULL && status NOT IN (WAREHOUSE,
-    //                 TAMBUR_CONSUMED, SUBCONTRACTOR_CONSUMED, SCRAP) — kapanmış/elden çıkmış parent'lar hariç
-    //   open_fabric = barcode IS NULL && status = IN_PRODUCTION (Kurşun/KK2/Tambur'da bekleyen açık kumaş)
-    //   finished    = status = WAREHOUSE
     const processingStatus = f["processingStatus"] as string | undefined;
     delete where.processingStatus;
     if (processingStatus === "raw") {
@@ -353,9 +351,6 @@ export class InventoryService {
       where.status = RollStatus.WAREHOUSE;
     }
 
-    // qualityGrade: kalite seviyesi (1.KALITE / A1 / FIRE / admin-tanımlı kodlar).
-    // Durumdan bağımsız bir attribute; A1/FIRE rulolar artık WAREHOUSE altında.
-    // includeFire toggle ile birlikte değerlendirilir.
     const qualityGradeFilter =
       typeof f["qualityGrade"] === "string" ? (f["qualityGrade"] as string) : null;
     delete where.qualityGrade;
@@ -365,14 +360,9 @@ export class InventoryService {
     if (qualityGradeFilter) {
       where.qualityGrade = qualityGradeFilter;
     } else if (!includeFire) {
-      // Varsayılan: FIRE kalitesindeki rulolar listede görünmez. Operatör
-      // "Fireleri göster" toggle ile (`filter[includeFire]=true`) açar.
       where.qualityGrade = { not: "FIRE" };
     }
 
-    // rollKind: barkod varlığına göre — fiziksel form ayrımı
-    //   OPEN_FABRIC = barcode IS NULL (Kurşun/KK2'de doğan açık kumaş)
-    //   WOUND_ROLL  = barcode IS NOT NULL (KK1 + Tambur'da doğan gerçek toplar)
     const rollKind = f["rollKind"] as string | undefined;
     delete where.rollKind;
     if (rollKind === "OPEN_FABRIC") {
@@ -381,8 +371,6 @@ export class InventoryService {
       where.barcode = { not: null };
     }
 
-    // currentStepKind: Roll'un şu an hangi istasyon türünde olduğunu filtreler
-    //   RAW_QC | PROCESS_QC | SUBCONTRACTOR | TAMBUR | OTHER
     const currentStepKindRaw = f["currentStepKind"] as string | undefined;
     delete where.currentStepKind;
     if (
@@ -394,18 +382,9 @@ export class InventoryService {
       };
     }
 
-    // rollScope: yüksek seviye gruplar — sekme bazlı süper-set/alt-set ayrımı.
-    //   RAW_STOCK         = KK1 ham, henüz hiçbir adıma girmemiş (renksiz, akış dışı)
-    //   PRODUCTION_ACTIVE = WO akışındaki her top (Fasonda + Kurşun/Tambur bekleyen
-    //                       açık kumaş + aktif IN_PRODUCTION hepsi). currentStepId
-    //                       set + status terminal değil.
-    //   FINISHED_STOCK    = Tambur'dan çıkmış, depoya alınmış (sevke hazır)
     const rollScope = f["rollScope"] as string | undefined;
     delete where.rollScope;
     if (rollScope === "RAW_STOCK") {
-      // Ham = henüz hiçbir WO step'inde değil. Renk filtre dışı — KK1 girişi
-      // renkli hazır kumaş da olabilir; "ham" ayrımı akış-bazlı (currentStepId
-      // null), kompozisyon-bazlı değil.
       where.AND = [
         ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
         { currentStepId: null },
@@ -435,7 +414,6 @@ export class InventoryService {
       };
     }
 
-    // itemId tek seçim
     const itemId = typeof f["itemId"] === "string" ? f["itemId"] : null;
     delete where.itemId;
     if (itemId) {
@@ -444,7 +422,6 @@ export class InventoryService {
 
     const propertyIds = readList(f["propertyIds"]);
     delete where.propertyIds;
-    // AND-every: seçilen tüm özellikleri fiilen taşıyan toplar (RollProperty).
     if (propertyIds.length > 0) {
       where.AND = [
         ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
@@ -454,17 +431,33 @@ export class InventoryService {
       ];
     }
 
-    // --- Width range (Roll.width) ---
     delete where.widthMin;
     delete where.widthMax;
     const widthRange = readNumberRange(f["widthMin"], f["widthMax"]);
     if (widthRange) where.width = widthRange;
 
-    // --- Qty range (Roll.currentQty) ---
     delete where.qtyMin;
     delete where.qtyMax;
     const qtyRange = readNumberRange(f["qtyMin"], f["qtyMax"]);
     if (qtyRange) where.currentQty = qtyRange;
+
+    return where;
+  }
+
+  /**
+   * List rolls with dynamic filtering, sorting, pagination.
+   * Business Rule: By default only STOCK rolls are returned.
+   * Other statuses must be explicitly requested via filter[status].
+   *
+   * İki mod (geri uyumlu):
+   *   - Offset: ?page=1&pageSize=50 — eski sayfalama, küçük tablo gibi.
+   *   - Cursor: ?mode=cursor&limit=50 — büyük tablo (30k+) için sabit hız.
+   */
+  async findAllRolls(
+    req: Request
+  ): Promise<PaginatedResponse<Roll> | CursorPaginatedResponse<Roll>> {
+    const params = parseQueryParams(req);
+    const where = this.buildRollWhere(params);
 
     const include = {
       item: { select: { id: true, code: true, name: true, itemType: true, unit: true } },
@@ -542,6 +535,52 @@ export class InventoryService {
         pageSize: params.pageSize,
         total,
         totalPages: Math.ceil(total / params.pageSize),
+      },
+    };
+  }
+
+  /**
+   * Roll özet istatistikleri — listenin SAYFAYA bağlı toplamlarını değil,
+   * filtreye uyan TÜM rolların aggregate'ini döner. Depo/dashboard kartlarının
+   * "Toplam metre / Toplam kg / Statü dağılımı / Kalite dağılımı" gibi
+   * panelleri için. Filtre seti findAllRolls ile aynı (buildRollWhere paylaşılır).
+   */
+  async getRollStats(req: Request): Promise<ApiResponse<RollStats>> {
+    const params = parseQueryParams(req);
+    const where = this.buildRollWhere(params) as Prisma.RollWhereInput;
+
+    const [aggregate, byStatusRaw, byQualityRaw] = await Promise.all([
+      prisma.roll.aggregate({
+        where,
+        _count: { _all: true },
+        _sum: { currentQty: true, weightKg: true },
+      }),
+      prisma.roll.groupBy({
+        where,
+        by: ["status"],
+        _count: { _all: true },
+      }),
+      prisma.roll.groupBy({
+        where,
+        by: ["qualityGrade"],
+        _count: { _all: true },
+      }),
+    ]);
+
+    const byStatus: Record<string, number> = {};
+    for (const row of byStatusRaw) byStatus[row.status] = row._count._all;
+
+    const byQuality: Record<string, number> = {};
+    for (const row of byQualityRaw) byQuality[row.qualityGrade] = row._count._all;
+
+    return {
+      success: true,
+      data: {
+        totalCount: aggregate._count._all,
+        totalQty: Number(aggregate._sum.currentQty ?? 0),
+        totalWeight: Number(aggregate._sum.weightKg ?? 0),
+        byStatus,
+        byQuality,
       },
     };
   }
@@ -694,7 +733,7 @@ export class InventoryService {
           return "Tambur Kesimi (Yeni Parça)";
         case RollEntrySource.SUPPLIER_RECEIPT:
         default:
-          return "Mal Kabul (Giriş)";
+          return "Ham Giriş";
       }
     })();
 
@@ -702,23 +741,23 @@ export class InventoryService {
     // TAMBUR_SPLIT için zorunlu, diğerlerinde de parent varsa eklenir.
     const parentInfo = roll.parent
       ? {
-          parentRollId: roll.parent.id,
-          parentBarcode: roll.parent.barcode,
-          parentQualityGrade: roll.parent.qualityGrade,
-          parentWorkOrder: roll.parent.producedInStep?.workOrder
-            ? {
-                id: roll.parent.producedInStep.workOrder.id,
-                batchNumber: roll.parent.producedInStep.workOrder.batchNumber,
-              }
-            : null,
-          parentProducedStation: roll.parent.producedInStep?.station
-            ? {
-                code: roll.parent.producedInStep.station.code,
-                name: roll.parent.producedInStep.station.name,
-                stepSequence: roll.parent.producedInStep.stepSequence,
-              }
-            : null,
-        }
+        parentRollId: roll.parent.id,
+        parentBarcode: roll.parent.barcode,
+        parentQualityGrade: roll.parent.qualityGrade,
+        parentWorkOrder: roll.parent.producedInStep?.workOrder
+          ? {
+            id: roll.parent.producedInStep.workOrder.id,
+            batchNumber: roll.parent.producedInStep.workOrder.batchNumber,
+          }
+          : null,
+        parentProducedStation: roll.parent.producedInStep?.station
+          ? {
+            code: roll.parent.producedInStep.station.code,
+            name: roll.parent.producedInStep.station.name,
+            stepSequence: roll.parent.producedInStep.stepSequence,
+          }
+          : null,
+      }
       : null;
 
     events.push({
@@ -981,14 +1020,16 @@ export class InventoryService {
   }
 
   /**
-   * Hard-delete: physically removes the roll from the database.
-   * Only STOCK or SCRAP rolls can be deleted.
+   * Arşivle: STOCK durumundaki bir topu CANCELLED'a çeker. RollError ve
+   * RollMovement / RollOperation kayıtları KORUNUR — izlenebilirlik ve
+   * audit için. Zaten SCRAP veya CANCELLED ise idempotent (no-op).
+   *
+   * NOT: Eski "hardDelete" davranışı (fiziksel DELETE + RollError purge)
+   * kaldırıldı — CLAUDE.md'deki "asla fiziksel DELETE" kuralı gereği.
+   * Method adı route uyumluluğu için korundu; semantik = soft archive.
    */
   async hardDelete(id: string, userId?: string): Promise<ApiResponse<Roll>> {
-    const existing = await prisma.roll.findUnique({
-      where: { id },
-      include: { errors: true },
-    });
+    const existing = await prisma.roll.findUnique({ where: { id } });
 
     if (!existing) {
       throw AppError.notFound("Top bulunamadı");
@@ -1000,15 +1041,26 @@ export class InventoryService {
       existing.status !== RollStatus.CANCELLED
     ) {
       throw AppError.badRequest(
-        "Sadece STOCK / SCRAP / CANCELLED durumundaki toplar kalıcı olarak silinebilir",
+        "Sadece STOCK / SCRAP / CANCELLED durumundaki toplar arşivlenebilir",
       );
     }
 
-    await prisma.$transaction(async (tx) => {
-      // Delete related records first
-      await tx.rollError.deleteMany({ where: { rollId: id } });
-      // Delete the roll
-      await tx.roll.delete({ where: { id } });
+    // Zaten arşivli — idempotent
+    if (
+      existing.status === RollStatus.SCRAP ||
+      existing.status === RollStatus.CANCELLED
+    ) {
+      return {
+        success: true,
+        data: existing,
+        message: `Top zaten arşivli: ${existing.barcode}`,
+      };
+    }
+
+    // STOCK → CANCELLED. RollError ve diğer geçmiş kayıtları aynen kalır.
+    const updated = await prisma.roll.update({
+      where: { id },
+      data: { status: RollStatus.CANCELLED },
     });
 
     await AuditService.log({
@@ -1021,13 +1073,13 @@ export class InventoryService {
         status: existing.status,
         currentQty: existing.currentQty,
       },
-      newData: null,
+      newData: { status: RollStatus.CANCELLED, event: "ARCHIVED" },
     });
 
     return {
       success: true,
-      data: existing,
-      message: `Top kalıcı olarak silindi: ${existing.barcode}`,
+      data: updated,
+      message: `Top arşivlendi: ${existing.barcode}`,
     };
   }
 

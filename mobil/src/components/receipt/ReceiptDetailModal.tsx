@@ -1,5 +1,11 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  useWindowDimensions,
+} from 'react-native';
 import { Text, IconButton, ActivityIndicator, Button, Surface, Icon } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -13,10 +19,13 @@ interface Props {
 }
 
 /**
- * Mal kabul detayını lazy çeken iç-modal (overlay).
- * RecentReceiptsModal içinde absolute overlay olarak render edilir.
+ * Mal kabul detayı — absolute fill overlay. RNModal'ı SARMAZ; başka bir
+ * RNModal'ın (HistoryReceiptsModal vb.) `overlay` prop'u olarak iletilirse
+ * o portal'ın içinde sheet'in üstünde render olur. Üst seviye akışta da
+ * tek başına kullanılabilir (parent'a absolute fill olur).
  */
 export default function ReceiptDetailModal({ receiptId, onDismiss }: Props) {
+  const { width: winW } = useWindowDimensions();
   const detailQuery = useQuery({
     queryKey: ['receipt', receiptId],
     queryFn: () => subcontractorService.getReceipt(receiptId as string),
@@ -31,7 +40,7 @@ export default function ReceiptDetailModal({ receiptId, onDismiss }: Props) {
   return (
     <View style={styles.overlay} pointerEvents="auto">
       <Pressable style={styles.backdrop} onPress={onDismiss} accessibilityLabel="Kapat" />
-      <View style={styles.card}>
+      <View style={[styles.card, { width: winW * 0.88 }]}>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text variant="titleMedium" style={styles.title}>
@@ -234,6 +243,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
+    zIndex: 10,
+    elevation: 10,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -242,7 +253,6 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 14,
-    width: '100%',
     maxWidth: 720,
     flex: 1,
     elevation: 12,

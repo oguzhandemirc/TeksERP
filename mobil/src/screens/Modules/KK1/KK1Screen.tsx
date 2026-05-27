@@ -6,7 +6,6 @@ import {
   Keyboard,
   useWindowDimensions,
   TextInput as RNTextInput,
-  Alert,
 } from 'react-native';
 import {
   Text,
@@ -16,6 +15,7 @@ import {
   IconButton,
   Icon,
   TouchableRipple,
+  Appbar,
 } from 'react-native-paper';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -30,6 +30,7 @@ import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
+import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { NumpadHost, useNumpadContext } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
 import { toastConfig } from '../../../components/ToastConfig';
@@ -69,6 +70,9 @@ export default function KK1Screen() {
 
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
+  // Telefon dikey: son kayıtlar tetiği header'a taşınır, body'deki buton gizlenir.
+  const { width: winW, height: winH } = useWindowDimensions();
+  const portraitPhone = compact && winH > winW;
   // Compact'ta sağ panel drawer'a taşınır.
   const [recentsDrawerOpen, setRecentsDrawerOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -78,6 +82,12 @@ export default function KK1Screen() {
   const [historyPage, setHistoryPage] = useState(1);
   // Etiket basımı — null değilse LabelPrinter QR + PDF üretir, sistem print menüsünü açar.
   const [printRoll, setPrintRoll] = useState<Roll | null>(null);
+  // Scrap onay modal'ı — native Alert yerine kendi modalımız (alert telefon yönünü değiştiriyordu).
+  const [scrapTarget, setScrapTarget] = useState<Roll | null>(null);
+  // react-native-modal aynı anda iki modal'ı doğru stack edemiyor (Android Dialog
+  // çakışması). Drawer / history açıkken scrap tıklanırsa hedef ref'e yazılır,
+  // önce mevcut modal kapanır, onModalHide'da scrapTarget set edilir.
+  const pendingScrapRef = useRef<Roll | null>(null);
 
   const qtyRef = useRef<RNTextInput>(null);
   const widthRef = useRef<RNTextInput>(null);
@@ -104,6 +114,10 @@ export default function KK1Screen() {
         filters: { isActive: 'true', itemType: 'FABRIC' },
       }),
   });
+
+  // Item picker'ı her açıldığında listeyi tazele — admin yeni kumaş eklediyse
+  // operatör Pull-to-refresh basmadan görsün.
+  useRefetchOnOpen(itemsQuery.refetch, pickerOpen === 'item');
 
   const itemOptions = useMemo<PickerOption[]>(
     () =>
@@ -251,21 +265,31 @@ export default function KK1Screen() {
 
   const handleScrapRoll = useCallback(
     (roll: Roll) => {
-      Alert.alert(
-        'Topu iptal et?',
-        `Barkod: ${roll.barcode ?? '—'}\n${roll.item?.name ?? ''}\n\nYanlış giriş için kullan. İptal edilen toplar fire sayılmaz, sadece kayıt geri alınır.`,
-        [
-          { text: 'Vazgeç', style: 'cancel' },
-          {
-            text: 'İptal Et',
-            style: 'destructive',
-            onPress: () => scrapMutation.mutate(roll.id),
-          },
-        ],
-      );
+      if (recentsDrawerOpen || historyOpen) {
+        // Modal açıkken: hedefi sıraya al, açık olanı kapat. Kapanma animasyonu
+        // bittiğinde (onModalHide) drainPendingScrap çalışıp scrapTarget set eder.
+        pendingScrapRef.current = roll;
+        setRecentsDrawerOpen(false);
+        setHistoryOpen(false);
+      } else {
+        setScrapTarget(roll);
+      }
     },
-    [scrapMutation],
+    [recentsDrawerOpen, historyOpen],
   );
+
+  const drainPendingScrap = useCallback(() => {
+    if (pendingScrapRef.current) {
+      setScrapTarget(pendingScrapRef.current);
+      pendingScrapRef.current = null;
+    }
+  }, []);
+
+  const confirmScrap = useCallback(() => {
+    if (!scrapTarget) return;
+    scrapMutation.mutate(scrapTarget.id);
+    setScrapTarget(null);
+  }, [scrapTarget, scrapMutation]);
 
   // ── Actions ──
   const handlePullMeterage = async () => {
@@ -322,7 +346,20 @@ export default function KK1Screen() {
   };
 
   return (
-    <ScreenChrome title="KK1 — Ham Giriş" subtitle="Fabrikaya gelen ham kumaş top kayıt">
+    <ScreenChrome
+      title="KK1 — Ham Giriş"
+      subtitle="Ham kumaş top kayıt"
+      headerExtras={
+        portraitPhone ? (
+          <Appbar.Action
+            icon="format-list-bulleted"
+            color="#fff"
+            onPress={() => setRecentsDrawerOpen(true)}
+            accessibilityLabel={`Son kayıtlar (${totalCount})`}
+          />
+        ) : undefined
+      }
+    >
       <View
         style={[
           styles.body,
@@ -342,8 +379,9 @@ export default function KK1Screen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator
         >
-          {/* Compact'ta sağ panel yok — sağa kayan drawer aç/kapa tetiği */}
-          {compact && (
+          {/* Compact'ta sağ panel yok — sağa kayan drawer aç/kapa tetiği.
+              Portrait telefon'da bu tetik header'a taşındı (Appbar.Action). */}
+          {compact && !portraitPhone && (
             <View style={styles.drawerTriggerBar}>
               <Button
                 mode="contained-tonal"
@@ -464,74 +502,74 @@ export default function KK1Screen() {
 
         {/* ── SAĞ: Üstte son 6 kayıt + altta Numpad ── */}
         {!compact && (
-        <View style={styles.recentsCol}>
-          <View style={styles.recentsHeader}>
-            <View style={{ flex: 1 }}>
-              <Text variant="titleMedium" style={styles.recentsTitle}>
-                Son Kayıtlar
-              </Text>
-              <Text variant="bodySmall" style={styles.recentsCount}>
-                Toplam {totalCount} kayıt
-              </Text>
-            </View>
-            <Button
-              mode="outlined"
-              icon="format-list-bulleted"
-              compact
-              onPress={() => {
-                setHistoryPage(1);
-                setHistoryOpen(true);
-              }}
-            >
-              Tümünü Gör
-            </Button>
-            <RefreshButton
-              onPress={() => recentRollsQuery.refetch()}
-              refreshing={recentRollsQuery.isFetching}
-              isError={recentRollsQuery.isError}
-              errorMessage={(recentRollsQuery.error as Error | undefined)?.message}
-            />
-          </View>
-
-          <View style={styles.recentsList}>
-            {recentRollsQuery.isLoading ? (
-              <View style={styles.recentsEmpty}>
-                <ActivityIndicator size="large" color="#4f46e5" />
-                <Text style={styles.recentsEmptyText}>Yükleniyor...</Text>
-              </View>
-            ) : recentRollsQuery.isError ? (
-              <View style={styles.recentsEmpty}>
-                <Text style={styles.recentsEmptyText}>Liste yüklenemedi</Text>
-                <Text style={styles.recentsEmptyHint}>
-                  {(recentRollsQuery.error as Error).message}
+          <View style={styles.recentsCol}>
+            <View style={styles.recentsHeader}>
+              <View style={{ flex: 1 }}>
+                <Text variant="titleMedium" style={styles.recentsTitle}>
+                  Son Kayıtlar
                 </Text>
-                <Button mode="outlined" onPress={() => recentRollsQuery.refetch()} style={{ marginTop: 12 }}>
-                  Tekrar dene
-                </Button>
-              </View>
-            ) : recentRolls.length === 0 ? (
-              <View style={styles.recentsEmpty}>
-                <Text style={styles.recentsEmptyText}>Henüz kayıt yok</Text>
-                <Text style={styles.recentsEmptyHint}>
-                  Kaydedilen toplar burada görünecek
+                <Text variant="bodySmall" style={styles.recentsCount}>
+                  Toplam {totalCount} kayıt
                 </Text>
               </View>
-            ) : (
-              <FlashList
-                ref={recentsListRef}
-                data={recentRolls}
-                keyExtractor={(r) => r.id}
-                renderItem={({ item }) => (
-                  <RollListItem roll={item} onPrint={handlePrintLabel} onScrap={handleScrapRoll} />
-                )}
-                contentContainerStyle={styles.recentsListContent}
-                showsVerticalScrollIndicator
+              <Button
+                mode="outlined"
+                icon="format-list-bulleted"
+                compact
+                onPress={() => {
+                  setHistoryPage(1);
+                  setHistoryOpen(true);
+                }}
+              >
+                Tümünü Gör
+              </Button>
+              <RefreshButton
+                onPress={() => recentRollsQuery.refetch()}
+                refreshing={recentRollsQuery.isFetching}
+                isError={recentRollsQuery.isError}
+                errorMessage={(recentRollsQuery.error as Error | undefined)?.message}
               />
-            )}
-          </View>
+            </View>
 
-          <NumpadHost style={styles.numpadHost} />
-        </View>
+            <View style={styles.recentsList}>
+              {recentRollsQuery.isLoading ? (
+                <View style={styles.recentsEmpty}>
+                  <ActivityIndicator size="large" color="#4f46e5" />
+                  <Text style={styles.recentsEmptyText}>Yükleniyor...</Text>
+                </View>
+              ) : recentRollsQuery.isError ? (
+                <View style={styles.recentsEmpty}>
+                  <Text style={styles.recentsEmptyText}>Liste yüklenemedi</Text>
+                  <Text style={styles.recentsEmptyHint}>
+                    {(recentRollsQuery.error as Error).message}
+                  </Text>
+                  <Button mode="outlined" onPress={() => recentRollsQuery.refetch()} style={{ marginTop: 12 }}>
+                    Tekrar dene
+                  </Button>
+                </View>
+              ) : recentRolls.length === 0 ? (
+                <View style={styles.recentsEmpty}>
+                  <Text style={styles.recentsEmptyText}>Henüz kayıt yok</Text>
+                  <Text style={styles.recentsEmptyHint}>
+                    Kaydedilen toplar burada görünecek
+                  </Text>
+                </View>
+              ) : (
+                <FlashList
+                  ref={recentsListRef}
+                  data={recentRolls}
+                  keyExtractor={(r) => r.id}
+                  renderItem={({ item }) => (
+                    <RollListItem roll={item} onPrint={handlePrintLabel} onScrap={handleScrapRoll} />
+                  )}
+                  contentContainerStyle={styles.recentsListContent}
+                  showsVerticalScrollIndicator
+                />
+              )}
+            </View>
+
+            <NumpadHost style={styles.numpadHost} />
+          </View>
         )}
       </View>
 
@@ -540,6 +578,7 @@ export default function KK1Screen() {
         <RecentsDrawer
           visible={recentsDrawerOpen}
           onDismiss={() => setRecentsDrawerOpen(false)}
+          onClosed={drainPendingScrap}
           totalCount={totalCount}
           rolls={recentRolls}
           loading={recentRollsQuery.isLoading}
@@ -560,6 +599,7 @@ export default function KK1Screen() {
       <RollHistoryModal
         visible={historyOpen}
         onDismiss={() => setHistoryOpen(false)}
+        onClosed={drainPendingScrap}
         page={historyPage}
         setPage={setHistoryPage}
         rolls={historyRollsQuery.data?.data ?? []}
@@ -593,6 +633,14 @@ export default function KK1Screen() {
 
       {/* ── Etiket yazıcı (headless): printRoll set olunca QR + A4 PDF üretir ── */}
       <LabelPrinter roll={printRoll} kind="ROLL_RAW" onDone={() => setPrintRoll(null)} />
+
+      {/* ── Scrap onay modal'ı (kendi modalımız; native Alert'i değiştirdi) ── */}
+      <ScrapConfirmModal
+        roll={scrapTarget}
+        loading={scrapMutation.isPending}
+        onDismiss={() => setScrapTarget(null)}
+        onConfirm={confirmScrap}
+      />
     </ScreenChrome>
   );
 }
@@ -601,6 +649,8 @@ export default function KK1Screen() {
 interface RecentsDrawerProps {
   visible: boolean;
   onDismiss: () => void;
+  /** Kapanma animasyonu bittiğinde — RNModal stack çakışmasını çözmek için. */
+  onClosed?: () => void;
   totalCount: number;
   rolls: Roll[];
   loading: boolean;
@@ -615,6 +665,7 @@ interface RecentsDrawerProps {
 function RecentsDrawer({
   visible,
   onDismiss,
+  onClosed,
   totalCount,
   rolls,
   loading,
@@ -635,6 +686,7 @@ function RecentsDrawer({
       isVisible={visible}
       onBackdropPress={onDismiss}
       onBackButtonPress={onDismiss}
+      onModalHide={onClosed}
       backdropOpacity={0.4}
       animationIn="slideInRight"
       animationOut="slideOutRight"
@@ -701,7 +753,7 @@ function RecentsDrawer({
               data={rolls}
               keyExtractor={(r) => r.id}
               renderItem={({ item }) => (
-                <RollListItem roll={item} onPrint={onPrint} onScrap={onScrap} />
+                <RollListItem roll={item} onPrint={onPrint} onScrap={onScrap} compactLayout={true} />
               )}
               contentContainerStyle={drawerStyles.listContent}
               showsVerticalScrollIndicator
@@ -718,6 +770,7 @@ function RecentsDrawer({
           Tümünü Gör
         </Button>
       </View>
+      <Toast config={toastConfig} />
     </Modal>
   );
 }
@@ -752,6 +805,8 @@ const drawerStyles = StyleSheet.create({
 interface RollHistoryModalProps {
   visible: boolean;
   onDismiss: () => void;
+  /** Kapanma animasyonu bittiğinde — RNModal stack çakışmasını çözmek için. */
+  onClosed?: () => void;
   page: number;
   setPage: (updater: (p: number) => number) => void;
   rolls: Roll[];
@@ -768,6 +823,7 @@ interface RollHistoryModalProps {
 function RollHistoryModal({
   visible,
   onDismiss,
+  onClosed,
   page,
   setPage,
   rolls,
@@ -787,6 +843,7 @@ function RollHistoryModal({
       isVisible={visible}
       onBackdropPress={onDismiss}
       onBackButtonPress={onDismiss}
+      onModalHide={onClosed}
       backdropOpacity={0.5}
       style={historyStyles.modal}
       useNativeDriver
@@ -903,15 +960,150 @@ const historyStyles = StyleSheet.create({
   pageInfo: { fontWeight: '600', color: '#334155' },
 });
 
+// ── Scrap onay modal'ı ──
+// Native Alert telefon yönüyle birlikte dönmüyordu (yan kalıyordu); kendi modal'ımız.
+interface ScrapConfirmModalProps {
+  roll: Roll | null;
+  loading: boolean;
+  onDismiss: () => void;
+  onConfirm: () => void;
+}
+
+function ScrapConfirmModal({ roll, loading, onDismiss, onConfirm }: ScrapConfirmModalProps) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  const sheetWidth = Math.min(winW * 0.9, 460);
+
+  return (
+    <Modal
+      isVisible={!!roll}
+      onBackdropPress={loading ? undefined : onDismiss}
+      onBackButtonPress={loading ? undefined : onDismiss}
+      backdropOpacity={0.5}
+      animationIn="zoomIn"
+      animationOut="zoomOut"
+      style={scrapStyles.modal}
+      useNativeDriver
+      hideModalContentWhileAnimating
+      deviceWidth={winW}
+      deviceHeight={winH}
+      statusBarTranslucent
+    >
+      <View style={[scrapStyles.sheet, { width: sheetWidth }]}>
+        <View style={scrapStyles.iconCircle}>
+          <Icon source="alert-circle-outline" size={36} color="#dc2626" />
+        </View>
+        <Text variant="titleLarge" style={scrapStyles.title}>
+          Topu iptal et?
+        </Text>
+
+        {roll && (
+          <View style={scrapStyles.infoBox}>
+            <View style={scrapStyles.infoRow}>
+              <Text style={scrapStyles.infoLabel}>Barkod</Text>
+              <Text style={scrapStyles.infoValue}>{roll.barcode ?? '—'}</Text>
+            </View>
+            <View style={scrapStyles.infoRow}>
+              <Text style={scrapStyles.infoLabel}>Ürün</Text>
+              <Text style={scrapStyles.infoValue} numberOfLines={2}>
+                {roll.item?.name ?? '—'}
+                {roll.color?.name ? ` · ${roll.color.name}` : ''}
+              </Text>
+            </View>
+            <View style={scrapStyles.infoRow}>
+              <Text style={scrapStyles.infoLabel}>Metraj</Text>
+              <Text style={scrapStyles.infoValue}>
+                {roll.initialQty} mt
+                {roll.width != null ? ` · ${roll.width} cm` : ''}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        <Text style={scrapStyles.hint}>
+          Yanlış giriş için kullan. İptal edilen toplar fire sayılmaz, sadece kayıt geri alınır.
+        </Text>
+
+        <View style={scrapStyles.actions}>
+          <Button
+            mode="outlined"
+            onPress={onDismiss}
+            disabled={loading}
+            style={scrapStyles.actionBtn}
+            contentStyle={scrapStyles.actionBtnContent}
+          >
+            Vazgeç
+          </Button>
+          <Button
+            mode="contained"
+            buttonColor="#dc2626"
+            textColor="#fff"
+            icon="trash-can-outline"
+            onPress={onConfirm}
+            loading={loading}
+            disabled={loading}
+            style={scrapStyles.actionBtn}
+            contentStyle={scrapStyles.actionBtnContent}
+          >
+            İptal Et
+          </Button>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const scrapStyles = StyleSheet.create({
+  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
+  sheet: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    alignItems: 'stretch',
+    gap: 12,
+  },
+  iconCircle: {
+    alignSelf: 'center',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#fef2f2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: { fontWeight: '700', color: '#0f172a', textAlign: 'center' },
+  infoBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 12,
+    gap: 6,
+  },
+  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  infoLabel: { width: 70, fontSize: 13, color: '#64748b', fontWeight: '600' },
+  infoValue: { flex: 1, fontSize: 14, color: '#0f172a', fontWeight: '600' },
+  hint: {
+    fontSize: 13,
+    color: '#64748b',
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  actionBtn: { flex: 1, borderRadius: 10 },
+  actionBtnContent: { height: 48 },
+});
+
 // ── Liste satırı: Roll + kim girdi + ne zaman ──
 function RollListItem({
   roll,
   onPrint,
   onScrap,
+  compactLayout,
 }: {
   roll: Roll;
   onPrint: (b: string) => void;
   onScrap?: (roll: Roll) => void;
+  compactLayout?: boolean;
 }) {
   const operator = roll.createdBy?.fullName ?? roll.createdBy?.username ?? 'Bilinmiyor';
   const at = roll.createdAt ? dayjs(roll.createdAt) : null;
@@ -922,22 +1114,37 @@ function RollListItem({
   const canPrint = !!roll.barcode;
 
   return (
-    <Surface style={[styles.recentItem, isInactive && styles.recentItemScrapped]} elevation={1}>
-      <View style={styles.recentItemHeader}>
-        <Text style={[styles.recentBarcode, isInactive && styles.recentBarcodeScrapped]}>
+    <Surface
+      style={[
+        styles.recentItem,
+        isInactive && styles.recentItemScrapped,
+        compactLayout && { padding: 6, marginVertical: 2, gap: 2 },
+      ]}
+      elevation={1}
+    >
+      <View style={[styles.recentItemHeader, compactLayout && { gap: 4 }]}>
+        <Text
+          style={[
+            styles.recentBarcode,
+            isInactive && styles.recentBarcodeScrapped,
+            compactLayout && { fontSize: 11, paddingVertical: 0 },
+          ]}
+        >
           {barcode}
         </Text>
-        <Text style={styles.recentTime}>{at ? at.format('DD.MM HH:mm') : ''}</Text>
+        <Text style={[styles.recentTime, compactLayout && { fontSize: 11 }]}>
+          {at ? at.format('DD.MM HH:mm') : ''}
+        </Text>
         {onScrap && !isInactive && (
           <IconButton
             icon="trash-can-outline"
             mode="contained-tonal"
-            size={20}
+            size={compactLayout ? 16 : 20}
             containerColor="#fef2f2"
             iconColor="#dc2626"
             onPress={() => onScrap(roll)}
             accessibilityLabel="Topu iptal et / hurda"
-            style={styles.recentScrapBtn}
+            style={[styles.recentScrapBtn, compactLayout && { width: 24, height: 24 }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           />
         )}
@@ -945,42 +1152,45 @@ function RollListItem({
           <IconButton
             icon="printer"
             mode="contained-tonal"
-            size={35}
+            size={compactLayout ? 20 : 35}
             containerColor="#eef2ff"
             iconColor="#000000ff"
             onPress={() => onPrint(roll.barcode!)}
             accessibilityLabel="Etiket bas"
-            style={styles.recentPrintBtn}
+            style={[styles.recentPrintBtn, compactLayout && { width: 28, height: 28 }]}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           />
         )}
       </View>
-      <Text style={styles.recentItemName} numberOfLines={1}>
+      <Text
+        style={[styles.recentItemName, compactLayout && { fontSize: 11 }]}
+        numberOfLines={1}
+      >
         {roll.item?.name ?? '—'}
         {roll.color?.name ? ` · ${roll.color.name}` : ''}
       </Text>
-      <View style={styles.recentBottomRow}>
+      <View style={[styles.recentBottomRow, compactLayout && { marginTop: 2, gap: 4 }]}>
         <View style={styles.recentBadgeRow}>
-          <View style={styles.recentBadge}>
-            <Icon source="arrow-expand-vertical" size={14} color="#0f172a" />
-            <Text style={styles.recentBadgeText}>{qty}</Text>
+          <View style={[styles.recentBadge, compactLayout && { paddingVertical: 1, paddingHorizontal: 4 }]}>
+            <Icon source="arrow-expand-vertical" size={compactLayout ? 12 : 14} color="#0f172a" />
+            <Text style={[styles.recentBadgeText, compactLayout && { fontSize: 11 }]}>{qty}</Text>
           </View>
           {widthLabel && (
-            <View style={styles.recentBadge}>
-              <Icon source="arrow-expand-horizontal" size={14} color="#0f172a" />
-              <Text style={styles.recentBadgeText}>{widthLabel}</Text>
+            <View style={[styles.recentBadge, compactLayout && { paddingVertical: 1, paddingHorizontal: 4 }]}>
+              <Icon source="arrow-expand-horizontal" size={compactLayout ? 12 : 14} color="#0f172a" />
+              <Text style={[styles.recentBadgeText, compactLayout && { fontSize: 11 }]}>{widthLabel}</Text>
             </View>
           )}
-          <View style={styles.recentBadge}>
-            <Icon source="star-circle" size={14} color="#0f172a" />
-            <Text style={styles.recentBadgeText}>{roll.qualityGrade}</Text>
+          <View style={[styles.recentBadge, compactLayout && { paddingVertical: 1, paddingHorizontal: 4 }]}>
+            <Icon source="star-circle" size={compactLayout ? 12 : 14} color="#0f172a" />
+            <Text style={[styles.recentBadgeText, compactLayout && { fontSize: 11 }]}>{roll.qualityGrade}</Text>
           </View>
         </View>
         <View style={styles.recentOperatorChip}>
-          <View style={styles.recentOperatorAvatar}>
-            <Icon source="account" size={14} color="#fff" />
+          <View style={[styles.recentOperatorAvatar, compactLayout && { width: 14, height: 14 }]}>
+            <Icon source="account" size={compactLayout ? 10 : 14} color="#fff" />
           </View>
-          <Text style={styles.recentOperatorText} numberOfLines={1}>
+          <Text style={[styles.recentOperatorText, compactLayout && { fontSize: 10 }]} numberOfLines={1}>
             {operator}
           </Text>
         </View>

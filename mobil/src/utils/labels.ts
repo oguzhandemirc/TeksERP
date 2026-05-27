@@ -34,11 +34,12 @@ export const ROLL_STATUS_LABEL: Record<string, string> = {
   IN_PRODUCTION: 'Üretimde',
   AT_SUBCONTRACTOR: 'Fasonda',
   RETURNED_FROM_SUBCONTRACTOR: 'Fasondan Döndü',
-  WAREHOUSE: 'Depoda',
+  WAREHOUSE: 'Depo',
   READY_FOR_SHIP: 'Sevke Hazır',
   SHIPPED: 'Sevk Edildi',
   DELIVERED: 'Teslim Edildi',
   PRODUCED: 'Üretildi',
+  A1_STOCK: '2. Kalite',
   SCRAP: 'Fire',
   CANCELLED: 'İptal Edildi',
 };

@@ -77,14 +77,16 @@ function pickDefaultAction(
 function computeTotalAmount(
   lines: Array<{ quantity?: number; unitPrice?: number | null | string }>
 ): number | null {
-  let total = 0;
+  // Fiyatlandırma Decimal aritmetik ile — float drift faturada kuruş kayması yaratmasın.
+  let total = new Prisma.Decimal(0);
   let any = false;
   for (const l of lines) {
     if (l.unitPrice == null) continue;
-    const qty = Number(l.quantity ?? 0);
-    const price = typeof l.unitPrice === "string" ? Number(l.unitPrice) : l.unitPrice;
-    if (!Number.isFinite(qty) || !Number.isFinite(price)) continue;
-    total += qty * (price as number);
+    const qtyRaw = Number(l.quantity ?? 0);
+    const priceRaw =
+      typeof l.unitPrice === "string" ? Number(l.unitPrice) : l.unitPrice;
+    if (!Number.isFinite(qtyRaw) || !Number.isFinite(priceRaw)) continue;
+    total = total.plus(new Prisma.Decimal(qtyRaw).times(priceRaw as number));
     any = true;
   }
   return any ? Number(total.toFixed(2)) : null;
@@ -783,7 +785,8 @@ export class OrderService extends BaseService {
         id: string;
         batchNumber: string;
         status: string;
-        allocatedQty: number;
+        // Decimal — toplamada float drift yaratmasın; serializer number'a çevirir.
+        allocatedQty: Prisma.Decimal;
       }
     >();
     for (const line of order.lines) {
@@ -791,13 +794,13 @@ export class OrderService extends BaseService {
         const wo = link.workOrder;
         const existing = woMap.get(wo.id);
         if (existing) {
-          existing.allocatedQty += Number(link.allocatedQty);
+          existing.allocatedQty = existing.allocatedQty.plus(link.allocatedQty);
         } else {
           woMap.set(wo.id, {
             id: wo.id,
             batchNumber: wo.batchNumber,
             status: wo.status,
-            allocatedQty: Number(link.allocatedQty),
+            allocatedQty: new Prisma.Decimal(link.allocatedQty),
           });
         }
       }

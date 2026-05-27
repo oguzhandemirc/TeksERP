@@ -20,6 +20,18 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { resolveQualityGradeId } from "./helpers/quality-grade.helper";
 import {
+  decodeDynamicCursor,
+  dynamicCursorWhere,
+  buildNextDynamicCursor,
+} from "../utils/cursor";
+import type { CursorPaginatedResponse } from "./base.service";
+
+export interface SwatchStats {
+  count: number;
+  /** Filtreye uyan tüm kartelaların `length` toplamı — cm. */
+  totalLength: number;
+}
+import {
   Prisma,
   Roll,
   RollStatus,
@@ -33,6 +45,7 @@ import {
 } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 import { buildPrefixedBarcode, buildPrefixedCardNumber } from "../utils/barcode";
+import { withBarcodeRetry } from "../utils/barcode-retry";
 import { assertWoAtStepKind, recomputeStepStatus } from "./helpers/roll-step.helper";
 
 /** Generate a barcode for a split-off roll */
@@ -224,21 +237,29 @@ export class TamburService {
       throw AppError.notFound("Bu iş emrinde Tambur adımı tanımlı değil");
     }
 
-    // Adıma girmiş ama henüz tamamlanmamış roller (RollMovement.exitedAt = null)
+    // Adıma girmiş ama henüz tamamlanmamış roller (RollMovement.exitedAt = null).
+    // Sıra LIFO (enteredAt desc): KK2'den en son çıkan = yeni sepetin en üstü =
+    // Tambur operatörünün ilk eline aldığı top. KK2 ilk işlediği parça sepetin
+    // en altına düşer, Tambur'a son sırada gider.
     const openMovements = await prisma.rollMovement.findMany({
       where: { workOrderStepId: step.id, exitedAt: null },
+      orderBy: { enteredAt: "desc" },
       select: {
         roll: {
           include: {
             item: { select: { code: true, name: true } },
             color: { select: { code: true, name: true } },
+            properties: {
+              select: {
+                property: { select: { id: true, name: true } },
+              },
+            },
             errors: {
               where: { isProcessed: false },
               orderBy: { startMeter: "asc" },
               select: {
                 id: true,
                 startMeter: true,
-                
                 errorType: true,
               },
             },
@@ -257,6 +278,10 @@ export class TamburService {
       currentQty: Number(m.roll.currentQty),
       width: m.roll.width !== null ? Number(m.roll.width) : null,
       qualityGrade: m.roll.qualityGrade,
+      properties: m.roll.properties.map((p) => ({
+        id: p.property.id,
+        name: p.property.name,
+      })),
       errorCount: m.roll.errors.length,
       errors: m.roll.errors.map((e) => ({
         id: e.id,
@@ -776,7 +801,8 @@ export class TamburService {
       );
     }
 
-    const created: Swatch[] = await prisma.$transaction(async (tx) => {
+    // Barkod sequence çakışırsa (P2002) tüm tx'i baştan dener.
+    const created: Swatch[] = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
       const list: Swatch[] = [];
       for (let i = 0; i < data.count; i++) {
         const seq = await this.nextSwatchSequence(tx);
@@ -801,14 +827,27 @@ export class TamburService {
         list.push(sw);
       }
 
-      // Kaynak rolden düş
-      await tx.roll.update({
-        where: { id: roll.id },
-        data: { currentQty: Number(roll.currentQty) - totalDeduct },
-      });
+      // Kaynak rolden atomic decrement — hesap DB-side (Decimal hassasiyeti
+      // korunur), `gte` guard ile concurrent overdraw engellenir.
+      try {
+        await tx.roll.update({
+          where: { id: roll.id, currentQty: { gte: totalDeduct } },
+          data: { currentQty: { decrement: totalDeduct } },
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2025"
+        ) {
+          throw AppError.conflict(
+            "Topun kalan metresi yetersiz — başka bir işlem aynı topu kullanıyor olabilir"
+          );
+        }
+        throw err;
+      }
 
       return list;
-    });
+    }));
 
     await AuditService.log({
       userId,
@@ -886,23 +925,133 @@ export class TamburService {
     workOrderId?: string;
     itemId?: string;
     limit?: number;
-  }): Promise<ApiResponse<Swatch[]>> {
+    /** Cursor mode aktivasyonu — verilirse pagination cursor response döner. */
+    cursor?: string;
+    /** `cursor=...` parametresi yokken bile cursor formatı istemek için. */
+    mode?: string;
+    /** Barkod / kart no / ürün adı/kodu / parti araması (cursor mode'da geçerli). */
+    search?: string;
+    /** Cursor mode ilk fetch'te totalEstimate doldur. */
+    withTotal?: boolean;
+  }): Promise<ApiResponse<Swatch[]> | CursorPaginatedResponse<Swatch>> {
     const where: Prisma.SwatchWhereInput = {};
     if (params?.workOrderId) where.workOrderId = params.workOrderId;
     if (params?.itemId) where.itemId = params.itemId;
+    const search = params?.search?.trim();
+    if (search) {
+      where.OR = [
+        { barcode: { contains: search, mode: "insensitive" } },
+        { cardNumber: { contains: search, mode: "insensitive" } },
+        { item: { name: { contains: search, mode: "insensitive" } } },
+        { item: { code: { contains: search, mode: "insensitive" } } },
+        { workOrder: { batchNumber: { contains: search, mode: "insensitive" } } },
+      ];
+    }
+
+    // Kartela kendi `properties` alanı taşımaz; özellikler kaynak rolden
+    // miras (Swatch fiziksel olarak parent Roll'dan kesilir, aynı kumaş).
+    // Side panel'in "Renk + Özellikler" bölmesi parentRoll üzerinden okur.
+    const include = {
+      item: { select: { id: true, code: true, name: true } },
+      color: { select: { id: true, code: true, name: true, hex: true } },
+      workOrder: { select: { id: true, batchNumber: true } },
+      parentRoll: {
+        select: {
+          id: true,
+          barcode: true,
+          qualityGrade: true,
+          color: { select: { id: true, code: true, name: true, hex: true } },
+          properties: {
+            select: {
+              propertyId: true,
+              property: { select: { id: true, code: true, name: true } },
+            },
+          },
+        },
+      },
+    } as const;
+
+    // Cursor mode (mobil infinite scroll, büyük katalog). Legacy çağrılar
+    // (Electron paneli, tartı/paket scan akışı) cursor/mode vermez ve eski
+    // `ApiResponse<Swatch[]>` cevabını alır.
+    const useCursor = !!params?.cursor || params?.mode === "cursor";
+    if (useCursor) {
+      const limit = Math.min(Math.max(1, params?.limit ?? 50), 200);
+      const cursor = decodeDynamicCursor(params?.cursor);
+      const cursorWhereClause = cursor
+        ? { AND: [where, dynamicCursorWhere(cursor, "createdAt", "desc")] }
+        : where;
+      const [items, totalEstimate] = await Promise.all([
+        prisma.swatch.findMany({
+          where: cursorWhereClause,
+          include,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: limit + 1,
+        }),
+        params?.withTotal ? prisma.swatch.count({ where }) : Promise.resolve(undefined),
+      ]);
+      const hasMore = items.length > limit;
+      const data = hasMore ? items.slice(0, limit) : items;
+      const last = data[data.length - 1] as Record<string, unknown> | undefined;
+      const nextCursor = hasMore ? buildNextDynamicCursor(last, "createdAt") : null;
+      return {
+        success: true,
+        data,
+        pagination: {
+          nextCursor,
+          hasMore,
+          limit,
+          ...(totalEstimate !== undefined ? { totalEstimate } : {}),
+        },
+      };
+    }
 
     const swatches = await prisma.swatch.findMany({
       where,
-      include: {
-        item: true,
-        color: true,
-        workOrder: true,
-        parentRoll: true,
-      },
+      include,
       orderBy: { createdAt: "desc" },
       take: params?.limit ?? 100,
     });
     return { success: true, data: swatches };
+  }
+
+  /**
+   * Kartela özet istatistikleri — listenin sayfaya bağlı toplamlarını değil,
+   * filtreye uyan TÜM kartelaların aggregate'ini döner. Depo panelinin
+   * "Toplam Kartela / Toplam Uzunluk" bölmesi için.
+   */
+  async getSwatchStats(params?: {
+    workOrderId?: string;
+    itemId?: string;
+    search?: string;
+  }): Promise<ApiResponse<SwatchStats>> {
+    const where: Prisma.SwatchWhereInput = {};
+    if (params?.workOrderId) where.workOrderId = params.workOrderId;
+    if (params?.itemId) where.itemId = params.itemId;
+    const search = params?.search?.trim();
+    if (search) {
+      where.OR = [
+        { barcode: { contains: search, mode: "insensitive" } },
+        { cardNumber: { contains: search, mode: "insensitive" } },
+        { item: { name: { contains: search, mode: "insensitive" } } },
+        { item: { code: { contains: search, mode: "insensitive" } } },
+        { workOrder: { batchNumber: { contains: search, mode: "insensitive" } } },
+      ];
+    }
+
+    const aggregate = await prisma.swatch.aggregate({
+      where,
+      _count: { _all: true },
+      _sum: { length: true },
+    });
+
+    return {
+      success: true,
+      data: {
+        count: aggregate._count._all,
+        totalLength: Number(aggregate._sum.length ?? 0),
+      },
+    };
   }
 
   /**
@@ -933,6 +1082,11 @@ export class TamburService {
           include: {
             item: { select: { code: true, name: true } },
             color: { select: { code: true, name: true } },
+            properties: {
+              select: {
+                property: { select: { id: true, name: true } },
+              },
+            },
             errors: {
               where: { isProcessed: false },
               orderBy: { startMeter: "asc" },
@@ -957,6 +1111,10 @@ export class TamburService {
       currentQty: Number(m.roll.currentQty),
       width: m.roll.width !== null ? Number(m.roll.width) : null,
       qualityGrade: m.roll.qualityGrade,
+      properties: m.roll.properties.map((p) => ({
+        id: p.property.id,
+        name: p.property.name,
+      })),
       errorCount: m.roll.errors.length,
       errors: m.roll.errors.map((e) => ({
         id: e.id,
@@ -1255,11 +1413,29 @@ export class TamburService {
       // UI "currentQty / initialQty" ayrımı Top Kesme'de anlamsız: kesim
       // sonrası eski etiket fiziksel olarak da geçersiz, operatör yenisini
       // basar; sistemde "70 / 100" gösterimi yanıltıcı.
-      const newParentQty = Number(parent.currentQty) - data.cutLength;
-      const updatedParent = await tx.roll.update({
-        where: { id: parent.id },
-        data: { currentQty: newParentQty, initialQty: newParentQty },
-      });
+      // Atomic decrement — hesap DB-side, gte guard concurrent overdraw'a karşı.
+      // Önceki kesim de initialQty=currentQty yaptığı için iki decrement aynı sonucu verir.
+      let updatedParent;
+      try {
+        updatedParent = await tx.roll.update({
+          where: { id: parent.id, currentQty: { gte: data.cutLength } },
+          data: {
+            currentQty: { decrement: data.cutLength },
+            initialQty: { decrement: data.cutLength },
+          },
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2025"
+        ) {
+          throw AppError.conflict(
+            "Topun kalan metresi yetersiz — başka bir işlem aynı topu kullanıyor olabilir"
+          );
+        }
+        throw err;
+      }
+      const newParentQty = Number(updatedParent.currentQty);
 
       return { child, newParentQty, updatedParent };
     });
@@ -1586,12 +1762,25 @@ export class TamburService {
         });
       }
 
-      // Parent currentQty düşür
-      const newParentQty = Number(parent.currentQty) - data.lengthMeters;
-      await tx.roll.update({
-        where: { id: parent.id },
-        data: { currentQty: newParentQty },
-      });
+      // Parent atomic decrement — hesap DB-side, gte guard concurrent overdraw'a karşı.
+      let updatedParent;
+      try {
+        updatedParent = await tx.roll.update({
+          where: { id: parent.id, currentQty: { gte: data.lengthMeters } },
+          data: { currentQty: { decrement: data.lengthMeters } },
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2025"
+        ) {
+          throw AppError.conflict(
+            "Açık kumaşın kalan metresi yetersiz — başka bir işlem aynı topu kullanıyor olabilir"
+          );
+        }
+        throw err;
+      }
+      const newParentQty = Number(updatedParent.currentQty);
 
       return { child, newParentQty };
     });
@@ -1932,8 +2121,14 @@ export class TamburService {
             id: true,
             itemId: true,
             quantity: true,
+            width: true,
             item: { select: { code: true, name: true } },
             color: { select: { code: true, name: true } },
+            requiredProperties: {
+              select: {
+                property: { select: { id: true, name: true } },
+              },
+            },
             order: {
               select: {
                 id: true,
@@ -1961,14 +2156,18 @@ export class TamburService {
           itemName: string;
           colorCode: string | null;
           colorName: string | null;
+          width: number | null;
           orderedQty: number;
           shippedQty: number;
+          requiredProperties: { id: string; name: string }[];
         }>;
       }
     >();
     for (const link of links) {
       const ol = link.orderLine;
       const order = ol.order;
+      // Sevkiyat modülü 2026-05-25 silindi, yeniden yazılacak. O zamana kadar
+      // shippedQty her zaman 0 — frontend tarafında gösterilmiyor.
       const shippedQty = 0;
       if (!ordersMap.has(order.id)) {
         ordersMap.set(order.id, {
@@ -1986,8 +2185,13 @@ export class TamburService {
         itemName: ol.item.name,
         colorCode: ol.color?.code ?? null,
         colorName: ol.color?.name ?? null,
+        width: ol.width !== null ? Number(ol.width) : null,
         orderedQty: Number(ol.quantity),
         shippedQty,
+        requiredProperties: ol.requiredProperties.map((rp) => ({
+          id: rp.property.id,
+          name: rp.property.name,
+        })),
       });
     }
     const orders = Array.from(ordersMap.values());
@@ -2061,27 +2265,45 @@ export class TamburService {
     };
   }
 
+  /**
+   * Defensive: tek satır yerine son 10 swatch kaydını çekip ilk parse-edilebilen
+   * barkoddan sequence çıkarır. Bozuk format kayıtlar (manuel import vb.) varsa
+   * sessizce 1'e dönmek yerine atlanır. Hiçbiri parse edilemezse net hata.
+   */
   private async nextSwatchSequence(tx: Prisma.TransactionClient): Promise<number> {
     const now = new Date();
     const yy = String(now.getFullYear()).slice(2);
     const mm = String(now.getMonth() + 1).padStart(2, "0");
     const prefix = `SW-${yy}${mm}-`;
-    const last = await tx.swatch.findFirst({
+    const candidates = await tx.swatch.findMany({
       where: { barcode: { startsWith: prefix } },
       orderBy: { barcode: "desc" },
+      take: 10,
       select: { barcode: true },
     });
-    if (!last) return 1;
-    const parts = last.barcode.split("-");
-    if (parts.length < 4) return 1;
-    const seqStr = parts[2];
+    if (candidates.length === 0) return 1;
+
     const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-    let n = 0;
-    for (const ch of seqStr.toUpperCase()) {
-      const v = CROCKFORD.indexOf(ch);
-      if (v < 0) return 1;
-      n = n * 32 + v;
+    for (const c of candidates) {
+      const parts = c.barcode.split("-");
+      if (parts.length < 4) continue;
+      const seqStr = parts[2].toUpperCase();
+      let n = 0;
+      let valid = true;
+      for (const ch of seqStr) {
+        const v = CROCKFORD.indexOf(ch);
+        if (v < 0) {
+          valid = false;
+          break;
+        }
+        n = n * 32 + v;
+      }
+      if (valid) return n + 1;
     }
-    return n + 1;
+
+    throw AppError.internal(
+      `Kartela sequence: ${prefix} prefix'inde bozuk barkodlar tespit edildi, ` +
+        `son 10 kayıttan hiçbiri parse edilemiyor. DB'yi manuel inceleyin.`
+    );
   }
 }

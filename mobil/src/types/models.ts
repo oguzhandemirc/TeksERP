@@ -227,6 +227,8 @@ export interface SubcontractorDispatchListItem {
   totalQty: number;
   plateNumber: string | null;
   driverName: string | null;
+  notes: string | null;
+  stepId: string;
   cancelledAt: string | null;
   cancelReason: string | null;
   workOrder?: Pick<WorkOrder, 'id' | 'batchNumber'>;
@@ -454,6 +456,8 @@ export interface TravelerCardLookup {
   workOrderId: string;
   printedAt: string;
   workOrder?: WorkOrder;
+  /** Bu WO'da iptal edilmemiş + mal kabulü tamamlanmamış açık sevk var mı. */
+  hasOpenDispatch?: boolean;
 }
 
 // =============================================================================
@@ -560,6 +564,8 @@ export interface TamburRollSummary {
   currentQty: number;
   width: number | null;
   qualityGrade: string;
+  /** Rulonun fiilen taşıdığı özellikler (RollProperty). */
+  properties: { id: string; name: string }[];
   errorCount: number;
   errors: TamburRollDefect[];
 }
@@ -647,8 +653,12 @@ export interface TamburContextOrderLine {
   itemName: string;
   colorCode: string | null;
   colorName: string | null;
+  width: number | null;
   orderedQty: number;
+  /** Sevkiyat modülü silindi (2026-05-25), her zaman 0. Modül yeniden yazılınca anlamlanacak. */
   shippedQty: number;
+  /** Müşterinin sipariş satırında istediği özellikler (OrderLineRequiredProperty). */
+  requiredProperties: { id: string; name: string }[];
 }
 
 export interface TamburContextOrder {

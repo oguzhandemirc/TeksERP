@@ -72,6 +72,12 @@ export type FilterDef =
       options: { value: string; label: string }[];
     }
   | {
+      kind: "multi-select";
+      key: string;
+      label: string;
+      options: { value: string; label: string }[];
+    }
+  | {
       kind: "lookup";
       key: string;
       label: string;
@@ -123,9 +129,14 @@ export function FilterBar({ filters, defaultDateRangeDays = 0 }: Props) {
   const dateDef = filters.find((f) => f.kind === "dateRange");
 
   // Default tarih aralığını (ilk render) uygula — URL'de yoksa.
+  // URL'de explicit `filter[...]` varsa (örn. dashboard'tan gelen "Açık İş Emri"
+  // status filtresi) default tarihi uygulama — sayım sayfasında tutarsız olmasın.
   useEffect(() => {
     if (!dateDef || !defaultDateRangeDays) return;
     if (searchParams.get("dateFrom") || searchParams.get("dateTo")) return;
+    for (const key of searchParams.keys()) {
+      if (key.startsWith("filter[")) return;
+    }
     const next = new URLSearchParams(searchParams);
     const today = new Date();
     const from = new Date(
@@ -157,6 +168,7 @@ export function FilterBar({ filters, defaultDateRangeDays = 0 }: Props) {
     <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs">
       {filters.map((f) => {
         if (f.kind === "select") return <SelectFilter key={f.key} def={f} sp={searchParams} update={update} />;
+        if (f.kind === "multi-select") return <MultiSelectFilter key={f.key} def={f} sp={searchParams} update={update} />;
         if (f.kind === "lookup") return <LookupFilter key={f.key} def={f} sp={searchParams} update={update} />;
         if (f.kind === "multi-lookup") return <MultiLookupFilter key={f.key} def={f} sp={searchParams} update={update} />;
         if (f.kind === "numberRange") return <NumberRangeFilter key={f.key} def={f} sp={searchParams} update={update} />;
@@ -198,6 +210,94 @@ function SelectFilter({ def, sp, update }: SubProps<Extract<FilterDef, { kind: "
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+function MultiSelectFilter({
+  def,
+  sp,
+  update,
+}: SubProps<Extract<FilterDef, { kind: "multi-select" }>>) {
+  const [open, setOpen] = useState(false);
+  const csv = sp.get(`filter[${def.key}]`) ?? "";
+  const selected = useMemo(
+    () => (csv ? csv.split(",").filter(Boolean) : []),
+    [csv],
+  );
+
+  const toggle = (value: string) =>
+    update((next) => {
+      const set = new Set(selected);
+      if (set.has(value)) set.delete(value);
+      else set.add(value);
+      if (set.size === 0) next.delete(`filter[${def.key}]`);
+      else next.set(`filter[${def.key}]`, Array.from(set).join(","));
+    });
+
+  const clearAll = () => update((next) => next.delete(`filter[${def.key}]`));
+
+  const triggerLabel =
+    selected.length === 0
+      ? def.label
+      : selected.length === 1
+        ? def.options.find((o) => o.value === selected[0])?.label ?? def.label
+        : `${def.label} (${selected.length})`;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-7 min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
+            selected.length > 0 && "border-primary/50",
+          )}
+        >
+          <span className={cn(selected.length === 0 && "text-muted-foreground")}>
+            {triggerLabel}
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-0" align="start">
+        <Command>
+          <CommandList>
+            <CommandEmpty>Seçenek yok.</CommandEmpty>
+            <CommandGroup>
+              {def.options.map((o) => {
+                const isSel = selected.includes(o.value);
+                return (
+                  <CommandItem key={o.value} value={o.label} onSelect={() => toggle(o.value)}>
+                    <Check
+                      className={cn(
+                        "mr-2 h-3.5 w-3.5",
+                        isSel ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    {o.label}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+          {selected.length > 0 ? (
+            <div className="border-t p-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 w-full justify-center text-xs"
+                onClick={clearAll}
+              >
+                Temizle
+              </Button>
+            </div>
+          ) : null}
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 

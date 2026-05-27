@@ -1,10 +1,8 @@
-import "./lib/zod-locale"; // Zod tr locale — diğer importlardan ÖNCE
+import "dotenv/config"; // .env yükle — diğer tüm importlardan ÖNCE (JWT_SECRET vb. modül-load anında okunur)
+import "./lib/zod-locale"; // Zod tr locale
 import app from './app';
-import dotenv from 'dotenv';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
 import { AuditService } from './services/audit.service';
-
-dotenv.config();
 
 const PORT = process.env.PORT || 4000;
 

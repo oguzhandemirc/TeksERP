@@ -55,6 +55,9 @@ interface StationLiveStateRow {
   queueCount: number;
   activeCount: number;
   todayCompletedCount: number;
+  /** Sadece EXTERNAL istasyonlar için anlamlı — bugün bu fason istasyonuna
+   *  sevk edilmiş parça (dispatch item) sayısı. INTERNAL'de hep 0. */
+  todayDispatchedCount: number;
 }
 
 /**
@@ -69,7 +72,11 @@ interface StationLiveStateRow {
  *
  *       - queueCount = `Roll.currentStepId` bu istasyondaki step'lere bağlı tüm rolls
  *       - activeCount = açık RollMovement (exitedAt IS NULL) ile bu istasyonda işlenmekte olan distinct rolls
- *       - todayCompletedCount = bugün exitedAt'i dolan distinct rolls (FINISH/SKIP)
+ *       - todayCompletedCount =
+ *           - INTERNAL: bugün exitedAt'i dolan distinct rolls (FINISH/SKIP)
+ *           - EXTERNAL: bugün fason kabul ile doğan açık kumaş parça sayısı
+ *             (kaç gittiği değil, kaç tane kabul ettiği — operatör perspektifi)
+ *           - RAW_QC: bugün giren ham mal sayısı
  *     security: [{ bearerAuth: [] }]
  */
 router.get(
@@ -95,7 +102,13 @@ router.get(
           s."type"::text                            AS "type",
           COALESCE(q.cnt, 0)::int                   AS "queueCount",
           COALESCE(a.cnt, 0)::int                   AS "activeCount",
-          COALESCE(t.cnt, e.cnt, 0)::int            AS "todayCompletedCount"
+          COALESCE(
+            CASE WHEN s."type" = 'EXTERNAL' THEN ext.cnt END,
+            t.cnt,
+            e.cnt,
+            0
+          )::int                                    AS "todayCompletedCount",
+          COALESCE(disp.cnt, 0)::int                AS "todayDispatchedCount"
         FROM "stations" s
         LEFT JOIN (
           SELECT wos."stationId" AS "stationId", COUNT(r."id")::int AS cnt
@@ -117,6 +130,30 @@ router.get(
           WHERE rm."exitedAt" IS NOT NULL AND rm."exitedAt" >= ${startOfToday}
           GROUP BY wos."stationId"
         ) t ON t."stationId" = s."id"
+        LEFT JOIN (
+          -- EXTERNAL: bugün fason kabulde kabul edilen parça sayısı.
+          -- subcontractor_receipt_items her tür fason için bir satır tutar:
+          -- boyahane'de yeni doğan açık kumaş, zımpara/yıkama'da geri dönen
+          -- orijinal top. Operatörün "bugün kaç parça kabul ettim" cevabı.
+          SELECT wos."stationId" AS "stationId", COUNT(sri."id")::int AS cnt
+          FROM "subcontractor_receipt_items" sri
+          JOIN "subcontractor_receipts" sr ON sr."id" = sri."receiptId"
+          JOIN "work_order_steps" wos ON wos."id" = sr."stepId"
+          WHERE sr."cancelledAt" IS NULL
+            AND sr."receivedAt" >= ${startOfToday}
+          GROUP BY wos."stationId"
+        ) ext ON ext."stationId" = s."id"
+        LEFT JOIN (
+          -- EXTERNAL: bugün bu istasyona sevk edilmiş parça sayısı (dispatch
+          -- item). İptal edilmiş sevkler hariç.
+          SELECT wos."stationId" AS "stationId", COUNT(di."id")::int AS cnt
+          FROM "subcontractor_dispatch_items" di
+          JOIN "subcontractor_dispatches" sd ON sd."id" = di."dispatchId"
+          JOIN "work_order_steps" wos ON wos."id" = sd."stepId"
+          WHERE sd."cancelledAt" IS NULL
+            AND sd."dispatchedAt" >= ${startOfToday}
+          GROUP BY wos."stationId"
+        ) disp ON disp."stationId" = s."id"
         LEFT JOIN (
           SELECT COUNT("id")::int AS cnt
           FROM "rolls"

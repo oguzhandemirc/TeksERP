@@ -11,6 +11,10 @@ interface Props {
   title?: string;
   /** Hangi barkod tiplerini okusun. Default: QR + Code128. */
   barcodeTypes?: SupportedBarcodeType[];
+  /** Modal kapanma animasyonu tamamen bittikten sonra çağrılır. Parent state'i
+   *  bu callback'te güncellesin — animation sırasında recutMode vb. mount
+   *  edilirse invisible modal overlay tıklamayı yutar. */
+  onModalHide?: () => void;
 }
 
 /**
@@ -30,6 +34,7 @@ export function BarcodeScannerModal({
   onScan,
   title,
   barcodeTypes,
+  onModalHide,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   return (
@@ -37,6 +42,7 @@ export function BarcodeScannerModal({
       isVisible={visible}
       onBackdropPress={onDismiss}
       onBackButtonPress={onDismiss}
+      onModalHide={onModalHide}
       backdropOpacity={0.7}
       style={styles.modal}
       useNativeDriver

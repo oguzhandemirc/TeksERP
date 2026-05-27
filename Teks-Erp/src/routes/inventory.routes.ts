@@ -165,6 +165,27 @@ router.get("/barcode", verifyToken, requireAnyPermission("roll:read", ...MOBILE_
 
 /**
  * @openapi
+ * /api/rolls/stats:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Top özet istatistikleri (filtreye uyan TÜM rolların toplamı)
+ *     description: |
+ *       Listeleme endpointi (`GET /api/rolls`) ile **aynı filtre parametrelerini** kabul eder
+ *       (`filter[status]`, `filter[statusIn]`, `filter[qualityGrade]`, `search` vb.).
+ *       Liste sayfaya bağlıdır; bu endpoint sayfaya değil **filtrenin TÜMÜNE** aggregate döner.
+ *       Depo paneli, dashboard kartları gibi yerlerde "toplam metre / kg / status dağılımı" için kullanılır.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: |
+ *           `{ totalCount, totalQty, totalWeight, byStatus, byQuality }`.
+ *           Decimal alanlar JSON'da number'a serileştirilir.
+ */
+router.get("/stats", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.getRollStats);
+
+/**
+ * @openapi
  * /api/rolls/{id}:
  *   get:
  *     tags: [Inventory]

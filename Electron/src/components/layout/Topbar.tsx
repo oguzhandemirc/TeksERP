@@ -1,4 +1,12 @@
-import { PanelLeft, Search, LogOut, User as UserIcon, Sun, Moon } from "lucide-react";
+import {
+  PanelLeft,
+  Search,
+  LogOut,
+  User as UserIcon,
+  Sun,
+  Moon,
+  RotateCw,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +52,16 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
           onClick={onOpenCommand}
         >
           <Search className="h-4 w-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Force reload"
+          title="Sayfayı yeniden yükle (Ctrl+Shift+R)"
+          onClick={() => window.location.reload()}
+        >
+          <RotateCw className="h-4 w-4" />
         </Button>
 
         <Button

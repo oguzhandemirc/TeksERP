@@ -107,6 +107,7 @@ export class TamburController {
     this.finalize = this.finalize.bind(this);
     this.createSwatch = this.createSwatch.bind(this);
     this.listSwatches = this.listSwatches.bind(this);
+    this.getSwatchStats = this.getSwatchStats.bind(this);
     this.reportError = this.reportError.bind(this);
     this.listOpenCards = this.listOpenCards.bind(this);
     this.getSwatchByBarcode = this.getSwatchByBarcode.bind(this);
@@ -320,6 +321,24 @@ export class TamburController {
         workOrderId: typeof req.query.workOrderId === "string" ? req.query.workOrderId : undefined,
         itemId:      typeof req.query.itemId === "string" ? req.query.itemId : undefined,
         limit:       typeof req.query.limit === "string" ? Number(req.query.limit) : undefined,
+        cursor:      typeof req.query.cursor === "string" ? req.query.cursor : undefined,
+        mode:        typeof req.query.mode === "string" ? req.query.mode : undefined,
+        search:      typeof req.query.search === "string" ? req.query.search : undefined,
+        withTotal:   req.query.withTotal === "true",
+      });
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/swatches/stats */
+  async getSwatchStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getSwatchStats({
+        workOrderId: typeof req.query.workOrderId === "string" ? req.query.workOrderId : undefined,
+        itemId:      typeof req.query.itemId === "string" ? req.query.itemId : undefined,
+        search:      typeof req.query.search === "string" ? req.query.search : undefined,
       });
       res.status(200).json(result);
     } catch (error) {

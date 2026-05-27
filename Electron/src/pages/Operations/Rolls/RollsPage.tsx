@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Package,
   Cog,
@@ -35,9 +36,30 @@ const TABS: Array<{ key: RollTabKey; label: string; Icon: typeof Package }> = [
   { key: "SWATCH",         label: "Kartela",         Icon: Palette },
 ];
 
+const TAB_KEYS = new Set<RollTabKey>(TABS.map((t) => t.key));
+
+function isRollTabKey(v: string | null): v is RollTabKey {
+  return v !== null && TAB_KEYS.has(v as RollTabKey);
+}
+
 export function RollsPage() {
-  const [tab, setTab] = useState<RollTabKey>("RAW_STOCK");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get("tab");
+  const [tab, setTab] = useState<RollTabKey>(
+    isRollTabKey(urlTab) ? urlTab : "RAW_STOCK",
+  );
   const [manualOpen, setManualOpen] = useState(false);
+
+  // Dashboard'tan `?tab=...` ile gelindiğinde initial state ile senkron;
+  // URL'i temizle ki sekme değişimi geri-tuş davranışına karışmasın.
+  useEffect(() => {
+    if (!urlTab) return;
+    if (isRollTabKey(urlTab) && urlTab !== tab) setTab(urlTab);
+    const next = new URLSearchParams(searchParams);
+    next.delete("tab");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTab]);
 
   return (
     <div className="flex h-full flex-col">

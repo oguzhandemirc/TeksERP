@@ -33,6 +33,18 @@ export async function fetchRollCount(status: string): Promise<number> {
   return res.pagination.total;
 }
 
+/**
+ * "Üretimde" sayısı — Roll listesi sekmesindeki PRODUCTION sekmesiyle aynı:
+ * IN_PRODUCTION + AT_SUBCONTRACTOR + Kurşun/Tambur bekleyen açık kumaş hepsi
+ * dahil. Sadece `status=IN_PRODUCTION` saymak fasondaki rulonları kaybeder.
+ */
+export async function fetchProductionActiveRollCount(): Promise<number> {
+  const res = await rollService.getAll(
+    countParams({ rollScope: "PRODUCTION_ACTIVE", status: "ALL" }),
+  );
+  return res.pagination.total;
+}
+
 export async function fetchUpcomingOrders(): Promise<Order[]> {
   // deadline'ı null olanları dışla — dateField+dateFrom IS NOT NULL etkisi yapar.
   const res = await orderService.getAll({
@@ -79,18 +91,6 @@ export async function fetchUpcomingWorkOrders(): Promise<WorkOrder[]> {
   return res.data;
 }
 
-interface DefectSummary {
-  openCount: number;
-  todayCount: number;
-}
-
-export async function fetchTodayDefectCount(): Promise<number> {
-  const res = await apiClient.get<ApiResponse<DefectSummary>>(
-    "/api/dashboard/defects/summary",
-  );
-  return res.data.data.todayCount;
-}
-
 export interface StationLiveState {
   id: string;
   code: string;
@@ -100,6 +100,8 @@ export interface StationLiveState {
   queueCount: number;
   activeCount: number;
   todayCompletedCount: number;
+  /** EXTERNAL istasyonlarda bugün sevk edilen parça sayısı. INTERNAL'de 0. */
+  todayDispatchedCount: number;
 }
 
 export async function fetchStationLiveState(): Promise<StationLiveState[]> {

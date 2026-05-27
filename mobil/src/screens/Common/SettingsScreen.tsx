@@ -1,13 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Platform,
-  useWindowDimensions,
-} from 'react-native';
-import RNModal from 'react-native-modal';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, StyleSheet, ScrollView, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Appbar,
   Text,
@@ -16,6 +9,7 @@ import {
   Icon,
   ActivityIndicator,
   TouchableRipple,
+  Switch,
 } from 'react-native-paper';
 import axios from 'axios';
 import * as Haptics from 'expo-haptics';
@@ -27,6 +21,8 @@ import {
   computeAutoUrl,
   normalizeUrl,
 } from '../../store/baseUrlStore';
+import { useDeviceSettingsStore } from '../../store/deviceSettingsStore';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import type { RootStackParamList } from '../../navigation/types';
 
 const COLORS = {
@@ -53,8 +49,15 @@ type TestResult =
 export default function SettingsScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const insets = useSafeAreaInsets();
   const { baseUrl, customUrl, setCustomUrl, reset } = useBaseUrlStore();
   const autoUrl = computeAutoUrl();
+  const manualBarcodeEntry = useDeviceSettingsStore(
+    (s) => s.manualBarcodeEntry,
+  );
+  const setManualBarcodeEntry = useDeviceSettingsStore(
+    (s) => s.setManualBarcodeEntry,
+  );
 
   const [input, setInput] = useState(customUrl ?? baseUrl);
   const [testing, setTesting] = useState<TestResult>({ status: 'idle' });
@@ -166,11 +169,11 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={styles.root}>
-      <Appbar.Header style={styles.appbar} dark>
+    <SafeAreaView edges={['left', 'right']} style={styles.root}>
+      <Appbar.Header style={styles.appbar} dark statusBarHeight={insets.top}>
         <Appbar.BackAction onPress={goBack} color={COLORS.text} />
         <Appbar.Content
-          title="Sunucu Ayarları"
+          title="Ayarlar"
           titleStyle={styles.appbarTitle}
         />
       </Appbar.Header>
@@ -276,6 +279,47 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        <View style={styles.card}>
+          <View style={styles.headRow}>
+            <View style={styles.iconBox}>
+              <Icon source="barcode-scan" size={28} color={COLORS.accentLight} />
+            </View>
+            <View style={styles.headText}>
+              <Text style={styles.title}>Donanım</Text>
+              <Text style={styles.subtitle}>
+                Kamera arızalıysa barkod ekranlarındaki elle yazma alanları
+                açılır. Varsayılan: kapalı (sadece kamera).
+              </Text>
+            </View>
+          </View>
+
+          <TouchableRipple
+            onPress={() => {
+              void setManualBarcodeEntry(!manualBarcodeEntry);
+              void Haptics.selectionAsync();
+            }}
+            rippleColor="rgba(99,102,241,0.2)"
+            style={styles.toggleRow}
+          >
+            <View style={styles.toggleRowInner}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.toggleLabel}>Kamera arızalı</Text>
+                <Text style={styles.toggleHint}>
+                  Elle barkod yazma alanlarını göster
+                </Text>
+              </View>
+              <Switch
+                value={manualBarcodeEntry}
+                onValueChange={(v) => {
+                  void setManualBarcodeEntry(v);
+                  void Haptics.selectionAsync();
+                }}
+                color={COLORS.accentLight}
+              />
+            </View>
+          </TouchableRipple>
+        </View>
+
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Şu an aktif</Text>
@@ -308,88 +352,21 @@ export default function SettingsScreen() {
         </View>
       </ScrollView>
 
-      <ConfirmModal
-        state={confirmState}
+      <ConfirmDialog
+        kind="destructive"
+        visible={confirmState !== null}
         onDismiss={() => setConfirmState(null)}
+        title={confirmState?.title ?? ''}
+        description={confirmState?.body ?? ''}
+        confirmLabel={confirmState?.confirmLabel}
+        onConfirm={() => {
+          confirmState?.onConfirm();
+          setConfirmState(null);
+        }}
       />
     </SafeAreaView>
   );
 }
-
-/** Yıkıcı işlem onayı için custom modal — native Alert yerine. Yön bağımsız,
- *  RNModal ile tutarlı, kendi tema/spacing kontrolü. */
-function ConfirmModal({
-  state,
-  onDismiss,
-}: {
-  state: {
-    title: string;
-    body: string;
-    confirmLabel: string;
-    onConfirm: () => void;
-  } | null;
-  onDismiss: () => void;
-}) {
-  const { width: winW, height: winH } = useWindowDimensions();
-  const visible = state !== null;
-  return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.6}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
-      style={confirmStyles.modal}
-    >
-      <View style={[confirmStyles.sheet, { maxWidth: Math.min(winW * 0.9, 420) }]}>
-        <Text variant="titleMedium" style={confirmStyles.title}>
-          {state?.title}
-        </Text>
-        <Text style={confirmStyles.body}>{state?.body}</Text>
-        <View style={confirmStyles.actions}>
-          <Button mode="outlined" onPress={onDismiss} style={confirmStyles.btn}>
-            Vazgeç
-          </Button>
-          <Button
-            mode="contained"
-            buttonColor="#dc2626"
-            onPress={() => {
-              state?.onConfirm();
-              onDismiss();
-            }}
-            style={confirmStyles.btn}
-          >
-            {state?.confirmLabel ?? 'Onayla'}
-          </Button>
-        </View>
-      </View>
-    </RNModal>
-  );
-}
-
-const confirmStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
-  sheet: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 20,
-    gap: 12,
-    width: '90%',
-  },
-  title: { fontWeight: '700', color: '#0f172a' },
-  body: { fontSize: 14, color: '#475569', lineHeight: 20 },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 4,
-  },
-  btn: { minWidth: 100 },
-});
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
@@ -490,6 +467,17 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border,
     marginVertical: 12,
   },
+  toggleRow: { borderRadius: 10, backgroundColor: COLORS.bgDarker },
+  toggleRowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  toggleLabel: { color: COLORS.text, fontSize: 15, fontWeight: '700' },
+  toggleHint: { color: COLORS.subtext, fontSize: 12, marginTop: 2 },
+
   resetBtn: { borderRadius: 8, marginTop: 4 },
   resetBtnInner: {
     flexDirection: 'row',

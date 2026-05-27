@@ -1,6 +1,22 @@
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 
+export interface SwatchStats {
+  count: number;
+  /** Filtreye uyan tüm kartelaların `length` toplamı — cm. */
+  totalLength: number;
+}
+
+export interface SwatchCursorPage {
+  success: boolean;
+  data: SwatchListItem[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
 // =============================================================================
 // Swatch (Kartela) — TartıPaket scan akışında kartela barkodu çözümlemesi
 // =============================================================================
@@ -21,6 +37,25 @@ export interface SwatchByBarcode {
   } | null;
 }
 
+export interface SwatchListItem {
+  id: string;
+  barcode: string;
+  cardNumber: string;
+  length: number | string;
+  width: number | string | null;
+  weightKg: number | string | null;
+  itemId: string;
+  colorId: string | null;
+  workOrderId: string | null;
+  parentRollId: string | null;
+  purpose: string | null;
+  createdAt: string;
+  item?: { id: string; code: string; name: string } | null;
+  color?: { id: string; code: string; name: string } | null;
+  workOrder?: { id: string; batchNumber?: string | null } | null;
+  parentRoll?: { id: string; barcode: string } | null;
+}
+
 export const swatchService = {
   getByBarcode: (barcode: string): Promise<ApiResponse<SwatchByBarcode | null>> =>
     apiClient
@@ -28,4 +63,55 @@ export const swatchService = {
         `/swatches/by-barcode/${encodeURIComponent(barcode)}`
       )
       .then((r) => r.data),
+
+  list: (params?: {
+    workOrderId?: string;
+    itemId?: string;
+    limit?: number;
+  }): Promise<ApiResponse<SwatchListItem[]>> => {
+    const sp = new URLSearchParams();
+    if (params?.workOrderId) sp.set('workOrderId', params.workOrderId);
+    if (params?.itemId) sp.set('itemId', params.itemId);
+    if (params?.limit) sp.set('limit', String(params.limit));
+    const qs = sp.toString();
+    return apiClient
+      .get<ApiResponse<SwatchListItem[]>>(`/swatches${qs ? `?${qs}` : ''}`)
+      .then((r) => r.data);
+  },
+
+  /** Cursor-pagination liste — infinite scroll. Backend search: barcode, cardNumber, item.name, item.code, workOrder.batchNumber. */
+  listCursor: (params?: {
+    workOrderId?: string;
+    itemId?: string;
+    limit?: number;
+    cursor?: string | null;
+    search?: string;
+  }): Promise<SwatchCursorPage> => {
+    const sp = new URLSearchParams();
+    sp.set('mode', 'cursor');
+    if (params?.workOrderId) sp.set('workOrderId', params.workOrderId);
+    if (params?.itemId) sp.set('itemId', params.itemId);
+    if (params?.limit) sp.set('limit', String(params.limit));
+    if (params?.cursor) sp.set('cursor', params.cursor);
+    if (params?.search) sp.set('search', params.search);
+    return apiClient
+      .get<SwatchCursorPage>(`/swatches?${sp.toString()}`)
+      .then((r) => r.data);
+  },
+
+  /** TÜM kartelaların özeti — filtreye uyan (workOrderId/itemId/search). */
+  getStats: (params?: {
+    workOrderId?: string;
+    itemId?: string;
+    search?: string;
+  }): Promise<ApiResponse<SwatchStats>> => {
+    const sp = new URLSearchParams();
+    if (params?.workOrderId) sp.set('workOrderId', params.workOrderId);
+    if (params?.itemId) sp.set('itemId', params.itemId);
+    if (params?.search) sp.set('search', params.search);
+    const qs = sp.toString();
+    return apiClient
+      .get<ApiResponse<SwatchStats>>(`/swatches/stats${qs ? `?${qs}` : ''}`)
+      .then((r) => r.data);
+  },
 };

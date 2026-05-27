@@ -53,6 +53,12 @@ interface Props {
    * WO'ya bağlı" sayar ve listeden düşürür.
    */
   excludeWorkOrderId?: string | null;
+  /**
+   * Material committed WO'da yeni siparişler sadece WO'nun kumaşı + eni ile
+   * uyumlu olmak zorunda. Set edilirse picker hard-filter olarak uygular.
+   */
+  requiredItemId?: string | null;
+  requiredWidth?: number | null;
 }
 
 type DeadlinePreset = "all" | "week" | "month" | "overdue";
@@ -77,6 +83,22 @@ function mismatchReason(anchor: Anchor, line: LineCompatTarget): string | null {
   if (line.itemId !== anchor.itemId) return "Farklı ürün";
   if ((line.colorId ?? null) !== (anchor.colorId ?? null)) return "Farklı renk";
   if ((line.width ?? null) !== (anchor.width ?? null)) return "Farklı en";
+  return null;
+}
+
+interface RequiredConstraint {
+  itemId: string;
+  width: number | null;
+}
+
+function requiredMismatchReason(
+  req: RequiredConstraint | null,
+  line: LineCompatTarget,
+): string | null {
+  if (!req) return null;
+  if (line.itemId !== req.itemId) return "İş emrinin kumaşıyla uyuşmuyor";
+  if ((line.width ?? null) !== (req.width ?? null))
+    return "İş emrinin eniyle uyuşmuyor";
   return null;
 }
 
@@ -138,7 +160,16 @@ export function OrderPickerDialog({
   initialSelected,
   onConfirm,
   excludeWorkOrderId,
+  requiredItemId,
+  requiredWidth,
 }: Props) {
+  const required = useMemo<RequiredConstraint | null>(
+    () =>
+      requiredItemId
+        ? { itemId: requiredItemId, width: requiredWidth ?? null }
+        : null,
+    [requiredItemId, requiredWidth],
+  );
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [customerId, setCustomerId] = useState<string | null>(null);
@@ -232,25 +263,28 @@ export function OrderPickerDialog({
     };
   }, [selectedArray]);
 
-  // Anchor + hideIncompatible aktifken her siparişin uyumsuz satırlarını gizle,
-  // hiç uyumlu satırı kalmayan siparişleri tamamen listeden çıkar. Anchor yoksa
-  // veya kullanıcı toggle'ı kapadıysa hepsi gösterilir (uyumsuzlar disabled görünür).
+  // Hard-filter: required (WO commitment) ile uyuşmayanları her zaman çıkar.
+  // Soft-filter: anchor (selection-derived) ile uyuşmayanları sadece
+  // hideIncompatible açıkken çıkar.
   const visibleFetched = useMemo(() => {
-    if (!anchor || !hideIncompatible) return sortedFetched;
+    const softFilter = anchor && hideIncompatible;
+    if (!required && !softFilter) return sortedFetched;
     return sortedFetched
       .map((o) => ({
         ...o,
-        lines: (o.lines ?? []).filter(
-          (l) =>
-            mismatchReason(anchor, {
-              itemId: l.itemId,
-              colorId: l.colorId,
-              width: l.width ?? null,
-            }) === null,
-        ),
+        lines: (o.lines ?? []).filter((l) => {
+          const target = {
+            itemId: l.itemId,
+            colorId: l.colorId,
+            width: l.width ?? null,
+          };
+          if (requiredMismatchReason(required, target) !== null) return false;
+          if (softFilter && mismatchReason(anchor!, target) !== null) return false;
+          return true;
+        }),
       }))
       .filter((o) => (o.lines?.length ?? 0) > 0);
-  }, [sortedFetched, anchor, hideIncompatible]);
+  }, [sortedFetched, anchor, hideIncompatible, required]);
 
   const groupedSelected = useMemo(() => {
     const map = new Map<
@@ -290,15 +324,17 @@ export function OrderPickerDialog({
     setSelectedMap((prev) => {
       const next = new Map(prev);
       for (const line of order.lines ?? []) {
-        // Anchor varsa sadece uyumlu satırları seç; uncheck'te kısıt yok.
+        // Anchor varsa sadece uyumlu satırları seç; required ile uyuşmayanlar
+        // her zaman dışarıda kalır. Uncheck'te kısıt yok.
+        const target = {
+          itemId: line.itemId,
+          colorId: line.colorId,
+          width: line.width ?? null,
+        };
         const incompatible =
-          checked && anchor
-            ? mismatchReason(anchor, {
-                itemId: line.itemId,
-                colorId: line.colorId,
-                width: line.width ?? null,
-              }) !== null
-            : false;
+          checked &&
+          (requiredMismatchReason(required, target) !== null ||
+            (anchor && mismatchReason(anchor, target) !== null));
         if (incompatible) continue;
         if (checked) next.set(line.id, buildPicked(order, line));
         else next.delete(line.id);
@@ -435,6 +471,7 @@ export function OrderPickerDialog({
                       order={order}
                       selectedMap={selectedMap}
                       anchor={anchor}
+                      required={required}
                       onToggleLine={(line, checked) =>
                         checked
                           ? addLine(buildPicked(order, line))
@@ -581,30 +618,31 @@ function FetchedOrderRow({
   order,
   selectedMap,
   anchor,
+  required,
   onToggleLine,
   onToggleOrder,
 }: {
   order: Order;
   selectedMap: Map<string, PickedOrderLine>;
   anchor: Anchor | null;
+  required: RequiredConstraint | null;
   onToggleLine: (line: OrderLine, checked: boolean) => void;
   onToggleOrder: (checked: boolean) => void;
 }) {
   const lines = order.lines ?? [];
-  const compatLines = anchor
-    ? lines.filter(
-        (l) =>
-          mismatchReason(anchor, {
-            itemId: l.itemId,
-            colorId: l.colorId,
-            width: l.width ?? null,
-          }) === null,
-      )
-    : lines;
+  const lineCompat = (l: OrderLine): string | null => {
+    const target = { itemId: l.itemId, colorId: l.colorId, width: l.width ?? null };
+    return (
+      requiredMismatchReason(required, target) ??
+      (anchor ? mismatchReason(anchor, target) : null)
+    );
+  };
+  const compatLines = lines.filter((l) => lineCompat(l) === null);
   const allChecked =
     compatLines.length > 0 && compatLines.every((l) => selectedMap.has(l.id));
   const someChecked = compatLines.some((l) => selectedMap.has(l.id));
-  const orderDisabled = anchor !== null && compatLines.length === 0;
+  const orderDisabled =
+    (anchor !== null || required !== null) && compatLines.length === 0;
 
   return (
     <li className="px-4 py-3">
@@ -623,13 +661,7 @@ function FetchedOrderRow({
       </div>
       <ul className="ml-6 mt-1.5 space-y-1">
         {lines.map((line) => {
-          const reason = anchor
-            ? mismatchReason(anchor, {
-                itemId: line.itemId,
-                colorId: line.colorId,
-                width: line.width ?? null,
-              })
-            : null;
+          const reason = lineCompat(line);
           const incompatible = reason !== null;
           const isSelected = selectedMap.has(line.id);
           return (

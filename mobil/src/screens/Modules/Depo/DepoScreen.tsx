@@ -1,6 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, useWindowDimensions } from 'react-native';
-import RNModal from 'react-native-modal';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import {
   Text,
   TextInput,
@@ -11,30 +10,41 @@ import {
   Icon,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
+import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import DetailSheet, {
+  SectionTitle,
+  MutedText,
+  type SummaryItem,
+} from '../../../components/DetailSheet';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { rollService } from '../../../services/roll.service';
+import { swatchService, type SwatchListItem } from '../../../services/swatch.service';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
+
+const PAGE_SIZE = 50;
 
 // =============================================================================
 // Depo — depodaki ve ardından paketlenmiş tüm envanterin görünümü.
 // Read-only liste + barkod scan + filtre + detay.
 // =============================================================================
 
-// Sevkiyat domain'i sıfırlandı — READY_FOR_SHIP enum'u kaldırıldı. Depo'da
-// şu an sadece WAREHOUSE statüsü anlamlı (Tambur sonrası + manuel renkli giriş).
-// Sevkiyat modülü yeniden yazılınca buraya yeni durumlar eklenecek.
-type StatusFilter = 'ALL' | 'WAREHOUSE';
+// Depo personeli sekmesi: Tümü (depo+ham) / Depo (WAREHOUSE) / Ham (STOCK) /
+// Kartela (Swatch). Sevkiyat modülü yeniden yazılınca burada yeni durumlar
+// olabilir; ham (STOCK) ve kartela üretim öncesi/yan envanteri kapsar.
+type ModeFilter = 'ALL' | 'WAREHOUSE' | 'STOCK' | 'SWATCH';
 
-const STATUS_TABS: { key: StatusFilter; label: string; color: string }[] = [
+const MODE_TABS: { key: ModeFilter; label: string; color: string }[] = [
   { key: 'ALL', label: 'Tümü', color: '#475569' },
-  { key: 'WAREHOUSE', label: 'Depoda', color: '#d97706' },
+  { key: 'WAREHOUSE', label: 'Depo', color: '#d97706' },
+  { key: 'STOCK', label: 'Ham', color: '#0ea5e9' },
+  { key: 'SWATCH', label: 'Kartela', color: '#7c3aed' },
 ];
 
 interface RollListItem {
@@ -56,87 +66,234 @@ interface RollListItem {
 export default function DepoScreen() {
   const device = useDeviceType();
   const isPhone = device === 'phone';
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [mode, setMode] = useState<ModeFilter>('ALL');
   const [search, setSearch] = useState('');
-  const [scanInput, setScanInput] = useState('');
-  const [scanning, setScanning] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [detailRoll, setDetailRoll] = useState<RollListItem | null>(null);
-  const handleDetailDismiss = useCallback(() => setDetailRoll(null), []);
+  const [detailSwatch, setDetailSwatch] = useState<SwatchListItem | null>(null);
+  const handleRollDetailDismiss = useCallback(() => setDetailRoll(null), []);
+  const handleSwatchDetailDismiss = useCallback(() => setDetailSwatch(null), []);
 
-  const filterStatus =
-    statusFilter === 'ALL' ? 'WAREHOUSE' : statusFilter;
+  const isSwatchMode = mode === 'SWATCH';
 
-  const rollsQuery = useQuery({
-    queryKey: ['rolls', 'depo', statusFilter, search],
-    queryFn: () =>
-      rollService.getAll({
-        page: 1,
-        pageSize: 100,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-        filters: { status: filterStatus },
+  // Roll listesi — status filtresi mode'a göre belirlenir. SWATCH modunda
+  // bu query enabled=false (kartela ayrı endpoint).
+  // ALL sekmesi depo karakterli tüm statüleri kapsar: WAREHOUSE (Tambur sonrası),
+  // A1_STOCK (2. kalite satılabilir), PRODUCED (Tambur'a girmemiş tamamlanmış),
+  // STOCK (ham). includeFire=true olmadan backend FIRE kaliteleri sessizce gizler.
+  const rollsFilters = useMemo<Record<string, string | string[]>>(() => {
+    const f: Record<string, string | string[]> = { includeFire: 'true' };
+    if (mode === 'ALL') f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'PRODUCED', 'STOCK'];
+    else if (mode === 'WAREHOUSE') f.status = 'WAREHOUSE';
+    else if (mode === 'STOCK') f.status = 'STOCK';
+    return f;
+  }, [mode]);
+
+  // Liste — cursor-mode infinite scroll. mode/search değiştiğinde queryKey
+  // değişir → useInfiniteQuery state'i sıfırlar (ilk sayfa).
+  const rollsQuery = useInfiniteQuery({
+    queryKey: ['rolls', 'depo', mode, search] as const,
+    queryFn: ({ pageParam }) =>
+      rollService.getAllCursor({
+        limit: PAGE_SIZE,
+        cursor: pageParam,
+        filters: rollsFilters,
         search: search.trim() || undefined,
       }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) =>
+      last.pagination.hasMore ? last.pagination.nextCursor : null,
+    enabled: !isSwatchMode,
     staleTime: 30 * 1000,
   });
 
-  const rolls = (rollsQuery.data?.data ?? []) as RollListItem[];
+  // Stats — TÜM filtreye uyan rolların aggregate'i (sayfaya bağlı değil).
+  // Liste ile aynı filtre seti, ayrı endpoint.
+  const rollStatsQuery = useQuery({
+    queryKey: ['rolls', 'depo', 'stats', mode, search] as const,
+    queryFn: () =>
+      rollService.getStats({
+        search: search.trim() || undefined,
+        filters: rollsFilters,
+      }),
+    enabled: !isSwatchMode,
+    staleTime: 30 * 1000,
+  });
 
-  // İstatistik özet
-  const stats = useMemo(() => {
-    const sums = {
-      count: rolls.length,
-      totalQty: 0,
-      totalWeight: 0,
-      warehouse: 0,
-      a1Quality: 0,
-      fireQuality: 0,
-    };
-    for (const r of rolls) {
-      // Backend Decimal alanları string döner — Number() ile coerce şart, aksi
-      // halde `+=` string concat yapıp .toFixed çağrılarını bozar.
-      sums.totalQty += Number(r.currentQty ?? 0);
-      if (r.weightKg != null) sums.totalWeight += Number(r.weightKg);
-      if (r.status === 'WAREHOUSE') sums.warehouse++;
-      if (r.qualityGrade === 'A1') sums.a1Quality++;
-      else if (r.qualityGrade === 'FIRE') sums.fireQuality++;
+  // Search artık backend'de — queryKey'de yer alır, değişince ilk sayfaya döner.
+  const swatchesQuery = useInfiniteQuery({
+    queryKey: ['swatches', 'depo', search] as const,
+    queryFn: ({ pageParam }) =>
+      swatchService.listCursor({
+        limit: PAGE_SIZE,
+        cursor: pageParam,
+        search: search.trim() || undefined,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) =>
+      last.pagination.hasMore ? last.pagination.nextCursor : null,
+    enabled: isSwatchMode,
+    staleTime: 30 * 1000,
+  });
+
+  const swatchStatsQuery = useQuery({
+    queryKey: ['swatches', 'depo', 'stats', search] as const,
+    queryFn: () =>
+      swatchService.getStats({ search: search.trim() || undefined }),
+    enabled: isSwatchMode,
+    staleTime: 30 * 1000,
+  });
+
+  const rolls = useMemo(
+    () =>
+      (rollsQuery.data?.pages.flatMap((p) => p.data) ?? []) as RollListItem[],
+    [rollsQuery.data]
+  );
+  const swatches = useMemo(
+    () =>
+      (swatchesQuery.data?.pages.flatMap((p) => p.data) ?? []) as SwatchListItem[],
+    [swatchesQuery.data]
+  );
+
+  // Stats artık API'den — tüm DB üzerinden hesaplanır, sayfaya bağlı değil.
+  const rs = rollStatsQuery.data?.data;
+  const rollStats = {
+    count: rs?.totalCount ?? 0,
+    totalQty: rs?.totalQty ?? 0,
+    warehouse: rs?.byStatus?.WAREHOUSE ?? 0,
+    stock: rs?.byStatus?.STOCK ?? 0,
+    a1Quality: rs?.byQuality?.A1 ?? 0,
+    fireQuality: rs?.byQuality?.FIRE ?? 0,
+  };
+
+  const ss = swatchStatsQuery.data?.data;
+  const swatchStats = {
+    count: ss?.count ?? 0,
+    totalLength: ss?.totalLength ?? 0,
+  };
+
+  // Scanner kapanma animasyonu BİTMEDEN detail modal açılırsa RNModal overlay'i
+  // tıklamaları yutuyor ve ekran kullanılamaz hale geliyor (BarcodeScannerModal
+  // dosyasındaki uyarı). Bu yüzden taranan barkodun sonucunu buraya yazıp,
+  // scanner.onModalHide'da detail modal'ı açıyoruz.
+  const pendingDetailRef = useRef<
+    | { kind: 'roll'; data: RollListItem }
+    | { kind: 'swatch'; data: SwatchListItem }
+    | null
+  >(null);
+
+  const handleBarcodeScanned = async (raw: string) => {
+    const barcode = raw.trim();
+    if (!barcode) {
+      setScannerOpen(false);
+      return;
     }
-    return sums;
-  }, [rolls]);
-
-  const handleScan = async () => {
-    const barcode = scanInput.trim();
-    if (!barcode) return;
-    setScanning(true);
+    // Sekme = listeleme bağlamı; barkod okutma = nokta sorgu, sekmeden bağımsız.
+    // Prefix sabit: SW- → Kartela, TEKS- → Top. Operatör Tümü sekmesindeyken
+    // kartela barkodu okutursa da kartela detayı açılır.
+    const isSwatchBarcode = /^SW-/i.test(barcode);
     try {
-      const res = await rollService.getByBarcode(barcode);
-      const r = res.data;
-      if (!r) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: barcode });
-        return;
+      if (isSwatchBarcode) {
+        const res = await swatchService.getByBarcode(barcode);
+        const s = res.data;
+        if (!s) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          Toast.show({ type: 'error', text1: 'Kartela bulunamadı', text2: barcode });
+        } else {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          pendingDetailRef.current = {
+            kind: 'swatch',
+            data: s as unknown as SwatchListItem,
+          };
+        }
+      } else {
+        const res = await rollService.getByBarcode(barcode);
+        const r = res.data;
+        if (!r) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: barcode });
+        } else {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          pendingDetailRef.current = { kind: 'roll', data: r as RollListItem };
+        }
       }
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setDetailRoll(r as RollListItem);
-      setScanInput('');
     } catch (err) {
       Toast.show({
         type: 'error',
         text1: 'Sorgulanamadı',
         text2: (err as Error).message,
       });
-    } finally {
-      setScanning(false);
     }
+    setScannerOpen(false);
+  };
+
+  const handleScannerHidden = useCallback(() => {
+    const pending = pendingDetailRef.current;
+    if (!pending) return;
+    pendingDetailRef.current = null;
+    if (pending.kind === 'roll') setDetailRoll(pending.data);
+    else setDetailSwatch(pending.data);
+  }, []);
+
+  const activeQuery = isSwatchMode ? swatchesQuery : rollsQuery;
+  const activeStatsQuery = isSwatchMode ? swatchStatsQuery : rollStatsQuery;
+  const refreshing = activeQuery.isFetching || activeStatsQuery.isFetching;
+  const handleRefresh = useCallback(() => {
+    activeQuery.refetch();
+    activeStatsQuery.refetch();
+  }, [activeQuery, activeStatsQuery]);
+
+  const subtitle = isSwatchMode
+    ? 'Kartela (Swatch) envanteri'
+    : mode === 'STOCK'
+      ? 'Ham stok — henüz üretime girmemiş toplar'
+      : mode === 'WAREHOUSE'
+        ? 'Depoda satışa/sevke hazır toplar'
+        : 'Depodaki toplar + ham stok';
+
+  const renderStats = () => {
+    if (isSwatchMode) {
+      return (
+        <>
+          <StatBox label="Toplam Kartela" value={swatchStats.count} color="#7c3aed" />
+          <View style={styles.statDivider} />
+          <StatBox
+            label="Toplam Uzunluk"
+            value={`${swatchStats.totalLength.toFixed(0)} cm`}
+            color="#0f172a"
+          />
+        </>
+      );
+    }
+    return (
+      <>
+        <StatBox
+          label={isPhone ? 'Toplam Top' : 'Toplam Top'}
+          value={rollStats.count}
+          color="#0f172a"
+        />
+        <View style={styles.statDivider} />
+        <StatBox
+          label={isPhone ? 'Metre' : 'Toplam Metre'}
+          value={`${rollStats.totalQty.toFixed(0)} m`}
+          color="#0f172a"
+        />
+        <View style={styles.statDivider} />
+        <StatBox label="Depo" value={rollStats.warehouse} color="#d97706" />
+        <View style={styles.statDivider} />
+        <StatBox label="Ham" value={rollStats.stock} color="#0ea5e9" />
+        <View style={styles.statDivider} />
+        <StatBox label="A1" value={rollStats.a1Quality} color="#7c3aed" />
+        <View style={styles.statDivider} />
+        <StatBox label="Fire" value={rollStats.fireQuality} color="#ef4444" />
+      </>
+    );
   };
 
   return (
-    <ScreenChrome
-      title="Depo"
-      subtitle="Tartılmış/paketlenmiş ve depodaki ham toplar"
-    >
+    <ScreenChrome title="Depo" subtitle={subtitle}>
       <View style={styles.container}>
-        {/* Üst — istatistik özet */}
+        {/* Üst — istatistik özet (mode'a göre içerik değişir) */}
         {isPhone ? (
           <Surface style={styles.statsCardPhone} elevation={1}>
             <ScrollView
@@ -144,93 +301,67 @@ export default function DepoScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.statsScrollContent}
             >
-              <StatBox label="Toplam Top" value={stats.count} color="#0f172a" />
-              <View style={styles.statDivider} />
-              <StatBox
-                label="Metre"
-                value={`${stats.totalQty.toFixed(0)} m`}
-                color="#0f172a"
-              />
-              <View style={styles.statDivider} />
-              <StatBox
-                label="Brüt"
-                value={`${stats.totalWeight.toFixed(0)} kg`}
-                color="#0f172a"
-              />
-              <View style={styles.statDivider} />
-              <StatBox label="Depoda" value={stats.warehouse} color="#d97706" />
-              <View style={styles.statDivider} />
-              <StatBox label="A1" value={stats.a1Quality} color="#7c3aed" />
-              <View style={styles.statDivider} />
-              <StatBox label="Fire" value={stats.fireQuality} color="#ef4444" />
+              {renderStats()}
             </ScrollView>
           </Surface>
         ) : (
           <Surface style={styles.statsCard} elevation={1}>
-            <StatBox label="Toplam Top" value={stats.count} color="#0f172a" />
-            <View style={styles.statDivider} />
-            <StatBox
-              label="Toplam Metre"
-              value={`${stats.totalQty.toFixed(0)} m`}
-              color="#0f172a"
-            />
-            <View style={styles.statDivider} />
-            <StatBox
-              label="Toplam Brüt"
-              value={`${stats.totalWeight.toFixed(0)} kg`}
-              color="#0f172a"
-            />
-            <View style={styles.statDivider} />
-            <StatBox label="Depoda" value={stats.warehouse} color="#d97706" />
-            <View style={styles.statDivider} />
-            <StatBox label="A1" value={stats.a1Quality} color="#7c3aed" />
-            <View style={styles.statDivider} />
-            <StatBox label="Fire" value={stats.fireQuality} color="#ef4444" />
+            {renderStats()}
           </Surface>
         )}
 
-        {/* Üst — barkod scan + arama */}
+        {/* Üst — kamera + arama */}
         <Surface style={styles.toolbar} elevation={1}>
           <View style={styles.toolbarRow}>
-            <TextInput
-              mode="outlined"
-              value={scanInput}
-              onChangeText={setScanInput}
-              placeholder={isPhone ? 'Barkod' : 'Barkod okut → detay aç'}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              onSubmitEditing={handleScan}
-              returnKeyType="search"
-              style={[styles.input, styles.inputRow]}
-              dense
-              left={<TextInput.Icon icon="qrcode-scan" />}
-            />
+            <TouchableRipple
+              borderless
+              onPress={() => setScannerOpen(true)}
+              style={styles.scanButton}
+            >
+              <View style={styles.scanButtonInner}>
+                <Icon source="qrcode-scan" size={22} color="#fff" />
+                <Text style={styles.scanButtonText}>
+                  {isPhone ? 'Okut' : isSwatchMode ? 'Kartela Okut' : 'Barkod Okut'}
+                </Text>
+              </View>
+            </TouchableRipple>
             <TextInput
               mode="outlined"
               value={search}
               onChangeText={setSearch}
-              placeholder={isPhone ? 'Kumaş ara' : 'Kumaş adı/kodu ara...'}
+              placeholder={
+                isPhone
+                  ? isSwatchMode
+                    ? 'Kartela ara'
+                    : 'Kumaş ara'
+                  : isSwatchMode
+                    ? 'Kart no / kumaş / renk ara...'
+                    : 'Kumaş adı/kodu ara...'
+              }
               style={[styles.input, styles.inputRow]}
               dense
               left={<TextInput.Icon icon="magnify" />}
             />
             <RefreshButton
-              onPress={() => rollsQuery.refetch()}
-              refreshing={rollsQuery.isFetching}
-              isError={rollsQuery.isError}
-              errorMessage={(rollsQuery.error as Error | undefined)?.message}
+              onPress={handleRefresh}
+              refreshing={refreshing}
+              isError={activeQuery.isError || activeStatsQuery.isError}
+              errorMessage={
+                (activeQuery.error as Error | undefined)?.message ??
+                (activeStatsQuery.error as Error | undefined)?.message
+              }
             />
           </View>
 
-          {/* Status filtre tab'ları */}
+          {/* Mode tab'ları */}
           <View style={styles.statusTabs}>
-            {STATUS_TABS.map((t) => {
-              const active = statusFilter === t.key;
+            {MODE_TABS.map((t) => {
+              const active = mode === t.key;
               return (
                 <TouchableRipple
                   key={t.key}
                   borderless
-                  onPress={() => setStatusFilter(t.key)}
+                  onPress={() => setMode(t.key)}
                   style={[
                     styles.statusChip,
                     active && {
@@ -255,14 +386,49 @@ export default function DepoScreen() {
 
         {/* Liste */}
         <View style={{ flex: 1 }}>
-          {rollsQuery.isLoading ? (
+          {activeQuery.isLoading ? (
             <View style={styles.empty}>
               <ActivityIndicator size="large" color="#475569" />
             </View>
+          ) : isSwatchMode ? (
+            swatches.length === 0 ? (
+              <View style={styles.empty}>
+                <Icon source="card-text-outline" size={56} color="#cbd5e1" />
+                <Text style={styles.emptyText}>Kartela bulunamadı</Text>
+                <Text style={styles.emptyHint}>
+                  {search ? `'${search}' için sonuç yok` : 'Henüz kartela üretilmemiş'}
+                </Text>
+              </View>
+            ) : (
+              <FlashList
+                data={swatches}
+                keyExtractor={(s) => s.id}
+                contentContainerStyle={styles.listContent}
+                onEndReached={() => {
+                  if (
+                    swatchesQuery.hasNextPage &&
+                    !swatchesQuery.isFetchingNextPage
+                  ) {
+                    swatchesQuery.fetchNextPage();
+                  }
+                }}
+                onEndReachedThreshold={0.4}
+                ListFooterComponent={
+                  swatchesQuery.isFetchingNextPage ? (
+                    <View style={styles.footerLoader}>
+                      <ActivityIndicator size="small" color="#475569" />
+                    </View>
+                  ) : null
+                }
+                renderItem={({ item }) => (
+                  <SwatchListRow swatch={item} onPress={() => setDetailSwatch(item)} />
+                )}
+              />
+            )
           ) : rolls.length === 0 ? (
             <View style={styles.empty}>
               <Icon source="package-variant-closed" size={56} color="#cbd5e1" />
-              <Text style={styles.emptyText}>Depoda kayıt yok</Text>
+              <Text style={styles.emptyText}>Kayıt yok</Text>
               <Text style={styles.emptyHint}>
                 {search ? `'${search}' için sonuç yok` : 'Filtreyi değiştirin'}
               </Text>
@@ -272,6 +438,19 @@ export default function DepoScreen() {
               data={rolls}
               keyExtractor={(r) => r.id}
               contentContainerStyle={styles.listContent}
+              onEndReached={() => {
+                if (rollsQuery.hasNextPage && !rollsQuery.isFetchingNextPage) {
+                  rollsQuery.fetchNextPage();
+                }
+              }}
+              onEndReachedThreshold={0.4}
+              ListFooterComponent={
+                rollsQuery.isFetchingNextPage ? (
+                  <View style={styles.footerLoader}>
+                    <ActivityIndicator size="small" color="#475569" />
+                  </View>
+                ) : null
+              }
               renderItem={({ item }) => (
                 <RollListRow roll={item} onPress={() => setDetailRoll(item)} />
               )}
@@ -280,9 +459,21 @@ export default function DepoScreen() {
         </View>
       </View>
 
+      {/* Kamera barkod tarayıcı */}
+      <BarcodeScannerModal
+        visible={scannerOpen}
+        onDismiss={() => setScannerOpen(false)}
+        onScan={handleBarcodeScanned}
+        onModalHide={handleScannerHidden}
+        title={isSwatchMode ? 'Kartela Barkodu Okut' : 'Top Barkodu Okut'}
+      />
+
       {/* Detay modal — yalnızca seçili top varken mount: hook'lar/query'ler boşa çalışmasın */}
       {detailRoll && (
-        <RollDetailModal roll={detailRoll} onDismiss={handleDetailDismiss} />
+        <RollDetailModal roll={detailRoll} onDismiss={handleRollDetailDismiss} />
+      )}
+      {detailSwatch && (
+        <SwatchDetailModal swatch={detailSwatch} onDismiss={handleSwatchDetailDismiss} />
       )}
     </ScreenChrome>
   );
@@ -326,6 +517,8 @@ function RollListRow({
                 style={[
                   styles.statusPill,
                   roll.status === 'WAREHOUSE' && styles.statusPillWarehouse,
+                  roll.status === 'A1_STOCK' && styles.statusPillA1Stock,
+                  roll.status === 'PRODUCED' && styles.statusPillReady,
                 ]}
               >
                 <Text style={styles.statusPillText}>
@@ -343,22 +536,16 @@ function RollListRow({
                 </View>
               )}
             </View>
-            <Text style={styles.rollItem} numberOfLines={1}>
-              {roll.item?.name ?? '—'}
-              {roll.variant?.name ? ` · ${roll.variant.name}` : ''}
-            </Text>
             <View style={styles.rollMeta}>
-              <Text style={styles.rollMetaText}>
-                {Number(roll.currentQty ?? 0).toFixed(1)} m
+              <Text
+                style={[styles.rollMetaText, styles.rollMetaName]}
+                numberOfLines={1}
+              >
+                {roll.item?.name ?? '—'}
+                {roll.variant?.name ? ` · ${roll.variant.name}` : ''}
               </Text>
-              {roll.weightKg != null && (
-                <>
-                  <Text style={styles.rollMetaSep}>·</Text>
-                  <Text style={styles.rollMetaText}>
-                    {Number(roll.weightKg).toFixed(2)} kg
-                  </Text>
-                </>
-              )}
+              <Text style={styles.rollMetaSep}>·</Text>
+              <Text style={styles.rollMetaText}>{roll.qualityGrade}</Text>
               {roll.width != null && (
                 <>
                   <Text style={styles.rollMetaSep}>·</Text>
@@ -366,13 +553,115 @@ function RollListRow({
                 </>
               )}
               <Text style={styles.rollMetaSep}>·</Text>
-              <Text style={styles.rollMetaText}>{roll.qualityGrade}</Text>
+              <Text style={styles.rollMetaText}>
+                {Number(roll.currentQty ?? 0).toFixed(1)} m
+              </Text>
             </View>
           </View>
           <Icon source="chevron-right" size={22} color="#94a3b8" />
         </View>
       </TouchableRipple>
     </Surface>
+  );
+}
+
+function SwatchListRow({
+  swatch,
+  onPress,
+}: {
+  swatch: SwatchListItem;
+  onPress: () => void;
+}) {
+  return (
+    <Surface style={styles.rollCard} elevation={1}>
+      <TouchableRipple borderless onPress={onPress} style={{ borderRadius: 10 }}>
+        <View style={styles.rollInner}>
+          <View style={{ flex: 1 }}>
+            <View style={styles.rollHeader}>
+              <Text style={styles.rollBarcode} numberOfLines={1}>
+                {swatch.cardNumber}
+              </Text>
+              <View style={[styles.statusPill, styles.statusPillSwatch]}>
+                <Text style={styles.statusPillText}>Kartela</Text>
+              </View>
+            </View>
+            <Text style={styles.rollItem} numberOfLines={1}>
+              {swatch.item?.name ?? '—'}
+              {swatch.color?.name ? ` · ${swatch.color.name}` : ''}
+            </Text>
+            <View style={styles.rollMeta}>
+              <Text style={styles.rollMetaText}>
+                {Number(swatch.length ?? 0).toFixed(0)} cm
+              </Text>
+              {swatch.width != null && (
+                <>
+                  <Text style={styles.rollMetaSep}>·</Text>
+                  <Text style={styles.rollMetaText}>en {Number(swatch.width).toFixed(0)} cm</Text>
+                </>
+              )}
+              {swatch.weightKg != null && (
+                <>
+                  <Text style={styles.rollMetaSep}>·</Text>
+                  <Text style={styles.rollMetaText}>
+                    {Number(swatch.weightKg).toFixed(2)} kg
+                  </Text>
+                </>
+              )}
+              <Text style={styles.rollMetaSep}>·</Text>
+              <Text style={[styles.rollMetaText, { fontFamily: 'monospace' }]} numberOfLines={1}>
+                {swatch.barcode}
+              </Text>
+            </View>
+          </View>
+          <Icon source="chevron-right" size={22} color="#94a3b8" />
+        </View>
+      </TouchableRipple>
+    </Surface>
+  );
+}
+
+function SwatchDetailModal({
+  swatch,
+  onDismiss,
+}: {
+  swatch: SwatchListItem;
+  onDismiss: () => void;
+}) {
+  const summary: SummaryItem[] = [
+    { icon: 'barcode', label: 'Barkod', value: swatch.barcode, monospaceValue: true },
+    { icon: 'ruler', label: 'Uzunluk', value: `${Number(swatch.length ?? 0).toFixed(0)} cm` },
+    ...(swatch.width != null
+      ? [{ icon: 'arrow-expand-horizontal', label: 'En', value: `${Number(swatch.width).toFixed(0)} cm` } as SummaryItem]
+      : []),
+    ...(swatch.weightKg != null
+      ? [{ icon: 'scale-balance', label: 'Ağırlık', value: `${Number(swatch.weightKg).toFixed(2)} kg` } as SummaryItem]
+      : []),
+    ...(swatch.parentRoll?.barcode
+      ? [{ icon: 'package-variant', label: 'Kaynak Top', value: swatch.parentRoll.barcode, monospaceValue: true } as SummaryItem]
+      : []),
+    ...(swatch.purpose
+      ? [{ icon: 'information-outline', label: 'Amaç', value: swatch.purpose } as SummaryItem]
+      : []),
+    {
+      icon: 'clock-outline',
+      label: 'Üretildi',
+      value: dayjs(swatch.createdAt).format('DD.MM.YYYY HH:mm'),
+    },
+  ];
+
+  return (
+    <DetailSheet
+      visible={!!swatch}
+      onDismiss={onDismiss}
+      icon="card-text"
+      title={swatch.cardNumber}
+      subtitle={
+        (swatch.item?.name ?? '—') +
+        (swatch.color?.name ? ` · ${swatch.color.name}` : '')
+      }
+      widthRatio={0.9}
+      summary={summary}
+    />
   );
 }
 
@@ -383,8 +672,6 @@ function RollDetailModal({
   roll: RollListItem | null;
   onDismiss: () => void;
 }) {
-  const { width: winW, height: winH } = useWindowDimensions();
-
   const historyQuery = useQuery({
     queryKey: ['roll-history', roll?.id],
     queryFn: () => (roll ? rollService.getHistory(roll.id) : Promise.resolve(null)),
@@ -403,106 +690,59 @@ function RollDetailModal({
     details?: Record<string, unknown>;
   }>;
 
+  const summary: SummaryItem[] = [
+    { icon: 'ruler', label: 'Mevcut Metraj', value: `${Number(roll.currentQty ?? 0).toFixed(1)} m` },
+    ...(roll.weightKg != null
+      ? [{ icon: 'scale-balance', label: 'Ağırlık', value: `${Number(roll.weightKg).toFixed(2)} kg` } as SummaryItem]
+      : []),
+    ...(roll.width != null
+      ? [{ icon: 'arrow-expand-horizontal', label: 'En', value: `${roll.width} cm` } as SummaryItem]
+      : []),
+    { icon: 'star-circle', label: 'Kalite', value: roll.qualityGrade },
+    { icon: 'circle', label: 'Durum', value: trLabel(ROLL_STATUS_LABEL, roll.status) },
+  ];
+
   return (
-    <RNModal
-      isVisible={!!roll}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.55}
-      style={modalStyles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+    <DetailSheet
+      visible={!!roll}
+      onDismiss={onDismiss}
+      icon="package-variant"
+      title={roll.barcode}
+      subtitle={
+        (roll.item?.name ?? '—') +
+        (roll.variant?.name ? ` · ${roll.variant.name}` : '')
+      }
+      widthRatio={0.9}
+      summary={summary}
     >
-      <View style={[modalStyles.sheet, { width: winW * 0.65, maxHeight: winH * 0.85 }]}>
-        <View style={modalStyles.header}>
-          <Icon source="package-variant" size={22} color="#0f172a" />
-          <View style={{ flex: 1 }}>
-            <Text variant="titleMedium" style={modalStyles.title}>
-              {roll.barcode}
-            </Text>
-            <Text style={modalStyles.subtitle}>
-              {roll.item?.name ?? '—'}
-              {roll.variant?.name ? ` · ${roll.variant.name}` : ''}
-            </Text>
-          </View>
-          <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
-        </View>
-
-        <ScrollView contentContainerStyle={{ padding: 14, gap: 10 }}>
-          {/* Üst özet */}
-          <Surface style={modalStyles.summary} elevation={0}>
-            <View style={modalStyles.summaryRow}>
-              <Icon source="ruler" size={14} color="#475569" />
-              <Text style={modalStyles.summaryLabel}>Mevcut Metraj:</Text>
-              <Text style={modalStyles.summaryValue}>
-                {Number(roll.currentQty ?? 0).toFixed(1)} m
+      {/* Geçmiş — DetailSheet children olarak custom section */}
+      <SectionTitle>Yaşam Döngüsü ({events.length})</SectionTitle>
+      {historyQuery.isLoading ? (
+        <ActivityIndicator size="small" color="#475569" />
+      ) : events.length === 0 ? (
+        <MutedText>Kayıt yok</MutedText>
+      ) : (
+        events.map((e, idx) => (
+          <Surface key={`${e.at}-${idx}`} style={modalStyles.eventCard} elevation={0}>
+            <View style={modalStyles.eventHeader}>
+              <Text style={modalStyles.eventTitle} numberOfLines={1}>
+                {e.title}
+              </Text>
+              <Text style={modalStyles.eventTime}>
+                {dayjs(e.at).format('DD.MM HH:mm')}
               </Text>
             </View>
-            {roll.weightKg != null && (
-              <View style={modalStyles.summaryRow}>
-                <Icon source="scale-balance" size={14} color="#475569" />
-                <Text style={modalStyles.summaryLabel}>Ağırlık:</Text>
-                <Text style={modalStyles.summaryValue}>
-                  {Number(roll.weightKg).toFixed(2)} kg
-                </Text>
-              </View>
-            )}
-            {roll.width != null && (
-              <View style={modalStyles.summaryRow}>
-                <Icon source="arrow-expand-horizontal" size={14} color="#475569" />
-                <Text style={modalStyles.summaryLabel}>En:</Text>
-                <Text style={modalStyles.summaryValue}>{roll.width} cm</Text>
-              </View>
-            )}
-            <View style={modalStyles.summaryRow}>
-              <Icon source="star-circle" size={14} color="#475569" />
-              <Text style={modalStyles.summaryLabel}>Kalite:</Text>
-              <Text style={modalStyles.summaryValue}>{roll.qualityGrade}</Text>
-            </View>
-            <View style={modalStyles.summaryRow}>
-              <Icon source="circle" size={14} color="#475569" />
-              <Text style={modalStyles.summaryLabel}>Durum:</Text>
-              <Text style={modalStyles.summaryValue}>
-                {trLabel(ROLL_STATUS_LABEL, roll.status)}
+            {(e.stationName || e.operatorName) && (
+              <Text style={modalStyles.eventMeta}>
+                {e.stationName ? `🏭 ${e.stationName}` : ''}
+                {e.stationName && e.operatorName ? ' · ' : ''}
+                {e.operatorName ? `👤 ${e.operatorName}` : ''}
               </Text>
-            </View>
+            )}
           </Surface>
-
-          {/* Geçmiş */}
-          <Text style={modalStyles.sectionTitle}>
-            Yaşam Döngüsü ({events.length})
-          </Text>
-          {historyQuery.isLoading ? (
-            <ActivityIndicator size="small" color="#475569" />
-          ) : events.length === 0 ? (
-            <Text style={modalStyles.muted}>Kayıt yok</Text>
-          ) : (
-            events.map((e, idx) => (
-              <Surface key={`${e.at}-${idx}`} style={modalStyles.eventCard} elevation={0}>
-                <View style={modalStyles.eventHeader}>
-                  <Text style={modalStyles.eventTitle} numberOfLines={1}>
-                    {e.title}
-                  </Text>
-                  <Text style={modalStyles.eventTime}>
-                    {dayjs(e.at).format('DD.MM HH:mm')}
-                  </Text>
-                </View>
-                {(e.stationName || e.operatorName) && (
-                  <Text style={modalStyles.eventMeta}>
-                    {e.stationName ? `🏭 ${e.stationName}` : ''}
-                    {e.stationName && e.operatorName ? ' · ' : ''}
-                    {e.operatorName ? `👤 ${e.operatorName}` : ''}
-                  </Text>
-                )}
-              </Surface>
-            ))
-          )}
-        </ScrollView>
-      </View>
-    </RNModal>
+        ))
+      )}
+    </DetailSheet>
   );
 }
 
@@ -537,6 +777,20 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#fff' },
   inputRow: { flex: 1 },
 
+  scanButton: {
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  scanButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  scanButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
   statusTabs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   statusChip: {
     paddingHorizontal: 12,
@@ -549,6 +803,7 @@ const styles = StyleSheet.create({
   statusChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
 
   listContent: { padding: 4 },
+  footerLoader: { paddingVertical: 16, alignItems: 'center' },
   empty: {
     flex: 1,
     justifyContent: 'center',
@@ -590,44 +845,20 @@ const styles = StyleSheet.create({
   statusPillWarehouse: { backgroundColor: '#fed7aa' },
   statusPillReady: { backgroundColor: '#bbf7d0' },
   statusPillA1: { backgroundColor: '#ddd6fe' },
+  statusPillA1Stock: { backgroundColor: '#fde68a' },
   statusPillFire: { backgroundColor: '#fecaca' },
+  statusPillSwatch: { backgroundColor: '#ddd6fe' },
   statusPillText: { fontSize: 10, fontWeight: '700', color: '#0f172a' },
   rollItem: { fontSize: 12, color: '#475569', marginTop: 4 },
   rollMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   rollMetaText: { fontSize: 11, color: '#0f172a', fontWeight: '600' },
+  rollMetaName: { flexShrink: 1, color: '#475569' },
   rollMetaSep: { fontSize: 11, color: '#cbd5e1' },
 });
 
+// RollDetailModal'a özel event card stilleri — DetailSheet children içinde
+// kullanılan history listesi için.
 const modalStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
-  sheet: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 16,
-    paddingRight: 4,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    gap: 8,
-    backgroundColor: '#f8fafc',
-  },
-  title: { fontWeight: '700', color: '#0f172a', fontFamily: 'monospace' },
-  subtitle: { fontSize: 12, color: '#64748b', marginTop: 2 },
-
-  summary: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 10,
-    padding: 12,
-    gap: 6,
-  },
-  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  summaryLabel: { fontSize: 11, color: '#64748b', fontWeight: '600', minWidth: 110 },
-  summaryValue: { fontSize: 13, color: '#0f172a', fontWeight: '700', flex: 1 },
-
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a', marginTop: 8 },
-  muted: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' },
-
   eventCard: {
     backgroundColor: '#fff',
     borderRadius: 8,

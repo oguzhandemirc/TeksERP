@@ -1,10 +1,10 @@
 import { useQueries } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   ClipboardList,
   Factory,
   Warehouse,
   Truck,
-  AlertTriangle,
   Cog,
   type LucideIcon,
 } from "lucide-react";
@@ -14,8 +14,8 @@ import { cn } from "@/lib/utils";
 import {
   fetchOpenOrderCount,
   fetchOpenWorkOrderCount,
+  fetchProductionActiveRollCount,
   fetchRollCount,
-  fetchTodayDefectCount,
 } from "./dashboardService";
 import { useDashboardLayout } from "./useDashboardLayout";
 
@@ -25,6 +25,8 @@ interface KpiDef {
   icon: LucideIcon;
   tone: string;
   query: () => Promise<number>;
+  /** Tıklandığında gidilecek route — query string ile filtre/tab taşır. */
+  to?: string;
 }
 
 const KPIS: KpiDef[] = [
@@ -34,6 +36,7 @@ const KPIS: KpiDef[] = [
     icon: ClipboardList,
     tone: "text-blue-600 dark:text-blue-400",
     query: fetchOpenOrderCount,
+    to: "/operations/orders?filter[status]=PENDING,APPROVED,PARTIAL_SHIPPED",
   },
   {
     key: "openWorkOrders",
@@ -41,6 +44,7 @@ const KPIS: KpiDef[] = [
     icon: Factory,
     tone: "text-violet-600 dark:text-violet-400",
     query: fetchOpenWorkOrderCount,
+    to: "/operations/work-orders?filter[status]=PLANNED,IN_PROGRESS,PAUSED",
   },
   {
     key: "warehouse",
@@ -48,6 +52,7 @@ const KPIS: KpiDef[] = [
     icon: Warehouse,
     tone: "text-amber-600 dark:text-amber-400",
     query: () => fetchRollCount("WAREHOUSE"),
+    to: "/operations/rolls?tab=FINISHED_STOCK",
   },
   {
     key: "atSubcontractor",
@@ -55,24 +60,20 @@ const KPIS: KpiDef[] = [
     icon: Truck,
     tone: "text-orange-600 dark:text-orange-400",
     query: () => fetchRollCount("AT_SUBCONTRACTOR"),
-  },
-  {
-    key: "todayDefects",
-    label: "Günlük Hata",
-    icon: AlertTriangle,
-    tone: "text-red-600 dark:text-red-400",
-    query: fetchTodayDefectCount,
+    to: "/operations/rolls?tab=SUBCONTRACTOR",
   },
   {
     key: "inProduction",
     label: "Üretimde",
     icon: Cog,
     tone: "text-indigo-600 dark:text-indigo-400",
-    query: () => fetchRollCount("IN_PRODUCTION"),
+    query: fetchProductionActiveRollCount,
+    to: "/operations/rolls?tab=PRODUCTION",
   },
 ];
 
 export function KpiCards() {
+  const navigate = useNavigate();
   const { isVisible, itemOrder } = useDashboardLayout();
   const kpiByFullKey = new Map(KPIS.map((k) => [`kpi:${k.key}`, k]));
   const visibleKpis = itemOrder("kpi")
@@ -95,8 +96,16 @@ export function KpiCards() {
       {visibleKpis.map((kpi, i) => {
         const r = results[i]!;
         const Icon = kpi.icon;
+        const clickable = Boolean(kpi.to);
         return (
-          <Card key={kpi.key}>
+          <Card
+            key={kpi.key}
+            onClick={clickable ? () => navigate(kpi.to!) : undefined}
+            className={cn(
+              clickable &&
+                "cursor-pointer transition-colors hover:bg-accent/40 hover:border-primary/40",
+            )}
+          >
             <CardContent className="flex items-center gap-3 p-4">
               <div
                 className={cn(

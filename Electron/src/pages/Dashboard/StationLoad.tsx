@@ -78,6 +78,9 @@ function StationCell({ station }: { station: StationLiveState }) {
   // KK1 (RAW_QC) üretim akışına step olarak girmez — kuyruk/aktif kavramı yok.
   // Sadece "bugün giren ham mal" sayacı anlamlı.
   const isEntryStation = station.kind === "RAW_QC";
+  // EXTERNAL (fason) istasyonlar — kuyruk = sevk edilen ve dönmeyenler;
+  // operatöre Aktif / Bugün giden / Bugün gelen üçlüsü daha anlamlı.
+  const isQueuelessStation = station.type === "EXTERNAL";
   const isBusy = isEntryStation
     ? station.todayCompletedCount > 0
     : station.queueCount > 0 || station.activeCount > 0;
@@ -104,6 +107,20 @@ function StationCell({ station }: { station: StationLiveState }) {
         <div className="mt-3 text-center">
           <Metric
             label="Bugün Giren"
+            value={station.todayCompletedCount}
+            tone="text-emerald-600 dark:text-emerald-400"
+          />
+        </div>
+      ) : isQueuelessStation ? (
+        <div className="mt-3 grid grid-cols-3 gap-1 text-center">
+          <Metric label="Aktif" value={station.activeCount} tone="text-sky-600 dark:text-sky-400" />
+          <Metric
+            label="Bugün giden"
+            value={station.todayDispatchedCount}
+            tone="text-orange-600 dark:text-orange-400"
+          />
+          <Metric
+            label="Bugün gelen"
             value={station.todayCompletedCount}
             tone="text-emerald-600 dark:text-emerald-400"
           />

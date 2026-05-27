@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, X, Tag } from "lucide-react";
+import { Tag } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -10,56 +10,14 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
-import { rollStatusLabels, RollOperationType, rollEntrySourceLabels } from "@/types/enums";
+import { rollStatusLabels, rollEntrySourceLabels } from "@/types/enums";
 import { rollService } from "./service";
-import type { Roll, RollOperationLogEntry } from "./types";
+import type { Roll } from "./types";
 
 interface Props {
   roll: Roll | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function OperationStatus({
-  label,
-  op,
-  loading,
-}: {
-  label: string;
-  op: RollOperationLogEntry | undefined;
-  loading: boolean;
-}) {
-  const operatorName = op?.operator?.fullName ?? op?.operator?.username ?? null;
-  return (
-    <div className="flex items-start gap-2 rounded border px-2.5 py-2">
-      <div
-        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-          op ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"
-        }`}
-      >
-        {op ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-medium">{label}</div>
-        {loading && !op ? (
-          <div className="text-[11px] text-muted-foreground">Yükleniyor…</div>
-        ) : op ? (
-          <>
-            <div className="text-[11px] text-muted-foreground">
-              {safeFormat(op.createdAt, "dd.MM.yyyy HH:mm")}
-            </div>
-            {operatorName && (
-              <div className="truncate text-[11px] text-muted-foreground">
-                {operatorName}
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="text-[11px] text-muted-foreground">Yapılmadı</div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
@@ -73,10 +31,6 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
     enabled: open && !!roll?.id,
     staleTime: 30_000,
   });
-
-  const operations = detailQuery.data?.data?.operations ?? roll?.operations ?? [];
-  const kursun = operations.find((op) => op.operationType === RollOperationType.KURSUN_APPLIED);
-  const qc2 = operations.find((op) => op.operationType === RollOperationType.QC2_COMPLETED);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -225,26 +179,6 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       </div>
                     </>
                   )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="space-y-2 p-3 text-sm">
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Kurşun / KK2
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <OperationStatus
-                    label="Kurşun"
-                    op={kursun}
-                    loading={detailQuery.isLoading}
-                  />
-                  <OperationStatus
-                    label="KK2"
-                    op={qc2}
-                    loading={detailQuery.isLoading}
-                  />
                 </div>
               </CardContent>
             </Card>

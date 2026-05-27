@@ -17,6 +17,7 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { buildBarcode, buildCardNumber, verifyBarcode } from "../utils/barcode";
 import { parseQueryParams, buildPagination } from "../utils/query-parser";
+import { withBarcodeRetry } from "../utils/barcode-retry";
 import {
   Prisma,
   TravelerCard,
@@ -29,35 +30,50 @@ import {
 export class TravelerCardService {
   /**
    * Ay bazlı sıra üretici — aynı yıl-ay içinde oluşturulan en yüksek barkodun
-   * 6-char segmentini decode edip +1 döndürür.
-   * Collision olursa retry ile çözümlenir.
+   * 6-char segmentini decode edip +1 döndürür. Collision olursa retry ile çözümlenir.
+   *
+   * Defensive: tek satır yerine son 10 satırı çekip ilk parse-edilebilen
+   * barkoddan sequence çıkarır. Böylece DB'de bozuk format kayıt olsa bile
+   * sessizce 1'e dönüp duplicate üretmek yerine bir sonraki geçerli kayda
+   * geçer. Hiçbiri parse edilemezse net hata fırlatır — admin müdahale eder.
    */
   private async nextMonthlySequence(date: Date): Promise<number> {
     const yy = String(date.getFullYear()).slice(2);
     const mm = String(date.getMonth() + 1).padStart(2, "0");
     const prefix = `RK-${yy}${mm}-`;
 
-    const lastCard = await prisma.travelerCard.findFirst({
+    const candidates = await prisma.travelerCard.findMany({
       where: { barcode: { startsWith: prefix } },
       orderBy: { barcode: "desc" },
+      take: 10,
       select: { barcode: true },
     });
 
-    if (!lastCard) return 1;
-
-    // barcode = RK-YYMM-XXXXXX-C → XXXXXX segmentini al ve crockford decode et
-    const parts = lastCard.barcode.split("-");
-    if (parts.length < 4) return 1;
-    const seqStr = parts[2];
+    if (candidates.length === 0) return 1;
 
     const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-    let n = 0;
-    for (const ch of seqStr.toUpperCase()) {
-      const v = CROCKFORD.indexOf(ch);
-      if (v < 0) return 1;
-      n = n * 32 + v;
+    for (const c of candidates) {
+      // barcode = RK-YYMM-XXXXXX-C → XXXXXX segmenti
+      const parts = c.barcode.split("-");
+      if (parts.length < 4) continue;
+      const seqStr = parts[2].toUpperCase();
+      let n = 0;
+      let valid = true;
+      for (const ch of seqStr) {
+        const v = CROCKFORD.indexOf(ch);
+        if (v < 0) {
+          valid = false;
+          break;
+        }
+        n = n * 32 + v;
+      }
+      if (valid) return n + 1;
     }
-    return n + 1;
+
+    throw AppError.internal(
+      `Refakat kartı sequence: ${prefix} prefix'inde bozuk barkodlar tespit edildi, ` +
+        `son 10 kayıttan hiçbiri parse edilemiyor. DB'yi manuel inceleyin.`
+    );
   }
 
   /**
@@ -177,8 +193,9 @@ export class TravelerCardService {
     const activeCard = wo.travelerCards.find((c) => c.status === TravelerCardStatus.ACTIVE);
     const lastVersion = wo.travelerCards[0]?.version ?? 0;
 
-    // Eski kartı REPRINTED'a çek, yeni kartı üret (transaction içinde)
-    return prisma.$transaction(async (tx) => {
+    // Eski kartı REPRINTED'a çek, yeni kartı üret (transaction içinde).
+    // Barkod sequence çakışırsa (P2002) tx'i baştan dener.
+    return withBarcodeRetry(() => prisma.$transaction(async (tx) => {
       if (activeCard) {
         await tx.travelerCard.update({
           where: { id: activeCard.id },
@@ -221,7 +238,7 @@ export class TravelerCardService {
         data: card,
         message: `Refakat kartı yeniden basıldı: ${cardNumber} (v${card.version})`,
       };
-    });
+    }));
   }
 
   /**
@@ -448,7 +465,9 @@ export class TravelerCardService {
    *
    * Mobile/admin tarafı her iki formatta da bu endpoint'i çağırabilir.
    */
-  async findByBarcode(input: string): Promise<ApiResponse<TravelerCard | null>> {
+  async findByBarcode(
+    input: string,
+  ): Promise<ApiResponse<(TravelerCard & { hasOpenDispatch: boolean }) | null>> {
     const normalized = input.trim().toUpperCase();
 
     const isFullBarcode = /^RK-\d{4}-[0-9A-Z]{6}-[0-9A-Z]$/.test(normalized);
@@ -485,7 +504,22 @@ export class TravelerCardService {
       return { success: false, data: null, message: "Kart bulunamadı" };
     }
 
-    return { success: true, data: card };
+    // Fason Sevk akışı: bu WO için açık (cancelledAt=null + mal kabul tam değil)
+    // sevk varsa kart üstüne yeni sevk eklenemez. Tüketici mobil UI bu flag'i
+    // okuyup operatöre erken uyarı verir; backend dispatch endpoint'i de
+    // ayrıca 409 atar (çift güvenlik).
+    const openDispatchCount = await prisma.subcontractorDispatch.count({
+      where: {
+        workOrderId: card.workOrderId,
+        cancelledAt: null,
+        items: { some: { receiptItems: { none: {} } } },
+      },
+    });
+
+    return {
+      success: true,
+      data: { ...card, hasOpenDispatch: openDispatchCount > 0 },
+    };
   }
 
   /**
@@ -520,20 +554,23 @@ export class TravelerCardService {
     userId: string | undefined,
     event: "PRINT" | "REPRINT"
   ): Promise<ApiResponse<TravelerCard>> {
-    const now = new Date();
-    const seq = await this.nextMonthlySequence(now);
-    const cardNumber = buildCardNumber(now, seq);
-    const barcode = buildBarcode(now, seq);
+    // Barkod sequence çakışırsa (P2002) yeniden hesaplanır ve create tekrarlanır.
+    const card = await withBarcodeRetry(async () => {
+      const now = new Date();
+      const seq = await this.nextMonthlySequence(now);
+      const cardNumber = buildCardNumber(now, seq);
+      const barcode = buildBarcode(now, seq);
 
-    const card = await prisma.travelerCard.create({
-      data: {
-        cardNumber,
-        barcode,
-        workOrderId,
-        version,
-        status: TravelerCardStatus.ACTIVE,
-        printedById: userId ?? null,
-      },
+      return prisma.travelerCard.create({
+        data: {
+          cardNumber,
+          barcode,
+          workOrderId,
+          version,
+          status: TravelerCardStatus.ACTIVE,
+          printedById: userId ?? null,
+        },
+      });
     });
 
     await AuditService.log({
@@ -541,13 +578,18 @@ export class TravelerCardService {
       action: "CREATE",
       tableName: "TRAVELER_CARD",
       recordId: card.id,
-      newData: { cardNumber, barcode, version, event },
+      newData: {
+        cardNumber: card.cardNumber,
+        barcode: card.barcode,
+        version,
+        event,
+      },
     });
 
     return {
       success: true,
       data: card,
-      message: `Refakat kartı basıldı: ${cardNumber}`,
+      message: `Refakat kartı basıldı: ${card.cardNumber}`,
     };
   }
 }

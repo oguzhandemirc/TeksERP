@@ -58,6 +58,7 @@ export class InventoryController {
     // Bind methods for Express route handler usage
     this.createInitialEntry = this.createInitialEntry.bind(this);
     this.findAllRolls = this.findAllRolls.bind(this);
+    this.getRollStats = this.getRollStats.bind(this);
     this.findRollById = this.findRollById.bind(this);
     this.findRollByBarcode = this.findRollByBarcode.bind(this);
     this.getRollHistory = this.getRollHistory.bind(this);
@@ -154,6 +155,19 @@ export class InventoryController {
   async findAllRolls(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.findAllRolls(req);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/rolls/stats
+   * Liste ile aynı filtre setini paylaşan özet (toplam adet/metraj/kg + status & kalite dağılımı).
+   */
+  async getRollStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getRollStats(req);
       res.status(200).json(result);
     } catch (error) {
       next(error);

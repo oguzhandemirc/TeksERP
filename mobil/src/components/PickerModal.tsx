@@ -18,6 +18,7 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
+import Pager from './Pager';
 
 export interface PickerOption {
   value: string;
@@ -169,7 +170,7 @@ export default function PickerModal(props: Props) {
         style={[
           styles.sheet,
           isPhone
-            ? { width: winW * 0.95, height: winH * 0.92 }
+            ? { width: winW * 0.95, height: winH * 0.85 }
             : { width: winW * 0.82, height: winH * 0.88 },
         ]}
       >
@@ -290,48 +291,15 @@ export default function PickerModal(props: Props) {
         </View>
 
         {/* Sayfalama — paginated modda */}
-        {paginated && (props as PaginatedProps).totalPages > 1 && (
-          <View style={styles.pagination}>
-            <IconButton
-              mode="outlined"
-              icon="chevron-left"
-              size={20}
-              onPress={() =>
-                (props as PaginatedProps).onPageChange(
-                  Math.max(1, (props as PaginatedProps).page - 1)
-                )
-              }
-              disabled={
-                (props as PaginatedProps).page <= 1 ||
-                (props as PaginatedProps).fetching
-              }
-              accessibilityLabel="Önceki sayfa"
-              style={styles.pageBtn}
-            />
-            <Text style={styles.pageInfo}>
-              {(props as PaginatedProps).page} /{' '}
-              {(props as PaginatedProps).totalPages}
-            </Text>
-            <IconButton
-              mode="outlined"
-              icon="chevron-right"
-              size={20}
-              onPress={() =>
-                (props as PaginatedProps).onPageChange(
-                  Math.min(
-                    (props as PaginatedProps).totalPages,
-                    (props as PaginatedProps).page + 1
-                  )
-                )
-              }
-              disabled={
-                (props as PaginatedProps).page >= (props as PaginatedProps).totalPages ||
-                (props as PaginatedProps).fetching
-              }
-              accessibilityLabel="Sonraki sayfa"
-              style={styles.pageBtn}
-            />
-          </View>
+        {paginated && (
+          <Pager
+            page={(props as PaginatedProps).page}
+            totalPages={(props as PaginatedProps).totalPages}
+            fetching={(props as PaginatedProps).fetching}
+            onPageChange={(props as PaginatedProps).onPageChange}
+            size="medium"
+            style={styles.pagination}
+          />
         )}
       </View>
     </Modal>
@@ -366,7 +334,7 @@ function SearchControls({
           ref={searchRef as React.Ref<any>}
           mode="outlined"
           dense
-          placeholder="Batch no..."
+          placeholder="Ara..."
           value={pendingSearch}
           onChangeText={setPendingSearch}
           onSubmitEditing={submitSearch}
@@ -383,7 +351,7 @@ function SearchControls({
               />
             ) : undefined
           }
-          style={[styles.searchInput, isPhone && styles.searchInputPhone]}
+          style={[styles.searchInput, isPhone && styles.searchInputPhonePaginated]}
           showSoftInputOnFocus
         />
         <Button
@@ -497,10 +465,13 @@ const styles = StyleSheet.create({
     height: SEARCH_HEIGHT,
     fontSize: 13,
   },
-  // Phone'da TextInput standalone (parent flex container yok); flex:1 height
-  // verir ama width verme garantisi yok → kartların altına düşüyordu. '100%'
-  // ile container width'i kesin alır.
+  // Client-mode: TextInput standalone — headerSearchRow içinde tek başına.
+  // width:'100%' parent'ın tüm genişliğini alır.
   searchInputPhone: { width: '100%' },
+  // Paginated-mode: searchGroup flex-row container; input flex:1 ile Button'la
+  // alanı bölüşür. width:240 (searchInput) override'ı için width:'auto' şart,
+  // aksi halde Button modal dışına taşıyordu.
+  searchInputPhonePaginated: { flex: 1, width: 'auto' },
   searchBtn: {
     borderRadius: 8,
     height: SEARCH_HEIGHT,
@@ -544,22 +515,11 @@ const styles = StyleSheet.create({
   empty: { textAlign: 'center', color: '#94a3b8', padding: 24 },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
+  // Pager container — sadece üst kenar ayırıcı + spacing. Layout Pager içinde.
   pagination: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
     paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
-  },
-  pageBtn: { margin: 0, width: 32, height: 32 },
-  pageInfo: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0f172a',
-    minWidth: 48,
-    textAlign: 'center',
   },
 
   cardWrap: { flex: 1, padding: 4 },

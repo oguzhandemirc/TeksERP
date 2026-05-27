@@ -38,14 +38,23 @@ import {
   WorkOrder,
   WorkOrderStatus,
   RollStatus,
+  RollEntrySource,
   Prisma,
 } from "@prisma/client";
 import {
   ensureWorkOrderInProgress,
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
+import { computeWorkOrderLocks } from "./helpers/workorder-locks.helper";
 import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
+import { withBarcodeRetry } from "../utils/barcode-retry";
+
+// Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
+function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
+  if (v === null || v === undefined) return null;
+  return typeof v === "number" ? v : Number(v);
+}
 
 const travelerCardService = new TravelerCardService();
 
@@ -429,7 +438,8 @@ export class WorkOrderService {
       ? data.batchNumber.trim()
       : await this.generateBatchNumber();
 
-    const workOrder = await prisma.$transaction(async (tx) => {
+    // Refakat kartı barkodu sequence çakışırsa (P2002) tx'i baştan dene.
+    const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
       // Overbooking guard (3.2) — her orderLine için reservedQty hesapla
       if (allocations.length > 0) {
         const orderLines = await tx.orderLine.findMany({
@@ -454,14 +464,16 @@ export class WorkOrderService {
               "Tahsis miktarı negatif olamaz."
             );
           }
+          // Decimal aritmetik — float tolerance gerekmiyor, exact karşılaştırma.
           const alreadyReserved = line.workOrderLinks.reduce(
-            (sum, l) => sum + Number(l.allocatedQty ?? 0),
-            0
+            (sum, l) => sum.plus(l.allocatedQty ?? 0),
+            new Prisma.Decimal(0)
           );
-          const remaining = Number(line.quantity) - alreadyReserved;
-          if (alloc.allocatedQty > remaining + 0.0001 /* float tolerance */) {
+          const remaining = new Prisma.Decimal(line.quantity).minus(alreadyReserved);
+          const allocDecimal = new Prisma.Decimal(alloc.allocatedQty);
+          if (allocDecimal.gt(remaining)) {
             throw AppError.conflict(
-              `Bir sipariş kalemi için kalan kapasite ${remaining.toFixed(2)} m, talep edilen ${alloc.allocatedQty.toFixed(2)} m bunu aşıyor.`
+              `Bir sipariş kalemi için kalan kapasite ${remaining.toFixed(2)} m, talep edilen ${allocDecimal.toFixed(2)} m bunu aşıyor.`
             );
           }
         }
@@ -539,7 +551,7 @@ export class WorkOrderService {
       await travelerCardService.createForWorkOrder(tx, wo.id, userId);
 
       return wo;
-    });
+    }));
 
     await AuditService.log({
       userId,
@@ -587,6 +599,21 @@ export class WorkOrderService {
       params.search
     );
     applyDateRange(where, params, WORKORDER_DATE_FIELDS);
+    // Arşivli (isActive=false) WO'lar default'ta gizli — ?withArchived=true override
+    if (req.query.withArchived !== "true") {
+      (where as Record<string, unknown>).isActive = true;
+    }
+    // Fason Sevk akışında: zaten açık (cancelledAt=null, item'ı henüz kabul
+    // edilmemiş) bir sevki olan WO'ları listeden gizle. Operatör müdahale
+    // etmeden önce eski sevki iptal etmek veya mal kabul yapmak zorunda.
+    if (req.query.excludeWithOpenDispatch === "true") {
+      (where as Record<string, unknown>).dispatches = {
+        none: {
+          cancelledAt: null,
+          items: { some: { receiptItems: { none: {} } } },
+        },
+      };
+    }
     const withOrderDetail = req.query.withOrderDetail === "true";
 
     const select = {
@@ -745,77 +772,273 @@ export class WorkOrderService {
     // currentStepId = şu an o adımda fiziksel olarak bekleyen rulolar (ham/boyalı/açık kumaş).
     // producedInStepId + depo/sevk statüsü = WO'nun ürettiği nihai çıktı.
     const stepIds = wo.steps.map((s) => s.id);
+    // Meter alanları Prisma.Decimal — JS float drift'i önlemek için. Response
+    // serializer (json-replacer) Decimal → number'a otomatik çevirir, frontend
+    // her zaman number görür.
     const stepRollSummaries = new Map<
       string,
       {
         count: number;
-        totalMeters: number;
+        totalMeters: Prisma.Decimal;
         rawCount: number;
-        rawMeters: number;
+        rawMeters: Prisma.Decimal;
         dyedCount: number;
-        dyedMeters: number;
+        dyedMeters: Prisma.Decimal;
         openFabricCount: number;
-        openFabricMeters: number;
+        openFabricMeters: Prisma.Decimal;
       }
     >();
-    let producedRolls = { count: 0, totalMeters: 0 };
+    /** Üretim çıktısının kategori bazlı kırılımı.
+     *  Tambur tüm çıktıyı `status=WAREHOUSE` olarak yazar; ayrım `qualityGrade`
+     *  üzerinden: "1.KALITE" → warehouse, "A1" → a1, "FIRE" → fire.
+     *  Toplam top sayısı warehouse+a1+fire (kartela ayrı); toplam metraj
+     *  warehouse+a1 (fire metre kaybı sayılmaz). */
+    let producedRolls: {
+      count: number;
+      totalMeters: Prisma.Decimal;
+      warehouse: { count: number; totalMeters: Prisma.Decimal };
+      a1: { count: number; totalMeters: Prisma.Decimal };
+      fire: { count: number; totalMeters: Prisma.Decimal };
+      swatch: { count: number; totalLength: Prisma.Decimal };
+      items: Array<{
+        id: string;
+        barcode: string | null;
+        qualityGrade: string;
+        /** Snapshot için production anındaki metraj (initialQty). */
+        currentQty: Prisma.Decimal;
+        /** Anlık durum — frontend re-cut/iptal rozetlerini buradan basar. */
+        status: RollStatus;
+        color: { code: string; name: string; hex: string | null } | null;
+        createdAt: Date;
+      }>;
+      swatchItems: Array<{
+        id: string;
+        barcode: string;
+        length: Prisma.Decimal;
+        purpose: string | null;
+        parentBarcode: string | null;
+        color: { code: string; name: string; hex: string | null } | null;
+        createdAt: Date;
+      }>;
+    } = {
+      count: 0,
+      totalMeters: new Prisma.Decimal(0),
+      warehouse: { count: 0, totalMeters: new Prisma.Decimal(0) },
+      a1: { count: 0, totalMeters: new Prisma.Decimal(0) },
+      fire: { count: 0, totalMeters: new Prisma.Decimal(0) },
+      swatch: { count: 0, totalLength: new Prisma.Decimal(0) },
+      items: [],
+      swatchItems: [],
+    };
+
+    // Per-step individual roll listesi — detay panelinde "hangi parça kaç metre"
+    // sorusunun cevabı. Aggregate ile aynı sorgudan dolduruyoruz, ek round-trip yok.
+    const stepRolls = new Map<
+      string,
+      Array<{
+        id: string;
+        barcode: string | null;
+        currentQty: number;
+        width: number | null;
+        qualityGrade: string;
+        kind: "raw" | "dyed" | "open";
+        item: { id: string; code: string; name: string } | null;
+        color: { id: string; code: string; name: string; hex: string | null } | null;
+      }>
+    >();
+    // Per-step fason sevk bilgisi — plaka / sürücü / not detayı için.
+    const stepDispatches = new Map<
+      string,
+      Array<{
+        id: string;
+        dispatchNo: string;
+        dispatchedAt: string;
+        totalQty: number;
+        plateNumber: string | null;
+        driverName: string | null;
+        notes: string | null;
+        subcontractor: { id: string; name: string };
+        dispatchedBy: { id: string; fullName: string | null; username: string } | null;
+      }>
+    >();
 
     if (stepIds.length > 0) {
       const currentRolls = await prisma.roll.findMany({
         where: { currentStepId: { in: stepIds } },
         select: {
+          id: true,
+          barcode: true,
           currentStepId: true,
           colorId: true,
           parentReceiptId: true,
           currentQty: true,
+          width: true,
+          qualityGrade: true,
+          item: { select: { id: true, code: true, name: true } },
+          color: { select: { id: true, code: true, name: true, hex: true } },
         },
+        orderBy: [{ barcode: "asc" }, { createdAt: "asc" }],
       });
       for (const r of currentRolls) {
         const key = r.currentStepId!;
-        const s =
-          stepRollSummaries.get(key) ??
-          {
-            count: 0,
-            totalMeters: 0,
-            rawCount: 0,
-            rawMeters: 0,
-            dyedCount: 0,
-            dyedMeters: 0,
-            openFabricCount: 0,
-            openFabricMeters: 0,
-          };
+        const s = stepRollSummaries.get(key) ?? {
+          count: 0,
+          totalMeters: new Prisma.Decimal(0),
+          rawCount: 0,
+          rawMeters: new Prisma.Decimal(0),
+          dyedCount: 0,
+          dyedMeters: new Prisma.Decimal(0),
+          openFabricCount: 0,
+          openFabricMeters: new Prisma.Decimal(0),
+        };
         s.count += 1;
-        s.totalMeters += Number(r.currentQty);
+        s.totalMeters = s.totalMeters.plus(r.currentQty);
+        let kind: "raw" | "dyed" | "open";
         if (r.parentReceiptId) {
           s.openFabricCount += 1;
-          s.openFabricMeters += Number(r.currentQty);
+          s.openFabricMeters = s.openFabricMeters.plus(r.currentQty);
+          kind = "open";
         } else if (r.colorId == null) {
           s.rawCount += 1;
-          s.rawMeters += Number(r.currentQty);
+          s.rawMeters = s.rawMeters.plus(r.currentQty);
+          kind = "raw";
         } else {
           s.dyedCount += 1;
-          s.dyedMeters += Number(r.currentQty);
+          s.dyedMeters = s.dyedMeters.plus(r.currentQty);
+          kind = "dyed";
         }
         stepRollSummaries.set(key, s);
+
+        const list = stepRolls.get(key) ?? [];
+        list.push({
+          id: r.id,
+          barcode: r.barcode,
+          currentQty: Number(r.currentQty),
+          width: r.width != null ? Number(r.width) : null,
+          qualityGrade: r.qualityGrade,
+          kind,
+          item: r.item,
+          color: r.color,
+        });
+        stepRolls.set(key, list);
       }
 
-      const producedAgg = await prisma.roll.aggregate({
+      const dispatches = await prisma.subcontractorDispatch.findMany({
+        where: { stepId: { in: stepIds }, cancelledAt: null },
+        select: {
+          id: true,
+          stepId: true,
+          dispatchNo: true,
+          dispatchedAt: true,
+          totalQty: true,
+          plateNumber: true,
+          driverName: true,
+          notes: true,
+          subcontractor: { select: { id: true, name: true } },
+          dispatchedBy: { select: { id: true, fullName: true, username: true } },
+        },
+        orderBy: { dispatchedAt: "desc" },
+      });
+      for (const d of dispatches) {
+        const list = stepDispatches.get(d.stepId) ?? [];
+        list.push({
+          id: d.id,
+          dispatchNo: d.dispatchNo,
+          dispatchedAt: d.dispatchedAt.toISOString(),
+          totalQty: Number(d.totalQty),
+          plateNumber: d.plateNumber,
+          driverName: d.driverName,
+          notes: d.notes,
+          subcontractor: d.subcontractor,
+          dispatchedBy: d.dispatchedBy,
+        });
+        stepDispatches.set(d.stepId, list);
+      }
+
+      // Üretim çıktısı — SNAPSHOT: Tambur'un açık kumaştan kestiği birinci
+      // nesil çocuklar. Status filtresi yok; sonradan re-cut'la TAMBUR_CONSUMED
+      // veya CANCELLED olanlar listede kalır (rozetle işaretlenir). Metraj
+      // initialQty (production anı), currentQty değil — re-cut sonrası
+      // sıfırlanmaz, snapshot sabit.
+      // parent.entrySource = SUBCONTRACTOR_RETURN: parent açık kumaş ise
+      // bu rulo Tambur'un orijinal kesim çıktısıdır. Sonraki nesiller
+      // (re-cut çocukları) parent.entrySource = TAMBUR_SPLIT olur, filtrelenir.
+      const producedRollRows = await prisma.roll.findMany({
         where: {
           producedInStepId: { in: stepIds },
-          status: {
-            in: [
-              RollStatus.WAREHOUSE,
-              RollStatus.A1_STOCK,
-            ],
-          },
+          parent: { entrySource: RollEntrySource.SUBCONTRACTOR_RETURN },
         },
-        _count: { _all: true },
-        _sum: { currentQty: true },
+        select: {
+          id: true,
+          barcode: true,
+          initialQty: true,
+          status: true,
+          qualityGrade: true,
+          createdAt: true,
+          color: { select: { code: true, name: true, hex: true } },
+        },
+        orderBy: { createdAt: "asc" },
       });
-      producedRolls = {
-        count: producedAgg._count._all,
-        totalMeters: Number(producedAgg._sum.currentQty ?? 0),
-      };
+      for (const r of producedRollRows) {
+        const bucket =
+          r.qualityGrade === "FIRE"
+            ? producedRolls.fire
+            : r.qualityGrade === "A1"
+              ? producedRolls.a1
+              : producedRolls.warehouse;
+        bucket.count += 1;
+        bucket.totalMeters = bucket.totalMeters.plus(r.initialQty);
+      }
+
+      const swatchRows = await prisma.swatch.findMany({
+        where: { workOrderId: id },
+        select: {
+          id: true,
+          barcode: true,
+          length: true,
+          purpose: true,
+          createdAt: true,
+          color: { select: { code: true, name: true, hex: true } },
+          parentRoll: { select: { id: true, barcode: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      producedRolls.swatch.count = swatchRows.length;
+      producedRolls.swatch.totalLength = swatchRows.reduce(
+        (s, w) => s.plus(w.length),
+        new Prisma.Decimal(0),
+      );
+
+      // Headline: tüm rulo çıktıları (kartela ayrı) + üretilen sağlam metraj
+      // (fire metresi hariç).
+      producedRolls.count =
+        producedRolls.warehouse.count +
+        producedRolls.a1.count +
+        producedRolls.fire.count;
+      producedRolls.totalMeters = producedRolls.warehouse.totalMeters.plus(
+        producedRolls.a1.totalMeters,
+      );
+
+      // Parça parça liste — snapshot. qty = initialQty (production anı), status
+      // = mevcut durum (frontend "Bölündü"/"İptal" rozeti basabilsin).
+      producedRolls.items = producedRollRows.map((r) => ({
+        id: r.id,
+        barcode: r.barcode,
+        qualityGrade: r.qualityGrade,
+        currentQty: r.initialQty,
+        status: r.status,
+        color: r.color,
+        createdAt: r.createdAt,
+      }));
+      producedRolls.swatchItems = swatchRows.map((w) => ({
+        id: w.id,
+        barcode: w.barcode,
+        length: w.length,
+        purpose: w.purpose,
+        parentBarcode: w.parentRoll?.barcode ?? null,
+        color: w.color,
+        createdAt: w.createdAt,
+      }));
     }
 
     const stepsWithRollSummary = wo.steps.map((step) => ({
@@ -823,15 +1046,21 @@ export class WorkOrderService {
       currentRolls:
         stepRollSummaries.get(step.id) ?? {
           count: 0,
-          totalMeters: 0,
+          totalMeters: new Prisma.Decimal(0),
           rawCount: 0,
-          rawMeters: 0,
+          rawMeters: new Prisma.Decimal(0),
           dyedCount: 0,
-          dyedMeters: 0,
+          dyedMeters: new Prisma.Decimal(0),
           openFabricCount: 0,
-          openFabricMeters: 0,
+          openFabricMeters: new Prisma.Decimal(0),
         },
+      currentRollList: stepRolls.get(step.id) ?? [],
+      dispatches: stepDispatches.get(step.id) ?? [],
     }));
+
+    // Düzenleme kilitleri — frontend formu bu bilgi ile input'ları disable
+    // eder, kullanıcıya niye değiştirilemediğini gösterir.
+    const locks = await computeWorkOrderLocks(prisma, id);
 
     return {
       success: true,
@@ -840,6 +1069,7 @@ export class WorkOrderService {
         steps: stepsWithRollSummary,
         dispatchedTotalQty,
         producedRolls,
+        locks,
       },
     };
   }
@@ -928,27 +1158,22 @@ export class WorkOrderService {
   }
 
   /**
-   * Hard-delete: physically removes the work order and all related records.
-   * Runs inside a transaction to maintain referential integrity.
-   * Order: WorkOrderStep → WorkOrderToOrderLine → WorkOrder
-   */
-  /**
-   * Hard-delete: physically removes the work order and all related records.
-   * Runs inside a transaction to maintain referential integrity.
+   * Soft-delete: arşivler — `isActive=false` yapar.
    *
-   * R5 fix: Silmeden önce bağlı tüm topları STOCK'a geri çek
-   *         (aksi halde Roll.currentStepId / producedInStepId dangling kalır).
-   * R2 fix: Bu WO'nun bağlı olduğu siparişleri IN_PRODUCTION'dan APPROVED'a geri çek
-   *         (başka aktif WO yoksa).
+   * Geçmiş (RollOperation, RollMovement, TravelerCard + scan, Manifest, Swatch,
+   * SubcontractorDispatch/Receipt, WorkOrderStep, WorkOrderToOrderLine)
+   * silinmez — izlenebilirlik ve audit için saklanır. Listeler arşivli WO'yu
+   * gizler; detay endpoint (findById) hala görüntüler.
    *
-   * Sıra: Roll kurtarma → Order geri çekme → WorkOrderStep → WorkOrderToOrderLine → WorkOrder
+   * Roll kurtarma: bu WO'nun adımlarına bağlı (currentStepId) topları STOCK'a
+   * geri çeker ki yeni üretimde tekrar kullanılabilsin. `producedInStepId`
+   * lineage olarak korunur (FK hala valid — step silinmedi).
    */
   async hardDelete(id: string, userId?: string): Promise<ApiResponse<WorkOrder>> {
     const existing = await prisma.workOrder.findUnique({
       where: { id },
       include: {
-        steps: true,
-        orderLinks: { include: { orderLine: true } },
+        steps: { select: { id: true } },
       },
     });
 
@@ -958,61 +1183,38 @@ export class WorkOrderService {
 
     if (existing.status === WorkOrderStatus.IN_PROGRESS) {
       throw AppError.conflict(
-        "Üretimdeki iş emri kalıcı olarak silinemez. Önce iptal edin."
+        "Üretimdeki iş emri arşivlenemez. Önce iptal edin."
       );
+    }
+
+    if (!existing.isActive) {
+      throw AppError.conflict("Bu iş emri zaten arşivli.");
     }
 
     const stepIds = existing.steps.map((s) => s.id);
 
-    await prisma.$transaction(async (tx) => {
+    const archived = await prisma.$transaction(async (tx) => {
       if (stepIds.length > 0) {
-        // Bağlı tüm topları STOCK'a geri çek
+        // Aktif üretimdeki topları STOCK'a geri çek (currentStepId null,
+        // status STOCK). producedInStepId KORUNUR — lineage; step kaydı
+        // hala DB'de (soft delete). Bu sayede ileride "bu top hangi WO'dan
+        // çıktı?" sorgusu cevap verir.
         await tx.roll.updateMany({
           where: {
-            OR: [
-              { producedInStepId: { in: stepIds } },
-              { currentStepId: { in: stepIds } },
-            ],
+            currentStepId: { in: stepIds },
+            status: RollStatus.IN_PRODUCTION,
           },
           data: {
             status: RollStatus.STOCK,
-            producedInStepId: null,
             currentStepId: null,
           },
         });
-
-        // Step-level FK'leri temizle (RESTRICT)
-        await tx.rollOperation.deleteMany({
-          where: { workOrderStepId: { in: stepIds } },
-        });
-        await tx.rollError.updateMany({
-          where: { detectedAtStepId: { in: stepIds } },
-          data: { detectedAtStepId: null },
-        });
-        await tx.rollError.updateMany({
-          where: { processedAtStepId: { in: stepIds } },
-          data: { processedAtStepId: null },
-        });
-        await tx.rollMovement.deleteMany({
-          where: { workOrderStepId: { in: stepIds } },
-        });
       }
 
-      // Fason belgeleri (stepId ve workOrderId RESTRICT)
-      await tx.subcontractorReceipt.deleteMany({ where: { workOrderId: id } });
-      await tx.subcontractorDispatch.deleteMany({ where: { workOrderId: id } });
-
-      // Swatch (kartela) RESTRICT — iş emrine bağlı olanları sil
-      await tx.swatch.deleteMany({ where: { workOrderId: id } });
-      // TravelerCard RESTRICT — kart ve (cascade ile) scan'leri sil
-      await tx.travelerCard.deleteMany({ where: { workOrderId: id } });
-      // Manifest RESTRICT — belgeleri sil
-      await tx.manifest.deleteMany({ where: { workOrderId: id } });
-
-      // Steps + WO link + WO
-      await tx.workOrderStep.deleteMany({ where: { workOrderId: id } });
-      await tx.workOrderToOrderLine.deleteMany({ where: { workOrderId: id } });
-      await tx.workOrder.delete({ where: { id } });
+      return tx.workOrder.update({
+        where: { id },
+        data: { isActive: false },
+      });
     });
 
     await AuditService.log({
@@ -1026,12 +1228,13 @@ export class WorkOrderService {
         status: existing.status,
         stepCount: existing.steps.length,
       },
+      newData: { isActive: false, event: "ARCHIVED" },
     });
 
     return {
       success: true,
-      data: existing,
-      message: `İş emri kalıcı olarak silindi: ${existing.batchNumber}`,
+      data: archived,
+      message: `İş emri arşivlendi: ${existing.batchNumber}`,
     };
   }
 
@@ -1331,6 +1534,7 @@ export class WorkOrderService {
   ): Promise<ApiResponse<WorkOrder>> {
     const existing = await prisma.workOrder.findUnique({
       where: { id },
+      include: { targetProperties: { select: { propertyId: true } } },
     });
     if (!existing) throw AppError.notFound("İş emri bulunamadı");
     if (
@@ -1340,6 +1544,69 @@ export class WorkOrderService {
       throw AppError.conflict(
         "Tamamlanmış veya iptal edilmiş iş emri düzenlenemez.",
       );
+    }
+
+    // ── Fiziksel taahhüt kilitleri ──────────────────────────────────────────
+    // Sevk gittiyse / herhangi adım başladıysa kumaş/en/metraj artık değişmez.
+    // Renk/özellik/kat tipi her birinin istasyonu adımı bitmediyse editable.
+    const locks = await computeWorkOrderLocks(prisma, id);
+
+    if (
+      normNum(existing.width) !== normNum(data.width) &&
+      locks.width
+    ) {
+      throw AppError.conflict(locks.reasons.width ?? "En kilitli.");
+    }
+    // targetQuantity bilinçli "fazla gönderdik / az kaldı" durumlarında
+    // değişebilir; fazla mal Tambur'da stok kalır, eksik kalan yeni sevkle
+    // tamamlanır. Backend yalnızca uyumsuz sipariş bağlamayı engeller.
+    if (
+      (existing.targetItemId ?? null) !== (data.targetItemId ?? null) &&
+      locks.targetItem
+    ) {
+      throw AppError.conflict(
+        locks.reasons.targetItem ?? "Hedef ürün kilitli.",
+      );
+    }
+    if (
+      (existing.targetColorId ?? null) !== (data.targetColorId ?? null) &&
+      locks.targetColor
+    ) {
+      throw AppError.conflict(
+        locks.reasons.targetColor ?? "Hedef renk kilitli.",
+      );
+    }
+    if (
+      (existing.foldType ?? null) !== (data.foldType ?? null) &&
+      locks.foldType
+    ) {
+      throw AppError.conflict(locks.reasons.foldType ?? "Kat tipi kilitli.");
+    }
+
+    // Özellik diff: kilitli özelliği kaldırma yasak; eklenen özelliğin
+    // applicable (route'ta + COMPLETED olmayan istasyon var) olması zorunlu.
+    if (data.targetPropertyIds) {
+      const existingPropIds = new Set(
+        existing.targetProperties.map((p) => p.propertyId),
+      );
+      const incomingSet = new Set(data.targetPropertyIds);
+      for (const lockedId of locks.lockedPropertyIds) {
+        if (existingPropIds.has(lockedId) && !incomingSet.has(lockedId)) {
+          throw AppError.conflict(
+            locks.reasons.properties?.[lockedId] ??
+              "Bu özellik artık kaldırılamaz.",
+          );
+        }
+      }
+      const applicableSet = new Set(locks.applicablePropertyIds);
+      for (const newId of data.targetPropertyIds) {
+        if (existingPropIds.has(newId)) continue;
+        if (!applicableSet.has(newId)) {
+          throw AppError.conflict(
+            "Eklenen özelliği uygulayabilecek istasyon bu rotada yok veya adımı tamamlanmış.",
+          );
+        }
+      }
     }
 
     const type = (data.type as WorkOrder["type"]) ?? existing.type;
@@ -1371,9 +1638,23 @@ export class WorkOrderService {
       const planBySeq = new Map<number, NonNullable<WorkOrderCreateInput["stepPlanning"]>[number]>();
       for (const p of data.stepPlanning ?? []) planBySeq.set(p.sequence, p);
 
+      // Rota şablonu değişmiyorsa mevcut step ID'lerini sequence eşleşmesiyle
+      // taşı — aksi halde smart-merge bütün step'leri "yeni" sayıp siler,
+      // ACTIVE/COMPLETED step varsa düşer. Kullanıcı sadece tip/sipariş gibi
+      // alanları değiştirmek istediğinde de bu yol bug üretiyordu.
+      let existingStepIdBySeq = new Map<number, string>();
+      if (data.routeTemplateId === existing.routeTemplateId) {
+        const rows = await prisma.workOrderStep.findMany({
+          where: { workOrderId: id },
+          select: { id: true, stepSequence: true },
+        });
+        existingStepIdBySeq = new Map(rows.map((r) => [r.stepSequence, r.id]));
+      }
+
       finalSteps = template.steps.map((s) => {
         const overlay = planBySeq.get(s.sequence);
         return {
+          id: existingStepIdBySeq.get(s.sequence),
           stationId: s.stationId,
           notes: overlay?.notes ?? s.defaultNotes ?? null,
           requiredCategoryId: overlay?.requiredCategoryId ?? null,
@@ -1587,6 +1868,37 @@ export class WorkOrderService {
         if (orderLines.length !== allocations.length) {
           throw AppError.badRequest("Bazı sipariş satırları bulunamadı");
         }
+
+        // Material committed iken yeni sipariş bağlamada kumaş + en
+        // uyumluluğu zorunlu — boyahaneye gönderdiğimiz kumaşı uyumsuz
+        // siparişe yamamak yasak.
+        if (locks.materialCommitted) {
+          // Sadece **yeni** bağlanan satırlar için kontrol et — mevcut
+          // bağlar zaten geçmişten geliyor, onları yeniden doğrulamaya
+          // gerek yok (zaten en/kumaş kilitli, değişmiyorlar).
+          const previousLinkIds = new Set(
+            (
+              await tx.workOrderToOrderLine.findMany({
+                where: { workOrderId: id },
+                select: { orderLineId: true },
+              })
+            ).map((l) => l.orderLineId),
+          );
+          for (const line of orderLines) {
+            if (previousLinkIds.has(line.id)) continue;
+            if (line.itemId !== existing.targetItemId) {
+              throw AppError.conflict(
+                "Sevk yapılmış iş emrine farklı kumaş içeren sipariş bağlanamaz.",
+              );
+            }
+            if (normNum(line.width) !== normNum(existing.width)) {
+              throw AppError.conflict(
+                "Sevk yapılmış iş emrine farklı eninde sipariş bağlanamaz.",
+              );
+            }
+          }
+        }
+
         for (const alloc of allocations) {
           const line = orderLines.find((l) => l.id === alloc.orderLineId);
           if (!line) continue;
@@ -1595,14 +1907,16 @@ export class WorkOrderService {
               "Tahsis miktarı negatif olamaz.",
             );
           }
+          // Decimal aritmetik — float tolerance gerekmiyor, exact karşılaştırma.
           const alreadyReserved = line.workOrderLinks.reduce(
-            (sum, l) => sum + Number(l.allocatedQty ?? 0),
-            0,
+            (sum, l) => sum.plus(l.allocatedQty ?? 0),
+            new Prisma.Decimal(0),
           );
-          const remaining = Number(line.quantity) - alreadyReserved;
-          if (alloc.allocatedQty > remaining + 0.0001) {
+          const remaining = new Prisma.Decimal(line.quantity).minus(alreadyReserved);
+          const allocDecimal = new Prisma.Decimal(alloc.allocatedQty);
+          if (allocDecimal.gt(remaining)) {
             throw AppError.conflict(
-              `Bir sipariş kalemi için kalan kapasite ${remaining.toFixed(2)} m, talep edilen ${alloc.allocatedQty.toFixed(2)} m bunu aşıyor.`,
+              `Bir sipariş kalemi için kalan kapasite ${remaining.toFixed(2)} m, talep edilen ${allocDecimal.toFixed(2)} m bunu aşıyor.`,
             );
           }
         }
@@ -2271,8 +2585,15 @@ export class WorkOrderService {
       type: wo.type,
       width: wo.width,
       totalRolls: rolls.length,
-      totalMeterage: rolls.reduce((sum, r) => sum + Number(r.currentQty), 0),
-      totalWeight: rolls.reduce((sum, r) => sum + Number(r.weightKg ?? 0), 0),
+      // Decimal aritmetik — float drift'i önler. Serializer Decimal'i number'a çevirir.
+      totalMeterage: rolls.reduce(
+        (sum, r) => sum.plus(r.currentQty),
+        new Prisma.Decimal(0)
+      ),
+      totalWeight: rolls.reduce(
+        (sum, r) => sum.plus(r.weightKg ?? 0),
+        new Prisma.Decimal(0)
+      ),
       rolls: rolls.map((r) => ({
         barcode: r.barcode,
         itemName: r.item.name,
@@ -2444,6 +2765,7 @@ export class WorkOrderService {
     const workOrders = await prisma.workOrder.findMany({
       where: {
         status: "PLANNED",
+        isActive: true,
       },
       include: {
         steps: {

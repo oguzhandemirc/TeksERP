@@ -11,6 +11,9 @@ interface Props {
   onPickerConfirm?: (lines: PickedOrderLine[]) => void;
   /** Edit modunda mevcut WO'nun kendi bağladığı kalemler picker'da müsait görünsün. */
   excludeWorkOrderId?: string | null;
+  /** Material committed WO için: yeni sipariş satırları sadece bu kumaş + en'de olabilir. */
+  requiredItemId?: string | null;
+  requiredWidth?: number | null;
 }
 
 function earliestDeadline(lines: PickedOrderLine[]): string | null {
@@ -31,6 +34,8 @@ export function LinkedOrderLinesField({
   onChange,
   onPickerConfirm,
   excludeWorkOrderId,
+  requiredItemId,
+  requiredWidth,
 }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -169,6 +174,8 @@ export function LinkedOrderLinesField({
         initialSelected={lines}
         onConfirm={handleConfirm}
         excludeWorkOrderId={excludeWorkOrderId}
+        requiredItemId={requiredItemId}
+        requiredWidth={requiredWidth}
       />
     </div>
   );

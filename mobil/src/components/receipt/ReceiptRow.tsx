@@ -10,6 +10,7 @@ import {
 import dayjs from 'dayjs';
 
 import type { SubcontractorReceiptListItem } from '../../types/models';
+import { useDeviceType } from '../../hooks/useDeviceType';
 
 interface Props {
   receipt: SubcontractorReceiptListItem;
@@ -28,7 +29,95 @@ interface Props {
 export default function ReceiptRow({ receipt, onShowDetail, onCancel }: Props) {
   const itemCount = receipt._count?.items ?? receipt.items?.length ?? 0;
   const isCancelled = !!receipt.cancelledAt;
+  const isPhone = useDeviceType() === 'phone';
 
+  // Telefon dikeyde her şeyi göstermek için yer yok. Receipt no / parti no /
+  // manifest no gibi kodlar detay modalında zaten var; satırda yalnızca
+  // operatörün listeden ayırt etmek için gerçekten ihtiyacı olanı tut:
+  // tarih, firma, miktar, istasyon.
+  if (isPhone) {
+    return (
+      <Surface
+        style={[styles.item, isCancelled && styles.itemCancelled]}
+        elevation={1}
+      >
+        <TouchableRipple
+          borderless
+          rippleColor="rgba(16, 185, 129, 0.12)"
+          onPress={() => onShowDetail(receipt.id)}
+          style={styles.touch}
+        >
+          <View style={styles.row}>
+            <View style={styles.col1Phone}>
+              <Text style={styles.dateDay}>
+                {dayjs(receipt.receivedAt).format('DD.MM')}
+              </Text>
+              <Text style={styles.dateTime}>
+                {dayjs(receipt.receivedAt).format('HH:mm')}
+              </Text>
+              {isCancelled && (
+                <Text style={styles.cancelTag} numberOfLines={1}>
+                  İPTAL
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.col2}>
+              <View style={styles.companyRow}>
+                <Icon source="factory" size={13} color="#475569" />
+                <Text style={styles.company} numberOfLines={1}>
+                  {receipt.subcontractor?.name ?? '—'}
+                </Text>
+              </View>
+              <View style={styles.metaRow}>
+                <Text style={styles.metaText}>
+                  {itemCount} top
+                  {typeof receipt.totalQty === 'number' && receipt.totalQty > 0
+                    ? ` · ${receipt.totalQty.toFixed(1)} mt`
+                    : ''}
+                </Text>
+                {receipt.step?.station?.name && (
+                  <>
+                    <Text style={styles.metaSep}>·</Text>
+                    <Text style={styles.metaText} numberOfLines={1}>
+                      {receipt.step.station.name}
+                    </Text>
+                  </>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.actions}>
+              <IconButton
+                icon="information-outline"
+                mode="contained-tonal"
+                size={18}
+                containerColor="#dcfce7"
+                iconColor="#059669"
+                onPress={() => onShowDetail(receipt.id)}
+                accessibilityLabel="Detay göster"
+                style={styles.actionBtn}
+              />
+              {onCancel && !isCancelled && (
+                <IconButton
+                  icon="undo-variant"
+                  mode="contained-tonal"
+                  size={18}
+                  containerColor="#fef2f2"
+                  iconColor="#dc2626"
+                  onPress={() => onCancel(receipt.id)}
+                  accessibilityLabel="Kabulü iptal et"
+                  style={styles.actionBtn}
+                />
+              )}
+            </View>
+          </View>
+        </TouchableRipple>
+      </Surface>
+    );
+  }
+
+  // Tablet/geniş ekran — kodlar gözüksün (operatörün yatay yerde sığıyor).
   return (
     <Surface style={[styles.item, isCancelled && styles.itemCancelled]} elevation={1}>
       <TouchableRipple
@@ -155,6 +244,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   col1: { width: 90, gap: 1 },
+  col1Phone: { width: 48, alignItems: 'flex-start', gap: 1 },
+  dateDay: { fontSize: 12, color: '#0f172a', fontWeight: '700' },
+  dateTime: { fontSize: 11, color: '#64748b', fontWeight: '600' },
   no: {
     fontFamily: 'monospace',
     fontSize: 11,

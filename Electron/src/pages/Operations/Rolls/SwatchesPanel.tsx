@@ -1,90 +1,115 @@
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Palette, Ruler, Boxes } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { safeFormat } from "@/lib/format";
-import { swatchService } from "./swatchService";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
+import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import { useDataTable } from "@/hooks/useDataTable";
+import { itemService } from "@/pages/Items/service";
+import { parseUrlToQueryParams } from "@/lib/query-builder";
+import { swatchService, type Swatch, type SwatchStats } from "./swatchService";
+import { swatchColumns } from "./swatchColumns";
+import { SwatchDetailSheet } from "./SwatchDetailSheet";
+
+const NUM_FMT = new Intl.NumberFormat("tr-TR");
+const DEC_FMT = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+
+const FILTERS: FilterDef[] = [
+  {
+    kind: "lookup",
+    key: "itemId",
+    label: "Ürün",
+    service: itemService,
+    queryKey: "items",
+  },
+];
+
+function SwatchesStats({
+  data,
+  isLoading,
+}: {
+  data: SwatchStats | undefined;
+  isLoading: boolean;
+}) {
+  if (isLoading && !data) {
+    return <span className="text-xs text-muted-foreground">Yükleniyor…</span>;
+  }
+  if (!data) return null;
+  return (
+    <div className="flex items-center gap-3 text-xs">
+      <Stat label="Kartela" value={NUM_FMT.format(data.count)} unit="adet" />
+      <Divider />
+      <Stat label="Uzunluk" value={DEC_FMT.format(data.totalLength)} unit="cm" />
+    </div>
+  );
+}
+
+function Stat({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <div className="flex items-baseline gap-1">
+      <span className="text-muted-foreground">{label}:</span>
+      <span className="font-medium text-foreground tabular-nums">{value}</span>
+      <span className="text-[10px] text-muted-foreground">{unit}</span>
+    </div>
+  );
+}
+
+function Divider() {
+  return <span className="h-3 w-px bg-border" aria-hidden />;
+}
 
 export function SwatchesPanel() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["swatches", { limit: 200 }],
-    queryFn: () => swatchService.list({ limit: 200 }),
+  const [searchParams] = useSearchParams();
+  const [selected, setSelected] = useState<Swatch | null>(null);
+
+  const { table, query, search, setSearch, pagination } = useDataTable<Swatch>({
+    queryKey: "swatches",
+    fetchFn: swatchService.listCursor,
+    columns: swatchColumns,
+    defaultPageSize: 100,
   });
 
-  const swatches = data?.data ?? [];
+  // Stats query — liste ile aynı filtre + search'i paylaşır.
+  const urlParams = useMemo(
+    () => parseUrlToQueryParams(searchParams.toString(), { pageSize: 100 }),
+    [searchParams],
+  );
+  const statsQuery = useQuery({
+    queryKey: ["swatches", "stats", urlParams.filters, urlParams.search],
+    queryFn: () =>
+      swatchService.getStats({
+        filters: urlParams.filters,
+        search: urlParams.search,
+      }),
+    staleTime: 0,
+  });
 
   return (
-    <div className="flex flex-1 flex-col overflow-auto p-4">
-      <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-        <Boxes className="h-4 w-4 text-muted-foreground" />
-        Kartela Envanteri
-        <Badge variant="secondary">{swatches.length}</Badge>
-      </div>
-
-      {isLoading ? (
-        <div className="space-y-2">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-14 w-full" />
-          ))}
-        </div>
-      ) : swatches.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          Henüz kartela basılmadı. Kartelalar Tambur ekranından üretilir.
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {swatches.map((s) => (
-            <div
-              key={s.id}
-              className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent/40"
-            >
-              <Palette className="h-5 w-5 shrink-0 text-purple-500" />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-sm font-semibold">{s.barcode}</span>
-                  <Badge variant="outline" className="text-[10px]">
-                    No: {s.cardNumber}
-                  </Badge>
-                  {s.item && (
-                    <Badge variant="outline" className="text-[10px]">
-                      {s.item.code} {s.item.name}
-                    </Badge>
-                  )}
-                  {s.color && (
-                    <Badge variant="secondary" className="gap-1 text-[10px]">
-                      {s.color.hex && (
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: s.color.hex }}
-                        />
-                      )}
-                      {s.color.name}
-                    </Badge>
-                  )}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Ruler className="h-3 w-3" /> {s.length.toFixed(2)} m
-                  </span>
-                  {s.width != null && <span>En: {s.width} cm</span>}
-                  {s.workOrder && <span>Parti: {s.workOrder.batchNumber}</span>}
-                  {s.parentRoll && s.parentRoll.barcode && (
-                    <span>Kaynak: {s.parentRoll.barcode}</span>
-                  )}
-                  <span className="tabular-nums">
-                    {safeFormat(s.createdAt, "dd.MM.yyyy HH:mm")}
-                  </span>
-                </div>
-                {s.purpose && (
-                  <p className="mt-1 text-[11px] italic text-muted-foreground">
-                    {s.purpose}
-                  </p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <>
+      <DataTableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Barkod / kart no / ürün / parti ara..."
+        actions={
+          <SwatchesStats
+            data={statsQuery.data?.data}
+            isLoading={statsQuery.isLoading}
+          />
+        }
+      />
+      <FilterBar filters={FILTERS} />
+      <DataTable<Swatch>
+        table={table}
+        isLoading={query.isLoading}
+        pagination={pagination}
+        emptyText="Kartela bulunamadı."
+        onRowClick={setSelected}
+      />
+      <SwatchDetailSheet
+        swatch={selected}
+        open={Boolean(selected)}
+        onOpenChange={(open) => !open && setSelected(null)}
+      />
+    </>
   );
 }
