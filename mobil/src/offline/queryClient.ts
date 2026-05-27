@@ -1,0 +1,44 @@
+// Offline-first QueryClient yapılandırması.
+// - NetInfo → TanStack Query onlineManager wire (RN'de browser event yok)
+// - AsyncStorage persister: paused mutation'lar app restart'ı sonrası kalır
+// - Mutation default: networkMode='online' → offline'da paused, online'da otomatik resume
+
+import { QueryClient, onlineManager } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import NetInfo from '@react-native-community/netinfo';
+
+onlineManager.setEventListener((setOnline) => {
+  return NetInfo.addEventListener((state) => {
+    setOnline(state.isConnected === true);
+  });
+});
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 30_000,
+    },
+    mutations: {
+      // Default 'always': offline'da paused olmaz, hızlıca network hatasıyla
+      // fail eder → loading sonsuza takılmaz. Offline-aware mutation'lar
+      // setMutationDefaults ile 'online'a override eder (QC2 vs.).
+      networkMode: 'always',
+      retry: 1,
+      retryDelay: 800,
+    },
+  },
+});
+
+export const asyncStoragePersister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+  key: 'TEKSERP_RQ_CACHE_V1',
+  throttleTime: 1000,
+});
+
+// Bump'lar persist cache'i invalidate eder: registry shape değiştiğinde veya
+// eski persisted mutation'larla incompatible bir değişiklik yapıldığında bump'la.
+// v2: KURSUN_FINISH registry'e eklendi + default networkMode 'always'a çevrildi.
+export const PERSIST_BUSTER = 'tekserp-v2';
+export const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;

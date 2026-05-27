@@ -12,7 +12,12 @@ import {
   Icon,
 } from 'react-native-paper';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  onlineManager,
+} from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,9 +34,14 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
-import { kursunQcService } from '../../../services/kursunQc.service';
+import {
+  kursunQcService,
+  type CompleteQc2Request,
+} from '../../../services/kursunQc.service';
 import { defectTypeService } from '../../../services/defectType.service';
 import { rollService } from '../../../services/roll.service';
+import { STATION_MUT } from '../../../offline/mutations';
+import { useIsOnline, usePendingStationOps } from '../../../offline/hooks';
 import type {
   KursunStepSummary,
   KursunRollSummary,
@@ -320,31 +330,74 @@ export default function KursunQcScreen() {
   // Per-roll "Kurşun geçtim/geçmedim" toggle'ı yok — istasyon yeteneği tek
   // doğruluk kaynağı. İstasyona KURSUN özelliği atanmışsa, QC2 tamamlanan
   // her top otomatik kurşunlanır (backend completeQc2 / kursunFinish).
-  const completeQc2Mutation = useMutation({
-    mutationFn: kursunQcService.completeQc2,
-    onSuccess: async (res) => {
+  //
+  // OFFLINE-FIRST: mutationFn `setMutationDefaults`'ta tanımlı; persist sonrası
+  // app restart'ında resolve edilir. onMutate'te optimistic update + sonraki
+  // top'a geçiş anında yapılır (network bekleme yok). onError'da rollback.
+  // Network yoksa mutation 'paused' kalır, online dönünce otomatik resume +
+  // backend zaten upsert ile idempotent (schema.prisma RollOperation @@unique).
+  const completeQc2Mutation = useMutation<
+    Awaited<ReturnType<typeof kursunQcService.completeQc2>>,
+    Error,
+    CompleteQc2Request,
+    { cardId: string; prevRolls: KursunRollSummary[]; prevSelectedRollId: string | null } | undefined
+  >({
+    mutationKey: STATION_MUT.QC2_COMPLETE,
+    onMutate: (vars) => {
+      if (!activeJob) return undefined;
+      const cardId = activeJob.cardId;
+      const prevRolls = activeJob.stepSummary.rolls;
+      const prevSelectedRollId = activeJob.selectedRollId;
+
+      const updatedRolls = prevRolls.map((r) =>
+        r.rollId === vars.rollId ? { ...r, qc2Completed: true } : r,
+      );
+      const next = updatedRolls.find(
+        (r) => !r.qc2Completed && r.rollId !== vars.rollId,
+      );
+
+      setOpenJobs((prev) =>
+        prev.map((j) =>
+          j.cardId === cardId
+            ? {
+                ...j,
+                stepSummary: { ...j.stepSummary, rolls: updatedRolls },
+                selectedRollId: next?.rollId ?? null,
+              }
+            : j,
+        ),
+      );
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
-        text1: 'QC2 tamamlandı',
-        text2: 'Top sonraki istasyona taşındı',
+        text1: 'QC2 işaretlendi',
+        text2: onlineManager.isOnline() ? undefined : 'Çevrimdışı — sync bekliyor',
       });
+
+      return { cardId, prevRolls, prevSelectedRollId };
+    },
+    onSuccess: async () => {
+      // Server confirm geldi — backend'den fresh state çek (open jobs listesi
+      // de değişmiş olabilir: step kapanma, başka kart silinmesi vb.).
       await refetchActiveJob();
-      // Bir sonraki QC2 olmamış top'a otomatik geç
-      if (activeJob) {
-        const next = activeJob.stepSummary.rolls.find(
-          (r) => !r.qc2Completed && r.rollId !== activeJob.selectedRollId
-        );
+      qc.invalidateQueries({ queryKey: ['kursun-qc', 'open-cards'] });
+    },
+    onError: (err, vars, context) => {
+      // 4xx (örn. WO iptal) veya net 5xx — optimistic update'i geri al.
+      if (context) {
         setOpenJobs((prev) =>
           prev.map((j) =>
-            j.cardId === activeJob.cardId
-              ? { ...j, selectedRollId: next?.rollId ?? null }
-              : j
-          )
+            j.cardId === context.cardId
+              ? {
+                  ...j,
+                  stepSummary: { ...j.stepSummary, rolls: context.prevRolls },
+                  selectedRollId: context.prevSelectedRollId,
+                }
+              : j,
+          ),
         );
       }
-    },
-    onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'QC2 başarısız', text2: err.message });
     },
@@ -392,23 +445,58 @@ export default function KursunQcScreen() {
   // Açık kumaşı Tambur'a iletir. Metre fason kabulden gelen değer, hatalar
   // operatörün "Hata Ekle" ile eklediği kayıtlar — bu çağrı sadece roll'u
   // ilerletir + Kurşun/QC2 operation log'larını yazar.
-  const kursunFinishMutation = useMutation({
-    mutationFn: (rollId: string) => rollService.kursunFinish(rollId, {}),
-    onSuccess: async (_res, finishedRollId) => {
+  //
+  // OFFLINE-FIRST: mutationFn registry'de (STATION_MUT.KURSUN_FINISH). Backend
+  // idempotent: priorFinish check + RollOperation skipDuplicates. onMutate'te
+  // optimistic — rulo listeden düşer, bir sonraki otomatik seçilir; onError'da
+  // tam rollback. Sync sırasında çakışma çıkarsa rollback toast'la görünür.
+  const kursunFinishMutation = useMutation<
+    Awaited<ReturnType<typeof rollService.kursunFinish>>,
+    Error,
+    string,
+    { cardId: string; prevRolls: KursunRollSummary[]; prevSelectedRollId: string | null } | undefined
+  >({
+    mutationKey: STATION_MUT.KURSUN_FINISH,
+    onMutate: (rollId) => {
+      if (!activeJob) return undefined;
+      const cardId = activeJob.cardId;
+      const prevRolls = activeJob.stepSummary.rolls;
+      const prevSelectedRollId = activeJob.selectedRollId;
+
+      const updatedRolls = prevRolls.filter((r) => r.rollId !== rollId);
+      const nextSelected = updatedRolls[0]?.rollId ?? null;
+
+      setOpenJobs((prev) =>
+        prev.map((j) =>
+          j.cardId === cardId
+            ? {
+                ...j,
+                stepSummary: { ...j.stepSummary, rolls: updatedRolls },
+                selectedRollId: nextSelected,
+              }
+            : j,
+        ),
+      );
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
         text1: 'Kumaş bitirildi',
-        text2: 'Roll Tambur adımına geçti',
+        text2: onlineManager.isOnline()
+          ? "Tambur'a iletildi"
+          : 'Çevrimdışı — sync bekliyor',
       });
-      // 1) Backend'den güncel step'i çek (bitirilen roll listeden düşmüş olmalı)
+
+      return { cardId, prevRolls, prevSelectedRollId };
+    },
+    onSuccess: async (_res, finishedRollId) => {
+      // Server confirm — fresh step state çek (kalan rulolar, kart kapatma).
       if (!activeJob) return;
       const res = await kursunQcService.getStep(
         activeJob.stepSummary.workOrderStepId,
       );
       const step = res.data as KursunStepSummary | undefined;
       const remainingRolls = step?.rolls ?? [];
-      // 2) Step'te başka açık kumaş kalmadıysa kartı kapat (otomatik çarpı)
       if (remainingRolls.length === 0) {
         setOpenJobs((prev) => {
           const next = prev.filter((j) => j.cardId !== activeJob.cardId);
@@ -418,7 +506,6 @@ export default function KursunQcScreen() {
         qc.invalidateQueries({ queryKey: ['rolls'] });
         return;
       }
-      // 3) Kart açık kalır; bir sonraki kumaşı otomatik seç
       const next = remainingRolls.find((r) => r.rollId !== finishedRollId);
       setOpenJobs((prev) =>
         prev.map((j) =>
@@ -433,7 +520,20 @@ export default function KursunQcScreen() {
       );
       qc.invalidateQueries({ queryKey: ['rolls'] });
     },
-    onError: (err: Error) => {
+    onError: (err, _rollId, context) => {
+      if (context) {
+        setOpenJobs((prev) =>
+          prev.map((j) =>
+            j.cardId === context.cardId
+              ? {
+                  ...j,
+                  stepSummary: { ...j.stepSummary, rolls: context.prevRolls },
+                  selectedRollId: context.prevSelectedRollId,
+                }
+              : j,
+          ),
+        );
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Kumaş bitirilemedi', text2: err.message });
     },
@@ -658,8 +758,15 @@ export default function KursunQcScreen() {
     />
   ) : null;
 
+  const headerExtras = (
+    <View style={styles.headerExtrasRow}>
+      <SyncStatusChip />
+      {headerOpenJobsBtn}
+    </View>
+  );
+
   return (
-    <ScreenChrome title="Kurşun + QC2" headerExtras={headerOpenJobsBtn}>
+    <ScreenChrome title="Kurşun + QC2" headerExtras={headerExtras}>
       <View
         style={[
           styles.body,
@@ -850,15 +957,17 @@ export default function KursunQcScreen() {
               {/* Sticky footer — açık kumaş ise "Kumaş Bitir", barkodlu ise QC2 */}
               <Surface style={styles.footer} elevation={4}>
                 {!selectedRoll.barcode ? (
-                  // Açık kumaş: direkt Tambur'a iletir (KK2'de ölçüm yok)
+                  // Açık kumaş: direkt Tambur'a iletir (KK2'de ölçüm yok).
+                  // OFFLINE-AWARE: loading/disabled binding'i YOK — mutation
+                  // hook'un global isPending'i paused mutation'larda true kalır,
+                  // bu da sıradaki rulaya basmayı engeller. Optimistic update
+                  // rulayı zaten listeden düşürdüğü için double-press riski yok.
                   <Button
                     mode="contained"
                     icon="package-check"
                     onPress={() =>
                       kursunFinishMutation.mutate(selectedRoll.rollId)
                     }
-                    loading={kursunFinishMutation.isPending}
-                    disabled={kursunFinishMutation.isPending}
                     buttonColor="#7c3aed"
                     style={styles.footerBtn}
                     contentStyle={styles.footerBtnContent}
@@ -881,12 +990,12 @@ export default function KursunQcScreen() {
                     QC2'yi Geri Al
                   </Button>
                 ) : (
+                  // Barkodlu top — aynı offline-aware mantığı: loading/disabled
+                  // binding'i yok (paused mutation sıradaki rulayı engellemesin).
                   <Button
                     mode="contained"
                     icon="check-all"
                     onPress={handleCompleteQc2}
-                    disabled={completeQc2Mutation.isPending}
-                    loading={completeQc2Mutation.isPending}
                     buttonColor="#059669"
                     style={styles.footerBtn}
                     contentStyle={styles.footerBtnContent}
@@ -954,6 +1063,52 @@ export default function KursunQcScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Yardımcı bileşenler
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Çevrimdışı / sync bekleyen QC2 sayısı rozeti.
+// Online + 0 bekleyen → görünmez (operatöre gürültü yapma).
+// Online + N bekleyen → mavi "🕐 N sync".
+// Offline + 0 → sarı "Çevrimdışı".
+// Offline + N → kırmızı "Çevrimdışı · N bekliyor" (en kritik durum).
+function SyncStatusChip() {
+  const online = useIsOnline();
+  const pending = usePendingStationOps();
+  const pendingCount = pending.length;
+
+  if (online && pendingCount === 0) return null;
+
+  let bg = '#1e40af';
+  let label = `${pendingCount} sync`;
+  if (!online && pendingCount === 0) {
+    bg = '#b45309';
+    label = 'Çevrimdışı';
+  } else if (!online && pendingCount > 0) {
+    bg = '#b91c1c';
+    label = `Çevrimdışı · ${pendingCount}`;
+  }
+
+  return (
+    <View
+      style={{
+        backgroundColor: bg,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        marginRight: 8,
+      }}
+      accessibilityLabel={
+        online
+          ? `${pendingCount} işlem senkronize bekliyor`
+          : pendingCount > 0
+          ? `Çevrimdışı, ${pendingCount} işlem bekliyor`
+          : 'Çevrimdışı'
+      }
+    >
+      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Açık kart listesi modal'ı.
@@ -1380,6 +1535,8 @@ const styles = StyleSheet.create({
   formCol: { flex: 1.4 },
   // Compact (telefon) — header'da profil ikonu solunda "Açık İşler" ikonu
   headerOpenJobsBtn: { margin: 0 },
+  // Header'da sync chip + open jobs button yan yana sığsın.
+  headerExtrasRow: { flexDirection: 'row', alignItems: 'center' },
 
   emptyState: {
     flex: 1,

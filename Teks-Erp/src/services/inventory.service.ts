@@ -1383,10 +1383,38 @@ export class InventoryService {
         "Bu Roll açık kumaş değil (barkodlu top); kursun-finish sadece açık kumaş Roll'larında çağrılır",
       );
     }
-    if (!roll.currentStep) {
-      throw AppError.badRequest("Roll bir step'te değil");
-    }
-    if (roll.currentStep.station.kind !== StationKind.PROCESS_QC) {
+    // Idempotency: aynı çağrı offline sync replay'inde 2. kez gelirse roll
+    // PROCESS_QC'yi çoktan bırakmış olur. Geçmiş bir PROCESS_QC step'inde
+    // QC2_COMPLETED RollOperation'ı varsa "zaten yapıldı" diye success dön
+    // (duplicate movement/RollError yaratma riski yok — bu noktada zaten
+    // ileri taşınmış).
+    if (
+      !roll.currentStep ||
+      roll.currentStep.station.kind !== StationKind.PROCESS_QC
+    ) {
+      const priorFinish = await prisma.rollOperation.findFirst({
+        where: {
+          rollId,
+          operationType: RollOperationType.QC2_COMPLETED,
+          step: { station: { kind: StationKind.PROCESS_QC } },
+        },
+        select: { id: true, workOrderStepId: true },
+      });
+      if (priorFinish) {
+        return {
+          success: true,
+          data: {
+            rollId,
+            totalMeters: Number(roll.currentQty),
+            nextStepId: roll.currentStepId,
+          },
+          message:
+            "Roll PROCESS_QC adımını zaten bitirmiş (idempotent retry).",
+        };
+      }
+      if (!roll.currentStep) {
+        throw AppError.badRequest("Roll bir step'te değil");
+      }
       throw AppError.badRequest(
         `Roll PROCESS_QC step'inde değil (mevcut: ${roll.currentStep.station.kind})`,
       );
