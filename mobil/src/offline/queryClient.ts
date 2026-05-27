@@ -39,6 +39,7 @@ export const asyncStoragePersister = createAsyncStoragePersister({
 
 // Bump'lar persist cache'i invalidate eder: registry shape değiştiğinde veya
 // eski persisted mutation'larla incompatible bir değişiklik yapıldığında bump'la.
+// v3: TAMBUR_FINALIZE_OPEN_FABRIC registry'e eklendi.
 // v2: KURSUN_FINISH registry'e eklendi + default networkMode 'always'a çevrildi.
-export const PERSIST_BUSTER = 'tekserp-v2';
+export const PERSIST_BUSTER = 'tekserp-v3';
 export const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;

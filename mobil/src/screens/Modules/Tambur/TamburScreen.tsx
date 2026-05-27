@@ -19,7 +19,12 @@ import {
   Appbar,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  onlineManager,
+} from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,6 +44,11 @@ import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { tamburService } from '../../../services/tambur.service';
+import {
+  STATION_MUT,
+  type TamburFinalizeOpenFabricVars,
+} from '../../../offline/mutations';
+import { useIsOnline, usePendingStationOps } from '../../../offline/hooks';
 import { defectTypeService } from '../../../services/defectType.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import type {
@@ -423,19 +433,44 @@ export default function TamburScreen() {
     },
   });
 
-  const finalizeOpenFabricMutation = useMutation({
-    mutationFn: (data: {
-      rollId: string;
-      remainingAction: TamburFinalizeRemainingAction;
-      foldType: string | null;
-    }) =>
-      tamburService.finalizeOpenFabric(data.rollId, {
-        remainingAction: data.remainingAction,
-        foldType: data.foldType,
-      }),
-    onSuccess: async () => {
+  // OFFLINE-AWARE: mutationFn `setMutationDefaults`'ta tanımlı; persist sonrası
+  // app restart'ında resolve. onMutate'te optimistic — açık kumaş listeden anında
+  // düşer; onError'da rollback. Backend idempotent (status===TAMBUR_CONSUMED
+  // check + cached TAMBUR_PROCESSED metadata).
+  const finalizeOpenFabricMutation = useMutation<
+    Awaited<ReturnType<typeof tamburService.finalizeOpenFabric>>,
+    Error,
+    TamburFinalizeOpenFabricVars,
+    { cardId: string; prevRolls: TamburRollSummary[]; prevSelectedRollId: string | null } | undefined
+  >({
+    mutationKey: STATION_MUT.TAMBUR_FINALIZE_OPEN_FABRIC,
+    onMutate: (vars) => {
+      if (!activeJob) return undefined;
+      const cardId = activeJob.cardId;
+      const prevRolls = activeJob.stepSummary.rolls;
+      const prevSelectedRollId = activeJob.selectedRollId;
+      const updatedRolls = prevRolls.filter((r) => r.rollId !== vars.rollId);
+      const nextSelected = updatedRolls[0]?.rollId ?? null;
+      setOpenJobs((prev) =>
+        prev.map((j) =>
+          j.cardId === cardId
+            ? {
+                ...j,
+                stepSummary: { ...j.stepSummary, rolls: updatedRolls },
+                selectedRollId: nextSelected,
+              }
+            : j,
+        ),
+      );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Tambur tamamlandı' });
+      Toast.show({
+        type: 'success',
+        text1: 'Tambur tamamlandı',
+        text2: onlineManager.isOnline() ? undefined : 'Çevrimdışı — sync bekliyor',
+      });
+      return { cardId, prevRolls, prevSelectedRollId };
+    },
+    onSuccess: async () => {
       if (!activeJob) {
         qc.invalidateQueries({ queryKey: ['rolls'] });
         return;
@@ -472,7 +507,20 @@ export default function TamburScreen() {
       }
       qc.invalidateQueries({ queryKey: ['rolls'] });
     },
-    onError: (err: Error) => {
+    onError: (err, _vars, context) => {
+      if (context) {
+        setOpenJobs((prev) =>
+          prev.map((j) =>
+            j.cardId === context.cardId
+              ? {
+                  ...j,
+                  stepSummary: { ...j.stepSummary, rolls: context.prevRolls },
+                  selectedRollId: context.prevSelectedRollId,
+                }
+              : j,
+          ),
+        );
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Tamamlanamadı', text2: err.message });
     },
@@ -1099,18 +1147,21 @@ export default function TamburScreen() {
       title="Tambur"
       subtitle={compact ? undefined : 'Kesim kararı + final + depoya gönderim'}
       headerExtras={
-        compact ? (
-          <Appbar.Action
-            icon="format-list-bulleted"
-            color="#fff"
-            onPress={() => setRightDrawerOpen(true)}
-            accessibilityLabel={
-              activeJob
-                ? `Açık iş: ${activeJob.stepSummary.batchNumber}`
-                : 'Açık İşler / Kart Okut'
-            }
-          />
-        ) : undefined
+        <View style={styles.headerExtrasRow}>
+          <SyncStatusChip />
+          {compact ? (
+            <Appbar.Action
+              icon="format-list-bulleted"
+              color="#fff"
+              onPress={() => setRightDrawerOpen(true)}
+              accessibilityLabel={
+                activeJob
+                  ? `Açık iş: ${activeJob.stepSummary.batchNumber}`
+                  : 'Açık İşler / Kart Okut'
+              }
+            />
+          ) : null}
+        </View>
       }
     >
       <View
@@ -1584,14 +1635,16 @@ export default function TamburScreen() {
 
               </ScrollView>
 
-              {/* Sticky footer — açık kumaş bitirme. Kalan varsa fire işaretlenir. */}
+              {/* Sticky footer — açık kumaş bitirme. Kalan varsa fire işaretlenir.
+                  OFFLINE-AWARE: loading/disabled binding'i YOK — mutation hook'un
+                  global isPending'i paused mutation'larda true kalır ve sıradaki
+                  rulayı engelleyebilir. Optimistic update rulayı listeden zaten
+                  düşürdüğü için double-press riski yok. */}
               <Surface style={styles.footer} elevation={4}>
                 <Button
                   mode="contained"
                   icon="warehouse"
                   onPress={handleFinalize}
-                  loading={finalizeOpenFabricMutation.isPending}
-                  disabled={finalizeOpenFabricMutation.isPending}
                   buttonColor="#1e40af"
                   style={styles.footerBtn}
                   contentStyle={styles.footerBtnContent}
@@ -1735,10 +1788,42 @@ export default function TamburScreen() {
         remainingQty={selectedRoll?.currentQty ?? 0}
         onDismiss={() => setFinalizeModalOpen(false)}
         onChoose={submitFinalize}
-        loading={finalizeOpenFabricMutation.isPending}
+        loading={false}
       />
 
     </ScreenChrome>
+  );
+}
+
+// Çevrimdışı / sync bekleyen istasyon işlemi rozeti (KursunQc'deki ile aynı).
+function SyncStatusChip() {
+  const online = useIsOnline();
+  const pending = usePendingStationOps();
+  const pendingCount = pending.length;
+  if (online && pendingCount === 0) return null;
+  let bg = '#1e40af';
+  let label = `${pendingCount} sync`;
+  if (!online && pendingCount === 0) {
+    bg = '#b45309';
+    label = 'Çevrimdışı';
+  } else if (!online && pendingCount > 0) {
+    bg = '#b91c1c';
+    label = `Çevrimdışı · ${pendingCount}`;
+  }
+  return (
+    <View
+      style={{
+        backgroundColor: bg,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        marginRight: 8,
+      }}
+    >
+      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+        {label}
+      </Text>
+    </View>
   );
 }
 
@@ -2500,6 +2585,7 @@ function FinalizeRemainingModal({
 // ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   body: { flex: 1, flexDirection: 'row', backgroundColor: '#f8fafc', position: 'relative' },
+  headerExtrasRow: { flexDirection: 'row', alignItems: 'center' },
   // recutMode wrap — header / form / footer doğal akışta yan yana, gap ile
   // birbirine yakın. paddingTop ekran üstünden nefes alır.
   recutWrap: { flex: 1, paddingTop: 24, gap: 12 },

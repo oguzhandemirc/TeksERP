@@ -368,6 +368,40 @@ export class TamburService {
     if (!roll) {
       throw AppError.notFound("Top bulunamadı");
     }
+
+    // IDEMPOTENCY: Tambur finalize her çağrıda yeni child Roll yaratır
+    // (uuid-based barkod). Offline sync replay'inde aynı çağrı 2. kez gelirse
+    // parent zaten TAMBUR_CONSUMED durumda olur — bu noktada mevcut child'ları
+    // ve işlenmiş hata sayısını döndür, transaction'ı çalıştırma.
+    // İlk çağrı transaction içinde all-or-nothing olduğu için partial state
+    // mümkün değil (TAMBUR_CONSUMED = tüm yan etkiler tamamlandı).
+    if (roll.status === RollStatus.TAMBUR_CONSUMED) {
+      const cachedOriginal = await prisma.roll.findUnique({
+        where: { id: data.rollId },
+        include: { item: true, color: true },
+      });
+      const cachedChildren = await prisma.roll.findMany({
+        where: {
+          parentRollId: data.rollId,
+          entrySource: RollEntrySource.TAMBUR_SPLIT,
+        },
+        include: { item: true, color: true },
+        orderBy: { createdAt: "asc" },
+      });
+      const processedErrors = await prisma.rollError.count({
+        where: { rollId: data.rollId, isProcessed: true },
+      });
+      return {
+        success: true,
+        data: {
+          originalRoll: cachedOriginal as Roll,
+          splitRolls: cachedChildren as Roll[],
+          processedErrors,
+        },
+        message: "Tambur zaten tamamlanmış (idempotent retry).",
+      };
+    }
+
     // Parent barkodlu (klasik) ise child barkodlar parent prefix'i ile üretilir;
     // açık kumaş (barcode=null, boyahane dönüşü) ise TEKS-YYYYMMDD-XXXX formatı.
     const parentBarcode = roll.barcode;
@@ -1862,6 +1896,35 @@ export class TamburService {
     if (parent.barcode !== null) {
       throw AppError.badRequest("Bu Roll açık kumaş değil (barkodlu)");
     }
+
+    // IDEMPOTENCY: Sync replay'inde 2. çağrı için. Parent zaten TAMBUR_CONSUMED
+    // ise (status + currentStepId=null) finalize tamamlanmış. TAMBUR_PROCESSED
+    // RollOperation metadata'sından kalan child + qty bilgisini okuyup cached
+    // response döner — duplicate child roll yaratılmaz.
+    if (parent.status === RollStatus.TAMBUR_CONSUMED) {
+      const tamburOp = await prisma.rollOperation.findFirst({
+        where: {
+          rollId: parent.id,
+          operationType: RollOperationType.TAMBUR_PROCESSED,
+        },
+        select: { metadata: true },
+        orderBy: { createdAt: "desc" },
+      });
+      const meta = (tamburOp?.metadata ?? null) as {
+        remainingChildId?: string | null;
+        remainingQty?: number;
+      } | null;
+      return {
+        success: true,
+        data: {
+          rollId: parent.id,
+          remainingChildId: meta?.remainingChildId ?? null,
+          remainingQty: Number(meta?.remainingQty ?? 0),
+        },
+        message: "Açık kumaş zaten finalize edilmiş (idempotent retry).",
+      };
+    }
+
     if (!parent.currentStep || parent.currentStep.station.kind !== StationKind.TAMBUR) {
       throw AppError.badRequest(
         `Roll Tambur step'inde değil (${parent.currentStep?.station.kind ?? "STEPSIZ"})`,

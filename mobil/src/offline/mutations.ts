@@ -14,11 +14,20 @@ import {
   type CompleteQc2Request,
 } from '../services/kursunQc.service';
 import { rollService } from '../services/roll.service';
+import { tamburService } from '../services/tambur.service';
+import type { TamburFinalizeRemainingAction } from '../types/models';
 
 export const STATION_MUT = {
   QC2_COMPLETE: ['station', 'qc2-complete'] as const,
   KURSUN_FINISH: ['station', 'kursun-finish'] as const,
+  TAMBUR_FINALIZE_OPEN_FABRIC: ['station', 'tambur-finalize-open-fabric'] as const,
 } as const;
+
+export interface TamburFinalizeOpenFabricVars {
+  rollId: string;
+  remainingAction: TamburFinalizeRemainingAction;
+  foldType: string | null;
+}
 
 const OFFLINE_AWARE = {
   networkMode: 'online' as const,
@@ -37,6 +46,17 @@ export function registerStationMutationDefaults(): void {
   // Backend idempotent: priorFinish check + skipDuplicates RollOperation.
   queryClient.setMutationDefaults(STATION_MUT.KURSUN_FINISH, {
     mutationFn: (rollId: string) => rollService.kursunFinish(rollId, {}),
+    ...OFFLINE_AWARE,
+  });
+  // Tambur açık kumaş bitirme (Tambur'un son aksiyonu).
+  // Backend idempotent: status===TAMBUR_CONSUMED check + cached metadata.
+  // Per-cut (cutOpenFabric) hala online-only — label print + per-call barcode.
+  queryClient.setMutationDefaults(STATION_MUT.TAMBUR_FINALIZE_OPEN_FABRIC, {
+    mutationFn: (vars: TamburFinalizeOpenFabricVars) =>
+      tamburService.finalizeOpenFabric(vars.rollId, {
+        remainingAction: vars.remainingAction,
+        foldType: vars.foldType,
+      }),
     ...OFFLINE_AWARE,
   });
 }
