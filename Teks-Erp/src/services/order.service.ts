@@ -12,7 +12,7 @@ import { AuditService } from "./audit.service";
 import { BaseService, BaseServiceConfig } from "./base.service";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
-import { OrderStatus, Prisma, WorkOrderStatus } from "@prisma/client";
+import { OrderStatus, Prisma, RollStatus, WorkOrderStatus } from "@prisma/client";
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
 import {
@@ -205,57 +205,85 @@ export class OrderService extends BaseService {
       ];
     }
 
-    // "Bloklayıcı" WO statüleri — kalemi başkasına ayırılmış kabul ettirir.
-    // CANCELLED hariç: iptal edilmiş WO'ya bağlı kalem tekrar müsait.
+    // "Bloklayıcı" WO statüleri — kalemden metraj REZERVE eder (allocatedQty).
+    // CANCELLED hariç: iptal edilmiş WO'ya bağlı tahsis serbest kalır.
     const BLOCKING: WorkOrderStatus[] = [
       WorkOrderStatus.PLANNED,
       WorkOrderStatus.IN_PROGRESS,
       WorkOrderStatus.PAUSED,
       WorkOrderStatus.COMPLETED,
     ];
-    const lineAvailableFilter = {
-      workOrderLinks: {
-        none: {
-          ...(excludeWorkOrderId
-            ? { workOrderId: { not: excludeWorkOrderId } }
-            : {}),
-          workOrder: {
-            status: { in: BLOCKING },
-          },
-        },
-      },
-    };
 
+    // Gap-bazlı picker: bir satır "müsait" ise Açık > 0.
+    //   Açık = quantity − Sevk(SHIPPED+targetOrderLineId) − Rezerve(canlı WO allocatedQty)
+    // Kapalı/iptal sipariş hariç (gap hesabı yalnız açık siparişlerde anlamlı).
     const where = {
       ...baseWhere,
-      lines: { some: lineAvailableFilter },
-    };
-
-    // include — sadece müsait kalemleri döner
-    const include = {
-      customer: true,
-      branch: { select: { id: true, name: true, city: true, district: true } },
-      lines: {
-        where: lineAvailableFilter,
-        include: {
-          item: {
-            include: {
-              allowedProperties: { include: { property: true } },
-            },
-          },
-          color: true,
-          requiredProperties: { include: { property: true } },
-        },
-      },
+      status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
     };
 
     const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
-    const { skip, take } = buildPagination(params.page, params.pageSize);
 
-    const [data, total] = await Promise.all([
-      prisma.order.findMany({ where, orderBy, skip, take, include }),
-      prisma.order.count({ where }),
-    ]);
+    // Aday açık siparişleri display include + satır tahsisleriyle çek (picker tavanı 500).
+    const orders = await prisma.order.findMany({
+      where,
+      orderBy,
+      take: 500,
+      include: {
+        customer: true,
+        branch: { select: { id: true, name: true, city: true, district: true } },
+        lines: {
+          include: {
+            item: { include: { allowedProperties: { include: { property: true } } } },
+            color: true,
+            requiredProperties: { include: { property: true } },
+            workOrderLinks: {
+              select: { allocatedQty: true, workOrder: { select: { id: true, status: true } } },
+            },
+          },
+        },
+      },
+    });
+
+    // Sevk edilen metraj — tüm aday satırlar için tek groupBy (N+1 yok).
+    const allLineIds = orders.flatMap((o) => o.lines.map((l) => l.id));
+    const shippedByLine = new Map<string, Prisma.Decimal>();
+    if (allLineIds.length > 0) {
+      const grouped = await prisma.roll.groupBy({
+        by: ["targetOrderLineId"],
+        where: { targetOrderLineId: { in: allLineIds }, status: RollStatus.SHIPPED },
+        _sum: { currentQty: true },
+      });
+      for (const g of grouped) {
+        if (g.targetOrderLineId) {
+          shippedByLine.set(g.targetOrderLineId, g._sum.currentQty ?? new Prisma.Decimal(0));
+        }
+      }
+    }
+
+    // Her sipariş için Açık>0 satırları süz + üç kovayı satıra ekle (UI'da göster).
+    const enriched = orders
+      .map((order) => {
+        const lines = order.lines
+          .map((line) => {
+            const shipped = shippedByLine.get(line.id) ?? new Prisma.Decimal(0);
+            const reserved = line.workOrderLinks.reduce((sum, link) => {
+              const live =
+                BLOCKING.includes(link.workOrder.status) &&
+                link.workOrder.id !== excludeWorkOrderId;
+              return live ? sum.plus(link.allocatedQty ?? 0) : sum;
+            }, new Prisma.Decimal(0));
+            const openQty = new Prisma.Decimal(line.quantity).minus(shipped).minus(reserved);
+            return { ...line, shippedQty: shipped, reservedQty: reserved, openQty };
+          })
+          .filter((line) => line.openQty.greaterThan(0));
+        return { ...order, lines };
+      })
+      .filter((order) => order.lines.length > 0);
+
+    const total = enriched.length;
+    const { skip, take } = buildPagination(params.page, params.pageSize);
+    const data = enriched.slice(skip, skip + take);
 
     return {
       success: true,
@@ -267,6 +295,108 @@ export class OrderService extends BaseService {
         totalPages: Math.ceil(total / params.pageSize),
       },
     };
+  }
+
+  /**
+   * Bir topun özelliğine (itemId + opsiyonel colorId/width) uyan, Açık > 0 olan
+   * AÇIK sipariş kalemlerini döner. Tambur "Yeniden Kes" (depo topu → müşteri
+   * etiketi) ve top-önce paketleme picker'ları için.
+   * Açık = quantity − sevk(SHIPPED) − canlı WO rezerve(allocatedQty).
+   */
+  async findAvailableOrderLines(params: {
+    itemId: string;
+    colorId?: string | null;
+    width?: number | null;
+  }): Promise<ApiResponse<unknown>> {
+    const where: Prisma.OrderLineWhereInput = {
+      itemId: params.itemId,
+      order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
+    };
+    if (params.colorId) where.colorId = params.colorId;
+    if (params.width != null) where.width = params.width;
+
+    const lines = await prisma.orderLine.findMany({
+      where,
+      take: 200,
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        quantity: true,
+        width: true,
+        customerItemName: true,
+        customerColorName: true,
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            deadline: true,
+            customer: { select: { id: true, name: true } },
+            branch: { select: { id: true, name: true } },
+          },
+        },
+        item: { select: { code: true, name: true } },
+        color: { select: { code: true, name: true } },
+        workOrderLinks: {
+          select: { allocatedQty: true, workOrder: { select: { status: true } } },
+        },
+      },
+    });
+
+    const lineIds = lines.map((l) => l.id);
+    const shippedByLine = new Map<string, Prisma.Decimal>();
+    if (lineIds.length > 0) {
+      const grouped = await prisma.roll.groupBy({
+        by: ["targetOrderLineId"],
+        where: { targetOrderLineId: { in: lineIds }, status: RollStatus.SHIPPED },
+        _sum: { currentQty: true },
+      });
+      for (const g of grouped) {
+        if (g.targetOrderLineId) {
+          shippedByLine.set(g.targetOrderLineId, g._sum.currentQty ?? new Prisma.Decimal(0));
+        }
+      }
+    }
+
+    const BLOCKING: WorkOrderStatus[] = [
+      WorkOrderStatus.PLANNED,
+      WorkOrderStatus.IN_PROGRESS,
+      WorkOrderStatus.PAUSED,
+      WorkOrderStatus.COMPLETED,
+    ];
+
+    const data = lines
+      .map((l) => {
+        const shipped = shippedByLine.get(l.id) ?? new Prisma.Decimal(0);
+        const reserved = l.workOrderLinks.reduce(
+          (sum, link) =>
+            BLOCKING.includes(link.workOrder.status)
+              ? sum.plus(link.allocatedQty ?? 0)
+              : sum,
+          new Prisma.Decimal(0),
+        );
+        const openQty = new Prisma.Decimal(l.quantity).minus(shipped).minus(reserved);
+        return {
+          lineId: l.id,
+          orderId: l.order.id,
+          orderNumber: l.order.orderNumber,
+          deadline: l.order.deadline,
+          customerId: l.order.customer.id,
+          customerName: l.order.customer.name,
+          branchName: l.order.branch?.name ?? null,
+          itemCode: l.item.code,
+          itemName: l.item.name,
+          customerItemName: l.customerItemName,
+          colorCode: l.color?.code ?? null,
+          colorName: l.color?.name ?? null,
+          customerColorName: l.customerColorName,
+          width: l.width,
+          quantity: l.quantity,
+          openQty,
+        };
+      })
+      .filter((l) => l.openQty.greaterThan(0));
+
+    return { success: true, data };
   }
 
   async create(

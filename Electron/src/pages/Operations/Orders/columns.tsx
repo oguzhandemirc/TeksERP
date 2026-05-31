@@ -43,13 +43,13 @@ export const orderColumns: ColumnDef<Order>[] = [
   },
   {
     id: "customer",
-    header: "Müşteri",
+    header: () => <SortableHeader field="customer" label="Müşteri" />,
     cell: ({ row }) =>
       row.original.customer?.name ?? <span className="text-muted-foreground">—</span>,
   },
   {
     id: "branch",
-    header: "Şube",
+    header: () => <SortableHeader field="branch" label="Şube" />,
     cell: ({ row }) =>
       row.original.branch?.name ?? <span className="text-muted-foreground">—</span>,
   },
@@ -65,12 +65,12 @@ export const orderColumns: ColumnDef<Order>[] = [
   },
   {
     id: "lines",
-    header: "Kalem",
+    header: () => <SortableHeader field="lineCount" label="Kalem" />,
     cell: ({ row }) => <Badge variant="muted">{row.original.lines?.length ?? 0}</Badge>,
   },
   {
     id: "shipped",
-    header: "Sevk",
+    header: () => <SortableHeader field="shippedQty" label="Sevk" />,
     cell: ({ row }) => {
       const o = row.original;
       const requested = (o.lines ?? []).reduce((s, l) => s + Number(l.quantity ?? 0), 0);
@@ -91,7 +91,7 @@ export const orderColumns: ColumnDef<Order>[] = [
   },
   {
     accessorKey: "status",
-    header: "Durum",
+    header: () => <SortableHeader field="status" label="Durum" />,
     cell: ({ row }) => (
       <StatusBadge
         status={row.original.status}

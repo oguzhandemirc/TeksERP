@@ -148,7 +148,7 @@ export function TargetColorPicker({
                       />
                     )}
                     {displayColor.name}
-                    {isOrphan && <span className="text-amber-600">!</span>}
+                    {isOrphan && <span className="text-warning">!</span>}
                   </Badge>
                 ) : (
                   <span className="text-xs text-muted-foreground">Renksiz</span>

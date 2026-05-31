@@ -163,6 +163,8 @@ export function CrudPage<T extends { id: string }>({
         search={search}
         onSearchChange={setSearch}
         placeholder={searchPlaceholder}
+        table={table}
+        exportName={title}
         actions={
           <>
             {filterBar}

@@ -6,6 +6,7 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
     "build": "tsc",
     "seed": "npx prisma db seed",
+    "seed:scenario": "ts-node prisma/seed-shipping-scenario.ts",
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate deploy",
     "prisma:studio": "npx prisma studio",

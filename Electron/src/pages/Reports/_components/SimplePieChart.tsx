@@ -1,4 +1,5 @@
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { CHART_COLORS } from "@/lib/chart-theme";
 
 interface Props<T> {
   data: T[];
@@ -8,14 +9,12 @@ interface Props<T> {
   colors?: string[];
 }
 
-const DEFAULT_COLORS = ["#0ea5e9", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b"];
-
 export function SimplePieChart<T>({
   data,
   nameKey,
   valueKey,
   formatValue,
-  colors = DEFAULT_COLORS,
+  colors = CHART_COLORS,
 }: Props<T>) {
   const valueFmt = formatValue ? (v: unknown) => formatValue(Number(v)) : undefined;
 

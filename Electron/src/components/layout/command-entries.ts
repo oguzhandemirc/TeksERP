@@ -68,3 +68,28 @@ export const commandSections: CommandSection[] = [
     })),
   },
 ];
+
+/** Tüm komut girişleri düz liste — favoriler katalogu olarak da kullanılır. */
+export const allCommandEntries: CommandEntry[] = commandSections.flatMap((s) => s.entries);
+
+/** Route (pathname) → komut girişi. Favori çözümleme + favori edilebilirlik kontrolü. */
+export function findCommandEntry(to: string): CommandEntry | undefined {
+  return allCommandEntries.find((e) => e.to === to);
+}
+
+// Bölüm başlığı → üst (hub) sayfa. Breadcrumb için: alt sayfadan hub'a dönüş.
+const SECTION_PARENTS: Record<string, { label: string; to: string }> = {
+  Operasyon: { label: "Operasyon", to: "/operations" },
+  Yetkilendirme: { label: "Yetkilendirme", to: "/access" },
+};
+
+/** Bir route'un breadcrumb üst bağlantısı (hub). Üst seviye sayfalarda null. */
+export function findBreadcrumbParent(to: string): { label: string; to: string } | null {
+  for (const section of commandSections) {
+    if (section.entries.some((e) => e.to === to)) {
+      if (section.heading.startsWith("Tanımlar")) return { label: "Tanımlar", to: "/definitions" };
+      return SECTION_PARENTS[section.heading] ?? null;
+    }
+  }
+  return null;
+}

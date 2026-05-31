@@ -1,50 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { usePreferences } from "@/providers/PreferencesProvider";
 import {
   DEFAULT_GROUP_ORDER,
   getDefaultItemOrder,
   type GroupKey,
 } from "./widgetRegistry";
 
-const STORAGE_KEY = "dashboard.layout.v2";
-const EVENT_NAME = "dashboard-layout-changed";
+// Dashboard widget düzeni (gizli widget'lar + grup/öğe sırası) — kullanıcı
+// tercihlerinde (backend, AppPreferences.dashboard) saklanır, cihazdan bağımsız.
 
-interface LayoutState {
-  /** Görünmeyen widget key'leri. */
-  hidden: string[];
-  /** Grup sırası — eksik gruplar default sıraya göre sona eklenir. */
-  groupOrder?: GroupKey[];
-  /** Grup içi item sırası — eksik itemlar default sıraya göre sona eklenir. */
-  itemOrders?: Partial<Record<GroupKey, string[]>>;
-}
+type ItemOrders = Partial<Record<GroupKey, string[]>>;
 
-const EMPTY: LayoutState = { hidden: [] };
-
-function load(): LayoutState {
-  if (typeof window === "undefined") return EMPTY;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return EMPTY;
-    const parsed = JSON.parse(raw) as Partial<LayoutState>;
-    return {
-      hidden: Array.isArray(parsed.hidden) ? parsed.hidden : [],
-      groupOrder: Array.isArray(parsed.groupOrder) ? (parsed.groupOrder as GroupKey[]) : undefined,
-      itemOrders:
-        parsed.itemOrders && typeof parsed.itemOrders === "object"
-          ? (parsed.itemOrders as Partial<Record<GroupKey, string[]>>)
-          : undefined,
-    };
-  } catch {
-    return EMPTY;
-  }
-}
-
-function save(state: LayoutState): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  window.dispatchEvent(new Event(EVENT_NAME));
-}
-
-/** Stored list + default list'i birleştirip eksik öğeleri default sırada sonuna ekler. */
+/** Stored list + default list'i birleştirir; eksik öğeleri default sırada sona ekler. */
 function mergeOrder<T extends string>(stored: T[] | undefined, defaults: T[]): T[] {
   if (!stored || stored.length === 0) return defaults;
   const inDefault = new Set(defaults);
@@ -63,63 +30,52 @@ function mergeOrder<T extends string>(stored: T[] | undefined, defaults: T[]): T
 }
 
 export function useDashboardLayout() {
-  const [state, setState] = useState<LayoutState>(() => load());
+  const { prefs, setPreference } = usePreferences();
+  const dash = prefs.dashboard;
+  const storedGroupOrder = dash?.groupOrder as GroupKey[] | undefined;
+  const itemOrders = dash?.itemOrders as ItemOrders | undefined;
 
-  useEffect(() => {
-    const handler = () => setState(load());
-    window.addEventListener("storage", handler);
-    window.addEventListener(EVENT_NAME, handler);
-    return () => {
-      window.removeEventListener("storage", handler);
-      window.removeEventListener(EVENT_NAME, handler);
-    };
-  }, []);
+  const patch = useCallback(
+    (next: Partial<{ hidden: string[]; groupOrder: GroupKey[]; itemOrders: ItemOrders }>) => {
+      setPreference({ dashboard: { ...(prefs.dashboard ?? {}), ...next } });
+    },
+    [prefs.dashboard, setPreference],
+  );
 
-  const groupOrder: GroupKey[] = mergeOrder<GroupKey>(state.groupOrder, DEFAULT_GROUP_ORDER);
+  const groupOrder: GroupKey[] = mergeOrder<GroupKey>(storedGroupOrder, DEFAULT_GROUP_ORDER);
 
   const itemOrder = useCallback(
     (groupKey: GroupKey): string[] =>
-      mergeOrder(state.itemOrders?.[groupKey], getDefaultItemOrder(groupKey)),
-    [state.itemOrders],
+      mergeOrder(itemOrders?.[groupKey], getDefaultItemOrder(groupKey)),
+    [itemOrders],
   );
 
   const isVisible = useCallback(
-    (key: string) => !state.hidden.includes(key),
-    [state.hidden],
+    (key: string) => !(dash?.hidden ?? []).includes(key),
+    [dash?.hidden],
   );
 
-  const setVisible = useCallback((key: string, visible: boolean) => {
-    const current = load();
-    const set = new Set(current.hidden);
-    if (visible) set.delete(key);
-    else set.add(key);
-    const next: LayoutState = { ...current, hidden: [...set] };
-    save(next);
-    setState(next);
-  }, []);
+  const setVisible = useCallback(
+    (key: string, visible: boolean) => {
+      const set = new Set(dash?.hidden ?? []);
+      if (visible) set.delete(key);
+      else set.add(key);
+      patch({ hidden: [...set] });
+    },
+    [dash?.hidden, patch],
+  );
 
-  const setGroupOrder = useCallback((order: GroupKey[]) => {
-    const current = load();
-    const next: LayoutState = { ...current, groupOrder: order };
-    save(next);
-    setState(next);
-  }, []);
+  const setGroupOrder = useCallback((order: GroupKey[]) => patch({ groupOrder: order }), [patch]);
 
-  const setItemOrder = useCallback((groupKey: GroupKey, order: string[]) => {
-    const current = load();
-    const next: LayoutState = {
-      ...current,
-      itemOrders: { ...(current.itemOrders ?? {}), [groupKey]: order },
-    };
-    save(next);
-    setState(next);
-  }, []);
+  const setItemOrder = useCallback(
+    (groupKey: GroupKey, order: string[]) =>
+      patch({ itemOrders: { ...(itemOrders ?? {}), [groupKey]: order } }),
+    [itemOrders, patch],
+  );
 
-  const reset = useCallback(() => {
-    save(EMPTY);
-    setState(EMPTY);
-  }, []);
+  const reset = useCallback(() => setPreference({ dashboard: {} }), [setPreference]);
 
+  const hidden = dash?.hidden ?? [];
   return {
     isVisible,
     setVisible,
@@ -128,10 +84,10 @@ export function useDashboardLayout() {
     itemOrder,
     setItemOrder,
     reset,
-    hiddenCount: state.hidden.length,
+    hiddenCount: hidden.length,
     customized:
-      state.hidden.length > 0 ||
-      state.groupOrder !== undefined ||
-      (state.itemOrders && Object.keys(state.itemOrders).length > 0),
+      hidden.length > 0 ||
+      storedGroupOrder !== undefined ||
+      (itemOrders != null && Object.keys(itemOrders).length > 0),
   };
 }

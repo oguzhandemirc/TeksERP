@@ -10,6 +10,7 @@ import {
   Icon,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
+import { SkeletonList } from '../../../components/motion';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import * as Haptics from 'expo-haptics';
@@ -24,6 +25,7 @@ import DetailSheet, {
   type SummaryItem,
 } from '../../../components/DetailSheet';
 import { useDeviceType } from '../../../hooks/useDeviceType';
+import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { rollService } from '../../../services/roll.service';
 import { swatchService, type SwatchListItem } from '../../../services/swatch.service';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
@@ -66,6 +68,7 @@ interface RollListItem {
 export default function DepoScreen() {
   const device = useDeviceType();
   const isPhone = device === 'phone';
+  useLandscapeLock(!isPhone); // tablet yatay
   const [mode, setMode] = useState<ModeFilter>('ALL');
   const [search, setSearch] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -387,9 +390,7 @@ export default function DepoScreen() {
         {/* Liste */}
         <View style={{ flex: 1 }}>
           {activeQuery.isLoading ? (
-            <View style={styles.empty}>
-              <ActivityIndicator size="large" color="#475569" />
-            </View>
+            <SkeletonList count={8} />
           ) : isSwatchMode ? (
             swatches.length === 0 ? (
               <View style={styles.empty}>

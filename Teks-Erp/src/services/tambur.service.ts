@@ -92,6 +92,8 @@ interface CutInput {
   length: number;
   qualityGrade: string;
   relatedErrorIds: string[];
+  // Bu kesimin hedef sipariş kalemi (null = stok). Tambur'da operatör seçer.
+  targetOrderLineId?: string | null;
 }
 
 /**
@@ -337,6 +339,8 @@ export class TamburService {
       decisions: ErrorDecision[];
       cuts: CutInput[];
       foldType?: "2-KAT" | "4-KAT";
+      // Tüm kesimlere/kalan'a uygulanacak varsayılan hedef sipariş (kesim bazlı yoksa).
+      targetOrderLineId?: string | null;
     },
     userId?: string
   ): Promise<
@@ -541,6 +545,7 @@ export class TamburService {
         inheritProperties: boolean;
         auditSource: string;
         auditErrorIds: string[];
+        targetOrderLineId: string | null;
       };
 
       const segments: Segment[] = [];
@@ -558,6 +563,7 @@ export class TamburService {
           inheritProperties: cutStatus === RollStatus.WAREHOUSE,
           auditSource: "OPERATOR_CUT",
           auditErrorIds: c.relatedErrorIds,
+          targetOrderLineId: c.targetOrderLineId ?? data.targetOrderLineId ?? null,
         });
         offset += c.length;
       }
@@ -577,6 +583,7 @@ export class TamburService {
           inheritProperties: remainStatus === RollStatus.WAREHOUSE,
           auditSource: "REMAINING_TAIL",
           auditErrorIds: [],
+          targetOrderLineId: data.targetOrderLineId ?? null,
         });
       }
 
@@ -600,6 +607,7 @@ export class TamburService {
             producedInStepId: roll.producedInStepId,
             parentRollId: roll.id,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
+            targetOrderLineId: seg.targetOrderLineId,
           },
           include: {
             item: true,
@@ -1354,6 +1362,7 @@ export class TamburService {
       cutLength: number;
       qualityGrade?: string | null;
       notes?: string | null;
+      targetOrderLineId?: string | null;
     },
     userId?: string,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
@@ -1408,6 +1417,7 @@ export class TamburService {
           parentRollId: parent.id,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
+          targetOrderLineId: data.targetOrderLineId ?? null,
         },
       });
 
@@ -1530,6 +1540,7 @@ export class TamburService {
     data: {
       remainingAction?: "keep_1kalite" | "keep_a1" | "scrap" | "discard";
       notes?: string | null;
+      targetOrderLineId?: string | null;
     },
     userId?: string,
   ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> {
@@ -1577,6 +1588,7 @@ export class TamburService {
             parentRollId: parent.id,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
+            targetOrderLineId: data.targetOrderLineId ?? null,
           },
         });
         if (propertyIds.length > 0) {
@@ -1686,6 +1698,7 @@ export class TamburService {
       status: "WAREHOUSE" | "SCRAP" | "A1_STOCK";
       qualityGrade?: string | null;
       notes?: string | null;
+      targetOrderLineId?: string | null;
     },
     userId?: string,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRemainingQty: number }>> {
@@ -1757,6 +1770,7 @@ export class TamburService {
           parentRollId: parent.id,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
+          targetOrderLineId: data.targetOrderLineId ?? null,
           // currentStepId: child Tambur'dan çıktı (depo değil bir step) — null.
         },
       });
@@ -1883,6 +1897,7 @@ export class TamburService {
       /// Tambur kararı — WO.foldType (planlama) override. Verilmezse planlanan
       /// kullanılır (WO.foldType). Bu değer audit/RollOperation metadata'ya yazılır.
       foldType?: string | null;
+      targetOrderLineId?: string | null;
     },
     userId?: string,
   ): Promise<ApiResponse<{ rollId: string; remainingChildId: string | null; remainingQty: number }>> {
@@ -1991,6 +2006,7 @@ export class TamburService {
             parentRollId: parent.id,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
+            targetOrderLineId: data.targetOrderLineId ?? null,
           },
         });
         if (propertyIds.length > 0) {

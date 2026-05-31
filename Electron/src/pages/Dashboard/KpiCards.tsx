@@ -1,5 +1,6 @@
 import { useQueries } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
   ClipboardList,
   Factory,
@@ -11,6 +12,9 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/motion";
+import { springSnappy, staggerContainer, staggerItem } from "@/lib/motion";
+import { STATION_TEXT } from "@/lib/station-colors";
 import {
   fetchOpenOrderCount,
   fetchOpenWorkOrderCount,
@@ -34,7 +38,7 @@ const KPIS: KpiDef[] = [
     key: "openOrders",
     label: "Açık Sipariş",
     icon: ClipboardList,
-    tone: "text-blue-600 dark:text-blue-400",
+    tone: "text-info",
     query: fetchOpenOrderCount,
     to: "/operations/orders?filter[status]=PENDING,APPROVED,PARTIAL_SHIPPED",
   },
@@ -42,7 +46,7 @@ const KPIS: KpiDef[] = [
     key: "openWorkOrders",
     label: "Açık İş Emri",
     icon: Factory,
-    tone: "text-violet-600 dark:text-violet-400",
+    tone: "text-primary",
     query: fetchOpenWorkOrderCount,
     to: "/operations/work-orders?filter[status]=PLANNED,IN_PROGRESS,PAUSED",
   },
@@ -50,7 +54,7 @@ const KPIS: KpiDef[] = [
     key: "warehouse",
     label: "Depoda Bekleyen",
     icon: Warehouse,
-    tone: "text-amber-600 dark:text-amber-400",
+    tone: STATION_TEXT.depo,
     query: () => fetchRollCount("WAREHOUSE"),
     to: "/operations/rolls?tab=FINISHED_STOCK",
   },
@@ -58,7 +62,7 @@ const KPIS: KpiDef[] = [
     key: "atSubcontractor",
     label: "Fason'da",
     icon: Truck,
-    tone: "text-orange-600 dark:text-orange-400",
+    tone: STATION_TEXT.fason,
     query: () => fetchRollCount("AT_SUBCONTRACTOR"),
     to: "/operations/rolls?tab=SUBCONTRACTOR",
   },
@@ -66,7 +70,7 @@ const KPIS: KpiDef[] = [
     key: "inProduction",
     label: "Üretimde",
     icon: Cog,
-    tone: "text-indigo-600 dark:text-indigo-400",
+    tone: STATION_TEXT.process,
     query: fetchProductionActiveRollCount,
     to: "/operations/rolls?tab=PRODUCTION",
   },
@@ -92,45 +96,67 @@ export function KpiCards() {
   if (visibleKpis.length === 0) return null;
 
   return (
-    <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+    <motion.div
+      className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+      variants={staggerContainer}
+      initial="hidden"
+      animate="show"
+    >
       {visibleKpis.map((kpi, i) => {
         const r = results[i]!;
         const Icon = kpi.icon;
         const clickable = Boolean(kpi.to);
         return (
-          <Card
+          <motion.div
             key={kpi.key}
-            onClick={clickable ? () => navigate(kpi.to!) : undefined}
-            className={cn(
-              clickable &&
-                "cursor-pointer transition-colors hover:bg-accent/40 hover:border-primary/40",
-            )}
+            variants={staggerItem}
+            whileHover={clickable ? { y: -3 } : undefined}
+            transition={springSnappy}
           >
-            <CardContent className="flex items-center gap-3 p-4">
-              <div
+            <Card
+              onClick={clickable ? () => navigate(kpi.to!) : undefined}
+              className={cn(
+                "relative h-full overflow-hidden bg-gradient-to-br from-primary/5 to-transparent",
+                clickable && "card-glow cursor-pointer",
+              )}
+            >
+              <Icon
+                aria-hidden
                 className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted",
+                  "pointer-events-none absolute -bottom-3 -right-2 h-20 w-20 opacity-[0.06]",
                   kpi.tone,
                 )}
-              >
-                <Icon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-muted-foreground">
-                  {kpi.label}
-                </p>
-                {r.isLoading ? (
-                  <Skeleton className="mt-1 h-7 w-12" />
-                ) : r.isError ? (
-                  <p className="mt-0.5 text-lg font-semibold text-muted-foreground">—</p>
-                ) : (
-                  <p className="text-2xl font-semibold leading-tight">{r.data}</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+              />
+              <CardContent className="relative flex items-center gap-3 p-4">
+                <div
+                  className={cn(
+                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-current/10",
+                    kpi.tone,
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium text-muted-foreground">
+                    {kpi.label}
+                  </p>
+                  {r.isLoading ? (
+                    <Skeleton className="mt-1 h-7 w-12" />
+                  ) : r.isError ? (
+                    <p className="mt-0.5 text-lg font-semibold text-muted-foreground">—</p>
+                  ) : (
+                    <AnimatedNumber
+                      value={r.data ?? 0}
+                      flash
+                      className="block text-2xl font-semibold leading-tight tabular-nums"
+                    />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         );
       })}
-    </div>
+    </motion.div>
   );
 }

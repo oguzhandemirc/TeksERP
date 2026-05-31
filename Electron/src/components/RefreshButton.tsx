@@ -59,7 +59,7 @@ export function RefreshButton({
       size="sm"
       className={cn(
         "gap-1.5 transition-colors",
-        justDone && "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400",
+        justDone && "border-success/40 bg-success/10 text-success",
         className,
       )}
       disabled={isSpinning}

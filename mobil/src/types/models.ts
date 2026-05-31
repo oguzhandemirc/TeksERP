@@ -711,6 +711,8 @@ export interface TamburCutRequest {
   status: 'WAREHOUSE' | 'SCRAP' | 'A1_STOCK';
   qualityGrade?: string | null;
   notes?: string | null;
+  /** Bu kesimin hedef sipariş kalemi (null = stok). Etiket buradan basılır. */
+  targetOrderLineId?: string | null;
 }
 
 /** `POST /api/tambur/:id/finalize-open-fabric` — açık kumaşı bitir */

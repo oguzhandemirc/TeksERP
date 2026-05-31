@@ -190,6 +190,8 @@ export function RollsTable({ tab }: Props) {
         search={search}
         onSearchChange={setSearch}
         placeholder="Barkod ara..."
+        table={table}
+        exportName="Toplar"
         actions={
           <RollsStats
             data={statsQuery.data?.data}

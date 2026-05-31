@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import type { Subcontractor } from "./types";
@@ -12,6 +13,14 @@ export const subcontractorColumns: ColumnDef<Subcontractor>[] = [
   {
     accessorKey: "name",
     header: () => <SortableHeader field="name" label="Ad" />,
+    cell: ({ row }) => (
+      <span className="flex items-center gap-1.5">
+        {row.original.isFavorite && (
+          <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+        )}
+        {row.original.name}
+      </span>
+    ),
   },
   {
     id: "categories",

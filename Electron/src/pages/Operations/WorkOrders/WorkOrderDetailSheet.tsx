@@ -14,6 +14,7 @@ import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { workOrderStatusLabels, workOrderTypeLabels, stepStatusLabels } from "@/types/enums";
 import { safeFormat, formatNumber } from "@/lib/format";
+import { AnimatedProgress } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import { workOrderService } from "./service";
 import { WorkOrderDocumentsDialog } from "./WorkOrderDocumentsDialog";
@@ -128,7 +129,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                   >
                     <Pencil className="h-3.5 w-3.5" /> İş Emrini Düzenle
                     {wo.status === "IN_PROGRESS" && (
-                      <span className="text-amber-600" aria-label="üretim devam ediyor">
+                      <span className="text-warning" aria-label="üretim devam ediyor">
                         ⚠
                       </span>
                     )}
@@ -178,6 +179,24 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                 </CardContent>
               </Card>
             </div>
+
+            {wo.targetQuantity != null && wo.targetQuantity > 0 && wo.producedRolls && (
+              <Card>
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Üretim İlerlemesi (bitmiş depo)</span>
+                    <span className="font-medium tabular-nums">
+                      {formatNumber(wo.producedRolls.warehouse.totalMeters, 0)} /{" "}
+                      {formatNumber(wo.targetQuantity, 0)} m
+                    </span>
+                  </div>
+                  <AnimatedProgress
+                    value={(wo.producedRolls.warehouse.totalMeters / wo.targetQuantity) * 100}
+                    className="mt-2 h-1.5"
+                  />
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardContent className="space-y-1 p-3 text-sm">
@@ -287,7 +306,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                             r.qualityGrade === "FIRE"
                               ? "text-destructive"
                               : r.qualityGrade === "A1"
-                                ? "text-amber-600 dark:text-amber-400"
+                                ? "text-warning"
                                 : "text-foreground";
                           // Snapshot: fiziksel olarak yok olmuş ise (re-cut →
                           // TAMBUR_CONSUMED, operatör iptal → CANCELLED) küçük
@@ -398,6 +417,38 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                   </CardContent>
                 </Card>
               )}
+
+            {sortedSteps.length > 0 && (
+              <div className="flex items-center gap-1.5 px-1" aria-hidden>
+                {sortedSteps.map((step, i) => {
+                  const done = step.status === "COMPLETED";
+                  const active = step.status === "ACTIVE";
+                  return (
+                    <div
+                      key={step.id}
+                      className={cn("flex items-center gap-1.5", i < sortedSteps.length - 1 ? "flex-1" : "flex-none")}
+                      title={step.station?.name ?? undefined}
+                    >
+                      <span
+                        className={cn(
+                          "h-2.5 w-2.5 shrink-0 rounded-full",
+                          done
+                            ? "bg-success"
+                            : active
+                              ? "bg-primary animate-pulse"
+                              : step.status === "SKIPPED"
+                                ? "bg-muted-foreground/40"
+                                : "bg-muted-foreground/20",
+                        )}
+                      />
+                      {i < sortedSteps.length - 1 && (
+                        <span className={cn("h-0.5 flex-1 rounded", done ? "bg-success" : "bg-border")} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div>
               <button

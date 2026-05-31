@@ -13,6 +13,7 @@ interface BackendPayload {
   phone: string | null;
   address: string | null;
   isActive: boolean;
+  isFavorite: boolean;
   categoryIds: string[];
 }
 
@@ -26,6 +27,7 @@ const buildPayload = (
   phone: v.phone?.trim() || null,
   address: v.address?.trim() || null,
   isActive: v.isActive,
+  isFavorite: v.isFavorite,
   categoryIds: v.categoryIds,
 });
 

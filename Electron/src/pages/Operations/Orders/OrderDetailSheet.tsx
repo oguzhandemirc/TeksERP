@@ -2,12 +2,14 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { safeFormat } from "@/lib/format";
-import { Lock, Pencil, Ban } from "lucide-react";
+import { fireConfetti } from "@/lib/confetti";
+import { Lock, Pencil, Ban, Factory } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { AnimatedProgress } from "@/components/motion";
 import {
   Dialog,
   DialogContent,
@@ -29,9 +31,17 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEdit?: (order: Order) => void;
+  /** "Bu siparişten iş emri oluştur" — WO formuna kalem seed'leyerek yönlendirir. */
+  onCreateWorkOrder?: (order: Order) => void;
 }
 
-export function OrderDetailSheet({ order, open, onOpenChange, onEdit }: Props) {
+export function OrderDetailSheet({
+  order,
+  open,
+  onOpenChange,
+  onEdit,
+  onCreateWorkOrder,
+}: Props) {
   const qc = useQueryClient();
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -41,6 +51,7 @@ export function OrderDetailSheet({ order, open, onOpenChange, onEdit }: Props) {
     mutationFn: ({ id, r }: { id: string; r: string }) => orderService.manualClose(id, r),
     onSuccess: () => {
       toast.success("Sipariş manuel olarak kapatıldı.");
+      fireConfetti();
       void qc.invalidateQueries({ queryKey: ["orders"] });
       setCloseOpen(false);
       setReason("");
@@ -112,6 +123,26 @@ export function OrderDetailSheet({ order, open, onOpenChange, onEdit }: Props) {
               </Card>
             </div>
 
+            {totalQty > 0 && (
+              <Card>
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Sevk İlerlemesi</span>
+                    <span className="font-medium tabular-nums">
+                      {order.shippedQty.toLocaleString("tr-TR")} / {totalQty.toLocaleString("tr-TR")} m
+                      <span className="ml-1 text-muted-foreground">
+                        (%{Math.round((order.shippedQty / totalQty) * 100)})
+                      </span>
+                    </span>
+                  </div>
+                  <AnimatedProgress
+                    value={(order.shippedQty / totalQty) * 100}
+                    className="mt-2 h-1.5"
+                  />
+                </CardContent>
+              </Card>
+            )}
+
             {order.completedAt && (
               <div className="rounded-md border bg-muted/30 p-3 text-xs">
                 <div className="font-medium">
@@ -169,6 +200,11 @@ export function OrderDetailSheet({ order, open, onOpenChange, onEdit }: Props) {
                             </span>
                           )}
                         </div>
+                        {line.cutNote && (
+                          <div className="mt-1.5 rounded bg-warning/10 px-2 py-1 text-xs text-foreground">
+                            <span className="font-medium">Kesim notu:</span> {line.cutNote}
+                          </div>
+                        )}
                         {line.requiredProperties && line.requiredProperties.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap items-center gap-1">
                             <span className="text-[10px] text-muted-foreground">
@@ -229,6 +265,26 @@ export function OrderDetailSheet({ order, open, onOpenChange, onEdit }: Props) {
                   Manuel Kapat: eksik sevkiyat olsa bile tamamlanmış işaretler.
                 </p>
               )}
+            </PermissionGate>
+
+            <PermissionGate permission="workorder:write">
+              {onCreateWorkOrder &&
+                (order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED") && (
+                  <div className="border-t pt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onCreateWorkOrder(order)}
+                      className="gap-1.5"
+                    >
+                      <Factory className="h-3.5 w-3.5" /> Bu siparişten iş emri oluştur
+                    </Button>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Açık kalemler iş emri formuna taşınır; orada düzenleyebilirsin.
+                    </p>
+                  </div>
+                )}
             </PermissionGate>
           </div>
         )}

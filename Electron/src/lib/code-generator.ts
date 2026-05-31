@@ -28,4 +28,5 @@ export const CODE_PREFIXES = {
   COLOR: "RNK",
   ROUTE: "ROT",
   FABRIC_PROPERTY: "OZL",
+  RECIPE: "REC",
 } as const;

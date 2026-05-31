@@ -11,6 +11,8 @@ export interface Subcontractor {
   phone: string | null;
   address: string | null;
   isActive: boolean;
+  /** İş emri fason adımında firma seçicide default gelir (kategori bazında). */
+  isFavorite: boolean;
   categories: SubcontractorCategoryLink[];
   createdAt: string;
   updatedAt: string;

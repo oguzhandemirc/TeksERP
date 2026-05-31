@@ -1,26 +1,56 @@
 import { useState } from "react";
-import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { CommandPalette } from "./CommandPalette";
+import { ShortcutsDialog } from "./ShortcutsDialog";
+import { AnimatedOutlet } from "@/components/motion";
+import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 
 export function AppShell() {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("sidebar.collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  useGlobalShortcuts({
+    onOpenCommand: () => setPaletteOpen(true),
+    onOpenHelp: () => setHelpOpen(true),
+  });
+
+  const toggleSidebar = () =>
+    setCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem("sidebar.collapsed", next ? "1" : "0");
+      } catch {
+        /* sessiz geç */
+      }
+      return next;
+    });
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
+    <div className="app-bg flex h-screen w-screen flex-col overflow-hidden text-foreground">
       <Topbar
-        onToggleSidebar={() => setCollapsed((c) => !c)}
+        onToggleSidebar={toggleSidebar}
         onOpenCommand={() => setPaletteOpen(true)}
       />
       <div className="flex min-h-0 flex-1">
         <Sidebar collapsed={collapsed} />
         <main className="min-w-0 flex-1 overflow-auto">
-          <Outlet />
+          <AnimatedOutlet />
         </main>
       </div>
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onShowHelp={() => setHelpOpen(true)}
+      />
+      <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   );
 }

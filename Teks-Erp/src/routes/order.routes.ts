@@ -7,7 +7,7 @@ import { z } from "zod";
 import { BaseController } from "../controllers/base.controller";
 import { OrderService } from "../services/order.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import "../types/express-augment";
 
 const service = new OrderService({
@@ -39,6 +39,13 @@ const service = new OrderService({
     },
   },
   nestedCreateFields: ["lines"],
+  // İlişki/aggregate sıralama: Müşteri (customer.name), Şube (branch.name),
+  // Kalem (lines _count). Bu anahtarlarda findAllCursor offset-cursor'a düşer.
+  relationSortMap: {
+    customer: (o) => ({ customer: { name: o } }),
+    branch: (o) => ({ branch: { name: o } }),
+    lineCount: (o) => ({ lines: { _count: o } }),
+  },
 });
 
 const controller = new BaseController(service);
@@ -276,6 +283,56 @@ router.get(
     try {
       const excludeWorkOrderId = req.query.excludeWorkOrderId as string | undefined;
       const result = await service.findAvailableForWorkOrder(req, excludeWorkOrderId);
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/orders/order-lines/available:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Özelliğe uyan açık sipariş kalemleri (Açık>0)
+ *     description: itemId zorunlu; colorId/width opsiyonel. Tambur yeniden-kes / paket picker'ı.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: itemId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: colorId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: width
+ *         schema: { type: number }
+ *     responses:
+ *       200: { description: Açık sipariş kalemleri }
+ */
+router.get(
+  "/order-lines/available",
+  verifyToken,
+  requireAnyPermission(
+    "order:read",
+    "quality:write",
+    "mobile:tambur",
+    "mobile:tarti-paket",
+  ),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const itemId = req.query.itemId as string | undefined;
+      if (!itemId) {
+        res.status(400).json({ success: false, message: "itemId gerekli" });
+        return;
+      }
+      const colorId = (req.query.colorId as string | undefined) || undefined;
+      const widthRaw = req.query.width as string | undefined;
+      const width =
+        widthRaw != null && widthRaw !== "" ? Number(widthRaw) : undefined;
+      const result = await service.findAvailableOrderLines({ itemId, colorId, width });
       res.json(result);
     } catch (e) {
       next(e);

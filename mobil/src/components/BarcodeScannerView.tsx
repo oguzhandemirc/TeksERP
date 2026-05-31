@@ -1,8 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, IconButton, Text, ActivityIndicator } from 'react-native-paper';
+import { Button, IconButton, Text } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { colors } from '../theme/tokens';
+import { springs } from '../theme/motion';
 
 export type SupportedBarcodeType =
   | 'qr'
@@ -30,15 +43,18 @@ interface Props {
   barcodeTypes?: SupportedBarcodeType[];
 }
 
+const FRAME = 260;
+const LINE_H = 3;
+
 /**
  * BarcodeScannerModal'ın RNModal sarmasız varyantı — başka modal'ların İÇİNDE
  * kullanılabilir. Nested RNModal sorunu (RN'de iki RNModal aynı anda render
  * edilmez) bu component'le aşılır.
  *
- * Kullanım örnekleri:
- *  - Top-level modal (kendi başına): BarcodeScannerModal bunu RNModal içine sarar
- *  - Diğer modal'ın içinde overlay olarak: ResplitModal vb. doğrudan bu view'i
- *    conditional render eder
+ * Görsel: animasyonlu köşe parantezleri + süpüren tarama çizgisi (Reanimated,
+ * UI thread). Okuma yakalandığında çerçeve yeşile döner ve yaylı bir onay
+ * işareti açılır — operatöre "okundu" hissi net verilir. `useReducedMotion`
+ * aktifse hareketler sabit/yumuşatılmış gösterilir.
  */
 export function BarcodeScannerView({
   active,
@@ -50,6 +66,7 @@ export function BarcodeScannerView({
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
   const [busy, setBusy] = useState(false);
+  const reduced = useReducedMotion();
 
   const onScanRef = useRef(onScan);
   useEffect(() => {
@@ -68,15 +85,78 @@ export function BarcodeScannerView({
     scannedRef.current = true;
     setBusy(true);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setTimeout(() => onScanRef.current(data), 80);
+    setTimeout(() => onScanRef.current(data), 180);
   }, []);
+
+  const scanning = active && !!permission?.granted && !busy;
+
+  // Tarama çizgisi — çerçeve içinde yukarı/aşağı süpürür.
+  const scanY = useSharedValue(0);
+  useEffect(() => {
+    if (scanning && !reduced) {
+      scanY.value = 0;
+      scanY.value = withRepeat(
+        withTiming(FRAME - LINE_H, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true,
+      );
+    } else {
+      cancelAnimation(scanY);
+    }
+    return () => cancelAnimation(scanY);
+  }, [scanning, reduced, scanY]);
+  const scanLineStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: scanY.value }],
+  }));
+
+  // Köşe parantezleri — tararken hafif nefes alır.
+  const cornerP = useSharedValue(0);
+  useEffect(() => {
+    if (scanning && !reduced) {
+      cornerP.value = withRepeat(
+        withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true,
+      );
+    } else {
+      cancelAnimation(cornerP);
+      cornerP.value = 0;
+    }
+    return () => cancelAnimation(cornerP);
+  }, [scanning, reduced, cornerP]);
+  const cornersStyle = useAnimatedStyle(() => ({
+    opacity: 0.65 + cornerP.value * 0.35,
+  }));
+
+  // Yakalama onayı — çerçeve yeşil + yaylı check.
+  const successV = useSharedValue(0);
+  useEffect(() => {
+    if (busy) {
+      successV.value = 0;
+      successV.value = reduced
+        ? withTiming(1, { duration: 160 })
+        : withSpring(1, springs.bouncy);
+    } else {
+      successV.value = 0;
+    }
+  }, [busy, reduced, successV]);
+  const successCheckStyle = useAnimatedStyle(() => ({
+    opacity: successV.value,
+    transform: [{ scale: 0.5 + successV.value * 0.5 }],
+  }));
+  const successTintStyle = useAnimatedStyle(() => ({
+    opacity: successV.value * 0.16,
+  }));
+
+  const cornerColor = busy ? colors.success : '#fff';
 
   const body = !permission ? (
     <View style={styles.center}>
-      <ActivityIndicator />
+      <MaterialCommunityIcons name="camera" size={40} color={colors.textOnDarkMuted} />
     </View>
   ) : !permission.granted ? (
     <View style={styles.center}>
+      <MaterialCommunityIcons name="camera-off" size={44} color={colors.textOnDarkMuted} />
       <Text variant="titleMedium" style={styles.permTitle}>
         Kamera izni gerekli
       </Text>
@@ -96,16 +176,33 @@ export function BarcodeScannerView({
         onBarcodeScanned={busy ? undefined : handleScanned}
       />
       <View style={styles.overlay} pointerEvents="none">
-        <View style={styles.targetFrame} />
+        <View style={styles.frame}>
+          {/* Yakalamada yeşil flaş */}
+          <Animated.View
+            style={[styles.successTint, successTintStyle]}
+          />
+          {/* Köşe parantezleri */}
+          <Animated.View style={[StyleSheet.absoluteFill, cornersStyle]}>
+            <View style={[styles.corner, styles.cornerTL, { borderColor: cornerColor }]} />
+            <View style={[styles.corner, styles.cornerTR, { borderColor: cornerColor }]} />
+            <View style={[styles.corner, styles.cornerBL, { borderColor: cornerColor }]} />
+            <View style={[styles.corner, styles.cornerBR, { borderColor: cornerColor }]} />
+          </Animated.View>
+          {/* Süpüren tarama çizgisi */}
+          {scanning && (
+            <Animated.View style={[styles.scanLine, scanLineStyle]} />
+          )}
+          {/* Yakalama onay işareti */}
+          {busy && (
+            <Animated.View style={[styles.successCheck, successCheckStyle]}>
+              <MaterialCommunityIcons name="check-bold" size={56} color="#fff" />
+            </Animated.View>
+          )}
+        </View>
         <Text style={styles.overlayHint}>
-          QR'ı çerçeve içine alın · otomatik okunur
+          {busy ? 'Okundu' : "QR'ı çerçeve içine alın · otomatik okunur"}
         </Text>
       </View>
-      {busy && (
-        <View style={styles.busyOverlay} pointerEvents="none">
-          <ActivityIndicator size="large" color="#fff" />
-        </View>
-      )}
     </View>
   ) : (
     <View style={styles.center} />
@@ -133,8 +230,9 @@ export function BarcodeScannerView({
   );
 }
 
+const CORNER = 36;
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a', overflow: 'hidden' },
+  container: { flex: 1, backgroundColor: colors.headerBg, overflow: 'hidden' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -144,23 +242,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#1e293b',
   },
   title: { color: '#fff', fontWeight: '700' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 6 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 8 },
   permTitle: { color: '#fff', fontWeight: '700' },
-  permBody: { color: '#cbd5e1', textAlign: 'center' },
+  permBody: { color: colors.textOnDarkMuted, textAlign: 'center' },
   cameraWrap: { flex: 1, backgroundColor: '#000', position: 'relative' },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
+    gap: 20,
   },
-  targetFrame: {
-    width: 260,
-    height: 260,
-    borderWidth: 3,
-    borderColor: '#fff',
+  frame: {
+    width: FRAME,
+    height: FRAME,
+    position: 'relative',
+  },
+  successTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.success,
     borderRadius: 16,
-    backgroundColor: 'transparent',
+  },
+  corner: {
+    position: 'absolute',
+    width: CORNER,
+    height: CORNER,
+  },
+  cornerTL: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 16 },
+  cornerTR: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 16 },
+  cornerBL: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 16 },
+  cornerBR: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 16 },
+  scanLine: {
+    position: 'absolute',
+    left: 6,
+    right: 6,
+    height: LINE_H,
+    borderRadius: LINE_H,
+    backgroundColor: colors.success,
+    shadowColor: colors.success,
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  },
+  successCheck: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   overlayHint: {
     color: '#fff',
@@ -170,11 +297,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-  },
-  busyOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
   },
 });

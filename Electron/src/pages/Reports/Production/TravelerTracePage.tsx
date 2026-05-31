@@ -91,7 +91,7 @@ export function TravelerTracePage() {
           <Search className="h-3.5 w-3.5" />
           Ara
         </Button>
-        {resolveError ? <span className="text-xs text-red-500">{resolveError}</span> : null}
+        {resolveError ? <span className="text-xs text-destructive">{resolveError}</span> : null}
       </form>
     </div>
   );
@@ -172,10 +172,10 @@ function TraceEvent({ ev }: { ev: TravelerEvent }) {
   const Icon = ev.type === "MOVEMENT_IN" ? ArrowDown : ev.type === "MOVEMENT_OUT" ? ArrowUp : Wrench;
   const tone =
     ev.type === "MOVEMENT_IN"
-      ? "text-sky-600 bg-sky-100/60"
+      ? "text-info bg-info/10"
       : ev.type === "MOVEMENT_OUT"
-        ? "text-emerald-600 bg-emerald-100/60"
-        : "text-amber-600 bg-amber-100/60";
+        ? "text-success bg-success/10"
+        : "text-warning bg-warning/10";
   const title =
     ev.type === "MOVEMENT_IN"
       ? `${ev.stationName} — Giriş`

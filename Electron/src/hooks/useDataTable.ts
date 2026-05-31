@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
+  type OnChangeFn,
+  type RowSelectionState,
+  type VisibilityState,
 } from "@tanstack/react-table";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { CursorPaginatedResponse, CursorParams } from "@/types/api";
 import { parseUrlToQueryParams } from "@/lib/query-builder";
+import { usePreferences } from "@/providers/PreferencesProvider";
 
 interface Options<T> {
   queryKey: string;
@@ -17,6 +21,8 @@ interface Options<T> {
   defaultPageSize?: number;
   /** Backend'e her durumda yollanan ek filtreler (URL override edemez). */
   forceFilters?: Record<string, string | string[]>;
+  /** Satır seçimi (toplu işlem) — varsayılan açık. */
+  enableSelection?: boolean;
 }
 
 /**
@@ -32,8 +38,10 @@ export function useDataTable<T>({
   columns,
   defaultPageSize = 50,
   forceFilters,
+  enableSelection = true,
 }: Options<T>) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const urlParams = useMemo(
     () => parseUrlToQueryParams(searchParams.toString(), { pageSize: defaultPageSize }),
@@ -46,6 +54,30 @@ export function useDataTable<T>({
   );
 
   const [search, setSearchInput] = useState(urlParams.search ?? "");
+  // Debounce ile URL'e EN SON yazdığımız arama. Harici URL değişikliğini
+  // (kayıtlı görünüm uygulama, tarayıcı geri/ileri) kendi yazımızdan ayırt
+  // etmek için — aksi halde geri-senkron, kullanıcı yazarken input'u ezerdi.
+  const lastPushedSearchRef = useRef(urlParams.search ?? "");
+
+  // Sütun sırası + görünürlüğü — kullanıcı tercihlerinde (backend) saklanır,
+  // cihazdan bağımsız. Boş = varsayılan.
+  const { prefs, setPreference } = usePreferences();
+  const columnOrder = useMemo(
+    () => prefs.tableOrder?.[queryKey] ?? [],
+    [prefs.tableOrder, queryKey],
+  );
+  const columnVisibility = useMemo<VisibilityState>(
+    () => prefs.tableVisibility?.[queryKey] ?? {},
+    [prefs.tableVisibility, queryKey],
+  );
+  const onColumnOrderChange: OnChangeFn<string[]> = (updater) => {
+    const next = typeof updater === "function" ? updater(columnOrder) : updater;
+    setPreference({ tableOrder: { ...(prefs.tableOrder ?? {}), [queryKey]: next } });
+  };
+  const onColumnVisibilityChange: OnChangeFn<VisibilityState> = (updater) => {
+    const next = typeof updater === "function" ? updater(columnVisibility) : updater;
+    setPreference({ tableVisibility: { ...(prefs.tableVisibility ?? {}), [queryKey]: next } });
+  };
 
   // Search debounce → URL'e yaz (cursor stack reset).
   useEffect(() => {
@@ -54,11 +86,23 @@ export function useDataTable<T>({
       if (search) next.set("search", search);
       else next.delete("search");
       next.delete("page"); // legacy
+      lastPushedSearchRef.current = search;
       setSearchParams(next, { replace: true });
     }, 300);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  // URL → input geri-senkron: kayıtlı görünüm uygulandığında / tarayıcı
+  // geri-ileri ile URL HARİCEN değiştiğinde arama kutusunu hizala. Kendi
+  // debounce yazımız lastPushedSearchRef ile elenir → yazma akışı bozulmaz.
+  useEffect(() => {
+    const urlSearch = urlParams.search ?? "";
+    if (urlSearch !== lastPushedSearchRef.current) {
+      lastPushedSearchRef.current = urlSearch;
+      setSearchInput(urlSearch);
+    }
+  }, [urlParams.search]);
 
   // Stable cache key — filter/sort/search/date değişince refetch + cursor reset.
   const baseKey = useMemo(
@@ -116,6 +160,13 @@ export function useDataTable<T>({
   const table = useReactTable({
     data: flatRows,
     columns,
+    state: { columnOrder, columnVisibility, rowSelection },
+    onColumnOrderChange,
+    onColumnVisibilityChange,
+    onRowSelectionChange: setRowSelection,
+    enableRowSelection: enableSelection,
+    // Seçim entity id'sine bağlı — sayfa yüklendikçe index kaymasından etkilenmez.
+    getRowId: (row) => (row as { id: string }).id,
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
     manualSorting: true,

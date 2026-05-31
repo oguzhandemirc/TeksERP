@@ -43,7 +43,8 @@ import {
   type ItemMismatchDetails,
 } from '../../../services/subcontractor.service';
 import { STATION_MUT } from '../../../offline/mutations';
-import { useIsOnline, usePendingStationOps } from '../../../offline/hooks';
+import SyncStatusChip from '../../../components/SyncStatusChip';
+import { SkeletonList } from '../../../components/motion';
 import type { Roll, WorkOrderStep } from '../../../types/models';
 import {
   WORK_ORDER_STATUS_LABEL,
@@ -1120,38 +1121,6 @@ export default function FasonSevkScreen() {
 }
 
 
-// Çevrimdışı / sync bekleyen istasyon işlemi rozeti (diğer ekranlarla aynı).
-function SyncStatusChip() {
-  const online = useIsOnline();
-  const pending = usePendingStationOps();
-  const pendingCount = pending.length;
-  if (online && pendingCount === 0) return null;
-  let bg = '#1e40af';
-  let label = `${pendingCount} sync`;
-  if (!online && pendingCount === 0) {
-    bg = '#b45309';
-    label = 'Çevrimdışı';
-  } else if (!online && pendingCount > 0) {
-    bg = '#b91c1c';
-    label = `Çevrimdışı · ${pendingCount}`;
-  }
-  return (
-    <View
-      style={{
-        backgroundColor: bg,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-        marginRight: 8,
-      }}
-    >
-      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 // ── Top seçim modalı (kamera placeholder) ──
 const ROLL_PICKER_PAGE_SIZE = 30;
 
@@ -1257,10 +1226,7 @@ function RollPickerModal({
 
         <View style={pickerStyles.listBox}>
           {rollsQuery.isLoading ? (
-            <View style={pickerStyles.empty}>
-              <ActivityIndicator size="large" color="#4f46e5" />
-              <Text style={pickerStyles.emptyText}>Yükleniyor...</Text>
-            </View>
+            <SkeletonList count={6} />
           ) : rollsQuery.isError ? (
             <View style={pickerStyles.empty}>
               <Text style={pickerStyles.emptyText}>Liste yüklenemedi</Text>

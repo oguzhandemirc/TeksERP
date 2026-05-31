@@ -182,7 +182,7 @@ export function TargetPropertyPicker({
                         }
                       >
                         {e.name}
-                        {e.orphan && <span className="ml-0.5 text-amber-600">!</span>}
+                        {e.orphan && <span className="ml-0.5 text-warning">!</span>}
                       </Badge>
                     ))}
                     {selectedEntries.length > 3 && (

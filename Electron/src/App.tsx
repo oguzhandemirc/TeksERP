@@ -3,6 +3,8 @@ import { RouterProvider } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
+import { MotionProvider } from "@/components/motion";
+import { PreferencesProvider } from "@/providers/PreferencesProvider";
 import { router } from "./router";
 import { useAuthStore } from "@/store/auth";
 import { tokenStore } from "@/lib/secure-token";
@@ -39,10 +41,14 @@ function AuthHydrator() {
 
 export function App() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <QueryClientProvider client={queryClient}>
         <AuthHydrator />
-        <RouterProvider router={router} />
+        <PreferencesProvider>
+          <MotionProvider>
+            <RouterProvider router={router} />
+          </MotionProvider>
+        </PreferencesProvider>
         <Toaster />
       </QueryClientProvider>
     </ThemeProvider>

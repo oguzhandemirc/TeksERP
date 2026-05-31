@@ -30,8 +30,18 @@ export function useCrudMutations<T>({ service, queryKey, entityName }: Options<T
 
   const removeMutation = useMutation({
     mutationFn: (id: string) => service.remove(id),
-    onSuccess: () => {
-      toast.success(`${entityName} silindi.`);
+    onSuccess: (_data, id) => {
+      toast.success(`${entityName} silindi.`, {
+        action: {
+          label: "Geri al",
+          onClick: () => {
+            void service.restore(id).then(() => {
+              toast.success(`${entityName} geri alındı.`);
+              invalidate();
+            });
+          },
+        },
+      });
       invalidate();
     },
   });

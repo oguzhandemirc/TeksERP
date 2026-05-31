@@ -1,27 +1,18 @@
 import React, { useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, TouchableRipple } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ScreenChrome from '../../components/ScreenChrome';
+import { PressableScale, AnimatedEntrance } from '../../components/motion';
 import { usePermissions } from '../../hooks/usePermission';
 import { useDeviceType } from '../../hooks/useDeviceType';
+import { colors, moduleAccents, radius, shadow, spacing } from '../../theme';
 import type { MainStackParamList } from '../../navigation/types';
 import type { MobileScreenKey, MobileScreenMeta } from '../../types/permissions';
 
 type Nav = NativeStackNavigationProp<MainStackParamList, 'ModuleSelect'>;
-
-const MODULE_COLORS: Record<MobileScreenKey, { tint: string; bg: string }> = {
-  KK1:        { tint: '#2563eb', bg: '#dbeafe' },
-  KursunQc:   { tint: '#d97706', bg: '#fef3c7' },
-  Tambur:     { tint: '#7c3aed', bg: '#ede9fe' },
-  Depo:       { tint: '#475569', bg: '#e2e8f0' },
-  TartiPaket: { tint: '#059669', bg: '#d1fae5' },
-  Sevkiyat:   { tint: '#ea580c', bg: '#ffedd5' },
-  FasonSevk:  { tint: '#0891b2', bg: '#cffafe' },
-  FasonKabul: { tint: '#db2777', bg: '#fce7f3' },
-};
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -49,11 +40,12 @@ export default function ModuleSelectScreen() {
     <View style={[styles.grid, isPhone && styles.gridPhone]}>
       {rows.map((row, rIdx) => (
         <View key={rIdx} style={[styles.row, isPhone && styles.rowPhone]}>
-          {row.map((s) => (
+          {row.map((s, cIdx) => (
             <ModuleCard
               key={s.key}
               meta={s}
               compact={isPhone}
+              index={rIdx * columns + cIdx}
               onPress={handlePress}
             />
           ))}
@@ -79,47 +71,52 @@ export default function ModuleSelectScreen() {
 const ModuleCard = React.memo(function ModuleCard({
   meta,
   compact,
+  index,
   onPress,
 }: {
   meta: MobileScreenMeta;
   compact: boolean;
+  index: number;
   onPress: (key: MobileScreenKey) => void;
 }) {
-  const color = MODULE_COLORS[meta.key];
+  const color = moduleAccents[meta.key];
   const handlePress = useCallback(() => onPress(meta.key), [onPress, meta.key]);
   return (
-    <TouchableRipple
-      onPress={handlePress}
-      borderless={false}
-      rippleColor={color.tint + '22'}
-      style={[styles.card, compact && styles.cardPhone, { borderTopColor: color.tint }]}
-    >
-      <View style={[styles.cardInner, compact && styles.cardInnerPhone]}>
-        <View
-          style={[
-            styles.iconBox,
-            compact && styles.iconBoxPhone,
-            { backgroundColor: color.bg },
-          ]}
-        >
-          <MaterialCommunityIcons
-            name={meta.icon as any}
-            size={compact ? 40 : 56}
-            color={color.tint}
-          />
+    <AnimatedEntrance index={index} style={styles.slot}>
+      <PressableScale
+        onPress={handlePress}
+        rippleColor={color.tint + '22'}
+        accessibilityLabel={meta.label}
+        style={[styles.card, { borderTopColor: color.tint }]}
+        contentStyle={styles.cardFill}
+      >
+        <View style={[styles.cardInner, compact && styles.cardInnerPhone]}>
+          <View
+            style={[
+              styles.iconBox,
+              compact && styles.iconBoxPhone,
+              { backgroundColor: color.bg },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={meta.icon as never}
+              size={compact ? 40 : 56}
+              color={color.tint}
+            />
+          </View>
+          <Text
+            variant={compact ? 'titleMedium' : 'titleLarge'}
+            style={styles.label}
+            numberOfLines={2}
+          >
+            {meta.label}
+          </Text>
+          <Text variant="bodySmall" style={styles.desc} numberOfLines={2}>
+            {meta.description}
+          </Text>
         </View>
-        <Text
-          variant={compact ? 'titleMedium' : 'titleLarge'}
-          style={styles.label}
-          numberOfLines={2}
-        >
-          {meta.label}
-        </Text>
-        <Text variant="bodySmall" style={styles.desc} numberOfLines={2}>
-          {meta.description}
-        </Text>
-      </View>
-    </TouchableRipple>
+      </PressableScale>
+    </AnimatedEntrance>
   );
 });
 
@@ -127,54 +124,51 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 1 },
   grid: {
     flex: 1,
-    padding: 16,
-    gap: 16,
+    padding: spacing.lg,
+    gap: spacing.lg,
   },
-  gridPhone: { padding: 12, gap: 12 },
+  gridPhone: { padding: spacing.md, gap: spacing.md },
   row: {
     flex: 1,
     flexDirection: 'row',
-    gap: 16,
+    gap: spacing.lg,
   },
-  rowPhone: { flex: 0, gap: 12 },
+  rowPhone: { flex: 0, gap: spacing.md },
+  slot: { flex: 1 },
   card: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
     borderTopWidth: 4,
     overflow: 'hidden',
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    ...shadow.md,
   },
-  cardPhone: { borderRadius: 14, minHeight: 160 },
+  cardFill: { flex: 1 },
   cardInner: {
     flex: 1,
-    padding: 20,
+    padding: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: spacing.sm + 2,
   },
-  cardInnerPhone: { padding: 14, gap: 6 },
+  cardInnerPhone: { padding: spacing.md + 2, gap: spacing.xs + 2, minHeight: 160 },
   spacer: { flex: 1 },
   iconBox: {
     width: 88,
     height: 88,
-    borderRadius: 22,
+    borderRadius: radius.xxl,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
-  iconBoxPhone: { width: 64, height: 64, borderRadius: 16, marginBottom: 0 },
+  iconBoxPhone: { width: 64, height: 64, borderRadius: radius.lg, marginBottom: 0 },
   label: {
     fontWeight: '700',
-    color: '#0f172a',
+    color: colors.text,
     textAlign: 'center',
   },
   desc: {
-    color: '#64748b',
+    color: colors.textMuted,
     textAlign: 'center',
   },
 });

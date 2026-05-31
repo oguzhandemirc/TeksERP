@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import { fireConfetti } from "@/lib/confetti";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -14,10 +16,15 @@ import { workOrderColumns } from "./columns";
 import { workOrderService } from "./service";
 import { WorkOrderDetailSheet } from "./WorkOrderDetailSheet";
 import { WorkOrderFormDialog } from "./WorkOrderFormDialog";
+import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
+import { WorkOrderType } from "@/types/enums";
+import { pickedLinesFromOrder } from "./workOrderPrefill";
+import type { PickedOrderLine } from "./OrderPickerDialog";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
 import type { CustomRouteStep } from "./RouteDesignerDialog";
 import type { WorkOrder } from "./types";
 import type { WorkOrderFormValues } from "./schema";
+import type { Order } from "@/pages/Operations/Orders/types";
 
 const FILTERS: FilterDef[] = [
   {
@@ -81,6 +88,7 @@ interface CreatePayload {
   targetColorId: string | null;
   targetPropertyIds: string[];
   orderLineIds?: string[];
+  orderLineAllocations?: { orderLineId: string; allocatedQty: number }[];
   stepPlanning?: StepPlanPayload[];
   width: number | null;
   targetQuantity: number | null;
@@ -92,8 +100,11 @@ interface CreatePayload {
 function buildPayload(
   v: WorkOrderFormValues,
   meta: { fasonPlans: FasonStepPlan[]; customSteps: CustomRouteStep[] },
+  targetQuantityEnabled: boolean,
 ): CreatePayload {
   const orderLineIds = v.orderLineIds ?? [];
+  const hasLines =
+    (v.orderLineAllocations?.length ?? 0) > 0 || orderLineIds.length > 0;
   const usingCustom = meta.customSteps.length > 0;
 
   // Custom rota: steps[] gönder; routeTemplateId yok, stepPlanning'e gerek yok.
@@ -118,16 +129,19 @@ function buildPayload(
       })();
 
   return {
-    type: v.type,
+    // Tip artık formda seçilmez — bağlı kalem varsa siparişe özel, yoksa stoğa.
+    type: hasLines ? WorkOrderType.ORDER_PRODUCTION : WorkOrderType.STOCK_PRODUCTION,
     ...routePart,
     targetItemId: v.targetItemId ?? null,
     targetColorId: v.targetColorId ?? null,
     targetPropertyIds: v.targetPropertyIds ?? [],
-    ...(v.type === "ORDER_PRODUCTION" && orderLineIds.length > 0
-      ? { orderLineIds }
-      : {}),
+    ...(v.type === "ORDER_PRODUCTION" && (v.orderLineAllocations?.length ?? 0) > 0
+      ? { orderLineAllocations: v.orderLineAllocations }
+      : v.type === "ORDER_PRODUCTION" && orderLineIds.length > 0
+        ? { orderLineIds }
+        : {}),
     width: v.width ?? null,
-    targetQuantity: v.targetQuantity ?? null,
+    targetQuantity: targetQuantityEnabled ? (v.targetQuantity ?? null) : null,
     plannedStartDate: dateOrNull(v.plannedStartDate),
     plannedEndDate: dateOrNull(v.plannedEndDate),
     foldType: trimOrNull(v.foldType),
@@ -136,9 +150,24 @@ function buildPayload(
 
 export function WorkOrdersPage() {
   const qc = useQueryClient();
+  const targetQuantityEnabled = useTargetQuantityEnabled();
   const [selected, setSelected] = useState<WorkOrder | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<WorkOrder | null>(null);
+  const [seedLines, setSeedLines] = useState<PickedOrderLine[] | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // "Bu siparişten iş emri oluştur" — Orders ekranından router state ile gelir.
+  useEffect(() => {
+    const state = location.state as { seedOrder?: Order } | null;
+    if (state?.seedOrder) {
+      setSeedLines(pickedLinesFromOrder(state.seedOrder));
+      setEditing(null);
+      setFormOpen(true);
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location.state, location.pathname, navigate]);
 
   const { table, query, search, setSearch, pagination } = useDataTable<WorkOrder>({
     queryKey: QUERY_KEY,
@@ -152,6 +181,7 @@ export function WorkOrdersPage() {
       workOrderService.create(payload as unknown as Partial<WorkOrder>),
     onSuccess: () => {
       toast.success("İş emri oluşturuldu.");
+      fireConfetti();
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
       setFormOpen(false);
     },
@@ -171,13 +201,17 @@ export function WorkOrdersPage() {
 
   const handleEdit = (wo: WorkOrder) => {
     setSelected(null);
+    setSeedLines(null);
     setEditing(wo);
     setFormOpen(true);
   };
 
   const handleFormOpenChange = (open: boolean) => {
     setFormOpen(open);
-    if (!open) setEditing(null);
+    if (!open) {
+      setEditing(null);
+      setSeedLines(null);
+    }
   };
 
   return (
@@ -189,7 +223,14 @@ export function WorkOrdersPage() {
           <>
             <RefreshButton queryKey={QUERY_KEY} />
             <PermissionGate permission="workorder:write">
-              <Button size="sm" onClick={() => setFormOpen(true)}>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setSeedLines(null);
+                  setEditing(null);
+                  setFormOpen(true);
+                }}
+              >
                 <Plus className="h-4 w-4" /> Yeni İş Emri
               </Button>
             </PermissionGate>
@@ -200,6 +241,8 @@ export function WorkOrdersPage() {
         search={search}
         onSearchChange={setSearch}
         placeholder="Parti numarası ara..."
+        table={table}
+        exportName="İş Emirleri"
       />
       <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
       <DataTable<WorkOrder>
@@ -219,8 +262,9 @@ export function WorkOrdersPage() {
         open={formOpen}
         onOpenChange={handleFormOpenChange}
         workOrder={editing}
+        initialPickedLines={editing ? undefined : seedLines ?? undefined}
         onSubmit={async (v, meta) => {
-          const payload = buildPayload(v, meta);
+          const payload = buildPayload(v, meta, targetQuantityEnabled);
           if (editing) {
             await replaceMut.mutateAsync({ id: editing.id, payload });
           } else {

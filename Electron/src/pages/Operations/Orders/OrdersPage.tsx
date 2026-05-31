@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
@@ -60,6 +61,7 @@ interface CreatePayload {
     unitPrice?: string | null;
     customerItemName?: string | null;
     customerColorName?: string | null;
+    cutNote?: string | null;
     requiredPropertyIds: string[];
   }[];
 }
@@ -74,6 +76,7 @@ interface UpdateLinePayload {
   unitPrice?: string | null;
   customerItemName?: string | null;
   customerColorName?: string | null;
+  cutNote?: string | null;
   requiredPropertyIds: string[];
 }
 
@@ -103,6 +106,7 @@ function buildCreatePayload(v: OrderFormValues, pricingEnabled: boolean): Create
         : {}),
       customerItemName: l.customerItemName?.trim() ? l.customerItemName.trim() : null,
       customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
+      cutNote: l.cutNote?.trim() ? l.cutNote.trim() : null,
       requiredPropertyIds: l.requiredPropertyIds ?? [],
     })),
   };
@@ -144,6 +148,7 @@ function buildUpdatePayload(
               : {}),
             customerItemName: l.customerItemName?.trim() ? l.customerItemName.trim() : null,
             customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
+            cutNote: l.cutNote?.trim() ? l.cutNote.trim() : null,
             requiredPropertyIds: l.requiredPropertyIds ?? [],
           })),
         }
@@ -153,6 +158,7 @@ function buildUpdatePayload(
 
 export function OrdersPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [selected, setSelected] = useState<Order | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
@@ -221,6 +227,8 @@ export function OrdersPage() {
         search={search}
         onSearchChange={setSearch}
         placeholder="Sipariş numarası ara..."
+        table={table}
+        exportName="Siparişler"
       />
       <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
 
@@ -237,6 +245,9 @@ export function OrdersPage() {
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(null)}
         onEdit={handleEdit}
+        onCreateWorkOrder={(order) =>
+          navigate("/operations/work-orders", { state: { seedOrder: order } })
+        }
       />
 
       <OrderFormDialog

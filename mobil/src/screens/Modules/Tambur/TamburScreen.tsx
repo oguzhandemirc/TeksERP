@@ -13,7 +13,6 @@ import {
   Button,
   IconButton,
   Surface,
-  ActivityIndicator,
   TouchableRipple,
   Icon,
   Appbar,
@@ -49,7 +48,9 @@ import {
   STATION_MUT,
   type TamburFinalizeOpenFabricVars,
 } from '../../../offline/mutations';
-import { useIsOnline, usePendingStationOps } from '../../../offline/hooks';
+import SyncStatusChip from '../../../components/SyncStatusChip';
+import { SkeletonList, usePressScale } from '../../../components/motion';
+import Animated from 'react-native-reanimated';
 import { defectTypeService } from '../../../services/defectType.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import type {
@@ -104,6 +105,8 @@ interface VoluntaryEntryState {
   length: string;
   qualityGrade: string;
   qualityName?: string;
+  /** Kesilen topun hedef sipariş kalemi (null = stok). */
+  targetOrderLineId: string | null;
 }
 
 interface RollWorkState {
@@ -124,6 +127,7 @@ const EMPTY_VOLUNTARY_ENTRY: VoluntaryEntryState = {
   length: '',
   qualityGrade: '1.KALITE',
   qualityName: '1. Kalite',
+  targetOrderLineId: null,
 };
 const EMPTY_WORK: RollWorkState = {
   decisions: {},
@@ -184,10 +188,36 @@ export default function TamburScreen() {
     barcode: string | null;
     currentQty: number;
     item: string;
+    itemId: string;
+    colorId: string | null;
+    colorName: string | null;
+    width: number | null;
   } | null>(null);
   const [recutCutLength, setRecutCutLength] = useState('');
   const [recutQualityGrade, setRecutQualityGrade] = useState<string>('1.KALITE');
   const [recutScannerOpen, setRecutScannerOpen] = useState(false);
+  // "Kime?" — depo topundan kesilen parça hangi siparişe (null = stok). Etiket buradan basılır.
+  const [recutTargetLineId, setRecutTargetLineId] = useState<string | null>(null);
+  // Topun özelliğine (item+color+width) uyan açık sipariş kalemleri (Kime? picker'ı).
+  const recutLinesQuery = useQuery({
+    queryKey: [
+      'recut-lines',
+      recutRollMeta?.itemId ?? null,
+      recutRollMeta?.colorId ?? null,
+      recutRollMeta?.width ?? null,
+    ],
+    queryFn: async () => {
+      const { orderService } = await import('../../../services/order.service');
+      return orderService.getAvailableOrderLines({
+        itemId: recutRollMeta!.itemId,
+        colorId: recutRollMeta?.colorId ?? undefined,
+        width: recutRollMeta?.width ?? undefined,
+      });
+    },
+    enabled: !!recutRollMeta?.itemId,
+    staleTime: 30_000,
+  });
+  const recutLineOptions = recutLinesQuery.data?.data ?? [];
   const [recutFinalizeOpen, setRecutFinalizeOpen] = useState(false);
   // Son kesimden dönen güncel parent — X kapat sırasında etiketi basıma kuyruğa
   // atılır (operatör fiziksel etiketi yenilemeli, eski metraj artık geçersiz).
@@ -406,11 +436,13 @@ export default function TamburScreen() {
       lengthMeters: number;
       status: 'WAREHOUSE' | 'SCRAP' | 'A1_STOCK';
       qualityGrade: string;
+      targetOrderLineId?: string | null;
     }) =>
       tamburService.cutOpenFabric(data.rollId, {
         lengthMeters: data.lengthMeters,
         status: data.status,
         qualityGrade: data.qualityGrade,
+        targetOrderLineId: data.targetOrderLineId ?? null,
       }),
     onSuccess: async (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -562,11 +594,18 @@ export default function TamburScreen() {
       rollId,
       cutLength,
       qualityGrade,
+      targetOrderLineId,
     }: {
       rollId: string;
       cutLength: number;
       qualityGrade: string;
-    }) => tamburService.cutWarehouseRoll(rollId, { cutLength, qualityGrade }),
+      targetOrderLineId?: string | null;
+    }) =>
+      tamburService.cutWarehouseRoll(rollId, {
+        cutLength,
+        qualityGrade,
+        targetOrderLineId: targetOrderLineId ?? null,
+      }),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const data = res.data;
@@ -811,6 +850,7 @@ export default function TamburScreen() {
       lengthMeters: length,
       status,
       qualityGrade: qg?.code ?? '1.KALITE',
+      targetOrderLineId: work.voluntaryEntry.targetOrderLineId,
     });
   };
 
@@ -956,7 +996,12 @@ export default function TamburScreen() {
         barcode: r.barcode,
         currentQty: r.currentQty,
         item: r.item?.name ?? '—',
+        itemId: r.itemId,
+        colorId: r.colorId ?? null,
+        colorName: r.color?.name ?? null,
+        width: r.width ?? null,
       });
+      setRecutTargetLineId(null);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       Toast.show({
@@ -990,6 +1035,7 @@ export default function TamburScreen() {
       rollId: recutResolvedRollId,
       cutLength: cut,
       qualityGrade: recutQualityGrade,
+      targetOrderLineId: recutTargetLineId,
     });
   };
 
@@ -1001,6 +1047,7 @@ export default function TamburScreen() {
     }
     setRecutResolvedRollId(null);
     setRecutRollMeta(null);
+    setRecutTargetLineId(null);
     setRecutCutLength('');
     setRecutQualityGrade('1.KALITE');
     setRecutLastParentRoll(null);
@@ -1236,6 +1283,43 @@ export default function TamburScreen() {
                     style={styles.input}
                     useNativeKeyboard={compact}
                   />
+
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>
+                      Kime? (kesilen parça hangi siparişe — etiket buradan basılır)
+                    </Text>
+                    <View style={styles.qualityGridInline}>
+                      {[
+                        { lineId: null as string | null, label: 'Stok' },
+                        ...recutLineOptions.map((l) => ({
+                          lineId: l.lineId as string | null,
+                          label: `${l.customerName} · ${Math.round(l.openQty)}m açık`,
+                        })),
+                      ].map((opt) => {
+                        const active = recutTargetLineId === opt.lineId;
+                        return (
+                          <TouchableRipple
+                            key={opt.lineId ?? 'stok'}
+                            borderless
+                            onPress={() => setRecutTargetLineId(opt.lineId)}
+                            style={[
+                              styles.qualityChip,
+                              active && styles.qualityChipActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.qualityChipText,
+                                active && styles.qualityChipTextActive,
+                              ]}
+                            >
+                              {opt.label}
+                            </Text>
+                          </TouchableRipple>
+                        );
+                      })}
+                    </View>
+                  </View>
 
                   <View style={styles.qualityActionRow}>
                     <View style={styles.qualityGridInline}>
@@ -1528,6 +1612,54 @@ export default function TamburScreen() {
                     />
                   </View>
 
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>
+                      Kime? (kesilen top hangi siparişe)
+                    </Text>
+                    <View style={styles.qualityGridInline}>
+                      {[
+                        { lineId: null as string | null, label: 'Stok' },
+                        ...(activeJob?.context?.orders ?? []).flatMap((o) =>
+                          o.lines.map((l) => ({
+                            lineId: l.lineId as string | null,
+                            label: `${o.customerName} · ${l.itemName}`,
+                          })),
+                        ),
+                      ].map((opt) => {
+                        const active =
+                          work.voluntaryEntry.targetOrderLineId === opt.lineId;
+                        return (
+                          <TouchableRipple
+                            key={opt.lineId ?? 'stok'}
+                            borderless
+                            onPress={() =>
+                              setWork((w) => ({
+                                ...w,
+                                voluntaryEntry: {
+                                  ...w.voluntaryEntry,
+                                  targetOrderLineId: opt.lineId,
+                                },
+                              }))
+                            }
+                            style={[
+                              styles.qualityChip,
+                              active && styles.qualityChipActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.qualityChipText,
+                                active && styles.qualityChipTextActive,
+                              ]}
+                            >
+                              {opt.label}
+                            </Text>
+                          </TouchableRipple>
+                        );
+                      })}
+                    </View>
+                  </View>
+
                   <View style={styles.qualityActionRow}>
                     <View style={styles.qualityGridInline}>
                       {qualityGrades.map((qg) => {
@@ -1793,38 +1925,6 @@ export default function TamburScreen() {
       />
 
     </ScreenChrome>
-  );
-}
-
-// Çevrimdışı / sync bekleyen istasyon işlemi rozeti (KursunQc'deki ile aynı).
-function SyncStatusChip() {
-  const online = useIsOnline();
-  const pending = usePendingStationOps();
-  const pendingCount = pending.length;
-  if (online && pendingCount === 0) return null;
-  let bg = '#1e40af';
-  let label = `${pendingCount} sync`;
-  if (!online && pendingCount === 0) {
-    bg = '#b45309';
-    label = 'Çevrimdışı';
-  } else if (!online && pendingCount > 0) {
-    bg = '#b91c1c';
-    label = `Çevrimdışı · ${pendingCount}`;
-  }
-  return (
-    <View
-      style={{
-        backgroundColor: bg,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-        marginRight: 8,
-      }}
-    >
-      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </View>
   );
 }
 
@@ -2308,9 +2408,7 @@ function CameraScanModal({
         </View>
         <View style={cameraStyles.listBox}>
           {loading ? (
-            <View style={cameraStyles.empty}>
-              <ActivityIndicator size="large" color="#1e40af" />
-            </View>
+            <SkeletonList count={6} />
           ) : cards.length === 0 ? (
             <View style={cameraStyles.empty}>
               <Icon source="package-variant" size={48} color="#cbd5e1" />
@@ -2425,15 +2523,23 @@ function RollListItem({
   selected: boolean;
   onPress: () => void;
 }) {
+  const press = usePressScale();
   return (
-    <Surface
-      style={[
-        helperStyles.rollItem,
-        selected && helperStyles.rollItemSelected,
-      ]}
-      elevation={selected ? 2 : 1}
-    >
-      <TouchableRipple borderless onPress={onPress} style={helperStyles.rollTouch}>
+    <Animated.View style={press.style}>
+      <Surface
+        style={[
+          helperStyles.rollItem,
+          selected && helperStyles.rollItemSelected,
+        ]}
+        elevation={selected ? 2 : 1}
+      >
+        <TouchableRipple
+          borderless
+          onPress={onPress}
+          onPressIn={press.onPressIn}
+          onPressOut={press.onPressOut}
+          style={helperStyles.rollTouch}
+        >
         <View style={helperStyles.rollInner}>
           <View style={helperStyles.rollIndex}>
             <Text style={helperStyles.rollIndexText}>{index + 1}</Text>
@@ -2463,8 +2569,9 @@ function RollListItem({
             <Icon source="chevron-left" size={22} color="#1e40af" />
           )}
         </View>
-      </TouchableRipple>
-    </Surface>
+        </TouchableRipple>
+      </Surface>
+    </Animated.View>
   );
 }
 

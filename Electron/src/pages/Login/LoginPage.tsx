@@ -15,7 +15,7 @@ import { decodeJwt } from "@/lib/jwt";
 import { useAuthStore } from "@/store/auth";
 import { canEnterApp } from "@/types/auth";
 import { LoginHero } from "./LoginHero";
-import logoUrl from "@/assets/teks-logo.png";
+import logoUrl from "@/assets/teks-logo-fullsize.png";
 
 const schema = z.object({
   username: z.string().min(1, "Kullanıcı adı gerekli"),
@@ -73,7 +73,11 @@ export function LoginPage() {
           <div className="flex flex-col items-center space-y-4 text-center">
             <div className="relative">
               <div className="absolute inset-0 -z-10 rounded-full bg-gradient-to-br from-blue-500/20 via-indigo-500/15 to-teal-500/20 blur-2xl" />
-              <img src={logoUrl} alt="TeksERP" className="h-24 w-24 object-contain" />
+              <img
+                src={logoUrl}
+                alt="TeksERP"
+                className="h-24 w-24 rounded-[22px] object-cover shadow-lg ring-1 ring-white/10"
+              />
             </div>
             <div className="space-y-1.5">
               <h2 className="text-3xl font-semibold tracking-tight">TeksERP</h2>

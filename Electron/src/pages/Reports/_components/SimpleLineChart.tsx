@@ -1,4 +1,5 @@
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CHART_COLORS } from "@/lib/chart-theme";
 
 interface LineDef {
   key: string;
@@ -13,8 +14,6 @@ interface Props<T> {
   formatValue?: (v: number) => string;
   formatCategory?: (v: string) => string;
 }
-
-const DEFAULT_COLORS = ["#0ea5e9", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 export function SimpleLineChart<T>({
   data,
@@ -48,7 +47,7 @@ export function SimpleLineChart<T>({
             type="monotone"
             dataKey={l.key}
             name={l.label}
-            stroke={l.color ?? DEFAULT_COLORS[idx % DEFAULT_COLORS.length]}
+            stroke={l.color ?? CHART_COLORS[idx % CHART_COLORS.length]}
             strokeWidth={2}
             dot={{ r: 2 }}
             activeDot={{ r: 4 }}

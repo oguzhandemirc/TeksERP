@@ -14,7 +14,7 @@ const columns: ColumnDef<OpenDispatchRow>[] = [
     header: "Gün",
     cell: ({ getValue }) => {
       const v = getValue() as number;
-      return <span className={v >= 14 ? "font-semibold text-red-600" : v >= 7 ? "font-semibold text-amber-700" : ""}>{fmtInt(v)}</span>;
+      return <span className={v >= 14 ? "font-semibold text-destructive" : v >= 7 ? "font-semibold text-warning" : ""}>{fmtInt(v)}</span>;
     },
   },
   {

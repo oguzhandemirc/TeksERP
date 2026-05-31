@@ -16,7 +16,9 @@ import {
   Icon,
   TouchableRipple,
   Appbar,
+  Switch,
 } from 'react-native-paper';
+import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import {
   useQuery,
@@ -36,7 +38,7 @@ import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
-import { NumpadHost, useNumpadContext } from '../../../components/NumpadProvider';
+import { NumpadHost } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
 import { toastConfig } from '../../../components/ToastConfig';
 import { LabelPrinter } from '../../../components/LabelPrinter';
@@ -46,7 +48,16 @@ import { hardwareService } from '../../../services/hardware.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import { generateClientBarcode } from '../../../offline/barcode';
-import { useIsOnline, usePendingStationOps } from '../../../offline/hooks';
+import SyncStatusChip from '../../../components/SyncStatusChip';
+import ConfirmDialog from '../../../components/ConfirmDialog';
+import {
+  AnimatedEntrance,
+  SkeletonList,
+  PressableScale,
+  AnimatedCounter,
+  Pulse,
+} from '../../../components/motion';
+import { colors, radius, spacing } from '../../../theme';
 import type { QualityGrade, Roll } from '../../../types/models';
 
 const RECENT_PAGE_SIZE = 6;
@@ -55,7 +66,7 @@ const HISTORY_PAGE_SIZE = 20;
 interface FormState {
   itemId: string;
   itemLabel: string;
-  initialQty: string;
+  /** EN (cm) — kaydetler ARASI korunur (aynı en toptan onlarca seri giriş). */
   width: string;
   qualityGrade: string;
 }
@@ -63,7 +74,6 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   itemId: '',
   itemLabel: '',
-  initialQty: '',
   width: '',
   qualityGrade: '',
 };
@@ -86,6 +96,21 @@ export default function KK1Screen() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [pickerOpen, setPickerOpen] = useState<'item' | null>(null);
   const [pulling, setPulling] = useState(false);
+  // Manuel mod: makine arızasında operatör mt + kg'yi elle girer. Varsayılan
+  // kapalı (normalde değerler "Kaydet"e basınca makineden çekilir).
+  const [manualMode, setManualMode] = useState(false);
+  const [manualQty, setManualQty] = useState('');
+  const [manualWeight, setManualWeight] = useState('');
+  // Otomatik modda son okunan metraj — küçük info readout'ta gösterilir.
+  const [lastMeter, setLastMeter] = useState<number | null>(null);
+  // Metraj info'suna dokununca çıkan "elle override" uyarısı.
+  const [meterWarnOpen, setMeterWarnOpen] = useState(false);
+  // Bu oturumda kaydedilen top sayısı (seri girişte ilerleme hissi).
+  const [sessionCount, setSessionCount] = useState(0);
+  // Kaydet sonrası kısa "✓ Kaydedildi" başarı flaşı (CTA).
+  const [justSaved, setJustSaved] = useState(false);
+  // Listede yeni beliren topu kısa süre vurgulamak için.
+  const [flashRollId, setFlashRollId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
   // Etiket basımı — sıralı kuyruk. activePrintRoll = şu an LabelPrinter'a verilen
@@ -118,19 +143,30 @@ export default function KK1Screen() {
   // çakışması). Drawer / history açıkken scrap tıklanırsa hedef ref'e yazılır,
   // önce mevcut modal kapanır, onModalHide'da scrapTarget set edilir.
   const pendingScrapRef = useRef<Roll | null>(null);
+  // Aynı iki-modal çakışması: drawer'dan "Tümünü Gör" → drawer kapanış
+  // animasyonu bitmeden history açılırsa görünmez. Niyeti ref'e yaz, drawer
+  // kapanınca (onModalHide) history'yi aç.
+  const pendingHistoryRef = useRef(false);
 
-  const qtyRef = useRef<RNTextInput>(null);
   const widthRef = useRef<RNTextInput>(null);
+  const manualQtyRef = useRef<RNTextInput>(null);
+  const manualWeightRef = useRef<RNTextInput>(null);
   const recentsListRef = useRef<FlashListRef<Roll>>(null);
 
-  const { closeTarget } = useNumpadContext();
-
+  // Numpad (tablet, sağ sütun): NumpadHost HER ZAMAN aktif kalır — varsayılan
+  // hedef EN; manuel açıkken mt/kg'ye dokununca oraya yönlenir. blurAll artık
+  // closeTarget ÇAĞIRMAZ (numpad disable olmasın); sadece native klavyeyi kapatır.
   const blurAll = useCallback(() => {
-    qtyRef.current?.blur();
-    widthRef.current?.blur();
     Keyboard.dismiss();
-    closeTarget();
-  }, [closeTarget]);
+  }, []);
+
+  // Manuel kapanınca (ve mount'ta) numpad varsayılan hedefi EN'e döner (tablet).
+  // Operatör mt/kg'den çıkınca tuşlar yine En'i değiştirir.
+  useEffect(() => {
+    if (!compact && !manualMode) {
+      requestAnimationFrame(() => widthRef.current?.focus());
+    }
+  }, [compact, manualMode]);
 
   // ── Items: kumaş (Variant kaldırıldı; RAW/DYED ayrımı yok artık) ──
   const itemsQuery = useQuery({
@@ -233,9 +269,25 @@ export default function KK1Screen() {
       requestAnimationFrame(() => {
         recentsListRef.current?.scrollToOffset({ offset: 0, animated: true });
       });
+      // Yeni gelen topu kısa süre vurgula (kaydın "düştüğü" net hissedilsin).
+      setFlashRollId(newTopId);
     }
     topIdRef.current = newTopId;
   }, [recentRolls]);
+
+  // "✓ Kaydedildi" CTA flaşını ~900ms sonra söndür.
+  useEffect(() => {
+    if (!justSaved) return;
+    const t = setTimeout(() => setJustSaved(false), 900);
+    return () => clearTimeout(t);
+  }, [justSaved]);
+
+  // Yeni-kayıt vurgusunu ~1.6sn sonra temizle.
+  useEffect(() => {
+    if (!flashRollId) return;
+    const t = setTimeout(() => setFlashRollId(null), 1600);
+    return () => clearTimeout(t);
+  }, [flashRollId]);
 
   // ── Mutation ──
   // OFFLINE-AWARE: mutationFn `setMutationDefaults`'ta tanımlı; persist sonrası
@@ -250,7 +302,12 @@ export default function KK1Screen() {
     Awaited<ReturnType<typeof rollService.createInitialEntry>>,
     Error,
     InitialEntryRequest,
-    { prevForm: FormState; clientBarcode: string | undefined } | undefined
+    {
+      prevForm: FormState;
+      prevManualQty: string;
+      prevManualWeight: string;
+      clientBarcode: string | undefined;
+    } | undefined
   >({
     mutationKey: STATION_MUT.KK1_CREATE_ENTRY,
     onMutate: (vars) => {
@@ -263,14 +320,21 @@ export default function KK1Screen() {
           ? `Barkod: ${vars.clientBarcode ?? '...'}`
           : `Çevrimdışı — sync bekliyor · ${vars.clientBarcode ?? ''}`,
       });
-      // Form temizlenir, item ve kalite seçimi korunur (operatör hızlı seri girer)
-      setForm((f) => ({
-        ...EMPTY_FORM,
-        itemId: f.itemId,
-        itemLabel: f.itemLabel,
-        qualityGrade: f.qualityGrade,
-      }));
-      return { prevForm, clientBarcode: vars.clientBarcode };
+      // Oturum sayacı + başarı flaşı (ekran-içi tatmin, offline'da da çalışır).
+      setSessionCount((c) => c + 1);
+      setJustSaved(true);
+      // Form'daki her alan KALICI (ürün, en, kalite) — aynı en'den seri giriş.
+      // Yalnızca per-roll manuel değerler (mt/kg) temizlenir.
+      const prevManualQty = manualQty;
+      const prevManualWeight = manualWeight;
+      setManualQty('');
+      setManualWeight('');
+      return {
+        prevForm,
+        prevManualQty,
+        prevManualWeight,
+        clientBarcode: vars.clientBarcode,
+      };
     },
     onSuccess: (res) => {
       if (!res.data) return;
@@ -282,10 +346,12 @@ export default function KK1Screen() {
       qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
     },
     onError: (err, _vars, context) => {
-      // Form'u geri yükle ki operatör veriyi kaybetmesin (özellikle offline'da
-      // beklenmedik backend reddi — yanlış item id vs. — durumunda kritik).
+      // Form'u + manuel değerleri geri yükle ki operatör veriyi kaybetmesin
+      // (özellikle offline'da beklenmedik backend reddi durumunda kritik).
       if (context) {
         setForm(context.prevForm);
+        setManualQty(context.prevManualQty);
+        setManualWeight(context.prevManualWeight);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({
@@ -340,6 +406,16 @@ export default function KK1Screen() {
     }
   }, []);
 
+  // Drawer kapanınca (onModalHide) bekleyen niyetleri uygula — scrap onayı veya
+  // "Tümünü Gör" → history. İkisi de aynı anda iki-modal çakışmasını önler.
+  const handleDrawerClosed = useCallback(() => {
+    drainPendingScrap();
+    if (pendingHistoryRef.current) {
+      pendingHistoryRef.current = false;
+      setHistoryOpen(true);
+    }
+  }, [drainPendingScrap]);
+
   const confirmScrap = useCallback(() => {
     if (!scrapTarget) return;
     scrapMutation.mutate(scrapTarget.id);
@@ -347,27 +423,24 @@ export default function KK1Screen() {
   }, [scrapTarget, scrapMutation]);
 
   // ── Actions ──
-  const handlePullMeterage = async () => {
-    blurAll();
-    setPulling(true);
-    try {
-      const m = await hardwareService.readMeterage();
-      setForm((f) => ({ ...f, initialQty: String(m) }));
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      widthRef.current?.focus();
-    } finally {
-      setPulling(false);
-    }
-  };
+  // En'i tek tuşla temizle — operatör değiştirmek isterse defalarca silmesin.
+  const handleClearWidth = useCallback(() => {
+    setForm((f) => ({ ...f, width: '' }));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    widthRef.current?.focus();
+  }, []);
 
-  const handleSubmit = () => {
+  // Manuel modu aç (metraj info'su uyarı onayından sonra veya doğrudan toggle).
+  const openManual = useCallback(() => {
+    setManualMode(true);
+    setMeterWarnOpen(false);
+    requestAnimationFrame(() => manualQtyRef.current?.focus());
+  }, []);
+
+  const handleSubmit = async () => {
+    if (pulling) return; // makineden okuma sürerken çift tetikleme yok
     if (!form.itemId) {
       Toast.show({ type: 'error', text1: 'Ürün seçimi zorunlu' });
-      return;
-    }
-    const qty = Number(form.initialQty);
-    if (!qty || qty <= 0) {
-      Toast.show({ type: 'error', text1: 'Geçerli metraj girilmeli' });
       return;
     }
     const width = Number(form.width);
@@ -379,6 +452,39 @@ export default function KK1Screen() {
       Toast.show({ type: 'error', text1: 'Kalite sınıfı seçilmedi' });
       return;
     }
+
+    // Metraj (+ağırlık) kaynağı: manuel modda elle, otomatik modda makineden
+    // ("Kaydet"e basınca paralel okunur).
+    let qty: number;
+    let weightKg: number | undefined;
+    if (manualMode) {
+      qty = Number(manualQty);
+      if (!qty || qty <= 0) {
+        Toast.show({ type: 'error', text1: 'Manuel metraj (mt) girilmeli' });
+        return;
+      }
+      const w = Number(manualWeight);
+      weightKg = w > 0 ? w : undefined;
+    } else {
+      blurAll();
+      setPulling(true);
+      try {
+        // Otomatik modda yalnız METRAJ makineden okunur. kg sadece manuel modda
+        // (opsiyonel) girilir — bu yüzden weightKg burada set EDİLMEZ (undefined).
+        qty = await hardwareService.readMeterage();
+        setLastMeter(qty);
+      } catch {
+        Toast.show({
+          type: 'error',
+          text1: 'Makineden okunamadı',
+          text2: 'Manuel moda geçip elle girebilirsiniz.',
+        });
+        return;
+      } finally {
+        setPulling(false);
+      }
+    }
+
     // Offline-aware: clientBarcode burada üretilir. Mutate paused olursa
     // persist edilen vars sabit kalır → retry'da aynı barkod gönderilir →
     // backend P2002 yakalayıp cached Roll döner (idempotent).
@@ -387,6 +493,7 @@ export default function KK1Screen() {
       itemId: form.itemId,
       initialQty: qty,
       width,
+      weightKg,
       qualityGrade: form.qualityGrade,
       clientBarcode,
     });
@@ -405,12 +512,25 @@ export default function KK1Screen() {
     enqueuePrint(roll);
   };
 
+  // Basılıyor + sırada bekleyen etiket sayısı (offline'da birikebilir).
+  const printingCount = (activePrintRoll ? 1 : 0) + printQueue.length;
+
   return (
     <ScreenChrome
       title="KK1 — Ham Giriş"
       subtitle="Ham kumaş top kayıt"
       headerExtras={
         <View style={styles.headerExtrasRow}>
+          {printingCount > 0 && (
+            <Animated.View
+              entering={FadeInUp.duration(180)}
+              exiting={FadeOutUp.duration(140)}
+              style={styles.printChip}
+            >
+              <Pulse color="#fff" size={7} />
+              <Text style={styles.printChipText}>{printingCount} etiket</Text>
+            </Animated.View>
+          )}
           <SyncStatusChip />
           {portraitPhone ? (
             <Appbar.Action
@@ -426,9 +546,12 @@ export default function KK1Screen() {
       <View
         style={[
           styles.body,
+          // Compact'ta yalnız güvenli-alan (notch) kadar dış boşluk — form
+          // neredeyse kenara yaslanır, içerik "ortada emanet" durmaz. İç nefes
+          // payı formContentCompact'ta.
           compact && {
-            paddingLeft: Math.max(insets.left, 12) + 12,
-            paddingRight: Math.max(insets.right, 12) + 12,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
           },
         ]}
       >
@@ -457,7 +580,83 @@ export default function KK1Screen() {
             </View>
           )}
 
+          {/* ── Manuel giriş paneli (varsayılan KAPALI; makine arızasında elle
+              mt/kg). Ürün tarafının en üstünde, açılıp-kapanır. ── */}
+          <Surface
+            style={[styles.manualBar, manualMode && styles.manualBarActive]}
+            elevation={0}
+          >
+            <TouchableRipple
+              borderless
+              rippleColor="rgba(217,119,6,0.12)"
+              onPress={() => (manualMode ? setManualMode(false) : openManual())}
+              style={styles.manualBarTouch}
+            >
+              <View style={styles.manualBarInner}>
+                <Icon source="wrench-outline" size={20} color={colors.warningDark} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.manualBarTitle}>Manuel Giriş</Text>
+                  <Text style={styles.manualBarSub}>
+                    {manualMode
+                      ? 'mt / kg elle giriliyor'
+                      : 'Makine arızasında mt / kg elle'}
+                  </Text>
+                </View>
+                <View pointerEvents="none">
+                  <Switch value={manualMode} color={colors.warningDark} />
+                </View>
+              </View>
+            </TouchableRipple>
+            {manualMode && (
+              <Animated.View
+                entering={FadeInUp.duration(180)}
+                exiting={FadeOutUp.duration(140)}
+                style={styles.manualPanel}
+              >
+                <View style={styles.manualField}>
+                  <Text style={styles.manualFieldLabel}>
+                    Metraj (mt) <Text style={styles.required}>*</Text>
+                  </Text>
+                  <NumpadInput
+                    ref={manualQtyRef}
+                    mode="outlined"
+                    value={manualQty}
+                    onChangeText={setManualQty}
+                    numpadLabel="Metraj (mt)"
+                    placeholder="0.0"
+                    style={styles.input}
+                    contentStyle={styles.manualInputContent}
+                    useNativeKeyboard={compact}
+                  />
+                </View>
+                <View style={styles.manualField}>
+                  <Text style={styles.manualFieldLabel}>Ağırlık (kg)</Text>
+                  <NumpadInput
+                    ref={manualWeightRef}
+                    mode="outlined"
+                    value={manualWeight}
+                    onChangeText={setManualWeight}
+                    numpadLabel="Ağırlık (kg)"
+                    placeholder="0.0"
+                    style={styles.input}
+                    contentStyle={styles.manualInputContent}
+                    useNativeKeyboard={compact}
+                  />
+                </View>
+              </Animated.View>
+            )}
+          </Surface>
+
+          {/* ── Üretim ayarı: ürün + en + kalite (kaydetler ARASI kalıcı) ── */}
           <Surface style={styles.card} elevation={1}>
+            <View style={styles.cardHero}>
+              <Icon source="cog-outline" size={18} color={colors.brand} />
+              <Text style={styles.cardHeroTitle}>Üretim Ayarı</Text>
+              <View style={styles.persistChip}>
+                <Icon source="pin" size={11} color={colors.brandDark} />
+                <Text style={styles.persistChipText}>kalıcı</Text>
+              </View>
+            </View>
             <Text style={styles.label}>
               Ürün <Text style={styles.required}>*</Text>
             </Text>
@@ -483,46 +682,31 @@ export default function KK1Screen() {
             </TouchableRipple>
 
             <Text style={[styles.label, styles.labelSpaced]}>
-              Metraj (mt) <Text style={styles.required}>*</Text>
-            </Text>
-            <View style={styles.row}>
-              <NumpadInput
-                ref={qtyRef}
-                mode="outlined"
-                value={form.initialQty}
-                onChangeText={(v) => setForm((f) => ({ ...f, initialQty: v }))}
-                numpadLabel="Metraj (mt)"
-                placeholder="0.0"
-                style={[styles.input, styles.qtyInput]}
-                contentStyle={styles.qtyInputContent}
-                useNativeKeyboard={compact}
-              />
-              <Button
-                mode="outlined"
-                icon={pulling ? undefined : 'gauge'}
-                onPress={handlePullMeterage}
-                disabled={pulling}
-                style={styles.pullBtn}
-                contentStyle={styles.pullBtnContent}
-              >
-                {pulling ? <ActivityIndicator size="small" /> : 'Cihazdan Çek'}
-              </Button>
-            </View>
-
-            <Text style={[styles.label, styles.labelSpaced]}>
               En (cm) <Text style={styles.required}>*</Text>
             </Text>
-            <NumpadInput
-              ref={widthRef}
-              mode="outlined"
-              value={form.width}
-              onChangeText={(v) => setForm((f) => ({ ...f, width: v }))}
-              numpadLabel="En (cm)"
-              placeholder="örn: 280"
-              style={styles.input}
-              useNativeKeyboard={compact}
-              autoActivate={!compact}
-            />
+            <View style={styles.widthRow}>
+              <NumpadInput
+                ref={widthRef}
+                mode="outlined"
+                value={form.width}
+                onChangeText={(v) => setForm((f) => ({ ...f, width: v }))}
+                numpadLabel="En (cm)"
+                placeholder="örn: 280"
+                style={[styles.input, styles.widthInput]}
+                contentStyle={styles.widthInputContent}
+                useNativeKeyboard={compact}
+                autoActivate={!compact}
+              />
+              <IconButton
+                icon="backspace-outline"
+                mode="contained-tonal"
+                size={24}
+                onPress={handleClearWidth}
+                disabled={!form.width}
+                accessibilityLabel="En'i temizle"
+                style={styles.widthClearBtn}
+              />
+            </View>
 
             <Text style={[styles.label, styles.labelSpaced]}>Kalite Sınıfı</Text>
             {qualityGradesQuery.isLoading ? (
@@ -549,18 +733,49 @@ export default function KK1Screen() {
             )}
           </Surface>
 
-          {/* OFFLINE-AWARE: loading/disabled binding'i YOK — paused mutation
-              isPending true kalır, sıradaki kayıt engellenmesin. Optimistic
-              onMutate zaten form'u temizliyor + toast atıyor. */}
+          {/* ── Metraj info (otomatik mod): salt-okunur. Kaydederken makineden
+              okunur; elle override için dokun → uyarı modalı. ── */}
+          {!manualMode && (
+            <PressableScale
+              onPress={() => setMeterWarnOpen(true)}
+              rippleColor="rgba(37,99,235,0.10)"
+              style={styles.meterInfo}
+              accessibilityLabel="Metraj otomatik — elle değiştirmek için dokunun"
+            >
+              <View style={styles.meterInfoInner}>
+                <Icon source="gauge" size={24} color={colors.info} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.meterInfoLabel}>Metraj · otomatik</Text>
+                  <Text style={styles.meterInfoValue}>
+                    {lastMeter != null
+                      ? `Son okunan: ${lastMeter.toFixed(1)} mt`
+                      : 'Kaydederken makineden okunur'}
+                  </Text>
+                </View>
+                <Icon source="lock-outline" size={16} color={colors.textMuted} />
+              </View>
+            </PressableScale>
+          )}
+
+          {/* OFFLINE-AWARE: mutation'a disabled binding YOK — paused mutation
+              isPending kalsa da sıradaki kayıt engellenmesin. Yalnız `pulling`
+              (makineden okuma, ~1sn) sırasında çift-tetiklemeyi kilitleriz. */}
           <Button
             mode="contained"
-            icon="package-check"
+            icon={pulling ? undefined : justSaved ? 'check-bold' : 'package-check'}
             onPress={handleSubmit}
+            loading={pulling}
+            disabled={pulling}
+            buttonColor={justSaved ? colors.success : undefined}
             style={styles.submitBtn}
             contentStyle={styles.submitBtnContent}
             labelStyle={styles.submitBtnLabel}
           >
-            Kaydet ve Etiket Bas
+            {pulling
+              ? 'Makineden okunuyor…'
+              : justSaved
+                ? 'Kaydedildi ✓'
+                : 'Kaydet ve Etiket Bas'}
           </Button>
         </ScrollView>
 
@@ -572,9 +787,21 @@ export default function KK1Screen() {
                 <Text variant="titleMedium" style={styles.recentsTitle}>
                   Son Kayıtlar
                 </Text>
-                <Text variant="bodySmall" style={styles.recentsCount}>
-                  Toplam {totalCount} kayıt
-                </Text>
+                <View style={styles.recentsSubRow}>
+                  <Text variant="bodySmall" style={styles.recentsCount}>
+                    Toplam {totalCount}
+                  </Text>
+                  {sessionCount > 0 && (
+                    <View style={styles.sessionChip}>
+                      <Icon source="check-circle" size={13} color={colors.successDark} />
+                      <Text style={styles.sessionChipLabel}>Bu oturum</Text>
+                      <AnimatedCounter
+                        value={sessionCount}
+                        style={styles.sessionChipCount}
+                      />
+                    </View>
+                  )}
+                </View>
               </View>
               <Button
                 mode="outlined"
@@ -597,12 +824,9 @@ export default function KK1Screen() {
 
             <View style={styles.recentsList}>
               {recentRollsQuery.isLoading ? (
-                <View style={styles.recentsEmpty}>
-                  <ActivityIndicator size="large" color="#4f46e5" />
-                  <Text style={styles.recentsEmptyText}>Yükleniyor...</Text>
-                </View>
+                <SkeletonList count={6} />
               ) : recentRollsQuery.isError ? (
-                <View style={styles.recentsEmpty}>
+                <AnimatedEntrance direction="fade" style={styles.recentsEmpty}>
                   <Text style={styles.recentsEmptyText}>Liste yüklenemedi</Text>
                   <Text style={styles.recentsEmptyHint}>
                     {(recentRollsQuery.error as Error).message}
@@ -610,21 +834,27 @@ export default function KK1Screen() {
                   <Button mode="outlined" onPress={() => recentRollsQuery.refetch()} style={{ marginTop: 12 }}>
                     Tekrar dene
                   </Button>
-                </View>
+                </AnimatedEntrance>
               ) : recentRolls.length === 0 ? (
-                <View style={styles.recentsEmpty}>
+                <AnimatedEntrance direction="fade" style={styles.recentsEmpty}>
                   <Text style={styles.recentsEmptyText}>Henüz kayıt yok</Text>
                   <Text style={styles.recentsEmptyHint}>
                     Kaydedilen toplar burada görünecek
                   </Text>
-                </View>
+                </AnimatedEntrance>
               ) : (
                 <FlashList
                   ref={recentsListRef}
                   data={recentRolls}
                   keyExtractor={(r) => r.id}
+                  extraData={flashRollId}
                   renderItem={({ item }) => (
-                    <RollListItem roll={item} onPrint={handlePrintLabel} onScrap={handleScrapRoll} />
+                    <RollListItem
+                      roll={item}
+                      isNew={item.id === flashRollId}
+                      onPrint={handlePrintLabel}
+                      onScrap={handleScrapRoll}
+                    />
                   )}
                   contentContainerStyle={styles.recentsListContent}
                   showsVerticalScrollIndicator
@@ -642,7 +872,7 @@ export default function KK1Screen() {
         <RecentsDrawer
           visible={recentsDrawerOpen}
           onDismiss={() => setRecentsDrawerOpen(false)}
-          onClosed={drainPendingScrap}
+          onClosed={handleDrawerClosed}
           totalCount={totalCount}
           rolls={recentRolls}
           loading={recentRollsQuery.isLoading}
@@ -650,9 +880,10 @@ export default function KK1Screen() {
           fetching={recentRollsQuery.isFetching}
           onRefresh={() => recentRollsQuery.refetch()}
           onOpenHistory={() => {
-            setRecentsDrawerOpen(false);
+            // Drawer kapanış animasyonu bitince history açılır (iki-modal çakışması).
             setHistoryPage(1);
-            setHistoryOpen(true);
+            pendingHistoryRef.current = true;
+            setRecentsDrawerOpen(false);
           }}
           onPrint={handlePrintLabel}
           onScrap={handleScrapRoll}
@@ -713,6 +944,18 @@ export default function KK1Screen() {
         onDismiss={() => setScrapTarget(null)}
         onConfirm={confirmScrap}
       />
+
+      {/* ── Metraj elle-override uyarısı → manuel moda geçiş ── */}
+      <ConfirmDialog
+        kind="simple"
+        visible={meterWarnOpen}
+        title="Metrajı elle gir?"
+        description="Metraj normalde makineden otomatik okunur. Elle girmek için manuel moda geçilecek — bu yalnızca makine arızasında kullanılmalıdır."
+        confirmLabel="Manuel Giriş'e Geç"
+        cancelLabel="Vazgeç"
+        onConfirm={openManual}
+        onDismiss={() => setMeterWarnOpen(false)}
+      />
     </ScreenChrome>
   );
 }
@@ -732,38 +975,6 @@ interface RecentsDrawerProps {
   onOpenHistory: () => void;
   onPrint: (barcode: string) => void;
   onScrap: (roll: Roll) => void;
-}
-
-// Çevrimdışı / sync bekleyen istasyon işlemi rozeti (Kurşun/Tambur ile aynı).
-function SyncStatusChip() {
-  const online = useIsOnline();
-  const pending = usePendingStationOps();
-  const pendingCount = pending.length;
-  if (online && pendingCount === 0) return null;
-  let bg = '#1e40af';
-  let label = `${pendingCount} sync`;
-  if (!online && pendingCount === 0) {
-    bg = '#b45309';
-    label = 'Çevrimdışı';
-  } else if (!online && pendingCount > 0) {
-    bg = '#b91c1c';
-    label = `Çevrimdışı · ${pendingCount}`;
-  }
-  return (
-    <View
-      style={{
-        backgroundColor: bg,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-        marginRight: 8,
-      }}
-    >
-      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </View>
-  );
 }
 
 function RecentsDrawer({
@@ -833,25 +1044,22 @@ function RecentsDrawer({
 
         <View style={drawerStyles.listBox}>
           {loading ? (
-            <View style={drawerStyles.empty}>
-              <ActivityIndicator size="large" color="#4f46e5" />
-              <Text style={drawerStyles.emptyText}>Yükleniyor...</Text>
-            </View>
+            <SkeletonList count={7} />
           ) : error ? (
-            <View style={drawerStyles.empty}>
+            <AnimatedEntrance direction="fade" style={drawerStyles.empty}>
               <Text style={drawerStyles.emptyText}>Liste yüklenemedi</Text>
               <Text style={drawerStyles.emptyHint}>{error.message}</Text>
               <Button mode="outlined" onPress={onRefresh} style={{ marginTop: 12 }}>
                 Tekrar dene
               </Button>
-            </View>
+            </AnimatedEntrance>
           ) : rolls.length === 0 ? (
-            <View style={drawerStyles.empty}>
+            <AnimatedEntrance direction="fade" style={drawerStyles.empty}>
               <Text style={drawerStyles.emptyText}>Henüz kayıt yok</Text>
               <Text style={drawerStyles.emptyHint}>
                 Kaydedilen toplar burada görünecek
               </Text>
-            </View>
+            </AnimatedEntrance>
           ) : (
             <FlashList
               data={rolls}
@@ -941,6 +1149,7 @@ function RollHistoryModal({
   onScrap,
 }: RollHistoryModalProps) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const isPhone = useDeviceType() === 'phone';
 
   return (
     <Modal
@@ -956,7 +1165,16 @@ function RollHistoryModal({
       deviceHeight={winH}
       statusBarTranslucent
     >
-      <View style={[historyStyles.sheet, { width: winW * 0.85, height: winH * 0.92 }]}>
+      {/* Telefonda daha geniş + daha kısa (satırlar compact ile alçaldı). */}
+      <View
+        style={[
+          historyStyles.sheet,
+          {
+            width: winW * (isPhone ? 0.96 : 0.85),
+            height: winH * (isPhone ? 0.86 : 0.92),
+          },
+        ]}
+      >
         <View style={historyStyles.header}>
           <View style={{ flex: 1 }}>
             <Text variant="titleLarge" style={historyStyles.title}>
@@ -971,10 +1189,7 @@ function RollHistoryModal({
 
         <View style={historyStyles.listBox}>
           {loading ? (
-            <View style={historyStyles.empty}>
-              <ActivityIndicator size="large" color="#4f46e5" />
-              <Text style={historyStyles.emptyText}>Yükleniyor...</Text>
-            </View>
+            <SkeletonList count={isPhone ? 8 : 10} />
           ) : error ? (
             <View style={historyStyles.empty}>
               <Text style={historyStyles.emptyText}>Liste yüklenemedi</Text>
@@ -992,7 +1207,12 @@ function RollHistoryModal({
               data={rolls}
               keyExtractor={(r) => r.id}
               renderItem={({ item }) => (
-                <RollListItem roll={item} onPrint={onPrint} onScrap={onScrap} />
+                <RollListItem
+                  roll={item}
+                  onPrint={onPrint}
+                  onScrap={onScrap}
+                  compactLayout={isPhone}
+                />
               )}
             />
           )}
@@ -1203,11 +1423,14 @@ function RollListItem({
   onPrint,
   onScrap,
   compactLayout,
+  isNew,
 }: {
   roll: Roll;
   onPrint: (b: string) => void;
   onScrap?: (roll: Roll) => void;
   compactLayout?: boolean;
+  /** Yeni kaydedilip listeye yeni düşen top — kısa süre vurgulanır. */
+  isNew?: boolean;
 }) {
   const operator = roll.createdBy?.fullName ?? roll.createdBy?.username ?? 'Bilinmiyor';
   const at = roll.createdAt ? dayjs(roll.createdAt) : null;
@@ -1222,6 +1445,7 @@ function RollListItem({
       style={[
         styles.recentItem,
         isInactive && styles.recentItemScrapped,
+        isNew && !isInactive && styles.recentItemNew,
         compactLayout && { padding: 6, marginVertical: 2, gap: 2 },
       ]}
       elevation={1}
@@ -1273,31 +1497,51 @@ function RollListItem({
         {roll.item?.name ?? '—'}
         {roll.color?.name ? ` · ${roll.color.name}` : ''}
       </Text>
-      <View style={[styles.recentBottomRow, compactLayout && { marginTop: 2, gap: 4 }]}>
+      <View style={[styles.recentBottomRow, compactLayout && { marginTop: 2, gap: 6 }]}>
         <View style={styles.recentBadgeRow}>
-          <View style={[styles.recentBadge, compactLayout && { paddingVertical: 1, paddingHorizontal: 4 }]}>
+          <View style={[styles.recentBadge, compactLayout && styles.recentBadgeCompact]}>
             <Icon source="arrow-expand-vertical" size={compactLayout ? 12 : 14} color="#0f172a" />
             <Text style={[styles.recentBadgeText, compactLayout && { fontSize: 11 }]}>{qty}</Text>
           </View>
           {widthLabel && (
-            <View style={[styles.recentBadge, compactLayout && { paddingVertical: 1, paddingHorizontal: 4 }]}>
+            <View style={[styles.recentBadge, compactLayout && styles.recentBadgeCompact]}>
               <Icon source="arrow-expand-horizontal" size={compactLayout ? 12 : 14} color="#0f172a" />
               <Text style={[styles.recentBadgeText, compactLayout && { fontSize: 11 }]}>{widthLabel}</Text>
             </View>
           )}
-          <View style={[styles.recentBadge, compactLayout && { paddingVertical: 1, paddingHorizontal: 4 }]}>
-            <Icon source="star-circle" size={compactLayout ? 12 : 14} color="#0f172a" />
-            <Text style={[styles.recentBadgeText, compactLayout && { fontSize: 11 }]}>{roll.qualityGrade}</Text>
-          </View>
+          {!compactLayout && (
+            <View style={styles.recentBadge}>
+              <Icon source="star-circle" size={14} color="#0f172a" />
+              <Text style={styles.recentBadgeText}>{roll.qualityGrade}</Text>
+            </View>
+          )}
         </View>
-        <View style={styles.recentOperatorChip}>
-          <View style={[styles.recentOperatorAvatar, compactLayout && { width: 14, height: 14 }]}>
-            <Icon source="account" size={compactLayout ? 10 : 14} color="#fff" />
+
+        {compactLayout ? (
+          /* "Kalite ile giriş yapan kişi alt alta" — yatayda yer kazanır,
+             satır alçalır. */
+          <View style={styles.recentQualOp}>
+            <View style={[styles.recentBadge, styles.recentBadgeCompact]}>
+              <Icon source="star-circle" size={12} color="#0f172a" />
+              <Text style={[styles.recentBadgeText, { fontSize: 11 }]}>{roll.qualityGrade}</Text>
+            </View>
+            <View style={styles.recentOperatorMini}>
+              <Icon source="account" size={11} color={colors.brand} />
+              <Text style={styles.recentOperatorMiniText} numberOfLines={1}>
+                {operator}
+              </Text>
+            </View>
           </View>
-          <Text style={[styles.recentOperatorText, compactLayout && { fontSize: 10 }]} numberOfLines={1}>
-            {operator}
-          </Text>
-        </View>
+        ) : (
+          <View style={styles.recentOperatorChip}>
+            <View style={styles.recentOperatorAvatar}>
+              <Icon source="account" size={14} color="#fff" />
+            </View>
+            <Text style={styles.recentOperatorText} numberOfLines={1}>
+              {operator}
+            </Text>
+          </View>
+        )}
       </View>
     </Surface>
   );
@@ -1310,8 +1554,128 @@ const styles = StyleSheet.create({
   // Sol — Form
   formCol: { flex: 1.4, backgroundColor: '#f8fafc' },
   formContent: { padding: 16, gap: 12, flexGrow: 1, paddingBottom: 16 },
-  formContentCompact: { padding: 10, gap: 8, paddingBottom: 12 },
+  formContentCompact: { padding: 12, gap: 10, paddingBottom: 14 },
   card: { padding: 14, borderRadius: 12, backgroundColor: '#fff', gap: 4 },
+
+  // ── Manuel giriş paneli (üst, açılır-kapanır; amber = "anormal/dikkat") ──
+  manualBar: {
+    borderRadius: radius.md,
+    backgroundColor: '#fffbeb', // amber 50
+    borderWidth: 1,
+    borderColor: '#fde68a', // amber 200
+    overflow: 'hidden',
+  },
+  manualBarActive: { borderColor: colors.warningDark },
+  manualBarTouch: { borderRadius: radius.md },
+  manualBarInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  manualBarTitle: { fontSize: 15, fontWeight: '700', color: colors.warningDark },
+  manualBarSub: { fontSize: 12, color: '#92400e', marginTop: 1 },
+  manualPanel: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  manualField: { flex: 1 },
+  manualFieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#92400e',
+    marginBottom: 4,
+  },
+  manualInputContent: { fontSize: 24, fontWeight: '700', textAlign: 'center' },
+
+  // ── En satırı + tek-tuş temizleme ──
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  persistHint: { fontSize: 12, color: colors.textMuted, fontWeight: '500' },
+  widthRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  widthInput: { flex: 1 },
+  widthInputContent: { fontSize: 28, fontWeight: '700', textAlign: 'center' },
+  widthClearBtn: { margin: 0 },
+
+  // ── Metraj info readout (otomatik mod, salt-okunur) ──
+  meterInfo: {
+    borderRadius: radius.md,
+    backgroundColor: colors.infoContainer,
+    borderWidth: 1,
+    borderColor: '#bfdbfe', // blue 200
+    overflow: 'hidden',
+  },
+  meterInfoInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  meterInfoLabel: { fontSize: 13, fontWeight: '700', color: colors.infoDark },
+  meterInfoValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.infoText,
+    marginTop: 1,
+  },
+
+  // ── Etiket kuyruğu çipi (header) ──
+  printChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.brand,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.md,
+    marginRight: spacing.sm,
+  },
+  printChipText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  // ── Üretim ayarı hero header ──
+  cardHero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  cardHeroTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text },
+  persistChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.brandSoft,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+  },
+  persistChipText: { fontSize: 11, fontWeight: '700', color: colors.brandDark },
+
+  // ── Oturum sayacı çipi (recents header) ──
+  recentsSubRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  sessionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.successContainer,
+    paddingLeft: 6,
+    paddingRight: 9,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  sessionChipLabel: { fontSize: 11, fontWeight: '600', color: colors.successText },
+  sessionChipCount: { fontSize: 13, fontWeight: '800', color: colors.successDark },
+
+  // ── Yeni-kayıt vurgusu ──
+  recentItemNew: {
+    backgroundColor: colors.successContainer,
+    borderWidth: 1.5,
+    borderColor: colors.success,
+  },
 
   // Compact (telefon) — form üstü sağa yaslı drawer tetiği
   drawerTriggerBar: {
@@ -1480,6 +1844,16 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   recentBadgeText: { fontSize: 12, color: '#0f172a', fontWeight: '600' },
+  recentBadgeCompact: { paddingVertical: 1, paddingHorizontal: 4 },
+  // Compact: kalite + operatör sağda alt alta (yatayda yer kazanır).
+  recentQualOp: { alignItems: 'flex-end', gap: 3, flexShrink: 0, maxWidth: '46%' },
+  recentOperatorMini: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  recentOperatorMiniText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    flexShrink: 1,
+  },
   recentOperator: { fontSize: 12, color: '#64748b', marginTop: 2 },
   recentOperatorChip: {
     flexDirection: 'row',

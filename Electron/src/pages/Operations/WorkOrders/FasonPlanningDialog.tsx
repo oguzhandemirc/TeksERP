@@ -36,7 +36,7 @@ interface Props {
   onConfirm: (plans: FasonStepPlan[]) => void;
 }
 
-function buildInitial(
+export function buildFasonPlans(
   externalSteps: RouteStep[],
   prior: FasonStepPlan[],
 ): FasonStepPlan[] {
@@ -65,7 +65,7 @@ export function FasonPlanningDialog({
   const [plans, setPlans] = useState<FasonStepPlan[]>([]);
 
   useEffect(() => {
-    if (open) setPlans(buildInitial(externalSteps, initialPlans));
+    if (open) setPlans(buildFasonPlans(externalSteps, initialPlans));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, externalSteps]);
 

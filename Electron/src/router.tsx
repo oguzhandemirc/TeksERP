@@ -4,6 +4,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LoginPage } from "@/pages/Login/LoginPage";
 import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { DashboardPage } from "@/pages/Dashboard/DashboardPage";
+import { SettingsPage } from "@/pages/Settings/SettingsPage";
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
 import { AccessUsersPage } from "@/pages/Access/Users/AccessUsersPage";
@@ -17,6 +18,7 @@ import { DefectTypesPage } from "@/pages/DefectTypes/DefectTypesPage";
 import { QualityGradesPage } from "@/pages/QualityGrades/QualityGradesPage";
 import { ColorsPage } from "@/pages/Colors/ColorsPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
+import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
 import { FabricPropertiesPage } from "@/pages/FabricProperties/FabricPropertiesPage";
 import { SubcontractorCategoriesPage } from "@/pages/SubcontractorCategories/SubcontractorCategoriesPage";
 import { SubcontractorsPage } from "@/pages/Subcontractors/SubcontractorsPage";
@@ -77,6 +79,7 @@ export const router = createHashRouter([
     ),
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: "settings", element: <SettingsPage /> },
 
       // Tanımlar — hub sayfası ve alt sayfalar
       { path: "definitions", element: <DefinitionsHubPage /> },
@@ -85,6 +88,7 @@ export const router = createHashRouter([
       { path: "definitions/stations", element: <StationsPage /> },
       { path: "definitions/machines", element: <MachinesPage /> },
       { path: "definitions/routes", element: <RoutesPage /> },
+      { path: "definitions/product-recipes", element: <ProductRecipesPage /> },
       { path: "definitions/defect-types", element: <DefectTypesPage /> },
       { path: "definitions/quality-grades", element: <QualityGradesPage /> },
       { path: "definitions/colors", element: <ColorsPage /> },

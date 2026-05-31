@@ -4,6 +4,8 @@ import { CalendarClock, AlertTriangle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AnimatedProgress } from "@/components/motion";
+import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import { orderStatusLabels } from "@/types/enums";
 import type { Order } from "@/pages/Operations/Orders/types";
@@ -18,7 +20,7 @@ export function UpcomingOrders() {
   });
 
   return (
-    <Card>
+    <Card className="border-t-2 border-t-info/60">
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <CalendarClock className="h-4 w-4 text-muted-foreground" />
@@ -36,9 +38,9 @@ export function UpcomingOrders() {
         {isLoading ? (
           <LoadingRows />
         ) : isError ? (
-          <EmptyState message="Veri alınamadı." />
+          <EmptyState icon={AlertTriangle} title="Veri alınamadı" />
         ) : !data || data.length === 0 ? (
-          <EmptyState message="Vadesi belirlenmiş açık sipariş yok." />
+          <EmptyState icon={CalendarClock} title="Vadesi belirlenmiş açık sipariş yok" />
         ) : (
           <ul className="divide-y divide-border/40">
             {data.map((order) => (
@@ -87,12 +89,7 @@ function OrderRow({ order, onClick }: { order: Order; onClick: () => void }) {
             {order.shippedQty.toLocaleString("tr-TR")} / {totalQty.toLocaleString("tr-TR")}
             <span className="ml-1 text-muted-foreground">m</span>
           </p>
-          <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full bg-primary/70"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+          <AnimatedProgress value={progress} className="mt-1 h-1" barClassName="bg-primary/70" />
         </div>
 
         <DeadlineBadge days={days} deadline={deadline} />
@@ -113,7 +110,7 @@ function DeadlineBadge({ days, deadline }: { days: number | null; deadline: Date
         className={cn(
           "flex items-center justify-end gap-1 text-sm font-semibold tabular-nums",
           overdue && "text-destructive",
-          urgent && "text-amber-600 dark:text-amber-400",
+          urgent && "text-warning",
         )}
       >
         {overdue && <AlertTriangle className="h-3.5 w-3.5" />}
@@ -140,10 +137,6 @@ function LoadingRows() {
       ))}
     </ul>
   );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return <p className="px-4 py-8 text-center text-sm text-muted-foreground">{message}</p>;
 }
 
 function daysUntil(date: Date): number {

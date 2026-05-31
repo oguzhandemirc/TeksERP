@@ -36,6 +36,14 @@ export const tableLabels: Record<string, string> = {
   PERMISSION_TEMPLATE: "Yetki Şablonu",
   USER_PERMISSION: "Kullanıcı Yetkisi",
   STATION_CAPABILITY: "İstasyon Yeteneği",
+  USER_PREFERENCE: "Kullanıcı Tercihi",
+  USER_PASSWORD: "Kullanıcı Şifresi",
+  USER_PERMISSION_SET: "Yetki Ataması",
+  users: "Kullanıcı",
+  devices: "Cihaz",
+  pairing_codes: "Eşleştirme Kodu",
+  LABEL_PRINT_EVENT: "Etiket Baskısı",
+  SACK: "Çuval",
 };
 
 export const actionLabels: Record<SystemLogDomainAction, string> = {

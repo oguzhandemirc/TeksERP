@@ -20,6 +20,8 @@ import {
   decodeDynamicCursor,
   dynamicCursorWhere,
   buildNextDynamicCursor,
+  decodeOffsetCursor,
+  encodeOffsetCursor,
 } from "../utils/cursor";
 import { PaginatedResponse, ApiResponse } from "../types/api.types";
 import { Request } from "express";
@@ -63,6 +65,18 @@ export interface BaseServiceConfig {
    * Genelde "code" (Color, Item, Station vb.). User için "username" olabilir.
    */
   uniqueField?: string;
+  /**
+   * İlişki / aggregate alanlarına göre sıralama eşlemesi: sanal `sortBy` anahtarı
+   * → Prisma nested orderBy üreten fonksiyon.
+   * Örn: `{ customer: (o) => ({ customer: { name: o } }) }`.
+   * Keyset cursor ilişki değeri sıralayamadığından, bu anahtarlarla gelen cursor
+   * istekleri `findAllCursor` içinde offset-cursor'a düşer (değerler canlı-doğru,
+   * denormalize kolon gerekmez). Sadece bu service'i etkiler; opt-in.
+   */
+  relationSortMap?: Record<
+    string,
+    (order: "asc" | "desc") => Record<string, unknown>
+  >;
 }
 
 export class BaseService {
@@ -159,6 +173,50 @@ export class BaseService {
       params.search
     );
     applyDateRange(baseWhere, params, this.config.dateFields ?? []);
+
+    // İlişki / aggregate sıralaması (customer.name, branch.name, lines _count):
+    // keyset imkansız (cursor değeri top-level skaler olmalı) → offset-encoded
+    // cursor'a düş. Frontend nextCursor'ı opak gördüğü için pagination değişmez.
+    const relationSort = this.config.relationSortMap?.[sortBy];
+    if (relationSort) {
+      const offset = decodeOffsetCursor(req.query.cursor as string | undefined);
+      // Derin offset guard — orders gibi mütevazı tablolar için fazlasıyla yeterli.
+      if (offset > 10000) {
+        return {
+          success: true,
+          data: [],
+          pagination: { nextCursor: null, hasMore: false, limit },
+        };
+      }
+      const [items, totalEstimate] = await Promise.all([
+        this.delegate.findMany({
+          where: baseWhere,
+          orderBy: [relationSort(sortOrder), { id: sortOrder }],
+          skip: offset,
+          take: limit + 1,
+          ...(this.config.defaultInclude
+            ? { include: this.config.defaultInclude }
+            : {}),
+        }),
+        wantTotal
+          ? this.delegate.count({ where: baseWhere })
+          : Promise.resolve(undefined),
+      ]);
+      const hasMore = items.length > limit;
+      const data = hasMore ? items.slice(0, limit) : items;
+      const nextCursor = hasMore ? encodeOffsetCursor(offset + limit) : null;
+      return {
+        success: true,
+        data,
+        pagination: {
+          nextCursor,
+          hasMore,
+          limit,
+          ...(totalEstimate !== undefined ? { totalEstimate } : {}),
+        },
+      };
+    }
+
     const where = cursor
       ? { AND: [baseWhere, dynamicCursorWhere(cursor, sortBy, sortOrder)] }
       : baseWhere;

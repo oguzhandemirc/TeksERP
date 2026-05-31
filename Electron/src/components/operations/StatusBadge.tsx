@@ -5,10 +5,10 @@ type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "muted";
 
 const toneClasses: Record<Tone, string> = {
   neutral: "bg-foreground/10 text-foreground border-transparent",
-  info: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-transparent",
-  success: "bg-green-500/15 text-green-600 dark:text-green-400 border-transparent",
-  warning: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-transparent",
-  danger: "bg-red-500/15 text-red-600 dark:text-red-400 border-transparent",
+  info: "bg-info/15 text-info border-transparent",
+  success: "bg-success/15 text-success border-transparent",
+  warning: "bg-warning/15 text-warning border-transparent",
+  danger: "bg-destructive/15 text-destructive border-transparent",
   muted: "bg-muted text-muted-foreground border-transparent",
 };
 

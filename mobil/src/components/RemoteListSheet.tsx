@@ -11,11 +11,11 @@ import {
   Text,
   IconButton,
   Icon,
-  ActivityIndicator,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 
 import RefreshButton from './RefreshButton';
+import { AnimatedEntrance, SkeletonList } from './motion';
 
 // =============================================================================
 // RemoteListSheet — RNModal + header (icon + title + RefreshButton + close) +
@@ -186,24 +186,22 @@ export default function RemoteListSheet<T>({
 
         <View style={[styles.listBox, contentStyle]}>
           {loading ? (
-            <View style={styles.empty}>
-              <ActivityIndicator size="large" color="#4f46e5" />
-            </View>
+            <SkeletonList count={7} />
           ) : isError ? (
-            <View style={styles.empty}>
+            <AnimatedEntrance direction="fade" style={styles.empty}>
               <Text style={styles.emptyText}>Liste yüklenemedi</Text>
               {errorMessage && (
                 <Text style={styles.emptyHint}>{errorMessage}</Text>
               )}
-            </View>
+            </AnimatedEntrance>
           ) : items.length === 0 ? (
-            <View style={styles.empty}>
+            <AnimatedEntrance direction="fade" style={styles.empty}>
               {emptyIcon && (
                 <Icon source={emptyIcon} size={48} color="#cbd5e1" />
               )}
               <Text style={styles.emptyText}>{emptyText}</Text>
               {emptyHint && <Text style={styles.emptyHint}>{emptyHint}</Text>}
-            </View>
+            </AnimatedEntrance>
           ) : useScrollView ? (
             // FlashList header/footer/scroll davranışı yerine basit ScrollView
             // (küçük listeler için). Her item'ı tek tek render eder.

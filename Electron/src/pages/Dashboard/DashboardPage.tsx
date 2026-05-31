@@ -2,9 +2,8 @@ import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
 import { Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
-import { useAuthStore } from "@/store/auth";
+import { DashboardHero } from "./DashboardHero";
 import { KpiCards } from "./KpiCards";
 import { StationLoad } from "./StationLoad";
 import { UpcomingOrders } from "./UpcomingOrders";
@@ -21,7 +20,6 @@ const PANEL_RENDERERS: Record<string, ReactNode> = {
 };
 
 export function DashboardPage() {
-  const user = useAuthStore((s) => s.user);
   const { isVisible, groupOrder, itemOrder } = useDashboardLayout();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -47,10 +45,8 @@ export function DashboardPage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="Anasayfa"
-        description={`Hoş geldin, ${user?.username ?? ""}.`}
+    <div className="space-y-6 p-6">
+      <DashboardHero
         actions={
           <>
             <RefreshButton queryKey="dashboard" successMessage="Anasayfa yenilendi" />
@@ -66,13 +62,11 @@ export function DashboardPage() {
           </>
         }
       />
-      <div className="space-y-6 p-6">
-        {groupOrder.map((g) => {
-          const node = renderGroup(g);
-          if (!node) return null;
-          return <Fragment key={g}>{node}</Fragment>;
-        })}
-      </div>
+      {groupOrder.map((g) => {
+        const node = renderGroup(g);
+        if (!node) return null;
+        return <Fragment key={g}>{node}</Fragment>;
+      })}
 
       <DashboardSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>

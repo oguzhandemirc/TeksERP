@@ -116,6 +116,7 @@ export const rollColumns: ColumnDef<Roll>[] = [
   {
     id: "processing",
     header: "Tip",
+    meta: { exportValue: (r) => processingLabels[rollProcessingState(r)] },
     cell: ({ row }) => {
       const state = rollProcessingState(row.original);
       const variant =
@@ -167,7 +168,7 @@ export const rollColumns: ColumnDef<Roll>[] = [
         return (
           <Badge
             variant="outline"
-            className="text-[10px] border-amber-500 text-amber-700"
+            className="text-[10px] border-warning text-warning"
           >
             A1
           </Badge>
@@ -179,6 +180,7 @@ export const rollColumns: ColumnDef<Roll>[] = [
   {
     accessorKey: "status",
     header: () => <SortableHeader field="status" label="Durum" />,
+    meta: { exportValue: (r) => rollStatusLabels[r.status] ?? r.status },
     cell: ({ row }) => (
       <StatusBadge
         status={row.original.status}

@@ -1,9 +1,10 @@
 import { WorkOrderType } from "@/types/enums";
-import type { PickedOrderLine } from "./OrderPickerDialog";
+import { buildPicked, type PickedOrderLine } from "./OrderPickerDialog";
 import type { CustomRouteStep, DesignerStep } from "./RouteDesignerDialog";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
 import type { WorkOrderFormValues } from "./schema";
 import type { WorkOrder } from "./types";
+import type { Order } from "@/pages/Operations/Orders/types";
 
 function dateToInput(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -24,6 +25,10 @@ export function formValuesFromWorkOrder(wo: WorkOrder): WorkOrderFormValues {
     targetColorId: wo.targetColorId,
     targetPropertyIds: (wo.targetProperties ?? []).map((p) => p.propertyId),
     orderLineIds: (wo.orderLinks ?? []).map((l) => l.orderLineId),
+    orderLineAllocations: (wo.orderLinks ?? []).map((l) => ({
+      orderLineId: l.orderLineId,
+      allocatedQty: l.allocatedQty ?? 0,
+    })),
     width: wo.width,
     targetQuantity: wo.targetQuantity,
     plannedStartDate: dateToInput(wo.plannedStartDate),
@@ -50,6 +55,8 @@ export function pickedLinesFromWorkOrder(wo: WorkOrder): PickedOrderLine[] {
       itemColorHex: ol.color?.hex ?? null,
       itemColorName: ol.color?.name ?? null,
       quantity: ol.quantity,
+      openQty: ol.quantity,
+      allocatedQty: link.allocatedQty ?? ol.quantity,
       width: ol.width ?? null,
       requiredProperties: (ol.requiredProperties ?? []).map((rp) => ({
         id: rp.propertyId,
@@ -58,6 +65,19 @@ export function pickedLinesFromWorkOrder(wo: WorkOrder): PickedOrderLine[] {
     });
   }
   return out;
+}
+
+/**
+ * Bir siparişin kalemlerinden WO picker satırları üretir — "Bu siparişten iş
+ * emri oluştur" kısayolu için. Zaten aktif (CANCELLED dışı) bir WO'ya bağlı
+ * kalemler dışlanır; çift bağlamayı önler.
+ */
+export function pickedLinesFromOrder(order: Order): PickedOrderLine[] {
+  return (order.lines ?? [])
+    .filter((l) =>
+      (l.workOrderLinks ?? []).every((w) => w.workOrder.status === "CANCELLED"),
+    )
+    .map((l) => buildPicked(order, l));
 }
 
 export interface RoutePrefillState {
@@ -108,4 +128,35 @@ export function routeStateFromWorkOrder(wo: WorkOrder): RoutePrefillState {
   }));
 
   return { customSteps, fasonPlans: [], designerSnapshot };
+}
+
+/**
+ * wo.steps → DesignerStep[] (template/custom farketmez, tüm adımlar). Inline rota
+ * editörünün edit modunda formu seed etmesi için.
+ */
+export function designerStepsFromWorkOrder(wo: WorkOrder): DesignerStep[] {
+  return [...(wo.steps ?? [])]
+    .sort((a, b) => a.stepSequence - b.stepSequence)
+    .map((s, i) => ({
+      clientId: `ds-prefill-${i}`,
+      serverId: s.id,
+      stationId: s.station?.id ?? "",
+      stationCode: s.station?.code ?? "",
+      stationName: s.station?.name ?? "—",
+      stationType: s.station?.type === "EXTERNAL" ? "EXTERNAL" : "INTERNAL",
+      notes: s.notes ?? "",
+      requiredCategoryId: s.requiredCategoryId ?? null,
+      plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+    }));
+}
+
+/** DesignerStep[] → backend custom steps payload (submit). */
+export function stepsToCustom(steps: DesignerStep[]): CustomRouteStep[] {
+  return steps.map((s) => ({
+    id: s.serverId ?? undefined,
+    stationId: s.stationId,
+    notes: s.notes.trim() || null,
+    requiredCategoryId: s.requiredCategoryId,
+    plannedSubcontractorId: s.plannedSubcontractorId,
+  }));
 }

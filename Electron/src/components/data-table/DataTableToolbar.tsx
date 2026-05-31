@@ -1,15 +1,28 @@
 import type { ReactNode } from "react";
 import { Search } from "lucide-react";
+import type { Table } from "@tanstack/react-table";
 import { Input } from "@/components/ui/input";
+import { SavedViewsMenu } from "./SavedViewsMenu";
+import { DataTableTools } from "./DataTableTools";
 
-interface Props {
+interface Props<T> {
   search: string;
   onSearchChange: (value: string) => void;
   placeholder?: string;
   actions?: ReactNode;
+  /** Verilirse "Sütunlar & CSV" araç menüsü gösterilir. */
+  table?: Table<T>;
+  exportName?: string;
 }
 
-export function DataTableToolbar({ search, onSearchChange, placeholder = "Ara...", actions }: Props) {
+export function DataTableToolbar<T>({
+  search,
+  onSearchChange,
+  placeholder = "Ara...",
+  actions,
+  table,
+  exportName,
+}: Props<T>) {
   return (
     <div className="flex items-center gap-2 px-3 py-2 border-b">
       <div className="relative w-64">
@@ -21,7 +34,11 @@ export function DataTableToolbar({ search, onSearchChange, placeholder = "Ara...
           className="h-8 pl-8 text-sm"
         />
       </div>
-      <div className="ml-auto flex items-center gap-2">{actions}</div>
+      <div className="ml-auto flex items-center gap-2">
+        {table ? <DataTableTools table={table} exportName={exportName} /> : null}
+        <SavedViewsMenu />
+        {actions}
+      </div>
     </div>
   );
 }

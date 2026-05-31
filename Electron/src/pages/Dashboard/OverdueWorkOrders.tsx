@@ -17,7 +17,7 @@ export function OverdueWorkOrders() {
   });
 
   return (
-    <Card>
+    <Card className="border-t-2 border-t-destructive/60">
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <AlertOctagon className="h-4 w-4 text-destructive" />

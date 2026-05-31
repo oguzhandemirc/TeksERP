@@ -17,8 +17,10 @@ import {
   TouchableRipple,
   ActivityIndicator,
 } from 'react-native-paper';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import * as Haptics from 'expo-haptics';
 import Pager from './Pager';
+import { colors } from '../theme';
 
 export interface PickerOption {
   value: string;
@@ -104,6 +106,7 @@ export default function PickerModal(props: Props) {
   const isPhone = device === 'phone';
   const effectiveColumns = isPhone ? 1 : numColumns;
   const searchRef = useRef<RNTextInput>(null);
+  const listRef = useRef<FlashListRef<PickerOption>>(null);
 
   // Client-mode: in-memory arama
   const [clientSearch, setClientSearch] = useState('');
@@ -144,6 +147,24 @@ export default function PickerModal(props: Props) {
         (o.sublabel?.toLocaleLowerCase('tr').includes(q) ?? false),
     );
   }, [paginated, sortedOptions, clientSearch]);
+
+  // A-Z hızlı indeks (yalnız client mode) — listData zaten alfabetik sıralı, her
+  // harfin ilk görünümünün index'ini tutarız. Operatör harfe basınca o gruba
+  // atlar (arama kutusuna yazmak yerine — onlarca üründe pratik).
+  const azIndex = useMemo(() => {
+    if (paginated) return [] as { letter: string; index: number }[];
+    const seen = new Map<string, number>();
+    listData.forEach((o, i) => {
+      const ch = (o.label?.trim()?.[0] ?? '').toLocaleUpperCase('tr');
+      if (ch && !seen.has(ch)) seen.set(ch, i);
+    });
+    return Array.from(seen.entries()).map(([letter, index]) => ({ letter, index }));
+  }, [paginated, listData]);
+
+  const jumpToLetter = (index: number) => {
+    Haptics.selectionAsync().catch(() => {});
+    listRef.current?.scrollToIndex({ index, animated: true });
+  };
 
   // Paginated submit handler
   const submitSearch = () => {
@@ -271,22 +292,44 @@ export default function PickerModal(props: Props) {
           ) : listData.length === 0 ? (
             <Text style={styles.empty}>{emptyText}</Text>
           ) : (
-            <FlashList
-              data={listData}
-              keyExtractor={(item) => item.value}
-              numColumns={effectiveColumns}
-              renderItem={({ item }) => (
-                <PickerCard
-                  option={item}
-                  selected={item.value === selectedValue}
-                  onPress={() => {
-                    onSelect(item.value);
-                    onDismiss();
-                    if (!paginated) setClientSearch('');
-                  }}
+            <View style={styles.listRow}>
+              <View style={{ flex: 1 }}>
+                <FlashList
+                  ref={listRef}
+                  data={listData}
+                  keyExtractor={(item) => item.value}
+                  numColumns={effectiveColumns}
+                  renderItem={({ item }) => (
+                    <PickerCard
+                      option={item}
+                      selected={item.value === selectedValue}
+                      onPress={() => {
+                        onSelect(item.value);
+                        onDismiss();
+                        if (!paginated) setClientSearch('');
+                      }}
+                    />
+                  )}
                 />
+              </View>
+              {/* A-Z hızlı indeks — client modda, yeterli kayıt varsa */}
+              {azIndex.length > 1 && (
+                <View style={styles.azStrip}>
+                  {azIndex.map(({ letter, index }) => (
+                    <TouchableRipple
+                      key={letter}
+                      borderless
+                      rippleColor="rgba(79, 70, 229, 0.15)"
+                      onPress={() => jumpToLetter(index)}
+                      style={styles.azLetterTouch}
+                      accessibilityLabel={`${letter} harfine git`}
+                    >
+                      <Text style={styles.azLetter}>{letter}</Text>
+                    </TouchableRipple>
+                  ))}
+                </View>
               )}
-            />
+            </View>
           )}
         </View>
 
@@ -512,6 +555,22 @@ const styles = StyleSheet.create({
   sortChipTextActive: { color: '#4f46e5', fontWeight: '700' },
 
   listBox: { flex: 1 },
+  listRow: { flex: 1, flexDirection: 'row' },
+  azStrip: {
+    width: 30,
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
+    paddingVertical: 4,
+    marginLeft: 2,
+  },
+  azLetterTouch: {
+    width: 28,
+    minHeight: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  azLetter: { fontSize: 12, fontWeight: '700', color: colors.brand },
   empty: { textAlign: 'center', color: '#94a3b8', padding: 24 },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 

@@ -72,6 +72,8 @@ async function main() {
     { code: "label:edit", module: "LOGISTICS", category: "web", description: "Sipariş satırı bazlı müşteri ismi/renk override" },
     { code: "label-template:read", module: "LOGISTICS", category: "web", description: "Etiket template listele" },
     { code: "label-template:write", module: "LOGISTICS", category: "web", description: "Template CRUD" },
+    { code: "shipping:read", module: "LOGISTICS", category: "web", description: "Sevkiyat/çuval listesi/detay görüntüleme" },
+    { code: "shipping:write", module: "LOGISTICS", category: "web", description: "Çuval/irsaliye oluşturma, tartı/kapama, sevk" },
     { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
     { code: "admin:settings", module: "ADMIN", category: "admin", description: "Sistem ayarları + log arşiv" },
     { code: "admin:*", module: "ADMIN", category: "admin", description: "Tüm admin yetkileri (wildcard)" },
@@ -92,6 +94,8 @@ async function main() {
     { code: "mobile:depo", module: "MOBILE", category: "mobile", description: "Depo ekranı" },
     { code: "mobile:fason-sevk", module: "MOBILE", category: "mobile", description: "Fason sevk ekranı" },
     { code: "mobile:fason-kabul", module: "MOBILE", category: "mobile", description: "Fason mal kabul ekranı" },
+    { code: "mobile:tarti-paket", module: "MOBILE", category: "mobile", description: "Tartı & Paketleme ekranı" },
+    { code: "mobile:sevkiyat", module: "MOBILE", category: "mobile", description: "Sevkiyat yönetimi ekranı" },
     { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
   ];
 
@@ -116,6 +120,8 @@ async function main() {
     { name: "Mobil — Depo Operatörü",        description: "Depo ekranı (read-only)",        codes: ["mobile:depo"] },
     { name: "Mobil — Fason Sevk Operatörü",  description: "Fason firmaya sevk ekranı",      codes: ["mobile:fason-sevk"] },
     { name: "Mobil — Fason Kabul Operatörü", description: "Fason firmadan mal kabul ekranı", codes: ["mobile:fason-kabul"] },
+    { name: "Mobil — Paketleme Operatörü",   description: "Tartı & Paketleme ekranı",       codes: ["mobile:tarti-paket"] },
+    { name: "Mobil — Sevkiyat Operatörü",    description: "Sevkiyat yönetimi ekranı",        codes: ["mobile:sevkiyat"] },
     { name: "Mobil — Tüm Ekranlar",          description: "Tüm mobil ekranlar (wildcard)",  codes: ["mobile:*"] },
   ];
 
@@ -433,11 +439,17 @@ async function main() {
   });
   console.log("✅ 3 şube (ARDA: İstanbul + Ankara, Moda: İzmir)");
 
-  // --- Label template'ler (ROLL + SWATCH defaults — etiket endpoint'leri için zorunlu) ---
+  // --- Label template'ler (her LabelKind için default — etiket endpoint'leri için zorunlu) ---
   await prisma.labelTemplate.create({
     data: {
-      name: "Standart Top Etiketi", kind: "ROLL", isDefault: true,
-      fields: buildDefaultFields("ROLL") as unknown as object,
+      name: "Standart Ham Top Etiketi", kind: "ROLL_RAW", isDefault: true,
+      fields: buildDefaultFields("ROLL_RAW") as unknown as object,
+    },
+  });
+  await prisma.labelTemplate.create({
+    data: {
+      name: "Standart Bitmiş Top Etiketi", kind: "ROLL_FINISHED", isDefault: true,
+      fields: buildDefaultFields("ROLL_FINISHED") as unknown as object,
     },
   });
   await prisma.labelTemplate.create({
@@ -446,7 +458,7 @@ async function main() {
       fields: buildDefaultFields("SWATCH") as unknown as object,
     },
   });
-  console.log("✅ 2 label template (ROLL + SWATCH default)");
+  console.log("✅ 3 label template (ROLL_RAW + ROLL_FINISHED + SWATCH default)");
 
   console.log("\n🎉 Seed tamamlandı.\n");
   console.log("Kullanıcılar:");

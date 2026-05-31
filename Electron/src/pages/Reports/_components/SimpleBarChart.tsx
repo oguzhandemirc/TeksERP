@@ -1,4 +1,6 @@
+import { useId } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CHART_COLORS } from "@/lib/chart-theme";
 
 interface BarDef {
   key: string;
@@ -17,8 +19,6 @@ interface Props<T> {
   horizontal?: boolean;
 }
 
-const DEFAULT_COLORS = ["#0ea5e9", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6"];
-
 export function SimpleBarChart<T>({
   data,
   xKey,
@@ -30,6 +30,7 @@ export function SimpleBarChart<T>({
   // recharts v3 formatter sözleşmesi: parametre `unknown`; safe-cast üzerinden geç.
   const valueFmt = formatValue ? (v: unknown) => formatValue(Number(v)) : undefined;
   const catFmt = formatCategory ? (v: unknown) => formatCategory(String(v)) : undefined;
+  const uid = useId().replace(/:/g, "");
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -38,6 +39,17 @@ export function SimpleBarChart<T>({
         layout={horizontal ? "vertical" : "horizontal"}
         margin={{ top: 6, right: 12, left: 0, bottom: 6 }}
       >
+        <defs>
+          {bars.map((b, idx) => {
+            const color = b.color ?? CHART_COLORS[idx % CHART_COLORS.length];
+            return (
+              <linearGradient key={b.key} id={`${uid}-${b.key}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.95} />
+                <stop offset="100%" stopColor={color} stopOpacity={0.45} />
+              </linearGradient>
+            );
+          })}
+        </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={!horizontal} horizontal={horizontal} />
         {horizontal ? (
           <>
@@ -72,7 +84,7 @@ export function SimpleBarChart<T>({
             key={b.key}
             dataKey={b.key}
             name={b.label}
-            fill={b.color ?? DEFAULT_COLORS[idx % DEFAULT_COLORS.length]}
+            fill={`url(#${uid}-${b.key})`}
             radius={horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]}
           />
         ))}

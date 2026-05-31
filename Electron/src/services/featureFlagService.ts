@@ -3,6 +3,7 @@ import type { ApiResponse } from "@/types/api";
 
 export interface FeatureFlags {
   pricingEnabled: boolean;
+  targetQuantityEnabled: boolean;
 }
 
 export const featureFlagService = {

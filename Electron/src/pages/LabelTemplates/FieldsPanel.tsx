@@ -88,7 +88,7 @@ function FieldRow({
         />
         Görünür
         {required && (
-          <span className="text-amber-600" title="Zorunlu alan">
+          <span className="text-warning" title="Zorunlu alan">
             *
           </span>
         )}

@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { STATION_TEXT } from "@/lib/station-colors";
 import { stationKindLabels, type StationKind } from "@/types/enums";
 import {
   fetchStationLiveState,
@@ -45,11 +46,17 @@ export function StationLoad() {
   });
 
   return (
-    <Card>
+    <Card className="border-t-2 border-t-primary/50">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <Activity className="h-4 w-4 text-muted-foreground" />
           İstasyon Doluluk
+          {data && data.length > 0 && (
+            <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+              <span className="live-dot" />
+              Canlı
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -96,11 +103,14 @@ function StationCell({ station }: { station: StationLiveState }) {
           <p className="truncate text-sm font-medium">{station.name}</p>
           <p className="truncate text-[10px] text-muted-foreground">{kindLabel}</p>
         </div>
-        {station.type === "EXTERNAL" && (
-          <Badge variant="outline" className="shrink-0 text-[10px]">
-            Fason
-          </Badge>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {isBusy && <span className="live-dot" title="Çalışıyor" />}
+          {station.type === "EXTERNAL" && (
+            <Badge variant="outline" className="text-[10px]">
+              Fason
+            </Badge>
+          )}
+        </div>
       </div>
 
       {isEntryStation ? (
@@ -108,31 +118,31 @@ function StationCell({ station }: { station: StationLiveState }) {
           <Metric
             label="Bugün Giren"
             value={station.todayCompletedCount}
-            tone="text-emerald-600 dark:text-emerald-400"
+            tone={STATION_TEXT.kk1}
           />
         </div>
       ) : isQueuelessStation ? (
         <div className="mt-3 grid grid-cols-3 gap-1 text-center">
-          <Metric label="Aktif" value={station.activeCount} tone="text-sky-600 dark:text-sky-400" />
+          <Metric label="Aktif" value={station.activeCount} tone="text-info" />
           <Metric
             label="Bugün giden"
             value={station.todayDispatchedCount}
-            tone="text-orange-600 dark:text-orange-400"
+            tone={STATION_TEXT.fason}
           />
           <Metric
             label="Bugün gelen"
             value={station.todayCompletedCount}
-            tone="text-emerald-600 dark:text-emerald-400"
+            tone="text-success"
           />
         </div>
       ) : (
         <div className="mt-3 grid grid-cols-3 gap-1 text-center">
-          <Metric label="Kuyruk" value={station.queueCount} tone="text-amber-600 dark:text-amber-400" />
-          <Metric label="Aktif" value={station.activeCount} tone="text-sky-600 dark:text-sky-400" />
+          <Metric label="Kuyruk" value={station.queueCount} tone="text-warning" />
+          <Metric label="Aktif" value={station.activeCount} tone="text-info" />
           <Metric
             label="Bugün"
             value={station.todayCompletedCount}
-            tone="text-emerald-600 dark:text-emerald-400"
+            tone="text-success"
           />
         </div>
       )}

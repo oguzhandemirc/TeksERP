@@ -9,13 +9,14 @@
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
+      "resizeMode": "cover",
+      "backgroundColor": "#181D31"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FFFFFF"
+        "backgroundImage": "./assets/logo-bg-512.png",
+        "backgroundColor": "#212A3F"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

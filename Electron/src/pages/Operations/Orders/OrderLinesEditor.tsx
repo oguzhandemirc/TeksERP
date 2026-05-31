@@ -63,6 +63,7 @@ export function OrderLinesEditor({ value, onChange, error, customerId }: Props) 
         customerItemName: "",
         customerColorName: "",
         requiredPropertyIds: [],
+        cutNote: "",
       },
     ]);
   };
@@ -175,6 +176,12 @@ export function OrderLinesEditor({ value, onChange, error, customerId }: Props) 
                     onChange={(ids) => updateLine(line.clientId, { requiredPropertyIds: ids })}
                   />
                 </div>
+                <Input
+                  className="col-span-12 text-sm"
+                  placeholder="Kesim notu (ops.) — örn: 3 parça 200+200+100 m"
+                  value={line.cutNote ?? ""}
+                  onChange={(e) => updateLine(line.clientId, { cutNote: e.target.value })}
+                />
               </div>
               <Button
                 type="button"

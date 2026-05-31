@@ -20,7 +20,7 @@ const columns: ColumnDef<UserActivityRow>[] = [
     header: "Sil",
     cell: ({ getValue }) => {
       const v = getValue() as number;
-      return <span className={v > 0 ? "font-semibold text-amber-700" : ""}>{fmtInt(v)}</span>;
+      return <span className={v > 0 ? "font-semibold text-warning" : ""}>{fmtInt(v)}</span>;
     },
   },
   {

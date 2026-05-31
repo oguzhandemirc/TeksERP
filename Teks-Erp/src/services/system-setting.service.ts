@@ -37,6 +37,8 @@ export const SETTING_KEYS = {
   SHIPPING_TOLERANCE_METERS: "shipping.toleranceMeters",
   /** Pricing/currency UI'da gösterilsin mi (sipariş ve ileride sevkiyat). */
   FINANCE_PRICING_ENABLED: "finance.pricingEnabled",
+  /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
+  WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
   /** Sipariş oluştururken termin (deadline) verilmediyse orderDate + N gün. Default 7. */
   ORDER_DEFAULT_DEADLINE_DAYS: "order.defaultDeadlineDays",
   /** İş emri oluştururken plannedEndDate verilmediyse plannedStartDate + N gün. Default 7. */
@@ -53,6 +55,7 @@ const DEFAULT_DEADLINE_DAYS = 7;
  */
 export interface FeatureFlags {
   pricingEnabled: boolean;
+  targetQuantityEnabled: boolean;
 }
 
 export class SystemSettingService {
@@ -134,6 +137,7 @@ export class SystemSettingService {
   async getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
     const flags: FeatureFlags = {
       pricingEnabled: await readPricingEnabled(),
+      targetQuantityEnabled: await readTargetQuantityEnabled(),
     };
     return { success: true, data: flags };
   }
@@ -156,6 +160,18 @@ export class SystemSettingService {
         SETTING_KEYS.FINANCE_PRICING_ENABLED,
         input.pricingEnabled,
         "Sipariş/sevkiyat ekranlarında para birimi + fiyat alanlarını göster",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "targetQuantityEnabled")) {
+      if (typeof input.targetQuantityEnabled !== "boolean") {
+        throw AppError.badRequest("targetQuantityEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.WORKORDER_TARGET_QUANTITY_ENABLED,
+        input.targetQuantityEnabled,
+        "İş emri formunda hedef metraj alanını göster",
         userId
       );
     }
@@ -193,6 +209,18 @@ export async function readShippingToleranceMeters(
 export async function readPricingEnabled(): Promise<boolean> {
   const setting = await prisma.systemSetting.findUnique({
     where: { key: SETTING_KEYS.FINANCE_PRICING_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * İş emri "hedef metraj" alanı gösterilsin mi? Default false (proses-only
+ * fabrika; üretim miktarını giren kumaş belirler). İleride örgü/üretim eklenirse açılır.
+ */
+export async function readTargetQuantityEnabled(): Promise<boolean> {
+  const setting = await prisma.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.WORKORDER_TARGET_QUANTITY_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

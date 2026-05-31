@@ -69,6 +69,7 @@ enum RollStatus {
   A1_STOCK // 2. Kalite satılabilir stok
   RETURNED_FROM_SUBCONTRACTOR // Fason dönüşünde yeni barkodlar üretildi, eski kapatıldı
   WAREHOUSE // Tambur sonrası depoya kaldırıldı — satışa / sevke hazır
+  SHIPPED // Çuval kapanıp tartıldı — müşteriye sevk edildi (sevk muhasebesi bu anda işlenir)
   TAMBUR_CONSUMED // Tambur'da bölündü; tüm metraj çocuk topları olarak doğdu — parent retire
   SUBCONTRACTOR_CONSUMED // Fason kabulde kapandı — yeni "açık kumaş" Roll'ları receipt üzerinden doğacak
 }
@@ -189,25 +190,26 @@ model User {
   isActive     Boolean @default(true)
 
   // Relations
-  permissions            UserPermission[]        @relation("UserPermissionUser")
-  grantedPermissions     UserPermission[]        @relation("UserPermissionGrantedBy")
-  logs                   SystemLog[]
-  printedTravelerCards   TravelerCard[]          @relation("TravelerCardPrintedBy")
-  cardScans              TravelerCardScan[]
-  rollMovements          RollMovement[]
-  printedManifests       Manifest[]              @relation("ManifestPrintedBy")
-  dispatches             SubcontractorDispatch[] @relation("DispatchCreatedBy")
-  cancelledDispatches    SubcontractorDispatch[] @relation("DispatchCancelledBy")
-  receipts               SubcontractorReceipt[]  @relation("ReceiptCreatedBy")
-  cancelledReceipts      SubcontractorReceipt[]  @relation("ReceiptCancelledBy")
-  swatchesCreated        Swatch[]                @relation("SwatchCreatedBy")
-  rollOperations         RollOperation[]
-  detectedRollErrors     RollError[]             @relation("RollErrorDetectedBy")
-  processedRollErrors    RollError[]             @relation("RollErrorProcessedBy")
-  createdRolls           Roll[]                  @relation("RollCreatedBy")
-  manualClosedOrders     Order[]                 @relation("OrderManualClosedBy")
-  systemSettingsUpdates  SystemSetting[]
-  createdPairingCodes    PairingCode[]           @relation("PairingCodeCreatedBy")
+  permissions           UserPermission[]        @relation("UserPermissionUser")
+  grantedPermissions    UserPermission[]        @relation("UserPermissionGrantedBy")
+  logs                  SystemLog[]
+  printedTravelerCards  TravelerCard[]          @relation("TravelerCardPrintedBy")
+  cardScans             TravelerCardScan[]
+  rollMovements         RollMovement[]
+  printedManifests      Manifest[]              @relation("ManifestPrintedBy")
+  dispatches            SubcontractorDispatch[] @relation("DispatchCreatedBy")
+  cancelledDispatches   SubcontractorDispatch[] @relation("DispatchCancelledBy")
+  receipts              SubcontractorReceipt[]  @relation("ReceiptCreatedBy")
+  cancelledReceipts     SubcontractorReceipt[]  @relation("ReceiptCancelledBy")
+  swatchesCreated       Swatch[]                @relation("SwatchCreatedBy")
+  rollOperations        RollOperation[]
+  detectedRollErrors    RollError[]             @relation("RollErrorDetectedBy")
+  processedRollErrors   RollError[]             @relation("RollErrorProcessedBy")
+  createdRolls          Roll[]                  @relation("RollCreatedBy")
+  manualClosedOrders    Order[]                 @relation("OrderManualClosedBy")
+  systemSettingsUpdates SystemSetting[]
+  createdPairingCodes   PairingCode[]           @relation("PairingCodeCreatedBy")
+  preference            UserPreference?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -215,12 +217,29 @@ model User {
   @@map("users")
 }
 
+/// Kullanıcı bazlı UI tercihleri (accent rengi, tema, yoğunluk, menü favorileri,
+/// kayıtlı tablo görünümleri). Şema esnekliği için tek `Json` blob — frontend
+/// `AppPreferences` tipini sahiplenir, alan eklemek migration gerektirmez.
+/// Sorgulanmaz (yalnız PK by userId fetch), bu yüzden GIN index gerekmez.
+model UserPreference {
+  id          String @id @default(uuid())
+  userId      String @unique
+  preferences Json
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_preferences")
+}
+
 /// Yetki kataloğu — runtime'da sadece bu tablo + UserPermission birlikte tüketilir.
 /// `category` admin UI'sında gruplamak için: "web" (web ekran/aksiyon), "mobile"
 /// (mobil ekran), "admin" (admin operasyonları).
 model Permission {
-  id          String  @id @default(uuid())
-  code        String  @unique @db.VarChar(64) // "order:read", "mobile:kk2", "admin:users", "mobile:*"
+  id          String             @id @default(uuid())
+  code        String             @unique @db.VarChar(64) // "order:read", "mobile:kk2", "admin:users", "mobile:*"
   module      String // "SALES", "PRODUCTION", "FINANCE", "MOBILE"
   category    PermissionCategory @default(web)
   description String?
@@ -410,8 +429,9 @@ model Route {
 
   // Relations
   customer   Customer?   @relation("CustomerDefaultRoutes", fields: [customerId], references: [id])
-  steps      RouteStep[]
-  workOrders WorkOrder[] // Bu şablondan türetilen WO'lar (analytics)
+  steps          RouteStep[]
+  workOrders     WorkOrder[] // Bu şablondan türetilen WO'lar (analytics)
+  productRecipes ProductRecipe[] // Bu rotayı kullanan üretim reçeteleri
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -437,6 +457,53 @@ model RouteStep {
 
   @@index([routeId, sequence])
   @@map("route_steps")
+}
+
+/// Üretim reçetesi — bir ürünü (kumaş + renk + özellikler + en + rota) tek
+/// isim/kod altında paketler. İş emri açılışında seçilince hedef alanlar + rota
+/// otomatik dolar (örn "PATOS GRİ-038"). Rota tekrar-kullanılabilir kalır;
+/// reçete rotanın ÜSTÜNDE ayrı bir katmandır — rotayı dönüştürmez.
+model ProductRecipe {
+  id       String   @id @default(uuid())
+  code     String   @unique @db.VarChar(32)
+  name     String   @db.VarChar(100)
+  itemId   String
+  colorId  String?
+  width    Decimal? @db.Decimal(12, 3)
+  foldType String?
+  routeId  String?
+  isActive Boolean  @default(true)
+
+  // Relations
+  item       Item                    @relation(fields: [itemId], references: [id])
+  color      Color?                  @relation(fields: [colorId], references: [id])
+  route      Route?                  @relation(fields: [routeId], references: [id])
+  properties ProductRecipeProperty[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([itemId])
+  @@index([colorId])
+  @@index([routeId])
+  @@map("product_recipes")
+}
+
+/// ProductRecipe ↔ FabricProperty M:N — reçetenin üretim özellikleri.
+/// Append-only pivot (sadece createdAt).
+model ProductRecipeProperty {
+  id         String @id @default(uuid())
+  recipeId   String
+  propertyId String
+
+  recipe   ProductRecipe  @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  property FabricProperty @relation(fields: [propertyId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([recipeId, propertyId])
+  @@index([propertyId])
+  @@map("product_recipe_properties")
 }
 
 // =============================================================================
@@ -466,6 +533,7 @@ model Item {
   workOrdersAsTarget WorkOrder[]           @relation("WorkOrderTargetItem")
   /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
   customerAliases    CustomerItemAlias[]
+  productRecipes     ProductRecipe[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -522,6 +590,13 @@ model Roll {
   // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
   createdById String?
 
+  // Sevkiyat — topun hedef sipariş kalemi ("değişebilen isim"). NULL = stok için.
+  // Tambur kesimde set edilir; yön değişince (redirect) güncellenir + yeni etiket basılır.
+  // Etiketin müşteri/sipariş alanları bu satırdan türetilir.
+  targetOrderLineId String?
+  // Paketleme — topun içinde bulunduğu çuval. NULL = henüz paketlenmedi.
+  sackId            String?
+
   // Relations
   item                Item                        @relation(fields: [itemId], references: [id])
   color               Color?                      @relation(fields: [colorId], references: [id])
@@ -541,6 +616,8 @@ model Roll {
   producedInStep      WorkOrderStep?              @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
   createdBy           User?                       @relation("RollCreatedBy", fields: [createdById], references: [id])
   properties          RollProperty[]
+  targetOrderLine     OrderLine?                  @relation("RollTargetOrderLine", fields: [targetOrderLineId], references: [id])
+  sack                Sack?                       @relation(fields: [sackId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -562,6 +639,8 @@ model Roll {
   // Fason kuyruğu: "bu adımda + AT_SUBCONTRACTOR" listeleme
   @@index([currentStepId, status])
   @@index([qualityGradeId])
+  @@index([targetOrderLineId])
+  @@index([sackId])
   @@map("rolls")
 }
 
@@ -583,6 +662,8 @@ model Customer {
   branches      CustomerBranch[]
   itemAliases   CustomerItemAlias[]
   colorAliases  CustomerColorAlias[]
+  sacks         Sack[]
+  shipments     Shipment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -612,6 +693,8 @@ model CustomerBranch {
 
   customer  Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
   orders    Order[]
+  sacks     Sack[]
+  shipments Shipment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -644,9 +727,9 @@ model Order {
   manualCloseReason String?   @db.Text
 
   // Relations
-  customer       Customer               @relation(fields: [customerId], references: [id])
-  branch         CustomerBranch?        @relation(fields: [branchId], references: [id])
-  manualClosedBy User?                  @relation("OrderManualClosedBy", fields: [manualClosedById], references: [id])
+  customer       Customer        @relation(fields: [customerId], references: [id])
+  branch         CustomerBranch? @relation(fields: [branchId], references: [id])
+  manualClosedBy User?           @relation("OrderManualClosedBy", fields: [manualClosedById], references: [id])
   lines          OrderLine[]
 
   createdAt DateTime @default(now())
@@ -675,6 +758,12 @@ model OrderLine {
   unitPrice Decimal? @db.Decimal(12, 2) // For future finance module
   width     Decimal? @db.Decimal(12, 3) // İstenen en (cm)
 
+  /// Tambur kesim talimatı — eşit-parça otomatik öneri. Örn 400 = "her 400 m'de bir kes".
+  /// NULL = serbest kesim (operatör karar verir). Tambur bu değerden kesim önerir.
+  pieceLengthM Decimal? @db.Decimal(12, 3)
+  /// Kesim/sevk için serbest not (pieceLengthM'e sığmayan istisna talimatlar).
+  cutNote      String?
+
   /// "Müşterideki adı" — sipariş satırı bazlı override (1-shot).
   /// NULL ise effective name CustomerItemAlias.alias'tan (master, live) okunur;
   /// o da yoksa Item.name (default). Master değişti → bu null satırlar otomatik
@@ -684,11 +773,13 @@ model OrderLine {
   customerColorName String?
 
   // Relations
-  order               Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  item                Item                        @relation(fields: [itemId], references: [id])
-  color               Color?                      @relation(fields: [colorId], references: [id])
-  workOrderLinks      WorkOrderToOrderLine[]
-  requiredProperties  OrderLineRequiredProperty[]
+  order              Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  item               Item                        @relation(fields: [itemId], references: [id])
+  color              Color?                      @relation(fields: [colorId], references: [id])
+  workOrderLinks     WorkOrderToOrderLine[]
+  requiredProperties OrderLineRequiredProperty[]
+  targetedRolls      Roll[]                      @relation("RollTargetOrderLine")
+  targetedSwatches   Swatch[]                    @relation("SwatchTargetOrderLine")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -868,7 +959,7 @@ model QualityGrade {
   code         String     @unique @db.VarChar(32) // "1.KALITE", "A1", "A2", "FIRE" (eski) veya KAL-YYMM-XXXX (admin)
   name         String     @db.VarChar(100) // UI'da görünen etiket
   description  String?
-  color        String? @db.VarChar(7) // "#10b981" vb. — UI rozeti için opsiyonel
+  color        String?    @db.VarChar(7) // "#10b981" vb. — UI rozeti için opsiyonel
   sortOrder    Int        @default(0)
   isActive     Boolean    @default(true)
   /// Tambur'da bu kalite seçildiğinde çocuk top'un alacağı hedef RollStatus.
@@ -887,14 +978,14 @@ model QualityGrade {
 /// Hata tipi kataloğu — operatör ekranında buton olarak çıkar, elle girilmez.
 /// Yönetici ekranı üzerinden eklenir/silinir. severity hataya görsel öncelik verir.
 model DefectType {
-  id          String   @id @default(uuid())
-  code        String   @unique @db.VarChar(32)
-  name        String   @db.VarChar(100)
+  id          String          @id @default(uuid())
+  code        String          @unique @db.VarChar(32)
+  name        String          @db.VarChar(100)
   description String?
   severity    DefectSeverity? // UI renklendirme için
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   rollErrors RollError[]
 
@@ -910,15 +1001,15 @@ model DefectType {
 ///   - errorType    → DefectType.name'in snapshot'ı (katalog ileride yeniden
 ///                    adlandırılsa bile historik etiket korunur)
 model RollError {
-  id           String  @id @default(uuid())
+  id           String           @id @default(uuid())
   rollId       String
   /// Hatanın tespit edildiği metre noktası (KK2 operatörü "60. metrede hata"
   /// girer). Hata sadece NOKTA olarak takip edilir; aralık bilgisi tutulmaz.
   /// Tambur operatörü ekranda bu noktayı görüp fiziksel kesim kararı verir.
-  startMeter   Decimal @db.Decimal(12, 3)
+  startMeter   Decimal          @db.Decimal(12, 3)
   defectTypeId String?
   errorType    String? // DefectType.name snapshot (kayıt anında kopyalanır)
-  isProcessed  Boolean @default(false) // Tambur kararı verildi mi?
+  isProcessed  Boolean          @default(false) // Tambur kararı verildi mi?
   actionTaken  RollErrorAction? // Tambur kararı
 
   // Lifecycle — tespit (Kurşun/QC2) ve işlem (Tambur) ayrı izlenir.
@@ -995,7 +1086,7 @@ model RollOperation {
 // Admin (admin:settings) okur/yazar.
 // =============================================================================
 model SystemSetting {
-  key         String @id @db.VarChar(100)
+  key         String  @id @db.VarChar(100)
   /// Tip-güvenli değer: boolean, number, string, array veya object.
   /// Reader fonksiyonları JsonValue'dan beklenen tipi çıkarır.
   value       Json
@@ -1155,7 +1246,7 @@ model SubcontractorDispatch {
 }
 
 model SubcontractorDispatchItem {
-  id               String @id @default(uuid())
+  id               String   @id @default(uuid())
   dispatchId       String
   rollId           String
   dispatchedQty    Decimal  @db.Decimal(12, 3)
@@ -1319,6 +1410,8 @@ model Subcontractor {
   phone     String?
   address   String?
   isActive  Boolean @default(true)
+  /// İş emri fason adımında firma seçicide default gelir (kategori bazında client eşleşir).
+  isFavorite Boolean @default(false)
 
   // Relations
   categories        SubcontractorToCategory[]
@@ -1353,9 +1446,9 @@ model SubcontractorToCategory {
 // =============================================================================
 
 model Swatch {
-  id           String  @id @default(uuid())
-  cardNumber   String  @unique @db.VarChar(64) // SW-YYMM-NNN
-  barcode      String  @unique @db.VarChar(64) // SW-YYMM-XXXXXX-C (Crockford checksum)
+  id           String   @id @default(uuid())
+  cardNumber   String   @unique @db.VarChar(64) // SW-YYMM-NNN
+  barcode      String   @unique @db.VarChar(64) // SW-YYMM-XXXXXX-C (Crockford checksum)
   itemId       String
   /// Kartelanın rengi — kaynak rolden veya manuel girilir.
   colorId      String?
@@ -1367,12 +1460,18 @@ model Swatch {
   purpose      String? // Müşteri sunumu, arşiv, laboratuvar vb.
   createdById  String?
 
+  // Sevkiyat — kartelanın hedef sipariş kalemi (NULL = stok/numune havuzu) + çuval.
+  targetOrderLineId String?
+  sackId            String?
+
   // Relations
-  item       Item       @relation(fields: [itemId], references: [id])
-  color      Color?     @relation(fields: [colorId], references: [id])
-  workOrder  WorkOrder? @relation(fields: [workOrderId], references: [id])
-  parentRoll Roll?      @relation("SwatchParentRoll", fields: [parentRollId], references: [id])
-  createdBy  User?      @relation("SwatchCreatedBy", fields: [createdById], references: [id])
+  item            Item       @relation(fields: [itemId], references: [id])
+  color           Color?     @relation(fields: [colorId], references: [id])
+  workOrder       WorkOrder? @relation(fields: [workOrderId], references: [id])
+  parentRoll      Roll?      @relation("SwatchParentRoll", fields: [parentRollId], references: [id])
+  createdBy       User?      @relation("SwatchCreatedBy", fields: [createdById], references: [id])
+  targetOrderLine OrderLine? @relation("SwatchTargetOrderLine", fields: [targetOrderLineId], references: [id])
+  sack            Sack?      @relation(fields: [sackId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1381,6 +1480,8 @@ model Swatch {
   @@index([colorId])
   @@index([workOrderId])
   @@index([parentRollId])
+  @@index([targetOrderLineId])
+  @@index([sackId])
   @@map("swatches")
 }
 
@@ -1406,6 +1507,93 @@ model Manifest {
 
   @@index([workOrderId])
   @@map("manifests")
+}
+
+// =============================================================================
+// 11.7 SEVKIYAT — Çuval (Sack) + İrsaliye (Shipment)
+// =============================================================================
+// Değişebilir etiket modeli: top/kartela hedefi Roll.targetOrderLineId'de tutulur.
+// "Sevk edildi" = çuval kapanıp tartılınca (Sack.status=CLOSED) → içindeki Roll'lar
+// SHIPPED + Order.shippedQty güncellenir. Shipment = bir müşteri+şubeye bir irsaliye.
+// =============================================================================
+
+enum SackStatus {
+  OPEN // Dolduruluyor — top/kartela okutuluyor
+  CLOSED // Tartıldı + kapandı = "sevk edildi" anı (sevk muhasebesi burada işlenir)
+  SHIPPED // Bir Shipment (irsaliye) ile fiilen kamyona yüklendi
+}
+
+enum ShipmentStatus {
+  PREPARING // İrsaliye hazırlanıyor, çuvallar bağlanıyor
+  DISPATCHED // Kamyona yüklendi, çıktı
+  CANCELLED // İptal
+}
+
+/// Çuval — fiziksel paket birimi. Tek müşteri + tek şube (teslim adresi).
+/// shipTo* alanları kapanış anında CustomerBranch'tan kopyalanan SNAPSHOT —
+/// şube adresi sonradan değişse bile eski irsaliyeler donuk (geçmiş kayıt) kalır.
+model Sack {
+  id         String     @id @default(uuid())
+  sackNo     String     @unique @db.VarChar(64) // Client-üretimi barkod (offline-aware)
+  customerId String
+  branchId   String? // Teslim şubesi — opsiyonel (şubesiz müşteri için null)
+  status     SackStatus @default(OPEN)
+  weightKg   Decimal?   @db.Decimal(12, 3) // Tartı — kapanışta girilir
+
+  // Teslim adresi snapshot (kapanışta CustomerBranch'tan kopyalanır — donuk geçmiş)
+  shipToName     String? @db.VarChar(100)
+  shipToAddress  String?
+  shipToCity     String?
+  shipToDistrict String?
+
+  shipmentId String? // Bağlı olduğu irsaliye (null = henüz sevkiyata girmedi)
+  closedAt   DateTime? // Kapanış (tartı) anı
+
+  // Relations
+  customer Customer        @relation(fields: [customerId], references: [id])
+  branch   CustomerBranch? @relation(fields: [branchId], references: [id])
+  shipment Shipment?       @relation(fields: [shipmentId], references: [id])
+  rolls    Roll[]
+  swatches Swatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId, status])
+  @@index([branchId])
+  @@index([shipmentId])
+  @@index([status, createdAt])
+  @@map("sacks")
+}
+
+/// İrsaliye / Sevkiyat — bir müşteri+şubeye giden bir sevk belgesi. Çuvalları gruplar.
+/// Aynı kamyon birden çok müşteri taşıyorsa aynı plakayla birden çok Shipment olur.
+model Shipment {
+  id         String         @id @default(uuid())
+  shipmentNo String         @unique @db.VarChar(64)
+  customerId String
+  branchId   String?
+  status     ShipmentStatus @default(PREPARING)
+
+  // Araç / sürücü
+  plateNumber String? @db.VarChar(32)
+  driverName  String? @db.VarChar(100)
+  carrier     String? @db.VarChar(100)
+
+  dispatchedAt DateTime? // Kamyona yüklenip çıktığı an
+
+  // Relations
+  customer Customer        @relation(fields: [customerId], references: [id])
+  branch   CustomerBranch? @relation(fields: [branchId], references: [id])
+  sacks    Sack[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId, status])
+  @@index([branchId])
+  @@index([status, createdAt])
+  @@map("shipments")
 }
 
 // =============================================================================
@@ -1436,7 +1624,7 @@ model Color {
   id        String   @id @default(uuid())
   code      String   @unique @db.VarChar(32) // "MAVI", "KIRMIZI"
   name      String   @db.VarChar(100)
-  hex       String? @db.VarChar(7) // UI rozeti için #RRGGBB
+  hex       String?  @db.VarChar(7) // UI rozeti için #RRGGBB
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -1453,6 +1641,7 @@ model Color {
   customerAliases     CustomerColorAlias[]
   /// Fason kabullerde renk olarak uygulandığı receipt'ler (boyahane dönüşü).
   appliedAtReceipts   SubcontractorReceipt[]
+  productRecipes      ProductRecipe[]
 
   @@index([isActive, sortOrder])
   @@map("colors")
@@ -1469,7 +1658,7 @@ model FabricProperty {
   name        String   @db.VarChar(100)
   category    String? // "Dayanıklılık", "Yüzey", "Kimyasal" vb. (UI gruplama için)
   description String?
-  color       String? @db.VarChar(7) // UI badge hex
+  color       String?  @db.VarChar(7) // UI badge hex
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -1483,6 +1672,7 @@ model FabricProperty {
   stationCapabilities StationProperty[]
   /// Fason kabullerde uygulandığı receipt'ler (boyahane dönüşü gibi).
   appliedAtReceipts   SubcontractorReceiptProperty[]
+  productRecipeTargets ProductRecipeProperty[]
 
   @@index([isActive, sortOrder])
   @@index([category])
@@ -1675,7 +1865,7 @@ model StationProperty {
 // =============================================================================
 
 model SystemLog {
-  id        String  @id @default(uuid())
+  id        String            @id @default(uuid())
   userId    String?
   category  SystemLogCategory @default(DOMAIN)
   action    String // DOMAIN: CREATE/UPDATE/DELETE — AUTH: LOGIN_SUCCESS/LOGIN_FAILED — SYSTEM: STARTUP/ERROR
@@ -1715,7 +1905,7 @@ model SystemLogArchive {
   ipAddress  String?
   oldData    Json?
   newData    Json?
-  archivedAt DateTime @default(now())
+  archivedAt DateTime          @default(now())
   createdAt  DateTime
   updatedAt  DateTime
 

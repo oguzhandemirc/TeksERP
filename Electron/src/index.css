@@ -30,11 +30,38 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
 
+  /* Marka accent — runtime'da kişiselleştirme ile override edilebilir */
+  --color-brand: hsl(var(--brand));
+  --color-brand-foreground: hsl(var(--brand-foreground));
+
+  /* Semantik durum renkleri */
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-info: hsl(var(--info));
+  --color-info-foreground: hsl(var(--info-foreground));
+
+  /* İstasyon renk kodları (üretim akışı) */
+  --color-station-kk1: hsl(var(--station-kk1));
+  --color-station-fason: hsl(var(--station-fason));
+  --color-station-process: hsl(var(--station-process));
+  --color-station-tambur: hsl(var(--station-tambur));
+  --color-station-depo: hsl(var(--station-depo));
+
+  /* Grafik paleti */
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+  --color-chart-6: hsl(var(--chart-6));
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 @layer base {
@@ -45,8 +72,8 @@
     --card-foreground: 240 10% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 243 75% 59%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
     --muted: 240 4.8% 95.9%;
@@ -57,8 +84,35 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
+    --ring: 243 75% 59%;
     --radius: 0.5rem;
+
+    /* Marka accent (kişiselleştirilebilir varsayılan) */
+    --brand: 243 75% 59%;
+    --brand-foreground: 0 0% 100%;
+
+    /* Durum renkleri */
+    --success: 142 71% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 95% 44%;
+    --warning-foreground: 38 100% 12%;
+    --info: 217 91% 53%;
+    --info-foreground: 0 0% 100%;
+
+    /* İstasyon renkleri */
+    --station-kk1: 199 89% 48%;
+    --station-fason: 25 95% 53%;
+    --station-process: 262 83% 58%;
+    --station-tambur: 160 84% 39%;
+    --station-depo: 43 96% 50%;
+
+    /* Grafik paleti */
+    --chart-1: 243 75% 59%;
+    --chart-2: 160 84% 39%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 199 89% 48%;
+    --chart-5: 350 89% 60%;
+    --chart-6: 262 83% 58%;
   }
 
   .dark {
@@ -68,8 +122,8 @@
     --card-foreground: 0 0% 98%;
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
+    --primary: 243 80% 67%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
     --muted: 240 3.7% 15.9%;
@@ -80,7 +134,34 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --ring: 243 80% 67%;
+
+    /* Marka accent (kişiselleştirilebilir varsayılan) */
+    --brand: 243 80% 67%;
+    --brand-foreground: 0 0% 100%;
+
+    /* Durum renkleri */
+    --success: 142 64% 52%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 38 100% 10%;
+    --info: 217 91% 65%;
+    --info-foreground: 0 0% 100%;
+
+    /* İstasyon renkleri */
+    --station-kk1: 199 89% 55%;
+    --station-fason: 25 95% 60%;
+    --station-process: 262 83% 66%;
+    --station-tambur: 160 75% 48%;
+    --station-depo: 43 96% 56%;
+
+    /* Grafik paleti */
+    --chart-1: 243 80% 67%;
+    --chart-2: 160 75% 48%;
+    --chart-3: 38 92% 55%;
+    --chart-4: 199 89% 55%;
+    --chart-5: 350 89% 66%;
+    --chart-6: 262 83% 66%;
   }
 
   * {
@@ -122,6 +203,126 @@
 .blob-2 { animation: blob-drift-2 26s ease-in-out infinite; }
 .blob-3 { animation: blob-drift-3 30s ease-in-out infinite; }
 
+/* Canlı veri göstergesi — üretim/aktivite "nabzı" */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+.live-dot {
+  position: relative;
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: hsl(var(--success));
+  animation: live-pulse 1.8s ease-in-out infinite;
+}
+.live-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background-color: hsl(var(--success) / 0.4);
+  animation: live-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes live-ping {
+  0% { transform: scale(1); opacity: 0.6; }
+  75%, 100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* Yükleniyor parıltısı — iskelet/placeholder için */
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blob-1, .blob-2, .blob-3, .live-dot, .live-dot::after {
+    animation: none !important;
+  }
+}
+
+/* ── Radix overlay/dialog/sheet açılış-kapanış (tailwindcss-animate kurulu
+   değil; data-state attribute'larına kendi keyframe'lerimizi bağlıyoruz). ── */
+@keyframes ui-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ui-overlay-out { from { opacity: 1; } to { opacity: 0; } }
+/* Yalnız scale + opacity — ortalama Tailwind'in `translate` özelliğiyle yapılır
+   (transform'dan bağımsız), bu yüzden transform'a translate koymuyoruz. */
+@keyframes ui-dialog-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes ui-dialog-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.96); }
+}
+[data-ui-overlay][data-state="open"] { animation: ui-overlay-in 160ms ease-out; }
+[data-ui-overlay][data-state="closed"] { animation: ui-overlay-out 130ms ease-in; }
+[data-ui-dialog][data-state="open"] { animation: ui-dialog-in 190ms cubic-bezier(0.16, 1, 0.3, 1); }
+[data-ui-dialog][data-state="closed"] { animation: ui-dialog-out 140ms ease-in; }
+
+/* Sheet — yöne göre kayma */
+@keyframes ui-sheet-in-right { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes ui-sheet-out-right { from { transform: translateX(0); } to { transform: translateX(100%); } }
+@keyframes ui-sheet-in-left { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@keyframes ui-sheet-out-left { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+@keyframes ui-sheet-in-top { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+@keyframes ui-sheet-out-top { from { transform: translateY(0); } to { transform: translateY(-100%); } }
+@keyframes ui-sheet-in-bottom { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes ui-sheet-out-bottom { from { transform: translateY(0); } to { transform: translateY(100%); } }
+[data-ui-sheet][data-side="right"][data-state="open"] { animation: ui-sheet-in-right 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+[data-ui-sheet][data-side="right"][data-state="closed"] { animation: ui-sheet-out-right 200ms ease-in; }
+[data-ui-sheet][data-side="left"][data-state="open"] { animation: ui-sheet-in-left 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+[data-ui-sheet][data-side="left"][data-state="closed"] { animation: ui-sheet-out-left 200ms ease-in; }
+[data-ui-sheet][data-side="top"][data-state="open"] { animation: ui-sheet-in-top 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+[data-ui-sheet][data-side="top"][data-state="closed"] { animation: ui-sheet-out-top 200ms ease-in; }
+[data-ui-sheet][data-side="bottom"][data-state="open"] { animation: ui-sheet-in-bottom 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+[data-ui-sheet][data-side="bottom"][data-state="closed"] { animation: ui-sheet-out-bottom 200ms ease-in; }
+
+/* Tablo satırı girişi — sayfa yüklenince satırlar sırayla belirir */
+@keyframes row-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.row-enter { animation: row-enter 240ms ease-out backwards; }
+
+/* Kart hover — accent kenar + glow + hafif yükselme (tıklanabilir kartlar) */
+.card-glow {
+  transition: box-shadow 200ms ease, border-color 200ms ease, transform 200ms ease;
+}
+.card-glow:hover {
+  border-color: hsl(var(--primary) / 0.5);
+  box-shadow:
+    0 10px 26px -10px hsl(var(--primary) / 0.28),
+    0 2px 8px -4px hsl(var(--foreground) / 0.12);
+  transform: translateY(-2px);
+}
+
+/* İskelet shimmer — soldan sağa parıltı sweep'i (animate-pulse yerine) */
+.skeleton-shimmer { position: relative; overflow: hidden; }
+.skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, hsl(var(--foreground) / 0.07), transparent);
+  animation: shimmer 1.6s infinite;
+}
+
+/* Değer değişim flash — KPI tazelenince yeni sayı kısa accent vurgusu */
+@keyframes value-flash {
+  0% { color: hsl(var(--primary)); }
+  100% { color: inherit; }
+}
+.value-flash { animation: value-flash 0.9s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ui-overlay], [data-ui-dialog], [data-ui-sheet], .row-enter,
+  .skeleton-shimmer::after, .value-flash {
+    animation: none !important;
+  }
+  .card-glow:hover { transform: none; }
+}
+
 /* Pencere taşıma alanı (frameless macOS — traffic lights bölgesi) */
 .app-drag {
   -webkit-app-region: drag;
@@ -131,6 +332,21 @@
 .app-no-drag {
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+
+/* Yoğunluk modu (kişiselleştirme) — kök font ölçeği rem-tabanlı tüm
+   boşluk/tipografiyi orantılı küçültür. comfortable = varsayılan (kural yok). */
+html[data-density="compact"] {
+  font-size: 14px;
+}
+
+/* App geneli zemin — düz renk yerine accent-tonlu çok hafif radial derinlik. */
+.app-bg {
+  background-color: hsl(var(--background));
+  background-image:
+    radial-gradient(58rem 40rem at 100% -5%, hsl(var(--primary) / 0.10), transparent 60%),
+    radial-gradient(48rem 34rem at -5% 105%, hsl(var(--primary) / 0.07), transparent 55%);
+  background-attachment: fixed;
 }
 
 /* macOS'ta hiddenInset: traffic lights ~78px alır */

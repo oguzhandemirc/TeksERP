@@ -39,10 +39,16 @@ export interface OrderLine {
   customerItemName: string | null;
   /** Müşteri-bazlı renk adı override (1-shot). */
   customerColorName: string | null;
+  /** Kesim/sevk için serbest not — örn. kaç parçaya bölüneceği. Tamburda görünür. */
+  cutNote: string | null;
   item?: OrderLineItem;
   color?: OrderLineColor | null;
   /** Müşterinin istediği özellikler — WO açılırken targetProperties önerisi olur. */
   requiredProperties?: OrderLineRequiredPropertyLink[];
+  /** WO picker (gap) yanıtında gelir: Açık = quantity − sevk − canlı rezerve. */
+  openQty?: number;
+  shippedQty?: number;
+  reservedQty?: number;
   /** Kalemin bağlandığı WO'lar. Boş veya hepsi CANCELLED ise kalem düzenlenebilir. */
   workOrderLinks?: Array<{
     workOrderId: string;

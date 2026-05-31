@@ -10,17 +10,19 @@ import {
   Disc3,
   Plus,
   Warehouse,
+  Columns3,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RollsTable } from "./RollsTable";
+import { RollsKanban } from "./RollsKanban";
 import { SwatchesPanel } from "./SwatchesPanel";
 import { ManualEntryDialog } from "./ManualEntryDialog";
 import type { RollStatusTabKey } from "./service";
 
-type RollTabKey = RollStatusTabKey | "SWATCH";
+type RollTabKey = RollStatusTabKey | "SWATCH" | "KANBAN";
 
 // Sıralama: stoklar (giriş/çıkış) önde yan yana → üretim akışı (super-set +
 // alt-kümeler) → arşiv/kartela. Operatör en sık giriş/çıkış sayım için
@@ -29,6 +31,7 @@ const TABS: Array<{ key: RollTabKey; label: string; Icon: typeof Package }> = [
   { key: "RAW_STOCK",      label: "Ham Stok",        Icon: Package },
   { key: "FINISHED_STOCK", label: "Bitmiş Depo",     Icon: Warehouse },
   { key: "PRODUCTION",     label: "Üretimde",        Icon: Cog },
+  { key: "KANBAN",         label: "Üretim Akışı",    Icon: Columns3 },
   { key: "SUBCONTRACTOR",  label: "Fasonda",         Icon: Send },
   { key: "KURSUN_PENDING", label: "Kurşun Bekleyen", Icon: FlaskConical },
   { key: "TAMBUR_PENDING", label: "Tambur Bekleyen", Icon: Disc3 },
@@ -71,7 +74,9 @@ export function RollsPage() {
             {/* Aktif sekmenin queryKey'i `rolls:<tab>` formatında (useDataTable);
                 "rolls" prefix match etmiyor — tek string'in başlangıcı array
                 matching ile yakalanmaz. */}
-            <RefreshButton queryKey={tab === "SWATCH" ? "swatches" : `rolls:${tab}`} />
+            <RefreshButton
+              queryKey={tab === "SWATCH" ? "swatches" : tab === "KANBAN" ? "rolls" : `rolls:${tab}`}
+            />
             {tab === "RAW_STOCK" && (
               <PermissionGate permission="roll:write">
                 <Button size="sm" onClick={() => setManualOpen(true)}>
@@ -99,7 +104,13 @@ export function RollsPage() {
           </button>
         ))}
       </div>
-      {tab === "SWATCH" ? <SwatchesPanel /> : <RollsTable tab={tab} />}
+      {tab === "SWATCH" ? (
+        <SwatchesPanel />
+      ) : tab === "KANBAN" ? (
+        <RollsKanban />
+      ) : (
+        <RollsTable tab={tab} />
+      )}
     </div>
   );
 }

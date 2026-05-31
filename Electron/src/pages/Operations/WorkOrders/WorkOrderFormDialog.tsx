@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ChevronDown, Factory, Lock, Package } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { AlertTriangle, ChevronDown, Lock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -20,21 +21,20 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { FormField } from "@/components/forms/FormField";
-import { EnumSelect } from "@/components/forms/EnumSelect";
-import { workOrderTypeLabels, WorkOrderType } from "@/types/enums";
+import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { routeService } from "@/pages/Routes/service";
-import type { RouteStep } from "@/pages/Routes/types";
+import type { ProductionRoute } from "@/pages/Routes/types";
+import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { LinkedOrderLinesField } from "./LinkedOrderLinesField";
-import { RouteSelectField } from "./RouteSelectField";
-import { TargetColorSelect, TargetPropertiesField } from "./TargetItemFields";
+import type { PickedOrderLine } from "./OrderPickerDialog";
+import { productRecipeService } from "@/pages/ProductRecipes/service";
+import type { ProductRecipe } from "@/pages/ProductRecipes/types";
+import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
+import { RouteEditor } from "./RouteEditor";
 import { TargetItemPicker } from "./TargetItemPicker";
-import { FasonPlanningDialog, type FasonStepPlan } from "./FasonPlanningDialog";
-import {
-  RouteDesignerDialog,
-  type CustomRouteStep,
-  type DesignerStep,
-  type RouteDesignerResult,
-} from "./RouteDesignerDialog";
+import { useDesignerSteps } from "./useDesignerSteps";
+import type { FasonStepPlan } from "./FasonPlanningDialog";
+import type { CustomRouteStep } from "./RouteDesignerDialog";
 import { useLinkedLinesAutoFill } from "./useLinkedLinesAutoFill";
 import {
   workOrderFormDefaults,
@@ -44,19 +44,17 @@ import {
 import {
   formValuesFromWorkOrder,
   pickedLinesFromWorkOrder,
-  routeStateFromWorkOrder,
+  designerStepsFromWorkOrder,
+  stepsToCustom,
 } from "./workOrderPrefill";
 import type { WorkOrder } from "./types";
-
-const formTypeLabels: Record<string, string> = {
-  ORDER_PRODUCTION: workOrderTypeLabels.ORDER_PRODUCTION,
-  STOCK_PRODUCTION: workOrderTypeLabels.STOCK_PRODUCTION,
-};
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workOrder?: WorkOrder | null;
+  /** Create modunda formu önceden seçili sipariş kalemleriyle açar ("siparişten WO"). */
+  initialPickedLines?: PickedOrderLine[];
   onSubmit: (
     values: WorkOrderFormValues,
     meta: { fasonPlans: FasonStepPlan[]; customSteps: CustomRouteStep[] },
@@ -68,11 +66,12 @@ export function WorkOrderFormDialog({
   open,
   onOpenChange,
   workOrder,
+  initialPickedLines,
   onSubmit,
   isSubmitting,
 }: Props) {
   const isEdit = Boolean(workOrder);
-  const isInProgress = workOrder?.status === "IN_PROGRESS";
+  const targetQuantityEnabled = useTargetQuantityEnabled();
 
   const form = useForm<WorkOrderFormValues>({
     resolver: zodResolver(workOrderFormSchema) as Resolver<WorkOrderFormValues>,
@@ -86,92 +85,144 @@ export function WorkOrderFormDialog({
     handleLinesChange,
     handlePickerConfirm,
   } = useLinkedLinesAutoFill(form);
-  const [fasonOpen, setFasonOpen] = useState(false);
-  const [fasonPlans, setFasonPlans] = useState<FasonStepPlan[]>([]);
-  const [designerOpen, setDesignerOpen] = useState(false);
-  const [customSteps, setCustomSteps] = useState<CustomRouteStep[]>([]);
-  const [designerSnapshot, setDesignerSnapshot] = useState<DesignerStep[]>([]);
+  const {
+    steps: routeSteps,
+    reset: resetRouteSteps,
+    addStep,
+    removeStep,
+    moveStep,
+    reorder: reorderSteps,
+    updateStep,
+    seedFromRoute,
+    handleStationPick,
+  } = useDesignerSteps([]);
   const [advancedOpen, setAdvancedOpen] = useState(true);
-  const prevRouteIdRef = useRef<string>("");
+  const [recipeId, setRecipeId] = useState<string | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const [saveRecipeOpen, setSaveRecipeOpen] = useState(false);
+  const [recipeName, setRecipeName] = useState("");
+  const qc = useQueryClient();
 
   useEffect(() => {
     if (!open) return;
+    setRecipeId(null);
+    setRouteError(null);
+    setSaveRecipeOpen(false);
+    setRecipeName("");
     if (workOrder) {
       const values = formValuesFromWorkOrder(workOrder);
-      const route = routeStateFromWorkOrder(workOrder);
       form.reset(values);
       setPickedLines(pickedLinesFromWorkOrder(workOrder));
-      setFasonPlans(route.fasonPlans);
-      setCustomSteps(route.customSteps);
-      setDesignerSnapshot(route.designerSnapshot);
-      prevRouteIdRef.current = values.routeTemplateId ?? "";
+      resetRouteSteps(designerStepsFromWorkOrder(workOrder));
       setAdvancedOpen(
         Boolean(values.foldType || values.plannedStartDate || values.plannedEndDate),
       );
     } else {
       form.reset(workOrderFormDefaults);
-      setPickedLines([]);
-      setFasonPlans([]);
-      setCustomSteps([]);
-      setDesignerSnapshot([]);
-      prevRouteIdRef.current = "";
+      if (initialPickedLines && initialPickedLines.length > 0) {
+        // "Bu siparişten iş emri oluştur" — kalemleri + hedefleri seed et.
+        handleLinesChange(initialPickedLines);
+        handlePickerConfirm(initialPickedLines);
+      } else {
+        setPickedLines([]);
+      }
+      resetRouteSteps([]);
       setAdvancedOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, workOrder?.id]);
 
-  const watchedRouteId = form.watch("routeTemplateId");
-  const routeQuery = useQuery({
-    queryKey: ["route", watchedRouteId],
-    queryFn: () => routeService.getById(watchedRouteId),
-    enabled: Boolean(watchedRouteId),
-    staleTime: 60_000,
+  // Rota şablonu olarak kaydet (inline — ayrı dialog yok).
+  const saveTemplateMut = useMutation({
+    mutationFn: (params: { name: string; forCustomer: boolean }) => {
+      const payload = {
+        name: params.name,
+        code: generateCode(CODE_PREFIXES.ROUTE),
+        customerId: params.forCustomer ? pickedLines[0]?.customerId ?? null : null,
+        isActive: true,
+        isFavorite: false,
+        steps: routeSteps.map((s, i) => ({
+          stationId: s.stationId,
+          sequence: i + 1,
+          defaultNotes: s.notes.trim() || null,
+        })),
+      };
+      return routeService.create(payload as unknown as Partial<ProductionRoute>);
+    },
+    onSuccess: (_res, vars) => {
+      toast.success(`Şablon kaydedildi: ${vars.name}`);
+      void qc.invalidateQueries({ queryKey: ["routes"] });
+    },
   });
-  const externalSteps: RouteStep[] = useMemo(
-    () =>
-      (routeQuery.data?.data?.steps ?? []).filter(
-        (s) => s.station?.type === "EXTERNAL",
-      ),
-    [routeQuery.data?.data?.steps],
-  );
 
-  useEffect(() => {
-    if (watchedRouteId === prevRouteIdRef.current) return;
-    prevRouteIdRef.current = watchedRouteId ?? "";
-    setFasonPlans([]);
-  }, [watchedRouteId]);
+  // Bu iş emrini reçete olarak kaydet: önce akıştan rota şablonu, sonra reçete.
+  const saveRecipeMut = useMutation({
+    mutationFn: async (name: string) => {
+      const v = form.getValues();
+      const routeRes = await routeService.create({
+        name: `${name} rotası`,
+        code: generateCode(CODE_PREFIXES.ROUTE),
+        isActive: true,
+        isFavorite: false,
+        steps: routeSteps.map((s, i) => ({
+          stationId: s.stationId,
+          sequence: i + 1,
+          defaultNotes: s.notes.trim() || null,
+        })),
+      } as unknown as Partial<ProductionRoute>);
+      const routeId = (routeRes.data as { id: string }).id;
+      return productRecipeService.create({
+        code: generateCode(CODE_PREFIXES.RECIPE),
+        name,
+        itemId: v.targetItemId,
+        colorId: v.targetColorId ?? null,
+        width: typeof v.width === "number" ? v.width : null,
+        foldType: v.foldType?.trim() ? v.foldType.trim() : null,
+        routeId,
+        properties: (v.targetPropertyIds ?? []).map((id) => ({ propertyId: id })),
+      } as unknown as Partial<ProductRecipe>);
+    },
+    onSuccess: (_res, name) => {
+      toast.success(`Reçete kaydedildi: ${name}`);
+      void qc.invalidateQueries({ queryKey: ["routes"] });
+      void qc.invalidateQueries({ queryKey: ["product-recipes"] });
+      setSaveRecipeOpen(false);
+      setRecipeName("");
+    },
+  });
 
-  const handleDesignerConfirm = (
-    result: RouteDesignerResult,
-    snapshot: DesignerStep[],
-  ) => {
-    setDesignerSnapshot(snapshot);
-    if (result.mode === "template") {
-      form.setValue("routeTemplateId", result.routeTemplateId);
-      setFasonPlans(result.fasonPlans);
-      setCustomSteps([]);
-    } else {
-      form.setValue("routeTemplateId", "");
-      setCustomSteps(result.customSteps);
-      setFasonPlans([]);
-    }
+  // Şablondan tohumla (boş seçilirse akışı temizle).
+  const handleSeedRoute = (routeId: string | null) => {
+    if (routeId) void seedFromRoute(routeId);
+    else resetRouteSteps([]);
   };
 
-  const clearCustomRoute = () => {
-    setCustomSteps([]);
-    setDesignerSnapshot([]);
+  // Akış değişince rota validasyon hatasını temizle.
+  useEffect(() => {
+    setRouteError(null);
+  }, [routeSteps]);
+
+  // Reçeteden doldur — seçilen reçetenin hedef alanları + rotasını forma yazar.
+  const applyRecipe = async (id: string | null) => {
+    setRecipeId(id);
+    if (!id) return;
+    const res = await productRecipeService.getById(id);
+    const r = res.data;
+    if (!r) return;
+    form.setValue("targetItemId", r.itemId);
+    form.setValue("targetColorId", r.colorId);
+    form.setValue(
+      "targetPropertyIds",
+      (r.properties ?? []).map((p) => p.propertyId),
+    );
+    if (r.routeId) void seedFromRoute(r.routeId);
+    if (r.width != null) form.setValue("width", r.width);
+    if (r.foldType) form.setValue("foldType", r.foldType);
   };
 
-  const watchedType = form.watch("type");
-  const isOrderProduction = watchedType === WorkOrderType.ORDER_PRODUCTION;
-
-  useEffect(() => {
-    if (!isOrderProduction) {
-      form.setValue("orderLineIds", []);
-      setPickedLines([]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOrderProduction]);
+  // Tip artık seçilmez — sipariş kalemi bağlıysa siparişe özel, değilse stoğa
+  // üretim. WorkOrdersPage.buildPayload submit'te type'ı bu kurala göre türetir.
+  const isOrderProduction = pickedLines.length > 0;
 
   const widthLocked = derived?.width != null;
   const quantityLocked = derived !== null;
@@ -210,12 +261,12 @@ export function WorkOrderFormDialog({
           <DialogDescription>
             {isEdit
               ? "Planlandı ve Devam Ediyor durumundaki iş emirleri düzenlenebilir. Tamamlandı/İptal için kapalıdır."
-              : "Üretim partisi tanımı. Rota şablonu seç, hedefleri belirle."}
+              : "Üretim partisi tanımı. Akışı kur, her istasyonun renk/özelliğini seç."}
           </DialogDescription>
         </DialogHeader>
 
         {locks?.materialCommitted && (
-          <div className="mx-6 mt-3 flex shrink-0 items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          <div className="mx-6 mt-3 flex shrink-0 items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-foreground">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
               <div className="font-medium">
@@ -232,21 +283,29 @@ export function WorkOrderFormDialog({
         <TooltipProvider delayDuration={150}>
           <form
             onSubmit={form.handleSubmit(async (v) => {
-              if (!v.routeTemplateId && customSteps.length === 0) {
-                form.setError("routeTemplateId", {
+              if (routeSteps.length === 0 || routeSteps.some((s) => !s.stationId)) {
+                setRouteError("En az bir adım ekle ve her adıma istasyon seç.");
+                return;
+              }
+              // Sipariş bağlı değil = stoğa üretim; backend hedef ürün zorunlu kılar.
+              if (pickedLines.length === 0 && !v.targetItemId) {
+                form.setError("targetItemId", {
                   type: "manual",
-                  message: "Rota şablonu seç veya özel rota tasarla.",
+                  message: "Sipariş bağlı değil — stoğa üretim için hedef ürün seçilmeli.",
                 });
                 return;
               }
-              await onSubmit(v, { fasonPlans, customSteps });
+              await onSubmit(v, {
+                fasonPlans: [],
+                customSteps: stepsToCustom(routeSteps),
+              });
             })}
             className="flex min-h-0 flex-1 flex-col"
           >
             <div className="flex min-h-0 flex-1">
-              {/* Sol panel — bağımsız scroll */}
-              <aside className="hidden w-[340px] shrink-0 flex-col border-r bg-muted/10 lg:flex">
-                {isOrderProduction ? (
+              {/* Sol panel — yalnız sipariş bağlıyken; stoğa üretimde yer kaplamaz */}
+              {isOrderProduction && (
+                <aside className="hidden w-[340px] shrink-0 flex-col border-r bg-muted/10 lg:flex">
                   <LinkedOrderLinesField
                     lines={pickedLines}
                     onChange={handleLinesChange}
@@ -259,23 +318,40 @@ export function WorkOrderFormDialog({
                       locks?.materialCommitted ? workOrder?.width : null
                     }
                   />
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center p-6 text-center text-xs text-muted-foreground">
-                    <Package className="mb-2 h-8 w-8 text-muted-foreground/50" />
-                    <div className="text-sm font-medium text-foreground">
-                      Stoğa Üretim
-                    </div>
-                    <div className="mt-1">
-                      Bağlı sipariş kalemi yok.<br />
-                      Üretilen toplar serbest stok olarak depoya geçer.
-                    </div>
-                  </div>
-                )}
-              </aside>
+                </aside>
+              )}
 
               {/* Sağ panel — form içeriği */}
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
-                {/* lg altında inline gösterim */}
+                {/* Reçeteden doldur — yeni + stoğa üretimde hızlı başlangıç */}
+                {!isEdit && !isOrderProduction && (
+                  <FormField
+                    label="Reçeteden doldur (opsiyonel)"
+                    hint="Hazır reçete seç — kumaş, renk, üretim özellikleri, en ve rota otomatik dolar."
+                  >
+                    <ReferenceSelect<ProductRecipe>
+                      value={recipeId}
+                      onChange={(id) => void applyRecipe(id)}
+                      service={productRecipeService}
+                      queryKey="product-recipes"
+                      getLabel={(r) => (r.code ? `${r.code} — ${r.name}` : r.name)}
+                      placeholder="Reçete seç..."
+                      nullable
+                      noneLabel="— Reçete kullanma"
+                    />
+                  </FormField>
+                )}
+                {/* Sipariş bağlı değil — slim "Sipariş Bağla" çubuğu (stoğa üretim) */}
+                {!isOrderProduction && (
+                  <LinkedOrderLinesField
+                    compact
+                    lines={pickedLines}
+                    onChange={handleLinesChange}
+                    onPickerConfirm={handlePickerConfirm}
+                    excludeWorkOrderId={workOrder?.id}
+                  />
+                )}
+                {/* lg altında inline gösterim — kalem varken */}
                 {isOrderProduction && (
                   <div className="rounded-md border bg-muted/10 lg:hidden">
                     <LinkedOrderLinesField
@@ -287,55 +363,43 @@ export function WorkOrderFormDialog({
                   </div>
                 )}
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                  <div className="sm:w-44 sm:shrink-0">
-                    <FormField label="Tip" error={form.formState.errors.type} required>
-                      <Controller
-                        control={form.control}
-                        name="type"
-                        render={({ field }) => (
-                          <EnumSelect<string>
-                            value={field.value}
-                            onChange={(v) => field.onChange(v)}
-                            labels={formTypeLabels}
-                          />
-                        )}
-                      />
-                    </FormField>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <RouteSelectField
-                      control={form.control}
-                      error={form.formState.errors.routeTemplateId}
-                      customStepCount={customSteps.length}
-                      onOpenDesigner={() => setDesignerOpen(true)}
-                      onClearCustom={clearCustomRoute}
-                    />
-                  </div>
-                </div>
-
-                {customSteps.length === 0 && externalSteps.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setFasonOpen(true)}
-                    className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted/50"
-                  >
-                    <Factory className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">
-                      Fason Adım Planlaması ({externalSteps.length})
-                    </span>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {fasonPlans.length === 0
-                        ? "Plan yapılmadı"
-                        : `${
-                            fasonPlans.filter((p) => p.plannedSubcontractorId).length
-                          } / ${externalSteps.length} firma seçildi`}
-                    </span>
-                  </button>
-                )}
+                <RouteEditor
+                  steps={routeSteps}
+                  onAdd={addStep}
+                  onRemove={removeStep}
+                  onMove={moveStep}
+                  onReorder={reorderSteps}
+                  onPickStation={(clientId, id) => void handleStationPick(clientId, id)}
+                  onSetNotes={(clientId, notes) => updateStep(clientId, { notes })}
+                  onSetFirm={(clientId, patch) => updateStep(clientId, patch)}
+                  onSeed={handleSeedRoute}
+                  onSaveTemplate={(name, forCustomer) =>
+                    saveTemplateMut.mutate({ name, forCustomer })
+                  }
+                  savePending={saveTemplateMut.isPending}
+                  customerId={pickedLines[0]?.customerId ?? null}
+                  target={{
+                    colorId: form.watch("targetColorId") ?? null,
+                    propertyIds: form.watch("targetPropertyIds") ?? [],
+                    onColor: (id) => form.setValue("targetColorId", id),
+                    onProperties: (ids) => form.setValue("targetPropertyIds", ids),
+                    colorLocked: Boolean(locks?.targetColor),
+                    lockedPropertyIds: locks?.lockedPropertyIds,
+                  }}
+                  error={routeError ?? undefined}
+                />
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <FormField label="Hedef Ürün (opsiyonel)">
+                  <FormField
+                    label="Hedef Ürün"
+                    required={!isOrderProduction}
+                    error={form.formState.errors.targetItemId}
+                    hint={
+                      isOrderProduction
+                        ? "Sipariş kalemlerinden otomatik"
+                        : "Stoğa üretimde zorunlu"
+                    }
+                  >
                     <TargetItemPicker
                       control={form.control}
                       onItemChange={() => {
@@ -346,22 +410,6 @@ export function WorkOrderFormDialog({
                       lockedTooltip={locks?.reasons.targetItem}
                     />
                   </FormField>
-                  <FormField label="Hedef Renk (opsiyonel)">
-                    <TargetColorSelect
-                      control={form.control}
-                      disabled={Boolean(locks?.targetColor)}
-                      lockedTooltip={locks?.reasons.targetColor}
-                    />
-                  </FormField>
-                </div>
-
-                <TargetPropertiesField
-                  control={form.control}
-                  lockedIds={locks?.lockedPropertyIds}
-                  applicableIds={locks?.applicablePropertyIds}
-                />
-
-                <div className="grid grid-cols-2 gap-3">
                   <FormField
                     label="En (cm)"
                     htmlFor="width"
@@ -379,6 +427,7 @@ export function WorkOrderFormDialog({
                       {...form.register("width")}
                     />
                   </FormField>
+                  {targetQuantityEnabled && (
                   <FormField
                     label="Hedef Metraj"
                     htmlFor="targetQuantity"
@@ -400,12 +449,71 @@ export function WorkOrderFormDialog({
                       {...form.register("targetQuantity")}
                     />
                     {quantityShortfall > 0 && (
-                      <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                      <p className="mt-1 text-xs text-warning">
                         Yeni hedef sevk edilenden{" "}
                         {quantityShortfall.toLocaleString("tr-TR")} m düşük.
                       </p>
                     )}
                   </FormField>
+                  )}
+                </div>
+
+                {/* Bu iş emrini reçete olarak kaydet */}
+                <div className="rounded-md border">
+                  <button
+                    type="button"
+                    onClick={() => setSaveRecipeOpen((v) => !v)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/30"
+                    aria-expanded={saveRecipeOpen}
+                  >
+                    <span className="uppercase tracking-wide">
+                      Bu iş emrini reçete olarak kaydet
+                    </span>
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform ${saveRecipeOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                  {saveRecipeOpen && (
+                    <div className="space-y-2 border-t bg-muted/10 p-3">
+                      <p className="text-[11px] text-muted-foreground">
+                        Ürün + renk + özellik + en + akış tek isimle saklanır; sonraki
+                        iş emirlerinde "Reçeteden doldur" ile gelir. (Akış ayrıca rota
+                        şablonu olarak da kaydedilir.)
+                      </p>
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[11px] text-muted-foreground">
+                            Reçete adı
+                          </label>
+                          <Input
+                            value={recipeName}
+                            onChange={(e) => setRecipeName(e.target.value)}
+                            placeholder="Örn: Patos Gri 038"
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={
+                            saveRecipeMut.isPending ||
+                            !recipeName.trim() ||
+                            !form.watch("targetItemId") ||
+                            routeSteps.length === 0 ||
+                            routeSteps.some((s) => !s.stationId)
+                          }
+                          onClick={() => saveRecipeMut.mutate(recipeName.trim())}
+                        >
+                          {saveRecipeMut.isPending ? "Kaydediliyor..." : "Reçete kaydet"}
+                        </Button>
+                      </div>
+                      {!form.watch("targetItemId") && (
+                        <p className="text-[11px] text-warning">
+                          Reçete için hedef ürün gerekli.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Gelişmiş accordion */}
@@ -502,22 +610,6 @@ export function WorkOrderFormDialog({
             </DialogFooter>
           </form>
         </TooltipProvider>
-
-        <FasonPlanningDialog
-          open={fasonOpen}
-          onOpenChange={setFasonOpen}
-          externalSteps={externalSteps}
-          initialPlans={fasonPlans}
-          onConfirm={setFasonPlans}
-        />
-
-        <RouteDesignerDialog
-          open={designerOpen}
-          onOpenChange={setDesignerOpen}
-          customerId={pickedLines[0]?.customerId ?? null}
-          initialSteps={designerSnapshot}
-          onConfirm={handleDesignerConfirm}
-        />
       </DialogContent>
     </Dialog>
   );

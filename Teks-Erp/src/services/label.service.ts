@@ -103,6 +103,20 @@ export class LabelService {
       include: {
         item: { select: { id: true, code: true, name: true } },
         color: { select: { id: true, code: true, name: true } },
+        targetOrderLine: {
+          select: {
+            id: true,
+            customerItemName: true,
+            customerColorName: true,
+            order: {
+              select: {
+                orderNumber: true,
+                customerId: true,
+                customer: { select: { name: true } },
+              },
+            },
+          },
+        },
         producedInStep: {
           select: {
             workOrder: {
@@ -147,10 +161,6 @@ export class LabelService {
     // hangisi belirsiz olduğu için null. Override (sipariş satırı özel adı)
     // tüm satırlarda aynıysa kullanılır, farklıysa müşterinin master alias'ına
     // düşer.
-    const links = roll.producedInStep?.workOrder?.orderLinks ?? [];
-    const customerIds = new Set(links.map((l) => l.orderLine.order.customerId));
-    const sameCustomer = links.length > 0 && customerIds.size === 1;
-
     let customerId: string | null = null;
     let customerName: string | null = null;
     let orderNumber: string | null = null;
@@ -160,21 +170,36 @@ export class LabelService {
     let itemMasterAlias: string | null = null;
     let colorMasterAlias: string | null = null;
 
-    if (sameCustomer) {
-      const first = links[0];
-      customerId = first.orderLine.order.customerId;
-      customerName = first.orderLine.order.customer.name;
-
-      if (links.length === 1) {
-        orderNumber = first.orderLine.order.orderNumber;
-        orderLineId = first.orderLine.id;
+    if (roll.targetOrderLineId && roll.targetOrderLine) {
+      // ① Öncelik: topun hedef sipariş kalemi (Tambur'da atanan "değişebilen isim").
+      // Çoklu-sipariş WO'da bile etiket net müşteri/sipariş alır.
+      const tgt = roll.targetOrderLine;
+      customerId = tgt.order.customerId;
+      customerName = tgt.order.customer.name;
+      orderNumber = tgt.order.orderNumber;
+      orderLineId = tgt.id;
+      itemOverride = tgt.customerItemName;
+      colorOverride = tgt.customerColorName;
+    } else {
+      // ② Geri uyum: hedef yoksa WO'ya bağlı satırlardan tek-müşteri tahmini.
+      const links = roll.producedInStep?.workOrder?.orderLinks ?? [];
+      const customerIds = new Set(links.map((l) => l.orderLine.order.customerId));
+      const sameCustomer = links.length > 0 && customerIds.size === 1;
+      if (sameCustomer) {
+        const first = links[0];
+        customerId = first.orderLine.order.customerId;
+        customerName = first.orderLine.order.customer.name;
+        if (links.length === 1) {
+          orderNumber = first.orderLine.order.orderNumber;
+          orderLineId = first.orderLine.id;
+        }
+        itemOverride = allEqual(links.map((l) => l.orderLine.customerItemName));
+        colorOverride = allEqual(links.map((l) => l.orderLine.customerColorName));
       }
+    }
 
-      // Override: tüm satırlarda aynı değer (veya hepsi null) ise kullan.
-      itemOverride = allEqual(links.map((l) => l.orderLine.customerItemName));
-      colorOverride = allEqual(links.map((l) => l.orderLine.customerColorName));
-
-      // Master alias'lar — customer × item / customer × color (yoksa null).
+    // Master alias'lar — customer × item / customer × color (yoksa null).
+    if (customerId) {
       const itemAlias = await prisma.customerItemAlias.findUnique({
         where: {
           customerId_itemId: { customerId, itemId: roll.item.id },

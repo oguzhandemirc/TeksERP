@@ -31,10 +31,21 @@ export default function MainNavigator() {
   return (
     <Stack.Navigator
       initialRouteName={initialRouteName}
-      screenOptions={{ headerShown: false, animation: 'fade' }}
+      // Modüle girerken sağdan kayar, geri dönerken geri kayar — fade yerine
+      // uzamsal hiyerarşi (ModuleSelect = ana sayfa, istasyon = üstüne push).
+      screenOptions={{
+        headerShown: false,
+        animation: 'slide_from_right',
+        animationDuration: 260,
+      }}
     >
       {hasMultipleMobileScreens && (
-        <Stack.Screen name="ModuleSelect" component={ModuleSelectScreen} />
+        // Ana sayfaya dönüş yumuşak fade ile (kayma değil) — "üst seviye" hissi.
+        <Stack.Screen
+          name="ModuleSelect"
+          component={ModuleSelectScreen}
+          options={{ animation: 'fade' }}
+        />
       )}
       {allowedScreens.map((s) => (
         <Stack.Screen key={s.key} name={s.key} getComponent={SCREEN_LOADERS[s.key]} />

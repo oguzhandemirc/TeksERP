@@ -25,6 +25,11 @@ export const orderLineSchema = z.object({
     .optional()
     .or(z.literal("")),
   requiredPropertyIds: z.array(z.string()).optional().default([]),
+  cutNote: z
+    .string()
+    .max(500, "Kesim notu en fazla 500 karakter olabilir")
+    .optional()
+    .or(z.literal("")),
 });
 
 export const orderFormSchema = z.object({
@@ -77,6 +82,7 @@ export const orderFormDefaults: OrderFormValues = {
       customerItemName: "",
       customerColorName: "",
       requiredPropertyIds: [],
+      cutNote: "",
     },
   ],
 };

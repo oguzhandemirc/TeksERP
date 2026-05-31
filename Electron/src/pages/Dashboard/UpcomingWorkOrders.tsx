@@ -18,7 +18,7 @@ export function UpcomingWorkOrders() {
   });
 
   return (
-    <Card>
+    <Card className="border-t-2 border-t-warning/60">
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <CalendarPlus className="h-4 w-4 text-muted-foreground" />
@@ -85,7 +85,7 @@ function WorkOrderRow({ wo, onClick }: { wo: WorkOrder; onClick: () => void }) {
           <p
             className={cn(
               "text-sm font-semibold tabular-nums",
-              startsSoon && "text-amber-600 dark:text-amber-400",
+              startsSoon && "text-warning",
             )}
           >
             {days === null

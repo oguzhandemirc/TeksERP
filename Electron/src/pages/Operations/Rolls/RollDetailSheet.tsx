@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Tag } from "lucide-react";
+import { History, Tag } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AnimatedProgress } from "@/components/motion";
 import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
-import { rollStatusLabels, rollEntrySourceLabels } from "@/types/enums";
+import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from "@/types/enums";
 import { rollService } from "./service";
 import type { Roll } from "./types";
 
@@ -113,6 +115,12 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                     <div className="mt-1 text-[11px] text-muted-foreground">
                       Başlangıç: {roll.initialQty.toLocaleString("tr-TR")} m
                     </div>
+                  )}
+                  {roll.initialQty > 0 && (
+                    <AnimatedProgress
+                      value={(roll.currentQty / roll.initialQty) * 100}
+                      className="mt-2 h-1"
+                    />
                   )}
                 </CardContent>
               </Card>
@@ -218,6 +226,41 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 </CardContent>
               </Card>
             )}
+
+            <Card>
+              <CardContent className="p-3">
+                <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <History className="h-3.5 w-3.5" /> İşlem Geçmişi
+                </div>
+                {detailQuery.isLoading ? (
+                  <div className="space-y-2">
+                    {[0, 1, 2].map((i) => (
+                      <Skeleton key={i} className="h-9 w-full" />
+                    ))}
+                  </div>
+                ) : (detailQuery.data?.data.operations?.length ?? 0) === 0 ? (
+                  <p className="text-xs text-muted-foreground">Henüz işlem kaydı yok.</p>
+                ) : (
+                  <ol className="relative ml-1 space-y-3 border-l border-border pl-4">
+                    {(detailQuery.data?.data.operations ?? []).map((op) => (
+                      <li key={op.id} className="relative">
+                        <span
+                          className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background"
+                          aria-hidden
+                        />
+                        <div className="text-sm font-medium leading-tight">
+                          {rollOperationTypeLabels[op.operationType] ?? op.operationType}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">
+                          {op.operator?.fullName ?? "—"} ·{" "}
+                          {safeFormat(op.createdAt, "dd.MM.yyyy HH:mm")}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </CardContent>
+            </Card>
 
             <div className="text-[11px] text-muted-foreground">
               Oluşturma: {safeFormat(roll.createdAt, "dd.MM.yyyy HH:mm")} ·

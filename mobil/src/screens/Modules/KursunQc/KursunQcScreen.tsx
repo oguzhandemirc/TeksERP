@@ -7,7 +7,6 @@ import {
   Button,
   IconButton,
   Surface,
-  ActivityIndicator,
   TouchableRipple,
   Icon,
 } from 'react-native-paper';
@@ -41,7 +40,9 @@ import {
 import { defectTypeService } from '../../../services/defectType.service';
 import { rollService } from '../../../services/roll.service';
 import { STATION_MUT } from '../../../offline/mutations';
-import { useIsOnline, usePendingStationOps } from '../../../offline/hooks';
+import SyncStatusChip from '../../../components/SyncStatusChip';
+import { SkeletonList, usePressScale } from '../../../components/motion';
+import Reanimated from 'react-native-reanimated';
 import { formatRelativeWait } from '../../../utils/relativeTime';
 import type {
   KursunStepSummary,
@@ -1065,52 +1066,6 @@ export default function KursunQcScreen() {
 // Yardımcı bileşenler
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Çevrimdışı / sync bekleyen QC2 sayısı rozeti.
-// Online + 0 bekleyen → görünmez (operatöre gürültü yapma).
-// Online + N bekleyen → mavi "🕐 N sync".
-// Offline + 0 → sarı "Çevrimdışı".
-// Offline + N → kırmızı "Çevrimdışı · N bekliyor" (en kritik durum).
-function SyncStatusChip() {
-  const online = useIsOnline();
-  const pending = usePendingStationOps();
-  const pendingCount = pending.length;
-
-  if (online && pendingCount === 0) return null;
-
-  let bg = '#1e40af';
-  let label = `${pendingCount} sync`;
-  if (!online && pendingCount === 0) {
-    bg = '#b45309';
-    label = 'Çevrimdışı';
-  } else if (!online && pendingCount > 0) {
-    bg = '#b91c1c';
-    label = `Çevrimdışı · ${pendingCount}`;
-  }
-
-  return (
-    <View
-      style={{
-        backgroundColor: bg,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-        marginRight: 8,
-      }}
-      accessibilityLabel={
-        online
-          ? `${pendingCount} işlem senkronize bekliyor`
-          : pendingCount > 0
-          ? `Çevrimdışı, ${pendingCount} işlem bekliyor`
-          : 'Çevrimdışı'
-      }
-    >
-      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Açık kart listesi modal'ı.
 // PROCESS_QC istasyonlarında açık top bekleyen aktif kartları listeler.
@@ -1204,9 +1159,7 @@ function CameraScanModal({
 
         <View style={cameraStyles.listBox}>
           {loading ? (
-            <View style={cameraStyles.empty}>
-              <ActivityIndicator size="large" color="#1e40af" />
-            </View>
+            <SkeletonList count={6} />
           ) : cards.length === 0 ? (
             <View style={cameraStyles.empty}>
               <Icon source="package-variant" size={48} color="#cbd5e1" />
@@ -1463,16 +1416,24 @@ function RollListItem({
   onPress: () => void;
 }) {
   const done = roll.qc2Completed;
+  const press = usePressScale();
   return (
-    <Surface
-      style={[
-        helperStyles.rollItem,
-        selected && helperStyles.rollItemSelected,
-        done && helperStyles.rollItemDone,
-      ]}
-      elevation={selected ? 2 : 1}
-    >
-      <TouchableRipple borderless onPress={onPress} style={helperStyles.rollTouch}>
+    <Reanimated.View style={press.style}>
+      <Surface
+        style={[
+          helperStyles.rollItem,
+          selected && helperStyles.rollItemSelected,
+          done && helperStyles.rollItemDone,
+        ]}
+        elevation={selected ? 2 : 1}
+      >
+        <TouchableRipple
+          borderless
+          onPress={onPress}
+          onPressIn={press.onPressIn}
+          onPressOut={press.onPressOut}
+          style={helperStyles.rollTouch}
+        >
         <View style={helperStyles.rollInner}>
           <View style={helperStyles.rollIndex}>
             <Text style={helperStyles.rollIndexText}>{index + 1}</Text>
@@ -1506,8 +1467,9 @@ function RollListItem({
             <Icon source="chevron-left" size={22} color="#1e40af" />
           )}
         </View>
-      </TouchableRipple>
-    </Surface>
+        </TouchableRipple>
+      </Surface>
+    </Reanimated.View>
   );
 }
 

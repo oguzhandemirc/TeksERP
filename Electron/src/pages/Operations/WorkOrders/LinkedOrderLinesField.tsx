@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link2, Pencil, X } from "lucide-react";
+import { Link2, Package, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { OrderPickerDialog, type PickedOrderLine } from "./OrderPickerDialog";
@@ -14,6 +14,8 @@ interface Props {
   /** Material committed WO için: yeni sipariş satırları sadece bu kumaş + en'de olabilir. */
   requiredItemId?: string | null;
   requiredWidth?: number | null;
+  /** Kalem yokken tam panel yerine slim "Sipariş Bağla" çubuğu göster (stoğa üretim). */
+  compact?: boolean;
 }
 
 function earliestDeadline(lines: PickedOrderLine[]): string | null {
@@ -36,6 +38,7 @@ export function LinkedOrderLinesField({
   excludeWorkOrderId,
   requiredItemId,
   requiredWidth,
+  compact,
 }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -45,10 +48,52 @@ export function LinkedOrderLinesField({
   };
   const handleRemove = (lineId: string) =>
     onChange(lines.filter((l) => l.lineId !== lineId));
+  const handleQtyChange = (lineId: string, value: string) => {
+    const n = value === "" ? 0 : Number(value);
+    onChange(
+      lines.map((l) =>
+        l.lineId === lineId
+          ? { ...l, allocatedQty: Number.isFinite(n) && n >= 0 ? n : 0 }
+          : l,
+      ),
+    );
+  };
 
-  const totalQty = lines.reduce((s, l) => s + Number(l.quantity), 0);
+  const totalQty = lines.reduce((s, l) => s + Number(l.allocatedQty), 0);
   const uniqueCustomers = new Set(lines.map((l) => l.customerId)).size;
   const deadline = earliestDeadline(lines);
+
+  // Kalem yok + compact: 340px panel yerine tek satırlık bağla çubuğu.
+  if (compact && lines.length === 0) {
+    return (
+      <>
+        <div className="flex items-center gap-2 rounded-md border bg-muted/10 px-3 py-2 text-xs">
+          <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="text-muted-foreground">
+            Stoğa üretim. İstersen sipariş kalemi bağla — toplar o siparişe yazılır.
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="ml-auto h-7 shrink-0 gap-1 text-xs"
+            onClick={() => setPickerOpen(true)}
+          >
+            <Link2 className="h-3 w-3" /> Sipariş Bağla
+          </Button>
+        </div>
+        <OrderPickerDialog
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          initialSelected={lines}
+          onConfirm={handleConfirm}
+          excludeWorkOrderId={excludeWorkOrderId}
+          requiredItemId={requiredItemId}
+          requiredWidth={requiredWidth}
+        />
+      </>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -147,6 +192,21 @@ export function LinkedOrderLinesField({
                   <span className="ml-auto tabular-nums text-muted-foreground">
                     {line.quantity.toLocaleString("tr-TR")} m
                     {line.width ? ` × ${line.width}cm` : ""}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <span className="text-[10px] font-medium text-muted-foreground">
+                    Tahsis
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={line.allocatedQty}
+                    onChange={(e) => handleQtyChange(line.lineId, e.target.value)}
+                    className="h-6 w-20 rounded border bg-background px-1.5 text-right text-[11px] tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <span className="text-[10px] text-muted-foreground">
+                    m · açık {line.openQty.toLocaleString("tr-TR")}
                   </span>
                 </div>
                 {line.requiredProperties.length > 0 && (

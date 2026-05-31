@@ -94,7 +94,7 @@ export function ResetPasswordTab({ userId, username }: Props) {
       </FormField>
 
       {done && (
-        <div className="flex items-center gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-2 text-xs text-green-600 dark:text-green-400">
+        <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success/10 p-2 text-xs text-success">
           <CheckCircle2 className="h-3.5 w-3.5" />
           Şifre başarıyla güncellendi. Kullanıcı yeni şifreyle giriş yapabilir.
         </div>

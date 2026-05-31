@@ -18,6 +18,7 @@ const router = Router();
 
 const updateSchema = z.object({
   pricingEnabled: z.boolean().optional(),
+  targetQuantityEnabled: z.boolean().optional(),
 });
 
 /**

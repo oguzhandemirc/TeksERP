@@ -109,7 +109,7 @@ export function OrderFulfillmentPage() {
             xKey="name"
             bars={[
               { key: "planned", label: "Planlanan" },
-              { key: "shipped", label: "Sevk Edilen", color: "#22c55e" },
+              { key: "shipped", label: "Sevk Edilen", color: "hsl(var(--success))" },
             ]}
             formatValue={(v) => fmtInt(v)}
           />

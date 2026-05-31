@@ -22,6 +22,7 @@ export const subcontractorFormSchema = z.object({
     .optional()
     .or(z.literal("")),
   isActive: z.boolean(),
+  isFavorite: z.boolean(),
   categoryIds: z
     .array(z.string())
     .min(1, "En az bir fason kategorisi seçilmeli"),
@@ -35,5 +36,6 @@ export const subcontractorFormDefaults: SubcontractorFormValues = {
   phone: "",
   address: "",
   isActive: true,
+  isFavorite: false,
   categoryIds: [],
 };

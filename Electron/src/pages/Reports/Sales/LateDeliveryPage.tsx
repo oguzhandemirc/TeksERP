@@ -28,7 +28,7 @@ const columns: ColumnDef<LateDeliveryRow>[] = [
     header: "Gecikme (gün)",
     cell: ({ getValue }) => {
       const v = getValue() as number;
-      return <span className={v >= 7 ? "font-semibold text-red-600" : ""}>{fmtInt(v)}</span>;
+      return <span className={v >= 7 ? "font-semibold text-destructive" : ""}>{fmtInt(v)}</span>;
     },
   },
   { accessorKey: "plannedQty", header: "Planlanan", cell: ({ getValue }) => fmtMeters(getValue() as number) },

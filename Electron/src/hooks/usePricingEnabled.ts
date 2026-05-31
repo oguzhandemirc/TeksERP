@@ -16,4 +16,9 @@ export function usePricingEnabled(): boolean {
   return q.data?.data?.pricingEnabled ?? false;
 }
 
+export function useTargetQuantityEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.targetQuantityEnabled ?? false;
+}
+
 export const FEATURE_FLAGS_QUERY_KEY = QUERY_KEY;

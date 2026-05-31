@@ -16,6 +16,7 @@ import {
   PERSIST_MAX_AGE_MS,
 } from './src/offline/queryClient';
 import { registerStationMutationDefaults } from './src/offline/mutations';
+import { colors } from './src/theme/tokens';
 
 registerStationMutationDefaults();
 
@@ -37,8 +38,8 @@ const theme = {
   ...MD3LightTheme,
   colors: {
     ...MD3LightTheme.colors,
-    primary: '#4f46e5',
-    primaryContainer: '#e0e7ff',
+    primary: colors.brand,
+    primaryContainer: colors.brandContainer,
   },
 };
 

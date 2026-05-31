@@ -3,7 +3,7 @@ import {
   Library,
   ShieldCheck,
   ScrollText,
-  Settings,
+  ServerCog,
   ClipboardList,
   type LucideIcon,
 } from "lucide-react";
@@ -43,7 +43,7 @@ export const navGroups: NavGroup[] = [
       {
         label: "Sistem",
         to: "/system",
-        icon: Settings,
+        icon: ServerCog,
         adminOnly: true,
       },
     ],

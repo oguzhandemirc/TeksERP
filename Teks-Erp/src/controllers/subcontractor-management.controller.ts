@@ -18,6 +18,7 @@ const createSubcontractorSchema = z.object({
   taxNumber: z.string().trim().max(32, "Vergi numarası en fazla 32 karakter olabilir").nullish(),
   phone: z.string().trim().max(32, "Telefon en fazla 32 karakter olabilir").nullish(),
   address: z.string().trim().max(500, "Adres en fazla 500 karakter olabilir").nullish(),
+  isFavorite: z.boolean().optional(),
   categoryIds: z.array(z.string().uuid()).optional(),
 });
 
@@ -28,6 +29,7 @@ const updateSubcontractorSchema = z.object({
   phone: z.string().trim().max(32, "Telefon en fazla 32 karakter olabilir").nullish(),
   address: z.string().trim().max(500, "Adres en fazla 500 karakter olabilir").nullish(),
   isActive: z.boolean().optional(),
+  isFavorite: z.boolean().optional(),
   categoryIds: z.array(z.string().uuid()).optional(),
 });
 

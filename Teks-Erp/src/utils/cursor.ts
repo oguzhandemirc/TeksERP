@@ -178,3 +178,31 @@ export function buildNextDynamicCursor(
   else serialized = String(v);
   return encodeDynamicCursor({ v: serialized, id: lastItem.id as string });
 }
+
+// =============================================================================
+// Offset-encoded cursor — ilişki / aggregate sıralaması için.
+// İlişki (customer.name) veya aggregate (lines _count) sıralamasında keyset
+// imkansızdır (cursor değeri satırın top-level skaler kolonu olmalı). Bu
+// durumda findAllCursor offset'e düşer; cursor token'ı opak offset taşır.
+// Frontend infinite-query nextCursor'ı opak gördüğü için pagination katmanı
+// değişmez. Değerler her zaman canlı-doğru (denormalize kolon yok).
+// =============================================================================
+
+const OFFSET_MARKER = "o";
+
+export function encodeOffsetCursor(offset: number): string {
+  return Buffer.from(`${OFFSET_MARKER}${SEP}${offset}`, "utf8").toString("base64url");
+}
+
+export function decodeOffsetCursor(token: string | undefined): number {
+  if (!token) return 0;
+  try {
+    const raw = Buffer.from(token, "base64url").toString("utf8");
+    const [marker, n] = raw.split(SEP);
+    if (marker !== OFFSET_MARKER) return 0;
+    const off = parseInt(n, 10);
+    return Number.isFinite(off) && off > 0 ? off : 0;
+  } catch {
+    return 0;
+  }
+}

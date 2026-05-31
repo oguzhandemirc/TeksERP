@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { arrayMove } from "@dnd-kit/sortable";
 import { toast } from "sonner";
 import { stationService } from "@/pages/Stations/service";
 import { routeService } from "@/pages/Routes/service";
+import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
 let counter = 0;
@@ -43,6 +45,16 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
 
   const removeStep = (clientId: string) => {
     setSteps((prev) => prev.filter((s) => s.clientId !== clientId));
+  };
+
+  // Sürükle-bırak ile keyfi yeniden sıralama (active → over konumuna).
+  const reorder = (activeId: string, overId: string) => {
+    setSteps((prev) => {
+      const from = prev.findIndex((s) => s.clientId === activeId);
+      const to = prev.findIndex((s) => s.clientId === overId);
+      if (from === -1 || to === -1 || from === to) return prev;
+      return arrayMove(prev, from, to);
+    });
   };
 
   const moveStep = (clientId: string, dir: -1 | 1) => {
@@ -101,6 +113,32 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
     }
   };
 
+  // Kategorinin favori firmasını bul: favori firmaları çek, kategoriye göre
+  // client-side eşleştir (server-side categoryId filtresine bağımlı değil).
+  const fetchFavoriteFirm = async (categoryId: string): Promise<string | null> => {
+    try {
+      const res = await qc.fetchQuery({
+        queryKey: ["subcontractors", "favorites"],
+        queryFn: () =>
+          subcontractorService.getAll({
+            page: 1,
+            pageSize: 100,
+            sortBy: "name",
+            sortOrder: "asc",
+            filters: { isFavorite: "true", isActive: "true" },
+          }),
+        staleTime: 60_000,
+      });
+      const fav = (res.data ?? []).find(
+        (f) =>
+          f.isFavorite && f.categories.some((c) => c.categoryId === categoryId),
+      );
+      return fav?.id ?? null;
+    } catch {
+      return null;
+    }
+  };
+
   const handleStationPick = async (clientId: string, stationId: string | null) => {
     if (!stationId) {
       updateStep(clientId, {
@@ -121,10 +159,13 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
       });
       const station = res.data;
       if (!station) return;
-      updateStep(clientId, {
-        ...stationToDesigner(station),
-        plannedSubcontractorId: null,
-      });
+      const designer = stationToDesigner(station);
+      // Fason adımıysa kategorinin favori firmasını default seç.
+      let plannedSubcontractorId: string | null = null;
+      if (designer.stationType === "EXTERNAL" && designer.requiredCategoryId) {
+        plannedSubcontractorId = await fetchFavoriteFirm(designer.requiredCategoryId);
+      }
+      updateStep(clientId, { ...designer, plannedSubcontractorId });
     } catch {
       toast.error("İstasyon bilgisi yüklenemedi.");
     }
@@ -136,6 +177,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
     addStep,
     removeStep,
     moveStep,
+    reorder,
     updateStep,
     seedFromRoute,
     handleStationPick,

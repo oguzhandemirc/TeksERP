@@ -277,6 +277,7 @@ export class SubcontractorManagementService {
       taxNumber?: string | null;
       phone?: string | null;
       address?: string | null;
+      isFavorite?: boolean;
       categoryIds?: string[];
     },
     userId?: string
@@ -288,6 +289,7 @@ export class SubcontractorManagementService {
       taxNumber?: string | null;
       phone?: string | null;
       address?: string | null;
+      isFavorite?: boolean;
     } = { code: rest.code, name: rest.name };
 
     // Required + length kontrolleri (paylaşımlı validator)
@@ -304,6 +306,7 @@ export class SubcontractorManagementService {
     if (phone !== undefined) payload.phone = phone;
     const address = normalizeAndValidateAddress(rest.address);
     if (address !== undefined) payload.address = address;
+    if (typeof rest.isFavorite === "boolean") payload.isFavorite = rest.isFavorite;
 
     const existing = await prisma.subcontractor.findFirst({
       where: { code: payload.code },
@@ -376,6 +379,7 @@ export class SubcontractorManagementService {
       phone?: string | null;
       address?: string | null;
       isActive?: boolean;
+      isFavorite?: boolean;
       categoryIds?: string[]; // verilirse mevcut kategoriler tamamen değişir
     },
     userId?: string

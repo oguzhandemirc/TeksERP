@@ -33,7 +33,40 @@ export interface ReadyOrder {
   lines: ReadyOrderLine[];
 }
 
+/** Bir topun özelliğine uyan açık sipariş kalemi (Açık>0). Tambur yeniden-kes "Kime?" picker'ı. */
+export interface AvailableOrderLine {
+  lineId: string;
+  orderId: string;
+  orderNumber: string;
+  customerId: string;
+  customerName: string;
+  branchName: string | null;
+  itemCode: string;
+  itemName: string;
+  customerItemName: string | null;
+  colorCode: string | null;
+  colorName: string | null;
+  customerColorName: string | null;
+  width: number | null;
+  quantity: number;
+  openQty: number;
+}
+
 export const orderService = {
   getReadyOrders: (): Promise<ApiResponse<ReadyOrder[]>> =>
     apiClient.get<ApiResponse<ReadyOrder[]>>('/shipping/ready-orders').then((r) => r.data),
+
+  /** Özelliğe (itemId + opsiyonel colorId/width) uyan açık sipariş kalemleri. */
+  getAvailableOrderLines: (params: {
+    itemId: string;
+    colorId?: string | null;
+    width?: number | null;
+  }): Promise<ApiResponse<AvailableOrderLine[]>> => {
+    const q = new URLSearchParams({ itemId: params.itemId });
+    if (params.colorId) q.set('colorId', params.colorId);
+    if (params.width != null) q.set('width', String(params.width));
+    return apiClient
+      .get<ApiResponse<AvailableOrderLine[]>>(`/orders/order-lines/available?${q.toString()}`)
+      .then((r) => r.data);
+  },
 };

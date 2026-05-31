@@ -35,6 +35,7 @@ export function SubcontractorFormDialog({
         phone: initial.phone ?? "",
         address: initial.address ?? "",
         isActive: initial.isActive,
+        isFavorite: initial.isFavorite,
         categoryIds: initial.categories.map((c) => c.categoryId),
       }
     : subcontractorFormDefaults;
@@ -145,9 +146,15 @@ export function SubcontractorFormDialog({
             </div>
           </FormField>
 
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" {...form.register("isActive")} /> Aktif
-          </label>
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" {...form.register("isActive")} /> Aktif
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" {...form.register("isFavorite")} /> Favori — iş
+              emri fason adımında default firma
+            </label>
+          </div>
         </>
       )}
     </EntityFormDialog>

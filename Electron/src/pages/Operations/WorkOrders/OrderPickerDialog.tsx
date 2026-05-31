@@ -37,6 +37,10 @@ export interface PickedOrderLine {
   itemColorHex: string | null;
   itemColorName: string | null;
   quantity: number;
+  /** Picker'da gösterilen "Açık" metraj (backend gap: quantity − sevk − rezerve). */
+  openQty: number;
+  /** Planlamacının bu kalemden bu WO'ya tahsis ettiği metraj. */
+  allocatedQty: number;
   width: number | null;
   requiredProperties: PickedOrderLineProperty[];
 }
@@ -102,7 +106,7 @@ function requiredMismatchReason(
   return null;
 }
 
-function buildPicked(order: Order, line: OrderLine): PickedOrderLine {
+export function buildPicked(order: Order, line: OrderLine): PickedOrderLine {
   return {
     lineId: line.id,
     orderId: order.id,
@@ -116,6 +120,8 @@ function buildPicked(order: Order, line: OrderLine): PickedOrderLine {
     itemColorHex: line.color?.hex ?? null,
     itemColorName: line.color?.name ?? null,
     quantity: line.quantity,
+    openQty: line.openQty ?? line.quantity,
+    allocatedQty: line.openQty ?? line.quantity,
     width: line.width ?? null,
     requiredProperties: (line.requiredProperties ?? []).map((rp) => ({
       id: rp.propertyId,
@@ -603,9 +609,9 @@ function DeadlineBadge({ deadline }: { deadline: string | null }) {
   const tone = deadlineTone(deadline);
   const cls =
     tone === "danger"
-      ? "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
+      ? "border-destructive/40 bg-destructive/10 text-destructive"
       : tone === "warning"
-        ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+        ? "border-warning/40 bg-warning/10 text-warning"
         : "";
   return (
     <Badge variant={tone === "muted" ? "muted" : "outline"} className={`text-[10px] ${cls}`}>
@@ -698,7 +704,7 @@ function FetchedOrderRow({
                 {incompatible && (
                   <Badge
                     variant="outline"
-                    className="border-amber-300 bg-amber-50 text-[10px] text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+                    className="border-warning/40 bg-warning/10 text-[10px] text-warning"
                   >
                     {reason}
                   </Badge>
@@ -735,10 +741,10 @@ function AnchorBanner({
   onHideIncompatibleChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-amber-50/60 px-4 py-2 text-xs dark:bg-amber-950/30">
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-warning/10 px-4 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-1.5">
-        <Info className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-300" />
-        <span className="text-amber-900 dark:text-amber-100">
+        <Info className="h-3.5 w-3.5 shrink-0 text-warning" />
+        <span className="text-foreground">
           Bu seçim sadece eşleşen kalemlerle birleştirilebilir:
         </span>
         <Badge variant="muted" className="text-[10px]">
@@ -763,7 +769,7 @@ function AnchorBanner({
           {anchor.width != null ? `${anchor.width} cm` : "en serbest"}
         </Badge>
       </div>
-      <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-amber-900 dark:text-amber-100">
+      <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-foreground">
         <Checkbox
           checked={hideIncompatible}
           onCheckedChange={(c) => onHideIncompatibleChange(Boolean(c))}

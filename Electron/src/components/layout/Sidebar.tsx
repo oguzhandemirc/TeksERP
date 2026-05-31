@@ -1,8 +1,29 @@
 import { NavLink } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
+import { springSnappy } from "@/lib/motion";
+import logoUrl from "@/assets/teks-logo-fullsize.png";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useFavorites } from "@/hooks/useFavorites";
+import { useMenuOrder } from "@/hooks/useMenuOrder";
 import { ADMIN_PERMISSION_LIST } from "@/types/auth";
 import { navGroups, type NavItem, type NavGroup } from "./nav-config";
+import { findCommandEntry, type CommandEntry } from "./command-entries";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 interface Props {
@@ -11,6 +32,14 @@ interface Props {
 
 export function Sidebar({ collapsed }: Props) {
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
+  const { favorites, reorderFavorites } = useFavorites();
+  const { orderItems, setGroupOrder } = useMenuOrder();
+
+  // Favoriler grubu → backend favori sırası; diğer gruplar → localStorage menü sırası.
+  const handleReorder = (groupLabel: string, order: string[]) => {
+    if (groupLabel === "Favoriler") reorderFavorites(order);
+    else setGroupOrder(groupLabel, order);
+  };
 
   const visible = (item: NavItem) => {
     if (item.adminOnly && !isAdmin && !hasAnyPermission(ADMIN_PERMISSION_LIST)) return false;
@@ -18,23 +47,67 @@ export function Sidebar({ collapsed }: Props) {
     return true;
   };
 
-  const groups = navGroups
-    .map((g) => ({ ...g, items: g.items.filter(visible) }))
+  // Favoriler — katalogdan çözülen sabitlenmiş sayfalar, en üstte ayrı grup
+  // (kendi sırasını korur, menü sürüklemeye dahil değil).
+  const favItems: NavItem[] = favorites
+    .map(findCommandEntry)
+    .filter((e): e is CommandEntry => Boolean(e))
+    .map((e) => ({
+      label: e.label,
+      to: e.to,
+      icon: e.icon,
+      permission: e.permission,
+      adminOnly: e.adminOnly,
+    }))
+    .filter(visible);
+  const favGroup: NavGroup[] = favItems.length > 0 ? [{ label: "Favoriler", items: favItems }] : [];
+
+  // Nav grupları — kullanıcı sürükle-bırak sırası uygulanır (localStorage).
+  const navOrdered: NavGroup[] = navGroups
+    .map((g) => ({ ...g, items: orderItems(g.label, g.items.filter(visible)) }))
     .filter((g) => g.items.length > 0);
+
+  const groups = [...favGroup, ...navOrdered];
 
   return (
     <aside
       className={cn(
-        "flex h-full flex-col border-r bg-card/40 transition-[width] duration-200",
+        "flex h-full flex-col border-r border-border/60 bg-card/50 backdrop-blur-xl transition-[width] duration-200",
         collapsed ? "w-[72px]" : "w-56",
       )}
     >
+      <SidebarBrand collapsed={collapsed} />
+
       <TooltipProvider delayDuration={150}>
-        {collapsed ? <CollapsedNav groups={groups} /> : <ExpandedNav groups={groups} />}
+        {collapsed ? (
+          <CollapsedNav groups={groups} />
+        ) : (
+          <ExpandedNav groups={groups} onReorder={handleReorder} />
+        )}
       </TooltipProvider>
 
       <Footer collapsed={collapsed} />
     </aside>
+  );
+}
+
+function SidebarBrand({ collapsed }: { collapsed: boolean }) {
+  return (
+    <div
+      className={cn(
+        "flex h-12 shrink-0 items-center border-b border-border/50",
+        collapsed ? "justify-center px-2" : "gap-2.5 px-4",
+      )}
+    >
+      <img
+        src={logoUrl}
+        alt=""
+        className="h-7 w-7 shrink-0 rounded-lg object-cover ring-1 ring-white/10"
+      />
+      {!collapsed && (
+        <span className="truncate text-sm font-bold tracking-tight">TeksERP</span>
+      )}
+    </div>
   );
 }
 
@@ -55,22 +128,78 @@ function CollapsedNav({ groups }: { groups: NavGroup[] }) {
   );
 }
 
-function ExpandedNav({ groups }: { groups: NavGroup[] }) {
+function ExpandedNav({
+  groups,
+  onReorder,
+}: {
+  groups: NavGroup[];
+  onReorder: (groupLabel: string, order: string[]) => void;
+}) {
   return (
     <nav className="flex-1 overflow-y-auto py-3">
       {groups.map((group) => (
-        <div key={group.label} className="mb-4">
-          <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-            {group.label}
-          </p>
-          <ul className="space-y-1 px-2">
-            {group.items.map((item) => (
-              <ExpandedItem key={item.to} item={item} />
-            ))}
-          </ul>
-        </div>
+        <ExpandedGroup key={group.label} group={group} onReorder={onReorder} />
       ))}
     </nav>
+  );
+}
+
+function ExpandedGroup({
+  group,
+  onReorder,
+}: {
+  group: NavGroup;
+  onReorder: (groupLabel: string, order: string[]) => void;
+}) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const ids = group.items.map((i) => i.to);
+
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldI = ids.indexOf(active.id as string);
+    const newI = ids.indexOf(over.id as string);
+    if (oldI < 0 || newI < 0) return;
+    onReorder(group.label, arrayMove(ids, oldI, newI));
+  };
+
+  return (
+    <div className="mb-4">
+      <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+        {group.label}
+      </p>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          <ul className="space-y-1 px-2">
+            {group.items.map((item) => (
+              <SortableExpandedItem key={item.to} item={item} />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+}
+
+function SortableExpandedItem({ item }: { item: NavItem }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.to,
+  });
+  return (
+    <li
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition,
+        opacity: isDragging ? 0.6 : 1,
+        zIndex: isDragging ? 20 : undefined,
+      }}
+      className="touch-none"
+      {...attributes}
+      {...listeners}
+    >
+      <NavItemLink item={item} />
+    </li>
   );
 }
 
@@ -82,7 +211,7 @@ function CollapsedItem({ item }: { item: NavItem }) {
         <TooltipTrigger asChild>
           <NavLink
             to={item.to}
-            end={item.to === "/"}
+            end
             style={{
               display: "flex",
               alignItems: "center",
@@ -111,26 +240,35 @@ function CollapsedItem({ item }: { item: NavItem }) {
   );
 }
 
-function ExpandedItem({ item }: { item: NavItem }) {
+function NavItemLink({ item }: { item: NavItem }) {
   const Icon = item.icon;
   return (
-    <li>
-      <NavLink
-        to={item.to}
-        end={item.to === "/"}
-        className={({ isActive }) =>
-          cn(
-            "flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors",
-            isActive
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-          )
-        }
-      >
-        <Icon className="h-[18px] w-[18px] shrink-0" />
-        <span className="truncate">{item.label}</span>
-      </NavLink>
-    </li>
+    <NavLink
+      to={item.to}
+      end
+      className={({ isActive }) =>
+        cn(
+          "relative flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors",
+          isActive
+            ? "text-primary"
+            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <motion.span
+              layoutId="sidebar-active-pill"
+              className="absolute inset-0 rounded-md bg-primary/10 ring-1 ring-inset ring-primary/25"
+              transition={springSnappy}
+            />
+          )}
+          <Icon className="relative z-10 h-[18px] w-[18px] shrink-0" />
+          <span className="relative z-10 truncate">{item.label}</span>
+        </>
+      )}
+    </NavLink>
   );
 }
 
