@@ -16,6 +16,7 @@ import { OrderStatus, Prisma, RollStatus, WorkOrderStatus } from "@prisma/client
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
 import { computeLineCoverage } from "./helpers/coverage.helper";
+import { CustomerAliasService } from "./customer-alias.service";
 import {
   applyDateRange,
   buildOrderByClause,
@@ -94,8 +95,93 @@ function computeTotalAmount(
 }
 
 export class OrderService extends BaseService {
+  private aliasService = new CustomerAliasService();
+
   constructor(config: BaseServiceConfig) {
     super(config);
+  }
+
+  /**
+   * Müşteriye-özel ad terfisi (otomatik master kaydı).
+   *
+   * Sipariş satırında `customerItemName` / `customerColorName` girilmiş VE o
+   * müşteri+ürün / müşteri+renk için master alias HENÜZ YOKSA → master tabloya
+   * (CustomerItemAlias / CustomerColorAlias) yazılır. Böylece aynı müşteriye
+   * sonraki sipariş girilirken `/aliases/suggest` bu adı otomatik getirir
+   * (alan kilitli/dolu gelir).
+   *
+   * Master ZATEN VARSA dokunulmaz: bu durumda satırdaki değer bilinçli bir
+   * tek-seferlik override'dır (frontend alanı master varken kilitler; "Override
+   * Et" onayıyla farklı ad girilebilir). Master'ı ezmek o ayrımı bozar.
+   *
+   * Best-effort: sipariş zaten commit edilmiştir, alias kaydı yan-etkidir.
+   * Terfi sırasında bir hata olursa (örn. ürün/renk pasifleştirilmiş) sipariş
+   * kaydı bozulmamalı — hata satır bazında yutulur.
+   */
+  private async promoteCustomerAliases(
+    customerId: string | null | undefined,
+    lines: Array<Record<string, unknown>> | null | undefined,
+    userId?: string
+  ): Promise<void> {
+    if (!customerId || !Array.isArray(lines) || lines.length === 0) return;
+
+    // Aynı sipariş içinde aynı ürün/renk birden fazla satırda geçerse tek terfi
+    // yeter (ilk dolu ad master olur, kalanı tek-seferlik sayılır).
+    const seenItems = new Set<string>();
+    const seenColors = new Set<string>();
+
+    for (const line of lines) {
+      const itemId = typeof line.itemId === "string" ? line.itemId : null;
+      const colorId = typeof line.colorId === "string" ? line.colorId : null;
+      const itemName =
+        typeof line.customerItemName === "string"
+          ? line.customerItemName.trim()
+          : "";
+      const colorName =
+        typeof line.customerColorName === "string"
+          ? line.customerColorName.trim()
+          : "";
+
+      if (itemId && itemName.length > 0 && !seenItems.has(itemId)) {
+        seenItems.add(itemId);
+        try {
+          const existing = await prisma.customerItemAlias.findUnique({
+            where: { customerId_itemId: { customerId, itemId } },
+            select: { id: true },
+          });
+          if (!existing) {
+            await this.aliasService.upsertItemAlias(
+              customerId,
+              itemId,
+              itemName,
+              userId
+            );
+          }
+        } catch {
+          // best-effort: terfi başarısızsa sipariş etkilenmesin.
+        }
+      }
+
+      if (colorId && colorName.length > 0 && !seenColors.has(colorId)) {
+        seenColors.add(colorId);
+        try {
+          const existing = await prisma.customerColorAlias.findUnique({
+            where: { customerId_colorId: { customerId, colorId } },
+            select: { id: true },
+          });
+          if (!existing) {
+            await this.aliasService.upsertColorAlias(
+              customerId,
+              colorId,
+              colorName,
+              userId
+            );
+          }
+        } catch {
+          // best-effort: terfi başarısızsa sipariş etkilenmesin.
+        }
+      }
+    }
   }
 
   /**
@@ -249,10 +335,9 @@ export class OrderService extends BaseService {
             const cov = covMap.get(line.id);
             const shipped = cov?.shipped ?? new Prisma.Decimal(0);
             const reserved = cov?.reserved ?? new Prisma.Decimal(0);
-            const warehouseLabeled = cov?.warehouseLabeled ?? new Prisma.Decimal(0);
             const openQty = new Prisma.Decimal(line.quantity)
               .minus(cov?.coverage ?? new Prisma.Decimal(0));
-            return { ...line, shippedQty: shipped, reservedQty: reserved, warehouseLabeledQty: warehouseLabeled, openQty };
+            return { ...line, shippedQty: shipped, reservedQty: reserved, openQty };
           })
           .filter((line) => line.openQty.greaterThan(0));
         return { ...order, lines };
@@ -355,8 +440,10 @@ export class OrderService extends BaseService {
    * Kapsama (coverage) — WO formundaki seçili sipariş kalemleri için üretim
    * açığını gösterir. Her kalem: istenen − sevk − WO-rezerve − serbest depo
    * stoğu − serbest ham stok = net üretim açığı (eksi = fazla).
-   * Serbest stok = item+renk+en eşleşen, hiçbir kaleme etiketli OLMAYAN toplar.
-   * Rezerve EDİLMEZ (anlık fotoğraf; çift sayım mümkün — planlamacı karar verir).
+   * GEVŞEK MODEL: serbest stok = item+renk+en eşleşen, henüz bir sevkiyata
+   * okutulmamış (shipmentId=null) WAREHOUSE/STOCK toplar — etiket bakılmaz
+   * (top fungible). Rezerve EDİLMEZ (anlık fotoğraf; aynı spec birden çok kalemde
+   * çift sayılabilir — planlamacı karar verir).
    * excludeWorkOrderId: düzenleme modunda WO'nun kendi tahsisini sayma.
    */
   async getCoverageForLines(params: {
@@ -382,17 +469,18 @@ export class OrderService extends BaseService {
       },
     });
 
-    // Uzlaştırılmış kapsama (etiket + plan): shipped, warehouseLabeled, reserved.
+    // Kapsama (sevk + plan): shipped, reserved.
     const covMap = await computeLineCoverage(prisma, lineIds, {
       excludeWorkOrderId: params.excludeWorkOrderId,
     });
 
-    // Serbest stok — spec bazında grupla (etiketsiz toplar); WAREHOUSE + STOCK ayrı
+    // Serbest stok — spec bazında grupla; bir sevkiyata okutulmamış (shipmentId=null)
+    // WAREHOUSE + STOCK toplar (fungible havuz, etiket bakılmaz).
     const itemIds = [...new Set(lines.map((l) => l.itemId))];
     const freeGrouped = await prisma.roll.groupBy({
       by: ["itemId", "colorId", "width", "status"],
       where: {
-        targetOrderLineId: null,
+        shipmentId: null,
         itemId: { in: itemIds },
         status: { in: [RollStatus.WAREHOUSE, RollStatus.STOCK] },
       },
@@ -418,13 +506,11 @@ export class OrderService extends BaseService {
       const cov = covMap.get(l.id);
       const shipped = cov?.shipped ?? new Prisma.Decimal(0);
       const reserved = cov?.reserved ?? new Prisma.Decimal(0);
-      const warehouseLabeled = cov?.warehouseLabeled ?? new Prisma.Decimal(0);
       const freeWarehouse = matchFree(l, RollStatus.WAREHOUSE);
       const freeStock = matchFree(l, RollStatus.STOCK);
       const requested = new Prisma.Decimal(l.quantity);
       const netGap = requested
         .minus(shipped)
-        .minus(warehouseLabeled)
         .minus(reserved)
         .minus(freeWarehouse)
         .minus(freeStock);
@@ -435,7 +521,6 @@ export class OrderService extends BaseService {
         width: l.width,
         requested,
         shipped,
-        warehouseLabeled,
         reserved,
         freeWarehouse,
         freeStock,
@@ -582,6 +667,16 @@ export class OrderService extends BaseService {
       recordId: record.id as string,
       newData: { ...data, orderNumber },
     });
+
+    // Müşteriye-özel ad terfisi: girilen customerItemName/customerColorName,
+    // master alias yoksa kalıcı kaydedilir (sonraki siparişte otomatik gelir).
+    await this.promoteCustomerAliases(
+      data.customerId as string | undefined,
+      Array.isArray(data.lines)
+        ? (data.lines as Array<Record<string, unknown>>)
+        : null,
+      userId
+    );
 
     return { success: true, data: record, message: "Sipariş oluşturuldu" };
   }
@@ -804,6 +899,16 @@ export class OrderService extends BaseService {
         ...(incomingLines ? { linesCount: incomingLines.length } : {}),
       },
     });
+
+    // Müşteriye-özel ad terfisi (create ile aynı kural). Müşteri değiştiyse
+    // yeni müşteri baz alınır; lines payload gelmediyse atlanır.
+    if (incomingLines) {
+      const finalCustomerId =
+        typeof cleanData.customerId === "string"
+          ? cleanData.customerId
+          : current.customerId;
+      await this.promoteCustomerAliases(finalCustomerId, incomingLines, userId);
+    }
 
     return { success: true, data: updated, message: "Sipariş güncellendi" };
   }

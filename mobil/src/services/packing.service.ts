@@ -2,44 +2,21 @@ import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 
 // =============================================================================
-// Tartı/Paket — yeni /api/shipping sözleşmesi (Sack = çuval)
+// Tartı/Paket + Sevkiyat — GEVŞEK MODEL sözleşmesi (/api/shipping)
+// Sevkiyat oturumu = tek müşteri+şube + seçilen siparişler + okutulan toplar +
+// çuval tartıları. Çuval = sadece no+kg (içerik yok). Karşılanma spec-toplam.
 // =============================================================================
 
-export interface SackListItem {
+export type ShipmentStatus = 'PREPARING' | 'READY' | 'DISPATCHED' | 'CANCELLED';
+
+interface Ref {
   id: string;
-  sackNo: string;
-  status: 'OPEN' | 'CLOSED' | 'SHIPPED' | 'CANCELLED';
-  weightKg: number | null;
-  shipmentId: string | null;
-  createdAt: string;
-  customer: { id: string; code: string; name: string };
-  branch: { id: string; name: string } | null;
-  _count: { rolls: number; swatches: number };
+  code?: string;
+  name: string;
 }
 
-export interface SackDetail {
-  id: string;
-  sackNo: string;
-  status: string;
-  weightKg: number | null;
-  customer: { id: string; code: string; name: string };
-  branch: { id: string; name: string } | null;
-  shipment: { id: string; shipmentNo: string; status: string } | null;
-  rolls: Array<{
-    id: string;
-    barcode: string | null;
-    currentQty: number;
-    status: string;
-    targetOrderLineId: string | null;
-  }>;
-  swatches: Array<{ id: string; barcode: string | null; length: number }>;
-}
-
-// =============================================================================
-// Sevke Hazır (Mod A) — depoda etiketli + çuvalda olmayan topu olan siparişler
-// =============================================================================
-
-export interface ReadyLine {
+// ── Sipariş seçim ekranı (open-orders + depo karşılaması) ──
+export interface OpenOrderLine {
   lineId: string;
   item: { id: string; code: string; name: string };
   color: { id: string; code: string; name: string } | null;
@@ -48,232 +25,190 @@ export interface ReadyLine {
   customerColorName: string | null;
   requested: number;
   shipped: number;
-  reserved: number;
   openQty: number;
-  readyQty: number;
-  readyCount: number;
+  warehouseAvailable: number;
+  covered: boolean;
 }
-
-export interface ReadyOrder {
+export interface OpenOrder {
   order: {
     id: string;
     orderNumber: string;
     status: string;
     deadline: string | null;
-    createdAt: string;
-    customer: { id: string; code: string; name: string };
+    customer: Ref;
     branch: { id: string; name: string } | null;
   };
-  lines: ReadyLine[];
+  lines: OpenOrderLine[];
 }
 
-export interface SackCancelPreview {
-  sackId: string;
-  sackNo: string;
-  status: 'OPEN' | 'CLOSED' | 'SHIPPED' | 'CANCELLED';
-  customerName: string;
-  branchName: string | null;
-  canCancel: boolean;
-  reason: string | null;
-  rolls: Array<{ id: string; barcode: string | null; currentQty: number; orderNumber: string | null }>;
-  swatches: Array<{ id: string; barcode: string | null }>;
+// ── Sevkiyat detayı (paketleme ekranı) ──
+export interface ShipmentDetailLine {
+  lineId: string;
+  item: { id: string; code: string; name: string };
+  color: { id: string; code: string; name: string } | null;
+  width: number | null;
+  customerItemName: string | null;
+  customerColorName: string | null;
+  requested: number;
+  shipped: number;
+  openQty: number;
+  thisShipment: number;
 }
-
-export interface ReprintItem {
+export interface ShipmentDetailOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  deadline: string | null;
+  lines: ShipmentDetailLine[];
+}
+export interface ShipmentDetailRoll {
   id: string;
   barcode: string | null;
-  width: number | null;
-  currentQty: number;
-  status: string;
   item: { code: string; name: string };
   color: { code: string; name: string } | null;
-  targetOrderLine: {
-    customerItemName: string | null;
-    customerColorName: string | null;
-    order: { orderNumber: string; customer: { name: string } };
-  } | null;
+  width: number | null;
+  currentQty: number;
 }
-
-export const packingService = {
-  /** Çuval listesi — status (OPEN/CLOSED/SHIPPED), customerId, unassignedOnly filtreleri. */
-  listSacks: (params?: {
-    status?: 'OPEN' | 'CLOSED' | 'SHIPPED';
-    customerId?: string;
-    unassignedOnly?: boolean;
-  }): Promise<ApiResponse<SackListItem[]>> => {
-    const q = new URLSearchParams();
-    if (params?.status) q.set('status', params.status);
-    if (params?.customerId) q.set('customerId', params.customerId);
-    if (params?.unassignedOnly) q.set('unassignedOnly', 'true');
-    const qs = q.toString();
-    return apiClient
-      .get<ApiResponse<SackListItem[]>>(`/shipping/sacks${qs ? '?' + qs : ''}`)
-      .then((r) => r.data);
-  },
-
-  /** Sevke hazır siparişler (Mod A girişi). Termine göre sıralı. */
-  getReady: (): Promise<ApiResponse<ReadyOrder[]>> =>
-    apiClient.get<ApiResponse<ReadyOrder[]>>('/shipping/ready').then((r) => r.data),
-
-  getSack: (id: string): Promise<ApiResponse<SackDetail>> =>
-    apiClient.get<ApiResponse<SackDetail>>(`/shipping/sacks/${id}`).then((r) => r.data),
-
-  createSack: (data: {
-    customerId: string;
-    branchId?: string | null;
-    sackNo?: string | null;
-  }): Promise<ApiResponse<{ id: string; sackNo: string }>> =>
-    apiClient
-      .post<ApiResponse<{ id: string; sackNo: string }>>('/shipping/sacks', data)
-      .then((r) => r.data),
-
-  /** Hızlı Okut (Mod C) — barkodla top okut, topun müşterisinin açık çuvalına otomatik ekle. */
-  autoAssign: (
-    barcode: string,
-  ): Promise<
-    ApiResponse<{
-      sackId: string;
-      sackNo: string;
-      customerId: string;
-      customerName: string;
-      createdSack: boolean;
-    }>
-  > =>
-    apiClient
-      .post<
-        ApiResponse<{
-          sackId: string;
-          sackNo: string;
-          customerId: string;
-          customerName: string;
-          createdSack: boolean;
-        }>
-      >('/shipping/sacks/auto-assign', { barcode })
-      .then((r) => r.data),
-
-  /** Değişebilir etiket / yönlendir — topun sipariş atıfını değiştir (null = stoğa al). */
-  relabel: (
-    rollId: string,
-    targetOrderLineId: string | null,
-  ): Promise<
-    ApiResponse<{
-      rollId: string;
-      customerName: string | null;
-      specMismatch: boolean;
-      reprintRequired: boolean;
-      poppedFromSack?: boolean;
-    }>
-  > =>
-    apiClient
-      .post<
-        ApiResponse<{
-          rollId: string;
-          customerName: string | null;
-          specMismatch: boolean;
-          reprintRequired: boolean;
-          poppedFromSack?: boolean;
-        }>
-      >('/shipping/relabel', { rollId, targetOrderLineId })
-      .then((r) => r.data),
-
-  /** Topu çuvala ekle (müşteri etiketinden belli; backend müşteri uyumunu doğrular). */
-  assignRoll: (data: {
-    rollId: string;
-    sackId: string;
-    targetOrderLineId?: string | null;
-  }): Promise<ApiResponse<unknown>> =>
-    apiClient.post<ApiResponse<unknown>>('/shipping/sacks/assign-roll', data).then((r) => r.data),
-
-  removeRoll: (rollId: string): Promise<ApiResponse<unknown>> =>
-    apiClient.post<ApiResponse<unknown>>('/shipping/sacks/remove-roll', { rollId }).then((r) => r.data),
-
-  /** Çuvalı tart + kapat = "sevk edildi" anı. */
-  weighClose: (sackId: string, weightKg: number): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/weigh`, { weightKg })
-      .then((r) => r.data),
-
-  /** İptal önizleme — serbest bırakılacak top/kartelaları listeler (yıkıcı işlem onayı). */
-  cancelPreview: (sackId: string): Promise<ApiResponse<SackCancelPreview>> =>
-    apiClient
-      .get<ApiResponse<SackCancelPreview>>(`/shipping/sacks/${sackId}/cancel-preview`)
-      .then((r) => r.data),
-
-  /** Çuvalı iptal et (soft delete → CANCELLED, top/kartela serbest bırakılır). */
-  cancelSack: (sackId: string): Promise<ApiResponse<{ freedRolls: number; freedSwatches: number }>> =>
-    apiClient
-      .post<ApiResponse<{ freedRolls: number; freedSwatches: number }>>(
-        `/shipping/sacks/${sackId}/cancel`,
-        {},
-      )
-      .then((r) => r.data),
-
-  /** Print-queue — yeniden basılacak etiketler (relabel sonrası, tambur). */
-  getReprintQueue: (): Promise<ApiResponse<ReprintItem[]>> =>
-    apiClient.get<ApiResponse<ReprintItem[]>>('/shipping/reprint-queue').then((r) => r.data),
-
-  /** Etiket basıldı → topu kuyruktan düşür. */
-  markReprinted: (rollId: string): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>('/shipping/reprint-queue/done', { rollId })
-      .then((r) => r.data),
-};
-
-// =============================================================================
-// Sevkiyat — İrsaliye (Shipment) = bir müşteri+şube
-// =============================================================================
+export interface ShipmentSack {
+  id: string;
+  sackNo: string;
+  seq: number;
+  weightKg: number | null;
+}
+export interface ShipmentDetail {
+  id: string;
+  shipmentNo: string;
+  status: ShipmentStatus;
+  plateNumber: string | null;
+  driverName: string | null;
+  carrier: string | null;
+  readyAt: string | null;
+  dispatchedAt: string | null;
+  customer: Ref;
+  branch: { id: string; name: string } | null;
+  orders: ShipmentDetailOrder[];
+  rolls: ShipmentDetailRoll[];
+  swatches: Array<{ id: string; barcode: string | null; length: number; width: number | null }>;
+  sacks: ShipmentSack[];
+  summary: {
+    rollCount: number;
+    swatchCount: number;
+    totalMeters: number;
+    sackCount: number;
+    totalKg: number;
+  };
+}
 
 export interface ShipmentListItem {
   id: string;
   shipmentNo: string;
-  status: 'PREPARING' | 'DISPATCHED' | 'CANCELLED';
+  status: ShipmentStatus;
   plateNumber: string | null;
   driverName: string | null;
   carrier: string | null;
+  readyAt: string | null;
   dispatchedAt: string | null;
   createdAt: string;
-  customer: { id: string; code: string; name: string };
+  customer: Ref;
   branch: { id: string; name: string } | null;
-  _count: { sacks: number };
+  _count: { sacks: number; rolls: number; orders: number };
 }
 
-export const shipmentService = {
-  list: (params?: {
-    status?: 'PREPARING' | 'DISPATCHED' | 'CANCELLED';
-    customerId?: string;
-  }): Promise<ApiResponse<ShipmentListItem[]>> => {
+export interface ShipmentCancelPreview {
+  shipmentId: string;
+  shipmentNo: string;
+  status: ShipmentStatus;
+  customerName: string;
+  branchName: string | null;
+  canCancel: boolean;
+  reason: string | null;
+  rolls: Array<{ id: string; barcode: string | null; currentQty: number; itemName: string; colorName: string | null }>;
+  swatchCount: number;
+  sackCount: number;
+  affectedOrders: Array<{ orderNumber: string; qty: string }>;
+}
+
+export const packingService = {
+  // ── Sipariş seçim ──
+  listOpenOrders: (params?: { customerId?: string; branchId?: string }): Promise<ApiResponse<OpenOrder[]>> => {
+    const q = new URLSearchParams();
+    if (params?.customerId) q.set('customerId', params.customerId);
+    if (params?.branchId) q.set('branchId', params.branchId);
+    const qs = q.toString();
+    return apiClient.get<ApiResponse<OpenOrder[]>>(`/shipping/open-orders${qs ? '?' + qs : ''}`).then((r) => r.data);
+  },
+
+  // ── Sevkiyat oturumu ──
+  createShipment: (orderIds: string[]): Promise<ApiResponse<{ id: string; shipmentNo: string; status: ShipmentStatus }>> =>
+    apiClient
+      .post<ApiResponse<{ id: string; shipmentNo: string; status: ShipmentStatus }>>('/shipping/shipments', { orderIds })
+      .then((r) => r.data),
+
+  getShipment: (id: string): Promise<ApiResponse<ShipmentDetail>> =>
+    apiClient.get<ApiResponse<ShipmentDetail>>(`/shipping/shipments/${id}`).then((r) => r.data),
+
+  listShipments: (params?: { status?: ShipmentStatus; customerId?: string }): Promise<ApiResponse<ShipmentListItem[]>> => {
     const q = new URLSearchParams();
     if (params?.status) q.set('status', params.status);
     if (params?.customerId) q.set('customerId', params.customerId);
     const qs = q.toString();
-    return apiClient
-      .get<ApiResponse<ShipmentListItem[]>>(`/shipping/shipments${qs ? '?' + qs : ''}`)
-      .then((r) => r.data);
+    return apiClient.get<ApiResponse<ShipmentListItem[]>>(`/shipping/shipments${qs ? '?' + qs : ''}`).then((r) => r.data);
   },
 
-  create: (data: {
-    customerId: string;
-    branchId?: string | null;
-  }): Promise<ApiResponse<{ id: string; shipmentNo: string; status: string }>> =>
+  addOrders: (id: string, orderIds: string[]): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/shipping/shipments/${id}/orders`, { orderIds }).then((r) => r.data),
+
+  removeOrder: (id: string, orderId: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/shipping/shipments/${id}/remove-order`, { orderId }).then((r) => r.data),
+
+  // ── Okutma ──
+  scan: (
+    id: string,
+    barcode: string,
+  ): Promise<ApiResponse<{ kind: 'ROLL' | 'SWATCH'; rollId?: string; swatchId?: string; currentQty?: number }>> =>
     apiClient
-      .post<ApiResponse<{ id: string; shipmentNo: string; status: string }>>('/shipping/shipments', data)
+      .post<ApiResponse<{ kind: 'ROLL' | 'SWATCH'; rollId?: string; swatchId?: string; currentQty?: number }>>(
+        `/shipping/shipments/${id}/scan`,
+        { barcode },
+      )
       .then((r) => r.data),
 
-  addSack: (shipmentId: string, sackId: string): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>(`/shipping/shipments/${shipmentId}/add-sack`, { sackId })
-      .then((r) => r.data),
+  removeRoll: (id: string, rollId: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/shipping/shipments/${id}/remove-roll`, { rollId }).then((r) => r.data),
 
-  removeSack: (shipmentId: string, sackId: string): Promise<ApiResponse<unknown>> =>
+  removeSwatch: (id: string, swatchId: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/shipping/shipments/${id}/remove-swatch`, { swatchId }).then((r) => r.data),
+
+  // ── Çuval (tartı) ──
+  addSack: (id: string, weightKg: number): Promise<ApiResponse<ShipmentSack>> =>
+    apiClient.post<ApiResponse<ShipmentSack>>(`/shipping/shipments/${id}/sacks`, { weightKg }).then((r) => r.data),
+
+  weighSack: (sackId: string, weightKg: number): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/weigh`, { weightKg }).then((r) => r.data),
+
+  removeSack: (sackId: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/remove`, {}).then((r) => r.data),
+
+  // ── Sevke Hazır / Sevk / İptal ──
+  markReady: (id: string): Promise<ApiResponse<{ shipmentId: string; rollCount: number; allocatedLines: number }>> =>
     apiClient
-      .post<ApiResponse<unknown>>(`/shipping/shipments/${shipmentId}/remove-sack`, { sackId })
+      .post<ApiResponse<{ shipmentId: string; rollCount: number; allocatedLines: number }>>(
+        `/shipping/shipments/${id}/ready`,
+        {},
+      )
       .then((r) => r.data),
 
   dispatch: (
-    shipmentId: string,
+    id: string,
     data: { plateNumber?: string | null; driverName?: string | null; carrier?: string | null },
   ): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/shipping/shipments/${id}/dispatch`, data).then((r) => r.data),
+
+  cancelPreview: (id: string): Promise<ApiResponse<ShipmentCancelPreview>> =>
+    apiClient.get<ApiResponse<ShipmentCancelPreview>>(`/shipping/shipments/${id}/cancel-preview`).then((r) => r.data),
+
+  cancel: (id: string): Promise<ApiResponse<{ shipmentId: string; freedRolls: number }>> =>
     apiClient
-      .post<ApiResponse<unknown>>(`/shipping/shipments/${shipmentId}/dispatch`, data)
+      .post<ApiResponse<{ shipmentId: string; freedRolls: number }>>(`/shipping/shipments/${id}/cancel`, {})
       .then((r) => r.data),
 };

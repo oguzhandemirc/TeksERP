@@ -649,22 +649,6 @@ export class InventoryService {
           orderBy: { createdAt: "asc" },
         },
         properties: { include: { property: true } },
-        // Değişebilir etiket — top hangi müşteri/siparişe etiketli (null = stok etiketli).
-        targetOrderLine: {
-          select: {
-            id: true,
-            customerItemName: true,
-            customerColorName: true,
-            order: {
-              select: {
-                id: true,
-                orderNumber: true,
-                customer: { select: { id: true, code: true, name: true } },
-                branch: { select: { id: true, name: true } },
-              },
-            },
-          },
-        },
       },
     });
 

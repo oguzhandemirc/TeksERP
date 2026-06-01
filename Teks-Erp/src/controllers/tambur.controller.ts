@@ -29,7 +29,6 @@ const finalizeSchema = z.object({
         length: z.number().positive("Kesim uzunluğu pozitif olmalı"),
         qualityGrade: z.string().min(1, "Kalite seçilmelidir"),
         relatedErrorIds: z.array(z.string().uuid()).default([]),
-        targetOrderLineId: z.string().uuid().optional().nullable(),
       })
     )
     .default([]),
@@ -42,9 +41,6 @@ const finalizeSchema = z.object({
     )
     .default([]),
   foldType: z.enum(["2-KAT", "4-KAT"]).optional(),
-  // Tüm kesimlere/kalan kuyruk topa uygulanacak varsayılan hedef sipariş kalemi.
-  // (Servis bunu zaten destekliyordu; şema eksikti → kuyruk top etiketsiz kalıyordu.)
-  targetOrderLineId: z.string().uuid().optional().nullable(),
 });
 
 const swatchSchema = z.object({
@@ -72,7 +68,6 @@ const cutOpenFabricSchema = z.object({
   }),
   qualityGrade: z.string().max(50).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
-  targetOrderLineId: z.string().uuid().optional().nullable(),
 });
 
 const finalizeOpenFabricSchema = z.object({
@@ -85,14 +80,12 @@ const finalizeOpenFabricSchema = z.object({
   notes: z.string().max(1000).optional().nullable(),
   // Tambur kararı — WO planlaması override (verilmezse WO.foldType kullanılır).
   foldType: z.string().trim().max(32).optional().nullable(),
-  targetOrderLineId: z.string().uuid().optional().nullable(),
 });
 
 const cutWarehouseRollSchema = z.object({
   cutLength: z.number().positive("Kesim metresi pozitif olmalı"),
   qualityGrade: z.string().max(50).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
-  targetOrderLineId: z.string().uuid().optional().nullable(),
 });
 
 const finalizeWarehouseCutSchema = z.object({
@@ -100,7 +93,6 @@ const finalizeWarehouseCutSchema = z.object({
     .enum(["keep_1kalite", "keep_a1", "scrap", "discard"])
     .optional(),
   notes: z.string().max(1000).optional().nullable(),
-  targetOrderLineId: z.string().uuid().optional().nullable(),
 });
 
 export class TamburController {

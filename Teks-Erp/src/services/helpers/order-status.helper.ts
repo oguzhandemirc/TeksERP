@@ -5,26 +5,29 @@
 //   PENDING → APPROVED → PARTIAL_SHIPPED → COMPLETED
 //                     → CANCELLED (manuel)
 //
-// Sevk muhasebesi: bir siparişin "sevk edilen" metrajı = o siparişin
-// satırlarına etiketli (Roll.targetOrderLineId) ve status=SHIPPED olan
-// topların currentQty toplamı. Çuval kapanınca toplar SHIPPED'a çekilir ve
-// bu helper tetiklenir. Order.shippedQty denormalize alanı buradan güncellenir.
+// Sevk muhasebesi (GEVŞEK MODEL): top→sipariş bağı YOK. Bir siparişin "sevk
+// edilen" metrajı = satırlarının OrderLine.shippedQty toplamı. shippedQty ise
+// ShipmentAllocation toplamıdır — Sevke Hazır (READY) anında spec-toplam, seçilen
+// siparişlere termin→tarih FIFO dağıtılınca yazılır; iptalde geri alınır. Bu
+// helper o yazımlardan sonra tetiklenir, Order.shippedQty + status'u senkronlar.
 // =============================================================================
 
-import { Prisma, OrderStatus, RollStatus } from "@prisma/client";
+import { Prisma, OrderStatus } from "@prisma/client";
 import { readShippingToleranceMeters } from "../system-setting.service";
 
 /**
  * Bir siparişin shippedQty ve status'unu yeniden hesaplar.
  *
  * Kurallar:
- *   - shippedQty = SUM(Roll.currentQty | targetOrderLineId ∈ sipariş satırları, status=SHIPPED)
+ *   - shippedQty = SUM(OrderLine.shippedQty)   (= Σ ShipmentAllocation.qty)
  *   - totalRequired = SUM(OrderLine.quantity)
  *   - shippedQty <= 0                                  → APPROVED
  *   - (totalRequired - shippedQty) <= tolerans          → COMPLETED
  *   - aksi                                              → PARTIAL_SHIPPED
  *
- * COMPLETED / CANCELLED terminal — değişmez. Transaction client kabul eder.
+ * CANCELLED terminal — değişmez. COMPLETED ise: manuel kapatılmış (manualClosedById
+ * dolu) sipariş terminal kalır; OTOMATİK kapanmış sipariş yeniden hesaplanabilir —
+ * sevkiyat iptalinde shippedQty düşünce sipariş yeniden açılır (re-open). Tx kabul eder.
  */
 export async function recomputeOrderStatus(
   tx: Prisma.TransactionClient,
@@ -36,29 +39,25 @@ export async function recomputeOrderStatus(
       id: true,
       status: true,
       completedAt: true,
-      lines: { select: { id: true, quantity: true } },
+      manualClosedById: true,
+      lines: { select: { quantity: true, shippedQty: true } },
     },
   });
   if (!order) return null;
 
-  // Terminal statüler değişmez
+  // İptal terminal; manuel kapatılmış sipariş de terminal (kullanıcı kararı korunur).
   if (
-    order.status === OrderStatus.COMPLETED ||
-    order.status === OrderStatus.CANCELLED
+    order.status === OrderStatus.CANCELLED ||
+    (order.status === OrderStatus.COMPLETED && order.manualClosedById != null)
   ) {
     return { changed: false, oldStatus: order.status, newStatus: order.status };
   }
 
-  const lineIds = order.lines.map((l) => l.id);
-
-  // Sevk edilen metraj — siparişe etiketli + SHIPPED topların currentQty toplamı
-  const shippedAgg = lineIds.length
-    ? await tx.roll.aggregate({
-        where: { targetOrderLineId: { in: lineIds }, status: RollStatus.SHIPPED },
-        _sum: { currentQty: true },
-      })
-    : null;
-  const shippedQty = shippedAgg?._sum.currentQty ?? new Prisma.Decimal(0);
+  // Sevk edilen metraj — satır bazlı tahsis toplamı (spec-aggregate karşılanma)
+  const shippedQty = order.lines.reduce(
+    (sum, l) => sum.plus(l.shippedQty),
+    new Prisma.Decimal(0)
+  );
 
   const totalRequired = order.lines.reduce(
     (sum, l) => sum.plus(l.quantity),
@@ -82,6 +81,10 @@ export async function recomputeOrderStatus(
     data.status = newStatus;
     if (newStatus === OrderStatus.COMPLETED && !order.completedAt) {
       data.completedAt = new Date();
+    }
+    // Re-open (COMPLETED → APPROVED/PARTIAL): otomatik tamamlanma izini temizle.
+    if (newStatus !== OrderStatus.COMPLETED && order.completedAt) {
+      data.completedAt = null;
     }
   }
   await tx.order.update({ where: { id: orderId }, data });

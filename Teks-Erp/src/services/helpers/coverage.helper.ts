@@ -1,25 +1,24 @@
 // =============================================================================
-// Sipariş kalemi kapsama (coverage) — UZLAŞTIRILMIŞ tek-kaynak hesap
+// Sipariş kalemi kapsama (coverage) — GEVŞEK MODEL (spec-aggregate)
 // =============================================================================
-// İki paralel defter vardı ve uzlaşmıyordu:
-//   1) Tahsis (plan):   WorkOrderToOrderLine.allocatedQty
-//   2) Etiket (gerçek): Roll.targetOrderLineId + bitmiş status
-// Bir iş emrinin çıktısı başka siparişe etiketlenince (tambur'da serbest atama),
-// kaynak siparişin "reserved"ı erimiyordu → sipariş sessizce eksik kalıyordu
-// (picker'da görünmez), hedef sipariş ise çift üretilebiliyordu.
+// Top→sipariş bağı (Roll.targetOrderLineId) KALDIRILDI. Karşılanma iki defterden
+// türetilir:
+//   1) Sevk (gerçek):  OrderLine.shippedQty  (= Σ ShipmentAllocation.qty)
+//   2) Tahsis (plan):  WorkOrderToOrderLine.allocatedQty (canlı WO in-flight payı)
 //
 // MODEL (her sipariş satırı L için):
-//   shipped(L)          = L'e etiketli + SHIPPED topların metrajı
-//   warehouseLabeled(L) = L'e etiketli + WAREHOUSE/A1_STOCK topların metrajı
-//   reserved(L)         = Σ canlı WO için: o WO'nun bitmemiş (in-flight) üretiminin
-//                         L'e düşen payı. inFlight(W) = max(0, totalAlloc(W) −
-//                         finishedByW). Yani WO üretimini bitirdikçe plan-rezervi
-//                         erir; mal nereye etiketlendiyse kapsama oraya geçer.
-//   coverage(L)         = shipped + warehouseLabeled + reserved
-//   open(L)             = quantity(L) − coverage(L)
+//   shipped(L)  = OrderLine.shippedQty — Sevke Hazır anında düşülen metraj
+//   reserved(L) = Σ canlı WO için: o WO'nun bitmemiş (in-flight) üretiminin L'e
+//                 düşen payı. inFlight(W) = max(0, totalAlloc(W) − finishedByW).
+//                 Yani WO üretimini bitirdikçe plan-rezervi erir; üretilen mal
+//                 depoya/serbest stoğa düşer ve spec-toplam olarak sayılır.
+//   coverage(L) = shipped + reserved
+//   open(L)     = quantity(L) − coverage(L)
 //
-// finishedByW = W'nin ürettiği (producedInStepId ∈ W.steps) ve terminal çıktıya
-// ulaşmış (WAREHOUSE/A1_STOCK/SHIPPED/SCRAP) topların metrajı — etiketten bağımsız.
+// "Depodaki serbest stok" (WAREHOUSE/STOCK) bu kapsamaya GİRMEZ — fungible havuz
+// olduğu için satıra atfedilemez (çift sayım). Onu spec bazında ayrı gösteren
+// getCoverageForLines (order.service) yapar. Burada yalnız satıra ait kesin
+// muhasebe (sevk + plan rezervi) hesaplanır.
 // =============================================================================
 
 import { Prisma, RollStatus, WorkOrderStatus } from "@prisma/client";
@@ -49,16 +48,15 @@ const FINISHED_OUTPUT: RollStatus[] = [
 
 export interface LineCoverage {
   shipped: Prisma.Decimal;
-  warehouseLabeled: Prisma.Decimal;
   reserved: Prisma.Decimal;
-  /** shipped + warehouseLabeled + reserved */
+  /** shipped + reserved */
   coverage: Prisma.Decimal;
 }
 
 const D0 = () => new Prisma.Decimal(0);
 
 /**
- * Verilen sipariş satırları için uzlaştırılmış kapsama kovalarını döner.
+ * Verilen sipariş satırları için kapsama kovalarını (shipped + reserved) döner.
  * `excludeWorkOrderId` verilirse o WO'nun tahsisi reserved'a katılmaz
  * (WO düzenleme/oluşturma picker'ında kendi rezervini saymamak için).
  */
@@ -71,26 +69,13 @@ export async function computeLineCoverage(
   const ids = [...new Set(lineIds)];
   if (ids.length === 0) return result;
 
-  // 1) Etiketli bitmiş toplar — (lineId, status) bazında tek groupBy.
-  const labeled = await client.roll.groupBy({
-    by: ["targetOrderLineId", "status"],
-    where: {
-      targetOrderLineId: { in: ids },
-      status: { in: [RollStatus.SHIPPED, RollStatus.WAREHOUSE, RollStatus.A1_STOCK] },
-    },
-    _sum: { currentQty: true },
+  // 1) Sevk edilen — satır bazlı denormalize alan (ShipmentAllocation toplamı).
+  const lineRows = await client.orderLine.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, shippedQty: true },
   });
   const shippedByLine = new Map<string, Prisma.Decimal>();
-  const whLabeledByLine = new Map<string, Prisma.Decimal>();
-  for (const g of labeled) {
-    if (!g.targetOrderLineId) continue;
-    const qty = g._sum.currentQty ?? D0();
-    if (g.status === RollStatus.SHIPPED) {
-      shippedByLine.set(g.targetOrderLineId, (shippedByLine.get(g.targetOrderLineId) ?? D0()).plus(qty));
-    } else {
-      whLabeledByLine.set(g.targetOrderLineId, (whLabeledByLine.get(g.targetOrderLineId) ?? D0()).plus(qty));
-    }
-  }
+  for (const l of lineRows) shippedByLine.set(l.id, new Prisma.Decimal(l.shippedQty));
 
   // 2) Bu satırlara bağlı tüm WO link'leri (allocatedQty + WO status).
   const links = await client.workOrderToOrderLine.findMany({
@@ -158,12 +143,10 @@ export async function computeLineCoverage(
       reserved = reserved.plus(inFlight.times(share));
     }
     const shipped = shippedByLine.get(lineId) ?? D0();
-    const warehouseLabeled = whLabeledByLine.get(lineId) ?? D0();
     result.set(lineId, {
       shipped,
-      warehouseLabeled,
       reserved,
-      coverage: shipped.plus(warehouseLabeled).plus(reserved),
+      coverage: shipped.plus(reserved),
     });
   }
 

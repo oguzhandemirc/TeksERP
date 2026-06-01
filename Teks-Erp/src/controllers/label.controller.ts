@@ -30,7 +30,10 @@ export class LabelController {
 
   getRollLabel = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = await this.service.getRollLabel(req.params.id as string);
+      const result = await this.service.getRollLabel(req.params.id as string, {
+        orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
+        customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
+      });
       res.status(200).json(result);
     } catch (e) { next(e); }
   };
@@ -66,6 +69,10 @@ export class LabelController {
       const result = await this.service.getRollLabelHtml(
         req.params.id as string,
         kindOverride,
+        {
+          orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
+          customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
+        },
       );
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("X-Label-Kind", result.data.kind);

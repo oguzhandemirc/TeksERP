@@ -12,6 +12,10 @@ interface Props {
   /** Etiket türü — KK1 → ROLL_RAW, Tambur → ROLL_FINISHED. Backend hangi
    *  default şablonun uygulanacağını belirler. */
   kind: 'ROLL_RAW' | 'ROLL_FINISHED';
+  /** Baskı-anında müşteri bağlamı (gevşek model: top→sipariş bağı yok).
+   *  orderLineId → tam sipariş + override; customerId → manuel müşteri; ikisi de
+   *  yoksa müşterisiz (spec-only) / WO-fallback. */
+  labelContext?: { orderLineId?: string | null; customerId?: string | null };
   /** Print akışı bittiğinde (başarılı / hatalı) parent state'ini temizler. */
   onDone: () => void;
 }
@@ -24,7 +28,7 @@ interface Props {
  * "Mobil ile Electron'daki etiket farklı" sorunu yapısal olarak çözülür —
  * Electron LabelPreview de iframe ile aynı HTML'i tüketir.
  */
-export function LabelPrinter({ roll, kind, onDone }: Props) {
+export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
   const firedRef = useRef(false);
 
   // onDone parent'tan inline arrow gelebilir → effect deps'inden çıkarmak için
@@ -64,7 +68,11 @@ export function LabelPrinter({ roll, kind, onDone }: Props) {
     (async () => {
       try {
         const r = await apiClient.get<string>(`/labels/rolls/${roll.id}/html`, {
-          params: { kind },
+          params: {
+            kind,
+            ...(labelContext?.orderLineId ? { orderLineId: labelContext.orderLineId } : {}),
+            ...(labelContext?.customerId ? { customerId: labelContext.customerId } : {}),
+          },
           responseType: 'text',
           transformResponse: [(d) => d],
         });
@@ -106,7 +114,7 @@ export function LabelPrinter({ roll, kind, onDone }: Props) {
         if (mountedRef.current) onDoneRef.current();
       }
     })();
-  }, [roll, kind]);
+  }, [roll, kind, labelContext]);
 
   return null;
 }

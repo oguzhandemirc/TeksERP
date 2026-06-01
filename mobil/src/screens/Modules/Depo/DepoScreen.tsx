@@ -27,7 +27,6 @@ import DetailSheet, {
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { rollService } from '../../../services/roll.service';
-import RelabelSheet, { type RelabelRoll } from '../../../components/RelabelSheet';
 import { swatchService, type SwatchListItem } from '../../../services/swatch.service';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 
@@ -75,7 +74,6 @@ export default function DepoScreen() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [detailRoll, setDetailRoll] = useState<RollListItem | null>(null);
   const [detailSwatch, setDetailSwatch] = useState<SwatchListItem | null>(null);
-  const [relabelRoll, setRelabelRoll] = useState<RelabelRoll | null>(null);
   const handleRollDetailDismiss = useCallback(() => setDetailRoll(null), []);
   const handleSwatchDetailDismiss = useCallback(() => setDetailSwatch(null), []);
 
@@ -184,11 +182,8 @@ export default function DepoScreen() {
   const pendingDetailRef = useRef<
     | { kind: 'roll'; data: RollListItem }
     | { kind: 'swatch'; data: SwatchListItem }
-    | { kind: 'relabel'; data: RelabelRoll }
     | null
   >(null);
-  // Tarayıcı amacı: detay görüntüleme mi, yönlendirme mi (aynı scanner paylaşılır).
-  const scanPurposeRef = useRef<'detail' | 'relabel'>('detail');
 
   const handleBarcodeScanned = async (raw: string) => {
     const barcode = raw.trim();
@@ -200,11 +195,6 @@ export default function DepoScreen() {
     // Prefix sabit: SW- → Kartela, TEKS- → Top. Operatör Tümü sekmesindeyken
     // kartela barkodu okutursa da kartela detayı açılır.
     const isSwatchBarcode = /^SW-/i.test(barcode);
-    if (scanPurposeRef.current === 'relabel' && isSwatchBarcode) {
-      Toast.show({ type: 'error', text1: 'Kartela yönlendirilemez' });
-      setScannerOpen(false);
-      return;
-    }
     try {
       if (isSwatchBarcode) {
         const res = await swatchService.getByBarcode(barcode);
@@ -227,22 +217,7 @@ export default function DepoScreen() {
           Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: barcode });
         } else {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          if (scanPurposeRef.current === 'relabel') {
-            pendingDetailRef.current = {
-              kind: 'relabel',
-              data: {
-                id: r.id,
-                barcode: r.barcode,
-                itemId: r.itemId,
-                colorId: r.colorId,
-                width: r.width,
-                itemName: r.item?.name,
-                colorName: r.color?.name ?? null,
-              },
-            };
-          } else {
-            pendingDetailRef.current = { kind: 'roll', data: r as RollListItem };
-          }
+          pendingDetailRef.current = { kind: 'roll', data: r as RollListItem };
         }
       }
     } catch (err) {
@@ -260,7 +235,6 @@ export default function DepoScreen() {
     if (!pending) return;
     pendingDetailRef.current = null;
     if (pending.kind === 'roll') setDetailRoll(pending.data);
-    else if (pending.kind === 'relabel') setRelabelRoll(pending.data);
     else setDetailSwatch(pending.data);
   }, []);
 
@@ -344,10 +318,7 @@ export default function DepoScreen() {
           <View style={styles.toolbarRow}>
             <TouchableRipple
               borderless
-              onPress={() => {
-                scanPurposeRef.current = 'detail';
-                setScannerOpen(true);
-              }}
+              onPress={() => setScannerOpen(true)}
               style={styles.scanButton}
             >
               <View style={styles.scanButtonInner}>
@@ -374,18 +345,6 @@ export default function DepoScreen() {
               dense
               left={<TextInput.Icon icon="magnify" />}
             />
-            {!isSwatchMode && (
-              <IconButton
-                icon="swap-horizontal"
-                mode="contained-tonal"
-                size={22}
-                onPress={() => {
-                  scanPurposeRef.current = 'relabel';
-                  setScannerOpen(true);
-                }}
-                accessibilityLabel="Yönlendir / etiketi değiştir"
-              />
-            )}
             <RefreshButton
               onPress={handleRefresh}
               refreshing={refreshing}
@@ -502,12 +461,6 @@ export default function DepoScreen() {
       </View>
 
       {/* Kamera barkod tarayıcı */}
-      <RelabelSheet
-        roll={relabelRoll}
-        onDismiss={() => setRelabelRoll(null)}
-        onDone={handleRefresh}
-      />
-
       <BarcodeScannerModal
         visible={scannerOpen}
         onDismiss={() => setScannerOpen(false)}

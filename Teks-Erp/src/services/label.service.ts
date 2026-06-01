@@ -97,26 +97,15 @@ export class LabelService {
    * customer/order alanları sabit null. Sevkiyat modülü yeniden yazıldığında
    * order context'i parametre olarak alınacak.
    */
-  async getRollLabel(rollId: string): Promise<ApiResponse<LabelPayload>> {
+  async getRollLabel(
+    rollId: string,
+    opts?: { orderLineId?: string | null; customerId?: string | null }
+  ): Promise<ApiResponse<LabelPayload>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
       include: {
         item: { select: { id: true, code: true, name: true } },
         color: { select: { id: true, code: true, name: true } },
-        targetOrderLine: {
-          select: {
-            id: true,
-            customerItemName: true,
-            customerColorName: true,
-            order: {
-              select: {
-                orderNumber: true,
-                customerId: true,
-                customer: { select: { name: true } },
-              },
-            },
-          },
-        },
         producedInStep: {
           select: {
             workOrder: {
@@ -170,18 +159,40 @@ export class LabelService {
     let itemMasterAlias: string | null = null;
     let colorMasterAlias: string | null = null;
 
-    if (roll.targetOrderLineId && roll.targetOrderLine) {
-      // ① Öncelik: topun hedef sipariş kalemi (Tambur'da atanan "değişebilen isim").
-      // Çoklu-sipariş WO'da bile etiket net müşteri/sipariş alır.
-      const tgt = roll.targetOrderLine;
-      customerId = tgt.order.customerId;
-      customerName = tgt.order.customer.name;
-      orderNumber = tgt.order.orderNumber;
-      orderLineId = tgt.id;
-      itemOverride = tgt.customerItemName;
-      colorOverride = tgt.customerColorName;
+    if (opts?.orderLineId) {
+      // ① Baskı-anında seçilen sipariş kalemi (tambur kesim / relabel). Bu bir BAĞ
+      // DEĞİL — yalnız bu baskının müşteri/sipariş bağlamı (gevşek model: top fungible).
+      const tgt = await prisma.orderLine.findUnique({
+        where: { id: opts.orderLineId },
+        select: {
+          id: true,
+          customerItemName: true,
+          customerColorName: true,
+          order: {
+            select: { orderNumber: true, customerId: true, customer: { select: { name: true } } },
+          },
+        },
+      });
+      if (tgt) {
+        customerId = tgt.order.customerId;
+        customerName = tgt.order.customer.name;
+        orderNumber = tgt.order.orderNumber;
+        orderLineId = tgt.id;
+        itemOverride = tgt.customerItemName;
+        colorOverride = tgt.customerColorName;
+      }
+    } else if (opts?.customerId) {
+      // ① Manuel müşteri (WO dışı) — sipariş yok; isimler master alias'tan türetilir.
+      const cust = await prisma.customer.findUnique({
+        where: { id: opts.customerId },
+        select: { id: true, name: true },
+      });
+      if (cust) {
+        customerId = cust.id;
+        customerName = cust.name;
+      }
     } else {
-      // ② Geri uyum: hedef yoksa WO'ya bağlı satırlardan tek-müşteri tahmini.
+      // ② Geri uyum: seçim yoksa WO'ya bağlı satırlardan tek-müşteri tahmini.
       const links = roll.producedInStep?.workOrder?.orderLinks ?? [];
       const customerIds = new Set(links.map((l) => l.orderLine.order.customerId));
       const sameCustomer = links.length > 0 && customerIds.size === 1;
@@ -352,8 +363,9 @@ export class LabelService {
   async getRollLabelHtml(
     rollId: string,
     kindOverride?: LabelKind,
+    opts?: { orderLineId?: string | null; customerId?: string | null },
   ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
-    const payloadResp = await this.getRollLabel(rollId);
+    const payloadResp = await this.getRollLabel(rollId, opts);
     const payload = payloadResp.data;
 
     const roll = await prisma.roll.findUnique({

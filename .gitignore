@@ -10,3 +10,7 @@ React/
 # Test artefaktları (token, raporlar)
 test-results/
 TEST_BUG_REPORT.md
+
+# Geçici diagnostic / e2e scratch dosyaları (repo'ya girmemeli)
+Teks-Erp/_e2e/
+Teks-Erp/_*.mjs

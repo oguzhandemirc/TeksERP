@@ -16,7 +16,6 @@ import {
   TouchableRipple,
   Icon,
   Appbar,
-  Badge,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import {
@@ -43,8 +42,7 @@ import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
-import ReprintQueueSheet from '../../../components/ReprintQueueSheet';
-import { packingService } from '../../../services/packing.service';
+import LabelTargetSheet, { type LabelTargetContext } from '../../../components/LabelTargetSheet';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { tamburService } from '../../../services/tambur.service';
@@ -151,14 +149,15 @@ export default function TamburScreen() {
   useLandscapeLock(!compact);
   const insets = useSafeAreaInsets();
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
-  // Print-queue (yeniden basılacak etiketler) — tek yazıcı tamburda.
-  const [reprintOpen, setReprintOpen] = useState(false);
-  const reprintQ = useQuery({
-    queryKey: ['shipping', 'reprint-queue'],
-    queryFn: () => packingService.getReprintQueue(),
-    staleTime: 30_000,
-  });
-  const reprintCount = reprintQ.data?.data?.length ?? 0;
+  // Etiket "kime?" — baskı anında müşteri seçimi (gevşek model: top→sipariş bağı yok).
+  const [labelContext, setLabelContext] = useState<LabelTargetContext | undefined>(undefined);
+  const [targetSheet, setTargetSheet] = useState<{ roll: Roll; defaultLineId: string | null } | null>(null);
+  const [pendingTargetRolls, setPendingTargetRolls] = useState<{ roll: Roll; defaultLineId: string | null }[]>([]);
+  // Yönlendir (yeniden etiketle) — topu bul (okut / kod ara / son toplar) → kime? → bas.
+  const [relabelFindOpen, setRelabelFindOpen] = useState(false);
+  const [relabelBarcode, setRelabelBarcode] = useState('');
+  const [relabelScanOpen, setRelabelScanOpen] = useState(false);
+  const [relabelResolving, setRelabelResolving] = useState(false);
   // Drawer + RNModal stack çakışmasını çözen ortak queue (hook).
   const drawerQueue = useDrawerActionQueue({
     drawerOpen: rightDrawerOpen,
@@ -187,10 +186,6 @@ export default function TamburScreen() {
   // Roller tam obje olarak tutulur (item.color, variant dahil) → LabelPrinter
   // doğrudan basabilsin.
   const [pendingPrintRolls, setPendingPrintRolls] = useState<Roll[]>([]);
-  // Kesim sonrası OTOMATİK yazdırma kuyruğu — operatör "Bas"a basmadan etiket
-  // çıkar. Manuel pendingPrintRolls modal'ı ayrı kalır; bu kuyruk doğrudan
-  // activePrintRoll'a akar (drain effect).
-  const [autoPrintQueue, setAutoPrintQueue] = useState<Roll[]>([]);
 
   // Geçmiş çıktı listesi modal state
   const [recentOutputOpen, setRecentOutputOpen] = useState(false);
@@ -413,14 +408,41 @@ export default function TamburScreen() {
     if (compact && activeCardId) setRightDrawerOpen(false);
   }, [compact, activeCardId]);
 
-  // Auto-print drain — yazıcı boştaysa kuyruktan bir sonrakini bas. Ardışık
-  // kesimlerde etiketler sırayla otomatik basılır (operatör müdahalesi yok).
+  // Etiket "kime?" kuyruğu drain — sheet ve yazıcı boşsa sıradaki top için aç.
+  // Kesim/yönlendir/son-toplar hepsi bu kuyruğa girer; her topta önce hedef sorulur.
   useEffect(() => {
-    if (activePrintRoll === null && autoPrintQueue.length > 0) {
-      setActivePrintRoll(autoPrintQueue[0]);
-      setAutoPrintQueue((q) => q.slice(1));
+    if (targetSheet === null && activePrintRoll === null && pendingTargetRolls.length > 0) {
+      setTargetSheet(pendingTargetRolls[0]);
+      setPendingTargetRolls((q) => q.slice(1));
     }
-  }, [activePrintRoll, autoPrintQueue]);
+  }, [targetSheet, activePrintRoll, pendingTargetRolls]);
+
+  // Bir topu "Etiket kime?" kuyruğuna at (kesim sonrası / yönlendir / son toplar / finalize).
+  const queueLabel = (roll: Roll, defaultLineId: string | null = null) =>
+    setPendingTargetRolls((q) => [...q, { roll, defaultLineId }]);
+
+  // Yönlendir — barkod/koddan topu çöz → "Etiket kime?" kuyruğuna at.
+  const resolveRelabelBarcode = async (code: string) => {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    setRelabelResolving(true);
+    try {
+      const { rollService } = await import('../../../services/roll.service');
+      const res = await rollService.getByBarcode(trimmed);
+      const roll = res.data as Roll | null;
+      if (!roll) {
+        Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: trimmed });
+        return;
+      }
+      setRelabelFindOpen(false);
+      setRelabelBarcode('');
+      queueLabel(roll, null);
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Okunamadı', text2: (e as Error).message });
+    } finally {
+      setRelabelResolving(false);
+    }
+  };
 
   // ── Mutations ──
   const finalizeMutation = useMutation({
@@ -479,15 +501,14 @@ export default function TamburScreen() {
         qualityGrade: data.qualityGrade,
         targetOrderLineId: data.targetOrderLineId ?? null,
       }),
-    onSuccess: async (res) => {
+    onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const data = res.data as
         | { childRoll?: Roll; parentRemainingQty?: number }
         | undefined;
       if (data?.childRoll?.barcode) {
-        // OTOMATİK yazdır — "Bas"a gerek yok; auto-print kuyruğuna at, drain
-        // effect yazıcıya verir.
-        setAutoPrintQueue((q) => [...q, data.childRoll!]);
+        // Baskıdan önce "Etiket kime?" sor → kesimde seçilen sipariş default gelir.
+        queueLabel(data.childRoll, variables.targetOrderLineId ?? null);
       }
       // Uzunluk input'unu sıfırla; kalite/sipariş aynen kalsın (seri kesim).
       setWork((w) => ({
@@ -661,12 +682,12 @@ export default function TamburScreen() {
         qualityGrade,
         targetOrderLineId: targetOrderLineId ?? null,
       }),
-    onSuccess: (res) => {
+    onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const data = res.data;
       if (data?.childRoll) {
-        // OTOMATİK yazdır — "Bas"a gerek yok (auto-print kuyruğu).
-        setAutoPrintQueue((q) => [...q, data.childRoll]);
+        // Baskıdan önce "Etiket kime?" sor → kesimde seçilen sipariş default gelir.
+        queueLabel(data.childRoll, variables.targetOrderLineId ?? null);
       }
       // Parent metraj güncelle (sticky header anında yansır)
       if (data && typeof data.parentRemainingQty === 'number' && recutRollMeta) {
@@ -1294,19 +1315,12 @@ export default function TamburScreen() {
       headerExtras={
         <View style={styles.headerExtrasRow}>
           <SyncStatusChip />
-          {reprintCount > 0 && (
-            <View>
-              <Appbar.Action
-                icon="printer-alert"
-                color="#fbbf24"
-                onPress={() => setReprintOpen(true)}
-                accessibilityLabel={`Yeniden basılacak etiket: ${reprintCount}`}
-              />
-              <Badge style={styles.reprintBadge} size={16}>
-                {reprintCount}
-              </Badge>
-            </View>
-          )}
+          <Appbar.Action
+            icon="swap-horizontal"
+            color="#fff"
+            onPress={() => setRelabelFindOpen(true)}
+            accessibilityLabel="Yönlendir / yeniden etiketle"
+          />
           {compact ? (
             <Appbar.Action
               icon="format-list-bulleted"
@@ -2100,7 +2114,7 @@ export default function TamburScreen() {
         rolls={pendingPrintRolls}
         batchNumber={activeJob?.stepSummary.batchNumber ?? null}
         onDismiss={() => setPendingPrintRolls([])}
-        onPrint={(roll) => setActivePrintRoll(roll)}
+        onPrint={(roll) => queueLabel(roll)}
         printingRollId={activePrintRoll?.id ?? null}
       />
 
@@ -2138,7 +2152,7 @@ export default function TamburScreen() {
       <RecentOutputModal
         visible={recentOutputOpen}
         onDismiss={() => setRecentOutputOpen(false)}
-        onPrint={(roll) => setActivePrintRoll(roll)}
+        onPrint={(roll) => queueLabel(roll)}
         printingRollId={activePrintRoll?.id ?? null}
       />
 
@@ -2159,7 +2173,11 @@ export default function TamburScreen() {
       <LabelPrinter
         roll={activePrintRoll}
         kind="ROLL_FINISHED"
-        onDone={() => setActivePrintRoll(null)}
+        labelContext={labelContext}
+        onDone={() => {
+          setActivePrintRoll(null);
+          setLabelContext(undefined);
+        }}
       />
 
       <ConfirmDialog
@@ -2201,9 +2219,90 @@ export default function TamburScreen() {
         emptyText="Açık sipariş satırı yok"
       />
 
-      <ReprintQueueSheet
-        visible={reprintOpen}
-        onDismiss={() => setReprintOpen(false)}
+      {/* Etiket kime? — kesim/yönlendir/son-toplar sonrası baskı hedefi */}
+      <LabelTargetSheet
+        roll={
+          targetSheet
+            ? {
+                id: targetSheet.roll.id,
+                barcode: targetSheet.roll.barcode,
+                itemId: targetSheet.roll.itemId,
+                colorId: targetSheet.roll.colorId,
+                width: targetSheet.roll.width != null ? Number(targetSheet.roll.width) : null,
+                itemName: targetSheet.roll.item?.name,
+                colorName: targetSheet.roll.color?.name ?? null,
+              }
+            : null
+        }
+        defaultLineId={targetSheet?.defaultLineId ?? null}
+        onCancel={() => setTargetSheet(null)}
+        onConfirm={(ctx) => {
+          const r = targetSheet?.roll ?? null;
+          setTargetSheet(null);
+          if (!r) return;
+          setLabelContext(ctx.orderLineId || ctx.customerId ? ctx : undefined);
+          setActivePrintRoll(r);
+        }}
+      />
+
+      {/* Yönlendir — topu bul: koddan / okut / son toplar → Etiket kime? → bas */}
+      <RNModal
+        isVisible={relabelFindOpen}
+        onBackdropPress={() => setRelabelFindOpen(false)}
+        style={{ justifyContent: 'center', margin: 24 }}
+      >
+        <Surface style={{ borderRadius: 16, padding: 16, backgroundColor: '#fff' }} elevation={4}>
+          <Text variant="titleMedium" style={{ fontWeight: '700', color: '#0f172a' }}>
+            Yönlendir — top bul
+          </Text>
+          <TextInput
+            mode="outlined"
+            dense
+            label="Top barkodu / no"
+            value={relabelBarcode}
+            onChangeText={setRelabelBarcode}
+            onSubmitEditing={() => resolveRelabelBarcode(relabelBarcode)}
+            right={
+              <TextInput.Icon icon="magnify" onPress={() => resolveRelabelBarcode(relabelBarcode)} />
+            }
+            style={{ marginVertical: 8 }}
+          />
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+            <Button
+              mode="contained"
+              icon="barcode-scan"
+              onPress={() => setRelabelScanOpen(true)}
+              disabled={relabelResolving}
+              style={{ flex: 1 }}
+            >
+              Okut
+            </Button>
+            <Button
+              mode="contained-tonal"
+              icon="printer-search"
+              onPress={() => {
+                setRelabelFindOpen(false);
+                setRecentOutputOpen(true);
+              }}
+              style={{ flex: 1 }}
+            >
+              Son toplar
+            </Button>
+          </View>
+          <Button onPress={() => setRelabelFindOpen(false)} style={{ marginTop: 6 }}>
+            Kapat
+          </Button>
+        </Surface>
+      </RNModal>
+
+      <BarcodeScannerModal
+        visible={relabelScanOpen}
+        onDismiss={() => setRelabelScanOpen(false)}
+        onScan={(code) => {
+          setRelabelScanOpen(false);
+          void resolveRelabelBarcode(code);
+        }}
+        title="Yönlendirilecek topu okut"
       />
     </ScreenChrome>
   );

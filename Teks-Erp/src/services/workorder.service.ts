@@ -441,12 +441,12 @@ export class WorkOrderService {
 
     // Refakat kartı barkodu sequence çakışırsa (P2002) tx'i baştan dene.
     const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
-      // Overbooking guard (3.2) — UZLAŞTIRILMIŞ kapsama ile.
-      // Kalan kapasite = quantity − (shipped + warehouseLabeled + reserved).
-      // Böylece (a) zaten karşılanmış (etiketli/sevk) metraj tekrar tahsis
-      // edilemez, (b) üretimi başka siparişe kayan WO'nun rezervi erir → o
-      // kalem yeniden üretime açılabilir. (Eski hali sadece allocatedQty
-      // topluyordu; shipped/finished saymıyordu — picker ile çelişiyordu.)
+      // Overbooking guard (3.2) — kapsama ile.
+      // Kalan kapasite = quantity − (shipped + reserved). Serbest depo stoğu
+      // (fungible havuz) bir kaleme bağlanmaz → tahsisi kısıtlamaz; planlamacı
+      // gerekirse stoğa rağmen WO açabilir (sistem gösterir, zorlamaz). Böylece
+      // (a) sevk edilmiş + canlı WO rezervi tekrar tahsis edilemez, (b) üretimi
+      // başka yöne kayan WO'nun rezervi erir → kalem yeniden üretime açılır.
       if (allocations.length > 0) {
         const allocLineIds = allocations.map((a) => a.orderLineId);
         const orderLines = await tx.orderLine.findMany({

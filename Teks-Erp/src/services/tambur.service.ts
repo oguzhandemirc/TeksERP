@@ -92,8 +92,6 @@ interface CutInput {
   length: number;
   qualityGrade: string;
   relatedErrorIds: string[];
-  // Bu kesimin hedef sipariş kalemi (null = stok). Tambur'da operatör seçer.
-  targetOrderLineId?: string | null;
 }
 
 /**
@@ -108,41 +106,6 @@ function resolveCutStatus(
   targetStatusByCode: Map<string, RollStatus>
 ): RollStatus {
   return targetStatusByCode.get(qualityGradeCode) ?? RollStatus.WAREHOUSE;
-}
-
-/**
- * #5 — Bir topu yalnızca ÜRÜNÜ (ve kalem rengi belliyse RENGİ) uyan sipariş
- * kalemine etiketleyebilirsin. Boş liste → no-op. Bulunamayan/uyumsuz → badRequest.
- * (Aksi halde yanlış ürün bir siparişi "karşılamış" görünür, sevk muhasebesi bozulur.)
- */
-async function assertTargetLinesMatchRoll(
-  targetLineIds: (string | null | undefined)[],
-  rollItemId: string,
-  rollColorId: string | null
-): Promise<void> {
-  const ids = [...new Set(targetLineIds.filter((x): x is string => !!x))];
-  if (ids.length === 0) return;
-  const lines = await prisma.orderLine.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, itemId: true, colorId: true },
-  });
-  const found = new Set(lines.map((l) => l.id));
-  const missing = ids.filter((id) => !found.has(id));
-  if (missing.length > 0) {
-    throw AppError.badRequest(`Hedef sipariş kalemi bulunamadı: ${missing.join(", ")}`);
-  }
-  for (const line of lines) {
-    if (line.itemId !== rollItemId) {
-      throw AppError.badRequest(
-        "Hedef sipariş kaleminin ürünü, topun ürünüyle eşleşmiyor — bu top o siparişe etiketlenemez."
-      );
-    }
-    if (line.colorId && rollColorId && line.colorId !== rollColorId) {
-      throw AppError.badRequest(
-        "Hedef sipariş kaleminin rengi, topun rengiyle eşleşmiyor — bu top o siparişe etiketlenemez."
-      );
-    }
-  }
 }
 
 /**
@@ -403,8 +366,6 @@ export class TamburService {
       decisions: ErrorDecision[];
       cuts: CutInput[];
       foldType?: "2-KAT" | "4-KAT";
-      // Tüm kesimlere/kalan'a uygulanacak varsayılan hedef sipariş (kesim bazlı yoksa).
-      targetOrderLineId?: string | null;
     },
     userId?: string
   ): Promise<
@@ -526,13 +487,6 @@ export class TamburService {
       }
     }
 
-    // #5 — kesimlerin/kuyruğun hedef sipariş kalemleri topun ürün/rengiyle uyumlu olmalı.
-    await assertTargetLinesMatchRoll(
-      [...inputCuts.map((c) => c.targetOrderLineId), data.targetOrderLineId],
-      roll.itemId,
-      roll.colorId
-    );
-
     // Item ve renk artık fason kabul aşamasında set edilmiş durumda. Tambur
     // kimlik değişikliği yapmaz — sadece bölme + Roll.properties parent'tan
     // miras alma.
@@ -626,7 +580,6 @@ export class TamburService {
         inheritProperties: boolean;
         auditSource: string;
         auditErrorIds: string[];
-        targetOrderLineId: string | null;
       };
 
       // Decimal offset — float drift'le sahte ~0.000m kuyruk top yaratma.
@@ -646,7 +599,6 @@ export class TamburService {
           inheritProperties: cutStatus === RollStatus.WAREHOUSE,
           auditSource: "OPERATOR_CUT",
           auditErrorIds: c.relatedErrorIds,
-          targetOrderLineId: c.targetOrderLineId ?? data.targetOrderLineId ?? null,
         });
         offsetD = nextOffsetD;
       }
@@ -666,7 +618,6 @@ export class TamburService {
           inheritProperties: remainStatus === RollStatus.WAREHOUSE,
           auditSource: "REMAINING_TAIL",
           auditErrorIds: [],
-          targetOrderLineId: data.targetOrderLineId ?? null,
         });
       }
 
@@ -690,7 +641,6 @@ export class TamburService {
             producedInStepId: roll.producedInStepId,
             parentRollId: roll.id,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
-            targetOrderLineId: seg.targetOrderLineId,
           },
           include: {
             item: true,
@@ -1456,7 +1406,6 @@ export class TamburService {
       cutLength: number;
       qualityGrade?: string | null;
       notes?: string | null;
-      targetOrderLineId?: string | null;
     },
     userId?: string,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
@@ -1487,9 +1436,6 @@ export class TamburService {
       );
     }
 
-    // #5 — etiket hedefi topun ürün/rengiyle uyumlu olmalı.
-    await assertTargetLinesMatchRoll([data.targetOrderLineId], parent.itemId, parent.colorId);
-
     const resolvedQualityGrade = data.qualityGrade ?? parent.qualityGrade;
     const resolvedQualityGradeId =
       data.qualityGrade && data.qualityGrade !== parent.qualityGrade
@@ -1514,7 +1460,6 @@ export class TamburService {
           parentRollId: parent.id,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
-          targetOrderLineId: data.targetOrderLineId ?? null,
         },
       });
 
@@ -1637,7 +1582,6 @@ export class TamburService {
     data: {
       remainingAction?: "keep_1kalite" | "keep_a1" | "scrap" | "discard";
       notes?: string | null;
-      targetOrderLineId?: string | null;
     },
     userId?: string,
   ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> {
@@ -1654,9 +1598,6 @@ export class TamburService {
     if (parent.status !== RollStatus.WAREHOUSE) {
       throw AppError.badRequest(`Top depoda değil (${parent.status})`);
     }
-
-    // #5 — kalan kuyruk top'un hedefi topun ürün/rengiyle uyumlu olmalı.
-    await assertTargetLinesMatchRoll([data.targetOrderLineId], parent.itemId, parent.colorId);
 
     const remainingQty = Number(parent.currentQty);
     const action = data.remainingAction ?? "discard";
@@ -1688,8 +1629,7 @@ export class TamburService {
             parentRollId: parent.id,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
-            targetOrderLineId: data.targetOrderLineId ?? null,
-          },
+            },
         });
         if (propertyIds.length > 0) {
           await tx.rollProperty.createMany({
@@ -1798,7 +1738,6 @@ export class TamburService {
       status: "WAREHOUSE" | "SCRAP" | "A1_STOCK";
       qualityGrade?: string | null;
       notes?: string | null;
-      targetOrderLineId?: string | null;
     },
     userId?: string,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRemainingQty: number }>> {
@@ -1835,9 +1774,6 @@ export class TamburService {
       );
     }
 
-    // #5 — etiket hedefi topun ürün/rengiyle uyumlu olmalı.
-    await assertTargetLinesMatchRoll([data.targetOrderLineId], parent.itemId, parent.colorId);
-
     // Geri uyum: tablet eski input'u (status A1_STOCK/SCRAP) gönderebilir.
     // Yeni kurguda status her zaman WAREHOUSE; eski status değerleri
     // qualityGrade'e dönüştürülür (explicit qualityGrade override eder).
@@ -1873,7 +1809,6 @@ export class TamburService {
           parentRollId: parent.id,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
-          targetOrderLineId: data.targetOrderLineId ?? null,
           // currentStepId: child Tambur'dan çıktı (depo değil bir step) — null.
         },
       });
@@ -2000,7 +1935,6 @@ export class TamburService {
       /// Tambur kararı — WO.foldType (planlama) override. Verilmezse planlanan
       /// kullanılır (WO.foldType). Bu değer audit/RollOperation metadata'ya yazılır.
       foldType?: string | null;
-      targetOrderLineId?: string | null;
     },
     userId?: string,
   ): Promise<ApiResponse<{ rollId: string; remainingChildId: string | null; remainingQty: number }>> {
@@ -2064,9 +1998,6 @@ export class TamburService {
       throw AppError.badRequest(`Açık kumaş aktif değil (${parent.status})`);
     }
 
-    // #5 — kalan kuyruk top'un hedef sipariş kalemi ürün/renk uyumlu olmalı.
-    await assertTargetLinesMatchRoll([data.targetOrderLineId], parent.itemId, parent.colorId);
-
     const remainingQty = Number(parent.currentQty);
     // remainingAction varsa onu kullan; yoksa eski scrapRemaining'den türet.
     const action: "keep_1kalite" | "keep_a1" | "scrap" | "discard" =
@@ -2112,8 +2043,7 @@ export class TamburService {
             parentRollId: parent.id,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
-            targetOrderLineId: data.targetOrderLineId ?? null,
-          },
+            },
         });
         if (propertyIds.length > 0) {
           await tx.rollProperty.createMany({

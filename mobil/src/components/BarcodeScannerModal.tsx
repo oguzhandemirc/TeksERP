@@ -1,7 +1,9 @@
 import React from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import RNModal from 'react-native-modal';
+import Toast from 'react-native-toast-message';
 import { BarcodeScannerView, type SupportedBarcodeType } from './BarcodeScannerView';
+import { toastConfig } from './ToastConfig';
 
 interface Props {
   visible: boolean;
@@ -64,6 +66,11 @@ export function BarcodeScannerModal({
           continuous={continuous}
         />
       </View>
+      {/* Modal native katmanda açıldığından kök <Toast/> ARKADA kalıyor; hata/başarı
+          mesajları okunmuyordu. Modalın İÇİNE ikinci bir Toast koyuyoruz — kütüphane
+          en son mount olan ref'i kullanır (modal kapanınca otomatik köke döner), böylece
+          tarama mesajları kameranın ÜSTÜNDE görünür. */}
+      <Toast config={toastConfig} />
     </RNModal>
   );
 }

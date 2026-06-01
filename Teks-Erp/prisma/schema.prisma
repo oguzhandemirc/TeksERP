@@ -428,7 +428,7 @@ model Route {
   isActive    Boolean @default(true)
 
   // Relations
-  customer   Customer?   @relation("CustomerDefaultRoutes", fields: [customerId], references: [id])
+  customer       Customer?       @relation("CustomerDefaultRoutes", fields: [customerId], references: [id])
   steps          RouteStep[]
   workOrders     WorkOrder[] // Bu şablondan türetilen WO'lar (analytics)
   productRecipes ProductRecipe[] // Bu rotayı kullanan üretim reçeteleri
@@ -590,16 +590,10 @@ model Roll {
   // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
   createdById String?
 
-  // Sevkiyat — topun hedef sipariş kalemi ("değişebilen isim"). NULL = stok için.
-  // Tambur kesimde set edilir; yön değişince (redirect) güncellenir + yeni etiket basılır.
-  // Etiketin müşteri/sipariş alanları bu satırdan türetilir.
-  targetOrderLineId String?
-  // Paketleme — topun içinde bulunduğu çuval. NULL = henüz paketlenmedi.
-  sackId            String?
-  // Sevkiyat — fiziksel etiketin yeniden basılması gerekiyor mu? Relabel (yön
-  // değişimi / stoğa alma) sonrası true; tambur yazıcısından basılınca temizlenir.
-  // Tek-yazıcı print-queue'yu besler (GET /shipping/reprint-queue).
-  needsReprint      Boolean @default(false)
+  // Paketleme — topun okutulduğu sevkiyat oturumu. NULL = henüz sevkiyata girmedi.
+  // READY'de toplar SHIPPED'a çekilir; iptalde shipmentId temizlenir, depoya döner.
+  // GEVŞEK MODEL: top→sipariş bağı YOK; etiket müşterisi baskı anında seçilir.
+  shipmentId String?
 
   // Relations
   item                Item                        @relation(fields: [itemId], references: [id])
@@ -620,8 +614,7 @@ model Roll {
   producedInStep      WorkOrderStep?              @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
   createdBy           User?                       @relation("RollCreatedBy", fields: [createdById], references: [id])
   properties          RollProperty[]
-  targetOrderLine     OrderLine?                  @relation("RollTargetOrderLine", fields: [targetOrderLineId], references: [id])
-  sack                Sack?                       @relation(fields: [sackId], references: [id])
+  shipment            Shipment?                   @relation(fields: [shipmentId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -643,9 +636,10 @@ model Roll {
   // Fason kuyruğu: "bu adımda + AT_SUBCONTRACTOR" listeleme
   @@index([currentStepId, status])
   @@index([qualityGradeId])
-  @@index([targetOrderLineId])
-  @@index([sackId])
-  @@index([needsReprint])
+  // Sevkiyat oturumunun topları + "depodaki serbest stok" (shipmentId IS NULL) sorgusu
+  @@index([shipmentId])
+  // Spec-toplam karşılanma: item+renk+en eşleşen WAREHOUSE/STOCK toplar (fungible havuz)
+  @@index([status, itemId, colorId, width])
   @@map("rolls")
 }
 
@@ -667,7 +661,6 @@ model Customer {
   branches      CustomerBranch[]
   itemAliases   CustomerItemAlias[]
   colorAliases  CustomerColorAlias[]
-  sacks         Sack[]
   shipments     Shipment[]
 
   createdAt DateTime @default(now())
@@ -698,7 +691,6 @@ model CustomerBranch {
 
   customer  Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
   orders    Order[]
-  sacks     Sack[]
   shipments Shipment[]
 
   createdAt DateTime @default(now())
@@ -736,6 +728,7 @@ model Order {
   branch         CustomerBranch? @relation(fields: [branchId], references: [id])
   manualClosedBy User?           @relation("OrderManualClosedBy", fields: [manualClosedById], references: [id])
   lines          OrderLine[]
+  shipmentLinks  ShipmentOrder[] // Paketleme oturumlarında seçildiği sevkiyatlar
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -753,15 +746,18 @@ model Order {
 // Planlamacı WO açarken bu üçü targetItem/targetColor/targetProperties
 // önerisi olarak kullanır.
 model OrderLine {
-  id        String   @id @default(uuid())
-  orderId   String
-  itemId    String
+  id         String   @id @default(uuid())
+  orderId    String
+  itemId     String
   /// Müşterinin istediği renk. NULL = ham talep (ileride satılabilir; bugün
   /// default akış değil). Item.allowedColors dolu ise bu listeden olmalı.
-  colorId   String?
-  quantity  Decimal  @db.Decimal(12, 3) // Requested quantity (meters)
-  unitPrice Decimal? @db.Decimal(12, 2) // For future finance module
-  width     Decimal? @db.Decimal(12, 3) // İstenen en (cm)
+  colorId    String?
+  quantity   Decimal  @db.Decimal(12, 3) // Requested quantity (meters)
+  /// Denormalize sevk toplamı (m) — Σ(ShipmentAllocation.qty). Tek yazma noktası:
+  /// sevkiyat READY/cancel akışı. recomputeOrderStatus bunu okur.
+  shippedQty Decimal  @default(0) @db.Decimal(12, 3)
+  unitPrice  Decimal? @db.Decimal(12, 2) // For future finance module
+  width      Decimal? @db.Decimal(12, 3) // İstenen en (cm)
 
   /// Tambur kesim talimatı — eşit-parça otomatik öneri. Örn 400 = "her 400 m'de bir kes".
   /// NULL = serbest kesim (operatör karar verir). Tambur bu değerden kesim önerir.
@@ -778,13 +774,12 @@ model OrderLine {
   customerColorName String?
 
   // Relations
-  order              Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  item               Item                        @relation(fields: [itemId], references: [id])
-  color              Color?                      @relation(fields: [colorId], references: [id])
-  workOrderLinks     WorkOrderToOrderLine[]
-  requiredProperties OrderLineRequiredProperty[]
-  targetedRolls      Roll[]                      @relation("RollTargetOrderLine")
-  targetedSwatches   Swatch[]                    @relation("SwatchTargetOrderLine")
+  order               Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  item                Item                        @relation(fields: [itemId], references: [id])
+  color               Color?                      @relation(fields: [colorId], references: [id])
+  workOrderLinks      WorkOrderToOrderLine[]
+  requiredProperties  OrderLineRequiredProperty[]
+  shipmentAllocations ShipmentAllocation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1408,13 +1403,13 @@ model SubcontractorCategory {
 }
 
 model Subcontractor {
-  id        String  @id @default(uuid())
-  code      String  @unique @db.VarChar(32)
-  name      String  @db.VarChar(100)
-  taxNumber String?
-  phone     String?
-  address   String?
-  isActive  Boolean @default(true)
+  id         String  @id @default(uuid())
+  code       String  @unique @db.VarChar(32)
+  name       String  @db.VarChar(100)
+  taxNumber  String?
+  phone      String?
+  address    String?
+  isActive   Boolean @default(true)
   /// İş emri fason adımında firma seçicide default gelir (kategori bazında client eşleşir).
   isFavorite Boolean @default(false)
 
@@ -1465,18 +1460,16 @@ model Swatch {
   purpose      String? // Müşteri sunumu, arşiv, laboratuvar vb.
   createdById  String?
 
-  // Sevkiyat — kartelanın hedef sipariş kalemi (NULL = stok/numune havuzu) + çuval.
-  targetOrderLineId String?
-  sackId            String?
+  // Sevkiyat — kartelanın okutulduğu sevkiyat oturumu (top gibi gönderilir, siparişe sayılmaz).
+  shipmentId String?
 
   // Relations
-  item            Item       @relation(fields: [itemId], references: [id])
-  color           Color?     @relation(fields: [colorId], references: [id])
-  workOrder       WorkOrder? @relation(fields: [workOrderId], references: [id])
-  parentRoll      Roll?      @relation("SwatchParentRoll", fields: [parentRollId], references: [id])
-  createdBy       User?      @relation("SwatchCreatedBy", fields: [createdById], references: [id])
-  targetOrderLine OrderLine? @relation("SwatchTargetOrderLine", fields: [targetOrderLineId], references: [id])
-  sack            Sack?      @relation(fields: [sackId], references: [id])
+  item       Item       @relation(fields: [itemId], references: [id])
+  color      Color?     @relation(fields: [colorId], references: [id])
+  workOrder  WorkOrder? @relation(fields: [workOrderId], references: [id])
+  parentRoll Roll?      @relation("SwatchParentRoll", fields: [parentRollId], references: [id])
+  createdBy  User?      @relation("SwatchCreatedBy", fields: [createdById], references: [id])
+  shipment   Shipment?  @relation(fields: [shipmentId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1485,8 +1478,7 @@ model Swatch {
   @@index([colorId])
   @@index([workOrderId])
   @@index([parentRollId])
-  @@index([targetOrderLineId])
-  @@index([sackId])
+  @@index([shipmentId])
   @@map("swatches")
 }
 
@@ -1515,65 +1507,46 @@ model Manifest {
 }
 
 // =============================================================================
-// 11.7 SEVKIYAT — Çuval (Sack) + İrsaliye (Shipment)
+// 11.7 SEVKIYAT — Sevkiyat oturumu (Shipment) + Çuval (Sack = sadece tartı)
 // =============================================================================
-// Değişebilir etiket modeli: top/kartela hedefi Roll.targetOrderLineId'de tutulur.
-// "Sevk edildi" = çuval kapanıp tartılınca (Sack.status=CLOSED) → içindeki Roll'lar
-// SHIPPED + Order.shippedQty güncellenir. Shipment = bir müşteri+şubeye bir irsaliye.
+// GEVŞEK MODEL: top→sipariş bağı YOK. Top yalnız spec (kalem+renk+en) taşır.
+// Sevkiyat = oturumun gövdesi: tek müşteri+şube + seçilen siparişler (ShipmentOrder)
+// + okutulan toplar (Roll.shipmentId) + çuval ağırlıkları (Sack) + karşılanma
+// tahsisi (ShipmentAllocation). "Sevke Hazır" (READY) anında spec-toplam, seçilen
+// siparişlere termin→tarih FIFO dağıtılır → OrderLine.shippedQty. Çuval içerik
+// tutmaz; sadece no + kg (irsaliyede giden topları yazarız).
 // =============================================================================
-
-enum SackStatus {
-  OPEN // Dolduruluyor — top/kartela okutuluyor
-  CLOSED // Tartıldı + kapandı = "sevk edildi" anı (sevk muhasebesi burada işlenir)
-  SHIPPED // Bir Shipment (irsaliye) ile fiilen kamyona yüklendi
-  CANCELLED // Yanlış açıldı/boşaltıldı — iptal (soft delete). İçindeki top/kartela serbest bırakıldı.
-}
 
 enum ShipmentStatus {
-  PREPARING // İrsaliye hazırlanıyor, çuvallar bağlanıyor
+  PREPARING // Paketleniyor — siparişler seçili, toplar okutuluyor, çuvallar tartılıyor
+  READY // Sevke hazır — kapıda, kamyon/irsaliye bekliyor (karşılanma burada düşülür)
   DISPATCHED // Kamyona yüklendi, çıktı
-  CANCELLED // İptal
+  CANCELLED // İptal — toplar depoya döner, karşılanma geri alınır
 }
 
-/// Çuval — fiziksel paket birimi. Tek müşteri + tek şube (teslim adresi).
-/// shipTo* alanları kapanış anında CustomerBranch'tan kopyalanan SNAPSHOT —
-/// şube adresi sonradan değişse bile eski irsaliyeler donuk (geçmiş kayıt) kalır.
+/// Çuval — fiziksel paket birimi. Artık SADECE tartı satırı: no + kg, içerik tutmaz.
+/// Hangi topun hangi çuvalda olduğu önemsiz (irsaliyede giden topları yazarız).
+/// Bir sevkiyata bağlıdır; "bu sevkiyatta kaç çuval, ağırlıkları ne" sorusuna cevap.
 model Sack {
-  id         String     @id @default(uuid())
-  sackNo     String     @unique @db.VarChar(64) // Client-üretimi barkod (offline-aware)
-  customerId String
-  branchId   String? // Teslim şubesi — opsiyonel (şubesiz müşteri için null)
-  status     SackStatus @default(OPEN)
-  weightKg   Decimal?   @db.Decimal(12, 3) // Tartı — kapanışta girilir
-
-  // Teslim adresi snapshot (kapanışta CustomerBranch'tan kopyalanır — donuk geçmiş)
-  shipToName     String? @db.VarChar(100)
-  shipToAddress  String?
-  shipToCity     String?
-  shipToDistrict String?
-
-  shipmentId String? // Bağlı olduğu irsaliye (null = henüz sevkiyata girmedi)
-  closedAt   DateTime? // Kapanış (tartı) anı
+  id         String   @id @default(uuid())
+  sackNo     String   @unique @db.VarChar(64) // Client-üretimi barkod (offline-aware)
+  shipmentId String? // Bağlı olduğu sevkiyat
+  seq        Int      @default(0) // Sevkiyat içinde sıra (Çuval 1, 2, 3...)
+  weightKg   Decimal? @db.Decimal(12, 3) // Tartı
 
   // Relations
-  customer Customer        @relation(fields: [customerId], references: [id])
-  branch   CustomerBranch? @relation(fields: [branchId], references: [id])
-  shipment Shipment?       @relation(fields: [shipmentId], references: [id])
-  rolls    Roll[]
-  swatches Swatch[]
+  shipment Shipment? @relation(fields: [shipmentId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([customerId, status])
-  @@index([branchId])
   @@index([shipmentId])
-  @@index([status, createdAt])
   @@map("sacks")
 }
 
-/// İrsaliye / Sevkiyat — bir müşteri+şubeye giden bir sevk belgesi. Çuvalları gruplar.
-/// Aynı kamyon birden çok müşteri taşıyorsa aynı plakayla birden çok Shipment olur.
+/// Sevkiyat oturumu — tek müşteri+şube. Paketleme oturumunun gövdesi: seçilen
+/// siparişler + okutulan toplar/kartelalar + çuval ağırlıkları + karşılanma tahsisi.
+/// READY (Sevke Hazır) = kapıda, karşılanma düşüldü; DISPATCHED = kamyona yüklendi.
 model Shipment {
   id         String         @id @default(uuid())
   shipmentNo String         @unique @db.VarChar(64)
@@ -1581,17 +1554,22 @@ model Shipment {
   branchId   String?
   status     ShipmentStatus @default(PREPARING)
 
-  // Araç / sürücü
+  // Araç / sürücü (dispatch'te girilir)
   plateNumber String? @db.VarChar(32)
   driverName  String? @db.VarChar(100)
   carrier     String? @db.VarChar(100)
 
+  readyAt      DateTime? // Sevke Hazır'a basıldığı an (karşılanma düşüldü)
   dispatchedAt DateTime? // Kamyona yüklenip çıktığı an
 
   // Relations
-  customer Customer        @relation(fields: [customerId], references: [id])
-  branch   CustomerBranch? @relation(fields: [branchId], references: [id])
-  sacks    Sack[]
+  customer    Customer             @relation(fields: [customerId], references: [id])
+  branch      CustomerBranch?      @relation(fields: [branchId], references: [id])
+  sacks       Sack[]
+  orders      ShipmentOrder[] // Bu oturumda seçilen siparişler (tahsis kapsamı)
+  rolls       Roll[] // Okutulan toplar
+  swatches    Swatch[] // Okutulan kartelalar (siparişe sayılmaz)
+  allocations ShipmentAllocation[] // READY'de yazılan karşılanma tahsisi (geri-alınabilir)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1600,6 +1578,42 @@ model Shipment {
   @@index([branchId])
   @@index([status, createdAt])
   @@map("shipments")
+}
+
+/// Sevkiyat ↔ Order (N:N) — paketleme oturumunda seçilen siparişler.
+/// Tahsis (allocation) yalnız bu siparişlere dağılır (kapsam = seçim). Append-only.
+model ShipmentOrder {
+  shipmentId String
+  orderId    String
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  order    Order    @relation(fields: [orderId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@id([shipmentId, orderId])
+  @@index([orderId])
+  @@map("shipment_orders")
+}
+
+/// Karşılanma tahsisi — Sevke Hazır anında spec-toplam, seçilen sipariş satırlarına
+/// termin→tarih FIFO dağıtılınca yazılır. OrderLine.shippedQty bunların toplamıdır.
+/// İptalde silinir → shippedQty geri alınır. "Hangi top" değil "ne kadar metraj"
+/// (top↔sipariş bağı yok; aggregate muhasebe).
+model ShipmentAllocation {
+  id          String  @id @default(uuid())
+  shipmentId  String
+  orderLineId String
+  qty         Decimal @db.Decimal(12, 3) // Bu sevkiyatın bu satıra düşürdüğü metraj
+
+  shipment  Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderLine OrderLine @relation(fields: [orderLineId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([shipmentId])
+  @@index([orderLineId])
+  @@map("shipment_allocations")
 }
 
 // =============================================================================
@@ -1671,13 +1685,13 @@ model FabricProperty {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  itemAllowed         ItemAllowedProperty[]
-  workOrderTargets    WorkOrderTargetProperty[]
-  rollProperties      RollProperty[]
-  orderLineRequired   OrderLineRequiredProperty[]
-  stationCapabilities StationProperty[]
+  itemAllowed          ItemAllowedProperty[]
+  workOrderTargets     WorkOrderTargetProperty[]
+  rollProperties       RollProperty[]
+  orderLineRequired    OrderLineRequiredProperty[]
+  stationCapabilities  StationProperty[]
   /// Fason kabullerde uygulandığı receipt'ler (boyahane dönüşü gibi).
-  appliedAtReceipts   SubcontractorReceiptProperty[]
+  appliedAtReceipts    SubcontractorReceiptProperty[]
   productRecipeTargets ProductRecipeProperty[]
 
   @@index([isActive, sortOrder])

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import {
   Surface,
@@ -18,188 +18,157 @@ import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
-import { packingService, type SackListItem } from '../../../services/packing.service';
-import { customerService } from '../../../services/customer.service';
-import { rollService } from '../../../services/roll.service';
+import { packingService, type OpenOrder } from '../../../services/packing.service';
 import { usePermissions } from '../../../hooks/usePermission';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import type { MainStackParamList } from '../../../navigation/types';
-import ReadyToShipList from './components/ReadyToShipList';
-import RelabelSheet, { type RelabelRoll } from '../../../components/RelabelSheet';
 
 // =============================================================================
-// Tartı/Paket — telefon dikey. Omurga: AÇIK çuvallar.
-//   Yeni Çuval (müşteri seç) → Top Ekle (okut) → Tart & Kapat (= sevk edildi).
-// Etiket basma YOK (etiket sadece tamburda). Çuval kapanınca sevkiyata düşer.
+// Tartı / Paket — GEVŞEK MODEL, telefon dikey. 3 adım:
+//   ① Sipariş seç (tek müşteri+şube, depo karşılaması görünür)
+//   ② Topları okut (depodan; canlı karşılama)
+//   ③ Çuvalla & tart → Sevke Hazır (karşılanma düşülür, kapıya)
+// Aktif PREPARING sevkiyat = paketleme görünümü; yoksa sipariş seçimi.
 // =============================================================================
+
+const groupKey = (customerId: string, branchId: string | null) => `${customerId}|${branchId ?? ''}`;
 
 export default function TartiPaketScreen() {
-  usePortraitLock(); // telefon dikey
+  usePortraitLock();
   const qc = useQueryClient();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
-  // Köprü görünürlüğü, navigasyonun Sevkiyat ekranını kaydetme koşuluyla AYNI
-  // kaynaktan gelmeli: has('mobile:sevkiyat') (mobile:* wildcard'ını da kapsar).
-  // Böylece köprü yalnızca ekran gerçekten navigasyona kayıtlıyken görünür —
-  // aksi halde (örn. yalnız global '*' izni) navigate('Sevkiyat') çökerdi.
   const { has } = usePermissions();
   const canShip = has('mobile:sevkiyat');
 
-  const [newSackOpen, setNewSackOpen] = useState(false);
-  const [custSearch, setCustSearch] = useState('');
-  const [scannerSackId, setScannerSackId] = useState<string | null>(null);
-  const [autoScanOpen, setAutoScanOpen] = useState(false);
-  const [relabelScanOpen, setRelabelScanOpen] = useState(false);
-  // Tarayıcı tam kapanmadan RelabelSheet açılırsa (RNModal üst üste) görünmez
-  // overlay dokunmayı yutar — barkodu pending'e al, resolve'u onModalHide'da yap.
-  const [pendingRelabelScan, setPendingRelabelScan] = useState<string | null>(null);
-  const [relabelRoll, setRelabelRoll] = useState<RelabelRoll | null>(null);
-  const [weighSack, setWeighSack] = useState<SackListItem | null>(null);
-  const [weightInput, setWeightInput] = useState('');
-  const [cancelTarget, setCancelTarget] = useState<SackListItem | null>(null);
+  const [shipmentId, setShipmentId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [selGroup, setSelGroup] = useState<string | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [sackOpen, setSackOpen] = useState(false);
+  const [sackKg, setSackKg] = useState('');
+  const [cancelOpen, setCancelOpen] = useState(false);
   const scanBusy = useRef(false);
 
-  const sacksQuery = useQuery({
-    queryKey: ['sacks', 'OPEN'],
-    queryFn: () => packingService.listSacks({ status: 'OPEN' }),
+  // ── Queries ──
+  const openOrdersQ = useQuery({
+    queryKey: ['open-orders'],
+    queryFn: () => packingService.listOpenOrders(),
+    enabled: shipmentId === null,
     staleTime: 10_000,
   });
-  const openSacks = sacksQuery.data?.data ?? [];
+  const openOrders = openOrdersQ.data?.data ?? [];
 
-  const closedQuery = useQuery({
-    queryKey: ['sacks', 'CLOSED', 'unassigned'],
-    queryFn: () => packingService.listSacks({ status: 'CLOSED', unassignedOnly: true }),
-    enabled: canShip,
+  const preparingQ = useQuery({
+    queryKey: ['shipments', 'PREPARING'],
+    queryFn: () => packingService.listShipments({ status: 'PREPARING' }),
+    enabled: shipmentId === null,
     staleTime: 10_000,
   });
-  const closedCount = closedQuery.data?.data?.length ?? 0;
+  const preparing = preparingQ.data?.data ?? [];
 
-  const customersQuery = useQuery({
-    queryKey: ['customers', 'picker'],
-    queryFn: () => customerService.getAll({ page: 1, pageSize: 200 }),
-    enabled: newSackOpen,
-    staleTime: 60_000,
+  const readyQ = useQuery({
+    queryKey: ['shipments', 'READY'],
+    queryFn: () => packingService.listShipments({ status: 'READY' }),
+    enabled: shipmentId === null && canShip,
+    staleTime: 10_000,
   });
+  const readyCount = readyQ.data?.data?.length ?? 0;
 
-  const refreshSacks = () => {
-    void qc.invalidateQueries({ queryKey: ['sacks'] });
-    // Paketlenen toplar Sevke Hazır listesinden düşsün
-    void qc.invalidateQueries({ queryKey: ['shipping', 'ready'] });
+  const shipQ = useQuery({
+    queryKey: ['shipment', shipmentId],
+    queryFn: () => packingService.getShipment(shipmentId!),
+    enabled: shipmentId !== null,
+    staleTime: 5_000,
+  });
+  const ship = shipQ.data?.data ?? null;
+
+  const refreshSelection = () => {
+    void qc.invalidateQueries({ queryKey: ['open-orders'] });
+    void qc.invalidateQueries({ queryKey: ['shipments'] });
   };
+  const refreshShip = () => void qc.invalidateQueries({ queryKey: ['shipment', shipmentId] });
 
-  const createSackMut = useMutation({
-    mutationFn: (customerId: string) => packingService.createSack({ customerId }),
+  // ── Mutations ──
+  const createMut = useMutation({
+    mutationFn: () => packingService.createShipment(selected),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Çuval açıldı', text2: res.data?.sackNo });
-      setNewSackOpen(false);
-      setCustSearch('');
-      refreshSacks();
+      const id = res.data?.id;
+      setSelected([]);
+      setSelGroup(null);
+      if (id) {
+        setShipmentId(id);
+        setScanOpen(true);
+      }
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çuval açılamadı', text2: e.message }),
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Sevkiyat açılamadı', text2: e.message }),
   });
 
-  // Sevke Hazır → "Çuvala Başla": müşterinin açık çuvalı varsa odaklan, yoksa aç —
-  // ardından o çuvalın okuyucusunu aç (operatör hazır topları tarasın).
-  const startSackMut = useMutation({
-    mutationFn: (vars: { customerId: string; branchId: string | null }) =>
-      packingService.createSack({ customerId: vars.customerId, branchId: vars.branchId }),
+  const addSackMut = useMutation({
+    mutationFn: (kg: number) => packingService.addSack(shipmentId!, kg),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Çuval açıldı', text2: res.data?.sackNo });
-      refreshSacks();
-      if (res.data?.id) setScannerSackId(res.data.id);
+      Toast.show({ type: 'success', text1: 'Çuval eklendi', text2: res.message });
+      setSackOpen(false);
+      setSackKg('');
+      refreshShip();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çuval açılamadı', text2: e.message }),
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çuval eklenemedi', text2: e.message }),
   });
 
-  // Sevke Hazır → Çuvala Başla: aynı müşteri+şubenin açık çuvalı varsa ona odaklan
-  // (çuval tek müşteri+tek şube). Şubesiz (null) çuval da eşleşir; yoksa şubeli aç.
-  const beginPackingForCustomer = (customerId: string, branchId: string | null) => {
-    const existing = openSacks.find(
-      (s) => s.customer.id === customerId && (s.branch?.id ?? null) === branchId,
-    );
-    if (existing) {
-      setScannerSackId(existing.id);
-      return;
-    }
-    startSackMut.mutate({ customerId, branchId });
-  };
+  const removeSackMut = useMutation({
+    mutationFn: (sackId: string) => packingService.removeSack(sackId),
+    onSuccess: refreshShip,
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Silinemedi', text2: e.message }),
+  });
 
-  const weighMut = useMutation({
-    mutationFn: ({ sackId, kg }: { sackId: string; kg: number }) =>
-      packingService.weighClose(sackId, kg),
-    onSuccess: () => {
+  const removeRollMut = useMutation({
+    mutationFn: (rollId: string) => packingService.removeRoll(shipmentId!, rollId),
+    onSuccess: refreshShip,
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çıkarılamadı', text2: e.message }),
+  });
+
+  const readyMut = useMutation({
+    mutationFn: () => packingService.markReady(shipmentId!),
+    onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Çuval kapatıldı', text2: 'Sevk edildi' });
-      setWeighSack(null);
-      setWeightInput('');
-      refreshSacks();
+      Toast.show({ type: 'success', text1: 'Sevke hazır — kapıda', text2: res.message });
+      setShipmentId(null);
+      refreshSelection();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Tartı kaydedilemedi', text2: e.message }),
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Sevke hazır yapılamadı', text2: e.message }),
   });
-
-  // Çuval iptali — yıkıcı işlem: önce önizleme (serbest bırakılacak toplar), sonra onayla.
-  const cancelPreviewQuery = useQuery({
-    queryKey: ['sacks', 'cancel-preview', cancelTarget?.id],
-    queryFn: () => packingService.cancelPreview(cancelTarget!.id),
-    enabled: cancelTarget !== null,
-    staleTime: 0,
-  });
-  const cancelPreview = cancelPreviewQuery.data?.data ?? null;
 
   const cancelMut = useMutation({
-    mutationFn: (sackId: string) => packingService.cancelSack(sackId),
+    mutationFn: () => packingService.cancel(shipmentId!),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Çuval iptal edildi', text2: res.message });
-      setCancelTarget(null);
-      refreshSacks();
+      Toast.show({ type: 'success', text1: 'Sevkiyat iptal edildi', text2: res.message });
+      setCancelOpen(false);
+      setShipmentId(null);
+      refreshSelection();
     },
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'İptal edilemedi', text2: e.message }),
   });
 
-  // Barkod okundu → topu çöz → açık çuvala ekle (müşteri uyumunu backend doğrular).
+  const cancelPreviewQ = useQuery({
+    queryKey: ['shipment', shipmentId, 'cancel-preview'],
+    queryFn: () => packingService.cancelPreview(shipmentId!),
+    enabled: cancelOpen && shipmentId !== null,
+    staleTime: 0,
+  });
+  const cancelPreview = cancelPreviewQ.data?.data ?? null;
+
+  // ── Okutma ──
   const handleScan = async (barcode: string) => {
     const code = barcode.trim();
-    if (!code || !scannerSackId || scanBusy.current) return;
+    if (!code || !shipmentId || scanBusy.current) return;
     scanBusy.current = true;
     try {
-      const res = await rollService.getByBarcode(code);
-      const roll = res.data;
-      if (!roll) {
-        Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: code });
-        return;
-      }
-      await packingService.assignRoll({ rollId: roll.id, sackId: scannerSackId });
+      const res = await packingService.scan(shipmentId, code);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Top çuvala eklendi', text2: roll.barcode ?? code });
-      refreshSacks();
-    } catch (e) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Eklenemedi', text2: (e as Error).message });
-    } finally {
-      // kısa kilit — aynı barkodun arka arkaya iki kez işlenmesini önle
-      setTimeout(() => {
-        scanBusy.current = false;
-      }, 600);
-    }
-  };
-
-  // Hızlı Okut (Mod C): müşteri seçmeden okut → backend topun müşterisini bulup
-  // açık çuvalına ekler (yoksa açar). Uymazsa hata döner (stok etiketli → yönlendir).
-  const handleAutoScan = async (barcode: string) => {
-    const code = barcode.trim();
-    if (!code || scanBusy.current) return;
-    scanBusy.current = true;
-    try {
-      const res = await packingService.autoAssign(code);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({
-        type: 'success',
-        text1: res.data?.createdSack ? 'Çuval açıldı, top eklendi' : 'Top çuvala eklendi',
-        text2: res.message ?? res.data?.customerName,
-      });
-      refreshSacks();
+      Toast.show({ type: 'success', text1: res.data?.kind === 'SWATCH' ? 'Kartela eklendi' : 'Top eklendi', text2: res.message });
+      refreshShip();
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Eklenemedi', text2: (e as Error).message });
@@ -210,362 +179,380 @@ export default function TartiPaketScreen() {
     }
   };
 
-  // Yönlendir: top okut → çöz → RelabelSheet aç (stok-etiketli / başka müşteri topu).
-  const handleRelabelScan = async (barcode: string) => {
-    const code = barcode.trim();
-    if (!code || scanBusy.current) return;
-    scanBusy.current = true;
-    try {
-      const res = await rollService.getByBarcode(code);
-      const roll = res.data;
-      if (!roll) {
-        Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: code });
-        return;
-      }
-      setRelabelRoll({
-        id: roll.id,
-        barcode: roll.barcode,
-        itemId: roll.itemId,
-        colorId: roll.colorId,
-        width: roll.width,
-        itemName: roll.item?.name,
-        colorName: roll.color?.name ?? null,
-      });
-    } catch (e) {
-      Toast.show({ type: 'error', text1: 'Okunamadı', text2: (e as Error).message });
-    } finally {
-      setTimeout(() => {
-        scanBusy.current = false;
-      }, 600);
+  // ── Sipariş seçimi ──
+  const toggleOrder = (o: OpenOrder) => {
+    const key = groupKey(o.order.customer.id, o.order.branch?.id ?? null);
+    if (selected.includes(o.order.id)) {
+      const next = selected.filter((id) => id !== o.order.id);
+      setSelected(next);
+      if (next.length === 0) setSelGroup(null);
+      return;
     }
+    if (selected.length > 0 && selGroup !== key) {
+      Toast.show({ type: 'info', text1: 'Tek müşteri + şube', text2: 'Önce farklı müşteriyi kaldır.' });
+      return;
+    }
+    setSelGroup(key);
+    setSelected((s) => [...s, o.order.id]);
   };
 
-  const customers = customersQuery.data?.data ?? [];
-  const filteredCustomers = customers.filter((c) => {
-    const q = custSearch.trim().toLocaleLowerCase('tr-TR');
-    if (!q) return true;
+  const sortedOpen = useMemo(
+    () =>
+      [...openOrders].sort((a, b) => {
+        const ad = a.order.deadline ? new Date(a.order.deadline).getTime() : Infinity;
+        const bd = b.order.deadline ? new Date(b.order.deadline).getTime() : Infinity;
+        return ad - bd;
+      }),
+    [openOrders],
+  );
+
+  // ===========================================================================
+  // PAKETLEME GÖRÜNÜMÜ (aktif sevkiyat)
+  // ===========================================================================
+  if (shipmentId !== null) {
+    const rolls = ship?.rolls ?? [];
+    const sacks = ship?.sacks ?? [];
+    const canReady = (ship?.summary.rollCount ?? 0) + (ship?.summary.swatchCount ?? 0) > 0 && sacks.length > 0;
+
     return (
-      c.name.toLocaleLowerCase('tr-TR').includes(q) ||
-      (c.code ?? '').toLocaleLowerCase('tr-TR').includes(q)
-    );
-  });
+      <ScreenChrome title="Paketleme" subtitle={ship?.shipmentNo}>
+        <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent}>
+          {shipQ.isLoading || !ship ? (
+            <ActivityIndicator style={{ marginTop: 24 }} />
+          ) : (
+            <>
+              <View style={styles.shipHead}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.customer}>
+                    {ship.customer.name}
+                    {ship.branch ? ` · ${ship.branch.name}` : ''}
+                  </Text>
+                  <Text style={styles.summary}>
+                    {ship.summary.rollCount} top · {ship.summary.sackCount} çuval ·{' '}
+                    {ship.summary.totalKg.toLocaleString('tr-TR')} kg
+                  </Text>
+                </View>
+                <Button compact onPress={() => setShipmentId(null)}>
+                  ← Geri
+                </Button>
+              </View>
 
+              {/* Karşılama — her satır: istenen / okutulan(bu sevkiyat) / kalan */}
+              <Text variant="titleSmall" style={styles.section}>
+                Karşılama
+              </Text>
+              {ship.orders.flatMap((o) =>
+                o.lines.map((l) => {
+                  const remaining = Math.max(0, l.openQty - l.thisShipment);
+                  const ok = remaining <= 0;
+                  return (
+                    <View key={l.lineId} style={styles.covRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.covSpec} numberOfLines={1}>
+                          {o.orderNumber} · {l.customerItemName ?? l.item.name}
+                          {l.color ? ` · ${l.customerColorName ?? l.color.name}` : ''}
+                          {l.width ? ` · ${l.width}cm` : ''}
+                        </Text>
+                        <Text style={styles.covMeta}>
+                          istenen {Math.round(l.openQty)}m · okutulan {Math.round(l.thisShipment)}m
+                        </Text>
+                      </View>
+                      <Text style={[styles.covTag, ok ? styles.covOk : styles.covShort]}>
+                        {ok ? '✓' : `${Math.round(remaining)}m eksik`}
+                      </Text>
+                    </View>
+                  );
+                }),
+              )}
+
+              <Button
+                mode="contained"
+                icon="barcode-scan"
+                onPress={() => setScanOpen(true)}
+                style={styles.bigBtn}
+                contentStyle={{ height: 52 }}
+              >
+                Top Okut
+              </Button>
+
+              {/* Okutulan toplar */}
+              <Text variant="titleSmall" style={styles.section}>
+                Okutulan Toplar ({rolls.length})
+              </Text>
+              {rolls.length === 0 ? (
+                <Text style={styles.emptySub}>Henüz top okutulmadı.</Text>
+              ) : (
+                rolls.map((r) => (
+                  <View key={r.id} style={styles.rollRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rollBarcode}>{r.barcode ?? '—'}</Text>
+                      <Text style={styles.covMeta}>
+                        {r.item.name}
+                        {r.color ? ` · ${r.color.name}` : ''} · {Math.round(r.currentQty)}m
+                      </Text>
+                    </View>
+                    <IconButton
+                      icon="close-circle-outline"
+                      size={20}
+                      iconColor="#dc2626"
+                      onPress={() => removeRollMut.mutate(r.id)}
+                    />
+                  </View>
+                ))
+              )}
+
+              {/* Çuvallar */}
+              <View style={styles.section2}>
+                <Text variant="titleSmall" style={styles.section}>
+                  Çuvallar ({sacks.length})
+                </Text>
+                <Button compact mode="contained-tonal" icon="plus" onPress={() => setSackOpen(true)}>
+                  Çuval Ekle
+                </Button>
+              </View>
+              {sacks.map((s) => (
+                <View key={s.id} style={styles.rollRow}>
+                  <Text style={styles.rollBarcode}>Çuval {s.seq}</Text>
+                  <Text style={styles.covMeta}>{(s.weightKg ?? 0).toLocaleString('tr-TR')} kg</Text>
+                  <IconButton
+                    icon="close-circle-outline"
+                    size={20}
+                    iconColor="#dc2626"
+                    onPress={() => removeSackMut.mutate(s.id)}
+                  />
+                </View>
+              ))}
+
+              <Divider style={{ marginVertical: 12 }} />
+              <Button
+                mode="contained"
+                icon="truck-check"
+                buttonColor="#059669"
+                disabled={!canReady || readyMut.isPending}
+                loading={readyMut.isPending}
+                onPress={() => readyMut.mutate()}
+                contentStyle={{ height: 52 }}
+              >
+                Sevke Hazır
+              </Button>
+              {!canReady && (
+                <Text style={styles.hint}>En az 1 top okut + 1 çuval tart.</Text>
+              )}
+              <Button textColor="#dc2626" onPress={() => setCancelOpen(true)} style={{ marginTop: 6 }}>
+                Sevkiyatı İptal Et
+              </Button>
+            </>
+          )}
+        </ScrollView>
+
+        <BarcodeScannerModal
+          visible={scanOpen}
+          onDismiss={() => setScanOpen(false)}
+          onScan={handleScan}
+          title="Depodan top okut"
+          continuous
+        />
+
+        {/* Çuval tartısı */}
+        <RNModal isVisible={sackOpen} onBackdropPress={() => setSackOpen(false)} style={styles.modal}>
+          <Surface style={styles.sheet} elevation={4}>
+            <Text variant="titleMedium" style={styles.sheetTitle}>
+              Çuval Ekle — Tartı
+            </Text>
+            <TextInput
+              mode="outlined"
+              label="Ağırlık (kg)"
+              keyboardType="decimal-pad"
+              value={sackKg}
+              onChangeText={setSackKg}
+              autoFocus
+              style={{ marginVertical: 12 }}
+              right={
+                <TextInput.Icon
+                  icon="scale"
+                  onPress={() => setSackKg((Math.round((10 + Math.random() * 90) * 10) / 10).toString())}
+                />
+              }
+            />
+            <View style={styles.actions}>
+              <Button onPress={() => setSackOpen(false)} style={styles.actionBtn}>
+                İptal
+              </Button>
+              <Button
+                mode="contained"
+                icon="check"
+                buttonColor="#059669"
+                style={styles.actionBtn}
+                loading={addSackMut.isPending}
+                disabled={addSackMut.isPending || !(parseFloat(sackKg) > 0)}
+                onPress={() => addSackMut.mutate(parseFloat(sackKg))}
+              >
+                Ekle
+              </Button>
+            </View>
+          </Surface>
+        </RNModal>
+
+        {/* İptal onayı — yıkıcı: depoya dönecek toplar + karşılanması geri alınacak siparişler */}
+        <RNModal isVisible={cancelOpen} onBackdropPress={() => setCancelOpen(false)} style={styles.modal}>
+          <Surface style={styles.sheet} elevation={4}>
+            <Text variant="titleMedium" style={styles.sheetTitle}>
+              Sevkiyatı İptal Et
+            </Text>
+            {cancelPreviewQ.isLoading || !cancelPreview ? (
+              <ActivityIndicator style={{ marginVertical: 16 }} />
+            ) : (
+              <>
+                <Text style={styles.covMeta}>
+                  {cancelPreview.rolls.length} top depoya dönecek
+                  {cancelPreview.affectedOrders.length > 0
+                    ? ` · ${cancelPreview.affectedOrders.length} siparişin karşılanması geri alınacak`
+                    : ''}
+                  .
+                </Text>
+                <ScrollView style={{ maxHeight: 200, marginTop: 8 }}>
+                  {cancelPreview.rolls.map((r) => (
+                    <Text key={r.id} style={styles.covMeta}>
+                      • {r.barcode ?? '—'} · {r.itemName}
+                      {r.colorName ? ` · ${r.colorName}` : ''} · {Math.round(r.currentQty)}m
+                    </Text>
+                  ))}
+                  {cancelPreview.affectedOrders.map((o) => (
+                    <Text key={o.orderNumber} style={styles.covMeta}>
+                      ↩ {o.orderNumber} · −{Math.round(Number(o.qty))}m
+                    </Text>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+            <View style={styles.actions}>
+              <Button onPress={() => setCancelOpen(false)} style={styles.actionBtn}>
+                Vazgeç
+              </Button>
+              <Button
+                mode="contained"
+                icon="close-circle"
+                buttonColor="#dc2626"
+                style={styles.actionBtn}
+                loading={cancelMut.isPending}
+                disabled={cancelMut.isPending || cancelPreview?.canCancel === false}
+                onPress={() => cancelMut.mutate()}
+              >
+                İptal Et
+              </Button>
+            </View>
+          </Surface>
+        </RNModal>
+      </ScreenChrome>
+    );
+  }
+
+  // ===========================================================================
+  // SİPARİŞ SEÇİM GÖRÜNÜMÜ
+  // ===========================================================================
   return (
-    <ScreenChrome title="Tartı / Paket" subtitle="Çuval doldur & tart">
+    <ScreenChrome title="Tartı / Paket" subtitle="Sipariş seç → okut → çuvalla">
       <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent}>
-        {/* Yetkiye duyarlı köprü — kullanıcının sevkiyat izni varsa görünür */}
-        {canShip && closedCount > 0 && (
+        {canShip && readyCount > 0 && (
           <TouchableRipple onPress={() => nav.navigate('Sevkiyat')} style={styles.bridge}>
             <View style={styles.bridgeInner}>
-              <Text style={styles.bridgeText}>{closedCount} kapalı çuval sevk bekliyor</Text>
+              <Text style={styles.bridgeText}>{readyCount} sevkiyat kapıda (kamyon bekliyor)</Text>
               <Text style={styles.bridgeCta}>Sevkiyat →</Text>
             </View>
           </TouchableRipple>
         )}
 
-        {/* Mod C Hızlı Okut + Yönlendir (değişebilir etiket) */}
-        <View style={styles.actionRow}>
-          <Button
-            mode="contained"
-            icon="barcode-scan"
-            onPress={() => setAutoScanOpen(true)}
-            style={styles.flexBtn}
-            contentStyle={styles.quickScanContent}
-          >
-            Hızlı Okut
-          </Button>
-          <Button
-            mode="outlined"
-            icon="swap-horizontal"
-            onPress={() => setRelabelScanOpen(true)}
-            style={styles.flexBtn}
-            contentStyle={styles.quickScanContent}
-          >
-            Yönlendir
-          </Button>
-        </View>
-
-        {/* Sevke Hazır (Mod A) — siparişten çuvala başla */}
-        <ReadyToShipList
-          onStart={beginPackingForCustomer}
-          busyCustomerId={startSackMut.isPending ? startSackMut.variables?.customerId ?? null : null}
-        />
-
-        <View style={styles.topBar}>
-          <Text variant="titleMedium" style={styles.heading}>
-            Açık Çuvallar ({openSacks.length})
-          </Text>
-          <Button mode="contained" icon="plus" onPress={() => setNewSackOpen(true)} compact>
-            Yeni Çuval
-          </Button>
-        </View>
-
-        {sacksQuery.isLoading ? (
-          <ActivityIndicator style={{ marginTop: 24 }} />
-        ) : openSacks.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>Açık çuval yok.</Text>
-            <Text style={styles.emptySub}>"Yeni Çuval" ile bir müşteriye çuval aç.</Text>
-          </View>
-        ) : (
-          <View style={styles.list}>
-            {openSacks.map((s) => (
-              <Surface key={s.id} style={styles.card} elevation={1}>
-                <View style={styles.cardHead}>
-                  <Text style={styles.sackNo}>{s.sackNo}</Text>
-                  <View style={styles.cardHeadRight}>
-                    <Text style={styles.sackMeta}>
-                      {s._count.rolls} top
-                      {s._count.swatches > 0 ? ` · ${s._count.swatches} kartela` : ''}
+        {/* Devam eden sevkiyatlar */}
+        {preparing.length > 0 && (
+          <>
+            <Text variant="titleSmall" style={styles.section}>
+              Devam Eden ({preparing.length})
+            </Text>
+            {preparing.map((sh) => (
+              <TouchableRipple key={sh.id} onPress={() => setShipmentId(sh.id)} style={styles.resumeCard}>
+                <View style={styles.bridgeInner}>
+                  <View>
+                    <Text style={styles.rollBarcode}>{sh.shipmentNo}</Text>
+                    <Text style={styles.covMeta}>
+                      {sh.customer.name}
+                      {sh.branch ? ` · ${sh.branch.name}` : ''} · {sh._count.rolls} top · {sh._count.sacks} çuval
                     </Text>
-                    <IconButton
-                      icon="close-circle-outline"
-                      size={20}
-                      iconColor="#dc2626"
-                      onPress={() => setCancelTarget(s)}
-                      style={styles.cancelIcon}
-                      accessibilityLabel="Çuvalı iptal et"
-                    />
                   </View>
+                  <Text style={styles.bridgeCta}>Sürdür →</Text>
                 </View>
-                <Text style={styles.customer}>
-                  {s.customer.name}
-                  {s.branch ? ` · ${s.branch.name}` : ''}
-                </Text>
-                <Divider style={{ marginVertical: 8 }} />
-                <View style={styles.actions}>
-                  <Button
-                    mode="contained-tonal"
-                    icon="barcode-scan"
-                    onPress={() => setScannerSackId(s.id)}
-                    style={styles.actionBtn}
-                  >
-                    Top Ekle
-                  </Button>
-                  <Button
-                    mode="contained"
-                    icon="scale-balance"
-                    onPress={() => {
-                      setWeighSack(s);
-                      setWeightInput('');
-                    }}
-                    disabled={s._count.rolls === 0}
-                    buttonColor="#059669"
-                    style={styles.actionBtn}
-                  >
-                    Tart & Kapat
-                  </Button>
-                </View>
-              </Surface>
+              </TouchableRipple>
             ))}
-          </View>
+            <Divider style={{ marginVertical: 12 }} />
+          </>
+        )}
+
+        <Text variant="titleSmall" style={styles.section}>
+          Açık Siparişler
+        </Text>
+        <Text style={styles.hint}>Tek müşteri + şube seç. Depo karşılaması satırda görünür.</Text>
+
+        {openOrdersQ.isLoading ? (
+          <ActivityIndicator style={{ marginTop: 24 }} />
+        ) : sortedOpen.length === 0 ? (
+          <Text style={styles.emptySub}>Açık sipariş yok.</Text>
+        ) : (
+          sortedOpen.map((o) => {
+            const isSel = selected.includes(o.order.id);
+            const key = groupKey(o.order.customer.id, o.order.branch?.id ?? null);
+            const disabled = selected.length > 0 && selGroup !== key && !isSel;
+            return (
+              <TouchableRipple
+                key={o.order.id}
+                onPress={() => toggleOrder(o)}
+                disabled={disabled}
+                style={[styles.orderCard, isSel && styles.orderCardSel, disabled && styles.orderCardDim]}
+              >
+                <View>
+                  <View style={styles.cardHead}>
+                    <Text style={styles.rollBarcode}>
+                      {isSel ? '✓ ' : ''}
+                      {o.order.orderNumber}
+                    </Text>
+                    <Text style={styles.covMeta}>
+                      {o.order.customer.name}
+                      {o.order.branch ? ` · ${o.order.branch.name}` : ''}
+                    </Text>
+                  </View>
+                  {o.lines.map((l) => (
+                    <View key={l.lineId} style={styles.covRow}>
+                      <Text style={styles.covSpec} numberOfLines={1}>
+                        {l.customerItemName ?? l.item.name}
+                        {l.color ? ` · ${l.color.name}` : ''}
+                        {l.width ? ` · ${l.width}cm` : ''} · {Math.round(l.openQty)}m
+                      </Text>
+                      <Text style={[styles.covTag, l.covered ? styles.covOk : styles.covShort]}>
+                        {l.covered
+                          ? 'depo ✓'
+                          : `${Math.round(Math.max(0, l.openQty - l.warehouseAvailable))}m eksik`}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </TouchableRipple>
+            );
+          })
         )}
       </ScrollView>
 
-      {/* Yeni çuval — müşteri seçici */}
-      <RNModal isVisible={newSackOpen} onBackdropPress={() => setNewSackOpen(false)} style={styles.modal}>
-        <Surface style={styles.sheet} elevation={4}>
-          <Text variant="titleMedium" style={styles.sheetTitle}>
-            Çuval için müşteri seç
-          </Text>
-          <TextInput
-            mode="outlined"
-            dense
-            placeholder="Müşteri ara..."
-            value={custSearch}
-            onChangeText={setCustSearch}
-            left={<TextInput.Icon icon="magnify" />}
-            style={{ marginBottom: 8 }}
-          />
-          {customersQuery.isLoading ? (
-            <ActivityIndicator style={{ marginVertical: 16 }} />
-          ) : (
-            <ScrollView style={{ maxHeight: 320 }}>
-              {filteredCustomers.map((c) => (
-                <TouchableRipple
-                  key={c.id}
-                  onPress={() => createSackMut.mutate(c.id)}
-                  disabled={createSackMut.isPending}
-                  style={styles.custRow}
-                >
-                  <View>
-                    <Text style={styles.custName}>{c.name}</Text>
-                    {c.code ? <Text style={styles.custCode}>{c.code}</Text> : null}
-                  </View>
-                </TouchableRipple>
-              ))}
-              {filteredCustomers.length === 0 && (
-                <Text style={styles.emptySub}>Müşteri bulunamadı.</Text>
-              )}
-            </ScrollView>
-          )}
-          <Button onPress={() => setNewSackOpen(false)} style={{ marginTop: 8 }}>
-            İptal
+      {selected.length > 0 && (
+        <View style={styles.footer}>
+          <Button
+            mode="contained"
+            icon="arrow-right"
+            contentStyle={{ height: 52 }}
+            loading={createMut.isPending}
+            disabled={createMut.isPending}
+            onPress={() => createMut.mutate()}
+          >
+            Sonraki adım ({selected.length} sipariş)
           </Button>
-        </Surface>
-      </RNModal>
-
-      {/* Top ekleme — kamera (belirli çuval). Sürekli: arka arkaya çok top okut. */}
-      <BarcodeScannerModal
-        visible={scannerSackId !== null}
-        onDismiss={() => setScannerSackId(null)}
-        onScan={handleScan}
-        title="Top barkodu okut"
-        continuous
-      />
-
-      {/* Hızlı Okut — otomatik çuval (müşteri seçmeden). Sürekli okuma. */}
-      <BarcodeScannerModal
-        visible={autoScanOpen}
-        onDismiss={() => setAutoScanOpen(false)}
-        onScan={handleAutoScan}
-        title="Hızlı okut — otomatik çuvala"
-        continuous
-      />
-
-      {/* Yönlendir — top okut. onScan modal'ı kapatır; asıl çözümleme + RelabelSheet
-          açılışı onModalHide'da (modal tam kapandığında) — overlay dokunmayı yutmasın. */}
-      <BarcodeScannerModal
-        visible={relabelScanOpen}
-        onDismiss={() => setRelabelScanOpen(false)}
-        onScan={(barcode) => {
-          setPendingRelabelScan(barcode);
-          setRelabelScanOpen(false);
-        }}
-        onModalHide={() => {
-          if (pendingRelabelScan) {
-            const b = pendingRelabelScan;
-            setPendingRelabelScan(null);
-            void handleRelabelScan(b);
-          }
-        }}
-        title="Yönlendirilecek topu okut"
-      />
-      <RelabelSheet
-        roll={relabelRoll}
-        onDismiss={() => setRelabelRoll(null)}
-        onDone={refreshSacks}
-      />
-
-      {/* Tart & kapat */}
-      <RNModal isVisible={weighSack !== null} onBackdropPress={() => setWeighSack(null)} style={styles.modal}>
-        <Surface style={styles.sheet} elevation={4}>
-          <Text variant="titleMedium" style={styles.sheetTitle}>
-            {weighSack?.sackNo} — Tart & Kapat
-          </Text>
-          <Text style={styles.customer}>
-            {weighSack?.customer.name} · {weighSack?._count.rolls} top
-          </Text>
-          <TextInput
-            mode="outlined"
-            label="Ağırlık (kg)"
-            keyboardType="decimal-pad"
-            value={weightInput}
-            onChangeText={setWeightInput}
-            style={{ marginVertical: 12 }}
-            right={
-              <TextInput.Icon
-                icon="scale"
-                onPress={() =>
-                  setWeightInput((Math.round((10 + Math.random() * 90) * 10) / 10).toString())
-                }
-              />
-            }
-          />
-          <View style={styles.actions}>
-            <Button onPress={() => setWeighSack(null)} style={styles.actionBtn}>
-              İptal
-            </Button>
-            <Button
-              mode="contained"
-              icon="check"
-              buttonColor="#059669"
-              style={styles.actionBtn}
-              loading={weighMut.isPending}
-              disabled={weighMut.isPending || !(parseFloat(weightInput) > 0)}
-              onPress={() => {
-                if (!weighSack) return;
-                weighMut.mutate({ sackId: weighSack.id, kg: parseFloat(weightInput) });
-              }}
-            >
-              Kapat (Sevk Et)
-            </Button>
-          </View>
-        </Surface>
-      </RNModal>
-
-      {/* Çuval iptal — yıkıcı işlem onayı: serbest bırakılacak topları somut listele */}
-      <RNModal
-        isVisible={cancelTarget !== null}
-        onBackdropPress={() => setCancelTarget(null)}
-        style={styles.modal}
-      >
-        <Surface style={styles.sheet} elevation={4}>
-          <Text variant="titleMedium" style={styles.sheetTitle}>
-            Çuvalı İptal Et — {cancelTarget?.sackNo}
-          </Text>
-          {cancelPreviewQuery.isLoading || !cancelPreview ? (
-            <ActivityIndicator style={{ marginVertical: 16 }} />
-          ) : !cancelPreview.canCancel ? (
-            <Text style={styles.cancelWarn}>{cancelPreview.reason}</Text>
-          ) : (
-            <>
-              <Text style={styles.customer}>
-                {cancelPreview.customerName}
-                {cancelPreview.branchName ? ` · ${cancelPreview.branchName}` : ''}
-              </Text>
-              {cancelPreview.rolls.length + cancelPreview.swatches.length === 0 ? (
-                <Text style={styles.emptySub}>Çuval boş — doğrudan iptal edilecek.</Text>
-              ) : (
-                <>
-                  <Text style={styles.cancelInfo}>
-                    Şu {cancelPreview.rolls.length} top
-                    {cancelPreview.swatches.length > 0
-                      ? ` ve ${cancelPreview.swatches.length} kartela`
-                      : ''}{' '}
-                    serbest bırakılacak (sevke hazır havuza döner):
-                  </Text>
-                  <ScrollView style={{ maxHeight: 240 }}>
-                    {cancelPreview.rolls.map((r) => (
-                      <View key={r.id} style={styles.cancelRow}>
-                        <Text style={styles.cancelBarcode}>{r.barcode ?? '—'}</Text>
-                        <Text style={styles.cancelMeta}>
-                          {Math.round(r.currentQty)}m
-                          {r.orderNumber ? ` · ${r.orderNumber}` : ''}
-                        </Text>
-                      </View>
-                    ))}
-                    {cancelPreview.swatches.map((s) => (
-                      <View key={s.id} style={styles.cancelRow}>
-                        <Text style={styles.cancelBarcode}>{s.barcode ?? '—'}</Text>
-                        <Text style={styles.cancelMeta}>kartela</Text>
-                      </View>
-                    ))}
-                  </ScrollView>
-                </>
-              )}
-            </>
-          )}
-          <View style={styles.actions}>
-            <Button onPress={() => setCancelTarget(null)} style={styles.actionBtn}>
-              Vazgeç
-            </Button>
-            <Button
-              mode="contained"
-              icon="close-circle"
-              buttonColor="#dc2626"
-              style={styles.actionBtn}
-              loading={cancelMut.isPending}
-              disabled={cancelMut.isPending || !cancelPreview?.canCancel}
-              onPress={() => {
-                if (cancelTarget) cancelMut.mutate(cancelTarget.id);
-              }}
-            >
-              İptal Et
-            </Button>
-          </View>
-        </Surface>
-      </RNModal>
+        </View>
+      )}
     </ScreenChrome>
   );
 }
@@ -574,53 +561,41 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scrollContent: { padding: 12, paddingBottom: 32 },
   bridge: { borderRadius: 10, backgroundColor: '#1e40af', marginBottom: 10 },
-  bridgeInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-  },
+  bridgeInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12 },
   bridgeText: { color: '#fff', fontWeight: '600' },
   bridgeCta: { color: '#bfdbfe', fontWeight: '700' },
-  actionRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  flexBtn: { flex: 1, borderRadius: 10 },
-  quickScanContent: { height: 52 },
-  topBar: {
+  resumeCard: { borderRadius: 10, backgroundColor: '#f1f5f9', marginBottom: 8 },
+  section: { fontWeight: '700', color: '#0f172a', marginTop: 8, marginBottom: 4 },
+  section2: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
+  hint: { fontSize: 12, color: '#94a3b8', marginBottom: 6 },
+  shipHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  customer: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
+  summary: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  covRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
+  covSpec: { flex: 1, fontSize: 13, color: '#334155' },
+  covMeta: { fontSize: 12, color: '#64748b' },
+  covTag: { fontSize: 12, fontWeight: '700' },
+  covOk: { color: '#059669' },
+  covShort: { color: '#b45309' },
+  bigBtn: { borderRadius: 10, marginTop: 12 },
+  rollRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  heading: { fontWeight: '700', color: '#0f172a' },
-  list: { gap: 10 },
-  card: { borderRadius: 12, padding: 12, backgroundColor: '#fff' },
-  cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  cancelIcon: { margin: 0 },
-  sackNo: { fontSize: 15, fontWeight: '700', color: '#0f172a', fontFamily: 'monospace' },
-  sackMeta: { fontSize: 12, color: '#64748b' },
-  cancelInfo: { fontSize: 13, color: '#475569', marginTop: 8, marginBottom: 4 },
-  cancelWarn: { fontSize: 13, color: '#b45309', marginVertical: 12 },
-  cancelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e2e8f0',
+    gap: 8,
   },
-  cancelBarcode: { fontSize: 13, color: '#0f172a', fontFamily: 'monospace' },
-  cancelMeta: { fontSize: 12, color: '#64748b' },
-  customer: { fontSize: 13, color: '#334155', marginTop: 2 },
-  actions: { flexDirection: 'row', gap: 8 },
-  actionBtn: { flex: 1 },
-  empty: { alignItems: 'center', marginTop: 48, gap: 4 },
-  emptyText: { fontSize: 15, fontWeight: '600', color: '#475569' },
-  emptySub: { fontSize: 13, color: '#94a3b8' },
+  rollBarcode: { fontSize: 14, fontWeight: '700', color: '#0f172a', fontFamily: 'monospace' },
+  emptySub: { fontSize: 13, color: '#94a3b8', marginVertical: 8 },
+  orderCard: { borderRadius: 12, padding: 12, backgroundColor: '#fff', marginBottom: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+  orderCardSel: { borderColor: '#059669', backgroundColor: '#ecfdf5' },
+  orderCardDim: { opacity: 0.45 },
+  cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  footer: { padding: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e2e8f0', backgroundColor: '#fff' },
   modal: { justifyContent: 'center', margin: 16 },
   sheet: { borderRadius: 16, padding: 16, backgroundColor: '#fff' },
-  sheetTitle: { fontWeight: '700', marginBottom: 8, color: '#0f172a' },
-  custRow: { paddingVertical: 12, paddingHorizontal: 8, borderRadius: 8 },
-  custName: { fontSize: 15, color: '#0f172a' },
-  custCode: { fontSize: 12, color: '#94a3b8' },
+  sheetTitle: { fontWeight: '700', marginBottom: 4, color: '#0f172a' },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  actionBtn: { flex: 1 },
 });
