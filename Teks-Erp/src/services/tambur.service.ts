@@ -110,6 +110,70 @@ function resolveCutStatus(
   return targetStatusByCode.get(qualityGradeCode) ?? RollStatus.WAREHOUSE;
 }
 
+/**
+ * #5 — Bir topu yalnızca ÜRÜNÜ (ve kalem rengi belliyse RENGİ) uyan sipariş
+ * kalemine etiketleyebilirsin. Boş liste → no-op. Bulunamayan/uyumsuz → badRequest.
+ * (Aksi halde yanlış ürün bir siparişi "karşılamış" görünür, sevk muhasebesi bozulur.)
+ */
+async function assertTargetLinesMatchRoll(
+  targetLineIds: (string | null | undefined)[],
+  rollItemId: string,
+  rollColorId: string | null
+): Promise<void> {
+  const ids = [...new Set(targetLineIds.filter((x): x is string => !!x))];
+  if (ids.length === 0) return;
+  const lines = await prisma.orderLine.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, itemId: true, colorId: true },
+  });
+  const found = new Set(lines.map((l) => l.id));
+  const missing = ids.filter((id) => !found.has(id));
+  if (missing.length > 0) {
+    throw AppError.badRequest(`Hedef sipariş kalemi bulunamadı: ${missing.join(", ")}`);
+  }
+  for (const line of lines) {
+    if (line.itemId !== rollItemId) {
+      throw AppError.badRequest(
+        "Hedef sipariş kaleminin ürünü, topun ürünüyle eşleşmiyor — bu top o siparişe etiketlenemez."
+      );
+    }
+    if (line.colorId && rollColorId && line.colorId !== rollColorId) {
+      throw AppError.badRequest(
+        "Hedef sipariş kaleminin rengi, topun rengiyle eşleşmiyor — bu top o siparişe etiketlenemez."
+      );
+    }
+  }
+}
+
+/**
+ * #8 — Tambur bir topu tüketmeden önce kalan AÇIK RollError'ları NO_CUT olarak
+ * kapatır (top tüketildikten sonra hata bir daha kapanamaz → yetim hata sızar).
+ * tx içinde çağrılır; kapatılan hata sayısını döner.
+ */
+async function closeOrphanRollErrors(
+  tx: Prisma.TransactionClient,
+  rollId: string,
+  stepId: string | null,
+  userId?: string
+): Promise<number> {
+  const open = await tx.rollError.findMany({
+    where: { rollId, isProcessed: false },
+    select: { id: true },
+  });
+  if (open.length === 0) return 0;
+  await tx.rollError.updateMany({
+    where: { id: { in: open.map((e) => e.id) } },
+    data: {
+      isProcessed: true,
+      actionTaken: "NO_CUT",
+      processedAtStepId: stepId,
+      processedByUserId: userId ?? null,
+      processedAt: new Date(),
+    },
+  });
+  return open.length;
+}
+
 interface TamburRollErrorSummary {
   id: string;
   /// Hata noktası (tek metre). KK2/Kurşun veya tambur operatörü "60. metrede
@@ -435,17 +499,19 @@ export class TamburService {
     const errorById = new Map(errors.map((e) => [e.id, e]));
 
     // cuts validasyonu: cumulative length toplamı totalQty'yi aşmasın.
+    // Decimal aritmetik — JS float drift'i YANLIŞ red üretmesin (0.1+0.2 > 0.3 gibi).
     const inputCuts = data.cuts ?? [];
-    let cumulativeLen = 0;
+    const totalQtyD = new Prisma.Decimal(roll.currentQty);
+    let cumulativeLenD = new Prisma.Decimal(0);
     for (const c of inputCuts) {
-      if (c.length <= 0) {
+      if (!(c.length > 0)) {
         throw AppError.badRequest("Kesim uzunluğu pozitif olmalı");
       }
-      cumulativeLen += c.length;
+      cumulativeLenD = cumulativeLenD.plus(c.length);
     }
-    if (cumulativeLen > totalQty) {
+    if (cumulativeLenD.greaterThan(totalQtyD)) {
       throw AppError.badRequest(
-        `Kesim uzunlukları toplamı (${cumulativeLen}m) topun metrajını (${totalQty}m) aşıyor`
+        `Kesim uzunlukları toplamı (${cumulativeLenD.toString()}m) topun metrajını (${totalQtyD.toString()}m) aşıyor`
       );
     }
     // Defect ID referansları parent'a ait olmalı.
@@ -459,6 +525,13 @@ export class TamburService {
         }
       }
     }
+
+    // #5 — kesimlerin/kuyruğun hedef sipariş kalemleri topun ürün/rengiyle uyumlu olmalı.
+    await assertTargetLinesMatchRoll(
+      [...inputCuts.map((c) => c.targetOrderLineId), data.targetOrderLineId],
+      roll.itemId,
+      roll.colorId
+    );
 
     // Item ve renk artık fason kabul aşamasında set edilmiş durumda. Tambur
     // kimlik değişikliği yapmaz — sadece bölme + Roll.properties parent'tan
@@ -525,6 +598,14 @@ export class TamburService {
         processedCount++;
       }
 
+      // #8 — decisions'ta geçmeyen açık hatalar NO_CUT olarak otomatik kapansın.
+      processedCount += await closeOrphanRollErrors(
+        tx,
+        data.rollId,
+        roll.currentStepId,
+        userId
+      );
+
       // Parent'ın FabricProperty listesini bir kez çek — her çocuğa miras kalır.
       // (Renk veren fason adımında WO.targetProperties parent.properties'e zaten
       // kopyalanmış durumda; Tambur sadece propagate eder.)
@@ -548,13 +629,15 @@ export class TamburService {
         targetOrderLineId: string | null;
       };
 
+      // Decimal offset — float drift'le sahte ~0.000m kuyruk top yaratma.
       const segments: Segment[] = [];
-      let offset = 0;
+      let offsetD = new Prisma.Decimal(0);
       for (const c of inputCuts) {
         const cutStatus = resolveCutStatus(c.qualityGrade, targetStatusByCode);
+        const nextOffsetD = offsetD.plus(c.length);
         segments.push({
-          start: offset,
-          end: offset + c.length,
+          start: offsetD.toNumber(),
+          end: nextOffsetD.toNumber(),
           qty: c.length,
           status: cutStatus,
           qualityGrade: c.qualityGrade,
@@ -565,18 +648,18 @@ export class TamburService {
           auditErrorIds: c.relatedErrorIds,
           targetOrderLineId: c.targetOrderLineId ?? data.targetOrderLineId ?? null,
         });
-        offset += c.length;
+        offsetD = nextOffsetD;
       }
       // Kalan kısım (sum(lengths) < totalQty) otomatik son child top.
-      if (offset < totalQty) {
-        const remaining = totalQty - offset;
+      if (offsetD.lessThan(totalQtyD)) {
+        const remaining = totalQtyD.minus(offsetD).toNumber();
         const remainStatus = resolveCutStatus(
           roll.qualityGrade,
           targetStatusByCode
         );
         segments.push({
-          start: offset,
-          end: totalQty,
+          start: offsetD.toNumber(),
+          end: totalQtyD.toNumber(),
           qty: remaining,
           status: remainStatus,
           qualityGrade: roll.qualityGrade,
@@ -742,7 +825,7 @@ export class TamburService {
               foldType: data.foldType ?? null,
               childRollCount: segments.length,
               cutCount: inputCuts.length,
-              tailCount: offset < totalQty ? 1 : 0,
+              tailCount: offsetD.lessThan(totalQtyD) ? 1 : 0,
               processedErrors: processedCount,
             } as Prisma.InputJsonValue,
           },
@@ -787,11 +870,11 @@ export class TamburService {
         status: updatedRoll.status,
         splitRollCount: splitRolls.length,
         cutCount: inputCuts.length,
-        hadRemainingTail: cumulativeLen < totalQty,
+        hadRemainingTail: cumulativeLenD.lessThan(totalQtyD),
       },
     });
 
-    const tailNote = cumulativeLen < totalQty ? " + kalan kuyruk top" : "";
+    const tailNote = cumulativeLenD.lessThan(totalQtyD) ? " + kalan kuyruk top" : "";
     const baseMsg = `Tambur tamamlandı. Parent bölündü, ${splitRolls.length} yeni top oluşturuldu (${inputCuts.length} kesim${tailNote}, ${processedCount} hata işlendi).`;
     return {
       success: true,
@@ -1404,6 +1487,9 @@ export class TamburService {
       );
     }
 
+    // #5 — etiket hedefi topun ürün/rengiyle uyumlu olmalı.
+    await assertTargetLinesMatchRoll([data.targetOrderLineId], parent.itemId, parent.colorId);
+
     const resolvedQualityGrade = data.qualityGrade ?? parent.qualityGrade;
     const resolvedQualityGradeId =
       data.qualityGrade && data.qualityGrade !== parent.qualityGrade
@@ -1568,6 +1654,9 @@ export class TamburService {
     if (parent.status !== RollStatus.WAREHOUSE) {
       throw AppError.badRequest(`Top depoda değil (${parent.status})`);
     }
+
+    // #5 — kalan kuyruk top'un hedefi topun ürün/rengiyle uyumlu olmalı.
+    await assertTargetLinesMatchRoll([data.targetOrderLineId], parent.itemId, parent.colorId);
 
     const remainingQty = Number(parent.currentQty);
     const action = data.remainingAction ?? "discard";
@@ -1745,6 +1834,9 @@ export class TamburService {
         `Kesim metresi (${data.lengthMeters}) açık kumaşın kalan metresinden (${parent.currentQty}) büyük olamaz`,
       );
     }
+
+    // #5 — etiket hedefi topun ürün/rengiyle uyumlu olmalı.
+    await assertTargetLinesMatchRoll([data.targetOrderLineId], parent.itemId, parent.colorId);
 
     // Geri uyum: tablet eski input'u (status A1_STOCK/SCRAP) gönderebilir.
     // Yeni kurguda status her zaman WAREHOUSE; eski status değerleri
@@ -1972,6 +2064,9 @@ export class TamburService {
       throw AppError.badRequest(`Açık kumaş aktif değil (${parent.status})`);
     }
 
+    // #5 — kalan kuyruk top'un hedef sipariş kalemi ürün/renk uyumlu olmalı.
+    await assertTargetLinesMatchRoll([data.targetOrderLineId], parent.itemId, parent.colorId);
+
     const remainingQty = Number(parent.currentQty);
     // remainingAction varsa onu kullan; yoksa eski scrapRemaining'den türet.
     const action: "keep_1kalite" | "keep_a1" | "scrap" | "discard" =
@@ -2031,6 +2126,9 @@ export class TamburService {
         }
         remainingChildId = child.id;
       }
+
+      // #8 — parent tüketilmeden kalan açık hatalar NO_CUT olarak kapansın.
+      await closeOrphanRollErrors(tx, parent.id, tamburStepId, userId);
 
       // Parent CONSUMED_AT_TAMBUR — currentQty=0, currentStepId=null
       await tx.roll.update({

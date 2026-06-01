@@ -15,6 +15,7 @@ import { AppError } from "../utils/app-error";
 import { OrderStatus, Prisma, RollStatus, WorkOrderStatus } from "@prisma/client";
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
+import { computeLineCoverage } from "./helpers/coverage.helper";
 import {
   applyDateRange,
   buildOrderByClause,
@@ -205,15 +206,6 @@ export class OrderService extends BaseService {
       ];
     }
 
-    // "Bloklayıcı" WO statüleri — kalemden metraj REZERVE eder (allocatedQty).
-    // CANCELLED hariç: iptal edilmiş WO'ya bağlı tahsis serbest kalır.
-    const BLOCKING: WorkOrderStatus[] = [
-      WorkOrderStatus.PLANNED,
-      WorkOrderStatus.IN_PROGRESS,
-      WorkOrderStatus.PAUSED,
-      WorkOrderStatus.COMPLETED,
-    ];
-
     // Gap-bazlı picker: bir satır "müsait" ise Açık > 0.
     //   Açık = quantity − Sevk(SHIPPED+targetOrderLineId) − Rezerve(canlı WO allocatedQty)
     // Kapalı/iptal sipariş hariç (gap hesabı yalnız açık siparişlerde anlamlı).
@@ -245,36 +237,22 @@ export class OrderService extends BaseService {
       },
     });
 
-    // Sevk edilen metraj — tüm aday satırlar için tek groupBy (N+1 yok).
+    // Uzlaştırılmış kapsama — tüm aday satırlar için tek hesap (etiket+plan defterleri).
     const allLineIds = orders.flatMap((o) => o.lines.map((l) => l.id));
-    const shippedByLine = new Map<string, Prisma.Decimal>();
-    if (allLineIds.length > 0) {
-      const grouped = await prisma.roll.groupBy({
-        by: ["targetOrderLineId"],
-        where: { targetOrderLineId: { in: allLineIds }, status: RollStatus.SHIPPED },
-        _sum: { currentQty: true },
-      });
-      for (const g of grouped) {
-        if (g.targetOrderLineId) {
-          shippedByLine.set(g.targetOrderLineId, g._sum.currentQty ?? new Prisma.Decimal(0));
-        }
-      }
-    }
+    const covMap = await computeLineCoverage(prisma, allLineIds, { excludeWorkOrderId });
 
-    // Her sipariş için Açık>0 satırları süz + üç kovayı satıra ekle (UI'da göster).
+    // Her sipariş için Açık>0 satırları süz + kovaları satıra ekle (UI'da göster).
     const enriched = orders
       .map((order) => {
         const lines = order.lines
           .map((line) => {
-            const shipped = shippedByLine.get(line.id) ?? new Prisma.Decimal(0);
-            const reserved = line.workOrderLinks.reduce((sum, link) => {
-              const live =
-                BLOCKING.includes(link.workOrder.status) &&
-                link.workOrder.id !== excludeWorkOrderId;
-              return live ? sum.plus(link.allocatedQty ?? 0) : sum;
-            }, new Prisma.Decimal(0));
-            const openQty = new Prisma.Decimal(line.quantity).minus(shipped).minus(reserved);
-            return { ...line, shippedQty: shipped, reservedQty: reserved, openQty };
+            const cov = covMap.get(line.id);
+            const shipped = cov?.shipped ?? new Prisma.Decimal(0);
+            const reserved = cov?.reserved ?? new Prisma.Decimal(0);
+            const warehouseLabeled = cov?.warehouseLabeled ?? new Prisma.Decimal(0);
+            const openQty = new Prisma.Decimal(line.quantity)
+              .minus(cov?.coverage ?? new Prisma.Decimal(0));
+            return { ...line, shippedQty: shipped, reservedQty: reserved, warehouseLabeledQty: warehouseLabeled, openQty };
           })
           .filter((line) => line.openQty.greaterThan(0));
         return { ...order, lines };
@@ -343,38 +321,12 @@ export class OrderService extends BaseService {
     });
 
     const lineIds = lines.map((l) => l.id);
-    const shippedByLine = new Map<string, Prisma.Decimal>();
-    if (lineIds.length > 0) {
-      const grouped = await prisma.roll.groupBy({
-        by: ["targetOrderLineId"],
-        where: { targetOrderLineId: { in: lineIds }, status: RollStatus.SHIPPED },
-        _sum: { currentQty: true },
-      });
-      for (const g of grouped) {
-        if (g.targetOrderLineId) {
-          shippedByLine.set(g.targetOrderLineId, g._sum.currentQty ?? new Prisma.Decimal(0));
-        }
-      }
-    }
-
-    const BLOCKING: WorkOrderStatus[] = [
-      WorkOrderStatus.PLANNED,
-      WorkOrderStatus.IN_PROGRESS,
-      WorkOrderStatus.PAUSED,
-      WorkOrderStatus.COMPLETED,
-    ];
+    const covMap = await computeLineCoverage(prisma, lineIds);
 
     const data = lines
       .map((l) => {
-        const shipped = shippedByLine.get(l.id) ?? new Prisma.Decimal(0);
-        const reserved = l.workOrderLinks.reduce(
-          (sum, link) =>
-            BLOCKING.includes(link.workOrder.status)
-              ? sum.plus(link.allocatedQty ?? 0)
-              : sum,
-          new Prisma.Decimal(0),
-        );
-        const openQty = new Prisma.Decimal(l.quantity).minus(shipped).minus(reserved);
+        const cov = covMap.get(l.id);
+        const openQty = new Prisma.Decimal(l.quantity).minus(cov?.coverage ?? new Prisma.Decimal(0));
         return {
           lineId: l.id,
           orderId: l.order.id,
@@ -430,18 +382,10 @@ export class OrderService extends BaseService {
       },
     });
 
-    // Sevk edilen — satır başına (SHIPPED)
-    const shippedByLine = new Map<string, Prisma.Decimal>();
-    const shippedGrouped = await prisma.roll.groupBy({
-      by: ["targetOrderLineId"],
-      where: { targetOrderLineId: { in: lineIds }, status: RollStatus.SHIPPED },
-      _sum: { currentQty: true },
+    // Uzlaştırılmış kapsama (etiket + plan): shipped, warehouseLabeled, reserved.
+    const covMap = await computeLineCoverage(prisma, lineIds, {
+      excludeWorkOrderId: params.excludeWorkOrderId,
     });
-    for (const g of shippedGrouped) {
-      if (g.targetOrderLineId) {
-        shippedByLine.set(g.targetOrderLineId, g._sum.currentQty ?? new Prisma.Decimal(0));
-      }
-    }
 
     // Serbest stok — spec bazında grupla (etiketsiz toplar); WAREHOUSE + STOCK ayrı
     const itemIds = [...new Set(lines.map((l) => l.itemId))];
@@ -454,13 +398,6 @@ export class OrderService extends BaseService {
       },
       _sum: { currentQty: true },
     });
-
-    const BLOCKING: WorkOrderStatus[] = [
-      WorkOrderStatus.PLANNED,
-      WorkOrderStatus.IN_PROGRESS,
-      WorkOrderStatus.PAUSED,
-      WorkOrderStatus.COMPLETED,
-    ];
 
     // Serbest stok eşleştirme: item kesin, renk/en line'da boşsa gevşek eşleşir
     const matchFree = (line: (typeof lines)[number], status: RollStatus): Prisma.Decimal =>
@@ -478,20 +415,16 @@ export class OrderService extends BaseService {
       }, new Prisma.Decimal(0));
 
     const data = lines.map((l) => {
-      const shipped = shippedByLine.get(l.id) ?? new Prisma.Decimal(0);
-      const reserved = l.workOrderLinks.reduce(
-        (sum, link) =>
-          BLOCKING.includes(link.workOrder.status) &&
-          link.workOrder.id !== params.excludeWorkOrderId
-            ? sum.plus(link.allocatedQty ?? 0)
-            : sum,
-        new Prisma.Decimal(0)
-      );
+      const cov = covMap.get(l.id);
+      const shipped = cov?.shipped ?? new Prisma.Decimal(0);
+      const reserved = cov?.reserved ?? new Prisma.Decimal(0);
+      const warehouseLabeled = cov?.warehouseLabeled ?? new Prisma.Decimal(0);
       const freeWarehouse = matchFree(l, RollStatus.WAREHOUSE);
       const freeStock = matchFree(l, RollStatus.STOCK);
       const requested = new Prisma.Decimal(l.quantity);
       const netGap = requested
         .minus(shipped)
+        .minus(warehouseLabeled)
         .minus(reserved)
         .minus(freeWarehouse)
         .minus(freeStock);
@@ -502,6 +435,7 @@ export class OrderService extends BaseService {
         width: l.width,
         requested,
         shipped,
+        warehouseLabeled,
         reserved,
         freeWarehouse,
         freeStock,

@@ -46,6 +46,7 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks } from "./helpers/workorder-locks.helper";
+import { computeLineCoverage } from "./helpers/coverage.helper";
 import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -440,21 +441,25 @@ export class WorkOrderService {
 
     // Refakat kartı barkodu sequence çakışırsa (P2002) tx'i baştan dene.
     const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
-      // Overbooking guard (3.2) — her orderLine için reservedQty hesapla
+      // Overbooking guard (3.2) — UZLAŞTIRILMIŞ kapsama ile.
+      // Kalan kapasite = quantity − (shipped + warehouseLabeled + reserved).
+      // Böylece (a) zaten karşılanmış (etiketli/sevk) metraj tekrar tahsis
+      // edilemez, (b) üretimi başka siparişe kayan WO'nun rezervi erir → o
+      // kalem yeniden üretime açılabilir. (Eski hali sadece allocatedQty
+      // topluyordu; shipped/finished saymıyordu — picker ile çelişiyordu.)
       if (allocations.length > 0) {
+        const allocLineIds = allocations.map((a) => a.orderLineId);
         const orderLines = await tx.orderLine.findMany({
-          where: { id: { in: allocations.map((a) => a.orderLineId) } },
-          include: {
-            workOrderLinks: {
-              where: { workOrder: { status: { not: WorkOrderStatus.CANCELLED } } },
-              select: { allocatedQty: true },
-            },
-          },
+          where: { id: { in: allocLineIds } },
+          select: { id: true, quantity: true },
         });
 
         if (orderLines.length !== allocations.length) {
           throw AppError.badRequest("Bazı sipariş satırları bulunamadı");
         }
+
+        // Yeni WO henüz yaratılmadı → kendi rezervi hesaba katılmaz.
+        const covMap = await computeLineCoverage(tx, allocLineIds);
 
         for (const alloc of allocations) {
           const line = orderLines.find((l) => l.id === alloc.orderLineId);
@@ -464,12 +469,8 @@ export class WorkOrderService {
               "Tahsis miktarı negatif olamaz."
             );
           }
-          // Decimal aritmetik — float tolerance gerekmiyor, exact karşılaştırma.
-          const alreadyReserved = line.workOrderLinks.reduce(
-            (sum, l) => sum.plus(l.allocatedQty ?? 0),
-            new Prisma.Decimal(0)
-          );
-          const remaining = new Prisma.Decimal(line.quantity).minus(alreadyReserved);
+          const coverage = covMap.get(line.id)?.coverage ?? new Prisma.Decimal(0);
+          const remaining = new Prisma.Decimal(line.quantity).minus(coverage);
           const allocDecimal = new Prisma.Decimal(alloc.allocatedQty);
           if (allocDecimal.gt(remaining)) {
             throw AppError.conflict(

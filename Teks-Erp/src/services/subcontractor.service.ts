@@ -853,30 +853,38 @@ export class SubcontractorService {
       throw AppError.badRequest("En az bir dönüş kaydı girin");
     }
 
-    // IDEMPOTENCY: Bir WO step'i bir kez receive edilir — ikinci çağrı offline
-    // sync replay'i demektir (ilk receive step.status'ü COMPLETED'a çekti ve
-    // aşağıdaki ACTIVE guard'ı normalde fırlatırdı). Mevcut receipt varsa
-    // cached response döndür, duplicate SubcontractorReceipt yaratma.
+    // IDEMPOTENCY (offline sync replay): SADECE bu çağrıdaki dönüş topları daha
+    // önce (iptal edilmemiş bir makbuzla) kabul edilmişse cached makbuzu döndür.
     //
-    // KRİTİK: cancelledAt: null filtresi şart — iptal edilmiş receipt'leri
-    // cached olarak GERİ DÖNDÜRMEMELİ. İptal sonrası tekrar kabul çağrısı
-    // operatörün "bunu yeniden kabul et" niyetiyle gelir; cached iptal kaydı
-    // dönerse silent failure (toast başarılı ama hiçbir şey olmaz, roller
-    // AT_SUBCONTRACTOR'da kalır). cancelReceipt soft-delete (cancelledAt ts).
-    const existingReceipt = await prisma.subcontractorReceipt.findFirst({
-      where: { stepId: data.stepId, cancelledAt: null },
-      orderBy: { createdAt: "desc" },
+    // Eskiden kontrol "bu adımda iptal edilmemiş herhangi bir makbuz var mı"
+    // idi; bu KISMİ/PARTİLİ dönüşü bozuyordu: boyahane topları parça parça
+    // gönderince ikinci kabul, ilk makbuzu cache sanıp silent dönüyor, kalan
+    // toplar AT_SUBCONTRACTOR'da takılı kalıyordu. Artık sevk tarafındaki
+    // sameRolls idempotency'siyle simetrik: payload'a (returns rollIds) bakar.
+    //
+    // KRİTİK: cancelledAt: null filtresi şart — iptal edilmiş receipt cached
+    // dönerse silent failure olur (toast başarılı ama hiçbir şey olmaz).
+    const incomingRollIds = data.returns.map((r) => r.rollId);
+    const priorReceiptItem = await prisma.subcontractorReceiptItem.findFirst({
+      where: {
+        newRollId: { in: incomingRollIds },
+        receipt: { stepId: data.stepId, cancelledAt: null },
+      },
       include: {
-        subcontractor: true,
-        step: { include: { station: true } },
-        items: { include: { newRoll: true } },
+        receipt: {
+          include: {
+            subcontractor: true,
+            step: { include: { station: true } },
+            items: { include: { newRoll: true } },
+          },
+        },
       },
     });
-    if (existingReceipt) {
+    if (priorReceiptItem) {
       return {
         success: true,
-        data: existingReceipt,
-        message: `Mal kabul zaten yapılmış (idempotent retry). Makbuz: ${existingReceipt.receiptNo}`,
+        data: priorReceiptItem.receipt,
+        message: `Mal kabul zaten yapılmış (idempotent retry). Makbuz: ${priorReceiptItem.receipt.receiptNo}`,
       };
     }
 
@@ -1172,11 +1180,18 @@ export class SubcontractorService {
               currentQty: nr.qty,
               weightKg: nr.weightKg ?? null,
               width: bornWidth,
-              status: RollStatus.STOCK,
+              // Sonraki adım varsa top fiilen üretimde (currentStepId dolu) → IN_PRODUCTION.
+              // STOCK yapmak yanlış etiketleme: serbest stok listesinde "müsait" görünür
+              // ve Tambur açık-kumaş akışı (cutOpenFabric IN_PRODUCTION ister) tutarsızlaşır.
+              status: nextStep ? RollStatus.IN_PRODUCTION : RollStatus.STOCK,
               qualityGrade: defaultQualityGradeCode,
               qualityGradeId: defaultQualityGradeId,
               entrySource: "SUBCONTRACTOR_RETURN",
               parentReceiptId: receipt.id,
+              // Born açık-kumaş topu bu fason adımında "üretildi" — roll→WO bağı.
+              // Bu olmadan (eski hali null) tambur WO-tamamlama, WO ürettiği-toplar
+              // raporu, WO iptalinde kurtarma ve soy-ağacı hepsi fason için kopuyordu.
+              producedInStepId: data.stepId,
               currentStepId: nextStep ? nextStep.id : null,
               createdById: userId ?? null,
               // barcode null — açık kumaş, fiziksel etiket yok

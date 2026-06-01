@@ -42,6 +42,9 @@ const finalizeSchema = z.object({
     )
     .default([]),
   foldType: z.enum(["2-KAT", "4-KAT"]).optional(),
+  // Tüm kesimlere/kalan kuyruk topa uygulanacak varsayılan hedef sipariş kalemi.
+  // (Servis bunu zaten destekliyordu; şema eksikti → kuyruk top etiketsiz kalıyordu.)
+  targetOrderLineId: z.string().uuid().optional().nullable(),
 });
 
 const swatchSchema = z.object({
