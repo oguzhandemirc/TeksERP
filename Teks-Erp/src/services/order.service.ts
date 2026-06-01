@@ -399,6 +399,119 @@ export class OrderService extends BaseService {
     return { success: true, data };
   }
 
+  /**
+   * Kapsama (coverage) — WO formundaki seçili sipariş kalemleri için üretim
+   * açığını gösterir. Her kalem: istenen − sevk − WO-rezerve − serbest depo
+   * stoğu − serbest ham stok = net üretim açığı (eksi = fazla).
+   * Serbest stok = item+renk+en eşleşen, hiçbir kaleme etiketli OLMAYAN toplar.
+   * Rezerve EDİLMEZ (anlık fotoğraf; çift sayım mümkün — planlamacı karar verir).
+   * excludeWorkOrderId: düzenleme modunda WO'nun kendi tahsisini sayma.
+   */
+  async getCoverageForLines(params: {
+    lineIds: string[];
+    excludeWorkOrderId?: string;
+  }): Promise<ApiResponse<unknown>> {
+    const lineIds = [...new Set(params.lineIds)];
+    if (lineIds.length === 0) return { success: true, data: [] };
+
+    const lines = await prisma.orderLine.findMany({
+      where: { id: { in: lineIds } },
+      select: {
+        id: true,
+        itemId: true,
+        colorId: true,
+        width: true,
+        quantity: true,
+        item: { select: { id: true, code: true, name: true } },
+        color: { select: { id: true, code: true, name: true } },
+        workOrderLinks: {
+          select: { allocatedQty: true, workOrder: { select: { id: true, status: true } } },
+        },
+      },
+    });
+
+    // Sevk edilen — satır başına (SHIPPED)
+    const shippedByLine = new Map<string, Prisma.Decimal>();
+    const shippedGrouped = await prisma.roll.groupBy({
+      by: ["targetOrderLineId"],
+      where: { targetOrderLineId: { in: lineIds }, status: RollStatus.SHIPPED },
+      _sum: { currentQty: true },
+    });
+    for (const g of shippedGrouped) {
+      if (g.targetOrderLineId) {
+        shippedByLine.set(g.targetOrderLineId, g._sum.currentQty ?? new Prisma.Decimal(0));
+      }
+    }
+
+    // Serbest stok — spec bazında grupla (etiketsiz toplar); WAREHOUSE + STOCK ayrı
+    const itemIds = [...new Set(lines.map((l) => l.itemId))];
+    const freeGrouped = await prisma.roll.groupBy({
+      by: ["itemId", "colorId", "width", "status"],
+      where: {
+        targetOrderLineId: null,
+        itemId: { in: itemIds },
+        status: { in: [RollStatus.WAREHOUSE, RollStatus.STOCK] },
+      },
+      _sum: { currentQty: true },
+    });
+
+    const BLOCKING: WorkOrderStatus[] = [
+      WorkOrderStatus.PLANNED,
+      WorkOrderStatus.IN_PROGRESS,
+      WorkOrderStatus.PAUSED,
+      WorkOrderStatus.COMPLETED,
+    ];
+
+    // Serbest stok eşleştirme: item kesin, renk/en line'da boşsa gevşek eşleşir
+    const matchFree = (line: (typeof lines)[number], status: RollStatus): Prisma.Decimal =>
+      freeGrouped.reduce((sum, g) => {
+        if (g.status !== status) return sum;
+        if (g.itemId !== line.itemId) return sum;
+        if (line.colorId != null && g.colorId !== line.colorId) return sum;
+        if (
+          line.width != null &&
+          (g.width == null || !new Prisma.Decimal(line.width).equals(g.width))
+        ) {
+          return sum;
+        }
+        return sum.plus(g._sum.currentQty ?? 0);
+      }, new Prisma.Decimal(0));
+
+    const data = lines.map((l) => {
+      const shipped = shippedByLine.get(l.id) ?? new Prisma.Decimal(0);
+      const reserved = l.workOrderLinks.reduce(
+        (sum, link) =>
+          BLOCKING.includes(link.workOrder.status) &&
+          link.workOrder.id !== params.excludeWorkOrderId
+            ? sum.plus(link.allocatedQty ?? 0)
+            : sum,
+        new Prisma.Decimal(0)
+      );
+      const freeWarehouse = matchFree(l, RollStatus.WAREHOUSE);
+      const freeStock = matchFree(l, RollStatus.STOCK);
+      const requested = new Prisma.Decimal(l.quantity);
+      const netGap = requested
+        .minus(shipped)
+        .minus(reserved)
+        .minus(freeWarehouse)
+        .minus(freeStock);
+      return {
+        lineId: l.id,
+        item: l.item,
+        color: l.color,
+        width: l.width,
+        requested,
+        shipped,
+        reserved,
+        freeWarehouse,
+        freeStock,
+        netGap,
+      };
+    });
+
+    return { success: true, data };
+  }
+
   async create(
     data: Record<string, unknown>,
     userId?: string

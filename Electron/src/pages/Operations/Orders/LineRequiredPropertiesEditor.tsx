@@ -22,6 +22,12 @@ interface Props {
   onChange: (next: string[]) => void;
 }
 
+/**
+ * Kurşun'a özgü ayrıcalık: özellik seçim listesinde (ve seçili rozetlerde)
+ * her zaman en başa sabitlenir. 0 = en üst, diğerleri (1) orijinal sırasını korur.
+ */
+const kursunRank = (name: string): number => (/kurşun/i.test(name) ? 0 : 1);
+
 export function LineRequiredPropertiesEditor({ itemId, value, onChange }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -51,9 +57,10 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange }: Props)
   const allProps = useMemo(() => propsQ.data?.data ?? [], [propsQ.data?.data]);
 
   const candidateProps = useMemo(() => {
-    if (allowedIds.length === 0) return allProps;
     const set = new Set(allowedIds);
-    return allProps.filter((p) => set.has(p.id));
+    const base = allowedIds.length === 0 ? allProps : allProps.filter((p) => set.has(p.id));
+    // Kurşun en başta — stabil sort, geri kalan sortOrder sırasını korur.
+    return [...base].sort((a, b) => kursunRank(a.name) - kursunRank(b.name));
   }, [allowedIds, allProps]);
 
   const propMultiItems: MultiSelectItem[] = useMemo(
@@ -70,7 +77,11 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange }: Props)
 
   const selectedById = useMemo(() => {
     const map = new Map(allProps.map((p) => [p.id, p]));
-    return value.map((id) => map.get(id)).filter((p): p is (typeof allProps)[number] => Boolean(p));
+    const list = value
+      .map((id) => map.get(id))
+      .filter((p): p is (typeof allProps)[number] => Boolean(p));
+    // Seçili rozetlerde de Kurşun en başta görünür.
+    return list.sort((a, b) => kursunRank(a.name) - kursunRank(b.name));
   }, [allProps, value]);
 
   const removeOne = (id: string) => onChange(value.filter((v) => v !== id));

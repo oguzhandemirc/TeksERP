@@ -20,16 +20,6 @@ export const machineColumns: ColumnDef<Machine>[] = [
       row.original.station?.name ?? <span className="text-muted-foreground">—</span>,
   },
   {
-    accessorKey: "deviceIp",
-    header: () => <SortableHeader field="deviceIp" label="Cihaz IP" />,
-    cell: ({ row }) =>
-      row.original.deviceIp ? (
-        <span className="font-mono text-xs">{row.original.deviceIp}</span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
-  },
-  {
     accessorKey: "isActive",
     header: () => <SortableHeader field="isActive" label="Durum" />,
     cell: ({ row }) => (row.original.isActive ? <Badge>Aktif</Badge> : <Badge variant="muted">Pasif</Badge>),

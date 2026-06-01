@@ -21,7 +21,6 @@ export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSub
     ? {
         stationId: initial.stationId,
         name: initial.name,
-        deviceIp: initial.deviceIp ?? "",
         isActive: initial.isActive,
       }
     : machineFormDefaults;
@@ -61,9 +60,6 @@ export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSub
           </FormField>
           <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
             <Input id="name" autoFocus {...form.register("name")} />
-          </FormField>
-          <FormField label="Cihaz IP / Adres" htmlFor="deviceIp" error={form.formState.errors.deviceIp}>
-            <Input id="deviceIp" placeholder="192.168.1.10:5000" {...form.register("deviceIp")} />
           </FormField>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...form.register("isActive")} /> Aktif

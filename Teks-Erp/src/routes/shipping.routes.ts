@@ -242,4 +242,106 @@ router.post("/shipments/:id/remove-sack", verifyToken, WRITE, controller.removeS
  */
 router.post("/shipments/:id/dispatch", verifyToken, WRITE, controller.dispatchShipment);
 
+// ===========================================================================
+// SEVKE HAZIR + DEĞİŞEBİLİR ETİKET
+// ===========================================================================
+
+/**
+ * @openapi
+ * /api/shipping/ready:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Sevke hazır siparişler (depoda etiketli + çuvalda olmayan topu olanlar, termine göre)
+ *     description: Mod A "Sevke Hazır" listesini besler. Her satırda istenen/sevk/açık metraj + hazır top sayısı/metrajı.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Sevke hazır sipariş listesi }
+ */
+router.get("/ready", verifyToken, READ, controller.getReady);
+
+/**
+ * @openapi
+ * /api/shipping/relabel:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Değişebilir etiket / yönlendir (topun sipariş atıfını değiştir — stok hareketi değil)
+ *     description: >
+ *       Topun targetOrderLineId atıfını değiştirir. SHIPPED/iptal/scrap/tüketilmiş top
+ *       yeniden etiketlenemez. STOCK top bir siparişe yönlendirilirse WAREHOUSE'a alınır.
+ *       Spec uyumsuzluğu blok değil (specMismatch bayrağı). Eski+yeni sipariş yeniden hesaplanır.
+ *       targetOrderLineId null = etiketi kaldır (stoğa al). Fiziksel etiket sonradan basılır.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollId, targetOrderLineId]
+ *             properties:
+ *               rollId:            { type: string, format: uuid }
+ *               targetOrderLineId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       200: { description: "Etiket güncellendi (data: { rollId, customerName, specMismatch, reprintRequired })" }
+ */
+router.post("/relabel", verifyToken, WRITE, controller.relabel);
+
+/**
+ * @openapi
+ * /api/shipping/sacks/auto-assign:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Hızlı Okut (Mod C) — barkodla top okut, topun müşterisinin açık çuvalına otomatik ekle (yoksa aç)
+ *     description: >
+ *       Müşteri seçtirmez. Top WAREHOUSE + sipariş etiketli (targetOrderLineId) olmalı.
+ *       Stok etiketli top reddedilir (önce yönlendir). Topun siparişinin müşterisinin
+ *       açık çuvalı varsa ona ekler, yoksa yeni çuval açıp ekler.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [barcode]
+ *             properties:
+ *               barcode: { type: string }
+ *     responses:
+ *       200: { description: "Top çuvala eklendi (data: { sackId, sackNo, customerId, customerName, createdSack })" }
+ */
+router.post("/sacks/auto-assign", verifyToken, WRITE, controller.autoAssign);
+
+/**
+ * @openapi
+ * /api/shipping/reprint-queue:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Yeniden basılacak etiketler (relabel sonrası — tek yazıcı/tambur listesi)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Yeniden basılacak toplar (barkod + müşteri/sipariş + spec) }
+ */
+router.get("/reprint-queue", verifyToken, READ, controller.reprintQueue);
+
+/**
+ * @openapi
+ * /api/shipping/reprint-queue/done:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Etiket basıldı → topu print-queue'dan düşür
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollId]
+ *             properties:
+ *               rollId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Kuyruktan düşürüldü }
+ */
+router.post("/reprint-queue/done", verifyToken, WRITE, controller.markReprinted);
+
 export default router;

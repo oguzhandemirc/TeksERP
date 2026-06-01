@@ -1075,6 +1075,91 @@ export class WorkOrderService {
   }
 
   /**
+   * İptal etkisini ÖNİZLER (yıkıcı işlem onayı için). Hiçbir şeyi değiştirmez.
+   * Döner: STOCK'a çekilecek toplar + VOID olacak ACTIVE refakat kartı sayısı.
+   */
+  async getCancelImpact(id: string): Promise<ApiResponse<unknown>> {
+    const wo = await prisma.workOrder.findUnique({
+      where: { id },
+      include: { steps: { select: { id: true } } },
+    });
+    if (!wo) {
+      throw AppError.notFound("İş emri bulunamadı");
+    }
+
+    const stepIds = wo.steps.map((s) => s.id);
+    const rolls =
+      stepIds.length > 0
+        ? await prisma.roll.findMany({
+            where: {
+              OR: [
+                { producedInStepId: { in: stepIds } },
+                { currentStepId: { in: stepIds } },
+              ],
+            },
+            select: {
+              id: true,
+              barcode: true,
+              status: true,
+              currentQty: true,
+              colorId: true,
+              entrySource: true,
+              color: { select: { name: true, hex: true } },
+              _count: { select: { properties: true } },
+            },
+            take: 200,
+            orderBy: { createdAt: "asc" },
+          })
+        : [];
+    const travelerCardCount = await prisma.travelerCard.count({
+      where: { workOrderId: id, status: "ACTIVE" },
+    });
+
+    // Her top için: ham mı işlenmiş mi (boyalı/özellikli/fason-dönüşü) + hâlâ fasonda mı.
+    const mappedRolls = rolls.map((r) => ({
+      id: r.id,
+      barcode: r.barcode,
+      status: r.status,
+      currentQty: r.currentQty,
+      colorName: r.color?.name ?? null,
+      colorHex: r.color?.hex ?? null,
+      propertyCount: r._count.properties,
+      processed:
+        Boolean(r.colorId) ||
+        r._count.properties > 0 ||
+        String(r.entrySource) === "SUBCONTRACTOR_RETURN" ||
+        r.status === RollStatus.AT_SUBCONTRACTOR ||
+        r.status === RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+      atSubcontractor: r.status === RollStatus.AT_SUBCONTRACTOR,
+    }));
+    const atSubcontractorCount = mappedRolls.filter((r) => r.atSubcontractor).length;
+    const processedCount = mappedRolls.filter((r) => r.processed).length;
+
+    let blockReason: string | null = null;
+    if (wo.status === WorkOrderStatus.CANCELLED) {
+      blockReason = "İş emri zaten iptal edilmiş.";
+    } else if (wo.status === WorkOrderStatus.COMPLETED) {
+      blockReason = "Tamamlanmış iş emri iptal edilemez.";
+    }
+
+    return {
+      success: true,
+      data: {
+        workOrderId: id,
+        batchNumber: wo.batchNumber,
+        status: wo.status,
+        canCancel: blockReason === null,
+        blockReason,
+        travelerCardCount,
+        rollCount: rolls.length,
+        processedCount,
+        atSubcontractorCount,
+        rolls: mappedRolls,
+      },
+    };
+  }
+
+  /**
    * Soft-delete: sets status = CANCELLED (WorkOrder has no isActive field).
    * Veritabanı mantığı:
    * 1. İş Emri iptal edilir.

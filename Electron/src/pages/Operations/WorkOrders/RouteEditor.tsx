@@ -73,11 +73,12 @@ export function RouteEditor({
   const [saveName, setSaveName] = useState("");
   const [forCustomer, setForCustomer] = useState(false);
 
-  // Yeni adım eklendiğinde sonuncuyu otomatik seç.
+  // Tek adım eklenince onu seç; toplu (şablondan tohum) gelince İLK adımı seç.
   const prevLen = useRef(steps.length);
   useEffect(() => {
     if (steps.length > prevLen.current && steps.length > 0) {
-      setSelectedId(steps[steps.length - 1]!.clientId);
+      const isSingleAdd = steps.length === prevLen.current + 1;
+      setSelectedId((isSingleAdd ? steps[steps.length - 1]! : steps[0]!).clientId);
     }
     prevLen.current = steps.length;
   }, [steps]);

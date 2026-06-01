@@ -45,6 +45,20 @@ const dispatchSchema = z.object({
   carrier: z.string().trim().max(100).optional().nullable(),
 });
 
+const relabelSchema = z.object({
+  rollId: z.string().uuid("Geçersiz top ID"),
+  // null = etiketi kaldır (stoğa al). Alan zorunlu — niyet açıkça belirtilmeli.
+  targetOrderLineId: z.string().uuid("Geçersiz sipariş satırı ID").nullable(),
+});
+
+const autoAssignSchema = z.object({
+  barcode: z.string().trim().min(1, "Barkod gerekli").max(64),
+});
+
+const markReprintedSchema = z.object({
+  rollId: z.string().uuid("Geçersiz top ID"),
+});
+
 export class ShippingController {
   private service = new ShippingService();
 
@@ -212,6 +226,56 @@ export class ShippingController {
         body,
         req.user?.userId
       );
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  // ---- SEVKE HAZIR + RELABEL ---------------------------------------------
+  getReady = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getReadyForShipping();
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  relabel = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = relabelSchema.parse(req.body);
+      const result = await this.service.relabelRoll(body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  autoAssign = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = autoAssignSchema.parse(req.body);
+      const result = await this.service.autoAssignByBarcode(body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  // ---- PRINT-QUEUE -------------------------------------------------------
+  reprintQueue = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getReprintQueue();
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  markReprinted = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = markReprintedSchema.parse(req.body);
+      const result = await this.service.markReprinted(body.rollId, req.user?.userId);
       res.status(200).json(result);
     } catch (e) {
       next(e);

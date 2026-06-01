@@ -8,6 +8,12 @@ const base = createCrudService<WorkOrder>("/api/work-orders");
 export const workOrderService = {
   ...base,
 
+  /** İptal önizleme: stoğa dönecek toplar + void olacak kart sayısı. */
+  getCancelImpact: (id: string) =>
+    apiClient
+      .get<ApiResponse<WorkOrderCancelImpact>>(`/api/work-orders/${id}/cancel-impact`)
+      .then((r) => r.data),
+
   /** Frontend uyarısı için: değişiklik kaç rulo etkiler? */
   getTargetPropertiesImpact: (id: string) =>
     apiClient
@@ -47,7 +53,59 @@ export const workOrderService = {
         `/api/subcontractor/dispatches/${dispatchId}/print`,
       )
       .then((r) => r.data),
+
+  /** WO formu kapsama paneli — seçili sipariş kalemleri için net üretim açığı. */
+  getCoverage: (lineIds: string[], excludeWorkOrderId?: string) =>
+    apiClient
+      .post<ApiResponse<CoverageLine[]>>("/api/orders/order-lines/coverage", {
+        lineIds,
+        ...(excludeWorkOrderId ? { excludeWorkOrderId } : {}),
+      })
+      .then((r) => r.data),
 };
+
+export interface CoverageLine {
+  lineId: string;
+  item: { id: string; code: string; name: string };
+  color: { id: string; code: string; name: string } | null;
+  width: number | null;
+  requested: number;
+  shipped: number;
+  reserved: number;
+  /** Etiketsiz, eşleşen depodaki hazır stok. */
+  freeWarehouse: number;
+  /** Etiketsiz, eşleşen ham stok. */
+  freeStock: number;
+  /** istenen − sevk − rezerve − serbest depo − ham. Eksi = fazla (üretme). */
+  netGap: number;
+}
+
+export interface CancelImpactRoll {
+  id: string;
+  barcode: string | null;
+  status: string;
+  currentQty: number;
+  colorName: string | null;
+  colorHex: string | null;
+  propertyCount: number;
+  /** Ham değil — boyalı/özellikli/fason-dönüşü. */
+  processed: boolean;
+  /** Hâlâ fason/boyahanede (fiziksel olarak dışarıda). */
+  atSubcontractor: boolean;
+}
+
+export interface WorkOrderCancelImpact {
+  workOrderId: string;
+  batchNumber: string;
+  status: string;
+  canCancel: boolean;
+  blockReason: string | null;
+  travelerCardCount: number;
+  rollCount: number;
+  processedCount: number;
+  atSubcontractorCount: number;
+  rolls: CancelImpactRoll[];
+}
 
 export interface DispatchPrintRoll {
   rollId: string;

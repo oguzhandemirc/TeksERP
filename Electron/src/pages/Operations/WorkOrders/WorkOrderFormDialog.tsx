@@ -3,7 +3,7 @@ import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ChevronDown, Lock } from "lucide-react";
+import { AlertTriangle, ChevronDown, FlaskConical, Lock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,10 +22,12 @@ import {
 } from "@/components/ui/tooltip";
 import { FormField } from "@/components/forms/FormField";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { routeService } from "@/pages/Routes/service";
 import type { ProductionRoute } from "@/pages/Routes/types";
 import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { LinkedOrderLinesField } from "./LinkedOrderLinesField";
+import { CoveragePanel } from "./CoveragePanel";
 import type { PickedOrderLine } from "./OrderPickerDialog";
 import { productRecipeService } from "@/pages/ProductRecipes/service";
 import type { ProductRecipe } from "@/pages/ProductRecipes/types";
@@ -209,14 +211,19 @@ export function WorkOrderFormDialog({
     const res = await productRecipeService.getById(id);
     const r = res.data;
     if (!r) return;
-    form.setValue("targetItemId", r.itemId);
-    form.setValue("targetColorId", r.colorId);
-    form.setValue(
-      "targetPropertyIds",
-      (r.properties ?? []).map((p) => p.propertyId),
-    );
+    // Sipariş bağlıysa ürün/renk/en/özellik siparişten gelir (kilitli) — reçeteden
+    // yalnız ROTA + kat tipi al. Stoğa üretimde hepsini doldur.
+    const orderBound = pickedLines.length > 0;
+    if (!orderBound) {
+      form.setValue("targetItemId", r.itemId);
+      form.setValue("targetColorId", r.colorId);
+      form.setValue(
+        "targetPropertyIds",
+        (r.properties ?? []).map((p) => p.propertyId),
+      );
+      if (r.width != null) form.setValue("width", r.width);
+    }
     if (r.routeId) void seedFromRoute(r.routeId);
-    if (r.width != null) form.setValue("width", r.width);
     if (r.foldType) form.setValue("foldType", r.foldType);
   };
 
@@ -324,10 +331,14 @@ export function WorkOrderFormDialog({
               {/* Sağ panel — form içeriği */}
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
                 {/* Reçeteden doldur — yeni + stoğa üretimde hızlı başlangıç */}
-                {!isEdit && !isOrderProduction && (
+                {!isEdit && (
                   <FormField
                     label="Reçeteden doldur (opsiyonel)"
-                    hint="Hazır reçete seç — kumaş, renk, üretim özellikleri, en ve rota otomatik dolar."
+                    hint={
+                      isOrderProduction
+                        ? "Reçeteden yalnız ROTA + kat tipi gelir (ürün/renk/en sipariş kaleminden)."
+                        : "Hazır reçete seç — kumaş, renk, üretim özellikleri, en ve rota otomatik dolar."
+                    }
                   >
                     <ReferenceSelect<ProductRecipe>
                       value={recipeId}
@@ -361,6 +372,14 @@ export function WorkOrderFormDialog({
                       excludeWorkOrderId={workOrder?.id}
                     />
                   </div>
+                )}
+
+                {/* Üretim kapsama — "ne kadar üretmeliyim" (sevk/WO/stok kovaları) */}
+                {isOrderProduction && (
+                  <CoveragePanel
+                    lineIds={pickedLines.map((l) => l.lineId)}
+                    excludeWorkOrderId={workOrder?.id}
+                  />
                 )}
 
                 <RouteEditor
@@ -406,8 +425,11 @@ export function WorkOrderFormDialog({
                         form.setValue("targetColorId", null);
                         form.setValue("targetPropertyIds", []);
                       }}
-                      disabled={Boolean(locks?.targetItem)}
-                      lockedTooltip={locks?.reasons.targetItem}
+                      disabled={Boolean(locks?.targetItem) || isOrderProduction}
+                      lockedTooltip={
+                        locks?.reasons.targetItem ??
+                        "Sipariş kaleminden alındı — değiştirilemez"
+                      }
                     />
                   </FormField>
                   <FormField
@@ -455,64 +477,6 @@ export function WorkOrderFormDialog({
                       </p>
                     )}
                   </FormField>
-                  )}
-                </div>
-
-                {/* Bu iş emrini reçete olarak kaydet */}
-                <div className="rounded-md border">
-                  <button
-                    type="button"
-                    onClick={() => setSaveRecipeOpen((v) => !v)}
-                    className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/30"
-                    aria-expanded={saveRecipeOpen}
-                  >
-                    <span className="uppercase tracking-wide">
-                      Bu iş emrini reçete olarak kaydet
-                    </span>
-                    <ChevronDown
-                      className={`h-4 w-4 transition-transform ${saveRecipeOpen ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                  {saveRecipeOpen && (
-                    <div className="space-y-2 border-t bg-muted/10 p-3">
-                      <p className="text-[11px] text-muted-foreground">
-                        Ürün + renk + özellik + en + akış tek isimle saklanır; sonraki
-                        iş emirlerinde "Reçeteden doldur" ile gelir. (Akış ayrıca rota
-                        şablonu olarak da kaydedilir.)
-                      </p>
-                      <div className="flex items-end gap-2">
-                        <div className="flex-1 space-y-1">
-                          <label className="text-[11px] text-muted-foreground">
-                            Reçete adı
-                          </label>
-                          <Input
-                            value={recipeName}
-                            onChange={(e) => setRecipeName(e.target.value)}
-                            placeholder="Örn: Patos Gri 038"
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={
-                            saveRecipeMut.isPending ||
-                            !recipeName.trim() ||
-                            !form.watch("targetItemId") ||
-                            routeSteps.length === 0 ||
-                            routeSteps.some((s) => !s.stationId)
-                          }
-                          onClick={() => saveRecipeMut.mutate(recipeName.trim())}
-                        >
-                          {saveRecipeMut.isPending ? "Kaydediliyor..." : "Reçete kaydet"}
-                        </Button>
-                      </div>
-                      {!form.watch("targetItemId") && (
-                        <p className="text-[11px] text-warning">
-                          Reçete için hedef ürün gerekli.
-                        </p>
-                      )}
-                    </div>
                   )}
                 </div>
 
@@ -594,19 +558,62 @@ export function WorkOrderFormDialog({
               </div>
             </div>
 
-            <DialogFooter className="shrink-0 border-t bg-background px-6 py-3">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                İptal
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting
-                  ? isEdit
-                    ? "Güncelleniyor..."
-                    : "Oluşturuluyor..."
-                  : isEdit
-                    ? "Güncelle"
-                    : "İş Emri Oluştur"}
-              </Button>
+            <DialogFooter className="shrink-0 border-t bg-background px-6 py-3 sm:justify-between">
+              <Popover open={saveRecipeOpen} onOpenChange={setSaveRecipeOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      !form.watch("targetItemId") ||
+                      routeSteps.length === 0 ||
+                      routeSteps.some((s) => !s.stationId)
+                    }
+                    className="gap-1"
+                    title="Bu iş emrini reçete olarak kaydet"
+                  >
+                    <FlaskConical className="h-3.5 w-3.5" /> Reçete Kaydet
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-80 space-y-2">
+                  <div className="text-xs font-medium">Bu iş emrini reçete olarak kaydet</div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Ürün + renk + özellik + en + akış tek isimle saklanır; sonraki iş
+                    emirlerinde "Reçeteden doldur" ile gelir.
+                  </p>
+                  <Input
+                    value={recipeName}
+                    onChange={(e) => setRecipeName(e.target.value)}
+                    placeholder="Reçete adı (örn: Patos Gri 038)"
+                    className="h-8 text-xs"
+                    autoFocus
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full"
+                    disabled={saveRecipeMut.isPending || !recipeName.trim()}
+                    onClick={() => saveRecipeMut.mutate(recipeName.trim())}
+                  >
+                    {saveRecipeMut.isPending ? "Kaydediliyor..." : "Kaydet"}
+                  </Button>
+                </PopoverContent>
+              </Popover>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                  İptal
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting
+                    ? isEdit
+                      ? "Güncelleniyor..."
+                      : "Oluşturuluyor..."
+                    : isEdit
+                      ? "Güncelle"
+                      : "İş Emri Oluştur"}
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </TooltipProvider>

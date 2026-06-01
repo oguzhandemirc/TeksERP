@@ -16,6 +16,7 @@ import {
   TouchableRipple,
   Icon,
   Appbar,
+  Badge,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import {
@@ -40,6 +41,10 @@ import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
+import ConfirmDialog from '../../../components/ConfirmDialog';
+import PickerModal, { type PickerOption } from '../../../components/PickerModal';
+import ReprintQueueSheet from '../../../components/ReprintQueueSheet';
+import { packingService } from '../../../services/packing.service';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { tamburService } from '../../../services/tambur.service';
@@ -146,6 +151,14 @@ export default function TamburScreen() {
   useLandscapeLock(!compact);
   const insets = useSafeAreaInsets();
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  // Print-queue (yeniden basılacak etiketler) — tek yazıcı tamburda.
+  const [reprintOpen, setReprintOpen] = useState(false);
+  const reprintQ = useQuery({
+    queryKey: ['shipping', 'reprint-queue'],
+    queryFn: () => packingService.getReprintQueue(),
+    staleTime: 30_000,
+  });
+  const reprintCount = reprintQ.data?.data?.length ?? 0;
   // Drawer + RNModal stack çakışmasını çözen ortak queue (hook).
   const drawerQueue = useDrawerActionQueue({
     drawerOpen: rightDrawerOpen,
@@ -164,6 +177,9 @@ export default function TamburScreen() {
 
   // Aktif top'un çalışma state'i — top/sekme değişince sıfırlanır.
   const [work, setWork] = useState<RollWorkState>(EMPTY_WORK);
+  // Kesim uzunluğu kaynağı. Faz 1'de MANUEL varsayılan (gerçek makine yok);
+  // Otomatik'te uzunluk makineden ölçülür → input + numpad gizlenir.
+  const [cutMode, setCutMode] = useState<'manual' | 'auto'>('manual');
   
   const pendingRecutCleanupRef = useRef<{ remainingChild: Roll | null } | null>(null);
 
@@ -171,6 +187,10 @@ export default function TamburScreen() {
   // Roller tam obje olarak tutulur (item.color, variant dahil) → LabelPrinter
   // doğrudan basabilsin.
   const [pendingPrintRolls, setPendingPrintRolls] = useState<Roll[]>([]);
+  // Kesim sonrası OTOMATİK yazdırma kuyruğu — operatör "Bas"a basmadan etiket
+  // çıkar. Manuel pendingPrintRolls modal'ı ayrı kalır; bu kuyruk doğrudan
+  // activePrintRoll'a akar (drain effect).
+  const [autoPrintQueue, setAutoPrintQueue] = useState<Roll[]>([]);
 
   // Geçmiş çıktı listesi modal state
   const [recentOutputOpen, setRecentOutputOpen] = useState(false);
@@ -194,6 +214,12 @@ export default function TamburScreen() {
     width: number | null;
   } | null>(null);
   const [recutCutLength, setRecutCutLength] = useState('');
+  // Recut (Top Kesme) — açık kumaş akışıyla aynı: manuel/otomatik mod + Kalanı At.
+  const [recutMode, setRecutMode] = useState<'manual' | 'auto'>('manual');
+  const [recutDiscardConfirm, setRecutDiscardConfirm] = useState(false);
+  // "Kime" — sipariş kısayollarına ek olarak listeden (müşteriye göre aranabilir)
+  // açık sipariş satırı seçme picker'ı. Her iki kesim akışı paylaşır.
+  const [kimePickerOpen, setKimePickerOpen] = useState(false);
   const [recutQualityGrade, setRecutQualityGrade] = useState<string>('1.KALITE');
   const [recutScannerOpen, setRecutScannerOpen] = useState(false);
   // "Kime?" — depo topundan kesilen parça hangi siparişe (null = stok). Etiket buradan basılır.
@@ -387,6 +413,15 @@ export default function TamburScreen() {
     if (compact && activeCardId) setRightDrawerOpen(false);
   }, [compact, activeCardId]);
 
+  // Auto-print drain — yazıcı boştaysa kuyruktan bir sonrakini bas. Ardışık
+  // kesimlerde etiketler sırayla otomatik basılır (operatör müdahalesi yok).
+  useEffect(() => {
+    if (activePrintRoll === null && autoPrintQueue.length > 0) {
+      setActivePrintRoll(autoPrintQueue[0]);
+      setAutoPrintQueue((q) => q.slice(1));
+    }
+  }, [activePrintRoll, autoPrintQueue]);
+
   // ── Mutations ──
   const finalizeMutation = useMutation({
     mutationFn: (data: TamburFinalizeRequest) => tamburService.finalize(data),
@@ -446,19 +481,34 @@ export default function TamburScreen() {
       }),
     onSuccess: async (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Top oluşturuldu' });
-      const data = res.data as { childRoll?: Roll } | undefined;
+      const data = res.data as
+        | { childRoll?: Roll; parentRemainingQty?: number }
+        | undefined;
       if (data?.childRoll?.barcode) {
-        // Hemen etiket basma modal'ını aç — operatör sayaç başında basar
-        setPendingPrintRolls((prev) => [...prev, data.childRoll!]);
+        // OTOMATİK yazdır — "Bas"a gerek yok; auto-print kuyruğuna at, drain
+        // effect yazıcıya verir.
+        setAutoPrintQueue((q) => [...q, data.childRoll!]);
       }
-      // Uzunluk input'unu sıfırla; kalite aynen kalsın (operatör çoğu zaman
-      // aynı kaliteyi devam ettirir).
+      // Uzunluk input'unu sıfırla; kalite/sipariş aynen kalsın (seri kesim).
       setWork((w) => ({
         ...w,
         voluntaryEntry: { ...w.voluntaryEntry, length: '' },
       }));
-      await refetchActiveJob();
+      // OTOMATİK BİTİŞ: açık kumaşın kalanı ihmal edilebilir (<10cm) ise ayrı
+      // "Tamamla" beklemeden finalize et — son kesim işi otomatik kapatır,
+      // sıradakine geçer. Eşik küçük yuvarlama artıklarını da yutar.
+      const remaining = data?.parentRemainingQty ?? 0;
+      if (remaining < 0.1 && selectedRoll) {
+        Toast.show({ type: 'success', text1: 'Açık kumaş tamamlandı' });
+        finalizeOpenFabricMutation.mutate({
+          rollId: selectedRoll.rollId,
+          remainingAction: 'discard',
+          foldType: work.foldType ?? null,
+        });
+      } else {
+        Toast.show({ type: 'success', text1: 'Top oluşturuldu' });
+        await refetchActiveJob();
+      }
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -522,17 +572,22 @@ export default function TamburScreen() {
           return next;
         });
       } else {
-        // Hâlâ top varsa sıradakini otomatik seç
-        const next = remainingRolls.find(
-          (r) => r.rollId !== activeJob.selectedRollId,
-        );
+        // BUG FIX: onMutate zaten bir sonrakini (updatedRolls[0]) seçti. Burada
+        // TEKRAR ilerletme — sadece listeyi backend ile eşitle ve seçiliyi KORU.
+        // Eski kod `find(r => r.rollId !== selectedRollId)` ile, seçili artık
+        // "sıradaki" olduğundan onu da atlayıp BİR FAZLA ilerliyordu. Seçili hâlâ
+        // listede ise koru; değilse (silinmişse) ilk topa düş.
+        const sel = activeJob.selectedRollId;
+        const keepId = remainingRolls.some((r) => r.rollId === sel)
+          ? sel
+          : (remainingRolls[0]?.rollId ?? null);
         setOpenJobs((prev) =>
           prev.map((j) =>
             j.cardId === activeJob.cardId
               ? {
                   ...j,
                   stepSummary: step!,
-                  selectedRollId: next?.rollId ?? null,
+                  selectedRollId: keepId,
                 }
               : j,
           ),
@@ -610,8 +665,8 @@ export default function TamburScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const data = res.data;
       if (data?.childRoll) {
-        // Otomatik etiket basımı — LabelPrintModal pendingPrintRolls'ı dinler
-        setPendingPrintRolls((prev) => [...prev, data.childRoll]);
+        // OTOMATİK yazdır — "Bas"a gerek yok (auto-print kuyruğu).
+        setAutoPrintQueue((q) => [...q, data.childRoll]);
       }
       // Parent metraj güncelle (sticky header anında yansır)
       if (data && typeof data.parentRemainingQty === 'number' && recutRollMeta) {
@@ -623,13 +678,22 @@ export default function TamburScreen() {
       if (data?.parentRoll) {
         setRecutLastParentRoll(data.parentRoll);
       }
-      // Form reset — operatör hemen yeni kesim yapabilsin
       setRecutCutLength('');
-      Toast.show({
-        type: 'success',
-        text1: 'Top oluşturuldu',
-        text2: `Kalan: ${data?.parentRemainingQty.toFixed(1)} m`,
-      });
+      // OTOMATİK BİTİŞ: kalan ~0 ise ayrı "Bitir" beklemeden arşivle.
+      const remaining = data?.parentRemainingQty ?? 0;
+      if (remaining < 0.1 && recutResolvedRollId) {
+        Toast.show({ type: 'success', text1: 'Top Kesme tamamlandı' });
+        finalizeWarehouseCutMutation.mutate({
+          rollId: recutResolvedRollId,
+          remainingAction: 'discard',
+        });
+      } else {
+        Toast.show({
+          type: 'success',
+          text1: 'Top oluşturuldu',
+          text2: `Kalan: ${remaining.toFixed(1)} m`,
+        });
+      }
     },
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -810,7 +874,7 @@ export default function TamburScreen() {
     };
   }, [selectedRoll]);
 
-  const addVoluntaryCut = () => {
+  const addVoluntaryCut = (lengthOverride?: number) => {
     if (!selectedRoll) return;
     if (selectedRoll.barcode) {
       Toast.show({
@@ -820,7 +884,8 @@ export default function TamburScreen() {
       });
       return;
     }
-    const length = parseFloat(work.voluntaryEntry.length);
+    // Otomatik modda uzunluk makineden (override) gelir; manuelde input'tan.
+    const length = lengthOverride ?? parseFloat(work.voluntaryEntry.length);
     if (!Number.isFinite(length) || length <= 0) {
       Toast.show({ type: 'error', text1: 'Uzunluk pozitif sayı olmalı' });
       return;
@@ -854,26 +919,20 @@ export default function TamburScreen() {
     });
   };
 
-  // "Makineden Çek" — sayaç entegrasyonu yok; simülasyon olarak makul rastgele
-  // bir değer üret. Kalan metraja göre clamp et.
-  const fetchFromMachine = () => {
-    if (!selectedRoll) return;
-    const usedSoFar = work.voluntaryCuts.reduce((s, c) => s + c.length, 0);
-    const remaining = Math.max(0, selectedRoll.currentQty - usedSoFar);
-    if (remaining <= 0) {
-      Toast.show({ type: 'info', text1: 'Kesim için kalan metraj yok' });
-      return;
+  // Footer "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen.
+  const handleKes = () => {
+    if (cutMode === 'auto') {
+      if (!selectedRoll) return;
+      // FAZ 1 SİMÜLASYONU — gerçek sayaç yok; kalana clamp'li makul bir uzunluk
+      // üret. Faz 2'de bu satır gerçek makine okumasıyla değişecek.
+      const remaining = selectedRoll.currentQty;
+      const lo = Math.min(5, remaining);
+      const hi = Math.min(80, remaining);
+      const measured = Math.round((lo + Math.random() * (hi - lo)) * 10) / 10;
+      addVoluntaryCut(measured);
+    } else {
+      addVoluntaryCut();
     }
-    // 5–80 mt arası rastgele; kalan azsa kalana clamp
-    const min = Math.min(5, remaining);
-    const max = Math.min(80, remaining);
-    const raw = min + Math.random() * (max - min);
-    const simulated = Math.round(raw * 10) / 10; // 1 ondalık
-    setWork((w) => ({
-      ...w,
-      voluntaryEntry: { ...w.voluntaryEntry, length: simulated.toString() },
-    }));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const removeVoluntaryCut = (id: string) => {
@@ -915,38 +974,17 @@ export default function TamburScreen() {
     });
   };
 
-  // Tamamla'ya basınca, kalan metre varsa operatöre 4 seçenekli modal sun.
-  // Kalan = 0 ise modal yok, doğrudan kapat (action önemsiz — backend no-op).
-  const [finalizeModalOpen, setFinalizeModalOpen] = useState(false);
+  // Normal bitiş OTOMATİK (son kesimde kalan ~0 → finalize). "Kalanı At" yalnız
+  // operatör kalan açık kumaşı top yapmadan kapatmak isterse (kayıp) — yıkıcı,
+  // onay modalı.
+  const [discardConfirm, setDiscardConfirm] = useState(false);
 
-  const handleFinalize = () => {
+  const doDiscardRemaining = () => {
+    setDiscardConfirm(false);
     if (!activeJob || !selectedRoll) return;
-    if (selectedRoll.barcode) {
-      Toast.show({
-        type: 'error',
-        text1: 'Bu ekran açık kumaş için',
-      });
-      return;
-    }
-    const remaining = selectedRoll.currentQty;
-    if (remaining <= 0.001) {
-      // Kalan yok → modal'a gerek yok, direkt kapat
-      finalizeOpenFabricMutation.mutate({
-        rollId: selectedRoll.rollId,
-        remainingAction: 'discard',
-        foldType: work.foldType ?? null,
-      });
-      return;
-    }
-    setFinalizeModalOpen(true);
-  };
-
-  const submitFinalize = (action: TamburFinalizeRemainingAction) => {
-    if (!activeJob || !selectedRoll) return;
-    setFinalizeModalOpen(false);
     finalizeOpenFabricMutation.mutate({
       rollId: selectedRoll.rollId,
-      remainingAction: action,
+      remainingAction: 'discard',
       foldType: work.foldType ?? null,
     });
   };
@@ -1012,9 +1050,9 @@ export default function TamburScreen() {
     }
   };
 
-  const handleRecutSubmit = () => {
+  const handleRecutSubmit = (lengthOverride?: number) => {
     if (!recutResolvedRollId || !recutRollMeta) return;
-    const cut = parseFloat(recutCutLength);
+    const cut = lengthOverride ?? parseFloat(recutCutLength);
     if (Number.isNaN(cut) || cut <= 0) {
       Toast.show({ type: 'error', text1: 'Kesim metresi pozitif olmalı' });
       return;
@@ -1038,6 +1076,77 @@ export default function TamburScreen() {
       targetOrderLineId: recutTargetLineId,
     });
   };
+
+  // Recut "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen (sim).
+  const handleRecutKes = () => {
+    if (recutMode === 'auto') {
+      if (!recutRollMeta) return;
+      const remaining = recutRollMeta.currentQty;
+      const lo = Math.min(5, remaining);
+      const hi = Math.min(80, remaining);
+      const measured = Math.round((lo + Math.random() * (hi - lo)) * 10) / 10;
+      handleRecutSubmit(measured);
+    } else {
+      handleRecutSubmit();
+    }
+  };
+
+  // Recut "Kalanı At" — kalan depo topunu top yapmadan arşivle (yıkıcı, onaylı).
+  const doRecutDiscard = () => {
+    setRecutDiscardConfirm(false);
+    if (!recutResolvedRollId) return;
+    finalizeWarehouseCutMutation.mutate({
+      rollId: recutResolvedRollId,
+      remainingAction: 'discard',
+    });
+  };
+
+  // "Kime" picker seçenekleri — recut akışında topa uyan TÜM açık satırlar
+  // (getAvailableOrderLines), açık-kumaşta WO'ya bağlı sipariş satırları.
+  const kimeOptions = useMemo<PickerOption[]>(() => {
+    if (recutRollMeta) {
+      return recutLineOptions.map((l) => ({
+        value: l.lineId,
+        label: l.customerName,
+        sublabel: `${l.orderNumber} · ${l.itemName}${
+          l.openQty ? ` · ${Math.round(l.openQty)}m açık` : ''
+        }`,
+      }));
+    }
+    return (activeJob?.context?.orders ?? []).flatMap((o) =>
+      o.lines.map((l) => ({
+        value: l.lineId,
+        label: o.customerName,
+        sublabel: `${o.orderNumber} · ${l.itemName}`,
+      })),
+    );
+  }, [recutRollMeta, recutLineOptions, activeJob]);
+
+  const handleKimeSelect = (lineId: string) => {
+    if (recutRollMeta) {
+      setRecutTargetLineId(lineId);
+    } else {
+      setWork((w) => ({
+        ...w,
+        voluntaryEntry: { ...w.voluntaryEntry, targetOrderLineId: lineId },
+      }));
+    }
+  };
+
+  // "Listeden Seç" chip — kısayollara ek; müşteriye göre aranabilir picker açar.
+  const kimeListChip = (
+    <TouchableRipple
+      borderless
+      onPress={() => setKimePickerOpen(true)}
+      style={styles.kimeListChip}
+      accessibilityLabel="Listeden müşteri / sipariş seç"
+    >
+      <View style={styles.kimeListChipInner}>
+        <Icon source="format-list-bulleted" size={14} color="#4f46e5" />
+        <Text style={styles.kimeListChipText}>Listeden Seç</Text>
+      </View>
+    </TouchableRipple>
+  );
 
   const resetRecut = () => {
     // X kapat: kesim yapıldıysa parent etiketini otomatik basım kuyruğuna at —
@@ -1093,45 +1202,33 @@ export default function TamburScreen() {
           // Kamera-only mod: 4 aksiyon tek satırda büyük ikon olarak.
           // Input gizli olduğu için açılan alanı dokunma hedeflerini büyüterek değerlendiriyoruz.
           <View style={styles.actionsCompactRow}>
-            <IconButton
+            <CompactAction
               icon="format-list-bulleted"
-              mode="contained-tonal"
-              containerColor="#e2e8f0"
-              iconColor="#0f172a"
-              size={32}
+              label="Liste"
+              bg="#e2e8f0"
+              color="#0f172a"
               onPress={() => openList()}
-              accessibilityLabel="Açık kartları listele"
-              style={styles.compactActionBtn}
             />
-            <IconButton
+            <CompactAction
               icon="camera"
-              mode="contained-tonal"
-              containerColor="#dbeafe"
-              iconColor="#1e40af"
-              size={32}
+              label="Tara"
+              bg="#dbeafe"
+              color="#1e40af"
               onPress={() => openScanner()}
-              accessibilityLabel="Kamera ile refakat kartı tara"
-              style={styles.compactActionBtn}
             />
-            <IconButton
+            <CompactAction
               icon="printer-search"
-              mode="contained-tonal"
-              containerColor="#e0f2fe"
-              iconColor="#0369a1"
-              size={32}
+              label="Çıkanlar"
+              bg="#e0f2fe"
+              color="#0369a1"
               onPress={() => openRecentOutput()}
-              accessibilityLabel="Çıkan toplar"
-              style={styles.compactActionBtn}
             />
-            <IconButton
+            <CompactAction
               icon="content-cut"
-              mode="contained-tonal"
-              containerColor="#fee2e2"
-              iconColor="#b91c1c"
-              size={32}
+              label="Kesme"
+              bg="#fee2e2"
+              color="#b91c1c"
               onPress={() => openRecut()}
-              accessibilityLabel="Top kesme"
-              style={styles.compactActionBtn}
             />
           </View>
         )}
@@ -1197,6 +1294,19 @@ export default function TamburScreen() {
       headerExtras={
         <View style={styles.headerExtrasRow}>
           <SyncStatusChip />
+          {reprintCount > 0 && (
+            <View>
+              <Appbar.Action
+                icon="printer-alert"
+                color="#fbbf24"
+                onPress={() => setReprintOpen(true)}
+                accessibilityLabel={`Yeniden basılacak etiket: ${reprintCount}`}
+              />
+              <Badge style={styles.reprintBadge} size={16}>
+                {reprintCount}
+              </Badge>
+            </View>
+          )}
           {compact ? (
             <Appbar.Action
               icon="format-list-bulleted"
@@ -1249,11 +1359,17 @@ export default function TamburScreen() {
                   </Text>
                   <Text style={styles.headerSub}>{recutRollMeta.item}</Text>
                 </View>
-                <View style={styles.remainingBadge}>
-                  <Text style={styles.remainingBadgeValue}>
+                <View
+                  style={[
+                    styles.headerBox,
+                    styles.headerBoxGreen,
+                    recutRollMeta.currentQty <= 0.001 && styles.headerBoxDanger,
+                  ]}
+                >
+                  <Text style={styles.headerBoxValue}>
                     {recutRollMeta.currentQty.toFixed(1)}
                   </Text>
-                  <Text style={styles.remainingBadgeLabel}>mt kalan</Text>
+                  <Text style={styles.headerBoxSub}>mt kalan</Text>
                 </View>
                 <IconButton
                   icon="close"
@@ -1268,27 +1384,95 @@ export default function TamburScreen() {
               {/* ScrollView'siz: form kısa, scroll gerekmez. Header, section ve
                   footer peş peşe yerleşir — gap ile birbirine yakın, bütünleşik. */}
               <Surface style={styles.section} elevation={1}>
-                  <Text style={styles.sectionTitle}>Kesim</Text>
-                  <Text style={styles.entryLabel}>Uzunluk (mt)</Text>
-                  <NumpadInput
-                    mode="outlined"
-                    value={recutCutLength}
-                    onChangeText={setRecutCutLength}
-                    numpadLabel="Kesim uzunluğu"
-                    allowDecimal
-                    autoActivate
-                    numpadMaxLength={8}
-                    placeholder="örn: 60"
-                    dense
-                    style={styles.input}
-                    useNativeKeyboard={compact}
-                  />
+                  <View style={styles.cutHeaderRow}>
+                    <Text style={styles.sectionTitle}>Kesim</Text>
+                    <View style={styles.cutModeToggle}>
+                      {(['manual', 'auto'] as const).map((m) => {
+                        const active = recutMode === m;
+                        return (
+                          <TouchableRipple
+                            key={m}
+                            borderless
+                            onPress={() => setRecutMode(m)}
+                            style={[styles.cutModeChip, active && styles.cutModeChipActive]}
+                          >
+                            <Text
+                              style={[
+                                styles.cutModeChipText,
+                                active && styles.cutModeChipTextActive,
+                              ]}
+                            >
+                              {m === 'manual' ? 'Manuel' : 'Otomatik'}
+                            </Text>
+                          </TouchableRipple>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {recutMode === 'manual' ? (
+                    <>
+                      <Text style={styles.entryLabel}>Uzunluk (mt)</Text>
+                      <View style={styles.cutInputRow}>
+                        <View style={{ flex: 1 }}>
+                          <NumpadInput
+                            mode="outlined"
+                            value={recutCutLength}
+                            onChangeText={setRecutCutLength}
+                            numpadLabel="Kesim uzunluğu"
+                            allowDecimal
+                            autoActivate
+                            numpadMaxLength={8}
+                            placeholder="örn: 60"
+                            dense
+                            style={styles.input}
+                            useNativeKeyboard={compact}
+                          />
+                        </View>
+                        <IconButton
+                          icon="backspace-outline"
+                          mode="contained-tonal"
+                          size={24}
+                          iconColor="#475569"
+                          containerColor="#e2e8f0"
+                          onPress={() => setRecutCutLength('')}
+                          disabled={!recutCutLength}
+                          accessibilityLabel="Uzunluğu temizle"
+                          style={{ margin: 0 }}
+                        />
+                      </View>
+                      {recutRollMeta.currentQty > 0.001 && (
+                        <Button
+                          mode="text"
+                          compact
+                          icon="arrow-down-bold-box-outline"
+                          onPress={() =>
+                            setRecutCutLength(
+                              (Math.floor(recutRollMeta.currentQty * 10) / 10).toString(),
+                            )
+                          }
+                          style={styles.useRemainingBtn}
+                        >
+                          Kalanı kullan ({recutRollMeta.currentQty.toFixed(1)} mt)
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.autoInfo}>
+                      <Icon source="ruler" size={18} color="#1e40af" />
+                      <Text style={styles.autoInfoText}>
+                        Uzunluk makineden ölçülür — "Kes"e basınca o metrede top
+                        oluşur.
+                      </Text>
+                    </View>
+                  )}
 
                   <View style={{ marginBottom: 8 }}>
                     <Text style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>
                       Kime? (kesilen parça hangi siparişe — etiket buradan basılır)
                     </Text>
                     <View style={styles.qualityGridInline}>
+                      {kimeListChip}
                       {[
                         { lineId: null as string | null, label: 'Stok' },
                         ...recutLineOptions.map((l) => ({
@@ -1350,26 +1534,9 @@ export default function TamburScreen() {
                         );
                       })}
                     </View>
+                    {/* İkincil — Kartela (numune) + Kalanı At (yıkıcı, onaylı).
+                        Asıl "Kes" footer'da. */}
                     <View style={styles.createActionRow}>
-                      <Button
-                        mode="contained"
-                        icon="plus-circle"
-                        onPress={handleRecutSubmit}
-                        buttonColor="#7c3aed"
-                        compact
-                        loading={cutWarehouseRollMutation.isPending}
-                        disabled={
-                          cutWarehouseRollMutation.isPending ||
-                          recutSwatchMutation.isPending ||
-                          !recutCutLength.trim() ||
-                          parseFloat(recutCutLength) <= 0 ||
-                          parseFloat(recutCutLength) > recutRollMeta.currentQty ||
-                          !recutQualityGrade
-                        }
-                        style={styles.createTopBtn}
-                      >
-                        Top Oluştur
-                      </Button>
                       <Button
                         mode="contained-tonal"
                         icon="content-copy"
@@ -1387,41 +1554,46 @@ export default function TamburScreen() {
                       >
                         Kartela Oluştur
                       </Button>
+                      {recutRollMeta.currentQty > 0.001 && (
+                        <Button
+                          mode="text"
+                          icon="trash-can-outline"
+                          onPress={() => setRecutDiscardConfirm(true)}
+                          compact
+                          textColor="#b91c1c"
+                          style={styles.createTopBtn}
+                        >
+                          Kalanı At ({recutRollMeta.currentQty.toFixed(1)} mt)
+                        </Button>
+                      )}
                     </View>
                   </View>
                 </Surface>
 
-              {/* Footer — Top Kesme bitir; kalan varsa karar modal, yoksa
-                  direkt arşivle (discard, kayıp 0). Beyaz card kaldırıldı —
-                  sadece buton görünür. */}
+              {/* Footer — ASIL aksiyon "Kes". Girilen uzunlukta top oluşur; son
+                  kesimde kalan ~0 olunca depo topu OTOMATİK arşivlenir (ayrı Bitir
+                  yok). Kalanı top yapmadan kapatmak için "Kalanı At". */}
               <Surface style={styles.recutFooter} elevation={0}>
                 <Button
                   mode="contained"
-                  icon="archive"
-                  onPress={() => {
-                    if (recutRollMeta.currentQty <= 0.001) {
-                      // Kalan yok — modal'a gerek yok, direkt parent'ı arşivle
-                      finalizeWarehouseCutMutation.mutate({
-                        rollId: recutResolvedRollId,
-                        remainingAction: 'discard',
-                      });
-                    } else {
-                      setRecutFinalizeOpen(true);
-                    }
-                  }}
-                  buttonColor="#1e40af"
+                  icon="content-cut"
+                  onPress={handleRecutKes}
+                  buttonColor="#7c3aed"
                   style={styles.footerBtn}
                   contentStyle={styles.footerBtnContent}
                   labelStyle={styles.footerBtnLabel}
-                  loading={finalizeWarehouseCutMutation.isPending}
+                  loading={cutWarehouseRollMutation.isPending}
                   disabled={
                     cutWarehouseRollMutation.isPending ||
-                    finalizeWarehouseCutMutation.isPending
+                    finalizeWarehouseCutMutation.isPending ||
+                    !recutQualityGrade ||
+                    (recutMode === 'manual' &&
+                      (!recutCutLength.trim() ||
+                        parseFloat(recutCutLength) <= 0 ||
+                        parseFloat(recutCutLength) > recutRollMeta.currentQty))
                   }
                 >
-                  {recutRollMeta.currentQty > 0.001
-                    ? `Bitir (Kalan ${recutRollMeta.currentQty.toFixed(1)}m için seç)`
-                    : 'Bitir ve Arşivle'}
+                  {recutMode === 'auto' ? 'Kes — Makineden Ölç' : 'Kes — Top Oluştur'}
                 </Button>
               </Surface>
             </View>
@@ -1465,56 +1637,48 @@ export default function TamburScreen() {
                       ))}
                     </View>
                   )}
-                  {/* Planlanan foldType / layerCount info chip */}
-                  {activeJob?.context &&
-                    (activeJob.context.plannedFoldType ||
-                      activeJob.context.plannedLayerCount != null) && (
-                      <View style={styles.plannedChip}>
-                        <Icon source="information-outline" size={11} color="#cbd5e1" />
-                        <Text style={styles.plannedChipText}>
-                          Planlanan:{' '}
-                          {activeJob.context.plannedFoldType ?? '—'}
-                          {activeJob.context.plannedLayerCount != null
-                            ? ` · ${activeJob.context.plannedLayerCount} katman`
-                            : ''}
-                        </Text>
-                      </View>
-                    )}
                 </View>
 
-                {/* Kalan metre rozeti — sürekli görünür, operatörün ana ölçeği */}
+                {/* Planlanan katlama — kutu (mt kalan / sipariş ile aynı yükseklik) */}
+                {!!activeJob?.context?.plannedFoldType && (
+                  <View style={[styles.headerBox, styles.headerBoxDark]}>
+                    <Text style={styles.headerBoxValue}>
+                      {activeJob.context.plannedFoldType === '4-KAT'
+                        ? '4-Kat'
+                        : '2-Kat'}
+                    </Text>
+                    <Text style={styles.headerBoxSub}>katlama</Text>
+                  </View>
+                )}
+
+                {/* Kalan metre — operatörün ana ölçeği */}
                 <View
                   style={[
-                    styles.remainingBadge,
+                    styles.headerBox,
+                    styles.headerBoxGreen,
                     (segmentPreview?.remaining ?? 0) <= 0.001 &&
-                      styles.remainingBadgeDanger,
+                      styles.headerBoxDanger,
                   ]}
                 >
-                  <Text style={styles.remainingBadgeValue}>
+                  <Text style={styles.headerBoxValue}>
                     {(segmentPreview?.remaining ?? selectedRoll.currentQty).toFixed(1)}
                   </Text>
-                  <Text style={styles.remainingBadgeLabel}>
-                    mt kalan
-                  </Text>
-                  <Text style={styles.remainingBadgeMeta}>
-                    / {selectedRoll.currentQty.toFixed(1)} giriş
-                  </Text>
+                  <Text style={styles.headerBoxSub}>mt kalan</Text>
                 </View>
 
-                {/* Siparişler butonu — operatör tıklayınca modal'da görür */}
-                {activeJob?.context?.orders &&
+                {/* Siparişler — modal trigger */}
+                {!!activeJob?.context?.orders &&
                   activeJob.context.orders.length > 0 && (
                     <TouchableRipple
                       onPress={() => setOrdersModalOpen(true)}
                       borderless
-                      style={styles.ordersHeaderBtn}
+                      style={[styles.headerBox, styles.headerBoxDark]}
                     >
-                      <View style={styles.ordersHeaderBtnInner}>
-                        <Icon source="clipboard-list-outline" size={20} color="#fff" />
-                        <Text style={styles.ordersHeaderBtnLabel}>
+                      <View style={styles.headerBoxInner}>
+                        <Text style={styles.headerBoxValue}>
                           {activeJob.context.orders.length}
                         </Text>
-                        <Text style={styles.ordersHeaderBtnSub}>sipariş</Text>
+                        <Text style={styles.headerBoxSub}>sipariş</Text>
                       </View>
                     </TouchableRipple>
                   )}
@@ -1525,6 +1689,19 @@ export default function TamburScreen() {
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
               >
+                {/* Sipariş kesim notu + tambur adım notu — kesimden önce görünür */}
+                <NotesBanner
+                  stepNote={activeJob?.context?.stepNote}
+                  cutNotes={Array.from(
+                    new Set(
+                      (activeJob?.context?.orders ?? []).flatMap((o) =>
+                        o.lines
+                          .map((l) => l.cutNote?.trim())
+                          .filter((x): x is string => !!x),
+                      ),
+                    ),
+                  )}
+                />
                 {/* Hata noktaları — sadece referans, kompakt yan yana chip'ler */}
                 <Surface style={styles.defectGuideSection} elevation={1}>
                   <Text style={styles.defectGuideTitle}>
@@ -1576,47 +1753,144 @@ export default function TamburScreen() {
                 {/* Kesim — operatör fiziksel kesim yapar, anında sisteme girer.
                     Her "Top Oluştur" tıklaması child Roll oluşturur + etiket basar. */}
                 <Surface style={styles.section} elevation={1}>
-                  <Text style={styles.sectionTitle}>Kesim</Text>
-
-                  <Text style={styles.entryLabel}>Uzunluk (mt)</Text>
-                  <View style={styles.cutInputRow}>
-                    <View style={{ flex: 1 }}>
-                      <NumpadInput
-                        mode="outlined"
-                        value={work.voluntaryEntry.length}
-                        onChangeText={(v) =>
-                          setWork((w) => ({
-                            ...w,
-                            voluntaryEntry: { ...w.voluntaryEntry, length: v },
-                          }))
-                        }
-                        numpadLabel="Kesim uzunluğu"
-                        allowDecimal
-                        autoActivate
-                        numpadMaxLength={8}
-                        placeholder="örn: 60"
-                        dense
-                        style={styles.input}
-                        useNativeKeyboard={compact}
-                      />
+                  <View style={styles.cutHeaderRow}>
+                    <Text style={styles.sectionTitle}>Kesim</Text>
+                    <View style={styles.cutModeToggle}>
+                      {(['manual', 'auto'] as const).map((m) => {
+                        const active = cutMode === m;
+                        return (
+                          <TouchableRipple
+                            key={m}
+                            borderless
+                            onPress={() => setCutMode(m)}
+                            style={[
+                              styles.cutModeChip,
+                              active && styles.cutModeChipActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.cutModeChipText,
+                                active && styles.cutModeChipTextActive,
+                              ]}
+                            >
+                              {m === 'manual' ? 'Manuel' : 'Otomatik'}
+                            </Text>
+                          </TouchableRipple>
+                        );
+                      })}
                     </View>
-                    <IconButton
-                      icon="counter"
-                      mode="contained-tonal"
-                      size={24}
-                      iconColor="#7c3aed"
-                      containerColor="#ede9fe"
-                      onPress={fetchFromMachine}
-                      accessibilityLabel="Makineden çek (simülasyon)"
-                      style={{ margin: 0 }}
-                    />
                   </View>
+
+                  {/* Katlama — Kesim'in içinde, mode toggle'ın altında. Eskiden
+                      ayrı bir bölümdü (en altta, kaydırma gerekiyordu). */}
+                  <View style={styles.foldInlineRow}>
+                    <Text style={styles.inlineLabel}>Katlama</Text>
+                    {(['2-KAT', '4-KAT'] as TamburFoldType[]).map((ft) => {
+                      const active = work.foldType === ft;
+                      return (
+                        <TouchableRipple
+                          key={ft}
+                          borderless
+                          onPress={() =>
+                            setWork((w) => ({ ...w, foldType: active ? null : ft }))
+                          }
+                          style={[styles.foldChipSm, active && styles.foldChipActive]}
+                        >
+                          <Text
+                            style={[
+                              styles.foldChipText,
+                              active && styles.foldChipTextActive,
+                            ]}
+                          >
+                            {ft === '2-KAT' ? 'Çift Kat' : '4 Kat'}
+                          </Text>
+                        </TouchableRipple>
+                      );
+                    })}
+                  </View>
+
+                  {cutMode === 'manual' ? (
+                    <>
+                      <Text style={styles.entryLabel}>Uzunluk (mt)</Text>
+                      <View style={styles.cutInputRow}>
+                        <View style={{ flex: 1 }}>
+                          <NumpadInput
+                            mode="outlined"
+                            value={work.voluntaryEntry.length}
+                            onChangeText={(v) =>
+                              setWork((w) => ({
+                                ...w,
+                                voluntaryEntry: { ...w.voluntaryEntry, length: v },
+                              }))
+                            }
+                            numpadLabel="Kesim uzunluğu"
+                            allowDecimal
+                            autoActivate
+                            numpadMaxLength={8}
+                            placeholder="örn: 60"
+                            dense
+                            style={styles.input}
+                            useNativeKeyboard={compact}
+                          />
+                        </View>
+                        <IconButton
+                          icon="backspace-outline"
+                          mode="contained-tonal"
+                          size={24}
+                          iconColor="#475569"
+                          containerColor="#e2e8f0"
+                          onPress={() =>
+                            setWork((w) => ({
+                              ...w,
+                              voluntaryEntry: { ...w.voluntaryEntry, length: '' },
+                            }))
+                          }
+                          disabled={!work.voluntaryEntry.length}
+                          accessibilityLabel="Uzunluğu temizle"
+                          style={{ margin: 0 }}
+                        />
+                      </View>
+                      {/* Tüm kalanı tek dokunuşla uzunluğa yaz → "Kes" tüm kalanı
+                          top yapar → kalan 0 → otomatik biter. */}
+                      {selectedRoll.currentQty > 0.001 && (
+                        <Button
+                          mode="text"
+                          compact
+                          icon="arrow-down-bold-box-outline"
+                          onPress={() =>
+                            setWork((w) => ({
+                              ...w,
+                              voluntaryEntry: {
+                                ...w.voluntaryEntry,
+                                length: (
+                                  Math.floor(selectedRoll.currentQty * 10) / 10
+                                ).toString(),
+                              },
+                            }))
+                          }
+                          style={styles.useRemainingBtn}
+                        >
+                          Kalanı kullan ({selectedRoll.currentQty.toFixed(1)} mt)
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.autoInfo}>
+                      <Icon source="ruler" size={18} color="#1e40af" />
+                      <Text style={styles.autoInfoText}>
+                        Uzunluk makineden ölçülür — "Kes"e basınca o metrede top
+                        oluşur.
+                      </Text>
+                    </View>
+                  )}
 
                   <View style={{ marginBottom: 8 }}>
                     <Text style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>
                       Kime? (kesilen top hangi siparişe)
                     </Text>
                     <View style={styles.qualityGridInline}>
+                      {kimeListChip}
                       {[
                         { lineId: null as string | null, label: 'Stok' },
                         ...(activeJob?.context?.orders ?? []).flatMap((o) =>
@@ -1699,23 +1973,9 @@ export default function TamburScreen() {
                         );
                       })}
                     </View>
+                    {/* İkincil aksiyonlar — Kartela (numune) ayrı; Kalanı At
+                        sadece kalan varken (yıkıcı, onaylı). Asıl "Kes" footer'da. */}
                     <View style={styles.createActionRow}>
-                      <Button
-                        mode="contained"
-                        icon="plus-circle"
-                        onPress={addVoluntaryCut}
-                        buttonColor="#7c3aed"
-                        compact
-                        loading={cutOpenFabricMutation.isPending}
-                        disabled={
-                          cutOpenFabricMutation.isPending ||
-                          !work.voluntaryEntry.length ||
-                          !work.voluntaryEntry.qualityGrade
-                        }
-                        style={styles.createTopBtn}
-                      >
-                        Top Oluştur
-                      </Button>
                       <Button
                         mode="contained-tonal"
                         icon="content-copy"
@@ -1730,62 +1990,44 @@ export default function TamburScreen() {
                       >
                         Kartela Oluştur
                       </Button>
-                    </View>
-                  </View>
-                </Surface>
-
-                {/* Katlama */}
-                <Surface style={styles.section} elevation={1}>
-                  <Text style={styles.sectionTitle}>Katlama</Text>
-                  <View style={styles.foldRow}>
-                    {(['2-KAT', '4-KAT'] as TamburFoldType[]).map((ft) => {
-                      const active = work.foldType === ft;
-                      return (
-                        <TouchableRipple
-                          key={ft}
-                          borderless
-                          onPress={() =>
-                            setWork((w) => ({ ...w, foldType: active ? null : ft }))
-                          }
-                          style={[
-                            styles.foldChip,
-                            active && styles.foldChipActive,
-                          ]}
+                      {selectedRoll.currentQty > 0.001 && (
+                        <Button
+                          mode="text"
+                          icon="trash-can-outline"
+                          onPress={() => setDiscardConfirm(true)}
+                          compact
+                          textColor="#b91c1c"
+                          style={styles.createTopBtn}
                         >
-                          <Text
-                            style={[
-                              styles.foldChipText,
-                              active && styles.foldChipTextActive,
-                            ]}
-                          >
-                            {ft === '2-KAT' ? 'Çift Kat' : '4 Kat'}
-                          </Text>
-                        </TouchableRipple>
-                      );
-                    })}
+                          Kalanı At ({selectedRoll.currentQty.toFixed(1)} mt)
+                        </Button>
+                      )}
+                    </View>
                   </View>
                 </Surface>
 
               </ScrollView>
 
-              {/* Sticky footer — açık kumaş bitirme. Kalan varsa fire işaretlenir.
-                  OFFLINE-AWARE: loading/disabled binding'i YOK — mutation hook'un
-                  global isPending'i paused mutation'larda true kalır ve sıradaki
-                  rulayı engelleyebilir. Optimistic update rulayı listeden zaten
-                  düşürdüğü için double-press riski yok. */}
+              {/* Sticky footer — ASIL aksiyon "Kes". Girilen uzunlukta top oluşur;
+                  son kesimde kalan ~0 olunca açık kumaş OTOMATİK biter (ayrı Tamamla
+                  yok). cutOpenFabric offline-aware değil → isPending'de kilitlenir. */}
               <Surface style={styles.footer} elevation={4}>
                 <Button
                   mode="contained"
-                  icon="warehouse"
-                  onPress={handleFinalize}
-                  buttonColor="#1e40af"
+                  icon="content-cut"
+                  onPress={handleKes}
+                  buttonColor="#7c3aed"
+                  loading={cutOpenFabricMutation.isPending}
+                  disabled={
+                    cutOpenFabricMutation.isPending ||
+                    !work.voluntaryEntry.qualityGrade ||
+                    (cutMode === 'manual' && !work.voluntaryEntry.length)
+                  }
                   style={styles.footerBtn}
                   contentStyle={styles.footerBtnContent}
                   labelStyle={styles.footerBtnLabel}
                 >
-                  {selectedRoll.currentQty > 0.001
-                    ? `Tamamla (Kalan ${selectedRoll.currentQty.toFixed(1)}m için seç)`
-                    : 'Tamamla'}
+                  {cutMode === 'auto' ? 'Kes — Makineden Ölç' : 'Kes — Top Oluştur'}
                 </Button>
               </Surface>
             </>
@@ -1797,7 +2039,11 @@ export default function TamburScreen() {
         {!compact && (
           <View style={styles.rightCol}>
             {renderRightContent()}
-            <NumpadHost style={styles.numpadHost} />
+            {/* Otomatik modda yazılacak bir şey yok → numpad gizlenir. Recut
+                akışı aktifse onun modu (recutMode), değilse açık-kumaş (cutMode). */}
+            {(recutRollMeta ? recutMode : cutMode) === 'manual' && (
+              <NumpadHost style={styles.numpadHost} />
+            )}
           </View>
         )}
 
@@ -1916,14 +2162,49 @@ export default function TamburScreen() {
         onDone={() => setActivePrintRoll(null)}
       />
 
-      <FinalizeRemainingModal
-        visible={finalizeModalOpen}
-        remainingQty={selectedRoll?.currentQty ?? 0}
-        onDismiss={() => setFinalizeModalOpen(false)}
-        onChoose={submitFinalize}
-        loading={false}
+      <ConfirmDialog
+        kind="destructive"
+        visible={discardConfirm}
+        title="Kalanı at?"
+        description={`Açık kumaşın kalan ${(selectedRoll?.currentQty ?? 0).toFixed(1)} mt'si top yapılmadan kapatılacak (kayıp sayılır). Emin misiniz?`}
+        confirmLabel="Kalanı At"
+        cancelLabel="Vazgeç"
+        onConfirm={doDiscardRemaining}
+        onDismiss={() => setDiscardConfirm(false)}
       />
 
+      {/* Recut (Top Kesme) kalanı at onayı */}
+      <ConfirmDialog
+        kind="destructive"
+        visible={recutDiscardConfirm}
+        title="Kalanı at?"
+        description={`Depo topunun kalan ${(recutRollMeta?.currentQty ?? 0).toFixed(1)} mt'si top yapılmadan arşivlenecek (kayıp sayılır). Emin misiniz?`}
+        confirmLabel="Kalanı At"
+        cancelLabel="Vazgeç"
+        onConfirm={doRecutDiscard}
+        onDismiss={() => setRecutDiscardConfirm(false)}
+      />
+
+      {/* Kime — kısayollara ek; listeden (müşteriye göre aranabilir) sipariş seç */}
+      <PickerModal
+        visible={kimePickerOpen}
+        title="Müşteri / Sipariş Seç"
+        options={kimeOptions}
+        selectedValue={
+          recutRollMeta
+            ? recutTargetLineId
+            : work.voluntaryEntry.targetOrderLineId
+        }
+        numColumns={compact ? 1 : 2}
+        onSelect={handleKimeSelect}
+        onDismiss={() => setKimePickerOpen(false)}
+        emptyText="Açık sipariş satırı yok"
+      />
+
+      <ReprintQueueSheet
+        visible={reprintOpen}
+        onDismiss={() => setReprintOpen(false)}
+      />
     </ScreenChrome>
   );
 }
@@ -2149,6 +2430,20 @@ function OrdersDetailModal({
                             ))}
                           </View>
                         )}
+                        {(line.pieceLengthM != null || !!line.cutNote?.trim()) && (
+                          <View style={ordersModalStyles.lineCut}>
+                            {line.pieceLengthM != null && (
+                              <Text style={ordersModalStyles.lineCutText}>
+                                ✂ Her {line.pieceLengthM} m'de kes
+                              </Text>
+                            )}
+                            {!!line.cutNote?.trim() && (
+                              <Text style={ordersModalStyles.lineCutNote}>
+                                Kesim notu: {line.cutNote.trim()}
+                              </Text>
+                            )}
+                          </View>
+                        )}
                       </View>
                       <View style={ordersModalStyles.lineRemaining}>
                         <Text style={ordersModalStyles.lineRemainingValue}>
@@ -2205,6 +2500,16 @@ const ordersModalStyles = StyleSheet.create({
     fontWeight: '700',
     color: '#0f172a',
   },
+  lineCut: {
+    marginTop: 4,
+    backgroundColor: '#fffbeb',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    gap: 2,
+  },
+  lineCutText: { fontSize: 12, fontWeight: '700', color: '#b45309' },
+  lineCutNote: { fontSize: 12, color: '#92400e', fontWeight: '600' },
   lineRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2695,13 +3000,86 @@ function FinalizeRemainingModal({
   );
 }
 
+// Sipariş kesim notu + tambur adım notu bandı — aktif iş üstünde, operatör
+// kesimden önce talimatı görsün (eskiden hiç gösterilmiyordu).
+function NotesBanner({
+  stepNote,
+  cutNotes,
+}: {
+  stepNote?: string | null;
+  cutNotes: string[];
+}) {
+  const note = stepNote?.trim();
+  const cut = cutNotes.join(' · ').trim() || null;
+  if (!note && !cut) return null;
+  return (
+    <Surface style={styles.notesBanner} elevation={1}>
+      {/* Yan yana, yarı-yarı. Biri yoksa diğeri tüm satırı kaplar (flex:1). */}
+      <View style={styles.notesRow}>
+        {note && (
+          <View style={styles.noteCell}>
+            <View style={styles.noteHead}>
+              <Icon source="clipboard-text-outline" size={15} color="#b45309" />
+              <Text style={styles.noteLabel}>Tambur Notu</Text>
+            </View>
+            <Text style={styles.noteText}>{note}</Text>
+          </View>
+        )}
+        {note && cut && <View style={styles.noteDivider} />}
+        {cut && (
+          <View style={styles.noteCell}>
+            <View style={styles.noteHead}>
+              <Icon source="content-cut" size={15} color="#b45309" />
+              <Text style={styles.noteLabel}>Kesim Notu</Text>
+            </View>
+            <Text style={styles.noteText}>{cut}</Text>
+          </View>
+        )}
+      </View>
+    </Surface>
+  );
+}
+
+// Kamera-only modda sağdaki aksiyon hücresi — ikon + altında etiket. Operatör
+// hangi butonun ne olduğunu (liste / tara / çıkan / kesme) karıştırmasın.
+function CompactAction({
+  icon,
+  label,
+  bg,
+  color,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  bg: string;
+  color: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableRipple
+      onPress={onPress}
+      rippleColor="rgba(15,23,42,0.10)"
+      style={[styles.compactAction, { backgroundColor: bg }]}
+      accessibilityLabel={label}
+    >
+      <View style={styles.compactActionInner}>
+        <Icon source={icon} size={20} color={color} />
+        <Text style={[styles.compactActionLabel, { color }]} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+    </TouchableRipple>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   body: { flex: 1, flexDirection: 'row', backgroundColor: '#f8fafc', position: 'relative' },
   headerExtrasRow: { flexDirection: 'row', alignItems: 'center' },
+  reprintBadge: { position: 'absolute', top: 4, right: 2, backgroundColor: '#dc2626' },
   // recutMode wrap — header / form / footer doğal akışta yan yana, gap ile
   // birbirine yakın. paddingTop ekran üstünden nefes alır.
-  recutWrap: { flex: 1, paddingTop: 24, gap: 12 },
+  recutWrap: { flex: 1, paddingTop: 6, gap: 10 },
 
   formCol: { flex: 1.4 },
   // Compact (telefon) — form üstü sağa yaslı sağ panel tetiği
@@ -2769,6 +3147,30 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   plannedChipText: { fontSize: 10, color: '#cbd5e1', fontWeight: '600' },
+
+  // Header kutuları — Katlama / mt kalan / sipariş HEPSİ eşit yükseklik.
+  headerBox: {
+    minWidth: 76,
+    minHeight: 52,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  headerBoxInner: { alignItems: 'center' },
+  headerBoxDark: { backgroundColor: '#1e293b' },
+  headerBoxGreen: { backgroundColor: '#059669' },
+  headerBoxDanger: { backgroundColor: '#dc2626' },
+  headerBoxValue: { fontSize: 20, fontWeight: '800', color: '#fff', lineHeight: 24 },
+  headerBoxSub: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.82)',
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginTop: 1,
+  },
 
   // Kalan metre rozeti — header'da prominent
   remainingBadge: {
@@ -2912,7 +3314,7 @@ const styles = StyleSheet.create({
     color: '#b91c1c',
   },
 
-  // Kesim — uzunluk input + Makineden Çek ikonu
+  // Kesim — uzunluk input + temizleme tuşu
   cutInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2935,6 +3337,34 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   createActionRow: { flexDirection: 'column', gap: 6 },
+  useRemainingBtn: { alignSelf: 'flex-start', marginTop: 2, marginBottom: 4 },
+  // Manuel/Otomatik kesim modu toggle'ı (segmented)
+  cutHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  cutModeToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#e2e8f0',
+    borderRadius: 8,
+    padding: 2,
+  },
+  cutModeChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 6 },
+  cutModeChipActive: { backgroundColor: '#7c3aed' },
+  cutModeChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+  cutModeChipTextActive: { color: '#fff' },
+  autoInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  autoInfoText: { flex: 1, fontSize: 13, color: '#1e40af', fontWeight: '600', lineHeight: 18 },
 
   // İş Emri Siparişleri — operatörün kesim planı yapması için
   orderItem: {
@@ -3091,6 +3521,34 @@ const styles = StyleSheet.create({
   addBtnLabel: { fontSize: 16, fontWeight: '700' },
 
   foldRow: { flexDirection: 'row', gap: 10 },
+  // Kesim içi kompakt katlama satırı (etiket + 2 küçük chip)
+  foldInlineRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  inlineLabel: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  // "Listeden Seç" chip (kesik kenarlı = kısayollardan ayrışsın)
+  kimeListChip: {
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: '#4f46e5',
+    borderStyle: 'dashed',
+    backgroundColor: '#eef2ff',
+  },
+  kimeListChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  kimeListChipText: { fontSize: 13, fontWeight: '700', color: '#4f46e5' },
+  foldChipSm: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#cbd5e1',
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
   foldChip: {
     flex: 1,
     backgroundColor: '#fff',
@@ -3141,15 +3599,55 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 6,
   },
-  // Kamera-only mod: 4 aksiyon tek satırda. justifyContent space-around
-  // → ikonlar eşit aralıklı, dokunma hedefi 48dp+ contained-tonal sayesinde.
+  // Kamera-only mod: 4 aksiyon tek satırda — her biri ikon + altında etiket
+  // (operatör hangi butonun ne olduğunu karıştırmasın). Hücreler flex:1.
   actionsCompactRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
+    gap: 6,
     paddingVertical: 4,
   },
-  compactActionBtn: { margin: 0 },
+  // Yatay pill: renkli zemin + ikon + kısa etiket, tek satır (az yer kaplar).
+  compactAction: { flex: 1, borderRadius: 10, overflow: 'hidden' },
+  compactActionInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+  },
+  compactActionLabel: { fontSize: 12, fontWeight: '700' },
+
+  // Sipariş kesim / tambur adım notu bandı (amber = talimat/dikkat).
+  notesBanner: {
+    backgroundColor: '#fffbeb',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    padding: 8,
+    marginBottom: 8,
+  },
+  notesRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  noteCell: { flex: 1, gap: 1 },
+  noteHead: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  noteDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: '#fde68a',
+    marginHorizontal: 10,
+  },
+  noteLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#b45309',
+    letterSpacing: 0.3,
+  },
+  noteText: {
+    fontSize: 13,
+    color: '#0f172a',
+    fontWeight: '600',
+    lineHeight: 18,
+  },
 
   tabBar: {
     flexDirection: 'row',

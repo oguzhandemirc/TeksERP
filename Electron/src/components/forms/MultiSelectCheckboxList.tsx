@@ -88,6 +88,12 @@ export function MultiSelectCheckboxList({
   };
 
   const totalVisible = Array.from(grouped.values()).reduce((a, l) => a + l.length, 0);
+  // Görünür (aramayla filtrelenmiş) öğelerin id'leri — "Tümünü seç" bunları seçer.
+  const visibleIds = useMemo(
+    () => Array.from(grouped.values()).flat().map((i) => i.id),
+    [grouped],
+  );
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
 
   return (
     <div className={cn("flex h-full flex-col gap-3", className)}>
@@ -104,6 +110,15 @@ export function MultiSelectCheckboxList({
         <div className="text-xs text-muted-foreground">
           <span className="text-foreground font-medium">{value.length}</span> / {items.length} seçili
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled || visibleIds.length === 0 || allVisibleSelected}
+          onClick={() => setMany(visibleIds, true)}
+        >
+          Tümünü seç
+        </Button>
         <Button
           type="button"
           variant="outline"

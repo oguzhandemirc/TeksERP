@@ -342,6 +342,49 @@ router.get(
 
 /**
  * @openapi
+ * /api/orders/order-lines/coverage:
+ *   post:
+ *     tags: [Orders]
+ *     summary: Seçili sipariş kalemleri için üretim kapsama paneli (net açık)
+ *     description: >
+ *       Her kalem için istenen − sevk − WO-rezerve − serbest depo − ham stok = net açık.
+ *       Serbest stok rezerve edilmez (anlık fotoğraf). excludeWorkOrderId düzenleme modunda
+ *       WO'nun kendi tahsisini saymaz. WO oluşturma ekranını besler.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [lineIds]
+ *             properties:
+ *               lineIds:            { type: array, items: { type: string, format: uuid } }
+ *               excludeWorkOrderId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "Kalem başına kapsama (requested/shipped/reserved/freeWarehouse/freeStock/netGap)" }
+ */
+router.post(
+  "/order-lines/coverage",
+  verifyToken,
+  requireAnyPermission("order:read", "workorder:read", "workorder:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schema = z.object({
+        lineIds: z.array(z.string().uuid("Geçersiz kalem ID")).max(100),
+        excludeWorkOrderId: z.string().uuid("Geçersiz WO ID").optional(),
+      });
+      const body = schema.parse(req.body);
+      const result = await service.getCoverageForLines(body);
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+/**
+ * @openapi
  * /api/orders/{id}:
  *   get:
  *     tags: [Orders]

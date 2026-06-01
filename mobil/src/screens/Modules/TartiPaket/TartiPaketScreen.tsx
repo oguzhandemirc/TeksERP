@@ -23,6 +23,8 @@ import { rollService } from '../../../services/roll.service';
 import { useAuthStore } from '../../../store/authStore';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import type { MainStackParamList } from '../../../navigation/types';
+import ReadyToShipList from './components/ReadyToShipList';
+import RelabelSheet, { type RelabelRoll } from '../../../components/RelabelSheet';
 
 // =============================================================================
 // Tartı/Paket — telefon dikey. Omurga: AÇIK çuvallar.
@@ -41,6 +43,9 @@ export default function TartiPaketScreen() {
   const [newSackOpen, setNewSackOpen] = useState(false);
   const [custSearch, setCustSearch] = useState('');
   const [scannerSackId, setScannerSackId] = useState<string | null>(null);
+  const [autoScanOpen, setAutoScanOpen] = useState(false);
+  const [relabelScanOpen, setRelabelScanOpen] = useState(false);
+  const [relabelRoll, setRelabelRoll] = useState<RelabelRoll | null>(null);
   const [weighSack, setWeighSack] = useState<SackListItem | null>(null);
   const [weightInput, setWeightInput] = useState('');
   const scanBusy = useRef(false);
@@ -69,6 +74,8 @@ export default function TartiPaketScreen() {
 
   const refreshSacks = () => {
     void qc.invalidateQueries({ queryKey: ['sacks'] });
+    // Paketlenen toplar Sevke Hazır listesinden düşsün
+    void qc.invalidateQueries({ queryKey: ['shipping', 'ready'] });
   };
 
   const createSackMut = useMutation({
@@ -82,6 +89,28 @@ export default function TartiPaketScreen() {
     },
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çuval açılamadı', text2: e.message }),
   });
+
+  // Sevke Hazır → "Çuvala Başla": müşterinin açık çuvalı varsa odaklan, yoksa aç —
+  // ardından o çuvalın okuyucusunu aç (operatör hazır topları tarasın).
+  const startSackMut = useMutation({
+    mutationFn: (customerId: string) => packingService.createSack({ customerId }),
+    onSuccess: (res) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Çuval açıldı', text2: res.data?.sackNo });
+      refreshSacks();
+      if (res.data?.id) setScannerSackId(res.data.id);
+    },
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çuval açılamadı', text2: e.message }),
+  });
+
+  const beginPackingForCustomer = (customerId: string) => {
+    const existing = openSacks.find((s) => s.customer.id === customerId);
+    if (existing) {
+      setScannerSackId(existing.id);
+      return;
+    }
+    startSackMut.mutate(customerId);
+  };
 
   const weighMut = useMutation({
     mutationFn: ({ sackId, kg }: { sackId: string; kg: number }) =>
@@ -123,6 +152,62 @@ export default function TartiPaketScreen() {
     }
   };
 
+  // Hızlı Okut (Mod C): müşteri seçmeden okut → backend topun müşterisini bulup
+  // açık çuvalına ekler (yoksa açar). Uymazsa hata döner (stok etiketli → yönlendir).
+  const handleAutoScan = async (barcode: string) => {
+    const code = barcode.trim();
+    if (!code || scanBusy.current) return;
+    scanBusy.current = true;
+    try {
+      const res = await packingService.autoAssign(code);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({
+        type: 'success',
+        text1: res.data?.createdSack ? 'Çuval açıldı, top eklendi' : 'Top çuvala eklendi',
+        text2: res.message ?? res.data?.customerName,
+      });
+      refreshSacks();
+    } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({ type: 'error', text1: 'Eklenemedi', text2: (e as Error).message });
+    } finally {
+      setTimeout(() => {
+        scanBusy.current = false;
+      }, 600);
+    }
+  };
+
+  // Yönlendir: top okut → çöz → RelabelSheet aç (stok-etiketli / başka müşteri topu).
+  const handleRelabelScan = async (barcode: string) => {
+    const code = barcode.trim();
+    if (!code || scanBusy.current) return;
+    scanBusy.current = true;
+    try {
+      const res = await rollService.getByBarcode(code);
+      const roll = res.data;
+      if (!roll) {
+        Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: code });
+        return;
+      }
+      setRelabelScanOpen(false);
+      setRelabelRoll({
+        id: roll.id,
+        barcode: roll.barcode,
+        itemId: roll.itemId,
+        colorId: roll.colorId,
+        width: roll.width,
+        itemName: roll.item?.name,
+        colorName: roll.color?.name ?? null,
+      });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Okunamadı', text2: (e as Error).message });
+    } finally {
+      setTimeout(() => {
+        scanBusy.current = false;
+      }, 600);
+    }
+  };
+
   const customers = customersQuery.data?.data ?? [];
   const filteredCustomers = customers.filter((c) => {
     const q = custSearch.trim().toLocaleLowerCase('tr-TR');
@@ -135,7 +220,7 @@ export default function TartiPaketScreen() {
 
   return (
     <ScreenChrome title="Tartı / Paket" subtitle="Çuval doldur & tart">
-      <View style={styles.root}>
+      <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent}>
         {/* Yetkiye duyarlı köprü — kullanıcının sevkiyat izni varsa görünür */}
         {canShip && closedCount > 0 && (
           <TouchableRipple onPress={() => nav.navigate('Sevkiyat')} style={styles.bridge}>
@@ -145,6 +230,34 @@ export default function TartiPaketScreen() {
             </View>
           </TouchableRipple>
         )}
+
+        {/* Mod C Hızlı Okut + Yönlendir (değişebilir etiket) */}
+        <View style={styles.actionRow}>
+          <Button
+            mode="contained"
+            icon="barcode-scan"
+            onPress={() => setAutoScanOpen(true)}
+            style={styles.flexBtn}
+            contentStyle={styles.quickScanContent}
+          >
+            Hızlı Okut
+          </Button>
+          <Button
+            mode="outlined"
+            icon="swap-horizontal"
+            onPress={() => setRelabelScanOpen(true)}
+            style={styles.flexBtn}
+            contentStyle={styles.quickScanContent}
+          >
+            Yönlendir
+          </Button>
+        </View>
+
+        {/* Sevke Hazır (Mod A) — siparişten çuvala başla */}
+        <ReadyToShipList
+          onStart={beginPackingForCustomer}
+          busyCustomerId={startSackMut.isPending ? startSackMut.variables ?? null : null}
+        />
 
         <View style={styles.topBar}>
           <Text variant="titleMedium" style={styles.heading}>
@@ -163,7 +276,7 @@ export default function TartiPaketScreen() {
             <Text style={styles.emptySub}>"Yeni Çuval" ile bir müşteriye çuval aç.</Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.list}>
+          <View style={styles.list}>
             {openSacks.map((s) => (
               <Surface key={s.id} style={styles.card} elevation={1}>
                 <View style={styles.cardHead}>
@@ -203,9 +316,9 @@ export default function TartiPaketScreen() {
                 </View>
               </Surface>
             ))}
-          </ScrollView>
+          </View>
         )}
-      </View>
+      </ScrollView>
 
       {/* Yeni çuval — müşteri seçici */}
       <RNModal isVisible={newSackOpen} onBackdropPress={() => setNewSackOpen(false)} style={styles.modal}>
@@ -250,12 +363,33 @@ export default function TartiPaketScreen() {
         </Surface>
       </RNModal>
 
-      {/* Top ekleme — kamera */}
+      {/* Top ekleme — kamera (belirli çuval) */}
       <BarcodeScannerModal
         visible={scannerSackId !== null}
         onDismiss={() => setScannerSackId(null)}
         onScan={handleScan}
         title="Top barkodu okut"
+      />
+
+      {/* Hızlı Okut — otomatik çuval (müşteri seçmeden) */}
+      <BarcodeScannerModal
+        visible={autoScanOpen}
+        onDismiss={() => setAutoScanOpen(false)}
+        onScan={handleAutoScan}
+        title="Hızlı okut — otomatik çuvala"
+      />
+
+      {/* Yönlendir — top okut, RelabelSheet açılır */}
+      <BarcodeScannerModal
+        visible={relabelScanOpen}
+        onDismiss={() => setRelabelScanOpen(false)}
+        onScan={handleRelabelScan}
+        title="Yönlendirilecek topu okut"
+      />
+      <RelabelSheet
+        roll={relabelRoll}
+        onDismiss={() => setRelabelRoll(null)}
+        onDone={refreshSacks}
       />
 
       {/* Tart & kapat */}
@@ -309,7 +443,8 @@ export default function TartiPaketScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, padding: 12 },
+  root: { flex: 1 },
+  scrollContent: { padding: 12, paddingBottom: 32 },
   bridge: { borderRadius: 10, backgroundColor: '#1e40af', marginBottom: 10 },
   bridgeInner: {
     flexDirection: 'row',
@@ -319,6 +454,9 @@ const styles = StyleSheet.create({
   },
   bridgeText: { color: '#fff', fontWeight: '600' },
   bridgeCta: { color: '#bfdbfe', fontWeight: '700' },
+  actionRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  flexBtn: { flex: 1, borderRadius: 10 },
+  quickScanContent: { height: 52 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -326,7 +464,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   heading: { fontWeight: '700', color: '#0f172a' },
-  list: { paddingBottom: 24, gap: 10 },
+  list: { gap: 10 },
   card: { borderRadius: 12, padding: 12, backgroundColor: '#fff' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sackNo: { fontSize: 15, fontWeight: '700', color: '#0f172a', fontFamily: 'monospace' },

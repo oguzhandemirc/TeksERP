@@ -35,6 +35,53 @@ export interface SackDetail {
   swatches: Array<{ id: string; barcode: string | null; length: number }>;
 }
 
+// =============================================================================
+// Sevke Hazır (Mod A) — depoda etiketli + çuvalda olmayan topu olan siparişler
+// =============================================================================
+
+export interface ReadyLine {
+  lineId: string;
+  item: { id: string; code: string; name: string };
+  color: { id: string; code: string; name: string } | null;
+  width: number | null;
+  customerItemName: string | null;
+  customerColorName: string | null;
+  requested: number;
+  shipped: number;
+  reserved: number;
+  openQty: number;
+  readyQty: number;
+  readyCount: number;
+}
+
+export interface ReadyOrder {
+  order: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    deadline: string | null;
+    createdAt: string;
+    customer: { id: string; code: string; name: string };
+    branch: { id: string; name: string } | null;
+  };
+  lines: ReadyLine[];
+}
+
+export interface ReprintItem {
+  id: string;
+  barcode: string | null;
+  width: number | null;
+  currentQty: number;
+  status: string;
+  item: { code: string; name: string };
+  color: { code: string; name: string } | null;
+  targetOrderLine: {
+    customerItemName: string | null;
+    customerColorName: string | null;
+    order: { orderNumber: string; customer: { name: string } };
+  } | null;
+}
+
 export const packingService = {
   /** Çuval listesi — status (OPEN/CLOSED/SHIPPED), customerId, unassignedOnly filtreleri. */
   listSacks: (params?: {
@@ -52,6 +99,10 @@ export const packingService = {
       .then((r) => r.data);
   },
 
+  /** Sevke hazır siparişler (Mod A girişi). Termine göre sıralı. */
+  getReady: (): Promise<ApiResponse<ReadyOrder[]>> =>
+    apiClient.get<ApiResponse<ReadyOrder[]>>('/shipping/ready').then((r) => r.data),
+
   getSack: (id: string): Promise<ApiResponse<SackDetail>> =>
     apiClient.get<ApiResponse<SackDetail>>(`/shipping/sacks/${id}`).then((r) => r.data),
 
@@ -62,6 +113,55 @@ export const packingService = {
   }): Promise<ApiResponse<{ id: string; sackNo: string }>> =>
     apiClient
       .post<ApiResponse<{ id: string; sackNo: string }>>('/shipping/sacks', data)
+      .then((r) => r.data),
+
+  /** Hızlı Okut (Mod C) — barkodla top okut, topun müşterisinin açık çuvalına otomatik ekle. */
+  autoAssign: (
+    barcode: string,
+  ): Promise<
+    ApiResponse<{
+      sackId: string;
+      sackNo: string;
+      customerId: string;
+      customerName: string;
+      createdSack: boolean;
+    }>
+  > =>
+    apiClient
+      .post<
+        ApiResponse<{
+          sackId: string;
+          sackNo: string;
+          customerId: string;
+          customerName: string;
+          createdSack: boolean;
+        }>
+      >('/shipping/sacks/auto-assign', { barcode })
+      .then((r) => r.data),
+
+  /** Değişebilir etiket / yönlendir — topun sipariş atıfını değiştir (null = stoğa al). */
+  relabel: (
+    rollId: string,
+    targetOrderLineId: string | null,
+  ): Promise<
+    ApiResponse<{
+      rollId: string;
+      customerName: string | null;
+      specMismatch: boolean;
+      reprintRequired: boolean;
+      poppedFromSack?: boolean;
+    }>
+  > =>
+    apiClient
+      .post<
+        ApiResponse<{
+          rollId: string;
+          customerName: string | null;
+          specMismatch: boolean;
+          reprintRequired: boolean;
+          poppedFromSack?: boolean;
+        }>
+      >('/shipping/relabel', { rollId, targetOrderLineId })
       .then((r) => r.data),
 
   /** Topu çuvala ekle (müşteri etiketinden belli; backend müşteri uyumunu doğrular). */
@@ -79,6 +179,16 @@ export const packingService = {
   weighClose: (sackId: string, weightKg: number): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/weigh`, { weightKg })
+      .then((r) => r.data),
+
+  /** Print-queue — yeniden basılacak etiketler (relabel sonrası, tambur). */
+  getReprintQueue: (): Promise<ApiResponse<ReprintItem[]>> =>
+    apiClient.get<ApiResponse<ReprintItem[]>>('/shipping/reprint-queue').then((r) => r.data),
+
+  /** Etiket basıldı → topu kuyruktan düşür. */
+  markReprinted: (rollId: string): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>('/shipping/reprint-queue/done', { rollId })
       .then((r) => r.data),
 };
 

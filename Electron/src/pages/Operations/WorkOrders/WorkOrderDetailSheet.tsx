@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, FileText, Info, Pencil, Printer } from "lucide-react";
+import { Ban, ChevronDown, ChevronRight, FileText, Info, Pencil, Printer } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import { workOrderService } from "./service";
 import { WorkOrderDocumentsDialog } from "./WorkOrderDocumentsDialog";
 import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
+import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import type { WorkOrder } from "./types";
 
 interface Props {
@@ -36,6 +37,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
   const [travelerCardOpen, setTravelerCardOpen] = useState(false);
   const [printDispatchId, setPrintDispatchId] = useState<string | null>(null);
   const [inProgressConfirmOpen, setInProgressConfirmOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   const detail = useQuery({
     queryKey: ["work-order-detail", workOrder?.id],
@@ -145,6 +147,19 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
             >
               <FileText className="h-3.5 w-3.5" /> Belgeler
             </Button>
+            {wo.status !== "COMPLETED" && wo.status !== "CANCELLED" && (
+              <PermissionGate permission="workorder:write">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCancelOpen(true)}
+                  className="gap-1 text-destructive hover:text-destructive"
+                >
+                  <Ban className="h-3.5 w-3.5" /> İptal Et
+                </Button>
+              </PermissionGate>
+            )}
           </div>
         )}
 
@@ -702,6 +717,14 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
           dispatchId={printDispatchId}
           open={Boolean(printDispatchId)}
           onOpenChange={(open) => !open && setPrintDispatchId(null)}
+        />
+
+        <WorkOrderCancelDialog
+          open={cancelOpen}
+          onOpenChange={setCancelOpen}
+          workOrderId={wo?.id ?? null}
+          batchNumber={wo?.batchNumber}
+          onCancelled={() => onOpenChange(false)}
         />
 
         <ConfirmDialog

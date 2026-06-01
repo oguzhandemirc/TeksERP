@@ -3,7 +3,6 @@ export interface Machine {
   stationId: string;
   code: string;
   name: string;
-  deviceIp: string | null;
   isActive: boolean;
   station?: { id: string; code: string; name: string };
   createdAt: string;

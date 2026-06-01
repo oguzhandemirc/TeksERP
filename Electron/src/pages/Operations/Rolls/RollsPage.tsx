@@ -16,6 +16,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
+import { ReorderableTabBar } from "@/components/layout/ReorderableTabBar";
+import { useTabOrder } from "@/hooks/useTabOrder";
 import { RollsTable } from "./RollsTable";
 import { RollsKanban } from "./RollsKanban";
 import { SwatchesPanel } from "./SwatchesPanel";
@@ -35,11 +37,16 @@ const TABS: Array<{ key: RollTabKey; label: string; Icon: typeof Package }> = [
   { key: "SUBCONTRACTOR",  label: "Fasonda",         Icon: Send },
   { key: "KURSUN_PENDING", label: "Kurşun Bekleyen", Icon: FlaskConical },
   { key: "TAMBUR_PENDING", label: "Tambur Bekleyen", Icon: Disc3 },
-  { key: "ARCHIVE",        label: "Arşiv",           Icon: Archive },
   { key: "SWATCH",         label: "Kartela",         Icon: Palette },
+  // Arşiv varsayılan olarak en sonda — nadiren bakılır. Kullanıcı sürükleyerek
+  // değiştirebilir; sıra tercihte (backend) saklanır.
+  { key: "ARCHIVE",        label: "Arşiv",           Icon: Archive },
 ];
 
 const TAB_KEYS = new Set<RollTabKey>(TABS.map((t) => t.key));
+// Arşiv reorder dışında — sağ kenara sabit, "çöp kutusu" gibi ayrı tutulur.
+const REORDERABLE_KEYS = TABS.filter((t) => t.key !== "ARCHIVE").map((t) => t.key);
+const ARCHIVE_TAB = TABS.find((t) => t.key === "ARCHIVE")!;
 
 function isRollTabKey(v: string | null): v is RollTabKey {
   return v !== null && TAB_KEYS.has(v as RollTabKey);
@@ -52,6 +59,11 @@ export function RollsPage() {
     isRollTabKey(urlTab) ? urlTab : "RAW_STOCK",
   );
   const [manualOpen, setManualOpen] = useState(false);
+  const { ordered, reorder } = useTabOrder("rolls", REORDERABLE_KEYS);
+  const orderedTabs = ordered.flatMap((k) => {
+    const t = TABS.find((x) => x.key === k);
+    return t ? [t] : [];
+  });
 
   // Dashboard'tan `?tab=...` ile gelindiğinde initial state ile senkron;
   // URL'i temizle ki sekme değişimi geri-tuş davranışına karışmasın.
@@ -88,22 +100,13 @@ export function RollsPage() {
         }
       />
       <ManualEntryDialog open={manualOpen} onOpenChange={setManualOpen} />
-      <div className="flex items-center gap-1 border-b px-3 pt-2">
-        {TABS.map(({ key, label, Icon }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-xs font-medium transition-colors ${
-              tab === key
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {label}
-          </button>
-        ))}
-      </div>
+      <ReorderableTabBar
+        tabs={orderedTabs}
+        pinnedTab={ARCHIVE_TAB}
+        activeKey={tab}
+        onSelect={(k) => setTab(k as RollTabKey)}
+        onReorder={reorder}
+      />
       {tab === "SWATCH" ? (
         <SwatchesPanel />
       ) : tab === "KANBAN" ? (

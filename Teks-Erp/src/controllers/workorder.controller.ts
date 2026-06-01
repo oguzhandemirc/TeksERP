@@ -155,6 +155,7 @@ export class WorkOrderController {
     this.createManifest = this.createManifest.bind(this);
     this.listManifests = this.listManifests.bind(this);
     this.getManifestById = this.getManifestById.bind(this);
+    this.cancelImpact = this.cancelImpact.bind(this);
     this.softDelete = this.softDelete.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
     this.findAvailableForAttach = this.findAvailableForAttach.bind(this);
@@ -391,6 +392,19 @@ export class WorkOrderController {
   async getManifestById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.getManifestById(req.params.manifestId as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/work-orders/:id/cancel-impact
+   * İptal önizleme: stoğa dönecek toplar + void olacak kart sayısı (read-only).
+   */
+  async cancelImpact(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getCancelImpact(req.params.id as string);
       res.status(200).json(result);
     } catch (error) {
       next(error);

@@ -6,6 +6,7 @@ export type RootStackParamList = {
   Main: undefined;
   NoAccess: undefined;
   Settings: undefined;
+  DevicePairing: undefined;
 };
 
 export type MainStackParamList = {

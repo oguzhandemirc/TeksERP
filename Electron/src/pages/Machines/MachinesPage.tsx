@@ -10,7 +10,6 @@ const buildPayload = (v: MachineFormValues, initial: Machine | null): Partial<Ma
   stationId: v.stationId,
   code: initial?.code ?? generateCode(CODE_PREFIXES.MACHINE),
   name: v.name,
-  deviceIp: v.deviceIp || null,
   isActive: v.isActive,
 });
 

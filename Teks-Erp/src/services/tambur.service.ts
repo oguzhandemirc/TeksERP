@@ -1277,6 +1277,11 @@ export class TamburService {
         stationName: string;
         stationCode: string;
         openRollCount: number;
+        totalCurrentQty: number;
+        /** WO.targetItem/targetColor — Kanban kartında kumaş + renk göstermek için. */
+        itemName: string | null;
+        colorName: string | null;
+        colorHex: string | null;
         /** Tambur'a giriş tarihi — en eski açık RollMovement.enteredAt. Liste
          *  ekranında operatöre "ne kadar zamandır bekliyor" göstergesi için. */
         oldestEnteredAt: Date | null;
@@ -1296,6 +1301,8 @@ export class TamburService {
         workOrder: {
           select: {
             batchNumber: true,
+            targetItem: { select: { name: true } },
+            targetColor: { select: { name: true, hex: true } },
             travelerCards: {
               where: { status: "ACTIVE" },
               select: { id: true, cardNumber: true, barcode: true },
@@ -1303,7 +1310,7 @@ export class TamburService {
             },
           },
         },
-        _count: { select: { currentRolls: true } },
+        currentRolls: { select: { currentQty: true } },
         movements: {
           where: { exitedAt: null },
           select: { enteredAt: true },
@@ -1329,7 +1336,11 @@ export class TamburService {
           stepId: s.id,
           stationName: s.station.name,
           stationCode: s.station.code,
-          openRollCount: s._count.currentRolls,
+          openRollCount: s.currentRolls.length,
+          totalCurrentQty: s.currentRolls.reduce((sum, r) => sum + Number(r.currentQty), 0),
+          itemName: s.workOrder.targetItem?.name ?? null,
+          colorName: s.workOrder.targetColor?.name ?? null,
+          colorHex: s.workOrder.targetColor?.hex ?? null,
           oldestEnteredAt: oldest,
         };
       })
@@ -2150,6 +2161,8 @@ export class TamburService {
       stationName: string;
       /// Tambur planlama bilgisi — operatöre ekranda gösterilir, override edilebilir.
       plannedFoldType: string | null;
+      /// Tambur adımına yazılan not (WorkOrderStep.notes) — operatöre gösterilir.
+      stepNote: string | null;
       orders: Array<{
         orderId: string;
         orderNumber: string;
@@ -2164,6 +2177,9 @@ export class TamburService {
           colorName: string | null;
           orderedQty: number;
           shippedQty: number;
+          /// Sipariş satırı kesim notu + eşit-parça önerisi (Tambur talimatı).
+          cutNote: string | null;
+          pieceLengthM: number | null;
         }>;
       }>;
       openFabricRolls: Array<{
@@ -2213,6 +2229,8 @@ export class TamburService {
             itemId: true,
             quantity: true,
             width: true,
+            cutNote: true,
+            pieceLengthM: true,
             item: { select: { code: true, name: true } },
             color: { select: { code: true, name: true } },
             requiredProperties: {
@@ -2250,6 +2268,8 @@ export class TamburService {
           width: number | null;
           orderedQty: number;
           shippedQty: number;
+          cutNote: string | null;
+          pieceLengthM: number | null;
           requiredProperties: { id: string; name: string }[];
         }>;
       }
@@ -2279,6 +2299,8 @@ export class TamburService {
         width: ol.width !== null ? Number(ol.width) : null,
         orderedQty: Number(ol.quantity),
         shippedQty,
+        cutNote: ol.cutNote ?? null,
+        pieceLengthM: ol.pieceLengthM !== null ? Number(ol.pieceLengthM) : null,
         requiredProperties: ol.requiredProperties.map((rp) => ({
           id: rp.property.id,
           name: rp.property.name,
@@ -2350,6 +2372,7 @@ export class TamburService {
         stepId: step.id,
         stationName: step.station.name,
         plannedFoldType: step.workOrder.foldType,
+        stepNote: step.notes,
         orders,
         openFabricRolls,
       },

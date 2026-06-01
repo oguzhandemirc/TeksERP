@@ -22,6 +22,7 @@ import {
   normalizeUrl,
 } from '../../store/baseUrlStore';
 import { useDeviceSettingsStore } from '../../store/deviceSettingsStore';
+import { useDeviceStore } from '../../store/deviceStore';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -58,6 +59,7 @@ export default function SettingsScreen() {
   const setManualBarcodeEntry = useDeviceSettingsStore(
     (s) => s.setManualBarcodeEntry,
   );
+  const paired = useDeviceStore((s) => s.paired);
 
   const [input, setInput] = useState(customUrl ?? baseUrl);
   const [testing, setTesting] = useState<TestResult>({ status: 'idle' });
@@ -320,6 +322,28 @@ export default function SettingsScreen() {
           </TouchableRipple>
         </View>
 
+        {/* ── Cihaz eşleştirme (durum + alt ekran) ── */}
+        <TouchableRipple
+          onPress={() => navigation.navigate('DevicePairing')}
+          rippleColor="rgba(99,102,241,0.2)"
+          style={styles.card}
+        >
+          <View style={[styles.headRow, styles.navRow]}>
+            <View style={styles.iconBox}>
+              <Icon source="cellphone-link" size={28} color={COLORS.accentLight} />
+            </View>
+            <View style={styles.headText}>
+              <Text style={styles.title}>Cihaz Eşleştirme</Text>
+              <Text style={styles.subtitle}>
+                {paired
+                  ? `${paired.code} — ${paired.name}`
+                  : 'Eşleşmemiş — kod girerek eşleştir'}
+              </Text>
+            </View>
+            <Icon source="chevron-right" size={26} color={COLORS.subtext} />
+          </View>
+        </TouchableRipple>
+
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Şu an aktif</Text>
@@ -383,6 +407,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   headRow: { flexDirection: 'row', gap: 14, marginBottom: 20 },
+  navRow: { marginBottom: 0, alignItems: 'center' },
   iconBox: {
     width: 52,
     height: 52,

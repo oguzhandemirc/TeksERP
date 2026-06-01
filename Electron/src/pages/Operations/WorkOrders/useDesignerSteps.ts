@@ -31,6 +31,18 @@ function stationToDesigner(s: StationLike): Pick<
   };
 }
 
+// Favori firma listesinden kategorinin favorisini seç (client-side eşleşme).
+function pickFavoriteFirmId(
+  favs: { id: string; isFavorite: boolean; categories: { categoryId: string }[] }[],
+  categoryId: string,
+): string | null {
+  return (
+    favs.find(
+      (f) => f.isFavorite && f.categories.some((c) => c.categoryId === categoryId),
+    )?.id ?? null
+  );
+}
+
 export function useDesignerSteps(initialSteps?: DesignerStep[]) {
   const qc = useQueryClient();
   const [steps, setSteps] = useState<DesignerStep[]>(initialSteps ?? []);
@@ -95,7 +107,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
       });
       const route = res.data;
       if (!route) return;
-      const newSteps: DesignerStep[] = (route.steps ?? []).map((s) => ({
+      let newSteps: DesignerStep[] = (route.steps ?? []).map((s) => ({
         clientId: newClientId(),
         ...stationToDesigner({
           id: s.station?.id ?? s.stationId,
@@ -107,15 +119,23 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
         notes: s.defaultNotes ?? "",
         plannedSubcontractorId: null,
       }));
+      // Fason adımlarına kategorinin favori firmasını default ata.
+      if (newSteps.some((s) => s.stationType === "EXTERNAL" && s.requiredCategoryId)) {
+        const favs = await fetchFavoriteFirms();
+        newSteps = newSteps.map((s) =>
+          s.stationType === "EXTERNAL" && s.requiredCategoryId
+            ? { ...s, plannedSubcontractorId: pickFavoriteFirmId(favs, s.requiredCategoryId) }
+            : s,
+        );
+      }
       setSteps(newSteps);
     } catch {
       toast.error("Şablon yüklenemedi.");
     }
   };
 
-  // Kategorinin favori firmasını bul: favori firmaları çek, kategoriye göre
-  // client-side eşleştir (server-side categoryId filtresine bağımlı değil).
-  const fetchFavoriteFirm = async (categoryId: string): Promise<string | null> => {
+  // Favori (isFavorite) firmaları getir — client-side kategoriye göre eşleşir.
+  const fetchFavoriteFirms = async () => {
     try {
       const res = await qc.fetchQuery({
         queryKey: ["subcontractors", "favorites"],
@@ -129,13 +149,9 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
           }),
         staleTime: 60_000,
       });
-      const fav = (res.data ?? []).find(
-        (f) =>
-          f.isFavorite && f.categories.some((c) => c.categoryId === categoryId),
-      );
-      return fav?.id ?? null;
+      return res.data ?? [];
     } catch {
-      return null;
+      return [];
     }
   };
 
@@ -163,7 +179,8 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
       // Fason adımıysa kategorinin favori firmasını default seç.
       let plannedSubcontractorId: string | null = null;
       if (designer.stationType === "EXTERNAL" && designer.requiredCategoryId) {
-        plannedSubcontractorId = await fetchFavoriteFirm(designer.requiredCategoryId);
+        const favs = await fetchFavoriteFirms();
+        plannedSubcontractorId = pickFavoriteFirmId(favs, designer.requiredCategoryId);
       }
       updateStep(clientId, { ...designer, plannedSubcontractorId });
     } catch {

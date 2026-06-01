@@ -460,6 +460,25 @@ router.get("/:id/rolls", verifyToken, requirePermission("workorder:read"), contr
  *       404:
  *         description: İş emri bulunamadı
  */
+/**
+ * @openapi
+ * /api/work-orders/{id}/cancel-impact:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: İptal önizleme (stoğa dönecek toplar + void kart sayısı)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: İptal etkisi
+ */
+router.get("/:id/cancel-impact", verifyToken, requirePermission("workorder:write"), controller.cancelImpact);
+
 router.delete("/:id", verifyToken, requirePermission("workorder:write"), controller.softDelete);
 
 /**

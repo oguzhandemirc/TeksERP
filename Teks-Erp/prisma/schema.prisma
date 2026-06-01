@@ -596,6 +596,10 @@ model Roll {
   targetOrderLineId String?
   // Paketleme — topun içinde bulunduğu çuval. NULL = henüz paketlenmedi.
   sackId            String?
+  // Sevkiyat — fiziksel etiketin yeniden basılması gerekiyor mu? Relabel (yön
+  // değişimi / stoğa alma) sonrası true; tambur yazıcısından basılınca temizlenir.
+  // Tek-yazıcı print-queue'yu besler (GET /shipping/reprint-queue).
+  needsReprint      Boolean @default(false)
 
   // Relations
   item                Item                        @relation(fields: [itemId], references: [id])
@@ -641,6 +645,7 @@ model Roll {
   @@index([qualityGradeId])
   @@index([targetOrderLineId])
   @@index([sackId])
+  @@index([needsReprint])
   @@map("rolls")
 }
 

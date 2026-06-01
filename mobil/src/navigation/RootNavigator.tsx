@@ -12,6 +12,7 @@ import LoginScreen from '../screens/Auth/LoginScreen';
 import PairingScreen from '../screens/Auth/PairingScreen';
 import NoAccessScreen from '../screens/Common/NoAccessScreen';
 import SettingsScreen from '../screens/Common/SettingsScreen';
+import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
 import MainNavigator from './MainNavigator';
 import type { RootStackParamList } from './types';
 
@@ -72,6 +73,11 @@ export default function RootNavigator() {
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="DevicePairing"
+          component={DevicePairingScreen}
           options={{ animation: 'slide_from_right' }}
         />
       </Stack.Navigator>

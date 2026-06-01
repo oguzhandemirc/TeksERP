@@ -1,12 +1,8 @@
-import { useEffect } from "react";
-import {
-  Controller,
-  useForm,
-  useWatch,
-  type Control,
-  type Resolver,
-} from "react-hook-form";
+import { useEffect, useState } from "react";
+import { Controller, useForm, type Control, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -18,12 +14,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
-import { PropertyChipsField } from "@/components/forms/PropertyChipsField";
+import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { routeService } from "@/pages/Routes/service";
 import type { ProductionRoute } from "@/pages/Routes/types";
 import { TargetItemPicker } from "@/pages/Operations/WorkOrders/TargetItemPicker";
-import { TargetColorSelect } from "@/pages/Operations/WorkOrders/TargetItemFields";
+import { RouteEditor } from "@/pages/Operations/WorkOrders/RouteEditor";
+import { useDesignerSteps } from "@/pages/Operations/WorkOrders/useDesignerSteps";
 import type { WorkOrderFormValues } from "@/pages/Operations/WorkOrders/schema";
 import {
   recipeFormDefaults,
@@ -62,38 +58,114 @@ export function ProductRecipeFormDialog({
   isSubmitting,
 }: Props) {
   const isEdit = Boolean(initial);
+  const qc = useQueryClient();
   const form = useForm<RecipeFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(recipeFormSchema as any) as unknown as Resolver<RecipeFormValues>,
     defaultValues: buildDefaults(initial),
   });
 
+  // İş emri modalındaki aynı inline rota editörü.
+  const {
+    steps: routeSteps,
+    reset: resetRouteSteps,
+    addStep,
+    removeStep,
+    moveStep,
+    reorder: reorderSteps,
+    updateStep,
+    seedFromRoute,
+    handleStationPick,
+  } = useDesignerSteps([]);
+  const [seededRouteId, setSeededRouteId] = useState<string | null>(null);
+  const [routeDirty, setRouteDirty] = useState(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
+
   useEffect(() => {
-    if (open) form.reset(buildDefaults(initial));
+    if (!open) return;
+    form.reset(buildDefaults(initial));
+    setRouteError(null);
+    if (initial?.routeId) {
+      void seedFromRoute(initial.routeId);
+      setSeededRouteId(initial.routeId);
+    } else {
+      resetRouteSteps([]);
+      setSeededRouteId(null);
+    }
+    setRouteDirty(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
 
-  // Hedef ürün/renk picker'ları WorkOrderFormValues'a tipli — alan adları aynı
-  // olduğu için control'ü güvenle cast ediyoruz (targetItemId/targetColorId).
+  // Akış değişince rota validasyon hatasını temizle.
+  useEffect(() => {
+    setRouteError(null);
+  }, [routeSteps]);
+
+  // Hedef ürün/renk picker'ları WorkOrderFormValues'a tipli — alan adları aynı.
   const woControl = form.control as unknown as Control<WorkOrderFormValues>;
-  const watchedItemId = useWatch({ control: form.control, name: "targetItemId" });
+
+  const createRouteFromSteps = async (name: string): Promise<string> => {
+    const res = await routeService.create({
+      name: `${name} rotası`,
+      code: generateCode(CODE_PREFIXES.ROUTE),
+      isActive: true,
+      isFavorite: false,
+      steps: routeSteps.map((s, i) => ({
+        stationId: s.stationId,
+        sequence: i + 1,
+        defaultNotes: s.notes.trim() || null,
+      })),
+    } as unknown as Partial<ProductionRoute>);
+    return (res.data as { id: string }).id;
+  };
+
+  const saveTemplateMut = useMutation({
+    mutationFn: (params: { name: string }) => createRouteFromSteps(params.name),
+    onSuccess: () => {
+      toast.success("Rota şablonu kaydedildi.");
+      void qc.invalidateQueries({ queryKey: ["routes"] });
+    },
+  });
+
+  const handleSeedRoute = (routeId: string | null) => {
+    if (routeId) {
+      void seedFromRoute(routeId);
+      setSeededRouteId(routeId);
+    } else {
+      resetRouteSteps([]);
+      setSeededRouteId(null);
+    }
+    setRouteDirty(false);
+  };
 
   const handleSubmit = form.handleSubmit(async (values) => {
     if (!values.targetItemId) {
       form.setError("targetItemId", { type: "manual", message: "Ürün seçilmeli." });
       return;
     }
-    await onSubmit(values);
+    if (routeSteps.length > 0 && routeSteps.some((s) => !s.stationId)) {
+      setRouteError("Her adıma istasyon seç (ya da boş adımı sil).");
+      return;
+    }
+    // Akış değişmemiş tohumsa mevcut rotayı referansla; değişmiş/yeni ise oluştur.
+    let routeId: string | null = null;
+    if (routeSteps.length > 0) {
+      routeId =
+        seededRouteId && !routeDirty
+          ? seededRouteId
+          : await createRouteFromSteps(values.name);
+    }
+    await onSubmit({ ...values, routeTemplateId: routeId ?? "" });
   });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Reçeteyi Düzenle" : "Yeni Üretim Reçetesi"}</DialogTitle>
           <DialogDescription>
-            Ürün + renk + özellik + en + rota'yı tek isim altında topla. İş emri
-            açılışında reçeteyi seçince hepsi otomatik dolar.
+            Ürün + akış (renk/özellik istasyonlarda) + en'i tek isim altında topla.
+            İş emri açılışında reçeteyi seçince hepsi otomatik dolar.
           </DialogDescription>
         </DialogHeader>
 
@@ -104,41 +176,61 @@ export function ProductRecipeFormDialog({
             </div>
           )}
 
-          <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
-            <Input id="name" autoFocus placeholder="Patos Gri 038" {...form.register("name")} />
-          </FormField>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
+              <Input id="name" autoFocus placeholder="Patos Gri 038" {...form.register("name")} />
+            </FormField>
+            <FormField label="Hedef Ürün" required error={form.formState.errors.targetItemId}>
+              <TargetItemPicker
+                control={woControl}
+                onItemChange={() => {
+                  form.setValue("targetColorId", null);
+                  form.setValue("targetPropertyIds", []);
+                }}
+              />
+            </FormField>
+          </div>
 
-          <FormField
-            label="Hedef Ürün"
-            required
-            error={form.formState.errors.targetItemId}
-          >
-            <TargetItemPicker
-              control={woControl}
-              onItemChange={() => {
-                form.setValue("targetColorId", null);
-                form.setValue("targetPropertyIds", []);
-              }}
-            />
-          </FormField>
-
-          <FormField label="Hedef Renk (opsiyonel)">
-            <TargetColorSelect control={woControl} />
-          </FormField>
-
-          <FormField label="Üretim Özellikleri (opsiyonel)">
-            <Controller
-              control={form.control}
-              name="targetPropertyIds"
-              render={({ field }) => (
-                <PropertyChipsField
-                  itemId={watchedItemId ?? ""}
-                  value={field.value ?? []}
-                  onChange={field.onChange}
-                />
-              )}
-            />
-          </FormField>
+          {/* İş emri modalındaki rota editörünün aynısı */}
+          <RouteEditor
+            steps={routeSteps}
+            onAdd={() => {
+              addStep();
+              setRouteDirty(true);
+            }}
+            onRemove={(id) => {
+              removeStep(id);
+              setRouteDirty(true);
+            }}
+            onMove={(id, dir) => {
+              moveStep(id, dir);
+              setRouteDirty(true);
+            }}
+            onReorder={(a, b) => {
+              reorderSteps(a, b);
+              setRouteDirty(true);
+            }}
+            onPickStation={(id, sid) => {
+              void handleStationPick(id, sid);
+              setRouteDirty(true);
+            }}
+            onSetNotes={(id, notes) => {
+              updateStep(id, { notes });
+              setRouteDirty(true);
+            }}
+            onSetFirm={(id, patch) => updateStep(id, patch)}
+            onSeed={handleSeedRoute}
+            onSaveTemplate={(name) => saveTemplateMut.mutate({ name })}
+            savePending={saveTemplateMut.isPending}
+            customerId={null}
+            target={{
+              colorId: form.watch("targetColorId") ?? null,
+              propertyIds: form.watch("targetPropertyIds") ?? [],
+              onColor: (id) => form.setValue("targetColorId", id),
+              onProperties: (ids) => form.setValue("targetPropertyIds", ids),
+            }}
+            error={routeError ?? undefined}
+          />
 
           <div className="grid grid-cols-2 gap-3">
             <FormField label="En (cm)" htmlFor="width" error={form.formState.errors.width}>
@@ -175,28 +267,6 @@ export function ProductRecipeFormDialog({
               />
             </FormField>
           </div>
-
-          <FormField
-            label="Rota (opsiyonel)"
-            hint="Bu reçete seçilince iş emrine bu rota gelir."
-          >
-            <Controller
-              control={form.control}
-              name="routeTemplateId"
-              render={({ field }) => (
-                <ReferenceSelect<ProductionRoute>
-                  value={field.value || undefined}
-                  onChange={(v) => field.onChange(v ?? "")}
-                  service={routeService}
-                  queryKey="routes"
-                  getLabel={(r) => r.name}
-                  placeholder="Rota şablonu seç..."
-                  nullable
-                  noneLabel="— Rota yok"
-                />
-              )}
-            />
-          </FormField>
 
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input type="checkbox" {...form.register("isActive")} /> Aktif

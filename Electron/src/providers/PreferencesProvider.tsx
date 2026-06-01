@@ -9,6 +9,7 @@ import {
 import type { ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth";
 import { fetchPreferences, savePreferences } from "@/services/preferencesService";
 import { DEFAULT_PREFERENCES, type AppPreferences } from "@/types/preferences";
@@ -95,7 +96,13 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         const toSave = pendingRef.current;
-        if (toSave) void savePreferences(toSave).catch(() => undefined);
+        if (toSave)
+          void savePreferences(toSave).catch(() =>
+            // Sabit id → arka arkaya başarısız kayıtlarda toast yığılmaz, tek satır güncellenir.
+            toast.error("Tercihlerin kaydedilemedi. Bağlantını kontrol et.", {
+              id: "prefs-save-error",
+            }),
+          );
       }, SAVE_DEBOUNCE_MS);
     },
     [queryClient, queryKey, user],
@@ -105,7 +112,12 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     queryClient.setQueryData(queryKey, DEFAULT_PREFERENCES);
     if (timerRef.current) clearTimeout(timerRef.current);
     pendingRef.current = DEFAULT_PREFERENCES;
-    if (user) void savePreferences(DEFAULT_PREFERENCES).catch(() => undefined);
+    if (user)
+      void savePreferences(DEFAULT_PREFERENCES).catch(() =>
+        toast.error("Tercihler sıfırlanamadı. Bağlantını kontrol et.", {
+          id: "prefs-save-error",
+        }),
+      );
     // Lokal saklanan tercihler de sıfırlansın.
     try {
       localStorage.removeItem("sidebar.collapsed");

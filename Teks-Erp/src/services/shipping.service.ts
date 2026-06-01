@@ -13,7 +13,14 @@
 // her top zaten bir müşteri/sipariş satırına etiketlidir (Roll.targetOrderLineId).
 // =============================================================================
 
-import { Prisma, RollStatus, SackStatus, ShipmentStatus } from "@prisma/client";
+import {
+  Prisma,
+  RollStatus,
+  SackStatus,
+  ShipmentStatus,
+  OrderStatus,
+  WorkOrderStatus,
+} from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -140,15 +147,22 @@ export class ShippingService {
       );
     }
 
-    // Çuval = tek müşteri: topun hedef siparişinin müşterisi çuvalla aynı olmalı
+    // Çuval = tek müşteri: topun hedef siparişinin müşterisi çuvalla aynı olmalı.
+    // Kapalı (iptal/tamamlanmış) siparişe ait top paketlenemez — önce yönlendir.
     const line = await prisma.orderLine.findUnique({
       where: { id: effectiveLineId },
-      select: { order: { select: { customerId: true } } },
+      select: { order: { select: { customerId: true, status: true } } },
     });
     if (!line) throw AppError.notFound("Hedef sipariş satırı bulunamadı");
+    if (
+      line.order.status === OrderStatus.CANCELLED ||
+      line.order.status === OrderStatus.COMPLETED
+    ) {
+      throw AppError.badRequest("Topun siparişi kapalı (iptal/tamamlanmış) — önce yönlendir.");
+    }
     if (line.order.customerId !== sack.customerId) {
       throw AppError.badRequest(
-        "Bu top başka müşterinin siparişine etiketli. Yön değiştirmek için tamburda yeni etiket basılmalı."
+        "Bu top başka müşterinin siparişine etiketli. Yön değiştirmek için önce yönlendir."
       );
     }
 
@@ -602,6 +616,452 @@ export class ShippingService {
       },
     });
     return { success: true, data: shipments };
+  }
+
+  // =========================================================================
+  // SEVKE HAZIR + DEĞİŞEBİLİR ETİKET
+  // =========================================================================
+
+  /**
+   * Sevke Hazır — depoda etiketli (WAREHOUSE + targetOrderLineId) ve henüz
+   * çuvalda olmayan topu bulunan AÇIK siparişler. Mod A listesini besler.
+   * Her satıra istenen/sevk/rezerve/açık metraj + hazır top sayısı/metrajı eklenir.
+   */
+  async getReadyForShipping(): Promise<ApiResponse<unknown>> {
+    // 1) Depoda etiketli, çuvalda olmayan hazır toplar — satır başına topla
+    const readyGrouped = await prisma.roll.groupBy({
+      by: ["targetOrderLineId"],
+      where: { status: RollStatus.WAREHOUSE, targetOrderLineId: { not: null }, sackId: null },
+      _sum: { currentQty: true },
+      _count: true,
+    });
+    if (readyGrouped.length === 0) return { success: true, data: [] };
+
+    const readyByLine = new Map<string, { readyQty: Prisma.Decimal; readyCount: number }>();
+    for (const g of readyGrouped) {
+      if (g.targetOrderLineId) {
+        readyByLine.set(g.targetOrderLineId, {
+          readyQty: g._sum.currentQty ?? new Prisma.Decimal(0),
+          readyCount: g._count,
+        });
+      }
+    }
+    const lineIds = [...readyByLine.keys()];
+
+    // 2) Satırları sipariş + müşteri + ürün/renk + canlı WO bağlarıyla çek (açık siparişler)
+    const lines = await prisma.orderLine.findMany({
+      where: {
+        id: { in: lineIds },
+        order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
+      },
+      select: {
+        id: true,
+        quantity: true,
+        width: true,
+        customerItemName: true,
+        customerColorName: true,
+        item: { select: { id: true, code: true, name: true } },
+        color: { select: { id: true, code: true, name: true } },
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            deadline: true,
+            status: true,
+            createdAt: true,
+            customer: { select: { id: true, code: true, name: true } },
+            branch: { select: { id: true, name: true } },
+          },
+        },
+        workOrderLinks: {
+          select: { allocatedQty: true, workOrder: { select: { status: true } } },
+        },
+      },
+    });
+
+    // 3) Sevk edilen metraj — satır başına (SHIPPED)
+    const shippedByLine = new Map<string, Prisma.Decimal>();
+    const shippedGrouped = await prisma.roll.groupBy({
+      by: ["targetOrderLineId"],
+      where: { targetOrderLineId: { in: lineIds }, status: RollStatus.SHIPPED },
+      _sum: { currentQty: true },
+    });
+    for (const g of shippedGrouped) {
+      if (g.targetOrderLineId) {
+        shippedByLine.set(g.targetOrderLineId, g._sum.currentQty ?? new Prisma.Decimal(0));
+      }
+    }
+
+    const BLOCKING: WorkOrderStatus[] = [
+      WorkOrderStatus.PLANNED,
+      WorkOrderStatus.IN_PROGRESS,
+      WorkOrderStatus.PAUSED,
+      WorkOrderStatus.COMPLETED,
+    ];
+
+    // 4) Satırları zenginleştir + sipariş bazında grupla
+    type ReadyOrder = {
+      order: {
+        id: string;
+        orderNumber: string;
+        status: OrderStatus;
+        deadline: Date | null;
+        createdAt: Date;
+        customer: { id: string; code: string; name: string };
+        branch: { id: string; name: string } | null;
+      };
+      lines: unknown[];
+    };
+    const byOrder = new Map<string, ReadyOrder>();
+    for (const l of lines) {
+      const ready = readyByLine.get(l.id) ?? { readyQty: new Prisma.Decimal(0), readyCount: 0 };
+      const shipped = shippedByLine.get(l.id) ?? new Prisma.Decimal(0);
+      const reserved = l.workOrderLinks.reduce(
+        (sum, link) =>
+          BLOCKING.includes(link.workOrder.status) ? sum.plus(link.allocatedQty ?? 0) : sum,
+        new Prisma.Decimal(0),
+      );
+      const openQty = new Prisma.Decimal(l.quantity).minus(shipped).minus(reserved);
+
+      const o = l.order;
+      if (!byOrder.has(o.id)) {
+        byOrder.set(o.id, {
+          order: {
+            id: o.id,
+            orderNumber: o.orderNumber,
+            status: o.status,
+            deadline: o.deadline,
+            createdAt: o.createdAt,
+            customer: o.customer,
+            branch: o.branch,
+          },
+          lines: [],
+        });
+      }
+      byOrder.get(o.id)!.lines.push({
+        lineId: l.id,
+        item: l.item,
+        color: l.color,
+        width: l.width,
+        customerItemName: l.customerItemName,
+        customerColorName: l.customerColorName,
+        requested: l.quantity,
+        shipped,
+        reserved,
+        openQty,
+        readyQty: ready.readyQty,
+        readyCount: ready.readyCount,
+      });
+    }
+
+    // 5) Termine göre sırala (null en sona), eşitlikte oluşturulma sırası
+    const data = [...byOrder.values()].sort((a, b) => {
+      const ad = a.order.deadline ? a.order.deadline.getTime() : Infinity;
+      const bd = b.order.deadline ? b.order.deadline.getTime() : Infinity;
+      if (ad !== bd) return ad - bd;
+      return a.order.createdAt.getTime() - b.order.createdAt.getTime();
+    });
+
+    return { success: true, data };
+  }
+
+  /**
+   * Değişebilir etiket / yönlendir — topun targetOrderLineId atıfını değiştirir.
+   * Bu bir STOK HAREKETİ DEĞİLDİR; sadece "kime sayılıyor" değişir.
+   *   - SHIPPED / iptal / scrap / tüketilmiş top yeniden etiketlenemez.
+   *   - STOCK top bir siparişe yönlendirilirse WAREHOUSE'a (sevke hazır havuza) alınır.
+   *   - Spec uyumsuzluğu (ürün/renk/en) BLOK DEĞİL → specMismatch bayrağı (uyar-geç).
+   *   - Eski + yeni siparişin karşılanması yeniden hesaplanır.
+   * Fiziksel etiket sonradan tambur yazıcısından basılır (reprintRequired).
+   */
+  async relabelRoll(
+    data: { rollId: string; targetOrderLineId: string | null },
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    const roll = await prisma.roll.findUnique({
+      where: { id: data.rollId },
+      select: {
+        id: true,
+        status: true,
+        barcode: true,
+        itemId: true,
+        colorId: true,
+        width: true,
+        sackId: true,
+        sack: { select: { customerId: true, status: true } },
+        targetOrderLineId: true,
+        targetOrderLine: { select: { orderId: true } },
+      },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+
+    const BLOCKED: RollStatus[] = [
+      RollStatus.SHIPPED,
+      RollStatus.CANCELLED,
+      RollStatus.SCRAP,
+      RollStatus.TAMBUR_CONSUMED,
+      RollStatus.SUBCONTRACTOR_CONSUMED,
+    ];
+    if (BLOCKED.includes(roll.status)) {
+      throw AppError.conflict(`Bu durumdaki top yeniden etiketlenemez (${roll.status})`);
+    }
+
+    const newLineId = data.targetOrderLineId;
+
+    // No-op — atıf zaten aynı
+    if ((roll.targetOrderLineId ?? null) === newLineId) {
+      return {
+        success: true,
+        data: { rollId: roll.id, customerName: null, specMismatch: false, reprintRequired: false },
+        message: "Etiket zaten aynı",
+      };
+    }
+
+    // Hedef satır doğrulaması + spec uyumu (uyar-geç)
+    let specMismatch = false;
+    let newCustomerName: string | null = null;
+    let newOrderId: string | null = null;
+    let newCustomerId: string | null = null;
+    if (newLineId) {
+      const line = await prisma.orderLine.findUnique({
+        where: { id: newLineId },
+        select: {
+          itemId: true,
+          colorId: true,
+          width: true,
+          order: {
+            select: {
+              id: true,
+              status: true,
+              customer: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+      if (!line) throw AppError.notFound("Hedef sipariş satırı bulunamadı");
+      if (
+        line.order.status === OrderStatus.CANCELLED ||
+        line.order.status === OrderStatus.COMPLETED
+      ) {
+        throw AppError.badRequest("İptal edilmiş veya tamamlanmış siparişe etiketlenemez");
+      }
+      newOrderId = line.order.id;
+      newCustomerId = line.order.customer.id;
+      newCustomerName = line.order.customer.name;
+      const colorMismatch =
+        line.colorId != null && roll.colorId != null && line.colorId !== roll.colorId;
+      const widthMismatch =
+        line.width != null &&
+        roll.width != null &&
+        !new Prisma.Decimal(line.width).equals(roll.width);
+      specMismatch = line.itemId !== roll.itemId || colorMismatch || widthMismatch;
+    }
+
+    const oldOrderId = roll.targetOrderLine?.orderId ?? null;
+
+    // Çuval bütünlüğü: top AÇIK bir çuvaldaysa ve yeni hedefin müşterisi çuvalın
+    // müşterisinden farklıysa (veya etiket kaldırılıyorsa) topu çuvaldan çıkar —
+    // çuval tek-müşteri kalmalı. Çapraz sevk tasarımca serbest; çuval bozulmaz.
+    const popFromSack =
+      roll.sackId != null &&
+      roll.sack?.status === SackStatus.OPEN &&
+      (newLineId == null || newCustomerId !== roll.sack.customerId);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.roll.update({
+        where: { id: roll.id },
+        data: {
+          targetOrderLineId: newLineId,
+          // Müşteri etiketi değişti → fiziksel etiket tamburda yeniden basılmalı
+          needsReprint: true,
+          // STOCK topu sevke yönlendirilirse hazır havuza al
+          ...(roll.status === RollStatus.STOCK && newLineId
+            ? { status: RollStatus.WAREHOUSE }
+            : {}),
+          // Çuval müşterisi değişiyorsa topu çuvaldan çıkar
+          ...(popFromSack ? { sackId: null } : {}),
+        },
+      });
+      const affected = [
+        ...new Set([oldOrderId, newOrderId].filter((x): x is string => Boolean(x))),
+      ];
+      await recomputeOrderStatusForOrders(tx, affected);
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: roll.id,
+      newData: {
+        kind: "RELABEL",
+        from: roll.targetOrderLineId ?? null,
+        to: newLineId,
+        barcode: roll.barcode,
+        specMismatch,
+        poppedFromSack: popFromSack,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        rollId: roll.id,
+        customerName: newCustomerName,
+        specMismatch,
+        reprintRequired: true,
+        poppedFromSack: popFromSack,
+      },
+      message: newLineId ? "Etiket güncellendi" : "Top stoğa alındı (etiket kaldırıldı)",
+    };
+  }
+
+  /**
+   * Hızlı Okut (Mod C) — barkodla top okut, sistem topun siparişinden müşteriyi
+   * bulur ve o müşterinin AÇIK çuvalına ekler (yoksa çuval açar). Müşteri seçtirmez.
+   * Stok etiketli (targetOrderLineId yok) top kabul edilmez → önce yönlendir.
+   */
+  async autoAssignByBarcode(
+    data: { barcode: string },
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    const roll = await prisma.roll.findUnique({
+      where: { barcode: data.barcode },
+      select: {
+        id: true,
+        status: true,
+        sackId: true,
+        barcode: true,
+        targetOrderLine: {
+          select: {
+            order: {
+              select: {
+                status: true,
+                customerId: true,
+                customer: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!roll) throw AppError.notFound(`Top bulunamadı: ${data.barcode}`);
+    if (roll.status !== RollStatus.WAREHOUSE) {
+      throw AppError.badRequest(`Sadece depodaki toplar çuvallanabilir (bu top: ${roll.status})`);
+    }
+    if (roll.sackId) throw AppError.conflict("Top zaten bir çuvalda");
+    if (!roll.targetOrderLine) {
+      throw AppError.badRequest(
+        "Top stok etiketli (müşteri/sipariş atanmamış). Önce yönlendir / etiketle."
+      );
+    }
+    const order = roll.targetOrderLine.order;
+    if (order.status === OrderStatus.CANCELLED || order.status === OrderStatus.COMPLETED) {
+      throw AppError.badRequest("Topun siparişi kapalı (iptal/tamamlanmış) — önce yönlendir.");
+    }
+    const customerId = order.customerId;
+    const customerName = order.customer.name;
+
+    // Müşterinin en yeni açık çuvalı; yoksa aç.
+    const existing = await prisma.sack.findFirst({
+      where: { customerId, status: SackStatus.OPEN },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, sackNo: true },
+    });
+
+    let sackId: string;
+    let sackNo: string;
+    let createdSack = false;
+    if (existing) {
+      sackId = existing.id;
+      sackNo = existing.sackNo;
+    } else {
+      createdSack = true;
+      const sack = await withBarcodeRetry(async () => {
+        const no = await nextSackNo();
+        return prisma.sack.create({
+          data: { sackNo: no, customerId, status: SackStatus.OPEN },
+          select: { id: true, sackNo: true },
+        });
+      });
+      sackId = sack.id;
+      sackNo = sack.sackNo;
+      await AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "SACK",
+        recordId: sackId,
+        newData: { sackNo, customerId, via: "AUTO_PACK" },
+      });
+    }
+
+    await prisma.roll.update({ where: { id: roll.id }, data: { sackId } });
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: roll.id,
+      newData: { kind: "AUTO_PACK_ASSIGN", sackId, sackNo, customerId, createdSack, barcode: roll.barcode },
+    });
+
+    return {
+      success: true,
+      data: { sackId, sackNo, customerId, customerName, createdSack },
+      message: createdSack
+        ? `${customerName} için çuval açıldı, top eklendi`
+        : `${customerName} çuvalına eklendi`,
+    };
+  }
+
+  // =========================================================================
+  // PRINT-QUEUE — yeniden basılacak etiketler (tek yazıcı = tambur)
+  // =========================================================================
+
+  /** Relabel sonrası fiziksel etiketi yeniden basılacak toplar. Tambur listesi. */
+  async getReprintQueue(): Promise<ApiResponse<unknown>> {
+    const rolls = await prisma.roll.findMany({
+      where: { needsReprint: true },
+      orderBy: { updatedAt: "desc" },
+      take: 200,
+      select: {
+        id: true,
+        barcode: true,
+        width: true,
+        currentQty: true,
+        status: true,
+        item: { select: { code: true, name: true } },
+        color: { select: { code: true, name: true } },
+        targetOrderLine: {
+          select: {
+            customerItemName: true,
+            customerColorName: true,
+            order: { select: { orderNumber: true, customer: { select: { name: true } } } },
+          },
+        },
+      },
+    });
+    return { success: true, data: rolls };
+  }
+
+  /** Etiket basıldı → topu print-queue'dan düşür. */
+  async markReprinted(rollId: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const roll = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: { id: true, needsReprint: true, barcode: true },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+    if (!roll.needsReprint) {
+      return { success: true, data: {}, message: "Top zaten kuyrukta değil" };
+    }
+    await prisma.roll.update({ where: { id: rollId }, data: { needsReprint: false } });
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: rollId,
+      newData: { kind: "REPRINT_DONE", barcode: roll.barcode },
+    });
+    return { success: true, data: {}, message: "Etiket basıldı olarak işaretlendi" };
   }
 }
 

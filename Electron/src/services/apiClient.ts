@@ -36,6 +36,8 @@ apiClient.interceptors.response.use(
     if (axios.isAxiosError(error)) {
       const status = error.response?.status;
       const body = error.response?.data as ApiErrorBody | undefined;
+      // İstek kendi hata mesajını gösterecekse genel toast'ı atla (duplicate önle).
+      const suppressToast = Boolean(error.config?.suppressErrorToast);
 
       if (status === 401) {
         const isLoginRequest = error.config?.url?.includes("/api/auth/login");
@@ -50,16 +52,18 @@ apiClient.interceptors.response.use(
       }
 
       if (status === 403) {
-        toast.error("Bu işlem için yetkiniz bulunmuyor.");
+        if (!suppressToast) toast.error("Bu işlem için yetkiniz bulunmuyor.");
         return Promise.reject(error);
       }
 
-      if (status && status >= 400 && status < 500) {
-        toast.error(buildErrorMessage(body));
-      } else if (status && status >= 500) {
-        toast.error("Sunucu hatası. Lütfen daha sonra tekrar deneyin.");
-      } else if (!error.response) {
-        toast.error("Sunucuya ulaşılamıyor.");
+      if (!suppressToast) {
+        if (status && status >= 400 && status < 500) {
+          toast.error(buildErrorMessage(body));
+        } else if (status && status >= 500) {
+          toast.error("Sunucu hatası. Lütfen daha sonra tekrar deneyin.");
+        } else if (!error.response) {
+          toast.error("Sunucuya ulaşılamıyor.");
+        }
       }
     }
     return Promise.reject(error);

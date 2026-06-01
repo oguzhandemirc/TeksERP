@@ -27,6 +27,8 @@ export interface AppPreferences {
   tableOrder?: Record<string, string[]>;
   /** Tablo sütun görünürlüğü — queryKey → { columnId: visible }. */
   tableVisibility?: Record<string, Record<string, boolean>>;
+  /** Sekme sırası — sekme seti anahtarı → sekme key listesi. */
+  tabOrder?: Record<string, string[]>;
   /** Dashboard widget düzeni — gizli widget'lar + grup/öğe sırası. */
   dashboard?: {
     hidden?: string[];

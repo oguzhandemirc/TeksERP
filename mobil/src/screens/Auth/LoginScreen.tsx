@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, TouchableRipple, ActivityIndicator, Icon, IconButton } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
@@ -358,9 +358,12 @@ function TopBar({ compact }: { compact: boolean }) {
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   return (
     <View style={[styles.topBar, compact && styles.topBarCompact]}>
-      <View style={styles.logoBox}>
-        <Text style={styles.logoLetter}>T</Text>
-      </View>
+      <Image
+        source={require('../../../assets/logo.png')}
+        style={styles.logoImg}
+        resizeMode="cover"
+        accessibilityLabel="TeksERP logosu"
+      />
       <View style={styles.brandTextGroup}>
         <Text style={styles.brandName}>TeksERP</Text>
         <Text style={styles.brandSub}>Üretim Yönetim Sistemi</Text>
@@ -465,15 +468,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bgDarker,
   },
   topBarCompact: { paddingHorizontal: 16, paddingVertical: 10 },
-  logoBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 11,
-    backgroundColor: COLORS.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoLetter: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  logoImg: { width: 44, height: 44, borderRadius: 11 },
   brandTextGroup: { flex: 1 },
   brandName: { color: COLORS.text, fontSize: 18, fontWeight: '800' },
   brandSub: { color: COLORS.subtext, fontSize: 12 },
