@@ -194,6 +194,22 @@ export class ShippingService {
       );
     }
 
+    // Tek aktif sevkiyat: bir açık sipariş aynı anda yalnız bir PREPARING/READY
+    // sevkiyatta olabilir → çift sevkiyat/çift sevk olmaz (mevcut olanı sürdür).
+    const alreadyIn = await prisma.shipmentOrder.findFirst({
+      where: {
+        orderId: { in: orderIds },
+        shipment: { status: { in: [ShipmentStatus.PREPARING, ShipmentStatus.READY] } },
+      },
+      select: { orderId: true, shipment: { select: { shipmentNo: true } } },
+    });
+    if (alreadyIn) {
+      const ordNo = orders.find((o) => o.id === alreadyIn.orderId)?.orderNumber ?? "";
+      throw AppError.conflict(
+        `Sipariş ${ordNo} zaten bir sevkiyatta (${alreadyIn.shipment.shipmentNo}) — onu sürdür.`
+      );
+    }
+
     const shipment = await withBarcodeRetry(async () => {
       const shipmentNo = await nextShipmentNo();
       return prisma.shipment.create({
@@ -249,6 +265,19 @@ export class ShippingService {
       if (o.customerId !== shipment.customerId || (o.branchId ?? null) !== (shipment.branchId ?? null)) {
         throw AppError.badRequest(`Sipariş bu sevkiyatın müşteri/şubesine ait değil: ${o.orderNumber}`);
       }
+    }
+
+    // Başka bir aktif sevkiyatta olan sipariş eklenemez (tek aktif sevkiyat kuralı).
+    const alreadyIn = await prisma.shipmentOrder.findFirst({
+      where: {
+        orderId: { in: ids },
+        shipmentId: { not: shipmentId },
+        shipment: { status: { in: [ShipmentStatus.PREPARING, ShipmentStatus.READY] } },
+      },
+      select: { shipment: { select: { shipmentNo: true } } },
+    });
+    if (alreadyIn) {
+      throw AppError.conflict(`Sipariş zaten başka bir sevkiyatta (${alreadyIn.shipment.shipmentNo}).`);
     }
 
     await prisma.shipmentOrder.createMany({
@@ -1045,33 +1074,45 @@ export class ShippingService {
     });
     if (orders.length === 0) return { success: true, data: [] };
 
-    // Açık satırlar (openQty>0) için spec havuzu — depodaki serbest WAREHOUSE toplar
-    const itemIds = [...new Set(orders.flatMap((o) => o.lines.map((l) => l.itemId)))];
-    const freeRolls = await prisma.roll.findMany({
-      where: { shipmentId: null, status: RollStatus.WAREHOUSE, itemId: { in: itemIds } },
-      select: { itemId: true, colorId: true, width: true, currentQty: true },
+    // Bu siparişler zaten aktif (PREPARING/READY) bir sevkiyatta mı? → ekranda "Sürdür".
+    const activeLinks = await prisma.shipmentOrder.findMany({
+      where: {
+        orderId: { in: orders.map((o) => o.id) },
+        shipment: { status: { in: [ShipmentStatus.PREPARING, ShipmentStatus.READY] } },
+      },
+      select: { orderId: true, shipment: { select: { id: true, shipmentNo: true, status: true } } },
     });
+    const activeByOrder = new Map<string, { id: string; shipmentNo: string; status: ShipmentStatus }>();
+    for (const a of activeLinks) activeByOrder.set(a.orderId, a.shipment);
 
-    const linesForAlloc: LineForAlloc[] = orders.flatMap((o) =>
-      o.lines.map((l) => ({
-        id: l.id,
-        itemId: l.itemId,
-        colorId: l.colorId,
-        width: l.width,
-        quantity: new Prisma.Decimal(l.quantity),
-        shippedQty: new Prisma.Decimal(l.shippedQty),
-        deadline: o.deadline,
-        orderDate: o.orderDate,
-        lineCreatedAt: l.createdAt,
-      }))
-    );
-    const rollsForAlloc: RollSpec[] = freeRolls.map((r) => ({
-      itemId: r.itemId,
-      colorId: r.colorId,
-      width: r.width,
-      currentQty: new Prisma.Decimal(r.currentQty),
-    }));
-    const warehouseCover = allocate(rollsForAlloc, linesForAlloc);
+    // Depodaki serbest stok — spec bazında TOPLAM (groupBy; tüm roll satırlarını
+    // belleğe çekmez). Anlık foto: rezerve YOK, çift sayım serbest (aynı spec birden
+    // çok kalemde tam stoğu görür) — gerçek tahsis Sevke Hazır'da FIFO yapılır.
+    // (Eski hâl tüm rolleri yükleyip global FIFO koşuyordu → ağır + başka müşterinin
+    //  önceliği yüzünden "yanlış eksik" görünebiliyordu.)
+    const itemIds = [...new Set(orders.flatMap((o) => o.lines.map((l) => l.itemId)))];
+    const stockBySpec = await prisma.roll.groupBy({
+      by: ["itemId", "colorId", "width"],
+      where: { shipmentId: null, status: RollStatus.WAREHOUSE, itemId: { in: itemIds } },
+      _sum: { currentQty: true },
+    });
+    // Bir satırın spec'ine uyan toplam depo stoğu (renk/en line'da boşsa gevşek eşleşir).
+    const specAvail = (line: {
+      itemId: string;
+      colorId: string | null;
+      width: Prisma.Decimal | null;
+    }): Prisma.Decimal =>
+      stockBySpec.reduce((sum, g) => {
+        if (g.itemId !== line.itemId) return sum;
+        if (line.colorId != null && g.colorId !== line.colorId) return sum;
+        if (
+          line.width != null &&
+          (g.width == null || !new Prisma.Decimal(line.width).equals(g.width))
+        ) {
+          return sum;
+        }
+        return sum.plus(g._sum.currentQty ?? 0);
+      }, D0());
 
     const data = orders.map((o) => ({
       order: {
@@ -1081,12 +1122,13 @@ export class ShippingService {
         deadline: o.deadline,
         customer: o.customer,
         branch: o.branch,
+        activeShipment: activeByOrder.get(o.id) ?? null, // doluysa: zaten sevkiyatta → "Sürdür"
       },
       lines: o.lines.map((l) => {
         const requested = new Prisma.Decimal(l.quantity);
         const shipped = new Prisma.Decimal(l.shippedQty);
         const openQty = requested.minus(shipped);
-        const fromWarehouse = warehouseCover.get(l.id) ?? D0();
+        const fromWarehouse = specAvail(l);
         return {
           lineId: l.id,
           item: l.item,
@@ -1097,7 +1139,7 @@ export class ShippingService {
           requested,
           shipped,
           openQty,
-          warehouseAvailable: fromWarehouse, // depodan karşılanabilen (anlık, rezerve yok)
+          warehouseAvailable: fromWarehouse, // o spec'ten depodaki toplam (anlık, rezerve yok)
           covered: openQty.lessThanOrEqualTo(0) || fromWarehouse.greaterThanOrEqualTo(openQty),
         };
       }),

@@ -26,15 +26,6 @@ export const workOrderFormSchema = z.object({
   targetColorId: z.string().nullable().optional(),
   targetPropertyIds: z.array(z.string()).optional().default([]),
   orderLineIds: z.array(z.string()).optional().default([]),
-  orderLineAllocations: z
-    .array(
-      z.object({
-        orderLineId: z.string(),
-        allocatedQty: z.coerce.number().nonnegative(),
-      }),
-    )
-    .optional()
-    .default([]),
   width: z
     .union([
       z.coerce.number().positive("En 0'dan büyük olmalı"),
@@ -69,7 +60,6 @@ export const workOrderFormDefaults: WorkOrderFormValues = {
   targetColorId: null,
   targetPropertyIds: [],
   orderLineIds: [],
-  orderLineAllocations: [],
   width: null,
   targetQuantity: null,
   plannedStartDate: "",

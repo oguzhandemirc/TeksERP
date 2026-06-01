@@ -4,6 +4,7 @@ import RNModal from 'react-native-modal';
 import Toast from 'react-native-toast-message';
 import { BarcodeScannerView, type SupportedBarcodeType } from './BarcodeScannerView';
 import { toastConfig } from './ToastConfig';
+import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 
 interface Props {
   visible: boolean;
@@ -42,6 +43,7 @@ export function BarcodeScannerModal({
   continuous,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
   return (
     <RNModal
       isVisible={visible}
@@ -52,9 +54,7 @@ export function BarcodeScannerModal({
       style={styles.modal}
       useNativeDriver
       hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+      {...modalProps}
     >
       <View style={[styles.sheet, { width: winW * 0.7, height: winH * 0.8 }]}>
         <BarcodeScannerView

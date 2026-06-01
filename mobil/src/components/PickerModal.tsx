@@ -9,6 +9,7 @@ import {
 import RefreshButton from './RefreshButton';
 import Modal from 'react-native-modal';
 import { useDeviceType } from '../hooks/useDeviceType';
+import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 import {
   Text,
   TextInput,
@@ -56,6 +57,12 @@ interface BaseProps {
   refreshError?: boolean;
   /** Hata mesajı (toast'ta gösterilir). */
   refreshErrorMessage?: string;
+  /** Üstte ÇERÇEVELİ sabit grup — verilen sırada (alfabetik sıralanmaz, A-Z'ye
+   *  dahil değil). Asıl liste bu çerçevenin DIŞINDA, altından başlar. Örn. "bu
+   *  iş emrinde siparişi olan müşteriler". Aramayla birlikte filtrelenir. */
+  pinnedOptions?: PickerOption[];
+  /** Çerçevenin üstündeki küçük başlık. */
+  pinnedLabel?: string;
 }
 
 interface PaginatedProps extends BaseProps {
@@ -98,10 +105,13 @@ export default function PickerModal(props: Props) {
     refreshing = false,
     refreshError = false,
     refreshErrorMessage,
+    pinnedOptions = [],
+    pinnedLabel,
   } = props;
 
   const paginated = props.paginated === true;
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
   const device = useDeviceType();
   const isPhone = device === 'phone';
   const effectiveColumns = isPhone ? 1 : numColumns;
@@ -166,6 +176,45 @@ export default function PickerModal(props: Props) {
     listRef.current?.scrollToIndex({ index, animated: true });
   };
 
+  // Çerçeveli sabit grup — aramayla birlikte filtrelenir, alfabetik sıralanmaz.
+  const filteredPinned = useMemo(() => {
+    if (paginated || pinnedOptions.length === 0) return [] as PickerOption[];
+    const q = clientSearch.trim().toLocaleLowerCase('tr');
+    if (!q) return pinnedOptions;
+    return pinnedOptions.filter(
+      (o) =>
+        o.label.toLocaleLowerCase('tr').includes(q) ||
+        (o.sublabel?.toLocaleLowerCase('tr').includes(q) ?? false),
+    );
+  }, [paginated, pinnedOptions, clientSearch]);
+
+  const pinnedHeader =
+    filteredPinned.length > 0 ? (
+      <View style={styles.pinnedFrame}>
+        {pinnedLabel ? (
+          <Text style={styles.pinnedLabel}>{pinnedLabel}</Text>
+        ) : null}
+        <View style={styles.pinnedGrid}>
+          {filteredPinned.map((item) => (
+            <View
+              key={item.value}
+              style={{ width: `${100 / effectiveColumns}%` as `${number}%` }}
+            >
+              <PickerCard
+                option={item}
+                selected={item.value === selectedValue}
+                onPress={() => {
+                  onSelect(item.value);
+                  onDismiss();
+                  if (!paginated) setClientSearch('');
+                }}
+              />
+            </View>
+          ))}
+        </View>
+      </View>
+    ) : null;
+
   // Paginated submit handler
   const submitSearch = () => {
     if (!paginated) return;
@@ -183,9 +232,7 @@ export default function PickerModal(props: Props) {
       useNativeDriver
       hideModalContentWhileAnimating
       avoidKeyboard={false}
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+      {...modalProps}
     >
       <View
         style={[
@@ -289,7 +336,7 @@ export default function PickerModal(props: Props) {
             <View style={styles.loading}>
               <ActivityIndicator size="large" color="#4f46e5" />
             </View>
-          ) : listData.length === 0 ? (
+          ) : listData.length === 0 && filteredPinned.length === 0 ? (
             <Text style={styles.empty}>{emptyText}</Text>
           ) : (
             <View style={styles.listRow}>
@@ -299,6 +346,7 @@ export default function PickerModal(props: Props) {
                   data={listData}
                   keyExtractor={(item) => item.value}
                   numColumns={effectiveColumns}
+                  ListHeaderComponent={pinnedHeader}
                   renderItem={({ item }) => (
                     <PickerCard
                       option={item}
@@ -556,6 +604,23 @@ const styles = StyleSheet.create({
 
   listBox: { flex: 1 },
   listRow: { flex: 1, flexDirection: 'row' },
+  // Çerçeveli sabit grup (örn. iş emrindeki müşteriler) — listenin üstünde.
+  pinnedFrame: {
+    borderWidth: 2,
+    borderColor: '#4f46e5',
+    borderRadius: 12,
+    backgroundColor: '#f5f3ff',
+    padding: 6,
+    marginBottom: 10,
+  },
+  pinnedLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4f46e5',
+    marginLeft: 4,
+    marginBottom: 2,
+  },
+  pinnedGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   azStrip: {
     width: 30,
     alignItems: 'center',

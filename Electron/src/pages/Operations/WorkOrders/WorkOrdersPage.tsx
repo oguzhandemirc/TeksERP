@@ -18,7 +18,7 @@ import { WorkOrderDetailSheet } from "./WorkOrderDetailSheet";
 import { WorkOrderFormDialog } from "./WorkOrderFormDialog";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import { WorkOrderType } from "@/types/enums";
-import { pickedLinesFromOrder } from "./workOrderPrefill";
+import { pickedLinesFromOrder, type WoSeedTarget } from "./workOrderPrefill";
 import type { PickedOrderLine } from "./OrderPickerDialog";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
 import type { CustomRouteStep } from "./RouteDesignerDialog";
@@ -88,7 +88,6 @@ interface CreatePayload {
   targetColorId: string | null;
   targetPropertyIds: string[];
   orderLineIds?: string[];
-  orderLineAllocations?: { orderLineId: string; allocatedQty: number }[];
   stepPlanning?: StepPlanPayload[];
   width: number | null;
   targetQuantity: number | null;
@@ -103,8 +102,7 @@ function buildPayload(
   targetQuantityEnabled: boolean,
 ): CreatePayload {
   const orderLineIds = v.orderLineIds ?? [];
-  const hasLines =
-    (v.orderLineAllocations?.length ?? 0) > 0 || orderLineIds.length > 0;
+  const hasLines = orderLineIds.length > 0;
   const usingCustom = meta.customSteps.length > 0;
 
   // Custom rota: steps[] gönder; routeTemplateId yok, stepPlanning'e gerek yok.
@@ -135,11 +133,7 @@ function buildPayload(
     targetItemId: v.targetItemId ?? null,
     targetColorId: v.targetColorId ?? null,
     targetPropertyIds: v.targetPropertyIds ?? [],
-    ...(v.type === "ORDER_PRODUCTION" && (v.orderLineAllocations?.length ?? 0) > 0
-      ? { orderLineAllocations: v.orderLineAllocations }
-      : v.type === "ORDER_PRODUCTION" && orderLineIds.length > 0
-        ? { orderLineIds }
-        : {}),
+    ...(hasLines ? { orderLineIds } : {}),
     width: v.width ?? null,
     targetQuantity: targetQuantityEnabled ? (v.targetQuantity ?? null) : null,
     plannedStartDate: dateOrNull(v.plannedStartDate),
@@ -155,14 +149,35 @@ export function WorkOrdersPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<WorkOrder | null>(null);
   const [seedLines, setSeedLines] = useState<PickedOrderLine[] | null>(null);
+  const [seedTarget, setSeedTarget] = useState<WoSeedTarget | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
-  // "Bu siparişten iş emri oluştur" — Orders ekranından router state ile gelir.
+  // Orders / Ürün Dengesi ekranından router state ile gelir:
+  // - seedPickedLines: belirli spec'in açık kalemleri (hazır picker satırı,
+  //   openQty=kalan; link-only). Toplu seçim + Denge "siparişlere bağla" modu.
+  // - seedTarget: sipariş bağı olmadan hedef spec + miktar (Denge "stoğa üret").
+  // - seedOrder: tek siparişin "iş emri oluştur" kısayolu (kalan kalemler süzülür).
   useEffect(() => {
-    const state = location.state as { seedOrder?: Order } | null;
-    if (state?.seedOrder) {
-      setSeedLines(pickedLinesFromOrder(state.seedOrder));
+    const state = location.state as
+      | {
+          seedOrder?: Order;
+          seedPickedLines?: PickedOrderLine[];
+          seedTarget?: WoSeedTarget;
+        }
+      | null;
+    const picked =
+      state?.seedPickedLines ??
+      (state?.seedOrder ? pickedLinesFromOrder(state.seedOrder) : []);
+    if (picked.length > 0) {
+      setSeedLines(picked);
+      setSeedTarget(null);
+      setEditing(null);
+      setFormOpen(true);
+      navigate(location.pathname, { replace: true });
+    } else if (state?.seedTarget) {
+      setSeedTarget(state.seedTarget);
+      setSeedLines(null);
       setEditing(null);
       setFormOpen(true);
       navigate(location.pathname, { replace: true });
@@ -202,6 +217,7 @@ export function WorkOrdersPage() {
   const handleEdit = (wo: WorkOrder) => {
     setSelected(null);
     setSeedLines(null);
+    setSeedTarget(null);
     setEditing(wo);
     setFormOpen(true);
   };
@@ -211,6 +227,7 @@ export function WorkOrdersPage() {
     if (!open) {
       setEditing(null);
       setSeedLines(null);
+      setSeedTarget(null);
     }
   };
 
@@ -227,6 +244,7 @@ export function WorkOrdersPage() {
                 size="sm"
                 onClick={() => {
                   setSeedLines(null);
+                  setSeedTarget(null);
                   setEditing(null);
                   setFormOpen(true);
                 }}
@@ -263,6 +281,7 @@ export function WorkOrdersPage() {
         onOpenChange={handleFormOpenChange}
         workOrder={editing}
         initialPickedLines={editing ? undefined : seedLines ?? undefined}
+        initialTarget={editing ? undefined : seedTarget ?? undefined}
         onSubmit={async (v, meta) => {
           const payload = buildPayload(v, meta, targetQuantityEnabled);
           if (editing) {

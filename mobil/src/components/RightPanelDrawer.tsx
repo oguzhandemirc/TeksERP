@@ -7,6 +7,7 @@ import {
   Keyboard,
 } from 'react-native';
 import RNModal from 'react-native-modal';
+import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 import { IconButton, Text } from 'react-native-paper';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -36,6 +37,7 @@ export function RightPanelDrawer({
   onClosed?: () => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
   const drawerWidth = Math.min(winW * 0.9, 420);
 
   return (
@@ -50,16 +52,14 @@ export function RightPanelDrawer({
       style={styles.modal}
       useNativeDriver
       hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+      {...modalProps}
     >
       <View
         style={[
           styles.sheet,
           {
             width: drawerWidth,
-            height: winH,
+            height: '100%',
             paddingTop: insets.top + 8,
             paddingBottom: insets.bottom + 12,
             paddingRight: Math.max(insets.right, 8),

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import {
   Surface,
   Text,
@@ -7,10 +7,12 @@ import {
   TextInput,
   ActivityIndicator,
   TouchableRipple,
+  IconButton,
   Divider,
 } from 'react-native-paper';
 import RNModal from 'react-native-modal';
 import { useQuery } from '@tanstack/react-query';
+import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 import { orderService } from '../services/order.service';
 import { customerService } from '../services/customer.service';
 
@@ -18,7 +20,7 @@ import { customerService } from '../services/customer.service';
 // Etiket Kime? — bir topun etiketi BASKI ANINDA kime basılacak (gevşek model:
 // top→sipariş bağı yok). Seçenekler:
 //   ① Topun spec'ine uyan açık sipariş kalemi → orderLineId (tam sipariş bağlamı)
-//   ② Manuel müşteri (WO dışı) → customerId (master alias'lar)
+//   ② Tüm müşteriler (WO dışı) → customerId (master alias'lar)
 //   ③ Müşterisiz → {} (spec-only üretim etiketi)
 // Hiçbir DB durumu değişmez — parent context'i LabelPrinter'a verip basar.
 // =============================================================================
@@ -44,6 +46,10 @@ interface Props {
 }
 
 export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConfirm }: Props) {
+  const modalProps = useFullscreenModalProps();
+  const { width: winW, height: winH } = useWindowDimensions();
+  // Daralt: tablet/yatayda yarı genişlik ama 460px tavanlı, telefon dikte %92.
+  const sheetWidth = winH > winW ? winW * 0.92 : Math.min(winW * 0.5, 460);
   const [mode, setMode] = useState<'choose' | 'manual'>('choose');
   const [custSearch, setCustSearch] = useState('');
 
@@ -90,16 +96,27 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
   };
 
   return (
-    <RNModal isVisible={roll !== null} onBackdropPress={cancel} style={styles.modal}>
-      <Surface style={styles.sheet} elevation={4}>
-        <Text variant="titleMedium" style={styles.title}>
-          Etiket kime?
-        </Text>
-        <Text style={styles.spec}>
-          {roll?.barcode ?? '—'} · {roll?.itemName ?? ''}
-          {roll?.colorName ? ` · ${roll.colorName}` : ''}
-          {roll?.width ? ` · ${roll.width}cm` : ''}
-        </Text>
+    <RNModal isVisible={roll !== null} onBackdropPress={cancel} style={styles.modal} {...modalProps}>
+      <Surface style={[styles.sheet, { width: sheetWidth }]} elevation={4}>
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text variant="titleMedium" style={styles.title}>
+              Etiket kime?
+            </Text>
+            <Text style={styles.spec} numberOfLines={1}>
+              {roll?.barcode ?? '—'} · {roll?.itemName ?? ''}
+              {roll?.colorName ? ` · ${roll.colorName}` : ''}
+              {roll?.width ? ` · ${roll.width}cm` : ''}
+            </Text>
+          </View>
+          <IconButton
+            icon="close"
+            size={22}
+            onPress={cancel}
+            accessibilityLabel="Kapat (basma)"
+            style={styles.closeBtn}
+          />
+        </View>
         <Divider style={{ marginVertical: 8 }} />
 
         {mode === 'choose' ? (
@@ -138,11 +155,11 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
             <View style={styles.actions}>
               <Button
                 mode="contained-tonal"
-                icon="account-plus"
+                icon="account-multiple"
                 onPress={() => setMode('manual')}
                 style={styles.flexBtn}
               >
-                Manuel müşteri
+                Tüm müşteriler
               </Button>
               <Button
                 mode="outlined"
@@ -153,13 +170,10 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
                 Müşterisiz
               </Button>
             </View>
-            <Button onPress={cancel} style={{ marginTop: 4 }}>
-              Vazgeç (basma)
-            </Button>
           </>
         ) : (
           <>
-            <Text style={styles.label}>Sipariş dışı müşteri seç:</Text>
+            <Text style={styles.label}>Müşteri seç (tüm müşteriler):</Text>
             <TextInput
               mode="outlined"
               dense
@@ -201,8 +215,17 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
 }
 
 const styles = StyleSheet.create({
-  modal: { justifyContent: 'center', margin: 16 },
-  sheet: { borderRadius: 16, padding: 16, backgroundColor: '#fff' },
+  modal: { justifyContent: 'center', alignItems: 'center', margin: 16 },
+  sheet: {
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+    backgroundColor: '#fff',
+  },
+  header: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  headerText: { flex: 1, paddingTop: 8 },
+  closeBtn: { margin: 0, marginRight: -8 },
   title: { fontWeight: '700', color: '#0f172a' },
   spec: { fontSize: 13, color: '#475569', marginTop: 4 },
   label: { fontSize: 12, color: '#64748b', marginBottom: 4 },

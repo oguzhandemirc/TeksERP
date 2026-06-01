@@ -12,9 +12,15 @@ interface Props {
   title: string;
   subtitle?: string;
   onBack?: () => void;
+  /** Ekran-içi "önceki adıma dön" — home'u GİZLEMEZ; home'un yanında ok olarak
+   *  çıkar. Modül içi alt-adım (örn. paketleme → sipariş seçimi) için. */
+  onStepBack?: () => void;
   /** Appbar.Content'ten sonra, sağdaki sistem aksiyonlarından önce render edilir.
    *  Ekran-spesifik tetikler (örn. Tambur'da "Açık İşler") için. */
   headerExtras?: React.ReactNode;
+  /** Kullanıcı tetikleyicisini metin yerine yalnız profil ikonu yap (ad menüde
+   *  görünür). Header'da çok aksiyon olan ekranlarda (Tambur) yer kazandırır. */
+  userIconOnly?: boolean;
   children: React.ReactNode;
 }
 
@@ -22,7 +28,9 @@ export default function ScreenChrome({
   title,
   subtitle,
   onBack,
+  onStepBack,
   headerExtras,
+  userIconOnly,
   children,
 }: Props) {
   const user = useAuthStore((s) => s.user);
@@ -54,6 +62,10 @@ export default function ScreenChrome({
     <View style={styles.root}>
       <Appbar.Header style={styles.appbar} elevated statusBarHeight={insets.top}>
         {onBack && <Appbar.BackAction onPress={onBack} color="#fff" />}
+        {/* Önceki adım (geri) — ev ikonunun SOLUNDA, hep aynı yerde. */}
+        {onStepBack && (
+          <Appbar.BackAction onPress={onStepBack} color="#fff" accessibilityLabel="Önceki adım" />
+        )}
         {showHome && (
           <Appbar.Action icon="home" onPress={goHome} color="#fff" accessibilityLabel="Ana sayfa" />
         )}
@@ -83,9 +95,9 @@ export default function ScreenChrome({
               accessibilityLabel="Kullanıcı menüsü"
             >
               <View style={styles.userTriggerInner}>
-                {compactPortrait ? (
-                  // Compact portrait: sadece profil ikonu (username text yer harcıyor)
-                  <Icon source="account-circle" size={24} color="#cbd5e1" />
+                {compactPortrait || userIconOnly ? (
+                  // Sadece profil ikonu — username text yer harcamaz, ad menüde.
+                  <Icon source="account-circle" size={26} color="#cbd5e1" />
                 ) : (
                   <>
                     <Text variant="bodyMedium" style={styles.userText}>
@@ -98,6 +110,14 @@ export default function ScreenChrome({
             </TouchableRipple>
           }
         >
+          {/* Menü başlığı — tıklayınca kim giriş yaptıysa adı görünür. */}
+          <View style={styles.menuHeader}>
+            <Icon source="account-circle" size={22} color="#475569" />
+            <Text style={styles.menuHeaderName} numberOfLines={1}>
+              {user?.username ?? '—'}
+            </Text>
+          </View>
+          <Divider />
           <Menu.Item
             leadingIcon="cog"
             onPress={openSettings}
@@ -107,7 +127,10 @@ export default function ScreenChrome({
           <Menu.Item leadingIcon="logout" onPress={doLogout} title="Çıkış" />
         </Menu>
       </Appbar.Header>
-      <View style={styles.content}>{children}</View>
+      {/* paddingBottom: Android nav bar (gesture/buton) + dock içeriğin üstüne
+          binmesin diye alt safe-area inset'i bırakılır. Tüm ScreenChrome
+          ekranları (sticky footer'lar dahil) bundan faydalanır. */}
+      <View style={[styles.content, { paddingBottom: insets.bottom }]}>{children}</View>
     </View>
   );
 }
@@ -132,5 +155,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   userText: { color: '#cbd5e1', fontWeight: '600' },
+  menuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minWidth: 170,
+  },
+  menuHeaderName: { fontWeight: '700', color: '#0f172a', fontSize: 14, flexShrink: 1 },
   content: { flex: 1 },
 });

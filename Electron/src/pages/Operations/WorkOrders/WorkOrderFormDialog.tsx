@@ -57,6 +57,13 @@ interface Props {
   workOrder?: WorkOrder | null;
   /** Create modunda formu önceden seçili sipariş kalemleriyle açar ("siparişten WO"). */
   initialPickedLines?: PickedOrderLine[];
+  /** Create modunda sipariş bağı olmadan hedef spec + miktar seed'i (Denge "stoğa üret"). */
+  initialTarget?: {
+    itemId: string;
+    colorId: string | null;
+    width: number | null;
+    targetQuantity: number | null;
+  };
   onSubmit: (
     values: WorkOrderFormValues,
     meta: { fasonPlans: FasonStepPlan[]; customSteps: CustomRouteStep[] },
@@ -69,6 +76,7 @@ export function WorkOrderFormDialog({
   onOpenChange,
   workOrder,
   initialPickedLines,
+  initialTarget,
   onSubmit,
   isSubmitting,
 }: Props) {
@@ -127,6 +135,16 @@ export function WorkOrderFormDialog({
         handlePickerConfirm(initialPickedLines);
       } else {
         setPickedLines([]);
+        if (initialTarget) {
+          // Denge "stoğa üret": sipariş bağı yok, sadece hedef spec + miktar.
+          // (Lines boş → buildPayload type'ı STOCK_PRODUCTION yapar.)
+          form.setValue("targetItemId", initialTarget.itemId);
+          form.setValue("targetColorId", initialTarget.colorId);
+          form.setValue("width", initialTarget.width);
+          if (initialTarget.targetQuantity != null) {
+            form.setValue("targetQuantity", initialTarget.targetQuantity);
+          }
+        }
       }
       resetRouteSteps([]);
       setAdvancedOpen(true);
@@ -232,7 +250,6 @@ export function WorkOrderFormDialog({
   const isOrderProduction = pickedLines.length > 0;
 
   const widthLocked = derived?.width != null;
-  const quantityLocked = derived !== null;
   const mixedWidths = derived !== null && derived.width == null;
 
   // Backend findById response'unda gelir; material commitment durumuna göre
@@ -242,11 +259,11 @@ export function WorkOrderFormDialog({
   const widthTooltip = locks?.width
     ? locks.reasons.width
     : "Sipariş kaleminden alındı";
-  // targetQuantity sertçe kilitli değil — sadece sipariş bağlıysa derived
-  // değerden gelir. Material committed iken kullanıcı bilinçli olarak
-  // değiştirebilir (fazla → Tambur stoğu, eksik → yeni sevk).
-  const quantityFullyLocked = quantityLocked;
-  const quantityTooltip = "Sipariş kalemleri toplamı";
+  // targetQuantity ASLA kilitli değil — sipariş bağlıyken bile yalnız öneri
+  // (bağlı kalemlerin açık toplamı) gelir; kullanıcı değiştirebilir (fazla →
+  // Tambur stoğu, eksik → kalan için yeni iş emri).
+  const quantityFullyLocked = false;
+  const quantityTooltip = "Bağlı kalemlerden önerilir; değiştirebilirsin";
 
   // "Sevk edilen > yeni hedef" uyarısı için canlı izleme.
   const watchedQuantity = form.watch("targetQuantity");
@@ -457,7 +474,9 @@ export function WorkOrderFormDialog({
                     hint={
                       locks?.materialCommitted && dispatchedQty > 0
                         ? `Sevk edilen: ${dispatchedQty.toLocaleString("tr-TR")} m`
-                        : undefined
+                        : isOrderProduction
+                          ? "Bağlı kalemlerin açığından önerilir — değiştirebilirsin (fazlası stoğa)"
+                          : undefined
                     }
                   >
                     <LockedInput

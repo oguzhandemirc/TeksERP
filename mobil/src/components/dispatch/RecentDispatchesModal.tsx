@@ -13,6 +13,7 @@ import type { SubcontractorDispatchListItem } from '../../types/models';
 import DispatchRow from './DispatchRow';
 import RefreshButton from '../RefreshButton';
 import ConfirmDialog from '../ConfirmDialog';
+import { useFullscreenModalProps } from '../../hooks/useFullscreenModalProps';
 import Pager from '../Pager';
 
 interface Props {
@@ -62,6 +63,7 @@ export default function RecentDispatchesModal({
   onCancelDispatch,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
   // Aynı anda yalnız bir satır açık — operatör başkasına tıklayınca eski kapanır.
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -118,10 +120,8 @@ export default function RecentDispatchesModal({
       style={styles.modal}
       useNativeDriver
       hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
       avoidKeyboard
+      {...modalProps}
     >
       <View style={[styles.sheet, { width: sheetWidth, height: winH * 0.88 }]}>
         {/* Sade header */}

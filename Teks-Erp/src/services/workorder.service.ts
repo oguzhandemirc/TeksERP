@@ -46,7 +46,6 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks } from "./helpers/workorder-locks.helper";
-import { computeLineCoverage } from "./helpers/coverage.helper";
 import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -185,7 +184,7 @@ export class WorkOrderService {
    *   - routeTemplateId verilirse RouteStep'ler WorkOrderStep'e kopyalanır (copy-on-write snapshot).
    *     Bu durumda `steps` verilmemelidir; verilirse reddedilir.
    *   - routeTemplateId verilmezse `steps` zorunlu.
-   *   - `orderLineAllocations` verilirse her satır için overbooking kontrolü yapılır.
+   *   - sipariş bağı (orderLineIds/orderLineAllocations) link-only; metraj taşımaz.
    *   - type=ORDER_PRODUCTION ise en az bir sipariş bağı zorunlu.
    *   - batchNumber verilmezse otomatik üretilir (B-YYMMDD-NNN).
    */
@@ -441,42 +440,15 @@ export class WorkOrderService {
 
     // Refakat kartı barkodu sequence çakışırsa (P2002) tx'i baştan dene.
     const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
-      // Overbooking guard (3.2) — kapsama ile.
-      // Kalan kapasite = quantity − (shipped + reserved). Serbest depo stoğu
-      // (fungible havuz) bir kaleme bağlanmaz → tahsisi kısıtlamaz; planlamacı
-      // gerekirse stoğa rağmen WO açabilir (sistem gösterir, zorlamaz). Böylece
-      // (a) sevk edilmiş + canlı WO rezervi tekrar tahsis edilemez, (b) üretimi
-      // başka yöne kayan WO'nun rezervi erir → kalem yeniden üretime açılır.
+      // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK. Sipariş bağı yalnız
+      // "bu iş emri hangi siparişler için" niyetidir (metraj taşımaz); fazla
+      // üretim Tambur'da stoğa düşer. Yalnız satırların varlığını doğrula.
       if (allocations.length > 0) {
-        const allocLineIds = allocations.map((a) => a.orderLineId);
-        const orderLines = await tx.orderLine.findMany({
-          where: { id: { in: allocLineIds } },
-          select: { id: true, quantity: true },
+        const found = await tx.orderLine.count({
+          where: { id: { in: allocations.map((a) => a.orderLineId) } },
         });
-
-        if (orderLines.length !== allocations.length) {
+        if (found !== allocations.length) {
           throw AppError.badRequest("Bazı sipariş satırları bulunamadı");
-        }
-
-        // Yeni WO henüz yaratılmadı → kendi rezervi hesaba katılmaz.
-        const covMap = await computeLineCoverage(tx, allocLineIds);
-
-        for (const alloc of allocations) {
-          const line = orderLines.find((l) => l.id === alloc.orderLineId);
-          if (!line) continue;
-          if (alloc.allocatedQty < 0) {
-            throw AppError.badRequest(
-              "Tahsis miktarı negatif olamaz."
-            );
-          }
-          const coverage = covMap.get(line.id)?.coverage ?? new Prisma.Decimal(0);
-          const remaining = new Prisma.Decimal(line.quantity).minus(coverage);
-          const allocDecimal = new Prisma.Decimal(alloc.allocatedQty);
-          if (allocDecimal.gt(remaining)) {
-            throw AppError.conflict(
-              `Bir sipariş kalemi için kalan kapasite ${remaining.toFixed(2)} m, talep edilen ${allocDecimal.toFixed(2)} m bunu aşıyor.`
-            );
-          }
         }
       }
 
@@ -832,6 +804,13 @@ export class WorkOrderService {
       swatchItems: [],
     };
 
+    // Üretime giren ham toplar — WO'nun ilk adımına giren ayrık toplar (aşağıda
+    // RollMovement üzerinden, stepIds hesaplandıktan sonra doldurulur).
+    let inputRolls: { count: number; totalMeters: Prisma.Decimal } = {
+      count: 0,
+      totalMeters: new Prisma.Decimal(0),
+    };
+
     // Per-step individual roll listesi — detay panelinde "hangi parça kaç metre"
     // sorusunun cevabı. Aggregate ile aynı sorgudan dolduruyoruz, ek round-trip yok.
     const stepRolls = new Map<
@@ -1040,6 +1019,35 @@ export class WorkOrderService {
         color: w.color,
         createdAt: w.createdAt,
       }));
+
+      // Üretime giren ham toplar — WO'nun İLK adımına RollMovement ile giren ayrık
+      // topların initialQty toplamı. Movement append-only olduğundan top sonradan
+      // fasona/tambura geçse de (currentStepId/producedInStepId değişse veya null
+      // olsa) sayım kalıcı; EXTERNAL ilk adımda (boyahane, sevkle giriş) de çalışır.
+      // Üretilen çıktı (tambur — son adımda doğar) ve fason açık kumaşı (2.+ adıma
+      // girer) ilk adıma movement atmaz → doğal olarak hariç. STOCK'a geri çekilen
+      // (un-attach / iptal) ve CANCELLED toplar sayılmaz.
+      const firstStepId = stepIds[0];
+      const entryRollRows = await prisma.rollMovement.findMany({
+        where: { workOrderStepId: firstStepId },
+        select: { rollId: true },
+        distinct: ["rollId"],
+      });
+      const entryRollIds = entryRollRows.map((m) => m.rollId);
+      if (entryRollIds.length > 0) {
+        const inputAgg = await prisma.roll.aggregate({
+          where: {
+            id: { in: entryRollIds },
+            status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
+          },
+          _sum: { initialQty: true },
+          _count: { _all: true },
+        });
+        inputRolls = {
+          count: inputAgg._count._all,
+          totalMeters: inputAgg._sum.initialQty ?? new Prisma.Decimal(0),
+        };
+      }
     }
 
     const stepsWithRollSummary = wo.steps.map((step) => ({
@@ -1070,6 +1078,7 @@ export class WorkOrderService {
         steps: stepsWithRollSummary,
         dispatchedTotalQty,
         producedRolls,
+        inputRolls,
         locks,
       },
     };
@@ -1937,31 +1946,22 @@ export class WorkOrderService {
 
     // ── Transaction: smart merge (steps id-bazlı diff) ───────────────────────
     const updated = await prisma.$transaction(async (tx) => {
-      // Overbooking guard (kendi mevcut link'lerini hariç tutarak)
+      // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK (fazla üretim → stok).
+      // Yalnız (a) satır varlığı, (b) material committed iken kumaş + en uyumu.
       if (allocations.length > 0) {
         const orderLines = await tx.orderLine.findMany({
           where: { id: { in: allocations.map((a) => a.orderLineId) } },
-          include: {
-            workOrderLinks: {
-              where: {
-                workOrder: { status: { not: WorkOrderStatus.CANCELLED } },
-                workOrderId: { not: id },
-              },
-              select: { allocatedQty: true },
-            },
-          },
+          select: { id: true, itemId: true, width: true },
         });
         if (orderLines.length !== allocations.length) {
           throw AppError.badRequest("Bazı sipariş satırları bulunamadı");
         }
 
-        // Material committed iken yeni sipariş bağlamada kumaş + en
-        // uyumluluğu zorunlu — boyahaneye gönderdiğimiz kumaşı uyumsuz
-        // siparişe yamamak yasak.
+        // Material committed iken yeni sipariş bağlamada kumaş + en uyumluluğu
+        // zorunlu — boyahaneye gönderdiğimiz kumaşı uyumsuz siparişe yamamak yasak.
         if (locks.materialCommitted) {
-          // Sadece **yeni** bağlanan satırlar için kontrol et — mevcut
-          // bağlar zaten geçmişten geliyor, onları yeniden doğrulamaya
-          // gerek yok (zaten en/kumaş kilitli, değişmiyorlar).
+          // Sadece **yeni** bağlanan satırları kontrol et — mevcut bağlar zaten
+          // geçmişten geliyor (en/kumaş kilitli, değişmiyorlar).
           const previousLinkIds = new Set(
             (
               await tx.workOrderToOrderLine.findMany({
@@ -1982,28 +1982,6 @@ export class WorkOrderService {
                 "Sevk yapılmış iş emrine farklı eninde sipariş bağlanamaz.",
               );
             }
-          }
-        }
-
-        for (const alloc of allocations) {
-          const line = orderLines.find((l) => l.id === alloc.orderLineId);
-          if (!line) continue;
-          if (alloc.allocatedQty < 0) {
-            throw AppError.badRequest(
-              "Tahsis miktarı negatif olamaz.",
-            );
-          }
-          // Decimal aritmetik — float tolerance gerekmiyor, exact karşılaştırma.
-          const alreadyReserved = line.workOrderLinks.reduce(
-            (sum, l) => sum.plus(l.allocatedQty ?? 0),
-            new Prisma.Decimal(0),
-          );
-          const remaining = new Prisma.Decimal(line.quantity).minus(alreadyReserved);
-          const allocDecimal = new Prisma.Decimal(alloc.allocatedQty);
-          if (allocDecimal.gt(remaining)) {
-            throw AppError.conflict(
-              `Bir sipariş kalemi için kalan kapasite ${remaining.toFixed(2)} m, talep edilen ${allocDecimal.toFixed(2)} m bunu aşıyor.`,
-            );
           }
         }
       }

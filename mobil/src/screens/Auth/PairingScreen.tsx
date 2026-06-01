@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Platform, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useRef, useState } from 'react';
+import { View, StyleSheet, Platform, ScrollView, TextInput } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Button, TouchableRipple, Icon, IconButton } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -48,6 +48,8 @@ export default function PairingScreen() {
   const device = useDeviceType();
   const portrait = useIsPortrait();
   const isCompact = device === 'phone' || portrait;
+  const insets = useSafeAreaInsets();
+  const codeInputRef = useRef<TextInput>(null);
 
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -103,7 +105,29 @@ export default function PairingScreen() {
     setError('');
   };
 
+  // Telefon/dikey modda donanım numpad'i yerine Android sayı klavyesi kullanılıyor.
+  const handleCodeChange = (text: string) => {
+    if (loading) return;
+    const digits = text.replace(/\D/g, '').slice(0, CODE_LENGTH);
+    setCode(digits);
+    setError('');
+  };
+
   const canSubmit = code.length === CODE_LENGTH && !loading;
+
+  const codeDots = Array.from({ length: CODE_LENGTH }).map((_, i) => (
+    <View
+      key={i}
+      style={[
+        styles.pinDot,
+        i < code.length && styles.pinDotFilled,
+        i === code.length && !loading && styles.pinDotActive,
+        !!error && styles.pinDotError,
+      ]}
+    >
+      {i < code.length && <Text style={styles.pinDigit}>{code[i]}</Text>}
+    </View>
+  ));
 
   const infoSection = (
     <View style={[styles.leftPanel, isCompact && styles.leftPanelCompact]}>
@@ -117,21 +141,29 @@ export default function PairingScreen() {
       </Text>
 
       <Text style={styles.sectionLabel}>EŞLEŞTİRME KODU</Text>
-      <View style={styles.pinRow}>
-        {Array.from({ length: CODE_LENGTH }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.pinDot,
-              i < code.length && styles.pinDotFilled,
-              i === code.length && !loading && styles.pinDotActive,
-              !!error && styles.pinDotError,
-            ]}
-          >
-            {i < code.length && <Text style={styles.pinDigit}>{code[i]}</Text>}
+      {isCompact ? (
+        <>
+          <View style={styles.pinInputWrap}>
+            <View style={styles.pinRow}>{codeDots}</View>
+            <TextInput
+              ref={codeInputRef}
+              value={code}
+              onChangeText={handleCodeChange}
+              keyboardType="number-pad"
+              maxLength={CODE_LENGTH}
+              autoFocus
+              caretHidden
+              editable={!loading}
+              returnKeyType="done"
+              underlineColorAndroid="transparent"
+              style={styles.overlayInput}
+            />
           </View>
-        ))}
-      </View>
+          <Text style={styles.helper}>Kodu girmek için dokunun</Text>
+        </>
+      ) : (
+        <View style={styles.pinRow}>{codeDots}</View>
+      )}
 
       {error ? (
         <View style={styles.errorBox}>
@@ -210,10 +242,7 @@ export default function PairingScreen() {
   );
 
   const cardInner = isCompact ? (
-    <>
-      {infoSection}
-      {numpadSection}
-    </>
+    <>{infoSection}</>
   ) : (
     <>
       {infoSection}
@@ -222,7 +251,10 @@ export default function PairingScreen() {
   );
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={styles.root}>
+    <SafeAreaView
+      edges={['top', 'left', 'right']}
+      style={[styles.root, { paddingBottom: insets.bottom }]}
+    >
       <View style={styles.topBar}>
         <IconButton
           icon="cog"
@@ -300,6 +332,24 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   pinRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  pinInputWrap: { position: 'relative' },
+  overlayInput: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    color: 'transparent',
+    backgroundColor: 'transparent',
+    textAlign: 'center',
+  },
+  helper: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: -4,
+    marginBottom: 16,
+  },
   pinDot: {
     flex: 1,
     height: 48,

@@ -17,7 +17,8 @@ export interface OrderCancelPreviewWO {
   id: string;
   batchNumber: string;
   status: "PLANNED" | "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "CANCELLED";
-  allocatedQty: number;
+  /** WO'nun hedef üretim metrajı (link-only: per-sipariş tahsis yok). null olabilir. */
+  targetQuantity: number | null;
   isSoleOrder: boolean;
   otherOrdersCount: number;
   otherOrderNumbers: string[];

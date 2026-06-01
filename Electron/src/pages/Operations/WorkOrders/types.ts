@@ -154,6 +154,12 @@ export interface WorkOrder {
     }>;
   };
   /**
+   * Sadece findById response'unda — bu WO'ya üretime giren ham toplar (girdi).
+   * attachRolls ile ilk adıma bağlanan orijinal stok topları; tambur çıktısı ve
+   * fason açık kumaşı hariç. totalMeters = giriş anı (initialQty) toplamı.
+   */
+  inputRolls?: { count: number; totalMeters: number };
+  /**
    * Sadece findById response'unda — iptal edilmemiş fason sevklerin toplam
    * metrajı. Form'da yeni hedef metraj girilirken karşılaştırma için kullanılır
    * (sevk edilen > yeni hedef → fazla, Tambur'da stok kalır uyarısı).

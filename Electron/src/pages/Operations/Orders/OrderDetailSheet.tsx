@@ -22,6 +22,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { orderStatusLabels } from "@/types/enums";
+import { CoveragePanel } from "@/pages/Operations/WorkOrders/CoveragePanel";
 import { orderService } from "./service";
 import { OrderCancelDialog } from "./OrderCancelDialog";
 import type { Order } from "./types";
@@ -154,6 +155,12 @@ export function OrderDetailSheet({
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Kapsama: istenen − sevk − WO-rezerve − serbest depo − ham stok = net açık.
+                "Depoda zaten karşılayan stok var mıydı" sorusunun cevabı. */}
+            {order.status !== "CANCELLED" && order.status !== "COMPLETED" && (
+              <CoveragePanel lineIds={order.lines.map((l) => l.id)} />
             )}
 
             <div>

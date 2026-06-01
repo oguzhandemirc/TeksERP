@@ -15,7 +15,7 @@ import { AppError } from "../utils/app-error";
 import { OrderStatus, Prisma, RollStatus, WorkOrderStatus } from "@prisma/client";
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
-import { computeLineCoverage } from "./helpers/coverage.helper";
+import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
 import { CustomerAliasService } from "./customer-alias.service";
 import {
   applyDateRange,
@@ -270,8 +270,7 @@ export class OrderService extends BaseService {
    * `sortBy` ve sayfalama parametreleri `findAll` ile aynı şekilde çalışır.
    */
   async findAvailableForWorkOrder(
-    req: Request,
-    excludeWorkOrderId?: string
+    req: Request
   ): Promise<PaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
     // Search'i `buildWhereClause`'a vermiyoruz; picker'da arama relation'lara
@@ -293,7 +292,8 @@ export class OrderService extends BaseService {
     }
 
     // Gap-bazlı picker: bir satır "müsait" ise Açık > 0.
-    //   Açık = quantity − Sevk(SHIPPED+targetOrderLineId) − Rezerve(canlı WO allocatedQty)
+    //   Açık = quantity − sevk (OrderLine.shippedQty). WO bağı açığı ETKİLEMEZ —
+    //   sipariş ancak sevk edilince kapanır, üretime girince değil (gevşek model).
     // Kapalı/iptal sipariş hariç (gap hesabı yalnız açık siparişlerde anlamlı).
     const where = {
       ...baseWhere,
@@ -315,17 +315,14 @@ export class OrderService extends BaseService {
             item: { include: { allowedProperties: { include: { property: true } } } },
             color: true,
             requiredProperties: { include: { property: true } },
-            workOrderLinks: {
-              select: { allocatedQty: true, workOrder: { select: { id: true, status: true } } },
-            },
           },
         },
       },
     });
 
-    // Uzlaştırılmış kapsama — tüm aday satırlar için tek hesap (etiket+plan defterleri).
+    // Kapsama (yalnız sevk) — tüm aday satırlar için tek hesap.
     const allLineIds = orders.flatMap((o) => o.lines.map((l) => l.id));
-    const covMap = await computeLineCoverage(prisma, allLineIds, { excludeWorkOrderId });
+    const covMap = await computeLineCoverage(prisma, allLineIds);
 
     // Her sipariş için Açık>0 satırları süz + kovaları satıra ekle (UI'da göster).
     const enriched = orders
@@ -334,10 +331,8 @@ export class OrderService extends BaseService {
           .map((line) => {
             const cov = covMap.get(line.id);
             const shipped = cov?.shipped ?? new Prisma.Decimal(0);
-            const reserved = cov?.reserved ?? new Prisma.Decimal(0);
-            const openQty = new Prisma.Decimal(line.quantity)
-              .minus(cov?.coverage ?? new Prisma.Decimal(0));
-            return { ...line, shippedQty: shipped, reservedQty: reserved, openQty };
+            const openQty = new Prisma.Decimal(line.quantity).minus(shipped);
+            return { ...line, shippedQty: shipped, openQty };
           })
           .filter((line) => line.openQty.greaterThan(0));
         return { ...order, lines };
@@ -364,7 +359,7 @@ export class OrderService extends BaseService {
    * Bir topun özelliğine (itemId + opsiyonel colorId/width) uyan, Açık > 0 olan
    * AÇIK sipariş kalemlerini döner. Tambur "Yeniden Kes" (depo topu → müşteri
    * etiketi) ve top-önce paketleme picker'ları için.
-   * Açık = quantity − sevk(SHIPPED) − canlı WO rezerve(allocatedQty).
+   * Açık = quantity − sevk (OrderLine.shippedQty); WO bağı açığı etkilemez.
    */
   async findAvailableOrderLines(params: {
     itemId: string;
@@ -399,9 +394,6 @@ export class OrderService extends BaseService {
         },
         item: { select: { code: true, name: true } },
         color: { select: { code: true, name: true } },
-        workOrderLinks: {
-          select: { allocatedQty: true, workOrder: { select: { status: true } } },
-        },
       },
     });
 
@@ -411,7 +403,9 @@ export class OrderService extends BaseService {
     const data = lines
       .map((l) => {
         const cov = covMap.get(l.id);
-        const openQty = new Prisma.Decimal(l.quantity).minus(cov?.coverage ?? new Prisma.Decimal(0));
+        const openQty = new Prisma.Decimal(l.quantity).minus(
+          cov?.shipped ?? new Prisma.Decimal(0),
+        );
         return {
           lineId: l.id,
           orderId: l.order.id,
@@ -437,14 +431,17 @@ export class OrderService extends BaseService {
   }
 
   /**
-   * Kapsama (coverage) — WO formundaki seçili sipariş kalemleri için üretim
-   * açığını gösterir. Her kalem: istenen − sevk − WO-rezerve − serbest depo
-   * stoğu − serbest ham stok = net üretim açığı (eksi = fazla).
-   * GEVŞEK MODEL: serbest stok = item+renk+en eşleşen, henüz bir sevkiyata
-   * okutulmamış (shipmentId=null) WAREHOUSE/STOCK toplar — etiket bakılmaz
-   * (top fungible). Rezerve EDİLMEZ (anlık fotoğraf; aynı spec birden çok kalemde
-   * çift sayılabilir — planlamacı karar verir).
-   * excludeWorkOrderId: düzenleme modunda WO'nun kendi tahsisini sayma.
+   * Kapsama (coverage) — WO formundaki seçili sipariş kalemleri için "ne kadar
+   * üretmeliyim". Her spec (ürün+renk+en) için:
+   *   istenen − sevk − üretimde − serbest depo − serbest ham = net açık (eksi = fazla).
+   * HİBRİT MODEL:
+   *  - sevk: kaleme özel (OrderLine.shippedQty) → satır bazında toplanır.
+   *  - üretimde: canlı WO'ların hedef-spec başına in-flight'ı (committed − finished,
+   *    computeWoMaterial). Spec-havuz: aynı spec'in her kalemi aynı değeri taşır
+   *    (frontend bir kez sayar). Pro-rata / per-kalem tahsis YOK.
+   *  - serbest depo/ham: item+renk+en eşleşen, sevkiyata okutulmamış
+   *    (shipmentId=null) WAREHOUSE/STOCK toplar (fungible havuz).
+   * excludeWorkOrderId: düzenleme modunda WO'nun kendi üretimini sayma.
    */
   async getCoverageForLines(params: {
     lineIds: string[];
@@ -461,18 +458,20 @@ export class OrderService extends BaseService {
         colorId: true,
         width: true,
         quantity: true,
+        shippedQty: true,
         item: { select: { id: true, code: true, name: true } },
         color: { select: { id: true, code: true, name: true } },
-        workOrderLinks: {
-          select: { allocatedQty: true, workOrder: { select: { id: true, status: true } } },
-        },
       },
     });
 
-    // Kapsama (sevk + plan): shipped, reserved.
-    const covMap = await computeLineCoverage(prisma, lineIds, {
-      excludeWorkOrderId: params.excludeWorkOrderId,
-    });
+    const specKey = (
+      itemId: string,
+      colorId: string | null,
+      width: Prisma.Decimal | number | null,
+    ): string => {
+      const w = width == null ? "" : new Prisma.Decimal(width).toString();
+      return `${itemId}|${colorId ?? ""}|${w}`;
+    };
 
     // Serbest stok — spec bazında grupla; bir sevkiyata okutulmamış (shipmentId=null)
     // WAREHOUSE + STOCK toplar (fungible havuz, etiket bakılmaz).
@@ -502,16 +501,52 @@ export class OrderService extends BaseService {
         return sum.plus(g._sum.currentQty ?? 0);
       }, new Prisma.Decimal(0));
 
+    // Üretimde — canlı WO'ların hedef-spec başına in-flight (committed − finished).
+    // Düzenlenen WO hariç (kendi üretimini açığa saymamak için).
+    const liveWos = await prisma.workOrder.findMany({
+      where: {
+        status: {
+          in: [
+            WorkOrderStatus.PLANNED,
+            WorkOrderStatus.IN_PROGRESS,
+            WorkOrderStatus.PAUSED,
+          ],
+        },
+        isActive: true,
+        targetItemId: { in: itemIds },
+        ...(params.excludeWorkOrderId ? { id: { not: params.excludeWorkOrderId } } : {}),
+      },
+      select: {
+        id: true,
+        targetItemId: true,
+        targetColorId: true,
+        width: true,
+      },
+    });
+    const woMat = await computeWoMaterial(prisma, liveWos.map((w) => w.id));
+    const inProdBySpec = new Map<string, Prisma.Decimal>();
+    for (const w of liveWos) {
+      if (!w.targetItemId) continue;
+      const mat = woMat.get(w.id);
+      const inFlight = Prisma.Decimal.max(
+        0,
+        (mat?.committed ?? new Prisma.Decimal(0)).minus(mat?.finished ?? 0),
+      );
+      if (inFlight.lessThanOrEqualTo(0)) continue;
+      const key = specKey(w.targetItemId, w.targetColorId, w.width);
+      inProdBySpec.set(key, (inProdBySpec.get(key) ?? new Prisma.Decimal(0)).plus(inFlight));
+    }
+
     const data = lines.map((l) => {
-      const cov = covMap.get(l.id);
-      const shipped = cov?.shipped ?? new Prisma.Decimal(0);
-      const reserved = cov?.reserved ?? new Prisma.Decimal(0);
+      const shipped = new Prisma.Decimal(l.shippedQty);
+      const inProduction =
+        inProdBySpec.get(specKey(l.itemId, l.colorId, l.width)) ?? new Prisma.Decimal(0);
       const freeWarehouse = matchFree(l, RollStatus.WAREHOUSE);
       const freeStock = matchFree(l, RollStatus.STOCK);
       const requested = new Prisma.Decimal(l.quantity);
       const netGap = requested
         .minus(shipped)
-        .minus(reserved)
+        .minus(inProduction)
         .minus(freeWarehouse)
         .minus(freeStock);
       return {
@@ -521,7 +556,7 @@ export class OrderService extends BaseService {
         width: l.width,
         requested,
         shipped,
-        reserved,
+        inProduction,
         freeWarehouse,
         freeStock,
         netGap,
@@ -1033,13 +1068,13 @@ export class OrderService extends BaseService {
             id: true,
             workOrderLinks: {
               select: {
-                allocatedQty: true,
                 workOrder: {
                   select: {
                     id: true,
                     batchNumber: true,
                     status: true,
                     type: true,
+                    targetQuantity: true,
                   },
                 },
               },
@@ -1067,24 +1102,21 @@ export class OrderService extends BaseService {
         id: string;
         batchNumber: string;
         status: string;
-        // Decimal — toplamada float drift yaratmasın; serializer number'a çevirir.
-        allocatedQty: Prisma.Decimal;
+        /** WO'nun hedef üretim metrajı (link-only model: per-sipariş tahsis yok). */
+        targetQuantity: Prisma.Decimal | null;
       }
     >();
     for (const line of order.lines) {
       for (const link of line.workOrderLinks) {
         const wo = link.workOrder;
-        const existing = woMap.get(wo.id);
-        if (existing) {
-          existing.allocatedQty = existing.allocatedQty.plus(link.allocatedQty);
-        } else {
-          woMap.set(wo.id, {
-            id: wo.id,
-            batchNumber: wo.batchNumber,
-            status: wo.status,
-            allocatedQty: new Prisma.Decimal(link.allocatedQty),
-          });
-        }
+        if (woMap.has(wo.id)) continue;
+        woMap.set(wo.id, {
+          id: wo.id,
+          batchNumber: wo.batchNumber,
+          status: wo.status,
+          targetQuantity:
+            wo.targetQuantity != null ? new Prisma.Decimal(wo.targetQuantity) : null,
+        });
       }
     }
 
@@ -1114,7 +1146,7 @@ export class OrderService extends BaseService {
           id: wo.id,
           batchNumber: wo.batchNumber,
           status: wo.status,
-          allocatedQty: wo.allocatedQty,
+          targetQuantity: wo.targetQuantity,
           isSoleOrder,
           otherOrdersCount: otherOrders.length,
           otherOrderNumbers: otherOrders.map((o) => o.orderNumber),

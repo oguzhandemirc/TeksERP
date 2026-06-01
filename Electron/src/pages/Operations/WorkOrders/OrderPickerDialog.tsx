@@ -37,10 +37,8 @@ export interface PickedOrderLine {
   itemColorHex: string | null;
   itemColorName: string | null;
   quantity: number;
-  /** Picker'da gösterilen "Açık" metraj (backend gap: quantity − sevk − rezerve). */
+  /** Picker'da gösterilen "Açık" metraj (quantity − sevk). */
   openQty: number;
-  /** Planlamacının bu kalemden bu WO'ya tahsis ettiği metraj. */
-  allocatedQty: number;
   width: number | null;
   requiredProperties: PickedOrderLineProperty[];
 }
@@ -121,7 +119,6 @@ export function buildPicked(order: Order, line: OrderLine): PickedOrderLine {
     itemColorName: line.color?.name ?? null,
     quantity: line.quantity,
     openQty: line.openQty ?? line.quantity,
-    allocatedQty: line.openQty ?? line.quantity,
     width: line.width ?? null,
     requiredProperties: (line.requiredProperties ?? []).map((rp) => ({
       id: rp.propertyId,

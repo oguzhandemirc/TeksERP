@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, ScrollView, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, StyleSheet, ScrollView, Image, TextInput } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TouchableRipple, ActivityIndicator, Icon, IconButton } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
@@ -53,6 +53,7 @@ export default function LoginScreen() {
   const device = useDeviceType();
   const portrait = useIsPortrait();
   const isCompact = device === 'phone' || portrait;
+  const insets = useSafeAreaInsets();
 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [pin, setPin] = useState('');
@@ -93,6 +94,7 @@ export default function LoginScreen() {
   const pinRef = useRef(pin);
   const submittingRef = useRef(submitting);
   const selectedUserRef = useRef(selectedUser);
+  const pinInputRef = useRef<TextInput>(null);
   useEffect(() => {
     pinRef.current = pin;
   }, [pin]);
@@ -144,6 +146,19 @@ export default function LoginScreen() {
       setPin(next);
       setError('');
       if (next.length === PIN_LENGTH) void submit(next, currentUser);
+    },
+    [submit],
+  );
+
+  // Telefon/dikey modda donanım numpad'i yerine Android sayı klavyesi kullanılıyor.
+  const handlePinChange = useCallback(
+    (text: string) => {
+      const currentUser = selectedUserRef.current;
+      if (!currentUser || submittingRef.current) return;
+      const digits = text.replace(/\D/g, '').slice(0, PIN_LENGTH);
+      setPin(digits);
+      setError('');
+      if (digits.length === PIN_LENGTH) void submit(digits, currentUser);
     },
     [submit],
   );
@@ -224,6 +239,69 @@ export default function LoginScreen() {
     </>
   );
 
+  // Telefon/dikey: donanım numpad'i yok — noktalar dokunulunca Android sayı
+  // klavyesini açan görünmez bir TextInput'a odaklanır. Klavye nav çubuğunun
+  // üstünden açıldığı için dock sorunu yaşanmaz.
+  const pinSectionCompact = (
+    <>
+      <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>2 · PIN (6 HANE)</Text>
+      <View style={styles.pinInputWrap}>
+        <View style={[styles.pinRow, styles.pinRowCompact]}>
+          {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.pinDot,
+                i < pin.length && styles.pinDotFilled,
+                i === pin.length && !!selectedUser && !submitting && styles.pinDotActive,
+                !!error && styles.pinDotError,
+              ]}
+            />
+          ))}
+        </View>
+        {!!selectedUser && (
+          <TextInput
+            ref={pinInputRef}
+            value={pin}
+            onChangeText={handlePinChange}
+            keyboardType="number-pad"
+            maxLength={PIN_LENGTH}
+            autoFocus
+            caretHidden
+            editable={!submitting}
+            returnKeyType="done"
+            underlineColorAndroid="transparent"
+            style={styles.overlayInput}
+          />
+        )}
+      </View>
+
+      <Text style={styles.pinHelper}>Hane girmek için dokunun</Text>
+
+      <View style={[styles.statusRow, styles.statusRowCompact]}>
+        {submitting ? (
+          <>
+            <ActivityIndicator size={16} color={COLORS.accentLight} />
+            <Text style={styles.statusText}>Giriş yapılıyor...</Text>
+          </>
+        ) : error ? (
+          <>
+            <Icon source="alert-circle" size={18} color={COLORS.error} />
+            <Text style={styles.errorText}>{error}</Text>
+          </>
+        ) : (
+          <Text style={styles.statusText}>
+            {!selectedUser
+              ? 'Önce kullanıcı seç'
+              : pin.length === 0
+                ? '6 haneli PIN gir'
+                : `${pin.length} / ${PIN_LENGTH}`}
+          </Text>
+        )}
+      </View>
+    </>
+  );
+
   const numpad = (
     <View style={[styles.numpad, isCompact && styles.numpadCompact]}>
       {NUMPAD_ROWS.map((row, ri) => (
@@ -255,7 +333,10 @@ export default function LoginScreen() {
   );
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={styles.root}>
+    <SafeAreaView
+      edges={['top', 'left', 'right']}
+      style={[styles.root, { paddingBottom: insets.bottom }]}
+    >
       <TopBar compact={isCompact} />
 
       {isCompact ? (
@@ -264,8 +345,7 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.compactSection}>{userSection}</View>
-          <View style={styles.compactSection}>{pinSection}</View>
-          <View style={styles.compactNumpadWrap}>{numpad}</View>
+          <View style={styles.compactSection}>{pinSectionCompact}</View>
         </ScrollView>
       ) : (
         <View style={styles.main}>
@@ -566,6 +646,18 @@ const styles = StyleSheet.create({
 
   pinRow: { flexDirection: 'row', gap: 14 },
   pinRowCompact: { gap: 10, justifyContent: 'center' },
+  pinInputWrap: { alignSelf: 'center', position: 'relative' },
+  pinHelper: { color: COLORS.subtext, fontSize: 12, textAlign: 'center', marginTop: 8 },
+  overlayInput: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    color: 'transparent',
+    backgroundColor: 'transparent',
+    textAlign: 'center',
+  },
   pinDot: {
     width: 28,
     height: 28,

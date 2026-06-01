@@ -84,6 +84,17 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
     }));
   }, [wo?.orderLinks]);
 
+  // Sipariş toplam = bağlı sipariş kalemlerinin talebi (link-only: tahsis yok).
+  const hasOrders = (wo?.orderLinks?.length ?? 0) > 0;
+  const orderTotal = useMemo(
+    () =>
+      (wo?.orderLinks ?? []).reduce(
+        (s, l) => s + Number(l.orderLine?.quantity ?? 0),
+        0,
+      ),
+    [wo?.orderLinks],
+  );
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-2xl overflow-auto">
@@ -165,16 +176,35 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
 
         {wo && (
           <div className="mt-4 space-y-4">
-            <div className="grid grid-cols-3 gap-2 text-sm">
+            <div
+              className={cn(
+                "grid gap-2 text-sm",
+                hasOrders ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3",
+              )}
+            >
+              {hasOrders && (
+                <Card>
+                  <CardContent className="p-3">
+                    <div className="text-xs text-muted-foreground">Sipariş Toplam</div>
+                    <div className="mt-0.5 font-medium tabular-nums">
+                      {formatNumber(orderTotal, 0)}
+                      <span className="ml-1 text-xs text-muted-foreground">m</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
               <Card>
                 <CardContent className="p-3">
-                  <div className="text-xs text-muted-foreground">Hedef Metraj</div>
+                  <div className="text-xs text-muted-foreground">Üretime Giren</div>
                   <div className="mt-0.5 font-medium tabular-nums">
-                    {formatNumber(wo.targetQuantity, 0)}
-                    {wo.targetQuantity != null && (
-                      <span className="ml-1 text-xs text-muted-foreground">m</span>
-                    )}
+                    {formatNumber(wo.inputRolls?.totalMeters ?? 0, 0)}
+                    <span className="ml-1 text-xs text-muted-foreground">m</span>
                   </div>
+                  {(wo.inputRolls?.count ?? 0) > 0 && (
+                    <div className="text-[11px] text-muted-foreground">
+                      {wo.inputRolls!.count} top
+                    </div>
+                  )}
                 </CardContent>
               </Card>
               <Card>
@@ -666,11 +696,6 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                                   {ol?.quantity != null && (
                                     <Badge variant="outline" className="font-normal">
                                       Boy: {formatNumber(ol.quantity, 0)} m
-                                    </Badge>
-                                  )}
-                                  {link.allocatedQty > 0 && (
-                                    <Badge variant="muted" className="font-normal">
-                                      Atanan: {formatNumber(link.allocatedQty, 0)} m
                                     </Badge>
                                   )}
                                 </div>

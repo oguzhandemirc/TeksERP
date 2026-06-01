@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { flexRender, type Header, type Table as TanstackTable } from "@tanstack/react-table";
 import {
   DndContext,
@@ -31,6 +32,8 @@ interface Props<T> {
   pagination?: Pagination;
   emptyText?: string;
   onRowClick?: (row: T) => void;
+  /** Seçim çubuğuna sayfa-özel toplu aksiyon enjekte eder (seçili satırları alır). */
+  bulkActions?: (rows: T[]) => ReactNode;
 }
 
 export function DataTable<T>({
@@ -39,6 +42,7 @@ export function DataTable<T>({
   pagination,
   emptyText = "Kayıt yok.",
   onRowClick,
+  bulkActions,
 }: Props<T>) {
   const rows = table.getRowModel().rows;
   const selectable = Boolean(table.options.enableRowSelection);
@@ -150,6 +154,7 @@ export function DataTable<T>({
       {selected.length > 0 && (
         <div className="flex items-center gap-3 border-t bg-primary/5 px-3 py-2 text-sm">
           <span className="font-medium">{selected.length} seçili</span>
+          {bulkActions?.(selected.map((r) => r.original))}
           <div className="ml-auto flex items-center gap-2">
             <Button
               variant="outline"

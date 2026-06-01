@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import RNModal from 'react-native-modal';
 import {
@@ -23,12 +23,20 @@ import {
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import dayjs from 'dayjs';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import { useDeviceType } from '../../../hooks/useDeviceType';
+import { useFullscreenModalProps } from '../../../hooks/useFullscreenModalProps';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import WorkOrderDetailPanel from '../../../components/workOrder/WorkOrderDetailPanel';
 import { RecentDispatchesModal } from '../../../components/dispatch';
@@ -55,6 +63,18 @@ import {
 } from '../../../utils/labels';
 
 const PAGE_SIZE = 10;
+
+// Barkod tipi sezgisi — yanlış alana okutmayı backend 404'üne güvenmeden anında,
+// net mesajla yakalar. Refakat kartı "RK-", top (rulo) "TEKS-" ile başlar; ikisi
+// asla çakışmaz. Yalnızca KESİN ters tipi reddederiz; gerisini backend doğrular.
+const looksLikeRollBarcode = (code: string) => /^TEKS-/i.test(code.trim());
+const looksLikeCardBarcode = (code: string) => /^RK-/i.test(code.trim());
+
+// Detay paneli (telefon) sürükleme — 3 yaslama konumu (kapalı/orta/büyük) +
+// yaylı geçiş. Kapalı yükseklik sabit (başlık görünür kadar); orta/büyük ekran
+// oranından hesaplanır.
+const SHEET_COLLAPSED_H = 88;
+const SHEET_SPRING = { damping: 22, stiffness: 240, mass: 0.6 };
 
 interface ScannedRoll {
   id: string;
@@ -106,6 +126,56 @@ export default function FasonSevkScreen() {
   const [plateNumber, setPlateNumber] = useState('');
   const [driverName, setDriverName] = useState('');
   const [notes, setNotes] = useState('');
+  // Sevk bilgileri (plaka/sürücü/not) opsiyonel — katlanır bölüm, varsayılan kapalı.
+  const [shippingOpen, setShippingOpen] = useState(false);
+
+  // ── Telefon: sürüklenebilir "İş Emri Detayları" paneli (3 yaslama konumu) ──
+  // sheetH = panelin canlı yüksekliği (shared value). detailsCollapsed yalnızca
+  // chevron yönü + tablet flex'i için tutulur; sürükleme onu runOnJS ile eşler.
+  const { height: winH } = useWindowDimensions();
+  const SHEET_MIDDLE_H = Math.round(winH * 0.42);
+  const SHEET_EXPANDED_H = Math.round(winH * 0.78);
+  const sheetH = useSharedValue(SHEET_COLLAPSED_H);
+  const sheetStartH = useSharedValue(0);
+  const sheetStyle = useAnimatedStyle(() => ({ height: sheetH.value }));
+  const snapTo = useCallback(
+    (target: number) => {
+      sheetH.value = withSpring(target, SHEET_SPRING);
+      setDetailsCollapsed(target <= SHEET_COLLAPSED_H + 1);
+    },
+    [sheetH],
+  );
+  const sheetPan = useMemo(
+    () =>
+      Gesture.Pan()
+        .onStart(() => {
+          sheetStartH.value = sheetH.value;
+        })
+        .onUpdate((e) => {
+          const h = sheetStartH.value - e.translationY;
+          sheetH.value = Math.min(SHEET_EXPANDED_H, Math.max(SHEET_COLLAPSED_H, h));
+        })
+        .onEnd((e) => {
+          // Hız-duyarlı en yakın yaslama: kapalı / orta / büyük.
+          const projected = sheetH.value - e.velocityY * 0.12;
+          let target = SHEET_COLLAPSED_H;
+          if (Math.abs(projected - SHEET_MIDDLE_H) < Math.abs(projected - target)) {
+            target = SHEET_MIDDLE_H;
+          }
+          if (Math.abs(projected - SHEET_EXPANDED_H) < Math.abs(projected - target)) {
+            target = SHEET_EXPANDED_H;
+          }
+          sheetH.value = withSpring(target, SHEET_SPRING);
+          runOnJS(setDetailsCollapsed)(target <= SHEET_COLLAPSED_H + 1);
+        }),
+    [SHEET_MIDDLE_H, SHEET_EXPANDED_H, sheetH, sheetStartH],
+  );
+
+  // Kamera taramasında okunan barkod — işleme, modal TAM kapandıktan sonra
+  // (onModalHide) yapılır ki hata/başarı toast'ı modal-içi toast yerine KÖK
+  // toast'ta görünsün; aksi halde modal kapanışıyla toast anında kayboluyor.
+  const pendingCardScanRef = useRef<string | null>(null);
+  const pendingRollScanRef = useRef<string | null>(null);
 
   // ── WO picker server-side state ──
   const WO_PAGE_SIZE = 30;
@@ -262,6 +332,16 @@ export default function FasonSevkScreen() {
   const handleCardScan = async (rawBarcode: string) => {
     const barcode = rawBarcode.trim();
     if (!barcode) return;
+    // Yanlış tip: top barkodu (TEKS-) kart alanına okutulduysa anında net hata.
+    if (looksLikeRollBarcode(barcode)) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Toast.show({
+        type: 'error',
+        text1: 'Bu bir top barkodu',
+        text2: 'Buraya refakat kartı / iş emri barkodu okutun.',
+      });
+      return;
+    }
     setResolvingCard(true);
     try {
       const res = await travelerCardService.findByBarcode(barcode);
@@ -331,7 +411,7 @@ export default function FasonSevkScreen() {
       setSubcontractorLabel('');
       setPlannedSubId(null);
       setCardInput('');
-      setDetailsCollapsed(false);
+      snapTo(SHEET_MIDDLE_H);
       Toast.show({
         type: 'success',
         text1: 'İş emri seçildi',
@@ -596,6 +676,18 @@ export default function FasonSevkScreen() {
       return;
     }
 
+    // Yanlış tip: refakat kartı (RK-) top alanına okutulduysa anında net hata.
+    if (looksLikeCardBarcode(barcode)) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Toast.show({
+        type: 'error',
+        text1: 'Bu bir refakat kartı',
+        text2: 'Buraya top (rulo) barkodu okutun.',
+      });
+      setBarcodeInput('');
+      return;
+    }
+
     setScanning(true);
     try {
       const res = await rollService.getByBarcode(barcode);
@@ -651,6 +743,101 @@ export default function FasonSevkScreen() {
     });
   };
 
+  // İş emri seçimini ve ona bağlı (adım/firma) seçimleri temizler — o iş
+  // emrinden çıkış. Detay paneli kapanır, kart okutma çubuğu geri gelir.
+  const clearWorkOrder = () => {
+    setWorkOrderId('');
+    setWorkOrderLabel('');
+    setStepId('');
+    setSubcontractorId('');
+    setSubcontractorLabel('');
+    setPlannedSubId(null);
+    snapTo(SHEET_COLLAPSED_H);
+  };
+  // Katlanmış "Sevk Bilgileri" başlığında gösterilecek özet (doluysa).
+  const shippingSummary = [
+    plateNumber.trim() || null,
+    driverName.trim() || null,
+    notes.trim() ? 'not' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  // Detay paneli başlık bloğu — durum sağa yaslı (başlık satırı); en + bu
+  // siparişteki toplam metraj sağa yaslı (batch satırı). Toplam metraj = WO hedef
+  // metrajı; yoksa bağlı sipariş satırlarının toplamı. Telefon sheet'i + tablet
+  // sütunu ortak kullanır.
+  const orderTotalMeters = selectedWo
+    ? selectedWo.targetQuantity ??
+      (selectedWo.orderLinks ?? []).reduce(
+        (sum, l) => sum + Number(l.orderLine?.quantity ?? 0),
+        0,
+      )
+    : null;
+  const metaRight = [
+    selectedWo?.width != null ? `En ${selectedWo.width} cm` : null,
+    orderTotalMeters && orderTotalMeters > 0 ? `${Math.round(orderTotalMeters)} m` : null,
+  ]
+    .filter(Boolean)
+    .join('  ·  ');
+  const detailTitleBlock = (
+    <View style={{ flex: 1 }}>
+      <View style={styles.titleRow}>
+        <Text
+          variant="titleMedium"
+          style={[styles.recentsTitle, styles.titleFlex]}
+          numberOfLines={1}
+        >
+          İş Emri Detayları
+        </Text>
+        {selectedWo && (
+          <View style={styles.statusChip}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: WORK_ORDER_STATUS_COLOR[selectedWo.status] ?? '#64748b' },
+              ]}
+            />
+            <Text
+              style={[
+                styles.statusChipText,
+                { color: WORK_ORDER_STATUS_COLOR[selectedWo.status] ?? '#64748b' },
+              ]}
+            >
+              {trLabel(WORK_ORDER_STATUS_LABEL, selectedWo.status)}
+            </Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.metaRow}>
+        <Text variant="bodySmall" style={styles.recentsCount} numberOfLines={1}>
+          {selectedWo ? `Batch ${selectedWo.batchNumber}` : 'İş emri seçildikçe burada görünür'}
+        </Text>
+        {selectedWo && metaRight.length > 0 && (
+          <Text variant="bodySmall" style={styles.metaRight} numberOfLines={1}>
+            {metaRight}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+
+  const detailContent = (
+    <ScrollView style={styles.recentsList} contentContainerStyle={styles.detailScrollContent}>
+      {selectedWo ? (
+        <WorkOrderDetailPanel wo={selectedWo} hideStatusWidth />
+      ) : (
+        <View style={styles.empty}>
+          <Icon source="clipboard-text-outline" size={56} color="#cbd5e1" />
+          <Text style={styles.emptyText}>İş emri seçilmedi</Text>
+          <Text style={styles.emptyHint}>
+            Sol taraftan bir iş emri seçtikten sonra detaylar burada görünecek
+          </Text>
+        </View>
+      )}
+    </ScrollView>
+  );
+
   return (
     <ScreenChrome
       title="Fason Sevk"
@@ -670,35 +857,29 @@ export default function FasonSevkScreen() {
     >
       <View style={[styles.body, isPhone && styles.bodyPhone]}>
         {/* ── SOL: Yeni Sevk ── */}
-        <ScrollView style={styles.formCol} contentContainerStyle={styles.formContent}>
+        <ScrollView
+          style={styles.formCol}
+          contentContainerStyle={[styles.formContent, isPhone && styles.formContentPhone]}
+        >
+          {/* ① İş Emri & Fason */}
           <Surface style={styles.card} elevation={1}>
-            {/* İş Emri — manuel kart girişi + kamera + liste */}
-            <Text style={styles.label}>
-              İş Emri <Text style={styles.required}>*</Text>
-            </Text>
-            {workOrderId ? (
-              <Surface style={styles.woSelected} elevation={0}>
-                <Icon source="card-account-details-outline" size={20} color="#0d9488" />
-                <Text style={styles.woSelectedLabel} numberOfLines={1}>
-                  {workOrderLabel}
-                </Text>
-                <IconButton
-                  icon="close"
-                  size={20}
-                  onPress={() => {
-                    setWorkOrderId('');
-                    setWorkOrderLabel('');
-                    setStepId('');
-                    setSubcontractorId('');
-                    setSubcontractorLabel('');
-                    setPlannedSubId(null);
-                    setDetailsCollapsed(true);
-                  }}
-                  accessibilityLabel="İş emrini kaldır"
-                  style={{ margin: 0 }}
-                />
-              </Surface>
-            ) : (
+            <View style={styles.fieldHead}>
+              <Text style={styles.label}>
+                İş Emri <Text style={styles.required}>*</Text>
+              </Text>
+              {workOrderId ? (
+                <Button
+                  compact
+                  mode="text"
+                  icon="close-circle-outline"
+                  textColor="#64748b"
+                  onPress={clearWorkOrder}
+                >
+                  Vazgeç
+                </Button>
+              ) : null}
+            </View>
+            {!workOrderId && (
               <ScannerEntryBar
                 value={cardInput}
                 onChangeText={setCardInput}
@@ -711,160 +892,194 @@ export default function FasonSevkScreen() {
               />
             )}
 
-            {/* Hangi fason istasyonu */}
+            {/* Fason Adımı + Fason Firma — yan yana (WO seçilince) */}
             {workOrderId && (
               <>
-                <Text style={[styles.label, styles.labelSpaced]}>
-                  Fason Adımı <Text style={styles.required}>*</Text>
-                </Text>
-                {externalSteps.length === 0 ? (
-                  <Text style={styles.warningText}>
-                    Bu iş emrinde sevke uygun fason adımı yok.
-                  </Text>
-                ) : externalSteps.length === 1 ? (
-                  // Tek fason adımı varsa: bilgi kartı (otomatik seçili, tıklanmaya gerek yok)
-                  <View style={styles.lockedInfo}>
-                    <View style={styles.lockedIconBox}>
-                      <Text style={styles.lockedIcon}>🏭</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.lockedLabel}>
-                        {externalSteps[0].station?.name ?? '—'}
-                      </Text>
-                      <Text style={styles.lockedSublabel}>
-                        #{externalSteps[0].stepSequence} ·{' '}
-                        {trLabel(STEP_STATUS_LABEL, externalSteps[0].status)}
-                      </Text>
-                    </View>
-                  </View>
-                ) : (
-                  // Birden fazla fason adımı varsa: picker
-                  <TouchableRipple
-                    onPress={() => setPickerOpen('step')}
-                    style={styles.picker}
-                    borderless
-                  >
-                    <View style={styles.pickerInner}>
-                      <Text
-                        style={[styles.pickerText, !stepId && styles.pickerPlaceholder]}
+                <View style={styles.fieldsRow}>
+                  {/* Fason Adımı */}
+                  <View style={styles.col}>
+                    <Text style={[styles.label, styles.labelSpaced]}>
+                      Fason Adımı <Text style={styles.required}>*</Text>
+                    </Text>
+                    {externalSteps.length === 0 ? (
+                      <Text style={styles.warningText}>Sevke uygun adım yok.</Text>
+                    ) : externalSteps.length === 1 ? (
+                      // Tek adım: otomatik seçili bilgi kartı
+                      <View style={styles.lockedInfo}>
+                        <View style={styles.lockedIconBox}>
+                          <Text style={styles.lockedIcon}>🏭</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.lockedLabel} numberOfLines={1}>
+                            {externalSteps[0].station?.name ?? '—'}
+                          </Text>
+                          <Text style={styles.lockedSublabel} numberOfLines={1}>
+                            #{externalSteps[0].stepSequence} ·{' '}
+                            {trLabel(STEP_STATUS_LABEL, externalSteps[0].status)}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <TouchableRipple
+                        onPress={() => setPickerOpen('step')}
+                        style={styles.picker}
+                        borderless
                       >
-                        {externalSteps.find((s) => s.id === stepId)?.station?.name ??
-                          `${externalSteps.length} fason adımından birini seçiniz...`}
-                      </Text>
-                      <IconButton icon="chevron-down" size={24} />
-                    </View>
-                  </TouchableRipple>
+                        <View style={styles.pickerInner}>
+                          <Text
+                            style={[styles.pickerText, !stepId && styles.pickerPlaceholder]}
+                            numberOfLines={1}
+                          >
+                            {externalSteps.find((s) => s.id === stepId)?.station?.name ??
+                              `${externalSteps.length} adım — seç`}
+                          </Text>
+                          <IconButton icon="chevron-down" size={24} />
+                        </View>
+                      </TouchableRipple>
+                    )}
+                  </View>
+
+                  {/* Fason Firma */}
+                  <View style={styles.col}>
+                    <Text style={[styles.label, styles.labelSpaced]} numberOfLines={1}>
+                      Fason Firma <Text style={styles.required}>*</Text>
+                      {requiredCategoryName ? (
+                        <Text style={styles.helperText}> ({requiredCategoryName})</Text>
+                      ) : null}
+                    </Text>
+                    <TouchableRipple
+                      onPress={() => stepId && setPickerOpen('subcontractor')}
+                      style={[styles.picker, !stepId && styles.pickerDisabled]}
+                      borderless
+                      disabled={!stepId}
+                    >
+                      <View style={styles.pickerInner}>
+                        <Text
+                          style={[styles.pickerText, !subcontractorId && styles.pickerPlaceholder]}
+                          numberOfLines={1}
+                        >
+                          {subcontractorLabel || (stepId ? 'Firma seç...' : 'Önce adım seç')}
+                        </Text>
+                        <IconButton icon="chevron-down" size={24} />
+                      </View>
+                    </TouchableRipple>
+                  </View>
+                </View>
+                {isOverride && (
+                  <View style={styles.overrideWarning}>
+                    <Text style={styles.overrideWarningText}>
+                      ⚠️ Bu sevk plandan farklı bir firmaya yapılıyor. Sebep raporlanacak.
+                    </Text>
+                  </View>
                 )}
               </>
             )}
-
-            {/* Fason Firma */}
-            <Text style={[styles.label, styles.labelSpaced]}>
-              Fason Firma <Text style={styles.required}>*</Text>
-              {requiredCategoryName && (
-                <Text style={styles.helperText}>  ({requiredCategoryName})</Text>
-              )}
-            </Text>
-            <TouchableRipple
-              onPress={() => stepId && setPickerOpen('subcontractor')}
-              style={[styles.picker, !stepId && styles.pickerDisabled]}
-              borderless
-              disabled={!stepId}
-            >
-              <View style={styles.pickerInner}>
-                <Text
-                  style={[
-                    styles.pickerText,
-                    !subcontractorId && styles.pickerPlaceholder,
-                  ]}
-                >
-                  {subcontractorLabel ||
-                    (stepId ? 'Fason firma seçiniz...' : 'Önce fason adımı seçin')}
-                </Text>
-                <IconButton icon="chevron-down" size={24} />
-              </View>
-            </TouchableRipple>
-            {isOverride && (
-              <View style={styles.overrideWarning}>
-                <Text style={styles.overrideWarningText}>
-                  ⚠️ Bu sevk plandan farklı bir firmaya yapılıyor. Sebep raporlanacak.
-                </Text>
-              </View>
-            )}
-
-            {/* Barkod ekleme */}
-            <Text style={[styles.label, styles.labelSpaced]}>Top Barkodu</Text>
-            <ScannerEntryBar
-              value={barcodeInput}
-              onChangeText={setBarcodeInput}
-              placeholder="Barkod gir veya okut..."
-              inputLeftIcon="barcode-scan"
-              resolving={scanning}
-              onScan={() => setRollScannerOpen(true)}
-              onList={() => setRollPickerOpen(true)}
-              tone="blue"
-              extra={
-                <Button
-                  mode="contained"
-                  icon={scanning ? undefined : 'plus'}
-                  onPress={handleAddBarcodeFromInput}
-                  disabled={scanning || !barcodeInput.trim()}
-                  style={styles.addBtn}
-                  contentStyle={styles.addBtnContent}
-                >
-                  {scanning ? <ActivityIndicator size="small" color="#fff" /> : 'Ekle'}
-                </Button>
-              }
-            />
-
-            {/* Eklenen toplar */}
-            {scannedRolls.length > 0 && (
-              <View style={styles.rollList}>
-                <Text style={styles.rollListHeader}>
-                  Sevk listesi ({scannedRolls.length} top,{' '}
-                  {scannedRollsTotal.toFixed(1)} mt)
-                </Text>
-                {scannedRolls.map((r) => (
-                  <ScannedRollRow key={r.id} roll={r} onRemove={handleRemoveRoll} />
-                ))}
-              </View>
-            )}
-
-            {/* Opsiyoneller */}
-            <View style={[styles.row, styles.rowSpaced]}>
-              <View style={styles.col}>
-                <Text style={styles.label}>Plaka</Text>
-                <TextInput
-                  mode="outlined"
-                  value={plateNumber}
-                  onChangeText={setPlateNumber}
-                  placeholder="34 ABC 123"
-                  autoCapitalize="characters"
-                  style={styles.input}
-                />
-              </View>
-              <View style={styles.col}>
-                <Text style={styles.label}>Sürücü</Text>
-                <TextInput
-                  mode="outlined"
-                  value={driverName}
-                  onChangeText={setDriverName}
-                  placeholder="Sürücü adı"
-                  style={styles.input}
-                />
-              </View>
-            </View>
-
-            <Text style={[styles.label, styles.labelSpaced]}>Not (opsiyonel)</Text>
-            <TextInput
-              mode="outlined"
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Sevk notu..."
-              dense
-              style={styles.input}
-            />
           </Surface>
+
+          {/* ② Toplar — asıl iş: okutma + sevk listesi */}
+          {workOrderId && (
+            <Surface style={styles.card} elevation={1}>
+              <Text style={styles.sectionTitle}>
+                Toplar{scannedRolls.length > 0 ? ` (${scannedRolls.length})` : ''}
+              </Text>
+              <ScannerEntryBar
+                value={barcodeInput}
+                onChangeText={setBarcodeInput}
+                placeholder="Barkod gir veya okut..."
+                inputLeftIcon="barcode-scan"
+                resolving={scanning}
+                onScan={() => setRollScannerOpen(true)}
+                onList={() => setRollPickerOpen(true)}
+                tone="blue"
+                extra={
+                  <Button
+                    mode="contained"
+                    icon={scanning ? undefined : 'plus'}
+                    onPress={handleAddBarcodeFromInput}
+                    disabled={scanning || !barcodeInput.trim()}
+                    style={styles.addBtn}
+                    contentStyle={styles.addBtnContent}
+                  >
+                    {scanning ? <ActivityIndicator size="small" color="#fff" /> : 'Ekle'}
+                  </Button>
+                }
+              />
+              {scannedRolls.length > 0 && (
+                <View style={styles.rollList}>
+                  <Text style={styles.rollListHeader}>
+                    Sevk listesi ({scannedRolls.length} top,{' '}
+                    {scannedRollsTotal.toFixed(1)} mt)
+                  </Text>
+                  {scannedRolls.map((r) => (
+                    <ScannedRollRow key={r.id} roll={r} onRemove={handleRemoveRoll} />
+                  ))}
+                </View>
+              )}
+            </Surface>
+          )}
+
+          {/* ③ Sevk Bilgileri (opsiyonel) — katlanır: plaka / sürücü / not */}
+          {workOrderId && (
+            <Surface style={styles.card} elevation={1}>
+              <TouchableRipple
+                onPress={() => setShippingOpen((v) => !v)}
+                borderless
+                style={styles.sectionToggle}
+              >
+                <View style={styles.sectionToggleInner}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sectionTitle}>Sevk Bilgileri (opsiyonel)</Text>
+                    {!shippingOpen && (
+                      <Text style={styles.sectionSub} numberOfLines={1}>
+                        {shippingSummary || 'Plaka · Sürücü · Not'}
+                      </Text>
+                    )}
+                  </View>
+                  <Icon
+                    source={shippingOpen ? 'chevron-up' : 'chevron-down'}
+                    size={22}
+                    color="#64748b"
+                  />
+                </View>
+              </TouchableRipple>
+              {shippingOpen && (
+                <View style={styles.sectionBody}>
+                  <View style={styles.row}>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>Plaka</Text>
+                      <TextInput
+                        mode="outlined"
+                        value={plateNumber}
+                        onChangeText={setPlateNumber}
+                        placeholder="34 ABC 123"
+                        autoCapitalize="characters"
+                        style={styles.input}
+                      />
+                    </View>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>Sürücü</Text>
+                      <TextInput
+                        mode="outlined"
+                        value={driverName}
+                        onChangeText={setDriverName}
+                        placeholder="Sürücü adı"
+                        style={styles.input}
+                      />
+                    </View>
+                  </View>
+                  <Text style={[styles.label, styles.labelSpaced]}>Not</Text>
+                  <TextInput
+                    mode="outlined"
+                    value={notes}
+                    onChangeText={setNotes}
+                    placeholder="Sevk notu..."
+                    dense
+                    style={styles.input}
+                  />
+                </View>
+              )}
+            </Surface>
+          )}
 
           <Button
             mode="contained"
@@ -881,64 +1096,45 @@ export default function FasonSevkScreen() {
           </Button>
         </ScrollView>
 
-        {/* ── SAĞ: Seçili İş Emri Detayları ── */}
-        <View
-          style={[
-            styles.recentsCol,
-            isPhone && styles.recentsColPhone,
-            isPhone && detailsCollapsed && styles.recentsColCollapsed,
-          ]}
-        >
-          <View style={styles.recentsHeader}>
-            <View style={{ flex: 1 }}>
-              <Text variant="titleMedium" style={styles.recentsTitle}>
-                İş Emri Detayları
-              </Text>
-              <Text variant="bodySmall" style={styles.recentsCount}>
-                {selectedWo
-                  ? `Batch ${selectedWo.batchNumber}`
-                  : 'İş emri seçildikçe burada görünür'}
-              </Text>
-            </View>
-            {isPhone && (
-              <IconButton
-                icon={detailsCollapsed ? 'chevron-up' : 'chevron-down'}
-                size={22}
-                onPress={() => setDetailsCollapsed((v) => !v)}
-                style={{ margin: 0 }}
-              />
-            )}
-            {!isPhone && !detailsCollapsed && (
-              <Button
-                mode="contained-tonal"
-                icon="history"
-                compact
-                onPress={() => setRecentDispatchesOpen(true)}
-              >
-                Son Sevkler
-              </Button>
-            )}
-          </View>
-
-          {!(isPhone && detailsCollapsed) && (
-            <ScrollView
-              style={styles.recentsList}
-              contentContainerStyle={styles.detailScrollContent}
-            >
-              {selectedWo ? (
-                <WorkOrderDetailPanel wo={selectedWo} />
-              ) : (
-                <View style={styles.empty}>
-                  <Icon source="clipboard-text-outline" size={56} color="#cbd5e1" />
-                  <Text style={styles.emptyText}>İş emri seçilmedi</Text>
-                  <Text style={styles.emptyHint}>
-                    Sol taraftan bir iş emri seçtikten sonra detaylar burada görünecek
-                  </Text>
+        {/* ── SAĞ (tablet) / ALT (telefon): İş Emri Detayları ──
+            Telefonda 3 konumlu sürüklenebilir alt panel; tablette sabit sütun. */}
+        {isPhone ? (
+          <Animated.View style={[styles.sheet, sheetStyle]}>
+            <GestureDetector gesture={sheetPan}>
+              <View style={styles.sheetHandleArea}>
+                <View style={styles.grabber} />
+                <View style={styles.recentsHeader}>
+                  {detailTitleBlock}
+                  <IconButton
+                    icon={detailsCollapsed ? 'chevron-up' : 'chevron-down'}
+                    size={22}
+                    onPress={() => snapTo(detailsCollapsed ? SHEET_MIDDLE_H : SHEET_COLLAPSED_H)}
+                    style={{ margin: 0 }}
+                    accessibilityLabel={detailsCollapsed ? 'Detayları aç' : 'Detayları gizle'}
+                  />
                 </View>
+              </View>
+            </GestureDetector>
+            <View style={styles.sheetBody}>{detailContent}</View>
+          </Animated.View>
+        ) : (
+          <View style={styles.recentsCol}>
+            <View style={styles.recentsHeader}>
+              {detailTitleBlock}
+              {!detailsCollapsed && (
+                <Button
+                  mode="contained-tonal"
+                  icon="history"
+                  compact
+                  onPress={() => setRecentDispatchesOpen(true)}
+                >
+                  Son Sevkler
+                </Button>
               )}
-            </ScrollView>
-          )}
-        </View>
+            </View>
+            {detailContent}
+          </View>
+        )}
       </View>
 
       {/* ── Picker Modal'lar ── */}
@@ -988,7 +1184,7 @@ export default function FasonSevkScreen() {
           setSubcontractorId('');
           setSubcontractorLabel('');
           setPlannedSubId(null);
-          setDetailsCollapsed(false);
+          snapTo(SHEET_MIDDLE_H);
         }}
       />
       <PickerModal
@@ -1043,8 +1239,15 @@ export default function FasonSevkScreen() {
         visible={cardScannerOpen}
         onDismiss={() => setCardScannerOpen(false)}
         onScan={(data) => {
+          // İşlemeyi modal TAM kapandıktan sonraya ertele (onModalHide) —
+          // toast modal-içi yerine kök toast'ta kalıcı görünsün.
+          pendingCardScanRef.current = data;
           setCardScannerOpen(false);
-          void handleCardScan(data);
+        }}
+        onModalHide={() => {
+          const d = pendingCardScanRef.current;
+          pendingCardScanRef.current = null;
+          if (d) void handleCardScan(d);
         }}
         title="Refakat Kartı Okut"
       />
@@ -1054,9 +1257,18 @@ export default function FasonSevkScreen() {
         visible={rollScannerOpen}
         onDismiss={() => setRollScannerOpen(false)}
         onScan={(data) => {
+          // İşlemeyi modal TAM kapandıktan sonraya ertele (onModalHide) —
+          // toast modal-içi yerine kök toast'ta kalıcı görünsün.
+          pendingRollScanRef.current = data;
           setRollScannerOpen(false);
-          setBarcodeInput(data);
-          void addBarcodeFromString(data);
+        }}
+        onModalHide={() => {
+          const d = pendingRollScanRef.current;
+          pendingRollScanRef.current = null;
+          if (d) {
+            setBarcodeInput(d);
+            void addBarcodeFromString(d);
+          }
         }}
         title="Top Barkodunu Okut"
       />
@@ -1136,6 +1348,7 @@ function RollPickerModal({
   onSelect: (r: Roll) => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
   const device = useDeviceType();
   const isPhone = device === 'phone';
   const [search, setSearch] = useState('');
@@ -1177,9 +1390,7 @@ function RollPickerModal({
       style={pickerStyles.modal}
       useNativeDriver
       hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+      {...modalProps}
     >
       <View
         style={[
@@ -1575,6 +1786,16 @@ const styles = StyleSheet.create({
 
   row: { flexDirection: 'row', gap: 10, alignItems: 'flex-end' },
   rowSpaced: { marginTop: 8 },
+  // İş Emri etiketi + "Değiştir" — aynı satır.
+  fieldHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 32 },
+  // Fason Adımı | Fason Firma — yan yana, üstten hizalı (yükseklikleri farklı olabilir).
+  fieldsRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  // Kart başlığı (Toplar / Sevk Bilgileri).
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  sectionToggle: { borderRadius: 8 },
+  sectionToggleInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionSub: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
+  sectionBody: { marginTop: 4 },
   col: { flex: 1 },
   input: { backgroundColor: '#fff' },
   addBtn: { borderRadius: 8 },
@@ -1641,14 +1862,36 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderLeftColor: '#e2e8f0',
   },
-  recentsColPhone: {
-    borderLeftWidth: 0,
+  // Telefon: alttan sürüklenen panel (absolute overlay). Yükseklik animasyonlu
+  // (sheetStyle). Üst kenarda belirgin gölge formla net ayırır.
+  sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
+    borderColor: '#cbd5e1',
+    overflow: 'hidden',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 20,
   },
-  // Telefon modunda daraltıldığında — sadece başlık görünür; flex sıfır olur
-  // ki üstteki form bölümü kalan alanı kapsasın.
-  recentsColCollapsed: { flex: 0, flexGrow: 0 },
+  sheetHandleArea: { paddingTop: 6 },
+  grabber: {
+    alignSelf: 'center',
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#cbd5e1',
+    marginBottom: 2,
+  },
+  sheetBody: { flex: 1 },
+  formContentPhone: { paddingBottom: SHEET_COLLAPSED_H + 24 },
   recentsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1658,7 +1901,28 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e2e8f0',
   },
   recentsTitle: { fontWeight: '700', color: '#0f172a' },
-  recentsCount: { color: '#64748b', marginTop: 2 },
+  recentsCount: { color: '#64748b', flexShrink: 1 },
+  titleFlex: { flex: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 2,
+  },
+  metaRight: { color: '#475569', fontWeight: '600' },
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusChipText: { fontSize: 11, fontWeight: '700' },
   recentsList: { flex: 1, padding: 10 },
 
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 6 },

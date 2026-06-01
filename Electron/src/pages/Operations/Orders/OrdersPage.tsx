@@ -16,6 +16,7 @@ import { buildOrderColumns } from "./columns";
 import { orderService } from "./service";
 import { OrderDetailSheet } from "./OrderDetailSheet";
 import { OrderFormDialog } from "./OrderFormDialog";
+import { BulkCreateWorkOrderAction } from "./BulkCreateWorkOrderAction";
 import { customerService } from "@/pages/Customers/service";
 import type { Order } from "./types";
 import { generateOrderNumber, type OrderFormValues } from "./schema";
@@ -238,6 +239,12 @@ export function OrdersPage() {
         pagination={pagination}
         emptyText="Sipariş bulunamadı."
         onRowClick={setSelected}
+        bulkActions={(rows) => (
+          <BulkCreateWorkOrderAction
+            orders={rows}
+            onDone={() => table.resetRowSelection()}
+          />
+        )}
       />
 
       <OrderDetailSheet

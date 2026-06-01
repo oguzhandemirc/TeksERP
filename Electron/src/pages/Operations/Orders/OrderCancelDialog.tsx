@@ -226,9 +226,11 @@ function WOActionRow({
           labels={workOrderStatusLabels}
           tones={workOrderStatusTones}
         />
-        <Badge variant="muted" className="text-[10px]">
-          {wo.allocatedQty.toLocaleString("tr-TR")} m tahsisli
-        </Badge>
+        {wo.targetQuantity != null && wo.targetQuantity > 0 && (
+          <Badge variant="muted" className="text-[10px]">
+            {wo.targetQuantity.toLocaleString("tr-TR")} m hedef
+          </Badge>
+        )}
         {wo.producedRollCount > 0 && (
           <Badge variant="muted" className="text-[10px]">
             {wo.producedRollCount} rulo üretilmiş

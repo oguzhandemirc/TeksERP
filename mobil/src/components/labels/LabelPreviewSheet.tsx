@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, StyleSheet, useWindowDimensions, ScrollView } from 'react-native';
 import RNModal from 'react-native-modal';
+import { useFullscreenModalProps } from '../../hooks/useFullscreenModalProps';
 import {
   Text,
   Surface,
@@ -48,6 +49,7 @@ function sourceIcon(s: NameSource | null): { emoji: string; label: string } {
 
 export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
   const { has } = usePermissions();
   const canRead = has('label:read');
   const canEdit = has('label:edit');
@@ -119,9 +121,7 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }:
         onBackdropPress={onDismiss}
         onBackButtonPress={onDismiss}
         backdropOpacity={0.55}
-        deviceWidth={winW}
-        deviceHeight={winH}
-        statusBarTranslucent
+        {...modalProps}
       >
         <View style={styles.sheet}>
           <Text style={styles.title}>Yetki yok</Text>
@@ -139,9 +139,7 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }:
         onBackdropPress={onDismiss}
         onBackButtonPress={onDismiss}
         backdropOpacity={0.55}
-        deviceWidth={winW}
-        deviceHeight={winH}
-        statusBarTranslucent
+        {...modalProps}
         style={styles.modal}
       >
         <View style={[styles.sheet, { width: winW * 0.55, maxHeight: winH * 0.85 }]}>
@@ -214,9 +212,7 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }:
         onBackdropPress={updateMut.isPending ? undefined : () => setEditOpen(false)}
         onBackButtonPress={updateMut.isPending ? undefined : () => setEditOpen(false)}
         backdropOpacity={0.55}
-        deviceWidth={winW}
-        deviceHeight={winH}
-        statusBarTranslucent
+        {...modalProps}
         style={styles.modal}
       >
         <View style={[styles.sheet, { width: winW * 0.5 }]}>

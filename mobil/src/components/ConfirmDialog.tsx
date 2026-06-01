@@ -8,6 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import RNModal from 'react-native-modal';
+import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 import {
   Text,
   TextInput,
@@ -86,6 +87,7 @@ type Props = SimpleProps | DestructiveProps;
 
 export default function ConfirmDialog(props: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
   const isDestructive = props.kind === 'destructive';
 
   // Sebep state — destructive + reason geçilince aktif olur.
@@ -159,9 +161,7 @@ export default function ConfirmDialog(props: Props) {
       backdropOpacity={0.55}
       useNativeDriver
       hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+      {...modalProps}
       style={styles.modal}
       avoidKeyboard={!!reasonCfg}
     >

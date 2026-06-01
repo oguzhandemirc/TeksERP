@@ -50,6 +50,15 @@ export default function MainNavigator() {
       {allowedScreens.map((s) => (
         <Stack.Screen key={s.key} name={s.key} getComponent={SCREEN_LOADERS[s.key]} />
       ))}
+      {/* Alt sayfalar — Tartı/Paket & Sevkiyat'tan push edilir (modül değil, yetki-bağımsız). */}
+      <Stack.Screen
+        name="SevkiyatGecmisi"
+        getComponent={() => require('../screens/Modules/Sevkiyat/SevkiyatGecmisiScreen').default}
+      />
+      <Stack.Screen
+        name="Paketleme"
+        getComponent={() => require('../screens/Modules/TartiPaket/PaketlemeScreen').default}
+      />
     </Stack.Navigator>
   );
 }

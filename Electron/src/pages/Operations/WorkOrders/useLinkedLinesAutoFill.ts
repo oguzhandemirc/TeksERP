@@ -6,10 +6,10 @@ import type { WorkOrderFormValues } from "./schema";
 /**
  * Bağlı sipariş kalemleri → form alanları otomatik senkronizasyonu.
  *
- * - `derived`: kalemlerden türeyen `totalQuantity` (toplam) ve `width`
- *   (tüm en'ler eşitse o değer, değilse null).
- * - `handleLinesChange`: kalem ekle/sil — form'un `orderLineIds`'i + state'i günceller,
- *   `targetQuantity` ve (eşitse) `width` her zaman senkronize tutulur.
+ * - `derived`: kalemlerden türeyen `totalQuantity` (açık toplamı = hedef metraj
+ *   ÖNERİSİ, kullanıcı değiştirebilir) ve `width` (tüm en'ler eşitse o değer).
+ * - `handleLinesChange`: kalem ekle/sil — form'un `orderLineIds`'i + state'i günceller
+ *   (link-only, metraj taşımaz); `targetQuantity` önerisi + (eşitse) `width` senkron.
  * - `handlePickerConfirm`: picker onayında targetItem + targetPropertyIds otomatik dolar
  *   (tüm kalemler aynı ürün ise). Kalem silmede yeniden çalışmaz.
  */
@@ -22,7 +22,8 @@ export function useLinkedLinesAutoFill(form: UseFormReturn<WorkOrderFormValues>)
     if (!first) return null;
     const allSameWidth = pickedLines.every((l) => l.width === first.width);
     return {
-      totalQuantity: pickedLines.reduce((sum, l) => sum + Number(l.allocatedQty), 0),
+      // Önerilen hedef metraj = bağlı kalemlerin açık (sevk edilmemiş) toplamı.
+      totalQuantity: pickedLines.reduce((sum, l) => sum + Number(l.openQty), 0),
       width: allSameWidth && first.width != null ? first.width : null,
     };
   }, [pickedLines]);
@@ -36,13 +37,10 @@ export function useLinkedLinesAutoFill(form: UseFormReturn<WorkOrderFormValues>)
 
   const handleLinesChange = (next: PickedOrderLine[]) => {
     setPickedLines(next);
+    // Link-only: yalnız hangi kalemler bağlı — metraj taşımaz (fazla → stok).
     form.setValue(
       "orderLineIds",
       next.map((l) => l.lineId),
-    );
-    form.setValue(
-      "orderLineAllocations",
-      next.map((l) => ({ orderLineId: l.lineId, allocatedQty: l.allocatedQty })),
     );
   };
 

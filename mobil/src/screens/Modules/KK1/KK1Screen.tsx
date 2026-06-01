@@ -29,6 +29,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import Modal from 'react-native-modal';
+import { useFullscreenModalProps } from '../../../hooks/useFullscreenModalProps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import dayjs from 'dayjs';
 
@@ -992,6 +993,7 @@ function RecentsDrawer({
   onScrap,
 }: RecentsDrawerProps) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
   const insets = useSafeAreaInsets();
   // Telefon dar; drawer genişliği ekranın %85'i veya max 380px
   const drawerWidth = Math.min(winW * 0.85, 380);
@@ -1008,16 +1010,14 @@ function RecentsDrawer({
       style={drawerStyles.modal}
       useNativeDriver
       hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+      {...modalProps}
     >
       <View
         style={[
           drawerStyles.sheet,
           {
             width: drawerWidth,
-            height: winH,
+            height: '100%',
             paddingTop: insets.top + 8,
             paddingBottom: insets.bottom + 12,
             paddingRight: Math.max(insets.right, 12),
@@ -1149,6 +1149,7 @@ function RollHistoryModal({
   onScrap,
 }: RollHistoryModalProps) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
   const isPhone = useDeviceType() === 'phone';
 
   return (
@@ -1161,9 +1162,7 @@ function RollHistoryModal({
       style={historyStyles.modal}
       useNativeDriver
       hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+      {...modalProps}
     >
       {/* Telefonda daha geniş + daha kısa (satırlar compact ile alçaldı). */}
       <View
@@ -1295,6 +1294,7 @@ interface ScrapConfirmModalProps {
 
 function ScrapConfirmModal({ roll, loading, onDismiss, onConfirm }: ScrapConfirmModalProps) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
   const sheetWidth = Math.min(winW * 0.9, 460);
 
   return (
@@ -1308,9 +1308,7 @@ function ScrapConfirmModal({ roll, loading, onDismiss, onConfirm }: ScrapConfirm
       style={scrapStyles.modal}
       useNativeDriver
       hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+      {...modalProps}
     >
       <View style={[scrapStyles.sheet, { width: sheetWidth }]}>
         <View style={scrapStyles.iconCircle}>

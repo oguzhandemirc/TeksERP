@@ -48,18 +48,8 @@ export function LinkedOrderLinesField({
   };
   const handleRemove = (lineId: string) =>
     onChange(lines.filter((l) => l.lineId !== lineId));
-  const handleQtyChange = (lineId: string, value: string) => {
-    const n = value === "" ? 0 : Number(value);
-    onChange(
-      lines.map((l) =>
-        l.lineId === lineId
-          ? { ...l, allocatedQty: Number.isFinite(n) && n >= 0 ? n : 0 }
-          : l,
-      ),
-    );
-  };
 
-  const totalQty = lines.reduce((s, l) => s + Number(l.allocatedQty), 0);
+  const totalQty = lines.reduce((s, l) => s + Number(l.openQty), 0);
   const uniqueCustomers = new Set(lines.map((l) => l.customerId)).size;
   const deadline = earliestDeadline(lines);
 
@@ -194,20 +184,8 @@ export function LinkedOrderLinesField({
                     {line.width ? ` × ${line.width}cm` : ""}
                   </span>
                 </div>
-                <div className="mt-1.5 flex items-center gap-1.5">
-                  <span className="text-[10px] font-medium text-muted-foreground">
-                    Tahsis
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={line.allocatedQty}
-                    onChange={(e) => handleQtyChange(line.lineId, e.target.value)}
-                    className="h-6 w-20 rounded border bg-background px-1.5 text-right text-[11px] tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
-                  <span className="text-[10px] text-muted-foreground">
-                    m · açık {line.openQty.toLocaleString("tr-TR")}
-                  </span>
+                <div className="mt-1 text-[10px] text-muted-foreground">
+                  Açık {line.openQty.toLocaleString("tr-TR")} m (sevk edilmemiş)
                 </div>
                 {line.requiredProperties.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">

@@ -3,6 +3,7 @@ import {
   Factory,
   Package,
   Layers,
+  Scale,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,6 +31,14 @@ export const operationsTiles: OperationsTile[] = [
     description: "Üretim partileri ve rota ilerleyişi",
     icon: Factory,
     to: "/operations/work-orders",
+    permission: "workorder:read",
+  },
+  {
+    key: "product-balance",
+    title: "Ürün Dengesi",
+    description: "Talep ↔ depo + üretim; eksik kadar iş emri aç",
+    icon: Scale,
+    to: "/operations/product-balance",
     permission: "workorder:read",
   },
   {

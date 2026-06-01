@@ -37,6 +37,8 @@ export interface OpenOrder {
     deadline: string | null;
     customer: Ref;
     branch: { id: string; name: string } | null;
+    /** Doluysa sipariş zaten aktif bir sevkiyatta → ekranda "Sürdür". */
+    activeShipment: { id: string; shipmentNo: string; status: ShipmentStatus } | null;
   };
   lines: OpenOrderLine[];
 }

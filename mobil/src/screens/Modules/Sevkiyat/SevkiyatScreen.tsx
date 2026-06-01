@@ -7,14 +7,19 @@ import {
   TextInput,
   ActivityIndicator,
   Divider,
+  Appbar,
 } from 'react-native-paper';
 import RNModal from 'react-native-modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { packingService, type ShipmentListItem } from '../../../services/packing.service';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
+import { useFullscreenModalProps } from '../../../hooks/useFullscreenModalProps';
+import type { MainStackParamList } from '../../../navigation/types';
 
 // =============================================================================
 // Sevkiyat — telefon dikey. Kapıdaki (READY) sevkiyatlar → plaka/şoför → kamyon.
@@ -23,6 +28,8 @@ import { usePortraitLock } from '../../../hooks/usePortraitLock';
 
 export default function SevkiyatScreen() {
   usePortraitLock();
+  const modalProps = useFullscreenModalProps();
+  const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const qc = useQueryClient();
   const [dispatchShip, setDispatchShip] = useState<ShipmentListItem | null>(null);
   const [plate, setPlate] = useState('');
@@ -67,7 +74,18 @@ export default function SevkiyatScreen() {
   const loading = readyQuery.isLoading;
 
   return (
-    <ScreenChrome title="Sevkiyat" subtitle="Kapıdaki sevkiyatlar → kamyon">
+    <ScreenChrome
+      title="Sevkiyat"
+      subtitle="Kapıdaki sevkiyatlar → kamyon"
+      headerExtras={
+        <Appbar.Action
+          icon="history"
+          color="#fff"
+          onPress={() => nav.navigate('SevkiyatGecmisi')}
+          accessibilityLabel="Sevkiyat geçmişi"
+        />
+      }
+    >
       <ScrollView contentContainerStyle={styles.root}>
         {loading && <ActivityIndicator style={{ marginTop: 24 }} />}
 
@@ -130,7 +148,7 @@ export default function SevkiyatScreen() {
         )}
       </ScrollView>
 
-      <RNModal isVisible={dispatchShip !== null} onBackdropPress={() => setDispatchShip(null)} style={styles.modal}>
+      <RNModal isVisible={dispatchShip !== null} onBackdropPress={() => setDispatchShip(null)} style={styles.modal} {...modalProps}>
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
             {dispatchShip?.shipmentNo} — Sevk Et

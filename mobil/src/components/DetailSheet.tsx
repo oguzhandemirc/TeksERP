@@ -6,6 +6,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import RNModal from 'react-native-modal';
+import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 import {
   Text,
   IconButton,
@@ -75,6 +76,7 @@ export default function DetailSheet({
   children,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
   return (
     <RNModal
       isVisible={visible}
@@ -84,9 +86,7 @@ export default function DetailSheet({
       style={styles.modal}
       useNativeDriver
       hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+      {...modalProps}
     >
       <View
         style={[

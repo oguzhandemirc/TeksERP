@@ -71,12 +71,13 @@ export interface CoverageLine {
   width: number | null;
   requested: number;
   shipped: number;
-  reserved: number;
+  /** Bu spec'i üreten canlı WO'ların in-flight'ı (committed − finished). Spec-havuz. */
+  inProduction: number;
   /** Etiketsiz, eşleşen depodaki hazır stok. */
   freeWarehouse: number;
   /** Etiketsiz, eşleşen ham stok. */
   freeStock: number;
-  /** istenen − sevk − rezerve − serbest depo − ham. Eksi = fazla (üretme). */
+  /** istenen − sevk − üretimde − serbest depo − ham. Eksi = fazla (üretme). */
   netGap: number;
 }
 

@@ -6,6 +6,17 @@ import type { WorkOrderFormValues } from "./schema";
 import type { WorkOrder } from "./types";
 import type { Order } from "@/pages/Operations/Orders/types";
 
+/**
+ * Ürün Dengesi "WO Aç (stoğa üret)" → WO formuna sipariş bağı olmadan hedef
+ * spec + miktar seed'i. Bağlı (siparişlere bağla) mod seedPickedLines kullanır.
+ */
+export interface WoSeedTarget {
+  itemId: string;
+  colorId: string | null;
+  width: number | null;
+  targetQuantity: number | null;
+}
+
 function dateToInput(iso: string | null | undefined): string {
   if (!iso) return "";
   return iso.slice(0, 10);
@@ -25,10 +36,6 @@ export function formValuesFromWorkOrder(wo: WorkOrder): WorkOrderFormValues {
     targetColorId: wo.targetColorId,
     targetPropertyIds: (wo.targetProperties ?? []).map((p) => p.propertyId),
     orderLineIds: (wo.orderLinks ?? []).map((l) => l.orderLineId),
-    orderLineAllocations: (wo.orderLinks ?? []).map((l) => ({
-      orderLineId: l.orderLineId,
-      allocatedQty: l.allocatedQty ?? 0,
-    })),
     width: wo.width,
     targetQuantity: wo.targetQuantity,
     plannedStartDate: dateToInput(wo.plannedStartDate),
@@ -56,7 +63,6 @@ export function pickedLinesFromWorkOrder(wo: WorkOrder): PickedOrderLine[] {
       itemColorName: ol.color?.name ?? null,
       quantity: ol.quantity,
       openQty: ol.quantity,
-      allocatedQty: link.allocatedQty ?? ol.quantity,
       width: ol.width ?? null,
       requiredProperties: (ol.requiredProperties ?? []).map((rp) => ({
         id: rp.propertyId,
@@ -69,15 +75,15 @@ export function pickedLinesFromWorkOrder(wo: WorkOrder): PickedOrderLine[] {
 
 /**
  * Bir siparişin kalemlerinden WO picker satırları üretir — "Bu siparişten iş
- * emri oluştur" kısayolu için. Zaten aktif (CANCELLED dışı) bir WO'ya bağlı
- * kalemler dışlanır; çift bağlamayı önler.
+ * emri oluştur" kısayolu için. Sevki tamamlanmamış (quantity − shippedQty > 0)
+ * kalemler alınır; openQty kalan (sevk edilmemiş) kadar gelir (link-only — metraj
+ * taşımaz). Üretim önceliği/dengesi Ürün Dengesi ekranında; burası pratik kısayol.
  */
 export function pickedLinesFromOrder(order: Order): PickedOrderLine[] {
   return (order.lines ?? [])
-    .filter((l) =>
-      (l.workOrderLinks ?? []).every((w) => w.workOrder.status === "CANCELLED"),
-    )
-    .map((l) => buildPicked(order, l));
+    .map((l) => ({ l, rem: Number(l.quantity) - Number(l.shippedQty ?? 0) }))
+    .filter((x) => x.rem > 0)
+    .map((x) => buildPicked(order, { ...x.l, openQty: x.rem }));
 }
 
 export interface RoutePrefillState {

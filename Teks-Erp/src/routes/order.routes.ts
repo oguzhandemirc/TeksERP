@@ -281,8 +281,7 @@ router.get(
   requirePermission("order:read"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const excludeWorkOrderId = req.query.excludeWorkOrderId as string | undefined;
-      const result = await service.findAvailableForWorkOrder(req, excludeWorkOrderId);
+      const result = await service.findAvailableForWorkOrder(req);
       res.json(result);
     } catch (e) {
       next(e);

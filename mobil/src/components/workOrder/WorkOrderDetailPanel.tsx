@@ -17,11 +17,19 @@ import {
  * Seçili iş emrinin sevkiyat odaklı özet paneli.
  * Hem fason sevk ekranında, hem de sevk geçmişi modalında kullanılır.
  */
-export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
+export default function WorkOrderDetailPanel({
+  wo,
+  hideStatusWidth = false,
+}: {
+  wo: WorkOrder;
+  /** Durum + en bilgisi panel dışında (örn. başlıkta) gösteriliyorsa burada gizle. */
+  hideStatusWidth?: boolean;
+}) {
   const dispatched = wo.dispatchedTotalQty ?? 0;
   const target = wo.targetQuantity ?? null;
   const remaining = target != null ? Math.max(0, target - dispatched) : null;
   const overshoot = target != null && dispatched > target;
+  const showWidth = wo.width != null && !hideStatusWidth;
 
   const externalStations = useMemo(
     () =>
@@ -77,27 +85,33 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerStrip}>
-        <View
-          style={[
-            styles.statusDot,
-            { backgroundColor: WORK_ORDER_STATUS_COLOR[wo.status] ?? '#64748b' },
-          ]}
-        />
-        <Text style={styles.statusText}>
-          {trLabel(WORK_ORDER_STATUS_LABEL, wo.status)}
-        </Text>
-        {isStock && (
-          <View style={[styles.typeTag, styles.stockTag]}>
-            <Icon source="package-variant" size={12} color="#1e40af" />
-            <Text style={[styles.typeTagText, { color: '#1e40af' }]}>Stoka</Text>
-          </View>
-        )}
-      </View>
+      {(!hideStatusWidth || isStock) && (
+        <View style={styles.headerStrip}>
+          {!hideStatusWidth && (
+            <>
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: WORK_ORDER_STATUS_COLOR[wo.status] ?? '#64748b' },
+                ]}
+              />
+              <Text style={styles.statusText}>
+                {trLabel(WORK_ORDER_STATUS_LABEL, wo.status)}
+              </Text>
+            </>
+          )}
+          {isStock && (
+            <View style={[styles.typeTag, styles.stockTag]}>
+              <Icon source="package-variant" size={12} color="#1e40af" />
+              <Text style={[styles.typeTagText, { color: '#1e40af' }]}>Stoka</Text>
+            </View>
+          )}
+        </View>
+      )}
 
-      {(target != null || dispatched > 0 || wo.width != null) && (
+      {(target != null || dispatched > 0 || showWidth) && (
         <View style={styles.card}>
-          {(target != null || wo.width != null) && (
+          {(target != null || showWidth) && (
             <View style={styles.badgeRow}>
               {target != null && (
                 <View style={styles.badge}>
@@ -105,7 +119,7 @@ export default function WorkOrderDetailPanel({ wo }: { wo: WorkOrder }) {
                   <Text style={styles.badgeText}>{target} mt hedef</Text>
                 </View>
               )}
-              {wo.width != null && (
+              {showWidth && (
                 <View style={styles.badge}>
                   <Icon source="arrow-expand-horizontal" size={13} color="#0f172a" />
                   <Text style={styles.badgeText}>{wo.width} cm</Text>

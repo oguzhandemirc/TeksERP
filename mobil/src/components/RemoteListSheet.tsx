@@ -7,6 +7,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import RNModal from 'react-native-modal';
+import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 import {
   Text,
   IconButton,
@@ -65,6 +66,13 @@ interface Props<T> {
    *  amaçlı). Default false. */
   useScrollView?: boolean;
 
+  /** Infinite scroll — FlashList sona yaklaşınca tetiklenir (useScrollView=false
+   *  iken). Sayfalı listeler için `fetchNextPage` bağla. */
+  onEndReached?: () => void;
+  /** Liste sonuna (scroll içinde) render edilen footer — örn. "daha yükleniyor"
+   *  spinner'ı. FlashList ListFooterComponent'ine geçer. */
+  listFooterComponent?: React.ReactElement | null;
+
   // Boş durum
   emptyIcon?: string;
   emptyText?: string;
@@ -111,6 +119,8 @@ export default function RemoteListSheet<T>({
   keyExtractor,
   renderItem,
   useScrollView = false,
+  onEndReached,
+  listFooterComponent,
   emptyIcon,
   emptyText = 'Kayıt yok',
   emptyHint,
@@ -124,6 +134,7 @@ export default function RemoteListSheet<T>({
   overlay,
 }: Props<T>) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
 
   return (
     <RNModal
@@ -134,9 +145,7 @@ export default function RemoteListSheet<T>({
       style={styles.modal}
       useNativeDriver
       hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+      {...modalProps}
     >
       <View
         style={[
@@ -218,6 +227,10 @@ export default function RemoteListSheet<T>({
               keyExtractor={keyExtractor}
               renderItem={({ item }) => renderItem(item)}
               contentContainerStyle={styles.listContent}
+              onEndReached={onEndReached}
+              onEndReachedThreshold={0.6}
+              ListFooterComponent={listFooterComponent ?? undefined}
+              keyboardShouldPersistTaps="handled"
             />
           )}
         </View>

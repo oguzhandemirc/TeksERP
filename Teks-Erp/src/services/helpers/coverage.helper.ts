@@ -1,42 +1,33 @@
 // =============================================================================
-// Sipariş kalemi kapsama (coverage) — GEVŞEK MODEL (spec-aggregate)
+// Sipariş kalemi kapsama (coverage) — GEVŞEK / HİBRİT MODEL
 // =============================================================================
-// Top→sipariş bağı (Roll.targetOrderLineId) KALDIRILDI. Karşılanma iki defterden
-// türetilir:
-//   1) Sevk (gerçek):  OrderLine.shippedQty  (= Σ ShipmentAllocation.qty)
-//   2) Tahsis (plan):  WorkOrderToOrderLine.allocatedQty (canlı WO in-flight payı)
+// Top→sipariş bağı yok; kumaş spec (ürün+renk+en) bazında fungible havuz. Bir
+// sipariş kaleminin "kapsaması" yalnız GERÇEKLEŞEN sevkten türetilir:
+//   coverage(L) = shipped(L) = OrderLine.shippedQty  (= Σ ShipmentAllocation.qty)
+//   open(L)     = quantity(L) − shipped(L)
 //
-// MODEL (her sipariş satırı L için):
-//   shipped(L)  = OrderLine.shippedQty — Sevke Hazır anında düşülen metraj
-//   reserved(L) = Σ canlı WO için: o WO'nun bitmemiş (in-flight) üretiminin L'e
-//                 düşen payı. inFlight(W) = max(0, totalAlloc(W) − finishedByW).
-//                 Yani WO üretimini bitirdikçe plan-rezervi erir; üretilen mal
-//                 depoya/serbest stoğa düşer ve spec-toplam olarak sayılır.
-//   coverage(L) = shipped + reserved
-//   open(L)     = quantity(L) − coverage(L)
+// ESKİ pro-rata "plan rezervesi" KALDIRILDI. WorkOrderToOrderLine.allocatedQty
+// payına göre bölmek "saçma ondalık" (…,3714) üretiyordu ve sipariş üretime
+// girince "kapanıp" yeniden iş emrine bağlanamıyordu. Artık WO↔sipariş bağı
+// yalnız "bu iş emri hangi siparişler için" niyetini taşır (Tambur bunu
+// kullanır); metraj muhasebesi taşımaz. "Ne kadar üretmeliyim" sorusu
+// spec-toplam dengesinden gelir → production-balance.service (Ürün Dengesi) +
+// order.service.getCoverageForLines (kapsama paneli).
 //
-// "Depodaki serbest stok" (WAREHOUSE/STOCK) bu kapsamaya GİRMEZ — fungible havuz
-// olduğu için satıra atfedilemez (çift sayım). Onu spec bazında ayrı gösteren
-// getCoverageForLines (order.service) yapar. Burada yalnız satıra ait kesin
-// muhasebe (sevk + plan rezervi) hesaplanır.
+// Bu dosya iki şey sağlar:
+//   1) computeLineCoverage — satır başına sevk (open = quantity − shipped)
+//   2) computeWoMaterial   — WO başına committed/finished malzeme defteri
+//      (Ürün Dengesi "üretimde" + kapsama paneli "in-flight" için tek kaynak)
 // =============================================================================
 
-import { Prisma, RollStatus, WorkOrderStatus } from "@prisma/client";
+import { Prisma, RollStatus } from "@prisma/client";
 
 type Client = Prisma.TransactionClient | {
   orderLine: Prisma.TransactionClient["orderLine"];
   roll: Prisma.TransactionClient["roll"];
-  workOrderToOrderLine: Prisma.TransactionClient["workOrderToOrderLine"];
+  rollMovement: Prisma.TransactionClient["rollMovement"];
   workOrderStep: Prisma.TransactionClient["workOrderStep"];
 };
-
-// "Plan rezervesi" hesabına dahil WO statüleri (CANCELLED hariç — iptal serbest bırakır).
-const BLOCKING: WorkOrderStatus[] = [
-  WorkOrderStatus.PLANNED,
-  WorkOrderStatus.IN_PROGRESS,
-  WorkOrderStatus.PAUSED,
-  WorkOrderStatus.COMPLETED,
-];
 
 // Terminal çıktı statüleri — "bu metraj artık üretildi/karara bağlandı".
 const FINISHED_OUTPUT: RollStatus[] = [
@@ -48,109 +39,142 @@ const FINISHED_OUTPUT: RollStatus[] = [
 
 export interface LineCoverage {
   shipped: Prisma.Decimal;
+  /** Geriye uyumluluk için 0 — pro-rata plan rezervesi kaldırıldı. */
   reserved: Prisma.Decimal;
-  /** shipped + reserved */
+  /** shipped + reserved (= shipped). */
   coverage: Prisma.Decimal;
 }
 
 const D0 = () => new Prisma.Decimal(0);
 
 /**
- * Verilen sipariş satırları için kapsama kovalarını (shipped + reserved) döner.
- * `excludeWorkOrderId` verilirse o WO'nun tahsisi reserved'a katılmaz
- * (WO düzenleme/oluşturma picker'ında kendi rezervini saymamak için).
+ * Verilen sipariş satırları için kapsama (yalnız sevk) döner.
+ * open = quantity − coverage = quantity − shipped. WO bağı kapsamayı ETKİLEMEZ
+ * (gevşek model: sipariş ancak sevk edilince kapanır, üretime girince değil).
  */
 export async function computeLineCoverage(
   client: Client,
-  lineIds: string[],
-  opts?: { excludeWorkOrderId?: string }
+  lineIds: string[]
 ): Promise<Map<string, LineCoverage>> {
   const result = new Map<string, LineCoverage>();
   const ids = [...new Set(lineIds)];
   if (ids.length === 0) return result;
 
-  // 1) Sevk edilen — satır bazlı denormalize alan (ShipmentAllocation toplamı).
+  // Sevk edilen — satır bazlı denormalize alan (ShipmentAllocation toplamı).
   const lineRows = await client.orderLine.findMany({
     where: { id: { in: ids } },
     select: { id: true, shippedQty: true },
   });
-  const shippedByLine = new Map<string, Prisma.Decimal>();
-  for (const l of lineRows) shippedByLine.set(l.id, new Prisma.Decimal(l.shippedQty));
+  for (const l of lineRows) {
+    const shipped = new Prisma.Decimal(l.shippedQty);
+    result.set(l.id, { shipped, reserved: D0(), coverage: shipped });
+  }
+  return result;
+}
 
-  // 2) Bu satırlara bağlı tüm WO link'leri (allocatedQty + WO status).
-  const links = await client.workOrderToOrderLine.findMany({
-    where: { orderLineId: { in: ids } },
-    select: { orderLineId: true, allocatedQty: true, workOrderId: true, workOrder: { select: { status: true } } },
-  });
+export interface WoMaterial {
+  /** WO ilk adımına giren ham malzeme (initialQty toplamı, CANCELLED/STOCK hariç). */
+  committed: Prisma.Decimal;
+  /** WO adımlarında üretilip terminal çıktıya ulaşan metraj (currentQty toplamı). */
+  finished: Prisma.Decimal;
+}
 
-  // Canlı + (exclude değil) WO id'leri.
-  const liveWoIds = [
-    ...new Set(
-      links
-        .filter((l) => BLOCKING.includes(l.workOrder.status) && l.workOrderId !== opts?.excludeWorkOrderId)
-        .map((l) => l.workOrderId)
-    ),
-  ];
+/**
+ * Verilen WO'lar için "üretime giren malzeme (committed)" ve "üretilen terminal
+ * çıktı (finished)" defterini döner. committed RollMovement (append-only, ilk
+ * adıma giriş) üzerinden — INTERNAL + EXTERNAL/boyahane ilk adımda çalışır;
+ * top sonra fasona/tambura geçse, producedInStepId null kalsa bile sabit.
+ * Hem kapsama paneli "in-flight" (order.service) hem Ürün Dengesi "üretimde"
+ * hesabı (production-balance.service) bunu kullanır → tek kaynak.
+ */
+export async function computeWoMaterial(
+  client: Client,
+  woIds: string[]
+): Promise<Map<string, WoMaterial>> {
+  const out = new Map<string, WoMaterial>();
+  const ids = [...new Set(woIds)];
+  if (ids.length === 0) return out;
 
-  // 3) Bu WO'ların TÜM tahsisleri (totalAlloc(W) için — pay hesabı) + adımları.
+  const committedByWo = new Map<string, Prisma.Decimal>();
   const finishedByWo = new Map<string, Prisma.Decimal>();
-  const totalAllocByWo = new Map<string, Prisma.Decimal>();
-  if (liveWoIds.length > 0) {
-    const allLinks = await client.workOrderToOrderLine.findMany({
-      where: { workOrderId: { in: liveWoIds } },
-      select: { workOrderId: true, allocatedQty: true },
-    });
-    for (const l of allLinks) {
-      totalAllocByWo.set(l.workOrderId, (totalAllocByWo.get(l.workOrderId) ?? D0()).plus(l.allocatedQty ?? 0));
+
+  const steps = await client.workOrderStep.findMany({
+    where: { workOrderId: { in: ids } },
+    select: { id: true, workOrderId: true, stepSequence: true },
+  });
+  const stepToWo = new Map<string, string>();
+  // WO başına ilk (en düşük stepSequence) adım — malzeme girişi buraya yazılır.
+  const firstStepByWo = new Map<string, { id: string; seq: number }>();
+  for (const s of steps) {
+    stepToWo.set(s.id, s.workOrderId);
+    const cur = firstStepByWo.get(s.workOrderId);
+    if (!cur || s.stepSequence < cur.seq) {
+      firstStepByWo.set(s.workOrderId, { id: s.id, seq: s.stepSequence });
     }
+  }
+  const stepIds = steps.map((s) => s.id);
 
-    const steps = await client.workOrderStep.findMany({
-      where: { workOrderId: { in: liveWoIds } },
-      select: { id: true, workOrderId: true },
+  if (stepIds.length > 0) {
+    // finished: producedInStepId ∈ W.steps ve status terminal çıktı.
+    const finishedRows = await client.roll.groupBy({
+      by: ["producedInStepId"],
+      where: { producedInStepId: { in: stepIds }, status: { in: FINISHED_OUTPUT } },
+      _sum: { currentQty: true },
     });
-    const stepToWo = new Map<string, string>();
-    for (const s of steps) stepToWo.set(s.id, s.workOrderId);
-    const stepIds = steps.map((s) => s.id);
+    for (const r of finishedRows) {
+      if (!r.producedInStepId) continue;
+      const woId = stepToWo.get(r.producedInStepId);
+      if (!woId) continue;
+      finishedByWo.set(woId, (finishedByWo.get(woId) ?? D0()).plus(r._sum.currentQty ?? 0));
+    }
+  }
 
-    if (stepIds.length > 0) {
-      // finishedByW: producedInStepId ∈ W.steps ve status terminal çıktı.
-      const finishedRows = await client.roll.groupBy({
-        by: ["producedInStepId"],
-        where: { producedInStepId: { in: stepIds }, status: { in: FINISHED_OUTPUT } },
-        _sum: { currentQty: true },
+  // committed: ilk adıma RollMovement ile giren ayrık topların initialQty toplamı.
+  const firstStepToWo = new Map<string, string>();
+  for (const [woId, s] of firstStepByWo) firstStepToWo.set(s.id, woId);
+  const firstStepIds = [...firstStepToWo.keys()];
+  if (firstStepIds.length > 0) {
+    const moves = await client.rollMovement.findMany({
+      where: { workOrderStepId: { in: firstStepIds } },
+      select: { rollId: true, workOrderStepId: true },
+    });
+    const rollIdsByStep = new Map<string, Set<string>>();
+    const allRollIds = new Set<string>();
+    for (const m of moves) {
+      if (!m.workOrderStepId) continue;
+      allRollIds.add(m.rollId);
+      let set = rollIdsByStep.get(m.workOrderStepId);
+      if (!set) {
+        set = new Set();
+        rollIdsByStep.set(m.workOrderStepId, set);
+      }
+      set.add(m.rollId);
+    }
+    if (allRollIds.size > 0) {
+      const rolls = await client.roll.findMany({
+        where: {
+          id: { in: [...allRollIds] },
+          status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
+        },
+        select: { id: true, initialQty: true },
       });
-      for (const r of finishedRows) {
-        if (!r.producedInStepId) continue;
-        const woId = stepToWo.get(r.producedInStepId);
+      const qtyByRoll = new Map<string, Prisma.Decimal>();
+      for (const r of rolls) qtyByRoll.set(r.id, new Prisma.Decimal(r.initialQty));
+      for (const [stepId, rollSet] of rollIdsByStep) {
+        const woId = firstStepToWo.get(stepId);
         if (!woId) continue;
-        finishedByWo.set(woId, (finishedByWo.get(woId) ?? D0()).plus(r._sum.currentQty ?? 0));
+        let sum = committedByWo.get(woId) ?? D0();
+        for (const rid of rollSet) sum = sum.plus(qtyByRoll.get(rid) ?? 0);
+        committedByWo.set(woId, sum);
       }
     }
   }
 
-  // 4) Her satır için reserved = Σ canlı link: inFlight(W) × pay(L).
-  for (const lineId of ids) {
-    let reserved = D0();
-    for (const link of links) {
-      if (link.orderLineId !== lineId) continue;
-      if (!BLOCKING.includes(link.workOrder.status)) continue;
-      if (link.workOrderId === opts?.excludeWorkOrderId) continue;
-      const totalAlloc = totalAllocByWo.get(link.workOrderId) ?? D0();
-      if (totalAlloc.lessThanOrEqualTo(0)) continue; // 0-alloc link → rezerve katmaz
-      const finished = finishedByWo.get(link.workOrderId) ?? D0();
-      const inFlight = Prisma.Decimal.max(0, totalAlloc.minus(finished));
-      const share = new Prisma.Decimal(link.allocatedQty ?? 0).div(totalAlloc);
-      reserved = reserved.plus(inFlight.times(share));
-    }
-    const shipped = shippedByLine.get(lineId) ?? D0();
-    result.set(lineId, {
-      shipped,
-      reserved,
-      coverage: shipped.plus(reserved),
+  for (const woId of ids) {
+    out.set(woId, {
+      committed: committedByWo.get(woId) ?? D0(),
+      finished: finishedByWo.get(woId) ?? D0(),
     });
   }
-
-  return result;
+  return out;
 }
-
-export { BLOCKING as COVERAGE_BLOCKING_STATUSES };

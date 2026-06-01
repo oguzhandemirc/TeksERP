@@ -10,6 +10,7 @@ import React, {
 import { StyleSheet, StyleProp, View, ViewStyle, useWindowDimensions } from 'react-native';
 import { Button, Surface, Text } from 'react-native-paper';
 import Modal from 'react-native-modal';
+import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 import Numpad from './Numpad';
 
 interface NumpadTarget {
@@ -141,6 +142,7 @@ export function NumpadModalHost() {
   const { target, closeTarget, notifier } = useNumpadContext();
   useSyncExternalStore(notifier.subscribe, notifier.getSnapshot);
   const { width: winW, height: winH } = useWindowDimensions();
+  const modalProps = useFullscreenModalProps();
 
   const value = target ? target.getValue() : '';
   const onChange = target?.onChange ?? noop;
@@ -157,9 +159,7 @@ export function NumpadModalHost() {
       style={modalStyles.modal}
       useNativeDriver
       hideModalContentWhileAnimating
-      deviceWidth={winW}
-      deviceHeight={winH}
-      statusBarTranslucent
+      {...modalProps}
       animationIn="slideInUp"
       animationOut="slideOutDown"
     >

@@ -7,6 +7,7 @@ import { HubCard, HubGrid } from "@/components/hub/HubCard";
 const TILE_TONES: Record<string, string> = {
   orders: "text-info",
   "work-orders": "text-primary",
+  "product-balance": "text-station-fason",
   rolls: "text-station-depo",
   "kursun-queue": "text-station-process",
 };

@@ -8,7 +8,63 @@ interface Props {
 }
 
 function fmt(n: number): string {
-  return Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+  return Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+}
+
+interface SpecRow {
+  key: string;
+  label: string;
+  count: number;
+  requested: number;
+  shipped: number;
+  inProduction: number;
+  freeWarehouse: number;
+  freeStock: number;
+  netGap: number;
+}
+
+/**
+ * Aynı spec (ürün+renk+en) kalemlerini tek satırda topla:
+ * - istenen / sevk → TOPLANIR (kaleme özel muhasebe),
+ * - üretimde / serbest depo / ham → PAYLAŞILAN havuz; aynı spec için her kalem
+ *   aynı değeri döndürür, bir kez sayılır (Math.max ile çift sayım önlenir),
+ * - net açık birleşik değerlerden yeniden hesaplanır.
+ */
+function aggregateBySpec(rows: CoverageLine[]): SpecRow[] {
+  const map = new Map<string, SpecRow>();
+  for (const r of rows) {
+    const key = `${r.item.id}::${r.color?.id ?? ""}::${r.width ?? ""}`;
+    const acc = map.get(key);
+    if (!acc) {
+      map.set(key, {
+        key,
+        label:
+          r.item.name +
+          (r.color ? ` · ${r.color.name}` : "") +
+          (r.width ? ` · ${fmt(r.width)}cm` : ""),
+        count: 1,
+        requested: r.requested,
+        shipped: r.shipped,
+        inProduction: r.inProduction,
+        freeWarehouse: r.freeWarehouse,
+        freeStock: r.freeStock,
+        netGap: 0,
+      });
+    } else {
+      acc.count += 1;
+      acc.requested += r.requested;
+      acc.shipped += r.shipped;
+      // Havuz paylaşılır: topla değil, bir kez al (aynı spec'te eşit olmalı).
+      acc.inProduction = Math.max(acc.inProduction, r.inProduction);
+      acc.freeWarehouse = Math.max(acc.freeWarehouse, r.freeWarehouse);
+      acc.freeStock = Math.max(acc.freeStock, r.freeStock);
+    }
+  }
+  for (const s of map.values()) {
+    s.netGap =
+      s.requested - s.shipped - s.inProduction - s.freeWarehouse - s.freeStock;
+  }
+  return Array.from(map.values());
 }
 
 /**
@@ -24,8 +80,8 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
     enabled: lineIds.length > 0,
     staleTime: 30_000,
   });
-  const rows = q.data?.data ?? [];
   if (lineIds.length === 0) return null;
+  const specs = aggregateBySpec(q.data?.data ?? []);
 
   return (
     <div className="rounded-md border bg-muted/10 p-3">
@@ -34,65 +90,69 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
       </div>
       {q.isLoading ? (
         <p className="text-xs text-muted-foreground">Hesaplanıyor…</p>
-      ) : rows.length === 0 ? (
+      ) : specs.length === 0 ? (
         <p className="text-xs text-muted-foreground">Kapsama verisi yok.</p>
       ) : (
-        <div className="space-y-2">
-          {rows.map((r) => (
-            <CoverageRow key={r.lineId} r={r} />
-          ))}
-          <p className="text-[10px] leading-tight text-muted-foreground">
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px] tabular-nums">
+              <thead>
+                <tr className="text-muted-foreground [&>th]:px-1.5 [&>th]:py-1 [&>th]:font-medium">
+                  <th className="text-left">Ürün</th>
+                  <th className="text-right">İstenen</th>
+                  <th className="text-right" title="Sevk edilen">Sevk</th>
+                  <th className="text-right" title="Üretimde — canlı iş emirleri">WO</th>
+                  <th className="text-right" title="Depoda hazır — eşleşen serbest stok">Depo</th>
+                  <th className="text-right" title="Ham stok — eşleşen serbest">Ham</th>
+                  <th className="text-right">Net açık</th>
+                </tr>
+              </thead>
+              <tbody>
+                {specs.map((s) => {
+                  const surplus = s.netGap <= 0;
+                  return (
+                    <tr key={s.key} className="border-t [&>td]:px-1.5 [&>td]:py-1">
+                      <td className="text-left">
+                        <span className="font-medium">{s.label}</span>
+                        {s.count > 1 && (
+                          <span className="text-muted-foreground"> · {s.count} kalem</span>
+                        )}
+                      </td>
+                      <td className="text-right text-foreground">{fmt(s.requested)}</td>
+                      <td className="text-right text-muted-foreground">{fmt(s.shipped)}</td>
+                      <td className="text-right text-muted-foreground">{fmt(s.inProduction)}</td>
+                      <td className="text-right text-muted-foreground">{fmt(s.freeWarehouse)}</td>
+                      <td className="text-right text-muted-foreground">{fmt(s.freeStock)}</td>
+                      <td
+                        className={
+                          "text-right font-semibold " +
+                          (surplus
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-amber-600 dark:text-amber-400")
+                        }
+                      >
+                        <span className="inline-flex items-center justify-end gap-1 whitespace-nowrap">
+                          {surplus ? (
+                            <PackageCheck className="h-3 w-3" />
+                          ) : (
+                            <AlertTriangle className="h-3 w-3" />
+                          )}
+                          {fmt(Math.abs(s.netGap))}
+                          {surplus ? " fazla" : ""}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-[10px] leading-tight text-muted-foreground">
             Serbest stok rezerve edilmez — anlık fotoğraf. Net açık eksi ise fazla
             var, üretim gerekmeyebilir.
           </p>
-        </div>
+        </>
       )}
-    </div>
-  );
-}
-
-function CoverageRow({ r }: { r: CoverageLine }) {
-  const surplus = r.netGap <= 0;
-  return (
-    <div className="rounded border bg-background p-2 text-xs">
-      <div className="mb-1 font-medium">
-        {r.item.name}
-        {r.color ? ` · ${r.color.name}` : ""}
-        {r.width ? ` · ${fmt(r.width)}cm` : ""}
-      </div>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-        <span>İstenen</span>
-        <span className="text-right tabular-nums text-foreground">{fmt(r.requested)}</span>
-        <span>− Sevk edilen</span>
-        <span className="text-right tabular-nums">{fmt(r.shipped)}</span>
-        <span>− Üretimde (WO)</span>
-        <span className="text-right tabular-nums">{fmt(r.reserved)}</span>
-        <span>− Depoda hazır</span>
-        <span className="text-right tabular-nums">{fmt(r.freeWarehouse)}</span>
-        <span>− Ham stok</span>
-        <span className="text-right tabular-nums">{fmt(r.freeStock)}</span>
-      </div>
-      <div
-        className={
-          "mt-1 flex items-center justify-between border-t pt-1 text-[11px] font-semibold " +
-          (surplus
-            ? "text-emerald-600 dark:text-emerald-400"
-            : "text-amber-600 dark:text-amber-400")
-        }
-      >
-        <span className="flex items-center gap-1">
-          {surplus ? (
-            <PackageCheck className="h-3 w-3" />
-          ) : (
-            <AlertTriangle className="h-3 w-3" />
-          )}
-          {surplus ? "Net fazla (üretme)" : "Net üretim açığı"}
-        </span>
-        <span className="tabular-nums">
-          {fmt(Math.abs(r.netGap))}
-          {surplus ? " fazla" : ""}
-        </span>
-      </div>
     </div>
   );
 }
