@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # TeksERP — Windows Servis Yöneticisi  (manage.ps1)
 # =============================================================================
 # Bu script, setup.exe tarafından kurulum sonrası ve kaldırma öncesi çağrılır.
@@ -17,7 +17,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("install", "uninstall", "start", "stop", "restart", "status", "backup", "restore")]
+    [ValidateSet("install", "uninstall", "start", "stop", "restart", "status", "backup", "restore", "studio")]
     [string]$Action,
 
     # setup.exe kurulum dizinini geçer; elle çalıştırırken script kendi konumundan bulur.
@@ -142,7 +142,7 @@ function Install-Database {
 
     # NetworkService veri kokune (DataRoot) girip pgdata'ya ulasabilsin diye traverse izni.
     # secret.json kalitimi kapali oldugundan bu izin onu ACMAZ.
-    icacls $DataRoot /grant "$PgAccount:(RX)" *> $null
+    icacls $DataRoot /grant "${PgAccount}:(RX)" *> $null
 
     $alreadyInit = Test-Path (Join-Path $PgData "PG_VERSION")
 
@@ -151,7 +151,7 @@ function Install-Database {
         New-Item -ItemType Directory -Path $PgData -Force | Out-Null
 
         # Servis hesabinin (NetworkService) pgdata'ya tam erisimi olmali
-        icacls $PgData /grant "$PgAccount:(OI)(CI)F" /T | Out-Null
+        icacls $PgData /grant "${PgAccount}:(OI)(CI)F" /T | Out-Null
 
         $pwFile = Join-Path $env:TEMP ("teks_pg_pw_" + (New-HexSecret 6) + ".txt")
         Set-Content -Path $pwFile -Value $Secrets.pgSuperPassword -NoNewline -Encoding ASCII
@@ -163,8 +163,20 @@ function Install-Database {
             Remove-Item $pwFile -Force -ErrorAction SilentlyContinue
         }
 
-        # postgresql.conf: yalniz localhost, ozel port, performans guvenlikleri (compose ile ayni)
-        $conf = Join-Path $PgData "postgresql.conf"
+        Write-Ok "initdb tamamlandi."
+    } else {
+        Write-Step "Mevcut veri dizini bulundu (initdb atlaniyor) — guncelleme modu."
+        icacls $PgData /grant "${PgAccount}:(OI)(CI)F" /T | Out-Null
+    }
+
+    # postgresql.conf TeksERP ayarlarini IDEMPOTENT uygula (marker yoksa ekle).
+    # Bu blok hem ilk kurulumda hem guncellemede calisir: initdb yarim kalmissa
+    # (or conf elle bozulmussa) ayarlar yine de uygulanir. Bu olmazsa PostgreSQL
+    # varsayilan portta (5432) baslar, script 5433'te bekleyip timeout ile patlar.
+    $conf = Join-Path $PgData "postgresql.conf"
+    $confChanged = $false
+    $confText = if (Test-Path $conf) { Get-Content $conf -Raw } else { "" }
+    if ($confText -notmatch "TeksERP ayarlari") {
         Add-Content -Path $conf -Value @"
 
 # --- TeksERP ayarlari ---
@@ -179,10 +191,8 @@ logging_collector = on
 log_directory = 'log'
 log_min_duration_statement = 500
 "@
-        Write-Ok "initdb tamamlandi."
-    } else {
-        Write-Step "Mevcut veri dizini bulundu (initdb atlaniyor) — guncelleme modu."
-        icacls $PgData /grant "$PgAccount:(OI)(CI)F" /T | Out-Null
+        $confChanged = $true
+        Write-Ok "postgresql.conf TeksERP ayarlari uygulandi (port $PgPort)."
     }
 
     # Servisi kaydet (yoksa)
@@ -203,16 +213,32 @@ log_min_duration_statement = 500
         Write-Ok "DB servisi kaydedildi."
     }
 
-    Write-Step "PostgreSQL servisi baslatiliyor..."
-    Start-Service -Name $DbServiceName
+    # Servisi baslat; zaten calisiyor ve conf degistiyse yeni ayarlar (port!) icin
+    # YENIDEN baslat -- aksi halde eski portta calismaya devam eder.
+    $svc = Get-Service -Name $DbServiceName -ErrorAction SilentlyContinue
+    if ($svc.Status -eq "Running") {
+        if ($confChanged) {
+            Write-Step "Conf degisti -> PostgreSQL yeniden baslatiliyor..."
+            Restart-Service -Name $DbServiceName -Force
+        }
+    } else {
+        Write-Step "PostgreSQL servisi baslatiliyor..."
+        Start-Service -Name $DbServiceName
+    }
     Wait-PgReady -SuperPass $Secrets.pgSuperPassword
 
     # Rol + veritabani (idempotent)
     Write-Step "Uygulama rolu ve veritabani kontrol ediliyor..."
     $roleExists = Invoke-Psql -Sql "SELECT 1 FROM pg_roles WHERE rolname='$DbUser'" -SuperPass $Secrets.pgSuperPassword
     if (-not $roleExists) {
-        Invoke-Psql -Sql "CREATE ROLE $DbUser LOGIN PASSWORD '$($Secrets.appDbPassword)'" -SuperPass $Secrets.pgSuperPassword
+        # CREATEDB sart: Prisma 7 `migrate deploy` baglandiginda veritabanini
+        # olusturmayi dener; bu yetki olmadan "permission denied to create
+        # database" ile patlar (DB onceden olusturulmus olsa bile).
+        Invoke-Psql -Sql "CREATE ROLE $DbUser LOGIN CREATEDB PASSWORD '$($Secrets.appDbPassword)'" -SuperPass $Secrets.pgSuperPassword
         Write-Ok "Rol olusturuldu: $DbUser"
+    } else {
+        # Eski kurulumda rol CREATEDB'siz olusturulmus olabilir -> garanti et.
+        Invoke-Psql -Sql "ALTER ROLE $DbUser CREATEDB" -SuperPass $Secrets.pgSuperPassword
     }
     $dbExists = Invoke-Psql -Sql "SELECT 1 FROM pg_database WHERE datname='$DbName'" -SuperPass $Secrets.pgSuperPassword
     if (-not $dbExists) {
@@ -282,18 +308,21 @@ function Invoke-MigrateAndSeed {
 function Install-BackendService {
     param($Secrets)
     $dbUrl     = Get-DbUrl -Secrets $Secrets
-    $serverJs  = Join-Path $AppDir "dist\src\server.js"
+    # AppParameters'a GORELI yol ver: mutlak yol "C:\Program Files\..." bosluk
+    # icerdiginden NSSM onu tirnaksiz gecince node "C:\Program" modulunu arayip
+    # crash eder. AppDirectory zaten $AppDir oldugundan goreli yol bosluksuz cozulur.
+    $serverJsRel = "dist\src\server.js"
     $stdoutLog = Join-Path $LogDir "backend-out.log"
     $stderrLog = Join-Path $LogDir "backend-err.log"
 
     $svc = Get-Service -Name $BackendServiceName -ErrorAction SilentlyContinue
     if (-not $svc) {
         Write-Step "Backend Windows servisi kaydediliyor ($BackendServiceName)..."
-        & $Nssm install $BackendServiceName $NodeExe $serverJs | Out-Null
+        & $Nssm install $BackendServiceName $NodeExe $serverJsRel | Out-Null
     } else {
         Write-Step "Backend servisi guncelleniyor..."
         & $Nssm set $BackendServiceName Application $NodeExe | Out-Null
-        & $Nssm set $BackendServiceName AppParameters $serverJs | Out-Null
+        & $Nssm set $BackendServiceName AppParameters $serverJsRel | Out-Null
     }
 
     & $Nssm set $BackendServiceName AppDirectory $AppDir | Out-Null
@@ -310,9 +339,17 @@ function Install-BackendService {
     & $Nssm set $BackendServiceName AppEnvironmentExtra `
         "NODE_ENV=production" "TZ=$Tz" "PORT=$ApiPort" "DATABASE_URL=$dbUrl" "JWT_SECRET=$($Secrets.jwtSecret)" | Out-Null
 
-    Write-Step "Backend servisi (yeniden) baslatiliyor..."
-    & $Nssm restart $BackendServiceName *> $null
-    if ($LASTEXITCODE -ne 0) { Start-Service -Name $BackendServiceName -ErrorAction SilentlyContinue }
+    # Backend'i baslat. `nssm restart` YENI kurulan (hic baslamamis) serviste
+    # "service has not been started" ile patlar; bu yuzden once (calisiyorsa)
+    # durdur, sonra Start-Service ile baslat. Start-Service NSSM servisinde de
+    # calisir ve DependOnService (TeksErpDB) bagimliligina uyar.
+    Write-Step "Backend servisi baslatiliyor..."
+    # Mevcut servisi (Running / Paused / throttled olabilir) kosulsuz durdur ki
+    # eski crash-loop throttle durumu temizlensin; sonra baslat.
+    Stop-Service -Name $BackendServiceName -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    Start-Service -Name $BackendServiceName -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 3
     Write-Ok "Backend servisi ayarlandi."
 }
 
@@ -337,7 +374,40 @@ function Test-Health {
     return $false
 }
 
+# Gercek fiziksel/LAN adaptorlerini sanal olanlardan (VirtualBox, Hyper-V, VMware,
+# WSL, vEthernet, loopback) ayiklayan filtre. Cok adaptorlu sunucuda dogru kart
+# secilsin diye kullanilir.
+function Get-LanIpCandidates {
+    try {
+        Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+            Where-Object {
+                $_.IPAddress -notlike "169.*" -and
+                $_.IPAddress -ne "127.0.0.1" -and
+                $_.PrefixOrigin -ne "WellKnown" -and
+                $_.InterfaceAlias -notmatch "vEthernet|VirtualBox|VMware|Hyper-V|Loopback|WSL|Default Switch|Bluetooth"
+            } | Select-Object -ExpandProperty IPAddress -Unique
+    } catch { @() }
+}
+
+# Birincil LAN IP'si: ONCE default gateway'i olan (internete/aga cikan) arayuzun
+# IPv4'unu sec -- bu, sanal host-only adaptorleri (orn. 192.168.56.x) eler. Gateway
+# yoksa (izole fabrika agi) sanal-olmayan ilk gercek IPv4'e duser.
 function Get-LanIp {
+    # 1) Default gateway'li arayuz (en dusuk route metric)
+    try {
+        $cfg = Get-NetIPConfiguration -ErrorAction Stop |
+            Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq "Up" -and $_.IPv4Address } |
+            Sort-Object -Property @{ Expression = { ($_.IPv4DefaultGateway | Select-Object -First 1).RouteMetric } } |
+            Select-Object -First 1
+        if ($cfg) {
+            $ip = ($cfg.IPv4Address | Select-Object -First 1).IPAddress
+            if ($ip) { return $ip }
+        }
+    } catch { }
+    # 2) Gateway yok -> sanal-olmayan ilk gercek IPv4
+    $cand = @(Get-LanIpCandidates)
+    if ($cand.Count -gt 0) { return $cand[0] }
+    # 3) Hicbiri yoksa: filtresiz ilk IPv4
     try {
         $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
             Where-Object { $_.IPAddress -notlike "169.*" -and $_.IPAddress -ne "127.0.0.1" -and $_.PrefixOrigin -ne "WellKnown" } |
@@ -348,10 +418,45 @@ function Get-LanIp {
 }
 
 # -----------------------------------------------------------------------------
+# Eski/artik kurulum temizligi
+# -----------------------------------------------------------------------------
+# Onceki bir surum FARKLI bir dizine (orn. C:\Users\Public\TeksERP) ve kullanici
+# Startup klasorune kisayol birakmis olabilir. O kurulum kaldirilmadan yenisi
+# yapilinca acilista IKI tepsi ikonu birden basliyordu. Bu fonksiyon su anki
+# kurulum disindaki tum TeksERP tepsi artiklarini temizler (idempotent).
+function Remove-LegacyTray {
+    # 1) Su anki kurulum disindaki konumdan calisan tepsi panellerini durdur.
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq "powershell.exe" -and $_.CommandLine -like "*tray.ps1*" -and
+                       $_.CommandLine -notlike "*$InstallDir*" } |
+        ForEach-Object {
+            Write-Step "Eski tepsi paneli kapatiliyor (PID $($_.ProcessId))..."
+            Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+
+    # 2) Tum kullanici profillerindeki kisisel Startup kisayolunu sil (yeni surum
+    #    yalniz Common Startup kullanir; kisisel olan eski surumden kalmadir).
+    $userStartups = @(Get-ChildItem "C:\Users\*\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\TeksERP*.lnk" -ErrorAction SilentlyContinue)
+    foreach ($lnk in $userStartups) {
+        Write-Step "Eski kisisel acilis kisayolu kaldiriliyor: $($lnk.FullName)"
+        Remove-Item $lnk.FullName -Force -ErrorAction SilentlyContinue
+    }
+
+    # 3) Eski kurulum dizinini (su anki degilse) tamamen kaldir.
+    foreach ($legacy in @("C:\Users\Public\TeksERP")) {
+        if ((Test-Path $legacy) -and ($legacy.TrimEnd('\') -ne $InstallDir.TrimEnd('\'))) {
+            Write-Step "Eski kurulum dizini siliniyor: $legacy"
+            Remove-Item $legacy -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+# -----------------------------------------------------------------------------
 # Aksiyonlar
 # -----------------------------------------------------------------------------
 function Do-Install {
     Assert-Admin
+    Remove-LegacyTray
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor White
     Write-Host "  TeksERP — Kurulum / Guncelleme" -ForegroundColor White
@@ -365,6 +470,7 @@ function Do-Install {
     Open-Firewall
     $healthy = Test-Health
     $ip = Get-LanIp
+    $altIps = @(Get-LanIpCandidates | Where-Object { $_ -ne $ip })
 
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor White
@@ -376,8 +482,14 @@ function Do-Install {
     Write-Host "================================================================" -ForegroundColor White
     Write-Host ""
     Write-Host "  Bu sunucuda:     http://localhost:$ApiPort"
-    Write-Host "  Fabrika aginda:  http://$ip`:$ApiPort"
+    Write-Host "  Fabrika aginda:  http://$ip`:$ApiPort" -ForegroundColor Green
     Write-Host "  Swagger:         http://$ip`:$ApiPort/api-docs"
+    if ($altIps.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Bu sunucuda birden fazla ag adresi var. Yukaridaki calismazsa" -ForegroundColor Yellow
+        Write-Host "  asagidakilerden fabrika agindakini deneyin:" -ForegroundColor Yellow
+        foreach ($a in $altIps) { Write-Host "      http://$a`:$ApiPort" }
+    }
     Write-Host ""
     Write-Host "  Test girisi:     admin / admin123"
     Write-Host ""
@@ -389,6 +501,11 @@ function Do-Install {
 
 function Do-Uninstall {
     Assert-Admin
+    Write-Step "Tepsi durum paneli kapatiliyor (calisiyorsa)..."
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq "powershell.exe" -and $_.CommandLine -like "*tray.ps1*" } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
     Write-Step "Backend servisi durduruluyor/kaldiriliyor..."
     & $Nssm stop $BackendServiceName *> $null
     & $Nssm remove $BackendServiceName confirm *> $null
@@ -464,6 +581,40 @@ function Do-Restore {
 }
 
 # -----------------------------------------------------------------------------
+# Prisma Studio (veritabani GUI) — SADECE bu sunucuda, localhost'ta acilir.
+# secret.json'dan gizli sifreyi okur (admin yetkisi gerekir), gomulu node.exe ile
+# urun node_modules'undaki prisma CLI'yi calistirir. Default hostname 127.0.0.1
+# oldugundan fabrika agina ACILMAZ — DB'ye tam erisim verir, sadece sunucu basinda.
+# -----------------------------------------------------------------------------
+function Do-Studio {
+    Assert-Admin
+    if (-not (Test-Path $SecretFile)) { throw "Sir dosyasi yok — once kurulum yapin." }
+    $secrets = Get-Content $SecretFile -Raw | ConvertFrom-Json
+    $prismaCli = Join-Path $AppDir "node_modules\prisma\build\index.js"
+    if (-not (Test-Path $prismaCli)) { throw "Prisma CLI bulunamadi: $prismaCli" }
+
+    $env:DATABASE_URL = Get-DbUrl -Secrets $secrets
+    $env:NODE_ENV = "production"
+    $env:TZ = $Tz
+
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor White
+    Write-Host "  Prisma Studio baslatiliyor (veritabani arayuzu)" -ForegroundColor White
+    Write-Host "================================================================" -ForegroundColor White
+    Write-Host "  Tarayicida acilacak:  http://localhost:5555" -ForegroundColor Green
+    Write-Host "  Sadece bu sunucuda erisilebilir (fabrika agina kapali)." -ForegroundColor Yellow
+    Write-Host "  Kapatmak icin bu pencerede Ctrl+C." -ForegroundColor DarkGray
+    Write-Host ""
+    Push-Location $AppDir
+    try {
+        & $NodeExe $prismaCli studio --port 5555
+    } finally {
+        Pop-Location
+        Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+    }
+}
+
+# -----------------------------------------------------------------------------
 # Dispatch
 # -----------------------------------------------------------------------------
 try {
@@ -476,6 +627,7 @@ try {
         "status"    { Do-Status }
         "backup"    { Do-Backup }
         "restore"   { Do-Restore }
+        "studio"    { Do-Studio }
     }
     exit 0
 } catch {

@@ -38,6 +38,11 @@ ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 PrivilegesRequired=admin
 WizardStyle=modern
+; TeksERP markasi: setup.exe ikonu, sihirbaz kucuk gorseli, kaldir listesi ikonu.
+; wizard-small.bmp build.ps1 tarafindan logodan uretilir.
+SetupIconFile=branding\TeksERP.ico
+WizardSmallImageFile=branding\wizard-small.bmp
+UninstallDisplayIcon={app}\branding\TeksERP.ico
 UninstallDisplayName=TeksERP Backend (Sunucu)
 SetupLogging=yes
 ; Guncellemede backend servisi dosyalari kilitleyebilir -> kapanmasini bekle
@@ -54,14 +59,35 @@ Source: "payload\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ig
 Source: "runtime\*"; DestDir: "{app}\runtime"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Yonetim scriptleri
 Source: "scripts\*"; DestDir: "{app}\scripts"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Sistem tepsisi durum paneli (tray.ps1 + tray-launch.vbs)
+Source: "tray\*"; DestDir: "{app}\tray"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Marka varliklari: logo ikonu (tray + kisayollar bunu kullanir)
+Source: "branding\*"; DestDir: "{app}\branding"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{group}\TeksERP Durumu"; Filename: "powershell.exe"; \
-  Parameters: "-NoExit -NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action status"
+; Markali durum sayfasi (API/DB OK mi) — tarayicida acilir.
+Name: "{group}\TeksERP Durum Sayfasi"; Filename: "http://localhost:4000/"; \
+  IconFilename: "{app}\branding\TeksERP.ico"
+Name: "{group}\TeksERP Durumu (konsol)"; Filename: "powershell.exe"; \
+  Parameters: "-NoExit -NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action status"; \
+  IconFilename: "{app}\branding\TeksERP.ico"
+Name: "{group}\Veritabani (Prisma Studio)"; Filename: "powershell.exe"; \
+  Parameters: "-NoExit -NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action studio"; \
+  IconFilename: "{app}\branding\TeksERP.ico"
 Name: "{group}\TeksERP Yedek Al"; Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action backup"
-Name: "{group}\Swagger API Dokumani"; Filename: "http://localhost:4000/api-docs"
-Name: "{group}\TeksERP Kaldir"; Filename: "{uninstallexe}"
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action backup"; \
+  IconFilename: "{app}\branding\TeksERP.ico"
+Name: "{group}\Swagger API Dokumani"; Filename: "http://localhost:4000/api-docs"; \
+  IconFilename: "{app}\branding\TeksERP.ico"
+Name: "{group}\TeksERP Kaldir"; Filename: "{uninstallexe}"; \
+  IconFilename: "{app}\branding\TeksERP.ico"
+; Tepsi durum paneli: Baslat menusunden elle, ve TUM kullanicilar icin acilista otomatik.
+Name: "{group}\TeksERP Durum Paneli"; Filename: "{sys}\wscript.exe"; \
+  Parameters: """{app}\tray\tray-launch.vbs"""; \
+  IconFilename: "{app}\branding\TeksERP.ico"
+Name: "{commonstartup}\TeksERP Durum Paneli"; Filename: "{sys}\wscript.exe"; \
+  Parameters: """{app}\tray\tray-launch.vbs"""; \
+  IconFilename: "{app}\branding\TeksERP.ico"
 
 [Run]
 ; Kurulum/guncelleme sonrasi tum kurulum islemini manage.ps1 yapar.
@@ -71,6 +97,11 @@ Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\manage.ps1"" -Action install -InstallDir ""{app}"""; \
   StatusMsg: "PostgreSQL, veritabani, migration ve servisler ayarlaniyor (ilk seferde birkac dakika)..."; \
   Flags: waituntilterminated
+; Kurulum bitince tepsi durum panelini hemen baslat (oturum acan kullanicinin
+; baglaminda, yonetici degil -> ikon dogru oturumun tepsisinde gozuksun).
+Filename: "{sys}\wscript.exe"; \
+  Parameters: """{app}\tray\tray-launch.vbs"""; \
+  Flags: nowait runasoriginaluser skipifsilent
 
 [UninstallRun]
 ; Kaldirma: veriyi silmek kullanicinin ek onayina baglidir (asagidaki Code).
@@ -91,6 +122,12 @@ var
 begin
   Exec('powershell.exe',
     '-NoProfile -ExecutionPolicy Bypass -Command "Get-Service TeksErpBackend,TeksErpDB -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // Calisan tepsi panellerini de durdur (her konumdan): aksi halde guncellemede
+  // eski tepsi ikonu calismaya devam eder, manage.ps1 yenisini baslatinca
+  // yeniden baslatmaya kadar IKI ikon gorunur. Boylece tek ikon kalir.
+  Exec('powershell.exe',
+    '-NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq ''powershell.exe'' -and $_.CommandLine -like ''*tray.ps1*'' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := '';
 end;

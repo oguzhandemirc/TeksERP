@@ -35,7 +35,7 @@ Production'da `migrate dev` yerine `npm run prisma:migrate` (= `prisma migrate d
 
 ```
 PORT=4000
-DATABASE_URL="postgresql://postgres:4747@45.136.6.28:5432/TeksErpDb?schema=public"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/TeksErpDb?schema=public"
 JWT_SECRET="..."
 ```
 

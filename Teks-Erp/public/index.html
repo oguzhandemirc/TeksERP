@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TeksERP — Sunucu Durumu</title>
+  <link rel="icon" href="/logo.png" />
+  <style>
+    :root {
+      --bg: #0f172a; --card: #1e293b; --line: #334155;
+      --txt: #e2e8f0; --muted: #94a3b8;
+      --ok: #22c55e; --bad: #ef4444; --wait: #eab308;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--txt);
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .wrap { width: 100%; max-width: 560px; }
+    header { text-align: center; margin-bottom: 28px; }
+    header img { height: 84px; width: auto; margin-bottom: 12px; }
+    header h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: .3px; }
+    .overall {
+      display: inline-flex; align-items: center; gap: 8px; margin-top: 10px;
+      padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 600;
+      background: #334155; color: var(--muted);
+    }
+    .overall .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--wait); }
+    .overall.ok  { background: rgba(34,197,94,.15);  color: var(--ok); }
+    .overall.ok  .dot  { background: var(--ok); }
+    .overall.bad { background: rgba(239,68,68,.15);  color: var(--bad); }
+    .overall.bad .dot { background: var(--bad); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 18px; display: flex; flex-direction: column; gap: 10px;
+    }
+    .card .name { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+    .card .val { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; }
+    .card .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--wait); flex: none;
+                 box-shadow: 0 0 0 4px rgba(234,179,8,.15); }
+    .card.ok  .dot { background: var(--ok);  box-shadow: 0 0 0 4px rgba(34,197,94,.15); }
+    .card.bad .dot { background: var(--bad); box-shadow: 0 0 0 4px rgba(239,68,68,.15); }
+    .meta { margin-top: 22px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.9; }
+    .meta b { color: var(--txt); font-weight: 600; }
+    .meta a { color: #60a5fa; text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    .meta .sep { opacity: .4; margin: 0 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="/logo.png" alt="TeksERP" />
+      <h1>TeksERP Sunucu</h1>
+      <div id="overall" class="overall"><span class="dot"></span><span id="overallText">Kontrol ediliyor…</span></div>
+    </header>
+
+    <div class="grid">
+      <div id="apiCard" class="card">
+        <div class="name">API Sunucusu</div>
+        <div class="val"><span class="dot"></span><span id="apiText">…</span></div>
+      </div>
+      <div id="dbCard" class="card">
+        <div class="name">Veritabanı</div>
+        <div class="val"><span class="dot"></span><span id="dbText">…</span></div>
+      </div>
+    </div>
+
+    <div class="meta">
+      <div>Adres: <b id="addr">—</b></div>
+      <div>
+        <span id="version">Sürüm —</span>
+        <span class="sep">•</span>
+        <span id="time">—</span>
+      </div>
+      <div style="margin-top:8px">
+        <a href="/api-docs">API Dokümanı (Swagger)</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/status.js"></script>
+</body>
+</html>
