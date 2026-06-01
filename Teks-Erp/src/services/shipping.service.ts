@@ -129,7 +129,7 @@ export class ShippingService {
       }),
       prisma.sack.findUnique({
         where: { id: data.sackId },
-        select: { id: true, status: true, customerId: true },
+        select: { id: true, status: true, customerId: true, branchId: true },
       }),
     ]);
     if (!roll) throw AppError.notFound("Top bulunamadı");
@@ -151,7 +151,7 @@ export class ShippingService {
     // Kapalı (iptal/tamamlanmış) siparişe ait top paketlenemez — önce yönlendir.
     const line = await prisma.orderLine.findUnique({
       where: { id: effectiveLineId },
-      select: { order: { select: { customerId: true, status: true } } },
+      select: { order: { select: { customerId: true, branchId: true, status: true } } },
     });
     if (!line) throw AppError.notFound("Hedef sipariş satırı bulunamadı");
     if (
@@ -165,13 +165,28 @@ export class ShippingService {
         "Bu top başka müşterinin siparişine etiketli. Yön değiştirmek için önce yönlendir."
       );
     }
+    // Çuval = tek müşteri + tek şube. Çuvalın şubesi belliyse siparişin şubesiyle
+    // eşleşmeli; çuval henüz şubesizse ilk topun siparişinin şubesine kilitlenir
+    // (teslim adresi snapshot'ı da bu şubeden alınır). null şube = "belirtilmemiş".
+    const orderBranchId = line.order.branchId ?? null;
+    if (sack.branchId != null && orderBranchId !== sack.branchId) {
+      throw AppError.badRequest(
+        "Bu çuval başka bir şubeye ait. Aynı müşteri+şubenin siparişine ait top eklenebilir."
+      );
+    }
+    const lockBranch = sack.branchId == null && orderBranchId != null;
 
-    await prisma.roll.update({
-      where: { id: roll.id },
-      data: {
-        sackId: sack.id,
-        ...(data.targetOrderLineId !== undefined ? { targetOrderLineId: data.targetOrderLineId } : {}),
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.roll.update({
+        where: { id: roll.id },
+        data: {
+          sackId: sack.id,
+          ...(data.targetOrderLineId !== undefined ? { targetOrderLineId: data.targetOrderLineId } : {}),
+        },
+      });
+      if (lockBranch) {
+        await tx.sack.update({ where: { id: sack.id }, data: { branchId: orderBranchId } });
+      }
     });
 
     await AuditService.log({
@@ -220,7 +235,7 @@ export class ShippingService {
       }),
       prisma.sack.findUnique({
         where: { id: data.sackId },
-        select: { id: true, status: true, customerId: true },
+        select: { id: true, status: true, customerId: true, branchId: true },
       }),
     ]);
     if (!swatch) throw AppError.notFound("Kartela bulunamadı");
@@ -229,23 +244,38 @@ export class ShippingService {
 
     const effectiveLineId =
       data.targetOrderLineId !== undefined ? data.targetOrderLineId : swatch.targetOrderLineId;
+    let lockBranch = false;
+    let orderBranchId: string | null = null;
     if (effectiveLineId) {
       const line = await prisma.orderLine.findUnique({
         where: { id: effectiveLineId },
-        select: { order: { select: { customerId: true } } },
+        select: { order: { select: { customerId: true, branchId: true } } },
       });
       if (!line) throw AppError.notFound("Hedef sipariş satırı bulunamadı");
       if (line.order.customerId !== sack.customerId) {
         throw AppError.badRequest("Kartela başka müşterinin siparişine ait");
       }
+      // Çuval tek şube — assignRoll ile aynı kural (bkz. assignRoll yorumu).
+      orderBranchId = line.order.branchId ?? null;
+      if (sack.branchId != null && orderBranchId !== sack.branchId) {
+        throw AppError.badRequest(
+          "Bu çuval başka bir şubeye ait. Aynı müşteri+şubenin siparişine ait kartela eklenebilir."
+        );
+      }
+      lockBranch = sack.branchId == null && orderBranchId != null;
     }
 
-    await prisma.swatch.update({
-      where: { id: swatch.id },
-      data: {
-        sackId: sack.id,
-        ...(data.targetOrderLineId !== undefined ? { targetOrderLineId: data.targetOrderLineId } : {}),
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.swatch.update({
+        where: { id: swatch.id },
+        data: {
+          sackId: sack.id,
+          ...(data.targetOrderLineId !== undefined ? { targetOrderLineId: data.targetOrderLineId } : {}),
+        },
+      });
+      if (lockBranch) {
+        await tx.sack.update({ where: { id: sack.id }, data: { branchId: orderBranchId } });
+      }
     });
     await AuditService.log({
       userId,
@@ -359,6 +389,119 @@ export class ShippingService {
       success: true,
       data: { sackId: sack.id, ...result },
       message: "Çuval tartıldı ve kapatıldı (sevk edildi)",
+    };
+  }
+
+  /**
+   * Yanlış açılan / boşaltılacak çuvalı İPTAL et (soft delete → status=CANCELLED).
+   * Sadece AÇIK çuval iptal edilebilir — kapanmış (CLOSED) / sevk edilmiş (SHIPPED)
+   * çuvalı geri almak sevk muhasebesini ters çevirmek demektir (ayrı akış).
+   * İçindeki top/kartela serbest bırakılır (sackId=null) → sevke-hazır havuza döner.
+   */
+  async cancelSack(sackId: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const sack = await prisma.sack.findUnique({
+      where: { id: sackId },
+      select: {
+        id: true,
+        sackNo: true,
+        status: true,
+        rolls: { select: { id: true } },
+        swatches: { select: { id: true } },
+      },
+    });
+    if (!sack) throw AppError.notFound("Çuval bulunamadı");
+    if (sack.status === SackStatus.CANCELLED) {
+      return { success: true, data: { sackId }, message: "Çuval zaten iptal edilmiş" };
+    }
+    if (sack.status !== SackStatus.OPEN) {
+      throw AppError.conflict(
+        "Yalnızca açık çuval iptal edilebilir. Kapanmış/sevk edilmiş çuval iptal edilemez."
+      );
+    }
+
+    const rollIds = sack.rolls.map((r) => r.id);
+    const swatchIds = sack.swatches.map((s) => s.id);
+
+    await prisma.$transaction(async (tx) => {
+      if (rollIds.length > 0) {
+        await tx.roll.updateMany({ where: { id: { in: rollIds } }, data: { sackId: null } });
+      }
+      if (swatchIds.length > 0) {
+        await tx.swatch.updateMany({ where: { id: { in: swatchIds } }, data: { sackId: null } });
+      }
+      await tx.sack.update({ where: { id: sackId }, data: { status: SackStatus.CANCELLED } });
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SACK",
+      recordId: sackId,
+      newData: {
+        kind: "CANCEL",
+        sackNo: sack.sackNo,
+        freedRolls: rollIds.length,
+        freedSwatches: swatchIds.length,
+      },
+    });
+
+    return {
+      success: true,
+      data: { sackId, freedRolls: rollIds.length, freedSwatches: swatchIds.length },
+      message:
+        rollIds.length + swatchIds.length > 0
+          ? `Çuval iptal edildi — ${rollIds.length} top, ${swatchIds.length} kartela serbest bırakıldı`
+          : "Çuval iptal edildi",
+    };
+  }
+
+  /**
+   * İptal önizleme — yıkıcı işlem onayı için serbest bırakılacak top/kartelaları
+   * somut listeler (CLAUDE.md: "X kayıt etkilenecek" yetmez, her kaydı göster).
+   */
+  async getSackCancelPreview(sackId: string): Promise<ApiResponse<unknown>> {
+    const sack = await prisma.sack.findUnique({
+      where: { id: sackId },
+      select: {
+        id: true,
+        sackNo: true,
+        status: true,
+        customer: { select: { name: true } },
+        branch: { select: { name: true } },
+        rolls: {
+          select: {
+            id: true,
+            barcode: true,
+            currentQty: true,
+            targetOrderLine: { select: { order: { select: { orderNumber: true } } } },
+          },
+        },
+        swatches: { select: { id: true, barcode: true } },
+      },
+    });
+    if (!sack) throw AppError.notFound("Çuval bulunamadı");
+
+    const canCancel = sack.status === SackStatus.OPEN;
+    return {
+      success: true,
+      data: {
+        sackId: sack.id,
+        sackNo: sack.sackNo,
+        status: sack.status,
+        customerName: sack.customer.name,
+        branchName: sack.branch?.name ?? null,
+        canCancel,
+        reason: canCancel
+          ? null
+          : "Yalnızca açık çuval iptal edilebilir (kapanmış/sevk edilmiş çuval iptal edilemez).",
+        rolls: sack.rolls.map((r) => ({
+          id: r.id,
+          barcode: r.barcode,
+          currentQty: r.currentQty,
+          orderNumber: r.targetOrderLine?.order.orderNumber ?? null,
+        })),
+        swatches: sack.swatches.map((s) => ({ id: s.id, barcode: s.barcode })),
+      },
     };
   }
 
@@ -938,6 +1081,7 @@ export class ShippingService {
               select: {
                 status: true,
                 customerId: true,
+                branchId: true,
                 customer: { select: { name: true } },
               },
             },
@@ -961,10 +1105,12 @@ export class ShippingService {
     }
     const customerId = order.customerId;
     const customerName = order.customer.name;
+    const orderBranchId = order.branchId ?? null;
 
-    // Müşterinin en yeni açık çuvalı; yoksa aç.
+    // Müşteri + şube eşleşen en yeni açık çuval; yoksa o müşteri+şube için aç.
+    // (Çuval tek müşteri + tek şube — assignRoll ile aynı kural.)
     const existing = await prisma.sack.findFirst({
-      where: { customerId, status: SackStatus.OPEN },
+      where: { customerId, status: SackStatus.OPEN, branchId: orderBranchId },
       orderBy: { createdAt: "desc" },
       select: { id: true, sackNo: true },
     });
@@ -980,7 +1126,7 @@ export class ShippingService {
       const sack = await withBarcodeRetry(async () => {
         const no = await nextSackNo();
         return prisma.sack.create({
-          data: { sackNo: no, customerId, status: SackStatus.OPEN },
+          data: { sackNo: no, customerId, branchId: orderBranchId, status: SackStatus.OPEN },
           select: { id: true, sackNo: true },
         });
       });

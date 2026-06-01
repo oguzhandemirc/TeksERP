@@ -153,6 +153,24 @@ export class ShippingController {
     }
   };
 
+  cancelSackPreview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getSackCancelPreview(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  cancelSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.cancelSack(req.params.id as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
   // ---- İRSALİYE ----------------------------------------------------------
   createShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

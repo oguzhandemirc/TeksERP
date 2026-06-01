@@ -8,7 +8,7 @@ import type { ApiResponse } from '../types/api';
 export interface SackListItem {
   id: string;
   sackNo: string;
-  status: 'OPEN' | 'CLOSED' | 'SHIPPED';
+  status: 'OPEN' | 'CLOSED' | 'SHIPPED' | 'CANCELLED';
   weightKg: number | null;
   shipmentId: string | null;
   createdAt: string;
@@ -65,6 +65,18 @@ export interface ReadyOrder {
     branch: { id: string; name: string } | null;
   };
   lines: ReadyLine[];
+}
+
+export interface SackCancelPreview {
+  sackId: string;
+  sackNo: string;
+  status: 'OPEN' | 'CLOSED' | 'SHIPPED' | 'CANCELLED';
+  customerName: string;
+  branchName: string | null;
+  canCancel: boolean;
+  reason: string | null;
+  rolls: Array<{ id: string; barcode: string | null; currentQty: number; orderNumber: string | null }>;
+  swatches: Array<{ id: string; barcode: string | null }>;
 }
 
 export interface ReprintItem {
@@ -179,6 +191,21 @@ export const packingService = {
   weighClose: (sackId: string, weightKg: number): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/weigh`, { weightKg })
+      .then((r) => r.data),
+
+  /** İptal önizleme — serbest bırakılacak top/kartelaları listeler (yıkıcı işlem onayı). */
+  cancelPreview: (sackId: string): Promise<ApiResponse<SackCancelPreview>> =>
+    apiClient
+      .get<ApiResponse<SackCancelPreview>>(`/shipping/sacks/${sackId}/cancel-preview`)
+      .then((r) => r.data),
+
+  /** Çuvalı iptal et (soft delete → CANCELLED, top/kartela serbest bırakılır). */
+  cancelSack: (sackId: string): Promise<ApiResponse<{ freedRolls: number; freedSwatches: number }>> =>
+    apiClient
+      .post<ApiResponse<{ freedRolls: number; freedSwatches: number }>>(
+        `/shipping/sacks/${sackId}/cancel`,
+        {},
+      )
       .then((r) => r.data),
 
   /** Print-queue — yeniden basılacak etiketler (relabel sonrası, tambur). */

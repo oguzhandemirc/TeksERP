@@ -1526,6 +1526,7 @@ enum SackStatus {
   OPEN // Dolduruluyor — top/kartela okutuluyor
   CLOSED // Tartıldı + kapandı = "sevk edildi" anı (sevk muhasebesi burada işlenir)
   SHIPPED // Bir Shipment (irsaliye) ile fiilen kamyona yüklendi
+  CANCELLED // Yanlış açıldı/boşaltıldı — iptal (soft delete). İçindeki top/kartela serbest bırakıldı.
 }
 
 enum ShipmentStatus {

@@ -41,7 +41,17 @@ interface Props {
   onClose?: () => void;
   title?: string;
   barcodeTypes?: SupportedBarcodeType[];
+  /**
+   * Sürekli okuma — modal açık kalıp arka arkaya çok top okutan akışlar için
+   * (Top Ekle / Hızlı Okut). Her okumadan sonra scanner kısa gecikmeyle yeniden
+   * silahlanır; aynı barkod kadrajda kaldığı sürece tekrar işlenmez. Default
+   * false = tek-okuma (okuyup modalı kapatan Tambur/KK1/Fason akışları aynen kalır).
+   */
+  continuous?: boolean;
 }
+
+// Sürekli modda iki okuma arası yeniden silahlanma gecikmesi (ms).
+const REARM_MS = 1400;
 
 const FRAME = 260;
 const LINE_H = 3;
@@ -62,6 +72,7 @@ export function BarcodeScannerView({
   onClose,
   title = 'Barkod / QR Okut',
   barcodeTypes = ['qr', 'code128'],
+  continuous = false,
 }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
@@ -73,19 +84,38 @@ export function BarcodeScannerView({
     onScanRef.current = onScan;
   }, [onScan]);
 
+  // Stable handleScanned içinden güncel continuous'a erişim için ref.
+  const continuousRef = useRef(continuous);
+  useEffect(() => {
+    continuousRef.current = continuous;
+  }, [continuous]);
+  // Sürekli modda aynı barkodu üst üste işlememek için son okunan kod.
+  const lastScanRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (active) {
       scannedRef.current = false;
       setBusy(false);
+      lastScanRef.current = null;
     }
   }, [active]);
 
   const handleScanned = useCallback(({ data }: { data: string }) => {
     if (!data || scannedRef.current) return;
+    // Sürekli modda: aynı top hâlâ kadrajdaysa tekrar ekleme.
+    if (continuousRef.current && lastScanRef.current === data) return;
     scannedRef.current = true;
+    lastScanRef.current = data;
     setBusy(true);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setTimeout(() => onScanRef.current(data), 180);
+    // Sürekli modda kısa gecikmeyle yeniden silahlan (modal açık kalır).
+    if (continuousRef.current) {
+      setTimeout(() => {
+        scannedRef.current = false;
+        setBusy(false);
+      }, REARM_MS);
+    }
   }, []);
 
   const scanning = active && !!permission?.granted && !busy;

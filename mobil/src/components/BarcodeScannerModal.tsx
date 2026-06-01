@@ -15,6 +15,8 @@ interface Props {
    *  bu callback'te güncellesin — animation sırasında recutMode vb. mount
    *  edilirse invisible modal overlay tıklamayı yutar. */
   onModalHide?: () => void;
+  /** Sürekli okuma — modal açık kalıp arka arkaya çok top okutan akışlar için. */
+  continuous?: boolean;
 }
 
 /**
@@ -35,6 +37,7 @@ export function BarcodeScannerModal({
   title,
   barcodeTypes,
   onModalHide,
+  continuous,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   return (
@@ -58,6 +61,7 @@ export function BarcodeScannerModal({
           onScan={onScan}
           title={title}
           barcodeTypes={barcodeTypes}
+          continuous={continuous}
         />
       </View>
     </RNModal>

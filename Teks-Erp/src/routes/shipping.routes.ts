@@ -114,6 +114,42 @@ router.post("/sacks/:id/weigh", verifyToken, WRITE, controller.weighSack);
 
 /**
  * @openapi
+ * /api/shipping/sacks/{id}/cancel-preview:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Çuval iptal önizleme (serbest bırakılacak top/kartelaları listeler)
+ *     description: Yıkıcı işlem onayı için — sadece AÇIK çuval iptal edilebilir (canCancel bayrağı).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "İptal önizleme (sackNo, canCancel, rolls[], swatches[])" }
+ */
+router.get("/sacks/:id/cancel-preview", verifyToken, READ, controller.cancelSackPreview);
+
+/**
+ * @openapi
+ * /api/shipping/sacks/{id}/cancel:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Çuvalı iptal et (soft delete → CANCELLED, top/kartela serbest bırakılır)
+ *     description: Sadece AÇIK çuval. Kapanmış/sevk edilmiş çuval iptal edilemez (409).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "Çuval iptal edildi (freedRolls, freedSwatches)" }
+ */
+router.post("/sacks/:id/cancel", verifyToken, WRITE, controller.cancelSack);
+
+/**
+ * @openapi
  * /api/shipping/sacks/{id}:
  *   get:
  *     tags: [Shipping]

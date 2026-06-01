@@ -14,8 +14,8 @@ import {
 // =============================================================================
 
 interface Props {
-  /** Çuvala Başla → o müşteri için çuval aç/odaklan (parent yönetir). */
-  onStart: (customerId: string) => void;
+  /** Çuvala Başla → o müşteri+şube için çuval aç/odaklan (parent yönetir). */
+  onStart: (customerId: string, branchId: string | null) => void;
   busyCustomerId?: string | null;
 }
 
@@ -53,7 +53,7 @@ export default function ReadyToShipList({ onStart, busyCustomerId }: Props) {
           key={o.order.id}
           data={o}
           busy={busyCustomerId === o.order.customer.id}
-          onStart={() => onStart(o.order.customer.id)}
+          onStart={() => onStart(o.order.customer.id, o.order.branch?.id ?? null)}
         />
       ))}
     </View>

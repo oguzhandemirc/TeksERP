@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TouchableRipple,
   Divider,
+  IconButton,
 } from 'react-native-paper';
 import RNModal from 'react-native-modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -20,7 +21,7 @@ import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { packingService, type SackListItem } from '../../../services/packing.service';
 import { customerService } from '../../../services/customer.service';
 import { rollService } from '../../../services/roll.service';
-import { useAuthStore } from '../../../store/authStore';
+import { usePermissions } from '../../../hooks/usePermission';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import type { MainStackParamList } from '../../../navigation/types';
 import ReadyToShipList from './components/ReadyToShipList';
@@ -36,18 +37,25 @@ export default function TartiPaketScreen() {
   usePortraitLock(); // telefon dikey
   const qc = useQueryClient();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
-  const perms = useAuthStore((s) => s.user?.permissions ?? []);
-  const canShip =
-    perms.includes('mobile:sevkiyat') || perms.includes('mobile:*') || perms.includes('*');
+  // Köprü görünürlüğü, navigasyonun Sevkiyat ekranını kaydetme koşuluyla AYNI
+  // kaynaktan gelmeli: has('mobile:sevkiyat') (mobile:* wildcard'ını da kapsar).
+  // Böylece köprü yalnızca ekran gerçekten navigasyona kayıtlıyken görünür —
+  // aksi halde (örn. yalnız global '*' izni) navigate('Sevkiyat') çökerdi.
+  const { has } = usePermissions();
+  const canShip = has('mobile:sevkiyat');
 
   const [newSackOpen, setNewSackOpen] = useState(false);
   const [custSearch, setCustSearch] = useState('');
   const [scannerSackId, setScannerSackId] = useState<string | null>(null);
   const [autoScanOpen, setAutoScanOpen] = useState(false);
   const [relabelScanOpen, setRelabelScanOpen] = useState(false);
+  // Tarayıcı tam kapanmadan RelabelSheet açılırsa (RNModal üst üste) görünmez
+  // overlay dokunmayı yutar — barkodu pending'e al, resolve'u onModalHide'da yap.
+  const [pendingRelabelScan, setPendingRelabelScan] = useState<string | null>(null);
   const [relabelRoll, setRelabelRoll] = useState<RelabelRoll | null>(null);
   const [weighSack, setWeighSack] = useState<SackListItem | null>(null);
   const [weightInput, setWeightInput] = useState('');
+  const [cancelTarget, setCancelTarget] = useState<SackListItem | null>(null);
   const scanBusy = useRef(false);
 
   const sacksQuery = useQuery({
@@ -93,7 +101,8 @@ export default function TartiPaketScreen() {
   // Sevke Hazır → "Çuvala Başla": müşterinin açık çuvalı varsa odaklan, yoksa aç —
   // ardından o çuvalın okuyucusunu aç (operatör hazır topları tarasın).
   const startSackMut = useMutation({
-    mutationFn: (customerId: string) => packingService.createSack({ customerId }),
+    mutationFn: (vars: { customerId: string; branchId: string | null }) =>
+      packingService.createSack({ customerId: vars.customerId, branchId: vars.branchId }),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: 'Çuval açıldı', text2: res.data?.sackNo });
@@ -103,13 +112,17 @@ export default function TartiPaketScreen() {
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çuval açılamadı', text2: e.message }),
   });
 
-  const beginPackingForCustomer = (customerId: string) => {
-    const existing = openSacks.find((s) => s.customer.id === customerId);
+  // Sevke Hazır → Çuvala Başla: aynı müşteri+şubenin açık çuvalı varsa ona odaklan
+  // (çuval tek müşteri+tek şube). Şubesiz (null) çuval da eşleşir; yoksa şubeli aç.
+  const beginPackingForCustomer = (customerId: string, branchId: string | null) => {
+    const existing = openSacks.find(
+      (s) => s.customer.id === customerId && (s.branch?.id ?? null) === branchId,
+    );
     if (existing) {
       setScannerSackId(existing.id);
       return;
     }
-    startSackMut.mutate(customerId);
+    startSackMut.mutate({ customerId, branchId });
   };
 
   const weighMut = useMutation({
@@ -123,6 +136,26 @@ export default function TartiPaketScreen() {
       refreshSacks();
     },
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Tartı kaydedilemedi', text2: e.message }),
+  });
+
+  // Çuval iptali — yıkıcı işlem: önce önizleme (serbest bırakılacak toplar), sonra onayla.
+  const cancelPreviewQuery = useQuery({
+    queryKey: ['sacks', 'cancel-preview', cancelTarget?.id],
+    queryFn: () => packingService.cancelPreview(cancelTarget!.id),
+    enabled: cancelTarget !== null,
+    staleTime: 0,
+  });
+  const cancelPreview = cancelPreviewQuery.data?.data ?? null;
+
+  const cancelMut = useMutation({
+    mutationFn: (sackId: string) => packingService.cancelSack(sackId),
+    onSuccess: (res) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Çuval iptal edildi', text2: res.message });
+      setCancelTarget(null);
+      refreshSacks();
+    },
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'İptal edilemedi', text2: e.message }),
   });
 
   // Barkod okundu → topu çöz → açık çuvala ekle (müşteri uyumunu backend doğrular).
@@ -189,7 +222,6 @@ export default function TartiPaketScreen() {
         Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: code });
         return;
       }
-      setRelabelScanOpen(false);
       setRelabelRoll({
         id: roll.id,
         barcode: roll.barcode,
@@ -256,7 +288,7 @@ export default function TartiPaketScreen() {
         {/* Sevke Hazır (Mod A) — siparişten çuvala başla */}
         <ReadyToShipList
           onStart={beginPackingForCustomer}
-          busyCustomerId={startSackMut.isPending ? startSackMut.variables ?? null : null}
+          busyCustomerId={startSackMut.isPending ? startSackMut.variables?.customerId ?? null : null}
         />
 
         <View style={styles.topBar}>
@@ -281,10 +313,20 @@ export default function TartiPaketScreen() {
               <Surface key={s.id} style={styles.card} elevation={1}>
                 <View style={styles.cardHead}>
                   <Text style={styles.sackNo}>{s.sackNo}</Text>
-                  <Text style={styles.sackMeta}>
-                    {s._count.rolls} top
-                    {s._count.swatches > 0 ? ` · ${s._count.swatches} kartela` : ''}
-                  </Text>
+                  <View style={styles.cardHeadRight}>
+                    <Text style={styles.sackMeta}>
+                      {s._count.rolls} top
+                      {s._count.swatches > 0 ? ` · ${s._count.swatches} kartela` : ''}
+                    </Text>
+                    <IconButton
+                      icon="close-circle-outline"
+                      size={20}
+                      iconColor="#dc2626"
+                      onPress={() => setCancelTarget(s)}
+                      style={styles.cancelIcon}
+                      accessibilityLabel="Çuvalı iptal et"
+                    />
+                  </View>
                 </View>
                 <Text style={styles.customer}>
                   {s.customer.name}
@@ -363,27 +405,40 @@ export default function TartiPaketScreen() {
         </Surface>
       </RNModal>
 
-      {/* Top ekleme — kamera (belirli çuval) */}
+      {/* Top ekleme — kamera (belirli çuval). Sürekli: arka arkaya çok top okut. */}
       <BarcodeScannerModal
         visible={scannerSackId !== null}
         onDismiss={() => setScannerSackId(null)}
         onScan={handleScan}
         title="Top barkodu okut"
+        continuous
       />
 
-      {/* Hızlı Okut — otomatik çuval (müşteri seçmeden) */}
+      {/* Hızlı Okut — otomatik çuval (müşteri seçmeden). Sürekli okuma. */}
       <BarcodeScannerModal
         visible={autoScanOpen}
         onDismiss={() => setAutoScanOpen(false)}
         onScan={handleAutoScan}
         title="Hızlı okut — otomatik çuvala"
+        continuous
       />
 
-      {/* Yönlendir — top okut, RelabelSheet açılır */}
+      {/* Yönlendir — top okut. onScan modal'ı kapatır; asıl çözümleme + RelabelSheet
+          açılışı onModalHide'da (modal tam kapandığında) — overlay dokunmayı yutmasın. */}
       <BarcodeScannerModal
         visible={relabelScanOpen}
         onDismiss={() => setRelabelScanOpen(false)}
-        onScan={handleRelabelScan}
+        onScan={(barcode) => {
+          setPendingRelabelScan(barcode);
+          setRelabelScanOpen(false);
+        }}
+        onModalHide={() => {
+          if (pendingRelabelScan) {
+            const b = pendingRelabelScan;
+            setPendingRelabelScan(null);
+            void handleRelabelScan(b);
+          }
+        }}
         title="Yönlendirilecek topu okut"
       />
       <RelabelSheet
@@ -438,6 +493,79 @@ export default function TartiPaketScreen() {
           </View>
         </Surface>
       </RNModal>
+
+      {/* Çuval iptal — yıkıcı işlem onayı: serbest bırakılacak topları somut listele */}
+      <RNModal
+        isVisible={cancelTarget !== null}
+        onBackdropPress={() => setCancelTarget(null)}
+        style={styles.modal}
+      >
+        <Surface style={styles.sheet} elevation={4}>
+          <Text variant="titleMedium" style={styles.sheetTitle}>
+            Çuvalı İptal Et — {cancelTarget?.sackNo}
+          </Text>
+          {cancelPreviewQuery.isLoading || !cancelPreview ? (
+            <ActivityIndicator style={{ marginVertical: 16 }} />
+          ) : !cancelPreview.canCancel ? (
+            <Text style={styles.cancelWarn}>{cancelPreview.reason}</Text>
+          ) : (
+            <>
+              <Text style={styles.customer}>
+                {cancelPreview.customerName}
+                {cancelPreview.branchName ? ` · ${cancelPreview.branchName}` : ''}
+              </Text>
+              {cancelPreview.rolls.length + cancelPreview.swatches.length === 0 ? (
+                <Text style={styles.emptySub}>Çuval boş — doğrudan iptal edilecek.</Text>
+              ) : (
+                <>
+                  <Text style={styles.cancelInfo}>
+                    Şu {cancelPreview.rolls.length} top
+                    {cancelPreview.swatches.length > 0
+                      ? ` ve ${cancelPreview.swatches.length} kartela`
+                      : ''}{' '}
+                    serbest bırakılacak (sevke hazır havuza döner):
+                  </Text>
+                  <ScrollView style={{ maxHeight: 240 }}>
+                    {cancelPreview.rolls.map((r) => (
+                      <View key={r.id} style={styles.cancelRow}>
+                        <Text style={styles.cancelBarcode}>{r.barcode ?? '—'}</Text>
+                        <Text style={styles.cancelMeta}>
+                          {Math.round(r.currentQty)}m
+                          {r.orderNumber ? ` · ${r.orderNumber}` : ''}
+                        </Text>
+                      </View>
+                    ))}
+                    {cancelPreview.swatches.map((s) => (
+                      <View key={s.id} style={styles.cancelRow}>
+                        <Text style={styles.cancelBarcode}>{s.barcode ?? '—'}</Text>
+                        <Text style={styles.cancelMeta}>kartela</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+            </>
+          )}
+          <View style={styles.actions}>
+            <Button onPress={() => setCancelTarget(null)} style={styles.actionBtn}>
+              Vazgeç
+            </Button>
+            <Button
+              mode="contained"
+              icon="close-circle"
+              buttonColor="#dc2626"
+              style={styles.actionBtn}
+              loading={cancelMut.isPending}
+              disabled={cancelMut.isPending || !cancelPreview?.canCancel}
+              onPress={() => {
+                if (cancelTarget) cancelMut.mutate(cancelTarget.id);
+              }}
+            >
+              İptal Et
+            </Button>
+          </View>
+        </Surface>
+      </RNModal>
     </ScreenChrome>
   );
 }
@@ -467,8 +595,22 @@ const styles = StyleSheet.create({
   list: { gap: 10 },
   card: { borderRadius: 12, padding: 12, backgroundColor: '#fff' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  cancelIcon: { margin: 0 },
   sackNo: { fontSize: 15, fontWeight: '700', color: '#0f172a', fontFamily: 'monospace' },
   sackMeta: { fontSize: 12, color: '#64748b' },
+  cancelInfo: { fontSize: 13, color: '#475569', marginTop: 8, marginBottom: 4 },
+  cancelWarn: { fontSize: 13, color: '#b45309', marginVertical: 12 },
+  cancelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e2e8f0',
+  },
+  cancelBarcode: { fontSize: 13, color: '#0f172a', fontFamily: 'monospace' },
+  cancelMeta: { fontSize: 12, color: '#64748b' },
   customer: { fontSize: 13, color: '#334155', marginTop: 2 },
   actions: { flexDirection: 'row', gap: 8 },
   actionBtn: { flex: 1 },

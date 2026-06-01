@@ -33,6 +33,9 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
     enabled: open && !!roll?.id,
     staleTime: 30_000,
   });
+  // targetOrderLine (etiketli müşteri/sipariş) yalnız detay endpoint'inden gelir.
+  const detail = detailQuery.data?.data;
+  const targetLine = detail?.targetOrderLine ?? null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -188,6 +191,54 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                     </>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Değişebilir etiket — top hangi müşteri/siparişe etiketli */}
+            <Card>
+              <CardContent className="space-y-2 p-3 text-sm">
+                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <Tag className="h-3.5 w-3.5" /> Sipariş Etiketi
+                  {detail?.needsReprint && (
+                    <Badge variant="outline" className="ml-auto text-[10px] text-amber-600">
+                      Etiket yenilenecek
+                    </Badge>
+                  )}
+                </div>
+                {detailQuery.isLoading ? (
+                  <Skeleton className="h-10 w-full" />
+                ) : targetLine ? (
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <div className="text-xs text-muted-foreground">Müşteri</div>
+                    <div className="font-medium">
+                      {targetLine.order.customer.name}
+                      {targetLine.order.branch ? (
+                        <span className="text-muted-foreground"> · {targetLine.order.branch.name}</span>
+                      ) : null}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Sipariş</div>
+                    <div className="font-mono text-xs">{targetLine.order.orderNumber}</div>
+                    {targetLine.customerItemName && (
+                      <>
+                        <div className="text-xs text-muted-foreground">Müşteri Ürün Adı</div>
+                        <div>{targetLine.customerItemName}</div>
+                      </>
+                    )}
+                    {targetLine.customerColorName && (
+                      <>
+                        <div className="text-xs text-muted-foreground">Müşteri Renk Adı</div>
+                        <div>{targetLine.customerColorName}</div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    <Badge variant="outline" className="mr-2 text-[10px]">
+                      Stok etiketli
+                    </Badge>
+                    Bu top henüz bir müşteri siparişine etiketlenmemiş.
+                  </div>
+                )}
               </CardContent>
             </Card>
 
