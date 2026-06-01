@@ -1,0 +1,21 @@
+{
+  // =============================================================================
+  // Windows kurulum paketi için BİRLEŞİK derleme yapılandırması.
+  // =============================================================================
+  // Hem `src/**` (Express sunucusu) hem de `prisma/seed.ts` aynı ağaca
+  // derlenir, böylece seed.ts'in `../src/config/label-fields` importu üretimde
+  // de çözülür. Çıktı:  installer/windows/.build/bundle/
+  //   .build/bundle/src/server.js      <- servis girişi
+  //   .build/bundle/prisma/seed.js     <- ilk kurulum seed'i
+  // rootDir = proje kökü (Teks-Erp) olduğu için ağaç korunur.
+  // =============================================================================
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "outDir": "./.build/bundle",
+    "types": ["node"],
+    "noEmit": false
+  },
+  "include": ["../../src/**/*.ts", "../../prisma/seed.ts"],
+  "exclude": ["../../node_modules", "../../dist"]
+}

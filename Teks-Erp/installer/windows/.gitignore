@@ -1,0 +1,6 @@
+# Build sırasında indirilen/üretilen ağır çıktılar — repoya girmez.
+.cache/
+.build/
+payload/
+dist/
+*.exe
