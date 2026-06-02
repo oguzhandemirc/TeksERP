@@ -36,6 +36,50 @@
     }
   }
 
+  // Saniyeyi "2 gün 3 sa 14 dk" gibi okunur süreye çevirir.
+  function fmtUptime(sec) {
+    if (sec == null || isNaN(sec)) return "—";
+    sec = Math.floor(sec);
+    var d = Math.floor(sec / 86400);
+    var h = Math.floor((sec % 86400) / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    var parts = [];
+    if (d > 0) parts.push(d + " gün");
+    if (h > 0) parts.push(h + " sa");
+    parts.push(m + " dk");
+    return parts.join(" ");
+  }
+
+  // Byte → KB/MB/GB.
+  function fmtBytes(b) {
+    if (b == null || isNaN(b)) return "—";
+    var u = ["B", "KB", "MB", "GB", "TB"];
+    var i = 0;
+    while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+    return (i === 0 ? b : b.toFixed(1)) + " " + u[i];
+  }
+
+  // Son yedek: zaman + "x önce" görece ifade.
+  function fmtLastBackup(lb) {
+    if (!lb || !lb.time) return "Henüz yedek yok";
+    var when = fmtTime(lb.time);
+    var diffMs = Date.now() - new Date(lb.time).getTime();
+    var rel;
+    if (diffMs < 0 || isNaN(diffMs)) rel = "";
+    else {
+      var hrs = Math.floor(diffMs / 3600000);
+      if (hrs < 1) rel = " (1 saatten az önce)";
+      else if (hrs < 24) rel = " (" + hrs + " saat önce)";
+      else rel = " (" + Math.floor(hrs / 24) + " gün önce)";
+    }
+    return when + rel;
+  }
+
+  function setText(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
   async function refresh() {
     try {
       var r = await fetch("/health", { cache: "no-store" });
@@ -45,14 +89,22 @@
       setCard("apiCard", "apiText", apiUp, "Bağlı", "Yanıt yok");
       setCard("dbCard", "dbText", dbUp, "Bağlı", "Bağlantı yok");
       setOverall(apiUp, dbUp);
-      document.getElementById("version").textContent = "Sürüm " + (j.version || "—");
-      document.getElementById("time").textContent = fmtTime(j.time);
+      setText("version", "Sürüm " + (j.version || "—"));
+      setText("time", fmtTime(j.time));
+      setText("uptime", fmtUptime(j.uptimeSec));
+      setText("dbsize", dbUp ? fmtBytes(j.dbSizeBytes) : "—");
+      setText("conns", j.dbConnections != null ? j.dbConnections + " bağlantı" : "—");
+      setText("lastbackup", fmtLastBackup(j.lastBackup));
     } catch (e) {
       // API'ye hiç ulaşılamadı → her şey kırmızı.
       setCard("apiCard", "apiText", false, "Bağlı", "Yanıt yok");
       setCard("dbCard", "dbText", false, "Bağlı", "Bağlantı yok");
       setOverall(false, false);
-      document.getElementById("time").textContent = fmtTime(new Date().toISOString());
+      setText("time", fmtTime(new Date().toISOString()));
+      setText("uptime", "—");
+      setText("dbsize", "—");
+      setText("conns", "—");
+      setText("lastbackup", "—");
     }
   }
 

@@ -25,6 +25,15 @@ $AppRoot   = Split-Path -Parent $PSScriptRoot
 $ManagePs1 = Join-Path $AppRoot "scripts\manage.ps1"
 if (-not (Test-Path $ManagePs1)) { $ManagePs1 = "C:\Program Files\TeksERP\scripts\manage.ps1" }
 $LogoIco   = Join-Path $AppRoot "branding\TeksERP.ico"
+$LogDir    = "C:\ProgramData\TeksERP\logs"
+
+# manage.ps1'i yonetici (UAC) yukseltmesiyle, konsol acik birakacak sekilde calistirir.
+# Tray normal kullanici baglaminda calisir; servis islemleri admin gerektirir.
+function Invoke-ManageAdmin($ActionName) {
+    if (Test-Path $ManagePs1) {
+        Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',"`"$ManagePs1`"",'-Action',$ActionName
+    }
+}
 
 function Get-PrimaryIp {
     # .NET NetworkInformation kullanir: Get-NetIPConfiguration (WMI) bu sorguyu
@@ -111,9 +120,15 @@ $miAddr   = $menu.Items.Add("Adres: ...")
 $miAddr.Enabled = $false
 [void]$menu.Items.Add("-")
 $miOpen   = $menu.Items.Add("Durum sayfasini ac")
-$miStudio = $menu.Items.Add("Veritabanini ac (Prisma Studio)")
 $miCopy   = $menu.Items.Add("Fabrika adresini kopyala")
+$miStudio = $menu.Items.Add("Veritabanini ac (Prisma Studio)")
+[void]$menu.Items.Add("-")
+$miStart  = $menu.Items.Add("Servisleri baslat (yonetici)")
+$miStop   = $menu.Items.Add("Servisleri durdur (yonetici)")
 $miRestart= $menu.Items.Add("Servisleri yeniden baslat (yonetici)")
+[void]$menu.Items.Add("-")
+$miBackup = $menu.Items.Add("Simdi yedek al (yonetici)")
+$miLogs   = $menu.Items.Add("Loglari ac")
 [void]$menu.Items.Add("-")
 $miUninst = $menu.Items.Add("TeksERP'yi kaldir...")
 $miExit   = $menu.Items.Add("Cikis")
@@ -121,15 +136,14 @@ $ni.ContextMenuStrip = $menu
 
 $miOpen.add_Click({ Start-Process "$($script:url)/" })
 $miCopy.add_Click({ Set-Clipboard -Value "$($script:url)/" })
-$miStudio.add_Click({
-    if (Test-Path $ManagePs1) {
-        Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',"`"$ManagePs1`"",'-Action','studio'
-    }
-})
-$miRestart.add_Click({
-    if (Test-Path $ManagePs1) {
-        Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',"`"$ManagePs1`"",'-Action','restart'
-    }
+$miStudio.add_Click({ Invoke-ManageAdmin 'studio' })
+$miStart.add_Click({ Invoke-ManageAdmin 'start' })
+$miStop.add_Click({ Invoke-ManageAdmin 'stop' })
+$miRestart.add_Click({ Invoke-ManageAdmin 'restart' })
+$miBackup.add_Click({ Invoke-ManageAdmin 'backup' })
+$miLogs.add_Click({
+    if (Test-Path $LogDir) { Start-Process explorer.exe $LogDir }
+    else { [System.Windows.Forms.MessageBox]::Show("Log klasoru henuz olusmamis:`r`n$LogDir", "TeksERP") | Out-Null }
 })
 $miUninst.add_Click({
     # Inno Setup kaldiricisi: {app}\unins000.exe — kendi yonetici yukseltmesini yapar

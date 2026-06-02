@@ -109,17 +109,48 @@ try {
   /* package.json okunamazsa varsayılan sürümle devam */
 }
 
+// Yedek klasörü: manage.ps1 backend servisini kaydederken BACKUP_DIR env'i verir
+// (C:\ProgramData\TeksERP\backups). Tanımlıysa durum sayfası son yedek zamanını
+// gösterir. Dev ortamında tanımsızdır → son yedek alanı null döner.
+const backupDir = process.env.BACKUP_DIR;
+
+// Son yedeğin (.dump) adını ve zamanını döndürür. Klasör yoksa/erişilemezse null.
+function latestBackupInfo(): { name: string; time: string } | null {
+  if (!backupDir) return null;
+  try {
+    let newest: { name: string; mtimeMs: number } | null = null;
+    for (const f of fs.readdirSync(backupDir)) {
+      if (!f.toLowerCase().endsWith(".dump")) continue;
+      const st = fs.statSync(path.join(backupDir, f));
+      if (!newest || st.mtimeMs > newest.mtimeMs) newest = { name: f, mtimeMs: st.mtimeMs };
+    }
+    return newest ? { name: newest.name, time: new Date(newest.mtimeMs).toISOString() } : null;
+  } catch {
+    return null;
+  }
+}
+
 // =============================================================================
 // Health Check  (durum sayfası ve tepsi paneli buradan beslenir)
 // =============================================================================
 // API her zaman UP (bu kod çalışıyorsa); ek olarak DB bağlantısını canlı test
 // eder. Geriye dönük uyumluluk için HTTP durumu 200 KALIR ve eski alanlar
-// (status, message) korunur — yeni alanlar (db, version) eklenir.
+// (status, message) korunur — yeni alanlar (db, version, uptimeSec, dbSizeBytes,
+// dbConnections, lastBackup) eklenir.
 app.get("/health", async (_req: Request, res: Response) => {
   let db: "UP" | "DOWN" = "DOWN";
+  let dbSizeBytes: number | null = null;
+  let dbConnections: number | null = null;
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    // Tek round-trip: DB canlılığı + boyut + aktif bağlantı sayısı.
+    const rows = await prisma.$queryRaw<Array<{ size: bigint; conns: bigint }>>`
+      SELECT pg_database_size(current_database()) AS size,
+             (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()) AS conns`;
     db = "UP";
+    if (rows && rows[0]) {
+      dbSizeBytes = Number(rows[0].size);
+      dbConnections = Number(rows[0].conns);
+    }
   } catch {
     db = "DOWN";
   }
@@ -130,6 +161,10 @@ app.get("/health", async (_req: Request, res: Response) => {
     db,
     version: appVersion,
     time: new Date().toISOString(),
+    uptimeSec: Math.floor(process.uptime()),
+    dbSizeBytes,
+    dbConnections,
+    lastBackup: latestBackupInfo(),
   });
 });
 

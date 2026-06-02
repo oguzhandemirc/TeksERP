@@ -46,9 +46,13 @@ $Nssm     = Join-Path $InstallDir "runtime\nssm.exe"
 $DataRoot   = "C:\ProgramData\TeksERP"
 $PgData     = Join-Path $DataRoot "pgdata"
 $LogDir     = Join-Path $DataRoot "logs"
+$BackupDir  = Join-Path $DataRoot "backups"
 $SecretFile = Join-Path $DataRoot "secret.json"
 $SeededFlag = Join-Path $DataRoot ".seeded"
+$VersionFile= Join-Path $DataRoot "version.txt"   # kurulu sürüm (güncelleme karşılaştırması)
 $EnvFile    = Join-Path $AppDir ".env"   # backend CWD'sinde dursun (dotenv)
+
+$BackupTaskName = "TeksERP Gece Yedek"   # Görev Zamanlayıcı'daki otomatik yedek görevi
 
 # Servis ve DB ayarları
 $DbServiceName      = "TeksErpDB"
@@ -130,6 +134,137 @@ function Wait-PgReady {
         Start-Sleep -Seconds 1
     }
     throw "PostgreSQL $TimeoutSec sn icinde hazir olmadi. Log: $PgData\log"
+}
+
+# -----------------------------------------------------------------------------
+# Sürüm yardımcıları
+# -----------------------------------------------------------------------------
+# Kurulan kodun sürümü (Inno yeni dosyalari KOPYALADIKTAN sonra calistigi icin
+# bu, GUNCELLENECEK -yeni- surumu verir). $VersionFile ise ONCEKI kurulu surumu
+# tutar -> ikisini karsilastirip yukseltme/ayni/dusurme tespiti yapilir.
+function Get-AppVersion {
+    $pkg = Join-Path $AppDir "package.json"
+    if (Test-Path $pkg) {
+        try { return (Get-Content $pkg -Raw | ConvertFrom-Json).version } catch { }
+    }
+    return "0.0.0"
+}
+
+function Get-InstalledVersion {
+    if (Test-Path $VersionFile) { return (Get-Content $VersionFile -Raw).Trim() }
+    return $null
+}
+
+# -----------------------------------------------------------------------------
+# Kurulum öncesi ön-kontroller (port çakışması + disk alanı)
+# -----------------------------------------------------------------------------
+# Bizim kendi servislerimiz (postgres/node) portu tutuyorsa sorun degil; YABANCI
+# bir surec tutuyorsa operatore acik uyari verilir (backend bind edemeyip crash
+# loop'a girerse sebebi anlasilsin).
+function Test-PortConflict {
+    param([int]$Port, [string[]]$AllowProcess = @())
+    try {
+        $conns = @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction Stop)
+    } catch {
+        return $false   # cmdlet yok (cok eski OS) ya da port bos -> kontrolu atla
+    }
+    foreach ($c in $conns) {
+        $proc  = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
+        $pname = if ($proc) { $proc.ProcessName } else { "bilinmeyen" }
+        if ($AllowProcess -contains $pname) { continue }   # bizim servisimiz
+        Write-Warn2 "Port $Port baska bir uygulama tarafindan kullaniliyor: '$pname' (PID $($c.OwningProcess))."
+        return $true
+    }
+    return $false
+}
+
+function Test-Preflight {
+    Write-Step "Kurulum on-kontrolleri..."
+
+    # 1) Disk alani (sistem surucusu: hem Program Files hem ProgramData burada).
+    $sysDrive = $env:SystemDrive.TrimEnd(':')   # "C:" -> "C"
+    try {
+        $free = (Get-PSDrive -Name $sysDrive -ErrorAction Stop).Free
+        $freeGb = [math]::Round($free / 1GB, 1)
+        if ($free -lt 2GB) {
+            Write-Warn2 "Sistem surucusunde dusuk disk alani: $freeGb GB bos. Kurulum + DB icin >=2 GB onerilir."
+        } else {
+            Write-Ok "Disk alani yeterli ($freeGb GB bos)."
+        }
+    } catch {
+        Write-Warn2 "Disk alani okunamadi (atlaniyor)."
+    }
+
+    # 2) Port cakismasi. Kendi servislerimiz haric.
+    $apiBusy = Test-PortConflict -Port $ApiPort -AllowProcess @("node")
+    $dbBusy  = Test-PortConflict -Port $PgPort  -AllowProcess @("postgres")
+    if ($apiBusy) {
+        Write-Warn2 "API portu ($ApiPort) dolu. Backend baslayamayabilir. Cozum: cakisan uygulamayi kapatin"
+        Write-Warn2 "  veya manage.ps1 basindaki `$ApiPort degerini degistirip yeniden kurun."
+    }
+    if ($dbBusy) {
+        Write-Warn2 "DB portu ($PgPort) dolu. Cozum: manage.ps1 basindaki `$PgPort degerini degistirip yeniden kurun."
+    }
+    if (-not $apiBusy -and -not $dbBusy) { Write-Ok "Portlar uygun ($ApiPort, $PgPort)." }
+}
+
+# -----------------------------------------------------------------------------
+# Migration öncesi otomatik yedek (yalnızca GÜNCELLEME'de)
+# -----------------------------------------------------------------------------
+# Ilk kurulumda DB bostur -> yedek anlamsiz. Guncellemede `migrate deploy`
+# calismadan ONCE mevcut veriyi `premigrate_<eskiSurum>_<zaman>.dump` olarak
+# yedekler. Boyle bir migration beklenmedik sekilde patlarsa geri donus noktasi olur.
+function Invoke-PreMigrationBackup {
+    param($Secrets, [string]$FromVersion)
+    if (-not (Test-Path $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null }
+    $verTag = if ($FromVersion) { ($FromVersion -replace '[^0-9A-Za-z\.]', '_') } else { "unknown" }
+    $stamp  = Get-Date -Format "yyyyMMdd_HHmmss"
+    $out    = Join-Path $BackupDir "premigrate_${verTag}_$stamp.dump"
+    Write-Step "Guncelleme: migration oncesi otomatik yedek aliniyor -> $out"
+    $env:PGPASSWORD = $Secrets.pgSuperPassword
+    & (Join-Path $PgBin "pg_dump.exe") -h 127.0.0.1 -p $PgPort -U $PgSuper -d $DbName -Fc -f $out
+    $code = $LASTEXITCODE
+    Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+    if ($code -ne 0) {
+        # Yedek alinamadi: guncellemeyi BLOKLAMA (ileriye donuk migration'lar
+        # genelde guvenli), ama operatore cok acik uyar.
+        Write-ErrX "Migration oncesi yedek ALINAMADI (pg_dump kod $code). Yine de devam ediliyor."
+        Write-Warn2 "Kritik bir guncellemeden onceyseniz, elle yedek alip dogrulayin: manage.ps1 -Action backup"
+        return $null
+    }
+    Write-Ok "Migration oncesi yedek hazir."
+    return $out
+}
+
+# -----------------------------------------------------------------------------
+# Otomatik gece yedeği (Görev Zamanlayıcı)
+# -----------------------------------------------------------------------------
+# Her gece 03:00'te SYSTEM hesabiyla `manage.ps1 -Action backup` calistiran bir
+# zamanlanmis gorev kurar (idempotent: -Force ile yeniden yazilir). Boylece admin
+# elle gorev olusturmak zorunda kalmaz (README-KURULUM.md'deki manuel adim otomatiklesir).
+function Register-BackupTask {
+    try {
+        $manage = Join-Path $InstallDir "scripts\manage.ps1"
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" `
+            -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$manage`" -Action backup"
+        $trigger   = New-ScheduledTaskTrigger -Daily -At ([datetime]"03:00")
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $settings  = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+        Register-ScheduledTask -TaskName $BackupTaskName -Action $action -Trigger $trigger `
+            -Principal $principal -Settings $settings -Description "TeksERP veritabani gece yedegi" -Force | Out-Null
+        Write-Ok "Otomatik gece yedegi kuruldu (her gun 03:00 -> $BackupDir)."
+    } catch {
+        Write-Warn2 "Otomatik yedek gorevi kurulamadi: $($_.Exception.Message)"
+    }
+}
+
+function Unregister-BackupTask {
+    try {
+        if (Get-ScheduledTask -TaskName $BackupTaskName -ErrorAction SilentlyContinue) {
+            Unregister-ScheduledTask -TaskName $BackupTaskName -Confirm:$false
+            Write-Ok "Otomatik yedek gorevi kaldirildi."
+        }
+    } catch { }
 }
 
 # -----------------------------------------------------------------------------
@@ -336,8 +471,9 @@ function Install-BackendService {
     # DB hazir olsun diye DB servisine bagimlilik
     & $Nssm set $BackendServiceName DependOnService $DbServiceName | Out-Null
     # Ortam degiskenleri (NSSM = yetkili kaynak; .env de yedek olarak yazildi)
+    # BACKUP_DIR: durum sayfasi son yedek zamanini bu klasorden okur.
     & $Nssm set $BackendServiceName AppEnvironmentExtra `
-        "NODE_ENV=production" "TZ=$Tz" "PORT=$ApiPort" "DATABASE_URL=$dbUrl" "JWT_SECRET=$($Secrets.jwtSecret)" | Out-Null
+        "NODE_ENV=production" "TZ=$Tz" "PORT=$ApiPort" "DATABASE_URL=$dbUrl" "JWT_SECRET=$($Secrets.jwtSecret)" "BACKUP_DIR=$BackupDir" | Out-Null
 
     # Backend'i baslat. `nssm restart` YENI kurulan (hic baslamamis) serviste
     # "service has not been started" ile patlar; bu yuzden once (calisiyorsa)
@@ -457,17 +593,45 @@ function Remove-LegacyTray {
 function Do-Install {
     Assert-Admin
     Remove-LegacyTray
+
+    # Sürüm tespiti: $VersionFile = ONCEKI kurulu surum, Get-AppVersion = simdi
+    # kopyalanan -yeni- surum. Ilk kurulumda onceki yoktur.
+    $prevVersion = Get-InstalledVersion
+    $newVersion  = Get-AppVersion
+    $isUpdate    = (Test-Path $SeededFlag) -or ($null -ne $prevVersion)
+
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor White
-    Write-Host "  TeksERP — Kurulum / Guncelleme" -ForegroundColor White
+    if ($isUpdate) {
+        Write-Host "  TeksERP — Guncelleme" -ForegroundColor White
+        if ($prevVersion) {
+            if ($prevVersion -eq $newVersion) {
+                Write-Host "  Sürüm: $newVersion (yeniden kurulum)" -ForegroundColor Gray
+            } else {
+                $direction = try { if ([version]$newVersion -lt [version]$prevVersion) { "GERI ALMA" } else { "yukseltme" } } catch { "degisim" }
+                Write-Host "  Sürüm: $prevVersion -> $newVersion ($direction)" -ForegroundColor Gray
+            }
+        }
+    } else {
+        Write-Host "  TeksERP — Ilk Kurulum (sürüm $newVersion)" -ForegroundColor White
+    }
     Write-Host "================================================================" -ForegroundColor White
+
+    Test-Preflight
 
     $secrets = Get-OrCreateSecrets
     Install-Database -Secrets $secrets
     Write-EnvFile -Secrets $secrets
+    # Guncellemede: migration'lar calismadan ONCE mevcut veriyi yedekle (geri donus noktasi).
+    if ($isUpdate) { Invoke-PreMigrationBackup -Secrets $secrets -FromVersion $prevVersion | Out-Null }
     Invoke-MigrateAndSeed -Secrets $secrets
     Install-BackendService -Secrets $secrets
     Open-Firewall
+    Register-BackupTask
+
+    # Bu sürümü kurulu sürüm olarak kaydet (bir sonraki guncellemede karsilastirilir).
+    Set-Content -Path $VersionFile -Value $newVersion -Encoding UTF8 -NoNewline
+
     $healthy = Test-Health
     $ip = Get-LanIp
     $altIps = @(Get-LanIpCandidates | Where-Object { $_ -ne $ip })
@@ -496,11 +660,16 @@ function Do-Install {
     Write-Host "  Servisler:       $DbServiceName , $BackendServiceName  (otomatik baslar)"
     Write-Host "  Veri klasoru:    $DataRoot   (yedek/guncelleme bunu korur)"
     Write-Host "  Loglar:          $LogDir"
+    Write-Host "  Yedekler:        $BackupDir"
+    Write-Host "  Otomatik yedek:  her gun 03:00 (Gorev Zamanlayici: '$BackupTaskName')"
     Write-Host ""
 }
 
 function Do-Uninstall {
     Assert-Admin
+    Write-Step "Otomatik yedek gorevi kaldiriliyor..."
+    Unregister-BackupTask
+
     Write-Step "Tepsi durum paneli kapatiliyor (calisiyorsa)..."
     Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -eq "powershell.exe" -and $_.CommandLine -like "*tray.ps1*" } |
@@ -551,7 +720,7 @@ function Do-Backup {
     Assert-Admin
     if (-not (Test-Path $SecretFile)) { throw "Sir dosyasi yok — kurulum yapilmamis." }
     $secrets = Get-Content $SecretFile -Raw | ConvertFrom-Json
-    if (-not $BackupPath) { $BackupPath = Join-Path $DataRoot "backups" }
+    if (-not $BackupPath) { $BackupPath = $BackupDir }
     if (-not (Test-Path $BackupPath)) { New-Item -ItemType Directory -Path $BackupPath -Force | Out-Null }
     $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $out = Join-Path $BackupPath "tekserp_$stamp.dump"
@@ -562,6 +731,17 @@ function Do-Backup {
     Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
     if ($code -ne 0) { throw "pg_dump basarisiz (kod $code)." }
     Write-Ok "Yedek alindi: $out"
+
+    # Saklama (retention): zamanli gunluk yedek (tekserp_*) dosyalarindan en yeni
+    # 14'u tutulur, eskiler silinir -> disk dolmaz. Migration oncesi yedekler
+    # (premigrate_*) ve elle baska klasore alinanlar bu temizlige DAHIL DEGIL.
+    $keep = 14
+    $old = @(Get-ChildItem -Path $BackupPath -Filter "tekserp_*.dump" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -Skip $keep)
+    foreach ($f in $old) {
+        Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
+        Write-Step "Eski yedek silindi (saklama: $keep): $($f.Name)"
+    }
 }
 
 function Do-Restore {
