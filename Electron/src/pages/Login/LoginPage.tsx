@@ -4,11 +4,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, Moon, Sun } from "lucide-react";
+import { Loader2, Moon, Settings, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
+import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
 import { authService } from "@/services/authService";
 import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt } from "@/lib/jwt";
@@ -29,6 +30,7 @@ export function LoginPage() {
   const location = useLocation();
   const setUser = useAuthStore((s) => s.setUser);
   const [submitting, setSubmitting] = useState(false);
+  const [apiDialogOpen, setApiDialogOpen] = useState(false);
   const { theme, setTheme } = useTheme();
 
   const form = useForm<FormValues>({
@@ -60,14 +62,26 @@ export function LoginPage() {
       <LoginHero />
 
       <div className="relative flex w-full items-center justify-center bg-background p-10 app-no-drag md:w-[460px] md:shrink-0">
-        <button
-          type="button"
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          aria-label="Tema değiştir"
-          className="absolute right-5 top-5 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition hover:text-foreground"
-        >
-          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
+        <div className="absolute right-5 top-5 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setApiDialogOpen(true)}
+            aria-label="Sunucu adresi ayarları"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition hover:text-foreground"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            aria-label="Tema değiştir"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition hover:text-foreground"
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+        </div>
+
+        <ApiEndpointDialog open={apiDialogOpen} onOpenChange={setApiDialogOpen} />
 
         <div className="w-full max-w-sm space-y-8">
           <div className="flex flex-col items-center space-y-4 text-center">

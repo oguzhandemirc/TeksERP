@@ -2,6 +2,7 @@ import { Buffer } from "buffer";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./App";
+import { bootstrapApiBaseUrl } from "@/lib/api-config";
 import "@fontsource/plus-jakarta-sans/400.css";
 import "@fontsource/plus-jakarta-sans/500.css";
 import "@fontsource/plus-jakarta-sans/600.css";
@@ -17,8 +18,15 @@ import "./index.css";
 const platform = window.api?.appInfo.platform();
 if (platform) document.documentElement.classList.add(`platform-${platform === "darwin" ? "mac" : platform}`);
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+/* İlk istekten önce yerel kayıtlı API adresini axios baseURL'ine uygula.
+   Hızlı yerel okuma; render'ı yalnız bu süre kadar bekletir. */
+async function bootstrap(): Promise<void> {
+  await bootstrapApiBaseUrl();
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}
+
+void bootstrap();

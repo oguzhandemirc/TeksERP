@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PricingFlagCard } from "./PricingFlagCard";
+import { ApiEndpointCard } from "./ApiEndpointCard";
 
 const SETTINGS_QUERY_KEY = "system-settings";
 
@@ -15,6 +16,7 @@ export function GeneralSettingsPage() {
       <div className="flex-1 overflow-auto">
         <div className="mx-auto max-w-3xl space-y-5 p-6">
           <PricingFlagCard />
+          <ApiEndpointCard />
         </div>
       </div>
     </div>

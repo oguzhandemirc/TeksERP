@@ -2,10 +2,16 @@ import axios from "axios";
 import { toast } from "sonner";
 import { tokenStore } from "@/lib/secure-token";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
+/**
+ * Build sırasında gömülen varsayılan adres. Çalışma anında kullanıcı bunu
+ * yerel ayardan değiştirebilir — bkz. `@/lib/api-config` (açılışta `baseURL`'e
+ * uygulanır). Kayıtlı adres yoksa bu değer geçerli kalır.
+ */
+export const DEFAULT_API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: DEFAULT_API_BASE_URL,
   timeout: 15_000,
   headers: { "Content-Type": "application/json" },
 });
