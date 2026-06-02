@@ -1,5 +1,5 @@
-# =============================================================================
-# TeksERP — Windows Setup Paketi Olusturucu  (build.ps1)
+﻿# =============================================================================
+# TeksERP - Windows Setup Paketi Olusturucu  (build.ps1)
 # =============================================================================
 # Bu script BIR WINDOWS makinede calistirilir ve TeksERP-Setup-<surum>.exe uretir.
 #
@@ -75,21 +75,30 @@ Push-Location $Backend
 try {
     if (-not $SkipNpm) {
         Say "npm ci (tum bagimliliklar)..."
-        & npm ci
+        & npm.cmd ci
         if ($LASTEXITCODE -ne 0) { throw "npm ci basarisiz." }
     }
 
+    # Prisma client tsc'den ONCE uretilmeli: src/* kodu `import { Prisma } from
+    # '@prisma/client'` kullanir; client generate edilmeden bu tip yok ve tsc
+    # "has no exported member 'Prisma'" + implicit-any hatalariyla patlar.
+    Say "Prisma client uretiliyor (tsc oncesi - tip bilgisi icin)..."
+    & npx.cmd prisma generate
+    if ($LASTEXITCODE -ne 0) { throw "prisma generate (tsc oncesi) basarisiz." }
+    Done "Prisma client hazir."
+
     Say "Backend derleniyor (src + prisma/seed -> .build\bundle)..."
-    & npx tsc -p (Join-Path $Here "tsconfig.bundle.json")
+    & npx.cmd tsc -p (Join-Path $Here "tsconfig.bundle.json")
     if ($LASTEXITCODE -ne 0) { throw "tsc derleme basarisiz." }
     Done "Derleme tamam."
 
     Say "Uretim node_modules hazirlaniyor (devDependencies cikariliyor)..."
-    & npm prune --omit=dev
+    & npm.cmd prune --omit=dev
     if ($LASTEXITCODE -ne 0) { throw "npm prune basarisiz." }
 
-    Say "Prisma client + Windows engine uretiliyor (prisma generate)..."
-    & npx prisma generate
+    # prune sonrasi Windows engine'in pruned agacta oldugundan emin ol.
+    Say "Prisma client + Windows engine yeniden uretiliyor (prune sonrasi)..."
+    & npx.cmd prisma generate
     if ($LASTEXITCODE -ne 0) { throw "prisma generate basarisiz." }
     Done "node_modules hazir."
 } finally {
@@ -104,16 +113,27 @@ $AppOut = Join-Path $Payload "app"
 New-Item -ItemType Directory -Path $AppOut -Force | Out-Null
 
 # Derlenmis JS -> app\dist  (dist\src\server.js , dist\prisma\seed.js)
-Copy-Item (Join-Path $Bundle "*") (Join-Path $AppOut "dist") -Recurse -Force
+# Hedef klasoru once olustur: yoksa Copy-Item coklu ogeyi (src, prisma) tek
+# hedefe kopyalarken "Container cannot be copied onto existing leaf" hatasi verir.
+$DistOut = Join-Path $AppOut "dist"
+New-Item -ItemType Directory -Path $DistOut -Force | Out-Null
+Copy-Item (Join-Path $Bundle "*") $DistOut -Recurse -Force
 # Uretim bagimliliklari
 Copy-Item (Join-Path $Backend "node_modules") (Join-Path $AppOut "node_modules") -Recurse -Force
-# Prisma sema + migration'lar
+# Prisma sema + migration'lar (ust klasor Copy-Item tarafindan olusturulmaz -> once yarat)
+New-Item -ItemType Directory -Path (Join-Path $AppOut "prisma") -Force | Out-Null
 Copy-Item (Join-Path $Backend "prisma\schema.prisma") (Join-Path $AppOut "prisma\schema.prisma") -Force
 Copy-Item (Join-Path $Backend "prisma\migrations")    (Join-Path $AppOut "prisma\migrations") -Recurse -Force
 # package.json (prisma CLI okuyabilir)
 Copy-Item (Join-Path $Backend "package.json") (Join-Path $AppOut "package.json") -Force
-# Uretim Prisma config (DUZ JS — ts-node gerektirmez)
+# Uretim Prisma config (DUZ JS - ts-node gerektirmez)
 Copy-Item (Join-Path $Here "prisma.config.prod.js") (Join-Path $AppOut "prisma.config.js") -Force
+# Durum sayfasi statik dosyalari (public\ -> app\public): kok / adresinde markali
+# API/DB durum sayfasi sunulur. CWD = app\ oldugundan express.static bunu bulur.
+if (Test-Path (Join-Path $Backend "public")) {
+    Copy-Item (Join-Path $Backend "public") (Join-Path $AppOut "public") -Recurse -Force
+    Done "Durum sayfasi (public\) eklendi."
+}
 Done "payload\ hazir."
 
 # -----------------------------------------------------------------------------
@@ -122,10 +142,13 @@ Done "payload\ hazir."
 function Get-Cached {
     param([string]$Url, [string]$FileName)
     $path = Join-Path $Cache $FileName
-    if ((Test-Path $path) -and -not $SkipDownload) { Done "onbellek: $FileName"; return $path }
-    if ($SkipDownload -and -not (Test-Path $path)) { throw "$FileName onbellekte yok ama -SkipDownload verildi." }
+    # Onbellekte gecerli (bos olmayan) dosya varsa HER ZAMAN onu kullan — indirme.
+    if ((Test-Path $path) -and ((Get-Item $path).Length -gt 0)) { Done "onbellek: $FileName"; return $path }
+    if ($SkipDownload) { throw "$FileName onbellekte yok ama -SkipDownload verildi." }
     Say "Indiriliyor: $FileName"
-    Invoke-WebRequest -Uri $Url -OutFile $path -UseBasicParsing
+    $tmp = "$path.partial"
+    Invoke-WebRequest -Uri $Url -OutFile $tmp -UseBasicParsing
+    Move-Item $tmp $path -Force   # yarim/bozuk indirme onbellege gecmesin
     return $path
 }
 
@@ -133,7 +156,7 @@ $tmp = Join-Path $Build "extract"
 if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 New-Item -ItemType Directory -Path $tmp -Force | Out-Null
 
-# 3a) Node.js — sadece node.exe lazim
+# 3a) Node.js - sadece node.exe lazim
 Say "Node.js runtime..."
 $nodeZip = Get-Cached -Url $NodeUrl -FileName "node-v$NodeVersion-win-x64.zip"
 Expand-Archive -Path $nodeZip -DestinationPath $tmp -Force
@@ -142,7 +165,7 @@ New-Item -ItemType Directory -Path (Join-Path $Runtime "node") -Force | Out-Null
 Copy-Item $nodeExe (Join-Path $Runtime "node\node.exe") -Force
 Done "node.exe gomuldu."
 
-# 3b) PostgreSQL — pgsql\ (bin, lib, share)
+# 3b) PostgreSQL - pgsql\ (bin, lib, share)
 Say "PostgreSQL binaries..."
 $pgZip = Get-Cached -Url $PgUrl -FileName "postgresql-$PgVersion-win-x64-binaries.zip"
 Expand-Archive -Path $pgZip -DestinationPath $tmp -Force
@@ -164,13 +187,46 @@ Copy-Item $nssmExe (Join-Path $Runtime "nssm.exe") -Force
 Done "nssm.exe gomuldu."
 
 # -----------------------------------------------------------------------------
+# 3d) Sihirbaz logosu (BMP) — Inno modern sihirbazinin kucuk gorseli .bmp ister.
+#     Logo PNG'sinden oraninikoruyarak beyaz zemin uzerine 138x140 BMP uretilir.
+# -----------------------------------------------------------------------------
+function New-WizardBmp {
+    param([string]$Png, [string]$OutBmp, [int]$W, [int]$H)
+    Add-Type -AssemblyName System.Drawing
+    $src = [System.Drawing.Image]::FromFile($Png)
+    try {
+        $bmp = New-Object System.Drawing.Bitmap $W, $H
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $g.Clear([System.Drawing.Color]::White)
+        $pad = 12
+        $ratio = [Math]::Min(($W - 2 * $pad) / $src.Width, ($H - 2 * $pad) / $src.Height)
+        $dw = [int]($src.Width * $ratio); $dh = [int]($src.Height * $ratio)
+        $g.DrawImage($src, [int](($W - $dw) / 2), [int](($H - $dh) / 2), $dw, $dh)
+        $g.Dispose()
+        $bmp.Save($OutBmp, [System.Drawing.Imaging.ImageFormat]::Bmp)
+        $bmp.Dispose()
+    } finally { $src.Dispose() }
+}
+
+$brandDir = Join-Path $Here "branding"
+$brandPng = Join-Path $brandDir "logo.png"
+if (Test-Path $brandPng) {
+    Say "Sihirbaz logosu (BMP) uretiliyor..."
+    New-WizardBmp -Png $brandPng -OutBmp (Join-Path $brandDir "wizard-small.bmp") -W 138 -H 140
+    Done "branding\wizard-small.bmp hazir."
+}
+
+# -----------------------------------------------------------------------------
 # 4) Inno Setup derle
 # -----------------------------------------------------------------------------
 Say "Inno Setup (ISCC.exe) araniyor..."
 $iscc = $null
 $candidates = @(
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+    "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"   # winget kullanici-bazli kurulum
 )
 foreach ($c in $candidates) { if (Test-Path $c) { $iscc = $c; break } }
 if (-not $iscc) {

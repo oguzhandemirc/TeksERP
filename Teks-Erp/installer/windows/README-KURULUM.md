@@ -96,12 +96,21 @@ $NssmVersion` değişkenlerinden ayarlanır.
 3. Hepsi bu. Kurulum:
    - mevcut şifreleri ve veritabanını **korur**,
    - kodu yeni sürümle değiştirir,
+   - **migration'lardan önce otomatik yedek alır** (`backups\premigrate_<eskiSürüm>_<zaman>.dump`),
    - yalnızca **yeni migration'ları** uygular,
    - **seed'i atlar** (veriler korunur),
-   - backend servisini yeniden başlatır.
+   - backend servisini yeniden başlatır,
+   - konsolda **sürüm geçişini** gösterir (örn. `1.0.0 -> 1.1.0 (yukseltme)`).
 
 > İpucu: Büyük indeks içeren migration'lar büyük tablolarda yazma kilidi alabilir.
 > Bu tür güncellemeleri **vardiya dışında** (gece/hafta sonu) çalıştır.
+
+**Geri alma (rollback):** Güncelleme sonrası bir sorun çıkarsa, migration öncesi
+otomatik alınan yedeğe dönebilirsin:
+```powershell
+.\manage.ps1 -Action restore -BackupFile "C:\ProgramData\TeksERP\backups\premigrate_1.0.0_20260601_0300.dump"
+```
+(Şema değişen bir sürümde, koddan da eski sürüme dönmen gerekebilir — önce eski `setup.exe`'yi çalıştır, sonra restore et.)
 
 ---
 
@@ -120,13 +129,18 @@ Yönetici PowerShell'de (`C:\Program Files\TeksERP\scripts\`):
 ```
 
 Servisleri Windows "Hizmetler" (services.msc) ekranından da yönetebilirsin:
-`TeksErpDB`, `TeksErpBackend`.
+`TeksErpDB`, `TeksErpBackend`. Çoğu işlem için sistem tepsisindeki **durum paneli**
+sağ-tık menüsü yeterlidir (başlat/durdur/yeniden başlat, yedek al, logları aç,
+durum sayfası, Prisma Studio).
 
-**Otomatik yedek (önerilen):** Görev Zamanlayıcı'da her gece çalışan bir görev:
-```
-Program:   powershell.exe
-Argüman:   -NoProfile -ExecutionPolicy Bypass -File "C:\Program Files\TeksERP\scripts\manage.ps1" -Action backup
-```
+**Otomatik yedek:** Kurulum, Görev Zamanlayıcı'da **`TeksERP Gece Yedek`** adıyla
+her gece **03:00**'te çalışan bir yedek görevi otomatik kurar — elle ayarlamana
+gerek yok. Zamanlı yedeklerden (`tekserp_*.dump`) en yeni **14 tanesi** tutulur,
+eskiler otomatik silinir (disk dolmaz). Migration öncesi yedekler (`premigrate_*`)
+bu temizliğe dahil değildir. Saati/günü Görev Zamanlayıcı'dan değiştirebilirsin.
+
+> Yedekleri ayrı bir diske/sunucuya da kopyalamak güvenlidir; `secret.json` ile
+> birlikte sakla (geri yükleme için ikisi de gerekir).
 
 ---
 
