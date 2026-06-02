@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import RefreshButton from './RefreshButton';
 import Modal from 'react-native-modal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDeviceType } from '../hooks/useDeviceType';
 import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 import {
@@ -112,9 +113,16 @@ export default function PickerModal(props: Props) {
   const paginated = props.paginated === true;
   const { width: winW, height: winH } = useWindowDimensions();
   const modalProps = useFullscreenModalProps();
+  const insets = useSafeAreaInsets();
   const device = useDeviceType();
   const isPhone = device === 'phone';
   const effectiveColumns = isPhone ? 1 : numColumns;
+
+  // Modal dikeyde/yatayda ORTALI olduğundan, güvenli alan (durum/nav çubuğu,
+  // çentik) dışına taşmaması için sheet boyutu hem oran hem de
+  // (ekran − 2×max(inset)) ile sınırlanır — özellikle tablette önemli.
+  const maxSheetH = winH - 2 * Math.max(insets.top, insets.bottom) - 24;
+  const maxSheetW = winW - 2 * Math.max(insets.left, insets.right) - 24;
   const searchRef = useRef<RNTextInput>(null);
   const listRef = useRef<FlashListRef<PickerOption>>(null);
 
@@ -237,9 +245,10 @@ export default function PickerModal(props: Props) {
       <View
         style={[
           styles.sheet,
-          isPhone
-            ? { width: winW * 0.95, height: winH * 0.85 }
-            : { width: winW * 0.82, height: winH * 0.88 },
+          {
+            width: Math.min(isPhone ? winW * 0.95 : winW * 0.82, maxSheetW),
+            height: Math.min(isPhone ? winH * 0.85 : winH * 0.8, maxSheetH),
+          },
         ]}
       >
         {/* Başlık satırı — telefonda search ayrı satıra düşer */}

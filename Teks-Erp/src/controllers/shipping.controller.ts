@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { ShipmentStatus } from "@prisma/client";
 import { ShippingService } from "../services/shipping.service";
 import "../types/express-augment";
 
@@ -48,15 +47,7 @@ export class ShippingController {
 
   listShipments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const statusRaw = req.query.status as string | undefined;
-      const status =
-        statusRaw && Object.values(ShipmentStatus).includes(statusRaw as ShipmentStatus)
-          ? (statusRaw as ShipmentStatus)
-          : undefined;
-      const result = await this.service.listShipments({
-        status,
-        customerId: (req.query.customerId as string | undefined) || undefined,
-      });
+      const result = await this.service.listShipments(req);
       res.status(200).json(result);
     } catch (e) {
       next(e);

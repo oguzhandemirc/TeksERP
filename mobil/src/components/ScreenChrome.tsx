@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Appbar, Text, Menu, TouchableRipple, Icon, Divider } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,9 +18,6 @@ interface Props {
   /** Appbar.Content'ten sonra, sağdaki sistem aksiyonlarından önce render edilir.
    *  Ekran-spesifik tetikler (örn. Tambur'da "Açık İşler") için. */
   headerExtras?: React.ReactNode;
-  /** Kullanıcı tetikleyicisini metin yerine yalnız profil ikonu yap (ad menüde
-   *  görünür). Header'da çok aksiyon olan ekranlarda (Tambur) yer kazandırır. */
-  userIconOnly?: boolean;
   children: React.ReactNode;
 }
 
@@ -30,7 +27,6 @@ export default function ScreenChrome({
   onBack,
   onStepBack,
   headerExtras,
-  userIconOnly,
   children,
 }: Props) {
   const user = useAuthStore((s) => s.user);
@@ -52,11 +48,6 @@ export default function ScreenChrome({
     setMenuVisible(false);
     void clearAuth();
   };
-
-  const { width: winW, height: winH } = useWindowDimensions();
-  // Compact portrait (telefon dikey) — kullanıcı tetikleyicisi sadece profil
-  // ikonu olur; yer kazancı header'da diğer aksiyonlara nefes aldırır.
-  const compactPortrait = winH > winW && winW < 600;
 
   return (
     <View style={styles.root}>
@@ -95,17 +86,7 @@ export default function ScreenChrome({
               accessibilityLabel="Kullanıcı menüsü"
             >
               <View style={styles.userTriggerInner}>
-                {compactPortrait || userIconOnly ? (
-                  // Sadece profil ikonu — username text yer harcamaz, ad menüde.
-                  <Icon source="account-circle" size={26} color="#cbd5e1" />
-                ) : (
-                  <>
-                    <Text variant="bodyMedium" style={styles.userText}>
-                      {user?.username ?? ''}
-                    </Text>
-                    <Icon source="chevron-down" size={18} color="#cbd5e1" />
-                  </>
-                )}
+                <Icon source="account-circle" size={26} color="#cbd5e1" />
               </View>
             </TouchableRipple>
           }
@@ -154,7 +135,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
-  userText: { color: '#cbd5e1', fontWeight: '600' },
   menuHeader: {
     flexDirection: 'row',
     alignItems: 'center',

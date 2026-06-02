@@ -93,7 +93,11 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }:
   });
 
   const printMut = useMutation({
-    mutationFn: () => labelService.recordPrintEvent(rollId!),
+    mutationFn: () =>
+      labelService.recordPrintEvent(
+        rollId!,
+        payload?.orderLineId ? { orderLineId: payload.orderLineId } : undefined,
+      ),
     onError: (err: Error) => {
       // Audit hatası baskıyı engellemez — sadece log.
       console.warn('Print audit failed', err.message);

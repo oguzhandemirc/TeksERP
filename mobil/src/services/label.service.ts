@@ -53,11 +53,18 @@ export const labelService = {
       .then((r) => r.data),
 
   /**
-   * Etiket basıldı audit event'i. Asıl baskı tarayıcı/yazıcıda gerçekleşir;
-   * bu endpoint sadece SystemLog izi düşer.
+   * Etiket basıldı audit event'i + "son basılan etiket" snapshot'ı. Asıl baskı
+   * tarayıcı/yazıcıda gerçekleşir; bu çağrı SystemLog izi düşer ve baskı
+   * bağlamını (orderLineId/customerId) backend'e bildirir (snapshot için).
    */
-  recordPrintEvent: (rollId: string): Promise<ApiResponse<unknown>> =>
+  recordPrintEvent: (
+    rollId: string,
+    ctx?: { orderLineId?: string | null; customerId?: string | null }
+  ): Promise<ApiResponse<unknown>> =>
     apiClient
-      .post<ApiResponse<unknown>>(`/labels/rolls/${rollId}/print`)
+      .post<ApiResponse<unknown>>(`/labels/rolls/${rollId}/print`, {
+        ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
+        ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
+      })
       .then((r) => r.data),
 };

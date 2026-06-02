@@ -27,6 +27,14 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { recomputeOrderStatusForOrders } from "./helpers/order-status.helper";
 import { ApiResponse } from "../types/api.types";
+import type { CursorPaginatedResponse } from "./base.service";
+import type { Request } from "express";
+import { parseQueryParams, isCursorRequested } from "../utils/query-parser";
+import {
+  decodeDynamicCursor,
+  dynamicCursorWhere,
+  buildNextDynamicCursor,
+} from "../utils/cursor";
 
 // ---------------------------------------------------------------------------
 // Sequence helpers — SVK-YYMMDD-NNN (sevkiyat), CV-YYMMDD-NNN (çuval)
@@ -319,32 +327,69 @@ export class ShippingService {
     return { success: true, data: {}, message: "Sipariş çıkarıldı" };
   }
 
-  async listShipments(params: {
-    status?: ShipmentStatus;
-    customerId?: string;
-  }): Promise<ApiResponse<unknown>> {
+  async listShipments(
+    req: Request
+  ): Promise<ApiResponse<unknown> | CursorPaginatedResponse<unknown>> {
+    const params = parseQueryParams(req);
+    // status/customer: hem ham query (mobil `?status=`) hem filter[] (Electron) destekle.
+    const statusRaw =
+      (req.query.status as string | undefined) ??
+      (typeof params.filters.status === "string" ? params.filters.status : undefined);
+    const status =
+      statusRaw && Object.values(ShipmentStatus).includes(statusRaw as ShipmentStatus)
+        ? (statusRaw as ShipmentStatus)
+        : undefined;
+    const customerId =
+      (req.query.customerId as string | undefined) ||
+      (typeof params.filters.customerId === "string" ? params.filters.customerId : undefined) ||
+      undefined;
+
     const where: Prisma.ShipmentWhereInput = {};
-    if (params.status) where.status = params.status;
-    if (params.customerId) where.customerId = params.customerId;
+    if (status) where.status = status;
+    if (customerId) where.customerId = customerId;
+
+    // Lean select — liste için sayılar (dizi değil); snapshot/dizi YOK (perf, rule 13).
+    const select = {
+      id: true,
+      shipmentNo: true,
+      status: true,
+      plateNumber: true,
+      driverName: true,
+      carrier: true,
+      readyAt: true,
+      dispatchedAt: true,
+      createdAt: true,
+      customer: { select: { id: true, code: true, name: true } },
+      branch: { select: { id: true, name: true } },
+      _count: { select: { sacks: true, rolls: true, orders: true } },
+    } as const;
+
+    // Electron DataTable → cursor; mobil/eski istemci → array (geri uyum, mobil bozulmaz).
+    if (isCursorRequested(req)) {
+      const rawLimit = parseInt(req.query.limit as string, 10) || 50;
+      const limit = Math.min(Math.max(1, rawLimit), 200);
+      const cursor = decodeDynamicCursor(req.query.cursor as string | undefined);
+      const cursorWhere = cursor
+        ? { AND: [where, dynamicCursorWhere(cursor, "createdAt", "desc")] }
+        : where;
+      const items = await prisma.shipment.findMany({
+        where: cursorWhere,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: limit + 1,
+        select,
+      });
+      const hasMore = items.length > limit;
+      const data = hasMore ? items.slice(0, limit) : items;
+      const last = data[data.length - 1] as Record<string, unknown> | undefined;
+      const nextCursor = hasMore ? buildNextDynamicCursor(last, "createdAt") : null;
+      return { success: true, data, pagination: { nextCursor, hasMore, limit } };
+    }
 
     const shipments = await prisma.shipment.findMany({
       where,
       orderBy: { createdAt: "desc" },
       take: 200,
-      select: {
-        id: true,
-        shipmentNo: true,
-        status: true,
-        plateNumber: true,
-        driverName: true,
-        carrier: true,
-        readyAt: true,
-        dispatchedAt: true,
-        createdAt: true,
-        customer: { select: { id: true, code: true, name: true } },
-        branch: { select: { id: true, name: true } },
-        _count: { select: { sacks: true, rolls: true, orders: true } },
-      },
+      select,
     });
     return { success: true, data: shipments };
   }

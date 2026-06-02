@@ -473,6 +473,12 @@ export class OrderService extends BaseService {
       return `${itemId}|${colorId ?? ""}|${w}`;
     };
 
+    // En eşleşmesi: birebir (Depo) vs gevşek (Ham, null=joker) — Ürün Dengesi ile aynı.
+    const widthEqual = (a: Prisma.Decimal | null, b: Prisma.Decimal | null): boolean =>
+      a == null || b == null ? a == null && b == null : new Prisma.Decimal(a).equals(b);
+    const widthCompatible = (a: Prisma.Decimal | null, b: Prisma.Decimal | null): boolean =>
+      a == null || b == null ? true : new Prisma.Decimal(a).equals(b);
+
     // Serbest stok — spec bazında grupla; bir sevkiyata okutulmamış (shipmentId=null)
     // WAREHOUSE + STOCK toplar (fungible havuz, etiket bakılmaz).
     const itemIds = [...new Set(lines.map((l) => l.itemId))];
@@ -486,17 +492,22 @@ export class OrderService extends BaseService {
       _sum: { currentQty: true },
     });
 
-    // Serbest stok eşleştirme: item kesin, renk/en line'da boşsa gevşek eşleşir
+    // Serbest stok eşleştirme (item kesin):
+    //  - Depo (WAREHOUSE, bitmiş/boyalı): renk + en BİREBİR (renk zaten uygulanmış).
+    //  - Ham (STOCK, işlenecek): renksiz (null) ham JOKER — boyahanede istenen renge
+    //    boyanır, renkli talebe de sayılır; en null=joker. (Ürün Dengesi ile aynı.)
     const matchFree = (line: (typeof lines)[number], status: RollStatus): Prisma.Decimal =>
       freeGrouped.reduce((sum, g) => {
         if (g.status !== status) return sum;
         if (g.itemId !== line.itemId) return sum;
-        if (line.colorId != null && g.colorId !== line.colorId) return sum;
-        if (
-          line.width != null &&
-          (g.width == null || !new Prisma.Decimal(line.width).equals(g.width))
-        ) {
-          return sum;
+        if (status === RollStatus.WAREHOUSE) {
+          if ((g.colorId ?? null) !== (line.colorId ?? null)) return sum;
+          if (!widthEqual(g.width, line.width)) return sum;
+        } else {
+          const colorOk =
+            g.colorId == null || line.colorId == null || g.colorId === line.colorId;
+          if (!colorOk) return sum;
+          if (!widthCompatible(g.width, line.width)) return sum;
         }
         return sum.plus(g._sum.currentQty ?? 0);
       }, new Prisma.Decimal(0));
@@ -544,11 +555,12 @@ export class OrderService extends BaseService {
       const freeWarehouse = matchFree(l, RollStatus.WAREHOUSE);
       const freeStock = matchFree(l, RollStatus.STOCK);
       const requested = new Prisma.Decimal(l.quantity);
+      // Net açık = bitmiş/üretimdeki ürün açığı. Ham (freeStock) HARİÇ — ham
+      // işlenmemiş girdi, mamul değil; net açığı düşürmez (yalnız bilgi döner).
       const netGap = requested
         .minus(shipped)
-        .minus(inProduction)
         .minus(freeWarehouse)
-        .minus(freeStock);
+        .minus(inProduction);
       return {
         lineId: l.id,
         item: l.item,

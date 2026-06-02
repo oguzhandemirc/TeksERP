@@ -99,6 +99,34 @@ interface RollRow {
 // "iptal edebilir miyim?" sorusu artık tab seçimiyle yanıtlanır.
 type RightTab = 'pending' | 'cancellable' | 'history';
 
+// Koyu header'da ikon + etiketli aksiyon pill'i — Tambur ekranıyla aynı kalıp.
+function HeaderChip({
+  icon,
+  label,
+  onPress,
+  accent,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  accent?: boolean;
+}) {
+  return (
+    <TouchableRipple
+      onPress={onPress}
+      style={[styles.headerChip, accent && styles.headerChipAccent]}
+      borderless
+      rippleColor="rgba(255,255,255,0.2)"
+      accessibilityLabel={label}
+    >
+      <View style={[styles.headerChipInner, accent && styles.headerChipInnerLarge]}>
+        <Icon source={icon} size={accent ? 22 : 18} color="#fff" />
+        <Text style={styles.headerChipText}>{label}</Text>
+      </View>
+    </TouchableRipple>
+  );
+}
+
 export default function FasonKabulScreen() {
   const device = useDeviceType();
   const isPhone = device === 'phone';
@@ -610,9 +638,70 @@ export default function FasonKabulScreen() {
   return (
     <ScreenChrome
       title="Fason Kabul"
-      // Telefon: tüm aksiyonlar (Liste / Kamera / Geçmiş) ekran altındaki sabit
-      // bar'da → header'da sadece başlık + profil kalır.
-      headerExtras={<SyncStatusChip />}
+      headerExtras={
+        <View style={styles.headerExtrasRow}>
+          {/* Telefon dikeyde aksiyonlar alt baş-parmak barına taşınır. Tablet
+              header'ında soldan: "Kamera ile Okut" + "Bekleyen Sevkler" +
+              "Yenile" (en sağda, profilin solunda). Kamera çalışıyorken okutma
+              buradaki chip'ten; kamera arızalı seçiliyse chip gizlenir, sağ
+              kolonda HID/elle metin girişi açılır. */}
+          {!isPhone && !manualBarcodeEntry && (
+            <HeaderChip
+              icon="camera"
+              label="Kamera ile Okut"
+              onPress={() => setScannerOpen(true)}
+              accent
+            />
+          )}
+          <SyncStatusChip />
+          {!isPhone && (
+            <HeaderChip
+              icon="format-list-bulleted"
+              label="Bekleyen Sevkler"
+              onPress={() => setListModalOpen(true)}
+            />
+          )}
+          {!isPhone && (
+            <RefreshButton
+              headerStyle
+              label="Yenile"
+              onPress={() => {
+                if (rightTab === 'pending') pendingQuery.refetch();
+                else if (rightTab === 'cancellable') cancellableReceiptsQuery.refetch();
+                else receiptsQuery.refetch();
+              }}
+              refreshing={
+                rightTab === 'pending'
+                  ? pendingQuery.isFetching
+                  : rightTab === 'cancellable'
+                    ? cancellableReceiptsQuery.isFetching
+                    : receiptsQuery.isFetching
+              }
+              isError={
+                rightTab === 'pending'
+                  ? pendingQuery.isError
+                  : rightTab === 'cancellable'
+                    ? cancellableReceiptsQuery.isError
+                    : receiptsQuery.isError
+              }
+              errorMessage={
+                rightTab === 'pending'
+                  ? (pendingQuery.error as Error | undefined)?.message
+                  : rightTab === 'cancellable'
+                    ? (cancellableReceiptsQuery.error as Error | undefined)?.message
+                    : (receiptsQuery.error as Error | undefined)?.message
+              }
+              successMessage={
+                rightTab === 'pending'
+                  ? 'Bekleyen sevkler güncellendi'
+                  : rightTab === 'cancellable'
+                    ? 'İptal listesi güncellendi'
+                    : 'Kabul listesi güncellendi'
+              }
+            />
+          )}
+        </View>
+      }
     >
       <View style={[styles.body, isPhone && styles.bodyPhone]}>
         {/* ════════ SOL: form ════════ */}
@@ -622,7 +711,9 @@ export default function FasonKabulScreen() {
               <Icon source="package-down" size={64} color="#cbd5e1" />
               <Text style={styles.emptyTitle}>Sevk seçilmedi</Text>
               <Text style={styles.emptyHint}>
-                Sağdan bekleyen bir sevke tıklayın veya refakat kartını okutun
+                {isPhone
+                  ? 'Alttan "Bekleyen"e basıp bir sevk seçin veya "Kamera ile Okut" ile refakat kartını okutun'
+                  : 'Sağdan bekleyen bir sevke tıklayın veya refakat kartını okutun'}
               </Text>
             </View>
           ) : (
@@ -1023,22 +1114,21 @@ export default function FasonKabulScreen() {
         {!(isPhone && !manualBarcodeEntry) && (
         <View style={[styles.rightCol, isPhone && styles.rightColPhone]}>
           <>
-          {/* Kart input + kamera — sticky top, her tab'da görünür.
-              Telefonda Liste/Kamera alt sabit bar'da; bar burada sadece
-              manuel input render eder (compactCta + manualMode pattern). */}
-          <View style={styles.cardInputWrap}>
-            <ScannerEntryBar
-              value={cardBarcode}
-              onChangeText={setCardBarcode}
-              placeholder="Refakat kartı barkodu okut/yaz..."
-              onResolve={() => handleResolveCard()}
-              resolving={resolvingCard}
-              onScan={() => setScannerOpen(true)}
-              onList={isPhone ? undefined : () => setListModalOpen(true)}
-              tone="green"
-              compactCta={isPhone}
-            />
-          </View>
+          {/* Kart giriş bandı — yalnız "Kamera arızalı" (manuel) modda görünür.
+              Kamera çalışıyorken okutma top bar'daki "Kamera ile Okut" chip'inden
+              yapılır; bu bant gizlidir. */}
+          {manualBarcodeEntry && (
+            <View style={styles.cardInputWrap}>
+              <ScannerEntryBar
+                value={cardBarcode}
+                onChangeText={setCardBarcode}
+                placeholder="Refakat kartı barkodu okut/yaz..."
+                onResolve={() => handleResolveCard()}
+                resolving={resolvingCard}
+                tone="green"
+              />
+            </View>
+          )}
 
           {!isPhone && (
           <>
@@ -1066,36 +1156,6 @@ export default function FasonKabulScreen() {
               onPress={() => setRightTab('history')}
               activeColor="#059669"
             />
-            <View style={styles.tabRefreshWrap}>
-              <RefreshButton
-                onPress={() => {
-                  if (rightTab === 'pending') pendingQuery.refetch();
-                  else if (rightTab === 'cancellable') cancellableReceiptsQuery.refetch();
-                  else receiptsQuery.refetch();
-                }}
-                refreshing={
-                  rightTab === 'pending'
-                    ? pendingQuery.isFetching
-                    : rightTab === 'cancellable'
-                      ? cancellableReceiptsQuery.isFetching
-                      : receiptsQuery.isFetching
-                }
-                isError={
-                  rightTab === 'pending'
-                    ? pendingQuery.isError
-                    : rightTab === 'cancellable'
-                      ? cancellableReceiptsQuery.isError
-                      : receiptsQuery.isError
-                }
-                errorMessage={
-                  rightTab === 'pending'
-                    ? (pendingQuery.error as Error | undefined)?.message
-                    : rightTab === 'cancellable'
-                      ? (cancellableReceiptsQuery.error as Error | undefined)?.message
-                      : (receiptsQuery.error as Error | undefined)?.message
-                }
-              />
-            </View>
           </View>
 
           {/* Tab içeriği */}
@@ -1148,49 +1208,61 @@ export default function FasonKabulScreen() {
         </View>
         )}
 
-        {/* Telefon dikey — ekran altında sabit aksiyon barı: liste (sol) + kamera (sağ).
-            position:absolute body'nin içinde bottom:0 — modal'lar üstte kalır. */}
+        {/* Telefon dikey — ekran altında baş-parmak aksiyon barı.
+            30 / 40 / 30: Bekleyen (sol) · Kamera ile Okut (orta, ana eylem) ·
+            Geçmiş (sağ). Kamera ortada vurgulu dolgulu blok. */}
         {isPhone && (
           <View style={styles.bottomBar}>
-            <TouchableRipple
-              onPress={() => setListModalOpen(true)}
-              style={[styles.bottomBarBtn, styles.bottomBarBtnSide]}
-              rippleColor="rgba(15, 23, 42, 0.1)"
-              accessibilityLabel="Bekleyen sevkler"
-            >
-              <View style={styles.bottomBarBtnInner}>
-                <Icon source="format-list-bulleted" size={26} color="#0f172a" />
-                <Text style={styles.bottomBarBtnText}>Liste</Text>
-              </View>
-            </TouchableRipple>
-            <View style={styles.bottomBarDivider} />
-            <TouchableRipple
-              onPress={() => setScannerOpen(true)}
-              style={[styles.bottomBarBtn, styles.bottomBarBtnPrimary]}
-              rippleColor="rgba(30, 64, 175, 0.12)"
-              accessibilityLabel="Kamera ile refakat kartı tara"
-            >
-              <View style={styles.bottomBarBtnInner}>
-                <Icon source="camera" size={26} color="#1e40af" />
-                <Text style={[styles.bottomBarBtnText, { color: '#1e40af' }]}>
-                  Kamera
-                </Text>
-              </View>
-            </TouchableRipple>
-            <View style={styles.bottomBarDivider} />
-            <TouchableRipple
-              onPress={() => setHistoryModalOpen(true)}
-              style={[styles.bottomBarBtn, styles.bottomBarBtnSide]}
-              rippleColor="rgba(5, 150, 105, 0.12)"
-              accessibilityLabel="Geçmiş kabuller"
-            >
-              <View style={styles.bottomBarBtnInner}>
-                <Icon source="history" size={26} color="#059669" />
-                <Text style={[styles.bottomBarBtnText, { color: '#059669' }]}>
-                  Geçmiş
-                </Text>
-              </View>
-            </TouchableRipple>
+            {/* Flex oranı dış hücre View'lerinde — TouchableRipple'a doğrudan
+                flex vermek Paper'da güvenilir değil; ripple hücreyi flex:1 ile
+                doldurur. */}
+            <View style={styles.bottomBarCellSide}>
+              <TouchableRipple
+                onPress={() => setListModalOpen(true)}
+                style={styles.bottomBarBtn}
+                rippleColor="rgba(217, 119, 6, 0.12)"
+                accessibilityLabel="Bekleyen sevkler"
+              >
+                <View style={styles.bottomBarBtnInner}>
+                  <Icon source="format-list-bulleted" size={24} color="#d97706" />
+                  <Text style={[styles.bottomBarBtnText, { color: '#d97706' }]}>
+                    Bekleyen
+                  </Text>
+                </View>
+              </TouchableRipple>
+            </View>
+
+            <View style={styles.bottomBarCellPrimary}>
+              <TouchableRipple
+                onPress={() => setScannerOpen(true)}
+                style={[styles.bottomBarBtn, styles.bottomBarBtnPrimaryFill]}
+                rippleColor="rgba(255,255,255,0.25)"
+                accessibilityLabel="Kamera ile okut"
+              >
+                <View style={styles.bottomBarBtnInner}>
+                  <Icon source="camera" size={30} color="#fff" />
+                  <Text style={[styles.bottomBarBtnText, { color: '#fff' }]}>
+                    Kamera ile Okut
+                  </Text>
+                </View>
+              </TouchableRipple>
+            </View>
+
+            <View style={styles.bottomBarCellSide}>
+              <TouchableRipple
+                onPress={() => setHistoryModalOpen(true)}
+                style={styles.bottomBarBtn}
+                rippleColor="rgba(71, 85, 105, 0.12)"
+                accessibilityLabel="Geçmiş kabuller"
+              >
+                <View style={styles.bottomBarBtnInner}>
+                  <Icon source="history" size={24} color="#475569" />
+                  <Text style={[styles.bottomBarBtnText, { color: '#475569' }]}>
+                    Geçmiş
+                  </Text>
+                </View>
+              </TouchableRipple>
+            </View>
           </View>
         )}
       </View>
@@ -2086,6 +2158,33 @@ const styles = StyleSheet.create({
   body: { flex: 1, flexDirection: 'row', backgroundColor: '#f8fafc' },
   bodyPhone: { flexDirection: 'column' },
 
+  // Top bar aksiyonları — Tambur ekranındaki HeaderChip kalıbıyla aynı stil.
+  headerExtrasRow: { flexDirection: 'row', alignItems: 'center' },
+  headerChip: {
+    borderRadius: 10,
+    marginLeft: 4,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    overflow: 'hidden',
+  },
+  headerChipAccent: {
+    backgroundColor: 'rgba(30,64,175,0.45)',
+    borderColor: 'rgba(147,197,253,0.7)',
+  },
+  headerChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  headerChipInnerLarge: {
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  headerChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+
   // Sol — form
   formCol: { flex: 1.4, backgroundColor: '#f8fafc' },
   // Telefon dikey: scroll içeriği alt sabit bar'ın altına gizlenmesin.
@@ -2108,13 +2207,19 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
     shadowRadius: 6,
   },
-  bottomBarBtn: { justifyContent: 'center', alignItems: 'center' },
-  // 30 / 40 / 30 oranı — orta (kamera) ana eylem olarak vurgulanır.
-  bottomBarBtnSide: { flex: 3 },
-  bottomBarBtnPrimary: { flex: 4 },
+  // 30 / 40 / 30 oranı dış hücrelerde — orta (kamera) ana eylem.
+  bottomBarCellSide: { flex: 3 },
+  bottomBarCellPrimary: { flex: 4 },
+  bottomBarBtn: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  // Orta kamera bloğu dolgulu yeşil hero — sahada en sık basılan eylem.
+  bottomBarBtnPrimaryFill: { backgroundColor: '#059669' },
   bottomBarBtnInner: { alignItems: 'center', gap: 2 },
   bottomBarBtnText: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
-  bottomBarDivider: { width: 1, backgroundColor: '#e2e8f0' },
 
   emptyState: {
     flex: 1,
@@ -2466,14 +2571,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tabCountText: { fontSize: 11, fontWeight: '700', color: '#0f172a' },
-  tabRefreshWrap: {
-    paddingHorizontal: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderLeftWidth: 1,
-    borderLeftColor: '#e2e8f0',
-  },
-
   // Pane (tab içeriği)
   paneFlex: { flex: 1 },
   paneEmpty: {

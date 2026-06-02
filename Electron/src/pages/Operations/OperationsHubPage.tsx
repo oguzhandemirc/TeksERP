@@ -10,6 +10,7 @@ const TILE_TONES: Record<string, string> = {
   "product-balance": "text-station-fason",
   rolls: "text-station-depo",
   "kursun-queue": "text-station-process",
+  shipments: "text-success",
 };
 
 export function OperationsHubPage() {

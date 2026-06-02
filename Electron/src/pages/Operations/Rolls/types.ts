@@ -44,25 +44,22 @@ export interface Roll {
   properties?: RollPropertyLink[];
   /** Per-roll operasyon logu. Sadece detay endpoint'inden gelir. */
   operations?: RollOperationLogEntry[];
-  /** Değişebilir etiket — top hangi siparişe/müşteriye etiketli (null = stok etiketli). */
-  targetOrderLineId?: string | null;
-  targetOrderLine?: RollTargetOrderLine | null;
-  /** Etiket değişti → fiziksel etiket tamburda yeniden basılmalı. */
-  needsReprint?: boolean;
+  /** Topun ÜSTÜNDEKİ son basılan etiketin snapshot'ı (null = stok / müşteri etiketi yok).
+   *  BAĞ DEĞİL — yalnız bilgi; baskı/yönlendir anında yazılır. Detay endpoint'inden gelir. */
+  lastLabelSnapshot?: RollLabelSnapshot | null;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface RollTargetOrderLine {
-  id: string;
-  customerItemName: string | null;
-  customerColorName: string | null;
-  order: {
-    id: string;
-    orderNumber: string;
-    customer: { id: string; code: string; name: string };
-    branch: { id: string; name: string } | null;
-  };
+export interface RollLabelSnapshot {
+  customerId: string | null;
+  customerName: string | null;
+  orderNumber: string | null;
+  itemName: string | null;
+  colorName: string | null;
+  printedAt: string;
+  operatorId: string | null;
+  operatorName: string | null;
 }
 
 export interface RollOperationLogEntry {

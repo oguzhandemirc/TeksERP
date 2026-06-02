@@ -56,6 +56,10 @@ export default function MainNavigator() {
         getComponent={() => require('../screens/Modules/Sevkiyat/SevkiyatGecmisiScreen').default}
       />
       <Stack.Screen
+        name="SevkiyatDetay"
+        getComponent={() => require('../screens/Modules/Sevkiyat/SevkiyatDetayScreen').default}
+      />
+      <Stack.Screen
         name="Paketleme"
         getComponent={() => require('../screens/Modules/TartiPaket/PaketlemeScreen').default}
       />

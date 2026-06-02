@@ -30,7 +30,7 @@ export const STATION_TYPE_LABEL: Record<string, string> = {
 };
 
 export const ROLL_STATUS_LABEL: Record<string, string> = {
-  STOCK: 'Stok',
+  STOCK: 'Ham',
   IN_PRODUCTION: 'Üretimde',
   AT_SUBCONTRACTOR: 'Fasonda',
   RETURNED_FROM_SUBCONTRACTOR: 'Fasondan Döndü',

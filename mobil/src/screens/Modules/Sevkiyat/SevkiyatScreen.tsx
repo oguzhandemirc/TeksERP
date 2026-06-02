@@ -6,6 +6,7 @@ import {
   Button,
   TextInput,
   ActivityIndicator,
+  TouchableRipple,
   Divider,
   Appbar,
 } from 'react-native-paper';
@@ -18,6 +19,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { packingService, type ShipmentListItem } from '../../../services/packing.service';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
+import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useFullscreenModalProps } from '../../../hooks/useFullscreenModalProps';
 import type { MainStackParamList } from '../../../navigation/types';
 
@@ -27,7 +29,7 @@ import type { MainStackParamList } from '../../../navigation/types';
 // =============================================================================
 
 export default function SevkiyatScreen() {
-  usePortraitLock();
+  usePortraitLock(useDeviceType() === 'phone');
   const modalProps = useFullscreenModalProps();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const qc = useQueryClient();
@@ -51,6 +53,10 @@ export default function SevkiyatScreen() {
   const dispatched = dispatchedQuery.data?.data ?? [];
 
   const refresh = () => void qc.invalidateQueries({ queryKey: ['shipments'] });
+  const handleRefresh = async () => {
+    await qc.invalidateQueries({ queryKey: ['shipments'] });
+    Toast.show({ type: 'success', text1: 'Liste güncellendi' });
+  };
 
   const dispatchMut = useMutation({
     mutationFn: (id: string) =>
@@ -72,18 +78,27 @@ export default function SevkiyatScreen() {
   });
 
   const loading = readyQuery.isLoading;
+  const refreshing = readyQuery.isFetching || dispatchedQuery.isFetching;
 
   return (
     <ScreenChrome
       title="Sevkiyat"
-      subtitle="Kapıdaki sevkiyatlar → kamyon"
       headerExtras={
-        <Appbar.Action
-          icon="history"
-          color="#fff"
-          onPress={() => nav.navigate('SevkiyatGecmisi')}
-          accessibilityLabel="Sevkiyat geçmişi"
-        />
+        <>
+          <Appbar.Action
+            icon={refreshing ? () => <ActivityIndicator size={18} color="#fff" /> : 'refresh'}
+            color="#fff"
+            disabled={refreshing}
+            onPress={handleRefresh}
+            accessibilityLabel="Yenile"
+          />
+          <Appbar.Action
+            icon="history"
+            color="#fff"
+            onPress={() => nav.navigate('SevkiyatGecmisi')}
+            accessibilityLabel="Sevkiyat geçmişi"
+          />
+        </>
       }
     >
       <ScrollView contentContainerStyle={styles.root}>
@@ -132,17 +147,25 @@ export default function SevkiyatScreen() {
               Sevk Edilenler ({dispatched.length})
             </Text>
             {dispatched.slice(0, 20).map((sh) => (
-              <Surface key={sh.id} style={styles.cardDim} elevation={0}>
-                <View style={styles.cardHead}>
-                  <Text style={styles.sackNo}>{sh.shipmentNo}</Text>
-                  <Text style={styles.meta}>{sh._count.sacks} çuval</Text>
-                </View>
-                <Text style={styles.customer}>
-                  {sh.customer.name}
-                  {sh.branch ? ` · ${sh.branch.name}` : ''}
-                  {sh.plateNumber ? ` · ${sh.plateNumber}` : ''}
-                </Text>
-              </Surface>
+              <TouchableRipple
+                key={sh.id}
+                onPress={() =>
+                  nav.navigate('SevkiyatDetay', { shipmentId: sh.id, shipmentNo: sh.shipmentNo })
+                }
+                style={styles.cardDimWrap}
+              >
+                <Surface style={styles.cardDim} elevation={0}>
+                  <View style={styles.cardHead}>
+                    <Text style={styles.sackNo}>{sh.shipmentNo}</Text>
+                    <Text style={styles.meta}>{sh._count.sacks} çuval ›</Text>
+                  </View>
+                  <Text style={styles.customer}>
+                    {sh.customer.name}
+                    {sh.branch ? ` · ${sh.branch.name}` : ''}
+                    {sh.plateNumber ? ` · ${sh.plateNumber}` : ''}
+                  </Text>
+                </Surface>
+              </TouchableRipple>
             ))}
           </>
         )}
@@ -187,7 +210,8 @@ const styles = StyleSheet.create({
   root: { padding: 12, paddingBottom: 24 },
   heading: { fontWeight: '700', color: '#0f172a', marginBottom: 8 },
   card: { borderRadius: 12, padding: 12, backgroundColor: '#fff', marginBottom: 10 },
-  cardDim: { borderRadius: 12, padding: 12, backgroundColor: '#f8fafc', marginBottom: 8 },
+  cardDimWrap: { borderRadius: 12, marginBottom: 8 },
+  cardDim: { borderRadius: 12, padding: 12, backgroundColor: '#f8fafc' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sackNo: { fontSize: 15, fontWeight: '700', color: '#0f172a', fontFamily: 'monospace' },
   meta: { fontSize: 12, color: '#64748b' },

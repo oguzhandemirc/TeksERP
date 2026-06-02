@@ -63,7 +63,7 @@ interface Props {
   inputLeftIcon?: string;
 
   // Aksiyon butonları
-  onScan: () => void;
+  onScan?: () => void;
   /** Default mode CTA label. Default: "Kamera ile Okut". */
   scanCtaLabel?: string;
   /** Renk teması. Default 'blue'. */
@@ -147,17 +147,19 @@ export default function ScannerEntryBar({
           style={styles.input}
           disabled={inputDisabled || resolving}
         />
-        <IconButton
-          icon="camera"
-          mode="contained-tonal"
-          containerColor={colors.scanContainer}
-          iconColor={colors.scanIcon}
-          size={26}
-          onPress={onScan}
-          accessibilityLabel="Kamera ile okut"
-          style={styles.iconBtn}
-          disabled={resolving}
-        />
+        {onScan && (
+          <IconButton
+            icon="camera"
+            mode="contained-tonal"
+            containerColor={colors.scanContainer}
+            iconColor={colors.scanIcon}
+            size={26}
+            onPress={onScan}
+            accessibilityLabel="Kamera ile okut"
+            style={styles.iconBtn}
+            disabled={resolving}
+          />
+        )}
         {onList && (
           <View>
             <IconButton
@@ -186,8 +188,8 @@ export default function ScannerEntryBar({
         mode="contained"
         icon={resolving ? undefined : 'camera'}
         buttonColor={colors.scanButton}
-        onPress={onScan}
-        disabled={resolving}
+        onPress={onScan ?? undefined}
+        disabled={resolving || !onScan}
         style={styles.cta}
         contentStyle={styles.ctaContent}
         labelStyle={styles.ctaLabel}

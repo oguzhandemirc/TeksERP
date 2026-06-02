@@ -23,6 +23,7 @@ import { AnimatedEntrance } from '../../../components/motion';
 import { colors, spacing, radius, shadow, typography } from '../../../theme';
 import { packingService } from '../../../services/packing.service';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
+import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useFullscreenModalProps } from '../../../hooks/useFullscreenModalProps';
 import type { MainStackParamList } from '../../../navigation/types';
 
@@ -37,7 +38,8 @@ const dualName = (ourName: string, custName?: string | null) =>
   custName && custName.trim() && custName !== ourName ? `${ourName} (${custName})` : ourName;
 
 export default function PaketlemeScreen() {
-  usePortraitLock();
+  // Portrait kilidi yalnızca telefonda — tablette zorunlu dik yapma, yatay kalsın.
+  usePortraitLock(useDeviceType() === 'phone');
   const modalProps = useFullscreenModalProps();
   const qc = useQueryClient();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
@@ -70,7 +72,11 @@ export default function PaketlemeScreen() {
   });
   const ship = shipQ.data?.data ?? null;
 
-  const refreshShip = () => void qc.invalidateQueries({ queryKey: ['shipment', shipmentId] });
+  // id verilmezse state'teki shipmentId — ama ilk aksiyonda (sevkiyat yeni
+  // yaratılıyor) state henüz null; o yüzden çağıran ensureShipment'in döndürdüğü
+  // gerçek id'yi geçmeli (yoksa ['shipment', null] invalidate edilir → top düşmez).
+  const refreshShip = (id: string | null = shipmentId) =>
+    void qc.invalidateQueries({ queryKey: ['shipment', id] });
   const finishAndBack = () => {
     void qc.invalidateQueries({ queryKey: ['open-orders'] });
     void qc.invalidateQueries({ queryKey: ['shipments'] });
@@ -104,27 +110,28 @@ export default function PaketlemeScreen() {
   const addSackMut = useMutation({
     mutationFn: async (kg: number) => {
       const id = await ensureShipment();
-      return packingService.addSack(id, kg);
+      const res = await packingService.addSack(id, kg);
+      return { id, message: res.message };
     },
-    onSuccess: (res) => {
+    onSuccess: ({ id, message }) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Çuval eklendi', text2: res.message });
+      Toast.show({ type: 'success', text1: 'Çuval eklendi', text2: message });
       setSackOpen(false);
       setSackKg('');
-      refreshShip();
+      refreshShip(id);
     },
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çuval eklenemedi', text2: e.message }),
   });
 
   const removeSackMut = useMutation({
     mutationFn: (sackId: string) => packingService.removeSack(sackId),
-    onSuccess: refreshShip,
+    onSuccess: () => refreshShip(),
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Silinemedi', text2: e.message }),
   });
 
   const removeRollMut = useMutation({
     mutationFn: (rollId: string) => packingService.removeRoll(shipmentId!, rollId),
-    onSuccess: refreshShip,
+    onSuccess: () => refreshShip(),
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çıkarılamadı', text2: e.message }),
   });
 
@@ -166,7 +173,7 @@ export default function PaketlemeScreen() {
       const res = await packingService.scan(id, code);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: res.data?.kind === 'SWATCH' ? 'Kartela eklendi' : 'Top eklendi', text2: res.message });
-      refreshShip();
+      refreshShip(id);
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Eklenemedi', text2: (e as Error).message });
@@ -322,21 +329,33 @@ export default function PaketlemeScreen() {
                   {covRows.map((r, i) => {
                     const remaining = Math.max(0, r.openQty - r.thisShipment);
                     const ok = remaining <= 0;
+                    const progress = r.openQty > 0 ? Math.min(1, r.thisShipment / r.openQty) : ok ? 1 : 0;
                     return (
                       <View key={r.key} style={[styles.covRow, i > 0 && styles.rowBorder]}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.covSpec} numberOfLines={2}>
-                            {r.order} · {r.name}
-                            {r.colorName ? ` · ${r.colorName}` : ''}
-                            {r.width ? ` · ${r.width}cm` : ''}
+                        <Text style={styles.covSpec} numberOfLines={2}>
+                          {r.order} · {r.name}
+                          {r.colorName ? ` · ${r.colorName}` : ''}
+                          {r.width ? ` · ${r.width}cm` : ''}
+                        </Text>
+
+                        <Text style={styles.covNums}>
+                          <Text style={styles.covNumLabel}>okutulan </Text>
+                          <Text style={[styles.covNumValue, { color: ok ? colors.successDark : colors.brand }]}>
+                            {Math.round(r.thisShipment)}
                           </Text>
-                          <Text style={styles.covMeta}>
-                            istenen {Math.round(r.openQty)}m · okutulan {Math.round(r.thisShipment)}m
-                          </Text>
-                        </View>
-                        <View style={[styles.pill, ok ? styles.pillOk : styles.pillShort]}>
-                          <Text style={[styles.pillText, ok ? styles.pillOkText : styles.pillShortText]}>
-                            {ok ? '✓ tamam' : `${Math.round(remaining)}m eksik`}
+                          <Text style={styles.covNumLabel}> / istenen </Text>
+                          <Text style={styles.covNumValue}>{Math.round(r.openQty)}</Text>
+                          <Text style={styles.covNumLabel}> m</Text>
+                        </Text>
+
+                        <View style={styles.covBarRow}>
+                          <ProgressBar
+                            progress={progress}
+                            color={ok ? colors.successDark : colors.brand}
+                            style={styles.covBar}
+                          />
+                          <Text style={[styles.covStatus, ok ? styles.covStatusOk : styles.covStatusShort]}>
+                            {ok ? '✓ tamam' : `${Math.round(remaining)} m eksik`}
                           </Text>
                         </View>
                       </View>
@@ -610,16 +629,20 @@ const styles = StyleSheet.create({
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
 
   // Karşılama satırı
-  covRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.sm },
-  covSpec: { fontSize: typography.size.sm, color: colors.text, fontWeight: '500' },
+  covRow: { paddingVertical: spacing.md, gap: spacing.xs },
+  covSpec: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: '600' },
   covMeta: { fontSize: typography.size.xs, color: colors.textMuted, marginTop: 2 },
 
-  pill: { borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  pillText: { fontSize: typography.size.xs, fontWeight: '700' },
-  pillOk: { backgroundColor: colors.successContainer },
-  pillOkText: { color: colors.successText },
-  pillShort: { backgroundColor: colors.warningContainer },
-  pillShortText: { color: colors.warningText },
+  // İstenen / okutulan — satırın en baskın bilgisi
+  covNums: { marginTop: spacing.xs },
+  covNumLabel: { fontSize: typography.size.sm, color: colors.textMuted, fontWeight: '500' },
+  covNumValue: { fontSize: typography.size.xl, fontWeight: '700', color: colors.text },
+
+  covBarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
+  covBar: { flex: 1, height: 8, borderRadius: radius.full, backgroundColor: colors.surfaceSunken },
+  covStatus: { fontSize: typography.size.sm, fontWeight: '700' },
+  covStatusOk: { color: colors.successText },
+  covStatusShort: { color: colors.warningText },
 
   // Top / çuval satırı
   itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.sm },

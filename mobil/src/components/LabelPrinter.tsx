@@ -91,7 +91,7 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
         if (!mountedRef.current) return;
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         // Audit izi — başarısızlığı baskı akışını engellemez.
-        labelService.recordPrintEvent(roll.id).catch((e) => {
+        labelService.recordPrintEvent(roll.id, labelContext).catch((e) => {
           console.warn('Print audit failed', (e as Error).message);
         });
       } catch (err) {

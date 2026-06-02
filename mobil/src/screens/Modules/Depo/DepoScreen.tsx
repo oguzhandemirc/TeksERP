@@ -20,7 +20,7 @@ import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import DetailSheet, {
-  SectionTitle,
+  CollapsibleSection,
   MutedText,
   type SummaryItem,
 } from '../../../components/DetailSheet';
@@ -60,9 +60,16 @@ interface RollListItem {
   width: number | null;
   qualityGrade: string;
   status: string;
+  /** Topun üstündeki son basılan etiket (null = stok/etiket yok). */
+  lastLabelSnapshot?: { customerName: string | null; orderNumber: string | null } | null;
   createdAt?: string;
   item?: { id: string; code: string; name: string };
   variant?: { id: string; code: string; name: string } | null;
+  color?: { id: string; code: string; name: string; hex?: string | null } | null;
+  properties?: {
+    propertyId: string;
+    property?: { id: string; code: string; name: string };
+  }[];
 }
 
 export default function DepoScreen() {
@@ -538,12 +545,17 @@ function RollListRow({
               )}
             </View>
             <View style={styles.rollMeta}>
+              {roll.color?.hex && (
+                <View
+                  style={[styles.rollSwatch, { backgroundColor: roll.color.hex }]}
+                />
+              )}
               <Text
                 style={[styles.rollMetaText, styles.rollMetaName]}
                 numberOfLines={1}
               >
                 {roll.item?.name ?? '—'}
-                {roll.variant?.name ? ` · ${roll.variant.name}` : ''}
+                {roll.color?.name ? ` · ${roll.color.name}` : ''}
               </Text>
               <Text style={styles.rollMetaSep}>·</Text>
               <Text style={styles.rollMetaText}>{roll.qualityGrade}</Text>
@@ -701,7 +713,64 @@ function RollDetailModal({
       : []),
     { icon: 'star-circle', label: 'Kalite', value: roll.qualityGrade },
     { icon: 'circle', label: 'Durum', value: trLabel(ROLL_STATUS_LABEL, roll.status) },
+    ...(roll.lastLabelSnapshot?.customerName
+      ? [
+          {
+            icon: 'tag',
+            label: 'Son Etiket',
+            value:
+              roll.lastLabelSnapshot.customerName +
+              (roll.lastLabelSnapshot.orderNumber
+                ? ` · ${roll.lastLabelSnapshot.orderNumber}`
+                : ''),
+          } as SummaryItem,
+        ]
+      : []),
   ];
+
+  // İkinci sütun — kumaşın rengi + özellikleri. Ham toplarda renk atanmamış ve
+  // özellik yoktur → ilgili satırı HİÇ ekleme ("Atanmamış/Belirtilmemiş" gibi
+  // anlamsız placeholder gösterme). İkisi de yoksa aside sütunu hiç çıkmaz →
+  // DetailSheet tek sütuna döner.
+  const props = roll.properties ?? [];
+  const summaryAside: SummaryItem[] = [];
+  if (roll.color) {
+    summaryAside.push({
+      icon: 'palette',
+      label: 'Renk',
+      value: (
+        <View style={modalStyles.colorValue}>
+          <View
+            style={[
+              modalStyles.colorSwatch,
+              { backgroundColor: roll.color.hex ?? '#e2e8f0' },
+            ]}
+          />
+          <Text style={modalStyles.colorName} numberOfLines={1}>
+            {roll.color.name}
+          </Text>
+        </View>
+      ),
+    });
+  }
+  if (props.length > 0) {
+    summaryAside.push({
+      icon: 'tag-multiple',
+      label: 'Özellikler',
+      value: (
+        <View style={modalStyles.propChips}>
+          {props.map((p) => (
+            <View key={p.propertyId} style={modalStyles.propChip}>
+              <Text style={modalStyles.propChipText}>
+                {p.property?.name ?? '—'}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ),
+    });
+  }
+  const hasAside = summaryAside.length > 0;
 
   return (
     <DetailSheet
@@ -711,38 +780,42 @@ function RollDetailModal({
       title={roll.barcode}
       subtitle={
         (roll.item?.name ?? '—') +
-        (roll.variant?.name ? ` · ${roll.variant.name}` : '')
+        (roll.color?.name ? ` · ${roll.color.name}` : '')
       }
       widthRatio={0.9}
       summary={summary}
+      summaryAside={hasAside ? summaryAside : undefined}
+      summaryTitle={hasAside ? 'Top Bilgisi' : undefined}
+      asideTitle={hasAside ? 'Kumaş & Renk' : undefined}
     >
-      {/* Geçmiş — DetailSheet children olarak custom section */}
-      <SectionTitle>Yaşam Döngüsü ({events.length})</SectionTitle>
-      {historyQuery.isLoading ? (
-        <ActivityIndicator size="small" color="#475569" />
-      ) : events.length === 0 ? (
-        <MutedText>Kayıt yok</MutedText>
-      ) : (
-        events.map((e, idx) => (
-          <Surface key={`${e.at}-${idx}`} style={modalStyles.eventCard} elevation={0}>
-            <View style={modalStyles.eventHeader}>
-              <Text style={modalStyles.eventTitle} numberOfLines={1}>
-                {e.title}
-              </Text>
-              <Text style={modalStyles.eventTime}>
-                {dayjs(e.at).format('DD.MM HH:mm')}
-              </Text>
-            </View>
-            {(e.stationName || e.operatorName) && (
-              <Text style={modalStyles.eventMeta}>
-                {e.stationName ? `🏭 ${e.stationName}` : ''}
-                {e.stationName && e.operatorName ? ' · ' : ''}
-                {e.operatorName ? `👤 ${e.operatorName}` : ''}
-              </Text>
-            )}
-          </Surface>
-        ))
-      )}
+      {/* Geçmiş — açılır/kapanır section, varsayılan KAPALI */}
+      <CollapsibleSection title={`Yaşam Döngüsü (${events.length})`}>
+        {historyQuery.isLoading ? (
+          <ActivityIndicator size="small" color="#475569" />
+        ) : events.length === 0 ? (
+          <MutedText>Kayıt yok</MutedText>
+        ) : (
+          events.map((e, idx) => (
+            <Surface key={`${e.at}-${idx}`} style={modalStyles.eventCard} elevation={0}>
+              <View style={modalStyles.eventHeader}>
+                <Text style={modalStyles.eventTitle} numberOfLines={1}>
+                  {e.title}
+                </Text>
+                <Text style={modalStyles.eventTime}>
+                  {dayjs(e.at).format('DD.MM HH:mm')}
+                </Text>
+              </View>
+              {(e.stationName || e.operatorName) && (
+                <Text style={modalStyles.eventMeta}>
+                  {e.stationName ? `🏭 ${e.stationName}` : ''}
+                  {e.stationName && e.operatorName ? ' · ' : ''}
+                  {e.operatorName ? `👤 ${e.operatorName}` : ''}
+                </Text>
+              )}
+            </Surface>
+          ))
+        )}
+      </CollapsibleSection>
     </DetailSheet>
   );
 }
@@ -854,6 +927,13 @@ const styles = StyleSheet.create({
   rollMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   rollMetaText: { fontSize: 11, color: '#0f172a', fontWeight: '600' },
   rollMetaName: { flexShrink: 1, color: '#475569' },
+  rollSwatch: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
   rollMetaSep: { fontSize: 11, color: '#cbd5e1' },
 });
 
@@ -876,4 +956,27 @@ const modalStyles = StyleSheet.create({
   eventTitle: { flex: 1, fontSize: 13, fontWeight: '700', color: '#0f172a' },
   eventTime: { fontSize: 11, color: '#94a3b8' },
   eventMeta: { fontSize: 11, color: '#64748b' },
+
+  // Renk değeri — küçük örnek dairesi + ad
+  colorValue: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+  colorSwatch: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  colorName: { flex: 1, fontSize: 13, fontWeight: '700', color: '#0f172a' },
+
+  // Özellik chip'leri — sarmalı liste
+  propChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  propChip: {
+    backgroundColor: '#e0e7ff',
+    borderColor: '#c7d2fe',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  propChipText: { fontSize: 11, fontWeight: '700', color: '#3730a3' },
 });

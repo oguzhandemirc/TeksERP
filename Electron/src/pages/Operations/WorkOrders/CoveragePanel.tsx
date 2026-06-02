@@ -61,8 +61,8 @@ function aggregateBySpec(rows: CoverageLine[]): SpecRow[] {
     }
   }
   for (const s of map.values()) {
-    s.netGap =
-      s.requested - s.shipped - s.inProduction - s.freeWarehouse - s.freeStock;
+    // Ham (freeStock) net açığa GİRMEZ — işlenmemiş girdi, mamul değil (yalnız bilgi).
+    s.netGap = s.requested - s.shipped - s.freeWarehouse - s.inProduction;
   }
   return Array.from(map.values());
 }
@@ -103,7 +103,7 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
                   <th className="text-right" title="Sevk edilen">Sevk</th>
                   <th className="text-right" title="Üretimde — canlı iş emirleri">WO</th>
                   <th className="text-right" title="Depoda hazır — eşleşen serbest stok">Depo</th>
-                  <th className="text-right" title="Ham stok — eşleşen serbest">Ham</th>
+                  <th className="text-right" title="Ham stok — işlenmemiş kumaş (bilgi; net açığa girmez)">Ham</th>
                   <th className="text-right">Net açık</th>
                 </tr>
               </thead>
@@ -148,8 +148,9 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
             </table>
           </div>
           <p className="mt-2 text-[10px] leading-tight text-muted-foreground">
-            Serbest stok rezerve edilmez — anlık fotoğraf. Net açık eksi ise fazla
-            var, üretim gerekmeyebilir.
+            Net açık = istenen − sevk − depo − üretimde. Ham (işlenmemiş kumaş)
+            buna girmez — yalnız bilgi; üretmen gerekirse kumaş tedariki gerekip
+            gerekmediğini gösterir. Net açık eksi ise fazla var, üretim gerekmeyebilir.
           </p>
         </>
       )}

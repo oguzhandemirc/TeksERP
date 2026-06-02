@@ -8,7 +8,7 @@ import {
   Divider,
   Appbar,
 } from 'react-native-paper';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Toast from 'react-native-toast-message';
@@ -16,6 +16,7 @@ import ScreenChrome from '../../../components/ScreenChrome';
 import { packingService, type OpenOrder } from '../../../services/packing.service';
 import { usePermissions } from '../../../hooks/usePermission';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
+import { useDeviceType } from '../../../hooks/useDeviceType';
 import type { MainStackParamList } from '../../../navigation/types';
 
 // =============================================================================
@@ -31,7 +32,8 @@ const dualName = (ourName: string, custName?: string | null) =>
   custName && custName.trim() && custName !== ourName ? `${ourName} (${custName})` : ourName;
 
 export default function TartiPaketScreen() {
-  usePortraitLock();
+  // Portrait kilidi yalnızca telefonda — tablette zorunlu dik yapma, yatay kalsın.
+  usePortraitLock(useDeviceType() === 'phone');
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const { has } = usePermissions();
   const canShip = has('mobile:sevkiyat');
@@ -60,6 +62,17 @@ export default function TartiPaketScreen() {
     staleTime: 10_000,
   });
   const readyCount = readyQ.data?.data?.length ?? 0;
+
+  const qc = useQueryClient();
+  const refreshing =
+    openOrdersQ.isFetching || preparingQ.isFetching || readyQ.isFetching;
+  const handleRefresh = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['open-orders'] }),
+      qc.invalidateQueries({ queryKey: ['shipments'] }),
+    ]);
+    Toast.show({ type: 'success', text1: 'Liste güncellendi' });
+  };
 
   // ── Sipariş seçimi ──
   const toggleOrder = (o: OpenOrder) => {
@@ -169,14 +182,22 @@ export default function TartiPaketScreen() {
   return (
     <ScreenChrome
       title="Tartı / Paket"
-      subtitle="Sipariş seç → okut → çuvalla"
       headerExtras={
-        <Appbar.Action
-          icon="history"
-          color="#fff"
-          onPress={() => nav.navigate('SevkiyatGecmisi')}
-          accessibilityLabel="Sevkiyat geçmişi"
-        />
+        <>
+          <Appbar.Action
+            icon={refreshing ? () => <ActivityIndicator size={18} color="#fff" /> : 'refresh'}
+            color="#fff"
+            disabled={refreshing}
+            onPress={handleRefresh}
+            accessibilityLabel="Yenile"
+          />
+          <Appbar.Action
+            icon="history"
+            color="#fff"
+            onPress={() => nav.navigate('SevkiyatGecmisi')}
+            accessibilityLabel="Sevkiyat geçmişi"
+          />
+        </>
       }
     >
       <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent}>

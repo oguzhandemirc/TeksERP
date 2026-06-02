@@ -43,7 +43,14 @@ import { rollService } from '../../../services/roll.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList, usePressScale } from '../../../components/motion';
-import Reanimated from 'react-native-reanimated';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  cancelAnimation,
+  Easing,
+} from 'react-native-reanimated';
 import { formatRelativeWait } from '../../../utils/relativeTime';
 import type {
   KursunStepSummary,
@@ -78,6 +85,42 @@ interface OpenJob {
 /** Açık kart listesinin otomatik yenileme aralığı (modal başlığında gösterilir). */
 const OPEN_CARDS_REFETCH_MS = 15 * 1000;
 
+// Koyu header'da etiketli aksiyon pill'i (ikon + ne olduğu yazısı) — Tambur
+// ekranıyla aynı stil. `badge` = sağ üst köşede küçük rozet (acil sayısı).
+function HeaderChip({
+  icon,
+  label,
+  onPress,
+  badge,
+  iconAnimatedStyle,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  badge?: React.ReactNode;
+  iconAnimatedStyle?: object;
+}) {
+  return (
+    <View style={styles.headerChipWrap}>
+      <TouchableRipple
+        onPress={onPress}
+        style={styles.headerChip}
+        borderless
+        rippleColor="rgba(255,255,255,0.2)"
+        accessibilityLabel={label}
+      >
+        <View style={styles.headerChipInner}>
+          <Reanimated.View style={iconAnimatedStyle}>
+            <Icon source={icon} size={18} color="#fff" />
+          </Reanimated.View>
+          <Text style={styles.headerChipText}>{label}</Text>
+        </View>
+      </TouchableRipple>
+      {badge}
+    </View>
+  );
+}
+
 export default function KursunQcScreen() {
   // Telefon ekranında landscape kilidi kaldırılır + sağ panel drawer'a alınır.
   // Tabletlerde önceki davranış aynen korunur.
@@ -109,6 +152,24 @@ export default function KursunQcScreen() {
   const [refreshingActive, setRefreshingActive] = useState(false);
   /** Son manuel yenileme hata mesajı — RefreshButton'a isError olarak verilir. */
   const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  const refreshSpin = useSharedValue(0);
+  const refreshSpinStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${refreshSpin.value}deg` }],
+  }));
+  useEffect(() => {
+    if (refreshingActive) {
+      refreshSpin.value = 0;
+      refreshSpin.value = withRepeat(
+        withTiming(360, { duration: 600, easing: Easing.linear }),
+        -1,
+        false,
+      );
+    } else {
+      cancelAnimation(refreshSpin);
+      refreshSpin.value = withTiming(0, { duration: 150 });
+    }
+  }, [refreshingActive, refreshSpin]);
 
   // Açık kart listesi — modal açılmadan da (acil rozeti için) tazelenir.
   // OPEN_CARDS_REFETCH_MS polling: planlama acil işaretlediğinde tablet en geç
@@ -193,18 +254,25 @@ export default function KursunQcScreen() {
   // Manuel "Yenile" basışı — spinner için ayrı sarmalayıcı. Auto-refetch
   // (mutation onSuccess) yolunu kasıtlı sarmıyoruz: o aksiyonlar kendi
   // haptic/toast'unu zaten veriyor, butonun her işlemde dönmesi gürültü olur.
+  // MIN_SPIN_MS: RefreshButton bir turu 800ms'de tamamlar; yanıt daha erken
+  // gelirse animasyon yarıda kesiliyordu. En az bir tam tur garantisi.
+  const MIN_SPIN_MS = 800;
   const handleRefreshActive = async () => {
-    if (!activeJob || refreshingActive) return;
+    if (refreshingActive) return;
+    const spinStart = Date.now();
     setRefreshingActive(true);
     setRefreshError(null);
     try {
-      await refetchActiveJob();
-      // Başarı: net geri bildirim — kullanıcı yenilemenin olumlu bittiğini görsün.
-      Toast.show({ type: 'success', text1: 'Liste güncellendi' });
+      await Promise.all([
+        activeJob ? refetchActiveJob() : Promise.resolve(),
+        openCardsQuery.refetch(),
+      ]);
+      Toast.show({ type: 'success', text1: 'Yenilendi' });
     } catch (err) {
-      // Hata: refreshError → RefreshButton transition'da error-haptic + toast atar.
       setRefreshError((err as Error).message);
     } finally {
+      const remaining = MIN_SPIN_MS - (Date.now() - spinStart);
+      if (remaining > 0) await new Promise<void>((r) => setTimeout(r, remaining));
       setRefreshingActive(false);
     }
   };
@@ -656,7 +724,10 @@ export default function KursunQcScreen() {
             placeholder="Refakat kartı barkodu okut/yaz..."
             onResolve={handleResolveCard}
             resolving={resolvingCard}
-            onScan={() => drawerQueue.run(() => setScannerOpen(true))}
+            // Tablette kamera-okut header'daki "Kart Okut" pill'i ile yapılıyor →
+            // giriş bandındaki ikinci (pasif duran) kamera butonu kaldırıldı.
+            // Telefonda header pill'i yok, kamera butonu burada kalır.
+            onScan={compact ? () => drawerQueue.run(() => setScannerOpen(true)) : undefined}
             onList={() => drawerQueue.run(() => setListModalOpen(true))}
             tone="green"
             listContainerColor={urgentCount > 0 ? '#fee2e2' : undefined}
@@ -685,9 +756,9 @@ export default function KursunQcScreen() {
 
       {/* Üst kontrol/sekme şeridi — kamera modunda Okut+Liste solda sabit,
           sekmeler kalan alanda yatay kaydırılır; manuel modda yalnız sekmeler. */}
-      {(!manualBarcodeEntry || openJobs.length > 0) && (
+      {((compact && !manualBarcodeEntry) || openJobs.length > 0) && (
         <View style={styles.topRow}>
-          {!manualBarcodeEntry && (
+          {compact && !manualBarcodeEntry && (
             <>
               <Button
                 mode="contained"
@@ -714,6 +785,21 @@ export default function KursunQcScreen() {
                 />
                 <UrgentBadge count={urgentCount} />
               </View>
+              <IconButton
+                icon={({ size, color }) => (
+                  <Reanimated.View style={refreshSpinStyle}>
+                    <Icon source="refresh" size={size} color={color} />
+                  </Reanimated.View>
+                )}
+                mode="contained-tonal"
+                containerColor="#f1f5f9"
+                iconColor="#475569"
+                size={22}
+                onPress={handleRefreshActive}
+                disabled={refreshingActive}
+                accessibilityLabel="Yenile"
+                style={styles.listCompactBtn}
+              />
             </>
           )}
 
@@ -802,6 +888,30 @@ export default function KursunQcScreen() {
   const headerExtras = (
     <View style={styles.headerExtrasRow}>
       <SyncStatusChip />
+      {/* Tablet: Kart Okut + Liste aksiyonları header'a etiketli pill olarak
+          alınır (Tambur ekranıyla aynı stil). Telefonda header dar; aksiyonlar
+          drawer'da kalır, headerOpenJobsBtn ile açılır. */}
+      {!compact && (
+        <>
+          <HeaderChip
+            icon="camera"
+            label="Kart Okut"
+            onPress={() => drawerQueue.run(() => setScannerOpen(true))}
+          />
+          <HeaderChip
+            icon="format-list-bulleted"
+            label="Liste"
+            onPress={() => drawerQueue.run(() => setListModalOpen(true))}
+            badge={<UrgentBadge count={urgentCount} />}
+          />
+          <HeaderChip
+            icon="refresh"
+            label="Yenile"
+            onPress={handleRefreshActive}
+            iconAnimatedStyle={refreshSpinStyle}
+          />
+        </>
+      )}
       {headerOpenJobsBtn}
     </View>
   );
@@ -1507,6 +1617,23 @@ const styles = StyleSheet.create({
   headerOpenJobsBtn: { margin: 0 },
   // Header'da sync chip + open jobs button yan yana sığsın.
   headerExtrasRow: { flexDirection: 'row', alignItems: 'center' },
+  // Koyu header'a uygun translucent etiketli aksiyon pill'i (Tambur ile aynı).
+  headerChipWrap: { marginLeft: 4 },
+  headerChip: {
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    overflow: 'hidden',
+  },
+  headerChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  headerChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   emptyState: {
     flex: 1,

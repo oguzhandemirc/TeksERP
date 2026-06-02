@@ -18,7 +18,15 @@ import {
   Appbar,
   Switch,
 } from 'react-native-paper';
-import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
+import Animated, {
+  FadeInUp,
+  FadeOutUp,
+  Easing,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withRepeat,
+} from 'react-native-reanimated';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import {
   useQuery,
@@ -54,7 +62,6 @@ import ConfirmDialog from '../../../components/ConfirmDialog';
 import {
   AnimatedEntrance,
   SkeletonList,
-  PressableScale,
   AnimatedCounter,
   Pulse,
 } from '../../../components/motion';
@@ -79,6 +86,70 @@ const EMPTY_FORM: FormState = {
   qualityGrade: '',
 };
 
+// Koyu header'da etiketli pill aksiyon (Tambur ile aynı stil) — tablette sağ
+// kolon başlığındaki butonları yukarı taşımak için.
+// `spinning` true iken ikon kesintisiz döner (Yenile için fetch sırasında).
+function HeaderChip({
+  icon,
+  label,
+  onPress,
+  spinning,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  spinning?: boolean;
+}) {
+  const rot = useSharedValue(0);
+  const wasSpinning = useRef(false);
+  useEffect(() => {
+    if (spinning) {
+      wasSpinning.current = true;
+      rot.value = withRepeat(
+        withTiming(1, { duration: 800, easing: Easing.linear }),
+        -1,
+        false,
+      );
+    } else if (wasSpinning.current) {
+      wasSpinning.current = false;
+      // Mevcut turu tamamla, sonra sıfırla — ortada kesilme yok
+      const remaining = Math.max(0, 1 - rot.value);
+      rot.value = withTiming(1, {
+        duration: Math.max(80, remaining * 800),
+        easing: Easing.linear,
+      }, (finished) => {
+        'worklet';
+        if (finished) rot.value = 0;
+      });
+    }
+  }, [spinning, rot]);
+  const spinStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rot.value * 360}deg` }],
+  }));
+
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    onPress();
+  };
+
+  return (
+    <TouchableRipple
+      onPress={handlePress}
+      style={styles.headerChip}
+      borderless
+      rippleColor="rgba(255,255,255,0.2)"
+      accessibilityLabel={label}
+    >
+      <View style={styles.headerChipInner}>
+        <Animated.View style={spinStyle}>
+          <Icon source={icon} size={18} color="#fff" />
+        </Animated.View>
+        <Text style={styles.headerChipText}>{label}</Text>
+      </View>
+    </TouchableRipple>
+  );
+}
+
 export default function KK1Screen() {
   // Telefon ekranında (kısa kenar < 600px) landscape kilidini kaldır —
   // kullanıcı portrait/landscape arasında serbestçe dönebilsin. Tabletlerde
@@ -102,10 +173,6 @@ export default function KK1Screen() {
   const [manualMode, setManualMode] = useState(false);
   const [manualQty, setManualQty] = useState('');
   const [manualWeight, setManualWeight] = useState('');
-  // Otomatik modda son okunan metraj — küçük info readout'ta gösterilir.
-  const [lastMeter, setLastMeter] = useState<number | null>(null);
-  // Metraj info'suna dokununca çıkan "elle override" uyarısı.
-  const [meterWarnOpen, setMeterWarnOpen] = useState(false);
   // Bu oturumda kaydedilen top sayısı (seri girişte ilerleme hissi).
   const [sessionCount, setSessionCount] = useState(0);
   // Kaydet sonrası kısa "✓ Kaydedildi" başarı flaşı (CTA).
@@ -431,10 +498,9 @@ export default function KK1Screen() {
     widthRef.current?.focus();
   }, []);
 
-  // Manuel modu aç (metraj info'su uyarı onayından sonra veya doğrudan toggle).
+  // Manuel modu aç (Manuel Giriş anahtarından).
   const openManual = useCallback(() => {
     setManualMode(true);
-    setMeterWarnOpen(false);
     requestAnimationFrame(() => manualQtyRef.current?.focus());
   }, []);
 
@@ -473,7 +539,6 @@ export default function KK1Screen() {
         // Otomatik modda yalnız METRAJ makineden okunur. kg sadece manuel modda
         // (opsiyonel) girilir — bu yüzden weightKg burada set EDİLMEZ (undefined).
         qty = await hardwareService.readMeterage();
-        setLastMeter(qty);
       } catch {
         Toast.show({
           type: 'error',
@@ -500,6 +565,19 @@ export default function KK1Screen() {
     });
   };
 
+  const handleRefresh = useCallback(async () => {
+    const result = await recentRollsQuery.refetch();
+    if (result.status === 'success') {
+      Toast.show({ type: 'success', text1: 'Liste güncellendi' });
+    } else if (result.status === 'error') {
+      Toast.show({
+        type: 'error',
+        text1: 'Yenileme başarısız',
+        text2: (result.error as Error)?.message,
+      });
+    }
+  }, [recentRollsQuery]);
+
   const handlePrintLabel = (barcode: string) => {
     // Listeden top'u bul ve LabelPrinter'a ver. Operatör başka top için printi
     // tekrar tetikleyene kadar tek print akışı çalışır.
@@ -519,7 +597,6 @@ export default function KK1Screen() {
   return (
     <ScreenChrome
       title="KK1 — Ham Giriş"
-      subtitle="Ham kumaş top kayıt"
       headerExtras={
         <View style={styles.headerExtrasRow}>
           {printingCount > 0 && (
@@ -533,6 +610,34 @@ export default function KK1Screen() {
             </Animated.View>
           )}
           <SyncStatusChip />
+          {/* Tablet: aksiyonlar header'a alınır. "Son Kayıtlar" başlığı ise sağ
+              kolonun en üstünde (ayrım çizgisiyle) kalır → liste sütunuyla tam
+              hizalı. Telefonda header dar; bunlar drawer'da kalır. */}
+          {!compact && (
+            <>
+              {sessionCount > 0 && (
+                <View style={styles.headerSessionChip}>
+                  <Icon source="check-circle" size={14} color="#86efac" />
+                  <Text style={styles.headerSessionLabel}>Bu oturum</Text>
+                  <AnimatedCounter value={sessionCount} style={styles.headerSessionCount} />
+                </View>
+              )}
+              <HeaderChip
+                icon="format-list-bulleted"
+                label="Tümünü Gör"
+                onPress={() => {
+                  setHistoryPage(1);
+                  setHistoryOpen(true);
+                }}
+              />
+              <HeaderChip
+                icon="refresh"
+                label="Yenile"
+                spinning={recentRollsQuery.isFetching}
+                onPress={handleRefresh}
+              />
+            </>
+          )}
           {portraitPhone ? (
             <Appbar.Action
               icon="format-list-bulleted"
@@ -653,10 +758,6 @@ export default function KK1Screen() {
             <View style={styles.cardHero}>
               <Icon source="cog-outline" size={18} color={colors.brand} />
               <Text style={styles.cardHeroTitle}>Üretim Ayarı</Text>
-              <View style={styles.persistChip}>
-                <Icon source="pin" size={11} color={colors.brandDark} />
-                <Text style={styles.persistChipText}>kalıcı</Text>
-              </View>
             </View>
             <Text style={styles.label}>
               Ürün <Text style={styles.required}>*</Text>
@@ -734,30 +835,6 @@ export default function KK1Screen() {
             )}
           </Surface>
 
-          {/* ── Metraj info (otomatik mod): salt-okunur. Kaydederken makineden
-              okunur; elle override için dokun → uyarı modalı. ── */}
-          {!manualMode && (
-            <PressableScale
-              onPress={() => setMeterWarnOpen(true)}
-              rippleColor="rgba(37,99,235,0.10)"
-              style={styles.meterInfo}
-              accessibilityLabel="Metraj otomatik — elle değiştirmek için dokunun"
-            >
-              <View style={styles.meterInfoInner}>
-                <Icon source="gauge" size={24} color={colors.info} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.meterInfoLabel}>Metraj · otomatik</Text>
-                  <Text style={styles.meterInfoValue}>
-                    {lastMeter != null
-                      ? `Son okunan: ${lastMeter.toFixed(1)} mt`
-                      : 'Kaydederken makineden okunur'}
-                  </Text>
-                </View>
-                <Icon source="lock-outline" size={16} color={colors.textMuted} />
-              </View>
-            </PressableScale>
-          )}
-
           {/* OFFLINE-AWARE: mutation'a disabled binding YOK — paused mutation
               isPending kalsa da sıradaki kayıt engellenmesin. Yalnız `pulling`
               (makineden okuma, ~1sn) sırasında çift-tetiklemeyi kilitleriz. */}
@@ -780,49 +857,16 @@ export default function KK1Screen() {
           </Button>
         </ScrollView>
 
-        {/* ── SAĞ: Üstte son 6 kayıt + altta Numpad ── */}
+        {/* ── SAĞ: Üstte son kayıtlar + altta Numpad. Aksiyonlar header'a alındı;
+            başlık ise kolonun en üstünde (ayrım çizgisiyle) → liste sütunuyla
+            tam hizalı. ── */}
         {!compact && (
           <View style={styles.recentsCol}>
-            <View style={styles.recentsHeader}>
-              <View style={{ flex: 1 }}>
-                <Text variant="titleMedium" style={styles.recentsTitle}>
-                  Son Kayıtlar
-                </Text>
-                <View style={styles.recentsSubRow}>
-                  <Text variant="bodySmall" style={styles.recentsCount}>
-                    Toplam {totalCount}
-                  </Text>
-                  {sessionCount > 0 && (
-                    <View style={styles.sessionChip}>
-                      <Icon source="check-circle" size={13} color={colors.successDark} />
-                      <Text style={styles.sessionChipLabel}>Bu oturum</Text>
-                      <AnimatedCounter
-                        value={sessionCount}
-                        style={styles.sessionChipCount}
-                      />
-                    </View>
-                  )}
-                </View>
-              </View>
-              <Button
-                mode="outlined"
-                icon="format-list-bulleted"
-                compact
-                onPress={() => {
-                  setHistoryPage(1);
-                  setHistoryOpen(true);
-                }}
-              >
-                Tümünü Gör
-              </Button>
-              <RefreshButton
-                onPress={() => recentRollsQuery.refetch()}
-                refreshing={recentRollsQuery.isFetching}
-                isError={recentRollsQuery.isError}
-                errorMessage={(recentRollsQuery.error as Error | undefined)?.message}
-              />
+            <View style={styles.recentsColHeader}>
+              <Icon source="history" size={16} color="#475569" />
+              <Text style={styles.recentsColTitle}>Son Kayıtlar</Text>
+              <Text style={styles.recentsColCount}>· {recentRolls.length}</Text>
             </View>
-
             <View style={styles.recentsList}>
               {recentRollsQuery.isLoading ? (
                 <SkeletonList count={6} />
@@ -879,7 +923,7 @@ export default function KK1Screen() {
           loading={recentRollsQuery.isLoading}
           error={recentRollsQuery.isError ? (recentRollsQuery.error as Error) : null}
           fetching={recentRollsQuery.isFetching}
-          onRefresh={() => recentRollsQuery.refetch()}
+          onRefresh={handleRefresh}
           onOpenHistory={() => {
             // Drawer kapanış animasyonu bitince history açılır (iki-modal çakışması).
             setHistoryPage(1);
@@ -946,17 +990,6 @@ export default function KK1Screen() {
         onConfirm={confirmScrap}
       />
 
-      {/* ── Metraj elle-override uyarısı → manuel moda geçiş ── */}
-      <ConfirmDialog
-        kind="simple"
-        visible={meterWarnOpen}
-        title="Metrajı elle gir?"
-        description="Metraj normalde makineden otomatik okunur. Elle girmek için manuel moda geçilecek — bu yalnızca makine arızasında kullanılmalıdır."
-        confirmLabel="Manuel Giriş'e Geç"
-        cancelLabel="Vazgeç"
-        onConfirm={openManual}
-        onDismiss={() => setMeterWarnOpen(false)}
-      />
     </ScreenChrome>
   );
 }
@@ -1150,6 +1183,7 @@ function RollHistoryModal({
 }: RollHistoryModalProps) {
   const { width: winW, height: winH } = useWindowDimensions();
   const modalProps = useFullscreenModalProps();
+  const insets = useSafeAreaInsets();
   const isPhone = useDeviceType() === 'phone';
 
   return (
@@ -1164,13 +1198,17 @@ function RollHistoryModal({
       hideModalContentWhileAnimating
       {...modalProps}
     >
-      {/* Telefonda daha geniş + daha kısa (satırlar compact ile alçaldı). */}
+      {/* Telefonda daha geniş + daha kısa (satırlar compact ile alçaldı).
+          maxWidth/maxHeight ile güvenli alanı (durum/nav çubuğu, çentik) aşmaz. */}
       <View
         style={[
           historyStyles.sheet,
           {
             width: winW * (isPhone ? 0.96 : 0.85),
             height: winH * (isPhone ? 0.86 : 0.92),
+            // Modal ortalanır → her iki kenar boşluğu da en büyük inset'i geçmeli.
+            maxWidth: winW - 2 * Math.max(insets.left, insets.right) - 24,
+            maxHeight: winH - 2 * Math.max(insets.top, insets.bottom) - 24,
           },
         ]}
       >
@@ -1211,6 +1249,7 @@ function RollHistoryModal({
                   onPrint={onPrint}
                   onScrap={onScrap}
                   compactLayout={isPhone}
+                  singleLine={!isPhone}
                 />
               )}
             />
@@ -1421,12 +1460,15 @@ function RollListItem({
   onPrint,
   onScrap,
   compactLayout,
+  singleLine,
   isNew,
 }: {
   roll: Roll;
   onPrint: (b: string) => void;
   onScrap?: (roll: Roll) => void;
   compactLayout?: boolean;
+  /** Geniş tablet modalı: tüm bilgi tek satıra sığar. */
+  singleLine?: boolean;
   /** Yeni kaydedilip listeye yeni düşen top — kısa süre vurgulanır. */
   isNew?: boolean;
 }) {
@@ -1438,30 +1480,28 @@ function RollListItem({
   const barcode = roll.barcode ?? '—';
   const canPrint = !!roll.barcode;
 
-  return (
-    <Surface
-      style={[
-        styles.recentItem,
-        isInactive && styles.recentItemScrapped,
-        isNew && !isInactive && styles.recentItemNew,
-        compactLayout && { padding: 6, marginVertical: 2, gap: 2 },
-      ]}
-      elevation={1}
-    >
-      <View style={[styles.recentItemHeader, compactLayout && { gap: 4 }]}>
-        <Text
-          style={[
-            styles.recentBarcode,
-            isInactive && styles.recentBarcodeScrapped,
-            compactLayout && { fontSize: 11, paddingVertical: 0 },
-          ]}
-        >
-          {barcode}
-        </Text>
-        <Text style={[styles.recentTime, compactLayout && { fontSize: 11 }]}>
-          {at ? at.format('DD.MM HH:mm') : ''}
-        </Text>
-        {onScrap && !isInactive && (
+  // Aksiyon tuşları. Tablette (labeled) personel kolay bassın diye yazılı + büyük;
+  // telefonda yer olmadığından ikon-only.
+  const renderActions = (labeled: boolean) => (
+    <>
+      {onScrap &&
+        !isInactive &&
+        (labeled ? (
+          <Button
+            mode="contained-tonal"
+            icon="trash-can-outline"
+            compact
+            buttonColor="#fef2f2"
+            textColor="#dc2626"
+            onPress={() => onScrap(roll)}
+            accessibilityLabel="Topu iptal et / hurda"
+            style={styles.recentActionBtn}
+            labelStyle={styles.recentActionLabel}
+            contentStyle={styles.recentActionContent}
+          >
+            Sil
+          </Button>
+        ) : (
           <IconButton
             icon="trash-can-outline"
             mode="contained-tonal"
@@ -1473,8 +1513,24 @@ function RollListItem({
             style={[styles.recentScrapBtn, compactLayout && { width: 24, height: 24 }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           />
-        )}
-        {canPrint && (
+        ))}
+      {canPrint &&
+        (labeled ? (
+          <Button
+            mode="contained-tonal"
+            icon="printer"
+            compact
+            buttonColor="#eef2ff"
+            textColor="#1e293b"
+            onPress={() => onPrint(roll.barcode!)}
+            accessibilityLabel="Etiket bas"
+            style={styles.recentActionBtn}
+            labelStyle={styles.recentActionLabel}
+            contentStyle={styles.recentActionContent}
+          >
+            Yazdır
+          </Button>
+        ) : (
           <IconButton
             icon="printer"
             mode="contained-tonal"
@@ -1486,15 +1542,106 @@ function RollListItem({
             style={[styles.recentPrintBtn, compactLayout && { width: 28, height: 28 }]}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           />
-        )}
-      </View>
-      <Text
-        style={[styles.recentItemName, compactLayout && { fontSize: 11 }]}
-        numberOfLines={1}
+        ))}
+    </>
+  );
+
+  // ── Geniş tablet modalı: her kayıt tek satır (ad · kod · boy · en · kalite
+  //    … operatör · tarih · aksiyonlar). ──
+  if (singleLine) {
+    return (
+      <Surface
+        style={[
+          styles.recentItem,
+          styles.recentItemSingle,
+          isInactive && styles.recentItemScrapped,
+          isNew && !isInactive && styles.recentItemNew,
+        ]}
+        elevation={1}
       >
-        {roll.item?.name ?? '—'}
-        {roll.color?.name ? ` · ${roll.color.name}` : ''}
-      </Text>
+        <View style={styles.recentSingleRow}>
+          <Text
+            style={[styles.recentItemName, isInactive && styles.recentBarcodeScrapped]}
+            numberOfLines={1}
+          >
+            {roll.item?.name ?? '—'}
+            {roll.color?.name ? ` · ${roll.color.name}` : ''}
+          </Text>
+          <Text
+            style={[styles.recentBarcode, isInactive && styles.recentBarcodeScrapped]}
+            numberOfLines={1}
+          >
+            {barcode}
+          </Text>
+          <View style={styles.recentBadge}>
+            <Icon source="arrow-expand-vertical" size={14} color="#0f172a" />
+            <Text style={styles.recentBadgeText}>{qty}</Text>
+          </View>
+          {widthLabel && (
+            <View style={styles.recentBadge}>
+              <Icon source="arrow-expand-horizontal" size={14} color="#0f172a" />
+              <Text style={styles.recentBadgeText}>{widthLabel}</Text>
+            </View>
+          )}
+          <View style={styles.recentBadge}>
+            <Icon source="star-circle" size={14} color="#0f172a" />
+            <Text style={styles.recentBadgeText}>{roll.qualityGrade}</Text>
+          </View>
+
+          <View style={[styles.recentOperatorChip, styles.recentTimeRight]}>
+            <View style={styles.recentOperatorAvatar}>
+              <Icon source="account" size={14} color="#fff" />
+            </View>
+            <Text style={styles.recentOperatorText} numberOfLines={1}>
+              {operator}
+            </Text>
+          </View>
+          <Text style={styles.recentTime}>{at ? at.format('DD.MM HH:mm') : ''}</Text>
+          {renderActions(true)}
+        </View>
+      </Surface>
+    );
+  }
+
+  return (
+    <Surface
+      style={[
+        styles.recentItem,
+        isInactive && styles.recentItemScrapped,
+        isNew && !isInactive && styles.recentItemNew,
+        compactLayout && { padding: 6, marginVertical: 2, gap: 2 },
+      ]}
+      elevation={1}
+    >
+      {/* Satır 1: top adı + kod (yan yana, sol) — tarih + aksiyonlar (sağda) */}
+      <View style={[styles.recentItemHeader, compactLayout && { gap: 4 }]}>
+        <Text
+          style={[
+            styles.recentItemName,
+            isInactive && styles.recentBarcodeScrapped,
+            compactLayout && { fontSize: 12 },
+          ]}
+          numberOfLines={1}
+        >
+          {roll.item?.name ?? '—'}
+          {roll.color?.name ? ` · ${roll.color.name}` : ''}
+        </Text>
+        <Text
+          style={[
+            styles.recentBarcode,
+            isInactive && styles.recentBarcodeScrapped,
+            compactLayout && { fontSize: 11, paddingVertical: 0 },
+          ]}
+          numberOfLines={1}
+        >
+          {barcode}
+        </Text>
+        <Text style={[styles.recentTime, styles.recentTimeRight, compactLayout && { fontSize: 11 }]}>
+          {at ? at.format('DD.MM HH:mm') : ''}
+        </Text>
+        {renderActions(!compactLayout)}
+      </View>
+      {/* Satır 2: boy · en · kalite (sol) — giriş yapan kişi (en sağ) */}
       <View style={[styles.recentBottomRow, compactLayout && { marginTop: 2, gap: 6 }]}>
         <View style={styles.recentBadgeRow}>
           <View style={[styles.recentBadge, compactLayout && styles.recentBadgeCompact]}>
@@ -1507,39 +1654,20 @@ function RollListItem({
               <Text style={[styles.recentBadgeText, compactLayout && { fontSize: 11 }]}>{widthLabel}</Text>
             </View>
           )}
-          {!compactLayout && (
-            <View style={styles.recentBadge}>
-              <Icon source="star-circle" size={14} color="#0f172a" />
-              <Text style={styles.recentBadgeText}>{roll.qualityGrade}</Text>
-            </View>
-          )}
+          <View style={[styles.recentBadge, compactLayout && styles.recentBadgeCompact]}>
+            <Icon source="star-circle" size={compactLayout ? 12 : 14} color="#0f172a" />
+            <Text style={[styles.recentBadgeText, compactLayout && { fontSize: 11 }]}>{roll.qualityGrade}</Text>
+          </View>
         </View>
 
-        {compactLayout ? (
-          /* "Kalite ile giriş yapan kişi alt alta" — yatayda yer kazanır,
-             satır alçalır. */
-          <View style={styles.recentQualOp}>
-            <View style={[styles.recentBadge, styles.recentBadgeCompact]}>
-              <Icon source="star-circle" size={12} color="#0f172a" />
-              <Text style={[styles.recentBadgeText, { fontSize: 11 }]}>{roll.qualityGrade}</Text>
-            </View>
-            <View style={styles.recentOperatorMini}>
-              <Icon source="account" size={11} color={colors.brand} />
-              <Text style={styles.recentOperatorMiniText} numberOfLines={1}>
-                {operator}
-              </Text>
-            </View>
+        <View style={[styles.recentOperatorChip, compactLayout && { maxWidth: '42%' }]}>
+          <View style={styles.recentOperatorAvatar}>
+            <Icon source="account" size={14} color="#fff" />
           </View>
-        ) : (
-          <View style={styles.recentOperatorChip}>
-            <View style={styles.recentOperatorAvatar}>
-              <Icon source="account" size={14} color="#fff" />
-            </View>
-            <Text style={styles.recentOperatorText} numberOfLines={1}>
-              {operator}
-            </Text>
-          </View>
-        )}
+          <Text style={styles.recentOperatorText} numberOfLines={1}>
+            {operator}
+          </Text>
+        </View>
       </View>
     </Surface>
   );
@@ -1548,6 +1676,23 @@ function RollListItem({
 const styles = StyleSheet.create({
   body: { flex: 1, flexDirection: 'row' },
   headerExtrasRow: { flexDirection: 'row', alignItems: 'center' },
+  // Koyu header pill aksiyonu (Tambur ile aynı stil).
+  headerChip: {
+    borderRadius: 10,
+    marginLeft: 4,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    overflow: 'hidden',
+  },
+  headerChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  headerChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   // Sol — Form
   formCol: { flex: 1.4, backgroundColor: '#f8fafc' },
@@ -1598,29 +1743,6 @@ const styles = StyleSheet.create({
   widthInputContent: { fontSize: 28, fontWeight: '700', textAlign: 'center' },
   widthClearBtn: { margin: 0 },
 
-  // ── Metraj info readout (otomatik mod, salt-okunur) ──
-  meterInfo: {
-    borderRadius: radius.md,
-    backgroundColor: colors.infoContainer,
-    borderWidth: 1,
-    borderColor: '#bfdbfe', // blue 200
-    overflow: 'hidden',
-  },
-  meterInfoInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  meterInfoLabel: { fontSize: 13, fontWeight: '700', color: colors.infoDark },
-  meterInfoValue: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.infoText,
-    marginTop: 1,
-  },
-
   // ── Etiket kuyruğu çipi (header) ──
   printChip: {
     flexDirection: 'row',
@@ -1642,31 +1764,35 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   cardHeroTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text },
-  persistChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.brandSoft,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.full,
-  },
-  persistChipText: { fontSize: 11, fontWeight: '700', color: colors.brandDark },
 
-  // ── Oturum sayacı çipi (recents header) ──
-  recentsSubRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  sessionChip: {
+  // ── Oturum sayacı çipi (koyu header — diğer pill'lerle aynı yükseklik) ──
+  headerSessionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.successContainer,
-    paddingLeft: 6,
-    paddingRight: 9,
-    paddingVertical: 2,
-    borderRadius: radius.full,
+    gap: 5,
+    marginLeft: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: 'rgba(16,185,129,0.20)',
+    borderWidth: 1,
+    borderColor: 'rgba(134,239,172,0.45)',
   },
-  sessionChipLabel: { fontSize: 11, fontWeight: '600', color: colors.successText },
-  sessionChipCount: { fontSize: 13, fontWeight: '800', color: colors.successDark },
+  headerSessionLabel: { fontSize: 13, fontWeight: '700', color: '#dcfce7' },
+  headerSessionCount: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  // ── "Son Kayıtlar · N" — sağ kolonun en üstü; liste sütunuyla tam hizalı,
+  //    altında ince ayrım çizgisi (liste ile arasında). ──
+  recentsColHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  recentsColTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  recentsColCount: { fontSize: 14, fontWeight: '700', color: '#64748b' },
 
   // ── Yeni-kayıt vurgusu ──
   recentItemNew: {
@@ -1769,17 +1895,6 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderLeftColor: '#e2e8f0',
   },
-  recentsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  recentsTitle: { fontWeight: '700', color: '#0f172a' },
-  recentsCount: { color: '#64748b', marginTop: 2 },
   recentsList: { flex: 1, minHeight: 0 },
   recentsListContent: { padding: 12 },
   recentsEmpty: {
@@ -1804,6 +1919,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  recentItemSingle: { paddingVertical: 8, gap: 0 },
+  recentSingleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   recentBarcode: {
     fontFamily: 'monospace',
     fontSize: 13,
@@ -1814,16 +1935,21 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
-  recentTime: { fontSize: 12, color: '#0d4a8fff', flex: 1 },
+  recentTime: { fontSize: 12, color: '#0d4a8fff' },
+  recentTimeRight: { marginLeft: 'auto' },
   recentPrintBtn: { margin: 0, width: 35, height: 35 },
   recentScrapBtn: { margin: 0, width: 30, height: 30 },
+  // Tablet: yazılı + büyük aksiyon tuşları (personel kolay bassın).
+  recentActionBtn: { margin: 0, marginLeft: 4, borderRadius: 10 },
+  recentActionContent: { height: 46, paddingHorizontal: 6 },
+  recentActionLabel: { fontSize: 14, fontWeight: '700', marginHorizontal: 10, marginVertical: 0 },
   recentItemScrapped: { opacity: 0.55, backgroundColor: '#f1f5f9' },
   recentBarcodeScrapped: {
     textDecorationLine: 'line-through',
     color: '#64748b',
     backgroundColor: '#e2e8f0',
   },
-  recentItemName: { fontSize: 13, color: '#475569' },
+  recentItemName: { flexShrink: 1, fontSize: 14, fontWeight: '700', color: '#0f172a' },
   recentBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1843,16 +1969,6 @@ const styles = StyleSheet.create({
   },
   recentBadgeText: { fontSize: 12, color: '#0f172a', fontWeight: '600' },
   recentBadgeCompact: { paddingVertical: 1, paddingHorizontal: 4 },
-  // Compact: kalite + operatör sağda alt alta (yatayda yer kazanır).
-  recentQualOp: { alignItems: 'flex-end', gap: 3, flexShrink: 0, maxWidth: '46%' },
-  recentOperatorMini: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  recentOperatorMiniText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    flexShrink: 1,
-  },
-  recentOperator: { fontSize: 12, color: '#64748b', marginTop: 2 },
   recentOperatorChip: {
     flexDirection: 'row',
     alignItems: 'center',

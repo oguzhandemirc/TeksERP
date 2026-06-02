@@ -4,6 +4,7 @@ import {
   Package,
   Layers,
   Scale,
+  Truck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -48,6 +49,14 @@ export const operationsTiles: OperationsTile[] = [
     icon: Package,
     to: "/operations/rolls",
     permission: "roll:read",
+  },
+  {
+    key: "shipments",
+    title: "Sevkiyatlar",
+    description: "Müşteri sevkiyatları + sevk irsaliyesi",
+    icon: Truck,
+    to: "/operations/shipments",
+    permission: "shipping:read",
   },
   {
     key: "kursun-queue",

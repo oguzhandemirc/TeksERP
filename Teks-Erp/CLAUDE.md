@@ -35,9 +35,11 @@ Production'da `migrate dev` yerine `npm run prisma:migrate` (= `prisma migrate d
 
 ```
 PORT=4000
-DATABASE_URL="postgresql://postgres:4747@45.136.6.28:5432/TeksErpDb?schema=public"
+DATABASE_URL="postgresql://oad@localhost:5432/adnansahin_db?schema=public"
 JWT_SECRET="..."
 ```
+
+> Geliştirme tamamen **yerel** PostgreSQL ile çalışır (`localhost:5432/adnansahin_db`). Uzak/paylaşımlı DB yok.
 
 ## Architecture (özet)
 

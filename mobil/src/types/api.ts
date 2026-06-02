@@ -15,6 +15,16 @@ export interface PaginatedResponse<T> {
   };
 }
 
+export interface CursorPaginatedResponse<T> {
+  success: boolean;
+  data: T[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
 export interface QueryParams {
   page?: number;
   pageSize?: number;

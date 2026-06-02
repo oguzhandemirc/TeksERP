@@ -18,7 +18,7 @@
 // =============================================================================
 
 import bwipjs from "bwip-js";
-import { LabelKind } from "@prisma/client";
+import { LabelKind, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -610,12 +610,59 @@ export class LabelService {
    * Etiket basıldı — sadece audit izi (gerçek baskı tarayıcıda olur).
    * label:print yetkisi gerekir (route katmanında).
    */
-  async recordPrintEvent(rollId: string, userId?: string): Promise<ApiResponse<{ recorded: true }>> {
+  async recordPrintEvent(
+    rollId: string,
+    userId?: string,
+    opts?: { orderLineId?: string | null; customerId?: string | null }
+  ): Promise<ApiResponse<{ recorded: true }>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
       select: { id: true, barcode: true, status: true },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
+
+    // "Son basılan etiket" snapshot'ı — baskı anında çözülen müşteri/sipariş
+    // bağlamı (getRollLabel ile aynı çözüm; BAĞ DEĞİL, yalnız bilgi). Müşteri
+    // çözülürse denormalize yaz; müşterisiz (stok) baskıda önceki snapshot
+    // temizlenir (üstündeki fiili etiket artık stok). Etiket çözülemezse dokunma.
+    let labelData: LabelPayload | null = null;
+    try {
+      labelData = (await this.getRollLabel(rollId, opts)).data;
+    } catch {
+      labelData = null;
+    }
+    if (labelData) {
+      if (labelData.customerId) {
+        let operatorName: string | null = null;
+        if (userId) {
+          const u = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { fullName: true },
+          });
+          operatorName = u?.fullName ?? null;
+        }
+        const snap: Record<string, string> = {
+          customerId: labelData.customerId,
+          printedAt: new Date().toISOString(),
+        };
+        if (labelData.customerName) snap.customerName = labelData.customerName;
+        if (labelData.orderNumber) snap.orderNumber = labelData.orderNumber;
+        if (labelData.itemName) snap.itemName = labelData.itemName;
+        if (labelData.colorName) snap.colorName = labelData.colorName;
+        if (userId) snap.operatorId = userId;
+        if (operatorName) snap.operatorName = operatorName;
+        await prisma.roll.update({
+          where: { id: rollId },
+          data: { lastLabelSnapshot: snap },
+        });
+      } else {
+        // Müşterisiz (stok) baskı → önceki müşteri snapshot'ını temizle.
+        await prisma.roll.update({
+          where: { id: rollId },
+          data: { lastLabelSnapshot: Prisma.DbNull },
+        });
+      }
+    }
 
     await AuditService.log({
       userId,

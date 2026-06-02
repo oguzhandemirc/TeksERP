@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "muted";
+export type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "muted";
 
 const toneClasses: Record<Tone, string> = {
   neutral: "bg-foreground/10 text-foreground border-transparent",

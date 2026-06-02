@@ -101,9 +101,17 @@ export class LabelController {
 
   recordPrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const body = (req.body ?? {}) as {
+        orderLineId?: string | null;
+        customerId?: string | null;
+      };
       const result = await this.service.recordPrintEvent(
         req.params.id as string,
         req.user?.userId,
+        {
+          orderLineId: body.orderLineId ?? undefined,
+          customerId: body.customerId ?? undefined,
+        },
       );
       res.status(200).json(result);
     } catch (e) { next(e); }

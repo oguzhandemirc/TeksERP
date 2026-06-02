@@ -1,68 +1,101 @@
-import React, { useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as Haptics from 'expo-haptics';
+import Animated, { useAnimatedRef } from 'react-native-reanimated';
+import Sortable, {
+  type SortableGridRenderItem,
+  type SortableGridDragEndParams,
+} from 'react-native-sortables';
 import ScreenChrome from '../../components/ScreenChrome';
-import { PressableScale, AnimatedEntrance } from '../../components/motion';
-import { usePermissions } from '../../hooks/usePermission';
 import { useDeviceType } from '../../hooks/useDeviceType';
+import { useModuleOrder } from '../../hooks/useModuleOrder';
 import { colors, moduleAccents, radius, shadow, spacing } from '../../theme';
 import type { MainStackParamList } from '../../navigation/types';
 import type { MobileScreenKey, MobileScreenMeta } from '../../types/permissions';
 
 type Nav = NativeStackNavigationProp<MainStackParamList, 'ModuleSelect'>;
 
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
 export default function ModuleSelectScreen() {
-  const { allowedScreens } = usePermissions();
   const device = useDeviceType();
   const nav = useNavigation<Nav>();
   const isPhone = device === 'phone';
   const columns = isPhone ? 2 : 4;
-  const rows = useMemo(
-    () => chunk(allowedScreens, columns),
-    [allowedScreens, columns],
+  const gap = isPhone ? spacing.md : spacing.lg;
+
+  // Sıra kullanıcı profilinden (backend) gelir; sürükle-bırakta geri yazılır.
+  const { orderedScreens, setModuleOrder } = useModuleOrder();
+
+  // Tablet: grid tek ekrana sığar → kartları ölçülen alana göre yükselt (doldur).
+  // Telefon: scroll'lu, sabit yükseklik.
+  const scrollableRef = useAnimatedRef<Animated.ScrollView>();
+  const [areaH, setAreaH] = useState(0);
+  const onArea = useCallback((e: LayoutChangeEvent) => {
+    setAreaH(e.nativeEvent.layout.height);
+  }, []);
+
+  const rows = Math.max(1, Math.ceil(orderedScreens.length / columns));
+  const cardHeight = isPhone
+    ? 168
+    : areaH > 0
+      ? Math.max(180, Math.floor((areaH - 2 * gap - (rows - 1) * gap) / rows))
+      : 200;
+
+  const renderItem = useCallback<SortableGridRenderItem<MobileScreenMeta>>(
+    ({ item }) => (
+      // Sortable.Touchable: tek dokunuş → ekrana git; basılı tutma grid'in
+      // sürükleme jestine bırakılır (ikisi çakışmaz).
+      <Sortable.Touchable onTap={() => nav.navigate(item.key)}>
+        <ModuleCard meta={item} height={cardHeight} compact={isPhone} />
+      </Sortable.Touchable>
+    ),
+    [nav, cardHeight, isPhone],
   );
 
-  const handlePress = useCallback(
-    (key: MobileScreenKey) => nav.navigate(key),
-    [nav],
+  const handleDragEnd = useCallback(
+    ({ data }: SortableGridDragEndParams<MobileScreenMeta>) => {
+      setModuleOrder(data.map((s) => s.key));
+    },
+    [setModuleOrder],
   );
+
+  const handleDragStart = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, []);
 
   const grid = (
-    <View style={[styles.grid, isPhone && styles.gridPhone]}>
-      {rows.map((row, rIdx) => (
-        <View key={rIdx} style={[styles.row, isPhone && styles.rowPhone]}>
-          {row.map((s, cIdx) => (
-            <ModuleCard
-              key={s.key}
-              meta={s}
-              compact={isPhone}
-              index={rIdx * columns + cIdx}
-              onPress={handlePress}
-            />
-          ))}
-          {Array.from({ length: columns - row.length }).map((_, i) => (
-            <View key={`spacer-${i}`} style={styles.spacer} />
-          ))}
-        </View>
-      ))}
-    </View>
+    <Sortable.Grid
+      columns={columns}
+      data={orderedScreens}
+      keyExtractor={(item) => item.key}
+      renderItem={renderItem}
+      rowGap={gap}
+      columnGap={gap}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      hapticsEnabled={false}
+      autoScrollEnabled={isPhone}
+      {...(isPhone ? { scrollableRef } : {})}
+    />
   );
 
   return (
-    <ScreenChrome title="Modül Seçimi" subtitle="Çalışacağınız ekranı seçin">
+    <ScreenChrome title="Modül Seçimi">
       {isPhone ? (
-        <ScrollView contentContainerStyle={styles.scroll}>{grid}</ScrollView>
+        <Animated.ScrollView
+          ref={scrollableRef}
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+        >
+          {grid}
+        </Animated.ScrollView>
       ) : (
-        grid
+        <View style={styles.tabletArea} onLayout={onArea}>
+          {grid}
+        </View>
       )}
     </ScreenChrome>
   );
@@ -70,80 +103,55 @@ export default function ModuleSelectScreen() {
 
 const ModuleCard = React.memo(function ModuleCard({
   meta,
+  height,
   compact,
-  index,
-  onPress,
 }: {
   meta: MobileScreenMeta;
+  height: number;
   compact: boolean;
-  index: number;
-  onPress: (key: MobileScreenKey) => void;
 }) {
-  const color = moduleAccents[meta.key];
-  const handlePress = useCallback(() => onPress(meta.key), [onPress, meta.key]);
+  const color = moduleAccents[meta.key as MobileScreenKey];
   return (
-    <AnimatedEntrance index={index} style={styles.slot}>
-      <PressableScale
-        onPress={handlePress}
-        rippleColor={color.tint + '22'}
-        accessibilityLabel={meta.label}
-        style={[styles.card, { borderTopColor: color.tint }]}
-        contentStyle={styles.cardFill}
-      >
-        <View style={[styles.cardInner, compact && styles.cardInnerPhone]}>
-          <View
-            style={[
-              styles.iconBox,
-              compact && styles.iconBoxPhone,
-              { backgroundColor: color.bg },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name={meta.icon as never}
-              size={compact ? 40 : 56}
-              color={color.tint}
-            />
-          </View>
-          <Text
-            variant={compact ? 'titleMedium' : 'titleLarge'}
-            style={styles.label}
-            numberOfLines={2}
-          >
-            {meta.label}
-          </Text>
-          <Text variant="bodySmall" style={styles.desc} numberOfLines={2}>
-            {meta.description}
-          </Text>
+    <View style={[styles.card, { borderTopColor: color.tint, height }]}>
+      <View style={[styles.cardInner, compact && styles.cardInnerPhone]}>
+        <View
+          style={[
+            styles.iconBox,
+            compact && styles.iconBoxPhone,
+            { backgroundColor: color.bg },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name={meta.icon as never}
+            size={compact ? 40 : 56}
+            color={color.tint}
+          />
         </View>
-      </PressableScale>
-    </AnimatedEntrance>
+        <Text
+          variant={compact ? 'titleMedium' : 'titleLarge'}
+          style={styles.label}
+          numberOfLines={2}
+        >
+          {meta.label}
+        </Text>
+        <Text variant="bodySmall" style={styles.desc} numberOfLines={2}>
+          {meta.description}
+        </Text>
+      </View>
+    </View>
   );
 });
 
 const styles = StyleSheet.create({
-  scroll: { flexGrow: 1 },
-  grid: {
-    flex: 1,
-    padding: spacing.lg,
-    gap: spacing.lg,
-  },
-  gridPhone: { padding: spacing.md, gap: spacing.md },
-  row: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: spacing.lg,
-  },
-  rowPhone: { flex: 0, gap: spacing.md },
-  slot: { flex: 1 },
+  scroll: { padding: spacing.md },
+  tabletArea: { flex: 1, padding: spacing.lg },
   card: {
-    flex: 1,
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
     borderTopWidth: 4,
     overflow: 'hidden',
     ...shadow.md,
   },
-  cardFill: { flex: 1 },
   cardInner: {
     flex: 1,
     padding: spacing.xl,
@@ -151,8 +159,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm + 2,
   },
-  cardInnerPhone: { padding: spacing.md + 2, gap: spacing.xs + 2, minHeight: 160 },
-  spacer: { flex: 1 },
+  cardInnerPhone: { padding: spacing.md + 2, gap: spacing.xs + 2 },
   iconBox: {
     width: 88,
     height: 88,

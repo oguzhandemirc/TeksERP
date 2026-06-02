@@ -275,7 +275,10 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 8 },
   permTitle: { color: '#fff', fontWeight: '700' },
   permBody: { color: colors.textOnDarkMuted, textAlign: 'center' },
-  cameraWrap: { flex: 1, backgroundColor: '#000', position: 'relative' },
+  // overflow: 'hidden' — Android'de CameraView native önizleme yüzeyi parent'tan
+  // daha geniş render edip yuvarlak sayfanın dışına taşabiliyor (kamera başlıktan
+  // geniş görünüyor). Sert kırpma önizlemeyi sayfa genişliğine sabitler.
+  cameraWrap: { flex: 1, backgroundColor: '#000', position: 'relative', overflow: 'hidden' },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',

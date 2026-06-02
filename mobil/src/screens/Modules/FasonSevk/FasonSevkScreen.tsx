@@ -1863,7 +1863,8 @@ const styles = StyleSheet.create({
     borderLeftColor: '#e2e8f0',
   },
   // Telefon: alttan sürüklenen panel (absolute overlay). Yükseklik animasyonlu
-  // (sheetStyle). Üst kenarda belirgin gölge formla net ayırır.
+  // (sheetStyle). Sayfanın geri kalanı da beyaz olduğundan üst kenara kalın
+  // lacivert çizgi çekilir — paneli net ayırır (gölge tek başına yetmiyordu).
   sheet: {
     position: 'absolute',
     left: 0,
@@ -1872,8 +1873,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    borderTopWidth: 1,
-    borderColor: '#cbd5e1',
+    borderTopWidth: 4,
+    borderTopColor: '#1e3a8a',
     overflow: 'hidden',
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: -4 },

@@ -1,54 +1,57 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, ViewStyle } from 'react-native';
-import { IconButton } from 'react-native-paper';
+import { Animated, Easing, StyleSheet, View, ViewStyle } from 'react-native';
+import { IconButton, TouchableRipple, Text, Icon } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
 interface Props {
   onPress: () => void;
-  /** Yenileme/fetch sürerken animasyon döner; true→false geçişi başarı haptic'i tetikler. */
+  /** Yenileme/fetch sürerken animasyon döner; true→false geçişi bitiş haptic'i tetikler. */
   refreshing: boolean;
-  /** Sorgu son halinde başarısızsa true → bitiş haptic'i error olur + toast atılır. */
+  /** Sorgu son halinde başarısızsa true → error haptic + error toast. */
   isError?: boolean;
-  /** İsteğe bağlı hata mesajı (toast'ta gösterilir). */
+  /** Hata mesajı (error toast'ta gösterilir). */
   errorMessage?: string;
-  /** Stil override (örn. margin: 0). Container View'a uygulanır. */
+  /** Başarı mesajı — sağlanırsa yenileme tamamlanınca success toast gösterilir. */
+  successMessage?: string;
+  /** Stil override (default variant'ta Animated.View container'a uygulanır). */
   containerStyle?: ViewStyle;
   /** İkon boyutu — default 18. */
   size?: number;
+  /** Header dark chip modunda render et — AppBar içindeki dark header'a uygun beyaz ikon + pill stil. */
+  headerStyle?: boolean;
+  /** Header chip modunda ikonun yanında gösterilen etiket. */
+  label?: string;
+  /** Header chip accent rengi (koyu mavi). */
+  accent?: boolean;
 }
 
 /**
- * Yenile (refresh) ikon butonu — kesintisiz dönen animasyon + haptic geri bildirim.
+ * Yenile (refresh) butonu — dönen animasyon + haptic + isteğe bağlı toast.
  *
- * Davranış:
- * - `refreshing=true`: 360°/800ms linear sonsuz tur. Mid-rotation snap yok;
- *   refreshing false'a düşünce mevcut tur tamamlanır, sessizce 0°'de durur.
- * - **Art arda basılabilir** — disabled değil. React-query refetch dedupe eder.
- * - **Tap haptic:** basışta light impact (`tıkladım` geri bildirimi).
- * - **Başarı haptic:** refreshing true→false transition'ında success notification.
- *
- * Kullanım: `<RefreshButton onPress={() => query.refetch()} refreshing={query.isFetching} />`
+ * `headerStyle=true` ile AppBar dark header'ına uygun beyaz pill chip olarak render edilir.
+ * Default variant'ta beyaz arka plan üzerinde mor IconButton olarak görünür.
  */
 export default function RefreshButton({
   onPress,
   refreshing,
   isError = false,
   errorMessage,
+  successMessage,
   containerStyle,
   size = 18,
+  headerStyle = false,
+  label,
+  accent = false,
 }: Props) {
   const spin = useRef(new Animated.Value(0)).current;
-  // Animation callback `refreshing` değişimini kapanışta okumak için ref şart.
   const refreshingRef = useRef(refreshing);
   refreshingRef.current = refreshing;
   const animatingRef = useRef(false);
   const prevRefreshing = useRef(refreshing);
 
-  // Tek tur — bittikten sonra hâlâ refreshing ise yeni tur, değilse 360° (= 0°
-  // görsel) konumunda sessizce durur.
   const runRotation = useCallback(() => {
-    if (animatingRef.current) return; // Çift loop koruması
+    if (animatingRef.current) return;
     animatingRef.current = true;
     spin.setValue(0);
     Animated.timing(spin, {
@@ -68,30 +71,24 @@ export default function RefreshButton({
     if (refreshing) runRotation();
   }, [refreshing, runRotation]);
 
-  // refreshing true→false → bitiş geri bildirimi
-  // - isError true: error haptic + error toast
-  // - isError false: success haptic (sessiz, toast yok — auto-fetch'lerde kirlilik olmasın)
   useEffect(() => {
     if (prevRefreshing.current && !refreshing) {
       if (isError) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(
-          () => {}
-        );
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
         Toast.show({
           type: 'error',
           text1: 'Yenileme başarısız',
           text2: errorMessage,
         });
       } else {
-        Haptics.notificationAsync(
-          Haptics.NotificationFeedbackType.Success
-        ).catch(() => {});
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        if (successMessage) {
+          Toast.show({ type: 'success', text1: successMessage });
+        }
       }
     }
     prevRefreshing.current = refreshing;
-    // isError ve errorMessage transition anında okunduğu için deps'te yer almayabilir
-    // ama React kuralı gereği ekledik; transition mantığı `prevRefreshing` ref'iyle korunur.
-  }, [refreshing, isError, errorMessage]);
+  }, [refreshing, isError, errorMessage, successMessage]);
 
   const rotation = spin.interpolate({
     inputRange: [0, 1],
@@ -102,6 +99,25 @@ export default function RefreshButton({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     onPress();
   };
+
+  if (headerStyle) {
+    return (
+      <TouchableRipple
+        onPress={handlePress}
+        style={[hdrStyles.chip, accent && hdrStyles.chipAccent]}
+        borderless
+        rippleColor="rgba(255,255,255,0.2)"
+        accessibilityLabel={label ?? 'Yenile'}
+      >
+        <View style={hdrStyles.chipInner}>
+          <Animated.View style={{ transform: [{ rotate: rotation }] }}>
+            <Icon source="refresh" size={18} color="#fff" />
+          </Animated.View>
+          {label && <Text style={hdrStyles.chipText}>{label}</Text>}
+        </View>
+      </TouchableRipple>
+    );
+  }
 
   return (
     <Animated.View style={[{ transform: [{ rotate: rotation }] }, containerStyle]}>
@@ -121,4 +137,27 @@ export default function RefreshButton({
 
 const styles = StyleSheet.create({
   btn: { margin: 0, width: 36, height: 36 },
+});
+
+const hdrStyles = StyleSheet.create({
+  chip: {
+    borderRadius: 10,
+    marginLeft: 4,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    overflow: 'hidden',
+  },
+  chipAccent: {
+    backgroundColor: 'rgba(30,64,175,0.45)',
+    borderColor: 'rgba(147,197,253,0.7)',
+  },
+  chipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  chipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });

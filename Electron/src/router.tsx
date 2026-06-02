@@ -67,6 +67,7 @@ import { WorkOrdersPage } from "@/pages/Operations/WorkOrders/WorkOrdersPage";
 import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
 import { KursunQueuePage } from "@/pages/Operations/KursunQueue/KursunQueuePage";
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
+import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
 
 export const router = createHashRouter([
   { path: "/login", element: <LoginPage /> },
@@ -281,6 +282,14 @@ export const router = createHashRouter([
         element: (
           <ProtectedRoute requirePermission="workorder:read">
             <ProductBalancePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "operations/shipments",
+        element: (
+          <ProtectedRoute requirePermission="shipping:read">
+            <ShipmentsPage />
           </ProtectedRoute>
         ),
       },

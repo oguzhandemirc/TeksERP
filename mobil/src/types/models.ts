@@ -298,7 +298,20 @@ export interface Roll {
     workOrder?: { id: string; batchNumber: string } | null;
   } | null;
   createdBy?: { id: string; username: string; fullName: string } | null;
+  /** Topun üstündeki son basılan etiket snapshot'ı (null = stok/etiket yok). BAĞ DEĞİL. */
+  lastLabelSnapshot?: RollLabelSnapshot | null;
   createdAt?: string;
+}
+
+export interface RollLabelSnapshot {
+  customerId: string | null;
+  customerName: string | null;
+  orderNumber: string | null;
+  itemName: string | null;
+  colorName: string | null;
+  printedAt: string;
+  operatorId: string | null;
+  operatorName: string | null;
 }
 
 // =============================================================================

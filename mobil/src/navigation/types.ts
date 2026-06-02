@@ -13,5 +13,6 @@ export type MainStackParamList = {
   ModuleSelect: undefined;
   // Modül değil — Tartı/Paket & Sevkiyat'tan push edilen alt sayfalar (yetki-bağımsız).
   SevkiyatGecmisi: undefined;
+  SevkiyatDetay: { shipmentId: string; shipmentNo?: string };
   Paketleme: { shipmentId?: string; orderIds?: string[] };
 } & Record<MobileScreenKey, undefined>;

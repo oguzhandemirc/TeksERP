@@ -33,6 +33,8 @@ export interface LabelTargetRoll {
   width?: number | null;
   itemName?: string;
   colorName?: string | null;
+  /** Topun ŞU ANKİ son etiketi — relabel'de "neyi değiştiriyorsun" göstermek için. */
+  lastLabelSnapshot?: { customerName: string | null; orderNumber: string | null } | null;
 }
 
 export type LabelTargetContext = { orderLineId?: string | null; customerId?: string | null };
@@ -108,6 +110,12 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
               {roll?.colorName ? ` · ${roll.colorName}` : ''}
               {roll?.width ? ` · ${roll.width}cm` : ''}
             </Text>
+            {roll?.lastLabelSnapshot?.customerName ? (
+              <Text style={styles.currentLabel} numberOfLines={1}>
+                Şu an: {roll.lastLabelSnapshot.customerName}
+                {roll.lastLabelSnapshot.orderNumber ? ` · ${roll.lastLabelSnapshot.orderNumber}` : ''} — değiştiriyorsun
+              </Text>
+            ) : null}
           </View>
           <IconButton
             icon="close"
@@ -228,6 +236,7 @@ const styles = StyleSheet.create({
   closeBtn: { margin: 0, marginRight: -8 },
   title: { fontWeight: '700', color: '#0f172a' },
   spec: { fontSize: 13, color: '#475569', marginTop: 4 },
+  currentLabel: { fontSize: 12, color: '#b45309', marginTop: 4, fontWeight: '600' },
   label: { fontSize: 12, color: '#64748b', marginBottom: 4 },
   empty: { fontSize: 13, color: '#94a3b8', marginVertical: 12 },
   row: { paddingVertical: 12, paddingHorizontal: 8, borderRadius: 8 },

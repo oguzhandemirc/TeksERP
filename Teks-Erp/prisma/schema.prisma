@@ -595,6 +595,13 @@ model Roll {
   // GEVŞEK MODEL: top→sipariş bağı YOK; etiket müşterisi baskı anında seçilir.
   shipmentId String?
 
+  // GEVŞEK MODEL: topun ÜSTÜNDEKİ son basılan etiketin denormalize snapshot'ı
+  // (müşteri/sipariş/ürün-renk adı + baskı tarihi/operatör). BAĞ DEĞİL — yalnız
+  // "şu an hangi etiket basılı" bilgisi; kapsama/sevk mantığına GİRMEZ. Müşterisiz
+  // (stok) baskıda null'a çekilir. Küçük/nullable alan; index/filtre yok → liste
+  // sorgusunda dönse de perf etkisi yok, asıl detay (findRollById) kullanır.
+  lastLabelSnapshot Json?
+
   // Relations
   item                Item                        @relation(fields: [itemId], references: [id])
   color               Color?                      @relation(fields: [colorId], references: [id])

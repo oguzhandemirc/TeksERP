@@ -1,10 +1,12 @@
 import React from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import RNModal from 'react-native-modal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { BarcodeScannerView, type SupportedBarcodeType } from './BarcodeScannerView';
 import { toastConfig } from './ToastConfig';
 import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
+import { useDeviceType } from '../hooks/useDeviceType';
 
 interface Props {
   visible: boolean;
@@ -43,7 +45,32 @@ export function BarcodeScannerModal({
   continuous,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const isTablet = useDeviceType() === 'tablet';
   const modalProps = useFullscreenModalProps();
+
+  // Modal tam ekranda ortalanır (justifyContent: 'center'). Telefonda eski
+  // davranış korunur. Tablette ekran yüksek olduğundan winH*0.8 + ortalama,
+  // header/kapat butonunu durum çubuğu / kamera çentiği (safe area) altına
+  // itiyordu. Tablet'te: biraz küçült + güvenli alana sığdır. Ortalı modal'ın
+  // bir kenardan taşmaması için yükseklik en fazla `ekran - 2*(en büyük dikey
+  // inset)`; genişlikte de yatay inset düşülür. Ayrıca mutlak tavanla küçültülür
+  // (büyük tablette dev kamera modalı gereksiz).
+  const vInset = Math.max(insets.top, insets.bottom);
+  const hInset = Math.max(insets.left, insets.right);
+  // Tablet: kare modal (genişlik = yükseklik) — kenarlar eşit. Tek `side`
+  // tüm sınırların en küçüğü: yatay/dikey güvenli alan + mutlak tavan.
+  const tabletSide = Math.min(
+    winW * 0.6,
+    winW - 2 * hInset - 16,
+    winH * 0.78,
+    winH - 2 * vInset - 16,
+    560,
+  );
+  const sheetSize = isTablet
+    ? { width: tabletSide, height: tabletSide }
+    : { width: winW * 0.7, height: winH * 0.8 };
+
   return (
     <RNModal
       isVisible={visible}
@@ -56,7 +83,7 @@ export function BarcodeScannerModal({
       hideModalContentWhileAnimating
       {...modalProps}
     >
-      <View style={[styles.sheet, { width: winW * 0.7, height: winH * 0.8 }]}>
+      <View style={[styles.sheet, sheetSize]}>
         <BarcodeScannerView
           active={visible}
           onClose={onDismiss}

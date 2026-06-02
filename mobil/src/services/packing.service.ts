@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import type { ApiResponse } from '../types/api';
+import type { ApiResponse, CursorPaginatedResponse } from '../types/api';
 
 // =============================================================================
 // Tartı/Paket + Sevkiyat — GEVŞEK MODEL sözleşmesi (/api/shipping)
@@ -8,6 +8,13 @@ import type { ApiResponse } from '../types/api';
 // =============================================================================
 
 export type ShipmentStatus = 'PREPARING' | 'READY' | 'DISPATCHED' | 'CANCELLED';
+
+export const SHIPMENT_STATUS_TR: Record<ShipmentStatus, string> = {
+  PREPARING: 'Hazırlanıyor',
+  READY: 'Hazır',
+  DISPATCHED: 'Sevk Edildi',
+  CANCELLED: 'İptal',
+};
 
 interface Ref {
   id: string;
@@ -155,6 +162,25 @@ export const packingService = {
     if (params?.customerId) q.set('customerId', params.customerId);
     const qs = q.toString();
     return apiClient.get<ApiResponse<ShipmentListItem[]>>(`/shipping/shipments${qs ? '?' + qs : ''}`).then((r) => r.data);
+  },
+
+  // Sayfalı (cursor) liste — FlashList sonsuz kaydırma. Backend non-breaking cursor
+  // (mode=cursor). Filtre: status + customerId (server). Geçmiş ekranı bunu kullanır.
+  listShipmentsCursor: (params: {
+    status?: ShipmentStatus;
+    customerId?: string;
+    cursor?: string | null;
+    limit?: number;
+  }): Promise<CursorPaginatedResponse<ShipmentListItem>> => {
+    const q = new URLSearchParams();
+    q.set('mode', 'cursor');
+    q.set('limit', String(params.limit ?? 20));
+    if (params.cursor) q.set('cursor', params.cursor);
+    if (params.status) q.set('status', params.status);
+    if (params.customerId) q.set('customerId', params.customerId);
+    return apiClient
+      .get<CursorPaginatedResponse<ShipmentListItem>>(`/shipping/shipments?${q.toString()}`)
+      .then((r) => r.data);
   },
 
   addOrders: (id: string, orderIds: string[]): Promise<ApiResponse<unknown>> =>
