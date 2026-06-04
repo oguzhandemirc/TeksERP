@@ -11,7 +11,7 @@ export default defineConfig({
       lib: {
         entry: resolve(__dirname, "electron/main.ts"),
         formats: ["es"],
-        fileName: () => "index.js",
+        fileName: () => "main.js",
       },
     },
     resolve: {
@@ -25,7 +25,7 @@ export default defineConfig({
       lib: {
         entry: resolve(__dirname, "electron/preload.ts"),
         formats: ["cjs"],
-        fileName: () => "index.cjs",
+        fileName: () => "preload.cjs",
       },
     },
     resolve: {

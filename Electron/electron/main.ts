@@ -82,6 +82,11 @@ async function createMainWindow(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === "win32") {
+    // Taskbar ikonu/gruplaması ve bildirimlerin doğru logoyla görünmesi için — appId ile birebir aynı.
+    app.setAppUserModelId("com.etkiliyazilim.adnan-sahin-erp");
+  }
+
   if (isDev && process.platform === "darwin" && app.dock) {
     const dockIconPath = path.join(__dirname, "../..", "resources", "TeksERP-LOGO-mac.png");
     const dockIcon = nativeImage.createFromPath(dockIconPath);

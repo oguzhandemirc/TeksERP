@@ -3,28 +3,30 @@ import { Menu, app, type MenuItemConstructorOptions } from "electron";
 const isMac = process.platform === "darwin";
 
 export function buildAppMenu(): void {
+  // Windows/Linux'ta üst menü çubuğunu (Dosya/Düzenle/Görünüm/Pencere/Yardım)
+  // tamamen kaldır. Metin düzenleme kısayolları (Ctrl+C/V/X, geri al/yinele,
+  // tümünü seç) Chromium tarafından input/textarea alanlarında zaten yerel
+  // olarak çalışır — görünür bir menü çubuğuna gerek yok.
+  if (!isMac) {
+    Menu.setApplicationMenu(null);
+    return;
+  }
+
+  // macOS uygulamaları sistem menü çubuğu gerektirir — tam menüyü koru.
   const template: MenuItemConstructorOptions[] = [
-    ...(isMac
-      ? [
-          {
-            label: app.name,
-            submenu: [
-              { role: "about" as const },
-              { type: "separator" as const },
-              { role: "services" as const },
-              { type: "separator" as const },
-              { role: "hide" as const },
-              { role: "hideOthers" as const },
-              { role: "unhide" as const },
-              { type: "separator" as const },
-              { role: "quit" as const },
-            ],
-          },
-        ]
-      : []),
     {
-      label: "Dosya",
-      submenu: [isMac ? { role: "close" } : { role: "quit" }],
+      label: app.name,
+      submenu: [
+        { role: "about" },
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
     },
     {
       label: "Düzenle",
@@ -41,10 +43,6 @@ export function buildAppMenu(): void {
     {
       label: "Görünüm",
       submenu: [
-        { role: "reload" },
-        { role: "forceReload" },
-        { role: "toggleDevTools" },
-        { type: "separator" },
         { role: "resetZoom" },
         { role: "zoomIn" },
         { role: "zoomOut" },
@@ -58,12 +56,7 @@ export function buildAppMenu(): void {
     },
     {
       role: "help",
-      submenu: [
-        {
-          label: "by Etkili Yazılım",
-          enabled: false,
-        },
-      ],
+      submenu: [{ label: "by Etkili Yazılım", enabled: false }],
     },
   ];
 

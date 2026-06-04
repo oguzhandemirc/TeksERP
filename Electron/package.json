@@ -141,10 +141,21 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": true,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Adnan Şahin ERP"
+      "shortcutName": "Adnan Şahin ERP",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "resources/TeksERP-LOGO.ico",
+      "uninstallerIcon": "resources/TeksERP-LOGO.ico",
+      "installerHeaderIcon": "resources/TeksERP-LOGO.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "uninstallDisplayName": "Adnan Şahin ERP",
+      "menuCategory": "Etkili Yazılım"
     },
     "linux": {
       "icon": "resources/TeksERP-LOGO.png",
