@@ -5,10 +5,12 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { MotionProvider } from "@/components/motion";
 import { PreferencesProvider } from "@/providers/PreferencesProvider";
-import { router } from "./router";
+import { AppShell } from "@/components/layout/AppShell";
+import { authRouter } from "./router";
 import { useAuthStore } from "@/store/auth";
 import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt } from "@/lib/jwt";
+import { canEnterApp } from "@/types/auth";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +41,23 @@ function AuthHydrator() {
   return null;
 }
 
+/**
+ * Üst seviye kapı: kimlik durumuna göre oturum-dışı router'ı ya da uygulama
+ * kabuğunu (AppShell + sekmeler) gösterir. AppShell bilerek bir data-router'ın
+ * DIŞINDA render edilir — böylece her sekmenin memory router'ı tek katmandır,
+ * iç içe geçmez.
+ */
+function Root() {
+  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const user = useAuthStore((s) => s.user);
+
+  if (!isHydrated) return null;
+  if (!user || !canEnterApp(user.permissions)) {
+    return <RouterProvider router={authRouter} />;
+  }
+  return <AppShell />;
+}
+
 export function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
@@ -46,7 +65,7 @@ export function App() {
         <AuthHydrator />
         <PreferencesProvider>
           <MotionProvider>
-            <RouterProvider router={router} />
+            <Root />
           </MotionProvider>
         </PreferencesProvider>
         <Toaster />

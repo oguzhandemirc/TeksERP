@@ -1,11 +1,15 @@
 import { createCrudService } from "@/services/crudService";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { ShipmentListItem, ShipmentDetail } from "./types";
+import type { ShipmentListItem, ShipmentDetail, BranchLookupItem } from "./types";
 
 // Liste + cursor: createCrudService (GET /api/shipping/shipments?mode=cursor...).
 // Detay ayrı tip (zengin) → getDetail. Backend listShipments cursor'u non-breaking.
 const base = createCrudService<ShipmentListItem>("/api/shipping/shipments");
+
+/** FilterBar şube filtresi için global şube lookup'ı (customer dahil). */
+export const branchLookupService =
+  createCrudService<BranchLookupItem>("/api/customer-branches");
 
 export const shipmentService = {
   ...base,

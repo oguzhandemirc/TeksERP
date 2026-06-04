@@ -75,7 +75,7 @@ export interface SwatchLabelPayload {
   colorNameDefault: string | null;
   colorNameSource: NameSource | null;
   widthCm: number | null;
-  lengthCm: number;
+  lengthCm: number | null;
   weightKg: number | null;
   customerName: string | null;
   customerId: string | null;
@@ -489,30 +489,6 @@ export class LabelService {
       include: {
         item: { select: { id: true, code: true, name: true } },
         color: { select: { id: true, code: true, name: true } },
-        workOrder: {
-          select: {
-            id: true,
-            batchNumber: true,
-            orderLinks: {
-              select: {
-                orderLine: {
-                  select: {
-                    id: true,
-                    customerItemName: true,
-                    customerColorName: true,
-                    order: {
-                      select: {
-                        orderNumber: true,
-                        customerId: true,
-                        customer: { select: { name: true } },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
         parentRoll: {
           select: {
             id: true,
@@ -523,60 +499,12 @@ export class LabelService {
     });
     if (!sw) throw AppError.notFound("Kartela bulunamadı");
 
-    // Müşteri context: getRollLabel ile aynı mantık. Tek müşteri (1+ satır)
-    // → customer çöz; orderNumber/orderLineId yalnız tek satırda set edilir.
-    const links = sw.workOrder?.orderLinks ?? [];
-    const customerIds = new Set(links.map((l) => l.orderLine.order.customerId));
-    const sameCustomer = links.length > 0 && customerIds.size === 1;
-
-    let customerId: string | null = null;
-    let customerName: string | null = null;
-    let orderNumber: string | null = null;
-    let orderLineId: string | null = null;
-    let itemOverride: string | null = null;
-    let colorOverride: string | null = null;
-    let itemMasterAlias: string | null = null;
-    let colorMasterAlias: string | null = null;
-
-    if (sameCustomer) {
-      const first = links[0];
-      customerId = first.orderLine.order.customerId;
-      customerName = first.orderLine.order.customer.name;
-
-      if (links.length === 1) {
-        orderNumber = first.orderLine.order.orderNumber;
-        orderLineId = first.orderLine.id;
-      }
-
-      itemOverride = allEqual(links.map((l) => l.orderLine.customerItemName));
-      colorOverride = allEqual(links.map((l) => l.orderLine.customerColorName));
-
-      const itemAlias = await prisma.customerItemAlias.findUnique({
-        where: {
-          customerId_itemId: { customerId, itemId: sw.item.id },
-        },
-        select: { alias: true },
-      });
-      itemMasterAlias = itemAlias?.alias ?? null;
-
-      if (sw.color) {
-        const colorAlias = await prisma.customerColorAlias.findUnique({
-          where: {
-            customerId_colorId: { customerId, colorId: sw.color.id },
-          },
-          select: { alias: true },
-        });
-        colorMasterAlias = colorAlias?.alias ?? null;
-      }
-    }
-
-    const itemResolved = resolveName(
-      itemOverride,
-      itemMasterAlias,
-      sw.item.name,
-    );
+    // GEVŞEK MODEL: Kartela siparişe/WO'ya bağlı değil (fason dönüşünden doğar).
+    // Müşteri/sipariş bağlamı yok; etiket müşterisi baskı anında seçilir (top
+    // etiketi gibi). Ürün/renk adı master default'tan basılır.
+    const itemResolved = resolveName(null, null, sw.item.name);
     const colorResolved = sw.color
-      ? resolveName(colorOverride, colorMasterAlias, sw.color.name)
+      ? resolveName(null, null, sw.color.name)
       : null;
 
     const payload: SwatchLabelPayload = {
@@ -592,13 +520,13 @@ export class LabelService {
       colorNameDefault: sw.color?.name ?? null,
       colorNameSource: colorResolved?.source ?? null,
       widthCm: sw.width !== null ? Number(sw.width) : null,
-      lengthCm: Number(sw.length),
+      lengthCm: sw.length !== null ? Number(sw.length) : null,
       weightKg: sw.weightKg !== null ? Number(sw.weightKg) : null,
-      customerName,
-      customerId,
-      orderNumber,
-      orderLineId,
-      batchNumber: sw.workOrder?.batchNumber ?? null,
+      customerName: null,
+      customerId: null,
+      orderNumber: null,
+      orderLineId: null,
+      batchNumber: null,
       parentRollBarcode: sw.parentRoll?.barcode ?? null,
       printedAt: new Date().toISOString(),
     };

@@ -155,4 +155,6 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   Sevkiyat: { tint: '#ea580c', bg: '#ffedd5' },
   FasonSevk: { tint: '#0891b2', bg: '#cffafe' },
   FasonKabul: { tint: '#db2777', bg: '#fce7f3' },
+  KartelaSevk: { tint: '#9333ea', bg: '#f3e8ff' },
+  KartelaKabul: { tint: '#c026d3', bg: '#fae8ff' },
 };

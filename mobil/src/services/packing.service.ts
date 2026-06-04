@@ -4,7 +4,7 @@ import type { ApiResponse, CursorPaginatedResponse } from '../types/api';
 // =============================================================================
 // Tartı/Paket + Sevkiyat — GEVŞEK MODEL sözleşmesi (/api/shipping)
 // Sevkiyat oturumu = tek müşteri+şube + seçilen siparişler + okutulan toplar +
-// çuval tartıları. Çuval = sadece no+kg (içerik yok). Karşılanma spec-toplam.
+// çuval tartıları + İÇERİK (çuval-önce: topu aktif çuvala okut). Karşılanma spec-toplam.
 // =============================================================================
 
 export type ShipmentStatus = 'PREPARING' | 'READY' | 'DISPATCHED' | 'CANCELLED';
@@ -77,8 +77,49 @@ export interface ShipmentDetailRoll {
   color: { code: string; name: string } | null;
   width: number | null;
   currentQty: number;
+  /** İçinde bulunduğu çuval (top-level rolls'da döner). */
+  sackId?: string | null;
+}
+
+/** Çuval içeriğindeki top (sack.rolls). */
+export interface SackRoll {
+  id: string;
+  barcode: string | null;
+  width: number | null;
+  currentQty: number;
+  item: { code: string; name: string };
+  color: { code: string; name: string } | null;
+}
+export interface SackSwatch {
+  id: string;
+  barcode: string | null;
+  length: number | null;
+  width: number | null;
+  item: { code: string; name: string } | null;
+  color: { code: string; name: string } | null;
+}
+export interface SackProductSummary {
+  itemCode: string;
+  itemName: string;
+  colorCode: string | null;
+  colorName: string | null;
+  width: number | null;
+  totalQty: number;
+  rollCount: number;
 }
 export interface ShipmentSack {
+  id: string;
+  sackNo: string;
+  seq: number;
+  weightKg: number | null;
+  rolls: SackRoll[];
+  swatches: SackSwatch[];
+  productSummary: SackProductSummary[];
+  rollCount: number;
+  swatchCount: number;
+}
+/** addSack lean dönüşü — yeni açılan boş çuval (içerik yok). */
+export interface ShipmentSackLean {
   id: string;
   sackNo: string;
   seq: number;
@@ -193,12 +234,14 @@ export const packingService = {
   scan: (
     id: string,
     barcode: string,
-  ): Promise<ApiResponse<{ kind: 'ROLL' | 'SWATCH'; rollId?: string; swatchId?: string; currentQty?: number }>> =>
+    sackId?: string | null,
+  ): Promise<
+    ApiResponse<{ kind: 'ROLL' | 'SWATCH'; rollId?: string; swatchId?: string; sackId?: string | null; currentQty?: number }>
+  > =>
     apiClient
-      .post<ApiResponse<{ kind: 'ROLL' | 'SWATCH'; rollId?: string; swatchId?: string; currentQty?: number }>>(
-        `/shipping/shipments/${id}/scan`,
-        { barcode },
-      )
+      .post<
+        ApiResponse<{ kind: 'ROLL' | 'SWATCH'; rollId?: string; swatchId?: string; sackId?: string | null; currentQty?: number }>
+      >(`/shipping/shipments/${id}/scan`, { barcode, ...(sackId ? { sackId } : {}) })
       .then((r) => r.data),
 
   removeRoll: (id: string, rollId: string): Promise<ApiResponse<unknown>> =>
@@ -207,15 +250,22 @@ export const packingService = {
   removeSwatch: (id: string, swatchId: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/shipments/${id}/remove-swatch`, { swatchId }).then((r) => r.data),
 
-  // ── Çuval (tartı) ──
-  addSack: (id: string, weightKg: number): Promise<ApiResponse<ShipmentSack>> =>
-    apiClient.post<ApiResponse<ShipmentSack>>(`/shipping/shipments/${id}/sacks`, { weightKg }).then((r) => r.data),
+  // ── Çuval (aç / tart / içerik) ──
+  // Çuval-önce: boş açılır (kg sonra weighSack ile). weightKg verilirse doğrudan tartılı açılır.
+  addSack: (id: string, weightKg?: number): Promise<ApiResponse<ShipmentSackLean>> =>
+    apiClient
+      .post<ApiResponse<ShipmentSackLean>>(`/shipping/shipments/${id}/sacks`, weightKg != null ? { weightKg } : {})
+      .then((r) => r.data),
 
   weighSack: (sackId: string, weightKg: number): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/weigh`, { weightKg }).then((r) => r.data),
 
   removeSack: (sackId: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/remove`, {}).then((r) => r.data),
+
+  // Topu çuvaldan çuvala taşı (aynı sevkiyat içi)
+  moveRollToSack: (rollId: string, sackId: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/shipping/rolls/${rollId}/move-sack`, { sackId }).then((r) => r.data),
 
   // ── Sevke Hazır / Sevk / İptal ──
   markReady: (id: string): Promise<ApiResponse<{ shipmentId: string; rollCount: number; allocatedLines: number }>> =>

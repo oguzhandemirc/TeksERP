@@ -15,6 +15,7 @@ import { shipmentService } from "./service";
 import type { ShipmentDetail } from "./types";
 
 const NUM = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
+const NUMKG = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
 
 interface Props {
   shipmentId: string | null;
@@ -158,14 +159,66 @@ function NoteSheet({ d }: { d: ShipmentDetail }) {
       </div>
 
       {d.sacks.length > 0 && (
-        <div className="mt-3 text-[11px]">
-          <span className="font-semibold">Çuvallar:</span> {d.sacks.length} adet · Toplam{" "}
-          {NUM.format(d.summary.totalKg)} kg{" "}
-          <span className="text-gray-600">
-            ({d.sacks
-              .map((s) => `#${s.seq}:${s.weightKg != null ? NUM.format(s.weightKg) : "—"}kg`)
-              .join(", ")})
-          </span>
+        <div className="mt-4">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide">
+            Çuval Dökümü ({d.sacks.length} çuval · {NUMKG.format(d.summary.totalKg)} kg brüt)
+          </div>
+          <div className="space-y-2">
+            {d.sacks.map((s) => (
+              <div key={s.id} className="border border-gray-300">
+                <div className="flex items-center justify-between border-b border-gray-300 bg-gray-50 px-2 py-1 text-[11px] font-semibold">
+                  <span>Çuval #{s.seq}</span>
+                  <span className="tabular-nums">
+                    {s.weightKg != null ? `${NUMKG.format(s.weightKg)} kg` : "—"} brüt
+                  </span>
+                </div>
+                <table className="w-full border-collapse text-[10px]">
+                  <thead>
+                    <tr className="border-b border-gray-300 text-gray-600">
+                      <Th>Ürün</Th>
+                      <Th>Renk</Th>
+                      <Th className="text-center">En</Th>
+                      <Th className="text-right">Metre</Th>
+                      <Th className="text-right">Top</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.productSummary.map((p, i) => (
+                      <tr key={i} className="border-b border-gray-200">
+                        <Td>{p.itemName}</Td>
+                        <Td>{p.colorName ?? "—"}</Td>
+                        <Td className="text-center tabular-nums">
+                          {p.width != null ? `${p.width} cm` : "—"}
+                        </Td>
+                        <Td className="text-right tabular-nums">{NUM.format(p.totalQty)}</Td>
+                        <Td className="text-right tabular-nums">{p.rollCount}</Td>
+                      </tr>
+                    ))}
+                    {s.swatches.map((sw) => (
+                      <tr key={sw.id} className="border-b border-gray-200 text-gray-600">
+                        <Td>Kartela · {sw.item?.name ?? "—"}</Td>
+                        <Td>{sw.color?.name ?? "—"}</Td>
+                        <Td className="text-center tabular-nums">
+                          {sw.width != null ? `${sw.width} cm` : "—"}
+                        </Td>
+                        <Td className="text-right tabular-nums">
+                          {sw.length != null ? `${sw.length} cm` : "—"}
+                        </Td>
+                        <Td className="text-right tabular-nums">1</Td>
+                      </tr>
+                    ))}
+                    {s.productSummary.length === 0 && s.swatches.length === 0 && (
+                      <tr>
+                        <Td colSpan={5} className="py-1 text-center text-gray-500">
+                          boş
+                        </Td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       <div className="mt-2 text-[11px]">

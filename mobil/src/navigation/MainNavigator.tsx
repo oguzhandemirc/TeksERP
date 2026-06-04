@@ -18,6 +18,8 @@ const SCREEN_LOADERS: Record<MobileScreenKey, () => React.ComponentType<any>> = 
   Sevkiyat: () => require('../screens/Modules/Sevkiyat/SevkiyatScreen').default,
   FasonSevk: () => require('../screens/Modules/FasonSevk/FasonSevkScreen').default,
   FasonKabul: () => require('../screens/Modules/FasonKabul/FasonKabulScreen').default,
+  KartelaSevk: () => require('../screens/Modules/KartelaSevk/KartelaSevkScreen').default,
+  KartelaKabul: () => require('../screens/Modules/KartelaKabul/KartelaKabulScreen').default,
 };
 
 export default function MainNavigator() {

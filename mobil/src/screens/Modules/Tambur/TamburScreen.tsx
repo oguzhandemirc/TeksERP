@@ -17,6 +17,7 @@ import {
   IconButton,
   Surface,
   TouchableRipple,
+  Checkbox,
   Icon,
   Appbar,
   ActivityIndicator,
@@ -237,6 +238,11 @@ export default function TamburScreen() {
   // Yazdırılacak aktif rol — LabelPrinter bu state'i izler ve sıfırlanınca
   // hazır olur. Per-row "Bas" butonu bu state'i set eder.
   const [activePrintRoll, setActivePrintRoll] = useState<Roll | null>(null);
+
+  // Kartelalık işareti — bu kesimde doğan çıktı topları depoda kartela sevki için
+  // işaretlensin (yalnız WAREHOUSE çıktılarda etkili; sevki engellemez). Aynı topu
+  // kartelaya kesen operatör için kesimler arası kalıcı, finalize'da sıfırlanır.
+  const [markAsKartela, setMarkAsKartela] = useState(false);
 
   // Top Kesme — sağdaki "Top Kesme" butonu → top-level kamera modal → barkod
   // tara → sol panelde "WAREHOUSE topu modu" açılır. Normal Tambur cutOpenFabric
@@ -538,12 +544,14 @@ export default function TamburScreen() {
       targetOrderLineId?: string | null;
       // Sadece etiket hedefi (kesim stok olarak girer); backend'e gitmez.
       targetCustomerId?: string | null;
+      markedForKartela?: boolean;
     }) =>
       tamburService.cutOpenFabric(data.rollId, {
         lengthMeters: data.lengthMeters,
         status: data.status,
         qualityGrade: data.qualityGrade,
         targetOrderLineId: data.targetOrderLineId ?? null,
+        markedForKartela: data.markedForKartela ?? false,
       }),
     onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -628,6 +636,7 @@ export default function TamburScreen() {
       return { cardId, prevRolls, prevSelectedRollId };
     },
     onSuccess: async () => {
+      setMarkAsKartela(false); // bir sonraki top için sıfırla
       if (!activeJob) {
         qc.invalidateQueries({ queryKey: ['rolls'] });
         return;
@@ -724,16 +733,19 @@ export default function TamburScreen() {
       cutLength,
       qualityGrade,
       targetOrderLineId,
+      markedForKartela,
     }: {
       rollId: string;
       cutLength: number;
       qualityGrade: string;
       targetOrderLineId?: string | null;
+      markedForKartela?: boolean;
     }) =>
       tamburService.cutWarehouseRoll(rollId, {
         cutLength,
         qualityGrade,
         targetOrderLineId: targetOrderLineId ?? null,
+        markedForKartela: markedForKartela ?? false,
       }),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -781,60 +793,9 @@ export default function TamburScreen() {
     },
   });
 
-  // Top Kesme — kartela üretimi (depo topundan, multi-cut akışı sırasında).
-  // Backend createSwatch metraj düşürür; frontend recutRollMeta'yı local günceller.
-  const recutSwatchMutation = useMutation({
-    mutationFn: ({
-      sourceRollId,
-      length,
-    }: {
-      sourceRollId: string;
-      length: number;
-    }) =>
-      tamburService.createSwatch({
-        sourceRollId,
-        length,
-        count: 1,
-        purpose: null,
-        workOrderId: null,
-      }),
-    onSuccess: (_res, vars) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Kartela oluşturuldu' });
-      if (recutRollMeta) {
-        setRecutRollMeta({
-          ...recutRollMeta,
-          currentQty: Math.max(0, recutRollMeta.currentQty - vars.length),
-        });
-      }
-      setRecutCutLength('');
-    },
-    onError: (err: Error) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.show({ type: 'error', text1: 'Kartela başarısız', text2: err.message });
-    },
-  });
-
-  const handleRecutKartela = () => {
-    if (!recutResolvedRollId || !recutRollMeta) return;
-    const cut = parseFloat(recutCutLength);
-    if (Number.isNaN(cut) || cut <= 0) {
-      Toast.show({ type: 'error', text1: 'Uzunluk pozitif olmalı' });
-      return;
-    }
-    if (cut > recutRollMeta.currentQty + 0.001) {
-      Toast.show({
-        type: 'error',
-        text1: 'Kalan metrajı aşıyor',
-        text2: `Kalan ${recutRollMeta.currentQty.toFixed(1)} mt`,
-      });
-      return;
-    }
-    recutSwatchMutation.mutate({
-      sourceRollId: recutResolvedRollId,
-      length: cut,
-    });
-  };
+  // NOT: Kartela artık Tambur'da kesilmez. Kartela = bitmiş topun kartela fason
+  // firmasında işlenmesiyle doğar (Kartela Sevk + Kartela Kabul ekranları).
+  // Eski recutSwatchMutation / handleRecutKartela kaldırıldı. Bkz. KARTELA-TASARIM.md.
 
   // Top Kesme'yi bitir — parent retire (TAMBUR_CONSUMED), kalan için karar
   const finalizeWarehouseCutMutation = useMutation({
@@ -848,6 +809,7 @@ export default function TamburScreen() {
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: 'Top Kesme bitti', text2: 'Top arşivlendi' });
+      setMarkAsKartela(false); // bir sonraki top için sıfırla
       const remainingChild = res.data?.remainingChild ?? null;
 
       if (recutFinalizeOpen) {
@@ -875,20 +837,6 @@ export default function TamburScreen() {
     },
   });
 
-  const swatchMutation = useMutation({
-    mutationFn: tamburService.createSwatch,
-    onSuccess: async () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Kartela oluşturuldu' });
-      setWork((w) => ({
-        ...w,
-        voluntaryEntry: { ...w.voluntaryEntry, length: '' },
-      }));
-      await refetchActiveJob();
-    },
-    onError: (err: Error) =>
-      Toast.show({ type: 'error', text1: 'Kartela oluşturulamadı', text2: err.message }),
-  });
 
   // ── Decision helpers ──
   const setDecision = (errorId: string, decision: TamburDecision) => {
@@ -1003,6 +951,7 @@ export default function TamburScreen() {
       qualityGrade: qg?.code ?? '1.KALITE',
       targetOrderLineId: work.voluntaryEntry.targetOrderLineId,
       targetCustomerId: work.voluntaryEntry.targetCustomerId,
+      markedForKartela: markAsKartela,
     });
   };
 
@@ -1027,38 +976,6 @@ export default function TamburScreen() {
       ...w,
       voluntaryCuts: w.voluntaryCuts.filter((c) => c.id !== id),
     }));
-  };
-
-  // Kartela: top kesimiyle aynı uzunluk input'u; tek kayıt, amaç/adet sorulmaz.
-  const addKartela = () => {
-    if (!activeJob || !selectedRoll) return;
-    if (selectedRoll.barcode) {
-      Toast.show({
-        type: 'error',
-        text1: 'Bu ekran açık kumaş için',
-      });
-      return;
-    }
-    const length = parseFloat(work.voluntaryEntry.length);
-    if (!Number.isFinite(length) || length <= 0) {
-      Toast.show({ type: 'error', text1: 'Uzunluk pozitif sayı olmalı' });
-      return;
-    }
-    if (length > selectedRoll.currentQty + 0.001) {
-      Toast.show({
-        type: 'error',
-        text1: 'Kalan metrajı aşıyor',
-        text2: `Kalan ${selectedRoll.currentQty.toFixed(1)} mt`,
-      });
-      return;
-    }
-    swatchMutation.mutate({
-      sourceRollId: selectedRoll.rollId,
-      length,
-      count: 1,
-      purpose: null,
-      workOrderId: activeJob.stepSummary.workOrderId,
-    });
   };
 
   // Normal bitiş OTOMATİK (son kesimde kalan ~0 → finalize). Kalan kumaş artık
@@ -1155,6 +1072,7 @@ export default function TamburScreen() {
       cutLength: cut,
       qualityGrade: recutQualityGrade,
       targetOrderLineId: recutTargetLineId,
+      markedForKartela: markAsKartela,
     });
   };
 
@@ -1697,28 +1615,23 @@ export default function TamburScreen() {
                 </Surface>
               </ScrollView>
 
-              {/* Sticky footer — Kartela (ikincil) + Kes (asıl). WO akışıyla aynı.
-                  Son kesimde kalan ~0 olunca depo topu OTOMATİK arşivlenir. */}
+              {/* Sticky footer — Kes (asıl). Son kesimde kalan ~0 olunca depo
+                  topu OTOMATİK arşivlenir. Kartela düğmesi kaldırıldı (kartela
+                  artık fason dönüşünden doğuyor). */}
               <Surface style={styles.footer} elevation={4}>
+                <TouchableRipple
+                  onPress={() => setMarkAsKartela((v) => !v)}
+                  style={styles.kartelaCheckRow}
+                  borderless
+                >
+                  <View style={styles.kartelaCheckInner}>
+                    <Checkbox status={markAsKartela ? 'checked' : 'unchecked'} />
+                    <Text style={styles.kartelaCheckLabel}>
+                      Kartelalık (depoda kolay bulunur)
+                    </Text>
+                  </View>
+                </TouchableRipple>
                 <View style={styles.footerRow}>
-                  <Button
-                    mode="contained-tonal"
-                    icon="content-copy"
-                    onPress={handleRecutKartela}
-                    loading={recutSwatchMutation.isPending}
-                    disabled={
-                      cutWarehouseRollMutation.isPending ||
-                      recutSwatchMutation.isPending ||
-                      !recutCutLength.trim() ||
-                      parseFloat(recutCutLength) <= 0 ||
-                      parseFloat(recutCutLength) > recutRollMeta.currentQty
-                    }
-                    style={styles.footerKartelaBtn}
-                    contentStyle={styles.footerKartelaContent}
-                    labelStyle={styles.footerKartelaLabel}
-                  >
-                    Kartela
-                  </Button>
                   <Button
                     mode="contained"
                     icon="content-cut"
@@ -2128,22 +2041,20 @@ export default function TamburScreen() {
                   son kesimde kalan ~0 olunca açık kumaş OTOMATİK biter (ayrı Tamamla
                   yok). cutOpenFabric offline-aware değil → isPending'de kilitlenir. */}
               <Surface style={styles.footer} elevation={4}>
+                <TouchableRipple
+                  onPress={() => setMarkAsKartela((v) => !v)}
+                  style={styles.kartelaCheckRow}
+                  borderless
+                >
+                  <View style={styles.kartelaCheckInner}>
+                    <Checkbox status={markAsKartela ? 'checked' : 'unchecked'} />
+                    <Text style={styles.kartelaCheckLabel}>
+                      Kartelalık (depoda kolay bulunur)
+                    </Text>
+                  </View>
+                </TouchableRipple>
                 <View style={styles.footerRow}>
-                  {/* Kartela (numune) — ikincil, küçük; asıl aksiyon "Kes". */}
-                  <Button
-                    mode="contained-tonal"
-                    icon="content-copy"
-                    onPress={addKartela}
-                    loading={swatchMutation.isPending}
-                    disabled={
-                      swatchMutation.isPending || !work.voluntaryEntry.length
-                    }
-                    style={styles.footerKartelaBtn}
-                    contentStyle={styles.footerKartelaContent}
-                    labelStyle={styles.footerKartelaLabel}
-                  >
-                    Kartela
-                  </Button>
+                  {/* Kartela düğmesi kaldırıldı — kartela artık fason dönüşünden doğuyor. */}
                   <Button
                     mode="contained"
                     icon="content-cut"
@@ -4182,6 +4093,9 @@ const styles = StyleSheet.create({
   footerBtn: { borderRadius: 12 },
   // Kartela (küçük, ikincil) + Kes (büyük, asıl) yan yana.
   footerRow: { flexDirection: 'row', alignItems: 'stretch', gap: 8 },
+  kartelaCheckRow: { borderRadius: 10, marginBottom: 8 },
+  kartelaCheckInner: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 },
+  kartelaCheckLabel: { fontSize: 14, fontWeight: '600', color: '#7c3aed' },
   footerBtnMain: { flex: 1, borderRadius: 12 },
   footerKartelaBtn: { borderRadius: 12, justifyContent: 'center' },
   footerKartelaContent: { height: 60 },

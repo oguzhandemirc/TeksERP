@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Keyboard, LogOut, Moon, RotateCw, Rows3, Star, type LucideIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -14,6 +13,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useFavorites } from "@/hooks/useFavorites";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { useAuthStore } from "@/store/auth";
+import { useTabsStore } from "@/store/tabs";
 import { commandSections, findCommandEntry, type CommandEntry } from "./command-entries";
 
 interface Props {
@@ -23,7 +23,7 @@ interface Props {
 }
 
 export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
-  const navigate = useNavigate();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const { isAdmin, hasPermission } = useRoleAccess();
   const { favorites } = useFavorites();
   const { prefs, setPreference } = usePreferences();
@@ -43,7 +43,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
 
   const go = (to: string) => {
     onOpenChange(false);
-    navigate(to);
+    navigateActive(to);
   };
 
   const runAction = (fn: () => void) => {

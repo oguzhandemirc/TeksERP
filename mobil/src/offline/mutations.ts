@@ -19,6 +19,11 @@ import {
   subcontractorService,
   type DispatchRequest,
 } from '../services/subcontractor.service';
+import {
+  kartelaService,
+  type KartelaDispatchRequest,
+  type KartelaReceiveRequest,
+} from '../services/kartela.service';
 import type {
   TamburFinalizeRemainingAction,
   ReceiveRequest,
@@ -31,6 +36,8 @@ export const STATION_MUT = {
   KK1_CREATE_ENTRY: ['station', 'kk1-create-entry'] as const,
   FASON_KABUL_RECEIVE: ['station', 'fason-kabul-receive'] as const,
   FASON_SEVK_DISPATCH: ['station', 'fason-sevk-dispatch'] as const,
+  KARTELA_SEVK_DISPATCH: ['station', 'kartela-sevk-dispatch'] as const,
+  KARTELA_KABUL_RECEIVE: ['station', 'kartela-kabul-receive'] as const,
 } as const;
 
 export interface TamburFinalizeOpenFabricVars {
@@ -91,6 +98,18 @@ export function registerStationMutationDefaults(): void {
   // ile 2. çağrı openDispatch'i cached döner; farklı payload → conflict.
   queryClient.setMutationDefaults(STATION_MUT.FASON_SEVK_DISPATCH, {
     mutationFn: (vars: DispatchRequest) => subcontractorService.dispatch(vars),
+    ...OFFLINE_AWARE,
+  });
+  // Kartela Sevk — bitmiş topu kartela firmasına gönder. Backend idempotent:
+  // aynı firma + aynı toplarla açık sevk varsa cached döner.
+  queryClient.setMutationDefaults(STATION_MUT.KARTELA_SEVK_DISPATCH, {
+    mutationFn: (vars: KartelaDispatchRequest) => kartelaService.dispatch(vars),
+    ...OFFLINE_AWARE,
+  });
+  // Kartela Kabul — firmadan dönen kartelaların kabulü. Backend idempotent:
+  // toplar zaten KARTELA_CONSUMED ise cached receipt döner.
+  queryClient.setMutationDefaults(STATION_MUT.KARTELA_KABUL_RECEIVE, {
+    mutationFn: (vars: KartelaReceiveRequest) => kartelaService.receive(vars),
     ...OFFLINE_AWARE,
   });
 }

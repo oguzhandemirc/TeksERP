@@ -3,8 +3,9 @@ import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
-import { AnimatedOutlet } from "@/components/motion";
+import { TabHost } from "./tabs";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
+import { useTabShortcuts } from "@/hooks/useTabShortcuts";
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(() => {
@@ -21,6 +22,7 @@ export function AppShell() {
     onOpenCommand: () => setPaletteOpen(true),
     onOpenHelp: () => setHelpOpen(true),
   });
+  useTabShortcuts();
 
   const toggleSidebar = () =>
     setCollapsed((c) => {
@@ -41,8 +43,8 @@ export function AppShell() {
       />
       <div className="flex min-h-0 flex-1">
         <Sidebar collapsed={collapsed} />
-        <main className="min-w-0 flex-1 overflow-auto">
-          <AnimatedOutlet />
+        <main className="relative min-w-0 flex-1 overflow-hidden">
+          <TabHost />
         </main>
       </div>
       <CommandPalette

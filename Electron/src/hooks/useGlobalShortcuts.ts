@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useTabsStore } from "@/store/tabs";
 
 function isTyping(el: EventTarget | null): boolean {
   const t = el as HTMLElement | null;
@@ -32,7 +32,7 @@ interface Options {
  *  - `?` → kısayol rehberi
  */
 export function useGlobalShortcuts({ onOpenCommand, onOpenHelp }: Options) {
-  const navigate = useNavigate();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
 
   useEffect(() => {
     let goPending = false;
@@ -52,7 +52,7 @@ export function useGlobalShortcuts({ onOpenCommand, onOpenHelp }: Options) {
         clearGo();
         if (dest) {
           e.preventDefault();
-          navigate(dest);
+          navigateActive(dest);
         }
         return;
       }
@@ -78,5 +78,5 @@ export function useGlobalShortcuts({ onOpenCommand, onOpenHelp }: Options) {
       window.removeEventListener("keydown", handler);
       clearGo();
     };
-  }, [navigate, onOpenCommand, onOpenHelp]);
+  }, [navigateActive, onOpenCommand, onOpenHelp]);
 }

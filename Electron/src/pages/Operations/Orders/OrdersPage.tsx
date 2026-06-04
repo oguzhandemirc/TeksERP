@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
@@ -18,6 +17,7 @@ import { OrderDetailSheet } from "./OrderDetailSheet";
 import { OrderFormDialog } from "./OrderFormDialog";
 import { BulkCreateWorkOrderAction } from "./BulkCreateWorkOrderAction";
 import { customerService } from "@/pages/Customers/service";
+import { useTabsStore } from "@/store/tabs";
 import type { Order } from "./types";
 import { generateOrderNumber, type OrderFormValues } from "./schema";
 
@@ -159,7 +159,7 @@ function buildUpdatePayload(
 
 export function OrdersPage() {
   const qc = useQueryClient();
-  const navigate = useNavigate();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const [selected, setSelected] = useState<Order | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
@@ -252,9 +252,10 @@ export function OrdersPage() {
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(null)}
         onEdit={handleEdit}
-        onCreateWorkOrder={(order) =>
-          navigate("/operations/work-orders", { state: { seedOrder: order } })
-        }
+        onCreateWorkOrder={(order) => {
+          setSelected(null);
+          navigateActive("/operations/work-orders", { state: { seedOrder: order } });
+        }}
       />
 
       <OrderFormDialog

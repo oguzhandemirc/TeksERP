@@ -7,6 +7,8 @@ export type MobilePermission =
   | 'mobile:sevkiyat'
   | 'mobile:fason-sevk'
   | 'mobile:fason-kabul'
+  | 'mobile:kartela-sevk'
+  | 'mobile:kartela-kabul'
   | 'mobile:*';
 
 /**
@@ -33,7 +35,9 @@ export type MobileScreenKey =
   | 'TartiPaket'
   | 'Sevkiyat'
   | 'FasonSevk'
-  | 'FasonKabul';
+  | 'FasonKabul'
+  | 'KartelaSevk'
+  | 'KartelaKabul';
 
 export interface MobileScreenMeta {
   key: MobileScreenKey;
@@ -99,6 +103,20 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Fason Mal Kabul',
     icon: 'truck-check',
     description: 'Fason firmadan dönen mal',
+  },
+  {
+    key: 'KartelaSevk',
+    permission: 'mobile:kartela-sevk',
+    label: 'Kartela Sevk',
+    icon: 'palette-swatch',
+    description: 'Bitmiş topu kartela firmasına gönder',
+  },
+  {
+    key: 'KartelaKabul',
+    permission: 'mobile:kartela-kabul',
+    label: 'Kartela Kabul',
+    icon: 'palette-swatch-variant',
+    description: 'Kartela firmasından dönen kartelalar',
   },
 ];
 

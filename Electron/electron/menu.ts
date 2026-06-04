@@ -52,7 +52,13 @@ export function buildAppMenu(): void {
     },
     {
       label: "Pencere",
-      submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "close" }],
+      submenu: [
+        { role: "minimize" },
+        { role: "zoom" },
+        // Cmd+W renderer'da aktif sekmeyi kapatır (useTabShortcuts); pencere
+        // kapatma Cmd+Shift+W'ye taşındı ki sekme kapatmayla çakışmasın.
+        { role: "close", accelerator: "CmdOrCtrl+Shift+W", label: "Pencereyi Kapat" },
+      ],
     },
     {
       role: "help",

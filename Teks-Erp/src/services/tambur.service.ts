@@ -44,8 +44,6 @@ import {
   WorkOrderStatus,
 } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
-import { buildPrefixedBarcode, buildPrefixedCardNumber } from "../utils/barcode";
-import { withBarcodeRetry } from "../utils/barcode-retry";
 import { assertWoAtStepKind, recomputeStepStatus } from "./helpers/roll-step.helper";
 
 /** Generate a barcode for a split-off roll */
@@ -366,6 +364,9 @@ export class TamburService {
       decisions: ErrorDecision[];
       cuts: CutInput[];
       foldType?: "2-KAT" | "4-KAT";
+      /** Çıktı topları (depoya gidenler) kartelalık işaretlensin — depoda
+       *  kartela sevki için kolay bulunsun. Sevki engellemez. */
+      markedForKartela?: boolean;
     },
     userId?: string
   ): Promise<
@@ -641,6 +642,10 @@ export class TamburService {
             producedInStepId: roll.producedInStepId,
             parentRollId: roll.id,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
+            // Sadece depoya giden (WAREHOUSE) çıktılar kartelalık işaretlenir;
+            // fire/scrap işaretlenmez (zaten sevke uygun değil).
+            markedForKartela:
+              (data.markedForKartela ?? false) && seg.status === RollStatus.WAREHOUSE,
           },
           include: {
             item: true,
@@ -844,105 +849,9 @@ export class TamburService {
    * Kaynak rolden uzunluk*adet kadar metraj düşerek `count` adet kartela üretir.
    * Her kartela kendi barkodunu (SW-YYMM-XXXXXX-C) ve kart numarasını alır.
    */
-  async createSwatch(
-    data: {
-      sourceRollId: string;
-      length: number; // metre
-      width?: number | null;
-      count: number; // adet
-      purpose?: string | null;
-      workOrderId?: string | null;
-      colorId?: string | null;
-    },
-    userId?: string
-  ): Promise<ApiResponse<Swatch[]>> {
-    if (data.length <= 0) throw AppError.badRequest("Uzunluk pozitif olmalı");
-    if (data.count <= 0) throw AppError.badRequest("Adet pozitif olmalı");
-    if (!Number.isInteger(data.count)) {
-      throw AppError.badRequest("Adet tam sayı olmalı");
-    }
-
-    const roll = await prisma.roll.findUnique({
-      where: { id: data.sourceRollId },
-      include: { item: true },
-    });
-    if (!roll) throw AppError.notFound("Kaynak top bulunamadı");
-
-    const totalDeduct = data.length * data.count;
-    const remaining = Number(roll.currentQty);
-    if (totalDeduct > remaining + 1e-6) {
-      throw AppError.badRequest(
-        `Kartela için yeterli metraj yok. Kalan: ${remaining.toFixed(1)}m, Gereken: ${totalDeduct.toFixed(1)}m`
-      );
-    }
-
-    // Barkod sequence çakışırsa (P2002) tüm tx'i baştan dener.
-    const created: Swatch[] = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
-      const list: Swatch[] = [];
-      for (let i = 0; i < data.count; i++) {
-        const seq = await this.nextSwatchSequence(tx);
-        const now = new Date();
-        const cardNumber = buildPrefixedCardNumber("SW", now, seq, 6);
-        const barcode = buildPrefixedBarcode("SW", now, seq);
-
-        const sw = await tx.swatch.create({
-          data: {
-            cardNumber,
-            barcode,
-            itemId: roll.itemId,
-            colorId: data.colorId ?? roll.colorId ?? null,
-            width: data.width ?? roll.width ?? null,
-            length: data.length,
-            workOrderId: data.workOrderId ?? null,
-            parentRollId: roll.id,
-            purpose: data.purpose ?? null,
-            createdById: userId ?? null,
-          },
-        });
-        list.push(sw);
-      }
-
-      // Kaynak rolden atomic decrement — hesap DB-side (Decimal hassasiyeti
-      // korunur), `gte` guard ile concurrent overdraw engellenir.
-      try {
-        await tx.roll.update({
-          where: { id: roll.id, currentQty: { gte: totalDeduct } },
-          data: { currentQty: { decrement: totalDeduct } },
-        });
-      } catch (err) {
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === "P2025"
-        ) {
-          throw AppError.conflict(
-            "Topun kalan metresi yetersiz — başka bir işlem aynı topu kullanıyor olabilir"
-          );
-        }
-        throw err;
-      }
-
-      return list;
-    }));
-
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: "SWATCH",
-      recordId: roll.id,
-      newData: {
-        rollBarcode: roll.barcode,
-        swatchCount: created.length,
-        length: data.length,
-        totalDeductedMeters: totalDeduct,
-      },
-    });
-
-    return {
-      success: true,
-      data: created,
-      message: `${created.length} adet kartela üretildi (${totalDeduct.toFixed(1)}m düşüldü)`,
-    };
-  }
+  // NOT: Kartela artık Tambur'da kesilmez. Kartela = bitmiş bir topun kartela
+  // fason firmasında işlenmesiyle doğar (KartelaService.receive). Bkz.
+  // KARTELA-TASARIM.md. Eski createSwatch / nextSwatchSequence kaldırıldı.
 
   /**
    * Tambur'dan çıkmış son N rolü listeler — operatör etiketleri tekrar basabilsin
@@ -1009,8 +918,8 @@ export class TamburService {
     /** Cursor mode ilk fetch'te totalEstimate doldur. */
     withTotal?: boolean;
   }): Promise<ApiResponse<Swatch[]> | CursorPaginatedResponse<Swatch>> {
-    const where: Prisma.SwatchWhereInput = {};
-    if (params?.workOrderId) where.workOrderId = params.workOrderId;
+    // Soft-delete: iptal edilmiş kartela kabulünden gelen kartelalar listelenmez.
+    const where: Prisma.SwatchWhereInput = { cancelledAt: null };
     if (params?.itemId) where.itemId = params.itemId;
     const search = params?.search?.trim();
     if (search) {
@@ -1019,17 +928,15 @@ export class TamburService {
         { cardNumber: { contains: search, mode: "insensitive" } },
         { item: { name: { contains: search, mode: "insensitive" } } },
         { item: { code: { contains: search, mode: "insensitive" } } },
-        { workOrder: { batchNumber: { contains: search, mode: "insensitive" } } },
       ];
     }
 
     // Kartela kendi `properties` alanı taşımaz; özellikler kaynak rolden
-    // miras (Swatch fiziksel olarak parent Roll'dan kesilir, aynı kumaş).
+    // miras (kartela fasonda kaynak Roll'dan üretilir, aynı kumaş).
     // Side panel'in "Renk + Özellikler" bölmesi parentRoll üzerinden okur.
     const include = {
       item: { select: { id: true, code: true, name: true } },
       color: { select: { id: true, code: true, name: true, hex: true } },
-      workOrder: { select: { id: true, batchNumber: true } },
       parentRoll: {
         select: {
           id: true,
@@ -1096,12 +1003,10 @@ export class TamburService {
    * "Toplam Kartela / Toplam Uzunluk" bölmesi için.
    */
   async getSwatchStats(params?: {
-    workOrderId?: string;
     itemId?: string;
     search?: string;
   }): Promise<ApiResponse<SwatchStats>> {
-    const where: Prisma.SwatchWhereInput = {};
-    if (params?.workOrderId) where.workOrderId = params.workOrderId;
+    const where: Prisma.SwatchWhereInput = { cancelledAt: null };
     if (params?.itemId) where.itemId = params.itemId;
     const search = params?.search?.trim();
     if (search) {
@@ -1110,7 +1015,6 @@ export class TamburService {
         { cardNumber: { contains: search, mode: "insensitive" } },
         { item: { name: { contains: search, mode: "insensitive" } } },
         { item: { code: { contains: search, mode: "insensitive" } } },
-        { workOrder: { batchNumber: { contains: search, mode: "insensitive" } } },
       ];
     }
 
@@ -1406,6 +1310,8 @@ export class TamburService {
       cutLength: number;
       qualityGrade?: string | null;
       notes?: string | null;
+      /** Çıktı top kartelalık işaretlensin (depoda kartela sevki için). */
+      markedForKartela?: boolean;
     },
     userId?: string,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
@@ -1460,6 +1366,8 @@ export class TamburService {
           parentRollId: parent.id,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
+          // Depo topunun yeniden kesiminde çıktı her zaman WAREHOUSE.
+          markedForKartela: data.markedForKartela ?? false,
         },
       });
 
@@ -1738,6 +1646,8 @@ export class TamburService {
       status: "WAREHOUSE" | "SCRAP" | "A1_STOCK";
       qualityGrade?: string | null;
       notes?: string | null;
+      /** Çıktı top kartelalık işaretlensin (depoda kartela sevki için). */
+      markedForKartela?: boolean;
     },
     userId?: string,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRemainingQty: number }>> {
@@ -1809,6 +1719,9 @@ export class TamburService {
           parentRollId: parent.id,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
+          // Sadece depoya giden (WAREHOUSE) çıktı kartelalık işaretlenir.
+          markedForKartela:
+            (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
           // currentStepId: child Tambur'dan çıktı (depo değil bir step) — null.
         },
       });
@@ -2407,45 +2320,4 @@ export class TamburService {
     };
   }
 
-  /**
-   * Defensive: tek satır yerine son 10 swatch kaydını çekip ilk parse-edilebilen
-   * barkoddan sequence çıkarır. Bozuk format kayıtlar (manuel import vb.) varsa
-   * sessizce 1'e dönmek yerine atlanır. Hiçbiri parse edilemezse net hata.
-   */
-  private async nextSwatchSequence(tx: Prisma.TransactionClient): Promise<number> {
-    const now = new Date();
-    const yy = String(now.getFullYear()).slice(2);
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const prefix = `SW-${yy}${mm}-`;
-    const candidates = await tx.swatch.findMany({
-      where: { barcode: { startsWith: prefix } },
-      orderBy: { barcode: "desc" },
-      take: 10,
-      select: { barcode: true },
-    });
-    if (candidates.length === 0) return 1;
-
-    const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-    for (const c of candidates) {
-      const parts = c.barcode.split("-");
-      if (parts.length < 4) continue;
-      const seqStr = parts[2].toUpperCase();
-      let n = 0;
-      let valid = true;
-      for (const ch of seqStr) {
-        const v = CROCKFORD.indexOf(ch);
-        if (v < 0) {
-          valid = false;
-          break;
-        }
-        n = n * 32 + v;
-      }
-      if (valid) return n + 1;
-    }
-
-    throw AppError.internal(
-      `Kartela sequence: ${prefix} prefix'inde bozuk barkodlar tespit edildi, ` +
-        `son 10 kayıttan hiçbiri parse edilemiyor. DB'yi manuel inceleyin.`
-    );
-  }
 }

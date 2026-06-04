@@ -772,7 +772,6 @@ export class WorkOrderService {
       warehouse: { count: number; totalMeters: Prisma.Decimal };
       a1: { count: number; totalMeters: Prisma.Decimal };
       fire: { count: number; totalMeters: Prisma.Decimal };
-      swatch: { count: number; totalLength: Prisma.Decimal };
       items: Array<{
         id: string;
         barcode: string | null;
@@ -784,24 +783,13 @@ export class WorkOrderService {
         color: { code: string; name: string; hex: string | null } | null;
         createdAt: Date;
       }>;
-      swatchItems: Array<{
-        id: string;
-        barcode: string;
-        length: Prisma.Decimal;
-        purpose: string | null;
-        parentBarcode: string | null;
-        color: { code: string; name: string; hex: string | null } | null;
-        createdAt: Date;
-      }>;
     } = {
       count: 0,
       totalMeters: new Prisma.Decimal(0),
       warehouse: { count: 0, totalMeters: new Prisma.Decimal(0) },
       a1: { count: 0, totalMeters: new Prisma.Decimal(0) },
       fire: { count: 0, totalMeters: new Prisma.Decimal(0) },
-      swatch: { count: 0, totalLength: new Prisma.Decimal(0) },
       items: [],
-      swatchItems: [],
     };
 
     // Üretime giren ham toplar — WO'nun ilk adımına giren ayrık toplar (aşağıda
@@ -970,26 +958,7 @@ export class WorkOrderService {
         bucket.totalMeters = bucket.totalMeters.plus(r.initialQty);
       }
 
-      const swatchRows = await prisma.swatch.findMany({
-        where: { workOrderId: id },
-        select: {
-          id: true,
-          barcode: true,
-          length: true,
-          purpose: true,
-          createdAt: true,
-          color: { select: { code: true, name: true, hex: true } },
-          parentRoll: { select: { id: true, barcode: true } },
-        },
-        orderBy: { createdAt: "asc" },
-      });
-      producedRolls.swatch.count = swatchRows.length;
-      producedRolls.swatch.totalLength = swatchRows.reduce(
-        (s, w) => s.plus(w.length),
-        new Prisma.Decimal(0),
-      );
-
-      // Headline: tüm rulo çıktıları (kartela ayrı) + üretilen sağlam metraj
+      // Headline: tüm rulo çıktıları + üretilen sağlam metraj
       // (fire metresi hariç).
       producedRolls.count =
         producedRolls.warehouse.count +
@@ -1009,15 +978,6 @@ export class WorkOrderService {
         status: r.status,
         color: r.color,
         createdAt: r.createdAt,
-      }));
-      producedRolls.swatchItems = swatchRows.map((w) => ({
-        id: w.id,
-        barcode: w.barcode,
-        length: w.length,
-        purpose: w.purpose,
-        parentBarcode: w.parentRoll?.barcode ?? null,
-        color: w.color,
-        createdAt: w.createdAt,
       }));
 
       // Üretime giren ham toplar — WO'nun İLK adımına RollMovement ile giren ayrık

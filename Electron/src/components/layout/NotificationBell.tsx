@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -10,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { systemLogService } from "@/services/systemLogService";
 import { actionLabel, tableLabel } from "@/pages/System/Activity/labels";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useTabsStore } from "@/store/tabs";
 
 const SEEN_KEY = "notifications.lastSeen";
 const LIMIT = 12;
@@ -22,7 +22,7 @@ const LIMIT = 12;
  */
 export function NotificationBell() {
   const { permissions } = useRoleAccess();
-  const navigate = useNavigate();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const [lastSeen, setLastSeen] = useState<string>(() => localStorage.getItem(SEEN_KEY) ?? "");
 
   const canSee =
@@ -95,7 +95,7 @@ export function NotificationBell() {
         </div>
         <button
           type="button"
-          onClick={() => navigate("/system/activity")}
+          onClick={() => navigateActive("/system/activity")}
           className="block w-full border-t px-3 py-2 text-center text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           Tüm aktiviteyi gör

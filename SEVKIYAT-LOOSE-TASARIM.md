@@ -1,6 +1,14 @@
 # Sevkiyat & Üretim — Gevşek (Loose) Model Tasarımı
 
-> **Durum:** TASARIM — henüz kod yazılmadı. Bu doküman, sahada test edilecek
+> ## ⚠️ BU DOKÜMAN ARTIK GEÇERLİ DEĞİL (SÜPERSEDED — 2026-06-04)
+> Aşağıdaki "gevşek/L1" tasarım (`targetOrderLineId`, relabel, `/shipping/relabel`,
+> `auto-assign`, reprint-queue) **koda girmedi / sonradan kaldırıldı.** Canlı sevkiyat
+> modeli daha sade: top→sipariş bağı YOK, karşılanma `markReady` anında spec-toplam FIFO
+> (`ShipmentAllocation`), çuval İÇERİK tutar (`Roll.sackId`/`Swatch.sackId`, çuval-önce akış,
+> irsaliyede ürün-bazlı döküm). Gerçek durum için koda + güncel hafıza notlarına bak.
+> Bu doküman yalnız tarihsel tasarım kararları için tutuluyor.
+
+> **Durum (tarihsel):** TASARIM — henüz kod yazılmadı. Bu doküman, sahada test edilecek
 > "gevşek" sevkiyat/üretim akışının üzerinde anlaşılan kararlarını tutar.
 > Sahada gerçek senaryolara göre noktasal sıkılaştırılacak.
 

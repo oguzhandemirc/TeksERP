@@ -41,16 +41,7 @@ const finalizeSchema = z.object({
     )
     .default([]),
   foldType: z.enum(["2-KAT", "4-KAT"]).optional(),
-});
-
-const swatchSchema = z.object({
-  sourceRollId: z.string().uuid(),
-  length: z.number().positive(),
-  width: z.number().positive().nullish(),
-  count: z.number().int().positive().max(1000),
-  purpose: z.string().max(255).nullish(),
-  workOrderId: z.string().uuid().nullish(),
-  colorId: z.string().uuid().nullish(),
+  markedForKartela: z.boolean().optional(),
 });
 
 // Hata sadece NOKTA olarak girilir (startMeter); endMeter artık tutulmuyor.
@@ -68,6 +59,7 @@ const cutOpenFabricSchema = z.object({
   }),
   qualityGrade: z.string().max(50).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
+  markedForKartela: z.boolean().optional(),
 });
 
 const finalizeOpenFabricSchema = z.object({
@@ -86,6 +78,7 @@ const cutWarehouseRollSchema = z.object({
   cutLength: z.number().positive("Kesim metresi pozitif olmalı"),
   qualityGrade: z.string().max(50).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
+  markedForKartela: z.boolean().optional(),
 });
 
 const finalizeWarehouseCutSchema = z.object({
@@ -105,7 +98,6 @@ export class TamburController {
     this.getByCardBarcode = this.getByCardBarcode.bind(this);
     this.getStep = this.getStep.bind(this);
     this.finalize = this.finalize.bind(this);
-    this.createSwatch = this.createSwatch.bind(this);
     this.listSwatches = this.listSwatches.bind(this);
     this.getSwatchStats = this.getSwatchStats.bind(this);
     this.reportError = this.reportError.bind(this);
@@ -292,33 +284,10 @@ export class TamburController {
     }
   }
 
-  /** POST /api/tambur/swatch */
-  async createSwatch(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = swatchSchema.parse(req.body);
-      const result = await this.service.createSwatch(
-        {
-          sourceRollId: body.sourceRollId,
-          length: body.length,
-          width: body.width ?? null,
-          count: body.count,
-          purpose: body.purpose ?? null,
-          workOrderId: body.workOrderId ?? null,
-          colorId: body.colorId ?? null,
-        },
-        req.user?.userId
-      );
-      res.status(201).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
-
   /** GET /api/swatches */
   async listSwatches(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.listSwatches({
-        workOrderId: typeof req.query.workOrderId === "string" ? req.query.workOrderId : undefined,
         itemId:      typeof req.query.itemId === "string" ? req.query.itemId : undefined,
         limit:       typeof req.query.limit === "string" ? Number(req.query.limit) : undefined,
         cursor:      typeof req.query.cursor === "string" ? req.query.cursor : undefined,
@@ -336,7 +305,6 @@ export class TamburController {
   async getSwatchStats(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.getSwatchStats({
-        workOrderId: typeof req.query.workOrderId === "string" ? req.query.workOrderId : undefined,
         itemId:      typeof req.query.itemId === "string" ? req.query.itemId : undefined,
         search:      typeof req.query.search === "string" ? req.query.search : undefined,
       });

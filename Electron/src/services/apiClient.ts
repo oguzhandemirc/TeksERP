@@ -1,6 +1,7 @@
 import axios from "axios";
 import { toast } from "sonner";
 import { tokenStore } from "@/lib/secure-token";
+import { useAuthStore } from "@/store/auth";
 
 /**
  * Build sırasında gömülen varsayılan adres. Çalışma anında kullanıcı bunu
@@ -52,8 +53,9 @@ apiClient.interceptors.response.use(
           return Promise.reject(error);
         }
         await tokenStore.clear();
+        // Auth store'u temizle → App.tsx `Root` kapısı oturum-dışı router'a geçer.
+        useAuthStore.getState().setUser(null);
         toast.error("Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
-        window.location.hash = "#/login";
         return Promise.reject(error);
       }
 

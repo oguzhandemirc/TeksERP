@@ -26,14 +26,15 @@ export interface Swatch {
   itemId: string;
   colorId: string | null;
   width: number | null;
-  length: number;
-  workOrderId: string | null;
+  /** cm — kabulde opsiyonel girilir, boş olabilir. */
+  length: number | null;
+  /** Kartela fason kabulinde doğduğu receipt. */
+  parentReceiptId: string | null;
   parentRollId: string | null;
   purpose: string | null;
   createdById: string | null;
   item?: { id: string; code: string; name: string } | null;
   color?: { id: string; code: string; name: string; hex: string | null } | null;
-  workOrder?: { id: string; batchNumber: string } | null;
   parentRoll?: SwatchParentRoll | null;
   createdAt: string;
   updatedAt: string;
@@ -46,15 +47,14 @@ export interface SwatchStats {
 }
 
 export interface SwatchListParams {
-  workOrderId?: string;
   itemId?: string;
   limit?: number;
 }
 
 /**
- * Backend `/api/swatches` `filter[]` syntax'ı bilmez — direkt `?itemId=` /
- * `?workOrderId=` bekler. `useDataTable` ise URL filtre'lerini
- * `filters.itemId` formatında verir. Bu helper ikisini köprüler.
+ * Backend `/api/swatches` `filter[]` syntax'ı bilmez — direkt `?itemId=` bekler.
+ * `useDataTable` ise URL filtre'lerini `filters.itemId` formatında verir.
+ * Bu helper ikisini köprüler.
  */
 function appendKnownFilters(
   sp: URLSearchParams,
@@ -62,16 +62,12 @@ function appendKnownFilters(
 ): void {
   if (!filters) return;
   const itemId = typeof filters.itemId === "string" ? filters.itemId : undefined;
-  const workOrderId =
-    typeof filters.workOrderId === "string" ? filters.workOrderId : undefined;
   if (itemId) sp.set("itemId", itemId);
-  if (workOrderId) sp.set("workOrderId", workOrderId);
 }
 
 export const swatchService = {
   list(params?: SwatchListParams): Promise<ApiResponse<Swatch[]>> {
     const q = new URLSearchParams();
-    if (params?.workOrderId) q.set("workOrderId", params.workOrderId);
     if (params?.itemId) q.set("itemId", params.itemId);
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();

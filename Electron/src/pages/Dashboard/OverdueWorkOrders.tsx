@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import { AlertOctagon } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { workOrderStatusLabels } from "@/types/enums";
 import type { WorkOrder } from "@/pages/Operations/WorkOrders/types";
+import { useTabsStore } from "@/store/tabs";
 import { fetchOverdueWorkOrders } from "./dashboardService";
 
 export function OverdueWorkOrders() {
-  const navigate = useNavigate();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard", "overdueWorkOrders"],
     queryFn: fetchOverdueWorkOrders,
@@ -25,7 +25,7 @@ export function OverdueWorkOrders() {
         </CardTitle>
         <button
           type="button"
-          onClick={() => navigate("/operations/work-orders")}
+          onClick={() => navigateActive("/operations/work-orders")}
           className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           Tümünü gör →
@@ -44,7 +44,7 @@ export function OverdueWorkOrders() {
               <WorkOrderRow
                 key={wo.id}
                 wo={wo}
-                onClick={() => navigate(`/operations/work-orders?focus=${wo.id}`)}
+                onClick={() => navigateActive(`/operations/work-orders?focus=${wo.id}`)}
               />
             ))}
           </ul>

@@ -23,6 +23,11 @@ const router = Router();
  *       ham = sevksiz STOCK. üretilecek = max(0, talep−depo−üretimde); malzeme açığı =
  *       max(0, üretilecek−ham). Drill-down: katkı veren siparişler + WO'lar.
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: itemId
+ *         schema: { type: string }
+ *         description: Verilirse denge yalnız bu ürün için hesaplanır (arz/talep/üretim daraltılır).
  *     responses:
  *       200: { description: "Spec başına denge listesi" }
  */
@@ -30,9 +35,14 @@ router.get(
   "/",
   verifyToken,
   requireAnyPermission("workorder:read", "order:read"),
-  async (_req: Request, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await service.getBalance();
+      // itemId plain String FK — eşleşmeyen değer boş sonuç verir (Prisma hatası yok).
+      const itemId =
+        typeof req.query.itemId === "string" && req.query.itemId
+          ? req.query.itemId
+          : undefined;
+      const result = await service.getBalance({ itemId });
       res.json(result);
     } catch (e) {
       next(e);

@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import { CalendarClock, AlertTriangle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,10 +8,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import { orderStatusLabels } from "@/types/enums";
 import type { Order } from "@/pages/Operations/Orders/types";
+import { useTabsStore } from "@/store/tabs";
 import { fetchUpcomingOrders } from "./dashboardService";
 
 export function UpcomingOrders() {
-  const navigate = useNavigate();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard", "upcomingOrders"],
     queryFn: fetchUpcomingOrders,
@@ -28,7 +28,7 @@ export function UpcomingOrders() {
         </CardTitle>
         <button
           type="button"
-          onClick={() => navigate("/operations/orders")}
+          onClick={() => navigateActive("/operations/orders")}
           className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           Tümünü gör →
@@ -47,7 +47,7 @@ export function UpcomingOrders() {
               <OrderRow
                 key={order.id}
                 order={order}
-                onClick={() => navigate(`/operations/orders?focus=${order.id}`)}
+                onClick={() => navigateActive(`/operations/orders?focus=${order.id}`)}
               />
             ))}
           </ul>

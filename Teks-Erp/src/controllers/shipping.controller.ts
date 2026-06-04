@@ -14,13 +14,19 @@ const orderIdsSchema = z.object({
 
 const removeOrderSchema = z.object({ orderId: z.string().uuid("Geçersiz sipariş ID") });
 
-const scanSchema = z.object({ barcode: z.string().trim().min(1, "Barkod gerekli").max(64) });
+const scanSchema = z.object({
+  barcode: z.string().trim().min(1, "Barkod gerekli").max(64),
+  // Aktif çuval — verilirse top/kartela bu çuvala yazılır (çuval-önce akış)
+  sackId: z.string().uuid("Geçersiz çuval ID").optional().nullable(),
+});
 
 const removeRollSchema = z.object({ rollId: z.string().uuid("Geçersiz top ID") });
 const removeSwatchSchema = z.object({ swatchId: z.string().uuid("Geçersiz kartela ID") });
+const moveSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
 
 const addSackSchema = z.object({
-  weightKg: z.number().positive("Kg pozitif olmalı"),
+  // Çuval-önce akışta boş açılır (kg sonra tartılır) → opsiyonel
+  weightKg: z.number().positive("Kg pozitif olmalı").optional().nullable(),
   sackNo: z.string().trim().min(1).max(64).optional().nullable(),
 });
 const weighSackSchema = z.object({ weightKg: z.number().positive("Kg pozitif olmalı") });
@@ -88,7 +94,7 @@ export class ShippingController {
     try {
       const body = scanSchema.parse(req.body);
       const result = await this.service.scanIntoShipment(
-        { shipmentId: req.params.id as string, barcode: body.barcode },
+        { shipmentId: req.params.id as string, barcode: body.barcode, sackId: body.sackId },
         req.user?.userId
       );
       res.status(200).json(result);
@@ -115,6 +121,19 @@ export class ShippingController {
       const body = removeSwatchSchema.parse(req.body);
       const result = await this.service.removeSwatchFromShipment(
         { shipmentId: req.params.id as string, swatchId: body.swatchId },
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  moveRollToSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = moveSackSchema.parse(req.body);
+      const result = await this.service.moveRollToSack(
+        { rollId: req.params.rollId as string, sackId: body.sackId },
         req.user?.userId
       );
       res.status(200).json(result);

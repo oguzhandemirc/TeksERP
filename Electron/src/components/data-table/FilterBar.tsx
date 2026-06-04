@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, X } from "lucide-react";
@@ -114,6 +114,9 @@ interface Props {
   filters: FilterDef[];
   /** İlk açılışta URL'de tarih yoksa bu kadar günü default uygular. 0 = devre dışı. */
   defaultDateRangeDays?: number;
+  /** Filtre satırının EN BAŞINA (filtrelerden önce) eklenen öğe — örn. görünüm
+   *  seçici dropdown. Aynı satırda, aynı hizada render edilir. */
+  leading?: ReactNode;
 }
 
 const DATE_PRESETS = [
@@ -124,7 +127,7 @@ const DATE_PRESETS = [
 
 const NONE = "__all__";
 
-export function FilterBar({ filters, defaultDateRangeDays = 0 }: Props) {
+export function FilterBar({ filters, defaultDateRangeDays = 0, leading }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const dateDef = filters.find((f) => f.kind === "dateRange");
 
@@ -166,6 +169,7 @@ export function FilterBar({ filters, defaultDateRangeDays = 0 }: Props) {
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs">
+      {leading}
       {filters.map((f) => {
         if (f.kind === "select") return <SelectFilter key={f.key} def={f} sp={searchParams} update={update} />;
         if (f.kind === "multi-select") return <MultiSelectFilter key={f.key} def={f} sp={searchParams} update={update} />;

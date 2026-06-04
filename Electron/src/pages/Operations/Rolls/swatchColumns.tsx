@@ -53,9 +53,9 @@ export const swatchColumns: ColumnDef<Swatch>[] = [
     cell: ({ row }) => (
       <div className="text-right">
         <span className="tabular-nums text-xs">
-          {row.original.length.toLocaleString("tr-TR", {
-            maximumFractionDigits: 2,
-          })}
+          {row.original.length != null
+            ? row.original.length.toLocaleString("tr-TR", { maximumFractionDigits: 2 })
+            : "—"}
         </span>
         <span className="ml-1 text-[10px] text-muted-foreground">cm</span>
       </div>

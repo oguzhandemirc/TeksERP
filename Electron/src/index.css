@@ -362,6 +362,16 @@ html[data-density="compact"] {
   padding-left: 78px;
 }
 
+/* Kaydırma çubuğunu gizle — sekme şeridi gibi yatay kaydırılan dar alanlarda
+   native bar yükseklik tüketip çirkin durmasın. Kaydırma fare tekerleği
+   (deltaY→scrollLeft) + sürükleme ile yapılır. */
+.no-scrollbar {
+  scrollbar-width: none; /* Firefox */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chromium / Electron */
+}
+
 /* Yazdırma — yalnız .print-area içeriği basılır. window.print() çağrıldığında
    sayfanın geri kalanı (Sheet/Dialog overlay'leri dahil) gizlenir; print-area
    kağıdın başına oturur. Refakat kartı vb. belge dialoglarında kullanılır. */

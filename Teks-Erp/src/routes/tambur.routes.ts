@@ -246,20 +246,8 @@ router.get("/rolls/:rollId", verifyToken, requireAnyPermission("quality:read", "
  */
 router.post("/finalize", verifyToken, requireAnyPermission("quality:write", "mobile:tambur"), controller.finalize);
 
-/**
- * @openapi
- * /api/tambur/swatch:
- *   post:
- *     tags: [Tambur]
- *     summary: Kartela üretimi (adet x uzunluk kaynak rolden düşülür)
- *     security: [{ bearerAuth: [] }]
- */
-router.post(
-  "/swatch",
-  verifyToken,
-  requireAnyPermission("quality:write", "mobile:tambur"),
-  controller.createSwatch
-);
+// NOT: POST /api/tambur/swatch kaldırıldı. Kartela artık Tambur'da kesilmez;
+// kartela fason dönüşünde doğar (POST /api/kartela/receive). Bkz. KARTELA-TASARIM.md.
 
 /**
  * @openapi

@@ -113,7 +113,15 @@ interface SpecAcc extends BalanceSpec {
 }
 
 export class ProductionBalanceService {
-  async getBalance(): Promise<ApiResponse<BalanceSpec[]>> {
+  /**
+   * @param opts.itemId Verilirse arz/talep/üretim havuzları tek ürüne daraltılır
+   *   (orderLine + roll groupBy + workOrder where'lerine eklenir) → daha az
+   *   hesap + küçük payload. Verilmezse tüm spec'ler (eski davranış).
+   */
+  async getBalance(
+    opts: { itemId?: string } = {}
+  ): Promise<ApiResponse<BalanceSpec[]>> {
+    const { itemId } = opts;
     const map = new Map<string, SpecAcc>();
 
     const ensure = (
@@ -161,6 +169,7 @@ export class ProductionBalanceService {
     const lines = await prisma.orderLine.findMany({
       where: {
         order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
+        ...(itemId ? { itemId } : {}),
       },
       select: {
         id: true,
@@ -243,6 +252,7 @@ export class ProductionBalanceService {
       where: {
         status: { in: [RollStatus.WAREHOUSE, RollStatus.STOCK] },
         shipmentId: null,
+        ...(itemId ? { itemId } : {}),
       },
       _sum: { currentQty: true },
     });
@@ -252,7 +262,7 @@ export class ProductionBalanceService {
       where: {
         status: { in: LIVE_WO },
         isActive: true,
-        targetItemId: { not: null },
+        targetItemId: itemId ?? { not: null },
       },
       select: {
         id: true,

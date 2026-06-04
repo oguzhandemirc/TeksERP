@@ -18,6 +18,7 @@ import { shipmentStatusLabels, shipmentStatusTones } from "./types";
 import { ShipmentDispatchNote } from "./ShipmentDispatchNote";
 
 const fmt = (n: number) => Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+const fmtKg = (n: number) => Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 1 });
 
 interface Props {
   shipmentId: string | null;
@@ -36,6 +37,7 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
     staleTime: 30_000,
   });
   const d = q.data?.data;
+  const sackSeqById = new Map((d?.sacks ?? []).map((s) => [s.id, s.seq]));
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -80,7 +82,7 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
               <SummaryCard label="Toplam Metraj" value={`${fmt(d.summary.totalMeters)} m`} />
               <SummaryCard
                 label="Çuval / Kg"
-                value={`${d.summary.sackCount} · ${fmt(d.summary.totalKg)} kg`}
+                value={`${d.summary.sackCount} · ${fmtKg(d.summary.totalKg)} kg`}
               />
             </div>
 
@@ -149,7 +151,14 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
                           {r.item?.name}
                           {r.color ? ` · ${r.color.name}` : ""}
                         </span>
-                        <span className="tabular-nums">{fmt(r.currentQty)} m</span>
+                        <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+                          {r.sackId != null && sackSeqById.has(r.sackId) && (
+                            <span className="rounded bg-muted px-1 text-[10px] text-muted-foreground">
+                              Ç#{sackSeqById.get(r.sackId)}
+                            </span>
+                          )}
+                          {fmt(r.currentQty)} m
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -160,14 +169,52 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
             {d.sacks.length > 0 && (
               <Card>
                 <CardContent className="p-3">
-                  <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Çuvallar ({d.sacks.length})
+                  <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Çuval İçeriği ({d.sacks.length})
                   </div>
-                  <div className="flex flex-wrap gap-1.5 text-[11px]">
+                  <div className="space-y-2">
                     {d.sacks.map((s) => (
-                      <span key={s.id} className="rounded border px-1.5 py-0.5 tabular-nums">
-                        #{s.seq}: {s.weightKg != null ? `${fmt(s.weightKg)} kg` : "—"}
-                      </span>
+                      <div key={s.id} className="rounded border p-2">
+                        <div className="mb-1 flex items-center justify-between text-[11px] font-semibold">
+                          <span>Çuval #{s.seq}</span>
+                          <span className="tabular-nums font-normal text-muted-foreground">
+                            {s.weightKg != null ? `${fmtKg(s.weightKg)} kg` : "tartılmadı"} · {s.rollCount} top
+                            {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ""}
+                          </span>
+                        </div>
+                        {s.productSummary.length === 0 && s.swatchCount === 0 ? (
+                          <div className="text-[11px] text-muted-foreground">boş</div>
+                        ) : (
+                          <div className="space-y-0.5 text-[11px]">
+                            {s.productSummary.map((p, i) => (
+                              <div key={i} className="flex items-center justify-between gap-2">
+                                <span className="truncate">
+                                  {p.itemName}
+                                  {p.colorName ? ` · ${p.colorName}` : ""}
+                                  {p.width != null ? ` · ${fmt(p.width)}cm` : ""}
+                                </span>
+                                <span className="shrink-0 tabular-nums text-muted-foreground">
+                                  {fmt(p.totalQty)} m · {p.rollCount} top
+                                </span>
+                              </div>
+                            ))}
+                            {s.swatches.map((sw) => (
+                              <div
+                                key={sw.id}
+                                className="flex items-center justify-between gap-2 text-muted-foreground"
+                              >
+                                <span className="truncate">
+                                  Kartela · {sw.item?.name ?? "—"}
+                                  {sw.color ? ` · ${sw.color.name}` : ""}
+                                </span>
+                                <span className="shrink-0 tabular-nums">
+                                  {sw.length != null ? `${fmt(sw.length)} cm` : ""}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </CardContent>

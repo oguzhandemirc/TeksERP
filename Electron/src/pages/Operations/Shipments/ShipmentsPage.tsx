@@ -1,43 +1,79 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
+import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useDataTable } from "@/hooks/useDataTable";
+import { customerService } from "@/pages/Customers/service";
 import { shipmentColumns } from "./columns";
-import { shipmentService } from "./service";
-import { shipmentStatusLabels, type ShipmentListItem } from "./types";
+import { shipmentService, branchLookupService } from "./service";
+import {
+  shipmentStatusLabels,
+  type ShipmentListItem,
+  type BranchLookupItem,
+} from "./types";
 import { ShipmentDetailSheet } from "./ShipmentDetailSheet";
 
 const QUERY_KEY = "shipments";
 
-const TABS: { key: string; label: string }[] = [
-  { key: "ALL", label: "Tümü" },
-  { key: "PREPARING", label: shipmentStatusLabels.PREPARING },
-  { key: "READY", label: shipmentStatusLabels.READY },
-  { key: "DISPATCHED", label: shipmentStatusLabels.DISPATCHED },
-  { key: "CANCELLED", label: shipmentStatusLabels.CANCELLED },
+// Tüm filtreler FilterBar'da (durum dahil — sekme yok). Durum çoklu-seçim (Sipariş
+// paritesi); şube global lookup (cross-customer) → etikette müşteri adıyla ayrışsın
+// diye aranabilir multi-lookup. Tarih varsayılanı createdAt (indexli); Sevk/Hazır
+// opsiyonel alanlar.
+const FILTERS: FilterDef[] = [
+  {
+    kind: "multi-select",
+    key: "status",
+    label: "Durum",
+    options: [
+      { value: "PREPARING", label: shipmentStatusLabels.PREPARING },
+      { value: "READY", label: shipmentStatusLabels.READY },
+      { value: "DISPATCHED", label: shipmentStatusLabels.DISPATCHED },
+      { value: "CANCELLED", label: shipmentStatusLabels.CANCELLED },
+    ],
+  },
+  {
+    kind: "lookup",
+    key: "customerId",
+    label: "Müşteri",
+    service: customerService,
+    queryKey: "customers",
+  },
+  {
+    kind: "multi-lookup",
+    key: "branchId",
+    label: "Şube",
+    service: branchLookupService,
+    queryKey: "branch-lookup",
+    getLabel: (it) => {
+      const b = it as Partial<BranchLookupItem> & { id: string };
+      if (!b.name) return b.id;
+      const customer = b.customer?.name ? ` — ${b.customer.name}` : "";
+      const city = b.city ? ` (${b.city})` : "";
+      return `${b.name}${customer}${city}`;
+    },
+  },
+  {
+    kind: "dateRange",
+    label: "Tarih",
+    defaultField: "createdAt",
+    fieldOptions: [
+      { value: "createdAt", label: "Oluşturma" },
+      { value: "dispatchedAt", label: "Sevk" },
+      { value: "readyAt", label: "Hazır" },
+    ],
+  },
 ];
 
 export function ShipmentsPage() {
-  // Sevk edilenler birincil görünüm — varsayılan sekme.
-  const [statusTab, setStatusTab] = useState<string>("DISPATCHED");
   const [selected, setSelected] = useState<ShipmentListItem | null>(null);
-
-  // forceFilters → useDataTable backend'e filter[status] yollar (URL kirletmeden,
-  // sekme değişince cursor sıfırlanıp refetch olur). "ALL" → filtre yok.
-  const forceFilters = useMemo(
-    () => (statusTab === "ALL" ? undefined : { status: statusTab }),
-    [statusTab],
-  );
 
   const { table, query, search, setSearch, pagination } = useDataTable<ShipmentListItem>({
     queryKey: QUERY_KEY,
     fetchFn: shipmentService.listCursor,
     columns: shipmentColumns,
     defaultPageSize: 50,
-    forceFilters,
     enableSelection: false,
   });
 
@@ -48,26 +84,14 @@ export function ShipmentsPage() {
         description="Müşteri sevkiyatları — hazırlanan, hazır ve sevk edilenler."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
-      <div className="flex flex-wrap gap-1 px-1 pb-2">
-        {TABS.map((t) => (
-          <Button
-            key={t.key}
-            size="sm"
-            variant={statusTab === t.key ? "default" : "outline"}
-            className="h-7 text-xs"
-            onClick={() => setStatusTab(t.key)}
-          >
-            {t.label}
-          </Button>
-        ))}
-      </div>
       <DataTableToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Sevkiyat no ara..."
+        placeholder="Sevkiyat no, plaka, sürücü ara..."
         table={table}
         exportName="Sevkiyatlar"
       />
+      <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
       <DataTable<ShipmentListItem>
         table={table}
         isLoading={query.isLoading}

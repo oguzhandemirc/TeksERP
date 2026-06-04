@@ -627,15 +627,6 @@ export interface TamburReportErrorRequest {
   defectTypeId: string;
 }
 
-export interface TamburSwatchRequest {
-  sourceRollId: string;
-  length: number;
-  width?: number | null;
-  count: number;
-  purpose?: string | null;
-  workOrderId?: string | null;
-}
-
 
 export interface TamburSplitRollLabel {
   id: string;
@@ -732,6 +723,8 @@ export interface TamburCutRequest {
   notes?: string | null;
   /** Bu kesimin hedef sipariş kalemi (null = stok). Etiket buradan basılır. */
   targetOrderLineId?: string | null;
+  /** Çıktı top kartelalık işaretlensin (depoda kartela sevki için). */
+  markedForKartela?: boolean;
 }
 
 /** `POST /api/tambur/:id/finalize-open-fabric` — açık kumaşı bitir */

@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import { CalendarPlus } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,10 +6,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { workOrderTypeLabels } from "@/types/enums";
 import type { WorkOrder } from "@/pages/Operations/WorkOrders/types";
+import { useTabsStore } from "@/store/tabs";
 import { fetchUpcomingWorkOrders } from "./dashboardService";
 
 export function UpcomingWorkOrders() {
-  const navigate = useNavigate();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard", "upcomingWorkOrders"],
     queryFn: fetchUpcomingWorkOrders,
@@ -26,7 +26,7 @@ export function UpcomingWorkOrders() {
         </CardTitle>
         <button
           type="button"
-          onClick={() => navigate("/operations/work-orders")}
+          onClick={() => navigateActive("/operations/work-orders")}
           className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           Tümünü gör →
@@ -45,7 +45,7 @@ export function UpcomingWorkOrders() {
               <WorkOrderRow
                 key={wo.id}
                 wo={wo}
-                onClick={() => navigate(`/operations/work-orders?focus=${wo.id}`)}
+                onClick={() => navigateActive(`/operations/work-orders?focus=${wo.id}`)}
               />
             ))}
           </ul>

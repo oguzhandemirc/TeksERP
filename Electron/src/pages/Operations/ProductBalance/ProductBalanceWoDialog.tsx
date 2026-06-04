@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Link2, Package, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +11,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import type { PickedOrderLine } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
+import { useTabsStore } from "@/store/tabs";
 import type { BalanceSpec, BalanceLine } from "./types";
 
 type Mode = "bind" | "stock";
@@ -51,7 +51,7 @@ interface Props {
  *  - Stoğa üret: sipariş bağı yok, hedef spec + miktar (seedTarget) → STOCK_PRODUCTION.
  */
 export function ProductBalanceWoDialog({ spec, open, onOpenChange }: Props) {
-  const navigate = useNavigate();
+  const openTab = useTabsStore((s) => s.openTab);
   const [mode, setMode] = useState<Mode>("bind");
   const [qty, setQty] = useState("");
 
@@ -93,12 +93,16 @@ export function ProductBalanceWoDialog({ spec, open, onOpenChange }: Props) {
         picked.push(toPicked(l));
         left -= l.open;
       }
-      navigate("/operations/work-orders", {
+      // Yeni (odaklı) sekmede aç → Ürün Dengesi açık kalır, listeden başka
+      // satırlar için de iş emri açılabilir. forceNew: kaydedilmemiş formu
+      // ezmemek için her zaman taze sekme.
+      openTab("/operations/work-orders", {
         state: { seedPickedLines: picked },
+        forceNew: true,
       });
     } else {
       // stoğa üret (veya bind ama açık talep kalmamış → stoğa düşer)
-      navigate("/operations/work-orders", {
+      openTab("/operations/work-orders", {
         state: {
           seedTarget: {
             itemId: spec.itemId,
@@ -107,6 +111,7 @@ export function ProductBalanceWoDialog({ spec, open, onOpenChange }: Props) {
             targetQuantity: qtyNum,
           },
         },
+        forceNew: true,
       });
     }
     onOpenChange(false);

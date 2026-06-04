@@ -1,5 +1,4 @@
 import { PanelLeft, Search, LogOut, RotateCw, Settings } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { NotificationBell } from "./NotificationBell";
@@ -12,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuthStore } from "@/store/auth";
+import { useTabsStore } from "@/store/tabs";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 
 interface Props {
@@ -33,7 +33,7 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { isAdmin, permissions } = useRoleAccess();
-  const navigate = useNavigate();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
 
   return (
     <header className="app-drag flex h-12 shrink-0 items-center gap-2 border-b border-border/60 bg-card/60 pr-3 backdrop-blur-xl">
@@ -96,7 +96,7 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => navigate("/settings")}>
+            <DropdownMenuItem onSelect={() => navigateActive("/settings")}>
               <Settings className="mr-2 h-4 w-4" /> Ayarlar
             </DropdownMenuItem>
             <DropdownMenuSeparator />

@@ -19,6 +19,7 @@ installDecimalNumberSerializer();
 import authRoutes from "./routes/auth.routes";
 import itemRoutes from "./routes/item.routes";
 import customerRoutes from "./routes/customer.routes";
+import customerBranchListRoutes from "./routes/customer-branch-list.routes";
 import stationRoutes, { machineRouter } from "./routes/station.routes";
 import routeRoutes from "./routes/route.routes";
 import productRecipeRoutes from "./routes/product-recipe.routes";
@@ -36,6 +37,7 @@ import {
   subcontractorCategoryRouter,
 } from "./routes/subcontractor-management.routes";
 import swatchRoutes from "./routes/swatch.routes";
+import kartelaRoutes from "./routes/kartela.routes";
 import defectTypeRoutes from "./routes/defect-type.routes";
 import qualityGradeRoutes from "./routes/quality-grade.routes";
 import colorRoutes from "./routes/color.routes";
@@ -175,6 +177,7 @@ app.get("/health", async (_req: Request, res: Response) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/items", itemRoutes);
 app.use("/api/customers", customerRoutes);
+app.use("/api/customer-branches", customerBranchListRoutes);
 app.use("/api/stations", stationRoutes);
 app.use("/api/machines", machineRouter);
 app.use("/api/routes", routeRoutes);
@@ -190,6 +193,7 @@ app.use("/api/traveler-cards", travelerCardRoutes);
 app.use("/api/subcontractor", subcontractorRoutes);
 app.use("/api/subcontractors", subcontractorRouter);
 app.use("/api/subcontractor-categories", subcontractorCategoryRouter);
+app.use("/api/kartela", kartelaRoutes);
 app.use("/api/swatches", swatchRoutes);
 app.use("/api/defect-types", defectTypeRoutes);
 app.use("/api/quality-grades", qualityGradeRoutes);

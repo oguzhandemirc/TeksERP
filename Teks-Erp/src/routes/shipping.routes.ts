@@ -120,6 +120,7 @@ router.post("/shipments/:id/remove-order", verifyToken, WRITE, controller.remove
  *             required: [barcode]
  *             properties:
  *               barcode: { type: string }
+ *               sackId:  { type: string, format: uuid, description: "Aktif çuval — verilirse içerik bu çuvala yazılır" }
  *     responses:
  *       200: { description: Eklendi }
  */
@@ -129,10 +130,36 @@ router.post("/shipments/:id/remove-swatch", verifyToken, WRITE, controller.remov
 
 /**
  * @openapi
+ * /api/shipping/rolls/{rollId}/move-sack:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Topu çuvaldan çuvala taşı (aynı sevkiyat içi)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: rollId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sackId]
+ *             properties:
+ *               sackId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Taşındı }
+ */
+router.post("/rolls/:rollId/move-sack", verifyToken, WRITE, controller.moveRollToSack);
+
+/**
+ * @openapi
  * /api/shipping/shipments/{id}/sacks:
  *   post:
  *     tags: [Shipping]
- *     summary: Çuval ekle (tartı — sadece no + kg, içerik tutmaz)
+ *     summary: Çuval aç (boş açılabilir; brüt tartı sonra, içine top/kartela okutulur)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -145,9 +172,8 @@ router.post("/shipments/:id/remove-swatch", verifyToken, WRITE, controller.remov
  *         application/json:
  *           schema:
  *             type: object
- *             required: [weightKg]
  *             properties:
- *               weightKg: { type: number }
+ *               weightKg: { type: number, description: "Brüt kg (opsiyonel — sonra tartılır)" }
  *               sackNo:   { type: string, description: "Offline client barkodu (opsiyonel)" }
  *     responses:
  *       201: { description: Çuval eklendi }

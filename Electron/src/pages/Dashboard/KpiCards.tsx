@@ -1,5 +1,4 @@
 import { useQueries } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ClipboardList,
@@ -15,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/motion";
 import { springSnappy, staggerContainer, staggerItem } from "@/lib/motion";
 import { STATION_TEXT } from "@/lib/station-colors";
+import { useTabsStore } from "@/store/tabs";
 import {
   fetchOpenOrderCount,
   fetchOpenWorkOrderCount,
@@ -77,7 +77,7 @@ const KPIS: KpiDef[] = [
 ];
 
 export function KpiCards() {
-  const navigate = useNavigate();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const { isVisible, itemOrder } = useDashboardLayout();
   const kpiByFullKey = new Map(KPIS.map((k) => [`kpi:${k.key}`, k]));
   const visibleKpis = itemOrder("kpi")
@@ -114,7 +114,7 @@ export function KpiCards() {
             transition={springSnappy}
           >
             <Card
-              onClick={clickable ? () => navigate(kpi.to!) : undefined}
+              onClick={clickable ? () => navigateActive(kpi.to!) : undefined}
               className={cn(
                 "relative h-full overflow-hidden bg-gradient-to-br from-primary/5 to-transparent",
                 clickable && "card-glow cursor-pointer",

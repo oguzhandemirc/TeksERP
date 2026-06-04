@@ -1,4 +1,3 @@
-import { NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   DndContext,
@@ -21,6 +20,8 @@ import logoUrl from "@/assets/teks-logo-fullsize.png";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useMenuOrder } from "@/hooks/useMenuOrder";
+import { useTabsStore, selectActivePath } from "@/store/tabs";
+import { useTabTarget } from "./tabs/use-tab-target";
 import { ADMIN_PERMISSION_LIST } from "@/types/auth";
 import { navGroups, type NavItem, type NavGroup } from "./nav-config";
 import { findCommandEntry, type CommandEntry } from "./command-entries";
@@ -189,7 +190,8 @@ function SortableExpandedItem({ item }: { item: NavItem }) {
     <li
       ref={setNodeRef}
       style={{
-        transform: CSS.Translate.toString(transform),
+        // Yalnız dikey sürükleme: yatay ekseni sıfırla (imleç sağa/sola gitse de öğe kaymaz).
+        transform: CSS.Translate.toString(transform ? { ...transform, x: 0 } : transform),
         transition,
         opacity: isDragging ? 0.6 : 1,
         zIndex: isDragging ? 20 : undefined,
@@ -205,13 +207,15 @@ function SortableExpandedItem({ item }: { item: NavItem }) {
 
 function CollapsedItem({ item }: { item: NavItem }) {
   const Icon = item.icon;
+  const target = useTabTarget(item.to);
+  const isActive = useTabsStore(selectActivePath) === item.to;
   return (
     <li style={{ display: "flex", justifyContent: "center", width: "100%" }}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <NavLink
-            to={item.to}
-            end
+          <button
+            type="button"
+            {...target}
             style={{
               display: "flex",
               alignItems: "center",
@@ -221,16 +225,14 @@ function CollapsedItem({ item }: { item: NavItem }) {
               borderRadius: 8,
               transition: "background-color 150ms, color 150ms",
             }}
-            className={({ isActive }) =>
-              cn(
-                isActive
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-              )
-            }
+            className={cn(
+              isActive
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+            )}
           >
             <Icon size={18} strokeWidth={2} aria-hidden />
-          </NavLink>
+          </button>
         </TooltipTrigger>
         <TooltipContent side="right" sideOffset={8}>
           {item.label}
@@ -242,33 +244,29 @@ function CollapsedItem({ item }: { item: NavItem }) {
 
 function NavItemLink({ item }: { item: NavItem }) {
   const Icon = item.icon;
+  const target = useTabTarget(item.to);
+  const isActive = useTabsStore(selectActivePath) === item.to;
   return (
-    <NavLink
-      to={item.to}
-      end
-      className={({ isActive }) =>
-        cn(
-          "relative flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors",
-          isActive
-            ? "text-primary"
-            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-        )
-      }
-    >
-      {({ isActive }) => (
-        <>
-          {isActive && (
-            <motion.span
-              layoutId="sidebar-active-pill"
-              className="absolute inset-0 rounded-md bg-primary/10 ring-1 ring-inset ring-primary/25"
-              transition={springSnappy}
-            />
-          )}
-          <Icon className="relative z-10 h-[18px] w-[18px] shrink-0" />
-          <span className="relative z-10 truncate">{item.label}</span>
-        </>
+    <button
+      type="button"
+      {...target}
+      className={cn(
+        "relative flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors",
+        isActive
+          ? "text-primary"
+          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
       )}
-    </NavLink>
+    >
+      {isActive && (
+        <motion.span
+          layoutId="sidebar-active-pill"
+          className="absolute inset-0 rounded-md bg-primary/10 ring-1 ring-inset ring-primary/25"
+          transition={springSnappy}
+        />
+      )}
+      <Icon className="relative z-10 h-[18px] w-[18px] shrink-0" />
+      <span className="relative z-10 truncate">{item.label}</span>
+    </button>
   );
 }
 

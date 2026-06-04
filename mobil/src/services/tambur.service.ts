@@ -5,7 +5,6 @@ import type {
   TamburOpenCard,
   TamburFinalizeRequest,
   TamburReportErrorRequest,
-  TamburSwatchRequest,
   TamburContext,
   TamburCutRequest,
   TamburFinalizeOpenFabricRequest,
@@ -61,11 +60,8 @@ export const tamburService = {
   // delete-error'u doğrudan errorId üzerinden çalışıyor (isProcessed=false ise).
   // Sahada Tambur henüz karar vermediği için aynı endpoint güvenle kullanılabilir.
 
-  // Kartela üretimi — kaynak rolden N adet × L mt parça düşer
-  createSwatch: (data: TamburSwatchRequest): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>('/tambur/swatch', data)
-      .then((r) => r.data),
+  // NOT: createSwatch kaldırıldı — kartela artık Tambur'da kesilmiyor, fason
+  // dönüşünden doğuyor (kartelaService). Bkz. KARTELA-TASARIM.md.
 
   // Tambur'dan çıkmış son toplar — etiket yeniden basımı için liste
   recentOutputRolls: (params?: {
@@ -124,7 +120,7 @@ export const tamburService = {
    */
   cutWarehouseRoll: (
     rollId: string,
-    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null }
+    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; markedForKartela?: boolean }
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> =>
     apiClient
       .post<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>>(

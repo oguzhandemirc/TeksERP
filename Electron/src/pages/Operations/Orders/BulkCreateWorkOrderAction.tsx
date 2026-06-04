@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Factory } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PermissionGate } from "@/components/PermissionGate";
+import { useTabsStore } from "@/store/tabs";
 import {
   Dialog,
   DialogContent,
@@ -101,13 +101,13 @@ interface Props {
  * o durumda engelleyip grupları açıklar.
  */
 export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
-  const navigate = useNavigate();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const [incompatGroups, setIncompatGroups] = useState<GroupInfo[] | null>(null);
 
   // Seçili açık kalemleri (openQty=kalan; link-only) tek iş emri formuna taşır. Yalnız
   // ilgili spec'in açık kalemleri seed edilir — başka ürün/renk karışmaz.
   const goToForm = (pickedLines: PickedOrderLine[]) => {
-    navigate("/operations/work-orders", { state: { seedPickedLines: pickedLines } });
+    navigateActive("/operations/work-orders", { state: { seedPickedLines: pickedLines } });
     onDone();
   };
 

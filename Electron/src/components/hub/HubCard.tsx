@@ -1,10 +1,10 @@
 import { type ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowRight, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { staggerContainer, staggerItem, springSnappy } from "@/lib/motion";
+import { useTabTarget } from "@/components/layout/tabs/use-tab-target";
 
 // Hub kartları için renkli ama tutarlı ton paleti. Her kart kendi tonunu
 // (ikon chip + dev watermark + ok rengi) bu listeden index'e göre alır;
@@ -53,9 +53,10 @@ interface HubCardProps {
 /** Dashboard tarzı zengin hub kartı — gradient + tonlu ikon + watermark + hareket. */
 export function HubCard({ to, title, description, icon: Icon, tone, index = 0 }: HubCardProps) {
   const toneClass = tone ?? hubTone(index);
+  const target = useTabTarget(to);
   return (
     <motion.div variants={staggerItem} whileHover={{ y: -3 }} transition={springSnappy}>
-      <Link to={to} className="group block h-full">
+      <button type="button" {...target} className="group block h-full w-full text-left">
         <Card className="card-glow relative h-full overflow-hidden bg-gradient-to-br from-primary/5 to-transparent p-4">
           {/* Dev ikon filigranı — sağ alt, tona boyalı, hover'da hafif büyür */}
           <Icon
@@ -86,7 +87,7 @@ export function HubCard({ to, title, description, icon: Icon, tone, index = 0 }:
             <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
           </div>
         </Card>
-      </Link>
+      </button>
     </motion.div>
   );
 }

@@ -5,6 +5,7 @@ import {
   Layers,
   Scale,
   Truck,
+  SwatchBook,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,6 +58,14 @@ export const operationsTiles: OperationsTile[] = [
     icon: Truck,
     to: "/operations/shipments",
     permission: "shipping:read",
+  },
+  {
+    key: "kartela",
+    title: "Kartela Takibi",
+    description: "Kartela fason sevkleri ve dönen kartelalar",
+    icon: SwatchBook,
+    to: "/operations/kartela",
+    permission: "kartela:read",
   },
   {
     key: "kursun-queue",

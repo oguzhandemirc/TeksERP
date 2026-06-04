@@ -16,6 +16,20 @@ export const shipmentStatusTones: Record<string, Tone> = {
   CANCELLED: "muted",
 };
 
+/**
+ * Global şube lookup öğesi (`/api/customer-branches`) — FilterBar şube filtresi.
+ * `code` opsiyonel `string` (LookupItemBase ile uyum için `null` değil; backend null
+ * gönderse de getLabel tolere eder). Şube adları müşteri arası tekrar edebilir →
+ * `customer.name` etikette ayrım sağlar.
+ */
+export interface BranchLookupItem {
+  id: string;
+  name: string;
+  code?: string;
+  city?: string;
+  customer: { id: string; name: string; code?: string };
+}
+
 /** Liste satırı — lean (sayılar, dizi değil). Backend listShipments select'i ile birebir. */
 export interface ShipmentListItem {
   id: string;
@@ -61,6 +75,28 @@ export interface ShipmentDetailRoll {
   color: { code: string; name: string } | null;
   width: number | null;
   currentQty: number;
+  /** İçinde bulunduğu çuval (top-level rolls'da döner; içerik/iz sürme için). */
+  sackId?: string | null;
+}
+
+/** Çuval içeriğinde ürün (spec) bazlı özet — irsaliyedeki çuval dökümü. */
+export interface SackProductSummary {
+  itemCode: string;
+  itemName: string;
+  colorCode: string | null;
+  colorName: string | null;
+  width: number | null;
+  totalQty: number;
+  rollCount: number;
+}
+
+export interface SackContentSwatch {
+  id: string;
+  barcode: string | null;
+  length: number | null;
+  width: number | null;
+  item: { code: string; name: string } | null;
+  color: { code: string; name: string } | null;
 }
 
 export interface ShipmentDetailSack {
@@ -68,6 +104,11 @@ export interface ShipmentDetailSack {
   sackNo: number | string;
   seq: number;
   weightKg: number | null;
+  rolls: ShipmentDetailRoll[];
+  swatches: SackContentSwatch[];
+  productSummary: SackProductSummary[];
+  rollCount: number;
+  swatchCount: number;
 }
 
 export interface ShipmentDetail {
