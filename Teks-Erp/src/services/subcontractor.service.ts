@@ -31,6 +31,11 @@ import {
 import { buildPrefixedCardNumber } from "../utils/barcode";
 import { buildPagination } from "../utils/query-parser";
 import {
+  decodeDynamicCursor,
+  dynamicCursorWhere,
+  buildNextDynamicCursor,
+} from "../utils/cursor";
+import {
   recomputeStepStatus,
   ensureWorkOrderInProgress,
 } from "./helpers/roll-step.helper";
@@ -209,6 +214,8 @@ export class SubcontractorService {
       plateNumber?: string;
       driverName?: string;
       notes?: string;
+      /** Boyahaneye özel talimat — genel sevk notundan (notes) ayrı. */
+      dyehouseNote?: string;
       /**
        * Operatör WO ürünü ile uyuşmayan top sevkini bilinçli olarak onayladı.
        * Frontend mismatch modal'ında onayladıktan sonra true gönderir.
@@ -253,51 +260,50 @@ export class SubcontractorService {
         `Sevk yalnızca EXTERNAL (fason/boyahane) istasyonlar için yapılabilir. Mevcut: ${step.station.type}`
       );
     }
-    if (step.status === StepStatus.COMPLETED || step.status === StepStatus.SKIPPED) {
+    // SKIPPED adım rotadan bilinçli çıkarılmış — sevk yapılamaz. COMPLETED adıma
+    // ise EK PARTİ sevki yapılabilir (çoklu sevk): aşağıdaki transaction adımı
+    // tekrar ACTIVE'e açar. Tek kısıt WO statüsü (yukarıda) — COMPLETED/CANCELLED
+    // iş emrine sevk yok.
+    if (step.status === StepStatus.SKIPPED) {
       throw AppError.conflict(
-        `Adım zaten kapatılmış (${step.status}). Sevk yapılamaz.`
+        `Adım atlanmış (SKIPPED). Sevk yapılamaz.`
       );
     }
 
-    // Aynı adımda paralel açık sevk yasak — operatör yanlışlıkla aynı kartı
-    // tekrar okutup üstüne ekleme yapmasın. "Açık sevk" = iptal edilmemiş VE
-    // henüz fason kabulü tam yapılmamış (en az bir item geri gelmemiş).
-    // Meşru bir ikinci parti için operatör önce eski sevki iptal eder veya
-    // mal kabul yapar; o zaman bu kontrol geçer.
+    // ÇOKLU SEVK: Aynı adıma paralel birden çok açık sevke izin verilir —
+    // boyahaneye kumaş parça parça gönderilebilir. Aynı topun iki kez
+    // gönderilmesi aşağıdaki per-roll status (AT_SUBCONTRACTOR) kontrolüyle
+    // zaten engellenir; ayrıca bir "tek açık sevk" kısıtı yoktur.
     //
-    // IDEMPOTENCY: Offline sync replay'de aynı çağrı tekrar gelirse open
-    // dispatch zaten varsa AYNI payload (rollIds + subcontractorId) ile
-    // gelmesi durumunda cached dispatch döner. Farklı payload = gerçek
-    // çakışma → orijinal hata fırlatılır.
-    const openDispatch = await prisma.subcontractorDispatch.findFirst({
+    // IDEMPOTENCY: Offline sync replay'de aynı çağrı (AYNI rollIds + AYNI fason)
+    // tekrar gelirse, o açık sevki cached döndür — yeni kayıt açma. Farklı
+    // toplar = meşru yeni parti → guard geçer, yeni sevk açılır.
+    const incomingRollIds = new Set(data.rollIds);
+    const openDispatches = await prisma.subcontractorDispatch.findMany({
       where: {
         stepId: data.stepId,
         cancelledAt: null,
         items: { some: { receiptItems: { none: {} } } },
       },
-      include: {
+      select: {
+        id: true,
+        dispatchNo: true,
+        subcontractorId: true,
         items: { select: { rollId: true } },
       },
     });
-    if (openDispatch) {
-      const existingRollIds = new Set(openDispatch.items.map((i) => i.rollId));
-      const incomingRollIds = new Set(data.rollIds);
+    for (const open of openDispatches) {
+      const existingRollIds = new Set(open.items.map((i) => i.rollId));
       const sameRolls =
         existingRollIds.size === incomingRollIds.size &&
         [...existingRollIds].every((id) => incomingRollIds.has(id));
-      const sameSubcontractor =
-        openDispatch.subcontractorId === data.subcontractorId;
-      if (sameRolls && sameSubcontractor) {
+      if (sameRolls && open.subcontractorId === data.subcontractorId) {
         return {
           success: true,
-          data: openDispatch,
-          message: `Fason sevki zaten oluşturulmuş (idempotent retry): ${openDispatch.dispatchNo}`,
+          data: open,
+          message: `Fason sevki zaten oluşturulmuş (idempotent retry): ${open.dispatchNo}`,
         };
       }
-      throw AppError.conflict(
-        `Bu adım için açık fason sevki var (${openDispatch.dispatchNo}). ` +
-          `Yeni sevk açmak için önce o sevki iptal edin veya mal kabul yapın.`
-      );
     }
 
     const subcontractor = await prisma.subcontractor.findUnique({
@@ -429,11 +435,20 @@ export class SubcontractorService {
         });
       }
 
-      // Step ACTIVE'e çek
-      if (step.status === StepStatus.PENDING) {
+      // Step ACTIVE'e çek. PENDING → ilk sevk; COMPLETED → adıma ek parti
+      // sevki yapılıyor, adımı YENİDEN AÇ (çoklu sevk). startedAt korunur,
+      // completedAt sıfırlanır ki "şu an açık" görünsün.
+      if (
+        step.status === StepStatus.PENDING ||
+        step.status === StepStatus.COMPLETED
+      ) {
         await tx.workOrderStep.update({
           where: { id: step.id },
-          data: { status: StepStatus.ACTIVE, startedAt: new Date() },
+          data: {
+            status: StepStatus.ACTIVE,
+            startedAt: step.startedAt ?? new Date(),
+            completedAt: null,
+          },
         });
       }
       // WO henüz PLANNED ise IN_PROGRESS'e çek (fason sevki = üretim başlangıcı)
@@ -518,6 +533,11 @@ export class SubcontractorService {
           driverName: data.driverName ?? null,
           dispatchedById: userId ?? null,
           notes: data.notes ?? null,
+          // Snapshot'a dondurulmuyor (printSnapshot'a koymuyoruz) — canlı kolon;
+          // sevk sonrası düzenlenebilir, getDispatchPrintSnapshot canlı döner.
+          // Operatör notu (flag açıkken) öncelikli; boşsa iş emrindeki boyahane
+          // notu (WorkOrder.dyehouseNote) default kopyalanır.
+          dyehouseNote: (data.dyehouseNote?.trim() || wo.dyehouseNote) ?? null,
           totalQty,
           printSnapshot: printSnapshot as Prisma.InputJsonValue,
           items: {
@@ -535,55 +555,50 @@ export class SubcontractorService {
         },
       });
 
-      // Rolls: AT_SUBCONTRACTOR + SUBCONTRACTOR_SENT log
-      for (const r of rolls) {
-        await tx.roll.update({
-          where: { id: r.id },
-          data: { status: RollStatus.AT_SUBCONTRACTOR },
-        });
+      // Rolls: AT_SUBCONTRACTOR + SUBCONTRACTOR_SENT log (TOPLU — eski kod top
+      // başına update+findFirst+create+upsert yapıyordu = N+1).
+      const dispatchRollIds = rolls.map((r) => r.id);
 
-        // Açık RollMovement kapanmasın — operatör START atmamış olabilir.
-        // Fason süresi boyunca step üzerinde bekleyen açık movement varsa
-        // notlandır, yoksa yeni movement aç.
-        const open = await tx.rollMovement.findFirst({
-          where: { rollId: r.id, workOrderStepId: data.stepId, exitedAt: null },
-        });
-        if (!open) {
-          await tx.rollMovement.create({
-            data: {
-              rollId: r.id,
-              workOrderStepId: data.stepId,
-              qtyIn: r.currentQty,
-              weightIn: r.weightKg,
-              operatorId: userId ?? null,
-              notes: `DISPATCH:${dispatchNo}`,
-            },
-          });
-        }
+      // 1) status → AT_SUBCONTRACTOR (tek updateMany)
+      await tx.roll.updateMany({
+        where: { id: { in: dispatchRollIds } },
+        data: { status: RollStatus.AT_SUBCONTRACTOR },
+      });
 
-        // Per-roll operation log (idempotent — re-dispatch sonrası ilk sevk kaydı korunur)
-        await tx.rollOperation.upsert({
-          where: {
-            rollId_workOrderStepId_operationType: {
-              rollId: r.id,
-              workOrderStepId: data.stepId,
-              operationType: RollOperationType.SUBCONTRACTOR_SENT,
-            },
-          },
-          create: {
-            rollId: r.id,
-            workOrderStepId: data.stepId,
-            operationType: RollOperationType.SUBCONTRACTOR_SENT,
-            operatorId: userId ?? null,
-            metadata: {
-              dispatchNo,
-              qty: r.currentQty,
-              weight: r.weightKg,
-            } as Prisma.InputJsonValue,
-          },
-          update: {},
-        });
+      // 2) Açık movement'ı olan topları tek sorguda bul; OLMAYANLAR için yeni
+      //    movement aç (açık movement kapanmasın — operatör START atmamış olabilir).
+      const openMovements = await tx.rollMovement.findMany({
+        where: { rollId: { in: dispatchRollIds }, workOrderStepId: data.stepId, exitedAt: null },
+        select: { rollId: true },
+      });
+      const hasOpenMovement = new Set(openMovements.map((m) => m.rollId));
+      const newMovements = rolls
+        .filter((r) => !hasOpenMovement.has(r.id))
+        .map((r) => ({
+          rollId: r.id,
+          workOrderStepId: data.stepId,
+          qtyIn: r.currentQty,
+          weightIn: r.weightKg,
+          operatorId: userId ?? null,
+          notes: `DISPATCH:${dispatchNo}`,
+        }));
+      if (newMovements.length > 0) {
+        await tx.rollMovement.createMany({ data: newMovements });
       }
+
+      // 3) Per-roll operation log — doğal idempotency: @@unique(rollId,stepId,opType)
+      //    + skipDuplicates = eski upsert(update:{}) ile birebir aynı (re-dispatch'te
+      //    ilk sevk kaydı korunur).
+      await tx.rollOperation.createMany({
+        data: rolls.map((r) => ({
+          rollId: r.id,
+          workOrderStepId: data.stepId,
+          operationType: RollOperationType.SUBCONTRACTOR_SENT,
+          operatorId: userId ?? null,
+          metadata: { dispatchNo, qty: r.currentQty, weight: r.weightKg } as Prisma.InputJsonValue,
+        })),
+        skipDuplicates: true,
+      });
 
       // Refakat kartı DEPARTURE
       await logTravelerScan(
@@ -1077,10 +1092,26 @@ export class SubcontractorService {
 
       // 3) Receipt item kayıtları — orijinal Roll referansı (audit + UI'da
       //    "bu receipt hangi orijinal toplara karşılık" görünmek için).
+      //    sourceDispatchItemId ile kaynak sevk kalemine bağlanır: bu bağ
+      //    olmadan open-dispatch guard'ı ve fason raporu sevki sonsuza dek
+      //    "açık" görür (dönen/turnaround metrikleri de bozulur). Her dönen
+      //    top, bu adımdaki açık (kabul görmemiş) sevk kalemiyle eşleşir.
+      const openDispatchItems = await tx.subcontractorDispatchItem.findMany({
+        where: {
+          rollId: { in: returnRollIds },
+          dispatch: { stepId: data.stepId, cancelledAt: null },
+          receiptItems: { none: {} },
+        },
+        select: { id: true, rollId: true },
+      });
+      const dispatchItemByRoll = new Map(
+        openDispatchItems.map((di) => [di.rollId, di.id] as const),
+      );
       await tx.subcontractorReceiptItem.createMany({
         data: data.returns.map((ret) => ({
           receiptId: receipt.id,
           newRollId: ret.rollId,
+          sourceDispatchItemId: dispatchItemByRoll.get(ret.rollId) ?? null,
           notes: ret.notes ?? null,
         })),
       });
@@ -1437,43 +1468,124 @@ export class SubcontractorService {
   async listDispatches(params?: {
     workOrderId?: string;
     subcontractorId?: string;
+    /** 'all' (varsayılan) · 'active' = iptal edilmemiş · 'cancelled' = iptal edilmiş. */
+    status?: "all" | "active" | "cancelled";
+    /** sevk no / fason firma adı / parti kodu (case-insensitive). */
+    search?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    // offset (eski FasonSevk modal davranışı + geriye uyum)
     page?: number;
     pageSize?: number;
+    // cursor (yeni Fason Sevk Geçmişi sayfası — keyset, derin sayfalama hızlı)
+    cursor?: string;
+    mode?: string;
+    limit?: number;
+    withTotal?: boolean;
   }): Promise<{
     success: true;
     data: unknown[];
-    pagination: { page: number; pageSize: number; total: number; totalPages: number };
+    pagination: {
+      page?: number;
+      pageSize?: number;
+      total?: number;
+      totalPages?: number;
+      nextCursor?: string | null;
+      hasMore?: boolean;
+      limit?: number;
+      totalEstimate?: number;
+    };
   }> {
     const where: Prisma.SubcontractorDispatchWhereInput = {};
     if (params?.workOrderId) where.workOrderId = params.workOrderId;
     if (params?.subcontractorId) where.subcontractorId = params.subcontractorId;
 
+    const status = params?.status ?? "all";
+    if (status === "active") where.cancelledAt = null;
+    else if (status === "cancelled") where.cancelledAt = { not: null };
+
+    if (params?.dateFrom || params?.dateTo) {
+      where.dispatchedAt = {
+        ...(params?.dateFrom ? { gte: params.dateFrom } : {}),
+        ...(params?.dateTo ? { lte: params.dateTo } : {}),
+      };
+    }
+
+    const search = params?.search?.trim();
+    if (search) {
+      where.OR = [
+        { dispatchNo: { contains: search, mode: "insensitive" } },
+        { subcontractor: { name: { contains: search, mode: "insensitive" } } },
+        { workOrder: { batchNumber: { contains: search, mode: "insensitive" } } },
+      ];
+    }
+
+    // Liste için ÇOK HAFIF select — detay endpoint (`getDispatch`) tam veriyi döner.
+    // Müşteri/orderLinks gibi N+ join'ler list response'unu şişiriyordu;
+    // operatör detaya tıkladığında lazy fetch ile zenginleşir.
+    const select = {
+      id: true,
+      dispatchNo: true,
+      dispatchedAt: true,
+      totalQty: true,
+      plateNumber: true,
+      driverName: true,
+      notes: true,
+      dyehouseNote: true,
+      stepId: true,
+      cancelledAt: true,
+      cancelReason: true,
+      workOrder: { select: { id: true, batchNumber: true } },
+      subcontractor: { select: { id: true, name: true } },
+      _count: { select: { items: true } },
+    } as const;
+
+    // CURSOR mode (Fason Sevk Geçmişi sayfası): keyset by dispatchedAt desc + id desc.
+    // count YOK (withTotal ile opt-in) → derin sayfalamada sabit maliyet.
+    const useCursor = !!params?.cursor || params?.mode === "cursor";
+    if (useCursor) {
+      const limit = Math.min(Math.max(1, params?.limit ?? 30), 100);
+      const cursor = decodeDynamicCursor(params?.cursor);
+      const whereClause = cursor
+        ? { AND: [where, dynamicCursorWhere(cursor, "dispatchedAt", "desc")] }
+        : where;
+      const [items, totalEstimate] = await Promise.all([
+        prisma.subcontractorDispatch.findMany({
+          where: whereClause,
+          select,
+          orderBy: [{ dispatchedAt: "desc" }, { id: "desc" }],
+          take: limit + 1,
+        }),
+        params?.withTotal
+          ? prisma.subcontractorDispatch.count({ where })
+          : Promise.resolve(undefined),
+      ]);
+      const hasMore = items.length > limit;
+      const rows = hasMore ? items.slice(0, limit) : items;
+      const last = rows[rows.length - 1] as Record<string, unknown> | undefined;
+      const nextCursor = hasMore ? buildNextDynamicCursor(last, "dispatchedAt") : null;
+      return {
+        success: true,
+        data: rows,
+        pagination: {
+          nextCursor,
+          hasMore,
+          limit,
+          ...(totalEstimate !== undefined ? { totalEstimate } : {}),
+        },
+      };
+    }
+
+    // OFFSET mode (geriye uyum).
     const page = Math.max(1, params?.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, params?.pageSize ?? 10));
     // buildPagination MAX_OFFSET=10K aşımında 400 fırlatır (curl saldırı yüzeyi).
     const { skip } = buildPagination(page, pageSize);
 
-    // Liste için ÇOK HAFIF select — detay endpoint (`getDispatch`) tam veriyi döner.
-    // Müşteri/orderLinks gibi N+ join'ler list response'unu şişiriyordu;
-    // operatör detaya tıkladığında lazy fetch ile zenginleşir.
     const [dispatches, total] = await Promise.all([
       prisma.subcontractorDispatch.findMany({
         where,
-        select: {
-          id: true,
-          dispatchNo: true,
-          dispatchedAt: true,
-          totalQty: true,
-          plateNumber: true,
-          driverName: true,
-          notes: true,
-          stepId: true,
-          cancelledAt: true,
-          cancelReason: true,
-          workOrder: { select: { id: true, batchNumber: true } },
-          subcontractor: { select: { id: true, name: true } },
-          _count: { select: { items: true } },
-        },
+        select,
         orderBy: { dispatchedAt: "desc" },
         skip,
         take: pageSize,
@@ -1703,6 +1815,8 @@ export class SubcontractorService {
             batchNumber: true,
             parameters: true,
             type: true,
+            // Sevkin kendi boyahane notu boşsa fişte WO notuna düşülür (option B).
+            dyehouseNote: true,
             // Sevk fişinde "fasoncudan ne istiyoruz" → WO'nun hedef rengi.
             // Snapshot içinde dondurulmuyor; her zaman canlı join'liyoruz.
             // Fason istasyondan sonraki üretimde renk değişebilir; sevk fişi
@@ -1741,7 +1855,13 @@ export class SubcontractorService {
     if (dispatch.printSnapshot) {
       return {
         success: true,
-        data: { ...(dispatch.printSnapshot as object), requestedColor },
+        // requestedColor + dyehouseNote canlı join/kolon — eski snapshot'larda bile güncel.
+        data: {
+          ...(dispatch.printSnapshot as object),
+          requestedColor,
+          dyehouseNote: dispatch.dyehouseNote,
+          woDyehouseNote: dispatch.workOrder.dyehouseNote,
+        },
       };
     }
 
@@ -1798,8 +1918,51 @@ export class SubcontractorService {
           totalWeight,
         },
         requestedColor,
+        dyehouseNote: dispatch.dyehouseNote,
+        woDyehouseNote: dispatch.workOrder.dyehouseNote,
       },
     };
+  }
+
+  // ===========================================================================
+  // UPDATE DYEHOUSE NOTE — Boyahane notunu sevk sonrası düzenle (Electron)
+  // ===========================================================================
+  // Sevk notu (notes) snapshot'a dondurulduğu için değişmez; boyahane notu ise
+  // canlı kolon — planlamacı sevk fişini açıp talimatı sonradan ekleyebilir/
+  // düzeltebilir. İptal edilmiş sevkte düzenlemeye izin verilmez.
+  async updateDyehouseNote(
+    id: string,
+    dyehouseNote: string | null,
+    userId?: string
+  ): Promise<ApiResponse<{ id: string; dispatchNo: string; dyehouseNote: string | null }>> {
+    const dispatch = await prisma.subcontractorDispatch.findUnique({
+      where: { id },
+      select: { id: true, cancelledAt: true, dyehouseNote: true },
+    });
+    if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+    if (dispatch.cancelledAt) {
+      throw AppError.conflict("İptal edilmiş sevkin boyahane notu düzenlenemez");
+    }
+
+    // Boş/whitespace → null (notu temizle).
+    const next = dyehouseNote && dyehouseNote.trim() ? dyehouseNote.trim() : null;
+
+    const updated = await prisma.subcontractorDispatch.update({
+      where: { id },
+      data: { dyehouseNote: next },
+      select: { id: true, dispatchNo: true, dyehouseNote: true },
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SUBCONTRACTOR_DISPATCH",
+      recordId: id,
+      oldData: { dyehouseNote: dispatch.dyehouseNote },
+      newData: { dyehouseNote: next },
+    });
+
+    return { success: true, data: updated };
   }
 
   // ===========================================================================

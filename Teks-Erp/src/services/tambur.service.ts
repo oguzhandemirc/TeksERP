@@ -214,6 +214,21 @@ export class TamburService {
           where: { isProcessed: false },
           orderBy: { startMeter: "asc" },
         },
+        // En güncel iade kaydı — depo topu iade gelmişse operatör notunu/nedenini
+        // burada görür (kesime gitmeden önce). İade hep WAREHOUSE'a döner; not topa bağlı.
+        returns: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            qty: true,
+            reasonText: true,
+            note: true,
+            createdAt: true,
+            reason: { select: { code: true, name: true, color: true } },
+            receivedBy: { select: { fullName: true } },
+          },
+        },
       },
     });
 
@@ -388,6 +403,7 @@ export class TamburService {
                 targetItemId: true,
                 targetColorId: true,
                 foldType: true,
+                width: true,
               },
             },
           },
@@ -400,12 +416,16 @@ export class TamburService {
     }
 
     // IDEMPOTENCY: Tambur finalize her çağrıda yeni child Roll yaratır
-    // (uuid-based barkod). Offline sync replay'inde aynı çağrı 2. kez gelirse
-    // parent zaten TAMBUR_CONSUMED durumda olur — bu noktada mevcut child'ları
-    // ve işlenmiş hata sayısını döndür, transaction'ı çalıştırma.
-    // İlk çağrı transaction içinde all-or-nothing olduğu için partial state
-    // mümkün değil (TAMBUR_CONSUMED = tüm yan etkiler tamamlandı).
-    if (roll.status === RollStatus.TAMBUR_CONSUMED) {
+    // (uuid-based barkod — P2002 ile mükerrer yakalanamaz). Aynı çağrı 2. kez
+    // gelirse (offline replay / çift-tık) mükerrer child üretilmemeli. İki
+    // savunma katmanı:
+    //   1) Ön-kontrol (burada): önceki çağrı TAM commit etmişse parent
+    //      TAMBUR_CONSUMED olur → mevcut child'ları döndür, tx'i hiç açma.
+    //   2) Atomik claim (tx başında): iki çağrı eşzamanlı gelip ikisi de bu
+    //      ön-kontrolü geçerse (henüz commit yok), koşullu updateMany yalnız
+    //      birine count=1 verir; kaybeden idempotent döner.
+    // Bu yardımcı her iki yolda da aynı cevabı üretir.
+    const buildIdempotentResponse = async () => {
       const cachedOriginal = await prisma.roll.findUnique({
         where: { id: data.rollId },
         include: { item: true, color: true },
@@ -430,6 +450,10 @@ export class TamburService {
         },
         message: "Tambur zaten tamamlanmış (idempotent retry).",
       };
+    };
+
+    if (roll.status === RollStatus.TAMBUR_CONSUMED) {
+      return buildIdempotentResponse();
     }
 
     // Parent barkodlu (klasik) ise child barkodlar parent prefix'i ile üretilir;
@@ -526,7 +550,29 @@ export class TamburService {
     const splitRolls: Roll[] = [];
     let processedCount = 0;
 
+    // Eşzamanlı ikinci çağrı tx içindeki atomik claim'i kaybederse set edilir →
+    // tx geri sarılır, idempotent cevap döndürülür (mükerrer child üretilmez).
+    let raceLost = false;
+    // Child Roll CREATE audit'leri tx İÇİNDE atılmaz: tx sonradan rollback ederse
+    // (movement/step/WO completion hatası) AuditService global prisma'da hemen
+    // commit ettiğinden hayalet kayıt kalırdı. Döngüde topla, tx commit ettikten
+    // SONRA emit et.
+    const childAudits: Array<{ recordId: string; newData: Record<string, unknown> }> = [];
     const updatedRoll = await prisma.$transaction(async (tx) => {
+      // ATOMIK CLAIM: parent'ı tek hamlede sahiplen. Koşullu updateMany satır
+      // kilidi + status guard ile iki eşzamanlı finalize'dan yalnız BİRİNE
+      // count=1 verir; kaybeden count=0 alır → tx geri sarılır, mükerrer child
+      // Roll üretilmez. (Ön-kontrol tek başına yetmez: iki çağrı da henüz commit
+      // etmeden ön-kontrolü geçebilir.)
+      const claim = await tx.roll.updateMany({
+        where: { id: data.rollId, status: { not: RollStatus.TAMBUR_CONSUMED } },
+        data: { status: RollStatus.TAMBUR_CONSUMED },
+      });
+      if (claim.count === 0) {
+        raceLost = true;
+        throw new Error("TAMBUR_RACE_LOST");
+      }
+
       // Defect lifecycle — relatedErrorIds'da geçen defect'ler CUT, diğerleri NO_CUT.
       // decisions[].decision sadece operatörün niyetini bildirir; gerçek aksiyon
       // cuts.relatedErrorIds ile eşleştirilir.
@@ -632,7 +678,9 @@ export class TamburService {
             barcode: splitBarcode,
             itemId: roll.itemId,
             colorId: roll.colorId,
-            width: roll.width,
+            // Bitmiş topun eni = WO hedef eni (ham en KK1'de opsiyonel; ham
+            // top eni null olabilir). WO eni yoksa ham parent'ın enine düşülür.
+            width: wo?.width ?? roll.width,
             initialQty: seg.qty,
             currentQty: seg.qty,
             weightKg: null,
@@ -682,10 +730,8 @@ export class TamburService {
 
         splitRolls.push(splitRoll);
 
-        await AuditService.log({
-          userId,
-          action: "CREATE",
-          tableName: "ROLL",
+        // Audit tx dışına ertelenir (yukarıdaki childAudits notu).
+        childAudits.push({
           recordId: splitRoll.id,
           newData: {
             barcode: splitRoll.barcode,
@@ -812,7 +858,28 @@ export class TamburService {
       }
 
       return updated;
+    }).catch((e) => {
+      // Yarışı kaybeden eşzamanlı çağrı (raceLost): kazanan parent'ı tüketip
+      // child'ları zaten üretti. null dön → aşağıda idempotent cevaba düşülür.
+      // Gerçek hatalar yeniden fırlatılır.
+      if (raceLost) return null;
+      throw e;
     });
+
+    if (!updatedRoll) {
+      return buildIdempotentResponse();
+    }
+
+    // Tx commit etti — child Roll CREATE audit'lerini şimdi emit et.
+    for (const a of childAudits) {
+      await AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "ROLL",
+        recordId: a.recordId,
+        newData: a.newData,
+      });
+    }
 
     await AuditService.log({
       userId,

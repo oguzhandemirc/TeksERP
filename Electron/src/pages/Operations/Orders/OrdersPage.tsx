@@ -18,6 +18,7 @@ import { OrderFormDialog } from "./OrderFormDialog";
 import { BulkCreateWorkOrderAction } from "./BulkCreateWorkOrderAction";
 import { customerService } from "@/pages/Customers/service";
 import { useTabsStore } from "@/store/tabs";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
 import { generateOrderNumber, type OrderFormValues } from "./schema";
 
@@ -159,7 +160,11 @@ function buildUpdatePayload(
 
 export function OrdersPage() {
   const qc = useQueryClient();
-  const navigateActive = useTabsStore((s) => s.navigateActive);
+  const openTab = useTabsStore((s) => s.openTab);
+  // Panel Radix portal'ı (document.body) — pasif sekme `invisible` olsa da portal
+  // kaçar. Yalnız Siparişler sekmesi aktifken göster; `selected` korunur, kullanıcı
+  // sekmeye dönünce panel yeniden açılır.
+  const isTabActive = useIsTabActive();
   const [selected, setSelected] = useState<Order | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
@@ -249,12 +254,17 @@ export function OrdersPage() {
 
       <OrderDetailSheet
         order={selected}
-        open={Boolean(selected)}
+        open={Boolean(selected) && isTabActive}
         onOpenChange={(open) => !open && setSelected(null)}
         onEdit={handleEdit}
-        onCreateWorkOrder={(order) => {
-          setSelected(null);
-          navigateActive("/operations/work-orders", { state: { seedOrder: order } });
+        onCreateWorkOrder={(lines) => {
+          // Açılan iş emri sekmesine yönlendir. Panel kapatılmaz — state'i
+          // Siparişler sekmesinde açık kalır; başka ürün için kullanıcı bu
+          // sekmeye geri dönüp ilgili kalemin "İş emri"ne basabilir.
+          openTab("/operations/work-orders", {
+            forceNew: true,
+            state: { seedPickedLines: lines },
+          });
         }}
       />
 

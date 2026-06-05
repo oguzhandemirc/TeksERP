@@ -9,8 +9,7 @@ import React, {
 } from 'react';
 import { StyleSheet, StyleProp, View, ViewStyle, useWindowDimensions } from 'react-native';
 import { Button, Surface, Text } from 'react-native-paper';
-import Modal from 'react-native-modal';
-import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
+import AppModal from './AppModal';
 import Numpad from './Numpad';
 
 interface NumpadTarget {
@@ -142,7 +141,6 @@ export function NumpadModalHost() {
   const { target, closeTarget, notifier } = useNumpadContext();
   useSyncExternalStore(notifier.subscribe, notifier.getSnapshot);
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
 
   const value = target ? target.getValue() : '';
   const onChange = target?.onChange ?? noop;
@@ -151,18 +149,7 @@ export function NumpadModalHost() {
   const compactKeys = winH < 500;
 
   return (
-    <Modal
-      isVisible={!!target}
-      onBackdropPress={() => closeTarget()}
-      onBackButtonPress={() => closeTarget()}
-      backdropOpacity={0.3}
-      style={modalStyles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
-      animationIn="slideInUp"
-      animationOut="slideOutDown"
-    >
+    <AppModal visible={!!target} onDismiss={() => closeTarget()} position="bottom">
       <Surface style={modalStyles.sheet} elevation={4}>
         <View style={modalStyles.header}>
           <View style={{ flex: 1 }}>
@@ -187,7 +174,7 @@ export function NumpadModalHost() {
           />
         </View>
       </Surface>
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -200,7 +187,6 @@ const styles = StyleSheet.create({
 });
 
 const modalStyles = StyleSheet.create({
-  modal: { justifyContent: 'flex-end', margin: 0, padding: 0 },
   sheet: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,

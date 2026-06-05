@@ -15,4 +15,8 @@ export type MainStackParamList = {
   SevkiyatGecmisi: undefined;
   SevkiyatDetay: { shipmentId: string; shipmentNo?: string };
   Paketleme: { shipmentId?: string; orderIds?: string[] };
+  KartelaSevkGecmisi: undefined;
+  KartelaKabulGecmisi: undefined;
+  FasonSevkGecmisi: undefined;
+  IadeGecmisi: undefined;
 } & Record<MobileScreenKey, undefined>;

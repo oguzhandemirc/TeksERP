@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Tag } from "lucide-react";
+import { History, Tag, Undo2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -41,6 +41,8 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   // lastLabelSnapshot (topun üstündeki son basılan etiket) yalnız detay endpoint'inden gelir.
   const detail = detailQuery.data?.data;
   const snapshot = detail?.lastLabelSnapshot ?? null;
+  // En güncel iade kaydı (varsa) — müşteriden dönen top notu/nedeni; Tambur kesimden önce görülür.
+  const latestReturn = detail?.returns?.[0] ?? null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -250,6 +252,62 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 )}
               </CardContent>
             </Card>
+            )}
+
+            {/* İade bilgisi — müşteriden dönmüş top. Not + neden burada; Tambur kesimden önce görür. */}
+            {latestReturn && (
+              <Card>
+                <CardContent className="space-y-2 p-3 text-sm">
+                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <Undo2 className="h-3.5 w-3.5" /> İade Bilgisi
+                    <span className="ml-auto text-[10px] normal-case text-muted-foreground">
+                      {safeFormat(latestReturn.createdAt, "dd.MM.yyyy HH:mm")}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <div className="text-xs text-muted-foreground">Neden</div>
+                    <div>
+                      {latestReturn.reason ? (
+                        <Badge
+                          variant="secondary"
+                          style={
+                            latestReturn.reason.color
+                              ? {
+                                  backgroundColor: `${latestReturn.reason.color}22`,
+                                  color: latestReturn.reason.color,
+                                }
+                              : undefined
+                          }
+                        >
+                          {latestReturn.reason.name}
+                        </Badge>
+                      ) : latestReturn.reasonText ? (
+                        <span>{latestReturn.reasonText}</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </div>
+                    {latestReturn.reason && latestReturn.reasonText && (
+                      <>
+                        <div className="text-xs text-muted-foreground">Açıklama</div>
+                        <div className="text-xs">{latestReturn.reasonText}</div>
+                      </>
+                    )}
+                    {latestReturn.note && (
+                      <>
+                        <div className="text-xs text-muted-foreground">Not</div>
+                        <div className="text-xs">{latestReturn.note}</div>
+                      </>
+                    )}
+                    <div className="text-xs text-muted-foreground">İade Metrajı</div>
+                    <div className="tabular-nums">
+                      {latestReturn.qty.toLocaleString("tr-TR")} m
+                    </div>
+                    <div className="text-xs text-muted-foreground">Teslim Alan</div>
+                    <div className="text-xs">{latestReturn.receivedBy?.fullName ?? "—"}</div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
 
             {(roll.packageId || roll.netWeightKg != null) && (

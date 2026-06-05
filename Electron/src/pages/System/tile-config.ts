@@ -74,8 +74,8 @@ export const systemTiles: SystemTile[] = [
   },
   {
     key: "settings",
-    title: "Görünüm Ayarları",
-    description: "Fiyat alanlarının arayüzde gösterilip gizlenmesi",
+    title: "Genel Ayarlar",
+    description: "Özellik anahtarları, cihaz eşleştirme ve API adresi",
     icon: SettingsIcon,
     to: "/system/settings",
     group: "config",

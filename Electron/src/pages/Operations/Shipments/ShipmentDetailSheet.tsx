@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Package } from "lucide-react";
+import { FileText, Package, Undo2 } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -161,6 +161,50 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
                         </span>
                       </div>
                     ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {d.summary.returnedCount > 0 && (
+              <Card>
+                <CardContent className="p-3">
+                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <Undo2 className="h-3.5 w-3.5" /> Bu sevkiyattan iade edilenler (
+                    {d.summary.returnedCount})
+                  </div>
+                  <div className="space-y-0.5 text-[11px]">
+                    {d.returnedRolls.map((r) => (
+                      <div key={r.id} className="flex items-center justify-between gap-2">
+                        <span className="font-mono">{r.barcode ?? "—"}</span>
+                        <span className="truncate text-muted-foreground">
+                          {r.item?.name}
+                          {r.color ? ` · ${r.color.name}` : ""}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+                          {r.reasonName && (
+                            <span
+                              className="rounded px-1 text-[10px]"
+                              style={
+                                r.reasonColor
+                                  ? { backgroundColor: `${r.reasonColor}22`, color: r.reasonColor }
+                                  : undefined
+                              }
+                            >
+                              {r.reasonName}
+                            </span>
+                          )}
+                          {fmt(r.qty)} m
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 border-t pt-1.5 text-[11px] text-muted-foreground">
+                    Gönderilen toplam:{" "}
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {d.summary.rollCount + d.summary.returnedCount} top ·{" "}
+                      {fmt(d.summary.totalMeters + d.summary.returnedMeters)} m
+                    </span>
                   </div>
                 </CardContent>
               </Card>

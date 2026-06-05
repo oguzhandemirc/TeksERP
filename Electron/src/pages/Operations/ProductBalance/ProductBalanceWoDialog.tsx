@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import type { PickedOrderLine } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
 import { useTabsStore } from "@/store/tabs";
-import type { BalanceSpec, BalanceLine } from "./types";
+import type { WoTarget, BalanceLine } from "./types";
 
 type Mode = "bind" | "stock";
 
@@ -39,7 +39,7 @@ function toPicked(l: BalanceLine): PickedOrderLine {
 }
 
 interface Props {
-  spec: BalanceSpec | null;
+  spec: WoTarget | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -125,7 +125,7 @@ export function ProductBalanceWoDialog({ spec, open, onOpenChange }: Props) {
           <DialogDescription>
             <span className="font-medium text-foreground">{label}</span> için
             üretim emri. Talep {fmt(spec.talep)} · Depo {fmt(spec.depo)} ·
-            Üretimde {fmt(spec.uretimde)} · Ham {fmt(spec.ham)}.
+            Üretimde {fmt(spec.uretimde)} · Ham havuzu {fmt(spec.ham)}.
           </DialogDescription>
         </DialogHeader>
 

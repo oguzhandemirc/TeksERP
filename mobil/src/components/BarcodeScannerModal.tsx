@@ -1,11 +1,8 @@
 import React from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
-import RNModal from 'react-native-modal';
+import AppModal from './AppModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Toast from 'react-native-toast-message';
 import { BarcodeScannerView, type SupportedBarcodeType } from './BarcodeScannerView';
-import { toastConfig } from './ToastConfig';
-import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 import { useDeviceType } from '../hooks/useDeviceType';
 
 interface Props {
@@ -47,7 +44,6 @@ export function BarcodeScannerModal({
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isTablet = useDeviceType() === 'tablet';
-  const modalProps = useFullscreenModalProps();
 
   // Modal tam ekranda ortalanır (justifyContent: 'center'). Telefonda eski
   // davranış korunur. Tablette ekran yüksek olduğundan winH*0.8 + ortalama,
@@ -72,16 +68,15 @@ export function BarcodeScannerModal({
     : { width: winW * 0.7, height: winH * 0.8 };
 
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      onModalHide={onModalHide}
-      backdropOpacity={0.7}
-      style={styles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
+    <AppModal
+      visible={visible}
+      onDismiss={onDismiss}
+      onHidden={onModalHide}
+      // Sheet kendi genişliğini verir; AppModal'a bildirmezsek center modundaki
+      // contentBase (min(ekran-32,560)) dış sarmalayıcıyı daha geniş yapar ve
+      // dar sheet içinde sola yaslı kalır (modal sola kayar). contentStyle ile
+      // dış sarmalayıcıyı sheet genişliğine sabitleyip ortalıyoruz.
+      contentStyle={{ width: sheetSize.width }}
     >
       <View style={[styles.sheet, sheetSize]}>
         <BarcodeScannerView
@@ -93,17 +88,11 @@ export function BarcodeScannerModal({
           continuous={continuous}
         />
       </View>
-      {/* Modal native katmanda açıldığından kök <Toast/> ARKADA kalıyor; hata/başarı
-          mesajları okunmuyordu. Modalın İÇİNE ikinci bir Toast koyuyoruz — kütüphane
-          en son mount olan ref'i kullanır (modal kapanınca otomatik köke döner), böylece
-          tarama mesajları kameranın ÜSTÜNDE görünür. */}
-      <Toast config={toastConfig} />
-    </RNModal>
+    </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
   sheet: {
     backgroundColor: '#0f172a',
     borderRadius: 16,

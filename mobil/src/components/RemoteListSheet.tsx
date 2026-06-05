@@ -6,8 +6,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import RNModal from 'react-native-modal';
-import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
+import AppModal from './AppModal';
 import {
   Text,
   IconButton,
@@ -134,19 +133,9 @@ export default function RemoteListSheet<T>({
   overlay,
 }: Props<T>) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
 
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.55}
-      style={styles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
-    >
+    <AppModal visible={visible} onDismiss={onDismiss}>
       <View
         style={[
           styles.sheet,
@@ -241,12 +230,11 @@ export default function RemoteListSheet<T>({
             RNModal portal'ı içinde olduğu için iki RNModal çakışması yok. */}
         {overlay}
       </View>
-    </RNModal>
+    </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
   sheet: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },
 
   header: {

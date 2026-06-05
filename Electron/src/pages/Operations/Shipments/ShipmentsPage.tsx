@@ -18,9 +18,9 @@ import { ShipmentDetailSheet } from "./ShipmentDetailSheet";
 const QUERY_KEY = "shipments";
 
 // Tüm filtreler FilterBar'da (durum dahil — sekme yok). Durum çoklu-seçim (Sipariş
-// paritesi); şube global lookup (cross-customer) → etikette müşteri adıyla ayrışsın
-// diye aranabilir multi-lookup. Tarih varsayılanı createdAt (indexli); Sevk/Hazır
-// opsiyonel alanlar.
+// paritesi). Şube SEÇİLEN MÜŞTERİYE bağlı (dependent-lookup): müşteri seçilmeden
+// pasif, seçilince yalnız o müşterinin şubeleri (global endpoint filter[customerId]
+// ile daraltılır). Tarih varsayılanı createdAt (indexli); Sevk/Hazır opsiyonel.
 const FILTERS: FilterDef[] = [
   {
     kind: "multi-select",
@@ -41,17 +41,26 @@ const FILTERS: FilterDef[] = [
     queryKey: "customers",
   },
   {
-    kind: "multi-lookup",
+    kind: "dependent-lookup",
     key: "branchId",
     label: "Şube",
-    service: branchLookupService,
+    dependsOn: "customerId",
     queryKey: "branch-lookup",
+    placeholderNoParent: "Şube (önce müşteri)",
+    fetchOptions: (customerId) =>
+      branchLookupService
+        .getAll({
+          page: 1,
+          pageSize: 200,
+          sortBy: "name",
+          sortOrder: "asc",
+          filters: { isActive: "true", customerId },
+        })
+        .then((r) => r.data),
     getLabel: (it) => {
       const b = it as Partial<BranchLookupItem> & { id: string };
       if (!b.name) return b.id;
-      const customer = b.customer?.name ? ` — ${b.customer.name}` : "";
-      const city = b.city ? ` (${b.city})` : "";
-      return `${b.name}${customer}${city}`;
+      return b.city ? `${b.name} (${b.city})` : b.name;
     },
   },
   {

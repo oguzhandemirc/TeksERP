@@ -39,7 +39,10 @@ export function buildDispatchNoteHtml(d: ShipmentDetail): string {
 
   const sacks = d.sacks.length
     ? `Çuvallar: ${d.sacks.length} adet · Toplam ${n(d.summary.totalKg)} kg (${d.sacks
-        .map((s) => `#${s.seq}:${s.weightKg != null ? n(s.weightKg) : '—'}kg`)
+        .map(
+          (s) =>
+            `#${s.seq}${s.manualCode ? ` [${esc(s.manualCode)}]` : ''}:${s.weightKg != null ? n(s.weightKg) : '—'}kg`,
+        )
         .join(', ')})`
     : 'Çuval yok';
 

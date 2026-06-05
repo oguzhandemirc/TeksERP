@@ -47,8 +47,20 @@ export interface Roll {
   /** Topun ÜSTÜNDEKİ son basılan etiketin snapshot'ı (null = stok / müşteri etiketi yok).
    *  BAĞ DEĞİL — yalnız bilgi; baskı/yönlendir anında yazılır. Detay endpoint'inden gelir. */
   lastLabelSnapshot?: RollLabelSnapshot | null;
+  /** En güncel iade kaydı(ları) — detay endpoint'inden (RollReturn). Tambur/depo notu burada görünür. */
+  returns?: RollReturnEntry[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RollReturnEntry {
+  id: string;
+  qty: number;
+  reasonText: string | null;
+  note: string | null;
+  createdAt: string;
+  reason: { code: string; name: string; color: string | null } | null;
+  receivedBy: { fullName: string } | null;
 }
 
 export interface RollLabelSnapshot {

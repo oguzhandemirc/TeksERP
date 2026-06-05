@@ -129,6 +129,13 @@ export default function DispatchDetailPanel({
             <Text style={styles.notesText}>{dispatch.notes}</Text>
           </View>
         )}
+
+        {dispatch.dyehouseNote && (
+          <View style={styles.dyehouseNoteBox}>
+            <Text style={styles.dyehouseNoteLabel}>BOYAHANE NOTU</Text>
+            <Text style={styles.dyehouseNoteText}>{dispatch.dyehouseNote}</Text>
+          </View>
+        )}
       </View>
 
       {/* Sevk edilen toplar */}
@@ -263,6 +270,17 @@ const styles = StyleSheet.create({
     borderLeftColor: '#cbd5e1',
   },
   notesText: { fontSize: 12, color: '#475569', fontStyle: 'italic' },
+  dyehouseNoteBox: {
+    backgroundColor: '#fff7ed',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#ea580c',
+    gap: 2,
+  },
+  dyehouseNoteLabel: { fontSize: 10, color: '#9a3412', fontWeight: '700' },
+  dyehouseNoteText: { fontSize: 12, color: '#7c2d12' },
   rollItem: {
     backgroundColor: '#fff',
     borderRadius: 6,

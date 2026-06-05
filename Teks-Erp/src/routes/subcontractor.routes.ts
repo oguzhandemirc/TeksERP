@@ -31,9 +31,10 @@ const router = Router();
  *               stepId:          { type: string, format: uuid }
  *               subcontractorId: { type: string, format: uuid }
  *               rollIds:         { type: array, items: { type: string, format: uuid } }
- *               plateNumber: { type: string }
- *               driverName:  { type: string }
- *               notes:       { type: string }
+ *               plateNumber:  { type: string }
+ *               driverName:   { type: string }
+ *               notes:        { type: string, description: "Genel sevk/nakliye notu" }
+ *               dyehouseNote: { type: string, description: "Boyahaneye özel talimat (sevk notundan ayrı)" }
  *     responses:
  *       201: { description: Sevk belgesi oluşturuldu }
  */
@@ -42,6 +43,42 @@ router.post(
   verifyToken,
   requireAnyPermission("workorder:write", "mobile:fason-sevk"),
   controller.dispatch
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/dyehouse-note:
+ *   patch:
+ *     tags: [Subcontractor]
+ *     summary: Sevkin boyahane notunu güncelle
+ *     description: |
+ *       Boyahane notu (dyehouseNote) snapshot'a dondurulmayan canlı kolondur;
+ *       sevk fişi yazdırılmadan önce talimat eklenebilir/düzeltilebilir. Boş
+ *       gönderilirse not temizlenir. İptal edilmiş sevkte düzenlenemez.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               dyehouseNote: { type: string, nullable: true, maxLength: 1000 }
+ *     responses:
+ *       200: { description: Boyahane notu güncellendi }
+ *       404: { description: Sevk bulunamadı }
+ *       409: { description: İptal edilmiş sevk }
+ */
+router.patch(
+  "/dispatches/:id/dyehouse-note",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:fason-sevk"),
+  controller.updateDyehouseNote
 );
 
 /**

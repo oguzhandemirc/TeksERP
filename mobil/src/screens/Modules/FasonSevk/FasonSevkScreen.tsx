@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
-import RNModal from 'react-native-modal';
+import AppModal from '../../../components/AppModal';
 import {
   Text,
   TextInput,
@@ -20,6 +20,8 @@ import {
   useQueryClient,
   onlineManager,
 } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import dayjs from 'dayjs';
@@ -36,10 +38,7 @@ import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import { useDeviceType } from '../../../hooks/useDeviceType';
-import { useFullscreenModalProps } from '../../../hooks/useFullscreenModalProps';
-import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import WorkOrderDetailPanel from '../../../components/workOrder/WorkOrderDetailPanel';
-import { RecentDispatchesModal } from '../../../components/dispatch';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { workOrderService } from '../../../services/workOrder.service';
@@ -51,9 +50,11 @@ import {
   type ItemMismatchDetails,
 } from '../../../services/subcontractor.service';
 import { STATION_MUT } from '../../../offline/mutations';
+import { useDyehouseNoteMobileEntry } from '../../../hooks/useFeatureFlags';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList } from '../../../components/motion';
 import type { Roll, WorkOrderStep } from '../../../types/models';
+import type { MainStackParamList } from '../../../navigation/types';
 import {
   WORK_ORDER_STATUS_LABEL,
   WORK_ORDER_STATUS_COLOR,
@@ -61,8 +62,6 @@ import {
   ROLL_STATUS_LABEL,
   trLabel,
 } from '../../../utils/labels';
-
-const PAGE_SIZE = 10;
 
 // Barkod tipi sezgisi — yanlış alana okutmayı backend 404'üne güvenmeden anında,
 // net mesajla yakalar. Refakat kartı "RK-", top (rulo) "TEKS-" ile başlar; ikisi
@@ -80,6 +79,8 @@ interface ScannedRoll {
   id: string;
   /** Açık kumaş Roll'lar barkodsuz olabilir; fasona giden hep barkodlu. Defansif. */
   barcode: string | null;
+  /** Topun kumaşı (Item) — sevk anında WO hedef kumaşıyla override hesaplamak için. */
+  itemId: string | null;
   itemName: string;
   colorName?: string | null;
   currentQty: number;
@@ -90,6 +91,7 @@ interface ScannedRoll {
 
 export default function FasonSevkScreen() {
   const qc = useQueryClient();
+  const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const device = useDeviceType();
   const isPhone = device === 'phone';
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
@@ -120,12 +122,14 @@ export default function FasonSevkScreen() {
   // Top barkodu kamera tarama — okutulan barkod barcodeInput'a yazılır + resolve edilir.
   const [rollScannerOpen, setRollScannerOpen] = useState(false);
   const [rollPickerOpen, setRollPickerOpen] = useState(false);
-  const [recentDispatchesOpen, setRecentDispatchesOpen] = useState(false);
-  const [dispatchesPage, setDispatchesPage] = useState(1);
 
   const [plateNumber, setPlateNumber] = useState('');
   const [driverName, setDriverName] = useState('');
   const [notes, setNotes] = useState('');
+  // Boyahaneye özel talimat — sevk notundan ayrı. Operatör girişi yalnızca flag
+  // açıkken (Electron ayarı, default kapalı); kapalıyken not iş emrinden gelir.
+  const [dyehouseNote, setDyehouseNote] = useState('');
+  const dyehouseNoteMobileEntry = useDyehouseNoteMobileEntry();
   // Sevk bilgileri (plaka/sürücü/not) opsiyonel — katlanır bölüm, varsayılan kapalı.
   const [shippingOpen, setShippingOpen] = useState(false);
 
@@ -210,19 +214,22 @@ export default function FasonSevkScreen() {
           filters: { status: 'PLANNED,IN_PROGRESS' },
           search: woSearch || undefined,
         },
-        { withOrderDetail: true, excludeWithOpenDispatch: true }
+        // Çoklu sevk: açık sevki olan WO'lar da listede kalır (boyahaneye ek
+        // parti gönderilebilir). excludeWithOpenDispatch artık geçilmez.
+        { withOrderDetail: true }
       ),
     placeholderData: (prev) => prev,
   });
 
-  // Sadece açık fason (EXTERNAL + PENDING/ACTIVE) adımı olan WO'ları göster.
+  // Fason (EXTERNAL) adımı olan WO'ları göster. Çoklu sevk: COMPLETED fason
+  // adımı da uygundur (ek parti için yeniden açılır); sadece SKIPPED/CANCELLED
+  // adımlar sevke kapalı.
   const externalOpenWOs = useMemo(() => {
     const list = woQuery.data?.data ?? [];
     return list.filter((w) =>
       (w.steps ?? []).some(
         (s) =>
           s.station?.type === 'EXTERNAL' &&
-          s.status !== 'COMPLETED' &&
           s.status !== 'SKIPPED' &&
           s.status !== 'CANCELLED',
       ),
@@ -310,10 +317,11 @@ export default function FasonSevkScreen() {
 
   const externalSteps = useMemo<WorkOrderStep[]>(() => {
     const steps = woDetailQuery.data?.data?.steps ?? [];
+    // Çoklu sevk: COMPLETED fason adımı da seçilebilir (ek parti gönderilince
+    // backend adımı yeniden ACTIVE'e açar). Sadece SKIPPED/CANCELLED hariç.
     return steps.filter(
       (s) =>
         s.station?.type === 'EXTERNAL' &&
-        s.status !== 'COMPLETED' &&
         s.status !== 'SKIPPED' &&
         s.status !== 'CANCELLED'
     );
@@ -375,22 +383,14 @@ export default function FasonSevkScreen() {
         });
         return;
       }
-      // Picker'la aynı kural: açık sevki varsa kart okutmaya izin verme.
-      // Operatör önce eski sevki iptal etmek veya mal kabul yapmak zorunda.
-      if (card.hasOpenDispatch) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        Toast.show({
-          type: 'error',
-          text1: 'Açık fason sevki var',
-          text2: 'Önce eski sevki iptal edin veya mal kabul yapın.',
-        });
-        return;
-      }
-      // Picker filtresiyle aynı: en az 1 açık EXTERNAL adım olmalı.
+      // Çoklu sevk: açık sevk olması artık kart okutmayı engellemez — boyahaneye
+      // ek parti gönderilebilir (aynı topu iki kez gönderme backend per-roll
+      // status kontrolüyle zaten engelli).
+      // Picker filtresiyle aynı: sevke uygun (SKIPPED/CANCELLED olmayan) en az
+      // bir EXTERNAL adım olmalı; COMPLETED adım ek parti için yeniden açılır.
       const hasOpenExternal = (wo.steps ?? []).some(
         (s) =>
           s.station?.type === 'EXTERNAL' &&
-          s.status !== 'COMPLETED' &&
           s.status !== 'SKIPPED' &&
           s.status !== 'CANCELLED',
       );
@@ -509,19 +509,7 @@ export default function FasonSevkScreen() {
     [externalSteps]
   );
 
-  // ── Geçmiş sevkler — paginated ──
-  const dispatchesQuery = useQuery({
-    queryKey: ['dispatches', 'recent', dispatchesPage],
-    queryFn: () =>
-      subcontractorService.listDispatches({
-        page: dispatchesPage,
-        pageSize: PAGE_SIZE,
-      }),
-    placeholderData: (prev) => prev,
-  });
-
-  // Son Sevkler modal'ı her açılışta taze veri çek.
-  useRefetchOnOpen(dispatchesQuery.refetch, recentDispatchesOpen);
+  // Geçmiş sevkler artık ayrı tam sayfada (FasonSevkGecmisi) — cursor + filtreli.
 
   // Item mismatch modal state — backend "ITEM_MISMATCH" döndüğünde set edilir,
   // kullanıcı onayla → retry with allowItemOverride. Vars saklanır ki retry
@@ -529,6 +517,16 @@ export default function FasonSevkScreen() {
   const [itemMismatch, setItemMismatch] = useState<{
     details: ItemMismatchDetails;
     originalVars: DispatchRequest;
+  } | null>(null);
+
+  // Okutma-anı kumaş uyuşmazlığı — top eklenirken WO hedef kumaşı (targetItem)
+  // ile topun kumaşı farklıysa, listeye eklemeden ÖNCE onay diyaloğu göster.
+  // Yalnızca kumaşa (Item) bakar; en / metraj / kalite önemsiz. Operatör onaylarsa
+  // top eklenir ve sevkte allowItemOverride ile gider (ikinci kez sorulmaz).
+  const [pendingMismatch, setPendingMismatch] = useState<{
+    roll: Roll;
+    expectedLabel: string;
+    rollItemLabel: string;
   } | null>(null);
 
   // ── Mutations ──
@@ -571,6 +569,7 @@ export default function FasonSevkScreen() {
       setPlateNumber('');
       setDriverName('');
       setNotes('');
+      setDyehouseNote('');
       setDetailsCollapsed(true);
       // Listeleri tazele (yeni dispatch, WO statüsü)
       qc.invalidateQueries({ queryKey: ['dispatches'] });
@@ -600,57 +599,43 @@ export default function FasonSevkScreen() {
     dispatchMutation.mutate(retryVars);
   };
 
-  const cancelMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      subcontractorService.cancelDispatch(id, { reason }),
-    onSuccess: (res) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({
-        type: 'success',
-        text1: 'Sevk iptal edildi',
-        text2: res.data?.dispatchNo,
-      });
-      qc.invalidateQueries({ queryKey: ['dispatches'] });
-    },
-    onError: (err: Error) => {
-      Toast.show({ type: 'error', text1: 'İptal başarısız', text2: err.message });
-    },
-  });
-
-  // RecentDispatchesModal'a giden array referansını sabitle: query.data undefined
-  // iken `?? []` her render'da yeni dizi yaratıyordu → modal'a yeni prop → FlashList
-  // gereksiz re-process. useMemo yalnızca query.data değişimde yeni referans verir.
-  const recentDispatches = useMemo(
-    () => dispatchesQuery.data?.data ?? [],
-    [dispatchesQuery.data],
-  );
-  const handleRecentDispatchesDismiss = useCallback(
-    () => setRecentDispatchesOpen(false),
-    [],
-  );
-  const handleRecentDispatchesRefresh = useCallback(
-    () => {
-      void dispatchesQuery.refetch();
-    },
-    [dispatchesQuery],
-  );
-  const handleCancelDispatchMutation = useCallback(
-    async (id: string, reason: string) => {
-      await cancelMutation.mutateAsync({ id, reason });
-    },
-    [cancelMutation],
-  );
+  // Geçmişe git — eski "Son Sevkler" modalı yerine tam sayfa.
+  const openHistory = useCallback(() => nav.navigate('FasonSevkGecmisi'), [nav]);
 
   // ── Barkod ekleme ──
-  const addRollToList = (r: Roll): boolean => {
+  // 'added'     → listeye eklendi
+  // 'duplicate' → zaten listede (picker açık kalsın, başka top seçilebilir)
+  // 'mismatch'  → kumaş uyuşmazlığı, onay diyaloğu açıldı (picker kapanmalı)
+  type AddResult = 'added' | 'duplicate' | 'mismatch';
+  const addRollToList = (r: Roll, opts?: { overrideItem?: boolean }): AddResult => {
     if (scannedRolls.some((s) => s.barcode === r.barcode)) {
       Toast.show({ type: 'info', text1: 'Bu top zaten listede' });
-      return false;
+      return 'duplicate';
+    }
+    // Kumaş (Item) kontrolü — SADECE kumaşa bakar; en/metraj/kalite önemsiz.
+    // İş emrinin hedef kumaşı varsa ve topun kumaşı farklıysa, eklemeden önce
+    // operatöre "yanlış kumaş?" onayı sor. overrideItem=true ise (operatör zaten
+    // onayladı) kontrolü atla.
+    const rollItemId = r.item?.id ?? r.itemId ?? null;
+    if (
+      !opts?.overrideItem &&
+      selectedWo?.targetItemId &&
+      rollItemId &&
+      rollItemId !== selectedWo.targetItemId
+    ) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setPendingMismatch({
+        roll: r,
+        expectedLabel: selectedWo.targetItem?.name ?? '—',
+        rollItemLabel: r.item?.name ?? '—',
+      });
+      return 'mismatch';
     }
     setScannedRolls((prev) => [
       {
         id: r.id,
         barcode: r.barcode,
+        itemId: rollItemId,
         itemName: r.item?.name ?? '—',
         colorName: r.color?.name ?? null,
         currentQty: r.currentQty,
@@ -661,7 +646,7 @@ export default function FasonSevkScreen() {
       ...prev,
     ]);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    return true;
+    return 'added';
   };
 
   const handleAddBarcodeFromInput = () => addBarcodeFromString(barcodeInput);
@@ -732,6 +717,12 @@ export default function FasonSevkScreen() {
       Toast.show({ type: 'error', text1: 'Eksik alan', text2: 'Tüm seçimleri yapın' });
       return;
     }
+    // Operatör okutma anında "yine de ekle" diyerek onayladığı yanlış-kumaş toplar
+    // için backend'e override geç — aksi halde sevkte ikinci kez "Ürün Uyuşmazlığı"
+    // modalı çıkar. Mismatch yoksa flag gönderme (undefined).
+    const hasItemMismatch =
+      !!selectedWo?.targetItemId &&
+      scannedRolls.some((r) => r.itemId && r.itemId !== selectedWo.targetItemId);
     dispatchMutation.mutate({
       workOrderId,
       stepId,
@@ -740,6 +731,8 @@ export default function FasonSevkScreen() {
       plateNumber: plateNumber.trim() || undefined,
       driverName: driverName.trim() || undefined,
       notes: notes.trim() || undefined,
+      dyehouseNote: dyehouseNote.trim() || undefined,
+      allowItemOverride: hasItemMismatch || undefined,
     });
   };
 
@@ -844,14 +837,13 @@ export default function FasonSevkScreen() {
       headerExtras={
         <View style={styles.headerExtrasRow}>
           <SyncStatusChip />
-          {isPhone ? (
-            <Appbar.Action
-              icon="history"
-              color="#fff"
-              onPress={() => setRecentDispatchesOpen(true)}
-              accessibilityLabel="Son sevkler"
-            />
-          ) : null}
+          {/* Geçmiş — hem telefon hem tablette header'dan erişilebilir. */}
+          <Appbar.Action
+            icon="history"
+            color="#fff"
+            onPress={openHistory}
+            accessibilityLabel="Fason sevk geçmişi"
+          />
         </View>
       }
     >
@@ -1081,6 +1073,27 @@ export default function FasonSevkScreen() {
             </Surface>
           )}
 
+          {/* ④ Boyahane Notu (opsiyonel) — yalnızca Electron ayarından açıldıysa
+              görünür (default kapalı). Kapalıyken not iş emrinden gelir. Boş
+              bırakılırsa yine iş emrindeki boyahane notu kullanılır. Sevk fişinde
+              "İstenen Renk"in yanında görünür; sonradan Electron'dan düzenlenebilir. */}
+          {workOrderId && dyehouseNoteMobileEntry && (
+            <Surface style={styles.card} elevation={1}>
+              <View style={styles.sectionBody}>
+                <Text style={styles.sectionTitle}>Boyahane Notu (opsiyonel)</Text>
+                <TextInput
+                  mode="outlined"
+                  value={dyehouseNote}
+                  onChangeText={setDyehouseNote}
+                  placeholder="Boş bırakılırsa iş emrindeki not kullanılır..."
+                  multiline
+                  numberOfLines={3}
+                  style={[styles.input, styles.labelSpaced]}
+                />
+              </View>
+            </Surface>
+          )}
+
           <Button
             mode="contained"
             icon="truck-delivery"
@@ -1126,7 +1139,7 @@ export default function FasonSevkScreen() {
                   mode="contained-tonal"
                   icon="history"
                   compact
-                  onPress={() => setRecentDispatchesOpen(true)}
+                  onPress={openHistory}
                 >
                   Son Sevkler
                 </Button>
@@ -1230,7 +1243,9 @@ export default function FasonSevkScreen() {
         excludeIds={scannedRolls.map((r) => r.id)}
         onDismiss={() => setRollPickerOpen(false)}
         onSelect={(r) => {
-          if (addRollToList(r)) setRollPickerOpen(false);
+          // 'duplicate' dışında picker'ı kapat — 'mismatch'te onay diyaloğu
+          // picker'ın üstünde açık kalmasın diye de kapatmak gerekir.
+          if (addRollToList(r) !== 'duplicate') setRollPickerOpen(false);
         }}
       />
 
@@ -1273,22 +1288,6 @@ export default function FasonSevkScreen() {
         title="Top Barkodunu Okut"
       />
 
-      <RecentDispatchesModal
-        visible={recentDispatchesOpen}
-        dispatches={recentDispatches}
-        loading={dispatchesQuery.isLoading}
-        fetching={dispatchesQuery.isFetching}
-        error={dispatchesQuery.isError ? (dispatchesQuery.error as Error) : null}
-        isCanceling={cancelMutation.isPending}
-        page={dispatchesQuery.data?.pagination.page ?? 1}
-        totalPages={dispatchesQuery.data?.pagination.totalPages ?? 1}
-        total={dispatchesQuery.data?.pagination.total ?? 0}
-        onDismiss={handleRecentDispatchesDismiss}
-        onRefresh={handleRecentDispatchesRefresh}
-        onPageChange={setDispatchesPage}
-        onCancelDispatch={handleCancelDispatchMutation}
-      />
-
       {/* Item mismatch onay modal'ı — WO ürünü ile rulo ürünü uyuşmuyor.
           Operatör "Yine de sevk et" derse allowItemOverride:true ile retry. */}
       <ConfirmDialog
@@ -1328,6 +1327,47 @@ export default function FasonSevkScreen() {
         onDismiss={() => setItemMismatch(null)}
         onConfirm={handleItemMismatchOverride}
       />
+
+      {/* Okutma-anı kumaş uyuşmazlığı — top eklenirken WO hedef kumaşı ile
+          topun kumaşı farklı. Operatör "Yine de Ekle" derse top listeye eklenir
+          (overrideItem) ve sevkte allowItemOverride ile gider. */}
+      <ConfirmDialog
+        visible={pendingMismatch !== null}
+        kind="destructive"
+        title="Yanlış kumaş?"
+        description={
+          pendingMismatch ? (
+            <View>
+              <Text style={{ fontSize: 14, color: '#475569', lineHeight: 20 }}>
+                İş emri{' '}
+                <Text style={{ fontWeight: '700' }}>{pendingMismatch.expectedLabel}</Text>{' '}
+                kumaşı istiyor, ama bu top{' '}
+                <Text style={{ fontWeight: '700' }}>{pendingMismatch.rollItemLabel}</Text>:
+              </Text>
+              <Text style={{ marginTop: 8, fontSize: 13, color: '#0f172a' }}>
+                {pendingMismatch.roll.barcode ?? '(barkodsuz)'}
+              </Text>
+              <Text
+                style={{ marginTop: 12, fontSize: 13, color: '#b91c1c', fontWeight: '600' }}
+              >
+                Yanlış kumaş okutmuş olabilirsin. Yine de eklersen sevkte "ürün
+                uyuşmazlığı" olarak işaretlenir.
+              </Text>
+            </View>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel="Yine de Ekle"
+        cancelLabel="Vazgeç"
+        onDismiss={() => setPendingMismatch(null)}
+        onConfirm={() => {
+          if (pendingMismatch) {
+            addRollToList(pendingMismatch.roll, { overrideItem: true });
+          }
+          setPendingMismatch(null);
+        }}
+      />
     </ScreenChrome>
   );
 }
@@ -1348,7 +1388,6 @@ function RollPickerModal({
   onSelect: (r: Roll) => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
   const device = useDeviceType();
   const isPhone = device === 'phone';
   const [search, setSearch] = useState('');
@@ -1382,16 +1421,7 @@ function RollPickerModal({
   const rolls = allRolls.filter((r) => !excludeIds.includes(r.id));
 
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.5}
-      style={pickerStyles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
-    >
+    <AppModal visible={visible} onDismiss={onDismiss}>
       <View
         style={[
           pickerStyles.sheet,
@@ -1576,13 +1606,11 @@ function RollPickerModal({
           )}
         </View>
       </View>
-      <Toast />
-    </RNModal>
+    </AppModal>
   );
 }
 
 const pickerStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
   sheet: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -1726,7 +1754,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 10,
-    minHeight: 44,
+    // Fason Firma picker'ı (pickerInner) ile aynı sabit yükseklik → iki input eşit.
+    height: 52,
   },
   lockedIconBox: {
     width: 30,
@@ -1779,7 +1808,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingLeft: 12,
     paddingRight: 4,
-    minHeight: 44,
+    // Fason Adımı (lockedInfo / picker) ile aynı sabit yükseklik → iki input eşit.
+    height: 52,
   },
   pickerText: { fontSize: 14, color: '#0f172a', flex: 1 },
   pickerPlaceholder: { color: '#94a3b8' },

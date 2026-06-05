@@ -1,5 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Printer, Save } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -53,6 +55,13 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
               Sevk bilgisi bulunamadı.
             </div>
           )}
+          {snap && (
+            <DyehouseNoteEditor
+              dispatchId={dispatchId!}
+              value={snap.dyehouseNote}
+              woValue={snap.woDyehouseNote}
+            />
+          )}
           {snap && <PrintableSheet snap={snap} />}
         </div>
 
@@ -74,7 +83,88 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
   );
 }
 
+/**
+ * Boyahane notu düzenleyici — `.print-area` DIŞINDA durur, baskıya girmez.
+ * Kaydedince print snapshot query'sini invalidate eder; aşağıdaki fişte not
+ * güncel görünür. Bu alan sevkin KENDİ notunu (override) düzenler; boş
+ * bırakılırsa fişte iş emrindeki boyahane notu (`woValue`) basılır.
+ */
+function DyehouseNoteEditor({
+  dispatchId,
+  value,
+  woValue,
+}: {
+  dispatchId: string;
+  value: string | null;
+  woValue: string | null;
+}) {
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState(value ?? "");
+
+  // Başka kayıt açıldığında / sunucudan güncel not geldiğinde alanı eşitle.
+  useEffect(() => {
+    setDraft(value ?? "");
+  }, [value, dispatchId]);
+
+  const mutation = useMutation({
+    mutationFn: (note: string | null) =>
+      workOrderService.updateDispatchDyehouseNote(dispatchId, note),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dispatch-print", dispatchId] });
+      toast.success("Boyahane notu kaydedildi");
+    },
+  });
+
+  const trimmed = draft.trim();
+  const dirty = trimmed !== (value ?? "").trim();
+
+  return (
+    <div className="mb-3 rounded-md border bg-background p-3">
+      <div className="mb-1 flex items-center justify-between">
+        <label
+          htmlFor="dyehouse-note"
+          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        >
+          Boyahane Notu
+        </label>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="h-7 gap-1"
+          disabled={!dirty || mutation.isPending}
+          onClick={() => mutation.mutate(trimmed || null)}
+        >
+          <Save className="h-3.5 w-3.5" />
+          {mutation.isPending ? "Kaydediliyor…" : "Kaydet"}
+        </Button>
+      </div>
+      <textarea
+        id="dyehouse-note"
+        rows={2}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        maxLength={1000}
+        placeholder="Boyahaneye talimat (örn. yıkama yapma, matlaştır)…"
+        className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      />
+      {!trimmed && woValue?.trim() ? (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Boş bırakılırsa iş emrindeki boyahane notu basılır:{" "}
+          <span className="font-medium text-orange-700">«{woValue.trim()}»</span>
+        </p>
+      ) : (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Fişe işlenir ve baskıda görünür. Genel sevk notundan ayrıdır.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function PrintableSheet({ snap }: { snap: DispatchPrintSnapshot }) {
+  // Efektif boyahane notu: sevkin kendi notu (override) → yoksa WO notu (default).
+  const dyehouseNote = snap.dyehouseNote ?? snap.woDyehouseNote;
   return (
     <div className="print-area mx-auto max-w-[210mm] bg-white p-6 text-[12px] text-black">
       <div className="flex items-start justify-between border-b-2 border-black pb-3">
@@ -139,6 +229,17 @@ function PrintableSheet({ snap }: { snap: DispatchPrintSnapshot }) {
           </div>
         )}
       </div>
+
+      {dyehouseNote && (
+        <div className="mt-3 rounded border-2 border-black px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-700">
+            Boyahane Notu
+          </div>
+          <div className="mt-0.5 whitespace-pre-wrap text-[12px] font-medium">
+            {dyehouseNote}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4">
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide">

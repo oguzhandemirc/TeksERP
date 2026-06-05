@@ -66,7 +66,7 @@ src/
 | List | `@shopify/flash-list` |
 | SVG/QR | `react-native-svg`, `react-native-qrcode-svg` |
 | Network | `@react-native-community/netinfo` |
-| UX | `react-native-modal`, `react-native-toast-message` |
+| UX | `react-native-toast-message` (modal için `react-native-modal` KALDIRILDI → `src/components/AppModal.tsx`: Portal+Reanimated, tüm modallar bunu kullanır) |
 | Util | `dayjs` |
 
 **Yeni paket eklemeden önce onay al.**

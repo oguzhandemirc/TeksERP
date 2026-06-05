@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,10 +7,9 @@ import {
   TextInput as RNTextInput,
 } from 'react-native';
 import RefreshButton from './RefreshButton';
-import Modal from 'react-native-modal';
+import AppModal from './AppModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDeviceType } from '../hooks/useDeviceType';
-import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 import {
   Text,
   TextInput,
@@ -91,6 +90,10 @@ interface ClientProps extends BaseProps {
 
 type Props = PaginatedProps | ClientProps;
 
+// Modül seviyesinde kararlı referans — her render'da yeni fn üretip FlashList'i
+// gereksiz yere yeniden çalıştırmasın.
+const keyExtractor = (item: PickerOption) => item.value;
+
 export default function PickerModal(props: Props) {
   const {
     visible,
@@ -112,7 +115,6 @@ export default function PickerModal(props: Props) {
 
   const paginated = props.paginated === true;
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
   const insets = useSafeAreaInsets();
   const device = useDeviceType();
   const isPhone = device === 'phone';
@@ -184,6 +186,18 @@ export default function PickerModal(props: Props) {
     listRef.current?.scrollToIndex({ index, animated: true });
   };
 
+  // Tek, kararlı seçim handler'ı — hem çerçeveli grup hem ana liste kullanır.
+  // useCallback olmadan her render'da yeni closure üretir, PickerCard memo'sunu
+  // kırardı (tüm görünür kartlar yeniden render).
+  const handlePick = useCallback(
+    (value: string) => {
+      onSelect(value);
+      onDismiss();
+      if (!paginated) setClientSearch('');
+    },
+    [onSelect, onDismiss, paginated],
+  );
+
   // Çerçeveli sabit grup — aramayla birlikte filtrelenir, alfabetik sıralanmaz.
   const filteredPinned = useMemo(() => {
     if (paginated || pinnedOptions.length === 0) return [] as PickerOption[];
@@ -211,17 +225,26 @@ export default function PickerModal(props: Props) {
               <PickerCard
                 option={item}
                 selected={item.value === selectedValue}
-                onPress={() => {
-                  onSelect(item.value);
-                  onDismiss();
-                  if (!paginated) setClientSearch('');
-                }}
+                onPress={handlePick}
               />
             </View>
           ))}
         </View>
       </View>
     ) : null;
+
+  // Kararlı renderItem — yalnız seçim değişince kimliği değişir; PickerCard
+  // React.memo olduğundan sadece eski/yeni seçili kart yeniden render olur.
+  const renderItem = useCallback(
+    ({ item }: { item: PickerOption }) => (
+      <PickerCard
+        option={item}
+        selected={item.value === selectedValue}
+        onPress={handlePick}
+      />
+    ),
+    [selectedValue, handlePick],
+  );
 
   // Paginated submit handler
   const submitSearch = () => {
@@ -230,27 +253,22 @@ export default function PickerModal(props: Props) {
     Keyboard.dismiss();
   };
 
+  // Ortak AppModal (react-native-paper Portal+Modal). Tek opacity Animated.Value
+  // backdrop + içeriği BİRLİKTE fade ettiğinden react-native-modal'ın New Arch'taki
+  // "kapan→aç→kapan" desenkron flicker'ı yapısal olarak imkânsız. Ayrı native pencere
+  // açmaz → eski fullscreen backdrop hack'ine de gerek kalmadı.
   return (
-    <Modal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.5}
-      style={styles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      avoidKeyboard={false}
-      {...modalProps}
+    <AppModal
+      visible={visible}
+      onDismiss={onDismiss}
+      contentStyle={[
+        styles.sheet,
+        {
+          width: Math.min(isPhone ? winW * 0.95 : winW * 0.82, maxSheetW),
+          height: Math.min(isPhone ? winH * 0.85 : winH * 0.8, maxSheetH),
+        },
+      ]}
     >
-      <View
-        style={[
-          styles.sheet,
-          {
-            width: Math.min(isPhone ? winW * 0.95 : winW * 0.82, maxSheetW),
-            height: Math.min(isPhone ? winH * 0.85 : winH * 0.8, maxSheetH),
-          },
-        ]}
-      >
         {/* Başlık satırı — telefonda search ayrı satıra düşer */}
         <View style={styles.header}>
           <Text variant="titleLarge" style={styles.title} numberOfLines={1}>
@@ -353,20 +371,10 @@ export default function PickerModal(props: Props) {
                 <FlashList
                   ref={listRef}
                   data={listData}
-                  keyExtractor={(item) => item.value}
+                  keyExtractor={keyExtractor}
                   numColumns={effectiveColumns}
                   ListHeaderComponent={pinnedHeader}
-                  renderItem={({ item }) => (
-                    <PickerCard
-                      option={item}
-                      selected={item.value === selectedValue}
-                      onPress={() => {
-                        onSelect(item.value);
-                        onDismiss();
-                        if (!paginated) setClientSearch('');
-                      }}
-                    />
-                  )}
+                  renderItem={renderItem}
                 />
               </View>
               {/* A-Z hızlı indeks — client modda, yeterli kayıt varsa */}
@@ -401,8 +409,7 @@ export default function PickerModal(props: Props) {
             style={styles.pagination}
           />
         )}
-      </View>
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -482,20 +489,20 @@ function SearchControls({
   );
 }
 
-function PickerCard({
+const PickerCard = React.memo(function PickerCard({
   option,
   selected,
   onPress,
 }: {
   option: PickerOption;
   selected: boolean;
-  onPress: () => void;
+  onPress: (value: string) => void;
 }) {
   const hasDetails = !!option.details?.length;
   return (
     <View style={styles.cardWrap}>
       <TouchableRipple
-        onPress={onPress}
+        onPress={() => onPress(option.value)}
         borderless
         rippleColor="rgba(79, 70, 229, 0.15)"
         style={[
@@ -530,12 +537,11 @@ function PickerCard({
       </TouchableRipple>
     </View>
   );
-}
+});
 
 const SEARCH_HEIGHT = 40;
 
 const styles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
   sheet: {
     backgroundColor: '#fff',
     borderRadius: 14,

@@ -9,6 +9,7 @@ export type MobilePermission =
   | 'mobile:fason-kabul'
   | 'mobile:kartela-sevk'
   | 'mobile:kartela-kabul'
+  | 'mobile:iade'
   | 'mobile:*';
 
 /**
@@ -37,7 +38,8 @@ export type MobileScreenKey =
   | 'FasonSevk'
   | 'FasonKabul'
   | 'KartelaSevk'
-  | 'KartelaKabul';
+  | 'KartelaKabul'
+  | 'IadeGirisi';
 
 export interface MobileScreenMeta {
   key: MobileScreenKey;
@@ -77,18 +79,22 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     description: 'Depo girişi ve raf takibi',
   },
   {
+    // Anahtar geri-uyum için 'TartiPaket' kalır; ekran ASIL "Sevkiyat" (tartım+paket+irsaliye+
+    // çoğu işin fiilen sevk edildiği yer). İkinci ekran (key 'Sevkiyat') artık "Sevk Çıkışı".
     key: 'TartiPaket',
     permission: 'mobile:tarti-paket',
-    label: 'Tartı + Paket',
+    label: 'Sevkiyat',
     icon: 'scale-balance',
-    description: 'Tartım ve paketleme',
+    description: 'Tartım, paketleme ve irsaliye',
   },
   {
+    // Key 'Sevkiyat' (permission mobile:sevkiyat) korunur; ekran "Sevk Çıkışı": bekleyen
+    // (ara depo/kapı) sevklere çıkış ver / "ambar aldı" onayı.
     key: 'Sevkiyat',
     permission: 'mobile:sevkiyat',
-    label: 'Sevkiyat',
+    label: 'Sevk Çıkışı',
     icon: 'truck-delivery',
-    description: 'Sevk hazırlık ve çıkış',
+    description: 'Bekleyen sevklere çıkış / onay',
   },
   {
     key: 'FasonSevk',
@@ -117,6 +123,13 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Kartela Kabul',
     icon: 'palette-swatch-variant',
     description: 'Kartela firmasından dönen kartelalar',
+  },
+  {
+    key: 'IadeGirisi',
+    permission: 'mobile:iade',
+    label: 'İade Girişi',
+    icon: 'undo-variant',
+    description: 'Müşteriden dönen topu Hazır Depoya al',
   },
 ];
 

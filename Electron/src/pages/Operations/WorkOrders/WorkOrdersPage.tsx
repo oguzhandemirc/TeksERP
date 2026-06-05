@@ -18,13 +18,12 @@ import { WorkOrderDetailSheet } from "./WorkOrderDetailSheet";
 import { WorkOrderFormDialog } from "./WorkOrderFormDialog";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import { WorkOrderType } from "@/types/enums";
-import { pickedLinesFromOrder, type WoSeedTarget } from "./workOrderPrefill";
+import { type WoSeedTarget } from "./workOrderPrefill";
 import type { PickedOrderLine } from "./OrderPickerDialog";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
 import type { CustomRouteStep } from "./RouteDesignerDialog";
 import type { WorkOrder } from "./types";
 import type { WorkOrderFormValues } from "./schema";
-import type { Order } from "@/pages/Operations/Orders/types";
 
 const FILTERS: FilterDef[] = [
   {
@@ -82,6 +81,8 @@ interface StepPlanPayload {
 
 interface CreatePayload {
   type: string;
+  /** Parti Kodu. Boş/atlanırsa backend otomatik üretir (P-YYMMDD-NNN). */
+  batchNumber?: string;
   routeTemplateId?: string;
   steps?: CustomRouteStep[];
   targetItemId: string | null;
@@ -94,6 +95,7 @@ interface CreatePayload {
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   foldType: string | null;
+  dyehouseNote: string | null;
 }
 
 function buildPayload(
@@ -126,9 +128,14 @@ function buildPayload(
         };
       })();
 
+  // Parti kodu: doluysa gönder (manuel/override/düzenleme); boşsa hiç gönderme
+  // → backend otomatik üretir (otomatik mod).
+  const batchNumber = trimOrNull(v.batchNumber);
+
   return {
     // Tip artık formda seçilmez — bağlı kalem varsa siparişe özel, yoksa stoğa.
     type: hasLines ? WorkOrderType.ORDER_PRODUCTION : WorkOrderType.STOCK_PRODUCTION,
+    ...(batchNumber ? { batchNumber } : {}),
     ...routePart,
     targetItemId: v.targetItemId ?? null,
     targetColorId: v.targetColorId ?? null,
@@ -139,6 +146,7 @@ function buildPayload(
     plannedStartDate: dateOrNull(v.plannedStartDate),
     plannedEndDate: dateOrNull(v.plannedEndDate),
     foldType: trimOrNull(v.foldType),
+    dyehouseNote: trimOrNull(v.dyehouseNote),
   };
 }
 
@@ -155,20 +163,17 @@ export function WorkOrdersPage() {
 
   // Orders / Ürün Dengesi ekranından router state ile gelir:
   // - seedPickedLines: belirli spec'in açık kalemleri (hazır picker satırı,
-  //   openQty=kalan; link-only). Toplu seçim + Denge "siparişlere bağla" modu.
+  //   openQty=kalan; link-only). Toplu seçim, "bu üründen iş emri" kısayolu +
+  //   Denge "siparişlere bağla" modu — hepsi tek ürün/renk/en'e süzülmüş gelir.
   // - seedTarget: sipariş bağı olmadan hedef spec + miktar (Denge "stoğa üret").
-  // - seedOrder: tek siparişin "iş emri oluştur" kısayolu (kalan kalemler süzülür).
   useEffect(() => {
     const state = location.state as
       | {
-          seedOrder?: Order;
           seedPickedLines?: PickedOrderLine[];
           seedTarget?: WoSeedTarget;
         }
       | null;
-    const picked =
-      state?.seedPickedLines ??
-      (state?.seedOrder ? pickedLinesFromOrder(state.seedOrder) : []);
+    const picked = state?.seedPickedLines ?? [];
     if (picked.length > 0) {
       setSeedLines(picked);
       setSeedTarget(null);
@@ -258,7 +263,7 @@ export function WorkOrdersPage() {
       <DataTableToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Parti numarası ara..."
+        placeholder="Parti kodu ara..."
         table={table}
         exportName="İş Emirleri"
       />

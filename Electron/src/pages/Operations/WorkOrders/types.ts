@@ -38,6 +38,9 @@ export interface StepDispatch {
   plateNumber: string | null;
   driverName: string | null;
   notes: string | null;
+  dyehouseNote: string | null;
+  /** WO'daki boyahane notu (default) — sevkin kendi notu boşsa buna düşülür. */
+  woDyehouseNote: string | null;
   subcontractor: { id: string; name: string };
   dispatchedBy: { id: string; fullName: string | null; username: string } | null;
 }
@@ -91,6 +94,8 @@ export interface WorkOrder {
   targetColorId: string | null;
   /** Tambur planlama bilgisi — operatöre default olarak gelir. */
   foldType: string | null;
+  /** Boyahaneye özel talimat — fason sevkinde kullanılır. */
+  dyehouseNote: string | null;
   steps: WorkOrderStepLite[];
   routeTemplate?: { id: string; code: string | null; name: string } | null;
   targetItem?: WorkOrderTargetItem | null;
@@ -122,16 +127,16 @@ export interface WorkOrder {
     };
   }[];
   /** Sadece findById response'unda — bu WO'nun ürettiği nihai toplar.
-   *  Headline: count = warehouse+a1+fire (kartela ayrı), totalMeters =
-   *  warehouse+a1 (fire metresi sayılmaz). Tambur tüm çıktıyı status=WAREHOUSE
-   *  olarak yazar; ayrım qualityGrade (1.KALITE/A1/FIRE) üzerinden. */
+   *  Headline: count = warehouse+a1+fire, totalMeters = warehouse+a1 (fire
+   *  metresi sayılmaz). Tambur tüm çıktıyı status=WAREHOUSE olarak yazar; ayrım
+   *  qualityGrade (1.KALITE/A1/FIRE) üzerinden. (Kartela artık WO'dan üretilmez —
+   *  bitmiş top → kartela fasonu; bu yüzden swatch alanı yok.) */
   producedRolls?: {
     count: number;
     totalMeters: number;
     warehouse: { count: number; totalMeters: number };
     a1: { count: number; totalMeters: number };
     fire: { count: number; totalMeters: number };
-    swatch: { count: number; totalLength: number };
     items: Array<{
       id: string;
       barcode: string | null;
@@ -140,15 +145,6 @@ export interface WorkOrder {
       currentQty: number;
       /** Anlık durum; WAREHOUSE = aktif, TAMBUR_CONSUMED = bölündü, CANCELLED = iptal. */
       status: RollStatus;
-      color: { code: string; name: string; hex: string | null } | null;
-      createdAt: string;
-    }>;
-    swatchItems: Array<{
-      id: string;
-      barcode: string;
-      length: number;
-      purpose: string | null;
-      parentBarcode: string | null;
       color: { code: string; name: string; hex: string | null } | null;
       createdAt: string;
     }>;

@@ -44,33 +44,39 @@ export const orderColumns: ColumnDef<Order>[] = [
   {
     id: "customer",
     header: () => <SortableHeader field="customer" label="Müşteri" />,
+    meta: { label: "Müşteri" },
     cell: ({ row }) =>
       row.original.customer?.name ?? <span className="text-muted-foreground">—</span>,
   },
   {
     id: "branch",
     header: () => <SortableHeader field="branch" label="Şube" />,
+    meta: { label: "Şube" },
     cell: ({ row }) =>
       row.original.branch?.name ?? <span className="text-muted-foreground">—</span>,
   },
   {
     accessorKey: "orderDate",
     header: () => <SortableHeader field="orderDate" label="Sipariş Tarihi" />,
+    meta: { label: "Sipariş Tarihi" },
     cell: ({ row }) => safeFormat(row.original.orderDate, "dd.MM.yyyy"),
   },
   {
     accessorKey: "deadline",
     header: () => <SortableHeader field="deadline" label="Termin" />,
+    meta: { label: "Termin" },
     cell: ({ row }) => <DeadlineBadge deadline={row.original.deadline} />,
   },
   {
     id: "lines",
     header: () => <SortableHeader field="lineCount" label="Kalem" />,
+    meta: { label: "Kalem" },
     cell: ({ row }) => <Badge variant="muted">{row.original.lines?.length ?? 0}</Badge>,
   },
   {
     id: "shipped",
     header: () => <SortableHeader field="shippedQty" label="Sevk" />,
+    meta: { label: "Sevk" },
     cell: ({ row }) => {
       const o = row.original;
       const requested = (o.lines ?? []).reduce((s, l) => s + Number(l.quantity ?? 0), 0);
@@ -92,6 +98,7 @@ export const orderColumns: ColumnDef<Order>[] = [
   {
     accessorKey: "status",
     header: () => <SortableHeader field="status" label="Durum" />,
+    meta: { label: "Durum" },
     cell: ({ row }) => (
       <StatusBadge
         status={row.original.status}

@@ -29,4 +29,5 @@ export const CODE_PREFIXES = {
   ROUTE: "ROT",
   FABRIC_PROPERTY: "OZL",
   RECIPE: "REC",
+  RETURN_REASON: "IADE",
 } as const;

@@ -103,6 +103,8 @@ export interface WorkOrderCreateInput {
   /** Tambur planlama bilgisi — "2-KAT" / "4-KAT" gibi. Tambur'a bilgi olarak
    *  iletilir; operatör finalize sırasında override edebilir. */
   foldType?:          string | null;
+  /** Boyahaneye özel talimat — fason sevkinde dispatch'e default kopyalanır. */
+  dyehouseNote?:      string | null;
   /**
    * Üretim çıktısı rulolarda olacak özellikler. "Renk veren" fason adımının
    * Fason Kabul'ünde Roll.properties'e bindirilir. Item.allowedProperties
@@ -142,15 +144,36 @@ export interface WorkOrderCreateInput {
   orderLineIds?: string[] | null;
 }
 
+// "Hedef özellik değiştir" geri-dönük yazımının dokunabileceği rulo durumları.
+// Canlı üretim + depodaki satışa hazır mal. HARİÇ tutulanlar: SHIPPED (müşteride —
+// geçmiş çarpıtılmamalı), SCRAP/CANCELLED (ölü), TAMBUR_CONSUMED/
+// SUBCONTRACTOR_CONSUMED/KARTELA_CONSUMED (emekli/içi boş parent), AT_KARTELA
+// (kartela firmasında, tükenecek). Önizleme (getTargetPropertyChangeImpact) ile
+// mutasyon (updateTargetProperties) AYNI kümeyi kullanır → onay = gerçek kapsam.
+const TARGET_PROP_FINISHED_STATUSES: RollStatus[] = [
+  RollStatus.WAREHOUSE,
+  RollStatus.PRODUCED,
+];
+const TARGET_PROP_INPROD_STATUSES: RollStatus[] = [
+  RollStatus.IN_PRODUCTION,
+  RollStatus.AT_SUBCONTRACTOR,
+  RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+  RollStatus.STOCK,
+];
+const TARGET_PROP_MUTABLE_STATUSES: RollStatus[] = [
+  ...TARGET_PROP_FINISHED_STATUSES,
+  ...TARGET_PROP_INPROD_STATUSES,
+];
+
 export class WorkOrderService {
   /**
-   * Auto-generate a batch number: "B-YYMMDD-NNN".
+   * Auto-generate a parti kodu (batchNumber): "P-YYMMDD-NNN".
    * Günlük sıra veritabanındaki mevcut maksimum +1.
    */
   async generateBatchNumber(): Promise<string> {
     const now = new Date();
     const prefix =
-      "B-" +
+      "P-" +
       String(now.getFullYear()).slice(2) +
       String(now.getMonth() + 1).padStart(2, "0") +
       String(now.getDate()).padStart(2, "0") +
@@ -178,6 +201,25 @@ export class WorkOrderService {
   }
 
   /**
+   * Kullanıcının verdiği parti kodu (batchNumber) benzersiz mi? Değilse net
+   * Türkçe hata fırlatır. excludeId verilirse o iş emrini hariç tutar (güncelleme).
+   * DB @unique kısıtı backstop'tur; bu ön-kontrol generic P2002 yerine anlaşılır
+   * mesaj verir (auto modda withBarcodeRetry'ın yanıltıcı "Barkod..." hatasını da önler).
+   */
+  private async assertBatchNumberUnique(
+    batchNumber: string,
+    excludeId?: string,
+  ): Promise<void> {
+    const existing = await prisma.workOrder.findUnique({
+      where: { batchNumber },
+      select: { id: true },
+    });
+    if (existing && existing.id !== excludeId) {
+      throw AppError.conflict(`Bu parti kodu zaten kullanılıyor: ${batchNumber}`);
+    }
+  }
+
+  /**
    * Create a new Work Order.
    *
    * Kurallar:
@@ -186,7 +228,8 @@ export class WorkOrderService {
    *   - routeTemplateId verilmezse `steps` zorunlu.
    *   - sipariş bağı (orderLineIds/orderLineAllocations) link-only; metraj taşımaz.
    *   - type=ORDER_PRODUCTION ise en az bir sipariş bağı zorunlu.
-   *   - batchNumber verilmezse otomatik üretilir (B-YYMMDD-NNN).
+   *   - batchNumber (Parti Kodu) verilmezse otomatik üretilir (P-YYMMDD-NNN);
+   *     verilirse benzersizliği doğrulanır.
    */
   async create(
     data: WorkOrderCreateInput,
@@ -433,10 +476,16 @@ export class WorkOrderService {
       }
     }
 
-    // ── batchNumber (R11 generator) ─────────────────────────────────────────
-    const batchNumber = data.batchNumber && data.batchNumber.trim().length > 0
-      ? data.batchNumber.trim()
-      : await this.generateBatchNumber();
+    // ── batchNumber / Parti Kodu ────────────────────────────────────────────
+    // Kullanıcı verdiyse (manuel veya otomatik-override) benzersizliğini doğrula;
+    // vermediyse otomatik üret (P-YYMMDD-NNN).
+    let batchNumber: string;
+    if (data.batchNumber && data.batchNumber.trim().length > 0) {
+      batchNumber = data.batchNumber.trim();
+      await this.assertBatchNumberUnique(batchNumber);
+    } else {
+      batchNumber = await this.generateBatchNumber();
+    }
 
     // Refakat kartı barkodu sequence çakışırsa (P2002) tx'i baştan dene.
     const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
@@ -471,6 +520,7 @@ export class WorkOrderService {
           targetItemId:      resolvedTargetItemId,
           targetColorId:     resolvedTargetColorId,
           foldType:          data.foldType          ?? null,
+          dyehouseNote:      data.dyehouseNote       ?? null,
           steps: {
             create: finalSteps.map((step, index) => ({
               stationId:              step.stationId,
@@ -825,6 +875,9 @@ export class WorkOrderService {
         plateNumber: string | null;
         driverName: string | null;
         notes: string | null;
+        dyehouseNote: string | null;
+        /** WO'daki boyahane notu (default) — sevkin kendi notu boşsa frontend buna düşer. */
+        woDyehouseNote: string | null;
         subcontractor: { id: string; name: string };
         dispatchedBy: { id: string; fullName: string | null; username: string } | null;
       }>
@@ -902,6 +955,7 @@ export class WorkOrderService {
           plateNumber: true,
           driverName: true,
           notes: true,
+          dyehouseNote: true,
           subcontractor: { select: { id: true, name: true } },
           dispatchedBy: { select: { id: true, fullName: true, username: true } },
         },
@@ -917,6 +971,9 @@ export class WorkOrderService {
           plateNumber: d.plateNumber,
           driverName: d.driverName,
           notes: d.notes,
+          dyehouseNote: d.dyehouseNote,
+          // Tüm sevkler aynı WO'ya ait — boş not durumunda WO notuna düşülür (option B).
+          woDyehouseNote: wo.dyehouseNote,
           subcontractor: d.subcontractor,
           dispatchedBy: d.dispatchedBy,
         });
@@ -1085,6 +1142,34 @@ export class WorkOrderService {
       where: { workOrderId: id, status: "ACTIVE" },
     });
 
+    // Fasonda (boyahanede) işlem gören/görmüş in-flight top sayısı — varsa iptal
+    // bloklanır (fason malı ham stoğa dönemez). softDelete'teki guard ile aynı.
+    const fasonInFlightCount =
+      stepIds.length > 0
+        ? await prisma.roll.count({
+            where: {
+              AND: [
+                {
+                  OR: [
+                    { currentStepId: { in: stepIds } },
+                    { producedInStepId: { in: stepIds } },
+                  ],
+                },
+                {
+                  OR: [
+                    { status: RollStatus.AT_SUBCONTRACTOR },
+                    { status: RollStatus.RETURNED_FROM_SUBCONTRACTOR },
+                    {
+                      status: RollStatus.IN_PRODUCTION,
+                      entrySource: RollEntrySource.SUBCONTRACTOR_RETURN,
+                    },
+                  ],
+                },
+              ],
+            },
+          })
+        : 0;
+
     // Her top için: ham mı işlenmiş mi (boyalı/özellikli/fason-dönüşü) + hâlâ fasonda mı.
     const mappedRolls = rolls.map((r) => ({
       id: r.id,
@@ -1110,6 +1195,11 @@ export class WorkOrderService {
       blockReason = "İş emri zaten iptal edilmiş.";
     } else if (wo.status === WorkOrderStatus.COMPLETED) {
       blockReason = "Tamamlanmış iş emri iptal edilemez.";
+    } else if (fasonInFlightCount > 0) {
+      blockReason =
+        "Fasonda (boyahanede) işlem gören/görmüş toplar var. Fason malı ham " +
+        "stoğa dönemez; sipariş iptal olsa bile bu mal stok için üretilmeye " +
+        "devam eder, iş emri iptal edilemez.";
     }
 
     return {
@@ -1124,6 +1214,7 @@ export class WorkOrderService {
         rollCount: rolls.length,
         processedCount,
         atSubcontractorCount,
+        fasonInFlightCount,
         rolls: mappedRolls,
       },
     };
@@ -1132,9 +1223,15 @@ export class WorkOrderService {
   /**
    * Soft-delete: sets status = CANCELLED (WorkOrder has no isActive field).
    * Veritabanı mantığı:
+   * 0. GUARD: Fasonda (boyahanede) işlem gören/görmüş in-flight top varsa iptal
+   *    REDDEDİLİR — fason malı ham stoğa dönemez, sipariş kopsa bile stok için
+   *    üretilmeye devam eder. (AT_SUBCONTRACTOR, RETURNED_FROM_SUBCONTRACTOR,
+   *    veya boyanmış-dönmüş IN_PRODUCTION açık kumaş = SUBCONTRACTOR_RETURN.)
    * 1. İş Emri iptal edilir.
-   * 2. İş Emrine bağlı kumaş topları (currentStepId veya producedInStepId
-   *    üzerinden bağlanmış) bulunur ve STOCK'a geri çekilir.
+   * 2. Yalnız GERÇEKTEN HAM (entrySource ≠ SUBCONTRACTOR_RETURN), halen üretimdeki
+   *    (currentStepId + IN_PRODUCTION) toplar STOCK'a çekilir; producedInStepId
+   *    (üretim izi) KORUNUR. Bitmiş depo malları (WAREHOUSE/PRODUCED/
+   *    TAMBUR_CONSUMED) dokunulmaz.
    * 3. ACTIVE refakat kartları VOIDED'a düşer.
    * Tüm bu işlemler güvenli bir transaction bloğunda gerçekleşir.
    */
@@ -1161,23 +1258,62 @@ export class WorkOrderService {
     const stepIds = existing.steps.map((step) => step.id);
 
     const { updated } = await prisma.$transaction(async (tx) => {
+      // GUARD: Fasonda (boyahanede) işlem gören/görmüş in-flight top varsa iptal
+      // edilemez. Fason malı asla ham stoğa dönemez — sipariş kopsa bile bu mal
+      // stok için üretilmeye devam eder.
+      //   - AT_SUBCONTRACTOR                     → halen boyahanede
+      //   - RETURNED_FROM_SUBCONTRACTOR          → fason dönüşü (eski model)
+      //   - IN_PRODUCTION + SUBCONTRACTOR_RETURN → boyanmış açık kumaş, KK2'de
+      if (stepIds.length > 0) {
+        const fasonInFlight = await tx.roll.count({
+          where: {
+            AND: [
+              {
+                OR: [
+                  { currentStepId: { in: stepIds } },
+                  { producedInStepId: { in: stepIds } },
+                ],
+              },
+              {
+                OR: [
+                  { status: RollStatus.AT_SUBCONTRACTOR },
+                  { status: RollStatus.RETURNED_FROM_SUBCONTRACTOR },
+                  {
+                    status: RollStatus.IN_PRODUCTION,
+                    entrySource: RollEntrySource.SUBCONTRACTOR_RETURN,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        if (fasonInFlight > 0) {
+          throw AppError.conflict(
+            "Bu iş emrinde fasonda (boyahanede) işlem gören/görmüş toplar var. " +
+              "Fason malı ham stoğa geri dönemez; sipariş iptal olsa bile bu mal " +
+              "stok için üretilmeye devam eder. İş emri iptal edilemez."
+          );
+        }
+      }
+
       const cancelledWO = await tx.workOrder.update({
         where: { id },
         data: { status: WorkOrderStatus.CANCELLED },
       });
 
       if (stepIds.length > 0) {
-        // Bağlı tüm topları STOCK'a geri çek
+        // Yalnız GERÇEKTEN HAM (entrySource ≠ SUBCONTRACTOR_RETURN), halen
+        // üretimdeki topları STOCK'a geri çek. `producedInStepId` (üretim izi)
+        // KORUNUR. Bitmiş depo malları (WAREHOUSE/PRODUCED/TAMBUR_CONSUMED) ve
+        // fason ürünleri (yukarıda bloklandı) DOKUNULMAZ.
         await tx.roll.updateMany({
           where: {
-            OR: [
-              { producedInStepId: { in: stepIds } },
-              { currentStepId: { in: stepIds } },
-            ],
+            currentStepId: { in: stepIds },
+            status: RollStatus.IN_PRODUCTION,
+            entrySource: { not: RollEntrySource.SUBCONTRACTOR_RETURN },
           },
           data: {
             status: RollStatus.STOCK,
-            producedInStepId: null,
             currentStepId: null,
           },
         });
@@ -1208,7 +1344,7 @@ export class WorkOrderService {
     return {
       success: true,
       data: updated,
-      message: `İş emri iptal edildi, bağlı toplar STOCK'a çekildi: ${existing.batchNumber}`,
+      message: `İş emri iptal edildi, ham toplar STOCK'a çekildi: ${existing.batchNumber}`,
     };
   }
 
@@ -1495,6 +1631,7 @@ export class WorkOrderService {
       targetItemId?: string | null;
       targetColorId?: string | null;
       foldType?: string | null;
+      dyehouseNote?: string | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
@@ -1534,10 +1671,19 @@ export class WorkOrderService {
       }
     }
 
+    // Parti kodu değiştiriliyorsa benzersizliğini doğrula (kendini hariç tut).
+    if (
+      data.batchNumber &&
+      data.batchNumber.trim().length > 0 &&
+      data.batchNumber.trim() !== wo.batchNumber
+    ) {
+      await this.assertBatchNumberUnique(data.batchNumber.trim(), id);
+    }
+
     const updated = await prisma.workOrder.update({
       where: { id },
       data: {
-        batchNumber: data.batchNumber ?? undefined,
+        batchNumber: data.batchNumber?.trim() || undefined,
         width: data.width ?? undefined,
         targetQuantity: data.targetQuantity ?? undefined,
         plannedStartDate: data.plannedStartDate
@@ -1553,6 +1699,7 @@ export class WorkOrderService {
         targetItemId: data.targetItemId === undefined ? undefined : data.targetItemId,
         targetColorId: data.targetColorId === undefined ? undefined : data.targetColorId,
         foldType: data.foldType === undefined ? undefined : data.foldType,
+        dyehouseNote: data.dyehouseNote === undefined ? undefined : data.dyehouseNote,
       },
     });
 
@@ -1899,6 +2046,15 @@ export class WorkOrderService {
       }
     }
 
+    // Parti kodu değiştiriliyorsa benzersizliğini doğrula (kendini hariç tut).
+    if (
+      data.batchNumber &&
+      data.batchNumber.trim().length > 0 &&
+      data.batchNumber.trim() !== existing.batchNumber
+    ) {
+      await this.assertBatchNumberUnique(data.batchNumber.trim(), id);
+    }
+
     const batchNumber =
       data.batchNumber && data.batchNumber.trim().length > 0
         ? data.batchNumber.trim()
@@ -2047,6 +2203,7 @@ export class WorkOrderService {
           targetItemId: resolvedTargetItemId,
           targetColorId: resolvedTargetColorId,
           foldType: data.foldType ?? null,
+          dyehouseNote: data.dyehouseNote ?? null,
           ...(allocations.length > 0
             ? {
                 orderLinks: {
@@ -2169,9 +2326,15 @@ export class WorkOrderService {
         });
       }
 
-      // 2) Bağlı Roll'ları bul (producedInStep.workOrderId = id)
+      // 2) Bağlı + DEĞİŞTİRİLEBİLİR durumdaki Roll'ları bul. SHIPPED (müşteride),
+      //    SCRAP/CANCELLED (ölü), *_CONSUMED (emekli parent), AT_KARTELA hariç —
+      //    geçmiş/sevk edilmiş malın özelliği geri-dönük çarpıtılmaz. Önizleme
+      //    (getTargetPropertyChangeImpact) ile birebir aynı küme.
       const affectedRolls = await tx.roll.findMany({
-        where: { producedInStep: { workOrderId: id } },
+        where: {
+          producedInStep: { workOrderId: id },
+          status: { in: TARGET_PROP_MUTABLE_STATUSES },
+        },
         select: { id: true },
       });
       const rollIds = affectedRolls.map((r) => r.id);
@@ -2218,17 +2381,19 @@ export class WorkOrderService {
   async getTargetPropertyChangeImpact(
     id: string,
   ): Promise<ApiResponse<{ tamburPassedCount: number; inProductionCount: number }>> {
+    // Önizleme kümeleri = mutasyonun (updateTargetProperties) dokunduğu küme.
+    // İki bucket'ın toplamı = gerçek etkilenecek rulo sayısı (onay = gerçek kapsam).
     const [tamburPassed, inProduction] = await Promise.all([
       prisma.roll.count({
         where: {
           producedInStep: { workOrderId: id },
-          status: { in: [RollStatus.WAREHOUSE, RollStatus.PRODUCED] },
+          status: { in: TARGET_PROP_FINISHED_STATUSES },
         },
       }),
       prisma.roll.count({
         where: {
           producedInStep: { workOrderId: id },
-          status: { in: [RollStatus.IN_PRODUCTION, RollStatus.AT_SUBCONTRACTOR, RollStatus.STOCK] },
+          status: { in: TARGET_PROP_INPROD_STATUSES },
         },
       }),
     ]);
@@ -2382,36 +2547,42 @@ export class WorkOrderService {
     const detached: { id: string; barcode: string | null }[] = [];
 
     await prisma.$transaction(async (tx) => {
-      for (const rollId of rollIds) {
-        const roll = await tx.roll.findUnique({ where: { id: rollId } });
-        if (!roll) continue;
+      // TOPLU (eski kod top başına findUnique+update+updateMany = N+1).
+      const found = await tx.roll.findMany({
+        where: { id: { in: rollIds } },
+        select: { id: true, barcode: true },
+      });
+      const foundIds = found.map((r) => r.id);
+      if (foundIds.length === 0) return;
 
-        await tx.roll.update({
-          where: { id: rollId },
-          data: {
-            status: RollStatus.STOCK,
-            producedInStepId: null,
-            currentStepId: null,
-          },
-        });
+      // 1) Toplar → STOCK + pointer temizle (currentQty'ye dokunulmaz).
+      await tx.roll.updateMany({
+        where: { id: { in: foundIds } },
+        data: {
+          status: RollStatus.STOCK,
+          producedInStepId: null,
+          currentStepId: null,
+        },
+      });
 
-        // 3.4 — Açık RollMovement kayıtlarını DETACH notuyla kapat
-        await tx.rollMovement.updateMany({
-          where: {
-            rollId,
-            workOrderStepId: { in: stepIds },
-            exitedAt: null,
-          },
-          data: {
-            exitedAt: new Date(),
-            qtyOut: roll.currentQty,
-            weightOut: roll.weightKg,
-            notes: "DETACHED_FROM_WO",
-          },
-        });
+      // 2) Açık RollMovement'ları DETACH notuyla kapat. qtyOut/weightOut her top
+      //    için KENDİ currentQty/weightKg'sinden (join) gelir — satır-bazlı farklı
+      //    değer olduğu için tek raw UPDATE (Prisma updateMany tek değer yazardı).
+      //    Tek sorgu = O(1) (eski per-roll updateMany yerine).
+      await tx.$executeRaw`
+        UPDATE roll_movements m
+        SET "exitedAt" = now(),
+            "qtyOut" = r."currentQty",
+            "weightOut" = r."weightKg",
+            notes = 'DETACHED_FROM_WO'
+        FROM rolls r
+        WHERE m."rollId" = r.id
+          AND m."rollId" IN (${Prisma.join(foundIds)})
+          AND m."workOrderStepId" IN (${Prisma.join(stepIds)})
+          AND m."exitedAt" IS NULL
+      `;
 
-        detached.push({ id: rollId, barcode: roll.barcode });
-      }
+      detached.push(...found.map((r) => ({ id: r.id, barcode: r.barcode })));
     });
 
     // R8 fix: audit recordId = UUID

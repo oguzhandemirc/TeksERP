@@ -20,6 +20,7 @@ const SCREEN_LOADERS: Record<MobileScreenKey, () => React.ComponentType<any>> = 
   FasonKabul: () => require('../screens/Modules/FasonKabul/FasonKabulScreen').default,
   KartelaSevk: () => require('../screens/Modules/KartelaSevk/KartelaSevkScreen').default,
   KartelaKabul: () => require('../screens/Modules/KartelaKabul/KartelaKabulScreen').default,
+  IadeGirisi: () => require('../screens/Modules/IadeGirisi/IadeGirisiScreen').default,
 };
 
 export default function MainNavigator() {
@@ -64,6 +65,22 @@ export default function MainNavigator() {
       <Stack.Screen
         name="Paketleme"
         getComponent={() => require('../screens/Modules/TartiPaket/PaketlemeScreen').default}
+      />
+      <Stack.Screen
+        name="KartelaSevkGecmisi"
+        getComponent={() => require('../screens/Modules/KartelaSevk/KartelaSevkGecmisiScreen').default}
+      />
+      <Stack.Screen
+        name="KartelaKabulGecmisi"
+        getComponent={() => require('../screens/Modules/KartelaKabul/KartelaKabulGecmisiScreen').default}
+      />
+      <Stack.Screen
+        name="FasonSevkGecmisi"
+        getComponent={() => require('../screens/Modules/FasonSevk/FasonSevkGecmisiScreen').default}
+      />
+      <Stack.Screen
+        name="IadeGecmisi"
+        getComponent={() => require('../screens/Modules/IadeGirisi/IadeGecmisiScreen').default}
       />
     </Stack.Navigator>
   );

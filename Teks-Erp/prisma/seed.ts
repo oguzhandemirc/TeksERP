@@ -10,8 +10,8 @@
 //   npm run seed
 //
 // Yüklenenler:
-//   1. 42 permission (web + mobil + admin)
-//   2. 9 permission template (Admin Tam Yetki + 8 mobil rol)
+//   1. 45 permission (web + mobil + admin)
+//   2. 10 permission template (Admin Tam Yetki + 9 mobil rol)
 //   3. 7 kullanıcı (admin + 6 test — admin dışı yetkisiz başlar)
 //   4. Admin'e tüm yetkiler atanır
 //   5. 3 kalite sınıfı (1.KALITE / A1 / FIRE)
@@ -76,6 +76,8 @@ async function main() {
     { code: "label-template:write", module: "LOGISTICS", category: "web", description: "Template CRUD" },
     { code: "shipping:read", module: "LOGISTICS", category: "web", description: "Sevkiyat/çuval listesi/detay görüntüleme" },
     { code: "shipping:write", module: "LOGISTICS", category: "web", description: "Çuval/irsaliye oluşturma, tartı/kapama, sevk" },
+    { code: "return:read", module: "LOGISTICS", category: "web", description: "İade takibi raporu görüntüleme" },
+    { code: "return:write", module: "LOGISTICS", category: "web", description: "İade alma + iade nedeni kataloğu CRUD" },
     { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
     { code: "admin:settings", module: "ADMIN", category: "admin", description: "Sistem ayarları + log arşiv" },
     { code: "admin:*", module: "ADMIN", category: "admin", description: "Tüm admin yetkileri (wildcard)" },
@@ -100,6 +102,7 @@ async function main() {
     { code: "mobile:kartela-kabul", module: "MOBILE", category: "mobile", description: "Kartela mal kabul ekranı" },
     { code: "mobile:tarti-paket", module: "MOBILE", category: "mobile", description: "Tartı & Paketleme ekranı" },
     { code: "mobile:sevkiyat", module: "MOBILE", category: "mobile", description: "Sevkiyat yönetimi ekranı" },
+    { code: "mobile:iade", module: "MOBILE", category: "mobile", description: "İade girişi ekranı" },
     { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
   ];
 
@@ -128,6 +131,7 @@ async function main() {
     { name: "Mobil — Kartela Kabul Operatörü", description: "Kartela firmadan mal kabul ekranı", codes: ["mobile:kartela-kabul"] },
     { name: "Mobil — Paketleme Operatörü",   description: "Tartı & Paketleme ekranı",       codes: ["mobile:tarti-paket"] },
     { name: "Mobil — Sevkiyat Operatörü",    description: "Sevkiyat yönetimi ekranı",        codes: ["mobile:sevkiyat"] },
+    { name: "Mobil — İade Operatörü",        description: "İade girişi ekranı",             codes: ["mobile:iade"] },
     { name: "Mobil — Tüm Ekranlar",          description: "Tüm mobil ekranlar (wildcard)",  codes: ["mobile:*"] },
   ];
 
@@ -196,6 +200,20 @@ async function main() {
   });
   console.log("✅ 3 kalite sınıfı (1.KALITE/A1/FIRE)");
 
+  // İade nedenleri — admin sonradan ekleyip çıkarabilir (return:write); İade ekranında
+  // seçenek olarak çıkar. Serbest metin (RollReturn.reasonText) ile birlikte opsiyonel.
+  await prisma.returnReason.createMany({
+    data: [
+      { code: "YANLIS_URUN",      name: "Yanlış Ürün",      color: "#f59e0b", sortOrder: 10 },
+      { code: "YANLIS_RENK_EN",   name: "Yanlış Renk/En",   color: "#f59e0b", sortOrder: 20 },
+      { code: "HASARLI",          name: "Hasarlı",          color: "#ef4444", sortOrder: 30 },
+      { code: "FAZLA_SEVK",       name: "Fazla Sevkiyat",   color: "#3b82f6", sortOrder: 40 },
+      { code: "MUSTERI_VAZGECTI", name: "Müşteri Vazgeçti",  color: "#6b7280", sortOrder: 50 },
+      { code: "DIGER",            name: "Diğer",            color: "#6b7280", sortOrder: 60 },
+    ],
+  });
+  console.log("✅ 6 iade nedeni");
+
   // ===========================================================================
   // 6. MASTER DEMO (test ortamı — production'da çalıştırılmamalı)
   // ===========================================================================
@@ -261,9 +279,20 @@ async function main() {
         appliesProperty: true,
       },
     }),
+    // Kartela fason kategorisi — bitmiş top kartelaya bu kategorideki firmalara
+    // gönderilir. Renk/özellik uygulamaz (üretim rotasının parçası değil).
+    prisma.subcontractorCategory.create({
+      data: {
+        code: "KARTELA",
+        name: "Kartela",
+        description: "Bitmiş top → kartela üretimi (kartela sevk/kabul firmaları)",
+        appliesColor: false,
+        appliesProperty: false,
+      },
+    }),
   ]);
   const catByCode = new Map(cats.map((c) => [c.code, c]));
-  console.log(`✅ ${cats.length} fason kategori (BOYA, ZIMPARA)`);
+  console.log(`✅ ${cats.length} fason kategori (BOYA, ZIMPARA, KARTELA)`);
 
   await prisma.subcontractor.create({
     data: {
@@ -283,7 +312,16 @@ async function main() {
       categories: { create: [{ categoryId: catByCode.get("ZIMPARA")!.id }] },
     },
   });
-  console.log("✅ 2 fason firma (BOYER, KESTEL)");
+  await prisma.subcontractor.create({
+    data: {
+      code: "KARTELAAS",
+      name: "Kartela A.Ş.",
+      phone: "+90 212 555 3030",
+      address: "İstanbul / Zeytinburnu",
+      categories: { create: [{ categoryId: catByCode.get("KARTELA")!.id }] },
+    },
+  });
+  console.log("✅ 3 fason firma (BOYER, KESTEL, KARTELA A.Ş.)");
 
   // --- İstasyonlar ---
   // KK1 ham kumaş giriş noktası: bir tablet burada durur, operatör barkod basıp

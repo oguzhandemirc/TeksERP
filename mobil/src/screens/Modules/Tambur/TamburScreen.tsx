@@ -5,11 +5,7 @@ import {
   ScrollView,
   useWindowDimensions,
   Keyboard,
-  type StyleProp,
-  type ViewStyle,
 } from 'react-native';
-import RNModal from 'react-native-modal';
-import { useFullscreenModalProps } from '../../../hooks/useFullscreenModalProps';
 import {
   Text,
   TextInput,
@@ -17,7 +13,6 @@ import {
   IconButton,
   Surface,
   TouchableRipple,
-  Checkbox,
   Icon,
   Appbar,
   ActivityIndicator,
@@ -48,6 +43,7 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
+import AppModal from '../../../components/AppModal';
 import LabelTargetSheet, { type LabelTargetContext } from '../../../components/LabelTargetSheet';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
@@ -76,6 +72,7 @@ import type {
   TamburFoldType,
   TamburContext,
   TamburContextOrder,
+  TamburRollDefect,
   TamburFinalizeRemainingAction,
   DefectType,
   QualityGrade,
@@ -294,6 +291,10 @@ export default function TamburScreen() {
   const [recutLastParentRoll, setRecutLastParentRoll] = useState<Roll | null>(null);
   // İş emri siparişleri modal'ı — operatör kalan ihtiyaçları görmek için açar
   const [ordersModalOpen, setOrdersModalOpen] = useState(false);
+  // Hata noktaları detay modal'ı (cetvel + sıralı/filtreli liste) ve
+  // Tambur adım notu modal'ı (sticky header kutusundan açılır).
+  const [errorsModalOpen, setErrorsModalOpen] = useState(false);
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
 
 
 
@@ -994,6 +995,7 @@ export default function TamburScreen() {
   const openList = () => drawerQueue.run(() => setListModalOpen(true));
   const openRecentOutput = () => drawerQueue.run(() => setRecentOutputOpen(true));
   const openRecut = () => drawerQueue.run(() => setRecutScannerOpen(true));
+  const openRelabel = () => drawerQueue.run(() => setRelabelFindOpen(true));
 
   // Top Kesme akışı: kamera modal'ından tarama → onScan SADECE modal'ı kapatır
   // ve barkod'u pending state'e atar. Asıl resolve modal tamamen kapandıktan
@@ -1245,6 +1247,15 @@ export default function TamburScreen() {
               >
                 Top Kesme
               </Button>
+              <Button
+                mode="outlined"
+                icon="swap-horizontal"
+                compact
+                onPress={() => openRelabel()}
+                textColor="#4338ca"
+              >
+                Etiket
+              </Button>
             </View>
           )}
         </View>
@@ -1279,6 +1290,13 @@ export default function TamburScreen() {
               bg="#fee2e2"
               color="#b91c1c"
               onPress={() => openRecut()}
+            />
+            <CompactAction
+              icon="swap-horizontal"
+              label="Etiket"
+              bg="#e0e7ff"
+              color="#4338ca"
+              onPress={() => openRelabel()}
             />
           </View>
         </View>
@@ -1364,14 +1382,15 @@ export default function TamburScreen() {
                 label="Kesme"
                 onPress={() => openRecut()}
               />
+              {/* Telefonda bu aksiyon header'a sığmıyor → sağ panel/drawer'a alındı. */}
+              <HeaderChip
+                icon="swap-horizontal"
+                label="Etiket Değiştir"
+                onPress={() => setRelabelFindOpen(true)}
+                accent
+              />
             </>
           )}
-          <HeaderChip
-            icon="swap-horizontal"
-            label="Etiket Değiştir"
-            onPress={() => setRelabelFindOpen(true)}
-            accent
-          />
           {compact ? (
             <Appbar.Action
               icon="format-list-bulleted"
@@ -1619,19 +1638,26 @@ export default function TamburScreen() {
                   topu OTOMATİK arşivlenir. Kartela düğmesi kaldırıldı (kartela
                   artık fason dönüşünden doğuyor). */}
               <Surface style={styles.footer} elevation={4}>
-                <TouchableRipple
-                  onPress={() => setMarkAsKartela((v) => !v)}
-                  style={styles.kartelaCheckRow}
-                  borderless
-                >
-                  <View style={styles.kartelaCheckInner}>
-                    <Checkbox status={markAsKartela ? 'checked' : 'unchecked'} />
-                    <Text style={styles.kartelaCheckLabel}>
-                      Kartelalık (depoda kolay bulunur)
-                    </Text>
-                  </View>
-                </TouchableRipple>
                 <View style={styles.footerRow}>
+                  {/* Kartelalık — Kes'in yanında işaretlenebilir toggle (üstte
+                      ayrı satır yok → yer kaplamaz). */}
+                  <Button
+                    mode={markAsKartela ? 'contained' : 'outlined'}
+                    icon={
+                      markAsKartela ? 'checkbox-marked' : 'checkbox-blank-outline'
+                    }
+                    onPress={() => setMarkAsKartela((v) => !v)}
+                    buttonColor={markAsKartela ? '#7c3aed' : undefined}
+                    textColor={markAsKartela ? '#fff' : '#7c3aed'}
+                    style={[
+                      styles.footerKartelaBtn,
+                      !markAsKartela && styles.footerKartelaBtnOff,
+                    ]}
+                    contentStyle={styles.footerKartelaContent}
+                    labelStyle={styles.footerKartelaLabel}
+                  >
+                    Kartela
+                  </Button>
                   <Button
                     mode="contained"
                     icon="content-cut"
@@ -1744,77 +1770,94 @@ export default function TamburScreen() {
                       </View>
                     </TouchableRipple>
                   )}
+
               </Surface>
+
+              {/* İş emri Tambur adım notu — sticky şerit (header'ın hemen altında,
+                  ScrollView dışında → kesim için aşağı kaydırınca kaybolmaz).
+                  İlk satır dokunmadan görünür; dokun → tam not modal'i. */}
+              {!!activeJob?.context?.stepNote?.trim() && (
+                <TouchableRipple
+                  onPress={() => setNoteModalOpen(true)}
+                  style={styles.noteStrip}
+                >
+                  <View style={styles.noteStripInner}>
+                    <Icon source="note-text-outline" size={16} color="#78350f" />
+                    <Text style={styles.noteStripLabel}>Tambur Notu</Text>
+                    <Text style={styles.noteStripText} numberOfLines={1}>
+                      {activeJob.context.stepNote.trim()}
+                    </Text>
+                    <Icon source="chevron-right" size={16} color="#b45309" />
+                  </View>
+                </TouchableRipple>
+              )}
 
               <ScrollView
                 style={{ flex: 1 }}
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
               >
-                {/* Tambur (adım) notu + hata noktaları — tablette yan yana,
-                    telefonda alt alta. Kesim notu burada YOK; sipariş-sipariş
-                    kırılımıyla "Sipariş" detayında. Adım notu yoksa Hata
-                    Noktaları tüm satırı kaplar (topInfoCell flex:1). */}
-                <View style={compact ? styles.topInfoStack : styles.topInfoRow}>
-                  {/* İş emrinde Tambur adımına özel verilen not (WorkOrderStep.notes) */}
-                  <NotesBanner
-                    stepNote={activeJob?.context?.stepNote}
-                    style={compact ? styles.topInfoStackItem : styles.topInfoCell}
-                  />
-                  {/* Hata noktaları — sadece referans, kompakt yan yana chip'ler */}
-                  <Surface
-                    style={[
-                      styles.defectGuideSection,
-                      compact ? styles.topInfoStackItem : styles.topInfoCell,
-                    ]}
-                    elevation={1}
-                  >
-                    <Text style={styles.defectGuideTitle}>
-                      Hata Noktaları ({selectedRoll.errors.length})
-                    </Text>
-                    {selectedRoll.errors.length === 0 ? (
-                      <Text style={styles.defectGuideEmpty}>Kayıtlı hata yok</Text>
-                    ) : (
-                      <View style={styles.defectGuideRow}>
-                        {selectedRoll.errors.map((e) => {
-                          const defectType = defectTypes.find(
-                            (d) => d.name === e.errorType
-                          );
-                          const isCritical = defectType?.severity === 'CRITICAL';
-                          return (
-                            <View
-                              key={e.id}
-                              style={[
-                                styles.defectGuideChip,
-                                isCritical && styles.defectGuideChipCritical,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.defectGuideChipMeter,
-                                  isCritical && styles.defectGuideChipTextCritical,
-                                ]}
-                              >
-                                {e.startMeter.toFixed(1)}m
+                {/* Hata noktaları — metre cetveli. Çok nokta olsa da tek bakışta
+                    okunur (yakın noktalar kümelenir). Not artık sticky header'da;
+                    burada sadece hata haritası var. Dokun → cetvel + sıralı/
+                    filtreli liste modal'i. */}
+                {(() => {
+                  const errs = selectedRoll.errors;
+                  const critCount = errs.reduce(
+                    (n, e) =>
+                      n +
+                      (defectTypes.find((d) => d.name === e.errorType)?.severity ===
+                      'CRITICAL'
+                        ? 1
+                        : 0),
+                    0,
+                  );
+                  return (
+                    <TouchableRipple
+                      onPress={
+                        errs.length ? () => setErrorsModalOpen(true) : undefined
+                      }
+                      disabled={errs.length === 0}
+                      borderless
+                      style={styles.defectGuideSection}
+                    >
+                      <View style={{ gap: 6 }}>
+                        <View style={styles.defectGuideTitleRow}>
+                          <Text style={styles.defectGuideTitle}>
+                            Hata Noktaları ({errs.length})
+                          </Text>
+                          {critCount > 0 && (
+                            <View style={styles.defectCritBadge}>
+                              <Text style={styles.defectCritBadgeText}>
+                                {critCount} kritik
                               </Text>
-                              {e.errorType && (
-                                <Text
-                                  style={[
-                                    styles.defectGuideChipLabel,
-                                    isCritical && styles.defectGuideChipTextCritical,
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {e.errorType}
-                                </Text>
-                              )}
                             </View>
-                          );
-                        })}
+                          )}
+                          <View style={{ flex: 1 }} />
+                          {errs.length > 0 && (
+                            <Icon
+                              source="chevron-right"
+                              size={18}
+                              color="#94a3b8"
+                            />
+                          )}
+                        </View>
+                        {errs.length === 0 ? (
+                          <Text style={styles.defectGuideEmpty}>Kayıtlı hata yok</Text>
+                        ) : (
+                          <DefectRuler
+                            errors={errs}
+                            defectTypes={defectTypes}
+                            rulerMax={rulerMaxForErrors(
+                              selectedRoll.currentQty,
+                              errs,
+                            )}
+                          />
+                        )}
                       </View>
-                    )}
-                  </Surface>
-                </View>
+                    </TouchableRipple>
+                  );
+                })()}
 
                 {/* Kesim — operatör fiziksel kesim yapar, anında sisteme girer.
                     Her "Top Oluştur" tıklaması child Roll oluşturur + etiket basar. */}
@@ -2041,20 +2084,27 @@ export default function TamburScreen() {
                   son kesimde kalan ~0 olunca açık kumaş OTOMATİK biter (ayrı Tamamla
                   yok). cutOpenFabric offline-aware değil → isPending'de kilitlenir. */}
               <Surface style={styles.footer} elevation={4}>
-                <TouchableRipple
-                  onPress={() => setMarkAsKartela((v) => !v)}
-                  style={styles.kartelaCheckRow}
-                  borderless
-                >
-                  <View style={styles.kartelaCheckInner}>
-                    <Checkbox status={markAsKartela ? 'checked' : 'unchecked'} />
-                    <Text style={styles.kartelaCheckLabel}>
-                      Kartelalık (depoda kolay bulunur)
-                    </Text>
-                  </View>
-                </TouchableRipple>
                 <View style={styles.footerRow}>
-                  {/* Kartela düğmesi kaldırıldı — kartela artık fason dönüşünden doğuyor. */}
+                  {/* Kartelalık — Kes'in yanında işaretlenebilir toggle (üstte
+                      ayrı satır yok → yer kaplamaz). İşaretliyse çıktı toplar
+                      depoda kartela sevki için işaretlenir. */}
+                  <Button
+                    mode={markAsKartela ? 'contained' : 'outlined'}
+                    icon={
+                      markAsKartela ? 'checkbox-marked' : 'checkbox-blank-outline'
+                    }
+                    onPress={() => setMarkAsKartela((v) => !v)}
+                    buttonColor={markAsKartela ? '#7c3aed' : undefined}
+                    textColor={markAsKartela ? '#fff' : '#7c3aed'}
+                    style={[
+                      styles.footerKartelaBtn,
+                      !markAsKartela && styles.footerKartelaBtnOff,
+                    ]}
+                    contentStyle={styles.footerKartelaContent}
+                    labelStyle={styles.footerKartelaLabel}
+                  >
+                    Kartela
+                  </Button>
                   <Button
                     mode="contained"
                     icon="content-cut"
@@ -2143,6 +2193,26 @@ export default function TamburScreen() {
         onDismiss={() => setOrdersModalOpen(false)}
       />
 
+      {/* Hata noktaları detay modal'ı — büyük cetvel + sıralı/filtreli liste */}
+      <TamburErrorsModal
+        visible={errorsModalOpen}
+        barcode={selectedRoll?.barcode ?? null}
+        errors={selectedRoll?.errors ?? []}
+        defectTypes={defectTypes}
+        rulerMax={rulerMaxForErrors(
+          selectedRoll?.currentQty ?? 0,
+          selectedRoll?.errors ?? [],
+        )}
+        onDismiss={() => setErrorsModalOpen(false)}
+      />
+
+      {/* Tambur adım notu modal'ı — sticky header "not" kutusundan açılır */}
+      <TamburNoteModal
+        visible={noteModalOpen}
+        note={activeJob?.context?.stepNote ?? null}
+        onDismiss={() => setNoteModalOpen(false)}
+      />
+
       {/* Etiket basımı modal'ı — finalize/post-split sonrası */}
       <LabelPrintModal
         rolls={pendingPrintRolls}
@@ -2209,6 +2279,8 @@ export default function TamburScreen() {
           insets={insets}
           title="Tambur İşleri"
           onClosed={drawerQueue.drain}
+          widthFactor={0.96}
+          maxWidth={560}
         >
           {renderRightContent()}
         </RightPanelDrawer>
@@ -2392,7 +2464,6 @@ function LabelPrintModal({
   printingRollId: string | null;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
   // Compact (telefon dik) ekranda %45 modal çok dar — operatör barkod + ürün +
   // "Bas" satırlarını okumakta zorlanıyor. Portrait'te 92% ver, tablet/yatayda
   // 45% kalsın (kalan ekranı bloklamasın).
@@ -2404,16 +2475,7 @@ function LabelPrintModal({
   // animasyon tamamlansın.
 
   return (
-    <RNModal
-      isVisible={rolls.length > 0}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.55}
-      style={cameraStyles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
-    >
+    <AppModal visible={rolls.length > 0} onDismiss={onDismiss}>
       <View style={[cameraStyles.sheet, { width: sheetWidth, maxHeight: winH * 0.85 }]}>
         <View style={[cameraStyles.header, { backgroundColor: '#dcfce7', paddingVertical: 8 }]}>
           <Icon source="printer" size={20} color="#059669" />
@@ -2436,7 +2498,7 @@ function LabelPrintModal({
           ))}
         </ScrollView>
       </View>
-    </RNModal>
+    </AppModal>
   );
 }
 
@@ -2454,7 +2516,6 @@ function OrdersDetailModal({
   onDismiss: () => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
   const phone = winW < 600;
 
   // Başlık özeti için toplam kalem sayısı.
@@ -2464,16 +2525,7 @@ function OrdersDetailModal({
   );
 
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.55}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
-      style={ordersModalStyles.modal}
-    >
+    <AppModal visible={visible} onDismiss={onDismiss}>
       <View
         style={[
           ordersModalStyles.sheet,
@@ -2632,7 +2684,7 @@ function OrdersDetailModal({
           )}
         </ScrollView>
       </View>
-    </RNModal>
+    </AppModal>
   );
 }
 
@@ -2644,7 +2696,6 @@ const ORDERS_ACCENT_BORDER = '#bfdbfe'; // blue-200
 const ORDERS_ACCENT_ON = '#dbeafe'; // blue-100
 
 const ordersModalStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
   sheet: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
@@ -2795,6 +2846,107 @@ const ordersModalStyles = StyleSheet.create({
   remainingUnit: { fontSize: 10, fontWeight: '700', color: ORDERS_ACCENT_ON },
 });
 
+// Hata noktaları modal — kırmızı aksan (uyarı ailesi).
+const ERR_ACCENT = '#b91c1c'; // red-700
+const ERR_ACCENT_DARK = '#7f1d1d'; // red-900 (header)
+
+const errorsModalStyles = StyleSheet.create({
+  sheet: { backgroundColor: '#fff', borderRadius: 18, overflow: 'hidden' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: ERR_ACCENT_DARK,
+  },
+  headerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  subtitle: { fontSize: 12, color: '#fecaca', marginTop: 1, fontWeight: '600' },
+  rulerBox: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 14,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  filterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  filterChipOn: { backgroundColor: ERR_ACCENT, borderColor: ERR_ACCENT },
+  filterChipInner: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  filterChipText: { fontSize: 12, fontWeight: '700', color: '#b91c1c' },
+  filterChipTextOn: { color: '#fff' },
+  scroll: { paddingHorizontal: 12, paddingBottom: 14, gap: 6 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#94a3b8' },
+  dotCritical: { backgroundColor: '#dc2626' },
+  rowMeter: { fontSize: 15, fontWeight: '800', color: '#0f172a', minWidth: 64 },
+  rowType: { flex: 1, fontSize: 13, color: '#475569', fontWeight: '600' },
+  critBadge: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  critBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#b91c1c',
+    letterSpacing: 0.3,
+  },
+  emptyWrap: { alignItems: 'center', paddingVertical: 32, gap: 8 },
+  empty: { fontSize: 14, color: '#94a3b8', fontWeight: '600' },
+});
+
+// Tambur adım notu modal — amber (talimat) kimliği.
+const noteModalStyles = StyleSheet.create({
+  sheet: { backgroundColor: '#fff', borderRadius: 18, overflow: 'hidden' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#fef3c7',
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde68a',
+  },
+  headerIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: '#fde68a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: { flex: 1, fontSize: 16, fontWeight: '800', color: '#78350f' },
+  body: { padding: 16 },
+  text: { fontSize: 16, lineHeight: 24, color: '#0f172a', fontWeight: '500' },
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Yönlendir — top seçici. Depodaki (bitmiş stok) toplar arasından arama + sayfalı
 // liste; satıra basınca "Etiket kime?" akışına girer. Kamera/HID ile de okutulur.
@@ -2861,7 +3013,7 @@ function RelabelPickerModal({
       iconColor="#4338ca"
       headerTint="#e0e7ff"
       widthRatio={isCompactPortrait ? 0.96 : 0.64}
-      heightRatio={0.78}
+      heightRatio={isCompactPortrait ? 0.9 : 0.78}
       loading={q.isLoading}
       fetching={q.isFetching && !q.isFetchingNextPage}
       isError={q.isError}
@@ -3157,23 +3309,17 @@ function CameraScanModal({
   onSelect: (card: TamburOpenCard) => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
   // Compact portrait (telefon dik) ekranda 70% genişlik dar — operatör kart
   // listesini taramakta zorlanıyor. Portrait'te 92% ver, tablet/yatayda 70%.
   const isCompactPortrait = winH > winW;
   const sheetWidth = isCompactPortrait ? winW * 0.92 : winW * 0.7;
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.55}
-      style={cameraStyles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
+    <AppModal
+      visible={visible}
+      onDismiss={onDismiss}
+      contentStyle={[cameraStyles.sheet, { width: sheetWidth, height: winH * 0.8 }]}
     >
-      <View style={[cameraStyles.sheet, { width: sheetWidth, height: winH * 0.8 }]}>
+      <>
         <View style={cameraStyles.header}>
           <Icon source="format-list-bulleted" size={22} color="#0f172a" />
           <Text variant="titleMedium" style={cameraStyles.title} numberOfLines={1}>
@@ -3223,8 +3369,8 @@ function CameraScanModal({
             />
           )}
         </View>
-      </View>
-    </RNModal>
+      </>
+    </AppModal>
   );
 }
 
@@ -3355,20 +3501,15 @@ function FinalizeRemainingModal({
   onModalHide?: () => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
   const isCompactPortrait = winH > winW;
   const qtyText = `${remainingQty.toFixed(1)} mt`;
 
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={loading ? undefined : onDismiss}
-      onBackButtonPress={loading ? undefined : onDismiss}
-      onModalHide={onModalHide}
-      backdropOpacity={0.55}
-      style={cameraStyles.modal}
-      useNativeDriver
-      {...modalProps}
+    <AppModal
+      visible={visible}
+      onDismiss={onDismiss}
+      dismissable={!loading}
+      onHidden={onModalHide}
     >
       <View
         style={[
@@ -3451,33 +3592,323 @@ function FinalizeRemainingModal({
           </Button>
         </View>
       </View>
-    </RNModal>
+    </AppModal>
   );
 }
 
-// Sipariş kesim notu + tambur adım notu bandı — aktif iş üstünde, operatör
-// kesimden önce talimatı görsün (eskiden hiç gösterilmiyordu).
-function NotesBanner({
-  stepNote,
-  style,
+// Cetvel ölçeği — topun mevcut uzunluğu ile en uzak hatadan büyük olanı (sıfıra
+// bölme yok). Topta kesim olduysa bile en uzak hata cetvelde görünür kalır.
+function rulerMaxForErrors(
+  currentQty: number,
+  errors: TamburRollDefect[],
+): number {
+  let m = currentQty > 0 ? currentQty : 0;
+  for (const e of errors) if (e.startMeter > m) m = e.startMeter;
+  return Math.max(m, 1);
+}
+
+// Cetvel ölçek adımı — ~5 bölme verecek "yuvarlak" değer (50, 100 gibi).
+function niceStep(max: number): number {
+  const target = max / 5;
+  const steps = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
+  for (const s of steps) if (s >= target) return s;
+  return steps[steps.length - 1];
+}
+
+// Metre cetveli — hatalar topun uzunluğu boyunca tik olarak işaretlenir. Üst üste
+// binecek kadar yakın olanlar sayaçlı kümeye toplanır (çok nokta olsa da okunur).
+// Kritik = kırmızı. Genişlik onLayout ile ölçülür; ölçülene dek tik basılmaz.
+function DefectRuler({
+  errors,
+  defectTypes,
+  rulerMax,
 }: {
-  stepNote?: string | null;
-  style?: StyleProp<ViewStyle>;
+  errors: TamburRollDefect[];
+  defectTypes: DefectType[];
+  rulerMax: number;
 }) {
-  // Sadece Tambur (adım) notu. Sipariş kesim notu burada gösterilmez — zaten
-  // "Sipariş" detayında sipariş-sipariş kırılımıyla mevcut.
-  const note = stepNote?.trim();
-  if (!note) return null;
+  const [w, setW] = useState(0);
+  const isCritical = (e: TamburRollDefect) =>
+    defectTypes.find((d) => d.name === e.errorType)?.severity === 'CRITICAL';
+
+  const clusters = useMemo(() => {
+    if (w <= 0) return [] as { x: number; n: number; critical: boolean }[];
+    const MIN_GAP = 16; // bu px'ten yakın tik'ler tek kümede toplanır
+    const sorted = [...errors].sort((a, b) => a.startMeter - b.startMeter);
+    const out: { x: number; n: number; critical: boolean }[] = [];
+    for (const e of sorted) {
+      const x = (Math.min(e.startMeter, rulerMax) / rulerMax) * w;
+      const last = out[out.length - 1];
+      if (last && x - last.x < MIN_GAP) {
+        last.x = (last.x * last.n + x) / (last.n + 1);
+        last.n += 1;
+        last.critical = last.critical || isCritical(e);
+      } else {
+        out.push({ x, n: 1, critical: isCritical(e) });
+      }
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [errors, w, rulerMax, defectTypes]);
+
+  // Metre ölçeği — 0, 50, 100… (çubuk altında, "m" yazmadan).
+  const scaleMarks = useMemo(() => {
+    const step = niceStep(rulerMax);
+    const marks: number[] = [];
+    for (let v = 0; v <= rulerMax + 0.0001; v += step) marks.push(v);
+    return marks;
+  }, [rulerMax]);
+
   return (
-    <Surface style={[styles.notesBanner, style]} elevation={1}>
-      <View style={styles.noteCell}>
-        <View style={styles.noteHead}>
-          <Icon source="clipboard-text-outline" size={15} color="#b45309" />
-          <Text style={styles.noteLabel}>Tambur Notu</Text>
+    <View
+      style={styles.rulerWrap}
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+    >
+      <View style={styles.rulerTrack} />
+      {w > 0 &&
+        scaleMarks.map((v) => {
+          const x = (v / rulerMax) * w;
+          return (
+            <React.Fragment key={`s${v}`}>
+              <View
+                style={[styles.rulerScaleTick, { left: Math.min(x, w - 1) }]}
+              />
+              <Text
+                style={[
+                  styles.rulerScaleLabel,
+                  { left: Math.max(0, Math.min(x - 14, w - 28)) },
+                ]}
+              >
+                {v.toFixed(0)}
+              </Text>
+            </React.Fragment>
+          );
+        })}
+      {clusters.map((c, i) =>
+        c.n > 1 ? (
+          <View
+            key={i}
+            style={[
+              styles.rulerCluster,
+              c.critical && styles.rulerClusterCritical,
+              { left: Math.max(0, Math.min(c.x - 11, w - 22)) },
+            ]}
+          >
+            <Text style={styles.rulerClusterText}>{c.n}</Text>
+          </View>
+        ) : (
+          <View
+            key={i}
+            style={[
+              styles.rulerTick,
+              c.critical && styles.rulerTickCritical,
+              { left: Math.max(0, Math.min(c.x - 2, w - 4)) },
+            ]}
+          />
+        ),
+      )}
+    </View>
+  );
+}
+
+// Hata noktaları detay modal'ı — büyük cetvel + metreye göre sıralı liste +
+// "sadece kritik" filtresi. Tambur ekranındaki hata şeridine dokununca açılır.
+function TamburErrorsModal({
+  visible,
+  barcode,
+  errors,
+  defectTypes,
+  rulerMax,
+  onDismiss,
+}: {
+  visible: boolean;
+  barcode: string | null;
+  errors: TamburRollDefect[];
+  defectTypes: DefectType[];
+  rulerMax: number;
+  onDismiss: () => void;
+}) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  const phone = winW < 600;
+  const [criticalOnly, setCriticalOnly] = useState(false);
+
+  const isCritical = (e: TamburRollDefect) =>
+    defectTypes.find((d) => d.name === e.errorType)?.severity === 'CRITICAL';
+
+  const critCount = useMemo(
+    () => errors.filter(isCritical).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [errors, defectTypes],
+  );
+
+  const rows = useMemo(() => {
+    const list = criticalOnly ? errors.filter(isCritical) : errors;
+    return [...list].sort((a, b) => a.startMeter - b.startMeter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [errors, defectTypes, criticalOnly]);
+
+  return (
+    <AppModal visible={visible} onDismiss={onDismiss}>
+      <View
+        style={[
+          errorsModalStyles.sheet,
+          {
+            width: phone ? winW * 0.94 : Math.min(640, winW * 0.6),
+            maxHeight: winH * 0.86,
+          },
+        ]}
+      >
+        <View style={errorsModalStyles.header}>
+          <View style={errorsModalStyles.headerIcon}>
+            <Icon source="alert-octagon-outline" size={22} color="#fff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={errorsModalStyles.title}>Hata Noktaları</Text>
+            <Text style={errorsModalStyles.subtitle}>
+              {barcode ? `${barcode} · ` : ''}
+              {errors.length} nokta
+              {critCount > 0 ? ` · ${critCount} kritik` : ''}
+            </Text>
+          </View>
+          <IconButton
+            icon="close"
+            size={22}
+            iconColor="#fff"
+            onPress={onDismiss}
+            style={{ margin: 0 }}
+          />
         </View>
-        <Text style={styles.noteText}>{note}</Text>
+
+        {/* Büyük cetvel — tüm hataların top boyunca dağılımı */}
+        <View style={errorsModalStyles.rulerBox}>
+          <DefectRuler
+            errors={errors}
+            defectTypes={defectTypes}
+            rulerMax={rulerMax}
+          />
+        </View>
+
+        {critCount > 0 && (
+          <View style={errorsModalStyles.filterRow}>
+            <TouchableRipple
+              borderless
+              onPress={() => setCriticalOnly((v) => !v)}
+              style={[
+                errorsModalStyles.filterChip,
+                criticalOnly && errorsModalStyles.filterChipOn,
+              ]}
+            >
+              <View style={errorsModalStyles.filterChipInner}>
+                <Icon
+                  source={criticalOnly ? 'check-circle' : 'circle-outline'}
+                  size={15}
+                  color={criticalOnly ? '#fff' : '#b91c1c'}
+                />
+                <Text
+                  style={[
+                    errorsModalStyles.filterChipText,
+                    criticalOnly && errorsModalStyles.filterChipTextOn,
+                  ]}
+                >
+                  Sadece kritik
+                </Text>
+              </View>
+            </TouchableRipple>
+          </View>
+        )}
+
+        <ScrollView
+          contentContainerStyle={errorsModalStyles.scroll}
+          showsVerticalScrollIndicator={false}
+        >
+          {rows.length === 0 ? (
+            <View style={errorsModalStyles.emptyWrap}>
+              <Icon
+                source="check-decagram-outline"
+                size={44}
+                color={colors.borderStrong}
+              />
+              <Text style={errorsModalStyles.empty}>Gösterilecek hata yok</Text>
+            </View>
+          ) : (
+            rows.map((e, i) => {
+              const crit = isCritical(e);
+              return (
+                <AnimatedEntrance
+                  key={e.id}
+                  index={i}
+                  style={errorsModalStyles.row}
+                >
+                  <View
+                    style={[
+                      errorsModalStyles.dot,
+                      crit && errorsModalStyles.dotCritical,
+                    ]}
+                  />
+                  <Text style={errorsModalStyles.rowMeter}>
+                    {e.startMeter.toFixed(1)} m
+                  </Text>
+                  <Text style={errorsModalStyles.rowType} numberOfLines={1}>
+                    {e.errorType ?? 'Hata'}
+                  </Text>
+                  {crit && (
+                    <View style={errorsModalStyles.critBadge}>
+                      <Text style={errorsModalStyles.critBadgeText}>KRİTİK</Text>
+                    </View>
+                  )}
+                </AnimatedEntrance>
+              );
+            })
+          )}
+        </ScrollView>
       </View>
-    </Surface>
+    </AppModal>
+  );
+}
+
+// Tambur adım notu modal'ı — sticky header'daki "not" kutusundan açılır, tam
+// metni gösterir (uzun notlar için kaydırmalı).
+function TamburNoteModal({
+  visible,
+  note,
+  onDismiss,
+}: {
+  visible: boolean;
+  note: string | null;
+  onDismiss: () => void;
+}) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  const phone = winW < 600;
+  const text = note?.trim();
+  return (
+    <AppModal visible={visible} onDismiss={onDismiss}>
+      <View
+        style={[
+          noteModalStyles.sheet,
+          {
+            width: phone ? winW * 0.9 : Math.min(520, winW * 0.5),
+            maxHeight: winH * 0.7,
+          },
+        ]}
+      >
+        <View style={noteModalStyles.header}>
+          <View style={noteModalStyles.headerIcon}>
+            <Icon source="note-text-outline" size={20} color="#78350f" />
+          </View>
+          <Text style={noteModalStyles.title}>Tambur Notu</Text>
+          <IconButton
+            icon="close"
+            size={22}
+            iconColor="#78350f"
+            onPress={onDismiss}
+            style={{ margin: 0 }}
+          />
+        </View>
+        <ScrollView contentContainerStyle={noteModalStyles.body}>
+          <Text style={noteModalStyles.text}>{text || 'Not yok'}</Text>
+        </ScrollView>
+      </View>
+    </AppModal>
   );
 }
 
@@ -3634,6 +4065,31 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     marginTop: 1,
   },
+  // Tambur adım notu — sticky şerit (amber = talimat). Header altında sabit.
+  noteStrip: {
+    backgroundColor: '#fffbeb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde68a',
+  },
+  noteStripInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  noteStripLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#b45309',
+    letterSpacing: 0.3,
+  },
+  noteStripText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#0f172a',
+    fontWeight: '600',
+  },
 
   // Kalan metre rozeti — header'da prominent
   remainingBadge: {
@@ -3743,38 +4199,76 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontStyle: 'italic',
   },
-  defectGuideRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  defectGuideChip: {
+  defectGuideTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#f1f5f9',
+    gap: 6,
   },
-  defectGuideChipCritical: {
-    borderColor: '#fca5a5',
+  defectCritBadge: {
     backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 999,
   },
-  defectGuideChipMeter: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  defectGuideChipLabel: {
-    fontSize: 11,
-    color: '#475569',
-    maxWidth: 100,
-  },
-  defectGuideChipTextCritical: {
+  defectCritBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
     color: '#b91c1c',
+    letterSpacing: 0.2,
+  },
+  // Metre cetveli — hatalar tik/küme olarak, absolute konumlanır.
+  rulerWrap: { height: 40, justifyContent: 'center', marginTop: 2 },
+  rulerTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 11,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#e2e8f0',
+  },
+  rulerTick: {
+    position: 'absolute',
+    top: 3,
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: '#94a3b8',
+  },
+  rulerTickCritical: { backgroundColor: '#dc2626' },
+  rulerCluster: {
+    position: 'absolute',
+    top: 1,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 4,
+    backgroundColor: '#94a3b8',
+    borderWidth: 2,
+    borderColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rulerClusterCritical: { backgroundColor: '#dc2626' },
+  rulerClusterText: { fontSize: 11, fontWeight: '800', color: '#fff' },
+  // Metre ölçeği — çubuk altında ince gridline + sayı (0, 50, 100…).
+  rulerScaleTick: {
+    position: 'absolute',
+    top: 14,
+    width: 1,
+    height: 5,
+    backgroundColor: '#cbd5e1',
+  },
+  rulerScaleLabel: {
+    position: 'absolute',
+    bottom: 0,
+    width: 28,
+    textAlign: 'center',
+    fontSize: 10,
+    color: '#94a3b8',
+    fontWeight: '700',
   },
 
   // Kesim — uzunluk input + temizleme tuşu
@@ -4091,15 +4585,15 @@ const styles = StyleSheet.create({
   // Top Kesme footer'ı — beyaz card yok, sadece buton kendisi görünür
   recutFooter: { backgroundColor: 'transparent', padding: 10 },
   footerBtn: { borderRadius: 12 },
-  // Kartela (küçük, ikincil) + Kes (büyük, asıl) yan yana.
+  // Kartela (işaretlenebilir toggle) + Kes (büyük, asıl) yan yana.
   footerRow: { flexDirection: 'row', alignItems: 'stretch', gap: 8 },
-  kartelaCheckRow: { borderRadius: 10, marginBottom: 8 },
-  kartelaCheckInner: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 },
-  kartelaCheckLabel: { fontSize: 14, fontWeight: '600', color: '#7c3aed' },
   footerBtnMain: { flex: 1, borderRadius: 12 },
-  footerKartelaBtn: { borderRadius: 12, justifyContent: 'center' },
-  footerKartelaContent: { height: 60 },
-  footerKartelaLabel: { fontSize: 13, fontWeight: '700' },
+  // Sabit genişlik — outlined↔contained toggle'da Kartela (ve dolayısıyla Kes)
+  // genişliği zıplamasın. RN border-box: kenarlık dış genişliği değiştirmez.
+  footerKartelaBtn: { width: 132, borderRadius: 12, justifyContent: 'center' },
+  footerKartelaBtnOff: { borderColor: '#c4b5fd', borderWidth: 1.5 },
+  footerKartelaContent: { height: 60, paddingHorizontal: 6 },
+  footerKartelaLabel: { fontSize: 14, fontWeight: '800' },
   footerBtnContent: { height: 60 },
   footerBtnLabel: { fontSize: 17, fontWeight: '700' },
 
@@ -4136,51 +4630,16 @@ const styles = StyleSheet.create({
   },
   // Yatay pill: renkli zemin + ikon + kısa etiket, tek satır (az yer kaplar).
   compactAction: { flex: 1, borderRadius: 10, overflow: 'hidden' },
+  // Dikey: ikon üstte, kısa etiket altta — dar hücrelerde (5 aksiyon) etiket
+  // yan yana sığmadığından alt satıra alınır.
   compactActionInner: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 9,
-    paddingHorizontal: 6,
+    gap: 3,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
-  compactActionLabel: { fontSize: 12, fontWeight: '700' },
-
-  // Sipariş kesim / tambur adım notu bandı (amber = talimat/dikkat).
-  // Kesim notu + hata noktaları üst bilgi bandı — tablette yan yana, telefonda
-  // alt alta. Hücreler eşit yükseklikte (stretch) ki amber/beyaz kutular hizalı.
-  topInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 8,
-    marginBottom: 8,
-  },
-  topInfoStack: { gap: 8, marginBottom: 8 },
-  topInfoCell: { flex: 1, marginBottom: 0 },
-  topInfoStackItem: { marginBottom: 0 },
-
-  notesBanner: {
-    backgroundColor: '#fffbeb',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#fde68a',
-    padding: 8,
-    marginBottom: 8,
-  },
-  noteCell: { flex: 1, gap: 1 },
-  noteHead: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  noteLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#b45309',
-    letterSpacing: 0.3,
-  },
-  noteText: {
-    fontSize: 13,
-    color: '#0f172a',
-    fontWeight: '600',
-    lineHeight: 18,
-  },
+  compactActionLabel: { fontSize: 11, fontWeight: '700' },
 
   tabBar: {
     flexDirection: 'row',
@@ -4298,7 +4757,6 @@ const helperStyles = StyleSheet.create({
 });
 
 const cameraStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
   sheet: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },
   header: {
     flexDirection: 'row',

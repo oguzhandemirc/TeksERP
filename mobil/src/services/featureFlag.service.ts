@@ -1,0 +1,40 @@
+import { apiClient } from './api';
+import type { ApiResponse } from '../types/api';
+
+// =============================================================================
+// Public feature flag'ler — backend: GET /api/feature-flags (auth-only, özel
+// permission yok). App açılışında 1 kez çekilip React Query cache'inde tutulur;
+// UI bu flag'lere göre alan gösterir/gizler. Backend ENFORCE ETMEZ (sadece UI
+// rehberi). Admin Electron yönetim panelinden toggle eder.
+// =============================================================================
+
+export interface FeatureFlags {
+  pricingEnabled: boolean;
+  targetQuantityEnabled: boolean;
+  /** KK1 ham kumaş girişinde "en (cm)" alanı gösterilsin mi (default false). */
+  rawWidthEnabled: boolean;
+  /** İade kabulünde personel kaliteyi değiştirebilsin mi (default false). */
+  returnGradingEnabled: boolean;
+  /** Fason Sevk'te boyahane notunu operatör telefondan girebilsin mi (default false). */
+  dyehouseNoteMobileEntry: boolean;
+  /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). Kapalıyken
+   *  ① Sevkiyat ekranında "Hemen Sevk Et" kısayolu görünür; açıkken çıkış yalnız ② "Sevk Çıkışı"
+   *  ekranından onaylanır. Ara depoda bekleme + sonradan çıkış flag'den bağımsız her zaman var. */
+  shipmentConfirmationEnabled: boolean;
+}
+
+export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
+  pricingEnabled: false,
+  targetQuantityEnabled: false,
+  rawWidthEnabled: false,
+  returnGradingEnabled: false,
+  dyehouseNoteMobileEntry: false,
+  shipmentConfirmationEnabled: false,
+};
+
+export const featureFlagService = {
+  get: (): Promise<FeatureFlags> =>
+    apiClient
+      .get<ApiResponse<FeatureFlags>>('/feature-flags')
+      .then((r) => r.data.data ?? DEFAULT_FEATURE_FLAGS),
+};

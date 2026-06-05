@@ -39,10 +39,30 @@ export const SETTING_KEYS = {
   FINANCE_PRICING_ENABLED: "finance.pricingEnabled",
   /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
+  /** KK1 ham kumaş girişinde "en" alanı gösterilsin mi. Default false (ham en önemsiz). */
+  KK1_RAW_WIDTH_ENABLED: "kk1.rawWidthEnabled",
+  /** İade kabulünde personel topun kalitesini değiştirebilsin mi. Default false
+   *  (kapalıyken kalite butonu gizlenir + backend gönderilen override'ı yok sayar). */
+  RETURN_GRADING_ENABLED: "return.gradingEnabled",
+  /** İş emri "Parti Kodu" (batchNumber) otomatik mi üretilsin manuel mi girilsin.
+   *  Default false (manuel). Açıkken form otomatik P-YYMMDD-NNN önerir, override edilebilir. */
+  WORKORDER_PARTY_CODE_AUTO: "workorder.partyCodeAuto",
   /** Sipariş oluştururken termin (deadline) verilmediyse orderDate + N gün. Default 7. */
   ORDER_DEFAULT_DEADLINE_DAYS: "order.defaultDeadlineDays",
   /** İş emri oluştururken plannedEndDate verilmediyse plannedStartDate + N gün. Default 7. */
   WORKORDER_DEFAULT_PLAN_DURATION_DAYS: "workorder.defaultPlanDurationDays",
+  /** Sahadaki operatör Fason Sevk'te boyahane notunu telefondan girebilsin mi.
+   *  Default false (kapalı) → not yalnızca iş emrinden gelir; mobil alan gizli. */
+  DYEHOUSE_NOTE_MOBILE_ENTRY: "dyehouse.noteMobileEntry",
+  /** Mobil cihaz eşleştirmesi ZORUNLU mu. Default false (pasif) → eşleşmemiş
+   *  tabletler de giriş yapıp çalışabilir (makine atfı NULL kalır). True iken
+   *  eşleşmemiş/pasif cihaz device.middleware'de 401 ile kesilir. ENFORCE edilir. */
+  DEVICE_PAIRING_REQUIRED: "device.pairingRequired",
+  /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu. Default false (kapalı):
+   *  paketleyen ① ekranından "Hemen Sevk Et" ile direkt sevk edebilir. Açıkken ① sadece
+   *  "Sevke Hazır" yapar; çıkış yalnız ② "Sevk Çıkışı" ekranından onaylanır. Sadece UI
+   *  rehberi — backend ENFORCE ETMEZ (her iki yoldan da dispatch kabul edilir). */
+  SHIPMENT_CONFIRMATION_ENABLED: "shipping.confirmationEnabled",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -56,6 +76,15 @@ const DEFAULT_DEADLINE_DAYS = 7;
 export interface FeatureFlags {
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
+  rawWidthEnabled: boolean;
+  returnGradingEnabled: boolean;
+  partyCodeAuto: boolean;
+  dyehouseNoteMobileEntry: boolean;
+  /** Cihaz eşleştirme zorunlu mu (true=aktif) yoksa pasif mi (false=default).
+   *  Diğerlerinden farklı olarak ENFORCE edilir (device.middleware). */
+  devicePairingRequired: boolean;
+  /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
+  shipmentConfirmationEnabled: boolean;
 }
 
 export class SystemSettingService {
@@ -138,6 +167,12 @@ export class SystemSettingService {
     const flags: FeatureFlags = {
       pricingEnabled: await readPricingEnabled(),
       targetQuantityEnabled: await readTargetQuantityEnabled(),
+      rawWidthEnabled: await readRawWidthEnabled(),
+      returnGradingEnabled: await readReturnGradingEnabled(),
+      partyCodeAuto: await readPartyCodeAuto(),
+      dyehouseNoteMobileEntry: await readDyehouseNoteMobileEntry(),
+      devicePairingRequired: await readDevicePairingRequired(),
+      shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(),
     };
     return { success: true, data: flags };
   }
@@ -172,6 +207,78 @@ export class SystemSettingService {
         SETTING_KEYS.WORKORDER_TARGET_QUANTITY_ENABLED,
         input.targetQuantityEnabled,
         "İş emri formunda hedef metraj alanını göster",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "rawWidthEnabled")) {
+      if (typeof input.rawWidthEnabled !== "boolean") {
+        throw AppError.badRequest("rawWidthEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KK1_RAW_WIDTH_ENABLED,
+        input.rawWidthEnabled,
+        "KK1 ham kumaş girişinde en (cm) alanını göster",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "returnGradingEnabled")) {
+      if (typeof input.returnGradingEnabled !== "boolean") {
+        throw AppError.badRequest("returnGradingEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.RETURN_GRADING_ENABLED,
+        input.returnGradingEnabled,
+        "İade kabulünde personel topun kalitesini değiştirebilsin",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "partyCodeAuto")) {
+      if (typeof input.partyCodeAuto !== "boolean") {
+        throw AppError.badRequest("partyCodeAuto boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.WORKORDER_PARTY_CODE_AUTO,
+        input.partyCodeAuto,
+        "İş emri parti kodunu otomatik üret (manuel giriş yerine)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "dyehouseNoteMobileEntry")) {
+      if (typeof input.dyehouseNoteMobileEntry !== "boolean") {
+        throw AppError.badRequest("dyehouseNoteMobileEntry boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DYEHOUSE_NOTE_MOBILE_ENTRY,
+        input.dyehouseNoteMobileEntry,
+        "Fason Sevk'te boyahane notunu sahadaki operatör telefondan girebilsin",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "devicePairingRequired")) {
+      if (typeof input.devicePairingRequired !== "boolean") {
+        throw AppError.badRequest("devicePairingRequired boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DEVICE_PAIRING_REQUIRED,
+        input.devicePairingRequired,
+        "Mobil cihaz eşleştirmesi zorunlu olsun (kapalıyken eşleşmemiş cihazlar da girer)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shipmentConfirmationEnabled")) {
+      if (typeof input.shipmentConfirmationEnabled !== "boolean") {
+        throw AppError.badRequest("shipmentConfirmationEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED,
+        input.shipmentConfirmationEnabled,
+        "Sevk için ayrı 'ambar aldı / çıkış' onay adımı zorunlu olsun (kapalıyken paketleyen direkt sevk eder)",
         userId
       );
     }
@@ -221,6 +328,104 @@ export async function readPricingEnabled(): Promise<boolean> {
 export async function readTargetQuantityEnabled(): Promise<boolean> {
   const setting = await prisma.systemSetting.findUnique({
     where: { key: SETTING_KEYS.WORKORDER_TARGET_QUANTITY_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * KK1 ham kumaş girişinde "en (cm)" alanı gösterilsin mi? Default false
+ * (müşteri: ham kumaşın eni önemsiz). Kapalıyken mobil KK1 en alanını gizler,
+ * operatör isterse manuel override ile yine girebilir. Bitmiş topun eni KK1'den
+ * değil WorkOrder.width'ten damgalanır (bkz. tambur.service finalize).
+ */
+export async function readRawWidthEnabled(): Promise<boolean> {
+  const setting = await prisma.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KK1_RAW_WIDTH_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * İş emri "Parti Kodu" (batchNumber) otomatik mi üretilsin? Default false (manuel).
+ * Sadece UI rehberi — backend ENFORCE ETMEZ: batchNumber boş gelirse her iki modda
+ * da otomatik üretir. Flag yalnızca formun manuel/otomatik davranışını belirler.
+ */
+export async function readPartyCodeAuto(): Promise<boolean> {
+  const setting = await prisma.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.WORKORDER_PARTY_CODE_AUTO },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * İade kabulünde personel topun kalitesini değiştirebilsin mi? Default false.
+ * Kapalıyken mobil İade ekranı kalite (derecelendirme) kontrolünü gizler; ayrıca
+ * backend `createReturn`'de gönderilen qualityGradeId override'ı YOK SAYILIR
+ * (top çıktığı kaliteyle döner) — flag fiziksel etiketi belirlediği için sadece
+ * UI rehberi değil, enforce edilir.
+ */
+export async function readReturnGradingEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.RETURN_GRADING_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Fason Sevk'te boyahane notunu sahadaki operatör telefondan girebilsin mi?
+ * Default false (kapalı). Kapalıyken mobil Fason Sevk ekranında boyahane notu
+ * alanı gizli; not yalnızca iş emrinden (WorkOrder.dyehouseNote) gelir. Sadece
+ * UI rehberi — backend ENFORCE ETMEZ.
+ */
+export async function readDyehouseNoteMobileEntry(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DYEHOUSE_NOTE_MOBILE_ENTRY },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Mobil cihaz eşleştirmesi ZORUNLU mu? Default false (pasif). Kapalıyken (default)
+ * eşleşmemiş/kayıtsız tabletler de sisteme girebilir ve çalışır — ancak işledikleri
+ * topta makine atfı (RollMovement/RollOperation.machineId) NULL kalır. Açıkken bugünkü
+ * davranış: eşleşmemiş/pasif cihaz device.middleware'de 401 DEVICE_INACTIVE ile kesilir.
+ * Diğer flag'lerin aksine ENFORCE edilir (middleware + mobileUsers + mobil pairing gate).
+ */
+export async function readDevicePairingRequired(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu? Default false (kapalı).
+ * Kapalıyken mobil ① "Sevkiyat" ekranı "Hemen Sevk Et" kısayolunu gösterir (paketleyen
+ * direkt sevk eder); açıkken ① sadece "Sevke Hazır" yapar ve çıkış ② "Sevk Çıkışı"
+ * ekranından onaylanır. Sadece UI rehberi — backend ENFORCE ETMEZ (her iki yoldan da
+ * dispatch kabul edilir; ara depoda bekleme + sonradan çıkış flag'den bağımsız her zaman var).
+ */
+export async function readShipmentConfirmationEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

@@ -30,7 +30,11 @@ export interface BalanceWo {
   inFlight: number;
 }
 
-export interface BalanceSpec {
+/**
+ * En (width) alt-satırı. Ham / malzeme açığı BURADA YOK — (ürün+renk) grubu
+ * düzeyinde (ham kumaşın eni önemsiz). Depo en'e göre birebir → burada kalır.
+ */
+export interface BalanceSpecRow {
   key: string;
   itemId: string;
   itemName: string;
@@ -38,18 +42,56 @@ export interface BalanceSpec {
   colorName: string | null;
   colorHex: string | null;
   width: number | null;
-  /** Σ(istenen − sevk) açık siparişler. */
+  /** Σ(istenen − sevk) açık siparişler (bu en). */
   talep: number;
-  /** Sevksiz WAREHOUSE (hazır). */
+  /** Sevksiz WAREHOUSE (bu en, hazır). */
   depo: number;
-  /** Canlı WO hedef-spec in-flight (committed − finished). */
+  /** Canlı WO hedef-spec in-flight (committed − finished, bu en). */
   uretimde: number;
-  /** Sevksiz STOCK (işlenecek hazır kumaş). */
-  ham: number;
-  /** max(0, talep − depo − üretimde) → WO açılacak miktar. */
+  /** max(0, talep − depo − üretimde) → bu en için WO açılacak miktar. */
   uretilecek: number;
-  /** max(0, üretilecek − ham) → kumaş tedariki gereken kısım. */
-  malzemeAcigi: number;
   lines: BalanceLine[];
   wos: BalanceWo[];
+}
+
+/**
+ * (ürün, renk) grubu. Ham havuzu + malzeme açığı bu düzeyde (en-agnostik, tek
+ * sayım). Talep/Depo/Üretimde/Üretilecek başlıkta Σ; en kırılımı specs[].
+ */
+export interface BalanceGroup {
+  key: string;
+  itemId: string;
+  itemName: string;
+  colorId: string | null;
+  colorName: string | null;
+  colorHex: string | null;
+  talep: number;
+  depo: number;
+  uretimde: number;
+  uretilecek: number;
+  /** Sevksiz STOCK havuzu (ürün+renk, en-agnostik). */
+  ham: number;
+  /** max(0, Σüretilecek − ham) → kumaş tedariki gereken kısım. */
+  malzemeAcigi: number;
+  specs: BalanceSpecRow[];
+}
+
+/**
+ * "İş Emri Aç" dialog hedefi: belirli bir en alt-satırı (talep/depo/üretimde/
+ * üretilecek + lines) + ait olduğu grubun ham havuzu (paylaşılan, en-agnostik).
+ */
+export interface WoTarget {
+  key: string;
+  itemId: string;
+  itemName: string;
+  colorId: string | null;
+  colorName: string | null;
+  width: number | null;
+  talep: number;
+  depo: number;
+  uretimde: number;
+  uretilecek: number;
+  /** Grup ham havuzu (bu ürün+renk için paylaşılan; en'e bölünmez). */
+  ham: number;
+  lines: BalanceLine[];
 }

@@ -131,7 +131,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
             <CommandGroup key={section.heading} heading={section.heading}>
               {entries.map((entry) => {
                 const Icon = entry.icon;
-                const value = [entry.label, entry.description, section.heading]
+                const value = [entry.label, entry.description, entry.keywords, section.heading]
                   .filter(Boolean)
                   .join(" ");
                 return (

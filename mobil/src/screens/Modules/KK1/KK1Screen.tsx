@@ -36,8 +36,7 @@ import {
 } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import Modal from 'react-native-modal';
-import { useFullscreenModalProps } from '../../../hooks/useFullscreenModalProps';
+import AppModal from '../../../components/AppModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import dayjs from 'dayjs';
 
@@ -47,9 +46,9 @@ import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
+import { useRawWidthEnabled } from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
-import { toastConfig } from '../../../components/ToastConfig';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { itemService } from '../../../services/item.service';
 import { rollService, InitialEntryRequest } from '../../../services/roll.service';
@@ -160,6 +159,9 @@ export default function KK1Screen() {
 
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
+  // Ham kumaşın eni önemsiz → en girişi feature flag'e bağlı (default kapalı).
+  // Kapalıyken alan tamamen gizlidir (elle açma yok); yalnızca flag açıkken görünür.
+  const rawWidthEnabled = useRawWidthEnabled();
   // Telefon dikey: son kayıtlar tetiği header'a taşınır, body'deki buton gizlenir.
   const { width: winW, height: winH } = useWindowDimensions();
   const portraitPhone = compact && winH > winW;
@@ -229,12 +231,13 @@ export default function KK1Screen() {
   }, []);
 
   // Manuel kapanınca (ve mount'ta) numpad varsayılan hedefi EN'e döner (tablet).
-  // Operatör mt/kg'den çıkınca tuşlar yine En'i değiştirir.
+  // Operatör mt/kg'den çıkınca tuşlar yine En'i değiştirir. En girişi flag ile
+  // kapalıysa odaklanacak alan yok → atla (numpad zaten render edilmez).
   useEffect(() => {
-    if (!compact && !manualMode) {
+    if (!compact && !manualMode && rawWidthEnabled) {
       requestAnimationFrame(() => widthRef.current?.focus());
     }
-  }, [compact, manualMode]);
+  }, [compact, manualMode, rawWidthEnabled]);
 
   // ── Items: kumaş (Variant kaldırıldı; RAW/DYED ayrımı yok artık) ──
   const itemsQuery = useQuery({
@@ -510,9 +513,12 @@ export default function KK1Screen() {
       Toast.show({ type: 'error', text1: 'Ürün seçimi zorunlu' });
       return;
     }
-    const width = Number(form.width);
-    if (!width || width <= 0) {
-      Toast.show({ type: 'error', text1: 'En (cm) zorunlu' });
+    // En opsiyonel (ham kumaşın eni önemsiz). Girilmişse pozitif olmalı; boş
+    // bırakılırsa null gönderilir — bitmiş topun eni Tambur'da WO'dan gelir.
+    const widthNum = Number(form.width);
+    const width = widthNum > 0 ? widthNum : undefined;
+    if (form.width.trim() !== '' && !(widthNum > 0)) {
+      Toast.show({ type: 'error', text1: 'En (cm) geçersiz' });
       return;
     }
     if (!form.qualityGrade) {
@@ -783,32 +789,34 @@ export default function KK1Screen() {
               </View>
             </TouchableRipple>
 
-            <Text style={[styles.label, styles.labelSpaced]}>
-              En (cm) <Text style={styles.required}>*</Text>
-            </Text>
-            <View style={styles.widthRow}>
-              <NumpadInput
-                ref={widthRef}
-                mode="outlined"
-                value={form.width}
-                onChangeText={(v) => setForm((f) => ({ ...f, width: v }))}
-                numpadLabel="En (cm)"
-                placeholder="örn: 280"
-                style={[styles.input, styles.widthInput]}
-                contentStyle={styles.widthInputContent}
-                useNativeKeyboard={compact}
-                autoActivate={!compact}
-              />
-              <IconButton
-                icon="backspace-outline"
-                mode="contained-tonal"
-                size={24}
-                onPress={handleClearWidth}
-                disabled={!form.width}
-                accessibilityLabel="En'i temizle"
-                style={styles.widthClearBtn}
-              />
-            </View>
+            {rawWidthEnabled && (
+              <>
+                <Text style={[styles.label, styles.labelSpaced]}>En (cm)</Text>
+                <View style={styles.widthRow}>
+                  <NumpadInput
+                    ref={widthRef}
+                    mode="outlined"
+                    value={form.width}
+                    onChangeText={(v) => setForm((f) => ({ ...f, width: v }))}
+                    numpadLabel="En (cm)"
+                    placeholder="örn: 280 (opsiyonel)"
+                    style={[styles.input, styles.widthInput]}
+                    contentStyle={styles.widthInputContent}
+                    useNativeKeyboard={compact}
+                    autoActivate={!compact}
+                  />
+                  <IconButton
+                    icon="backspace-outline"
+                    mode="contained-tonal"
+                    size={24}
+                    onPress={handleClearWidth}
+                    disabled={!form.width}
+                    accessibilityLabel="En'i temizle"
+                    style={styles.widthClearBtn}
+                  />
+                </View>
+              </>
+            )}
 
             <Text style={[styles.label, styles.labelSpaced]}>Kalite Sınıfı</Text>
             {qualityGradesQuery.isLoading ? (
@@ -907,7 +915,12 @@ export default function KK1Screen() {
               )}
             </View>
 
-            <NumpadHost style={styles.numpadHost} />
+            {/* Numpad yalnızca sayısal alan varken: en girişi (flag) açık VEYA
+                manuel mt/kg açık. İkisi de kapalıysa girilecek değer yok →
+                numpad gizlenir, boşuna yer kaplamaz. */}
+            {(rawWidthEnabled || manualMode) && (
+              <NumpadHost style={styles.numpadHost} />
+            )}
           </View>
         )}
       </View>
@@ -1026,24 +1039,16 @@ function RecentsDrawer({
   onScrap,
 }: RecentsDrawerProps) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
   const insets = useSafeAreaInsets();
   // Telefon dar; drawer genişliği ekranın %85'i veya max 380px
   const drawerWidth = Math.min(winW * 0.85, 380);
 
   return (
-    <Modal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      onModalHide={onClosed}
-      backdropOpacity={0.4}
-      animationIn="slideInRight"
-      animationOut="slideOutRight"
-      style={drawerStyles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
+    <AppModal
+      visible={visible}
+      onDismiss={onDismiss}
+      position="right"
+      onHidden={onClosed}
     >
       <View
         style={[
@@ -1115,13 +1120,11 @@ function RecentsDrawer({
           Tümünü Gör
         </Button>
       </View>
-      <Toast config={toastConfig} />
-    </Modal>
+    </AppModal>
   );
 }
 
 const drawerStyles = StyleSheet.create({
-  modal: { margin: 0, padding: 0, justifyContent: 'flex-end', flexDirection: 'row' },
   sheet: {
     backgroundColor: '#fff',
     paddingLeft: 16,
@@ -1182,22 +1185,11 @@ function RollHistoryModal({
   onScrap,
 }: RollHistoryModalProps) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
   const insets = useSafeAreaInsets();
   const isPhone = useDeviceType() === 'phone';
 
   return (
-    <Modal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      onModalHide={onClosed}
-      backdropOpacity={0.5}
-      style={historyStyles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
-    >
+    <AppModal visible={visible} onDismiss={onDismiss} onHidden={onClosed}>
       {/* Telefonda daha geniş + daha kısa (satırlar compact ile alçaldı).
           maxWidth/maxHeight ile güvenli alanı (durum/nav çubuğu, çentik) aşmaz. */}
       <View
@@ -1281,13 +1273,11 @@ function RollHistoryModal({
           </View>
         )}
       </View>
-      <Toast config={toastConfig} />
-    </Modal>
+    </AppModal>
   );
 }
 
 const historyStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
   sheet: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -1333,22 +1323,10 @@ interface ScrapConfirmModalProps {
 
 function ScrapConfirmModal({ roll, loading, onDismiss, onConfirm }: ScrapConfirmModalProps) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
   const sheetWidth = Math.min(winW * 0.9, 460);
 
   return (
-    <Modal
-      isVisible={!!roll}
-      onBackdropPress={loading ? undefined : onDismiss}
-      onBackButtonPress={loading ? undefined : onDismiss}
-      backdropOpacity={0.5}
-      animationIn="zoomIn"
-      animationOut="zoomOut"
-      style={scrapStyles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
-    >
+    <AppModal visible={!!roll} onDismiss={onDismiss} dismissable={!loading}>
       <View style={[scrapStyles.sheet, { width: sheetWidth }]}>
         <View style={scrapStyles.iconCircle}>
           <Icon source="alert-circle-outline" size={36} color="#dc2626" />
@@ -1409,12 +1387,11 @@ function ScrapConfirmModal({ roll, loading, onDismiss, onConfirm }: ScrapConfirm
           </Button>
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 
 const scrapStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
   sheet: {
     backgroundColor: '#fff',
     borderRadius: 16,

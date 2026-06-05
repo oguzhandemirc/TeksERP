@@ -15,8 +15,15 @@ const dispatchSchema = z.object({
   plateNumber: z.string().max(32).optional(),
   driverName: z.string().max(128).optional(),
   notes: z.string().max(1000).optional(),
+  /** Boyahaneye özel talimat — genel sevk notundan ayrı (opsiyonel). */
+  dyehouseNote: z.string().max(1000).optional(),
   /** Operatör WO ürünü vs rulo ürünü uyuşmazlığını bilinçli onayladı. */
   allowItemOverride: z.boolean().optional(),
+});
+
+const updateDyehouseNoteSchema = z.object({
+  // Boş string / null → notu temizle.
+  dyehouseNote: z.string().max(1000).trim().nullish(),
 });
 
 const cancelDispatchSchema = z.object({
@@ -71,6 +78,7 @@ export class SubcontractorController {
   constructor() {
     this.service = new SubcontractorService();
     this.dispatch = this.dispatch.bind(this);
+    this.updateDyehouseNote = this.updateDyehouseNote.bind(this);
     this.cancelDispatch = this.cancelDispatch.bind(this);
     this.receive = this.receive.bind(this);
     this.pendingReturns = this.pendingReturns.bind(this);
@@ -90,6 +98,22 @@ export class SubcontractorController {
       const body = dispatchSchema.parse(req.body);
       const result = await this.service.dispatch(body, req.user?.userId);
       res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** PATCH /api/subcontractor/dispatches/:id/dyehouse-note */
+  async updateDyehouseNote(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const body = updateDyehouseNoteSchema.parse(req.body);
+      const result = await this.service.updateDyehouseNote(
+        id,
+        body.dyehouseNote ?? null,
+        req.user?.userId
+      );
+      res.status(200).json(result);
     } catch (err) {
       next(err);
     }
@@ -154,11 +178,38 @@ export class SubcontractorController {
   /** GET /api/subcontractor/dispatches */
   async listDispatches(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const qStr = (v: unknown): string | undefined =>
+        typeof v === "string" && v.length > 0 ? v : undefined;
+
+      const STATUSES = ["all", "active", "cancelled"] as const;
+      type DStatus = (typeof STATUSES)[number];
+      const statusRaw = qStr(req.query.status);
+      const status: DStatus | undefined = (STATUSES as readonly string[]).includes(
+        statusRaw ?? "",
+      )
+        ? (statusRaw as DStatus)
+        : undefined;
+
+      const dateFromStr = qStr(req.query.dateFrom);
+      const dateToStr = qStr(req.query.dateTo);
+      const dateFrom = dateFromStr ? new Date(dateFromStr) : undefined;
+      const dateTo = dateToStr ? new Date(dateToStr) : undefined;
+
       const result = await this.service.listDispatches({
-        workOrderId:     typeof req.query.workOrderId     === "string" ? req.query.workOrderId     : undefined,
-        subcontractorId: typeof req.query.subcontractorId === "string" ? req.query.subcontractorId : undefined,
-        page:            typeof req.query.page            === "string" ? Number(req.query.page)     : undefined,
-        pageSize:        typeof req.query.pageSize        === "string" ? Number(req.query.pageSize) : undefined,
+        workOrderId:     qStr(req.query.workOrderId),
+        subcontractorId: qStr(req.query.subcontractorId),
+        status,
+        search:          qStr(req.query.search),
+        dateFrom:        dateFrom && !Number.isNaN(dateFrom.getTime()) ? dateFrom : undefined,
+        dateTo:          dateTo && !Number.isNaN(dateTo.getTime()) ? dateTo : undefined,
+        // offset
+        page:            qStr(req.query.page) ? Number(req.query.page) : undefined,
+        pageSize:        qStr(req.query.pageSize) ? Number(req.query.pageSize) : undefined,
+        // cursor
+        cursor:          qStr(req.query.cursor),
+        mode:            qStr(req.query.mode),
+        limit:           qStr(req.query.limit) ? Number(req.query.limit) : undefined,
+        withTotal:       req.query.withTotal === "true",
       });
       res.status(200).json(result);
     } catch (err) {

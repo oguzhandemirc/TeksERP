@@ -46,15 +46,6 @@ function widthEqual(
   return new Prisma.Decimal(a).equals(b);
 }
 
-/** Gevşek en uyumu — ikisi de set ve farklıysa elenir; null = joker. */
-function widthCompatible(
-  a: Prisma.Decimal | null,
-  b: Prisma.Decimal | null
-): boolean {
-  if (a == null || b == null) return true;
-  return new Prisma.Decimal(a).equals(b);
-}
-
 /** Drill-down: bu spec'in açık sipariş kalemi (WO formuna bind için yeterli alan). */
 export interface BalanceLine {
   lineId: string;
@@ -87,7 +78,12 @@ export interface BalanceWo {
   inFlight: Prisma.Decimal;
 }
 
-export interface BalanceSpec {
+/**
+ * En (width) alt-satırı. Ham kumaşın eni önemsiz olduğu için ham/malzeme açığı
+ * BURADA YOK — onlar (ürün+renk) grubu düzeyinde (bkz. BalanceGroup). Depo
+ * (bitmiş mal) en'e göre birebir olduğundan alt-satırda kalır.
+ */
+export interface BalanceSpecRow {
   key: string;
   itemId: string;
   itemName: string;
@@ -98,16 +94,37 @@ export interface BalanceSpec {
   talep: Prisma.Decimal;
   depo: Prisma.Decimal;
   uretimde: Prisma.Decimal;
-  ham: Prisma.Decimal;
-  /** max(0, talep − depo − üretimde) → WO açılacak miktar. */
+  /** max(0, talep − depo − üretimde) → bu en için WO açılacak miktar. */
   uretilecek: Prisma.Decimal;
-  /** max(0, üretilecek − ham) → kumaş tedariki gereken kısım. */
-  malzemeAcigi: Prisma.Decimal;
   lines: BalanceLine[];
   wos: BalanceWo[];
 }
 
-interface SpecAcc extends BalanceSpec {
+/**
+ * (ürün, renk) grubu. Ham kumaşın eni önemsiz (KK1'de opsiyonel, fasonda
+ * işlenir/boyanır) → ham havuzu + malzeme açığı bu düzeyde TEK hesaplanır,
+ * en alt-satırlarına bölünmez (aksi halde aynı havuz her en satırına yazılıp
+ * çift sayılırdı). Talep/Depo/Üretimde/Üretilecek başlıkta Σ; kırılım specs[].
+ */
+export interface BalanceGroup {
+  key: string; // itemId|colorId
+  itemId: string;
+  itemName: string;
+  colorId: string | null;
+  colorName: string | null;
+  colorHex: string | null;
+  talep: Prisma.Decimal;
+  depo: Prisma.Decimal;
+  uretimde: Prisma.Decimal;
+  uretilecek: Prisma.Decimal;
+  /** Sevksiz STOCK havuzu (ürün+renk; en-agnostik, renksiz ham renk-joker). */
+  ham: Prisma.Decimal;
+  /** max(0, Σüretilecek − ham) → kumaş tedariki gereken kısım. */
+  malzemeAcigi: Prisma.Decimal;
+  specs: BalanceSpecRow[];
+}
+
+interface SpecAcc extends BalanceSpecRow {
   /** İsim doldurulmuş mu — ilk dolduran sabitlesin. */
   named: boolean;
 }
@@ -120,7 +137,7 @@ export class ProductionBalanceService {
    */
   async getBalance(
     opts: { itemId?: string } = {}
-  ): Promise<ApiResponse<BalanceSpec[]>> {
+  ): Promise<ApiResponse<BalanceGroup[]>> {
     const { itemId } = opts;
     const map = new Map<string, SpecAcc>();
 
@@ -148,9 +165,7 @@ export class ProductionBalanceService {
           talep: D0(),
           depo: D0(),
           uretimde: D0(),
-          ham: D0(),
           uretilecek: D0(),
-          malzemeAcigi: D0(),
           lines: [],
           wos: [],
           named: Boolean(names?.itemName),
@@ -243,10 +258,12 @@ export class ProductionBalanceService {
     }
 
     // 2) Arz havuzu (sevksiz) — depo (WAREHOUSE, bitmiş) + ham (STOCK, işlenecek).
-    // Satıra ENSURE ile eklenmez; aşağıda mevcut talep/üretim satırlarına eşleşir.
-    //   Depo: birebir (ürün+renk+en) — renk zaten uygulanmış.
-    //   Ham : renk-agnostik — renksiz (color=null) ham, boyahanede istenen renge
-    //         boyanacağı için aynı ürün+en'deki RENKLİ talebe de sayılır.
+    // Satıra ENSURE ile eklenmez; aşağıda eşleşir.
+    //   Depo: birebir (ürün+renk+en) — renk + en zaten bitmiş malda sabit → en
+    //         alt-satırına yazılır.
+    //   Ham : EN-AGNOSTİK (ham kumaşın eni önemsiz) — (ürün, renk) GRUBU düzeyinde
+    //         tek sayılır. Renksiz (color=null) ham, boyanacağı için aynı ürünün
+    //         her rengine joker sayılır (mevcut davranış korunur).
     const supply = await prisma.roll.groupBy({
       by: ["itemId", "colorId", "width", "status"],
       where: {
@@ -299,30 +316,21 @@ export class ProductionBalanceService {
       }
     }
 
-    // 4) Arz eşleştirme (depo birebir, ham gevşek) + türev kolonlar + filtre.
-    const data: BalanceSpec[] = [];
+    // 4) Depo eşleştirme (per-en birebir) + türev kolon + filtre → en alt-satırları.
+    //    Ham bu aşamada DEĞİL — (ürün,renk) grubu düzeyinde, aşağıda (5).
+    const rows: BalanceSpecRow[] = [];
     for (const acc of map.values()) {
       for (const g of supply) {
+        if (g.status !== RollStatus.WAREHOUSE) continue;
         if (g.itemId !== acc.itemId) continue;
         const qty = new Prisma.Decimal(g._sum.currentQty ?? 0);
         if (qty.lessThanOrEqualTo(0)) continue;
-        if (g.status === RollStatus.WAREHOUSE) {
-          // Depo: birebir ürün+renk+en.
-          if (
-            (g.colorId ?? null) === (acc.colorId ?? null) &&
-            widthEqual(g.width, acc.width)
-          ) {
-            acc.depo = acc.depo.plus(qty);
-          }
-        } else {
-          // Ham: renksiz (null) joker; renkli ham yalnız kendi rengine.
-          const colorOk =
-            g.colorId == null ||
-            acc.colorId == null ||
-            g.colorId === acc.colorId;
-          if (colorOk && widthCompatible(g.width, acc.width)) {
-            acc.ham = acc.ham.plus(qty);
-          }
+        // Depo: birebir ürün+renk+en.
+        if (
+          (g.colorId ?? null) === (acc.colorId ?? null) &&
+          widthEqual(g.width, acc.width)
+        ) {
+          acc.depo = acc.depo.plus(qty);
         }
       }
 
@@ -330,7 +338,6 @@ export class ProductionBalanceService {
         0,
         acc.talep.minus(acc.depo).minus(acc.uretimde)
       );
-      acc.malzemeAcigi = Prisma.Decimal.max(0, acc.uretilecek.minus(acc.ham));
       if (acc.talep.greaterThan(0) || acc.uretimde.greaterThan(0)) {
         // termin sırasıyla göster (bind seed'i için de hazır sıra)
         acc.lines.sort((a, b) => {
@@ -341,12 +348,61 @@ export class ProductionBalanceService {
         });
         const { named: _named, ...spec } = acc;
         void _named;
-        data.push(spec);
+        rows.push(spec);
       }
     }
 
-    // En çok üretilecek olan üste — planlamacı önceliği.
-    data.sort((a, b) => b.uretilecek.comparedTo(a.uretilecek));
+    // 5) (ürün, renk) grubu: en alt-satırlarını topla; ham + malzeme açığı
+    //    grup düzeyinde TEK hesaplanır (en-agnostik havuz → çift sayım yok).
+    const groupMap = new Map<string, BalanceGroup>();
+    for (const row of rows) {
+      const gKey = `${row.itemId}|${row.colorId ?? ""}`;
+      let grp = groupMap.get(gKey);
+      if (!grp) {
+        grp = {
+          key: gKey,
+          itemId: row.itemId,
+          itemName: row.itemName,
+          colorId: row.colorId,
+          colorName: row.colorName,
+          colorHex: row.colorHex,
+          talep: D0(),
+          depo: D0(),
+          uretimde: D0(),
+          uretilecek: D0(),
+          ham: D0(),
+          malzemeAcigi: D0(),
+          specs: [],
+        };
+        groupMap.set(gKey, grp);
+      }
+      grp.talep = grp.talep.plus(row.talep);
+      grp.depo = grp.depo.plus(row.depo);
+      grp.uretimde = grp.uretimde.plus(row.uretimde);
+      grp.uretilecek = grp.uretilecek.plus(row.uretilecek);
+      grp.specs.push(row);
+    }
+
+    for (const grp of groupMap.values()) {
+      // Ham havuzu: sevksiz STOCK, ürün+renk uyumlu, EN-AGNOSTİK (tek sayım).
+      for (const g of supply) {
+        if (g.status !== RollStatus.STOCK) continue;
+        if (g.itemId !== grp.itemId) continue;
+        const qty = new Prisma.Decimal(g._sum.currentQty ?? 0);
+        if (qty.lessThanOrEqualTo(0)) continue;
+        const colorOk =
+          g.colorId == null || grp.colorId == null || g.colorId === grp.colorId;
+        if (colorOk) grp.ham = grp.ham.plus(qty);
+      }
+      grp.malzemeAcigi = Prisma.Decimal.max(0, grp.uretilecek.minus(grp.ham));
+      // En alt-satırlarını en çok üretilecek olan üste.
+      grp.specs.sort((a, b) => b.uretilecek.comparedTo(a.uretilecek));
+    }
+
+    // En çok üretilecek olan grup üste — planlamacı önceliği.
+    const data = [...groupMap.values()].sort((a, b) =>
+      b.uretilecek.comparedTo(a.uretilecek)
+    );
 
     return { success: true, data };
   }

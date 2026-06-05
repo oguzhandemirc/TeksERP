@@ -26,6 +26,7 @@ import DetailSheet, {
 } from '../../../components/DetailSheet';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
+import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { rollService } from '../../../services/roll.service';
 import { swatchService, type SwatchListItem } from '../../../services/swatch.service';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
@@ -86,6 +87,11 @@ export default function DepoScreen() {
 
   const isSwatchMode = mode === 'SWATCH';
 
+  // Arama backend'de filtreleniyor. Her tuşa basıldığında istek atmamak için
+  // 300ms debounce — input anında doldurulur (controlled), ama queryKey sadece
+  // kullanıcı yazmayı bıraktığında değişir. (Tambur/FasonSevk ile aynı pattern.)
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
+
   // Roll listesi — status filtresi mode'a göre belirlenir. SWATCH modunda
   // bu query enabled=false (kartela ayrı endpoint).
   // ALL sekmesi depo karakterli tüm statüleri kapsar: WAREHOUSE (Tambur sonrası),
@@ -102,13 +108,13 @@ export default function DepoScreen() {
   // Liste — cursor-mode infinite scroll. mode/search değiştiğinde queryKey
   // değişir → useInfiniteQuery state'i sıfırlar (ilk sayfa).
   const rollsQuery = useInfiniteQuery({
-    queryKey: ['rolls', 'depo', mode, search] as const,
+    queryKey: ['rolls', 'depo', mode, debouncedSearch] as const,
     queryFn: ({ pageParam }) =>
       rollService.getAllCursor({
         limit: PAGE_SIZE,
         cursor: pageParam,
         filters: rollsFilters,
-        search: search.trim() || undefined,
+        search: debouncedSearch || undefined,
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) =>
@@ -120,10 +126,10 @@ export default function DepoScreen() {
   // Stats — TÜM filtreye uyan rolların aggregate'i (sayfaya bağlı değil).
   // Liste ile aynı filtre seti, ayrı endpoint.
   const rollStatsQuery = useQuery({
-    queryKey: ['rolls', 'depo', 'stats', mode, search] as const,
+    queryKey: ['rolls', 'depo', 'stats', mode, debouncedSearch] as const,
     queryFn: () =>
       rollService.getStats({
-        search: search.trim() || undefined,
+        search: debouncedSearch || undefined,
         filters: rollsFilters,
       }),
     enabled: !isSwatchMode,
@@ -132,12 +138,12 @@ export default function DepoScreen() {
 
   // Search artık backend'de — queryKey'de yer alır, değişince ilk sayfaya döner.
   const swatchesQuery = useInfiniteQuery({
-    queryKey: ['swatches', 'depo', search] as const,
+    queryKey: ['swatches', 'depo', debouncedSearch] as const,
     queryFn: ({ pageParam }) =>
       swatchService.listCursor({
         limit: PAGE_SIZE,
         cursor: pageParam,
-        search: search.trim() || undefined,
+        search: debouncedSearch || undefined,
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) =>
@@ -147,9 +153,9 @@ export default function DepoScreen() {
   });
 
   const swatchStatsQuery = useQuery({
-    queryKey: ['swatches', 'depo', 'stats', search] as const,
+    queryKey: ['swatches', 'depo', 'stats', debouncedSearch] as const,
     queryFn: () =>
-      swatchService.getStats({ search: search.trim() || undefined }),
+      swatchService.getStats({ search: debouncedSearch || undefined }),
     enabled: isSwatchMode,
     staleTime: 30 * 1000,
   });

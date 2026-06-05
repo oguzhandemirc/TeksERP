@@ -111,6 +111,8 @@ export interface ShipmentSack {
   id: string;
   sackNo: string;
   seq: number;
+  /** Operatörün çuval üstüne elle yazdığı kod (sevke hazır/sevk için zorunlu). */
+  manualCode: string | null;
   weightKg: number | null;
   rolls: SackRoll[];
   swatches: SackSwatch[];
@@ -123,7 +125,20 @@ export interface ShipmentSackLean {
   id: string;
   sackNo: string;
   seq: number;
+  manualCode: string | null;
   weightKg: number | null;
+}
+/** Bu sevkiyattan iade edilmiş top (canlı rolls'ta yok; RollReturn'den). */
+export interface ShipmentReturnedRoll {
+  id: string;
+  barcode: string | null;
+  item: { code: string; name: string } | null;
+  color: { code: string; name: string } | null;
+  width: number | null;
+  qty: number;
+  returnedAt: string;
+  reasonName: string | null;
+  reasonColor: string | null;
 }
 export interface ShipmentDetail {
   id: string;
@@ -140,12 +155,15 @@ export interface ShipmentDetail {
   rolls: ShipmentDetailRoll[];
   swatches: Array<{ id: string; barcode: string | null; length: number; width: number | null }>;
   sacks: ShipmentSack[];
+  returnedRolls: ShipmentReturnedRoll[];
   summary: {
     rollCount: number;
     swatchCount: number;
     totalMeters: number;
     sackCount: number;
     totalKg: number;
+    returnedCount: number;
+    returnedMeters: number;
   };
 }
 
@@ -257,8 +275,14 @@ export const packingService = {
       .post<ApiResponse<ShipmentSackLean>>(`/shipping/shipments/${id}/sacks`, weightKg != null ? { weightKg } : {})
       .then((r) => r.data),
 
-  weighSack: (sackId: string, weightKg: number): Promise<ApiResponse<unknown>> =>
-    apiClient.post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/weigh`, { weightKg }).then((r) => r.data),
+  // Çuval kapat: brüt tartı + elle yazılan kod birlikte set edilir (kod zorunlu).
+  weighSack: (sackId: string, weightKg: number, manualCode?: string): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/weigh`, {
+        weightKg,
+        ...(manualCode !== undefined ? { manualCode } : {}),
+      })
+      .then((r) => r.data),
 
   removeSack: (sackId: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/remove`, {}).then((r) => r.data),

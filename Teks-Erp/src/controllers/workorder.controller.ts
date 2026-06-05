@@ -20,6 +20,8 @@ const createSchema = z.object({
   targetColorId:     z.string().uuid().optional().nullable(),
   // Tambur planlama bilgisi — operatör override edebilir.
   foldType:          z.string().trim().max(32).optional().nullable(),
+  // Boyahaneye özel talimat — fason sevkinde kullanılır.
+  dyehouseNote:      z.string().trim().max(1000).optional().nullable(),
   steps: z
     .array(z.object({
       stationId:              z.string().uuid("Geçersiz istasyon ID"),
@@ -84,6 +86,7 @@ const updateWorkOrderSchema = z.object({
   targetItemId: z.string().uuid().nullable().optional(),
   targetColorId: z.string().uuid().nullable().optional(),
   foldType: z.string().trim().max(32).nullable().optional(),
+  dyehouseNote: z.string().trim().max(1000).nullable().optional(),
 });
 
 /**
@@ -102,6 +105,7 @@ const replaceWorkOrderSchema = z.object({
   targetItemId:      z.string().uuid().optional().nullable(),
   targetColorId:     z.string().uuid().optional().nullable(),
   foldType:          z.string().trim().max(32).optional().nullable(),
+  dyehouseNote:      z.string().trim().max(1000).optional().nullable(),
   steps: z
     .array(z.object({
       // smart-merge için: mevcut step'i güncellemek istersen id gönder.

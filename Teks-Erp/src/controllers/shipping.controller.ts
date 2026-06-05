@@ -25,11 +25,20 @@ const removeSwatchSchema = z.object({ swatchId: z.string().uuid("Geçersiz karte
 const moveSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
 
 const addSackSchema = z.object({
-  // Çuval-önce akışta boş açılır (kg sonra tartılır) → opsiyonel
+  // Çuval-önce akışta boş açılır (kg + kod sonra girilir) → opsiyonel
   weightKg: z.number().positive("Kg pozitif olmalı").optional().nullable(),
   sackNo: z.string().trim().min(1).max(64).optional().nullable(),
+  manualCode: z.string().trim().max(64).optional().nullable(),
 });
-const weighSackSchema = z.object({ weightKg: z.number().positive("Kg pozitif olmalı") });
+// Çuval güncelle — tartı ve/veya elle yazılan kod. En az biri verilmeli.
+const weighSackSchema = z
+  .object({
+    weightKg: z.number().positive("Kg pozitif olmalı").optional(),
+    manualCode: z.string().trim().max(64).optional(),
+  })
+  .refine((v) => v.weightKg !== undefined || v.manualCode !== undefined, {
+    message: "Tartı veya çuval kodu girilmeli",
+  });
 
 const dispatchSchema = z.object({
   plateNumber: z.string().trim().max(32).optional().nullable(),
@@ -147,7 +156,7 @@ export class ShippingController {
     try {
       const body = addSackSchema.parse(req.body);
       const result = await this.service.addSack(
-        { shipmentId: req.params.id as string, weightKg: body.weightKg, sackNo: body.sackNo },
+        { shipmentId: req.params.id as string, weightKg: body.weightKg, sackNo: body.sackNo, manualCode: body.manualCode },
         req.user?.userId
       );
       res.status(201).json(result);
@@ -160,7 +169,7 @@ export class ShippingController {
     try {
       const body = weighSackSchema.parse(req.body);
       const result = await this.service.updateSack(
-        { sackId: req.params.id as string, weightKg: body.weightKg },
+        { sackId: req.params.id as string, weightKg: body.weightKg, manualCode: body.manualCode },
         req.user?.userId
       );
       res.status(200).json(result);

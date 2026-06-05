@@ -195,50 +195,61 @@ export class TravelerCardService {
 
     // Eski kartı REPRINTED'a çek, yeni kartı üret (transaction içinde).
     // Barkod sequence çakışırsa (P2002) tx'i baştan dener.
-    return withBarcodeRetry(() => prisma.$transaction(async (tx) => {
-      if (activeCard) {
-        await tx.travelerCard.update({
-          where: { id: activeCard.id },
+    const card = await withBarcodeRetry(() =>
+      prisma.$transaction(async (tx) => {
+        if (activeCard) {
+          await tx.travelerCard.update({
+            where: { id: activeCard.id },
+            data: {
+              status: TravelerCardStatus.REPRINTED,
+              voidReason: `REPRINT: ${reason}`,
+              voidedAt: new Date(),
+            },
+          });
+        }
+        // Not: createCardInternal kendi küçük transaction'ı var; burada dış
+        // transaction'a katılması için tx'i direkt geçiremeyiz. Basit çözüm:
+        // kart oluşturma işini burada inline yapalım.
+        const seq = await this.nextMonthlySequence(new Date());
+        const now = new Date();
+        const cardNumber = buildCardNumber(now, seq);
+        const barcode = buildBarcode(now, seq);
+
+        return tx.travelerCard.create({
           data: {
-            status: TravelerCardStatus.REPRINTED,
-            voidReason: `REPRINT: ${reason}`,
-            voidedAt: new Date(),
+            cardNumber,
+            barcode,
+            workOrderId,
+            version: lastVersion + 1,
+            status: TravelerCardStatus.ACTIVE,
+            printedById: userId ?? null,
           },
         });
-      }
-      // Not: createCardInternal kendi küçük transaction'ı var; burada dış
-      // transaction'a katılması için tx'i direkt geçiremeyiz. Basit çözüm:
-      // kart oluşturma işini burada inline yapalım.
-      const seq = await this.nextMonthlySequence(new Date());
-      const now = new Date();
-      const cardNumber = buildCardNumber(now, seq);
-      const barcode = buildBarcode(now, seq);
+      })
+    );
 
-      const card = await tx.travelerCard.create({
-        data: {
-          cardNumber,
-          barcode,
-          workOrderId,
-          version: lastVersion + 1,
-          status: TravelerCardStatus.ACTIVE,
-          printedById: userId ?? null,
-        },
-      });
+    // Audit tx DIŞINDA: tx içinde atılırsa P2002 retry'ında başarısız denemenin
+    // ya da rollback'in audit'i (AuditService global prisma kullanır, ayrı
+    // bağlantıda hemen commit eder) SystemLog'da hayalet kayıt olarak kalırdı.
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "TRAVELER_CARD",
+      recordId: card.id,
+      newData: {
+        cardNumber: card.cardNumber,
+        barcode: card.barcode,
+        version: card.version,
+        event: "REPRINT",
+        reason,
+      },
+    });
 
-      await AuditService.log({
-        userId,
-        action: "CREATE",
-        tableName: "TRAVELER_CARD",
-        recordId: card.id,
-        newData: { cardNumber, barcode, version: card.version, event: "REPRINT", reason },
-      });
-
-      return {
-        success: true,
-        data: card,
-        message: `Refakat kartı yeniden basıldı: ${cardNumber} (v${card.version})`,
-      };
-    }));
+    return {
+      success: true,
+      data: card,
+      message: `Refakat kartı yeniden basıldı: ${card.cardNumber} (v${card.version})`,
+    };
   }
 
   /**

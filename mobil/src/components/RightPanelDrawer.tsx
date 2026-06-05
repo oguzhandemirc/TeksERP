@@ -6,12 +6,9 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
 } from 'react-native';
-import RNModal from 'react-native-modal';
-import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
+import AppModal from './AppModal';
 import { IconButton, Text } from 'react-native-paper';
 import type { EdgeInsets } from 'react-native-safe-area-context';
-import Toast from 'react-native-toast-message';
-import { toastConfig } from './ToastConfig';
 
 /**
  * Telefon (compact) modunda sağdan kayan iş paneli. KursunQc ve Tambur
@@ -28,6 +25,8 @@ export function RightPanelDrawer({
   title,
   children,
   onClosed,
+  widthFactor = 0.9,
+  maxWidth = 420,
 }: {
   visible: boolean;
   onDismiss: () => void;
@@ -35,24 +34,20 @@ export function RightPanelDrawer({
   title: string;
   children: React.ReactNode;
   onClosed?: () => void;
+  /** Ekran genişliğinin oranı (telefonda asıl belirleyici). Default 0.9. */
+  widthFactor?: number;
+  /** Üst sınır (tablet/geniş ekran). Default 420. */
+  maxWidth?: number;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
-  const drawerWidth = Math.min(winW * 0.9, 420);
+  const drawerWidth = Math.min(winW * widthFactor, maxWidth);
 
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      onModalHide={onClosed}
-      backdropOpacity={0.4}
-      animationIn="slideInRight"
-      animationOut="slideOutRight"
-      style={styles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
+    <AppModal
+      visible={visible}
+      onDismiss={onDismiss}
+      position="right"
+      onHidden={onClosed}
     >
       <View
         style={[
@@ -86,14 +81,12 @@ export function RightPanelDrawer({
         >
           <View style={styles.content}>{children}</View>
         </TouchableWithoutFeedback>
-        <Toast config={toastConfig} />
       </View>
-    </RNModal>
+    </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
-  modal: { margin: 0, padding: 0, justifyContent: 'flex-end', flexDirection: 'row' },
   sheet: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 16,

@@ -228,6 +228,7 @@ export interface SubcontractorDispatchListItem {
   plateNumber: string | null;
   driverName: string | null;
   notes: string | null;
+  dyehouseNote: string | null;
   stepId: string;
   cancelledAt: string | null;
   cancelReason: string | null;
@@ -246,6 +247,7 @@ export interface SubcontractorDispatch {
   plateNumber: string | null;
   driverName: string | null;
   notes: string | null;
+  dyehouseNote: string | null;
   totalQty: number;
   dispatchedAt: string;
   cancelledAt: string | null;

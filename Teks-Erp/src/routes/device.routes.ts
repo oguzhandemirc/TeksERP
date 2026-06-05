@@ -35,6 +35,20 @@ export const devicePublicRouter = Router();
  */
 devicePublicRouter.post("/pair", DeviceController.pair);
 
+/**
+ * @openapi
+ * /api/devices/pairing-required:
+ *   get:
+ *     tags: [Devices]
+ *     summary: Cihaz eşleştirmesi zorunlu mu (PUBLIC — JWT yok)
+ *     description: |
+ *       Mobil uygulama login öncesi okur. false (default) ise eşleştirme pasif —
+ *       tablet Pairing ekranını atlayıp doğrudan Login'e geçer ve eşleşmeden çalışır.
+ *     responses:
+ *       200: { description: "{ required: boolean }" }
+ */
+devicePublicRouter.get("/pairing-required", DeviceController.pairingRequired);
+
 // ADMIN endpoints
 export const deviceAdminRouter = Router();
 

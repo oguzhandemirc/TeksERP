@@ -181,7 +181,7 @@ export default function TartiPaketScreen() {
 
   return (
     <ScreenChrome
-      title="Tartı / Paket"
+      title="Sevkiyat"
       headerExtras={
         <>
           <Appbar.Action

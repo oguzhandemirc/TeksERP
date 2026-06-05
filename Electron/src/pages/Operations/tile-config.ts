@@ -6,6 +6,7 @@ import {
   Scale,
   Truck,
   SwatchBook,
+  Undo2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -66,6 +67,14 @@ export const operationsTiles: OperationsTile[] = [
     icon: SwatchBook,
     to: "/operations/kartela",
     permission: "kartela:read",
+  },
+  {
+    key: "returns",
+    title: "İade Takibi",
+    description: "Müşteri iadeleri — hangi siparişten/üründen ne kadar döndü",
+    icon: Undo2,
+    to: "/operations/returns",
+    permission: "return:read",
   },
   {
     key: "kursun-queue",

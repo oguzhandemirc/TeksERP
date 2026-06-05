@@ -12,12 +12,13 @@ import {
   Appbar,
   TouchableRipple,
 } from 'react-native-paper';
-import RNModal from 'react-native-modal';
+import AppModal from '../../../components/AppModal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
+import * as Print from 'expo-print';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { AnimatedEntrance } from '../../../components/motion';
@@ -25,13 +26,15 @@ import { colors, spacing, radius, shadow, typography } from '../../../theme';
 import { packingService } from '../../../services/packing.service';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
-import { useFullscreenModalProps } from '../../../hooks/useFullscreenModalProps';
+import { useShipmentConfirmationEnabled } from '../../../hooks/useFeatureFlags';
+import { buildDispatchNoteHtml } from '../Sevkiyat/dispatchNoteHtml';
 import type { MainStackParamList } from '../../../navigation/types';
 
 // =============================================================================
 // Paketleme — ÇUVAL-ÖNCE akış. Param: { orderIds } (yeni) veya { shipmentId }.
-// Çuval aç → topları O çuvala okut → tart → kapat → sıradaki çuval. Top başka
-// çuvala tek dokunuşla aktarılır. Sevke Hazır: her top çuvalda + her çuval tartılı.
+// Çuval aç → topları O çuvala okut → tart + KOD gir → kapat → sıradaki çuval. Top
+// başka çuvala tek dokunuşla aktarılır. Sevke Hazır/Sevk: her top çuvalda + her çuval
+// tartılı + kodlu. Onay kapalıysa "Hemen Sevk Et" kısayolu; açıksa çıkış ②'den onaylanır.
 // =============================================================================
 
 // Bizdeki ad + (karşıdaki ad) — alias farklıysa parantezde.
@@ -44,7 +47,6 @@ const randKg = () => (Math.round((10 + Math.random() * 90) * 10) / 10).toString(
 export default function PaketlemeScreen() {
   // Portrait kilidi yalnızca telefonda — tablette yatay kalsın.
   usePortraitLock(useDeviceType() === 'phone');
-  const modalProps = useFullscreenModalProps();
   const qc = useQueryClient();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'Paketleme'>>();
@@ -65,7 +67,12 @@ export default function PaketlemeScreen() {
 
   const [weighTarget, setWeighTarget] = useState<{ id: string; seq: number } | null>(null);
   const [weighKg, setWeighKg] = useState('');
+  const [weighCode, setWeighCode] = useState('');
   const [moveTarget, setMoveTarget] = useState<{ rollId: string; fromSackId: string | null; label: string } | null>(null);
+  const [printing, setPrinting] = useState(false);
+
+  // Sevk onayı açıksa ① yalnız "Sevke Hazır" yapar; kapalıysa "Hemen Sevk Et" kısayolu da görünür.
+  const confirmationEnabled = useShipmentConfirmationEnabled();
 
   const scanBusy = useRef(false);
   const ensureRef = useRef<Promise<string> | null>(null);
@@ -172,14 +179,16 @@ export default function PaketlemeScreen() {
   });
 
   const weighSackMut = useMutation({
-    mutationFn: ({ sackId, kg }: { sackId: string; kg: number }) => packingService.weighSack(sackId, kg),
+    mutationFn: ({ sackId, kg, code }: { sackId: string; kg: number; code: string }) =>
+      packingService.weighSack(sackId, kg, code.trim()),
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setWeighTarget(null);
       setWeighKg('');
+      setWeighCode('');
       refreshShip();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Tartı kaydedilemedi', text2: e.message }),
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: e.message }),
   });
 
   const moveRollMut = useMutation({
@@ -210,11 +219,41 @@ export default function PaketlemeScreen() {
     mutationFn: () => packingService.markReady(shipmentId!),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Sevke hazır — kapıda', text2: res.message });
+      Toast.show({ type: 'success', text1: 'Sevke hazır — bekliyor', text2: res.message });
       finishAndBack();
     },
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Sevke hazır yapılamadı', text2: e.message }),
   });
+
+  // "Hemen Sevk Et" (onay kapalı): PREPARING → DISPATCHED tek adım — stok düşer, irsaliye kesilir.
+  const dispatchMut = useMutation({
+    mutationFn: () => packingService.dispatch(shipmentId!, {}),
+    onSuccess: (res) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Sevk edildi', text2: res.message });
+      finishAndBack();
+    },
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Sevk edilemedi', text2: e.message }),
+  });
+
+  // İrsaliye — canlı detaydan A4 belge (expo-print). Çuvalı tartıp koduyla kapattıktan sonra.
+  const printNote = async (): Promise<void> => {
+    if (!ship) return;
+    try {
+      setPrinting(true);
+      await Print.printAsync({
+        html: buildDispatchNoteHtml(ship),
+        margins: { left: 0, top: 0, right: 0, bottom: 0 },
+      });
+    } catch (e) {
+      const msg = (e as Error).message ?? '';
+      if (!/did not complete|cancel/i.test(msg)) {
+        Toast.show({ type: 'error', text1: 'Yazdırılamadı', text2: msg });
+      }
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   const cancelMut = useMutation({
     mutationFn: () => packingService.cancel(shipmentId!),
@@ -268,15 +307,22 @@ export default function PaketlemeScreen() {
   const activeSeq = sacks.find((s) => s.id === activeSackId)?.seq ?? null;
   const looseRolls = rolls.filter((r) => !r.sackId);
   const unweighed = sacks.filter((s) => (s.weightKg ?? 0) <= 0);
+  const uncoded = sacks.filter((s) => !s.manualCode || !s.manualCode.trim());
   const hasContent = summary.rollCount + summary.swatchCount > 0;
   const canReady =
-    !isDraft && hasContent && sacks.length > 0 && looseRolls.length === 0 && unweighed.length === 0;
+    !isDraft &&
+    hasContent &&
+    sacks.length > 0 &&
+    looseRolls.length === 0 &&
+    unweighed.length === 0 &&
+    uncoded.length === 0;
 
   let readyHint = '';
   if (!hasContent) readyHint = 'Önce çuvala top/kartela okut.';
   else if (sacks.length === 0) readyHint = 'En az bir çuval aç.';
   else if (looseRolls.length > 0) readyHint = `${looseRolls.length} top henüz çuvalda değil.`;
   else if (unweighed.length > 0) readyHint = `${unweighed.length} çuval tartılmadı.`;
+  else if (uncoded.length > 0) readyHint = `${uncoded.length} çuvalın kodu girilmedi.`;
 
   const covRows = ship
     ? ship.orders.flatMap((o) =>
@@ -308,9 +354,10 @@ export default function PaketlemeScreen() {
 
   const loadingReal = shipmentId !== null && (shipQ.isLoading || !ship);
 
-  const openWeigh = (s: { id: string; seq: number; weightKg: number | null }) => {
+  const openWeigh = (s: { id: string; seq: number; weightKg: number | null; manualCode: string | null }) => {
     setWeighTarget({ id: s.id, seq: s.seq });
     setWeighKg(s.weightKg != null ? String(s.weightKg) : '');
+    setWeighCode(s.manualCode ?? '');
   };
 
   return (
@@ -320,12 +367,23 @@ export default function PaketlemeScreen() {
       onStepBack={() => nav.goBack()}
       headerExtras={
         !isDraft ? (
-          <Appbar.Action
-            icon="trash-can-outline"
-            color={colors.textOnDark}
-            onPress={() => setCancelOpen(true)}
-            accessibilityLabel="Sevkiyatı iptal et"
-          />
+          <>
+            {hasContent && (
+              <Appbar.Action
+                icon={printing ? () => <ActivityIndicator size={18} color={colors.textOnDark} /> : 'file-document-outline'}
+                color={colors.textOnDark}
+                disabled={printing}
+                onPress={printNote}
+                accessibilityLabel="Sevk irsaliyesi yazdır"
+              />
+            )}
+            <Appbar.Action
+              icon="trash-can-outline"
+              color={colors.textOnDark}
+              onPress={() => setCancelOpen(true)}
+              accessibilityLabel="Sevkiyatı iptal et"
+            />
+          </>
         ) : undefined
       }
     >
@@ -540,6 +598,14 @@ export default function PaketlemeScreen() {
                                 {s.rollCount} top
                                 {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ''} · {kgText(s.weightKg)}
                               </Text>
+                              <Text
+                                style={[
+                                  styles.sackMeta,
+                                  !s.manualCode?.trim() && styles.sackMetaWarn,
+                                ]}
+                              >
+                                {s.manualCode?.trim() ? `Kod: ${s.manualCode}` : 'Kod girilmedi'}
+                              </Text>
                             </View>
                             <IconButton
                               icon="scale"
@@ -613,21 +679,51 @@ export default function PaketlemeScreen() {
             </AnimatedEntrance>
           </ScrollView>
 
-          {/* ── Sabit alt: Sevke Hazır ── */}
+          {/* ── Sabit alt: Sevke Hazır (+ onay kapalıysa Hemen Sevk Et) ── */}
           <View style={styles.footer}>
-            {!canReady && <Text style={styles.footerHint}>{readyHint || 'Çuvala top okut + tart.'}</Text>}
-            <Button
-              mode="contained"
-              icon="truck-check"
-              buttonColor={colors.successDark}
-              disabled={!canReady || readyMut.isPending}
-              loading={readyMut.isPending}
-              onPress={() => readyMut.mutate()}
-              contentStyle={styles.footerBtnContent}
-              labelStyle={styles.footerBtnLabel}
-            >
-              Sevke Hazır
-            </Button>
+            {!canReady && <Text style={styles.footerHint}>{readyHint || 'Çuvala top okut + tart + kod gir.'}</Text>}
+            {confirmationEnabled ? (
+              // Onay açık: ① yalnız hazır eder; çıkış ② "Sevk Çıkışı"ndan onaylanır.
+              <Button
+                mode="contained"
+                icon="truck-check"
+                buttonColor={colors.successDark}
+                disabled={!canReady || readyMut.isPending}
+                loading={readyMut.isPending}
+                onPress={() => readyMut.mutate()}
+                contentStyle={styles.footerBtnContent}
+                labelStyle={styles.footerBtnLabel}
+              >
+                Sevke Hazır
+              </Button>
+            ) : (
+              // Onay kapalı: hemen sevk et (stok düşer) ya da ara depoya bırak (Sevke Hazır).
+              <View style={styles.footerRow}>
+                <Button
+                  mode="contained-tonal"
+                  icon="truck-check"
+                  disabled={!canReady || readyMut.isPending || dispatchMut.isPending}
+                  loading={readyMut.isPending}
+                  onPress={() => readyMut.mutate()}
+                  style={styles.footerBtnFlex}
+                  contentStyle={styles.footerBtnContent}
+                >
+                  Sevke Hazır
+                </Button>
+                <Button
+                  mode="contained"
+                  icon="truck-fast"
+                  buttonColor={colors.successDark}
+                  disabled={!canReady || readyMut.isPending || dispatchMut.isPending}
+                  loading={dispatchMut.isPending}
+                  onPress={() => dispatchMut.mutate()}
+                  style={styles.footerBtnFlex}
+                  contentStyle={styles.footerBtnContent}
+                >
+                  Hemen Sevk Et
+                </Button>
+              </View>
+            )}
           </View>
         </>
       )}
@@ -640,25 +736,28 @@ export default function PaketlemeScreen() {
         continuous
       />
 
-      {/* Tartı modalı */}
-      <RNModal
-        isVisible={weighTarget !== null}
-        onBackdropPress={() => setWeighTarget(null)}
-        style={styles.modal}
-        {...modalProps}
-      >
+      {/* Çuval kapat: kod + brüt tartı (ikisi de zorunlu) */}
+      <AppModal visible={weighTarget !== null} onDismiss={() => setWeighTarget(null)}>
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
-            Çuval {weighTarget?.seq} — Brüt Tartı
+            Çuval {weighTarget?.seq} — Kod + Brüt Tartı
           </Text>
+          <TextInput
+            mode="outlined"
+            label="Çuval kodu (üstüne yazılan)"
+            value={weighCode}
+            onChangeText={setWeighCode}
+            autoFocus
+            autoCapitalize="characters"
+            style={{ marginTop: spacing.md }}
+          />
           <TextInput
             mode="outlined"
             label="Brüt ağırlık (kg)"
             keyboardType="decimal-pad"
             value={weighKg}
             onChangeText={setWeighKg}
-            autoFocus
-            style={{ marginVertical: spacing.md }}
+            style={{ marginTop: spacing.sm }}
             right={<TextInput.Icon icon="scale" onPress={() => setWeighKg(randKg())} />}
           />
           <View style={styles.actions}>
@@ -671,22 +770,20 @@ export default function PaketlemeScreen() {
               buttonColor={colors.successDark}
               style={styles.actionBtn}
               loading={weighSackMut.isPending}
-              disabled={weighSackMut.isPending || !(parseFloat(weighKg) > 0)}
-              onPress={() => weighTarget && weighSackMut.mutate({ sackId: weighTarget.id, kg: parseFloat(weighKg) })}
+              disabled={weighSackMut.isPending || !(parseFloat(weighKg) > 0) || !weighCode.trim()}
+              onPress={() =>
+                weighTarget &&
+                weighSackMut.mutate({ sackId: weighTarget.id, kg: parseFloat(weighKg), code: weighCode })
+              }
             >
               Kaydet
             </Button>
           </View>
         </Surface>
-      </RNModal>
+      </AppModal>
 
       {/* Aktarma modalı — topu başka çuvala taşı */}
-      <RNModal
-        isVisible={moveTarget !== null}
-        onBackdropPress={() => setMoveTarget(null)}
-        style={styles.modal}
-        {...modalProps}
-      >
+      <AppModal visible={moveTarget !== null} onDismiss={() => setMoveTarget(null)}>
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
             Topu Çuvala Taşı
@@ -719,9 +816,9 @@ export default function PaketlemeScreen() {
             </Button>
           </View>
         </Surface>
-      </RNModal>
+      </AppModal>
 
-      <RNModal isVisible={cancelOpen} onBackdropPress={() => setCancelOpen(false)} style={styles.modal} {...modalProps}>
+      <AppModal visible={cancelOpen} onDismiss={() => setCancelOpen(false)}>
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
             Sevkiyatı İptal Et
@@ -769,7 +866,7 @@ export default function PaketlemeScreen() {
             </Button>
           </View>
         </Surface>
-      </RNModal>
+      </AppModal>
     </ScreenChrome>
   );
 }
@@ -899,6 +996,7 @@ const styles = StyleSheet.create({
   sackTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   sackLabel: { fontSize: typography.size.sm, fontWeight: '700', color: colors.text },
   sackMeta: { fontSize: typography.size.xs, color: colors.textSecondary, marginTop: 1 },
+  sackMetaWarn: { color: colors.warningText, fontWeight: '700' },
   activeTag: {
     backgroundColor: colors.brand,
     borderRadius: radius.full,
@@ -939,9 +1037,10 @@ const styles = StyleSheet.create({
   footerHint: { fontSize: typography.size.xs, color: colors.textMuted, textAlign: 'center' },
   footerBtnContent: { height: 54 },
   footerBtnLabel: { fontSize: typography.size.base, fontWeight: '700', letterSpacing: 0.3 },
+  footerRow: { flexDirection: 'row', gap: spacing.sm },
+  footerBtnFlex: { flex: 1 },
 
   // ── Modal'lar ──
-  modal: { justifyContent: 'center', margin: spacing.lg },
   sheet: { borderRadius: radius.lg, padding: spacing.lg, backgroundColor: colors.surface },
   sheetTitle: { fontWeight: '700', marginBottom: spacing.xs, color: colors.text },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },

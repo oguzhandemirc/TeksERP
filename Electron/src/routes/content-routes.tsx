@@ -15,6 +15,7 @@ import { MachinesPage } from "@/pages/Machines/MachinesPage";
 import { DefectTypesPage } from "@/pages/DefectTypes/DefectTypesPage";
 import { QualityGradesPage } from "@/pages/QualityGrades/QualityGradesPage";
 import { ColorsPage } from "@/pages/Colors/ColorsPage";
+import { ReturnReasonsPage } from "@/pages/ReturnReasons/ReturnReasonsPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
 import { FabricPropertiesPage } from "@/pages/FabricProperties/FabricPropertiesPage";
@@ -67,6 +68,7 @@ import { KursunQueuePage } from "@/pages/Operations/KursunQueue/KursunQueuePage"
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
 import { KartelaPage } from "@/pages/Operations/Kartela/KartelaPage";
+import { ReturnsPage } from "@/pages/Operations/Returns/ReturnsPage";
 
 /**
  * Uygulama içeriği rotaları (kabuk/sekme şeridi hariç). Hem dış HashRouter'ın
@@ -92,6 +94,14 @@ export const contentRoutes: RouteObject[] = [
   { path: "definitions/defect-types", element: <DefectTypesPage /> },
   { path: "definitions/quality-grades", element: <QualityGradesPage /> },
   { path: "definitions/colors", element: <ColorsPage /> },
+  {
+    path: "definitions/return-reasons",
+    element: (
+      <ProtectedRoute requirePermission="return:read">
+        <ReturnReasonsPage />
+      </ProtectedRoute>
+    ),
+  },
   {
     path: "definitions/fabric-properties",
     element: (
@@ -296,6 +306,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="kartela:read">
         <KartelaPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/returns",
+    element: (
+      <ProtectedRoute requirePermission="return:read">
+        <ReturnsPage />
       </ProtectedRoute>
     ),
   },

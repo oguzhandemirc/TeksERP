@@ -34,8 +34,15 @@ import {
 // modunu besler. cursor||mode==="cursor" → cursor response; aksi halde offset.
 interface KartelaListParams {
   subcontractorId?: string;
-  /** active (default) | cancelled | all */
-  status?: "active" | "cancelled" | "all";
+  /**
+   * Durum filtresi:
+   *   active   (default) — iptal edilmemiş (cancelledAt null)
+   *   open     — iptal edilmemiş VE henüz kabul edilmemiş (iptal edilebilir)
+   *   received — iptal edilmemiş VE kabul edilmiş
+   *   cancelled — iptal edilmiş
+   *   all      — hepsi
+   */
+  status?: "active" | "open" | "received" | "cancelled" | "all";
   search?: string;
   dateFrom?: Date;
   dateTo?: Date;
@@ -302,11 +309,23 @@ export class KartelaService {
           include: { items: true, subcontractor: true },
         });
 
-        // Toplar AT_KARTELA'ya çekilir.
-        await tx.roll.updateMany({
-          where: { id: { in: data.rollIds } },
+        // ATOMIK SAHİPLENME: toplar hâlâ depoda (WAREHOUSE) VE bir sevkiyata bağlı
+        // değilse (shipmentId null) AT_KARTELA'ya çek. Okuma ile yazma arasında
+        // biri (sevkiyat okutması / başka kartela sevki) kapmışsa count < beklenen
+        // olur → tüm tx geri sarılır (KartelaDispatch da oluşmaz), çift-bağ engellenir.
+        const claimed = await tx.roll.updateMany({
+          where: {
+            id: { in: data.rollIds },
+            status: RollStatus.WAREHOUSE,
+            shipmentId: null,
+          },
           data: { status: RollStatus.AT_KARTELA },
         });
+        if (claimed.count !== data.rollIds.length) {
+          throw AppError.conflict(
+            "Toplardan biri az önce başka bir akışa girdi (sevkiyat/başka kartela sevki) — tekrar deneyin."
+          );
+        }
 
         return dispatch;
       })
@@ -544,57 +563,59 @@ export class KartelaService {
           },
         });
 
-        let totalSwatches = 0;
         const rollById = new Map(rolls.map((r) => [r.id, r]));
+
+        // Sıra numarasını döngü DIŞINDA bir kez oku; tüm kartelalara bellekte
+        // ardışık ata (seq, seq+1, ...). Eski kod her kartela için ayrı
+        // nextSwatchSequence taraması + tek-tek create yapıyordu (N+1 + yavaş).
+        // P2002 çakışmasında withBarcodeRetry tx'i baştan dener → sıra yeniden okunur.
+        let seqCounter = await nextSwatchSequence(tx, now);
+
+        const receiptItemData: Prisma.KartelaReceiptItemCreateManyInput[] = [];
+        const swatchData: Prisma.SwatchCreateManyInput[] = [];
+        const consumedRollIds: string[] = [];
 
         for (const ret of data.returns) {
           const roll = rollById.get(ret.rollId)!;
           const di = dispatchItemByRoll.get(ret.rollId)!;
 
-          await tx.kartelaReceiptItem.create({
-            data: {
-              receiptId: receipt.id,
-              consumedRollId: roll.id,
-              sourceDispatchItemId: di.id,
-              kartelaCount: ret.count,
-              notes: ret.notes ?? null,
-            },
+          receiptItemData.push({
+            receiptId: receipt.id,
+            consumedRollId: roll.id,
+            sourceDispatchItemId: di.id,
+            kartelaCount: ret.count,
+            notes: ret.notes ?? null,
           });
+          consumedRollIds.push(roll.id);
 
-          // Orijinal top komple tükenir.
-          await tx.roll.update({
-            where: { id: roll.id },
-            data: { status: RollStatus.KARTELA_CONSUMED },
-          });
-
-          // N adet kartela doğar.
+          // N adet kartela doğar (bellekte hazırlanır, aşağıda tek createMany).
           for (let i = 0; i < ret.count; i++) {
-            const sSeq = await nextSwatchSequence(tx, now);
-            const cardNumber = buildPrefixedCardNumber("SW", now, sSeq, 6);
-            const barcode = buildPrefixedBarcode("SW", now, sSeq);
+            const sSeq = seqCounter++;
             const measure = ret.items?.[i];
-            const lengthCm = measure?.lengthCm ?? ret.bulkLengthCm ?? null;
-            const weightKg = measure?.weightKg ?? ret.bulkWeightKg ?? null;
-
-            await tx.swatch.create({
-              data: {
-                cardNumber,
-                barcode,
-                itemId: roll.itemId,
-                colorId: roll.colorId ?? null,
-                width: roll.width ?? null,
-                length: lengthCm,
-                weightKg,
-                parentReceiptId: receipt.id,
-                parentRollId: roll.id,
-                createdById: userId ?? null,
-              },
+            swatchData.push({
+              cardNumber: buildPrefixedCardNumber("SW", now, sSeq, 6),
+              barcode: buildPrefixedBarcode("SW", now, sSeq),
+              itemId: roll.itemId,
+              colorId: roll.colorId ?? null,
+              width: roll.width ?? null,
+              length: measure?.lengthCm ?? ret.bulkLengthCm ?? null,
+              weightKg: measure?.weightKg ?? ret.bulkWeightKg ?? null,
+              parentReceiptId: receipt.id,
+              parentRollId: roll.id,
+              createdById: userId ?? null,
             });
-            totalSwatches++;
           }
         }
 
-        return { receipt, totalSwatches };
+        // Toplu yazma: tek-tek create yerine createMany / updateMany.
+        await tx.kartelaReceiptItem.createMany({ data: receiptItemData });
+        await tx.roll.updateMany({
+          where: { id: { in: consumedRollIds } },
+          data: { status: RollStatus.KARTELA_CONSUMED },
+        });
+        await tx.swatch.createMany({ data: swatchData });
+
+        return { receipt, totalSwatches: swatchData.length };
       })
     );
 
@@ -750,9 +771,21 @@ export class KartelaService {
     // Tüm filtre kolonları indeksli (@@index dispatchedAt / subcontractorId,dispatchedAt).
     const where: Prisma.KartelaDispatchWhereInput = {};
     if (params?.subcontractorId) where.subcontractorId = params.subcontractorId;
+    // "Kabul edilmiş" = en az bir sevk kalemi, iptal edilmemiş bir kabulde tüketilmiş.
+    // (cancelDispatch ile aynı kural — receiptItem.sourceDispatchItem üzerinden.)
+    const receivedFilter: Prisma.KartelaDispatchWhereInput = {
+      items: { some: { receiptItems: { some: { receipt: { cancelledAt: null } } } } },
+    };
     const status = params?.status ?? "active";
     if (status === "active") where.cancelledAt = null;
     else if (status === "cancelled") where.cancelledAt = { not: null };
+    else if (status === "open") {
+      where.cancelledAt = null;
+      where.NOT = receivedFilter;
+    } else if (status === "received") {
+      where.cancelledAt = null;
+      where.items = receivedFilter.items;
+    }
     if (params?.dateFrom || params?.dateTo) {
       where.dispatchedAt = {
         ...(params?.dateFrom ? { gte: params.dateFrom } : {}),
@@ -768,6 +801,9 @@ export class KartelaService {
     }
 
     // Liste için hafif select — detay (`getDispatch`) tam veriyi döner.
+    // `receivedProbe`: kabul edilmiş kalem var mı (indeksli, take:1 existence).
+    // Mobil kabul dispatchId set etmediği için _count.receipts güvenilmez;
+    // "kabul edildi" rozeti bu probe ile hesaplanır (isReceived).
     const select = {
       id: true,
       dispatchNo: true,
@@ -781,7 +817,19 @@ export class KartelaService {
       subcontractor: { select: { id: true, name: true, code: true } },
       dispatchedBy: { select: { id: true, fullName: true } },
       _count: { select: { items: true, receipts: true } },
+      // Existence probe: kabul edilmiş kalem var mı (take:1, indeksli).
+      items: {
+        where: { receiptItems: { some: { receipt: { cancelledAt: null } } } },
+        select: { id: true },
+        take: 1,
+      },
     } as const;
+
+    // Probe array'ini boolean isReceived'a indir, ham relation'ı yanıttan çıkar.
+    const withReceived = (r: { items: { id: string }[] }) => {
+      const { items: receivedProbe, ...rest } = r;
+      return { ...rest, isReceived: receivedProbe.length > 0 };
+    };
 
     // CURSOR mode (admin/useDataTable): keyset by dispatchedAt desc + id desc.
     const useCursor = !!params?.cursor || params?.mode === "cursor";
@@ -801,12 +849,12 @@ export class KartelaService {
         params?.withTotal ? prisma.kartelaDispatch.count({ where }) : Promise.resolve(undefined),
       ]);
       const hasMore = items.length > limit;
-      const data = hasMore ? items.slice(0, limit) : items;
-      const last = data[data.length - 1] as Record<string, unknown> | undefined;
+      const rows = hasMore ? items.slice(0, limit) : items;
+      const last = rows[rows.length - 1] as Record<string, unknown> | undefined;
       const nextCursor = hasMore ? buildNextDynamicCursor(last, "dispatchedAt") : null;
       return {
         success: true,
-        data,
+        data: rows.map(withReceived),
         pagination: {
           nextCursor,
           hasMore,
@@ -832,7 +880,7 @@ export class KartelaService {
     ]);
     return {
       success: true,
-      data: dispatches,
+      data: dispatches.map(withReceived),
       pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) || 1 },
     };
   }
@@ -888,7 +936,20 @@ export class KartelaService {
       subcontractor: { select: { id: true, name: true, code: true } },
       receivedBy: { select: { id: true, fullName: true } },
       _count: { select: { items: true, swatches: true } },
-    } as const;
+      // Downstream probe: doğan kartelalardan biri sevkiyatta/çuvalda mı (take:1).
+      // Varsa kabul iptal edilemez (cancelReceipt zaten engeller).
+      swatches: {
+        where: { cancelledAt: null, OR: [{ shipmentId: { not: null } }, { sackId: { not: null } }] },
+        select: { id: true },
+        take: 1,
+      },
+    } satisfies Prisma.KartelaReceiptSelect;
+
+    // İptal edilebilir mi: iptal edilmemiş VE hiçbir kartela downstream'de değil.
+    const withCancellable = (r: { cancelledAt: Date | null; swatches: { id: string }[] }) => {
+      const { swatches: downstreamProbe, ...rest } = r;
+      return { ...rest, cancellable: !r.cancelledAt && downstreamProbe.length === 0 };
+    };
 
     const useCursor = !!params?.cursor || params?.mode === "cursor";
     if (useCursor) {
@@ -907,12 +968,12 @@ export class KartelaService {
         params?.withTotal ? prisma.kartelaReceipt.count({ where }) : Promise.resolve(undefined),
       ]);
       const hasMore = items.length > limit;
-      const data = hasMore ? items.slice(0, limit) : items;
-      const last = data[data.length - 1] as Record<string, unknown> | undefined;
+      const rows = hasMore ? items.slice(0, limit) : items;
+      const last = rows[rows.length - 1] as Record<string, unknown> | undefined;
       const nextCursor = hasMore ? buildNextDynamicCursor(last, "receivedAt") : null;
       return {
         success: true,
-        data,
+        data: rows.map(withCancellable),
         pagination: {
           nextCursor,
           hasMore,
@@ -937,7 +998,7 @@ export class KartelaService {
     ]);
     return {
       success: true,
-      data: receipts,
+      data: receipts.map(withCancellable),
       pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) || 1 },
     };
   }

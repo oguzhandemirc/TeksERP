@@ -3,20 +3,29 @@
 // =============================================================================
 // x-device-id header'ı varsa Device kaydını çözer ve req.device'a yazar.
 //
-// Davranış:
+// Davranış (cihaz eşleştirme ZORUNLU iken — device.pairingRequired = true):
 // - Header YOK            → next() (web/Electron istekleri, etkilenmez)
-// - Header VAR + aktif     → req.device set edilir, next()
-// - Header VAR + pasif/yok → 401 DEVICE_INACTIVE (tablet pairing'e geri düşer)
+// - Header VAR + aktif/eşli → req.device set edilir, next()
+// - Header VAR + pasif/yok/eşsiz → 401 DEVICE_INACTIVE (tablet pairing'e geri düşer)
 //
-// İstisna: /api/devices/pair endpoint'i bu kontrolden muaftır — pasif cihaz
-// admin tarafından tekrar aktifleştirildiğinde yeniden eşleşebilmeli.
+// Davranış (eşleştirme PASİF iken — device.pairingRequired = false, DEFAULT):
+// - Eşli cihaz yine req.device set edilir (makine atfı korunur).
+// - Eşleşmemiş/kayıtsız cihaz da BLOKLANMAZ → next() (req.device boş, makine atfı NULL).
+//
+// İstisna: /api/devices/pair ve /api/devices/pairing-required endpoint'leri bu
+// kontrolden muaftır — pasif cihaz tekrar eşleşebilmeli ve mobil login öncesi
+// eşleştirmenin zorunlu olup olmadığını öğrenebilmeli.
 // =============================================================================
 
 import { Request, Response, NextFunction } from "express";
 import { DeviceService } from "../services/device.service";
+import { readDevicePairingRequired } from "../services/system-setting.service";
 import "../types/express-augment";
 
-const PAIR_ENDPOINT = "/api/devices/pair";
+const EXEMPT_PATHS = new Set([
+  "/api/devices/pair",
+  "/api/devices/pairing-required",
+]);
 
 export const resolveDevice = async (
   req: Request,
@@ -28,34 +37,41 @@ export const resolveDevice = async (
   if (!deviceId || typeof deviceId !== "string") {
     return next();
   }
-  if (req.path === PAIR_ENDPOINT) {
+  if (EXEMPT_PATHS.has(req.path)) {
     return next();
   }
   try {
     const device = await DeviceService.resolveDevice(deviceId);
     if (!device) {
-      // Cihaz silinmiş veya admin tarafından pasifleştirilmiş — tablet'in
-      // tüm istekleri (login dahil) burada kesilir; mobil interceptor
+      // Cihaz silinmiş, pasifleştirilmiş veya hiç eşleşmemiş. Eşleştirme zorunluysa
+      // tablet'in tüm istekleri (login dahil) burada kesilir; mobil interceptor
       // pairing storage'ı temizleyip kullanıcıyı pairing ekranına yönlendirir.
-      res.status(401).json({
-        success: false,
-        message:
-          "Cihaz pasifleştirilmiş veya kayıtlı değil. Yöneticiden yeni eşleştirme kodu isteyin.",
-        code: "DEVICE_INACTIVE",
-      });
-      return;
+      // Eşleştirme pasifse (default) bloklama yok — cihaz req.device'sız geçer.
+      if (await readDevicePairingRequired()) {
+        res.status(401).json({
+          success: false,
+          message:
+            "Cihaz pasifleştirilmiş veya kayıtlı değil. Yöneticiden yeni eşleştirme kodu isteyin.",
+          code: "DEVICE_INACTIVE",
+        });
+        return;
+      }
+      return next();
     }
     if (!device.machineId) {
       // Cihaz aktif ama bir makineye eşli değil (admin "Eşleşmeyi Kaldır" çekti
-      // veya Pasife Al → Aktifleştir döngüsü machineId'yi sıfırladı). Tablet'in
-      // local pairing storage'ı geçersiz; yeniden eşleştirme kodu girilmeli.
-      res.status(401).json({
-        success: false,
-        message:
-          "Cihaz bir makineye eşli değil. Yöneticiden yeni eşleştirme kodu isteyin.",
-        code: "DEVICE_INACTIVE",
-      });
-      return;
+      // veya Pasife Al → Aktifleştir döngüsü machineId'yi sıfırladı). Eşleştirme
+      // zorunluysa yeniden eşleştirme kodu girilmeli; pasifse cihaz yine geçer.
+      if (await readDevicePairingRequired()) {
+        res.status(401).json({
+          success: false,
+          message:
+            "Cihaz bir makineye eşli değil. Yöneticiden yeni eşleştirme kodu isteyin.",
+          code: "DEVICE_INACTIVE",
+        });
+        return;
+      }
+      return next();
     }
     req.device = {
       id: device.id,

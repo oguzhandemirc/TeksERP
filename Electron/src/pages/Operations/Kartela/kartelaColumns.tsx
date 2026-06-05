@@ -26,16 +26,19 @@ export const kartelaDispatchColumns: ColumnDef<KartelaDispatchListItem>[] = [
   {
     id: "items",
     header: () => <div className="text-right">Top</div>,
+    meta: { label: "Top" },
     cell: ({ row }) => <div className="text-right tabular-nums">{row.original._count.items}</div>,
   },
   {
     accessorKey: "totalQty",
     header: () => <div className="text-right">Metre</div>,
+    meta: { label: "Metre" },
     cell: ({ row }) => <div className="text-right tabular-nums">{DEC.format(row.original.totalQty)}</div>,
   },
   {
     id: "receipts",
     header: () => <div className="text-right">Kabul</div>,
+    meta: { label: "Kabul" },
     cell: ({ row }) => <div className="text-right tabular-nums">{row.original._count.receipts}</div>,
   },
   {
@@ -78,11 +81,13 @@ export const kartelaReceiptColumns: ColumnDef<KartelaReceiptListItem>[] = [
   {
     id: "items",
     header: () => <div className="text-right">Top</div>,
+    meta: { label: "Top" },
     cell: ({ row }) => <div className="text-right tabular-nums">{row.original._count.items}</div>,
   },
   {
     id: "swatches",
     header: () => <div className="text-right">Kartela</div>,
+    meta: { label: "Kartela" },
     cell: ({ row }) => <div className="text-right tabular-nums">{row.original._count.swatches}</div>,
   },
   {

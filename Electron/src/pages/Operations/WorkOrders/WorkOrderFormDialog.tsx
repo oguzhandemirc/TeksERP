@@ -31,7 +31,7 @@ import { CoveragePanel } from "./CoveragePanel";
 import type { PickedOrderLine } from "./OrderPickerDialog";
 import { productRecipeService } from "@/pages/ProductRecipes/service";
 import type { ProductRecipe } from "@/pages/ProductRecipes/types";
-import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
+import { useTargetQuantityEnabled, usePartyCodeAuto } from "@/hooks/usePricingEnabled";
 import { RouteEditor } from "./RouteEditor";
 import { TargetItemPicker } from "./TargetItemPicker";
 import { useDesignerSteps } from "./useDesignerSteps";
@@ -82,6 +82,12 @@ export function WorkOrderFormDialog({
 }: Props) {
   const isEdit = Boolean(workOrder);
   const targetQuantityEnabled = useTargetQuantityEnabled();
+  const partyCodeAuto = usePartyCodeAuto();
+  // Otomatik mod + yeni kayıt: parti kodunu elle gir (override) seçeneği.
+  const [overrideParty, setOverrideParty] = useState(false);
+  // Parti kodu alanı düzenlenebilir + zorunlu mu? Otomatik modda yeni kayıtta
+  // override kapalıysa alan kilitli ve boş kalır → backend otomatik üretir.
+  const partyCodeEditable = isEdit || !partyCodeAuto || overrideParty;
 
   const form = useForm<WorkOrderFormValues>({
     resolver: zodResolver(workOrderFormSchema) as Resolver<WorkOrderFormValues>,
@@ -107,6 +113,7 @@ export function WorkOrderFormDialog({
     handleStationPick,
   } = useDesignerSteps([]);
   const [advancedOpen, setAdvancedOpen] = useState(true);
+  const [widthFocused, setWidthFocused] = useState(false);
   const [recipeId, setRecipeId] = useState<string | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [saveRecipeOpen, setSaveRecipeOpen] = useState(false);
@@ -119,13 +126,19 @@ export function WorkOrderFormDialog({
     setRouteError(null);
     setSaveRecipeOpen(false);
     setRecipeName("");
+    setOverrideParty(false);
     if (workOrder) {
       const values = formValuesFromWorkOrder(workOrder);
       form.reset(values);
       setPickedLines(pickedLinesFromWorkOrder(workOrder));
       resetRouteSteps(designerStepsFromWorkOrder(workOrder));
       setAdvancedOpen(
-        Boolean(values.foldType || values.plannedStartDate || values.plannedEndDate),
+        Boolean(
+          values.foldType ||
+            values.plannedStartDate ||
+            values.plannedEndDate ||
+            values.dyehouseNote,
+        ),
       );
     } else {
       form.reset(workOrderFormDefaults);
@@ -249,16 +262,26 @@ export function WorkOrderFormDialog({
   // üretim. WorkOrdersPage.buildPayload submit'te type'ı bu kurala göre türetir.
   const isOrderProduction = pickedLines.length > 0;
 
-  const widthLocked = derived?.width != null;
+  const orderWidth = derived?.width ?? null;
   const mixedWidths = derived !== null && derived.width == null;
 
   // Backend findById response'unda gelir; material commitment durumuna göre
   // hangi alanların değiştirilemediğini söyler.
   const locks = workOrder?.locks;
-  const widthFullyLocked = widthLocked || Boolean(locks?.width);
-  const widthTooltip = locks?.width
-    ? locks.reasons.width
-    : "Sipariş kaleminden alındı";
+  // Sipariş eni artık SADECE öneri — KİLİTLİ DEĞİL. Kullanıcı bilinçli olarak
+  // farklı en girebilir: boyahaneden (fason) dönen kumaşa WO eni damgalanır
+  // (subcontractor.service receive → bornWidth, tambur.service finalize), ham
+  // top en'siz girdiği için fason dönüşünün eni buradan belirlenir. Yalnız
+  // backend hard lock'u (malzeme bağlandı / sevk yapıldı) alanı kilitler.
+  const widthFullyLocked = Boolean(locks?.width);
+  const widthTooltip = locks?.reasons.width ?? "";
+  // Sipariş eninden farklı en girildi mi? (boyahane override uyarısı için)
+  const watchedWidth = form.watch("width");
+  const widthOverridden =
+    orderWidth != null &&
+    watchedWidth != null &&
+    String(watchedWidth) !== "" &&
+    Number(watchedWidth) !== Number(orderWidth);
   // targetQuantity ASLA kilitli değil — sipariş bağlıyken bile yalnız öneri
   // (bağlı kalemlerin açık toplamı) gelir; kullanıcı değiştirebilir (fazla →
   // Tambur stoğu, eksik → kalan için yeni iş emri).
@@ -311,6 +334,15 @@ export function WorkOrderFormDialog({
                 setRouteError("En az bir adım ekle ve her adıma istasyon seç.");
                 return;
               }
+              // Manuel mod / override / düzenlemede parti kodu zorunlu. Otomatik modda
+              // (override kapalı) boş bırakılır → backend otomatik üretir.
+              if (partyCodeEditable && !(v.batchNumber ?? "").trim()) {
+                form.setError("batchNumber", {
+                  type: "manual",
+                  message: "Parti kodu zorunlu",
+                });
+                return;
+              }
               // Sipariş bağlı değil = stoğa üretim; backend hedef ürün zorunlu kılar.
               if (pickedLines.length === 0 && !v.targetItemId) {
                 form.setError("targetItemId", {
@@ -347,6 +379,45 @@ export function WorkOrderFormDialog({
 
               {/* Sağ panel — form içeriği */}
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
+                {/* Parti Kodu — takip için. Otomatik modda kilitli (backend üretir),
+                    'elle gir' ile override; manuel modda + düzenlemede zorunlu. */}
+                <FormField
+                  label="Parti Kodu"
+                  htmlFor="batchNumber"
+                  required={partyCodeEditable}
+                  error={form.formState.errors.batchNumber}
+                  hint={
+                    !partyCodeEditable
+                      ? "Otomatik üretilecek (P-YYMMDD-NNN). Kendi kodunu girmek için 'elle gir'i işaretle."
+                      : "Takip kodu — benzersiz olmalı."
+                  }
+                >
+                  <Input
+                    id="batchNumber"
+                    placeholder={
+                      partyCodeEditable ? "örn: P-260605-001" : "Kaydedince otomatik atanır"
+                    }
+                    disabled={!partyCodeEditable}
+                    {...form.register("batchNumber")}
+                  />
+                  {partyCodeAuto && !isEdit && (
+                    <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={overrideParty}
+                        onChange={(e) => {
+                          setOverrideParty(e.target.checked);
+                          if (!e.target.checked) {
+                            form.setValue("batchNumber", "");
+                            form.clearErrors("batchNumber");
+                          }
+                        }}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                      Parti kodunu elle gir
+                    </label>
+                  )}
+                </FormField>
                 {/* Reçeteden doldur — yeni + stoğa üretimde hızlı başlangıç */}
                 {!isEdit && (
                   <FormField
@@ -362,7 +433,7 @@ export function WorkOrderFormDialog({
                       onChange={(id) => void applyRecipe(id)}
                       service={productRecipeService}
                       queryKey="product-recipes"
-                      getLabel={(r) => (r.code ? `${r.code} — ${r.name}` : r.name)}
+                      getLabel={(r) => (r.code ? `${r.name} — ${r.code}` : r.name)}
                       placeholder="Reçete seç..."
                       nullable
                       noneLabel="— Reçete kullanma"
@@ -464,7 +535,37 @@ export function WorkOrderFormDialog({
                       locked={widthFullyLocked}
                       lockedTooltip={widthTooltip}
                       {...form.register("width")}
+                      onFocus={() => setWidthFocused(true)}
                     />
+                    {/* Boyahane (fason) uyarısı: sipariş eni öneri olarak geldi,
+                        override edilebilir. Bu en boyahaneden dönen kumaşa
+                        damgalanır (ham top en'siz girer). Tıklayınca açılır;
+                        farklı en girilirse kalıcı amber uyarıya döner. */}
+                    {orderWidth != null &&
+                      !widthFullyLocked &&
+                      (widthFocused || widthOverridden) && (
+                        <p
+                          className={`mt-1 flex items-start gap-1.5 text-xs ${
+                            widthOverridden ? "text-warning" : "text-muted-foreground"
+                          }`}
+                        >
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <span>
+                            Bu en, boyahaneden (fason) dönen kumaşa damgalanır.{" "}
+                            {widthOverridden ? (
+                              <>
+                                Sipariş eni <strong>{orderWidth} cm</strong> — sen
+                                farklı en girdin, üretim ve sevk bu en ile işlenir.
+                              </>
+                            ) : (
+                              <>
+                                Sipariş eninden (<strong>{orderWidth} cm</strong>)
+                                otomatik geldi; gerekirse değiştirebilirsin.
+                              </>
+                            )}
+                          </span>
+                        </p>
+                      )}
                   </FormField>
                   {targetQuantityEnabled && (
                   <FormField
@@ -571,6 +672,20 @@ export function WorkOrderFormDialog({
                           />
                         </FormField>
                       </div>
+                      <FormField
+                        label="Boyahane Notu"
+                        htmlFor="dyehouseNote"
+                        error={form.formState.errors.dyehouseNote}
+                        hint="Fason sevkinde boyahaneye iletilir (örn. yıkama yapma, matlaştır). Sevk fişinde 'İstenen Renk'in yanında basılır."
+                      >
+                        <textarea
+                          id="dyehouseNote"
+                          rows={2}
+                          placeholder="Boyahaneye özel talimat…"
+                          {...form.register("dyehouseNote")}
+                          className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                      </FormField>
                     </div>
                   )}
                 </div>

@@ -17,7 +17,7 @@ function progressOf(wo: WorkOrder): { done: number; total: number; pct: number }
 export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     accessorKey: "batchNumber",
-    header: "Parti No",
+    header: "Parti Kodu",
     cell: ({ row }) => <span className="font-mono text-xs">{row.original.batchNumber}</span>,
   },
   {
@@ -49,6 +49,7 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     accessorKey: "targetQuantity",
     header: () => <SortableHeader field="targetQuantity" label="Hedef" />,
+    meta: { label: "Hedef" },
     cell: ({ row }) =>
       row.original.targetQuantity != null ? (
         <span className="tabular-nums text-xs">
@@ -61,11 +62,13 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     accessorKey: "plannedEndDate",
     header: () => <SortableHeader field="plannedEndDate" label="Termin" />,
+    meta: { label: "Termin" },
     cell: ({ row }) => <DeadlineBadge deadline={row.original.plannedEndDate} />,
   },
   {
     accessorKey: "createdAt",
     header: () => <SortableHeader field="createdAt" label="Oluşturma" />,
+    meta: { label: "Oluşturma" },
     cell: ({ row }) => <span className="text-xs">{safeFormat(row.original.createdAt, "dd.MM.yyyy")}</span>,
   },
   {

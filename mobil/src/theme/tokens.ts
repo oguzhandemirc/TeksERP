@@ -157,4 +157,5 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   FasonKabul: { tint: '#db2777', bg: '#fce7f3' },
   KartelaSevk: { tint: '#9333ea', bg: '#f3e8ff' },
   KartelaKabul: { tint: '#c026d3', bg: '#fae8ff' },
+  IadeGirisi: { tint: '#dc2626', bg: '#fee2e2' },
 };

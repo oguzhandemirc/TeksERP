@@ -111,6 +111,19 @@ export interface ShipmentDetailSack {
   swatchCount: number;
 }
 
+/** Bu sevkiyattan iade edilmiş top (canlı rolls'ta görünmez; RollReturn'den gelir). */
+export interface ShipmentReturnedRoll {
+  id: string;
+  barcode: string | null;
+  item: { code: string; name: string } | null;
+  color: { code: string; name: string } | null;
+  width: number | null;
+  qty: number;
+  returnedAt: string;
+  reasonName: string | null;
+  reasonColor: string | null;
+}
+
 export interface ShipmentDetail {
   id: string;
   shipmentNo: string;
@@ -126,11 +139,14 @@ export interface ShipmentDetail {
   rolls: ShipmentDetailRoll[];
   swatches: { id: string; barcode: string | null; length: number | null; width: number | null }[];
   sacks: ShipmentDetailSack[];
+  returnedRolls: ShipmentReturnedRoll[];
   summary: {
     rollCount: number;
     swatchCount: number;
     totalMeters: number;
     sackCount: number;
     totalKg: number;
+    returnedCount: number;
+    returnedMeters: number;
   };
 }

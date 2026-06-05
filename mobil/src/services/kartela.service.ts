@@ -1,5 +1,8 @@
 import { apiClient } from './api';
-import type { ApiResponse, PaginatedResponse } from '../types/api';
+import type { ApiResponse, PaginatedResponse, CursorPaginatedResponse } from '../types/api';
+
+/** Geçmiş ekranı durum filtresi. */
+export type KartelaDispatchStatusFilter = 'open' | 'received' | 'cancelled' | 'all';
 
 // ---------------------------------------------------------------------------
 // Types (backend kartela.service ile uyumlu)
@@ -43,8 +46,34 @@ export interface KartelaDispatchListItem {
   dispatchedAt: string;
   totalQty: number;
   cancelledAt: string | null;
+  /** En az bir kalem iptal-edilmemiş bir kabulde tüketilmiş mi (rozet için). */
+  isReceived: boolean;
   subcontractor: { id: string; name: string; code: string | null };
   _count: { items: number; receipts: number };
+}
+
+/** Geçmiş ekranında satır-altı çeki listesi için detay. */
+export interface KartelaDispatchDetail {
+  id: string;
+  dispatchNo: string;
+  dispatchedAt: string;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  totalQty: number;
+  subcontractor: { id: string; name: string };
+  items: Array<{
+    id: string;
+    dispatchedQty: number;
+    dispatchedWeight: number | null;
+    roll: {
+      id: string;
+      barcode: string | null;
+      currentQty: number;
+      item: { code: string; name: string };
+      color: { code: string; name: string } | null;
+    };
+  }>;
+  receipts: Array<{ id: string; receiptNo: string; receivedAt: string }>;
 }
 
 export interface KartelaReceiptListItem {
@@ -53,9 +82,44 @@ export interface KartelaReceiptListItem {
   manifestNo: string | null;
   receivedAt: string;
   cancelledAt: string | null;
+  /** İptal edilebilir mi: iptal edilmemiş VE hiçbir kartela sevkiyatta/çuvalda değil. */
+  cancellable: boolean;
   subcontractor: { id: string; name: string; code: string | null };
   _count: { items: number; swatches: number };
 }
+
+/** Kabul geçmişi detayı — tüketilen toplar + doğan kartelalar. */
+export interface KartelaReceiptDetail {
+  id: string;
+  receiptNo: string;
+  manifestNo: string | null;
+  receivedAt: string;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  subcontractor: { id: string; name: string };
+  items: Array<{
+    id: string;
+    kartelaCount: number;
+    consumedRoll: {
+      id: string;
+      barcode: string | null;
+      item: { code: string; name: string };
+      color: { code: string; name: string } | null;
+    };
+  }>;
+  swatches: Array<{
+    id: string;
+    cardNumber: string;
+    barcode: string;
+    length: number | null;
+    weightKg: number | null;
+    item: { code: string; name: string };
+    color: { code: string; name: string } | null;
+  }>;
+}
+
+/** Kabul geçmişi durum filtresi. */
+export type KartelaReceiptStatusFilter = 'active' | 'cancelled' | 'all';
 
 /** Kabul worklist'i — firmadaki AT_KARTELA toplar (KartelaDispatchItem bazlı). */
 export interface KartelaOutstandingItem {
@@ -120,8 +184,28 @@ export const kartelaService = {
       )
       .then((r) => r.data),
 
-  getDispatch: (id: string): Promise<ApiResponse<unknown>> =>
-    apiClient.get<ApiResponse<unknown>>(`/kartela/dispatches/${id}`).then((r) => r.data),
+  getDispatch: (id: string): Promise<ApiResponse<KartelaDispatchDetail>> =>
+    apiClient.get<ApiResponse<KartelaDispatchDetail>>(`/kartela/dispatches/${id}`).then((r) => r.data),
+
+  /** Geçmiş ekranı: cursor pagination + durum/firma filtresi (keyset, indeksli). */
+  listDispatchesCursor: (params?: {
+    status?: KartelaDispatchStatusFilter;
+    subcontractorId?: string;
+    limit?: number;
+    cursor?: string | null;
+    withTotal?: boolean;
+  }): Promise<CursorPaginatedResponse<KartelaDispatchListItem>> => {
+    const sp = new URLSearchParams();
+    sp.set('mode', 'cursor');
+    if (params?.status) sp.set('status', params.status);
+    if (params?.subcontractorId) sp.set('subcontractorId', params.subcontractorId);
+    sp.set('limit', String(params?.limit ?? 30));
+    if (params?.cursor) sp.set('cursor', params.cursor);
+    if (params?.withTotal) sp.set('withTotal', 'true');
+    return apiClient
+      .get<CursorPaginatedResponse<KartelaDispatchListItem>>(`/kartela/dispatches?${sp.toString()}`)
+      .then((r) => r.data);
+  },
 
   // ── Kabul ──
   outstanding: (subcontractorId?: string): Promise<ApiResponse<KartelaOutstandingItem[]>> =>
@@ -146,8 +230,28 @@ export const kartelaService = {
       )
       .then((r) => r.data),
 
-  getReceipt: (id: string): Promise<ApiResponse<unknown>> =>
-    apiClient.get<ApiResponse<unknown>>(`/kartela/receipts/${id}`).then((r) => r.data),
+  getReceipt: (id: string): Promise<ApiResponse<KartelaReceiptDetail>> =>
+    apiClient.get<ApiResponse<KartelaReceiptDetail>>(`/kartela/receipts/${id}`).then((r) => r.data),
+
+  /** Kabul geçmişi: cursor pagination + durum/firma filtresi. */
+  listReceiptsCursor: (params?: {
+    status?: KartelaReceiptStatusFilter;
+    subcontractorId?: string;
+    limit?: number;
+    cursor?: string | null;
+    withTotal?: boolean;
+  }): Promise<CursorPaginatedResponse<KartelaReceiptListItem>> => {
+    const sp = new URLSearchParams();
+    sp.set('mode', 'cursor');
+    if (params?.status) sp.set('status', params.status);
+    if (params?.subcontractorId) sp.set('subcontractorId', params.subcontractorId);
+    sp.set('limit', String(params?.limit ?? 30));
+    if (params?.cursor) sp.set('cursor', params.cursor);
+    if (params?.withTotal) sp.set('withTotal', 'true');
+    return apiClient
+      .get<CursorPaginatedResponse<KartelaReceiptListItem>>(`/kartela/receipts?${sp.toString()}`)
+      .then((r) => r.data);
+  },
 
   cancelReceipt: (id: string, reason: string): Promise<ApiResponse<{ id: string; receiptNo: string }>> =>
     apiClient

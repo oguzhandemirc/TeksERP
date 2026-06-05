@@ -31,6 +31,7 @@ export function formValuesFromWorkOrder(wo: WorkOrder): WorkOrderFormValues {
   const type = pickFormType(wo.type);
   return {
     type,
+    batchNumber: wo.batchNumber,
     routeTemplateId: wo.routeTemplateId ?? "",
     targetItemId: wo.targetItemId,
     targetColorId: wo.targetColorId,
@@ -41,6 +42,7 @@ export function formValuesFromWorkOrder(wo: WorkOrder): WorkOrderFormValues {
     plannedStartDate: dateToInput(wo.plannedStartDate),
     plannedEndDate: dateToInput(wo.plannedEndDate),
     foldType: wo.foldType ?? "",
+    dyehouseNote: wo.dyehouseNote ?? "",
   };
 }
 
@@ -74,13 +76,25 @@ export function pickedLinesFromWorkOrder(wo: WorkOrder): PickedOrderLine[] {
 }
 
 /**
- * Bir siparişin kalemlerinden WO picker satırları üretir — "Bu siparişten iş
- * emri oluştur" kısayolu için. Sevki tamamlanmamış (quantity − shippedQty > 0)
- * kalemler alınır; openQty kalan (sevk edilmemiş) kadar gelir (link-only — metraj
- * taşımaz). Üretim önceliği/dengesi Ürün Dengesi ekranında; burası pratik kısayol.
+ * "Bu üründen iş emri oluştur" kısayolu: bir siparişin TEK ürününden (anchor
+ * kalem) WO picker satırları üretir. Tek WO = tek kumaş/renk/en — anchor ile
+ * aynı ürün+renk+en'e sahip açık (quantity − shippedQty > 0) kalemler alınır;
+ * farklı ürün/renk/en kalemler dışarıda kalır (her biri için ayrı iş emri açılır).
+ * openQty kalan (sevk edilmemiş) kadar gelir (link-only — metraj taşımaz).
  */
-export function pickedLinesFromOrder(order: Order): PickedOrderLine[] {
+export function pickedLinesFromOrderLine(
+  order: Order,
+  anchorLineId: string,
+): PickedOrderLine[] {
+  const anchor = (order.lines ?? []).find((l) => l.id === anchorLineId);
+  if (!anchor) return [];
   return (order.lines ?? [])
+    .filter(
+      (l) =>
+        l.itemId === anchor.itemId &&
+        (l.colorId ?? null) === (anchor.colorId ?? null) &&
+        (l.width ?? null) === (anchor.width ?? null),
+    )
     .map((l) => ({ l, rem: Number(l.quantity) - Number(l.shippedQty ?? 0) }))
     .filter((x) => x.rem > 0)
     .map((x) => buildPicked(order, { ...x.l, openQty: x.rem }));

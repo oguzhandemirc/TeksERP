@@ -53,6 +53,7 @@ export const rollColumns: ColumnDef<Roll>[] = [
   {
     accessorKey: "barcode",
     header: () => <SortableHeader field="barcode" label="Barkod" />,
+    meta: { label: "Barkod" },
     cell: ({ row }) =>
       row.original.barcode ? (
         <span className="font-mono text-xs">{row.original.barcode}</span>
@@ -131,6 +132,7 @@ export const rollColumns: ColumnDef<Roll>[] = [
   {
     accessorKey: "currentQty",
     header: () => <SortableHeader field="currentQty" label="Metre" />,
+    meta: { label: "Metre" },
     cell: ({ row }) => (
       <div className="text-right">
         <span className="tabular-nums">{row.original.currentQty.toLocaleString("tr-TR")}</span>
@@ -145,6 +147,7 @@ export const rollColumns: ColumnDef<Roll>[] = [
   {
     accessorKey: "width",
     header: () => <SortableHeader field="width" label="En" />,
+    meta: { label: "En" },
     cell: ({ row }) =>
       row.original.width != null ? (
         <span className="tabular-nums text-xs">{row.original.width} cm</span>
@@ -155,6 +158,7 @@ export const rollColumns: ColumnDef<Roll>[] = [
   {
     accessorKey: "qualityGrade",
     header: () => <SortableHeader field="qualityGrade" label="Kalite" />,
+    meta: { label: "Kalite" },
     cell: ({ row }) => {
       const grade = row.original.qualityGrade;
       if (grade === "FIRE") {
@@ -180,7 +184,7 @@ export const rollColumns: ColumnDef<Roll>[] = [
   {
     accessorKey: "status",
     header: () => <SortableHeader field="status" label="Durum" />,
-    meta: { exportValue: (r) => rollStatusLabels[r.status] ?? r.status },
+    meta: { label: "Durum", exportValue: (r) => rollStatusLabels[r.status] ?? r.status },
     cell: ({ row }) => (
       <StatusBadge
         status={row.original.status}
@@ -192,6 +196,7 @@ export const rollColumns: ColumnDef<Roll>[] = [
   {
     accessorKey: "createdAt",
     header: () => <SortableHeader field="createdAt" label="Tarih" />,
+    meta: { label: "Tarih" },
     cell: ({ row }) => {
       const d = row.original.createdAt;
       return (

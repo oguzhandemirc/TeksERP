@@ -185,7 +185,7 @@ router.post("/shipments/:id/sacks", verifyToken, WRITE, controller.addSack);
  * /api/shipping/shipments/{id}/ready:
  *   post:
  *     tags: [Shipping]
- *     summary: Sevke Hazır — karşılanma düşülür (spec-FIFO), toplar SHIPPED, kapıda
+ *     summary: Sevke Hazır — paketlendi, ara depoda/kapıda bekler (stok/karşılanma çıkışta/DISPATCH'te düşer)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path

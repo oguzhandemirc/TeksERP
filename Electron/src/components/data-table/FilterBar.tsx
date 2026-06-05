@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, X } from "lucide-react";
@@ -50,6 +50,9 @@ function toLocalYmd(iso: string): string {
  *  - `select`: sabit seçenek listesi (status, type vb.)
  *  - `lookup`: master data dropdown (customer, item — `CrudService.getAll`)
  *  - `multi-lookup`: çoklu master data (popover + checkbox) — virgülle ayrılmış
+ *  - `dependent-lookup`: üst filtreye bağlı çoklu lookup (örn. müşteri → şube);
+ *    üst değer seçilince `fetchOptions(parentId)` ile seçenekler gelir, üst
+ *    değişince çocuk seçim temizlenir
  *  - `numberRange`: iki sayısal input (min-max). URL'e `<key>Min`, `<key>Max`
  *  - `dateRange`: preset (Son 7g/30g/90g/Tümü) — `dateField` zorunlu
  *
@@ -95,6 +98,19 @@ export type FilterDef =
       queryKey: string;
       getLabel?: LookupGetLabel;
       extraFilters?: Record<string, string>;
+    }
+  | {
+      kind: "dependent-lookup";
+      key: string;
+      label: string;
+      /** Bağlı olduğu üst filtre anahtarı (örn. "customerId"). */
+      dependsOn: string;
+      queryKey: string;
+      /** Üst filtre değeri verilince seçenekleri getirir (parentId boşken çağrılmaz). */
+      fetchOptions: (parentId: string) => Promise<LookupItemBase[]>;
+      getLabel?: LookupGetLabel;
+      /** Üst filtre seçilmeden gösterilen pasif metin (örn. "Şube (önce müşteri)"). */
+      placeholderNoParent?: string;
     }
   | {
       kind: "numberRange";
@@ -175,6 +191,7 @@ export function FilterBar({ filters, defaultDateRangeDays = 0, leading }: Props)
         if (f.kind === "multi-select") return <MultiSelectFilter key={f.key} def={f} sp={searchParams} update={update} />;
         if (f.kind === "lookup") return <LookupFilter key={f.key} def={f} sp={searchParams} update={update} />;
         if (f.kind === "multi-lookup") return <MultiLookupFilter key={f.key} def={f} sp={searchParams} update={update} />;
+        if (f.kind === "dependent-lookup") return <DependentLookupFilter key={f.key} def={f} sp={searchParams} update={update} />;
         if (f.kind === "numberRange") return <NumberRangeFilter key={f.key} def={f} sp={searchParams} update={update} />;
         return <DateRangeFilter key="date" def={f} sp={searchParams} update={update} />;
       })}
@@ -506,6 +523,138 @@ function MultiLookupFilter({
 
   const clearAll = () =>
     update((next) => next.delete(`filter[${def.key}]`));
+
+  const triggerLabel =
+    selectedIds.length === 0
+      ? def.label
+      : selectedIds.length === 1
+        ? labelOf(items.find((it) => it.id === selectedIds[0]) ?? { id: selectedIds[0]! })
+        : `${def.label} (${selectedIds.length})`;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-7 min-w-[140px] justify-between gap-1 px-2 text-xs font-normal",
+            selectedIds.length > 0 && "border-primary/50",
+          )}
+        >
+          <span className={cn(selectedIds.length === 0 && "text-muted-foreground")}>
+            {triggerLabel}
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder={`${def.label} ara...`} className="h-8" />
+          <CommandList>
+            <CommandEmpty>Sonuç yok.</CommandEmpty>
+            <CommandGroup>
+              {items.map((it) => {
+                const selected = selectedIds.includes(it.id);
+                return (
+                  <CommandItem
+                    key={it.id}
+                    value={labelOf(it)}
+                    onSelect={() => toggle(it.id)}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-3.5 w-3.5",
+                        selected ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    {labelOf(it)}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+          {selectedIds.length > 0 ? (
+            <div className="border-t p-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 w-full justify-center text-xs"
+                onClick={clearAll}
+              >
+                Temizle
+              </Button>
+            </div>
+          ) : null}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function DependentLookupFilter({
+  def,
+  sp,
+  update,
+}: SubProps<Extract<FilterDef, { kind: "dependent-lookup" }>>) {
+  const [open, setOpen] = useState(false);
+  const parentId = sp.get(`filter[${def.dependsOn}]`) ?? "";
+  const csv = sp.get(`filter[${def.key}]`) ?? "";
+  const selectedIds = useMemo(
+    () => (csv ? csv.split(",").filter(Boolean) : []),
+    [csv],
+  );
+
+  // Üst filtre (örn. müşteri) değişince child seçimini temizle — eski müşterinin
+  // şubesi yeni müşteride yok; bayat filtre boş sonuç döndürürdü.
+  const prevParent = useRef(parentId);
+  useEffect(() => {
+    if (prevParent.current === parentId) return;
+    prevParent.current = parentId;
+    if (sp.get(`filter[${def.key}]`)) {
+      update((next) => next.delete(`filter[${def.key}]`));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parentId]);
+
+  const { data } = useQuery({
+    queryKey: [def.queryKey, "filter-dependent", parentId],
+    queryFn: () => def.fetchOptions(parentId),
+    enabled: Boolean(parentId),
+    staleTime: 60_000,
+  });
+  const items = data ?? [];
+  const labelOf = (it: LookupItemBase) =>
+    def.getLabel ? def.getLabel(it) : it.name ?? it.code ?? it.id;
+
+  const toggle = (id: string) =>
+    update((next) => {
+      const set = new Set(selectedIds);
+      if (set.has(id)) set.delete(id);
+      else set.add(id);
+      if (set.size === 0) next.delete(`filter[${def.key}]`);
+      else next.set(`filter[${def.key}]`, Array.from(set).join(","));
+    });
+
+  const clearAll = () => update((next) => next.delete(`filter[${def.key}]`));
+
+  // Üst filtre seçilmeden child pasif.
+  if (!parentId) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled
+        className="h-7 min-w-[140px] justify-between gap-1 px-2 text-xs font-normal text-muted-foreground"
+      >
+        {def.placeholderNoParent ?? def.label}
+        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+      </Button>
+    );
+  }
 
   const triggerLabel =
     selectedIds.length === 0

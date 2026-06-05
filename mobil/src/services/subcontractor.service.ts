@@ -1,6 +1,11 @@
 import { apiClient } from './api';
 import { buildQueryString } from '../utils/queryBuilder';
-import type { ApiResponse, PaginatedResponse, QueryParams } from '../types/api';
+import type {
+  ApiResponse,
+  PaginatedResponse,
+  CursorPaginatedResponse,
+  QueryParams,
+} from '../types/api';
 import type {
   SubcontractorDispatch,
   SubcontractorDispatchListItem,
@@ -21,6 +26,20 @@ interface ListDispatchesParams {
   pageSize?: number;
 }
 
+/** Fason Sevk Geçmişi sayfası durum sekmesi. */
+export type DispatchStatusFilter = 'all' | 'active' | 'cancelled';
+
+interface ListDispatchesCursorParams {
+  status?: DispatchStatusFilter;
+  subcontractorId?: string;
+  /** sevk no / fason firma / parti kodu araması (sunucu-taraflı). */
+  search?: string;
+  /** ISO tarih — bu andan sonraki sevkler (dönem filtresi). */
+  dateFrom?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
 export interface DispatchRequest {
   workOrderId: string;
   stepId: string;
@@ -29,6 +48,8 @@ export interface DispatchRequest {
   plateNumber?: string;
   driverName?: string;
   notes?: string;
+  /** Boyahaneye özel talimat — genel sevk notundan ayrı. */
+  dyehouseNote?: string;
   /**
    * WO ürünü ile rulo ürünü uyuşmazlığını bilinçli onayla. Frontend
    * mismatch modal'da onayladıktan sonra true gönderir.
@@ -82,6 +103,29 @@ export const subcontractorService = {
     return apiClient
       .get<PaginatedResponse<SubcontractorDispatchListItem>>(
         `/subcontractor/dispatches${qs ? `?${qs}` : ''}`
+      )
+      .then((r) => r.data);
+  },
+
+  /**
+   * Fason Sevk Geçmişi sayfası: cursor (keyset) pagination + durum/firma/arama/
+   * dönem filtresi. Sunucu-taraflı filtre → over-fetch yok; count yok → derin
+   * sayfalamada sabit maliyet. `dispatchedAt desc + id desc` indeksli sıralama.
+   */
+  listDispatchesCursor: (
+    params: ListDispatchesCursorParams = {}
+  ): Promise<CursorPaginatedResponse<SubcontractorDispatchListItem>> => {
+    const sp = new URLSearchParams();
+    sp.set('mode', 'cursor');
+    if (params.status && params.status !== 'all') sp.set('status', params.status);
+    if (params.subcontractorId) sp.set('subcontractorId', params.subcontractorId);
+    if (params.search) sp.set('search', params.search);
+    if (params.dateFrom) sp.set('dateFrom', params.dateFrom);
+    sp.set('limit', String(params.limit ?? 30));
+    if (params.cursor) sp.set('cursor', params.cursor);
+    return apiClient
+      .get<CursorPaginatedResponse<SubcontractorDispatchListItem>>(
+        `/subcontractor/dispatches?${sp.toString()}`
       )
       .then((r) => r.data);
   },

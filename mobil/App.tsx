@@ -1,5 +1,10 @@
-import React from 'react';
-import { Text as RNText, TextInput as RNTextInput } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import {
+  AppState,
+  type AppStateStatus,
+  Text as RNText,
+  TextInput as RNTextInput,
+} from 'react-native';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -16,6 +21,7 @@ import {
   PERSIST_MAX_AGE_MS,
 } from './src/offline/queryClient';
 import { registerStationMutationDefaults } from './src/offline/mutations';
+import { FLAGS_KEY } from './src/hooks/useFeatureFlags';
 import { colors } from './src/theme/tokens';
 
 registerStationMutationDefaults();
@@ -44,6 +50,23 @@ const theme = {
 };
 
 export default function App() {
+  // Uygulama arka plandan/inaktiften ÖNE döndüğünde feature flag'leri tazele.
+  // Admin Electron'dan bir flag'i toggle edince (örn. boyahane notu mobil giriş),
+  // operatör uygulamayı öne getirince 5 dk staleTime'ı beklemeden yansır.
+  // invalidate aktif observer'ı hemen refetch'e zorlar; offline ise (queries
+  // networkMode='online') refetch beklemeye alınır, son persisted değer korunur.
+  const appState = useRef(AppState.currentState);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      const prev = appState.current;
+      appState.current = next;
+      if (next === 'active' && prev !== 'active') {
+        void queryClient.invalidateQueries({ queryKey: FLAGS_KEY });
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
@@ -63,8 +86,15 @@ export default function App() {
             <NumpadProvider>
               <RootNavigator />
             </NumpadProvider>
-            <Toast config={toastConfig} />
           </PaperProvider>
+          {/* Toast, PaperProvider'ın DIŞINDA ve ondan SONRA durur. Tüm modallar
+              (AppModal → react-native-paper Portal) PaperProvider'ın Portal.Host'una
+              mount olur; Portal içeriği host'un normal çocuklarının üstüne biner.
+              Toast host'un içindeyken (eski hali) modalın ARKASINDA kalıyordu. Burada
+              host dışında ve sonra render edildiğinden her zaman modalların üstünde
+              görünür. toastConfig yalnız react-native-toast-message + View kullanır,
+              Paper context'ine ihtiyacı yok. */}
+          <Toast config={toastConfig} />
         </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

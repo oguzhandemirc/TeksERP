@@ -1209,8 +1209,8 @@ export default function FasonKabulScreen() {
         )}
 
         {/* Telefon dikey — ekran altında baş-parmak aksiyon barı.
-            30 / 40 / 30: Bekleyen (sol) · Kamera ile Okut (orta, ana eylem) ·
-            Geçmiş (sağ). Kamera ortada vurgulu dolgulu blok. */}
+            30 / 40 / 30: Geçmiş (sol) · Kamera ile Okut (orta, ana eylem) ·
+            Bekleyen (sağ). Kamera ortada vurgulu dolgulu blok. */}
         {isPhone && (
           <View style={styles.bottomBar}>
             {/* Flex oranı dış hücre View'lerinde — TouchableRipple'a doğrudan
@@ -1218,15 +1218,15 @@ export default function FasonKabulScreen() {
                 doldurur. */}
             <View style={styles.bottomBarCellSide}>
               <TouchableRipple
-                onPress={() => setListModalOpen(true)}
+                onPress={() => setHistoryModalOpen(true)}
                 style={styles.bottomBarBtn}
-                rippleColor="rgba(217, 119, 6, 0.12)"
-                accessibilityLabel="Bekleyen sevkler"
+                rippleColor="rgba(71, 85, 105, 0.12)"
+                accessibilityLabel="Geçmiş kabuller"
               >
                 <View style={styles.bottomBarBtnInner}>
-                  <Icon source="format-list-bulleted" size={24} color="#d97706" />
-                  <Text style={[styles.bottomBarBtnText, { color: '#d97706' }]}>
-                    Bekleyen
+                  <Icon source="history" size={24} color="#475569" />
+                  <Text style={[styles.bottomBarBtnText, { color: '#475569' }]}>
+                    Geçmiş
                   </Text>
                 </View>
               </TouchableRipple>
@@ -1250,15 +1250,15 @@ export default function FasonKabulScreen() {
 
             <View style={styles.bottomBarCellSide}>
               <TouchableRipple
-                onPress={() => setHistoryModalOpen(true)}
+                onPress={() => setListModalOpen(true)}
                 style={styles.bottomBarBtn}
-                rippleColor="rgba(71, 85, 105, 0.12)"
-                accessibilityLabel="Geçmiş kabuller"
+                rippleColor="rgba(217, 119, 6, 0.12)"
+                accessibilityLabel="Bekleyen sevkler"
               >
                 <View style={styles.bottomBarBtnInner}>
-                  <Icon source="history" size={24} color="#475569" />
-                  <Text style={[styles.bottomBarBtnText, { color: '#475569' }]}>
-                    Geçmiş
+                  <Icon source="format-list-bulleted" size={24} color="#d97706" />
+                  <Text style={[styles.bottomBarBtnText, { color: '#d97706' }]}>
+                    Bekleyen
                   </Text>
                 </View>
               </TouchableRipple>
@@ -2641,7 +2641,6 @@ const styles = StyleSheet.create({
 });
 
 const cameraStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
   sheet: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },
   header: {
     flexDirection: 'row',

@@ -4,6 +4,8 @@ import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
 import { operationsTiles } from "@/pages/Operations/tile-config";
 import { accessTiles } from "@/pages/Access/tile-config";
+import { systemTiles } from "@/pages/System/tile-config";
+import { SETTINGS_CATEGORIES } from "@/pages/GeneralSettings/settings-config";
 
 export interface CommandEntry {
   key: string;
@@ -13,6 +15,8 @@ export interface CommandEntry {
   to: string;
   permission?: string;
   adminOnly?: boolean;
+  /** Görünmeyen ek arama anahtarları (cmdk eşleşme değerine eklenir). */
+  keywords?: string;
 }
 
 export interface CommandSection {
@@ -67,6 +71,30 @@ export const commandSections: CommandSection[] = [
       adminOnly: true,
     })),
   },
+  {
+    heading: "Sistem",
+    entries: systemTiles.map((tile) => ({
+      key: `sys:${tile.key}`,
+      label: tile.title,
+      description: tile.description,
+      icon: tile.icon,
+      to: tile.to,
+      permission: "admin:settings",
+    })),
+  },
+  {
+    // Genel Ayarlar'ın domain kategorileri — her biri ilgili sekmeyi derin bağlantıyla açar.
+    heading: "Genel Ayarlar",
+    entries: SETTINGS_CATEGORIES.map((cat) => ({
+      key: `setting:${cat.id}`,
+      label: `Genel Ayarlar · ${cat.label}`,
+      description: cat.description,
+      icon: cat.icon,
+      to: `/system/settings?tab=${cat.id}`,
+      permission: "admin:settings",
+      keywords: cat.keywords,
+    })),
+  },
 ];
 
 /** Tüm komut girişleri düz liste — favoriler katalogu olarak da kullanılır. */
@@ -81,6 +109,7 @@ export function findCommandEntry(to: string): CommandEntry | undefined {
 const SECTION_PARENTS: Record<string, { label: string; to: string }> = {
   Operasyon: { label: "Operasyon", to: "/operations" },
   Yetkilendirme: { label: "Yetkilendirme", to: "/access" },
+  Sistem: { label: "Sistem", to: "/system" },
 };
 
 /** Bir route'un breadcrumb üst bağlantısı (hub). Üst seviye sayfalarda null. */

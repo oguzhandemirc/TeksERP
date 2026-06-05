@@ -10,15 +10,21 @@ import {
   Checkbox,
   SegmentedButtons,
   Divider,
+  Icon,
+  ActivityIndicator,
 } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import { SkeletonList } from '../../../components/motion';
-import { subcontractorService } from '../../../services/subcontractor.service';
+import { useKartelaFirms } from '../../../hooks/useKartelaFirms';
+import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import {
   kartelaService,
   type KartelaOutstandingItem,
@@ -27,6 +33,7 @@ import {
 } from '../../../services/kartela.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import { colors, spacing, radius } from '../../../theme';
+import type { MainStackParamList } from '../../../navigation/types';
 
 interface RowState {
   selected: boolean;
@@ -59,6 +66,8 @@ const resizeItems = (items: { cm: string; kg: string }[], count: number) => {
 
 export default function KartelaKabulScreen() {
   const qc = useQueryClient();
+  const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
+  const insets = useSafeAreaInsets();
   const [firmId, setFirmId] = useState<string | null>(null);
   const [firmName, setFirmName] = useState('');
   const [firmPickerOpen, setFirmPickerOpen] = useState(false);
@@ -68,14 +77,11 @@ export default function KartelaKabulScreen() {
   const [globalCm, setGlobalCm] = useState('');
   const [globalKg, setGlobalKg] = useState('');
 
-  const firmsQuery = useQuery({
-    queryKey: ['subcontractors', 'picker'],
-    queryFn: () => subcontractorService.listSubcontractors({ pageSize: 200 }),
-  });
+  const { firms, isLoading: firmsLoading, categoryMissing, refetch: refetchFirms } = useKartelaFirms();
+  useRefetchOnOpen(refetchFirms, firmPickerOpen);
   const firmOptions: PickerOption[] = useMemo(
-    () =>
-      (firmsQuery.data?.data ?? []).map((s) => ({ value: s.id, label: s.name, sublabel: s.code ?? undefined })),
-    [firmsQuery.data]
+    () => firms.map((s) => ({ value: s.id, label: s.name, sublabel: s.code ?? undefined })),
+    [firms]
   );
 
   const outstandingQuery = useQuery({
@@ -183,7 +189,8 @@ export default function KartelaKabulScreen() {
   const canSubmit = !!firmId && selectedReturns.length > 0 && !receiveMutation.isPending;
 
   return (
-    <ScreenChrome title="Kartela Kabul" subtitle="Firmadan dönen kartelaları kabul et">
+    <ScreenChrome title="Kartela Kabul">
+      <View style={styles.flex}>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {/* Firma */}
         <Surface style={styles.card} elevation={1}>
@@ -359,25 +366,102 @@ export default function KartelaKabulScreen() {
           </Surface>
         )}
 
-        <Button
-          mode="contained"
-          icon="package-down"
-          onPress={() => receiveMutation.mutate()}
-          disabled={!canSubmit}
-          loading={receiveMutation.isPending}
-          style={styles.submit}
-          contentStyle={styles.submitContent}
-        >
-          Kabul Et ({selectedReturns.length} top → {totalKartela} kartela)
-        </Button>
       </ScrollView>
+
+      {/* Alt bar — FasonKabul deseni (30/40/30): Geçmiş (sol) · Kabul Et (orta,
+          vurgulu dolgulu hero) · Bekleyen (sağ). Güvenli alanı doldurup ekran
+          dibine uzar. */}
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom, marginBottom: -insets.bottom }]}>
+        <View style={styles.bottomBarRow}>
+        <View style={styles.bottomBarCellSide}>
+          <TouchableRipple
+            onPress={() => nav.navigate('KartelaKabulGecmisi')}
+            style={styles.bottomBarBtn}
+            rippleColor="rgba(71, 85, 105, 0.12)"
+            accessibilityLabel="Kabul geçmişi"
+          >
+            <View style={styles.bottomBarBtnInner}>
+              <Icon source="history" size={24} color="#475569" />
+              <Text style={[styles.bottomBarBtnText, { color: '#475569' }]}>Geçmiş</Text>
+            </View>
+          </TouchableRipple>
+        </View>
+
+        <View style={styles.bottomBarCellPrimary}>
+          {/* Hero tuş, KartelaSevk'teki "Kamera ile Okut" gibi koşulsuz yeşil.
+              Hazır değilken gri yapmak yerine yeşil kalır; basınca eksiği toast
+              ile söyler (Bekleyen tuşu deseni). canSubmit içi isPending'i de
+              kapsadığından çift submit engellenir. */}
+          <TouchableRipple
+            onPress={() => {
+              if (canSubmit) {
+                receiveMutation.mutate();
+              } else {
+                Toast.show({
+                  type: 'info',
+                  text1: !firmId
+                    ? 'Önce firma seçin'
+                    : selectedReturns.length === 0
+                      ? 'Kabul edilecek top seçin'
+                      : 'Kabul işleniyor…',
+                });
+              }
+            }}
+            style={[styles.bottomBarBtn, styles.bottomBarBtnPrimaryFill]}
+            rippleColor="rgba(255,255,255,0.25)"
+            accessibilityLabel="Kabul et"
+          >
+            <View style={styles.bottomBarBtnInner}>
+              {receiveMutation.isPending ? (
+                <ActivityIndicator size={22} color="#fff" />
+              ) : (
+                <Icon source="package-down" size={28} color="#fff" />
+              )}
+              <Text style={[styles.bottomBarBtnText, { color: '#fff' }]}>
+                {selectedReturns.length > 0
+                  ? `Kabul Et (${selectedReturns.length}→${totalKartela})`
+                  : 'Kabul Et'}
+              </Text>
+            </View>
+          </TouchableRipple>
+        </View>
+
+        <View style={styles.bottomBarCellSide}>
+          <TouchableRipple
+            onPress={() => {
+              void outstandingQuery.refetch();
+              Toast.show({
+                type: 'info',
+                text1: firmId ? `${outstanding.length} bekleyen top` : 'Önce firma seçin',
+              });
+            }}
+            style={styles.bottomBarBtn}
+            rippleColor="rgba(217, 119, 6, 0.12)"
+            accessibilityLabel="Bekleyen toplar"
+          >
+            <View style={styles.bottomBarBtnInner}>
+              <Icon source="format-list-bulleted" size={24} color="#d97706" />
+              <Text style={[styles.bottomBarBtnText, { color: '#d97706' }]}>
+                Bekleyen{firmId ? ` (${outstanding.length})` : ''}
+              </Text>
+            </View>
+          </TouchableRipple>
+        </View>
+        </View>
+      </View>
+      </View>
 
       <PickerModal
         visible={firmPickerOpen}
         title="Kartela Firması Seç"
         options={firmOptions}
         selectedValue={firmId ?? undefined}
-        loading={firmsQuery.isLoading}
+        loading={firmsLoading}
+        emptyText={
+          categoryMissing
+            ? '"Kartela" fason kategorisi tanımlı değil — admin panelinden ekleyin.'
+            : 'Kartela kategorisinde firma yok — admin panelinden firmaya "Kartela" kategorisi atayın.'
+        }
         onSelect={(v) => {
           setFirmId(v);
           setFirmName(firmOptions.find((o) => o.value === v)?.label ?? '');
@@ -391,10 +475,36 @@ export default function KartelaKabulScreen() {
 }
 
 const styles = StyleSheet.create({
-  body: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxxl },
+  flex: { flex: 1 },
+  body: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.lg },
+  // Alt bar — FasonKabul deseni (30/40/30, orta dolgulu hero). Tam genişlik bg,
+  // içerik tablet için maks-genişlikle ortalanır; güvenli alana uzar.
+  bottomBar: {
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: -2 },
+    shadowRadius: 6,
+  },
+  bottomBarRow: { height: 64, flexDirection: 'row', width: '100%', maxWidth: 520, alignSelf: 'center' },
+  bottomBarCellSide: { flex: 3 },
+  bottomBarCellPrimary: { flex: 4 },
+  bottomBarBtn: { flex: 1, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  bottomBarBtnPrimaryFill: { backgroundColor: '#059669' },
+  bottomBarBtnInner: { alignItems: 'center', gap: 2 },
+  bottomBarBtnText: { fontSize: 12, fontWeight: '700', color: colors.text },
   card: { padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, gap: spacing.sm },
   cardTitle: { color: colors.textSecondary },
-  firmSelect: { borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  firmSelect: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingLeft: spacing.md,
+    paddingVertical: 4,
+  },
   firmSelectRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   empty: { color: colors.textMuted, fontStyle: 'italic', paddingVertical: spacing.sm },
   measureRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -403,6 +513,4 @@ const styles = StyleSheet.create({
   rollBarcode: { fontWeight: '600', color: colors.text },
   rollMeta: { color: colors.textMuted, marginTop: 2 },
   itemIdx: { width: 28, color: colors.textMuted },
-  submit: { borderRadius: radius.lg },
-  submitContent: { height: 52 },
 });

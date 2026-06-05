@@ -109,6 +109,14 @@ export function WorkOrderDocumentsDialog({
                             </span>
                           </span>
                         </div>
+                        {(d.dyehouseNote ?? d.woDyehouseNote) && (
+                          <div className="text-[11px] text-muted-foreground">
+                            Boyahane Notu:{" "}
+                            <span className="whitespace-pre-wrap font-medium text-orange-700">
+                              {d.dyehouseNote ?? d.woDyehouseNote}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <Printer className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                     </button>

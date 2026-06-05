@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
@@ -7,6 +8,7 @@ import { useDeviceStore } from '../store/deviceStore';
 import { useBaseUrlStore } from '../store/baseUrlStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { setUnauthorizedHandler } from '../services/api';
+import { deviceService } from '../services/device.service';
 import { usePermissions } from '../hooks/usePermission';
 import LoginScreen from '../screens/Auth/LoginScreen';
 import PairingScreen from '../screens/Auth/PairingScreen';
@@ -29,6 +31,17 @@ export default function RootNavigator() {
   const baseUrlLoaded = useBaseUrlStore((s) => s.isLoaded);
   const initDeviceSettings = useDeviceSettingsStore((s) => s.init);
   const { hasAnyMobileScreen } = usePermissions();
+
+  // Cihaz eşleştirmesi zorunlu mu? Public gate (login öncesi okunur). React Query
+  // cache'i AsyncStorage'a persist edilir → son bilinen değer offline'da da geçerli.
+  // Yüklenene kadar / hata halinde false (pasif): boot'u bloklamayız, operatör
+  // doğrudan Login'e ulaşır. Eşleşmiş cihaz zaten `paired` ile Pairing'i atlar.
+  const pairingRequired =
+    useQuery({
+      queryKey: ['device', 'pairing-required'],
+      queryFn: deviceService.getPairingRequired,
+      staleTime: 5 * 60 * 1000,
+    }).data ?? false;
 
   useEffect(() => {
     void initBaseUrl();
@@ -61,7 +74,7 @@ export default function RootNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
-        {!paired ? (
+        {!paired && pairingRequired ? (
           <Stack.Screen name="Pairing" component={PairingScreen} />
         ) : !user ? (
           <Stack.Screen name="Login" component={LoginScreen} />

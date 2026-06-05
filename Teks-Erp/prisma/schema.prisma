@@ -216,6 +216,8 @@ model User {
   systemSettingsUpdates      SystemSetting[]
   createdPairingCodes        PairingCode[]           @relation("PairingCodeCreatedBy")
   preference                 UserPreference?
+  receivedReturns            RollReturn[]             @relation("RollReturnReceivedBy")
+  cancelledReturns           RollReturn[]             @relation("RollReturnCancelledBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -540,6 +542,7 @@ model Item {
   /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
   customerAliases    CustomerItemAlias[]
   productRecipes     ProductRecipe[]
+  rollReturns        RollReturn[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -642,6 +645,7 @@ model Roll {
   properties           RollProperty[]
   shipment             Shipment?                   @relation(fields: [shipmentId], references: [id])
   sack                 Sack?                       @relation(fields: [sackId], references: [id])
+  returns              RollReturn[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -691,6 +695,7 @@ model Customer {
   itemAliases   CustomerItemAlias[]
   colorAliases  CustomerColorAlias[]
   shipments     Shipment[]
+  rollReturns   RollReturn[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -758,6 +763,7 @@ model Order {
   manualClosedBy User?           @relation("OrderManualClosedBy", fields: [manualClosedById], references: [id])
   lines          OrderLine[]
   shipmentLinks  ShipmentOrder[] // Paketleme oturumlarında seçildiği sevkiyatlar
+  rollReturns    RollReturn[] // Bu siparişe atfedilen iadeler (sevk muhasebesini değiştirmez)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -871,6 +877,11 @@ model WorkOrder {
   /// (finalize sırasında override edebilir, gerçek değer RollOperation
   /// metadata'sına yazılır).
   foldType String?
+
+  /// Boyahaneye özel talimat — iş emri oluştururken girilir. Fason Sevk açılınca
+  /// dispatch.dyehouseNote'a default kopyalanır (operatör flag açıkken override
+  /// edebilir). Sevk fişinde "İstenen Renk"in yanında basılır.
+  dyehouseNote String?
 
   // Soft-delete bayrağı — hardDelete artık `isActive=false` yapar; bağlı
   // RollOperation / TravelerCard / Manifest / Swatch / Dispatch / Receipt
@@ -994,13 +1005,35 @@ model QualityGrade {
   /// 1. Kalite → WAREHOUSE, alt kaliteler (A1/A2/2.K) → A1_STOCK, FİRE → SCRAP.
   targetStatus RollStatus @default(SCRAP)
 
-  rolls Roll[]
+  rolls       Roll[]
+  rollReturns RollReturn[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([isActive, sortOrder])
   @@map("quality_grades")
+}
+
+/// İade nedeni kataloğu — admin CRUD. İade ekranında seçilebilir; ayrıca serbest
+/// metin (RollReturn.reasonText) de girilebilir, ikisi de opsiyonel/boş bırakılabilir.
+/// Soft-delete (isActive=false); mevcut RollReturn.reasonId snapshot'ları korunur.
+model ReturnReason {
+  id          String  @id @default(uuid())
+  code        String  @unique @db.VarChar(32) // "YANLIS_URUN", "HASARLI" ...
+  name        String  @db.VarChar(100)
+  description String?
+  color       String? @db.VarChar(7) // UI rozeti (opsiyonel)
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  rollReturns RollReturn[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("return_reasons")
 }
 
 /// Hata tipi kataloğu — operatör ekranında buton olarak çıkar, elle girilmez.
@@ -1239,6 +1272,10 @@ model SubcontractorDispatch {
   dispatchedAt           DateTime @default(now())
   dispatchedById         String?
   notes                  String?
+  // Boyahaneye özel talimat — genel "sevk notu"ndan (notes) AYRI. printSnapshot'a
+  // DONDURULMAZ; requestedColor gibi canlı tutulur → sevk sonrası (Electron'dan)
+  // düzenlenebilir, baskı her zaman güncel değeri gösterir.
+  dyehouseNote           String?
   totalQty               Decimal  @default(0) @db.Decimal(12, 3) // Toplam sevk edilen metraj (snapshot)
   printSnapshot          Json? // Sevk anında dondurulan irsaliye verisi
 
@@ -1691,6 +1728,7 @@ model Sack {
   sackNo     String   @unique @db.VarChar(64) // Client-üretimi barkod (offline-aware)
   shipmentId String? // Bağlı olduğu sevkiyat
   seq        Int      @default(0) // Sevkiyat içinde sıra (Çuval 1, 2, 3...)
+  manualCode String?  @db.VarChar(64) // Operatörün çuval üstüne elle yazdığı kod (sevkiyat-içi benzersiz; ready/sevk için zorunlu)
   weightKg   Decimal? @db.Decimal(12, 3) // Brüt tartı (kumaş + dara); tekli top kg tutulmaz
 
   // Relations
@@ -1731,6 +1769,7 @@ model Shipment {
   rolls       Roll[] // Okutulan toplar
   swatches    Swatch[] // Okutulan kartelalar (siparişe sayılmaz)
   allocations ShipmentAllocation[] // READY'de yazılan karşılanma tahsisi (geri-alınabilir)
+  returns     RollReturn[] // Bu sevkiyattan gelen iadeler (izlenebilirlik)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1775,6 +1814,73 @@ model ShipmentAllocation {
   @@index([shipmentId])
   @@index([orderLineId])
   @@map("shipment_allocations")
+}
+
+/// İADE DEFTERİ — müşteriden geri dönen topun kaydı. Append-only; izlenebilirliğin
+/// omurgası. Sevk muhasebesine (OrderLine.shippedQty / ShipmentAllocation) DOKUNMAZ
+/// → sipariş kapalı (COMPLETED) kalır. "Hangi siparişten / hangi üründen / ne kadar
+/// iade" tamamen bu tablodan türetilir. İade anında top SHIPPED→WAREHOUSE'a çekilir
+/// (statü hep WAREHOUSE — Tambur çıktısıyla tutarlı); kalite yalnız personel
+/// (returnGradingEnabled açıkken) override ederse `qualityGradeId`'de saklanır.
+model RollReturn {
+  id             String  @id @default(uuid())
+  rollId         String // İade edilen top
+  fromShipmentId String? // Geldiği sevkiyat (varsa)
+  customerId     String // Müşteri (sevkiyattan türetilir)
+  orderId        String? // Personelin seçtiği sipariş (tek aday=otomatik; yoksa null)
+
+  // Spec snapshot — top sonradan Tambur'da kesilse bile rapor sağlam kalsın
+  itemId  String
+  colorId String?
+  width   Decimal? @db.Decimal(12, 3)
+  qty     Decimal  @db.Decimal(12, 3) // İade anındaki currentQty
+
+  // Neden + not (hepsi opsiyonel; ikisi de boş olabilir)
+  reasonId   String? // ReturnReason FK (seçilen)
+  reasonText String? @db.Text // Serbest metin neden
+  note       String? @db.Text // Teslim alan personel notu
+
+  // Kalite — yalnız personel override ettiyse dolar (yoksa top çıktığı kaliteyle döner)
+  qualityGradeId String?
+
+  receivedById String // İadeyi teslim alan personel
+
+  // İade öncesi durum snapshot'ı — iptal (geri al) bunlarla topu eski haline döndürür.
+  prevSackId         String? // İade anındaki sackId (iptalde geri yazılır)
+  prevQualityGrade   String? // İade anındaki qualityGrade etiketi
+  prevQualityGradeId String? // İade anındaki qualityGradeId
+
+  // İptal (yanlış iade kabulü geri alındı) — sebeple birlikte.
+  cancelledAt   DateTime?
+  cancelReason  String?   @db.Text
+  cancelledById String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  roll         Roll          @relation(fields: [rollId], references: [id])
+  fromShipment Shipment?     @relation(fields: [fromShipmentId], references: [id])
+  customer     Customer      @relation(fields: [customerId], references: [id])
+  order        Order?        @relation(fields: [orderId], references: [id])
+  item         Item          @relation(fields: [itemId], references: [id])
+  color        Color?        @relation(fields: [colorId], references: [id])
+  reason       ReturnReason? @relation(fields: [reasonId], references: [id])
+  qualityGrade QualityGrade? @relation(fields: [qualityGradeId], references: [id])
+  receivedBy   User          @relation("RollReturnReceivedBy", fields: [receivedById], references: [id])
+  cancelledBy  User?         @relation("RollReturnCancelledBy", fields: [cancelledById], references: [id])
+
+  @@index([orderId])
+  @@index([customerId, createdAt])
+  @@index([itemId, colorId, width])
+  @@index([fromShipmentId])
+  @@index([rollId])
+  @@index([reasonId])
+  @@index([receivedById])
+  @@index([qualityGradeId])
+  @@index([cancelledById])
+  @@index([cancelledAt])
+  @@index([createdAt])
+  @@map("roll_returns")
 }
 
 // =============================================================================
@@ -1823,6 +1929,7 @@ model Color {
   /// Fason kabullerde renk olarak uygulandığı receipt'ler (boyahane dönüşü).
   appliedAtReceipts   SubcontractorReceipt[]
   productRecipes      ProductRecipe[]
+  rollReturns         RollReturn[]
 
   @@index([isActive, sortOrder])
   @@map("colors")

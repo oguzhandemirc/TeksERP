@@ -312,7 +312,10 @@ export class OrderService extends BaseService {
         branch: { select: { id: true, name: true, city: true, district: true } },
         lines: {
           include: {
-            item: { include: { allowedProperties: { include: { property: true } } } },
+            // item.allowedProperties picker sonucunda KULLANILMIYOR (TargetPropertyPicker
+            // ayrı item sorgusundan alır) — over-fetch'i kaldır. requiredProperties
+            // ise OrderPickerDialog'da gösteriliyor → kalır.
+            item: true,
             color: true,
             requiredProperties: { include: { property: true } },
           },
@@ -473,11 +476,10 @@ export class OrderService extends BaseService {
       return `${itemId}|${colorId ?? ""}|${w}`;
     };
 
-    // En eşleşmesi: birebir (Depo) vs gevşek (Ham, null=joker) — Ürün Dengesi ile aynı.
+    // En eşleşmesi: Depo (bitmiş) birebir; Ham EN-AGNOSTİK (ham kumaşın eni
+    // önemsiz, fasonda işlenir) — Ürün Dengesi ile aynı.
     const widthEqual = (a: Prisma.Decimal | null, b: Prisma.Decimal | null): boolean =>
       a == null || b == null ? a == null && b == null : new Prisma.Decimal(a).equals(b);
-    const widthCompatible = (a: Prisma.Decimal | null, b: Prisma.Decimal | null): boolean =>
-      a == null || b == null ? true : new Prisma.Decimal(a).equals(b);
 
     // Serbest stok — spec bazında grupla; bir sevkiyata okutulmamış (shipmentId=null)
     // WAREHOUSE + STOCK toplar (fungible havuz, etiket bakılmaz).
@@ -493,9 +495,9 @@ export class OrderService extends BaseService {
     });
 
     // Serbest stok eşleştirme (item kesin):
-    //  - Depo (WAREHOUSE, bitmiş/boyalı): renk + en BİREBİR (renk zaten uygulanmış).
+    //  - Depo (WAREHOUSE, bitmiş/boyalı): renk + en BİREBİR (renk + en zaten sabit).
     //  - Ham (STOCK, işlenecek): renksiz (null) ham JOKER — boyahanede istenen renge
-    //    boyanır, renkli talebe de sayılır; en null=joker. (Ürün Dengesi ile aynı.)
+    //    boyanır, renkli talebe de sayılır; en AGNOSTİK (eni önemsiz). (Ürün Dengesi ile aynı.)
     const matchFree = (line: (typeof lines)[number], status: RollStatus): Prisma.Decimal =>
       freeGrouped.reduce((sum, g) => {
         if (g.status !== status) return sum;
@@ -507,7 +509,7 @@ export class OrderService extends BaseService {
           const colorOk =
             g.colorId == null || line.colorId == null || g.colorId === line.colorId;
           if (!colorOk) return sum;
-          if (!widthCompatible(g.width, line.width)) return sum;
+          // Ham en-agnostik: en kontrolü yok.
         }
         return sum.plus(g._sum.currentQty ?? 0);
       }, new Prisma.Decimal(0));

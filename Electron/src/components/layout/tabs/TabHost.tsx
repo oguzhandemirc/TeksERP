@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useTabsStore } from "@/store/tabs";
 import { TabStrip } from "./TabStrip";
 import { TabRouter } from "./TabRouter";
+import { TabActiveProvider } from "./tab-active";
 
 /**
  * Sekme barındırıcı. Açık tüm sekmeler aynı anda mount kalır; yalnız aktif olan
@@ -39,7 +40,9 @@ export function TabHost() {
               tab.id === activeId ? "z-10" : "invisible pointer-events-none",
             )}
           >
-            <TabRouter id={tab.id} path={tab.path} />
+            <TabActiveProvider value={tab.id === activeId}>
+              <TabRouter id={tab.id} path={tab.path} />
+            </TabActiveProvider>
           </div>
         ))}
         {tabs.length === 0 && <EmptyTabs onOpen={() => openTab("/")} />}

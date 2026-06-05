@@ -55,12 +55,13 @@ const qStr = (v: unknown): string | undefined =>
 /** Liste query'sini (offset + cursor + filtre + arama + tarih) tek noktada parse et. */
 function parseListQuery(req: Request) {
   const statusRaw = qStr(req.query.status);
-  const status: "active" | "cancelled" | "all" | undefined =
-    statusRaw === "cancelled" || statusRaw === "all" || statusRaw === "active"
-      ? statusRaw
-      : req.query.includeCancelled === "true"
-        ? "all"
-        : undefined;
+  const STATUSES = ["active", "open", "received", "cancelled", "all"] as const;
+  type KStatus = (typeof STATUSES)[number];
+  const status: KStatus | undefined = (STATUSES as readonly string[]).includes(statusRaw ?? "")
+    ? (statusRaw as KStatus)
+    : req.query.includeCancelled === "true"
+      ? "all"
+      : undefined;
   const dateFromStr = qStr(req.query.dateFrom);
   const dateToStr = qStr(req.query.dateTo);
   const dateFrom = dateFromStr ? new Date(dateFromStr) : undefined;

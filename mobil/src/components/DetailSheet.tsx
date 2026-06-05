@@ -5,8 +5,7 @@ import {
   ScrollView,
   useWindowDimensions,
 } from 'react-native';
-import RNModal from 'react-native-modal';
-import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
+import AppModal from './AppModal';
 import {
   Text,
   IconButton,
@@ -89,7 +88,6 @@ export default function DetailSheet({
   children,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
 
   const twoCol = !!(summaryAside && summaryAside.length > 0);
   // Telefonda (dar) sütunlar alt alta; tablet/geniş ekranda yan yana.
@@ -124,16 +122,7 @@ export default function DetailSheet({
   );
 
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.55}
-      style={styles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
-    >
+    <AppModal visible={visible} onDismiss={onDismiss}>
       <View
         style={[
           styles.sheet,
@@ -167,7 +156,7 @@ export default function DetailSheet({
           {children}
         </ScrollView>
       </View>
-    </RNModal>
+    </AppModal>
   );
 }
 
@@ -220,7 +209,6 @@ export function CollapsibleSection({
 }
 
 const styles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
   sheet: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },
 
   header: {

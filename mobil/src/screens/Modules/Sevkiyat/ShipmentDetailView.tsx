@@ -128,10 +128,33 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
       <Text style={styles.section}>Çuvallar ({d.sacks.length})</Text>
       {d.sacks.map((s) => (
         <View key={s.id} style={styles.row}>
-          <Text style={styles.rowMono}>Çuval {s.seq}</Text>
+          <Text style={styles.rowMono}>
+            Çuval {s.seq}
+            {s.manualCode ? ` · ${s.manualCode}` : ''}
+          </Text>
           <Text style={styles.meta}>{n(s.weightKg ?? 0)} kg</Text>
         </View>
       ))}
+
+      {d.summary.returnedCount > 0 && (
+        <>
+          <Text style={styles.section}>Bu Sevkiyattan İade Edilenler ({d.summary.returnedCount})</Text>
+          {d.returnedRolls.map((r) => (
+            <View key={r.id} style={styles.row}>
+              <Text style={styles.rowMono}>{r.barcode ?? '—'}</Text>
+              <Text style={styles.meta} numberOfLines={1}>
+                {r.item?.name ?? '—'}
+                {r.color ? ` · ${r.color.name}` : ''}
+                {r.reasonName ? ` · ${r.reasonName}` : ''} · {n(r.qty)} m
+              </Text>
+            </View>
+          ))}
+          <Text style={[styles.summary, { marginTop: 8 }]}>
+            Gönderilen toplam: {d.summary.rollCount + d.summary.returnedCount} top ·{' '}
+            {n(d.summary.totalMeters + d.summary.returnedMeters)} m
+          </Text>
+        </>
+      )}
     </ScrollView>
   );
 }

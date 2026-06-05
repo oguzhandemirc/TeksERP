@@ -163,6 +163,22 @@ export default function LoginScreen() {
     [submit],
   );
 
+  // Telefon modu: görünmez TextInput'a odaklanıp Android sayı klavyesini açar.
+  // Klavye dışarı dokunarak kapatıldığında EditText odakta kalır; aynı input'a
+  // tekrar focus() çağırmak IME'yi geri açmaz. Bu yüzden odaktaysa önce blur edip
+  // bir frame sonra yeniden odaklanıyoruz — odak değişimi klavyeyi geri getiriyor.
+  const focusPin = useCallback(() => {
+    if (submittingRef.current || !selectedUserRef.current) return;
+    const input = pinInputRef.current;
+    if (!input) return;
+    if (input.isFocused()) {
+      input.blur();
+      requestAnimationFrame(() => pinInputRef.current?.focus());
+    } else {
+      input.focus();
+    }
+  }, []);
+
   const numpadDisabled = !selectedUser || submitting;
 
   const userSection = (
@@ -245,36 +261,54 @@ export default function LoginScreen() {
   const pinSectionCompact = (
     <>
       <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>2 · PIN (6 HANE)</Text>
-      <View style={styles.pinInputWrap}>
-        <View style={[styles.pinRow, styles.pinRowCompact]}>
-          {Array.from({ length: PIN_LENGTH }).map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.pinDot,
-                i < pin.length && styles.pinDotFilled,
-                i === pin.length && !!selectedUser && !submitting && styles.pinDotActive,
-                !!error && styles.pinDotError,
-              ]}
+      <TouchableRipple
+        onPress={focusPin}
+        disabled={!selectedUser || submitting}
+        rippleColor="rgba(99,102,241,0.25)"
+        borderless
+        style={styles.pinInputTap}
+      >
+        <View style={styles.pinInputWrap}>
+          <View style={[styles.pinRow, styles.pinRowCompact]}>
+            {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.pinDot,
+                  i < pin.length && styles.pinDotFilled,
+                  i === pin.length && !!selectedUser && !submitting && styles.pinDotActive,
+                  !!error && styles.pinDotError,
+                ]}
+              />
+            ))}
+          </View>
+          {!!selectedUser && (
+            <TextInput
+              ref={pinInputRef}
+              value={pin}
+              onChangeText={handlePinChange}
+              keyboardType="number-pad"
+              maxLength={PIN_LENGTH}
+              autoFocus
+              caretHidden
+              // Görünmez overlay olduğu için sistemin çizdiği görsel öğeleri bastır:
+              // Android autofill vurgu kutusu, seçim tutamağı ve bağlam menüsü
+              // aksi halde noktaların üstünde görünür artefakt bırakıyordu.
+              importantForAutofill="no"
+              autoComplete="off"
+              autoCorrect={false}
+              contextMenuHidden
+              selectTextOnFocus={false}
+              editable={!submitting}
+              returnKeyType="done"
+              underlineColorAndroid="transparent"
+              // Dokunmalar üstteki TouchableRipple'a gitsin (overlayInput'taki
+              // pointerEvents:'none'); odak yalnızca focusPin() ile programatik.
+              style={styles.overlayInput}
             />
-          ))}
+          )}
         </View>
-        {!!selectedUser && (
-          <TextInput
-            ref={pinInputRef}
-            value={pin}
-            onChangeText={handlePinChange}
-            keyboardType="number-pad"
-            maxLength={PIN_LENGTH}
-            autoFocus
-            caretHidden
-            editable={!submitting}
-            returnKeyType="done"
-            underlineColorAndroid="transparent"
-            style={styles.overlayInput}
-          />
-        )}
-      </View>
+      </TouchableRipple>
 
       <Text style={styles.pinHelper}>Hane girmek için dokunun</Text>
 
@@ -646,7 +680,9 @@ const styles = StyleSheet.create({
 
   pinRow: { flexDirection: 'row', gap: 14 },
   pinRowCompact: { gap: 10, justifyContent: 'center' },
-  pinInputWrap: { alignSelf: 'center', position: 'relative' },
+  // Dokunma hedefi: noktaların etrafını sarar, min 56dp yükseklik için padding.
+  pinInputTap: { alignSelf: 'center', borderRadius: 14 },
+  pinInputWrap: { position: 'relative', paddingVertical: 14, paddingHorizontal: 18 },
   pinHelper: { color: COLORS.subtext, fontSize: 12, textAlign: 'center', marginTop: 8 },
   overlayInput: {
     position: 'absolute',
@@ -654,6 +690,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    // opacity:0 tüm view'i (autofill kutusu/imleç/seçim tutamağı dahil) gizler;
+    // transparent renk tek başına sistemin çizdiği öğeleri durdurmuyordu.
+    opacity: 0,
+    // Dokunmaları üstteki TouchableRipple'a bırak — odaklanma focusPin() ile yapılır.
+    pointerEvents: 'none',
     color: 'transparent',
     backgroundColor: 'transparent',
     textAlign: 'center',

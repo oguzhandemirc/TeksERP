@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { DeviceService } from "../services/device.service";
+import { readDevicePairingRequired } from "../services/system-setting.service";
 import "../types/express-augment";
 
 const createPairingCodeSchema = z.object({
@@ -45,6 +46,24 @@ export class DeviceController {
         createdById: req.user?.userId,
       });
       res.status(201).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/devices/pairing-required (PUBLIC — login öncesi gate)
+   * Mobil uygulama açılışta eşleştirmenin zorunlu olup olmadığını öğrenir;
+   * pasifse (default) Pairing ekranını atlayıp doğrudan Login'e geçer.
+   */
+  static async pairingRequired(
+    _req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const required = await readDevicePairingRequired();
+      res.status(200).json({ success: true, data: { required } });
     } catch (error) {
       next(error);
     }

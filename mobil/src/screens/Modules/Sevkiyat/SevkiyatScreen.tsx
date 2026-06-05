@@ -10,27 +10,37 @@ import {
   Divider,
   Appbar,
 } from 'react-native-paper';
-import RNModal from 'react-native-modal';
+import AppModal from '../../../components/AppModal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
+import dayjs from 'dayjs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { packingService, type ShipmentListItem } from '../../../services/packing.service';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
-import { useFullscreenModalProps } from '../../../hooks/useFullscreenModalProps';
 import type { MainStackParamList } from '../../../navigation/types';
 
 // =============================================================================
-// Sevkiyat — telefon dikey. Kapıdaki (READY) sevkiyatlar → plaka/şoför → kamyon.
-// "Sevke Hazır" tartı/paket ekranında yapıldı; burada irsaliye + sevk kapanır.
+// Sevk Çıkışı — telefon dikey. Bekleyen (READY) sevkler ara depoda/kapıda bekler;
+// burada "Çıkış Ver / Ambar Aldı" ile sevk kapanır (stok o an düşer). "Sevke Hazır"
+// ① Sevkiyat ekranında yapıldı. Onay açıkken çıkışın tek yeri burasıdır.
 // =============================================================================
+
+// Ne kadar süredir bekliyor (readyAt'tan beri) — ara depo bekleme görünürlüğü.
+function waitText(readyAt: string | null): string | null {
+  if (!readyAt) return null;
+  const mins = dayjs().diff(dayjs(readyAt), 'minute');
+  if (mins < 60) return 'az önce hazırlandı';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} saattir bekliyor`;
+  return `${Math.floor(hours / 24)} gündür bekliyor`;
+}
 
 export default function SevkiyatScreen() {
   usePortraitLock(useDeviceType() === 'phone');
-  const modalProps = useFullscreenModalProps();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const qc = useQueryClient();
   const [dispatchShip, setDispatchShip] = useState<ShipmentListItem | null>(null);
@@ -67,7 +77,7 @@ export default function SevkiyatScreen() {
       }),
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Sevk edildi (kamyona yüklendi)' });
+      Toast.show({ type: 'success', text1: 'Çıkış verildi — stok düştü' });
       setDispatchShip(null);
       setPlate('');
       setDriver('');
@@ -82,7 +92,7 @@ export default function SevkiyatScreen() {
 
   return (
     <ScreenChrome
-      title="Sevkiyat"
+      title="Sevk Çıkışı"
       headerExtras={
         <>
           <Appbar.Action
@@ -105,39 +115,43 @@ export default function SevkiyatScreen() {
         {loading && <ActivityIndicator style={{ marginTop: 24 }} />}
 
         <Text variant="titleMedium" style={styles.heading}>
-          Kapıda Bekleyen ({ready.length})
+          Bekleyen Sevkler ({ready.length})
         </Text>
         {!loading && ready.length === 0 ? (
-          <Text style={styles.emptySub}>Kapıda bekleyen sevkiyat yok. Tartı/Paket'te "Sevke Hazır" yapın.</Text>
+          <Text style={styles.emptySub}>Bekleyen sevk yok. Sevkiyat ekranında "Sevke Hazır" yapın.</Text>
         ) : (
-          ready.map((sh) => (
-            <Surface key={sh.id} style={styles.card} elevation={1}>
-              <View style={styles.cardHead}>
-                <Text style={styles.sackNo}>{sh.shipmentNo}</Text>
-                <Text style={styles.meta}>
-                  {sh._count.rolls} top · {sh._count.sacks} çuval
+          ready.map((sh) => {
+            const wait = waitText(sh.readyAt);
+            return (
+              <Surface key={sh.id} style={styles.card} elevation={1}>
+                <View style={styles.cardHead}>
+                  <Text style={styles.sackNo}>{sh.shipmentNo}</Text>
+                  <Text style={styles.meta}>
+                    {sh._count.rolls} top · {sh._count.sacks} çuval
+                  </Text>
+                </View>
+                <Text style={styles.customer}>
+                  {sh.customer.name}
+                  {sh.branch ? ` · ${sh.branch.name}` : ''}
                 </Text>
-              </View>
-              <Text style={styles.customer}>
-                {sh.customer.name}
-                {sh.branch ? ` · ${sh.branch.name}` : ''}
-              </Text>
-              <Button
-                mode="contained"
-                icon="truck"
-                buttonColor="#1e40af"
-                onPress={() => {
-                  setDispatchShip(sh);
-                  setPlate(sh.plateNumber ?? '');
-                  setDriver(sh.driverName ?? '');
-                  setCarrier(sh.carrier ?? '');
-                }}
-                style={{ marginTop: 8 }}
-              >
-                Sevk Et
-              </Button>
-            </Surface>
-          ))
+                {wait ? <Text style={styles.waitText}>⏳ {wait}</Text> : null}
+                <Button
+                  mode="contained"
+                  icon="truck-check"
+                  buttonColor="#1e40af"
+                  onPress={() => {
+                    setDispatchShip(sh);
+                    setPlate(sh.plateNumber ?? '');
+                    setDriver(sh.driverName ?? '');
+                    setCarrier(sh.carrier ?? '');
+                  }}
+                  style={{ marginTop: 8 }}
+                >
+                  Çıkış Ver
+                </Button>
+              </Surface>
+            );
+          })
         )}
 
         {dispatched.length > 0 && (
@@ -171,10 +185,10 @@ export default function SevkiyatScreen() {
         )}
       </ScrollView>
 
-      <RNModal isVisible={dispatchShip !== null} onBackdropPress={() => setDispatchShip(null)} style={styles.modal} {...modalProps}>
+      <AppModal visible={dispatchShip !== null} onDismiss={() => setDispatchShip(null)}>
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
-            {dispatchShip?.shipmentNo} — Sevk Et
+            {dispatchShip?.shipmentNo} — Çıkış Ver
           </Text>
           <Text style={styles.customer}>
             {dispatchShip?.customer.name} · {dispatchShip?._count.sacks} çuval · {dispatchShip?._count.rolls} top
@@ -188,7 +202,7 @@ export default function SevkiyatScreen() {
             </Button>
             <Button
               mode="contained"
-              icon="truck"
+              icon="truck-check"
               buttonColor="#1e40af"
               style={styles.actionBtn}
               loading={dispatchMut.isPending}
@@ -197,11 +211,11 @@ export default function SevkiyatScreen() {
                 if (dispatchShip) dispatchMut.mutate(dispatchShip.id);
               }}
             >
-              Kamyona Yükle
+              Çıkışı Onayla
             </Button>
           </View>
         </Surface>
-      </RNModal>
+      </AppModal>
     </ScreenChrome>
   );
 }
@@ -216,10 +230,10 @@ const styles = StyleSheet.create({
   sackNo: { fontSize: 15, fontWeight: '700', color: '#0f172a', fontFamily: 'monospace' },
   meta: { fontSize: 12, color: '#64748b' },
   customer: { fontSize: 13, color: '#334155', marginTop: 2 },
+  waitText: { fontSize: 12, color: '#b45309', marginTop: 4, fontWeight: '600' },
   emptySub: { fontSize: 13, color: '#94a3b8', marginBottom: 8 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actionBtn: { flex: 1 },
-  modal: { justifyContent: 'center', margin: 16 },
   sheet: { borderRadius: 16, padding: 16, backgroundColor: '#fff' },
   sheetTitle: { fontWeight: '700', marginBottom: 4, color: '#0f172a' },
 });

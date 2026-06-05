@@ -7,8 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import RNModal from 'react-native-modal';
-import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
+import AppModal from './AppModal';
 import {
   Text,
   TextInput,
@@ -87,7 +86,6 @@ type Props = SimpleProps | DestructiveProps;
 
 export default function ConfirmDialog(props: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
   const isDestructive = props.kind === 'destructive';
 
   // Sebep state — destructive + reason geçilince aktif olur.
@@ -154,16 +152,10 @@ export default function ConfirmDialog(props: Props) {
   };
 
   return (
-    <RNModal
-      isVisible={props.visible}
-      onBackdropPress={props.confirming ? undefined : props.onDismiss}
-      onBackButtonPress={props.confirming ? undefined : props.onDismiss}
-      backdropOpacity={0.55}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
-      style={styles.modal}
-      avoidKeyboard={!!reasonCfg}
+    <AppModal
+      visible={props.visible}
+      onDismiss={props.onDismiss}
+      dismissable={!props.confirming}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -247,7 +239,7 @@ export default function ConfirmDialog(props: Props) {
           </Button>
         </View>
       </KeyboardAvoidingView>
-    </RNModal>
+    </AppModal>
   );
 }
 
@@ -294,11 +286,14 @@ function AffectedRow({
 }
 
 const styles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
   sheet: {
     backgroundColor: '#fff',
     borderRadius: 14,
     width: '90%',
+    // AppModal center wrapper'ı dış kutuyu ortalar; iç sheet'in width:'90%' +
+    // maxWidth'i olduğundan flex cross-axis'te varsayılan olarak SOLA yaslanır
+    // (yatayda kayık görünür). alignSelf:'center' sheet'i dış kutu içinde ortalar.
+    alignSelf: 'center',
     overflow: 'hidden',
   },
   header: {

@@ -304,8 +304,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               </CardContent>
             </Card>
 
-            {wo.producedRolls &&
-              (wo.producedRolls.count > 0 || wo.producedRolls.swatch.count > 0) && (
+            {wo.producedRolls && wo.producedRolls.count > 0 && (
                 <Card>
                   <CardContent className="p-3">
                     <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -335,11 +334,6 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                         <Badge variant="outline" className="font-normal text-destructive">
                           Fire: {wo.producedRolls.fire.count} top ·{" "}
                           {formatNumber(wo.producedRolls.fire.totalMeters, 0)} m
-                        </Badge>
-                      )}
-                      {wo.producedRolls.swatch.count > 0 && (
-                        <Badge variant="outline" className="font-normal">
-                          Kartela: {wo.producedRolls.swatch.count} adet
                         </Badge>
                       )}
                     </div>
@@ -412,52 +406,8 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       </ul>
                     )}
 
-                    {wo.producedRolls.swatchItems.length > 0 && (
-                      <>
-                        <div className="mt-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                          Kartelalar
-                        </div>
-                        <ul className="mt-1 divide-y rounded-md border bg-muted/30">
-                          {wo.producedRolls.swatchItems.map((s) => (
-                            <li
-                              key={s.id}
-                              className="flex items-center justify-between gap-2 px-2 py-1 text-[11px]"
-                            >
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span className="font-mono">{s.barcode}</span>
-                                {s.parentBarcode && (
-                                  <span className="font-mono text-muted-foreground">
-                                    ← {s.parentBarcode}
-                                  </span>
-                                )}
-                                {s.color && (
-                                  <span className="inline-flex items-center gap-1 text-muted-foreground">
-                                    {s.color.hex && (
-                                      <span
-                                        className="h-2 w-2 rounded-full border border-black/10"
-                                        style={{ backgroundColor: s.color.hex }}
-                                      />
-                                    )}
-                                    {s.color.name}
-                                  </span>
-                                )}
-                                {s.purpose && (
-                                  <span className="text-muted-foreground">
-                                    · {s.purpose}
-                                  </span>
-                                )}
-                              </div>
-                              <span className="font-medium tabular-nums">
-                                {formatNumber(s.length, 0)} cm
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-
                     <div className="mt-2 text-[11px] text-muted-foreground">
-                      Metraj toplamı sağlam (depo + A1); fire metresi hariç. Kartela ayrı.
+                      Metraj toplamı sağlam (depo + A1); fire metresi hariç.
                     </div>
                   </CardContent>
                 </Card>
@@ -840,6 +790,14 @@ function DispatchInfoPopover({
                   <>
                     <span className="text-muted-foreground">Not</span>
                     <span className="whitespace-pre-wrap">{d.notes}</span>
+                  </>
+                )}
+                {(d.dyehouseNote ?? d.woDyehouseNote) && (
+                  <>
+                    <span className="text-muted-foreground">Boyahane Notu</span>
+                    <span className="whitespace-pre-wrap font-medium text-orange-700">
+                      {d.dyehouseNote ?? d.woDyehouseNote}
+                    </span>
                   </>
                 )}
                 {d.dispatchedBy && (

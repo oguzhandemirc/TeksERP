@@ -21,6 +21,13 @@ export const workOrderFormSchema = z.object({
     [WorkOrderType.ORDER_PRODUCTION, WorkOrderType.STOCK_PRODUCTION],
     { message: "İş emri tipi seçilmeli" },
   ),
+  // Parti Kodu (backend: batchNumber). Zorunluluk runtime'da (manuel mod / override /
+  // düzenleme) form submit'inde uygulanır; boş = otomatik üret (otomatik mod).
+  batchNumber: z
+    .string()
+    .max(64, "Parti kodu en fazla 64 karakter olabilir")
+    .optional()
+    .or(z.literal("")),
   routeTemplateId: z.string().optional().default(""),
   targetItemId: z.string().nullable().optional(),
   targetColorId: z.string().nullable().optional(),
@@ -49,12 +56,18 @@ export const workOrderFormSchema = z.object({
     .max(32, "Katlama tipi en fazla 32 karakter olabilir")
     .optional()
     .or(z.literal("")),
+  dyehouseNote: z
+    .string()
+    .max(1000, "Boyahane notu en fazla 1000 karakter olabilir")
+    .optional()
+    .or(z.literal("")),
 });
 
 export type WorkOrderFormValues = z.infer<typeof workOrderFormSchema>;
 
 export const workOrderFormDefaults: WorkOrderFormValues = {
   type: WorkOrderType.ORDER_PRODUCTION,
+  batchNumber: "",
   routeTemplateId: "",
   targetItemId: null,
   targetColorId: null,
@@ -65,4 +78,5 @@ export const workOrderFormDefaults: WorkOrderFormValues = {
   plannedStartDate: "",
   plannedEndDate: "",
   foldType: "",
+  dyehouseNote: "",
 };

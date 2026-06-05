@@ -54,6 +54,15 @@ export const workOrderService = {
       )
       .then((r) => r.data),
 
+  /** Boyahane notunu güncelle — snapshot dışı canlı kolon; fiş baskısından önce
+   *  talimat eklenebilir/düzeltilebilir. Boş gönderince temizlenir. */
+  updateDispatchDyehouseNote: (dispatchId: string, dyehouseNote: string | null) =>
+    apiClient
+      .patch<
+        ApiResponse<{ id: string; dispatchNo: string; dyehouseNote: string | null }>
+      >(`/api/subcontractor/dispatches/${dispatchId}/dyehouse-note`, { dyehouseNote })
+      .then((r) => r.data),
+
   /** WO formu kapsama paneli — seçili sipariş kalemleri için net üretim açığı. */
   getCoverage: (lineIds: string[], excludeWorkOrderId?: string) =>
     apiClient
@@ -156,4 +165,8 @@ export interface DispatchPrintSnapshot {
     name: string;
     hex: string | null;
   } | null;
+  /** Boyahaneye özel talimat — sevk notundan ayrı. Snapshot dışı, canlı kolon. */
+  dyehouseNote: string | null;
+  /** WO'daki boyahane notu (default) — sevkin kendi notu boşsa fişte buna düşülür. */
+  woDyehouseNote: string | null;
 }

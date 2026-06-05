@@ -59,6 +59,7 @@ import {
   StationKind,
   StepStatus,
   WorkOrderStatus,
+  ShipmentStatus,
 } from "@prisma/client";
 import {
   ensureWorkOrderInProgress,
@@ -649,6 +650,20 @@ export class InventoryService {
           orderBy: { createdAt: "asc" },
         },
         properties: { include: { property: true } },
+        // En güncel iade kaydı (iade gelmiş depo topu için not/neden).
+        returns: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            qty: true,
+            reasonText: true,
+            note: true,
+            createdAt: true,
+            reason: { select: { code: true, name: true, color: true } },
+            receivedBy: { select: { fullName: true } },
+          },
+        },
       },
     });
 
@@ -669,6 +684,20 @@ export class InventoryService {
         item: true,
         color: true,
         errors: true,
+        // En güncel iade kaydı — Tambur/depo barkod okutmada iade notu/nedeni görünür.
+        returns: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            qty: true,
+            reasonText: true,
+            note: true,
+            createdAt: true,
+            reason: { select: { code: true, name: true, color: true } },
+            receivedBy: { select: { fullName: true } },
+          },
+        },
       },
     });
 
@@ -999,6 +1028,26 @@ export class InventoryService {
       throw AppError.conflict(
         "Bu top açık bir fason sevkiyatına bağlı — önce sevki iptal et veya kabul yap",
       );
+    }
+
+    // Aktif (PREPARING/READY) bir sevkiyata bağlı mı? Bağlıysa iptal edilemez —
+    // önce sevkten/çuvaldan çıkarılmalı. Aksi halde iptal edilen top sevkiyatta
+    // kalır, sevk çıkışında (dispatch) SHIPPED'a "diriltilir" ve karşılanmaya
+    // yanlış sayılır.
+    if (existing.shipmentId) {
+      const ship = await prisma.shipment.findUnique({
+        where: { id: existing.shipmentId },
+        select: { status: true, shipmentNo: true },
+      });
+      if (
+        ship &&
+        (ship.status === ShipmentStatus.PREPARING ||
+          ship.status === ShipmentStatus.READY)
+      ) {
+        throw AppError.conflict(
+          `Bu top hazırlanan/bekleyen bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`,
+        );
+      }
     }
 
     const updated = await prisma.$transaction(async (tx) => {

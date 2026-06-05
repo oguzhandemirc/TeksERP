@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, StyleSheet, useWindowDimensions, ScrollView } from 'react-native';
-import RNModal from 'react-native-modal';
-import { useFullscreenModalProps } from '../../hooks/useFullscreenModalProps';
+import AppModal from '../AppModal';
 import {
   Text,
   Surface,
@@ -49,7 +48,6 @@ function sourceIcon(s: NameSource | null): { emoji: string; label: string } {
 
 export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
   const { has } = usePermissions();
   const canRead = has('label:read');
   const canEdit = has('label:edit');
@@ -120,32 +118,19 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }:
 
   if (!canRead) {
     return (
-      <RNModal
-        isVisible={visible}
-        onBackdropPress={onDismiss}
-        onBackButtonPress={onDismiss}
-        backdropOpacity={0.55}
-        {...modalProps}
-      >
+      <AppModal visible={visible} onDismiss={onDismiss}>
         <View style={styles.sheet}>
           <Text style={styles.title}>Yetki yok</Text>
           <Text style={styles.body}>Bu top için etiket görüntüleme yetkin yok.</Text>
           <Button onPress={onDismiss}>Kapat</Button>
         </View>
-      </RNModal>
+      </AppModal>
     );
   }
 
   return (
     <>
-      <RNModal
-        isVisible={visible}
-        onBackdropPress={onDismiss}
-        onBackButtonPress={onDismiss}
-        backdropOpacity={0.55}
-        {...modalProps}
-        style={styles.modal}
-      >
+      <AppModal visible={visible} onDismiss={onDismiss}>
         <View style={[styles.sheet, { width: winW * 0.55, maxHeight: winH * 0.85 }]}>
           <View style={styles.header}>
             <Icon source="label" size={22} color="#1e40af" />
@@ -209,15 +194,12 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }:
             </View>
           )}
         </View>
-      </RNModal>
+      </AppModal>
 
-      <RNModal
-        isVisible={editOpen}
-        onBackdropPress={updateMut.isPending ? undefined : () => setEditOpen(false)}
-        onBackButtonPress={updateMut.isPending ? undefined : () => setEditOpen(false)}
-        backdropOpacity={0.55}
-        {...modalProps}
-        style={styles.modal}
+      <AppModal
+        visible={editOpen}
+        onDismiss={() => setEditOpen(false)}
+        dismissable={!updateMut.isPending}
       >
         <View style={[styles.sheet, { width: winW * 0.5 }]}>
           <View style={styles.header}>
@@ -289,7 +271,7 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }:
             </Button>
           </View>
         </View>
-      </RNModal>
+      </AppModal>
     </>
   );
 }
@@ -404,7 +386,6 @@ function SourceBadge({ source }: { source: NameSource | null }) {
 }
 
 const styles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0 },
   sheet: { backgroundColor: '#fff', borderRadius: 16, padding: 18, gap: 10 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { fontWeight: '700', color: '#0f172a' },

@@ -15,6 +15,7 @@ import {
   Tags,
   Tablet,
   CalendarClock,
+  Undo2,
   type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
@@ -65,6 +66,15 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/quality-grades",
     group: "catalog",
     permission: "quality:read",
+  },
+  {
+    key: "return-reasons",
+    title: "İade Nedenleri",
+    description: "Müşteri iadesi neden kataloğu",
+    icon: Undo2,
+    to: "/definitions/return-reasons",
+    group: "catalog",
+    permission: "return:read",
   },
   {
     key: "customers",

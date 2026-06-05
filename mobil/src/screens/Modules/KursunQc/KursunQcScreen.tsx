@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
-import RNModal from 'react-native-modal';
-import { useFullscreenModalProps } from '../../../hooks/useFullscreenModalProps';
+import AppModal from '../../../components/AppModal';
 import {
   Text,
   TextInput,
@@ -980,42 +979,9 @@ export default function KursunQcScreen() {
                 </View>
               </Surface>
 
-              <ScrollView
-                style={{ flex: 1 }}
-                contentContainerStyle={styles.scrollContent}
-                keyboardShouldPersistTaps="handled"
-              >
-                {/* Mevcut hatalar — sade liste */}
-                {selectedRoll.defects.length > 0 && (
-                  <Surface style={styles.section} elevation={1}>
-                    <Text style={styles.sectionTitle}>
-                      Kayıtlı Hatalar ({selectedRoll.defects.length})
-                    </Text>
-                    {selectedRoll.defects.map((d, idx) => (
-                      <View key={d.id} style={styles.defectRow}>
-                        <View style={styles.defectIndex}>
-                          <Text style={styles.defectIndexText}>{idx + 1}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.defectName}>{d.errorType ?? '—'}</Text>
-                          <Text style={styles.defectRange}>
-                            {d.startMeter.toFixed(1)} mt
-                          </Text>
-                        </View>
-                        <IconButton
-                          icon="trash-can-outline"
-                          size={22}
-                          iconColor="#dc2626"
-                          onPress={() => handleDeleteError(d.id)}
-                          accessibilityLabel="Hatayı sil"
-                          style={{ margin: 0 }}
-                        />
-                      </View>
-                    ))}
-                  </Surface>
-                )}
-
-                {/* Hata giriş alanı — sürekli açık */}
+              {/* Hata giriş alanı — HEP YUKARDA (ScrollView dışında, sabit).
+                  Çok hata kaydedilince giriş için aşağı/yukarı kaymaya gerek yok. */}
+              <View style={styles.entryFixed}>
                 <Surface style={styles.entrySection} elevation={1}>
                   <Text style={styles.sectionTitle}>Yeni Hata Gir</Text>
 
@@ -1035,8 +1001,8 @@ export default function KursunQcScreen() {
                     useNativeKeyboard={compact}
                   />
 
-                  {/* Hata tipi = ANA TUŞLAR (input'un altında, büyük, az yuvarlak).
-                      Metraj girip tipe basınca hata DİREKT kaydedilir — ayrı Ekle yok. */}
+                  {/* Hata tipi = ANA TUŞLAR (input'un altında, büyük). Metraj
+                      girip tipe basınca hata DİREKT kaydedilir — ayrı Ekle yok. */}
                   {defectTypes.length === 0 ? (
                     <Text style={styles.muted}>
                       Hata tipi tanımlı değil — admin'den ekleyin
@@ -1062,6 +1028,78 @@ export default function KursunQcScreen() {
                     </View>
                   )}
                 </Surface>
+              </View>
+
+              {/* Kayıtlı hatalar — kompakt sarmalı chip'ler (alt alta değil).
+                  Çok hata olsa da az satır kaplar; giriş yukarda sabit kalır.
+                  Chip: metre + tip + sil (×); kritik tip kırmızı. */}
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {selectedRoll.defects.length === 0 ? (
+                  <View style={styles.emptyDefects}>
+                    <Icon
+                      source="check-circle-outline"
+                      size={28}
+                      color="#cbd5e1"
+                    />
+                    <Text style={styles.muted}>Henüz hata yok</Text>
+                  </View>
+                ) : (
+                  <Surface style={styles.section} elevation={1}>
+                    <Text style={styles.sectionTitle}>
+                      Kayıtlı Hatalar ({selectedRoll.defects.length})
+                    </Text>
+                    <View style={styles.defectChipWrap}>
+                      {selectedRoll.defects.map((d) => {
+                        const crit =
+                          defectTypes.find((t) => t.name === d.errorType)
+                            ?.severity === 'CRITICAL';
+                        return (
+                          <View
+                            key={d.id}
+                            style={[
+                              styles.defectChip,
+                              crit && styles.defectChipCritical,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.defectChipMeter,
+                                crit && styles.defectChipTextCritical,
+                              ]}
+                            >
+                              {d.startMeter.toFixed(1)}m
+                            </Text>
+                            <Text
+                              style={[
+                                styles.defectChipName,
+                                crit && styles.defectChipTextCritical,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {d.errorType ?? '—'}
+                            </Text>
+                            <TouchableRipple
+                              onPress={() => handleDeleteError(d.id)}
+                              borderless
+                              style={styles.defectChipClose}
+                              accessibilityLabel="Hatayı sil"
+                            >
+                              <Icon
+                                source="close"
+                                size={15}
+                                color={crit ? '#b91c1c' : '#64748b'}
+                              />
+                            </TouchableRipple>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </Surface>
+                )}
               </ScrollView>
 
               {/* Sticky footer — durum sırası:
@@ -1242,7 +1280,6 @@ function CameraScanModal({
   onRefresh: () => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
-  const modalProps = useFullscreenModalProps();
 
   // FlashList sıralama değiştiğinde "en üstteki kart yukarı kaçar" davranışını
   // engellemek için: kartların order'ını imzalayan key'i her refetch'te
@@ -1259,16 +1296,7 @@ function CameraScanModal({
 
   const refreshIntervalSec = Math.round(refreshIntervalMs / 1000);
   return (
-    <RNModal
-      isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
-      backdropOpacity={0.55}
-      style={cameraStyles.modal}
-      useNativeDriver
-      hideModalContentWhileAnimating
-      {...modalProps}
-    >
+    <AppModal visible={visible} onDismiss={onDismiss}>
       <View style={[cameraStyles.sheet, { width: winW * 0.9, height: winH * 0.8 }]}>
         <View style={cameraStyles.header}>
           <Icon source="format-list-bulleted" size={22} color="#0f172a" />
@@ -1348,7 +1376,7 @@ function CameraScanModal({
           )}
         </View>
       </View>
-    </RNModal>
+    </AppModal>
   );
 }
 
@@ -1660,6 +1688,15 @@ const styles = StyleSheet.create({
   headerSub: { fontSize: 12, color: '#cbd5e1', marginTop: 2 },
   statusRow: { flexDirection: 'row', gap: 6, marginTop: 4 },
 
+  // Sabit (sticky) hata giriş zonu — header ile scroll arasında, kaymaz.
+  entryFixed: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
   scrollContent: { padding: 14, gap: 12 },
   section: {
     backgroundColor: '#fff',
@@ -1675,26 +1712,31 @@ const styles = StyleSheet.create({
   },
   muted: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' },
 
-  defectRow: {
+  // Kayıtlı hatalar — kompakt sarmalı chip'ler (alt alta liste yerine).
+  emptyDefects: { alignItems: 'center', paddingVertical: 24, gap: 8 },
+  defectChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  defectChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
-    padding: 8,
-    gap: 8,
-    marginTop: 4,
+    gap: 6,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 999,
+    paddingLeft: 12,
+    paddingRight: 2,
+    paddingVertical: 3,
   },
-  defectIndex: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#fef3c7',
-    justifyContent: 'center',
-    alignItems: 'center',
+  defectChipCritical: { backgroundColor: '#fef2f2', borderColor: '#fca5a5' },
+  defectChipMeter: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
+  defectChipName: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '600',
+    maxWidth: 160,
   },
-  defectIndexText: { fontSize: 11, fontWeight: '700', color: '#92400e' },
-  defectName: { fontSize: 13, fontWeight: '600', color: '#0f172a' },
-  defectRange: { fontSize: 11, color: '#475569', marginTop: 2 },
+  defectChipTextCritical: { color: '#b91c1c' },
+  defectChipClose: { padding: 7, borderRadius: 999 },
 
   footer: {
     backgroundColor: '#fff',
@@ -1915,7 +1957,6 @@ const helperStyles = StyleSheet.create({
 });
 
 const cameraStyles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 0, padding: 0 },
   sheet: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },
   header: {
     flexDirection: 'row',

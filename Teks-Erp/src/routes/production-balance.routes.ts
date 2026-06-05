@@ -16,12 +16,15 @@ const router = Router();
  * /api/production-balance:
  *   get:
  *     tags: [Operations]
- *     summary: Ürün dengesi — spec başına talep/depo/üretimde/ham/üretilecek
+ *     summary: Ürün dengesi — (ürün+renk) grubu başına denge, en kırılımı specs[]
  *     description: >
- *       Her ürün (ürün+renk+en) için MRP net ihtiyaç: talep = Σ(istenen−sevk) açık
- *       siparişler; depo = sevksiz WAREHOUSE; üretimde = canlı WO hedef-spec in-flight;
- *       ham = sevksiz STOCK. üretilecek = max(0, talep−depo−üretimde); malzeme açığı =
- *       max(0, üretilecek−ham). Drill-down: katkı veren siparişler + WO'lar.
+ *       (ürün+renk) grubu için MRP net ihtiyaç. talep = Σ(istenen−sevk) açık
+ *       siparişler; depo = sevksiz WAREHOUSE (en birebir); üretimde = canlı WO
+ *       hedef-spec in-flight. üretilecek = max(0, talep−depo−üretimde). Ham kumaşın
+ *       eni önemsiz olduğu için ham (= sevksiz STOCK) ve malzeme açığı GRUP düzeyinde
+ *       tek hesaplanır (en-agnostik havuz; malzeme açığı = max(0, Σüretilecek−ham)).
+ *       Talep/depo/üretimde/üretilecek en kırılımı her grubun specs[]'inde; drill-down:
+ *       katkı veren siparişler + WO'lar.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: query

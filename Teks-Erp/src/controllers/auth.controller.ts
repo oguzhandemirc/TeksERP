@@ -7,6 +7,7 @@ import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
+import { readDevicePairingRequired } from "../services/system-setting.service";
 import "../types/express-augment";
 
 // Zod schemas for validation
@@ -188,7 +189,9 @@ export class AuthController {
    */
   static async mobileUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.device) {
+      // Eşleştirme zorunluysa yalnız eşleşmiş tablet listeyi çekebilir. Pasif modda
+      // (default) eşleşmemiş cihaz da login ekranı için kullanıcı listesini alabilir.
+      if (!req.device && (await readDevicePairingRequired())) {
         res.status(401).json({
           success: false,
           message: "Bu endpoint sadece eşleştirilmiş tabletlerden çağrılabilir.",

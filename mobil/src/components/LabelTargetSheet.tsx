@@ -10,9 +10,8 @@ import {
   IconButton,
   Divider,
 } from 'react-native-paper';
-import RNModal from 'react-native-modal';
+import AppModal from './AppModal';
 import { useQuery } from '@tanstack/react-query';
-import { useFullscreenModalProps } from '../hooks/useFullscreenModalProps';
 import { orderService } from '../services/order.service';
 import { customerService } from '../services/customer.service';
 
@@ -48,7 +47,6 @@ interface Props {
 }
 
 export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConfirm }: Props) {
-  const modalProps = useFullscreenModalProps();
   const { width: winW, height: winH } = useWindowDimensions();
   // Daralt: tablet/yatayda yarı genişlik ama 460px tavanlı, telefon dikte %92.
   const sheetWidth = winH > winW ? winW * 0.92 : Math.min(winW * 0.5, 460);
@@ -98,7 +96,7 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
   };
 
   return (
-    <RNModal isVisible={roll !== null} onBackdropPress={cancel} style={styles.modal} {...modalProps}>
+    <AppModal visible={roll !== null} onDismiss={cancel}>
       <Surface style={[styles.sheet, { width: sheetWidth }]} elevation={4}>
         <View style={styles.header}>
           <View style={styles.headerText}>
@@ -218,12 +216,11 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
           </>
         )}
       </Surface>
-    </RNModal>
+    </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
-  modal: { justifyContent: 'center', alignItems: 'center', margin: 16 },
   sheet: {
     borderRadius: 16,
     paddingHorizontal: 16,

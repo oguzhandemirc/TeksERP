@@ -19,6 +19,14 @@ const router = Router();
 const updateSchema = z.object({
   pricingEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
+  rawWidthEnabled: z.boolean().optional(),
+  returnGradingEnabled: z.boolean().optional(),
+  // İş emri parti kodu otomatik mi üretilsin (true) manuel mi girilsin (false=default).
+  partyCodeAuto: z.boolean().optional(),
+  // Fason Sevk boyahane notunu sahadaki operatör telefondan girebilsin mi (false=default).
+  dyehouseNoteMobileEntry: z.boolean().optional(),
+  // Mobil cihaz eşleştirmesi zorunlu mu (true=aktif) yoksa pasif mi (false=default).
+  devicePairingRequired: z.boolean().optional(),
 });
 
 /**

@@ -28,8 +28,43 @@ import { safeFormat } from "@/lib/format";
 import { deviceService } from "./service";
 import type { DeviceListItem } from "./types";
 import { PairingCodeDialog } from "./PairingCodeDialog";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useTabTarget } from "@/components/layout/tabs/use-tab-target";
 
 const QUERY_KEY = "admin-devices";
+
+/**
+ * Cihaz eşleştirme kapalıyken (devicePairingRequired=false) bu ekran anlamsız.
+ * Açma/kapama yalnız Genel Ayarlar'da yapılır → kullanıcıyı oraya yönlendir.
+ */
+function DevicePairingDisabledNotice() {
+  const goSettings = useTabTarget("/system/settings");
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader
+        title="Cihazlar"
+        description="Sahadaki tabletler ve eşleşmeli oldukları makineler."
+      />
+      <div className="flex flex-1 items-center justify-center p-6">
+        <Card className="max-w-md">
+          <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
+            <div className="rounded-full bg-muted p-3">
+              <Unlink className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <div className="text-base font-semibold">Cihaz eşleştirme kapalı</div>
+            <p className="text-sm text-muted-foreground">
+              Cihaz eşleştirme şu an pasif. Bu ekranı kullanmak için önce Genel
+              Ayarlar'dan eşleştirmeyi açın.
+            </p>
+            <Button className="mt-1" {...goSettings}>
+              Genel Ayarlar'a Git
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
 
 interface PairingDefaults {
   machineId?: string;
@@ -38,6 +73,8 @@ interface PairingDefaults {
 
 export function DevicesPage() {
   const qc = useQueryClient();
+  const flagsQ = useFeatureFlags();
+  const pairingRequired = flagsQ.data?.data?.devicePairingRequired ?? false;
   const [pairingOpen, setPairingOpen] = useState(false);
   const [pairingDefaults, setPairingDefaults] = useState<PairingDefaults | undefined>(
     undefined
@@ -92,6 +129,12 @@ export function DevicesPage() {
   };
 
   const devices = query.data?.data ?? [];
+
+  // Cihaz eşleştirme kapalıysa ekran anlamsız → uyar + Genel Ayarlar'a yönlendir.
+  // (Flag yüklenirken normal akış; cached olduğu için pratikte anlık.)
+  if (!flagsQ.isLoading && !pairingRequired) {
+    return <DevicePairingDisabledNotice />;
+  }
 
   return (
     <div className="flex h-full flex-col">

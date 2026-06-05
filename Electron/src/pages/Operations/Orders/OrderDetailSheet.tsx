@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { safeFormat } from "@/lib/format";
 import { fireConfetti } from "@/lib/confetti";
-import { Lock, Pencil, Ban, Factory } from "lucide-react";
+import { Lock, Pencil, Ban, Factory, Undo2 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,10 @@ import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBad
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { orderStatusLabels } from "@/types/enums";
 import { CoveragePanel } from "@/pages/Operations/WorkOrders/CoveragePanel";
+import { pickedLinesFromOrderLine } from "@/pages/Operations/WorkOrders/workOrderPrefill";
+import type { PickedOrderLine } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
 import { orderService } from "./service";
+import { returnsService } from "@/pages/Operations/Returns/service";
 import { OrderCancelDialog } from "./OrderCancelDialog";
 import type { Order } from "./types";
 
@@ -32,8 +35,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEdit?: (order: Order) => void;
-  /** "Bu siparişten iş emri oluştur" — WO formuna kalem seed'leyerek yönlendirir. */
-  onCreateWorkOrder?: (order: Order) => void;
+  /** "Bu üründen iş emri oluştur" — tek ürünün açık kalemlerini WO formuna seed'ler. */
+  onCreateWorkOrder?: (lines: PickedOrderLine[]) => void;
 }
 
 export function OrderDetailSheet({
@@ -60,10 +63,24 @@ export function OrderDetailSheet({
     },
   });
 
+  // Bu siparişe gelen (aktif) iade özeti — bilgilendirici (sevk muhasebesini değiştirmez).
+  const returnsSummary = useQuery({
+    queryKey: ["returns", "order-summary", order?.id],
+    queryFn: () => returnsService.summaryForOrder(order!.id),
+    enabled: open && !!order?.id,
+    staleTime: 30_000,
+  });
+
   const totalQty = order?.lines.reduce((acc, l) => acc + Number(l.quantity), 0) ?? 0;
   const isEditable = order && (order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
   const isCancellable = order && order.status !== "COMPLETED" && order.status !== "CANCELLED";
   const canClose = order && (order.status === "PENDING" || order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
+  // İş emri kalem bazında açılır (tek WO = tek ürün/renk/en). Durum uygun + handler varsa
+  // her açık kalemde "İş emri" butonu çıkar; izin kontrolü PermissionGate ile.
+  const woEligible =
+    Boolean(onCreateWorkOrder) &&
+    Boolean(order) &&
+    (order!.status === "APPROVED" || order!.status === "PARTIAL_SHIPPED");
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -163,10 +180,33 @@ export function OrderDetailSheet({
               <CoveragePanel lineIds={order.lines.map((l) => l.id)} />
             )}
 
+            {/* Bu siparişe gelen iadeler — bilgilendirici (sipariş yeniden açılmaz). */}
+            {returnsSummary.data && returnsSummary.data.count > 0 && (
+              <Card>
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Undo2 className="h-3.5 w-3.5" /> Bu siparişe gelen iadeler
+                    </span>
+                    <span className="font-medium tabular-nums">
+                      {returnsSummary.data.count} top ·{" "}
+                      {returnsSummary.data.totalQty.toLocaleString("tr-TR")} m
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <div>
-              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Sipariş Kalemleri ({order.lines.length})
               </div>
+              {woEligible && (
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Her ürün için ayrı iş emri açılır. Kalemin "İş emri" butonu o
+                  ürünün açık kalemlerini forma taşır.
+                </p>
+              )}
               <ul className="space-y-2">
                 {order.lines.map((line) => (
                   <li key={line.id} className="rounded-md border p-3">
@@ -225,6 +265,24 @@ export function OrderDetailSheet({
                           </div>
                         )}
                       </div>
+                      {woEligible &&
+                        Number(line.quantity) - Number(line.shippedQty ?? 0) > 0 && (
+                          <PermissionGate permission="workorder:write">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="shrink-0 gap-1.5"
+                              onClick={() =>
+                                onCreateWorkOrder?.(
+                                  pickedLinesFromOrderLine(order, line.id),
+                                )
+                              }
+                            >
+                              <Factory className="h-3.5 w-3.5" /> İş emri
+                            </Button>
+                          </PermissionGate>
+                        )}
                     </div>
                   </li>
                 ))}
@@ -274,25 +332,6 @@ export function OrderDetailSheet({
               )}
             </PermissionGate>
 
-            <PermissionGate permission="workorder:write">
-              {onCreateWorkOrder &&
-                (order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED") && (
-                  <div className="border-t pt-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onCreateWorkOrder(order)}
-                      className="gap-1.5"
-                    >
-                      <Factory className="h-3.5 w-3.5" /> Bu siparişten iş emri oluştur
-                    </Button>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Açık kalemler iş emri formuna taşınır; orada düzenleyebilirsin.
-                    </p>
-                  </div>
-                )}
-            </PermissionGate>
           </div>
         )}
 
