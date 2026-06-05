@@ -234,6 +234,6 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: 13, color: '#94a3b8', marginBottom: 8 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actionBtn: { flex: 1 },
-  sheet: { borderRadius: 16, padding: 16, backgroundColor: '#fff' },
+  sheet: { borderRadius: 16, padding: 16, backgroundColor: '#fff', alignSelf: 'stretch' },
   sheetTitle: { fontWeight: '700', marginBottom: 4, color: '#0f172a' },
 });
