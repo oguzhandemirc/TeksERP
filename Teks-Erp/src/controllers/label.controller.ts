@@ -33,6 +33,7 @@ export class LabelController {
       const result = await this.service.getRollLabel(req.params.id as string, {
         orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
         customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
+        stock: req.query.stock === "1" || req.query.stock === "true",
       });
       res.status(200).json(result);
     } catch (e) { next(e); }
@@ -72,6 +73,7 @@ export class LabelController {
         {
           orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
           customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
+          stock: req.query.stock === "1" || req.query.stock === "true",
         },
       );
       res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -104,6 +106,7 @@ export class LabelController {
       const body = (req.body ?? {}) as {
         orderLineId?: string | null;
         customerId?: string | null;
+        stock?: boolean;
       };
       const result = await this.service.recordPrintEvent(
         req.params.id as string,
@@ -111,6 +114,7 @@ export class LabelController {
         {
           orderLineId: body.orderLineId ?? undefined,
           customerId: body.customerId ?? undefined,
+          stock: body.stock === true,
         },
       );
       res.status(200).json(result);

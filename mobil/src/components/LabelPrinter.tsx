@@ -13,9 +13,10 @@ interface Props {
    *  default şablonun uygulanacağını belirler. */
   kind: 'ROLL_RAW' | 'ROLL_FINISHED';
   /** Baskı-anında müşteri bağlamı (gevşek model: top→sipariş bağı yok).
-   *  orderLineId → tam sipariş + override; customerId → manuel müşteri; ikisi de
-   *  yoksa müşterisiz (spec-only) / WO-fallback. */
-  labelContext?: { orderLineId?: string | null; customerId?: string | null };
+   *  orderLineId → tam sipariş + override; customerId → manuel müşteri;
+   *  stock → explicit "Stok/müşterisiz" (backend müşteriyi zorla null bırakır,
+   *  snapshot/WO tahminini atlar); hiçbiri yoksa doğal etiket (snapshot/WO). */
+  labelContext?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean };
   /** Print akışı bittiğinde (başarılı / hatalı) parent state'ini temizler. */
   onDone: () => void;
 }
@@ -72,6 +73,7 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
             kind,
             ...(labelContext?.orderLineId ? { orderLineId: labelContext.orderLineId } : {}),
             ...(labelContext?.customerId ? { customerId: labelContext.customerId } : {}),
+            ...(labelContext?.stock ? { stock: "1" } : {}),
           },
           responseType: 'text',
           transformResponse: [(d) => d],

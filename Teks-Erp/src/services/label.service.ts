@@ -99,7 +99,7 @@ export class LabelService {
    */
   async getRollLabel(
     rollId: string,
-    opts?: { orderLineId?: string | null; customerId?: string | null }
+    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }
   ): Promise<ApiResponse<LabelPayload>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
@@ -159,11 +159,36 @@ export class LabelService {
     let itemMasterAlias: string | null = null;
     let colorMasterAlias: string | null = null;
 
-    if (opts?.orderLineId) {
-      // ① Baskı-anında seçilen sipariş kalemi (tambur kesim / relabel). Bu bir BAĞ
-      // DEĞİL — yalnız bu baskının müşteri/sipariş bağlamı (gevşek model: top fungible).
+    // Baskı bağlamı çözümü. Çağrı explicit opts verdiyse (Tambur baskı anı veya
+    // relabel) onu kullan. Vermediyse (Electron "Etiket" butonu / mobil görüntüleme)
+    // topun ÜSTÜNDEKİ son basılan etiketi (lastLabelSnapshot) yansıt — WO
+    // siparişinden TAHMİN değil. Snapshot hiç yoksa (henüz etiket basılmamış)
+    // eski WO-tek-müşteri tahminine düşülür.
+    const snap = (roll.lastLabelSnapshot ?? null) as Record<string, unknown> | null;
+    // Explicit "Stok" baskı (opts.stock): müşteriyi ZORLA null bırak — snapshot'ı
+    // VE WO tek-müşteri tahminini ATLA. Operatör "Stok" dediyse topun üstündeki
+    // eski müşteri etiketi tekrar basılmamalı; müşterisiz spec-only etiket çıkar.
+    const forceStock = opts?.stock === true;
+    const hasExplicit = forceStock || !!(opts?.orderLineId || opts?.customerId);
+    let effOrderLineId: string | null = forceStock ? null : (opts?.orderLineId ?? null);
+    let effCustomerId: string | null = forceStock ? null : (opts?.customerId ?? null);
+    // Snapshot var ama müşterisiz ("stok" baskı) → WO tahmini YAPMA, müşteri null kalsın.
+    let printedAsStock = forceStock;
+    if (!hasExplicit && snap) {
+      if (typeof snap.orderLineId === "string") {
+        effOrderLineId = snap.orderLineId;
+      } else if (typeof snap.customerId === "string") {
+        effCustomerId = snap.customerId;
+      } else {
+        printedAsStock = true;
+      }
+    }
+
+    if (effOrderLineId) {
+      // ① Baskı bağlamı: sipariş kalemi (tambur kesim / relabel / snapshot). Bu bir
+      // BAĞ DEĞİL — yalnız bu baskının müşteri/sipariş bağlamı (gevşek model: top fungible).
       const tgt = await prisma.orderLine.findUnique({
-        where: { id: opts.orderLineId },
+        where: { id: effOrderLineId },
         select: {
           id: true,
           customerItemName: true,
@@ -181,18 +206,21 @@ export class LabelService {
         itemOverride = tgt.customerItemName;
         colorOverride = tgt.customerColorName;
       }
-    } else if (opts?.customerId) {
-      // ① Manuel müşteri (WO dışı) — sipariş yok; isimler master alias'tan türetilir.
+    } else if (effCustomerId) {
+      // ① Manuel/snapshot müşteri (WO dışı) — sipariş yok; isimler master alias'tan türetilir.
       const cust = await prisma.customer.findUnique({
-        where: { id: opts.customerId },
+        where: { id: effCustomerId },
         select: { id: true, name: true },
       });
       if (cust) {
         customerId = cust.id;
         customerName = cust.name;
       }
+    } else if (printedAsStock) {
+      // Snapshot var ama müşterisiz → top "stok" etiketiyle basılmış. Müşteri null
+      // kalır; WO siparişinden tahmin YAPMA (yoksa hiç basılmamış müşteriyi gösterirdik).
     } else {
-      // ② Geri uyum: seçim yoksa WO'ya bağlı satırlardan tek-müşteri tahmini.
+      // ② Geri uyum: hiç etiket basılmamış — WO'ya bağlı satırlardan tek-müşteri tahmini.
       const links = roll.producedInStep?.workOrder?.orderLinks ?? [];
       const customerIds = new Set(links.map((l) => l.orderLine.order.customerId));
       const sameCustomer = links.length > 0 && customerIds.size === 1;
@@ -363,7 +391,7 @@ export class LabelService {
   async getRollLabelHtml(
     rollId: string,
     kindOverride?: LabelKind,
-    opts?: { orderLineId?: string | null; customerId?: string | null },
+    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean },
   ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
     const payloadResp = await this.getRollLabel(rollId, opts);
     const payload = payloadResp.data;
@@ -541,7 +569,7 @@ export class LabelService {
   async recordPrintEvent(
     rollId: string,
     userId?: string,
-    opts?: { orderLineId?: string | null; customerId?: string | null }
+    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }
   ): Promise<ApiResponse<{ recorded: true }>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
@@ -560,36 +588,39 @@ export class LabelService {
       labelData = null;
     }
     if (labelData) {
+      let operatorName: string | null = null;
+      if (userId) {
+        const u = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { fullName: true },
+        });
+        operatorName = u?.fullName ?? null;
+      }
+      const snap: Record<string, string | boolean> = {
+        printedAt: new Date().toISOString(),
+      };
+      if (userId) snap.operatorId = userId;
+      if (operatorName) snap.operatorName = operatorName;
+
       if (labelData.customerId) {
-        let operatorName: string | null = null;
-        if (userId) {
-          const u = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { fullName: true },
-          });
-          operatorName = u?.fullName ?? null;
-        }
-        const snap: Record<string, string> = {
-          customerId: labelData.customerId,
-          printedAt: new Date().toISOString(),
-        };
+        snap.customerId = labelData.customerId;
         if (labelData.customerName) snap.customerName = labelData.customerName;
         if (labelData.orderNumber) snap.orderNumber = labelData.orderNumber;
+        // orderLineId — Electron etiket görünümü override'ları (müşterideki ürün/
+        // renk adı) sadık biçimde yeniden çözebilsin diye saklanır.
+        if (labelData.orderLineId) snap.orderLineId = labelData.orderLineId;
         if (labelData.itemName) snap.itemName = labelData.itemName;
         if (labelData.colorName) snap.colorName = labelData.colorName;
-        if (userId) snap.operatorId = userId;
-        if (operatorName) snap.operatorName = operatorName;
-        await prisma.roll.update({
-          where: { id: rollId },
-          data: { lastLabelSnapshot: snap },
-        });
       } else {
-        // Müşterisiz (stok) baskı → önceki müşteri snapshot'ını temizle.
-        await prisma.roll.update({
-          where: { id: rollId },
-          data: { lastLabelSnapshot: Prisma.DbNull },
-        });
+        // Müşterisiz (stok) baskı → snapshot'ı silmek yerine "stok" işaretle.
+        // Böylece Electron etiket görünümü WO siparişinden müşteri TAHMİN ETMEZ
+        // (kart hâlâ "Stok etiketli" gösterir; customerName yok).
+        snap.stock = true;
       }
+      await prisma.roll.update({
+        where: { id: rollId },
+        data: { lastLabelSnapshot: snap as Prisma.InputJsonValue },
+      });
     }
 
     await AuditService.log({

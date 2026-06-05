@@ -59,12 +59,13 @@ export const labelService = {
    */
   recordPrintEvent: (
     rollId: string,
-    ctx?: { orderLineId?: string | null; customerId?: string | null }
+    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }
   ): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>(`/labels/rolls/${rollId}/print`, {
         ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
         ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
+        ...(ctx?.stock ? { stock: true } : {}),
       })
       .then((r) => r.data),
 };

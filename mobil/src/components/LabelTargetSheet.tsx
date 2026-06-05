@@ -20,7 +20,8 @@ import { customerService } from '../services/customer.service';
 // top→sipariş bağı yok). Seçenekler:
 //   ① Topun spec'ine uyan açık sipariş kalemi → orderLineId (tam sipariş bağlamı)
 //   ② Tüm müşteriler (WO dışı) → customerId (master alias'lar)
-//   ③ Müşterisiz → {} (spec-only üretim etiketi)
+//   ③ Stok (müşterisiz) → { stock: true } (spec-only üretim etiketi; backend
+//      müşteriyi ZORLA null bırakır — eski snapshot/WO tahmini basılmaz)
 // Hiçbir DB durumu değişmez — parent context'i LabelPrinter'a verip basar.
 // =============================================================================
 
@@ -36,7 +37,14 @@ export interface LabelTargetRoll {
   lastLabelSnapshot?: { customerName: string | null; orderNumber: string | null } | null;
 }
 
-export type LabelTargetContext = { orderLineId?: string | null; customerId?: string | null };
+// stock: explicit "Stok / müşterisiz" baskı — backend müşteriyi ZORLA null bırakır
+// (snapshot'taki eski müşteriyi ve WO tahminini atlar). orderLineId/customerId
+// boş + stock yoksa = "doğal etiket" (snapshot/WO çözümü).
+export type LabelTargetContext = {
+  orderLineId?: string | null;
+  customerId?: string | null;
+  stock?: boolean;
+};
 
 interface Props {
   roll: LabelTargetRoll | null;
@@ -131,7 +139,7 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
             {linesQ.isLoading ? (
               <ActivityIndicator style={{ marginVertical: 16 }} />
             ) : candidates.length === 0 ? (
-              <Text style={styles.empty}>Uygun açık sipariş yok — manuel müşteri ya da müşterisiz bas.</Text>
+              <Text style={styles.empty}>Uygun açık sipariş yok — Tüm müşteriler'den seç ya da Stok bas.</Text>
             ) : (
               <ScrollView style={{ maxHeight: 260 }}>
                 {candidates.map((c) => {
@@ -170,10 +178,10 @@ export default function LabelTargetSheet({ roll, defaultLineId, onCancel, onConf
               <Button
                 mode="outlined"
                 icon="tag-outline"
-                onPress={() => confirm({})}
+                onPress={() => confirm({ stock: true })}
                 style={styles.flexBtn}
               >
-                Müşterisiz
+                Stok
               </Button>
             </View>
           </>

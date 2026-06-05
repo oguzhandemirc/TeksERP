@@ -45,6 +45,7 @@ import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import AppModal from '../../../components/AppModal';
 import LabelTargetSheet, { type LabelTargetContext } from '../../../components/LabelTargetSheet';
+import { LabelPreviewSheet } from '../../../components/labels/LabelPreviewSheet';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { tamburService } from '../../../services/tambur.service';
@@ -561,14 +562,15 @@ export default function TamburScreen() {
         | undefined;
       if (data?.childRoll?.barcode) {
         // Hedef zaten "Kime" bölümünde seçili → "Kes" doğrudan o hedefe basar,
-        // TEKRAR "Etiket kime?" SORMAZ. Hiçbir şey seçili değilse = stok
-        // (müşterisiz etiket). Sonradan "Etiket Değiştir" ile yönlendirilebilir.
+        // TEKRAR "Etiket kime?" SORMAZ. Hiçbir şey seçili değilse = stok (explicit
+        // müşterisiz etiket — WO tahmini sızmasın). Sonradan "Etiket Değiştir" ile
+        // yönlendirilebilir.
         setLabelContext(
           variables.targetCustomerId
             ? { customerId: variables.targetCustomerId }
             : variables.targetOrderLineId
               ? { orderLineId: variables.targetOrderLineId }
-              : undefined,
+              : { stock: true },
         );
         setActivePrintRoll(data.childRoll);
       }
@@ -754,10 +756,10 @@ export default function TamburScreen() {
       if (data?.childRoll?.barcode) {
         // Hedef "Kime" bölümünde zaten seçili → tekrar "Etiket kime?" SORMA,
         // doğrudan o hedefe bas (open fabric kesimiyle aynı). Hiçbir şey seçili
-        // değilse = stok (müşterisiz etiket); sonradan "Etiket Değiştir" ile
-        // yönlendirilebilir.
+        // değilse = stok (explicit müşterisiz etiket — WO tahmini sızmasın);
+        // sonradan "Etiket Değiştir" ile yönlendirilebilir.
         setLabelContext(
-          variables.targetOrderLineId ? { orderLineId: variables.targetOrderLineId } : undefined,
+          variables.targetOrderLineId ? { orderLineId: variables.targetOrderLineId } : { stock: true },
         );
         setActivePrintRoll(data.childRoll);
       }
@@ -2344,7 +2346,11 @@ export default function TamburScreen() {
           const r = targetSheet?.roll ?? null;
           setTargetSheet(null);
           if (!r) return;
-          setLabelContext(ctx.orderLineId || ctx.customerId ? ctx : undefined);
+          // Stok seçimi de explicit bir bağlam — undefined'a düşürme, yoksa backend
+          // topun eski müşteri snapshot'ını/WO tahminini tekrar basar (müşterisiz olmaz).
+          setLabelContext(
+            ctx.orderLineId || ctx.customerId || ctx.stock ? ctx : undefined,
+          );
           setActivePrintRoll(r);
         }}
       />
@@ -2384,11 +2390,15 @@ function RollLabelCard({
   index,
   isPrinting,
   onPrint,
+  onPreview,
 }: {
   roll: Roll;
   index: number;
   isPrinting: boolean;
   onPrint: (roll: Roll) => void;
+  /** Verilirse kart gövdesine dokunmak etiket önizlemesini açar (son basılan
+   *  etiketi göster). "Bas" butonu ayrı dokunma hedefi olarak kalır. */
+  onPreview?: (roll: Roll) => void;
 }) {
   const color = roll.color ?? null;
   const gradeBg =
@@ -2397,40 +2407,57 @@ function RollLabelCard({
       : roll.qualityGrade === 'A1'
         ? '#fef3c7'
         : '#dcfce7';
+  const body = (
+    <View style={resplitStyles.labelLeft}>
+      <View style={resplitStyles.labelTopLine}>
+        <Text style={resplitStyles.labelIndex}>#{index + 1}</Text>
+        <View style={[resplitStyles.qualityPill, { backgroundColor: gradeBg }]}>
+          <Text style={resplitStyles.qualityPillText}>{roll.qualityGrade}</Text>
+        </View>
+        {color && (
+          <View style={resplitStyles.labelColorRow}>
+            <View
+              style={[
+                resplitStyles.colorDot,
+                { backgroundColor: color.hex ?? '#e2e8f0' },
+              ]}
+            />
+            <Text style={resplitStyles.labelMetaText} numberOfLines={1}>
+              {color.name}
+            </Text>
+          </View>
+        )}
+        {onPreview && (
+          <Icon source="eye-outline" size={15} color="#64748b" />
+        )}
+      </View>
+      <Text style={resplitStyles.labelBarcode} numberOfLines={1}>
+        {roll.barcode ?? '—'}
+      </Text>
+      <Text style={resplitStyles.labelItemName} numberOfLines={1}>
+        {roll.item?.name ?? '—'}
+        {roll.color?.name ? ` · ${roll.color.name}` : ''}
+      </Text>
+      <Text style={resplitStyles.labelMetaText}>
+        {roll.currentQty.toFixed(1)} m
+        {roll.width != null ? ` · ${roll.width} cm` : ''}
+      </Text>
+    </View>
+  );
   return (
     <Surface style={resplitStyles.labelCard} elevation={1}>
-      <View style={resplitStyles.labelLeft}>
-        <View style={resplitStyles.labelTopLine}>
-          <Text style={resplitStyles.labelIndex}>#{index + 1}</Text>
-          <View style={[resplitStyles.qualityPill, { backgroundColor: gradeBg }]}>
-            <Text style={resplitStyles.qualityPillText}>{roll.qualityGrade}</Text>
-          </View>
-          {color && (
-            <View style={resplitStyles.labelColorRow}>
-              <View
-                style={[
-                  resplitStyles.colorDot,
-                  { backgroundColor: color.hex ?? '#e2e8f0' },
-                ]}
-              />
-              <Text style={resplitStyles.labelMetaText} numberOfLines={1}>
-                {color.name}
-              </Text>
-            </View>
-          )}
-        </View>
-        <Text style={resplitStyles.labelBarcode} numberOfLines={1}>
-          {roll.barcode ?? '—'}
-        </Text>
-        <Text style={resplitStyles.labelItemName} numberOfLines={1}>
-          {roll.item?.name ?? '—'}
-          {roll.color?.name ? ` · ${roll.color.name}` : ''}
-        </Text>
-        <Text style={resplitStyles.labelMetaText}>
-          {roll.currentQty.toFixed(1)} m
-          {roll.width != null ? ` · ${roll.width} cm` : ''}
-        </Text>
-      </View>
+      {onPreview ? (
+        <TouchableRipple
+          borderless
+          onPress={() => onPreview(roll)}
+          style={{ flex: 1 }}
+          accessibilityLabel="Etiketi önizle"
+        >
+          {body}
+        </TouchableRipple>
+      ) : (
+        body
+      )}
       <IconButton
         icon={isPrinting ? 'progress-clock' : 'printer'}
         mode="contained"
@@ -3224,35 +3251,57 @@ function RecentOutputModal({
   useRefetchOnOpen(q.refetch, visible);
   const rolls: Roll[] = q.data?.data ?? [];
 
+  // Satıra dokununca topun "son basılan etiket"ini önizle (LabelPreviewSheet,
+  // snapshot/effective cascade). Liste açık kalır; önizleme üstüne (Portal) açılır.
+  const [previewRoll, setPreviewRoll] = useState<Roll | null>(null);
+
   return (
-    <RemoteListSheet
-      visible={visible}
-      onDismiss={onDismiss}
-      title="Üretilen Toplar"
-      icon="printer-search"
-      iconColor="#1e40af"
-      headerTint="#dbeafe"
-      widthRatio={isCompactPortrait ? 0.92 : 0.5}
-      heightRatio={0.85}
-      loading={q.isLoading}
-      fetching={q.isFetching}
-      isError={q.isError}
-      errorMessage={(q.error as Error | undefined)?.message}
-      onRefresh={() => q.refetch()}
-      items={rolls}
-      keyExtractor={(r) => r.id}
-      useScrollView
-      renderItem={(roll) => (
-        <RollLabelCard
-          roll={roll}
-          index={rolls.indexOf(roll)}
-          isPrinting={printingRollId === roll.id}
-          onPrint={onPrint}
-        />
-      )}
-      emptyIcon="package-variant"
-      emptyText="Henüz Tambur'dan çıkmış top yok"
-    />
+    <>
+      <RemoteListSheet
+        visible={visible}
+        onDismiss={onDismiss}
+        title="Üretilen Toplar"
+        icon="printer-search"
+        iconColor="#1e40af"
+        headerTint="#dbeafe"
+        widthRatio={isCompactPortrait ? 0.92 : 0.5}
+        heightRatio={0.85}
+        loading={q.isLoading}
+        fetching={q.isFetching}
+        isError={q.isError}
+        errorMessage={(q.error as Error | undefined)?.message}
+        onRefresh={() => q.refetch()}
+        items={rolls}
+        keyExtractor={(r) => r.id}
+        useScrollView
+        renderItem={(roll) => (
+          <RollLabelCard
+            roll={roll}
+            index={rolls.indexOf(roll)}
+            isPrinting={printingRollId === roll.id}
+            onPrint={onPrint}
+            onPreview={setPreviewRoll}
+          />
+        )}
+        emptyIcon="package-variant"
+        emptyText="Henüz Tambur'dan çıkmış top yok"
+      />
+
+      {/* Etiket önizleme — son basılan etiketin görünümü (barkod, ürün, renk,
+          kalite, metraj, müşteri/sipariş). "Bas" → listeyi kapat + normal
+          "Etiket kime?" baskı akışına gir (parent onPrint). */}
+      <LabelPreviewSheet
+        visible={previewRoll !== null}
+        rollId={previewRoll?.id ?? null}
+        kind="ROLL_FINISHED"
+        onDismiss={() => setPreviewRoll(null)}
+        onPrint={() => {
+          const r = previewRoll;
+          setPreviewRoll(null);
+          if (r) onPrint(r);
+        }}
+      />
+    </>
   );
 }
 

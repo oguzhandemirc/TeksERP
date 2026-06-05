@@ -49,9 +49,14 @@ function sourceIcon(s: NameSource | null): { emoji: string; label: string } {
 export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   const { has } = usePermissions();
-  const canRead = has('label:read');
+  // Backend `requireAnyPermission(label:*, ...MOBILE_LABEL_PRINTERS)` ile hizalı —
+  // mobil istasyon operatörü (kk1/tambur/tarti-paket) label:read/print yetkisi
+  // olmadan da kendi ekranında etiket görür+basar. canEdit web-only kalır.
+  const isMobileLabelOperator =
+    has('mobile:kk1') || has('mobile:tambur') || has('mobile:tarti-paket');
+  const canRead = has('label:read') || isMobileLabelOperator;
   const canEdit = has('label:edit');
-  const canPrint = has('label:print');
+  const canPrint = has('label:print') || isMobileLabelOperator;
   const qc = useQueryClient();
   const { template } = useLabelTemplate(kind);
 
