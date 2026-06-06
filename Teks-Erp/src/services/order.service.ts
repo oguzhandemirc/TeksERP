@@ -934,6 +934,14 @@ export class OrderService extends BaseService {
         await tx.order.update({ where: { id }, data: cleanData });
       }
 
+      // Satırlar değiştiyse denormalize sevk toplamı + durumu YENİDEN HESAPLA.
+      // recomputeOrderStatus = Order.shippedQty + status tek yazma noktası (şema notu).
+      // Satır ekleme/silme/quantity düzenlemesi sonrası çağrılmazsa Order.shippedQty
+      // ve status, satırların gerçeğinden bayatlar (Σline.shippedQty ile drift).
+      if (incomingLines) {
+        await recomputeOrderStatus(tx, id);
+      }
+
       return tx.order.findUnique({
         where: { id },
         ...(this.config.defaultInclude
