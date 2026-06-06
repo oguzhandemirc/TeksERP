@@ -31,6 +31,9 @@ const finalizeSchema = z.object({
         relatedErrorIds: z.array(z.string().uuid()).default([]),
       })
     )
+    // Cap: her segment tx içinde ayrı roll.create+property+op üretir. Cömert üst
+    // sınır — pathological girdinin 5s tx timeout'una/uzun kilide yol açmasını önler.
+    .max(200, "Tek seferde en fazla 200 kesim girilebilir")
     .default([]),
   decisions: z
     .array(

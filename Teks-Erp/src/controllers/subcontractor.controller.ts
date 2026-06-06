@@ -49,7 +49,8 @@ const receiveSchema = z.object({
         notes: z.string().max(500).nullish(),
       })
     )
-    .min(1, "En az bir dönüş kaydı girin"),
+    .min(1, "En az bir dönüş kaydı girin")
+    .max(300, "Tek seferde en fazla 300 dönüş kaydı girilebilir"),
   notes: z.string().max(1000).optional(),
   // Receipt seviyesinde uygulanan kimlik (boyahane gibi açık kumaş döndüren
   // fason için). Renk: appliesColor=true kategoride WO.targetColor otomatik;
@@ -69,7 +70,9 @@ const receiveSchema = z.object({
         notes: z.string().max(500).nullish(),
       })
     )
-    .min(1, "En az bir açık kumaş parçası girilmeli (metraj zorunlu)"),
+    // Cap: her parça tx içinde ayrı roll.create+rollMovement üretir (per-row).
+    .min(1, "En az bir açık kumaş parçası girilmeli (metraj zorunlu)")
+    .max(300, "Tek seferde en fazla 300 açık kumaş parçası girilebilir"),
 });
 
 export class SubcontractorController {

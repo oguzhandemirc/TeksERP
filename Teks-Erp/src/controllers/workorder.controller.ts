@@ -64,7 +64,9 @@ const targetPropertiesSchema = z.object({
 const attachRollsSchema = z.object({
   barcodes: z
     .array(z.string().min(1))
-    .min(1, "En az bir barkod gerekli"),
+    .min(1, "En az bir barkod gerekli")
+    // Cap: bağlama tx'inde barkod başına ~2 sorgu; cömert üst sınır (tx timeout/kilit koruması).
+    .max(300, "Tek seferde en fazla 300 top bağlanabilir"),
 });
 
 const detachRollsSchema = z.object({
