@@ -180,6 +180,10 @@ export class TamburController {
       const result = await this.service.listRecentOutputRolls({
         workOrderId,
         limit: Number.isFinite(limit) ? limit : undefined,
+        cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
+        mode: typeof req.query.mode === "string" ? req.query.mode : undefined,
+        search: typeof req.query.search === "string" ? req.query.search : undefined,
+        withTotal: req.query.withTotal === "true",
       });
       res.status(200).json(result);
     } catch (error) {

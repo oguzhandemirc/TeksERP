@@ -8,15 +8,17 @@ import {
   Divider,
   Appbar,
 } from 'react-native-paper';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Toast from 'react-native-toast-message';
 import ScreenChrome from '../../../components/ScreenChrome';
+import RefreshButton from '../../../components/RefreshButton';
 import { packingService, type OpenOrder } from '../../../services/packing.service';
 import { usePermissions } from '../../../hooks/usePermission';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import type { MainStackParamList } from '../../../navigation/types';
 
 // =============================================================================
@@ -63,16 +65,14 @@ export default function TartiPaketScreen() {
   });
   const readyCount = readyQ.data?.data?.length ?? 0;
 
-  const qc = useQueryClient();
-  const refreshing =
-    openOrdersQ.isFetching || preparingQ.isFetching || readyQ.isFetching;
-  const handleRefresh = async () => {
-    await Promise.all([
-      qc.invalidateQueries({ queryKey: ['open-orders'] }),
-      qc.invalidateQueries({ queryKey: ['shipments'] }),
-    ]);
-    Toast.show({ type: 'success', text1: 'Liste güncellendi' });
-  };
+  const headerRefresh = useManualRefresh(
+    [
+      () => openOrdersQ.refetch(),
+      () => preparingQ.refetch(),
+      () => readyQ.refetch(),
+    ],
+    'Liste güncellendi',
+  );
 
   // ── Sipariş seçimi ──
   const toggleOrder = (o: OpenOrder) => {
@@ -184,12 +184,13 @@ export default function TartiPaketScreen() {
       title="Sevkiyat"
       headerExtras={
         <>
-          <Appbar.Action
-            icon={refreshing ? () => <ActivityIndicator size={18} color="#fff" /> : 'refresh'}
-            color="#fff"
-            disabled={refreshing}
-            onPress={handleRefresh}
-            accessibilityLabel="Yenile"
+          <RefreshButton
+            headerStyle
+            onPress={headerRefresh.onRefresh}
+            refreshing={headerRefresh.refreshing}
+            isError={headerRefresh.isError}
+            errorMessage={headerRefresh.errorMessage}
+            successMessage={headerRefresh.successMessage}
           />
           <Appbar.Action
             icon="history"

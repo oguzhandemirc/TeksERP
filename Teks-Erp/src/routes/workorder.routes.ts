@@ -84,6 +84,28 @@ router.get("/:id", verifyToken, requireAnyPermission("workorder:read", "mobile:f
 
 /**
  * @openapi
+ * /api/work-orders/{id}/branches:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Fason dalları (paralel sevk partileri / lane görünümü)
+ *     description: Her SubcontractorDispatch bir "dal"dır; durumu (açık/kısmi/döndü) ve dönüşten doğan açık-kumaş toplarının şu anki konumunu döner.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Dal listesi
+ *       404:
+ *         description: İş emri bulunamadı
+ */
+router.get("/:id/branches", verifyToken, requirePermission("workorder:read"), controller.getBranches);
+
+/**
+ * @openapi
  * /api/work-orders/{id}/travel-card:
  *   get:
  *     tags: [WorkOrders]

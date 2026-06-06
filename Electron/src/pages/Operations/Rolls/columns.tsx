@@ -182,6 +182,21 @@ export const rollColumns: ColumnDef<Roll>[] = [
     },
   },
   {
+    id: "kartela",
+    header: () => <span className="text-xs">Kartela</span>,
+    meta: {
+      label: "Kartela",
+      exportValue: (r) => (r.markedForKartela ? "Kartelalık" : ""),
+    },
+    enableSorting: false,
+    cell: ({ row }) =>
+      row.original.markedForKartela ? (
+        <Badge className="text-[10px] border-transparent bg-[#7c3aed] text-white hover:bg-[#7c3aed]">
+          Kartelalık
+        </Badge>
+      ) : null,
+  },
+  {
     accessorKey: "status",
     header: () => <SortableHeader field="status" label="Durum" />,
     meta: { label: "Durum", exportValue: (r) => rollStatusLabels[r.status] ?? r.status },

@@ -7,6 +7,7 @@ import {
   TextInput as RNTextInput,
 } from 'react-native';
 import RefreshButton from './RefreshButton';
+import { useManualRefresh } from '../hooks/useManualRefresh';
 import AppModal from './AppModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDeviceType } from '../hooks/useDeviceType';
@@ -49,13 +50,19 @@ interface BaseProps {
   emptyText?: string;
   loading?: boolean;
   numColumns?: number;
-  /** Header'da yenile ikonu — basıldığında parent refetch yapar. */
+  /** Header'da yenile ikonu — basıldığında parent refetch yapar (react-query
+   *  refetch ya da axios async fn). Animasyon/haptic/toast + offline & timeout
+   *  davranışı useManualRefresh ile içeride yönetilir. */
   onRefresh?: () => void;
-  /** Yenileme veya fetch sürerken refresh ikonu döner. */
+  /** Manuel yenileme başarı toast'ı başlığı. Verilmezse başarıda sessiz (haptic). */
+  successMessage?: string;
+  /** @deprecated Artık kullanılmıyor — yenileme durumu useManualRefresh ile
+   *  içeride hesaplanır (ham isFetching offline'da yanlış sonuç veriyordu).
+   *  Geriye dönük uyumluluk için prop'lar korunur ama yok sayılır. */
   refreshing?: boolean;
-  /** Son fetch başarısız oldu mu — bitiş haptic'i + error toast için. */
+  /** @deprecated bkz. refreshing */
   refreshError?: boolean;
-  /** Hata mesajı (toast'ta gösterilir). */
+  /** @deprecated bkz. refreshing */
   refreshErrorMessage?: string;
   /** Üstte ÇERÇEVELİ sabit grup — verilen sırada (alfabetik sıralanmaz, A-Z'ye
    *  dahil değil). Asıl liste bu çerçevenin DIŞINDA, altından başlar. Örn. "bu
@@ -106,12 +113,14 @@ export default function PickerModal(props: Props) {
     loading,
     numColumns = 4,
     onRefresh,
-    refreshing = false,
-    refreshError = false,
-    refreshErrorMessage,
+    successMessage,
     pinnedOptions = [],
     pinnedLabel,
   } = props;
+
+  // Yenileme: ham isFetching yerine standart hook → offline guard + zaman aşımı
+  // + tek tip animasyon/haptic/toast. onRefresh yoksa buton render edilmez.
+  const manualRefresh = useManualRefresh(onRefresh ?? (() => {}), successMessage);
 
   const paginated = props.paginated === true;
   const { width: winW, height: winH } = useWindowDimensions();
@@ -277,10 +286,11 @@ export default function PickerModal(props: Props) {
 
           {onRefresh && (
             <RefreshButton
-              onPress={onRefresh}
-              refreshing={refreshing}
-              isError={refreshError}
-              errorMessage={refreshErrorMessage}
+              onPress={manualRefresh.onRefresh}
+              refreshing={manualRefresh.refreshing}
+              isError={manualRefresh.isError}
+              errorMessage={manualRefresh.errorMessage}
+              successMessage={manualRefresh.successMessage}
             />
           )}
 

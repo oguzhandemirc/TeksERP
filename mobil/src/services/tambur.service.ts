@@ -1,5 +1,6 @@
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
+import type { RollCursorPage } from './roll.service';
 import type {
   TamburStepSummary,
   TamburOpenCard,
@@ -64,16 +65,23 @@ export const tamburService = {
   // dönüşünden doğuyor (kartelaService). Bkz. KARTELA-TASARIM.md.
 
   // Tambur'dan çıkmış son toplar — etiket yeniden basımı için liste
+  // Cursor-paginated + aramalı. Modal infinite scroll için (RollCursorPage).
   recentOutputRolls: (params?: {
     workOrderId?: string;
     limit?: number;
-  }): Promise<ApiResponse<Roll[]>> => {
+    cursor?: string | null;
+    search?: string;
+    withTotal?: boolean;
+  }): Promise<RollCursorPage> => {
     const qs = new URLSearchParams();
+    qs.set('mode', 'cursor');
     if (params?.workOrderId) qs.set('workOrderId', params.workOrderId);
     if (params?.limit) qs.set('limit', String(params.limit));
-    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    if (params?.cursor) qs.set('cursor', params.cursor);
+    if (params?.search) qs.set('search', params.search);
+    if (params?.withTotal) qs.set('withTotal', 'true');
     return apiClient
-      .get<ApiResponse<Roll[]>>(`/tambur/recent-output-rolls${suffix}`)
+      .get<RollCursorPage>(`/tambur/recent-output-rolls?${qs.toString()}`)
       .then((r) => r.data);
   },
 

@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Ban, PanelRight, Pencil, Plus, Printer } from "lucide-react";
 import { fireConfetti } from "@/lib/confetti";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
+import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
+import { RowOpenItems, CopyMenuItem } from "@/components/data-table/row-menu-items";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -16,14 +18,13 @@ import { workOrderColumns } from "./columns";
 import { workOrderService } from "./service";
 import { WorkOrderDetailSheet } from "./WorkOrderDetailSheet";
 import { WorkOrderFormDialog } from "./WorkOrderFormDialog";
+import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
+import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
-import { WorkOrderType } from "@/types/enums";
 import { type WoSeedTarget } from "./workOrderPrefill";
 import type { PickedOrderLine } from "./OrderPickerDialog";
-import type { FasonStepPlan } from "./FasonPlanningDialog";
-import type { CustomRouteStep } from "./RouteDesignerDialog";
 import type { WorkOrder } from "./types";
-import type { WorkOrderFormValues } from "./schema";
+import { buildPayload, type CreatePayload } from "./workOrderPayload";
 
 const FILTERS: FilterDef[] = [
   {
@@ -61,99 +62,13 @@ const FILTERS: FilterDef[] = [
 
 const QUERY_KEY = "work-orders";
 
-function trimOrNull(s: string | null | undefined): string | null {
-  if (!s) return null;
-  const t = s.trim();
-  return t === "" ? null : t;
-}
-
-function dateOrNull(s: string | null | undefined): string | null {
-  if (!s) return null;
-  return new Date(s).toISOString();
-}
-
-interface StepPlanPayload {
-  sequence: number;
-  requiredCategoryId: string | null;
-  plannedSubcontractorId: string | null;
-  notes: string | null;
-}
-
-interface CreatePayload {
-  type: string;
-  /** Parti Kodu. Boş/atlanırsa backend otomatik üretir (P-YYMMDD-NNN). */
-  batchNumber?: string;
-  routeTemplateId?: string;
-  steps?: CustomRouteStep[];
-  targetItemId: string | null;
-  targetColorId: string | null;
-  targetPropertyIds: string[];
-  orderLineIds?: string[];
-  stepPlanning?: StepPlanPayload[];
-  width: number | null;
-  targetQuantity: number | null;
-  plannedStartDate: string | null;
-  plannedEndDate: string | null;
-  foldType: string | null;
-  dyehouseNote: string | null;
-}
-
-function buildPayload(
-  v: WorkOrderFormValues,
-  meta: { fasonPlans: FasonStepPlan[]; customSteps: CustomRouteStep[] },
-  targetQuantityEnabled: boolean,
-): CreatePayload {
-  const orderLineIds = v.orderLineIds ?? [];
-  const hasLines = orderLineIds.length > 0;
-  const usingCustom = meta.customSteps.length > 0;
-
-  // Custom rota: steps[] gönder; routeTemplateId yok, stepPlanning'e gerek yok.
-  // Şablon rota: routeTemplateId + (varsa) stepPlanning overlay.
-  const routePart: Pick<CreatePayload, "routeTemplateId" | "steps" | "stepPlanning"> = usingCustom
-    ? { steps: meta.customSteps }
-    : (() => {
-        const stepPlanning: StepPlanPayload[] = meta.fasonPlans
-          .filter(
-            (p) => p.requiredCategoryId || p.plannedSubcontractorId || p.notes.trim(),
-          )
-          .map((p) => ({
-            sequence: p.sequence,
-            requiredCategoryId: p.requiredCategoryId,
-            plannedSubcontractorId: p.plannedSubcontractorId,
-            notes: p.notes.trim() === "" ? null : p.notes.trim(),
-          }));
-        return {
-          routeTemplateId: v.routeTemplateId,
-          ...(stepPlanning.length > 0 ? { stepPlanning } : {}),
-        };
-      })();
-
-  // Parti kodu: doluysa gönder (manuel/override/düzenleme); boşsa hiç gönderme
-  // → backend otomatik üretir (otomatik mod).
-  const batchNumber = trimOrNull(v.batchNumber);
-
-  return {
-    // Tip artık formda seçilmez — bağlı kalem varsa siparişe özel, yoksa stoğa.
-    type: hasLines ? WorkOrderType.ORDER_PRODUCTION : WorkOrderType.STOCK_PRODUCTION,
-    ...(batchNumber ? { batchNumber } : {}),
-    ...routePart,
-    targetItemId: v.targetItemId ?? null,
-    targetColorId: v.targetColorId ?? null,
-    targetPropertyIds: v.targetPropertyIds ?? [],
-    ...(hasLines ? { orderLineIds } : {}),
-    width: v.width ?? null,
-    targetQuantity: targetQuantityEnabled ? (v.targetQuantity ?? null) : null,
-    plannedStartDate: dateOrNull(v.plannedStartDate),
-    plannedEndDate: dateOrNull(v.plannedEndDate),
-    foldType: trimOrNull(v.foldType),
-    dyehouseNote: trimOrNull(v.dyehouseNote),
-  };
-}
 
 export function WorkOrdersPage() {
   const qc = useQueryClient();
   const targetQuantityEnabled = useTargetQuantityEnabled();
   const [selected, setSelected] = useState<WorkOrder | null>(null);
+  const [printWo, setPrintWo] = useState<WorkOrder | null>(null);
+  const [cancelWo, setCancelWo] = useState<WorkOrder | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<WorkOrder | null>(null);
   const [seedLines, setSeedLines] = useState<PickedOrderLine[] | null>(null);
@@ -274,12 +189,51 @@ export function WorkOrdersPage() {
         pagination={pagination}
         emptyText="İş emri bulunamadı."
         onRowClick={setSelected}
+        rowContextMenu={(wo) => (
+          <>
+            <ContextMenuItem onSelect={() => setSelected(wo)}>
+              <PanelRight /> Detayı aç (panel)
+            </ContextMenuItem>
+            <RowOpenItems path={`/operations/work-orders/${wo.id}`} />
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={() => setPrintWo(wo)}>
+              <Printer /> Refakat kartı yazdır
+            </ContextMenuItem>
+            <PermissionGate permission="workorder:write">
+              <ContextMenuItem onSelect={() => handleEdit(wo)}>
+                <Pencil /> Düzenle
+              </ContextMenuItem>
+              {wo.status !== "COMPLETED" && wo.status !== "CANCELLED" && (
+                <ContextMenuItem
+                  onSelect={() => setCancelWo(wo)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Ban /> İptal et
+                </ContextMenuItem>
+              )}
+            </PermissionGate>
+            <ContextMenuSeparator />
+            <CopyMenuItem label="Parti kodu" value={wo.batchNumber} />
+          </>
+        )}
       />
       <WorkOrderDetailSheet
         workOrder={selected}
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(null)}
         onEdit={handleEdit}
+      />
+      <TravelerCardPrintDialog
+        workOrder={printWo}
+        open={Boolean(printWo)}
+        onOpenChange={(open) => !open && setPrintWo(null)}
+      />
+      <WorkOrderCancelDialog
+        open={Boolean(cancelWo)}
+        onOpenChange={(open) => !open && setCancelWo(null)}
+        workOrderId={cancelWo?.id ?? null}
+        batchNumber={cancelWo?.batchNumber}
+        onCancelled={() => setCancelWo(null)}
       />
       <WorkOrderFormDialog
         open={formOpen}

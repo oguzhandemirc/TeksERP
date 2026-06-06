@@ -12,6 +12,8 @@ export interface RollLabelPayload {
   lengthMeters: number;
   weightKg: number | null;
   packagingDate: string | null;
+  /** Tambur'da kartela için işaretlendi mi — etikette mor "Kartelalık" damgası. */
+  markedForKartela?: boolean;
 
   itemCode: string;
   itemName: string;

@@ -104,6 +104,7 @@ export interface WorkOrderCreateInput {
   type?:              string;
   width?:             number | null;
   targetQuantity?:    number | null;
+  targetWeight?:      number | null;
   parameters?:        Record<string, unknown> | null;
   plannedStartDate?:  string | null;
   plannedEndDate?:    string | null;
@@ -525,6 +526,7 @@ export class WorkOrderService {
           type,
           width:             data.width          ?? null,
           targetQuantity:    data.targetQuantity ?? null,
+          targetWeight:      data.targetWeight ?? null,
           parameters:        (data.parameters as Prisma.InputJsonValue) ?? undefined,
           status:            WorkOrderStatus.PLANNED,
           plannedStartDate:  planDates.plannedStartDate,
@@ -661,6 +663,7 @@ export class WorkOrderService {
       status: true,
       width: true,
       targetQuantity: true,
+      targetWeight: true,
       plannedStartDate: true,
       plannedEndDate: true,
       routeTemplateId: true,
@@ -1114,6 +1117,147 @@ export class WorkOrderService {
         locks,
       },
     };
+  }
+
+  /**
+   * Bir iş emrinin FASON DALLARI (paralel sevk partileri).
+   *
+   * Aynı WO'da kumaş parça parça fasona gidebilir (çoklu sevk): her
+   * `SubcontractorDispatch` bir "dal"dır. Lane görünümü için her dalın durumunu
+   * (açık/kısmi/döndü) ve dönüşten doğan açık-kumaş toplarının ŞU ANKİ konumunu
+   * çıkarır — böylece "1. parti Kurşun'da, 2. parti hâlâ boyahanede" tek bakışta
+   * görünür.
+   *
+   * Durum: dispatchItem'larından kaçının (iptal edilmemiş) receiptItem'ı var.
+   * Konum: o sevki kabul eden receipt'lerin `bornRolls`'unun `currentStep`'i.
+   * Not: bir receipt birden çok sevki kapsarsa doğan toplar o sevklerin hepsine
+   * atfedilir (pratikte kabul sevk-bazlı; v1 için kabul edilebilir yaklaşım).
+   */
+  async getBranches(workOrderId: string): Promise<ApiResponse<unknown>> {
+    const wo = await prisma.workOrder.findUnique({
+      where: { id: workOrderId },
+      select: { id: true },
+    });
+    if (!wo) {
+      return { success: false, data: null, message: "İş emri bulunamadı" };
+    }
+
+    const dispatches = await prisma.subcontractorDispatch.findMany({
+      where: { workOrderId },
+      orderBy: { dispatchedAt: "asc" },
+      select: {
+        id: true,
+        dispatchNo: true,
+        dispatchedAt: true,
+        totalQty: true,
+        cancelledAt: true,
+        step: { select: { station: { select: { name: true } } } },
+        subcontractor: { select: { id: true, name: true } },
+        items: {
+          select: {
+            id: true,
+            receiptItems: {
+              select: {
+                receipt: {
+                  select: {
+                    id: true,
+                    receiptNo: true,
+                    receivedAt: true,
+                    cancelledAt: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Phase 4: dal kimliği (batchSplitId = dispatch.id) ile her partinin TÜM rota
+    // ayak izini topla — born roll'lar + Tambur'da bölünen çocuklar (depo dahil).
+    // Tüketilen ara düğümler HARİÇ: orijinaller (SUBCONTRACTOR_CONSUMED, yerini
+    // born roll aldı) ve Tambur'da bölünen parent (TAMBUR_CONSUMED, yerini depodaki
+    // çocuklar aldı) — çift sayım olmasın. Açık dalın orijinalleri AT_SUBCONTRACTOR
+    // → fason adımında görünür (currentStep dolu).
+    const dispatchIds = dispatches.map((d) => d.id);
+    const lotRolls = dispatchIds.length
+      ? await prisma.roll.findMany({
+          where: {
+            batchSplitId: { in: dispatchIds },
+            status: { notIn: ["SUBCONTRACTOR_CONSUMED", "TAMBUR_CONSUMED", "CANCELLED"] },
+          },
+          select: {
+            batchSplitId: true,
+            currentQty: true,
+            status: true,
+            currentStep: { select: { station: { select: { name: true } } } },
+          },
+        })
+      : [];
+
+    const statusLabel = (s: string): string =>
+      s === "WAREHOUSE" ? "Depo" : s === "STOCK" ? "Stok" : "—";
+
+    // batchSplitId → konum dağılımı (label = istasyon adı, yoksa statü etiketi).
+    const positionsByLot = new Map<
+      string,
+      Map<string, { label: string; count: number; totalMeters: number }>
+    >();
+    for (const r of lotRolls) {
+      if (!r.batchSplitId) continue;
+      const label = r.currentStep?.station?.name ?? statusLabel(r.status);
+      const lot = positionsByLot.get(r.batchSplitId) ?? new Map();
+      const cur = lot.get(label) ?? { label, count: 0, totalMeters: 0 };
+      cur.count += 1;
+      cur.totalMeters += Number(r.currentQty);
+      lot.set(label, cur);
+      positionsByLot.set(r.batchSplitId, lot);
+    }
+
+    const branches = dispatches.map((d) => {
+      const itemCount = d.items.length;
+      const receivedItemCount = d.items.filter((it) =>
+        it.receiptItems.some((ri) => ri.receipt && !ri.receipt.cancelledAt),
+      ).length;
+
+      // İptal edilmemiş receipt'ler (dal başına benzersiz).
+      const receiptMap = new Map<string, { receiptNo: string; receivedAt: Date }>();
+      for (const it of d.items) {
+        for (const ri of it.receiptItems) {
+          const rcpt = ri.receipt;
+          if (!rcpt || rcpt.cancelledAt) continue;
+          if (!receiptMap.has(rcpt.id)) {
+            receiptMap.set(rcpt.id, {
+              receiptNo: rcpt.receiptNo,
+              receivedAt: rcpt.receivedAt,
+            });
+          }
+        }
+      }
+
+      let status: "OPEN" | "PARTIAL" | "RETURNED" | "CANCELLED";
+      if (d.cancelledAt) status = "CANCELLED";
+      else if (receivedItemCount === 0) status = "OPEN";
+      else if (receivedItemCount >= itemCount) status = "RETURNED";
+      else status = "PARTIAL";
+
+      const positions = positionsByLot.get(d.id);
+      return {
+        dispatchId: d.id,
+        dispatchNo: d.dispatchNo,
+        stepName: d.step?.station?.name ?? null,
+        subcontractorName: d.subcontractor.name,
+        dispatchedAt: d.dispatchedAt,
+        totalQty: Number(d.totalQty),
+        rollCount: itemCount,
+        receivedItemCount,
+        status,
+        receipts: [...receiptMap.values()],
+        currentPositions: positions ? [...positions.values()] : [],
+      };
+    });
+
+    return { success: true, data: { branches } };
   }
 
   /**
@@ -1641,6 +1785,7 @@ export class WorkOrderService {
       batchNumber?: string;
       width?: number | null;
       targetQuantity?: number | null;
+      targetWeight?: number | null;
       plannedStartDate?: string | null;
       plannedEndDate?: string | null;
       targetItemId?: string | null;
@@ -1701,6 +1846,7 @@ export class WorkOrderService {
         batchNumber: data.batchNumber?.trim() || undefined,
         width: data.width ?? undefined,
         targetQuantity: data.targetQuantity ?? undefined,
+        targetWeight: data.targetWeight ?? undefined,
         plannedStartDate: data.plannedStartDate
           ? new Date(data.plannedStartDate)
           : data.plannedStartDate === null
@@ -2211,6 +2357,7 @@ export class WorkOrderService {
           type,
           width: data.width ?? null,
           targetQuantity: data.targetQuantity ?? null,
+          targetWeight: data.targetWeight ?? null,
           parameters: (data.parameters as Prisma.InputJsonValue) ?? undefined,
           plannedStartDate: planDates.plannedStartDate,
           plannedEndDate: planDates.plannedEndDate,

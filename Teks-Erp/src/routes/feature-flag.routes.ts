@@ -27,6 +27,17 @@ const updateSchema = z.object({
   dyehouseNoteMobileEntry: z.boolean().optional(),
   // Mobil cihaz eşleştirmesi zorunlu mu (true=aktif) yoksa pasif mi (false=default).
   devicePairingRequired: z.boolean().optional(),
+  // shipping.confirmationEnabled — sevk onay adımı (UI rehberi).
+  shipmentConfirmationEnabled: z.boolean().optional(),
+  // Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri).
+  travelerCardConfig: z
+    .object({
+      companyName: z.string().trim().max(120),
+      showOperationGrid: z.boolean(),
+      showNotes: z.boolean(),
+      showOrders: z.boolean(),
+    })
+    .optional(),
 });
 
 /**

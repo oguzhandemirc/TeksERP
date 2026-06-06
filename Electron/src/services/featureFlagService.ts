@@ -1,6 +1,21 @@
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
 
+/** Refakat kartı marka/içerik ayarı — kart basımında snapshot'a dondurulur. */
+export interface TravelerCardConfig {
+  companyName: string;
+  showOperationGrid: boolean;
+  showNotes: boolean;
+  showOrders: boolean;
+}
+
+export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
+  companyName: "Adnan Şahin Tekstil",
+  showOperationGrid: true,
+  showNotes: true,
+  showOrders: true,
+};
+
 export interface FeatureFlags {
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
@@ -17,6 +32,8 @@ export interface FeatureFlags {
    *  mobil ① Sevkiyat ekranında "Hemen Sevk Et" kısayolu görünür; açıkken çıkış yalnız ②
    *  "Sevk Çıkışı" ekranından onaylanır. Ara depoda bekleme her iki modda da mümkündür. */
   shipmentConfirmationEnabled: boolean;
+  /** Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri). */
+  travelerCardConfig: TravelerCardConfig;
 }
 
 export const featureFlagService = {

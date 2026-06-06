@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BackHandler,
   Pressable,
@@ -7,6 +7,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Portal } from 'react-native-paper';
 import Animated, {
   Easing,
@@ -33,7 +34,18 @@ export interface AppModalProps {
    *  karşılığı. Gecikmeli aksiyonlar (ör. kapandıktan sonra başka modal açma,
    *  tarama sonucunu resolve etme) burada güvenle yapılır. */
   onHidden?: () => void;
+  /** Sürükleyerek kapatma (bottom/center=aşağı, right=sağa). Default true.
+   *  `dismissable=false` ise zaten devre dışıdır. Kritik/zorunlu modallarda kapat. */
+  swipeToDismiss?: boolean;
 }
+
+// Sürükle-kapat eşikleri.
+const DRAG_ZONE = 80; // bottom/center: aşağı çekiş yalnız içeriğin üst bu kadar px'inden başlar
+const V_DISMISS_DIST = 120; // dikey: bu kadar px aşılırsa kapan
+const V_DISMISS_VEL = 900; // dikey: bu hızı (px/s) aşan fırlatma kapatır
+const H_DISMISS_DIST = 100; // yatay (right): bu kadar px aşılırsa kapan
+const H_DISMISS_VEL = 800; // yatay: fırlatma hız eşiği
+const SPRING_BACK_MS = 160;
 
 // =============================================================================
 // AppModal — uygulama geneli modal primitifi. react-native-paper Portal (z-order)
@@ -60,6 +72,7 @@ export default function AppModal({
   dismissable = true,
   position = 'center',
   onHidden,
+  swipeToDismiss = true,
 }: AppModalProps) {
   // `rendered`: çıkış animasyonu bitene kadar Portal mount'ta kalır (yoksa içerik
   // anında kaybolur, kapanış animasyonu hiç oynamaz).
@@ -68,9 +81,25 @@ export default function AppModal({
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
+  // Sürükle-kapat için canlı offset'ler (px). dragY: bottom/center, dragX: right.
+  const dragY = useSharedValue(0);
+  const dragX = useSharedValue(0);
+  // Gesture-içi durum (worklet'ler arası): çekiş üst bölgeden mi başladı, başlangıç
+  // mutlak konumu, ve "kapanıyor" bayrağı (onFinalize geri-yaylanmayı atlasın).
+  const zoneOk = useSharedValue(false);
+  const startAbsX = useSharedValue(0);
+  const startAbsY = useSharedValue(0);
+  const closing = useSharedValue(false);
+
   const finishHide = useCallback(() => {
     setRendered(false);
+    // Bir sonraki açılış temiz başlasın: sürükleme offset'lerini sıfırla.
+    dragY.value = 0;
+    dragX.value = 0;
+    closing.value = false;
     onHidden?.();
+    // shared value'lar kararlı; sadece onHidden bağımlılık.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onHidden]);
 
   useEffect(() => {
@@ -100,19 +129,110 @@ export default function AppModal({
     return () => sub.remove();
   }, [visible, dismissable, onDismiss]);
 
-  const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value * 0.5 }));
+  // Backdrop, hem açılış progress'i hem sürükleme mesafesiyle solar — kullanıcı
+  // içeriği uzaklaştırdıkça arka perde de açılır (yön/mesafeye göre).
+  const backdropStyle = useAnimatedStyle(() => {
+    const dragFade =
+      position === 'right'
+        ? Math.min(1, Math.max(0, dragX.value) / (width * 0.6))
+        : Math.min(1, Math.max(0, dragY.value) / (height * 0.4));
+    return { opacity: progress.value * 0.5 * (1 - dragFade) };
+  });
 
   const contentAnimStyle = useAnimatedStyle(() => {
     const p = progress.value;
     if (position === 'bottom') {
-      return { opacity: 1, transform: [{ translateY: (1 - p) * height }] };
+      return { opacity: 1, transform: [{ translateY: (1 - p) * height + dragY.value }] };
     }
     if (position === 'right') {
-      return { opacity: 1, transform: [{ translateX: (1 - p) * width }] };
+      return { opacity: 1, transform: [{ translateX: (1 - p) * width + dragX.value }] };
     }
     // center
-    return { opacity: p, transform: [{ scale: 0.97 + p * 0.03 }] };
+    return {
+      opacity: p,
+      transform: [{ translateY: dragY.value }, { scale: 0.97 + p * 0.03 }],
+    };
   });
+
+  // Sürükle-kapat gesture'ı. dismissable + swipeToDismiss + görünür iken aktif.
+  const canSwipe = dismissable && swipeToDismiss && visible;
+  const gesture = useMemo(() => {
+    if (position === 'right') {
+      // Sağ drawer: sağa kaydır = kapat. Yatay eksen → dikey scroll'la çakışmaz
+      // (failOffsetY: dikey önce gelirse gesture düşer, ScrollView devralır).
+      return Gesture.Pan()
+        .enabled(canSwipe)
+        .activeOffsetX(18)
+        .failOffsetY([-14, 14])
+        .onUpdate((e) => {
+          'worklet';
+          dragX.value = e.translationX > 0 ? e.translationX : e.translationX * 0.25;
+        })
+        .onEnd((e) => {
+          'worklet';
+          if (e.translationX > H_DISMISS_DIST || e.velocityX > H_DISMISS_VEL) {
+            closing.value = true;
+            runOnJS(onDismiss)();
+          } else {
+            dragX.value = withTiming(0, { duration: SPRING_BACK_MS });
+          }
+        })
+        .onFinalize(() => {
+          'worklet';
+          if (!closing.value) dragX.value = withTiming(0, { duration: SPRING_BACK_MS });
+        });
+    }
+    // bottom & center: aşağı çek = kapat. manualActivation ile yalnız ÜST bölgeden
+    // (DRAG_ZONE) başlayan aşağı çekişte devreye girer; gövdeye/scroll'a dokunulan
+    // çekişlerde fail() → içteki ScrollView/FlashList serbestçe kaydırır. Dokunma
+    // (hareketsiz) hiç aktive olmaz → X tuşu/ butonlar normal çalışır.
+    return Gesture.Pan()
+      .enabled(canSwipe)
+      .manualActivation(true)
+      .onBegin((e) => {
+        'worklet';
+        zoneOk.value = e.y <= DRAG_ZONE;
+        startAbsX.value = e.absoluteX;
+        startAbsY.value = e.absoluteY;
+        closing.value = false;
+      })
+      .onTouchesMove((e, mgr) => {
+        'worklet';
+        const t = e.allTouches[0];
+        if (!t) return;
+        if (!zoneOk.value) {
+          mgr.fail();
+          return;
+        }
+        const dy = t.absoluteY - startAbsY.value;
+        const dx = t.absoluteX - startAbsX.value;
+        if (Math.abs(dx) > Math.abs(dy) + 4) {
+          mgr.fail(); // belirgin yatay hareket → kapatma değil
+          return;
+        }
+        if (dy > 6) mgr.activate();
+        else if (dy < -6) mgr.fail(); // yukarı → bırak
+      })
+      .onUpdate((e) => {
+        'worklet';
+        dragY.value = e.translationY > 0 ? e.translationY : e.translationY * 0.25;
+      })
+      .onEnd((e) => {
+        'worklet';
+        if (e.translationY > V_DISMISS_DIST || e.velocityY > V_DISMISS_VEL) {
+          closing.value = true;
+          runOnJS(onDismiss)();
+        } else {
+          dragY.value = withTiming(0, { duration: SPRING_BACK_MS });
+        }
+      })
+      .onFinalize(() => {
+        'worklet';
+        if (!closing.value) dragY.value = withTiming(0, { duration: SPRING_BACK_MS });
+      });
+    // dims + onDismiss + canSwipe + position değişince yeniden kur.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position, canSwipe, onDismiss, width, height]);
 
   if (!rendered) return null;
 
@@ -178,9 +298,11 @@ export default function AppModal({
         pointerEvents="box-none"
         style={[StyleSheet.absoluteFill, wrapperPos]}
       >
-        <Animated.View style={[contentBase, contentAnimStyle, contentStyle]}>
-          {children}
-        </Animated.View>
+        <GestureDetector gesture={gesture}>
+          <Animated.View style={[contentBase, contentAnimStyle, contentStyle]}>
+            {children}
+          </Animated.View>
+        </GestureDetector>
       </Animated.View>
     </Portal>
   );

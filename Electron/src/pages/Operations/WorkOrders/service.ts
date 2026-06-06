@@ -63,6 +63,14 @@ export const workOrderService = {
       >(`/api/subcontractor/dispatches/${dispatchId}/dyehouse-note`, { dyehouseNote })
       .then((r) => r.data),
 
+  /** Fason dalları (paralel sevk partileri) — tam sayfa lane görünümü için. */
+  getBranches: (id: string) =>
+    apiClient
+      .get<ApiResponse<{ branches: WorkOrderBranch[] }>>(
+        `/api/work-orders/${id}/branches`,
+      )
+      .then((r) => r.data),
+
   /** WO formu kapsama paneli — seçili sipariş kalemleri için net üretim açığı. */
   getCoverage: (lineIds: string[], excludeWorkOrderId?: string) =>
     apiClient
@@ -72,6 +80,33 @@ export const workOrderService = {
       })
       .then((r) => r.data),
 };
+
+/** Bir fason dalının (sevk partisi) doğan toplarının şu anki konum dağılımı. */
+export interface WorkOrderBranchPosition {
+  /** İstasyon adı, ya da konumsuz toplar için statü etiketi (Depo / Tambur...). */
+  label: string;
+  count: number;
+  totalMeters: number;
+}
+
+/** Bir fason dalı = bir SubcontractorDispatch (paralel sevk partisi). */
+export interface WorkOrderBranch {
+  dispatchId: string;
+  dispatchNo: string;
+  /** Hangi fason adımına gönderildi (istasyon adı). */
+  stepName: string | null;
+  subcontractorName: string;
+  dispatchedAt: string;
+  totalQty: number;
+  rollCount: number;
+  /** Dönüşü yapılmış sevk kalemi sayısı. */
+  receivedItemCount: number;
+  /** OPEN = fasonda · PARTIAL = kısmi dönüş · RETURNED = döndü · CANCELLED = iptal. */
+  status: "OPEN" | "PARTIAL" | "RETURNED" | "CANCELLED";
+  receipts: { receiptNo: string; receivedAt: string }[];
+  /** Dönüşten doğan açık-kumaş toplarının şu anki konum dağılımı. */
+  currentPositions: WorkOrderBranchPosition[];
+}
 
 export interface CoverageLine {
   lineId: string;
@@ -169,4 +204,6 @@ export interface DispatchPrintSnapshot {
   dyehouseNote: string | null;
   /** WO'daki boyahane notu (default) — sevkin kendi notu boşsa fişte buna düşülür. */
   woDyehouseNote: string | null;
+  /** P4: sevk iptal/kabul edildiyse not düzenlenemez (editör disabled). */
+  dyehouseNoteLocked: boolean;
 }

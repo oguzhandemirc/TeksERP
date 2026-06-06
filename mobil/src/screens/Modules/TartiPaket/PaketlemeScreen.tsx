@@ -20,6 +20,8 @@ import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import * as Print from 'expo-print';
 import ScreenChrome from '../../../components/ScreenChrome';
+import RefreshButton from '../../../components/RefreshButton';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { AnimatedEntrance } from '../../../components/motion';
 import { colors, spacing, radius, shadow, typography } from '../../../theme';
@@ -97,6 +99,12 @@ export default function PaketlemeScreen() {
 
   const refreshShip = (id: string | null = shipmentId) =>
     void qc.invalidateQueries({ queryKey: ['shipment', id] });
+
+  // Header "Yenile" — draft'ta açık siparişleri, kayıtlı sevkiyatta sevkiyatı tazeler.
+  const refresh = useManualRefresh(
+    () => (shipmentId === null ? openOrdersQ.refetch() : shipQ.refetch()),
+    shipmentId === null ? 'Açık siparişler güncellendi' : 'Sevkiyat güncellendi',
+  );
   const finishAndBack = () => {
     void qc.invalidateQueries({ queryKey: ['open-orders'] });
     void qc.invalidateQueries({ queryKey: ['shipments'] });
@@ -366,25 +374,35 @@ export default function PaketlemeScreen() {
       subtitle={ship?.shipmentNo ?? 'Yeni (henüz kaydedilmedi)'}
       onStepBack={() => nav.goBack()}
       headerExtras={
-        !isDraft ? (
-          <>
-            {hasContent && (
+        <>
+          <RefreshButton
+            headerStyle
+            onPress={refresh.onRefresh}
+            refreshing={refresh.refreshing}
+            isError={refresh.isError}
+            errorMessage={refresh.errorMessage}
+            successMessage={refresh.successMessage}
+          />
+          {!isDraft && (
+            <>
+              {hasContent && (
+                <Appbar.Action
+                  icon={printing ? () => <ActivityIndicator size={18} color={colors.textOnDark} /> : 'file-document-outline'}
+                  color={colors.textOnDark}
+                  disabled={printing}
+                  onPress={printNote}
+                  accessibilityLabel="Sevk irsaliyesi yazdır"
+                />
+              )}
               <Appbar.Action
-                icon={printing ? () => <ActivityIndicator size={18} color={colors.textOnDark} /> : 'file-document-outline'}
+                icon="trash-can-outline"
                 color={colors.textOnDark}
-                disabled={printing}
-                onPress={printNote}
-                accessibilityLabel="Sevk irsaliyesi yazdır"
+                onPress={() => setCancelOpen(true)}
+                accessibilityLabel="Sevkiyatı iptal et"
               />
-            )}
-            <Appbar.Action
-              icon="trash-can-outline"
-              color={colors.textOnDark}
-              onPress={() => setCancelOpen(true)}
-              accessibilityLabel="Sevkiyatı iptal et"
-            />
-          </>
-        ) : undefined
+            </>
+          )}
+        </>
       }
     >
       {loadingReal ? (

@@ -17,6 +17,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import ScreenChrome from '../../../components/ScreenChrome';
+import RefreshButton from '../../../components/RefreshButton';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { packingService, type ShipmentListItem } from '../../../services/packing.service';
 import { customerService } from '../../../services/customer.service';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
@@ -63,6 +65,8 @@ export default function SevkiyatGecmisiScreen() {
     staleTime: 60_000,
   });
   const customers = custQ.data?.data ?? [];
+
+  const refresh = useManualRefresh(() => listQ.refetch(), 'Geçmiş güncellendi');
 
   // Şube chip'leri — yüklenen (accumulated) sonuçtaki ayrık şubeler.
   const branches = useMemo(() => {
@@ -125,6 +129,17 @@ export default function SevkiyatGecmisiScreen() {
       title="Sevkiyat Geçmişi"
       subtitle="Sevk edilmiş sevkiyatlar"
       onBack={() => nav.goBack()}
+      headerExtras={
+        <RefreshButton
+          headerStyle
+          label="Yenile"
+          onPress={refresh.onRefresh}
+          refreshing={refresh.refreshing}
+          isError={refresh.isError}
+          errorMessage={refresh.errorMessage}
+          successMessage={refresh.successMessage}
+        />
+      }
     >
       <View style={styles.filters}>
         <TextInput

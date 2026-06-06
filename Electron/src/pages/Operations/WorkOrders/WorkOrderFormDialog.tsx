@@ -598,6 +598,24 @@ export function WorkOrderFormDialog({
                     )}
                   </FormField>
                   )}
+                  {targetQuantityEnabled && (
+                    <FormField
+                      label="Hedef Kg"
+                      htmlFor="targetWeight"
+                      error={form.formState.errors.targetWeight}
+                      hint="Opsiyonel — tekstilde mt + kg planlanır"
+                    >
+                      <LockedInput
+                        id="targetWeight"
+                        type="number"
+                        step="0.1"
+                        min={0}
+                        placeholder="—"
+                        locked={false}
+                        {...form.register("targetWeight")}
+                      />
+                    </FormField>
+                  )}
                 </div>
 
                 {/* Gelişmiş accordion */}

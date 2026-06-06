@@ -600,6 +600,13 @@ model Roll {
   // Açık kumaş ileride Tambur'da bölünüp gerçek toplara dönüşür (parentRollId).
   parentReceiptId String?
 
+  // Fason dalı / parti kimliği — paralel akış (lane) izlenebilirliği (Phase 4).
+  // origin = sevki yaratan SubcontractorDispatch.id; fason kabulde born roll'a,
+  // Tambur kesiminde çocuk roll'a KALITILIR → bir dal tüm rota boyunca (depodaki
+  // bölünmüş çocuklar dahil) tek kimlikle izlenir. NULL = fason'a hiç girmemiş
+  // ana akış. FK değil (dispatch silinmez ama soft-cancel olur; serbest grup anahtarı).
+  batchSplitId String?
+
   // Audit — KK1 girişinde / sistem genelinde topu kim oluşturdu
   // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
   createdById String?
@@ -652,6 +659,9 @@ model Roll {
 
   @@index([itemId])
   @@index([parentRollId])
+  // PARTIAL (WHERE "parentReceiptId" IS NOT NULL) — migration 20260606001717.
+  // Çoğu ruloda null; partial = küçük indeks + null insert'te bakım yok. Şemada
+  // @@index tam görünür ama DB'de partial'dır (Prisma 7 predicate'i drift saymaz).
   @@index([parentReceiptId])
   @@index([createdById])
   // Liste sayfaları: status filter + createdAt desc sort
@@ -666,10 +676,17 @@ model Roll {
   @@index([producedInStepId, status])
   // Fason kuyruğu: "bu adımda + AT_SUBCONTRACTOR" listeleme
   @@index([currentStepId, status])
+  // Dal/lane izi: bir partinin (batchSplitId) tüm rotadaki tops'larını topla.
+  // PARTIAL (WHERE "batchSplitId" IS NOT NULL) — migration 20260606001717.
+  @@index([batchSplitId])
   @@index([qualityGradeId])
-  // Sevkiyat oturumunun topları + "depodaki serbest stok" (shipmentId IS NULL) sorgusu
+  // Sevkiyat oturumunun topları (shipmentId = X). PARTIAL (WHERE "shipmentId" IS
+  // NOT NULL) — migration 20260606001717. NOT: "depodaki serbest stok" (shipmentId
+  // IS NULL) bu indeksi KULLANMAZ — o sorgu zaten status indeksinden geçer (null
+  // satırlar çoğunluk, düşük seçicilik; ölçüldü: balance groupBy status indeksini seçer).
   @@index([shipmentId])
-  // Çuval içeriği: bir çuvaldaki toplar (irsaliye/detay dökümü)
+  // Çuval içeriği: bir çuvaldaki toplar (irsaliye/detay dökümü).
+  // PARTIAL (WHERE "sackId" IS NOT NULL) — migration 20260606001717.
   @@index([sackId])
   // Spec-toplam karşılanma: item+renk+en eşleşen WAREHOUSE/STOCK toplar (fungible havuz)
   @@index([status, itemId, colorId, width])
@@ -852,6 +869,7 @@ model WorkOrder {
   type             WorkOrderType   @default(ORDER_PRODUCTION)
   width            Decimal?        @db.Decimal(12, 3) // En (cm) — kumaş eni
   targetQuantity   Decimal?        @db.Decimal(12, 3) // Hedef uzunluk/metraj
+  targetWeight     Decimal?        @db.Decimal(12, 3) // Hedef ağırlık (kg) — opsiyonel; tekstilde mt+kg planlanır
   parameters       Json? // Dynamic params: serbest meta
   status           WorkOrderStatus @default(PLANNED)
   plannedStartDate DateTime? // Planlanan başlangıç tarihi
@@ -1177,6 +1195,12 @@ model TravelerCard {
   printedById String?
   voidedAt    DateTime?
   voidReason  String?
+
+  /// Basım anında DONDURULAN içerik (ürün/renk/rota/metraj/sipariş + render config).
+  /// Kart bir kimlik jetonu değil, içeriği snapshot'lanmış bir belge: reprint
+  /// orijinali birebir üretir, WO sonradan değişse de eski kart sabit kalır.
+  /// Sorgulanmıyor → GIN yok; sadece detay/print'te okunur (liste select'ine girmez).
+  snapshot Json?
 
   // Relations
   workOrder WorkOrder          @relation(fields: [workOrderId], references: [id])

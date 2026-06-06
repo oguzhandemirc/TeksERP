@@ -203,6 +203,8 @@ export interface WorkOrder {
   targetProperties?: FabricProperty[];
   /** "2-KAT" / "4-KAT" gibi — Tambur planlaması, opsiyonel. */
   foldType?: string | null;
+  /** Boyahaneye özel talimat (planlamacı girer); fason sevkte salt-okunur gösterilir. */
+  dyehouseNote?: string | null;
   /** Tambur katman sayısı (1-20), opsiyonel. */
   layerCount?: number | null;
   dispatchedTotalQty?: number;

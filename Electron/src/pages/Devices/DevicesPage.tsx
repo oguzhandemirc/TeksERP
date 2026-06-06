@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   Trash2,
   KeyRound,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -21,7 +22,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { safeFormat } from "@/lib/format";
@@ -215,6 +223,14 @@ export function DevicesPage() {
   );
 }
 
+interface DeviceAction {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  onClick: () => void;
+  danger?: boolean;
+}
+
 function DeviceRow({
   device,
   onGenerateCode,
@@ -232,6 +248,8 @@ function DeviceRow({
   onDelete: () => void;
   isPending: boolean;
 }) {
+  const { hasPermission } = useRoleAccess();
+  const canManage = hasPermission("admin:settings");
   const paired = !!device.machine;
   const lastSeen = device.lastSeenAt
     ? safeFormat(device.lastSeenAt, "dd.MM.yyyy HH:mm")
@@ -239,7 +257,17 @@ function DeviceRow({
   const canGenerateCode = device.isActive && !paired;
   const canDelete = !paired;
 
-  return (
+  // Tek aksiyon listesi → hem "…" dropdown'ı hem sağ-tık menüsü aynı kaynaktan.
+  const actions: DeviceAction[] = [
+    canGenerateCode && { key: "gen", label: "Yeni Kod Üret", icon: KeyRound, onClick: onGenerateCode },
+    paired && { key: "unpair", label: "Eşleşmeyi Kaldır", icon: Unlink, onClick: onUnpair },
+    device.isActive
+      ? { key: "deactivate", label: "Pasife Al", icon: PowerOff, onClick: onDeactivate, danger: true }
+      : { key: "reactivate", label: "Aktifleştir", icon: Power, onClick: onReactivate },
+    canDelete && { key: "delete", label: "Kalıcı Olarak Sil", icon: Trash2, onClick: onDelete, danger: true },
+  ].filter(Boolean) as DeviceAction[];
+
+  const card = (
     <Card>
       <CardContent className="flex items-center gap-4 p-4">
         <div className="flex-1 min-w-0">
@@ -270,7 +298,7 @@ function DeviceRow({
             <span className="font-mono">{device.deviceId.slice(0, 12)}…</span>
           </div>
         </div>
-        <PermissionGate permission="admin:settings">
+        {canManage && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" disabled={isPending}>
@@ -278,40 +306,41 @@ function DeviceRow({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {canGenerateCode && (
-                <DropdownMenuItem onClick={onGenerateCode}>
-                  <KeyRound className="mr-2 h-4 w-4" />
-                  Yeni Kod Üret
+              {actions.map((a) => (
+                <DropdownMenuItem
+                  key={a.key}
+                  onClick={a.onClick}
+                  className={a.danger ? "text-destructive" : undefined}
+                >
+                  <a.icon className="mr-2 h-4 w-4" />
+                  {a.label}
                 </DropdownMenuItem>
-              )}
-              {paired && (
-                <DropdownMenuItem onClick={onUnpair}>
-                  <Unlink className="mr-2 h-4 w-4" />
-                  Eşleşmeyi Kaldır
-                </DropdownMenuItem>
-              )}
-              {device.isActive ? (
-                <DropdownMenuItem onClick={onDeactivate} className="text-destructive">
-                  <PowerOff className="mr-2 h-4 w-4" />
-                  Pasife Al
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem onClick={onReactivate}>
-                  <Power className="mr-2 h-4 w-4" />
-                  Aktifleştir
-                </DropdownMenuItem>
-              )}
-              {canDelete && (
-                <DropdownMenuItem onClick={onDelete} className="text-destructive">
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Kalıcı Olarak Sil
-                </DropdownMenuItem>
-              )}
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
-        </PermissionGate>
+        )}
       </CardContent>
     </Card>
+  );
+
+  // Sağ-tık menüsü: aynı aksiyonlar. Yetkisiz kullanıcıda kart düz kalır.
+  if (!canManage) return card;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{card}</ContextMenuTrigger>
+      <ContextMenuContent>
+        {actions.map((a) => (
+          <ContextMenuItem
+            key={a.key}
+            onSelect={a.onClick}
+            disabled={isPending}
+            className={a.danger ? "text-destructive focus:text-destructive" : undefined}
+          >
+            <a.icon /> {a.label}
+          </ContextMenuItem>
+        ))}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

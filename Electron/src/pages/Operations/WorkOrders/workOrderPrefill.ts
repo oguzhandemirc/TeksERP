@@ -39,6 +39,7 @@ export function formValuesFromWorkOrder(wo: WorkOrder): WorkOrderFormValues {
     orderLineIds: (wo.orderLinks ?? []).map((l) => l.orderLineId),
     width: wo.width,
     targetQuantity: wo.targetQuantity,
+    targetWeight: wo.targetWeight,
     plannedStartDate: dateToInput(wo.plannedStartDate),
     plannedEndDate: dateToInput(wo.plannedEndDate),
     foldType: wo.foldType ?? "",

@@ -74,6 +74,10 @@ export const ROLL_FINISHED_FIELDS: readonly FieldDef[] = [
   { key: "customerName",     defaultLabel: "Müşteri",                type: "text" },
   { key: "orderNumber",      defaultLabel: "Sipariş No",             type: "text" },
   { key: "batchNumber",      defaultLabel: "Parti No",               type: "text" },
+  // Kartelalık damgası — top Tambur'da kartela için işaretlendiyse (markedForKartela)
+  // etiketin üstünde belirgin mor şerit basılır. Yalnız işaretli topta görünür;
+  // bu alan template'te kapatılırsa işaretli toplarda da basılmaz.
+  { key: "kartelaMark",      defaultLabel: "Kartelalık",             type: "text" },
   { key: "printedAt",        defaultLabel: "Baskı Tarihi",           type: "date" },
 ] as const;
 

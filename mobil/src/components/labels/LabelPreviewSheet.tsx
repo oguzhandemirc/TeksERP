@@ -24,7 +24,7 @@ import type { LabelPayload, NameSource } from '../../types/models';
 // Refactor 6 + 7 — Etiket önizleme + müşteri-isim override + audit print
 // =============================================================================
 // - `getRollLabel` ile effective payload alır (cascade ile)
-// - Source badge (OVERRIDE 🔒, MASTER 👤, DEFAULT 🏠) gösterir
+// - Source badge yazı olarak (OVERRIDE "Özel", MASTER "Müşteri", DEFAULT "Standart")
 // - `label:edit` yetkili ise modal ile OrderLine override yapar
 // - `label:print` yetkili ise audit eventi atar (asıl baskı parent'ta)
 // - Açık kumaş Roll'lar (barcode null) için "etiket basılamaz" mesajı
@@ -36,18 +36,23 @@ interface Props {
   /** Hangi etiket türünün default şablonu kullanılsın — KK1 → ROLL_RAW, Tambur → ROLL_FINISHED. */
   kind: 'ROLL_RAW' | 'ROLL_FINISHED';
   onDismiss: () => void;
-  /** Operatör "Bas" deyince çağrılır — print için parent yazıcı tetikler. */
+  /** "Bas" — varolan etiketi AYNEN tekrar bas (parent yazıcı tetikler). */
   onPrint?: (payload: LabelPayload) => void;
+  /** "Yeni Etiket" — yönlendir: "Etiket kime?" seçip yeni etiket bas. Verilirse
+   *  "Bas"ın yanında ikinci buton görünür. */
+  onNewLabel?: () => void;
 }
 
-function sourceIcon(s: NameSource | null): { emoji: string; label: string } {
-  if (s === 'OVERRIDE') return { emoji: '🔒', label: 'Bu sipariş için özel' };
-  if (s === 'MASTER') return { emoji: '👤', label: 'Müşteri tanımı (master)' };
-  return { emoji: '🏠', label: 'Standart ad' };
+function sourceInfo(s: NameSource | null): { short: string; label: string } {
+  if (s === 'OVERRIDE') return { short: 'Özel', label: 'Bu sipariş için özel' };
+  if (s === 'MASTER') return { short: 'Müşteri', label: 'Müşteri tanımı (master)' };
+  return { short: 'Standart', label: 'Standart ad' };
 }
 
-export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }: Props) {
+export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint, onNewLabel }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
+  // Telefonda (dar) modal neredeyse tam en; tablette dengeli/orta genişlik.
+  const phone = winW < 600;
   const { has } = usePermissions();
   // Backend `requireAnyPermission(label:*, ...MOBILE_LABEL_PRINTERS)` ile hizalı —
   // mobil istasyon operatörü (kk1/tambur/tarti-paket) label:read/print yetkisi
@@ -136,7 +141,12 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }:
   return (
     <>
       <AppModal visible={visible} onDismiss={onDismiss}>
-        <View style={[styles.sheet, { width: winW * 0.55, maxHeight: winH * 0.85 }]}>
+        <View
+          style={[
+            styles.sheet,
+            { width: phone ? winW * 0.94 : winW * 0.55, maxHeight: winH * 0.85 },
+          ]}
+        >
           <View style={styles.header}>
             <Icon source="label" size={22} color="#1e40af" />
             <Text variant="titleMedium" style={styles.title}>
@@ -186,6 +196,16 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }:
                   Düzenle
                 </Button>
               )}
+              {canPrint && onNewLabel && (
+                <Button
+                  mode="outlined"
+                  icon="tag-plus-outline"
+                  textColor="#4338ca"
+                  onPress={onNewLabel}
+                >
+                  Yeni Etiket
+                </Button>
+              )}
               {canPrint && (
                 <Button
                   mode="contained"
@@ -206,7 +226,7 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint }:
         onDismiss={() => setEditOpen(false)}
         dismissable={!updateMut.isPending}
       >
-        <View style={[styles.sheet, { width: winW * 0.5 }]}>
+        <View style={[styles.sheet, { width: phone ? winW * 0.94 : winW * 0.5 }]}>
           <View style={styles.header}>
             <Icon source="pencil" size={22} color="#7c3aed" />
             <Text variant="titleMedium" style={styles.title}>
@@ -374,7 +394,7 @@ function PreviewBody({
 }
 
 function SourceBadge({ source }: { source: NameSource | null }) {
-  const info = sourceIcon(source);
+  const info = sourceInfo(source);
   const bg =
     source === 'OVERRIDE' ? '#fef3c7' : source === 'MASTER' ? '#e0f2fe' : '#f1f5f9';
   const fg =
@@ -385,7 +405,7 @@ function SourceBadge({ source }: { source: NameSource | null }) {
       onPress={() => Toast.show({ type: 'info', text1: info.label })}
       style={[styles.badge, { backgroundColor: bg }]}
     >
-      <Text style={[styles.badgeText, { color: fg }]}>{info.emoji}</Text>
+      <Text style={[styles.badgeText, { color: fg }]}>{info.short}</Text>
     </TouchableRipple>
   );
 }
@@ -442,5 +462,5 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
   },
-  badgeText: { fontSize: 14 },
+  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
 });

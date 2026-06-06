@@ -5,13 +5,20 @@ import {
   Truck,
   TabletSmartphone,
   Server,
+  Printer,
   type LucideIcon,
 } from "lucide-react";
 import type { FeatureFlags } from "@/services/featureFlagService";
 
+/** FeatureFlags'in yalnızca BOOLEAN değerli anahtarları (toggle edilebilenler).
+ *  travelerCardConfig gibi nesne ayarları bu listeden hariçtir — kendi paneli var. */
+type BooleanFlagKey = {
+  [K in keyof FeatureFlags]: FeatureFlags[K] extends boolean ? K : never;
+}[keyof FeatureFlags];
+
 /** Tek bir özellik anahtarının ekranda görünen metinleri. `key` backend kontratına bağlanır. */
 export interface FlagDef {
-  key: keyof FeatureFlags;
+  key: BooleanFlagKey;
   title: string;
   desc: string;
 }
@@ -22,7 +29,7 @@ export interface FlagDef {
  * - `device` → cihaz eşleştirme (enforce edilen, uyarılı) özel section
  * - `api`    → sunucu adresi (bu bilgisayara özel) özel section
  */
-export type CategoryKind = "flags" | "device" | "api";
+export type CategoryKind = "flags" | "device" | "api" | "travelerCard";
 
 export interface SettingsCategory {
   id: string;
@@ -127,6 +134,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     description: "Sahadaki tabletlerin eşleştirme zorunluluğu.",
     keywords: "cihaz eşleştirme tablet pairing makine atfı zorunlu kod",
     kind: "device",
+  },
+  {
+    id: "traveler-card",
+    label: "Refakat Kartı",
+    icon: Printer,
+    description: "Refakat kartında basılan firma adı ve hangi bölümlerin görüneceği.",
+    keywords: "refakat kartı traveler firma adı logo marka operasyon imza notlar siparişler bölüm",
+    kind: "travelerCard",
   },
   {
     id: "system",

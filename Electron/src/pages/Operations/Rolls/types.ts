@@ -30,6 +30,9 @@ export interface Roll {
   width: number | null;
   status: RollStatus;
   qualityGrade: string;
+  /** Tambur'da kartela için işaretlendi mi — depoda kartelaya gidecek topları
+   *  ayırt etmek için rozet/filtre. Sevki engellemez. */
+  markedForKartela?: boolean;
   entrySource: string;
   parentRollId: string | null;
   /** Açık kumaş Roll'lar için fason kabul referansı. */

@@ -40,6 +40,9 @@ export interface LabelPayload {
   widthCm: number | null;
   lengthMeters: number;
   weightKg: number | null;
+  // Tambur'da kartela için işaretlendi mi — true ise etikette mor "KARTELALIK"
+  // damgası basılır (kartelaMark alanı template'te açıksa).
+  markedForKartela: boolean;
 
   // Item/Color (effective ↔ default ayrı tutulur, frontend istediğini gösterir)
   itemCode: string;
@@ -282,6 +285,7 @@ export class LabelService {
       widthCm: roll.width !== null ? Number(roll.width) : null,
       lengthMeters: Number(roll.currentQty),
       weightKg: roll.weightKg !== null ? Number(roll.weightKg) : null,
+      markedForKartela: roll.markedForKartela,
 
       itemCode: roll.item.code,
       itemName: itemNameResolved.name,
@@ -332,6 +336,9 @@ export class LabelService {
       widthCm: 152,
       lengthMeters: 47.5,
       weightKg: 14.8,
+      // Önizlemede kartela damgası görünsün — admin kartelaMark alanını
+      // açıp kapatınca etkisini canlı görür.
+      markedForKartela: true,
       itemCode: "PA-60S",
       itemName: "Cotton Lining 60s",      // müşterideki ad
       itemNameDefault: "Pamuk Astar 60s",  // bizdeki ad

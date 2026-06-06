@@ -4,6 +4,7 @@ import type {
   WorkOrderStatus,
   WorkOrderType,
 } from "@/types/enums";
+import type { TravelerCardConfig } from "@/services/featureFlagService";
 
 /** findById response'unda her adım için anlık rulo özeti. List view'de boş gelir. */
 export interface StepRollSummary {
@@ -60,6 +61,10 @@ export interface WorkOrderStepLite {
   currentRollList?: StepRollItem[];
   /** Sadece findById response'unda — bu fason adımındaki aktif sevkler. */
   dispatches?: StepDispatch[];
+  /** Adım acil işaretli mi (refakat kartında ACİL bayrağı için). */
+  isUrgent?: boolean;
+  /** Planlanan fason firma — fason adımının altında kartta gösterilir. */
+  plannedSubcontractor?: { id: string; name: string } | null;
 }
 
 export interface WorkOrderTargetItem {
@@ -87,6 +92,8 @@ export interface WorkOrder {
   status: WorkOrderStatus;
   width: number | null;
   targetQuantity: number | null;
+  /** Hedef ağırlık (kg) — opsiyonel; tekstilde mt + kg planlanır. */
+  targetWeight: number | null;
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   routeTemplateId: string | null;
@@ -211,4 +218,8 @@ export interface TravelerCard {
   voidedAt?: string | null;
   voidReason?: string | null;
   printedBy?: { id: string; username: string; fullName: string | null } | null;
+  /** Basım anında dondurulan WO içeriği (refakat kartı snapshot'ı) + marka/içerik
+   *  config'i. PDF bunu canlı WO yerine kullanır → reprint orijinali birebir basar.
+   *  Eski kartlarda null → canlı WO'ya fallback. WorkOrder alt-kümesi şeklindedir. */
+  snapshot?: (WorkOrder & { config?: TravelerCardConfig }) | null;
 }

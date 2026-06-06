@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, ChevronDown, ChevronRight, FileText, Info, Pencil, Printer } from "lucide-react";
+import { Ban, ChevronDown, ChevronRight, FileText, Info, Maximize2, Pencil, Printer } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,10 +9,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import type { StepDispatch } from "./types";
-import { StatusBadge, workOrderStatusTones, stepStatusTones } from "@/components/operations/StatusBadge";
+import { StatusBadge, workOrderStatusTones } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { PermissionGate } from "@/components/PermissionGate";
-import { workOrderStatusLabels, workOrderTypeLabels, stepStatusLabels } from "@/types/enums";
+import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
 import { safeFormat, formatNumber } from "@/lib/format";
 import { AnimatedProgress } from "@/components/motion";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,12 @@ import { WorkOrderDocumentsDialog } from "./WorkOrderDocumentsDialog";
 import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
+import { RouteDistributionStrip } from "./RouteDistributionStrip";
+import { WorkOrderInfoCard } from "./WorkOrderInfoCard";
+import { ProducedRollsCard } from "./ProducedRollsCard";
+import { OrderLinksCard } from "./OrderLinksCard";
+import { StepStateBadge } from "./step-state";
+import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import type { WorkOrder } from "./types";
 
 interface Props {
@@ -38,6 +44,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
   const [printDispatchId, setPrintDispatchId] = useState<string | null>(null);
   const [inProgressConfirmOpen, setInProgressConfirmOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const openTarget = useOpenTarget();
 
   const detail = useQuery({
     queryKey: ["work-order-detail", workOrder?.id],
@@ -66,23 +73,15 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
     return lastDone ?? sortedSteps[0];
   }, [sortedSteps]);
 
-  // Bağlı sipariş satırlarını orderId'ye göre grupla — siparişe özel WO'larda
-  // hangi sipariş(ler)e ait olduğu + her siparişin kalemleri ayrı görünür.
-  const orderGroups = useMemo(() => {
-    const links = wo?.orderLinks ?? [];
-    const map = new Map<string, typeof links>();
-    for (const link of links) {
-      const orderId = link.orderLine?.order?.id ?? `__no_order_${link.orderLineId}`;
-      const existing = map.get(orderId);
-      if (existing) existing.push(link);
-      else map.set(orderId, [link]);
-    }
-    return Array.from(map.entries()).map(([orderId, ls]) => ({
-      orderId,
-      order: ls[0]?.orderLine?.order,
-      links: ls,
-    }));
-  }, [wo?.orderLinks]);
+  // Daraltılmış görünüm: tek "özet adım" yerine ŞU AN malı olan tüm adımları
+  // göster — birden çok dal varsa hepsi görünür (tek-pointer yanılgısını önler).
+  // Hiçbirinde WIP yoksa (başlamamış/bitmiş) özet adıma düş.
+  const collapsedSteps = useMemo(() => {
+    const withWip = sortedSteps.filter((s) => (s.currentRolls?.count ?? 0) > 0);
+    if (withWip.length > 0) return withWip;
+    return summaryStep ? [summaryStep] : [];
+  }, [sortedSteps, summaryStep]);
+
 
   // Sipariş toplam = bağlı sipariş kalemlerinin talebi (link-only: tahsis yok).
   const hasOrders = (wo?.orderLinks?.length ?? 0) > 0;
@@ -149,6 +148,19 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                   </Button>
                 </PermissionGate>
               )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={(e) => {
+                onOpenChange(false);
+                openTarget(`/operations/work-orders/${wo.id}`, e);
+              }}
+              className="gap-1"
+              title="Sol tık: bu sekmede · Shift/Ctrl+tık: yeni sekmede"
+            >
+              <Maximize2 className="h-3.5 w-3.5" /> Tam Ekran Aç
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -243,207 +255,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               </Card>
             )}
 
-            <Card>
-              <CardContent className="space-y-1 p-3 text-sm">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
-                  <div className="text-xs text-muted-foreground">Planlanan Başlangıç</div>
-                  <div className="text-xs">{safeFormat(wo.plannedStartDate, "dd.MM.yyyy")}</div>
-                  <div className="text-xs text-muted-foreground">Oluşturma</div>
-                  <div className="text-xs">{safeFormat(wo.createdAt, "dd.MM.yyyy HH:mm")}</div>
-                  {wo.targetItem && (
-                    <>
-                      <div className="text-xs text-muted-foreground">Hedef Ürün</div>
-                      <div className="text-xs font-medium">
-                        <span className="font-mono mr-1">{wo.targetItem.code}</span>
-                        {wo.targetItem.name}
-                      </div>
-                    </>
-                  )}
-                  {wo.targetColor && (
-                    <>
-                      <div className="text-xs text-muted-foreground">Renk</div>
-                      <div className="flex items-center gap-1.5 text-xs">
-                        {wo.targetColor.hex && (
-                          <span
-                            className="h-3 w-3 rounded-full"
-                            style={{ backgroundColor: wo.targetColor.hex }}
-                          />
-                        )}
-                        {wo.targetColor.name}
-                      </div>
-                    </>
-                  )}
-                  {wo.foldType && (
-                    <>
-                      <div className="text-xs text-muted-foreground">Kat Tipi</div>
-                      <div className="text-xs">{wo.foldType}</div>
-                    </>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <WorkOrderInfoCard wo={wo} />
 
-            <Card>
-              <CardContent className="space-y-2 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Üretim Özellikleri
-                </div>
-                {wo.targetProperties && wo.targetProperties.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {wo.targetProperties.map((p) => (
-                      <Badge key={p.propertyId} variant="muted" className="text-[10px]">
-                        {p.property.name}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-xs text-muted-foreground italic">
-                    Atanmış özellik yok.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <ProducedRollsCard wo={wo} />
 
-            {wo.producedRolls && wo.producedRolls.count > 0 && (
-                <Card>
-                  <CardContent className="p-3">
-                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Üretilen Nihai Toplar
-                    </div>
-                    <div className="mt-1 text-sm font-medium tabular-nums">
-                      {wo.producedRolls.count} top
-                      <span className="ml-1 text-muted-foreground">·</span>
-                      <span className="ml-1">
-                        {formatNumber(wo.producedRolls.totalMeters, 0)} m
-                      </span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-                      {wo.producedRolls.warehouse.count > 0 && (
-                        <Badge variant="muted" className="font-normal">
-                          Bitmiş Depo: {wo.producedRolls.warehouse.count} top ·{" "}
-                          {formatNumber(wo.producedRolls.warehouse.totalMeters, 0)} m
-                        </Badge>
-                      )}
-                      {wo.producedRolls.a1.count > 0 && (
-                        <Badge variant="muted" className="font-normal">
-                          A1: {wo.producedRolls.a1.count} top ·{" "}
-                          {formatNumber(wo.producedRolls.a1.totalMeters, 0)} m
-                        </Badge>
-                      )}
-                      {wo.producedRolls.fire.count > 0 && (
-                        <Badge variant="outline" className="font-normal text-destructive">
-                          Fire: {wo.producedRolls.fire.count} top ·{" "}
-                          {formatNumber(wo.producedRolls.fire.totalMeters, 0)} m
-                        </Badge>
-                      )}
-                    </div>
-
-                    {wo.producedRolls.items.length > 0 && (
-                      <ul className="mt-2 max-h-64 divide-y overflow-auto rounded-md border bg-muted/30">
-                        {wo.producedRolls.items.map((r) => {
-                          const tone =
-                            r.qualityGrade === "FIRE"
-                              ? "text-destructive"
-                              : r.qualityGrade === "A1"
-                                ? "text-warning"
-                                : "text-foreground";
-                          // Snapshot: fiziksel olarak yok olmuş ise (re-cut →
-                          // TAMBUR_CONSUMED, operatör iptal → CANCELLED) küçük
-                          // gri rozet + soluk satır.
-                          const removedFromStock =
-                            r.status === "TAMBUR_CONSUMED" ||
-                            r.status === "CANCELLED";
-                          const removedLabel =
-                            r.status === "TAMBUR_CONSUMED"
-                              ? "Bölündü"
-                              : r.status === "CANCELLED"
-                                ? "İptal"
-                                : null;
-                          return (
-                            <li
-                              key={r.id}
-                              className={cn(
-                                "flex items-center justify-between gap-2 px-2 py-1 text-[11px]",
-                                removedFromStock && "opacity-60",
-                              )}
-                            >
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span className="font-mono">
-                                  {r.barcode ?? "—"}
-                                </span>
-                                <Badge
-                                  variant="outline"
-                                  className={`text-[9px] font-normal ${tone}`}
-                                >
-                                  {r.qualityGrade}
-                                </Badge>
-                                {removedLabel && (
-                                  <Badge
-                                    variant="muted"
-                                    className="text-[9px] font-normal"
-                                  >
-                                    {removedLabel}
-                                  </Badge>
-                                )}
-                                {r.color && (
-                                  <span className="inline-flex items-center gap-1 text-muted-foreground">
-                                    {r.color.hex && (
-                                      <span
-                                        className="h-2 w-2 rounded-full border border-black/10"
-                                        style={{ backgroundColor: r.color.hex }}
-                                      />
-                                    )}
-                                    {r.color.name}
-                                  </span>
-                                )}
-                              </div>
-                              <span className="font-medium tabular-nums">
-                                {formatNumber(r.currentQty, 0)} m
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-
-                    <div className="mt-2 text-[11px] text-muted-foreground">
-                      Metraj toplamı sağlam (depo + A1); fire metresi hariç.
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-            {sortedSteps.length > 0 && (
-              <div className="flex items-center gap-1.5 px-1" aria-hidden>
-                {sortedSteps.map((step, i) => {
-                  const done = step.status === "COMPLETED";
-                  const active = step.status === "ACTIVE";
-                  return (
-                    <div
-                      key={step.id}
-                      className={cn("flex items-center gap-1.5", i < sortedSteps.length - 1 ? "flex-1" : "flex-none")}
-                      title={step.station?.name ?? undefined}
-                    >
-                      <span
-                        className={cn(
-                          "h-2.5 w-2.5 shrink-0 rounded-full",
-                          done
-                            ? "bg-success"
-                            : active
-                              ? "bg-primary animate-pulse"
-                              : step.status === "SKIPPED"
-                                ? "bg-muted-foreground/40"
-                                : "bg-muted-foreground/20",
-                        )}
-                      />
-                      {i < sortedSteps.length - 1 && (
-                        <span className={cn("h-0.5 flex-1 rounded", done ? "bg-success" : "bg-border")} />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            {sortedSteps.length > 0 && <RouteDistributionStrip steps={sortedSteps} />}
 
             <div>
               <button
@@ -459,7 +275,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                 Rota Adımları ({sortedSteps.length})
               </button>
               <ol className="space-y-1.5">
-                {(stepsExpanded ? sortedSteps : summaryStep ? [summaryStep] : []).map((step) => (
+                {(stepsExpanded ? sortedSteps : collapsedSteps).map((step) => (
                   <li key={step.id} className="rounded-md border p-2.5">
                     <div className="flex items-center gap-2">
                       <Badge
@@ -477,12 +293,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                           onPrint={(id) => setPrintDispatchId(id)}
                         />
                       )}
-                      <StatusBadge
-                        status={step.status}
-                        labels={stepStatusLabels}
-                        tones={stepStatusTones}
-                        className="h-6 text-[10px]"
-                      />
+                      <StepStateBadge step={step} />
                     </div>
                     {step.currentRolls && step.currentRolls.count > 0 && (
                       <div className="mt-1.5 pl-7">
@@ -575,96 +386,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               </ol>
             </div>
 
-            {orderGroups.length > 0 && (
-              <div>
-                <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {orderGroups.length === 1 ? "Bağlı Sipariş" : `Bağlı Siparişler (${orderGroups.length})`}
-                </div>
-                <div className="space-y-2">
-                  {orderGroups.map(({ orderId, order, links }) => (
-                    <Card key={orderId}>
-                      <CardContent className="space-y-2 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="font-mono text-xs font-semibold">
-                              {order?.orderNumber ?? "—"}
-                            </span>
-                            {order?.customer && (
-                              <span className="truncate text-sm">{order.customer.name}</span>
-                            )}
-                          </div>
-                          {order?.deadline && <DeadlineBadge deadline={order.deadline} />}
-                        </div>
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          Kalemler ({links.length})
-                        </div>
-                        <ul className="divide-y rounded-md border">
-                          {links.map((link) => {
-                            const ol = link.orderLine;
-                            return (
-                              <li
-                                key={link.orderLineId}
-                                className="flex flex-wrap items-center justify-between gap-2 p-2 text-xs"
-                              >
-                                <div className="min-w-0">
-                                  <span className="font-medium">
-                                    {ol?.item?.name ?? "—"}
-                                  </span>
-                                  {ol?.color && (
-                                    <span className="ml-1.5 inline-flex items-center gap-1">
-                                      {ol.color.hex && (
-                                        <span
-                                          className="h-2.5 w-2.5 rounded-full ring-1 ring-border"
-                                          style={{ backgroundColor: ol.color.hex }}
-                                        />
-                                      )}
-                                      <span className="text-muted-foreground">
-                                        {ol.color.name}
-                                      </span>
-                                    </span>
-                                  )}
-                                  {ol?.requiredProperties && ol.requiredProperties.length > 0 && (
-                                    <div className="mt-1 flex flex-wrap gap-1">
-                                      {ol.requiredProperties.map((rp) => (
-                                        <Badge
-                                          key={rp.propertyId}
-                                          variant="muted"
-                                          className="text-[9px]"
-                                        >
-                                          {rp.property.name}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  {ol?.width != null && (
-                                    <Badge variant="outline" className="font-normal">
-                                      En: {ol.width} cm
-                                    </Badge>
-                                  )}
-                                  {ol?.quantity != null && (
-                                    <Badge variant="outline" className="font-normal">
-                                      Boy: {formatNumber(ol.quantity, 0)} m
-                                    </Badge>
-                                  )}
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {wo.type === "STOCK_PRODUCTION" && (
-              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                Stoğa üretim — siparişe bağlı değil.
-              </div>
-            )}
+            <OrderLinksCard wo={wo} />
           </div>
         )}
 

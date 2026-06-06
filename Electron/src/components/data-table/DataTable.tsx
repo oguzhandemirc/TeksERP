@@ -17,6 +17,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Download, GripVertical, Inbox } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -34,6 +39,11 @@ interface Props<T> {
   onRowClick?: (row: T) => void;
   /** Seçim çubuğuna sayfa-özel toplu aksiyon enjekte eder (seçili satırları alır). */
   bulkActions?: (rows: T[]) => ReactNode;
+  /**
+   * Satıra sağ-tık menüsü. Dönen düğümler `ContextMenuContent` içine yerleşir
+   * (örn. `ContextMenuItem` / `RowOpenItems`). `null` dönerse o satır menüsüz kalır.
+   */
+  rowContextMenu?: (row: T) => ReactNode;
 }
 
 export function DataTable<T>({
@@ -43,6 +53,7 @@ export function DataTable<T>({
   emptyText = "Kayıt yok.",
   onRowClick,
   bulkActions,
+  rowContextMenu,
 }: Props<T>) {
   const rows = table.getRowModel().rows;
   const selectable = Boolean(table.options.enableRowSelection);
@@ -122,30 +133,41 @@ export function DataTable<T>({
                         </TableCell>
                       </TableRow>
                     )
-                  : rows.map((row, i) => (
-                      <TableRow
-                        key={row.id}
-                        data-state={row.getIsSelected() ? "selected" : undefined}
-                        className={cn("row-enter", onRowClick && "cursor-pointer")}
-                        style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
-                        onClick={() => onRowClick?.(row.original)}
-                      >
-                        {selectable && (
-                          <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
-                            <Checkbox
-                              checked={row.getIsSelected()}
-                              onCheckedChange={(v) => row.toggleSelected(!!v)}
-                              aria-label="Seç"
-                            />
-                          </TableCell>
-                        )}
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
+                  : rows.map((row, i) => {
+                      const rowEl = (
+                        <TableRow
+                          key={row.id}
+                          data-state={row.getIsSelected() ? "selected" : undefined}
+                          className={cn("row-enter", onRowClick && "cursor-pointer")}
+                          style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
+                          onClick={() => onRowClick?.(row.original)}
+                        >
+                          {selectable && (
+                            <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                checked={row.getIsSelected()}
+                                onCheckedChange={(v) => row.toggleSelected(!!v)}
+                                aria-label="Seç"
+                              />
+                            </TableCell>
+                          )}
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell key={cell.id}>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      );
+
+                      const menu = rowContextMenu?.(row.original);
+                      if (!menu) return rowEl;
+                      return (
+                        <ContextMenu key={row.id}>
+                          <ContextMenuTrigger asChild>{rowEl}</ContextMenuTrigger>
+                          <ContextMenuContent>{menu}</ContextMenuContent>
+                        </ContextMenu>
+                      );
+                    })}
             </TableBody>
           </Table>
         </DndContext>

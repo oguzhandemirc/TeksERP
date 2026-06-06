@@ -1094,6 +1094,17 @@ export default function FasonSevkScreen() {
             </Surface>
           )}
 
+          {/* Flag kapalıyken: bu partiyle gidecek boyahane notu (iş emrinden)
+              salt-okunur görünür — operatör hangi talimatla gönderdiğini bilsin. */}
+          {workOrderId && !dyehouseNoteMobileEntry && selectedWo?.dyehouseNote ? (
+            <Surface style={styles.card} elevation={1}>
+              <View style={styles.sectionBody}>
+                <Text style={styles.sectionTitle}>Boyahane Notu (iş emrinden)</Text>
+                <Text style={styles.dyehouseNoteText}>{selectedWo.dyehouseNote}</Text>
+              </View>
+            </Surface>
+          ) : null}
+
           <Button
             mode="contained"
             icon="truck-delivery"
@@ -1826,6 +1837,7 @@ const styles = StyleSheet.create({
   sectionToggleInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionSub: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
   sectionBody: { marginTop: 4 },
+  dyehouseNoteText: { fontSize: 14, color: '#0f172a', marginTop: 4, lineHeight: 20 },
   col: { flex: 1 },
   input: { backgroundColor: '#fff' },
   addBtn: { borderRadius: 8 },

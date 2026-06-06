@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { PanelRight } from "lucide-react";
 import { DataTable } from "@/components/data-table/DataTable";
+import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
+import { CopyMenuItem } from "@/components/data-table/row-menu-items";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -213,6 +216,19 @@ export function RollsTable({ tab }: Props) {
         pagination={pagination}
         emptyText="Top bulunamadı."
         onRowClick={setSelected}
+        rowContextMenu={(roll) => (
+          <>
+            <ContextMenuItem onSelect={() => setSelected(roll)}>
+              <PanelRight /> Detayı aç (panel)
+            </ContextMenuItem>
+            {roll.barcode && (
+              <>
+                <ContextMenuSeparator />
+                <CopyMenuItem label="Barkod" value={roll.barcode} />
+              </>
+            )}
+          </>
+        )}
       />
       <RollDetailSheet
         roll={selected}

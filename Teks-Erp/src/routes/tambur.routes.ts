@@ -39,8 +39,24 @@ router.get("/pending-rolls", verifyToken, requireAnyPermission("quality:read", "
  *       - in: query
  *         name: limit
  *         schema: { type: integer, default: 50, maximum: 200 }
+ *       - in: query
+ *         name: mode
+ *         description: "'cursor' → cursor-paginated cevap (mobil infinite scroll)"
+ *         schema: { type: string, enum: [cursor] }
+ *       - in: query
+ *         name: cursor
+ *         description: Bir önceki sayfanın nextCursor değeri
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         description: Barkod / ürün adı-kodu / renk / parti araması
+ *         schema: { type: string }
+ *       - in: query
+ *         name: withTotal
+ *         description: Cursor mode ilk sayfada totalEstimate döndür
+ *         schema: { type: boolean }
  *     responses:
- *       200: { description: Toplar listesi (item.color, variant ile) }
+ *       200: { description: "Toplar listesi — cursor mode'da pagination.nextCursor/hasMore ile" }
  */
 router.get(
   "/recent-output-rolls",

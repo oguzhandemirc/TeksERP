@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { workOrderService } from "./service";
 import { TravelerCardPdfDocument } from "./TravelerCardPdfDocument";
+import { DEFAULT_TRAVELER_CARD_CONFIG } from "@/services/featureFlagService";
 import type { WorkOrder, TravelerCard } from "./types";
 
 interface Props {
@@ -37,10 +38,26 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
     staleTime: 30_000,
   });
 
+  // PDF içeriği için ZENGİNLEŞTİRİLMİŞ WO gerekir (targetItem/targetColor/
+  // orderLinks/targetProperties). Liste satırından açılınca prop'taki WO hafif
+  // gelir → bu alanlar boş basılırdı. getById ile zenginleştir; sheet/sayfa
+  // aynı ['work-order-detail', id] cache'ini doldurduğundan ekstra istek olmaz.
+  const woDetailQuery = useQuery({
+    queryKey: ["work-order-detail", workOrder?.id],
+    queryFn: () => workOrderService.getById(workOrder!.id),
+    enabled: open && Boolean(workOrder?.id),
+    staleTime: 60_000,
+  });
+  const wo = woDetailQuery.data?.data ?? workOrder;
+
   const activeCard = useMemo<TravelerCard | null>(() => {
     const cards = cardQuery.data?.data ?? [];
     return cards.find((c) => c.status === "ACTIVE") ?? cards[0] ?? null;
   }, [cardQuery.data?.data]);
+
+  // Marka/içerik ayarı: kartın kendi snapshot'ından (basım anında dondurulmuş);
+  // eski kartlarda yoksa varsayılana düşer.
+  const cardConfig = activeCard?.snapshot?.config ?? DEFAULT_TRAVELER_CARD_CONFIG;
 
   /* QR Canvas → PNG dataURL. react-pdf Image PNG bekliyor.
      Callback ref ile canvas attach edildiğinde tek frame bekleyip dataURL
@@ -77,9 +94,10 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
     try {
       const blob = await pdf(
         <TravelerCardPdfDocument
-          workOrder={workOrder}
+          workOrder={activeCard.snapshot ?? wo ?? workOrder}
           card={activeCard}
           qrDataUrl={qrDataUrl}
+          config={cardConfig}
         />,
       ).toBlob();
       const url = URL.createObjectURL(blob);
@@ -177,9 +195,10 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
               style={{ border: 0 }}
             >
               <TravelerCardPdfDocument
-                workOrder={workOrder}
+                workOrder={activeCard.snapshot ?? wo ?? workOrder}
                 card={activeCard}
                 qrDataUrl={qrDataUrl}
+                config={cardConfig}
               />
             </PDFViewer>
           )}
@@ -205,9 +224,10 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
               <PDFDownloadLink
                 document={
                   <TravelerCardPdfDocument
-                    workOrder={workOrder}
+                    workOrder={activeCard.snapshot ?? wo ?? workOrder}
                     card={activeCard}
                     qrDataUrl={qrDataUrl}
+                    config={cardConfig}
                   />
                 }
                 fileName={fileName}

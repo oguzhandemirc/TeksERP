@@ -18,9 +18,11 @@ import dayjs from 'dayjs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ScreenChrome from '../../../components/ScreenChrome';
+import RefreshButton from '../../../components/RefreshButton';
 import { packingService, type ShipmentListItem } from '../../../services/packing.service';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import type { MainStackParamList } from '../../../navigation/types';
 
 // =============================================================================
@@ -63,10 +65,10 @@ export default function SevkiyatScreen() {
   const dispatched = dispatchedQuery.data?.data ?? [];
 
   const refresh = () => void qc.invalidateQueries({ queryKey: ['shipments'] });
-  const handleRefresh = async () => {
-    await qc.invalidateQueries({ queryKey: ['shipments'] });
-    Toast.show({ type: 'success', text1: 'Liste güncellendi' });
-  };
+  const headerRefresh = useManualRefresh(
+    [() => readyQuery.refetch(), () => dispatchedQuery.refetch()],
+    'Liste güncellendi',
+  );
 
   const dispatchMut = useMutation({
     mutationFn: (id: string) =>
@@ -88,19 +90,19 @@ export default function SevkiyatScreen() {
   });
 
   const loading = readyQuery.isLoading;
-  const refreshing = readyQuery.isFetching || dispatchedQuery.isFetching;
 
   return (
     <ScreenChrome
       title="Sevk Çıkışı"
       headerExtras={
         <>
-          <Appbar.Action
-            icon={refreshing ? () => <ActivityIndicator size={18} color="#fff" /> : 'refresh'}
-            color="#fff"
-            disabled={refreshing}
-            onPress={handleRefresh}
-            accessibilityLabel="Yenile"
+          <RefreshButton
+            headerStyle
+            onPress={headerRefresh.onRefresh}
+            refreshing={headerRefresh.refreshing}
+            isError={headerRefresh.isError}
+            errorMessage={headerRefresh.errorMessage}
+            successMessage={headerRefresh.successMessage}
           />
           <Appbar.Action
             icon="history"

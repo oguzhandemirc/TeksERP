@@ -49,6 +49,14 @@ export const workOrderFormSchema = z.object({
     ])
     .optional()
     .nullable(),
+  targetWeight: z
+    .union([
+      z.coerce.number().positive("Hedef ağırlık 0'dan büyük olmalı"),
+      z.literal("").transform(() => null),
+      z.null(),
+    ])
+    .optional()
+    .nullable(),
   plannedStartDate: z.string().optional().or(z.literal("")),
   plannedEndDate: z.string().optional().or(z.literal("")),
   foldType: z
@@ -75,6 +83,7 @@ export const workOrderFormDefaults: WorkOrderFormValues = {
   orderLineIds: [],
   width: null,
   targetQuantity: null,
+  targetWeight: null,
   plannedStartDate: "",
   plannedEndDate: "",
   foldType: "",

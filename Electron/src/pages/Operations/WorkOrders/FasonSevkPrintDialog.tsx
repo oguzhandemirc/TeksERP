@@ -60,6 +60,7 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
               dispatchId={dispatchId!}
               value={snap.dyehouseNote}
               woValue={snap.woDyehouseNote}
+              locked={snap.dyehouseNoteLocked}
             />
           )}
           {snap && <PrintableSheet snap={snap} />}
@@ -93,10 +94,12 @@ function DyehouseNoteEditor({
   dispatchId,
   value,
   woValue,
+  locked,
 }: {
   dispatchId: string;
   value: string | null;
   woValue: string | null;
+  locked: boolean;
 }) {
   const qc = useQueryClient();
   const [draft, setDraft] = useState(value ?? "");
@@ -132,7 +135,7 @@ function DyehouseNoteEditor({
           size="sm"
           variant="secondary"
           className="h-7 gap-1"
-          disabled={!dirty || mutation.isPending}
+          disabled={locked || !dirty || mutation.isPending}
           onClick={() => mutation.mutate(trimmed || null)}
         >
           <Save className="h-3.5 w-3.5" />
@@ -145,10 +148,15 @@ function DyehouseNoteEditor({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         maxLength={1000}
+        disabled={locked}
         placeholder="Boyahaneye talimat (örn. yıkama yapma, matlaştır)…"
-        className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
       />
-      {!trimmed && woValue?.trim() ? (
+      {locked ? (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Sevk kabul/iptal edilmiş — boyahane notu kilitli, değiştirilemez.
+        </p>
+      ) : !trimmed && woValue?.trim() ? (
         <p className="mt-1 text-[11px] text-muted-foreground">
           Boş bırakılırsa iş emrindeki boyahane notu basılır:{" "}
           <span className="font-medium text-orange-700">«{woValue.trim()}»</span>

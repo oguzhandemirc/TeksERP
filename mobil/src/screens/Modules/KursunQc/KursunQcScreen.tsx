@@ -22,11 +22,13 @@ import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import StationActionButton from '../../../components/StationActionButton';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import RefreshButton from '../../../components/RefreshButton';
+import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
@@ -42,14 +44,7 @@ import { rollService } from '../../../services/roll.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList, usePressScale } from '../../../components/motion';
-import Reanimated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  cancelAnimation,
-  Easing,
-} from 'react-native-reanimated';
+import Reanimated from 'react-native-reanimated';
 import { formatRelativeWait } from '../../../utils/relativeTime';
 import type {
   KursunStepSummary,
@@ -147,28 +142,6 @@ export default function KursunQcScreen() {
   const [scannerOpen, setScannerOpen] = useState(false);
   /** Refactor 4 — "yanlış istasyon" / kart bulunamadı backend mesajı banner. */
   const [cardError, setCardError] = useState<string | null>(null);
-  /** Manuel "Yenile" butonu fetch sürerken spinner döndürmek için. */
-  const [refreshingActive, setRefreshingActive] = useState(false);
-  /** Son manuel yenileme hata mesajı — RefreshButton'a isError olarak verilir. */
-  const [refreshError, setRefreshError] = useState<string | null>(null);
-
-  const refreshSpin = useSharedValue(0);
-  const refreshSpinStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${refreshSpin.value}deg` }],
-  }));
-  useEffect(() => {
-    if (refreshingActive) {
-      refreshSpin.value = 0;
-      refreshSpin.value = withRepeat(
-        withTiming(360, { duration: 600, easing: Easing.linear }),
-        -1,
-        false,
-      );
-    } else {
-      cancelAnimation(refreshSpin);
-      refreshSpin.value = withTiming(0, { duration: 150 });
-    }
-  }, [refreshingActive, refreshSpin]);
 
   // Açık kart listesi — modal açılmadan da (acil rozeti için) tazelenir.
   // OPEN_CARDS_REFETCH_MS polling: planlama acil işaretlediğinde tablet en geç
@@ -183,6 +156,14 @@ export default function KursunQcScreen() {
   const urgentCount = useMemo(
     () => (openCardsQuery.data?.data ?? []).filter((c) => c.isUrgent).length,
     [openCardsQuery.data],
+  );
+
+  // Açık Kartlar modalındaki manuel "Yenile" — standart RefreshButton davranışı
+  // (dönen ikon + haptic + toast). Auto-poll (openCardsQuery.isFetching) butonu
+  // döndürmez; spinner/toast yalnızca operatör bizzat bastığında çıkar.
+  const openCardsRefresh = useManualRefresh(
+    () => openCardsQuery.refetch(),
+    'Açık kartlar güncellendi',
   );
 
   // Yeni acil iş geldiğinde operatörü uyar (toast + haptic).
@@ -250,31 +231,18 @@ export default function KursunQcScreen() {
     );
   };
 
-  // Manuel "Yenile" basışı — spinner için ayrı sarmalayıcı. Auto-refetch
-  // (mutation onSuccess) yolunu kasıtlı sarmıyoruz: o aksiyonlar kendi
-  // haptic/toast'unu zaten veriyor, butonun her işlemde dönmesi gürültü olur.
-  // MIN_SPIN_MS: RefreshButton bir turu 800ms'de tamamlar; yanıt daha erken
-  // gelirse animasyon yarıda kesiliyordu. En az bir tam tur garantisi.
-  const MIN_SPIN_MS = 800;
-  const handleRefreshActive = async () => {
-    if (refreshingActive) return;
-    const spinStart = Date.now();
-    setRefreshingActive(true);
-    setRefreshError(null);
-    try {
-      await Promise.all([
-        activeJob ? refetchActiveJob() : Promise.resolve(),
-        openCardsQuery.refetch(),
-      ]);
-      Toast.show({ type: 'success', text1: 'Yenilendi' });
-    } catch (err) {
-      setRefreshError((err as Error).message);
-    } finally {
-      const remaining = MIN_SPIN_MS - (Date.now() - spinStart);
-      if (remaining > 0) await new Promise<void>((r) => setTimeout(r, remaining));
-      setRefreshingActive(false);
-    }
-  };
+  // Manuel "Yenile" — aktif kartı + açık kart listesini birlikte tazeler.
+  // Standart useManualRefresh: offline guard + zaman aşımı + tek tip animasyon/
+  // haptic/toast. refetchActiveJob axios fn'i (offline'da throw eder),
+  // openCards react-query refetch'i — hook ikisinin de hatasını doğru ele alır,
+  // böylece artık "ağ kopukken yanlış 'Yenilendi'" olmaz.
+  const activeRefresh = useManualRefresh(
+    [
+      () => (activeJob ? refetchActiveJob() : Promise.resolve()),
+      () => openCardsQuery.refetch(),
+    ],
+    'Yenilendi',
+  );
 
   // ── Kart çözümleme ─────────────────────────────────────────────────────────
   // Barkod parametreli ortak çözüm — input + kamera modalı bunu paylaşır.
@@ -674,6 +642,23 @@ export default function KursunQcScreen() {
       });
       return;
     }
+    // Mükerrer engeli: aynı metre + aynı hata tipi zaten kayıtlıysa engelle.
+    // Aynı metrede FARKLI tip serbest. Backend de 409 ile bunu garanti eder;
+    // bu kontrol anında geri bildirim için. (Decimal(12,3) → 0.0005 tolerans.)
+    const duplicate = selectedRoll.defects.some(
+      (d) =>
+        d.defectTypeId === defectTypeId &&
+        Math.abs(d.startMeter - start) < 0.0005,
+    );
+    if (duplicate) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Toast.show({
+        type: 'error',
+        text1: 'Bu hata zaten eklenmiş',
+        text2: `${start}. metrede bu hata tipi zaten kayıtlı`,
+      });
+      return;
+    }
     reportErrorMutation.mutate({
       rollId: selectedRoll.rollId,
       stepId: activeJob.stepSummary.workOrderStepId,
@@ -756,9 +741,10 @@ export default function KursunQcScreen() {
       {/* Üst kontrol/sekme şeridi — kamera modunda Okut+Liste solda sabit,
           sekmeler kalan alanda yatay kaydırılır; manuel modda yalnız sekmeler. */}
       {((compact && !manualBarcodeEntry) || openJobs.length > 0) && (
-        <View style={styles.topRow}>
+        <View style={styles.topArea}>
+          {/* Kamera modu aksiyonları (telefon): kendi satırında. */}
           {compact && !manualBarcodeEntry && (
-            <>
+            <View style={styles.scanRow}>
               <Button
                 mode="contained"
                 icon="camera"
@@ -784,36 +770,27 @@ export default function KursunQcScreen() {
                 />
                 <UrgentBadge count={urgentCount} />
               </View>
-              <IconButton
-                icon={({ size, color }) => (
-                  <Reanimated.View style={refreshSpinStyle}>
-                    <Icon source="refresh" size={size} color={color} />
-                  </Reanimated.View>
-                )}
-                mode="contained-tonal"
-                containerColor="#f1f5f9"
-                iconColor="#475569"
-                size={22}
-                onPress={handleRefreshActive}
-                disabled={refreshingActive}
-                accessibilityLabel="Yenile"
-                style={styles.listCompactBtn}
-              />
-            </>
+              {/* Yenile burada DEĞİL — açık iş sekmeleri şeridinde (tabRow) tek
+                  bir RefreshButton var. İkisi birden gösterilince drawer'da iki
+                  yenile tuşu çıkıyordu. */}
+            </View>
           )}
 
+          {/* Açık iş emri sekmeleri — telefonda KENDİ tam-genişlik satırı (tek
+              satır çip). Tablette de tek satır; orada zaten ayrı şerit. */}
           {openJobs.length > 0 && (
-            <>
+            <View style={styles.tabRow}>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.tabScroll}
+                contentContainerStyle={[styles.tabScroll, compact && styles.tabScrollCompact]}
                 style={styles.tabScrollArea}
               >
                 {openJobs.map((job) => (
                   <JobTab
                     key={job.cardId}
                     job={job}
+                    compact={compact}
                     active={job.cardId === activeCardId}
                     onPress={() => setActiveCardId(job.cardId)}
                     onClose={() => closeJob(job.cardId)}
@@ -828,7 +805,7 @@ export default function KursunQcScreen() {
                   errorMessage={refreshError ?? undefined}
                 />
               </View>
-            </>
+            </View>
           )}
         </View>
       )}
@@ -1143,23 +1120,20 @@ export default function KursunQcScreen() {
                   </View>
                 ) : !selectedRoll.barcode ? (
                   // Açık kumaş: direkt Tambur'a iletir (KK2'de ölçüm yok).
+                  // Tambur "Kes" butonuyla aynı görsel dil (tam genişlik +
+                  // basış animasyonu + haptic) — StationActionButton.
                   // OFFLINE-AWARE: loading/disabled binding'i YOK — mutation
                   // hook'un global isPending'i paused mutation'larda true kalır,
                   // bu da sıradaki rulaya basmayı engeller. Optimistic update
                   // rulayı zaten listeden düşürdüğü için double-press riski yok.
-                  <Button
-                    mode="contained"
+                  <StationActionButton
                     icon="package-check"
+                    label="Kumaşı Bitir (Tambur'a)"
+                    compact={compact}
                     onPress={() =>
                       kursunFinishMutation.mutate(selectedRoll.rollId)
                     }
-                    buttonColor="#7c3aed"
-                    style={styles.footerBtn}
-                    contentStyle={styles.footerBtnContent}
-                    labelStyle={styles.footerBtnLabel}
-                  >
-                    Kumaşı Bitir (Tambur'a)
-                  </Button>
+                  />
                 ) : selectedRoll.qc2Completed ? (
                   <Button
                     mode="outlined"
@@ -1213,10 +1187,7 @@ export default function KursunQcScreen() {
         refreshIntervalMs={OPEN_CARDS_REFETCH_MS}
         dataUpdatedAt={openCardsQuery.dataUpdatedAt}
         isFetching={openCardsQuery.isFetching}
-        onRefresh={() => {
-          Haptics.selectionAsync();
-          void openCardsQuery.refetch();
-        }}
+        refresh={openCardsRefresh}
       />
 
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
@@ -1263,7 +1234,7 @@ function CameraScanModal({
   refreshIntervalMs,
   dataUpdatedAt,
   isFetching,
-  onRefresh,
+  refresh,
 }: {
   visible: boolean;
   loading: boolean;
@@ -1274,10 +1245,10 @@ function CameraScanModal({
   refreshIntervalMs: number;
   /** TanStack Query `dataUpdatedAt` — son başarılı fetch epoch ms. */
   dataUpdatedAt: number;
-  /** Manuel "Yenile" ile tetiklenen veya polling fetch sürüyor mu. */
+  /** Manuel "Yenile" ile tetiklenen veya polling fetch sürüyor mu — RefreshMeta sayacı için. */
   isFetching: boolean;
-  /** Manuel yenile butonu — `query.refetch()` çağırır. */
-  onRefresh: () => void;
+  /** Standart manuel yenileme kontrolü (RefreshButton'a bağlanır). */
+  refresh: ManualRefresh;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
 
@@ -1310,13 +1281,13 @@ function CameraScanModal({
             dataUpdatedAt={dataUpdatedAt}
             isFetching={isFetching}
           />
-          <IconButton
-            icon="refresh"
+          <RefreshButton
             size={20}
-            onPress={onRefresh}
-            disabled={isFetching}
-            loading={isFetching}
-            style={{ margin: 0 }}
+            onPress={refresh.onRefresh}
+            refreshing={refresh.refreshing}
+            isError={refresh.isError}
+            errorMessage={refresh.errorMessage}
+            successMessage={refresh.successMessage}
           />
           <IconButton icon="close" size={22} onPress={onDismiss} style={{ margin: 0 }} />
         </View>
@@ -1502,32 +1473,49 @@ function JobTab({
   active,
   onPress,
   onClose,
+  compact = false,
 }: {
   job: OpenJob;
   active: boolean;
   onPress: () => void;
   onClose: () => void;
+  /** Telefon: tek satır çip (parti no · adet yan yana), daha dar. */
+  compact?: boolean;
 }) {
   const total = job.stepSummary.rolls.length;
   const done = job.stepSummary.rolls.filter((r) => r.qc2Completed).length;
   return (
     <Surface
-      style={[helperStyles.tab, active && helperStyles.tabActive]}
+      style={[helperStyles.tab, compact && helperStyles.tabCompact, active && helperStyles.tabActive]}
       elevation={active ? 2 : 1}
     >
       <TouchableRipple onPress={onPress} borderless style={helperStyles.tabPress}>
         <View style={helperStyles.tabInner}>
           <View style={helperStyles.tabTextWrap}>
-            <Text
-              style={[helperStyles.tabLabel, active && helperStyles.tabLabelActive]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {job.stepSummary.batchNumber}
-            </Text>
-            <Text style={helperStyles.tabSub} numberOfLines={1}>
-              {done}/{total} top
-            </Text>
+            {compact ? (
+              // Tek satır: parti no + adet inline → şerit tek satır kalır.
+              <Text
+                style={[helperStyles.tabLabel, active && helperStyles.tabLabelActive]}
+                numberOfLines={1}
+                ellipsizeMode="middle"
+              >
+                {job.stepSummary.batchNumber}
+                <Text style={helperStyles.tabCountInline}>{`  ·  ${done}/${total}`}</Text>
+              </Text>
+            ) : (
+              <>
+                <Text
+                  style={[helperStyles.tabLabel, active && helperStyles.tabLabelActive]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {job.stepSummary.batchNumber}
+                </Text>
+                <Text style={helperStyles.tabSub} numberOfLines={1}>
+                  {done}/{total} top
+                </Text>
+              </>
+            )}
           </View>
           <IconButton
             icon="close"
@@ -1778,15 +1766,24 @@ const styles = StyleSheet.create({
   cameraBtn: { margin: 0 },
 
   // Üst kontrol/sekme şeridi — Okut + Liste + yatay kaydırılan sekmeler tek satır.
-  topRow: {
+  // Üst alan: kamera-aksiyon satırı + açık iş sekmeleri satırı (telefonda 2 satır).
+  topArea: {
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    paddingVertical: 6,
+    gap: 6,
+  },
+  scanRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 8,
-    paddingVertical: 6,
-    backgroundColor: '#f8fafc',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
   },
   scanCompactBtn: { borderRadius: 8 },
   scanCompactContent: { height: 44, paddingHorizontal: 2 },
@@ -1803,6 +1800,8 @@ const styles = StyleSheet.create({
     gap: 6,
     alignItems: 'center',
   },
+  // Telefon: kendi satırında sekmeler soldan başlar (refresh sağda).
+  tabScrollCompact: { justifyContent: 'flex-start' },
   tabRefreshWrap: {
     paddingHorizontal: 6,
     justifyContent: 'center',
@@ -1875,6 +1874,8 @@ const helperStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
   },
+  // Telefon: tek satır çip → daha dar, içerik tek satır.
+  tabCompact: { width: 132 },
   tabActive: { backgroundColor: '#dbeafe', borderColor: '#1e40af' },
   tabPress: { borderRadius: 8, width: '100%' },
   tabInner: {
@@ -1893,6 +1894,7 @@ const helperStyles = StyleSheet.create({
     color: '#0f172a',
   },
   tabLabelActive: { color: '#1e40af' },
+  tabCountInline: { fontFamily: 'monospace', fontSize: 11, fontWeight: '700', color: '#64748b' },
   tabSub: { fontSize: 10, color: '#64748b', marginTop: 2 },
   tabCloseBtn: { margin: 0, width: 28, height: 28 },
 

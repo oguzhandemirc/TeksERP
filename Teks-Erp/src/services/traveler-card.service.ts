@@ -16,6 +16,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { buildBarcode, buildCardNumber, verifyBarcode } from "../utils/barcode";
+import { readTravelerCardConfig } from "./system-setting.service";
 import { parseQueryParams, buildPagination, resolveSortBy } from "../utils/query-parser";
 
 // Refakat kartı listesinde sıralanabilir kolonlar. createdAt BİLEREK yok →
@@ -103,6 +104,7 @@ export class TravelerCardService {
     const seq = await this.nextMonthlySequence(now);
     const cardNumber = buildCardNumber(now, seq);
     const barcode = buildBarcode(now, seq);
+    const snapshot = await this.buildSnapshot(tx, workOrderId);
 
     const card = await tx.travelerCard.create({
       data: {
@@ -112,6 +114,7 @@ export class TravelerCardService {
         version: 1,
         status: TravelerCardStatus.ACTIVE,
         printedById: userId ?? null,
+        snapshot,
       },
     });
 
@@ -565,6 +568,114 @@ export class TravelerCardService {
   }
 
   /**
+   * Basım anında WO içeriğini DONDURUR (refakat kartı snapshot'ı). PDF'in
+   * okuduğu WorkOrder alt-kümesiyle aynı şekil → reprint ve eski kartlar bu
+   * snapshot'tan birebir basılır (WO sonradan değişse de kart sabit kalır).
+   */
+  private async buildSnapshot(
+    client: Prisma.TransactionClient,
+    workOrderId: string,
+  ): Promise<Prisma.InputJsonValue> {
+    const wo = await client.workOrder.findUnique({
+      where: { id: workOrderId },
+      select: {
+        batchNumber: true,
+        type: true,
+        width: true,
+        targetQuantity: true,
+        targetWeight: true,
+        foldType: true,
+        plannedStartDate: true,
+        plannedEndDate: true,
+        dyehouseNote: true,
+        routeTemplate: { select: { name: true } },
+        targetItem: { select: { code: true, name: true } },
+        targetColor: { select: { name: true, hex: true } },
+        targetProperties: {
+          select: { propertyId: true, property: { select: { name: true } } },
+        },
+        steps: {
+          orderBy: { stepSequence: "asc" },
+          select: {
+            id: true,
+            stepSequence: true,
+            isUrgent: true,
+            station: { select: { name: true, type: true } },
+            plannedSubcontractor: { select: { id: true, name: true } },
+          },
+        },
+        orderLinks: {
+          select: {
+            orderLineId: true,
+            orderLine: {
+              select: {
+                quantity: true,
+                order: {
+                  select: { orderNumber: true, customer: { select: { name: true } } },
+                },
+                item: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!wo) return {};
+    const config = await readTravelerCardConfig(client);
+    const num = (d: Prisma.Decimal | null) => (d == null ? null : Number(d));
+    return {
+      // Marka/içerik ayarı da donar → reprint düzeni de sabit kalır.
+      config,
+      batchNumber: wo.batchNumber,
+      type: wo.type,
+      width: num(wo.width),
+      targetQuantity: num(wo.targetQuantity),
+      targetWeight: num(wo.targetWeight),
+      foldType: wo.foldType,
+      plannedStartDate: wo.plannedStartDate?.toISOString() ?? null,
+      plannedEndDate: wo.plannedEndDate?.toISOString() ?? null,
+      dyehouseNote: wo.dyehouseNote,
+      routeTemplate: wo.routeTemplate ? { name: wo.routeTemplate.name } : null,
+      targetItem: wo.targetItem
+        ? { code: wo.targetItem.code, name: wo.targetItem.name }
+        : null,
+      targetColor: wo.targetColor
+        ? { name: wo.targetColor.name, hex: wo.targetColor.hex }
+        : null,
+      targetProperties: wo.targetProperties.map((p) => ({
+        propertyId: p.propertyId,
+        property: { name: p.property.name },
+      })),
+      steps: wo.steps.map((st) => ({
+        id: st.id,
+        stepSequence: st.stepSequence,
+        isUrgent: st.isUrgent,
+        station: st.station ? { name: st.station.name, type: st.station.type } : null,
+        plannedSubcontractor: st.plannedSubcontractor
+          ? { id: st.plannedSubcontractor.id, name: st.plannedSubcontractor.name }
+          : null,
+      })),
+      orderLinks: wo.orderLinks.map((l) => ({
+        orderLineId: l.orderLineId,
+        orderLine: l.orderLine
+          ? {
+              quantity: num(l.orderLine.quantity),
+              order: l.orderLine.order
+                ? {
+                    orderNumber: l.orderLine.order.orderNumber,
+                    customer: l.orderLine.order.customer
+                      ? { name: l.orderLine.order.customer.name }
+                      : null,
+                  }
+                : null,
+              item: l.orderLine.item ? { name: l.orderLine.item.name } : null,
+            }
+          : null,
+      })),
+    } as unknown as Prisma.InputJsonValue;
+  }
+
+  /**
    * Kart oluşturma — print ve reprint tarafından kullanılır.
    */
   private async createCardInternal(
@@ -573,6 +684,8 @@ export class TravelerCardService {
     userId: string | undefined,
     event: "PRINT" | "REPRINT"
   ): Promise<ApiResponse<TravelerCard>> {
+    // Snapshot'ı retry dışında bir kez hesapla (re-create'te yeniden sorgulanmasın).
+    const snapshot = await this.buildSnapshot(prisma, workOrderId);
     // Barkod sequence çakışırsa (P2002) yeniden hesaplanır ve create tekrarlanır.
     const card = await withBarcodeRetry(async () => {
       const now = new Date();
@@ -588,6 +701,7 @@ export class TravelerCardService {
           version,
           status: TravelerCardStatus.ACTIVE,
           printedById: userId ?? null,
+          snapshot,
         },
       });
     });

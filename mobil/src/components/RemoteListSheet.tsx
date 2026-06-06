@@ -15,6 +15,7 @@ import {
 import { FlashList } from '@shopify/flash-list';
 
 import RefreshButton from './RefreshButton';
+import { useManualRefresh } from '../hooks/useManualRefresh';
 import { AnimatedEntrance, SkeletonList } from './motion';
 
 // =============================================================================
@@ -56,6 +57,10 @@ interface Props<T> {
   isError?: boolean;
   errorMessage?: string;
   onRefresh: () => void;
+  /** Manuel yenileme başarı toast'ı başlığı. Verilirse RefreshButton başarıda
+   *  toast gösterir; verilmezse başarıda sessiz (sadece haptic). Hata toast'ı
+   *  her durumda çalışır. */
+  successMessage?: string;
 
   // Liste
   items: T[];
@@ -114,6 +119,7 @@ export default function RemoteListSheet<T>({
   isError = false,
   errorMessage,
   onRefresh,
+  successMessage,
   items,
   keyExtractor,
   renderItem,
@@ -133,6 +139,11 @@ export default function RemoteListSheet<T>({
   overlay,
 }: Props<T>) {
   const { width: winW, height: winH } = useWindowDimensions();
+
+  // Manuel yenileme: buton SADECE kullanıcı bastığında döner/feedback verir.
+  // (Modal her açılışta useRefetchOnOpen ile oto-refetch oluyor; ham `fetching`'e
+  //  bağlasaydık her açılışta sahte "güncellendi" toast'ı çıkardı.)
+  const manualRefresh = useManualRefresh(onRefresh, successMessage);
 
   return (
     <AppModal visible={visible} onDismiss={onDismiss}>
@@ -155,10 +166,11 @@ export default function RemoteListSheet<T>({
           <View style={{ flex: 1 }} />
           {headerExtras}
           <RefreshButton
-            onPress={onRefresh}
-            refreshing={fetching}
-            isError={isError}
-            errorMessage={errorMessage}
+            onPress={manualRefresh.onRefresh}
+            refreshing={manualRefresh.refreshing}
+            isError={manualRefresh.isError}
+            errorMessage={manualRefresh.errorMessage}
+            successMessage={manualRefresh.successMessage}
           />
           <IconButton
             icon="close"

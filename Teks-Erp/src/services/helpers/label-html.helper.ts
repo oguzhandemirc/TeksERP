@@ -67,6 +67,13 @@ export function buildRollLabelHtml({
   const lbl = (key: string, fallback: string) => fieldLabel(fields, key, fallback);
   const sty = (key: string) => fieldStyle(fields, key);
 
+  // Kartela damgası OPT-OUT: bu alan (kartelaMark) catalog'a sonradan eklendi,
+  // dolayısıyla daha eski kayıtlı template'lerde HİÇ bulunmaz. Generic vis()
+  // "alan yok = kapalı" der; burada ise "alan yok = açık" istiyoruz ki eski
+  // template'ler veri migrasyonu gerektirmeden damgayı bassın. Sadece admin
+  // alanı bilerek isVisible=false yaptıysa gizlenir.
+  const visKartela = isVisibleDefaultOn(fields, "kartelaMark");
+
   return `<!doctype html>
 <html lang="tr">
 <head>
@@ -97,6 +104,17 @@ export function buildRollLabelHtml({
   }
   .top .brand { font-weight: 700; letter-spacing: 1px; }
   .top .batch { font-family: ui-monospace, monospace; font-weight: 700; color: #0f172a; }
+  .kartela-stamp {
+    background: #7c3aed;
+    color: #ffffff;
+    font-size: 11pt;
+    font-weight: 900;
+    letter-spacing: 2px;
+    text-align: center;
+    text-transform: uppercase;
+    padding: 1.5mm 0;
+    border-radius: 2mm;
+  }
   .qty {
     font-size: 32pt;
     font-weight: 900;
@@ -184,6 +202,12 @@ export function buildRollLabelHtml({
       ${safeBatch && vis("batchNumber") ? `<span class="batch">${safeBatch}</span>` : ""}
     </div>
 
+    ${
+      payload.markedForKartela && visKartela
+        ? `<div class="kartela-stamp" style="${sty("kartelaMark")}">${lbl("kartelaMark", "Kartelalık")}</div>`
+        : ""
+    }
+
     ${vis("itemName") ? `<div class="item-name" style="${sty("itemName")}">${itemName}</div>` : ""}
 
     ${
@@ -258,6 +282,17 @@ function isVisible(fields: TemplateField[] | null, key: string): boolean {
   if (!fields) return true;
   const f = fields.find((x) => x.key === key);
   return f ? f.isVisible : false;
+}
+
+/**
+ * isVisible'ın opt-out varyantı: alan template'te HİÇ yoksa AÇIK kabul eder.
+ * Catalog'a sonradan eklenen alanlar (kartelaMark gibi) için — eski kayıtlı
+ * template'lerde bulunmadıklarından generic isVisible onları gizlerdi.
+ */
+function isVisibleDefaultOn(fields: TemplateField[] | null, key: string): boolean {
+  if (!fields) return true;
+  const f = fields.find((x) => x.key === key);
+  return f ? f.isVisible : true;
 }
 
 function fieldLabel(fields: TemplateField[] | null, key: string, fallback: string): string {

@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Ban, PanelRight, Pencil, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
+import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
+import { CopyMenuItem } from "@/components/data-table/row-menu-items";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -15,6 +17,7 @@ import { buildOrderColumns } from "./columns";
 import { orderService } from "./service";
 import { OrderDetailSheet } from "./OrderDetailSheet";
 import { OrderFormDialog } from "./OrderFormDialog";
+import { OrderCancelDialog } from "./OrderCancelDialog";
 import { BulkCreateWorkOrderAction } from "./BulkCreateWorkOrderAction";
 import { customerService } from "@/pages/Customers/service";
 import { useTabsStore } from "@/store/tabs";
@@ -166,6 +169,7 @@ export function OrdersPage() {
   // sekmeye dönünce panel yeniden açılır.
   const isTabActive = useIsTabActive();
   const [selected, setSelected] = useState<Order | null>(null);
+  const [cancelOrder, setCancelOrder] = useState<Order | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Order | null>(null);
 
@@ -244,6 +248,28 @@ export function OrdersPage() {
         pagination={pagination}
         emptyText="Sipariş bulunamadı."
         onRowClick={setSelected}
+        rowContextMenu={(order) => (
+          <>
+            <ContextMenuItem onSelect={() => setSelected(order)}>
+              <PanelRight /> Detayı aç (panel)
+            </ContextMenuItem>
+            <PermissionGate permission="order:write">
+              <ContextMenuItem onSelect={() => handleEdit(order)}>
+                <Pencil /> Düzenle
+              </ContextMenuItem>
+              {order.status !== "COMPLETED" && order.status !== "CANCELLED" && (
+                <ContextMenuItem
+                  onSelect={() => setCancelOrder(order)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Ban /> İptal et
+                </ContextMenuItem>
+              )}
+            </PermissionGate>
+            <ContextMenuSeparator />
+            <CopyMenuItem label="Sipariş no" value={order.orderNumber} />
+          </>
+        )}
         bulkActions={(rows) => (
           <BulkCreateWorkOrderAction
             orders={rows}
@@ -266,6 +292,14 @@ export function OrdersPage() {
             state: { seedPickedLines: lines },
           });
         }}
+      />
+
+      <OrderCancelDialog
+        open={Boolean(cancelOrder)}
+        onOpenChange={(open) => !open && setCancelOrder(null)}
+        orderId={cancelOrder?.id ?? null}
+        orderNumber={cancelOrder?.orderNumber}
+        onCancelled={() => setCancelOrder(null)}
       />
 
       <OrderFormDialog

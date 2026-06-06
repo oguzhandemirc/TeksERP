@@ -10,6 +10,8 @@ import Toast from 'react-native-toast-message';
 import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import RefreshButton from '../../../components/RefreshButton';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import AppModal from '../../../components/AppModal';
 import { SkeletonList } from '../../../components/motion';
@@ -47,6 +49,8 @@ export default function IadeGecmisiScreen() {
   });
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.data) ?? [], [query.data]);
 
+  const refresh = useManualRefresh(() => query.refetch(), 'Geçmiş güncellendi');
+
   const cancelMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) => returnService.cancel(id, reason),
     onSuccess: () => {
@@ -64,7 +68,21 @@ export default function IadeGecmisiScreen() {
   });
 
   return (
-    <ScreenChrome title="İade Geçmişi" onBack={() => nav.goBack()}>
+    <ScreenChrome
+      title="İade Geçmişi"
+      onBack={() => nav.goBack()}
+      headerExtras={
+        <RefreshButton
+          headerStyle
+          label="Yenile"
+          onPress={refresh.onRefresh}
+          refreshing={refresh.refreshing}
+          isError={refresh.isError}
+          errorMessage={refresh.errorMessage}
+          successMessage={refresh.successMessage}
+        />
+      }
+    >
       <View style={styles.filterRow}>
         {STATUS_TABS.map((t) => {
           const active = status === t.key;

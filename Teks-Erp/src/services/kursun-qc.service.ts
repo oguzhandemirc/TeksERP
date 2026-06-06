@@ -390,6 +390,23 @@ export class KursunQcService {
 
     await this.assertRollInStep(data.rollId, data.stepId, StationKind.PROCESS_QC);
 
+    // Mükerrer engeli: aynı top + aynı metre + aynı hata tipi tekrar girilemez.
+    // Aynı metrede FARKLI tip serbest (50. metrede hem delik hem leke olabilir).
+    const existing = await prisma.rollError.findFirst({
+      where: {
+        rollId: data.rollId,
+        startMeter: data.startMeter,
+        defectTypeId: defectType.id,
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw AppError.conflict(
+        `Bu metrede (${data.startMeter}) "${defectType.name}" hatası zaten kayıtlı`,
+        { code: "DUPLICATE_ROLL_ERROR", existingErrorId: existing.id }
+      );
+    }
+
     const err = await prisma.rollError.create({
       data: {
         rollId: data.rollId,

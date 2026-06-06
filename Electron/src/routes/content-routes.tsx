@@ -63,6 +63,7 @@ import { SystemLogSummaryPage } from "@/pages/Reports/Audit/SystemLogSummaryPage
 import { UserActivityPage } from "@/pages/Reports/Audit/UserActivityPage";
 import { OrdersPage } from "@/pages/Operations/Orders/OrdersPage";
 import { WorkOrdersPage } from "@/pages/Operations/WorkOrders/WorkOrdersPage";
+import { WorkOrderDetailPage } from "@/pages/Operations/WorkOrders/WorkOrderDetailPage";
 import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
 import { KursunQueuePage } from "@/pages/Operations/KursunQueue/KursunQueuePage";
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
@@ -266,6 +267,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="workorder:read">
         <WorkOrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/work-orders/:id",
+    element: (
+      <ProtectedRoute requirePermission="workorder:read">
+        <WorkOrderDetailPage />
       </ProtectedRoute>
     ),
   },

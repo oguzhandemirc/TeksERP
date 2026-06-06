@@ -689,6 +689,9 @@ export class TamburService {
             qualityGradeId: qualityGradeIdByCode.get(seg.qualityGrade) ?? null,
             producedInStepId: roll.producedInStepId,
             parentRollId: roll.id,
+            // Phase 4: dal kimliğini parent'tan kalıt → bölünen toplar depoya
+            // gitse bile hangi fason partisinden geldiği lane'de izlenir.
+            batchSplitId: roll.batchSplitId,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             // Sadece depoya giden (WAREHOUSE) çıktılar kartelalık işaretlenir;
             // fire/scrap işaretlenmez (zaten sevke uygun değil).
@@ -929,24 +932,86 @@ export class TamburService {
   async listRecentOutputRolls(params?: {
     workOrderId?: string;
     limit?: number;
-  }): Promise<ApiResponse<Roll[]>> {
+    /** Cursor mode aktivasyonu — verilirse pagination cursor response döner. */
+    cursor?: string;
+    /** `cursor=...` yokken bile cursor formatı istemek için (ilk sayfa). */
+    mode?: string;
+    /** Barkod / ürün adı-kodu / renk / parti araması. */
+    search?: string;
+    /** Cursor mode ilk fetch'te totalEstimate doldur. */
+    withTotal?: boolean;
+  }): Promise<ApiResponse<Roll[]> | CursorPaginatedResponse<Roll>> {
+    const where: Prisma.RollWhereInput = {
+      entrySource: RollEntrySource.TAMBUR_SPLIT,
+      ...(params?.workOrderId
+        ? { producedInStep: { workOrderId: params.workOrderId } }
+        : {}),
+    };
+    const search = params?.search?.trim();
+    if (search) {
+      where.OR = [
+        { barcode: { contains: search, mode: "insensitive" } },
+        { item: { name: { contains: search, mode: "insensitive" } } },
+        { item: { code: { contains: search, mode: "insensitive" } } },
+        { color: { name: { contains: search, mode: "insensitive" } } },
+        {
+          producedInStep: {
+            workOrder: { batchNumber: { contains: search, mode: "insensitive" } },
+          },
+        },
+      ];
+    }
+
+    const include = {
+      item: true,
+      color: true,
+      producedInStep: {
+        select: { workOrder: { select: { id: true, batchNumber: true } } },
+      },
+    } as const;
+
+    // Cursor mode (mobil infinite scroll + arama). Legacy çağrı (cursor/mode
+    // yok) eski `ApiResponse<Roll[]>` "en yeni N" cevabını alır.
+    const useCursor = !!params?.cursor || params?.mode === "cursor";
+    if (useCursor) {
+      const limit = Math.min(Math.max(1, params?.limit ?? 50), 200);
+      const cursor = decodeDynamicCursor(params?.cursor);
+      const cursorWhereClause = cursor
+        ? { AND: [where, dynamicCursorWhere(cursor, "createdAt", "desc")] }
+        : where;
+      const [items, totalEstimate] = await Promise.all([
+        prisma.roll.findMany({
+          where: cursorWhereClause,
+          include,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: limit + 1,
+        }),
+        params?.withTotal
+          ? prisma.roll.count({ where })
+          : Promise.resolve(undefined),
+      ]);
+      const hasMore = items.length > limit;
+      const data = hasMore ? items.slice(0, limit) : items;
+      const last = data[data.length - 1] as Record<string, unknown> | undefined;
+      const nextCursor = hasMore ? buildNextDynamicCursor(last, "createdAt") : null;
+      return {
+        success: true,
+        data,
+        pagination: {
+          nextCursor,
+          hasMore,
+          limit,
+          ...(totalEstimate !== undefined ? { totalEstimate } : {}),
+        },
+      };
+    }
+
     const limit = Math.min(Math.max(params?.limit ?? 50, 1), 200);
     const rolls = await prisma.roll.findMany({
-      where: {
-        entrySource: RollEntrySource.TAMBUR_SPLIT,
-        ...(params?.workOrderId
-          ? { producedInStep: { workOrderId: params.workOrderId } }
-          : {}),
-      },
+      where,
       orderBy: { createdAt: "desc" },
       take: limit,
-      include: {
-        item: true,
-        color: true,
-        producedInStep: {
-          select: { workOrder: { select: { id: true, batchNumber: true } } },
-        },
-      },
+      include,
     });
     return { success: true, data: rolls };
   }

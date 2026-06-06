@@ -21,6 +21,8 @@ import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import RefreshButton from '../../../components/RefreshButton';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import { SkeletonList } from '../../../components/motion';
 import { useKartelaFirms } from '../../../hooks/useKartelaFirms';
@@ -90,6 +92,11 @@ export default function KartelaKabulScreen() {
     enabled: !!firmId,
   });
   const outstanding: KartelaOutstandingItem[] = outstandingQuery.data?.data ?? [];
+
+  const refresh = useManualRefresh(
+    () => outstandingQuery.refetch(),
+    'Bekleyen kabuller güncellendi',
+  );
 
   const getRow = useCallback((rollId: string, st: Record<string, RowState>) => st[rollId] ?? emptyRow(), []);
 
@@ -189,7 +196,20 @@ export default function KartelaKabulScreen() {
   const canSubmit = !!firmId && selectedReturns.length > 0 && !receiveMutation.isPending;
 
   return (
-    <ScreenChrome title="Kartela Kabul">
+    <ScreenChrome
+      title="Kartela Kabul"
+      headerExtras={
+        <RefreshButton
+          headerStyle
+          label="Yenile"
+          onPress={refresh.onRefresh}
+          refreshing={refresh.refreshing}
+          isError={refresh.isError}
+          errorMessage={refresh.errorMessage}
+          successMessage={refresh.successMessage}
+        />
+      }
+    >
       <View style={styles.flex}>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {/* Firma */}

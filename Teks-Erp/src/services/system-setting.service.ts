@@ -63,9 +63,31 @@ export const SETTING_KEYS = {
    *  "Sevke Hazır" yapar; çıkış yalnız ② "Sevk Çıkışı" ekranından onaylanır. Sadece UI
    *  rehberi — backend ENFORCE ETMEZ (her iki yoldan da dispatch kabul edilir). */
   SHIPMENT_CONFIRMATION_ENABLED: "shipping.confirmationEnabled",
+  /** Refakat kartı marka/içerik ayarı (JSON): firma adı + hangi bölümler basılsın.
+   *  Kart oluşturulurken snapshot'a DONDURULUR → reprint düzeni de sabit kalır. */
+  TRAVELER_CARD_CONFIG: "traveler.cardConfig",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
+
+/** Refakat kartı marka/içerik ayarı. Snapshot'a dondurulur. */
+export interface TravelerCardConfig {
+  /** Kart başlığındaki firma adı. */
+  companyName: string;
+  /** Operasyon imza grid'i basılsın mı. */
+  showOperationGrid: boolean;
+  /** Talimatlar/Boyahane notu kutusu basılsın mı. */
+  showNotes: boolean;
+  /** Bağlı siparişler tablosu basılsın mı. */
+  showOrders: boolean;
+}
+
+export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
+  companyName: "Adnan Şahin Tekstil",
+  showOperationGrid: true,
+  showNotes: true,
+  showOrders: true,
+};
 
 /**
  * Tüm public feature flag'lerin tek atışta okunmuş hali. Frontend app
@@ -85,6 +107,8 @@ export interface FeatureFlags {
   devicePairingRequired: boolean;
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
   shipmentConfirmationEnabled: boolean;
+  /** Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri). */
+  travelerCardConfig: TravelerCardConfig;
 }
 
 export class SystemSettingService {
@@ -173,6 +197,7 @@ export class SystemSettingService {
       dyehouseNoteMobileEntry: await readDyehouseNoteMobileEntry(),
       devicePairingRequired: await readDevicePairingRequired(),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(),
+      travelerCardConfig: await readTravelerCardConfig(),
     };
     return { success: true, data: flags };
   }
@@ -279,6 +304,28 @@ export class SystemSettingService {
         SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED,
         input.shipmentConfirmationEnabled,
         "Sevk için ayrı 'ambar aldı / çıkış' onay adımı zorunlu olsun (kapalıyken paketleyen direkt sevk eder)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "travelerCardConfig")) {
+      const c = input.travelerCardConfig;
+      if (!c || typeof c !== "object") {
+        throw AppError.badRequest("travelerCardConfig nesne olmalı");
+      }
+      const merged: TravelerCardConfig = {
+        companyName:
+          typeof c.companyName === "string" && c.companyName.trim()
+            ? c.companyName.trim().slice(0, 120)
+            : DEFAULT_TRAVELER_CARD_CONFIG.companyName,
+        showOperationGrid: c.showOperationGrid !== false,
+        showNotes: c.showNotes !== false,
+        showOrders: c.showOrders !== false,
+      };
+      await this.set(
+        SETTING_KEYS.TRAVELER_CARD_CONFIG,
+        merged as unknown as Prisma.InputJsonValue,
+        "Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri)",
         userId
       );
     }
@@ -429,6 +476,34 @@ export async function readShipmentConfirmationEnabled(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/**
+ * Refakat kartı marka/içerik ayarını okur (yoksa/eksikse default'lara düşer).
+ * buildSnapshot bunu çağırıp config'i karta dondurur.
+ */
+export async function readTravelerCardConfig(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<TravelerCardConfig> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TRAVELER_CARD_CONFIG },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (!v || typeof v !== "object" || Array.isArray(v)) {
+    return DEFAULT_TRAVELER_CARD_CONFIG;
+  }
+  const o = v as Record<string, unknown>;
+  return {
+    companyName:
+      typeof o.companyName === "string" && o.companyName.trim()
+        ? o.companyName
+        : DEFAULT_TRAVELER_CARD_CONFIG.companyName,
+    showOperationGrid: o.showOperationGrid !== false,
+    showNotes: o.showNotes !== false,
+    showOrders: o.showOrders !== false,
+  };
 }
 
 /**

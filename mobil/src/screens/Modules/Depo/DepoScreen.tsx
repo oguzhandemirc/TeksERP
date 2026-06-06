@@ -27,6 +27,7 @@ import DetailSheet, {
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { rollService } from '../../../services/roll.service';
 import { swatchService, type SwatchListItem } from '../../../services/swatch.service';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
@@ -61,6 +62,8 @@ interface RollListItem {
   width: number | null;
   qualityGrade: string;
   status: string;
+  /** Tambur'da kartela için işaretlendi mi — depoda ayırt etmek için rozet. */
+  markedForKartela?: boolean;
   /** Topun üstündeki son basılan etiket (null = stok/etiket yok). */
   lastLabelSnapshot?: { customerName: string | null; orderNumber: string | null } | null;
   createdAt?: string;
@@ -253,19 +256,10 @@ export default function DepoScreen() {
 
   const activeQuery = isSwatchMode ? swatchesQuery : rollsQuery;
   const activeStatsQuery = isSwatchMode ? swatchStatsQuery : rollStatsQuery;
-  const refreshing = activeQuery.isFetching || activeStatsQuery.isFetching;
-  const handleRefresh = useCallback(() => {
-    activeQuery.refetch();
-    activeStatsQuery.refetch();
-  }, [activeQuery, activeStatsQuery]);
-
-  const subtitle = isSwatchMode
-    ? 'Kartela (Swatch) envanteri'
-    : mode === 'STOCK'
-      ? 'Ham stok — henüz üretime girmemiş toplar'
-      : mode === 'WAREHOUSE'
-        ? 'Depoda satışa/sevke hazır toplar'
-        : 'Depodaki toplar + ham stok';
+  const refresh = useManualRefresh(
+    [() => activeQuery.refetch(), () => activeStatsQuery.refetch()],
+    isSwatchMode ? 'Kartela envanteri güncellendi' : 'Depo güncellendi',
+  );
 
   const renderStats = () => {
     if (isSwatchMode) {
@@ -307,7 +301,20 @@ export default function DepoScreen() {
   };
 
   return (
-    <ScreenChrome title="Depo" subtitle={subtitle}>
+    <ScreenChrome
+      title="Depo"
+      headerExtras={
+        <RefreshButton
+          headerStyle
+          label="Yenile"
+          onPress={refresh.onRefresh}
+          refreshing={refresh.refreshing}
+          isError={refresh.isError}
+          errorMessage={refresh.errorMessage}
+          successMessage={refresh.successMessage}
+        />
+      }
+    >
       <View style={styles.container}>
         {/* Üst — istatistik özet (mode'a göre içerik değişir) */}
         {isPhone ? (
@@ -357,15 +364,6 @@ export default function DepoScreen() {
               style={[styles.input, styles.inputRow]}
               dense
               left={<TextInput.Icon icon="magnify" />}
-            />
-            <RefreshButton
-              onPress={handleRefresh}
-              refreshing={refreshing}
-              isError={activeQuery.isError || activeStatsQuery.isError}
-              errorMessage={
-                (activeQuery.error as Error | undefined)?.message ??
-                (activeStatsQuery.error as Error | undefined)?.message
-              }
             />
           </View>
 
@@ -549,6 +547,11 @@ function RollListRow({
                   <Text style={styles.statusPillText}>Fire</Text>
                 </View>
               )}
+              {roll.markedForKartela && (
+                <View style={[styles.statusPill, styles.statusPillKartela]}>
+                  <Text style={styles.statusPillKartelaText}>Kartelalık</Text>
+                </View>
+              )}
             </View>
             <View style={styles.rollMeta}>
               {roll.color?.hex && (
@@ -719,6 +722,9 @@ function RollDetailModal({
       : []),
     { icon: 'star-circle', label: 'Kalite', value: roll.qualityGrade },
     { icon: 'circle', label: 'Durum', value: trLabel(ROLL_STATUS_LABEL, roll.status) },
+    ...(roll.markedForKartela
+      ? [{ icon: 'tag-multiple', label: 'Kartela', value: 'Kartelalık işaretli' } as SummaryItem]
+      : []),
     ...(roll.lastLabelSnapshot?.customerName
       ? [
           {
@@ -928,7 +934,9 @@ const styles = StyleSheet.create({
   statusPillA1Stock: { backgroundColor: '#fde68a' },
   statusPillFire: { backgroundColor: '#fecaca' },
   statusPillSwatch: { backgroundColor: '#ddd6fe' },
+  statusPillKartela: { backgroundColor: '#7c3aed' },
   statusPillText: { fontSize: 10, fontWeight: '700', color: '#0f172a' },
+  statusPillKartelaText: { fontSize: 10, fontWeight: '700', color: '#ffffff' },
   rollItem: { fontSize: 12, color: '#475569', marginTop: 4 },
   rollMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   rollMetaText: { fontSize: 11, color: '#0f172a', fontWeight: '600' },

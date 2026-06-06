@@ -12,6 +12,7 @@ const createSchema = z.object({
   type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).default("ORDER_PRODUCTION"),
   width:             z.number().positive("En değeri pozitif olmalı").optional().nullable(),
   targetQuantity:    z.number().positive().optional().nullable(),
+  targetWeight:      z.number().positive().optional().nullable(),
   parameters:        z.record(z.string(), z.unknown()).optional().nullable(),
   plannedStartDate:  z.string().optional().nullable(),
   plannedEndDate:    z.string().optional().nullable(),
@@ -81,6 +82,7 @@ const updateWorkOrderSchema = z.object({
   batchNumber: z.string().trim().min(1).max(64).optional(),
   width: z.number().positive().nullable().optional(),
   targetQuantity: z.number().positive().nullable().optional(),
+  targetWeight: z.number().positive().nullable().optional(),
   plannedStartDate: z.string().nullable().optional(),
   plannedEndDate: z.string().nullable().optional(),
   targetItemId: z.string().uuid().nullable().optional(),
@@ -98,6 +100,7 @@ const replaceWorkOrderSchema = z.object({
   type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).optional(),
   width:             z.number().positive("En değeri pozitif olmalı").optional().nullable(),
   targetQuantity:    z.number().positive().optional().nullable(),
+  targetWeight:      z.number().positive().optional().nullable(),
   parameters:        z.record(z.string(), z.unknown()).optional().nullable(),
   plannedStartDate:  z.string().optional().nullable(),
   plannedEndDate:    z.string().optional().nullable(),
@@ -147,6 +150,7 @@ export class WorkOrderController {
     this.create = this.create.bind(this);
     this.findAll = this.findAll.bind(this);
     this.findById = this.findById.bind(this);
+    this.getBranches = this.getBranches.bind(this);
     this.attachRolls = this.attachRolls.bind(this);
     this.detachRolls = this.detachRolls.bind(this);
     this.updateStepPlanning = this.updateStepPlanning.bind(this);
@@ -198,6 +202,22 @@ export class WorkOrderController {
   async findById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.findById(req.params.id as string);
+      if (!result.success) {
+        res.status(404).json(result);
+        return;
+      }
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/work-orders/:id/branches — fason dalları (lane görünümü)
+   */
+  async getBranches(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getBranches(req.params.id as string);
       if (!result.success) {
         res.status(404).json(result);
         return;

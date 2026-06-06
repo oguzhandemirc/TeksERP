@@ -559,10 +559,11 @@ export class SubcontractorService {
       // başına update+findFirst+create+upsert yapıyordu = N+1).
       const dispatchRollIds = rolls.map((r) => r.id);
 
-      // 1) status → AT_SUBCONTRACTOR (tek updateMany)
+      // 1) status → AT_SUBCONTRACTOR + dal kimliği (Phase 4): bu sevk = bir dal,
+      //    anahtarı dispatch.id. Born roll (kabul) ve Tambur çocuğu bunu kalıtır.
       await tx.roll.updateMany({
         where: { id: { in: dispatchRollIds } },
-        data: { status: RollStatus.AT_SUBCONTRACTOR },
+        data: { status: RollStatus.AT_SUBCONTRACTOR, batchSplitId: dispatch.id },
       });
 
       // 2) Açık movement'ı olan topları tek sorguda bul; OLMAYANLAR için yeni
@@ -1199,6 +1200,15 @@ export class SubcontractorService {
           tx,
         );
 
+        // Phase 4: born roll'lar kaynak partinin (dönen orijinal topların) dal
+        // kimliğini kalıtır → dönüş çıktısı tüm rota boyunca aynı lane'de izlenir.
+        const sourceLotRolls = await tx.roll.findMany({
+          where: { id: { in: data.returns.map((r) => r.rollId) } },
+          select: { batchSplitId: true },
+        });
+        const bornBatchSplitId =
+          sourceLotRolls.find((r) => r.batchSplitId)?.batchSplitId ?? null;
+
         for (const nr of data.newRolls) {
           if (!Number.isFinite(nr.qty) || nr.qty <= 0) {
             throw AppError.badRequest("Yeni Roll metrajı pozitif olmalı");
@@ -1219,6 +1229,7 @@ export class SubcontractorService {
               qualityGradeId: defaultQualityGradeId,
               entrySource: "SUBCONTRACTOR_RETURN",
               parentReceiptId: receipt.id,
+              batchSplitId: bornBatchSplitId,
               // Born açık-kumaş topu bu fason adımında "üretildi" — roll→WO bağı.
               // Bu olmadan (eski hali null) tambur WO-tamamlama, WO ürettiği-toplar
               // raporu, WO iptalinde kurtarma ve soy-ağacı hepsi fason için kopuyordu.
@@ -1841,6 +1852,18 @@ export class SubcontractorService {
 
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
 
+    // P4: Boyahane notu düzenleme kilidi — iptal edilmiş ya da (kabul edilmiş =
+    // mal döndü) sevkin notu artık değiştirilemez. Frontend editörü buna göre
+    // disabled eder; backend updateDyehouseNote de aynı guard'ı uygular.
+    const dyehouseNoteLocked =
+      dispatch.cancelledAt != null ||
+      (await prisma.subcontractorReceiptItem.count({
+        where: {
+          sourceDispatchItem: { dispatchId: dispatch.id },
+          receipt: { cancelledAt: null },
+        },
+      })) > 0;
+
     const requestedColor = dispatch.workOrder.targetColor
       ? {
           id: dispatch.workOrder.targetColor.id,
@@ -1861,6 +1884,7 @@ export class SubcontractorService {
           requestedColor,
           dyehouseNote: dispatch.dyehouseNote,
           woDyehouseNote: dispatch.workOrder.dyehouseNote,
+          dyehouseNoteLocked,
         },
       };
     }
@@ -1920,6 +1944,7 @@ export class SubcontractorService {
         requestedColor,
         dyehouseNote: dispatch.dyehouseNote,
         woDyehouseNote: dispatch.workOrder.dyehouseNote,
+        dyehouseNoteLocked,
       },
     };
   }
@@ -1937,11 +1962,31 @@ export class SubcontractorService {
   ): Promise<ApiResponse<{ id: string; dispatchNo: string; dyehouseNote: string | null }>> {
     const dispatch = await prisma.subcontractorDispatch.findUnique({
       where: { id },
-      select: { id: true, cancelledAt: true, dyehouseNote: true },
+      select: {
+        id: true,
+        cancelledAt: true,
+        dyehouseNote: true,
+        // P4: bu sevkin (iptal edilmemiş) bir kabulü var mı? Varsa boyahane
+        // malı zaten işledi — talimatı değiştirmek anlamsız/yanıltıcı, kilitle.
+        items: {
+          select: {
+            receiptItems: {
+              where: { receipt: { cancelledAt: null } },
+              select: { id: true },
+              take: 1,
+            },
+          },
+        },
+      },
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
     if (dispatch.cancelledAt) {
       throw AppError.conflict("İptal edilmiş sevkin boyahane notu düzenlenemez");
+    }
+    if (dispatch.items.some((it) => it.receiptItems.length > 0)) {
+      throw AppError.conflict(
+        "Mal kabul edilmiş — boyahane notu artık düzenlenemez.",
+      );
     }
 
     // Boş/whitespace → null (notu temizle).
