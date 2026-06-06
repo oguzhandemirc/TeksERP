@@ -20,7 +20,20 @@ import {
   buildPagination,
   isCursorRequested,
   applyDateRange,
+  resolveSortBy,
 } from "../utils/query-parser";
+
+// WO listesinde sıralanabilir kolonlar (UI SortableHeader'larıyla eşleşir) + güvenli
+// ekler. Whitelist dışı sortBy → createdAt (bilinmeyen kolon 500'ünü + indekssiz sortu engeller).
+const WO_SORTABLE_FIELDS = [
+  "createdAt",
+  "updatedAt",
+  "plannedEndDate",
+  "plannedStartDate",
+  "targetQuantity",
+  "batchNumber",
+  "status",
+] as const;
 
 const WORKORDER_DATE_FIELDS = [
   "createdAt",
@@ -616,6 +629,8 @@ export class WorkOrderService {
     req: Request
   ): Promise<PaginatedResponse<unknown> | CursorPaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
+    // sortBy güvenlik süzgeci — bilinmeyen kolon (500) + indekssiz keyfi sort engellenir.
+    params.sortBy = resolveSortBy(params.sortBy, WO_SORTABLE_FIELDS);
     const where = buildWhereClause(
       params.filters,
       ["batchNumber"],
