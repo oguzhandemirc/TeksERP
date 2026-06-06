@@ -169,6 +169,23 @@ export function buildOrderByClause(
 }
 
 /**
+ * sortBy güvenlik süzgeci — istemciden gelen sortBy yalnız whitelist'teyse kullanılır,
+ * değilse `fallback`'e düşer. İki sorunu birden engeller:
+ *   1) Bilinmeyen kolon → Prisma `PrismaClientValidationError` (HTTP 500). İstemci
+ *      `?sortBy=garbage` gönderince endpoint patlardı.
+ *   2) İndekssiz kolona keyfi sıralama → büyük tabloda seq scan + sort (ölçüldü:
+ *      indeksli 0.8ms vs indekssiz 20-31ms @300k; keyset cursor da bozulur).
+ * Whitelist = UI'ın sıralanabilir sunduğu kolonlar + createdAt/id (kararlı tie-break).
+ */
+export function resolveSortBy(
+  requested: string | undefined,
+  allowed: readonly string[],
+  fallback = "createdAt"
+): string {
+  return requested && allowed.includes(requested) ? requested : fallback;
+}
+
+/**
  * Calculate Prisma skip/take from page & pageSize.
  * MAX_OFFSET guard: skip > 10K → 400 fırlat (filtre kullanmaya zorla).
  */

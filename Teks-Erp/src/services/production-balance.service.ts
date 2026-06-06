@@ -37,15 +37,6 @@ function specKey(
   return `${itemId}|${colorId ?? ""}|${w}`;
 }
 
-/** Birebir en eşleşmesi (ikisi de null veya eşit). Bitmiş depo malı için. */
-function widthEqual(
-  a: Prisma.Decimal | null,
-  b: Prisma.Decimal | null
-): boolean {
-  if (a == null || b == null) return a == null && b == null;
-  return new Prisma.Decimal(a).equals(b);
-}
-
 /** Drill-down: bu spec'in açık sipariş kalemi (WO formuna bind için yeterli alan). */
 export interface BalanceLine {
   lineId: string;
@@ -318,21 +309,38 @@ export class ProductionBalanceService {
 
     // 4) Depo eşleştirme (per-en birebir) + türev kolon + filtre → en alt-satırları.
     //    Ham bu aşamada DEĞİL — (ürün,renk) grubu düzeyinde, aşağıda (5).
+    //
+    // Perf: supply gruplarını TEK SEFER indeksle → her acc/grp için tüm supply'ı
+    // taramak yerine doğrudan arama. Eskiden O(spec × arz) iç içe döngüydü;
+    // büyük katalogda (binlerce spec × binlerce arz) milyonlarca karşılaştırma
+    // yapıyordu. Davranış birebir aynı:
+    //   - WAREHOUSE: (itemId,colorId,width) groupBy anahtarında zaten tekil →
+    //     specKey ile birebir Map (acc.key = specKey(itemId,colorId,width)).
+    //   - STOCK: en-agnostik + renk-joker → item bazında listele, joker mantığı korunur.
+    const warehouseByKey = new Map<string, Prisma.Decimal>();
+    const stockByItem = new Map<
+      string,
+      { colorId: string | null; qty: Prisma.Decimal }[]
+    >();
+    for (const g of supply) {
+      const qty = new Prisma.Decimal(g._sum.currentQty ?? 0);
+      if (qty.lessThanOrEqualTo(0)) continue;
+      if (g.status === RollStatus.WAREHOUSE) {
+        warehouseByKey.set(specKey(g.itemId, g.colorId, g.width), qty);
+      } else if (g.status === RollStatus.STOCK) {
+        let list = stockByItem.get(g.itemId);
+        if (!list) {
+          list = [];
+          stockByItem.set(g.itemId, list);
+        }
+        list.push({ colorId: g.colorId, qty });
+      }
+    }
+
     const rows: BalanceSpecRow[] = [];
     for (const acc of map.values()) {
-      for (const g of supply) {
-        if (g.status !== RollStatus.WAREHOUSE) continue;
-        if (g.itemId !== acc.itemId) continue;
-        const qty = new Prisma.Decimal(g._sum.currentQty ?? 0);
-        if (qty.lessThanOrEqualTo(0)) continue;
-        // Depo: birebir ürün+renk+en.
-        if (
-          (g.colorId ?? null) === (acc.colorId ?? null) &&
-          widthEqual(g.width, acc.width)
-        ) {
-          acc.depo = acc.depo.plus(qty);
-        }
-      }
+      // Depo: birebir ürün+renk+en (acc.key = specKey(itemId,colorId,width)).
+      acc.depo = acc.depo.plus(warehouseByKey.get(acc.key) ?? 0);
 
       acc.uretilecek = Prisma.Decimal.max(
         0,
@@ -385,14 +393,11 @@ export class ProductionBalanceService {
 
     for (const grp of groupMap.values()) {
       // Ham havuzu: sevksiz STOCK, ürün+renk uyumlu, EN-AGNOSTİK (tek sayım).
-      for (const g of supply) {
-        if (g.status !== RollStatus.STOCK) continue;
-        if (g.itemId !== grp.itemId) continue;
-        const qty = new Prisma.Decimal(g._sum.currentQty ?? 0);
-        if (qty.lessThanOrEqualTo(0)) continue;
+      // Yalnız bu ürünün STOCK satırlarını gez (renk-joker mantığı korunur).
+      for (const s of stockByItem.get(grp.itemId) ?? []) {
         const colorOk =
-          g.colorId == null || grp.colorId == null || g.colorId === grp.colorId;
-        if (colorOk) grp.ham = grp.ham.plus(qty);
+          s.colorId == null || grp.colorId == null || s.colorId === grp.colorId;
+        if (colorOk) grp.ham = grp.ham.plus(s.qty);
       }
       grp.malzemeAcigi = Prisma.Decimal.max(0, grp.uretilecek.minus(grp.ham));
       // En alt-satırlarını en çok üretilecek olan üste.

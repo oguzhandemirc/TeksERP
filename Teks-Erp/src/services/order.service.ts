@@ -300,7 +300,11 @@ export class OrderService extends BaseService {
       status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
     };
 
-    const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
+    // sortBy güvenlik süzgeci (BaseService) — bilinmeyen kolon 500'ünü engeller.
+    const orderBy = buildOrderByClause(
+      this.safeSortBy(params.sortBy || "createdAt"),
+      params.sortOrder
+    );
 
     // Aday açık siparişleri display include + satır tahsisleriyle çek (picker tavanı 500).
     const orders = await prisma.order.findMany({

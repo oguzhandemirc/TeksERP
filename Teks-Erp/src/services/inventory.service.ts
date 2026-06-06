@@ -18,9 +18,23 @@ import {
   buildPagination,
   isCursorRequested,
   applyDateRange,
+  resolveSortBy,
 } from "../utils/query-parser";
 
 const ROLL_DATE_FIELDS = ["createdAt"] as const;
+// Rolls listesinde sıralanabilir kolonlar (UI SortableHeader'larıyla eşleşir) +
+// createdAt/id kararlı tie-break. Whitelist dışı sortBy → createdAt'e düşer
+// (bilinmeyen kolon 500'ünü ve indekssiz keyfi sortu engeller).
+const ROLL_SORTABLE_FIELDS = [
+  "createdAt",
+  "updatedAt",
+  "barcode",
+  "currentQty",
+  "initialQty",
+  "width",
+  "qualityGrade",
+  "status",
+] as const;
 
 function readList(value: string | string[] | undefined): string[] {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -350,8 +364,14 @@ export class InventoryService {
 
     const search = params.search?.trim();
     if (search) {
+      // Barkod: TAM eşleşme (unique index seek). `contains`/`startsWith` ILIKE
+      // en_US.UTF-8 collation'da barcode unique indeksini KULLANAMAZ — 300k satırda
+      // ölçüldü: contains ~21-87ms (seq scan), equals ~0.3ms (index scan). Barkod
+      // okutulur/yapıştırılır (tam değer); ortasından substring araması gerçek bir
+      // saha akışı değil. Ürün adı/kodu küçük master tabloda kaldığı için contains
+      // olarak kalır → "patos" gibi fuzzy ürün araması bozulmadan çalışır.
       where.OR = [
-        { barcode: { contains: search, mode: "insensitive" } },
+        { barcode: search },
         { item: { name: { contains: search, mode: "insensitive" } } },
         { item: { code: { contains: search, mode: "insensitive" } } },
       ];
@@ -502,6 +522,8 @@ export class InventoryService {
     req: Request
   ): Promise<PaginatedResponse<Roll> | CursorPaginatedResponse<Roll>> {
     const params = parseQueryParams(req);
+    // sortBy güvenlik süzgeci — bilinmeyen kolon (500) + indekssiz keyfi sort engellenir.
+    params.sortBy = resolveSortBy(params.sortBy, ROLL_SORTABLE_FIELDS);
     const where = this.buildRollWhere(params);
 
     const include = {

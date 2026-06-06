@@ -94,6 +94,9 @@
       setText("uptime", fmtUptime(j.uptimeSec));
       setText("dbsize", dbUp ? fmtBytes(j.dbSizeBytes) : "—");
       setText("conns", j.dbConnections != null ? j.dbConnections + " bağlantı" : "—");
+      setText("cachehit", j.cacheHitPct != null ? "%" + j.cacheHitPct : "—");
+      setText("rollsdead", j.rollsDeadPct != null ? "%" + j.rollsDeadPct : "—");
+      setText("longestq", j.longestQuerySec != null ? j.longestQuerySec + " sn" : "—");
       setText("lastbackup", fmtLastBackup(j.lastBackup));
     } catch (e) {
       // API'ye hiç ulaşılamadı → her şey kırmızı.
@@ -104,6 +107,9 @@
       setText("uptime", "—");
       setText("dbsize", "—");
       setText("conns", "—");
+      setText("cachehit", "—");
+      setText("rollsdead", "—");
+      setText("longestq", "—");
       setText("lastbackup", "—");
     }
   }

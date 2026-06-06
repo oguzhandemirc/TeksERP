@@ -16,7 +16,12 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { buildBarcode, buildCardNumber, verifyBarcode } from "../utils/barcode";
-import { parseQueryParams, buildPagination } from "../utils/query-parser";
+import { parseQueryParams, buildPagination, resolveSortBy } from "../utils/query-parser";
+
+// Refakat kartı listesinde sıralanabilir kolonlar. createdAt BİLEREK yok →
+// varsayılan/createdAt isteği printedAt'e düşer (yeni basılan kart ilk gelsin).
+// Whitelist dışı sortBy → printedAt (bilinmeyen kolon 500'ünü engeller).
+const TRAVELER_SORTABLE_FIELDS = ["printedAt", "cardNumber", "status", "version"] as const;
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import {
   Prisma,
@@ -401,19 +406,22 @@ export class TravelerCardService {
       where.status = TravelerCardStatus.ACTIVE;
     }
 
-    // Search: cardNumber / barcode / WO batchNumber üzerinde insensitive contains
+    // Search: cardNumber / barcode TAM eşleşme (ikisi de unique → index seek; kart
+    // okutulur/yapıştırılır, ortasından aranmaz — rolls barkod düzeltmesiyle aynı
+    // gerekçe). WO batchNumber kısmi araması için contains kalır (relation).
     if (params.search && params.search.trim()) {
       const q = params.search.trim();
       where.OR = [
-        { cardNumber: { contains: q, mode: "insensitive" } },
-        { barcode: { contains: q, mode: "insensitive" } },
+        { cardNumber: q },
+        { barcode: q },
         { workOrder: { batchNumber: { contains: q, mode: "insensitive" } } },
       ];
     }
 
     const { skip, take } = buildPagination(params.page, params.pageSize);
-    // createdAt yerine printedAt üzerinden sırala — yeni basılan kart ilk gelsin
-    const sortField = params.sortBy && params.sortBy !== "createdAt" ? params.sortBy : "printedAt";
+    // createdAt yerine printedAt üzerinden sırala — yeni basılan kart ilk gelsin.
+    // resolveSortBy: whitelist dışı (createdAt/garbage) → printedAt fallback.
+    const sortField = resolveSortBy(params.sortBy, TRAVELER_SORTABLE_FIELDS, "printedAt");
     const orderBy = { [sortField]: params.sortOrder };
 
     const [items, total] = await Promise.all([

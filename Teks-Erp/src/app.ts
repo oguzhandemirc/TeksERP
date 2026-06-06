@@ -146,15 +146,42 @@ app.get("/health", async (_req: Request, res: Response) => {
   let db: "UP" | "DOWN" = "DOWN";
   let dbSizeBytes: number | null = null;
   let dbConnections: number | null = null;
+  let cacheHitPct: number | null = null;
+  let rollsDeadPct: number | null = null;
+  let longestQuerySec: number | null = null;
   try {
-    // Tek round-trip: DB canlılığı + boyut + aktif bağlantı sayısı.
-    const rows = await prisma.$queryRaw<Array<{ size: bigint; conns: bigint }>>`
+    // Tek round-trip: DB canlılığı + boyut + bağlantı + ucuz sağlık metrikleri
+    // (cache isabeti, rolls ölü-satır oranı, en uzun aktif sorgu süresi). Hepsi
+    // in-memory stat view'lerden — TABLO TARAMASI YOK, 5sn poll'e güvenli. Ağır
+    // bloat/index teşhisi scripts/index-health.sql'de (talep üzerine çalışır).
+    const rows = await prisma.$queryRaw<
+      Array<{
+        size: bigint;
+        conns: bigint;
+        cache_hit: number | null;
+        rolls_dead: number | null;
+        longest_sec: number | null;
+      }>
+    >`
       SELECT pg_database_size(current_database()) AS size,
-             (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()) AS conns`;
+             (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()) AS conns,
+             (SELECT round(100.0 * sum(blks_hit) / NULLIF(sum(blks_hit + blks_read), 0), 1)
+                FROM pg_stat_database WHERE datname = current_database())::float8 AS cache_hit,
+             (SELECT round(100.0 * n_dead_tup / NULLIF(n_live_tup + n_dead_tup, 0), 1)
+                FROM pg_stat_user_tables WHERE relname = 'rolls')::float8 AS rolls_dead,
+             (SELECT COALESCE(max(extract(epoch FROM (clock_timestamp() - query_start))), 0)
+                FROM pg_stat_activity
+                WHERE datname = current_database() AND state = 'active'
+                  AND backend_type = 'client backend'
+                  AND query NOT ILIKE '%pg_stat_activity%')::float8 AS longest_sec`;
     db = "UP";
     if (rows && rows[0]) {
       dbSizeBytes = Number(rows[0].size);
       dbConnections = Number(rows[0].conns);
+      cacheHitPct = rows[0].cache_hit != null ? Number(rows[0].cache_hit) : null;
+      rollsDeadPct = rows[0].rolls_dead != null ? Number(rows[0].rolls_dead) : null;
+      longestQuerySec =
+        rows[0].longest_sec != null ? Math.round(Number(rows[0].longest_sec)) : null;
     }
   } catch {
     db = "DOWN";
@@ -169,6 +196,9 @@ app.get("/health", async (_req: Request, res: Response) => {
     uptimeSec: Math.floor(process.uptime()),
     dbSizeBytes,
     dbConnections,
+    cacheHitPct,
+    rollsDeadPct,
+    longestQuerySec,
     lastBackup: latestBackupInfo(),
   });
 });

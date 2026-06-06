@@ -6,6 +6,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { Prisma } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import {
@@ -25,6 +26,31 @@ import {
 } from "../utils/cursor";
 import { PaginatedResponse, ApiResponse } from "../types/api.types";
 import { Request } from "express";
+
+// Model adı → sıralanabilir (scalar/enum) alan adları. Prisma dmmf'ten lazy build
+// + cache. İstemciden gelen sortBy bu kümede (veya relationSortMap'te) değilse
+// createdAt'e düşülür → bilinmeyen kolon `PrismaClientValidationError` (HTTP 500)
+// ve indekssiz keyfi sort engellenir. Model bulunamazsa null → guard'lamaz (geri uyum).
+const modelSortFieldCache = new Map<string, Set<string> | null>();
+function sortableFieldsFor(modelName: string): Set<string> | null {
+  const key = modelName.toLowerCase();
+  if (modelSortFieldCache.has(key)) return modelSortFieldCache.get(key) ?? null;
+  const models = (
+    Prisma as unknown as {
+      dmmf?: { datamodel?: { models?: Array<{ name: string; fields: Array<{ name: string; kind: string }> }> } };
+    }
+  ).dmmf?.datamodel?.models;
+  const model = models?.find((m) => m.name.toLowerCase() === key);
+  const result = model
+    ? new Set(
+        model.fields
+          .filter((f) => f.kind === "scalar" || f.kind === "enum")
+          .map((f) => f.name)
+      )
+    : null;
+  modelSortFieldCache.set(key, result);
+  return result;
+}
 
 export interface CursorPaginatedResponse<T> {
   success: boolean;
@@ -111,8 +137,43 @@ export class BaseService {
     return this.findAllOffset(req);
   }
 
+  /**
+   * sortBy güvenlik süzgeci — istemciden gelen sortBy yalnız modelin gerçek
+   * (scalar/enum) kolonu VEYA relationSortMap anahtarıysa kullanılır, değilse
+   * `createdAt`'e düşer. Bilinmeyen kolon 500'ünü ve indekssiz keyfi sortu engeller.
+   * Model dmmf'te bulunamazsa guard'lamaz (geri uyum).
+   */
+  protected safeSortBy(requested: string): string {
+    const allowed = sortableFieldsFor(this.config.modelName);
+    if (!allowed) return requested;
+    if (allowed.has(requested)) return requested;
+    if (this.config.relationSortMap && requested in this.config.relationSortMap) return requested;
+    return "createdAt";
+  }
+
+  /**
+   * filter[] güvenlik süzgeci — `filter[bilinmeyenKolon]=x` Prisma'da
+   * `PrismaClientValidationError` (HTTP 500) yaratır (sortBy ile aynı sınıf).
+   * Modelin gerçek (scalar/enum) kolonu olmayan filtre anahtarları sessizce
+   * düşürülür → UI hatasız, 500 yok. Generic CRUD yolu skaler filtre kullanır;
+   * relation filtreli subclass'lar zaten kendi findAll'ını override eder.
+   */
+  protected safeFilters(
+    filters: Record<string, string | string[]>
+  ): Record<string, string | string[]> {
+    const allowed = sortableFieldsFor(this.config.modelName);
+    if (!allowed) return filters;
+    const out: Record<string, string | string[]> = {};
+    for (const [k, v] of Object.entries(filters)) {
+      if (allowed.has(k)) out[k] = v;
+    }
+    return out;
+  }
+
   protected async findAllOffset(req: Request): Promise<PaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
+    params.sortBy = this.safeSortBy(params.sortBy || "createdAt");
+    params.filters = this.safeFilters(params.filters);
     const where = buildWhereClause(
       params.filters,
       this.config.searchFields,
@@ -158,11 +219,12 @@ export class BaseService {
    */
   protected async findAllCursor(req: Request): Promise<CursorPaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
+    params.filters = this.safeFilters(params.filters);
     const rawLimit = parseInt(req.query.limit as string, 10) || 50;
     const limit = Math.min(Math.max(1, rawLimit), 200);
     const wantTotal = req.query.withTotal === "true";
 
-    const sortBy = params.sortBy || "createdAt";
+    const sortBy = this.safeSortBy(params.sortBy || "createdAt");
     const sortOrder: "asc" | "desc" = params.sortOrder === "asc" ? "asc" : "desc";
 
     const cursor = decodeDynamicCursor(req.query.cursor as string | undefined);

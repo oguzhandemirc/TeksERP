@@ -95,7 +95,7 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmal�
 1. **FK index zorunlu.** Her `@relation` kolonuna `@@index([fkColumn])` — Prisma otomatik yapmaz.
 2. **Composite index sırası:** Eşitlik kolonları önce, range/order sonra. Örn: `[status, createdAt]` ✓, `[createdAt, status]` ✗.
 3. **Sık birlikte filtrelenen kolonlar = tek composite.** İki ayrı index bitmap scan'e zorlar.
-4. **Soft-delete tablolarda partial index.** `WHERE isActive = true` — raw SQL migration ile (Prisma şemada native değil). Aktif: `items`, `customers`.
+4. **Null-yoğun / soft-delete tablolarda partial index.** `WHERE col IS NOT NULL` veya `WHERE isActive = true` — raw SQL migration ile (Prisma şemada native değil). **Drift-free yöntem:** şemada `@@index([col])` BIRAK, migration `DROP INDEX ... ; CREATE INDEX ... WHERE ...` ile partial'a çevir — Prisma 7 partial predicate'i drift saymaz (test edildi). Aktif: `rolls` (sackId, shipmentId, parentReceiptId, batchSplitId — migration `20260606001717`). `items`/`customers` partial'ı henüz YOK (gerekirse aynı yöntemle).
 5. **Yüksek hacim tablolar (`Roll`, `RollMovement`, `RollOperation`, `SystemLog`, `TravelerCardScan`)** için cursor pagination. `MAX_OFFSET=10000` guard aktif (`query-parser.ts`) — `skip > 10K` → 400.
 6. **JSON alan sorgulanacaksa GIN index** raw migration ile, **endpoint yazılmadan ÖNCE**. Şu an hiçbiri sorgulanmıyor (`MachineLog.details`, `WorkOrder.parameters`, `RollOperation.metadata`, snapshot'lar).
 7. **`include` yerine `select`** — only-needed-fields, over-fetch'i azaltır. Liste sayfaları için detay ekranındaki tüm alanları çekme.
@@ -113,7 +113,7 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmal�
 - **Slow query log** (`>500ms`) PostgreSQL log dosyasına düşer.
 - **6 ayda bir** `POST /api/admin/system-logs/archive { "monthsToKeep": 6 }` — `archived=0` dönene kadar tekrar et.
 - **3 ayda bir** ARCHITECTURE.md §10.2 sağlık kontrol SQL'lerini çalıştır.
-- **Yılda bir** `REINDEX TABLE CONCURRENTLY` yüksek hacim tablolarda (rolls, system_logs, roll_movements vb.).
+- **Bloat ölçülünce** (takvimle değil) `REINDEX INDEX CONCURRENTLY` — `scripts/index-health.sql` §8 (ölü-satır proxy) + §9 (pgstattuple kesin bloat) ile şişen indeksi tespit et, sadece onu reindex et. Tipik eşik: indeks boş-alan >%30 veya tablo ölü-satır >%20. Canlı/dolu DB'de CONCURRENTLY şart (yazma kilidi almaz).
 
 ## Yeni Endpoint Kontrol Listesi
 
