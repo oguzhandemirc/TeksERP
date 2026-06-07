@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, TextInput, IconButton, Surface, TouchableRipple, Chip, Icon, ActivityIndicator } from 'react-native-paper';
+import { Text, TextInput, IconButton, Surface, TouchableRipple, Icon, ActivityIndicator } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
+import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
@@ -13,10 +14,16 @@ import { returnService, type ReturnLookupResult } from '../../../services/return
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { useReturnGradingEnabled } from '../../../hooks/useFeatureFlags';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
+import { ORDER_STATUS_COLOR, ORDER_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import { colors, spacing, radius } from '../../../theme';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '../../../navigation/types';
+
+// İade modülü vurgu rengi (amber) — alt bardaki "İade Al" ve geçmiş ekranındaki
+// "İade" rozetiyle aynı kimlik.
+const ACCENT = '#d97706';
+const ACCENT_BG = '#fef3c7';
 
 export default function IadeGirisiScreen() {
   const qc = useQueryClient();
@@ -64,7 +71,11 @@ export default function IadeGirisiScreen() {
       (result?.candidateOrders ?? []).map((o) => ({
         value: o.id,
         label: o.orderNumber,
-        sublabel: o.status,
+        sublabel: o.deadline ? `Termin: ${dayjs(o.deadline).format('DD.MM.YYYY')}` : undefined,
+        badge: {
+          text: trLabel(ORDER_STATUS_LABEL, o.status),
+          color: ORDER_STATUS_COLOR[o.status] ?? colors.textMuted,
+        },
       })),
     [result],
   );
@@ -132,6 +143,7 @@ export default function IadeGirisiScreen() {
   const roll = result?.roll;
   const selectedQualityName =
     qualityOptions.find((o) => o.value === qualityGradeId)?.label ?? roll?.qualityGrade ?? '—';
+  const selectedOrderLabel = orderOptions.find((o) => o.value === orderId)?.label ?? null;
 
   return (
     <ScreenChrome title="İade Girişi">
@@ -139,151 +151,150 @@ export default function IadeGirisiScreen() {
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           {/* Barkod (manuel mod) — kamera alt bardaki "OKUT" ile */}
           {manualMode && (
-            <Surface style={styles.card} elevation={1}>
-              <Text variant="labelLarge" style={styles.cardTitle}>
-                Top Barkodu
-              </Text>
+            <View style={styles.field}>
+              <FieldLabel>Top Barkodu</FieldLabel>
               <View style={styles.manualRow}>
                 <TextInput
                   mode="outlined"
-                  dense
-                  style={{ flex: 1, backgroundColor: colors.surface }}
+                  style={styles.flex}
+                  outlineColor={colors.border}
+                  activeOutlineColor={ACCENT}
+                  outlineStyle={styles.inputOutline}
                   placeholder="Top barkodu gir…"
                   value={barcode}
                   onChangeText={setBarcode}
                   onSubmitEditing={() => lookup(barcode)}
-                  returnKeyType="done"
+                  returnKeyType="search"
                   autoCapitalize="characters"
+                  autoCorrect={false}
                   left={<TextInput.Icon icon="barcode" />}
                 />
                 <IconButton
-                  icon="magnify"
+                  icon={resolving ? 'timer-sand' : 'magnify'}
                   mode="contained"
+                  containerColor={ACCENT}
+                  iconColor="#fff"
+                  size={24}
+                  style={styles.manualBtn}
                   onPress={() => lookup(barcode)}
                   disabled={!barcode.trim() || resolving}
                 />
               </View>
-            </Surface>
+            </View>
           )}
 
           {!roll ? (
-            <Surface style={styles.card} elevation={1}>
-              <Text variant="bodyMedium" style={styles.empty}>
-                Sevk edilmiş bir top okutun. Top doğrudan Hazır Depoya iade alınır.
+            <Surface style={styles.emptyCard} elevation={0}>
+              <View style={styles.emptyIconBox}>
+                <Icon source="barcode-scan" size={32} color={ACCENT} />
+              </View>
+              <Text style={styles.emptyTitle}>Top Okutun</Text>
+              <Text style={styles.emptyText}>
+                Sevk edilmiş bir topun barkodunu okutun. Top doğrudan Hazır Depo'ya iade alınır.
               </Text>
             </Surface>
           ) : (
             <>
-              {/* Top bilgisi */}
-              <Surface style={styles.card} elevation={1}>
-                <View style={styles.rowBetween}>
-                  <Text variant="titleMedium" style={styles.rollBarcode}>
-                    {roll.barcode ?? roll.id.slice(0, 8)}
-                  </Text>
-                  <Chip compact style={styles.qtyChip} textStyle={styles.qtyChipText}>
-                    {roll.currentQty.toFixed(1)} m
-                  </Chip>
+              {/* Top bilgisi — okutulan topun kimlik kartı */}
+              <Surface style={styles.rollCard} elevation={1}>
+                <View style={styles.rollHead}>
+                  <View style={styles.rollIconBox}>
+                    <Icon source="cube-outline" size={20} color={ACCENT} />
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.rollCaption}>İADE EDİLECEK TOP</Text>
+                    <Text style={styles.rollBarcode} numberOfLines={1}>
+                      {roll.barcode ?? roll.id.slice(0, 8)}
+                    </Text>
+                  </View>
+                  <View style={styles.qtyChip}>
+                    <Text style={styles.qtyChipText}>{roll.currentQty.toFixed(1)} m</Text>
+                  </View>
                 </View>
-                <Text variant="bodyMedium" style={styles.rollMeta}>
+                <Text style={styles.rollMeta} numberOfLines={2}>
                   {roll.item?.name ?? '—'}
                   {roll.color ? ` · ${roll.color.name}` : ''}
-                  {roll.width != null ? ` · ${roll.width} cm` : ''} · {roll.qualityGrade}
+                  {roll.width != null ? ` · ${roll.width} cm` : ''}
+                  {roll.qualityGrade ? ` · ${roll.qualityGrade}` : ''}
                 </Text>
                 {result?.customer && (
-                  <Text variant="bodySmall" style={styles.rollSub}>
-                    {result.customer.name}
-                    {result.shipment ? ` · ${result.shipment.shipmentNo}` : ''}
-                  </Text>
+                  <View style={styles.rollSubRow}>
+                    <Icon source="account-outline" size={14} color={colors.textMuted} />
+                    <Text style={styles.rollSub} numberOfLines={1}>
+                      {result.customer.name}
+                      {result.shipment ? ` · ${result.shipment.shipmentNo}` : ''}
+                    </Text>
+                  </View>
                 )}
               </Surface>
 
               {/* Sipariş seçimi (aday siparişler) */}
-              <Surface style={styles.card} elevation={1}>
-                <Text variant="labelLarge" style={styles.cardTitle}>
-                  Sipariş {orderOptions.length === 0 ? '(aday yok)' : ''}
-                </Text>
-                <TouchableRipple
-                  style={styles.select}
-                  onPress={() => orderOptions.length > 0 && setOrderPickerOpen(true)}
-                  borderless
+              <View style={styles.field}>
+                <FieldLabel hint={orderOptions.length === 0 ? 'aday yok' : undefined}>Sipariş</FieldLabel>
+                <SelectField
+                  icon="file-document-outline"
+                  value={selectedOrderLabel}
+                  placeholder={
+                    orderOptions.length === 0 ? 'Bu sevkiyatta uyan sipariş yok' : 'Sipariş seçin…'
+                  }
                   disabled={orderOptions.length === 0}
-                >
-                  <View style={styles.rowBetween}>
-                    <Text variant="bodyLarge" style={{ color: orderId ? colors.text : colors.textMuted }}>
-                      {orderId
-                        ? orderOptions.find((o) => o.value === orderId)?.label
-                        : orderOptions.length === 0
-                          ? 'Bu sevkiyatta uyan sipariş yok'
-                          : 'Sipariş seçin…'}
-                    </Text>
-                    {orderOptions.length > 0 && <IconButton icon="chevron-down" size={20} />}
-                  </View>
-                </TouchableRipple>
-              </Surface>
+                  onPress={() => setOrderPickerOpen(true)}
+                />
+              </View>
 
               {/* İade nedeni (katalog) + serbest metin */}
-              <Surface style={styles.card} elevation={1}>
-                <Text variant="labelLarge" style={styles.cardTitle}>
-                  İade Nedeni (opsiyonel)
-                </Text>
-                <TouchableRipple style={styles.select} onPress={() => setReasonPickerOpen(true)} borderless>
-                  <View style={styles.rowBetween}>
-                    <Text variant="bodyLarge" style={{ color: reasonId ? colors.text : colors.textMuted }}>
-                      {reasonId ? reasonOptions.find((o) => o.value === reasonId)?.label : 'Neden seçin…'}
-                    </Text>
-                    <View style={styles.rowRight}>
-                      {reasonId && (
-                        <IconButton icon="close" size={16} onPress={() => setReasonId(null)} />
-                      )}
-                      <IconButton icon="chevron-down" size={20} />
-                    </View>
-                  </View>
-                </TouchableRipple>
+              <View style={styles.field}>
+                <FieldLabel optional>İade Nedeni</FieldLabel>
+                <SelectField
+                  icon="alert-circle-outline"
+                  value={reasonId ? reasonOptions.find((o) => o.value === reasonId)?.label ?? null : null}
+                  placeholder="Neden seçin…"
+                  onPress={() => setReasonPickerOpen(true)}
+                  onClear={reasonId ? () => setReasonId(null) : undefined}
+                />
                 <TextInput
                   mode="outlined"
-                  label="Açıklama (serbest, opsiyonel)"
+                  placeholder="Açıklama (serbest, opsiyonel)"
                   value={reasonText}
                   onChangeText={setReasonText}
-                  dense
                   multiline
+                  outlineColor={colors.border}
+                  activeOutlineColor={ACCENT}
+                  outlineStyle={styles.inputOutline}
+                  style={[styles.textArea, styles.fieldGap]}
                 />
-              </Surface>
+              </View>
 
               {/* Teslim alan notu */}
-              <Surface style={styles.card} elevation={1}>
-                <Text variant="labelLarge" style={styles.cardTitle}>
-                  Not (opsiyonel)
-                </Text>
+              <View style={styles.field}>
+                <FieldLabel optional>Not</FieldLabel>
                 <TextInput
                   mode="outlined"
-                  label="Teslim alan notu"
+                  placeholder="Teslim alan notu"
                   value={note}
                   onChangeText={setNote}
-                  dense
                   multiline
+                  outlineColor={colors.border}
+                  activeOutlineColor={ACCENT}
+                  outlineStyle={styles.inputOutline}
+                  style={styles.textArea}
                 />
-              </Surface>
+              </View>
 
               {/* Kalite (yalnız returnGradingEnabled açıkken) */}
               {returnGradingEnabled && (
-                <Surface style={styles.card} elevation={1}>
-                  <Text variant="labelLarge" style={styles.cardTitle}>
-                    Kalite (opsiyonel — seçilmezse çıktığı kaliteyle döner)
-                  </Text>
-                  <TouchableRipple style={styles.select} onPress={() => setQualityPickerOpen(true)} borderless>
-                    <View style={styles.rowBetween}>
-                      <Text variant="bodyLarge" style={{ color: qualityGradeId ? colors.text : colors.textMuted }}>
-                        {qualityGradeId ? selectedQualityName : `Mevcut: ${roll.qualityGrade}`}
-                      </Text>
-                      <View style={styles.rowRight}>
-                        {qualityGradeId && (
-                          <IconButton icon="close" size={16} onPress={() => setQualityGradeId(null)} />
-                        )}
-                        <IconButton icon="chevron-down" size={20} />
-                      </View>
-                    </View>
-                  </TouchableRipple>
-                </Surface>
+                <View style={styles.field}>
+                  <FieldLabel optional hint="seçilmezse çıktığı kaliteyle döner">
+                    Kalite
+                  </FieldLabel>
+                  <SelectField
+                    icon="star-outline"
+                    value={qualityGradeId ? selectedQualityName : null}
+                    placeholder={`Mevcut: ${roll.qualityGrade}`}
+                    onPress={() => setQualityPickerOpen(true)}
+                    onClear={qualityGradeId ? () => setQualityGradeId(null) : undefined}
+                  />
+                </View>
               )}
             </>
           )}
@@ -331,11 +342,11 @@ export default function IadeGirisiScreen() {
               >
                 <View style={styles.barBtnInner}>
                   {createMutation.isPending ? (
-                    <ActivityIndicator size={20} color="#d97706" />
+                    <ActivityIndicator size={20} color={ACCENT} />
                   ) : (
-                    <Icon source="undo-variant" size={24} color={canSubmit ? '#d97706' : colors.textMuted} />
+                    <Icon source="undo-variant" size={24} color={canSubmit ? ACCENT : colors.textMuted} />
                   )}
-                  <Text style={[styles.barBtnText, { color: canSubmit ? '#d97706' : colors.textMuted }]}>
+                  <Text style={[styles.barBtnText, { color: canSubmit ? ACCENT : colors.textMuted }]}>
                     İade Al
                   </Text>
                 </View>
@@ -399,21 +410,174 @@ export default function IadeGirisiScreen() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Form alan başlığı — opsiyonel/zorunlu işaret + ipucu suffix.
+// ---------------------------------------------------------------------------
+function FieldLabel({
+  children,
+  optional,
+  hint,
+}: {
+  children: React.ReactNode;
+  optional?: boolean;
+  hint?: string;
+}) {
+  return (
+    <Text style={styles.fieldLabel}>
+      {children}
+      {optional ? <Text style={styles.fieldLabelMuted}> (opsiyonel)</Text> : null}
+      {hint ? <Text style={styles.fieldLabelMuted}> — {hint}</Text> : null}
+    </Text>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Seçim alanı — picker tetikleyici. Sabit yükseklik, iç padding, sol ikon,
+// opsiyonel temizle (X) ve chevron. FasonSevk picker standardıyla hizalı.
+// ---------------------------------------------------------------------------
+function SelectField({
+  icon,
+  value,
+  placeholder,
+  onPress,
+  onClear,
+  disabled,
+}: {
+  icon?: string;
+  value: string | null;
+  placeholder: string;
+  onPress: () => void;
+  onClear?: () => void;
+  disabled?: boolean;
+}) {
+  const filled = !!value;
+  return (
+    <TouchableRipple
+      onPress={onPress}
+      disabled={disabled}
+      borderless
+      style={[styles.select, disabled && styles.selectDisabled]}
+    >
+      <View style={styles.selectInner}>
+        {icon ? (
+          <Icon source={icon} size={18} color={filled ? ACCENT : colors.textMuted} />
+        ) : null}
+        <Text
+          style={[styles.selectValue, !filled && styles.selectPlaceholder, disabled && styles.selectDisabledText]}
+          numberOfLines={1}
+        >
+          {value ?? placeholder}
+        </Text>
+        {onClear ? (
+          <IconButton icon="close-circle" size={18} iconColor={colors.textMuted} style={styles.clearBtn} onPress={onClear} />
+        ) : null}
+        {!disabled && <Icon source="chevron-down" size={22} color={colors.textMuted} />}
+      </View>
+    </TouchableRipple>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  body: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxxl },
-  card: { padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, gap: spacing.sm },
-  cardTitle: { color: colors.textSecondary },
-  empty: { color: colors.textMuted, fontStyle: 'italic', paddingVertical: spacing.sm },
-  manualRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  select: { borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  rowRight: { flexDirection: 'row', alignItems: 'center' },
-  rollBarcode: { fontWeight: '700', color: colors.text },
-  rollMeta: { color: colors.text, marginTop: 2 },
-  rollSub: { color: colors.textMuted, marginTop: 2 },
-  qtyChip: { backgroundColor: '#dbeafe', height: 26 },
-  qtyChipText: { fontSize: 13, fontWeight: '700', color: '#1d4ed8', marginVertical: 0 },
+  body: { padding: spacing.md, gap: spacing.lg, paddingBottom: spacing.xxxl },
+
+  field: { gap: spacing.xs },
+  fieldGap: { marginTop: spacing.sm },
+  fieldLabel: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginLeft: 2 },
+  fieldLabelMuted: { fontWeight: '500', color: colors.textMuted, fontSize: 12 },
+
+  // Manuel barkod
+  manualRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  manualBtn: { margin: 0, borderRadius: radius.md, alignSelf: 'stretch', width: 52 },
+
+  // Çok satırlı metin alanları
+  inputOutline: { borderRadius: radius.md, borderWidth: 1.5 },
+  textArea: { backgroundColor: colors.surface, minHeight: 56 },
+
+  // Seçim alanı (picker tetikleyici)
+  select: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  selectDisabled: { backgroundColor: colors.surfaceMuted, borderColor: colors.border },
+  selectInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    height: 52,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
+  },
+  selectValue: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text },
+  selectPlaceholder: { fontWeight: '500', color: colors.textMuted },
+  selectDisabledText: { fontStyle: 'italic', color: colors.textMuted },
+  clearBtn: { margin: 0 },
+
+  // Okutulan top kartı
+  rollCard: {
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    gap: spacing.sm,
+    borderLeftWidth: 4,
+    borderLeftColor: ACCENT,
+  },
+  rollHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  rollIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: ACCENT_BG,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rollCaption: { fontSize: 10.5, fontWeight: '800', color: colors.textMuted, letterSpacing: 0.8 },
+  rollBarcode: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 0.3,
+  },
+  qtyChip: {
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+  },
+  qtyChipText: { fontSize: 13, fontWeight: '800', color: '#1d4ed8', fontVariant: ['tabular-nums'] },
+  rollMeta: { fontSize: 14, color: colors.text, fontWeight: '500' },
+  rollSubRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  rollSub: { flex: 1, fontSize: 13, color: colors.textMuted },
+
+  // Boş durum
+  emptyCard: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    marginTop: spacing.sm,
+  },
+  emptyIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: radius.full,
+    backgroundColor: ACCENT_BG,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  emptyTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  emptyText: { fontSize: 13.5, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
+
   // Alt bar — FasonKabul deseni (dolgulu yeşil hero + amber yan). Tam genişlik
   // bg, içerik tablet için maks-genişlikle ortalanır; güvenli alana uzar.
   bottomBar: {

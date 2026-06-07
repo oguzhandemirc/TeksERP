@@ -20,12 +20,14 @@
 // ============================================================================
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   StyleSheet,
   ScrollView,
   useWindowDimensions,
   Pressable,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -43,6 +45,8 @@ import {
 import { FlashList } from '@shopify/flash-list';
 import {
   useQuery,
+  useInfiniteQuery,
+  keepPreviousData,
   useMutation,
   useQueryClient,
   onlineManager,
@@ -57,7 +61,6 @@ import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import RemoteListSheet from '../../../components/RemoteListSheet';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
-import Pager from '../../../components/Pager';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
@@ -69,6 +72,7 @@ import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList } from '../../../components/motion';
 import type {
   PendingReturnGroup,
+  PendingReturnSummary,
   ReceiveRequest,
   ReceiveNewRollInput,
   TravelerCardLookup,
@@ -79,6 +83,8 @@ import type {
 
 const RECEIPTS_PAGE_SIZE = 12;
 const SUBMIT_ARM_TIMEOUT_MS = 3000;
+const DRAFT_KEY = 'fason_kabul_draft_v1';
+const DRAFT_TTL_MS = 8 * 60 * 60 * 1000;
 
 interface RollRow {
   rollId: string;
@@ -194,10 +200,11 @@ export default function FasonKabulScreen() {
   const [cardBarcode, setCardBarcode] = useState('');
   const [resolvingCard, setResolvingCard] = useState(false);
   const [highlightedWorkOrderId, setHighlightedWorkOrderId] = useState<string | null>(null);
-  const [receiptsPage, setReceiptsPage] = useState(1);
   const [detailReceiptId, setDetailReceiptId] = useState<string | null>(null);
   const [listModalOpen, setListModalOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [groupLoading, setGroupLoading] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
   // Telefon dikeyde Geçmiş Kabuller alt panelde değil, header butonundan
   // açılan ayrı bir modal'da gösterilir.
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
@@ -213,6 +220,67 @@ export default function FasonKabulScreen() {
     };
   }, [submitArmed]);
 
+  // ── Draft yedekleme (Android LMK koruması) ──
+  // Telefonda OS uygulamayı arka planda öldürünce form state sıfırlanır.
+  // 8 saat (1 vardiya) TTL: vardiya içi kaza → kaldığın yerden devam;
+  // ertesi gün → temiz başla.
+  const draftRestoredRef = useRef(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
+      if (raw) {
+        try {
+          const d = JSON.parse(raw) as Record<string, unknown>;
+          const age = typeof d.savedAt === 'number' ? Date.now() - d.savedAt : Infinity;
+          if (age < DRAFT_TTL_MS) {
+            if (d.selectedGroup) setSelectedGroup(d.selectedGroup as PendingReturnGroup);
+            if (Array.isArray(d.rows) && d.rows.length > 0) {
+              setRows((d.rows as RollRow[]).map((r) => ({ ...r, noteOpen: false })));
+            }
+            if (typeof d.manifestNo === 'string' && d.manifestNo) setManifestNo(d.manifestNo);
+            if (typeof d.notes === 'string' && d.notes) setNotes(d.notes);
+            if (Array.isArray(d.newRolls) && d.newRolls.length > 0) {
+              type StoredNR = { qty: string; notes: string; prefilled: boolean };
+              setNewRolls((d.newRolls as StoredNR[]).map((r) => ({
+                ...makeNewRollRow(r.qty, r.prefilled),
+                notes: r.notes,
+              })));
+            }
+            if (d.appliedColor) setAppliedColor(d.appliedColor as Color);
+            if (Array.isArray(d.appliedProperties)) setAppliedProperties(d.appliedProperties as FabricProperty[]);
+          } else {
+            AsyncStorage.removeItem(DRAFT_KEY);
+          }
+        } catch {
+          AsyncStorage.removeItem(DRAFT_KEY);
+        }
+      }
+      draftRestoredRef.current = true;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!draftRestoredRef.current) return;
+    const t = setTimeout(() => {
+      if (!selectedGroup) {
+        AsyncStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
+        savedAt: Date.now(),
+        selectedGroup,
+        rows: rows.map((r) => ({ ...r, noteOpen: false })),
+        manifestNo,
+        notes,
+        newRolls: newRolls.map((r) => ({ qty: r.qty, notes: r.notes, prefilled: r.prefilled })),
+        appliedColor,
+        appliedProperties,
+      }));
+    }, 600);
+    return () => clearTimeout(t);
+  }, [selectedGroup, rows, manifestNo, notes, newRolls, appliedColor, appliedProperties]);
+
   // ── Queries ──
   // staleTime 30sn: ekran focus / tab geçişi tetikli otomatik refetch'leri susturur,
   // operatörün refresh butonu tek doğru kanal. Sahada gerçek değişim sıklığı zaten
@@ -225,15 +293,21 @@ export default function FasonKabulScreen() {
 
   // İPTAL EDİLEBİLİRLER (cancellable:'yes') — born rolls güvenli durumda.
   // Operatör hala iptal edebilir; UI'da İptal Et butonu gösterilir.
-  const cancellableReceiptsQuery = useQuery({
-    queryKey: ['receipts', 'cancellable', receiptsPage],
-    queryFn: () =>
-      subcontractorService.listReceipts({
-        page: receiptsPage,
-        pageSize: RECEIPTS_PAGE_SIZE,
+  // Cursor (keyset) + infinite scroll: count yok → MAX_OFFSET tavanı + her-sayfa
+  // COUNT maliyeti yok. `cancellable` filtresi sunucuda korunur.
+  const cancellableReceiptsQuery = useInfiniteQuery({
+    queryKey: ['receipts', 'cancellable'],
+    queryFn: ({ pageParam }) =>
+      subcontractorService.listReceiptsCursor({
         cancellable: 'yes',
+        limit: RECEIPTS_PAGE_SIZE,
+        cursor: pageParam,
+        withTotal: !pageParam,
       }),
-    placeholderData: (prev) => prev,
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) =>
+      last.pagination.hasMore ? last.pagination.nextCursor : undefined,
+    placeholderData: keepPreviousData,
     enabled: rightTab === 'cancellable' || historyModalOpen,
     staleTime: 30 * 1000,
   });
@@ -242,18 +316,37 @@ export default function FasonKabulScreen() {
   // Backend zaten cancelledAt:null koşulu uyguluyor; cancellable filtresi olmadan
   // hem hala-iptal-edilebilir hem settled olanlar tek listede dönüyor.
   // UI'da iptal butonu YOK — sadece detay görüntüleme (iptal aksiyonu ayrı tab).
-  const receiptsQuery = useQuery({
-    queryKey: ['receipts', 'all', receiptsPage],
-    queryFn: () =>
-      subcontractorService.listReceipts({
-        page: receiptsPage,
-        pageSize: RECEIPTS_PAGE_SIZE,
+  const receiptsQuery = useInfiniteQuery({
+    queryKey: ['receipts', 'all'],
+    queryFn: ({ pageParam }) =>
+      subcontractorService.listReceiptsCursor({
+        limit: RECEIPTS_PAGE_SIZE,
+        cursor: pageParam,
+        withTotal: !pageParam,
       }),
-    placeholderData: (prev) => prev,
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) =>
+      last.pagination.hasMore ? last.pagination.nextCursor : undefined,
+    placeholderData: keepPreviousData,
     // Tablet'te tab history iken, telefonda Geçmiş modal açıkken aktif
     enabled: rightTab === 'history' || historyModalOpen,
     staleTime: 30 * 1000,
   });
+
+  // Sayfaları düzleştir — infinite query birikimi.
+  const cancellableReceipts = useMemo(
+    () => cancellableReceiptsQuery.data?.pages.flatMap((p) => p.data) ?? [],
+    [cancellableReceiptsQuery.data],
+  );
+  const allReceipts = useMemo(
+    () => receiptsQuery.data?.pages.flatMap((p) => p.data) ?? [],
+    [receiptsQuery.data],
+  );
+  // Telefon "Geçmiş Kabuller" modal'ında aktif alt-sekmenin query'si + listesi.
+  const modalActiveQuery =
+    modalSubTab === 'cancellable' ? cancellableReceiptsQuery : receiptsQuery;
+  const modalReceipts =
+    modalSubTab === 'cancellable' ? cancellableReceipts : allReceipts;
 
   // Modal açılışında otomatik refresh — operatör manuel refresh basmasın.
   useRefetchOnOpen(pendingQuery.refetch, listModalOpen);
@@ -390,6 +483,7 @@ export default function FasonKabulScreen() {
     setNewRolls([]);
     setSubmitArmed(false);
     setHighlightedWorkOrderId(null);
+    AsyncStorage.removeItem(DRAFT_KEY);
   };
 
   const updateNewRoll = (key: string, patch: Partial<NewRollRow>) => {
@@ -413,7 +507,28 @@ export default function FasonKabulScreen() {
     setSubmitArmed(false);
   };
 
-  const selectGroup = (g: PendingReturnGroup) => {
+  const selectGroup = async (summary: PendingReturnSummary | PendingReturnGroup) => {
+    if (groupLoading) return;
+
+    // PendingReturnGroup (rolls mevcut) ise doğrudan kullan — refakat kartı akışı.
+    // PendingReturnSummary (rolls yok) ise backend'den lazy-load.
+    let g: PendingReturnGroup;
+    if ('rolls' in summary) {
+      g = summary as PendingReturnGroup;
+    } else {
+      setGroupLoading(true);
+      try {
+        const res = await subcontractorService.getPendingReturnGroup(summary.step.id);
+        g = res.data;
+      } catch (err) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Toast.show({ type: 'error', text1: 'Grup detayı alınamadı', text2: (err as Error).message });
+        return;
+      } finally {
+        setGroupLoading(false);
+      }
+    }
+
     setSelectedGroup(g);
     setRows(
       g.rolls.map((r) => ({
@@ -429,11 +544,8 @@ export default function FasonKabulScreen() {
         noteOpen: false,
       }))
     );
-    // applied color/properties default → WO.targetColor / targetProperties
     setAppliedColor(g.workOrder.targetColor ?? null);
     setAppliedProperties(g.workOrder.targetProperties ?? []);
-    // Açık kumaş pre-fill: sevkten her top için 1 satır + metre = sevk metresi.
-    // Aynen geldiyse operatör hiç dokunmadan submit eder. Sapma varsa düzeltir.
     setNewRolls(
       g.rolls.length > 0
         ? g.rolls.map((r) =>
@@ -473,7 +585,7 @@ export default function FasonKabulScreen() {
       // ("Mevcut konum: Kurşun + KK2 (4 rulo)..."). Banner'da göster.
       let matching: PendingReturnGroup[];
       try {
-        const pr = await subcontractorService.pendingReturns(card.workOrderId);
+        const pr = await subcontractorService.pendingReturnsByWorkOrder(card.workOrderId);
         matching = pr.data ?? [];
       } catch (err) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -651,6 +763,22 @@ export default function FasonKabulScreen() {
     return list;
   }, [allGroups, highlightedWorkOrderId]);
 
+  const filteredGroups = useMemo(() => {
+    const q = searchQ.trim().toLowerCase();
+    if (q.length < 2) return sortedGroups;
+    const hit = (s?: string | null) => !!s && s.toLowerCase().includes(q);
+    const hitAny = (arr?: string[]) => !!arr && arr.some((s) => hit(s));
+    return sortedGroups.filter(
+      (g) =>
+        hit(g.workOrder.batchNumber) ||
+        hit(g.lastDispatch?.subcontractor?.name) ||
+        hit(g.step.station.name) ||
+        hitAny(g.itemNames) ||
+        hitAny(g.colorNames) ||
+        hitAny(g.cardNumbers),
+    );
+  }, [sortedGroups, searchQ]);
+
   // ── Render ──
   return (
     <ScreenChrome
@@ -734,27 +862,14 @@ export default function FasonKabulScreen() {
                 />
               </Surface>
 
-              {/* Mini bilgi şeridi */}
-              <View style={styles.warning}>
-                <Icon source="information-outline" size={14} color="#92400e" />
-                <Text style={styles.warningText}>
-                  Yeni barkod basılmaz, ölçüm sonraki istasyonda yapılır
-                </Text>
-              </View>
-
               {/* "Renk veren" kategori (Boyahane vb.) — uygulanacak renk/özellikler */}
               {appliesColor && (
                 <View style={styles.appliesColorCard}>
-                  <View style={styles.appliesColorHeader}>
-                    <Icon source="palette" size={16} color="#7c3aed" />
-                    <Text style={styles.appliesColorTitle}>
-                      Uygulanacak Renk + Özellikler
-                    </Text>
-                    <Text style={styles.appliesColorHint}>
-                      WO planlamasından
-                    </Text>
-                  </View>
-                  <View style={styles.appliesColorBody}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.appliesColorRow}
+                  >
                     {appliedColor ? (
                       <View style={styles.appliesColorChip}>
                         <View
@@ -769,22 +884,17 @@ export default function FasonKabulScreen() {
                       </View>
                     ) : (
                       <Text style={styles.appliesColorEmpty}>
-                        WO'da renk belirtilmemiş — kabul sonrası rulolar
-                        renksiz kalır
+                        Renk belirtilmemiş
                       </Text>
                     )}
-                    {appliedProperties.length > 0 && (
-                      <View style={styles.appliesPropertyRow}>
-                        {appliedProperties.map((p) => (
-                          <View key={p.id} style={styles.appliesPropertyChip}>
-                            <Text style={styles.appliesPropertyChipText}>
-                              {p.name}
-                            </Text>
-                          </View>
-                        ))}
+                    {appliedProperties.map((p) => (
+                      <View key={p.id} style={styles.appliesPropertyChip}>
+                        <Text style={styles.appliesPropertyChipText}>
+                          {p.name}
+                        </Text>
                       </View>
-                    )}
-                  </View>
+                    ))}
+                  </ScrollView>
                 </View>
               )}
 
@@ -1151,43 +1261,42 @@ export default function FasonKabulScreen() {
           {rightTab === 'pending' && (
             <PendingPane
               loading={pendingQuery.isLoading}
-              groups={sortedGroups}
+              groupLoading={groupLoading}
+              groups={filteredGroups}
               selectedStepId={selectedGroup?.step.id ?? null}
               highlightedWorkOrderId={highlightedWorkOrderId}
+              searchQ={searchQ}
+              onSearchChange={setSearchQ}
               onSelect={selectGroup}
             />
           )}
           {rightTab === 'cancellable' && (
             <HistoryPane
               loading={cancellableReceiptsQuery.isLoading}
-              fetching={cancellableReceiptsQuery.isFetching}
               error={cancellableReceiptsQuery.isError ? (cancellableReceiptsQuery.error as Error) : null}
-              receipts={cancellableReceiptsQuery.data?.data ?? []}
-              page={cancellableReceiptsQuery.data?.pagination?.page ?? 1}
-              totalPages={cancellableReceiptsQuery.data?.pagination?.totalPages ?? 1}
-              total={cancellableReceiptsQuery.data?.pagination?.total ?? 0}
+              receipts={cancellableReceipts}
+              hasNextPage={cancellableReceiptsQuery.hasNextPage}
+              isFetchingNextPage={cancellableReceiptsQuery.isFetchingNextPage}
+              onEndReached={() => cancellableReceiptsQuery.fetchNextPage()}
               onShowDetail={setDetailReceiptId}
               onCancel={(id) => {
                 setCancelTargetReceiptId(id);
                 setCancelReason('');
               }}
-              onPageChange={setReceiptsPage}
               onRefresh={() => cancellableReceiptsQuery.refetch()}
             />
           )}
           {rightTab === 'history' && (
             <HistoryPane
               loading={receiptsQuery.isLoading}
-              fetching={receiptsQuery.isFetching}
               error={receiptsQuery.isError ? (receiptsQuery.error as Error) : null}
-              receipts={receiptsQuery.data?.data ?? []}
-              page={receiptsQuery.data?.pagination?.page ?? 1}
-              totalPages={receiptsQuery.data?.pagination?.totalPages ?? 1}
-              total={receiptsQuery.data?.pagination?.total ?? 0}
+              receipts={allReceipts}
+              hasNextPage={receiptsQuery.hasNextPage}
+              isFetchingNextPage={receiptsQuery.isFetchingNextPage}
+              onEndReached={() => receiptsQuery.fetchNextPage()}
               onShowDetail={setDetailReceiptId}
               /* onCancel verilmedi → ReceiptRow iptal butonunu gizler.
                  Geçmiş kabuller artık iptal edilemez (born roll'lar işleme girdi). */
-              onPageChange={setReceiptsPage}
               onRefresh={() => receiptsQuery.refetch()}
             />
           )}
@@ -1256,16 +1365,13 @@ export default function FasonKabulScreen() {
         )}
       </View>
 
-      {/* Detay modal — tablet'te sağ panelden veya telefon history modal
-          KAPALIYKEN üst seviyede mount. Telefon history modal AÇIKKEN detay
-          history'nin RNModal portal'ı içine `overlay` prop'uyla render
-          edilir (RNModal-içinde-RNModal çakışmasını önler). */}
-      {!historyModalOpen && (
-        <ReceiptDetailModal
-          receiptId={detailReceiptId}
-          onDismiss={() => setDetailReceiptId(null)}
-        />
-      )}
+      {/* Detay modal — kendi AppModal'ı (Portal + swipe). Telefon Geçmiş modalı
+          açık olsa bile ayrı Portal'da üstte açılır; aşağı çekerek kapanır ve
+          alttaki listenin swipe'ını tetiklemez. */}
+      <ReceiptDetailModal
+        receiptId={detailReceiptId}
+        onDismiss={() => setDetailReceiptId(null)}
+      />
 
       {/* Bekleyen sevk listesi — hızlı seçim için */}
       <CameraScanModal
@@ -1274,10 +1380,14 @@ export default function FasonKabulScreen() {
         fetching={pendingQuery.isFetching}
         isError={pendingQuery.isError}
         errorMessage={(pendingQuery.error as Error | undefined)?.message}
-        groups={allGroups}
-        onDismiss={() => setListModalOpen(false)}
+        groups={filteredGroups}
+        groupLoading={groupLoading}
+        searchQ={searchQ}
+        onSearchChange={setSearchQ}
+        onDismiss={() => { setListModalOpen(false); setSearchQ(''); }}
         onSelect={(g) => {
           setListModalOpen(false);
+          setSearchQ('');
           selectGroup(g);
         }}
         onRefresh={() => pendingQuery.refetch()}
@@ -1290,49 +1400,14 @@ export default function FasonKabulScreen() {
         visible={historyModalOpen}
         onDismiss={() => setHistoryModalOpen(false)}
         tab={modalSubTab}
-        onTabChange={(t) => {
-          setModalSubTab(t);
-          setReceiptsPage(1); // tab değiştiğinde sayfa sıfırla
-        }}
-        loading={
-          modalSubTab === 'cancellable'
-            ? cancellableReceiptsQuery.isLoading
-            : receiptsQuery.isLoading
-        }
-        fetching={
-          modalSubTab === 'cancellable'
-            ? cancellableReceiptsQuery.isFetching
-            : receiptsQuery.isFetching
-        }
-        error={
-          modalSubTab === 'cancellable'
-            ? cancellableReceiptsQuery.isError
-              ? (cancellableReceiptsQuery.error as Error)
-              : null
-            : receiptsQuery.isError
-              ? (receiptsQuery.error as Error)
-              : null
-        }
-        receipts={
-          modalSubTab === 'cancellable'
-            ? (cancellableReceiptsQuery.data?.data ?? [])
-            : (receiptsQuery.data?.data ?? [])
-        }
-        page={
-          modalSubTab === 'cancellable'
-            ? (cancellableReceiptsQuery.data?.pagination?.page ?? 1)
-            : (receiptsQuery.data?.pagination?.page ?? 1)
-        }
-        totalPages={
-          modalSubTab === 'cancellable'
-            ? (cancellableReceiptsQuery.data?.pagination?.totalPages ?? 1)
-            : (receiptsQuery.data?.pagination?.totalPages ?? 1)
-        }
-        total={
-          modalSubTab === 'cancellable'
-            ? (cancellableReceiptsQuery.data?.pagination?.total ?? 0)
-            : (receiptsQuery.data?.pagination?.total ?? 0)
-        }
+        onTabChange={setModalSubTab}
+        loading={modalActiveQuery.isLoading}
+        fetching={modalActiveQuery.isFetching}
+        error={modalActiveQuery.isError ? (modalActiveQuery.error as Error) : null}
+        receipts={modalReceipts}
+        hasNextPage={modalActiveQuery.hasNextPage}
+        isFetchingNextPage={modalActiveQuery.isFetchingNextPage}
+        onEndReached={() => modalActiveQuery.fetchNextPage()}
         onShowDetail={setDetailReceiptId}
         onCancel={
           modalSubTab === 'cancellable'
@@ -1342,37 +1417,27 @@ export default function FasonKabulScreen() {
               }
             : undefined
         }
-        onPageChange={setReceiptsPage}
-        onRefresh={() =>
-          modalSubTab === 'cancellable'
-            ? cancellableReceiptsQuery.refetch()
-            : receiptsQuery.refetch()
-        }
+        overlayActive={!!cancelTargetReceiptId}
+        onRefresh={() => modalActiveQuery.refetch()}
         overlay={
-          <>
-            <ReceiptDetailModal
-              receiptId={detailReceiptId}
-              onDismiss={() => setDetailReceiptId(null)}
-            />
-            <CancelReceiptModal
-              visible={!!cancelTargetReceiptId}
-              preview={cancelPreview}
-              previewLoading={cancelPreviewQuery.isLoading}
-              previewError={
-                cancelPreviewQuery.error
-                  ? (cancelPreviewQuery.error as Error).message
-                  : null
-              }
-              onDismiss={() => {
-                setCancelTargetReceiptId(null);
-                setCancelReason('');
-              }}
-              reason={cancelReason}
-              onReasonChange={setCancelReason}
-              submitting={cancelReceiptMutation.isPending}
-              onConfirm={handleConfirmCancelReceipt}
-            />
-          </>
+          <CancelReceiptModal
+            visible={!!cancelTargetReceiptId}
+            preview={cancelPreview}
+            previewLoading={cancelPreviewQuery.isLoading}
+            previewError={
+              cancelPreviewQuery.error
+                ? (cancelPreviewQuery.error as Error).message
+                : null
+            }
+            onDismiss={() => {
+              setCancelTargetReceiptId(null);
+              setCancelReason('');
+            }}
+            reason={cancelReason}
+            onReasonChange={setCancelReason}
+            submitting={cancelReceiptMutation.isPending}
+            onConfirm={handleConfirmCancelReceipt}
+          />
         }
       />
 
@@ -1692,6 +1757,9 @@ function CameraScanModal({
   isError,
   errorMessage,
   groups,
+  groupLoading,
+  searchQ,
+  onSearchChange,
   onDismiss,
   onSelect,
   onRefresh,
@@ -1701,9 +1769,12 @@ function CameraScanModal({
   fetching: boolean;
   isError: boolean;
   errorMessage?: string;
-  groups: PendingReturnGroup[];
+  groups: PendingReturnSummary[];
+  groupLoading: boolean;
+  searchQ: string;
+  onSearchChange: (q: string) => void;
   onDismiss: () => void;
-  onSelect: (g: PendingReturnGroup) => void;
+  onSelect: (g: PendingReturnSummary) => void;
   onRefresh: () => void;
 }) {
   return (
@@ -1713,35 +1784,74 @@ function CameraScanModal({
       title="Bekleyen Sevkler"
       icon="format-list-bulleted"
       loading={loading}
-      fetching={fetching}
+      fetching={fetching || groupLoading}
       isError={isError}
       errorMessage={errorMessage}
       onRefresh={onRefresh}
+      // Modal içi refresh tuşu da başarıda toast göstersin — ekran header'ındaki
+      // "Yenile" ile tutarlı (önceden successMessage yoktu → sessiz kalıyordu).
+      successMessage="Bekleyen sevkler güncellendi"
       items={groups}
       keyExtractor={(g) => g.step.id}
       renderItem={(item) => (
         <PendingDispatchRow group={item} onPress={() => onSelect(item)} />
       )}
       emptyIcon="package-variant"
-      emptyText="Fasonda bekleyen sevk yok"
+      emptyText={searchQ.length >= 2 ? 'Eşleşen sevk yok' : 'Fasonda bekleyen sevk yok'}
+      subHeader={
+        <View style={cameraStyles.searchRow}>
+          <Icon source="magnify" size={18} color="#94a3b8" />
+          <TextInput
+            mode="flat"
+            placeholder="Parti, kumaş, renk, kart no, fason..."
+            value={searchQ}
+            onChangeText={onSearchChange}
+            style={cameraStyles.searchInput}
+            underlineColor="transparent"
+            activeUnderlineColor="transparent"
+            dense
+          />
+          {searchQ.length > 0 && (
+            <IconButton icon="close-circle" size={16} onPress={() => onSearchChange('')} style={cameraStyles.searchClear} />
+          )}
+        </View>
+      }
       hint={{ text: 'Refakat kartı yoksa aşağıdan dönecek sevki seçerek devam edin.' }}
     />
   );
+}
+
+// Gruptaki distinct kumaş + renk adlarını "Kumaş · Renk" tek satırına indirger.
+// Hiçbiri yoksa null (satır gizlenir).
+function fabricLabel(g: PendingReturnSummary): string | null {
+  const item = g.itemNames?.join(', ') || '';
+  const color = g.colorNames?.join(', ') || '';
+  if (item && color) return `${item} · ${color}`;
+  return item || color || null;
 }
 
 function PendingDispatchRow({
   group,
   onPress,
 }: {
-  group: PendingReturnGroup;
+  group: PendingReturnSummary;
   onPress: () => void;
 }) {
+  const fabric = fabricLabel(group);
   return (
     <Surface style={cameraStyles.row} elevation={1}>
       <TouchableRipple borderless onPress={onPress} style={cameraStyles.rowTouch}>
         <View style={cameraStyles.rowInner}>
           <View style={{ flex: 1 }}>
             <Text style={cameraStyles.rowBatch}>{group.workOrder.batchNumber}</Text>
+            {fabric && (
+              <View style={cameraStyles.rowMeta}>
+                <Icon source="palette" size={12} color="#475569" />
+                <Text style={cameraStyles.rowMetaText} numberOfLines={1}>
+                  {fabric}
+                </Text>
+              </View>
+            )}
             <View style={cameraStyles.rowMeta}>
               <Icon source="map-marker-path" size={12} color="#475569" />
               <Text style={cameraStyles.rowMetaText} numberOfLines={1}>
@@ -1827,14 +1937,14 @@ function HistoryReceiptsModal({
   fetching,
   error,
   receipts,
-  page,
-  totalPages,
-  total,
+  hasNextPage,
+  isFetchingNextPage,
+  onEndReached,
   onShowDetail,
   onCancel,
-  onPageChange,
   onRefresh,
   overlay,
+  overlayActive,
   tab,
   onTabChange,
 }: {
@@ -1844,17 +1954,20 @@ function HistoryReceiptsModal({
   fetching: boolean;
   error: Error | null;
   receipts: import('../../../types/models').SubcontractorReceiptListItem[];
-  page: number;
-  totalPages: number;
-  total: number;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  /** Liste sonuna yaklaşınca bir sonraki sayfayı çeker (cursor infinite scroll). */
+  onEndReached: () => void;
   onShowDetail: (id: string) => void;
   /** Yalnız 'cancellable' tab'da görünür — settled tab'da undefined. */
   onCancel?: (id: string) => void;
-  onPageChange: (page: number) => void;
   onRefresh: () => void;
   /** Sheet'in üstüne render edilen overlay (detay modal) — aynı RNModal
    *  portal'ında olduğu için detay listeyi örtüp listeye geri dönüyor. */
   overlay?: React.ReactNode;
+  /** Bir overlay (detay/iptal) açık mı — açıkken sheet swipe'ı kapatılır ki
+   *  overlay tepesinden çekiş yanlışlıkla listeyi kapatmasın. */
+  overlayActive?: boolean;
   /** Sub-tab: 'cancellable' = iptal butonu görünür, 'history' = sadece detay. */
   tab: 'cancellable' | 'history';
   onTabChange: (t: 'cancellable' | 'history') => void;
@@ -1866,13 +1979,25 @@ function HistoryReceiptsModal({
       title="Kabul Geçmişi"
       icon="history"
       widthRatio={0.9}
+      swipeToDismiss={!overlayActive}
       loading={loading}
       fetching={fetching}
       isError={!!error}
       errorMessage={error?.message}
       onRefresh={onRefresh}
+      successMessage="Kabul listesi güncellendi"
       items={receipts}
       keyExtractor={(r) => r.id}
+      onEndReached={() => {
+        if (hasNextPage && !isFetchingNextPage) onEndReached();
+      }}
+      listFooterComponent={
+        isFetchingNextPage ? (
+          <View style={styles.loadingMore}>
+            <ActivityIndicator size="small" color="#64748b" />
+          </View>
+        ) : null
+      }
       overlay={overlay}
       subHeader={
         <View style={modalTabStyles.tabRow}>
@@ -1927,15 +2052,6 @@ function HistoryReceiptsModal({
           ? 'İptal edilebilir kabul yok'
           : 'Henüz kabul yapılmamış'
       }
-      footer={
-        <Pager
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          fetching={fetching}
-          onPageChange={onPageChange}
-        />
-      }
     />
   );
 }
@@ -1960,44 +2076,74 @@ const modalTabStyles = StyleSheet.create({
 
 function PendingPane({
   loading,
+  groupLoading,
   groups,
   selectedStepId,
   highlightedWorkOrderId,
+  searchQ,
+  onSearchChange,
   onSelect,
 }: {
   loading: boolean;
-  groups: PendingReturnGroup[];
+  groupLoading: boolean;
+  groups: PendingReturnSummary[];
   selectedStepId: string | null;
   highlightedWorkOrderId: string | null;
-  onSelect: (g: PendingReturnGroup) => void;
+  searchQ: string;
+  onSearchChange: (q: string) => void;
+  onSelect: (g: PendingReturnSummary) => void;
 }) {
-  if (loading) {
-    return <SkeletonList count={6} />;
-  }
-  if (groups.length === 0) {
-    return (
-      <View style={styles.paneEmpty}>
-        <Icon source="package-variant" size={48} color="#cbd5e1" />
-        <Text style={styles.paneEmptyText}>Fasonda bekleyen sevk yok</Text>
-      </View>
-    );
-  }
   return (
-    <FlashList
-      data={groups}
-      keyExtractor={(g) => g.step.id}
-      contentContainerStyle={{ padding: 8 }}
-      renderItem={({ item }) => (
-        <PendingCard
-          group={item}
-          selected={item.step.id === selectedStepId}
-          highlighted={
-            !!highlightedWorkOrderId && item.workOrder.id === highlightedWorkOrderId
-          }
-          onPress={() => onSelect(item)}
+    <View style={{ flex: 1 }}>
+      <View style={styles.paneSearchRow}>
+        <Icon source="magnify" size={18} color="#94a3b8" />
+        <TextInput
+          mode="flat"
+          placeholder="Parti no, fason firma, istasyon..."
+          value={searchQ}
+          onChangeText={onSearchChange}
+          style={styles.paneSearchInput}
+          underlineColor="transparent"
+          activeUnderlineColor="transparent"
+          dense
         />
-      )}
-    />
+        {searchQ.length > 0 && (
+          <IconButton icon="close-circle" size={16} onPress={() => onSearchChange('')} style={styles.paneSearchClear} />
+        )}
+      </View>
+      {/* Arama input'u dışına tap → klavye kapanır (boş alan / empty-state). */}
+      <Pressable style={{ flex: 1 }} onPress={() => Keyboard.dismiss()} accessible={false}>
+        {loading ? (
+          <SkeletonList count={6} />
+        ) : groups.length === 0 ? (
+          <View style={styles.paneEmpty}>
+            <Icon source="package-variant" size={48} color="#cbd5e1" />
+            <Text style={styles.paneEmptyText}>
+              {searchQ.length >= 2 ? 'Eşleşen sevk yok' : 'Fasonda bekleyen sevk yok'}
+            </Text>
+          </View>
+        ) : (
+          <FlashList
+            data={groups}
+            keyExtractor={(g) => g.step.id}
+            contentContainerStyle={{ padding: 8 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            renderItem={({ item }) => (
+              <PendingCard
+                group={item}
+                selected={item.step.id === selectedStepId}
+                highlighted={
+                  !!highlightedWorkOrderId && item.workOrder.id === highlightedWorkOrderId
+                }
+                loading={groupLoading && item.step.id === selectedStepId}
+                onPress={() => onSelect(item)}
+              />
+            )}
+          />
+        )}
+      </Pressable>
+    </View>
   );
 }
 
@@ -2005,11 +2151,13 @@ function PendingCard({
   group,
   selected,
   highlighted,
+  loading,
   onPress,
 }: {
-  group: PendingReturnGroup;
+  group: PendingReturnSummary;
   selected: boolean;
   highlighted: boolean;
+  loading?: boolean;
   onPress: () => void;
 }) {
   return (
@@ -2033,13 +2181,24 @@ function PendingCard({
                 <Text style={styles.pendingFlagText}>KART</Text>
               </View>
             )}
-            {selected && (
+            {selected && !loading && (
               <View style={[styles.pendingFlag, { backgroundColor: '#059669' }]}>
                 <Icon source="check" size={10} color="#fff" />
                 <Text style={styles.pendingFlagText}>SEÇİLİ</Text>
               </View>
             )}
+            {loading && (
+              <ActivityIndicator size={14} color="#059669" style={{ marginLeft: 4 }} />
+            )}
           </View>
+          {fabricLabel(group) && (
+            <View style={styles.pendingMidRow}>
+              <Icon source="palette" size={12} color="#475569" />
+              <Text style={styles.pendingStep} numberOfLines={1}>
+                {fabricLabel(group)}
+              </Text>
+            </View>
+          )}
           <View style={styles.pendingMidRow}>
             <Icon source="map-marker-path" size={12} color="#475569" />
             <Text style={styles.pendingStep} numberOfLines={1}>
@@ -2070,29 +2229,26 @@ function PendingCard({
 
 function HistoryPane({
   loading,
-  fetching,
   error,
   receipts,
-  page,
-  totalPages,
-  total,
+  hasNextPage,
+  isFetchingNextPage,
+  onEndReached,
   onShowDetail,
   onCancel,
-  onPageChange,
   onRefresh,
 }: {
   loading: boolean;
-  fetching: boolean;
   error: Error | null;
   receipts: import('../../../types/models').SubcontractorReceiptListItem[];
-  page: number;
-  totalPages: number;
-  total: number;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  /** Liste sonuna yaklaşınca bir sonraki sayfayı çeker (cursor infinite scroll). */
+  onEndReached: () => void;
   onShowDetail: (id: string) => void;
   /** Verilirse her satırda İptal Et butonu görünür. Settled tab'ında verilmez
       → ReceiptRow iptal butonunu otomatik gizler. */
   onCancel?: (id: string) => void;
-  onPageChange: (page: number) => void;
   onRefresh: () => void;
 }) {
   if (loading) {
@@ -2123,6 +2279,17 @@ function HistoryPane({
         data={receipts}
         keyExtractor={(r) => r.id}
         contentContainerStyle={{ padding: 8 }}
+        onEndReachedThreshold={0.6}
+        onEndReached={() => {
+          if (hasNextPage && !isFetchingNextPage) onEndReached();
+        }}
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <View style={styles.loadingMore}>
+              <ActivityIndicator size="small" color="#64748b" />
+            </View>
+          ) : null
+        }
         renderItem={({ item }) => (
           <ReceiptRow
             receipt={item}
@@ -2130,13 +2297,6 @@ function HistoryPane({
             onCancel={onCancel}
           />
         )}
-      />
-      <Pager
-        page={page}
-        totalPages={totalPages}
-        total={total}
-        fetching={fetching}
-        onPageChange={onPageChange}
       />
     </View>
   );
@@ -2258,27 +2418,18 @@ const styles = StyleSheet.create({
   appliesColorCard: {
     marginHorizontal: 12,
     marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 10,
     backgroundColor: '#faf5ff',
     borderWidth: 1,
     borderColor: '#c4b5fd',
-    gap: 8,
   },
-  appliesColorHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  appliesColorTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#6d28d9',
-    flex: 1,
+  appliesColorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
   },
-  appliesColorHint: {
-    fontSize: 10,
-    color: '#7c3aed',
-    fontStyle: 'italic',
-  },
-  appliesColorBody: { gap: 6 },
   appliesColorChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2300,7 +2451,6 @@ const styles = StyleSheet.create({
   },
   appliesColorChipText: { fontSize: 13, fontWeight: '600', color: '#0f172a' },
   appliesColorEmpty: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' },
-  appliesPropertyRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   appliesPropertyChip: {
     backgroundColor: '#ede9fe',
     paddingHorizontal: 8,
@@ -2562,6 +2712,7 @@ const styles = StyleSheet.create({
   tabCountText: { fontSize: 11, fontWeight: '700', color: '#0f172a' },
   // Pane (tab içeriği)
   paneFlex: { flex: 1 },
+  loadingMore: { paddingVertical: 16, alignItems: 'center' },
   paneEmpty: {
     flex: 1,
     justifyContent: 'center',
@@ -2571,6 +2722,24 @@ const styles = StyleSheet.create({
   },
   paneEmptyText: { fontSize: 14, color: '#94a3b8', fontWeight: '600' },
   paneEmptyHint: { fontSize: 12, color: '#cbd5e1', textAlign: 'center' },
+
+  paneSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    gap: 4,
+  },
+  paneSearchInput: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    fontSize: 13,
+    height: 36,
+  },
+  paneSearchClear: { margin: 0, width: 28, height: 28 },
 
   // Bekleyen kart
   pendingCard: {
@@ -2698,4 +2867,22 @@ const cameraStyles = StyleSheet.create({
   },
   rowQty: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
   rowDate: { fontSize: 11, color: '#94a3b8' },
+
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    gap: 4,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    fontSize: 13,
+    height: 36,
+  },
+  searchClear: { margin: 0, width: 28, height: 28 },
 });

@@ -22,6 +22,8 @@ export interface CursorPaginatedResponse<T> {
     nextCursor: string | null;
     hasMore: boolean;
     limit: number;
+    /** İlk sayfada yaklaşık toplam (backend `withTotal=true`). */
+    totalEstimate?: number;
   };
 }
 

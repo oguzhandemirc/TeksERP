@@ -24,8 +24,13 @@ export function useOpenTarget() {
   const navigateActive = useTabsStore((s) => s.navigateActive);
 
   return (path: string, e?: ClickLike, state?: unknown) => {
-    if (wantsNewTab(e)) openTab(path, { forceNew: true, state });
-    else navigateActive(path, { state });
+    if (wantsNewTab(e)) {
+      // Sağ tık (button 2) / orta tık (button 1) → odaklanmadan arka planda aç:
+      // kullanıcı mevcut ekranda kalır, peş peşe birden çok sekme açabilir.
+      // shift/ctrl/cmd ile sol tık ise kasıtlı "oraya götür" → ön plana al.
+      const background = e?.button === 1 || e?.button === 2;
+      openTab(path, { forceNew: true, state, background });
+    } else navigateActive(path, { state });
   };
 }
 

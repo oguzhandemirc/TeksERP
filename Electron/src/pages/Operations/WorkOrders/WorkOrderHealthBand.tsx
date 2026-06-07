@@ -1,8 +1,7 @@
 import { AlertTriangle, CalendarClock, Flame } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
-import { AnimatedProgress } from "@/components/motion";
-import { formatNumber } from "@/lib/format";
+import { AnimatedProgress, AnimatedNumber } from "@/components/motion";
 import { cn } from "@/lib/utils";
 import type { WorkOrder } from "./types";
 
@@ -77,12 +76,12 @@ export function WorkOrderHealthBand({ wo }: { wo: WorkOrder }) {
           {hasFlow ? (
             <>
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-lg font-bold leading-none text-primary">%{pct}</span>
+                <span className="text-lg font-bold leading-none text-primary">%<AnimatedNumber value={pct} delay={0.25} /></span>
                 <span className="text-xs tabular-nums text-muted-foreground">
-                  çıkan {formatNumber(output, 0)} / giren {formatNumber(input, 0)} m
+                  çıkan <AnimatedNumber value={output} delay={0.25} /> / giren <AnimatedNumber value={input} delay={0.25} /> m
                 </span>
               </div>
-              <AnimatedProgress value={pct} className="mt-2 h-2" />
+              <AnimatedProgress value={pct} className="mt-2 h-2" delay={0.25} />
             </>
           ) : (
             <div className="mt-1 text-sm text-muted-foreground">Üretime giren mal yok.</div>

@@ -12,6 +12,7 @@ import type {
   Subcontractor,
   SubcontractorCategory,
   PendingReturnGroup,
+  PendingReturnSummary,
   ReceiveRequest,
   SubcontractorReceipt,
   SubcontractorReceiptListItem,
@@ -158,16 +159,27 @@ export const subcontractorService = {
 
   // ── Mal Kabul (Receipt) ─────────────────────────────────────────────────────
 
-  /**
-   * Fasonda bekleyen sevkler. workOrderId verilirse sadece o WO'nun grupları döner
-   * (refakat kartı tarama akışı için).
-   */
-  pendingReturns: (workOrderId?: string): Promise<ApiResponse<PendingReturnGroup[]>> => {
-    const qs = workOrderId ? `?workOrderId=${encodeURIComponent(workOrderId)}` : '';
-    return apiClient
-      .get<ApiResponse<PendingReturnGroup[]>>(`/subcontractor/pending-returns${qs}`)
-      .then((r) => r.data);
-  },
+  /** Tüm bekleyen sevkler — rolls yok, liste için hafif özet. */
+  pendingReturns: (): Promise<ApiResponse<PendingReturnSummary[]>> =>
+    apiClient
+      .get<ApiResponse<PendingReturnSummary[]>>('/subcontractor/pending-returns')
+      .then((r) => r.data),
+
+  /** Refakat kartı akışı — WO'ya özel, rolls dahil (küçük sonuç, auto-select için). */
+  pendingReturnsByWorkOrder: (workOrderId: string): Promise<ApiResponse<PendingReturnGroup[]>> =>
+    apiClient
+      .get<ApiResponse<PendingReturnGroup[]>>(
+        `/subcontractor/pending-returns?workOrderId=${encodeURIComponent(workOrderId)}`,
+      )
+      .then((r) => r.data),
+
+  /** Seçim anında tek grup detayı — rolls lazy-load. */
+  getPendingReturnGroup: (stepId: string): Promise<ApiResponse<PendingReturnGroup>> =>
+    apiClient
+      .get<ApiResponse<PendingReturnGroup>>(
+        `/subcontractor/pending-returns/step/${encodeURIComponent(stepId)}`,
+      )
+      .then((r) => r.data),
 
   receive: (data: ReceiveRequest): Promise<ApiResponse<SubcontractorReceipt>> =>
     apiClient
@@ -194,6 +206,36 @@ export const subcontractorService = {
     return apiClient
       .get<PaginatedResponse<SubcontractorReceiptListItem>>(
         `/subcontractor/receipts${qs ? `?${qs}` : ''}`
+      )
+      .then((r) => r.data);
+  },
+
+  /**
+   * Geçmiş Kabuller sonsuz akışı: cursor (keyset) pagination. count yok
+   * (withTotal opt-in) → derin sayfalamada sabit maliyet + MAX_OFFSET tavanı yok.
+   * `receivedAt desc + id desc` indeksli sıralama. cancellable filtresi korunur.
+   */
+  listReceiptsCursor: (
+    params: {
+      workOrderId?: string;
+      subcontractorId?: string;
+      cancellable?: 'yes' | 'no';
+      limit?: number;
+      cursor?: string | null;
+      withTotal?: boolean;
+    } = {},
+  ): Promise<CursorPaginatedResponse<SubcontractorReceiptListItem>> => {
+    const sp = new URLSearchParams();
+    sp.set('mode', 'cursor');
+    if (params.workOrderId) sp.set('workOrderId', params.workOrderId);
+    if (params.subcontractorId) sp.set('subcontractorId', params.subcontractorId);
+    if (params.cancellable) sp.set('cancellable', params.cancellable);
+    sp.set('limit', String(params.limit ?? 20));
+    if (params.cursor) sp.set('cursor', params.cursor);
+    if (params.withTotal) sp.set('withTotal', 'true');
+    return apiClient
+      .get<CursorPaginatedResponse<SubcontractorReceiptListItem>>(
+        `/subcontractor/receipts?${sp.toString()}`,
       )
       .then((r) => r.data);
   },

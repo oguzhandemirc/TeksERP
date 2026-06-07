@@ -42,13 +42,14 @@ const PAGE_SIZE = 50;
 // Depo personeli sekmesi: Tümü (depo+ham) / Depo (WAREHOUSE) / Ham (STOCK) /
 // Kartela (Swatch). Sevkiyat modülü yeniden yazılınca burada yeni durumlar
 // olabilir; ham (STOCK) ve kartela üretim öncesi/yan envanteri kapsar.
-type ModeFilter = 'ALL' | 'WAREHOUSE' | 'STOCK' | 'SWATCH';
+type ModeFilter = 'ALL' | 'WAREHOUSE' | 'STOCK' | 'SWATCH' | 'KARTELALIK';
 
 const MODE_TABS: { key: ModeFilter; label: string; color: string }[] = [
   { key: 'ALL', label: 'Tümü', color: '#475569' },
   { key: 'WAREHOUSE', label: 'Depo', color: '#d97706' },
   { key: 'STOCK', label: 'Ham', color: '#0ea5e9' },
   { key: 'SWATCH', label: 'Kartela', color: '#7c3aed' },
+  { key: 'KARTELALIK', label: 'Kartelalık', color: '#059669' },
 ];
 
 interface RollListItem {
@@ -89,11 +90,18 @@ export default function DepoScreen() {
   const handleSwatchDetailDismiss = useCallback(() => setDetailSwatch(null), []);
 
   const isSwatchMode = mode === 'SWATCH';
+  const isKartelalikMode = mode === 'KARTELALIK';
 
   // Arama backend'de filtreleniyor. Her tuşa basıldığında istek atmamak için
   // 300ms debounce — input anında doldurulur (controlled), ama queryKey sadece
   // kullanıcı yazmayı bıraktığında değişir. (Tambur/FasonSevk ile aynı pattern.)
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
+
+  // Min 3 karakter kapısı: 1-2 harflik arama 500k satırda geniş `itemId IN`
+  // kümesi + ağır stats taraması üretir, faydası yok. Barkod metni (TEKS-...,
+  // SW-...) zaten 3+ karakterdir → tam-eşleşme aramasını engellemez. <3 → arama
+  // yok sayılır (queryKey'de de '' olduğu için "a"/"ab"/"" aynı sorguya düşer).
+  const effectiveSearch = debouncedSearch.length >= 3 ? debouncedSearch : '';
 
   // Roll listesi — status filtresi mode'a göre belirlenir. SWATCH modunda
   // bu query enabled=false (kartela ayrı endpoint).
@@ -101,23 +109,29 @@ export default function DepoScreen() {
   // A1_STOCK (2. kalite satılabilir), PRODUCED (Tambur'a girmemiş tamamlanmış),
   // STOCK (ham). includeFire=true olmadan backend FIRE kaliteleri sessizce gizler.
   const rollsFilters = useMemo<Record<string, string | string[]>>(() => {
-    const f: Record<string, string | string[]> = { includeFire: 'true' };
+    // shipmentScope:'free' → çuvallanmış (bir sevkiyata okutulmuş) toplar HARİÇ. Çuvallanan
+    // top artık "serbest depoda" görünmez; çuval depo/kapı önü ayrı izlenir (Sevk Çıkışı).
+    const f: Record<string, string | string[]> = { includeFire: 'true', shipmentScope: 'free' };
     if (mode === 'ALL') f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'PRODUCED', 'STOCK'];
     else if (mode === 'WAREHOUSE') f.status = 'WAREHOUSE';
     else if (mode === 'STOCK') f.status = 'STOCK';
+    else if (mode === 'KARTELALIK') {
+      f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'PRODUCED', 'STOCK'];
+      f.markedForKartela = 'true';
+    }
     return f;
   }, [mode]);
 
   // Liste — cursor-mode infinite scroll. mode/search değiştiğinde queryKey
   // değişir → useInfiniteQuery state'i sıfırlar (ilk sayfa).
   const rollsQuery = useInfiniteQuery({
-    queryKey: ['rolls', 'depo', mode, debouncedSearch] as const,
+    queryKey: ['rolls', 'depo', mode, effectiveSearch] as const,
     queryFn: ({ pageParam }) =>
       rollService.getAllCursor({
         limit: PAGE_SIZE,
         cursor: pageParam,
         filters: rollsFilters,
-        search: debouncedSearch || undefined,
+        search: effectiveSearch || undefined,
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) =>
@@ -129,24 +143,34 @@ export default function DepoScreen() {
   // Stats — TÜM filtreye uyan rolların aggregate'i (sayfaya bağlı değil).
   // Liste ile aynı filtre seti, ayrı endpoint.
   const rollStatsQuery = useQuery({
-    queryKey: ['rolls', 'depo', 'stats', mode, debouncedSearch] as const,
+    queryKey: ['rolls', 'depo', 'stats', mode, effectiveSearch] as const,
     queryFn: () =>
       rollService.getStats({
-        search: debouncedSearch || undefined,
+        search: effectiveSearch || undefined,
         filters: rollsFilters,
       }),
     enabled: !isSwatchMode,
     staleTime: 30 * 1000,
   });
 
+  // Depo kapsam sayaçları — çuvallanmış (serbest stoktan düşen) malın görünürlüğü.
+  const scopeQuery = useQuery({
+    queryKey: ['rolls', 'warehouse-scope'] as const,
+    queryFn: () => rollService.getWarehouseScope(),
+    enabled: !isSwatchMode,
+    staleTime: 30 * 1000,
+  });
+  const committedCount =
+    (scopeQuery.data?.data?.sackStore.count ?? 0) + (scopeQuery.data?.data?.atDoor.count ?? 0);
+
   // Search artık backend'de — queryKey'de yer alır, değişince ilk sayfaya döner.
   const swatchesQuery = useInfiniteQuery({
-    queryKey: ['swatches', 'depo', debouncedSearch] as const,
+    queryKey: ['swatches', 'depo', effectiveSearch] as const,
     queryFn: ({ pageParam }) =>
       swatchService.listCursor({
         limit: PAGE_SIZE,
         cursor: pageParam,
-        search: debouncedSearch || undefined,
+        search: effectiveSearch || undefined,
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) =>
@@ -156,9 +180,9 @@ export default function DepoScreen() {
   });
 
   const swatchStatsQuery = useQuery({
-    queryKey: ['swatches', 'depo', 'stats', debouncedSearch] as const,
+    queryKey: ['swatches', 'depo', 'stats', effectiveSearch] as const,
     queryFn: () =>
-      swatchService.getStats({ search: debouncedSearch || undefined }),
+      swatchService.getStats({ search: effectiveSearch || undefined }),
     enabled: isSwatchMode,
     staleTime: 30 * 1000,
   });
@@ -289,7 +313,9 @@ export default function DepoScreen() {
           color="#0f172a"
         />
         <View style={styles.statDivider} />
-        <StatBox label="Depo" value={rollStats.warehouse} color="#d97706" />
+        <StatBox label="Serbest" value={rollStats.warehouse} color="#d97706" />
+        <View style={styles.statDivider} />
+        <StatBox label="Çuvalda" value={committedCount} color="#4338ca" />
         <View style={styles.statDivider} />
         <StatBox label="Ham" value={rollStats.stock} color="#0ea5e9" />
         <View style={styles.statDivider} />
@@ -368,7 +394,11 @@ export default function DepoScreen() {
           </View>
 
           {/* Mode tab'ları */}
-          <View style={styles.statusTabs}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.statusTabs}
+          >
             {MODE_TABS.map((t) => {
               const active = mode === t.key;
               return (
@@ -395,7 +425,7 @@ export default function DepoScreen() {
                 </TouchableRipple>
               );
             })}
-          </View>
+          </ScrollView>
         </Surface>
 
         {/* Liste */}
@@ -877,7 +907,7 @@ const styles = StyleSheet.create({
   },
   scanButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
-  statusTabs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  statusTabs: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   statusChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,

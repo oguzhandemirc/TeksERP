@@ -5,7 +5,6 @@ import {
   Cog,
   Send,
   Archive,
-  Palette,
   FlaskConical,
   Disc3,
   Plus,
@@ -20,11 +19,10 @@ import { ReorderableTabBar } from "@/components/layout/ReorderableTabBar";
 import { useTabOrder } from "@/hooks/useTabOrder";
 import { RollsTable } from "./RollsTable";
 import { RollsKanban } from "./RollsKanban";
-import { SwatchesPanel } from "./SwatchesPanel";
 import { ManualEntryDialog } from "./ManualEntryDialog";
 import type { RollStatusTabKey } from "./service";
 
-type RollTabKey = RollStatusTabKey | "SWATCH" | "KANBAN";
+type RollTabKey = RollStatusTabKey | "KANBAN";
 
 // Sıralama: stoklar (giriş/çıkış) önde yan yana → üretim akışı (super-set +
 // alt-kümeler) → arşiv/kartela. Operatör en sık giriş/çıkış sayım için
@@ -37,7 +35,6 @@ const TABS: Array<{ key: RollTabKey; label: string; Icon: typeof Package }> = [
   { key: "SUBCONTRACTOR",  label: "Fasonda",         Icon: Send },
   { key: "KURSUN_PENDING", label: "Kurşun Bekleyen", Icon: FlaskConical },
   { key: "TAMBUR_PENDING", label: "Tambur Bekleyen", Icon: Disc3 },
-  { key: "SWATCH",         label: "Kartela",         Icon: Palette },
   // Arşiv varsayılan olarak en sonda — nadiren bakılır. Kullanıcı sürükleyerek
   // değiştirebilir; sıra tercihte (backend) saklanır.
   { key: "ARCHIVE",        label: "Arşiv",           Icon: Archive },
@@ -87,7 +84,7 @@ export function RollsPage() {
                 "rolls" prefix match etmiyor — tek string'in başlangıcı array
                 matching ile yakalanmaz. */}
             <RefreshButton
-              queryKey={tab === "SWATCH" ? "swatches" : tab === "KANBAN" ? "rolls" : `rolls:${tab}`}
+              queryKey={tab === "KANBAN" ? "rolls" : `rolls:${tab}`}
             />
             {tab === "RAW_STOCK" && (
               <PermissionGate permission="roll:write">
@@ -107,9 +104,7 @@ export function RollsPage() {
         onSelect={(k) => setTab(k as RollTabKey)}
         onReorder={reorder}
       />
-      {tab === "SWATCH" ? (
-        <SwatchesPanel />
-      ) : tab === "KANBAN" ? (
+      {tab === "KANBAN" ? (
         <RollsKanban />
       ) : (
         <RollsTable tab={tab} />

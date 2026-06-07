@@ -39,6 +39,8 @@ interface TabsState {
   selectIndex: (index: number) => void;
   reorder: (fromId: string, toId: string) => void;
   closeOthers: (id: string) => void;
+  /** Sekme başlığını güncelle (detay sayfaları entity adını öğrendikten sonra çağırır). */
+  updateTabTitle: (id: string, title: string) => void;
 }
 
 let counter = 0;
@@ -145,6 +147,10 @@ export const useTabsStore = create<TabsState>()(
         const [moved] = next.splice(from, 1);
         next.splice(to, 0, moved!);
         set({ tabs: next });
+      },
+
+      updateTabTitle: (id, title) => {
+        set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, title } : t)) }));
       },
 
       closeOthers: (id) => {

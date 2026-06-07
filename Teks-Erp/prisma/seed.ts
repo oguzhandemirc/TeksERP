@@ -103,6 +103,7 @@ async function main() {
     { code: "mobile:tarti-paket", module: "MOBILE", category: "mobile", description: "Tartı & Paketleme ekranı" },
     { code: "mobile:sevkiyat", module: "MOBILE", category: "mobile", description: "Sevkiyat yönetimi ekranı" },
     { code: "mobile:iade", module: "MOBILE", category: "mobile", description: "İade girişi ekranı" },
+    { code: "mobile:hizli-is-emri", module: "MOBILE", category: "mobile", description: "Hızlı İş Emri ekranı (stok topu okut → WO başlat + WO yönetimi)" },
     { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
   ];
 
@@ -132,6 +133,21 @@ async function main() {
     { name: "Mobil — Paketleme Operatörü",   description: "Tartı & Paketleme ekranı",       codes: ["mobile:tarti-paket"] },
     { name: "Mobil — Sevkiyat Operatörü",    description: "Sevkiyat yönetimi ekranı",        codes: ["mobile:sevkiyat"] },
     { name: "Mobil — İade Operatörü",        description: "İade girişi ekranı",             codes: ["mobile:iade"] },
+    {
+      // Mobilde masaüstüyle aynı iş emri yetkileri: stok topu okut → WO başlat,
+      // eski WO'ları listele/görüntüle/çıktı al/düzenle. Ekran görünürlüğü
+      // `mobile:hizli-is-emri` ile; aksiyonlar için gereken master-data read'leri bundle'da.
+      name: "Mobil — Hızlı İş Emri",
+      description: "Stok topu okut → iş emri başlat + iş emri yönetimi (masaüstü WO yetkileri)",
+      codes: [
+        "mobile:hizli-is-emri",
+        "workorder:read", "workorder:write",
+        "roll:read",
+        "item:read", "property:read", "station:read",
+        "subcontractor:read", "order:read", "customer:read",
+        "label:print",
+      ],
+    },
     { name: "Mobil — Tüm Ekranlar",          description: "Tüm mobil ekranlar (wildcard)",  codes: ["mobile:*"] },
   ];
 

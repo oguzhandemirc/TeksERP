@@ -155,6 +155,13 @@ interface TamburRollSummary {
   qualityGrade: string;
   errorCount: number;
   errors: TamburRollErrorSummary[];
+  /** Dal (fason partisi) kimliği — null = fasonsuz/doğrudan top. */
+  batchSplitId: string | null;
+  /** Dalın sevk numarası (SubcontractorDispatch.dispatchNo). */
+  dispatchNo: string | null;
+  /** WO içindeki 1-based parti sırası (dispatchedAt'e göre, stabil — bir parti
+   *  Tambur'dan çıksa bile numarası kaymaz). */
+  branchOrdinal: number | null;
 }
 
 interface TamburStepSummary {
@@ -240,6 +247,97 @@ export class TamburService {
   }
 
   /**
+   * batchSplitId → { dispatchNo, ordinal } haritası. Ordinal = WO'nun TÜM
+   * sevkleri içinde dispatchedAt sırasına göre 1-based parti no — bir parti
+   * Tambur'dan çıksa bile numarası kaymaz. Tambur listesinde dalları (fason
+   * partileri) ayırt etmek için kullanılır. Tek sevk lookup'ı.
+   */
+  private async buildBranchInfoMap(
+    workOrderId: string,
+    batchSplitIds: (string | null)[],
+  ): Promise<Map<string, { dispatchNo: string; ordinal: number }>> {
+    const map = new Map<string, { dispatchNo: string; ordinal: number }>();
+    const present = new Set(batchSplitIds.filter((x): x is string => Boolean(x)));
+    if (present.size === 0) return map;
+    const dispatches = await prisma.subcontractorDispatch.findMany({
+      where: { workOrderId },
+      orderBy: { dispatchedAt: "asc" },
+      select: { id: true, dispatchNo: true },
+    });
+    dispatches.forEach((d, i) => {
+      if (present.has(d.id)) {
+        map.set(d.id, { dispatchNo: d.dispatchNo, ordinal: i + 1 });
+      }
+    });
+    return map;
+  }
+
+  /**
+   * Tambur adımında bekleyen açık RollMovement'leri TamburRollSummary[]'e çevirir
+   * — dal bilgisiyle (batchSplitId/dispatchNo/branchOrdinal) zenginleştirilmiş.
+   * getByCardBarcode + getStep ortak kullanır (önceki kopyala-yapıştır birleşti).
+   */
+  private async loadTamburRolls(step: {
+    id: string;
+    workOrderId: string;
+  }): Promise<TamburRollSummary[]> {
+    // LIFO (enteredAt desc): KK2'den son çıkan açık kumaş Tambur'a ilk gelir.
+    const openMovements = await prisma.rollMovement.findMany({
+      where: { workOrderStepId: step.id, exitedAt: null },
+      orderBy: { enteredAt: "desc" },
+      select: {
+        roll: {
+          include: {
+            item: { select: { code: true, name: true } },
+            color: { select: { code: true, name: true } },
+            properties: {
+              select: { property: { select: { id: true, name: true } } },
+            },
+            errors: {
+              where: { isProcessed: false },
+              orderBy: { startMeter: "asc" },
+              select: { id: true, startMeter: true, errorType: true },
+            },
+          },
+        },
+      },
+    });
+    const branchInfo = await this.buildBranchInfoMap(
+      step.workOrderId,
+      openMovements.map((m) => m.roll.batchSplitId),
+    );
+    return openMovements.map((m) => {
+      const bi = m.roll.batchSplitId
+        ? branchInfo.get(m.roll.batchSplitId)
+        : undefined;
+      return {
+        rollId: m.roll.id,
+        barcode: m.roll.barcode,
+        itemCode: m.roll.item.code,
+        itemName: m.roll.item.name,
+        colorCode: m.roll.color?.code ?? null,
+        colorName: m.roll.color?.name ?? null,
+        currentQty: Number(m.roll.currentQty),
+        width: m.roll.width !== null ? Number(m.roll.width) : null,
+        qualityGrade: m.roll.qualityGrade,
+        properties: m.roll.properties.map((p) => ({
+          id: p.property.id,
+          name: p.property.name,
+        })),
+        errorCount: m.roll.errors.length,
+        errors: m.roll.errors.map((e) => ({
+          id: e.id,
+          startMeter: Number(e.startMeter),
+          errorType: e.errorType,
+        })),
+        batchSplitId: m.roll.batchSplitId ?? null,
+        dispatchNo: bi?.dispatchNo ?? null,
+        branchOrdinal: bi?.ordinal ?? null,
+      };
+    });
+  }
+
+  /**
    * Refakat kartı barkoduyla TAMBUR adımını çöz ve o adımda şu an bekleyen
    * rolleri (stok kodu, lot/varyant kodu, en, hata özeti ile birlikte) döndür.
    *
@@ -283,54 +381,7 @@ export class TamburService {
     // Sıra LIFO (enteredAt desc): KK2'den en son çıkan = yeni sepetin en üstü =
     // Tambur operatörünün ilk eline aldığı top. KK2 ilk işlediği parça sepetin
     // en altına düşer, Tambur'a son sırada gider.
-    const openMovements = await prisma.rollMovement.findMany({
-      where: { workOrderStepId: step.id, exitedAt: null },
-      orderBy: { enteredAt: "desc" },
-      select: {
-        roll: {
-          include: {
-            item: { select: { code: true, name: true } },
-            color: { select: { code: true, name: true } },
-            properties: {
-              select: {
-                property: { select: { id: true, name: true } },
-              },
-            },
-            errors: {
-              where: { isProcessed: false },
-              orderBy: { startMeter: "asc" },
-              select: {
-                id: true,
-                startMeter: true,
-                errorType: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const rolls: TamburRollSummary[] = openMovements.map((m) => ({
-      rollId: m.roll.id,
-      barcode: m.roll.barcode,
-      itemCode: m.roll.item.code,
-      itemName: m.roll.item.name,
-      colorCode: m.roll.color?.code ?? null,
-      colorName: m.roll.color?.name ?? null,
-      currentQty: Number(m.roll.currentQty),
-      width: m.roll.width !== null ? Number(m.roll.width) : null,
-      qualityGrade: m.roll.qualityGrade,
-      properties: m.roll.properties.map((p) => ({
-        id: p.property.id,
-        name: p.property.name,
-      })),
-      errorCount: m.roll.errors.length,
-      errors: m.roll.errors.map((e) => ({
-        id: e.id,
-        startMeter: Number(e.startMeter),
-        errorType: e.errorType,
-      })),
-    }));
+    const rolls = await this.loadTamburRolls(step);
 
     return {
       success: true,
@@ -1198,54 +1249,7 @@ export class TamburService {
     // LIFO sıralama: KK2'nin sepete son koyduğu açık kumaş Tambur'a ilk önce
     // gelir (operatör en üstten alır). `enteredAt DESC` ile son giren listenin
     // başında olur.
-    const openMovements = await prisma.rollMovement.findMany({
-      where: { workOrderStepId: stepId, exitedAt: null },
-      orderBy: { enteredAt: "desc" },
-      select: {
-        roll: {
-          include: {
-            item: { select: { code: true, name: true } },
-            color: { select: { code: true, name: true } },
-            properties: {
-              select: {
-                property: { select: { id: true, name: true } },
-              },
-            },
-            errors: {
-              where: { isProcessed: false },
-              orderBy: { startMeter: "asc" },
-              select: {
-                id: true,
-                startMeter: true,
-                errorType: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const rolls: TamburRollSummary[] = openMovements.map((m) => ({
-      rollId: m.roll.id,
-      barcode: m.roll.barcode,
-      itemCode: m.roll.item.code,
-      itemName: m.roll.item.name,
-      colorCode: m.roll.color?.code ?? null,
-      colorName: m.roll.color?.name ?? null,
-      currentQty: Number(m.roll.currentQty),
-      width: m.roll.width !== null ? Number(m.roll.width) : null,
-      qualityGrade: m.roll.qualityGrade,
-      properties: m.roll.properties.map((p) => ({
-        id: p.property.id,
-        name: p.property.name,
-      })),
-      errorCount: m.roll.errors.length,
-      errors: m.roll.errors.map((e) => ({
-        id: e.id,
-        startMeter: Number(e.startMeter),
-        errorType: e.errorType,
-      })),
-    }));
+    const rolls = await this.loadTamburRolls(step);
 
     return {
       success: true,
@@ -1529,6 +1533,8 @@ export class TamburService {
           qualityGrade: resolvedQualityGrade,
           qualityGradeId: resolvedQualityGradeId,
           parentRollId: parent.id,
+          // Phase 4: dal kimliğini parent'tan kalıt → fason partisi lane'i depoya kadar izlenir.
+          batchSplitId: parent.batchSplitId,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
           // Kartelalık yalnız depoya (WAREHOUSE) inen çıktıda anlamlı; ham stoğa
@@ -1722,6 +1728,8 @@ export class TamburService {
             qualityGrade: childQualityGrade,
             qualityGradeId: childQualityGradeId,
             parentRollId: parent.id,
+            // Phase 4: dal kimliğini parent'tan kalıt → fason partisi lane'i depoya kadar izlenir.
+            batchSplitId: parent.batchSplitId,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
             },
@@ -1904,6 +1912,8 @@ export class TamburService {
           qualityGradeId: resolvedQualityGradeId,
           producedInStepId: tamburStepId,
           parentRollId: parent.id,
+          // Phase 4: dal kimliğini parent'tan kalıt → fason partisi lane'i depoya kadar izlenir.
+          batchSplitId: parent.batchSplitId,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
           // Sadece depoya giden (WAREHOUSE) çıktı kartelalık işaretlenir.
@@ -2141,6 +2151,8 @@ export class TamburService {
             qualityGradeId: childQualityGradeId,
             producedInStepId: tamburStepId,
             parentRollId: parent.id,
+            // Phase 4: dal kimliğini parent'tan kalıt → fason partisi lane'i depoya kadar izlenir.
+            batchSplitId: parent.batchSplitId,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
             },

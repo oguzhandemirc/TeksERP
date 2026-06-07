@@ -29,6 +29,10 @@ import type { MainStackParamList } from '../../../navigation/types';
 
 const groupKey = (customerId: string, branchId: string | null) => `${customerId}|${branchId ?? ''}`;
 
+// "Devam Eden" başta en fazla bu kadar görünür; fazlası aç-kapa ile açılır — çok
+// sevkiyat varken liste şişip "Açık Siparişler"e inmeyi zorlaştırmasın.
+const PREPARING_CAP = 5;
+
 // Bizdeki ad + (karşıdaki ad) — alias farklıysa parantezde. Personel topu bizdeki adla bulur.
 const dualName = (ourName: string, custName?: string | null) =>
   custName && custName.trim() && custName !== ourName ? `${ourName} (${custName})` : ourName;
@@ -42,6 +46,7 @@ export default function TartiPaketScreen() {
 
   const [selected, setSelected] = useState<string[]>([]);
   const [selGroup, setSelGroup] = useState<string | null>(null);
+  const [showAllPreparing, setShowAllPreparing] = useState(false);
 
   const openOrdersQ = useQuery({
     queryKey: ['open-orders'],
@@ -217,7 +222,7 @@ export default function TartiPaketScreen() {
             <Text variant="titleSmall" style={styles.section}>
               Devam Eden ({preparing.length})
             </Text>
-            {preparing.map((sh) => (
+            {(showAllPreparing ? preparing : preparing.slice(0, PREPARING_CAP)).map((sh) => (
               <TouchableRipple
                 key={sh.id}
                 onPress={() => nav.navigate('Paketleme', { shipmentId: sh.id })}
@@ -235,6 +240,15 @@ export default function TartiPaketScreen() {
                 </View>
               </TouchableRipple>
             ))}
+            {preparing.length > PREPARING_CAP && (
+              <TouchableRipple onPress={() => setShowAllPreparing((v) => !v)} style={styles.morePreparing}>
+                <Text style={styles.morePreparingText}>
+                  {showAllPreparing
+                    ? 'Daha az göster ▴'
+                    : `+${preparing.length - PREPARING_CAP} sevkiyat daha göster ▾`}
+                </Text>
+              </TouchableRipple>
+            )}
             <Divider style={{ marginVertical: 12 }} />
           </>
         )}
@@ -284,6 +298,8 @@ const styles = StyleSheet.create({
   bridgeText: { color: '#fff', fontWeight: '600' },
   bridgeCta: { color: '#bfdbfe', fontWeight: '700' },
   resumeCard: { borderRadius: 10, backgroundColor: '#f1f5f9', marginBottom: 8 },
+  morePreparing: { borderRadius: 8, backgroundColor: '#eef2ff', paddingVertical: 9, alignItems: 'center', marginBottom: 8 },
+  morePreparingText: { fontSize: 13, color: '#4338ca', fontWeight: '700' },
   section: { fontWeight: '700', color: '#0f172a', marginTop: 8, marginBottom: 4 },
   hint: { fontSize: 12, color: '#94a3b8', marginBottom: 6 },
   covRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },

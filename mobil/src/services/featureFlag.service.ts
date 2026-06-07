@@ -1,5 +1,10 @@
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
+import {
+  type CompanyLetterhead,
+  type DocumentsConfig,
+  DEFAULT_COMPANY_LETTERHEAD,
+} from './documentConfig';
 
 // =============================================================================
 // Public feature flag'ler — backend: GET /api/feature-flags (auth-only, özel
@@ -7,6 +12,9 @@ import type { ApiResponse } from '../types/api';
 // UI bu flag'lere göre alan gösterir/gizler. Backend ENFORCE ETMEZ (sadece UI
 // rehberi). Admin Electron yönetim panelinden toggle eder.
 // =============================================================================
+
+/** Sevk irsaliyesi künyesinde firma adı verilmediğinde varsayılan. */
+export const DEFAULT_COMPANY_NAME = 'Adnan Şahin Tekstil';
 
 export interface FeatureFlags {
   pricingEnabled: boolean;
@@ -21,6 +29,12 @@ export interface FeatureFlags {
    *  ① Sevkiyat ekranında "Hemen Sevk Et" kısayolu görünür; açıkken çıkış yalnız ② "Sevk Çıkışı"
    *  ekranından onaylanır. Ara depoda bekleme + sonradan çıkış flag'den bağımsız her zaman var. */
   shipmentConfirmationEnabled: boolean;
+  /** ERP'nin kurulduğu firmanın adı — sevk irsaliyesi künyesinde basılır. */
+  companyName: string;
+  /** Belge künyesi (adres/tel/vergi) — irsaliye üst bloğunda basılır. */
+  companyLetterhead: CompanyLetterhead;
+  /** Yazdırılan belge içerik ayarı (canlı). resolveDocConfig ile çözülür. */
+  documentsConfig: DocumentsConfig;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -30,6 +44,9 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   returnGradingEnabled: false,
   dyehouseNoteMobileEntry: false,
   shipmentConfirmationEnabled: false,
+  companyName: DEFAULT_COMPANY_NAME,
+  companyLetterhead: DEFAULT_COMPANY_LETTERHEAD,
+  documentsConfig: {},
 };
 
 export const featureFlagService = {

@@ -17,6 +17,8 @@ import { requirePermission } from "../middlewares/rbac.middleware";
 const router = Router();
 
 const updateSchema = z.object({
+  // ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli).
+  companyName: z.string().trim().max(120).optional(),
   pricingEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
@@ -33,10 +35,36 @@ const updateSchema = z.object({
   travelerCardConfig: z
     .object({
       companyName: z.string().trim().max(120),
+      addressLine: z.string().trim().max(200).default(""),
+      phone: z.string().trim().max(60).default(""),
       showOperationGrid: z.boolean(),
       showNotes: z.boolean(),
       showOrders: z.boolean(),
+      showProperties: z.boolean().default(true),
+      footerNote: z.string().trim().max(500).default(""),
     })
+    .optional(),
+  // Belge künyesi — irsaliye/çeki üst bloğunda firma adının altına basılır.
+  companyLetterhead: z
+    .object({
+      addressLine: z.string().trim().max(200),
+      phone: z.string().trim().max(60),
+      taxInfo: z.string().trim().max(120),
+    })
+    .optional(),
+  // Yazdırılan belge içerik ayarı (bölüm görünürlükleri + başlık/imza/footer). Ham map.
+  documentsConfig: z
+    .record(
+      z.string(),
+      z.object({
+        titleOverride: z.string().trim().max(80).optional(),
+        showLetterhead: z.boolean().optional(),
+        sections: z.record(z.string(), z.boolean()).optional(),
+        signatureLabels: z.array(z.string().trim().max(40)).max(6).optional(),
+        showSignatures: z.boolean().optional(),
+        footerNote: z.string().trim().max(500).optional(),
+      }),
+    )
     .optional(),
 });
 

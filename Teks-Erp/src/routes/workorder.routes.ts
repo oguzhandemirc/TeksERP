@@ -44,7 +44,7 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *       200:
  *         description: Sayfalanmış iş emri listesi
  */
-router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk"), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.findAll);
 
 /**
  * @openapi
@@ -80,7 +80,7 @@ router.get("/available-for-attach", verifyToken, requirePermission("workorder:wr
  *       404:
  *         description: İş emri bulunamadı
  */
-router.get("/:id", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk"), controller.findById);
+router.get("/:id", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.findById);
 
 /**
  * @openapi
@@ -102,7 +102,7 @@ router.get("/:id", verifyToken, requireAnyPermission("workorder:read", "mobile:f
  *       404:
  *         description: İş emri bulunamadı
  */
-router.get("/:id/branches", verifyToken, requirePermission("workorder:read"), controller.getBranches);
+router.get("/:id/branches", verifyToken, requireAnyPermission("workorder:read", "mobile:hizli-is-emri"), controller.getBranches);
 
 /**
  * @openapi
@@ -124,7 +124,7 @@ router.get("/:id/branches", verifyToken, requirePermission("workorder:read"), co
  *       404:
  *         description: İş emri bulunamadı
  */
-router.get("/:id/travel-card", verifyToken, requirePermission("workorder:read"), controller.getTravelCard);
+router.get("/:id/travel-card", verifyToken, requireAnyPermission("workorder:read", "mobile:hizli-is-emri"), controller.getTravelCard);
 
 /**
  * @openapi
@@ -146,7 +146,7 @@ router.get("/:id/travel-card", verifyToken, requirePermission("workorder:read"),
  *       404:
  *         description: İş emri bulunamadı
  */
-router.get("/:id/manifest", verifyToken, requirePermission("workorder:read"), controller.getManifest);
+router.get("/:id/manifest", verifyToken, requireAnyPermission("workorder:read", "mobile:hizli-is-emri"), controller.getManifest);
 
 /**
  * @openapi
@@ -171,7 +171,7 @@ router.get("/:id/manifest", verifyToken, requirePermission("workorder:read"), co
  *     responses:
  *       201: { description: Manifest oluşturuldu }
  */
-router.post("/:id/manifest", verifyToken, requirePermission("workorder:write"), controller.createManifest);
+router.post("/:id/manifest", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.createManifest);
 
 /**
  * @openapi
@@ -188,7 +188,7 @@ router.post("/:id/manifest", verifyToken, requirePermission("workorder:write"), 
  *     responses:
  *       200: { description: Manifest listesi }
  */
-router.get("/:id/manifests", verifyToken, requirePermission("workorder:read"), controller.listManifests);
+router.get("/:id/manifests", verifyToken, requireAnyPermission("workorder:read", "mobile:hizli-is-emri"), controller.listManifests);
 
 /**
  * @openapi
@@ -207,7 +207,7 @@ router.get("/:id/manifests", verifyToken, requirePermission("workorder:read"), c
  *       200: { description: Manifest detayı (snapshot dahil) }
  *       404: { description: Manifest bulunamadı }
  */
-router.get("/manifest-by-id/:manifestId", verifyToken, requirePermission("workorder:read"), controller.getManifestById);
+router.get("/manifest-by-id/:manifestId", verifyToken, requireAnyPermission("workorder:read", "mobile:hizli-is-emri"), controller.getManifestById);
 
 /**
  * @openapi
@@ -266,6 +266,47 @@ router.post("/", verifyToken, requirePermission("workorder:write"), controller.c
 
 /**
  * @openapi
+ * /api/work-orders/quick-start:
+ *   post:
+ *     tags: [WorkOrders]
+ *     summary: Mobil hızlı iş emri başlatma (stok topu okut → WO + bağlama)
+ *     description: |
+ *       Okutulan stok (STOCK) toplarını doğrular, iş emrini oluşturur ve topları
+ *       tek istekte bağlar. targetItemId verilmezse okutulan topların ürününden
+ *       türetilir. Hiç top bağlanamazsa iş emri geri alınır (yetim WO bırakmaz).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollBarcodes]
+ *             properties:
+ *               rollBarcodes:
+ *                 type: array
+ *                 items: { type: string }
+ *                 example: ["TEKS-20260607-A1B2C3D4", "TEKS-20260607-E5F6G7H8"]
+ *               routeTemplateId: { type: string, format: uuid }
+ *               targetItemId:    { type: string, format: uuid }
+ *               targetColorId:   { type: string, format: uuid, nullable: true }
+ *               orderLineIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *     responses:
+ *       201: { description: İş emri başlatıldı (workOrder + attached + errors) }
+ *       400: { description: Validasyon / uygun olmayan top }
+ *       409: { description: Hiç top bağlanamadı }
+ */
+router.post(
+  "/quick-start",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:hizli-is-emri"),
+  controller.quickStart,
+);
+
+/**
+ * @openapi
  * /api/work-orders/{id}:
  *   patch:
  *     tags: [WorkOrders]
@@ -296,7 +337,7 @@ router.post("/", verifyToken, requirePermission("workorder:write"), controller.c
  *       200: { description: Güncellendi }
  *       409: { description: Üretim başlamış (sadece PLANNED düzenlenebilir) }
  */
-router.patch("/:id", verifyToken, requirePermission("workorder:write"), controller.update);
+router.patch("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.update);
 
 /**
  * @openapi
@@ -320,7 +361,7 @@ router.patch("/:id", verifyToken, requirePermission("workorder:write"), controll
  *       200: { description: Güncellendi }
  *       409: { description: Üretim başlamış (sadece PLANNED + roll bağlı olmayan WO) }
  */
-router.put("/:id", verifyToken, requirePermission("workorder:write"), controller.replace);
+router.put("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.replace);
 
 /**
  * @openapi
@@ -458,7 +499,7 @@ router.patch("/:id/lock", verifyToken, requirePermission("workorder:write"), con
  *       200:
  *         description: Bağlanmış topların listesi
  */
-router.get("/:id/rolls", verifyToken, requirePermission("workorder:read"), controller.getAttachedRolls);
+router.get("/:id/rolls", verifyToken, requireAnyPermission("workorder:read", "mobile:hizli-is-emri"), controller.getAttachedRolls);
 
 /**
  * @openapi
@@ -499,9 +540,9 @@ router.get("/:id/rolls", verifyToken, requirePermission("workorder:read"), contr
  *       200:
  *         description: İptal etkisi
  */
-router.get("/:id/cancel-impact", verifyToken, requirePermission("workorder:write"), controller.cancelImpact);
+router.get("/:id/cancel-impact", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.cancelImpact);
 
-router.delete("/:id", verifyToken, requirePermission("workorder:write"), controller.softDelete);
+router.delete("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.softDelete);
 
 /**
  * @openapi

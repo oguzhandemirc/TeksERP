@@ -162,16 +162,23 @@ router.post(
  * /api/subcontractor/pending-returns:
  *   get:
  *     tags: [Subcontractor]
- *     summary: Fasonda bekleyen sevkler
+ *     summary: Fasonda bekleyen sevkler (özet — rolls dahil değil)
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: Bekleyen sevk gruplari }
+ *       200: { description: Bekleyen sevk gruplari (rollCount+totalQty aggregate) }
  */
 router.get(
   "/pending-returns",
   verifyToken,
   requireAnyPermission("workorder:read", ...MOBILE_FASON_READ),
   controller.pendingReturns
+);
+
+router.get(
+  "/pending-returns/step/:stepId",
+  verifyToken,
+  requireAnyPermission("workorder:read", ...MOBILE_FASON_READ),
+  controller.pendingReturnDetail
 );
 
 router.get(

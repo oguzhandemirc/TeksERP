@@ -1,11 +1,11 @@
 import {
+  Building2,
   Banknote,
   ClipboardList,
   Factory,
   Truck,
   TabletSmartphone,
   Server,
-  Printer,
   type LucideIcon,
 } from "lucide-react";
 import type { FeatureFlags } from "@/services/featureFlagService";
@@ -29,7 +29,7 @@ export interface FlagDef {
  * - `device` → cihaz eşleştirme (enforce edilen, uyarılı) özel section
  * - `api`    → sunucu adresi (bu bilgisayara özel) özel section
  */
-export type CategoryKind = "flags" | "device" | "api" | "travelerCard";
+export type CategoryKind = "flags" | "device" | "api" | "company";
 
 export interface SettingsCategory {
   id: string;
@@ -52,6 +52,14 @@ export interface SettingsCategory {
  * dizisine bir satır ekle. Sayfa otomatik render eder (ayrı kart/mutation gerekmez).
  */
 export const SETTINGS_CATEGORIES: SettingsCategory[] = [
+  {
+    id: "company",
+    label: "Şirket Bilgileri",
+    icon: Building2,
+    description: "ERP'nin kurulduğu firmanın adı — panel başlığında ve uygulama genelinde gösterilir.",
+    keywords: "şirket firma ad kurum işletme marka isim başlık panel",
+    kind: "company",
+  },
   {
     id: "orders",
     label: "Siparişler",
@@ -134,14 +142,6 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     description: "Sahadaki tabletlerin eşleştirme zorunluluğu.",
     keywords: "cihaz eşleştirme tablet pairing makine atfı zorunlu kod",
     kind: "device",
-  },
-  {
-    id: "traveler-card",
-    label: "Refakat Kartı",
-    icon: Printer,
-    description: "Refakat kartında basılan firma adı ve hangi bölümlerin görüneceği.",
-    keywords: "refakat kartı traveler firma adı logo marka operasyon imza notlar siparişler bölüm",
-    kind: "travelerCard",
   },
   {
     id: "system",

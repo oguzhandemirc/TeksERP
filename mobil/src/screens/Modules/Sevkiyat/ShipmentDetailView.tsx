@@ -10,6 +10,7 @@ import {
   SHIPMENT_STATUS_TR,
   type ShipmentStatus,
 } from '../../../services/packing.service';
+import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import { buildDispatchNoteHtml } from './dispatchNoteHtml';
 
 const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-TR');
@@ -17,6 +18,7 @@ const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-T
 const STATUS_COLOR: Record<ShipmentStatus, string> = {
   PREPARING: '#d97706',
   READY: '#0284c7',
+  AT_DOOR: '#7c3aed',
   DISPATCHED: '#16a34a',
   CANCELLED: '#94a3b8',
 };
@@ -31,6 +33,7 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
     queryFn: () => packingService.getShipment(shipmentId),
     staleTime: 10_000,
   });
+  const flags = useFeatureFlags().data;
   const d = q.data?.data ?? null;
 
   if (q.isLoading || !d) return <ActivityIndicator style={{ marginTop: 24 }} />;
@@ -39,7 +42,11 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
     try {
       setPrinting(true);
       await Print.printAsync({
-        html: buildDispatchNoteHtml(d),
+        html: buildDispatchNoteHtml(d, {
+          documentsConfig: flags?.documentsConfig,
+          companyName: flags?.companyName,
+          letterhead: flags?.companyLetterhead,
+        }),
         margins: { left: 0, top: 0, right: 0, bottom: 0 },
       });
     } catch (e) {
@@ -127,13 +134,47 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
 
       <Text style={styles.section}>Çuvallar ({d.sacks.length})</Text>
       {d.sacks.map((s) => (
-        <View key={s.id} style={styles.row}>
-          <Text style={styles.rowMono}>
-            Çuval {s.seq}
-            {s.manualCode ? ` · ${s.manualCode}` : ''}
-          </Text>
-          <Text style={styles.meta}>{n(s.weightKg ?? 0)} kg</Text>
-        </View>
+        <Surface key={s.id} style={styles.card} elevation={0}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.rowMono}>
+              Çuval {s.seq}
+              {s.manualCode ? ` · ${s.manualCode}` : ''}
+            </Text>
+            <Text style={styles.meta}>
+              {s.weightKg != null ? `${n(s.weightKg)} kg` : 'tartılmadı'} · {s.rollCount} top
+              {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ''}
+            </Text>
+          </View>
+          {s.productSummary.length === 0 && s.swatchCount === 0 ? (
+            <Text style={[styles.meta, { marginTop: 4 }]}>boş</Text>
+          ) : (
+            <>
+              {s.productSummary.map((p, i) => (
+                <View key={`p${i}`} style={styles.lineRow}>
+                  <Text style={styles.lineText} numberOfLines={1}>
+                    {p.itemName}
+                    {p.colorName ? ` · ${p.colorName}` : ''}
+                    {p.width != null ? ` · ${p.width}cm` : ''}
+                  </Text>
+                  <Text style={styles.meta}>
+                    {n(p.totalQty)} m · {p.rollCount} top
+                  </Text>
+                </View>
+              ))}
+              {s.swatches.map((sw) => (
+                <View key={sw.id} style={styles.lineRow}>
+                  <Text style={styles.lineText} numberOfLines={1}>
+                    Kartela · {sw.item?.name ?? '—'}
+                    {sw.color ? ` · ${sw.color.name}` : ''}
+                  </Text>
+                  <Text style={styles.meta}>
+                    {sw.length != null ? `${n(sw.length)} cm` : ''}
+                  </Text>
+                </View>
+              ))}
+            </>
+          )}
+        </Surface>
       ))}
 
       {d.summary.returnedCount > 0 && (

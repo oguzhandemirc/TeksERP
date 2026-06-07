@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ChevronRight, Star } from "lucide-react";
+import { ArrowLeft, ChevronRight, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -29,6 +29,18 @@ export function PageHeader({ title, description, actions, className }: Props) {
       )}
     >
       <div className="flex min-w-0 items-stretch gap-3">
+        {parent && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate(-1)}
+            aria-label="Geri"
+            title="Geri"
+            className="h-8 w-8 shrink-0 self-center rounded-full text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        )}
         <span className="my-0.5 w-1 shrink-0 rounded-full bg-primary/70" aria-hidden />
         <div className="min-w-0">
           {parent && (

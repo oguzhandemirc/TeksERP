@@ -65,6 +65,7 @@ export class InventoryController {
     this.createInitialEntry = this.createInitialEntry.bind(this);
     this.findAllRolls = this.findAllRolls.bind(this);
     this.getRollStats = this.getRollStats.bind(this);
+    this.getWarehouseScope = this.getWarehouseScope.bind(this);
     this.findRollById = this.findRollById.bind(this);
     this.findRollByBarcode = this.findRollByBarcode.bind(this);
     this.getRollHistory = this.getRollHistory.bind(this);
@@ -175,6 +176,15 @@ export class InventoryController {
   async getRollStats(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.getRollStats(req);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getWarehouseScope(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getWarehouseScope();
       res.status(200).json(result);
     } catch (error) {
       next(error);

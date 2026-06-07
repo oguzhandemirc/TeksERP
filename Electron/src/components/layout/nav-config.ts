@@ -14,6 +14,8 @@ export interface NavItem {
   icon: LucideIcon;
   permission?: string;
   adminOnly?: boolean;
+  /** Opsiyonel sayısal rozet (bekleyen iş / uyarı). Veri bağlandığında dolar. */
+  badge?: number;
 }
 
 export interface NavGroup {

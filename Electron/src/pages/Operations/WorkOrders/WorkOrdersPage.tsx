@@ -45,7 +45,7 @@ const FILTERS: FilterDef[] = [
     label: "Tip",
     options: [
       { value: "ORDER_PRODUCTION", label: "Siparişe Özel" },
-      { value: "STOCK_PRODUCTION", label: "Stoka" },
+      { value: "STOCK_PRODUCTION", label: "Stok" },
     ],
   },
   {

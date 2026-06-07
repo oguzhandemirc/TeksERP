@@ -1,3 +1,5 @@
+import { motion } from "framer-motion";
+import { springSnappy } from "@/lib/motion";
 import { StickyNote } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +18,14 @@ export function StepWipCard({ step }: { step: WorkOrderStepLite }) {
   const hasWip = (wip?.count ?? 0) > 0;
 
   return (
+    <motion.div className="relative" whileHover={{ y: -2 }} transition={springSnappy}>
+      {hasWip && (
+        <motion.div
+          className="pointer-events-none absolute inset-0 rounded-lg border-2 border-primary/60"
+          animate={{ opacity: [0.2, 0.8, 0.2] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        />
+      )}
     <Card className={cn(hasWip && "border-primary/40")}>
       <CardContent className="space-y-2 p-3">
         <div className="flex items-center gap-2">
@@ -146,5 +156,6 @@ export function StepWipCard({ step }: { step: WorkOrderStepLite }) {
         )}
       </CardContent>
     </Card>
+    </motion.div>
   );
 }

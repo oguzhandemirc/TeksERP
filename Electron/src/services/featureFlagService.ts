@@ -1,22 +1,46 @@
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
+import {
+  type CompanyLetterhead,
+  type DocumentsConfig,
+  DEFAULT_COMPANY_LETTERHEAD,
+} from "./documentConfig";
+
+export type { CompanyLetterhead, DocumentsConfig } from "./documentConfig";
 
 /** Refakat kartı marka/içerik ayarı — kart basımında snapshot'a dondurulur. */
 export interface TravelerCardConfig {
   companyName: string;
+  /** Firma adının altına basılan adres (boş → basılmaz). */
+  addressLine: string;
+  /** Firma adının altına basılan telefon (boş → basılmaz). */
+  phone: string;
   showOperationGrid: boolean;
   showNotes: boolean;
   showOrders: boolean;
+  /** Özellikler (ÖZELLİKLER) satırı basılsın mı. */
+  showProperties: boolean;
+  /** Kart altına basılan serbest not (boş → basılmaz). */
+  footerNote: string;
 }
 
 export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   companyName: "Adnan Şahin Tekstil",
+  addressLine: "",
+  phone: "",
   showOperationGrid: true,
   showNotes: true,
   showOrders: true,
+  showProperties: true,
+  footerNote: "",
 };
 
+/** Firma adı verilmediğinde gösterilen varsayılan (backend ile aynı). */
+export const DEFAULT_COMPANY_NAME = "Adnan Şahin Tekstil";
+
 export interface FeatureFlags {
+  /** ERP'nin kurulduğu firmanın adı — panel başlığı + uygulama geneli. */
+  companyName: string;
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
@@ -34,7 +58,13 @@ export interface FeatureFlags {
   shipmentConfirmationEnabled: boolean;
   /** Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri). */
   travelerCardConfig: TravelerCardConfig;
+  /** Belge künyesi (adres/tel/vergi) — irsaliye/çeki üst bloğunda basılır. */
+  companyLetterhead: CompanyLetterhead;
+  /** Yazdırılan belgelerin içerik ayarı (canlı). resolveDocConfig ile çözülür. */
+  documentsConfig: DocumentsConfig;
 }
+
+export { DEFAULT_COMPANY_LETTERHEAD };
 
 export const featureFlagService = {
   get: (): Promise<ApiResponse<FeatureFlags>> =>

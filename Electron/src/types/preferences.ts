@@ -29,6 +29,8 @@ export interface AppPreferences {
   tableVisibility?: Record<string, Record<string, boolean>>;
   /** Sekme sırası — sekme seti anahtarı → sekme key listesi. */
   tabOrder?: Record<string, string[]>;
+  /** Hub kart sırası — hub anahtarı (örn "operations") → kart key listesi. */
+  hubOrder?: Record<string, string[]>;
   /** Dashboard widget düzeni — gizli widget'lar + grup/öğe sırası. */
   dashboard?: {
     hidden?: string[];

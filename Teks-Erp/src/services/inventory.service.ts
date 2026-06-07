@@ -520,6 +520,19 @@ export class InventoryService {
       };
     }
 
+    // --- Sevkiyat kapsamı: serbest depo vs çuvallanmış (committed) ---
+    // 'free'      = serbest depo (shipmentId null) — yalnız satılabilir/okutulabilir stok.
+    // 'committed' = çuvallanmış (shipmentId dolu) — çuval depo/kapı önü/sevk yolundaki.
+    // yok/'all'   = ayrım yapma. Depo ekranı 'free' geçer → çuvallanan top "serbest depoda"
+    // görünmez (çuval depo ayrı ekranda izlenir).
+    const shipmentScope = f["shipmentScope"] as string | undefined;
+    delete where.shipmentScope;
+    if (shipmentScope === "free") {
+      where.shipmentId = null;
+    } else if (shipmentScope === "committed") {
+      where.shipmentId = { not: null };
+    }
+
     const itemId = typeof f["itemId"] === "string" ? f["itemId"] : null;
     delete where.itemId;
     if (itemId) {
@@ -546,6 +559,12 @@ export class InventoryService {
     delete where.qtyMax;
     const qtyRange = readNumberRange(f["qtyMin"], f["qtyMax"]);
     if (qtyRange) where.currentQty = qtyRange;
+
+    const markedForKartelaRaw = f["markedForKartela"];
+    delete where.markedForKartela;
+    if (markedForKartelaRaw === "true") {
+      where.markedForKartela = true;
+    }
 
     return where;
   }
@@ -657,39 +676,76 @@ export class InventoryService {
     const params = parseQueryParams(req);
     const where = this.buildRollWhere(params) as Prisma.RollWhereInput;
 
-    const [aggregate, byStatusRaw, byQualityRaw] = await Promise.all([
-      prisma.roll.aggregate({
-        where,
-        _count: { _all: true },
-        _sum: { currentQty: true, weightKg: true },
-      }),
-      prisma.roll.groupBy({
-        where,
-        by: ["status"],
-        _count: { _all: true },
-      }),
-      prisma.roll.groupBy({
-        where,
-        by: ["qualityGrade"],
-        _count: { _all: true },
-      }),
-    ]);
+    // TEK TARAMA: (status, qualityGrade) bazlı groupBy bir scan'de hem count
+    // hem sum'ları döndürür. Eskiden 3 ayrı sorgu vardı (aggregate + groupBy
+    // status + groupBy qualityGrade) → 500k satırda 3 kez tarama. Bunu tek
+    // geçişe indiriyoruz (CLAUDE.md DB perf kuralı). Grup sayısı küçük
+    // (status × qualityGrade ≈ on'lar) → aşağıdaki JS reduce maliyetsiz.
+    const grouped = await prisma.roll.groupBy({
+      where,
+      by: ["status", "qualityGrade"],
+      _count: { _all: true },
+      _sum: { currentQty: true, weightKg: true },
+    });
 
+    let totalCount = 0;
+    // Decimal toplamları Prisma.Decimal ile biriktir — JS float aritmetiği
+    // ondalık metraj/ağırlıkta drift yapar (CLAUDE.md Decimal kuralı).
+    let totalQty = new Prisma.Decimal(0);
+    let totalWeight = new Prisma.Decimal(0);
     const byStatus: Record<string, number> = {};
-    for (const row of byStatusRaw) byStatus[row.status] = row._count._all;
-
     const byQuality: Record<string, number> = {};
-    for (const row of byQualityRaw) byQuality[row.qualityGrade] = row._count._all;
+
+    for (const row of grouped) {
+      const n = row._count._all;
+      totalCount += n;
+      byStatus[row.status] = (byStatus[row.status] ?? 0) + n;
+      byQuality[row.qualityGrade] = (byQuality[row.qualityGrade] ?? 0) + n;
+      if (row._sum.currentQty) totalQty = totalQty.plus(row._sum.currentQty);
+      if (row._sum.weightKg) totalWeight = totalWeight.plus(row._sum.weightKg);
+    }
 
     return {
       success: true,
       data: {
-        totalCount: aggregate._count._all,
-        totalQty: Number(aggregate._sum.currentQty ?? 0),
-        totalWeight: Number(aggregate._sum.weightKg ?? 0),
+        totalCount,
+        totalQty: Number(totalQty),
+        totalWeight: Number(totalWeight),
         byStatus,
         byQuality,
       },
+    };
+  }
+
+  /**
+   * Depo kapsam sayaçları — WAREHOUSE topları fiziksel yere göre ayır:
+   *  - serbest:   shipmentId null (satılabilir/okutulabilir gerçek serbest stok)
+   *  - çuval depo: shipment.status READY (çuvallandı, firma içi bekliyor)
+   *  - kapı önü:  shipment.status AT_DOOR (kamyon bekliyor)
+   * Hepsi hâlâ binada (WAREHOUSE) ama yalnız "serbest" satılabilir stoktur. SHIPPED hariç.
+   */
+  async getWarehouseScope(): Promise<
+    ApiResponse<{
+      free: { count: number; qty: number };
+      sackStore: { count: number; qty: number };
+      atDoor: { count: number; qty: number };
+    }>
+  > {
+    const agg = (where: Prisma.RollWhereInput) =>
+      prisma.roll.aggregate({ where, _count: { _all: true }, _sum: { currentQty: true } });
+
+    const free = await agg({ status: RollStatus.WAREHOUSE, shipmentId: null });
+    const sackStore = await agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.READY } });
+    const atDoor = await agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.AT_DOOR } });
+
+    const pick = (r: { _count: { _all: number }; _sum: { currentQty: Prisma.Decimal | null } }) => ({
+      count: r._count._all,
+      qty: Number(r._sum.currentQty ?? 0),
+    });
+
+    return {
+      success: true,
+      data: { free: pick(free), sackStore: pick(sackStore), atDoor: pick(atDoor) },
     };
   }
 
@@ -725,6 +781,22 @@ export class InventoryService {
             createdAt: true,
             reason: { select: { code: true, name: true, color: true } },
             receivedBy: { select: { fullName: true } },
+          },
+        },
+        // AT_KARTELA top için aktif (iptal edilmemiş) kartela sevki → detay
+        // panelinde "hangi kartela firmasında" gösterilir. En son non-cancelled.
+        kartelaDispatchItems: {
+          where: { dispatch: { cancelledAt: null } },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            dispatch: {
+              select: {
+                dispatchNo: true,
+                dispatchedAt: true,
+                subcontractor: { select: { id: true, name: true, code: true } },
+              },
+            },
           },
         },
       },

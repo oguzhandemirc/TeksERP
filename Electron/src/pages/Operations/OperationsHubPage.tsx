@@ -1,7 +1,8 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useHubOrder } from "@/hooks/useHubOrder";
 import { operationsTiles } from "./tile-config";
-import { HubCard, HubGrid } from "@/components/hub/HubCard";
+import { SortableHubGrid, type SortableHubTile } from "@/components/hub/SortableHubGrid";
 
 // İstasyon/akış anlamına göre ton — Kurşun Sırası PROCESS_QC, Toplar depo vb.
 const TILE_TONES: Record<string, string> = {
@@ -15,30 +16,36 @@ const TILE_TONES: Record<string, string> = {
 
 export function OperationsHubPage() {
   const { isAdmin, hasPermission } = useRoleAccess();
-  const tiles = operationsTiles.filter(
+  const visible = operationsTiles.filter(
     (t) => isAdmin || !t.permission || hasPermission(t.permission),
   );
+
+  // Kullanıcının kayıtlı sırasını uygula (yeni/izin kazanılan kart sona eklenir).
+  const { ordered, reorder } = useHubOrder(
+    "operations",
+    visible.map((t) => t.key),
+  );
+  const byKey = new Map(visible.map((t) => [t.key, t]));
+  const tiles: SortableHubTile[] = ordered
+    .map((k) => byKey.get(k))
+    .filter((t): t is (typeof visible)[number] => Boolean(t))
+    .map((t) => ({
+      key: t.key,
+      to: t.to,
+      title: t.title,
+      description: t.description,
+      icon: t.icon,
+      tone: TILE_TONES[t.key],
+    }));
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Operasyon"
-        description="Üretim ve lojistik akışını izle, kritik adımlarda müdahale et."
+        description="Üretim ve lojistik akışını izle, kritik adımlarda müdahale et. Kartları köşedeki tutamaçtan (⠿) sürükleyerek dilediğin sıraya diz — sıra hesabına kaydedilir."
       />
       <div className="p-6">
-        <HubGrid>
-          {tiles.map((tile, i) => (
-            <HubCard
-              key={tile.key}
-              to={tile.to}
-              title={tile.title}
-              description={tile.description}
-              icon={tile.icon}
-              tone={TILE_TONES[tile.key]}
-              index={i}
-            />
-          ))}
-        </HubGrid>
+        <SortableHubGrid tiles={tiles} onReorder={reorder} />
       </div>
     </div>
   );

@@ -6,4 +6,5 @@ export { default as Pulse } from './Pulse';
 export { default as AnimatedCounter } from './AnimatedCounter';
 export { default as Skeleton } from './Skeleton';
 export { default as SkeletonList } from './SkeletonList';
+export { default as MarqueeText } from './MarqueeText';
 export { usePressScale } from './usePressScale';

@@ -52,6 +52,14 @@ export interface Roll {
   lastLabelSnapshot?: RollLabelSnapshot | null;
   /** En güncel iade kaydı(ları) — detay endpoint'inden (RollReturn). Tambur/depo notu burada görünür. */
   returns?: RollReturnEntry[];
+  /** AT_KARTELA top için aktif kartela sevki (firma + belge) — detay endpoint'inden. */
+  kartelaDispatchItems?: Array<{
+    dispatch: {
+      dispatchNo: string;
+      dispatchedAt: string;
+      subcontractor: { id: string; name: string; code: string | null };
+    };
+  }>;
   createdAt: string;
   updatedAt: string;
 }

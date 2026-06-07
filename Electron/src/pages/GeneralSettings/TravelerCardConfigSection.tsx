@@ -13,9 +13,9 @@ import {
 import { FlagToggle } from "./SettingRow";
 
 /**
- * Refakat kartı marka/içerik ayarı paneli. Firma adı + hangi bölümlerin
- * basılacağı (toggle). Kaydedince yalnızca BUNDAN SONRA basılan kartlara işler
- * — mevcut kartlar basım anında dondurulduğu için (snapshot) değişmez.
+ * Refakat kartı marka/içerik ayarı paneli. Firma adı + künye + hangi bölümlerin
+ * basılacağı (toggle) + alt not. Kaydedince yalnızca BUNDAN SONRA basılan kartlara
+ * işler — mevcut kartlar basım anında dondurulduğu için (snapshot) değişmez.
  */
 export function TravelerCardConfigSection() {
   const qc = useQueryClient();
@@ -26,7 +26,16 @@ export function TravelerCardConfigSection() {
   useEffect(() => {
     setDraft(current);
     // Sunucudan gelen değer değişince formu eşitle.
-  }, [current.companyName, current.showOperationGrid, current.showNotes, current.showOrders]);
+  }, [
+    current.companyName,
+    current.addressLine,
+    current.phone,
+    current.showOperationGrid,
+    current.showNotes,
+    current.showOrders,
+    current.showProperties,
+    current.footerNote,
+  ]);
 
   const mut = useMutation({
     mutationFn: (cfg: TravelerCardConfig) =>
@@ -69,6 +78,35 @@ export function TravelerCardConfigSection() {
           />
         </div>
 
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="tc-address" className="text-sm font-medium">
+              Adres
+            </label>
+            <p className="text-xs text-muted-foreground">Firma adının altında (boş → basılmaz).</p>
+            <input
+              id="tc-address"
+              value={draft.addressLine}
+              maxLength={200}
+              onChange={(e) => setDraft((d) => ({ ...d, addressLine: e.target.value }))}
+              className="mt-2 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+          <div>
+            <label htmlFor="tc-phone" className="text-sm font-medium">
+              Telefon
+            </label>
+            <p className="text-xs text-muted-foreground">Firma adının altında (boş → basılmaz).</p>
+            <input
+              id="tc-phone"
+              value={draft.phone}
+              maxLength={60}
+              onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+              className="mt-2 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+        </div>
+
         <div className="divide-y divide-border rounded-md border px-3">
           <div className="py-3">
             <FlagToggle
@@ -97,6 +135,32 @@ export function TravelerCardConfigSection() {
               onChange={(v) => setDraft((d) => ({ ...d, showOrders: v }))}
             />
           </div>
+          <div className="py-3">
+            <FlagToggle
+              title="Özellikler satırı"
+              desc="ÖZELLİKLER (kumaş özellikleri) satırı kartta basılsın mı."
+              checked={draft.showProperties}
+              disabled={mut.isPending}
+              onChange={(v) => setDraft((d) => ({ ...d, showProperties: v }))}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="tc-footer" className="text-sm font-medium">
+            Alt Not
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Kartın altına basılan serbest not (boş → basılmaz).
+          </p>
+          <textarea
+            id="tc-footer"
+            value={draft.footerNote}
+            maxLength={500}
+            rows={2}
+            onChange={(e) => setDraft((d) => ({ ...d, footerNote: e.target.value }))}
+            className="mt-2 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

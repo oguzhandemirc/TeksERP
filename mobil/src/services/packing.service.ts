@@ -7,11 +7,12 @@ import type { ApiResponse, CursorPaginatedResponse } from '../types/api';
 // çuval tartıları + İÇERİK (çuval-önce: topu aktif çuvala okut). Karşılanma spec-toplam.
 // =============================================================================
 
-export type ShipmentStatus = 'PREPARING' | 'READY' | 'DISPATCHED' | 'CANCELLED';
+export type ShipmentStatus = 'PREPARING' | 'READY' | 'AT_DOOR' | 'DISPATCHED' | 'CANCELLED';
 
 export const SHIPMENT_STATUS_TR: Record<ShipmentStatus, string> = {
   PREPARING: 'Hazırlanıyor',
-  READY: 'Hazır',
+  READY: 'Çuval Depo',
+  AT_DOOR: 'Kapı Önü',
   DISPATCHED: 'Sevk Edildi',
   CANCELLED: 'İptal',
 };
@@ -196,6 +197,38 @@ export interface ShipmentCancelPreview {
   affectedOrders: Array<{ orderNumber: string; qty: string }>;
 }
 
+// ── Çuval Depo board'u (READY=çuval depo, AT_DOOR=kapı önü) ──
+export interface SackStoreContent {
+  itemName: string;
+  colorName: string | null;
+  width: number | null;
+  qty: number;
+  rollCount: number;
+}
+export interface SackStoreSack {
+  id: string;
+  sackNo: string;
+  seq: number;
+  manualCode: string | null;
+  weightKg: number | null;
+  rollCount: number;
+  swatchCount: number;
+  totalQty: number;
+  contents: SackStoreContent[];
+}
+export interface SackStoreShipment {
+  id: string;
+  shipmentNo: string;
+  status: 'READY' | 'AT_DOOR';
+  readyAt: string | null;
+  customer: Ref;
+  branch: { id: string; name: string } | null;
+  sackCount: number;
+  totalKg: number;
+  totalQty: number;
+  sacks: SackStoreSack[];
+}
+
 export const packingService = {
   // ── Sipariş seçim ──
   listOpenOrders: (params?: { customerId?: string; branchId?: string }): Promise<ApiResponse<OpenOrder[]>> => {
@@ -284,8 +317,11 @@ export const packingService = {
       })
       .then((r) => r.data),
 
-  removeSack: (sackId: string): Promise<ApiResponse<unknown>> =>
-    apiClient.post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/remove`, {}).then((r) => r.data),
+  // withContents=true → KISA YOL: dolu çuvalı içeriğiyle sil; toplar/kartelalar depoya döner.
+  removeSack: (sackId: string, withContents?: boolean): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/shipping/sacks/${sackId}/remove`, withContents ? { withContents: true } : {})
+      .then((r) => r.data),
 
   // Topu çuvaldan çuvala taşı (aynı sevkiyat içi)
   moveRollToSack: (rollId: string, sackId: string): Promise<ApiResponse<unknown>> =>
@@ -299,6 +335,22 @@ export const packingService = {
         {},
       )
       .then((r) => r.data),
+
+  // Sevke hazırı geri al (READY → PREPARING) — çıkış öncesi düzenleme için.
+  unready: (id: string): Promise<ApiResponse<{ shipmentId: string }>> =>
+    apiClient.post<ApiResponse<{ shipmentId: string }>>(`/shipping/shipments/${id}/unready`, {}).then((r) => r.data),
+
+  // Çuval Depo board'u — çuvallanmış bekleyen mal (READY + AT_DOOR) çuval içerikleriyle.
+  listSackStore: (): Promise<ApiResponse<SackStoreShipment[]>> =>
+    apiClient.get<ApiResponse<SackStoreShipment[]>>('/shipping/sack-store').then((r) => r.data),
+
+  // Kapı Önüne Koy (PREPARING/READY → AT_DOOR) — kamyon bekleme durağı; "Alındı" ile sevk olur.
+  moveToDoor: (id: string): Promise<ApiResponse<{ shipmentId: string }>> =>
+    apiClient.post<ApiResponse<{ shipmentId: string }>>(`/shipping/shipments/${id}/move-to-door`, {}).then((r) => r.data),
+
+  // Kapı önünden çuval depoya geri çek (AT_DOOR → READY).
+  pullBackFromDoor: (id: string): Promise<ApiResponse<{ shipmentId: string }>> =>
+    apiClient.post<ApiResponse<{ shipmentId: string }>>(`/shipping/shipments/${id}/pull-back`, {}).then((r) => r.data),
 
   dispatch: (
     id: string,

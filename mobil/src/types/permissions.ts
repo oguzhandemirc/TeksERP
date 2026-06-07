@@ -10,6 +10,7 @@ export type MobilePermission =
   | 'mobile:kartela-sevk'
   | 'mobile:kartela-kabul'
   | 'mobile:iade'
+  | 'mobile:hizli-is-emri'
   | 'mobile:*';
 
 /**
@@ -39,7 +40,8 @@ export type MobileScreenKey =
   | 'FasonKabul'
   | 'KartelaSevk'
   | 'KartelaKabul'
-  | 'IadeGirisi';
+  | 'IadeGirisi'
+  | 'HizliIsEmri';
 
 export interface MobileScreenMeta {
   key: MobileScreenKey;
@@ -130,6 +132,13 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'İade Girişi',
     icon: 'undo-variant',
     description: 'Müşteriden dönen topu Hazır Depoya al',
+  },
+  {
+    key: 'HizliIsEmri',
+    permission: 'mobile:hizli-is-emri',
+    label: 'Hızlı İş Emri',
+    icon: 'rocket-launch-outline',
+    description: 'Stok topu okut → iş emri başlat + iş emirlerini yönet',
   },
 ];
 

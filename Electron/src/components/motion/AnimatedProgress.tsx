@@ -9,10 +9,12 @@ interface Props {
   className?: string;
   /** Dolan çubuğun sınıfları — renk. Varsayılan accent. */
   barClassName?: string;
+  /** Bar dolmaya başlamadan önceki gecikme (saniye). */
+  delay?: number;
 }
 
 /** Yaylı dolan ilerleme çubuğu. Değer değişince yumuşakça yeni orana akar. */
-export function AnimatedProgress({ value, className, barClassName }: Props) {
+export function AnimatedProgress({ value, className, barClassName, delay = 0 }: Props) {
   const pct = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
   return (
     <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-muted", className)}>
@@ -20,7 +22,7 @@ export function AnimatedProgress({ value, className, barClassName }: Props) {
         className={cn("h-full rounded-full bg-primary", barClassName)}
         initial={{ width: 0 }}
         animate={{ width: `${pct}%` }}
-        transition={springSoft}
+        transition={{ ...springSoft, delay }}
       />
     </div>
   );

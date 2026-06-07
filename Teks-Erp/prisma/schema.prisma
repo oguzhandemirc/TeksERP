@@ -611,8 +611,10 @@ model Roll {
   // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
   createdById String?
 
-  // Paketleme — topun okutulduğu sevkiyat oturumu. NULL = henüz sevkiyata girmedi.
-  // READY'de toplar SHIPPED'a çekilir; iptalde shipmentId temizlenir, depoya döner.
+  // Paketleme — topun okutulduğu sevkiyat oturumu. NULL = henüz sevkiyata girmedi
+  // (serbest depo). Çuvallanan top PREPARING/READY/AT_DOOR boyunca WAREHOUSE kalır ama
+  // shipmentId dolu → SERBEST stoktan düşer (çuval depo/kapı önü). SHIPPED'a yalnız
+  // DISPATCHED'te (kamyon aldı) çekilir; iptalde shipmentId temizlenir, serbest depoya döner.
   // GEVŞEK MODEL: top→sipariş bağı YOK; etiket müşterisi baskı anında seçilir.
   shipmentId String?
 
@@ -690,6 +692,10 @@ model Roll {
   @@index([sackId])
   // Spec-toplam karşılanma: item+renk+en eşleşen WAREHOUSE/STOCK toplar (fungible havuz)
   @@index([status, itemId, colorId, width])
+  // Kartelalık filtresi: Tambur'da işaretlenmiş depodaki toplar. PARTIAL (WHERE
+  // "markedForKartela" = true) — migration 20260607020000. True olan satırlar
+  // toplam rollerin %1-2'si → micro-index; false satırlar indekslenmez.
+  @@index([markedForKartela])
   @@map("rolls")
 }
 
@@ -1584,6 +1590,11 @@ model Swatch {
   @@index([parentRollId])
   @@index([shipmentId])
   @@index([sackId])
+  // Cursor listesi + stats (ORDER BY createdAt DESC WHERE cancelledAt IS NULL).
+  // @@index tam görünür ama DB'de PARTIAL'dır (WHERE cancelledAt IS NULL) —
+  // soft-delete tablosunda iptal edilmiş kartelalar indekslenmez (migration
+  // 20260607030000). Prisma 7 partial predicate'i drift saymaz.
+  @@index([createdAt])
   @@map("swatches")
 }
 
@@ -1740,10 +1751,11 @@ model Manifest {
 // =============================================================================
 
 enum ShipmentStatus {
-  PREPARING // Paketleniyor — siparişler seçili, toplar okutuluyor, çuvallar tartılıyor
-  READY // Sevke hazır — kapıda, kamyon/irsaliye bekliyor (karşılanma burada düşülür)
-  DISPATCHED // Kamyona yüklendi, çıktı
-  CANCELLED // İptal — toplar depoya döner, karşılanma geri alınır
+  PREPARING // Paketleniyor — siparişler seçili, toplar okutuluyor; commit YOK, düzenlenebilir, toplar serbest depodan shipmentId ile düşer
+  READY // Çuval Depo — çuvallandı, firma içi depoda bekliyor (ihracat aylarca). Commit yapıldı (karşılanma işlendi); toplar hâlâ WAREHOUSE ama serbest stok DEĞİL
+  AT_DOOR // Kapı Önü — kamyon bekliyor. "Alındı" onayıyla DISPATCHED olur (sevk onayı bayrağı açıkken zorunlu durak). Commit'li, stok hâlâ binada
+  DISPATCHED // Kamyon aldı/çıktı — toplar SHIPPED, fiziksel stok bina dışı (stok yalnız burada düşer)
+  CANCELLED // İptal — toplar serbest depoya döner, karşılanma (commit) geri alınır
 }
 
 /// Çuval — fiziksel paket birimi. Brüt tartı (no + kg) + İÇERİK: hangi toplar/kartelalar

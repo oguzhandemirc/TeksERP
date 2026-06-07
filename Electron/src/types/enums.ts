@@ -119,7 +119,7 @@ export type WorkOrderType = (typeof WorkOrderType)[keyof typeof WorkOrderType];
 
 export const workOrderTypeLabels: Record<WorkOrderType, string> = {
   ORDER_PRODUCTION: "Siparişe Özel",
-  STOCK_PRODUCTION: "Stoka",
+  STOCK_PRODUCTION: "Stok",
 };
 
 export const StepStatus = {
@@ -149,6 +149,8 @@ export const RollStatus = {
   WAREHOUSE: "WAREHOUSE",
   TAMBUR_CONSUMED: "TAMBUR_CONSUMED",
   SUBCONTRACTOR_CONSUMED: "SUBCONTRACTOR_CONSUMED",
+  AT_KARTELA: "AT_KARTELA",
+  KARTELA_CONSUMED: "KARTELA_CONSUMED",
 } as const;
 export type RollStatus = (typeof RollStatus)[keyof typeof RollStatus];
 
@@ -164,6 +166,8 @@ export const rollStatusLabels: Record<RollStatus, string> = {
   WAREHOUSE: "Depoda",
   TAMBUR_CONSUMED: "Tamburda Bölündü",
   SUBCONTRACTOR_CONSUMED: "Fasonda Tüketildi",
+  AT_KARTELA: "Kartelada",
+  KARTELA_CONSUMED: "Kartela'da Tüketildi",
 };
 
 export const RollOperationType = {

@@ -1101,7 +1101,11 @@ export class SubcontractorService {
         where: {
           rollId: { in: returnRollIds },
           dispatch: { stepId: data.stepId, cancelledAt: null },
-          receiptItems: { none: {} },
+          // Sadece İPTAL EDİLMEMİŞ bir receipt item'ı olan kalem "dolu" sayılır.
+          // `none: {}` (eski hal) iptal edilmiş receipt item'ı da dolu sayıyordu:
+          // top iptal → tekrar fason kabul edilince kalem yeniden bağlanamıyor,
+          // sevk sonsuza dek "açık" görünüyordu (dal hep OPEN). İptal edilmişi atla.
+          receiptItems: { none: { receipt: { cancelledAt: null } } },
         },
         select: { id: true, rollId: true },
       });
@@ -1322,38 +1326,25 @@ export class SubcontractorService {
   async listPendingReturns(params?: {
     workOrderId?: string;
   }): Promise<ApiResponse<unknown>> {
-    // Mobil mal kabul akışı: refakat kartı okutulduğunda sadece o iş emrinin
-    // bekleyen grupları çekilir (gereksiz veri taşımamak için).
-    //
-    // workOrderId verildiyse boş döndüğünde net 400/404 mesajı atılır
-    // (operatör yanlış kart/yanlış zaman). workOrderId verilmediyse (admin
-    // tüm-WO listesi) sessiz boş array döner — eski davranış.
     if (params?.workOrderId) {
+      // ── Refakat kartı akışı: WO'ya özel (küçük sonuç, rolls dahil) ──
       const woId = params.workOrderId;
 
-      // WO'da hiç SUBCONTRACTOR step var mı?
       const subStepCount = await prisma.workOrderStep.count({
         where: { workOrderId: woId, station: { kind: "SUBCONTRACTOR" } },
       });
       if (subStepCount === 0) {
-        throw AppError.notFound(
-          "Bu iş emrinde fason adımı tanımlı değil",
-        );
+        throw AppError.notFound("Bu iş emrinde fason adımı tanımlı değil");
       }
 
-      // SUBCONTRACTOR step'lerden birinde AT_SUBCONTRACTOR rulu var mı?
       const pendingCount = await prisma.roll.count({
         where: {
           status: RollStatus.AT_SUBCONTRACTOR,
-          currentStep: {
-            workOrderId: woId,
-            station: { kind: "SUBCONTRACTOR" },
-          },
+          currentStep: { workOrderId: woId, station: { kind: "SUBCONTRACTOR" } },
         },
       });
 
       if (pendingCount === 0) {
-        // Bu WO'nun rulları gerçekte hangi adımlarda?
         const stepsWithRolls = await prisma.workOrderStep.findMany({
           where: { workOrderId: woId, currentRolls: { some: {} } },
           select: {
@@ -1376,61 +1367,116 @@ export class SubcontractorService {
           `Bu iş emrinin fason adımında bekleyen rulo yok. Mevcut konum: ${stepNames}. Tabletinizi yanlış istasyonda okutmuş olabilirsiniz.`,
         );
       }
+
+      const outstandingRolls = await prisma.roll.findMany({
+        where: { status: RollStatus.AT_SUBCONTRACTOR, currentStep: { workOrderId: woId } },
+        select: {
+          id: true, barcode: true, currentQty: true, weightKg: true, width: true,
+          qualityGrade: true, status: true, currentStepId: true,
+          item: { select: { id: true, code: true, name: true } },
+          color: { select: { id: true, code: true, name: true } },
+        },
+      });
+
+      const stepIds = [...new Set(outstandingRolls.map((r) => r.currentStepId).filter(Boolean) as string[])];
+      const steps = await prisma.workOrderStep.findMany({
+        where: { id: { in: stepIds } },
+        select: {
+          id: true, stepSequence: true, notes: true,
+          station: { select: { id: true, code: true, name: true, type: true } },
+          workOrder: { select: { id: true, batchNumber: true, status: true } },
+          plannedSubcontractor: { select: { id: true, code: true, name: true } },
+          requiredCategory: { select: { id: true, code: true, name: true } },
+        },
+      });
+
+      const dispatches = await prisma.subcontractorDispatch.findMany({
+        where: { stepId: { in: stepIds } },
+        select: {
+          id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
+          driverName: true, stepId: true, subcontractorId: true,
+          subcontractor: { select: { id: true, code: true, name: true } },
+        },
+        orderBy: { dispatchedAt: "desc" },
+      });
+
+      const byStep = new Map<string, typeof dispatches>();
+      for (const d of dispatches) {
+        const arr = byStep.get(d.stepId) ?? [];
+        arr.push(d);
+        byStep.set(d.stepId, arr);
+      }
+
+      const groups = steps.map((step) => {
+        const stepRolls = outstandingRolls.filter((r) => r.currentStepId === step.id);
+        const lastDispatch = byStep.get(step.id)?.[0] ?? null;
+        const totalQty = stepRolls.reduce((s, r) => s.plus(r.currentQty), new Prisma.Decimal(0));
+        return {
+          step: {
+            id: step.id, stepSequence: step.stepSequence, station: step.station,
+            notes: step.notes, requiredCategory: step.requiredCategory,
+            plannedSubcontractor: step.plannedSubcontractor,
+          },
+          workOrder: { id: step.workOrder.id, batchNumber: step.workOrder.batchNumber, status: step.workOrder.status },
+          lastDispatch,
+          rolls: stepRolls,
+          rollCount: stepRolls.length,
+          totalQty,
+        };
+      });
+
+      return { success: true, data: groups };
     }
 
-    const rollWhere: Prisma.RollWhereInput = {
-      status: RollStatus.AT_SUBCONTRACTOR,
-      ...(params?.workOrderId
-        ? { currentStep: { workOrderId: params.workOrderId } }
-        : {}),
-    };
-    // HAFİF projection — mobil/web sadece şunları tüketir:
-    //   barcode, qty/weight/width, qualityGrade, item.{code,name}, color.{code,name}
-    const outstandingRolls = await prisma.roll.findMany({
-      where: rollWhere,
-      select: {
-        id: true,
-        barcode: true,
-        currentQty: true,
-        weightKg: true,
-        width: true,
-        qualityGrade: true,
-        status: true,
-        currentStepId: true,
-        item: { select: { id: true, code: true, name: true } },
-        color: { select: { id: true, code: true, name: true } },
-      },
-    });
+    // ── Tüm bekleyenler: DB-side aggregate, rolls yok ──
+    // 500+ grup için COUNT/SUM + distinct kumaş/renk adları DB'de hesaplanır;
+    // tek tek Roll satırları frontend'e taşınmaz. Bu özet alanlar (itemNames,
+    // colorNames, cardNumbers) client-side arama içindir — operatör parti no
+    // dışında kumaş/renk/refakat kart no ile de filtreleyebilsin. Seçim anında
+    // rolls /pending-returns/step/:stepId ile lazy-load.
+    const rollStats = await prisma.$queryRaw<
+      Array<{
+        currentStepId: string;
+        roll_count: bigint;
+        total_qty: string | null;
+        item_names: string[] | null;
+        color_names: string[] | null;
+      }>
+    >`
+      SELECT
+        r."currentStepId" AS "currentStepId",
+        COUNT(*) AS roll_count,
+        SUM(r."currentQty") AS total_qty,
+        ARRAY_AGG(DISTINCT i.name) AS item_names,
+        ARRAY_AGG(DISTINCT c.name) FILTER (WHERE c.name IS NOT NULL) AS color_names
+      FROM rolls r
+      JOIN items i ON i.id = r."itemId"
+      LEFT JOIN colors c ON c.id = r."colorId"
+      WHERE r.status = 'AT_SUBCONTRACTOR' AND r."currentStepId" IS NOT NULL
+      GROUP BY r."currentStepId"
+    `;
 
-    const stepIds = [...new Set(outstandingRolls.map((r) => r.currentStepId).filter(Boolean) as string[])];
+    if (rollStats.length === 0) return { success: true, data: [] };
+
+    const statsMap = new Map(rollStats.map((s) => [s.currentStepId, s]));
+    const stepIds = rollStats.map((s) => s.currentStepId);
+
     const steps = await prisma.workOrderStep.findMany({
       where: { id: { in: stepIds } },
       select: {
-        id: true,
-        stepSequence: true,
-        notes: true,
+        id: true, stepSequence: true, notes: true,
         station: { select: { id: true, code: true, name: true, type: true } },
-        workOrder: {
-          select: { id: true, batchNumber: true, status: true },
-        },
-        plannedSubcontractor: {
-          select: { id: true, code: true, name: true },
-        },
+        workOrder: { select: { id: true, batchNumber: true, status: true } },
+        plannedSubcontractor: { select: { id: true, code: true, name: true } },
         requiredCategory: { select: { id: true, code: true, name: true } },
       },
     });
 
-    // Her step için son dispatch'i bul. printSnapshot (büyük JSON) liste için gereksiz.
     const dispatches = await prisma.subcontractorDispatch.findMany({
       where: { stepId: { in: stepIds } },
       select: {
-        id: true,
-        dispatchNo: true,
-        dispatchedAt: true,
-        plateNumber: true,
-        driverName: true,
-        stepId: true,
-        subcontractorId: true,
+        id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
+        driverName: true, stepId: true, subcontractorId: true,
         subcontractor: { select: { id: true, code: true, name: true } },
       },
       orderBy: { dispatchedAt: "desc" },
@@ -1443,37 +1489,109 @@ export class SubcontractorService {
       byStep.set(d.stepId, arr);
     }
 
-    const groups = steps.map((step) => {
-      const stepRolls = outstandingRolls.filter((r) => r.currentStepId === step.id);
-      const stepDispatches = byStep.get(step.id) ?? [];
-      const lastDispatch = stepDispatches[0] ?? null;
-      const totalQty = stepRolls.reduce(
-        (s, r) => s.plus(r.currentQty),
-        new Prisma.Decimal(0),
-      );
+    // Refakat kart no — arama için (WO başına ACTIVE kartlar). steps'in
+    // workOrderId'lerinden tek sorguda toplanır.
+    const woIds = [...new Set(steps.map((s) => s.workOrder.id))];
+    const cards = await prisma.travelerCard.findMany({
+      where: { workOrderId: { in: woIds }, status: TravelerCardStatus.ACTIVE },
+      select: { workOrderId: true, cardNumber: true },
+    });
+    const cardsByWo = new Map<string, string[]>();
+    for (const c of cards) {
+      const arr = cardsByWo.get(c.workOrderId) ?? [];
+      arr.push(c.cardNumber);
+      cardsByWo.set(c.workOrderId, arr);
+    }
 
+    const groups = steps.map((step) => {
+      const stat = statsMap.get(step.id);
+      const lastDispatch = byStep.get(step.id)?.[0] ?? null;
       return {
         step: {
-          id: step.id,
-          stepSequence: step.stepSequence,
-          station: step.station,
-          notes: step.notes,
-          requiredCategory: step.requiredCategory,
+          id: step.id, stepSequence: step.stepSequence, station: step.station,
+          notes: step.notes, requiredCategory: step.requiredCategory,
+          plannedSubcontractor: step.plannedSubcontractor,
+        },
+        workOrder: { id: step.workOrder.id, batchNumber: step.workOrder.batchNumber, status: step.workOrder.status },
+        lastDispatch,
+        rollCount: Number(stat?.roll_count ?? 0),
+        totalQty: new Prisma.Decimal(stat?.total_qty ?? "0"),
+        // Arama özetleri (client-side filtre için)
+        itemNames: stat?.item_names ?? [],
+        colorNames: stat?.color_names ?? [],
+        cardNumbers: cardsByWo.get(step.workOrder.id) ?? [],
+      };
+    });
+
+    return { success: true, data: groups };
+  }
+
+  /** GET /api/subcontractor/pending-returns/step/:stepId — seçim anında rolls lazy-load */
+  async getPendingReturnGroupDetail(stepId: string): Promise<ApiResponse<unknown>> {
+    const step = await prisma.workOrderStep.findUnique({
+      where: { id: stepId },
+      select: {
+        id: true, stepSequence: true, notes: true,
+        station: { select: { id: true, code: true, name: true, type: true } },
+        workOrder: {
+          select: {
+            id: true, batchNumber: true, status: true,
+            targetColor: { select: { id: true, code: true, name: true, hex: true } },
+            targetProperties: { select: { property: { select: { id: true, code: true, name: true } } } },
+          },
+        },
+        plannedSubcontractor: { select: { id: true, code: true, name: true } },
+        requiredCategory: {
+          select: { id: true, code: true, name: true, appliesColor: true, appliesProperty: true },
+        },
+      },
+    });
+
+    if (!step) throw AppError.notFound("Fason adımı bulunamadı");
+
+    const rolls = await prisma.roll.findMany({
+      where: { status: RollStatus.AT_SUBCONTRACTOR, currentStepId: stepId },
+      select: {
+        id: true, barcode: true, currentQty: true, weightKg: true, width: true,
+        qualityGrade: true, status: true, currentStepId: true,
+        item: { select: { id: true, code: true, name: true } },
+        color: { select: { id: true, code: true, name: true } },
+      },
+    });
+
+    const lastDispatch = await prisma.subcontractorDispatch.findFirst({
+      where: { stepId },
+      select: {
+        id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
+        driverName: true, stepId: true, subcontractorId: true,
+        subcontractor: { select: { id: true, code: true, name: true } },
+      },
+      orderBy: { dispatchedAt: "desc" },
+    });
+
+    const totalQty = rolls.reduce((s, r) => s.plus(r.currentQty), new Prisma.Decimal(0));
+
+    return {
+      success: true,
+      data: {
+        step: {
+          id: step.id, stepSequence: step.stepSequence, station: step.station,
+          notes: step.notes, requiredCategory: step.requiredCategory,
           plannedSubcontractor: step.plannedSubcontractor,
         },
         workOrder: {
           id: step.workOrder.id,
           batchNumber: step.workOrder.batchNumber,
           status: step.workOrder.status,
+          targetColor: step.workOrder.targetColor ?? null,
+          targetProperties: step.workOrder.targetProperties.map((p) => p.property),
         },
         lastDispatch,
-        rolls: stepRolls,
-        rollCount: stepRolls.length,
+        rolls,
+        rollCount: rolls.length,
         totalQty,
-      };
-    });
-
-    return { success: true, data: groups };
+      },
+    };
   }
 
   async listDispatches(params?: {
@@ -1666,6 +1784,12 @@ export class SubcontractorService {
     subcontractorId?: string;
     page?: number;
     pageSize?: number;
+    /** Cursor mode (DEFAULT — Geçmiş Kabuller sonsuz akışı): keyset by receivedAt. */
+    mode?: string;
+    limit?: number;
+    cursor?: string;
+    /** İlk sayfada yaklaşık toplam için (cursor mode'da count opt-in). */
+    withTotal?: boolean;
     /**
      * İptal edilebilirlik filtresi — mobil "İptal Edilebilirler" vs "Geçmiş
      * Kabuller" sekmelerini ayırır. Mantık: bir receipt iptal edilebilir <=>
@@ -1680,7 +1804,9 @@ export class SubcontractorService {
   }): Promise<{
     success: true;
     data: unknown[];
-    pagination: { page: number; pageSize: number; total: number; totalPages: number };
+    pagination:
+      | { page: number; pageSize: number; total: number; totalPages: number }
+      | { nextCursor: string | null; hasMore: boolean; limit: number; totalEstimate?: number };
   }> {
     // Default: iptal edilmiş receipt'ler listede görünmez — operatörün geçmiş
     // kabuller ekranında kafası karışmasın. Cancel sonrası soft-delete olduğu
@@ -1713,40 +1839,93 @@ export class SubcontractorService {
       where.bornRolls = { some: blockingCondition };
     }
 
+    // Hafif select — detay `getReceipt` ile lazy gelir (sevk listesindeki desen).
+    // Mal kabulde metraj ölçülmez; toplam metraj sevk anındaki `dispatchedQty`
+    // toplamından hesaplanır (fason hizmeti — qty değişmez).
+    const select = {
+      id: true,
+      receiptNo: true,
+      manifestNo: true,
+      receivedAt: true,
+      notes: true,
+      workOrder: { select: { id: true, batchNumber: true } },
+      subcontractor: { select: { id: true, name: true, code: true } },
+      step: {
+        select: {
+          id: true,
+          stepSequence: true,
+          station: { select: { name: true, code: true } },
+        },
+      },
+      receivedBy: { select: { id: true, username: true, fullName: true } },
+      _count: { select: { items: true } },
+      items: {
+        select: {
+          sourceDispatchItem: { select: { dispatchedQty: true } },
+        },
+      },
+    } as const;
+
+    // totalQty hesabı (items'tan) — list response'a items taşımadan.
+    const enrich = <T extends { items: { sourceDispatchItem: { dispatchedQty: Prisma.Decimal } | null }[] }>(
+      rows: T[],
+    ) =>
+      rows.map(({ items, ...rest }) => ({
+        ...rest,
+        // Decimal aritmetik — float drift olmasın; serializer number'a çevirir.
+        totalQty: items.reduce(
+          (sum, it) => sum.plus(it.sourceDispatchItem?.dispatchedQty ?? 0),
+          new Prisma.Decimal(0),
+        ),
+      }));
+
+    // CURSOR mode (DEFAULT — Geçmiş Kabuller sonsuz akışı): keyset by receivedAt
+    // desc + id desc. count YOK (withTotal ile opt-in) → derin sayfalamada sabit
+    // maliyet + MAX_OFFSET tavanı yok. cancellable filtresi where'de korunur.
+    const useCursor = !!params?.cursor || params?.mode === "cursor";
+    if (useCursor) {
+      const limit = Math.min(Math.max(1, params?.limit ?? 20), 100);
+      const cursor = decodeDynamicCursor(params?.cursor);
+      const whereClause = cursor
+        ? { AND: [where, dynamicCursorWhere(cursor, "receivedAt", "desc")] }
+        : where;
+      const [items, totalEstimate] = await Promise.all([
+        prisma.subcontractorReceipt.findMany({
+          where: whereClause,
+          select,
+          orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+          take: limit + 1,
+        }),
+        params?.withTotal
+          ? prisma.subcontractorReceipt.count({ where })
+          : Promise.resolve(undefined),
+      ]);
+      const hasMore = items.length > limit;
+      const rows = hasMore ? items.slice(0, limit) : items;
+      const last = rows[rows.length - 1] as Record<string, unknown> | undefined;
+      const nextCursor = hasMore ? buildNextDynamicCursor(last, "receivedAt") : null;
+      return {
+        success: true,
+        data: enrich(rows),
+        pagination: {
+          nextCursor,
+          hasMore,
+          limit,
+          ...(totalEstimate !== undefined ? { totalEstimate } : {}),
+        },
+      };
+    }
+
+    // OFFSET mode (geriye uyum).
     const page = Math.max(1, params?.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, params?.pageSize ?? 10));
     // buildPagination MAX_OFFSET=10K aşımında 400 fırlatır (curl saldırı yüzeyi).
     const { skip } = buildPagination(page, pageSize);
 
-    // Hafif select — detay `getReceipt` ile lazy gelir (sevk listesindeki desen).
-    // Mal kabulde metraj ölçülmez; toplam metraj sevk anındaki `dispatchedQty`
-    // toplamından hesaplanır (fason hizmeti — qty değişmez).
     const [receipts, total] = await Promise.all([
       prisma.subcontractorReceipt.findMany({
         where,
-        select: {
-          id: true,
-          receiptNo: true,
-          manifestNo: true,
-          receivedAt: true,
-          notes: true,
-          workOrder: { select: { id: true, batchNumber: true } },
-          subcontractor: { select: { id: true, name: true, code: true } },
-          step: {
-            select: {
-              id: true,
-              stepSequence: true,
-              station: { select: { name: true, code: true } },
-            },
-          },
-          receivedBy: { select: { id: true, username: true, fullName: true } },
-          _count: { select: { items: true } },
-          items: {
-            select: {
-              sourceDispatchItem: { select: { dispatchedQty: true } },
-            },
-          },
-        },
+        select,
         orderBy: { receivedAt: "desc" },
         skip,
         take: pageSize,
@@ -1754,18 +1933,9 @@ export class SubcontractorService {
       prisma.subcontractorReceipt.count({ where }),
     ]);
 
-    const enriched = receipts.map(({ items, ...rest }) => ({
-      ...rest,
-      // Decimal aritmetik — float drift olmasın; serializer number'a çevirir.
-      totalQty: items.reduce(
-        (sum, it) => sum.plus(it.sourceDispatchItem?.dispatchedQty ?? 0),
-        new Prisma.Decimal(0)
-      ),
-    }));
-
     return {
       success: true,
-      data: enriched,
+      data: enrich(receipts),
       pagination: {
         page,
         pageSize,

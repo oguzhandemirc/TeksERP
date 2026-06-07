@@ -23,12 +23,12 @@ import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
-import { AnimatedEntrance } from '../../../components/motion';
-import { colors, spacing, radius, shadow, typography } from '../../../theme';
-import { packingService } from '../../../services/packing.service';
+import { AnimatedEntrance, MarqueeText } from '../../../components/motion';
+import { colors, palette, spacing, radius, shadow, typography } from '../../../theme';
+import { packingService, type ShipmentSack } from '../../../services/packing.service';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
-import { useShipmentConfirmationEnabled } from '../../../hooks/useFeatureFlags';
+import { useShipmentConfirmationEnabled, FLAGS_KEY } from '../../../hooks/useFeatureFlags';
 import { buildDispatchNoteHtml } from '../Sevkiyat/dispatchNoteHtml';
 import type { MainStackParamList } from '../../../navigation/types';
 
@@ -45,6 +45,9 @@ const dualName = (ourName: string, custName?: string | null) =>
 
 const kgText = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
 const randKg = () => (Math.round((10 + Math.random() * 90) * 10) / 10).toString();
+// Metraj — GERÇEK değeri göster (44,5 → "44,5"). Math.round kullanma: 44,5 → 45
+// yuvarlıyordu (yanlış miktar görünüyordu). tr-TR ondalık = virgül, gereksiz sıfır yok.
+const mText = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 
 export default function PaketlemeScreen() {
   // Portrait kilidi yalnızca telefonda — tablette yatay kalsın.
@@ -71,6 +74,8 @@ export default function PaketlemeScreen() {
   const [weighKg, setWeighKg] = useState('');
   const [weighCode, setWeighCode] = useState('');
   const [moveTarget, setMoveTarget] = useState<{ rollId: string; fromSackId: string | null; label: string } | null>(null);
+  // Dolu çuval silme onayı — içindeki toplar (depoya dönecekler) somut listelenir.
+  const [removeSackTarget, setRemoveSackTarget] = useState<ShipmentSack | null>(null);
   const [printing, setPrinting] = useState(false);
 
   // Sevk onayı açıksa ① yalnız "Sevke Hazır" yapar; kapalıysa "Hemen Sevk Et" kısayolu da görünür.
@@ -102,7 +107,12 @@ export default function PaketlemeScreen() {
 
   // Header "Yenile" — draft'ta açık siparişleri, kayıtlı sevkiyatta sevkiyatı tazeler.
   const refresh = useManualRefresh(
-    () => (shipmentId === null ? openOrdersQ.refetch() : shipQ.refetch()),
+    () => {
+      // Admin Electron'dan toggle ettiği bayrakları (sevk onayı → "Kapı Önüne Koy"/"Hemen Sevk Et")
+      // 5 dk staleTime'ı beklemeden yansıt — operatör "Yenile"ye basınca footer güncellenir.
+      void qc.invalidateQueries({ queryKey: FLAGS_KEY });
+      return shipmentId === null ? openOrdersQ.refetch() : shipQ.refetch();
+    },
     shipmentId === null ? 'Açık siparişler güncellendi' : 'Sevkiyat güncellendi',
   );
   const finishAndBack = () => {
@@ -212,8 +222,17 @@ export default function PaketlemeScreen() {
   });
 
   const removeSackMut = useMutation({
-    mutationFn: (sackId: string) => packingService.removeSack(sackId),
-    onSuccess: () => refreshShip(),
+    mutationFn: ({ sackId, withContents }: { sackId: string; withContents?: boolean }) =>
+      packingService.removeSack(sackId, withContents),
+    onSuccess: (res, variables) => {
+      setRemoveSackTarget(null);
+      // Kısa yol (dolu çuval) belirgin bir işlem → bildir; boş çuval sessizce silinir.
+      if (variables.withContents) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Toast.show({ type: 'success', text1: 'Çuval silindi', text2: res.message });
+      }
+      refreshShip();
+    },
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Silinemedi', text2: e.message }),
   });
 
@@ -223,17 +242,29 @@ export default function PaketlemeScreen() {
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çıkarılamadı', text2: e.message }),
   });
 
+  // "Çuval Depoya Kaldır" (markReady → READY): çuvallandı, firma içi depoda bekler (commit yapılır).
   const readyMut = useMutation({
     mutationFn: () => packingService.markReady(shipmentId!),
     onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Sevke hazır — bekliyor', text2: res.message });
+      Toast.show({ type: 'success', text1: 'Çuval depoya kaldırıldı', text2: res.message });
       finishAndBack();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Sevke hazır yapılamadı', text2: e.message }),
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çuval depoya kaldırılamadı', text2: e.message }),
   });
 
-  // "Hemen Sevk Et" (onay kapalı): PREPARING → DISPATCHED tek adım — stok düşer, irsaliye kesilir.
+  // "Kapı Önüne Koy" (moveToDoor → AT_DOOR): sevk onayı açıkken çıkışın durağı; "Alındı" bekler.
+  const moveToDoorMut = useMutation({
+    mutationFn: () => packingService.moveToDoor(shipmentId!),
+    onSuccess: (res) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Kapı önüne kondu', text2: res.message });
+      finishAndBack();
+    },
+    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Kapı önüne konamadı', text2: e.message }),
+  });
+
+  // "Hemen Sevk Et" (onay kapalı): → DISPATCHED tek adım — stok düşer, irsaliye kesilir.
   const dispatchMut = useMutation({
     mutationFn: () => packingService.dispatch(shipmentId!, {}),
     onSuccess: (res) => {
@@ -370,8 +401,7 @@ export default function PaketlemeScreen() {
 
   return (
     <ScreenChrome
-      title="Paketleme"
-      subtitle={ship?.shipmentNo ?? 'Yeni (henüz kaydedilmedi)'}
+      title=""
       onStepBack={() => nav.goBack()}
       headerExtras={
         <>
@@ -405,6 +435,21 @@ export default function PaketlemeScreen() {
         </>
       }
     >
+      {/* Sevkiyat başlık şeridi — telefonda topbar'a sığmayan "Paketleme" + sevkiyat
+          kodu burada, koyu temada yan yana; sığmazsa yatay kayar. */}
+      <View style={styles.subBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.subBarContent}
+        >
+          <Icon source="package-variant-closed" size={14} color={colors.textOnDarkMuted} />
+          <Text style={styles.subBarTitle}>Paketleme</Text>
+          <View style={styles.subBarDivider} />
+          <Text style={styles.subBarCode}>{ship?.shipmentNo ?? 'Yeni · kaydedilmedi'}</Text>
+        </ScrollView>
+      </View>
+
       {loadingReal ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator color={colors.brand} />
@@ -507,10 +552,10 @@ export default function PaketlemeScreen() {
                         <Text style={styles.covNums}>
                           <Text style={styles.covNumLabel}>okutulan </Text>
                           <Text style={[styles.covNumValue, { color: ok ? colors.successDark : colors.brand }]}>
-                            {Math.round(r.thisShipment)}
+                            {mText(r.thisShipment)}
                           </Text>
                           <Text style={styles.covNumLabel}> / istenen </Text>
-                          <Text style={styles.covNumValue}>{Math.round(r.openQty)}</Text>
+                          <Text style={styles.covNumValue}>{mText(r.openQty)}</Text>
                           <Text style={styles.covNumLabel}> m</Text>
                         </Text>
 
@@ -521,7 +566,11 @@ export default function PaketlemeScreen() {
                             style={styles.covBar}
                           />
                           <Text style={[styles.covStatus, ok ? styles.covStatusOk : styles.covStatusShort]}>
-                            {ok ? '✓ tamam' : `${Math.round(remaining)} m eksik`}
+                            {ok
+                              ? r.thisShipment > r.openQty
+                                ? `✓ +${mText(r.thisShipment - r.openQty)}m fazla`
+                                : '✓ tamam'
+                              : `${mText(remaining)} m eksik`}
                           </Text>
                         </View>
                       </View>
@@ -545,7 +594,7 @@ export default function PaketlemeScreen() {
                         </View>
                         <Text style={styles.covMeta}>
                           {r.item.name}
-                          {r.color ? ` · ${r.color.name}` : ''} · {Math.round(r.currentQty)}m
+                          {r.color ? ` · ${r.color.name}` : ''} · {mText(r.currentQty)}m
                         </Text>
                       </View>
                       <IconButton
@@ -594,53 +643,61 @@ export default function PaketlemeScreen() {
                     const active = s.id === activeSackId;
                     return (
                       <View key={s.id} style={[styles.sackCard, active && styles.sackCardActive]}>
-                        <TouchableRipple
-                          onPress={() => setActiveSack(s.id)}
-                          style={styles.sackHead}
-                          borderless={false}
-                        >
-                          <View style={styles.sackHeadRow}>
-                            <View style={[styles.sackIcon, active && styles.sackIconActive]}>
-                              <Icon source="sack" size={18} color={active ? colors.brand : colors.textSecondary} />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                              <View style={styles.sackTitleRow}>
-                                <Text style={styles.sackLabel}>Çuval {s.seq}</Text>
-                                {active && (
-                                  <View style={styles.activeTag}>
-                                    <Text style={styles.activeTagText}>aktif</Text>
-                                  </View>
-                                )}
+                        {/* Bilgi alanı = seçici (aktif çuval); ikonlar AYRI kardeş.
+                            İç içe touchable yarışı (tartı modalı bazen açılmıyordu) önlenir. */}
+                        <View style={styles.sackHeadRow}>
+                          <TouchableRipple
+                            onPress={() => setActiveSack(s.id)}
+                            style={styles.sackHeadTap}
+                            borderless={false}
+                          >
+                            <View style={styles.sackHeadTapInner}>
+                              <View style={[styles.sackIcon, active && styles.sackIconActive]}>
+                                <Icon source="sack" size={18} color={active ? colors.brand : colors.textSecondary} />
                               </View>
-                              <Text style={styles.sackMeta}>
-                                {s.rollCount} top
-                                {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ''} · {kgText(s.weightKg)}
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.sackMeta,
-                                  !s.manualCode?.trim() && styles.sackMetaWarn,
-                                ]}
-                              >
-                                {s.manualCode?.trim() ? `Kod: ${s.manualCode}` : 'Kod girilmedi'}
-                              </Text>
+                              <View style={{ flex: 1 }}>
+                                <View style={styles.sackTitleRow}>
+                                  <Text style={styles.sackLabel}>Çuval {s.seq}</Text>
+                                  {active && (
+                                    <View style={styles.activeTag}>
+                                      <Text style={styles.activeTagText}>aktif</Text>
+                                    </View>
+                                  )}
+                                </View>
+                                <Text style={styles.sackMeta}>
+                                  {s.rollCount} top
+                                  {s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ''} · {kgText(s.weightKg)}
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.sackMeta,
+                                    !s.manualCode?.trim() && styles.sackMetaWarn,
+                                  ]}
+                                >
+                                  {s.manualCode?.trim() ? `Kod: ${s.manualCode}` : 'Kod girilmedi'}
+                                </Text>
+                              </View>
                             </View>
-                            <IconButton
-                              icon="scale"
-                              size={22}
-                              iconColor={colors.textSecondary}
-                              onPress={() => openWeigh(s)}
-                              accessibilityLabel="Çuvalı tart"
-                            />
-                            <IconButton
-                              icon="trash-can-outline"
-                              size={22}
-                              iconColor={colors.danger}
-                              onPress={() => removeSackMut.mutate(s.id)}
-                              accessibilityLabel="Çuvalı sil"
-                            />
-                          </View>
-                        </TouchableRipple>
+                          </TouchableRipple>
+                          <IconButton
+                            icon="scale"
+                            size={22}
+                            iconColor={colors.textSecondary}
+                            onPress={() => openWeigh(s)}
+                            accessibilityLabel="Çuvalı tart"
+                          />
+                          <IconButton
+                            icon="trash-can-outline"
+                            size={22}
+                            iconColor={colors.danger}
+                            onPress={() =>
+                              s.rollCount > 0 || s.swatchCount > 0
+                                ? setRemoveSackTarget(s) // dolu → önce onay (toplar depoya döner)
+                                : removeSackMut.mutate({ sackId: s.id }) // boş → sessizce sil
+                            }
+                            accessibilityLabel="Çuvalı sil"
+                          />
+                        </View>
 
                         {s.rolls.length === 0 && s.swatchCount === 0 ? (
                           <Text style={styles.sackEmpty}>
@@ -651,10 +708,11 @@ export default function PaketlemeScreen() {
                             {s.rolls.map((r) => (
                               <View key={r.id} style={styles.sackRollRow}>
                                 <View style={{ flex: 1 }}>
-                                  <Text style={styles.sackRollBarcode}>{r.barcode ?? '—'}</Text>
+                                  {/* Barkod tek satır; sığmazsa OTOMATIK kayar (marquee). */}
+                                  <MarqueeText text={r.barcode ?? '—'} style={styles.sackRollBarcode} />
                                   <Text style={styles.covMeta}>
                                     {r.item.name}
-                                    {r.color ? ` · ${r.color.name}` : ''} · {Math.round(r.currentQty)}m
+                                    {r.color ? ` · ${r.color.name}` : ''} · {mText(r.currentQty)}m
                                   </Text>
                                 </View>
                                 {sacks.length > 1 && (
@@ -697,37 +755,37 @@ export default function PaketlemeScreen() {
             </AnimatedEntrance>
           </ScrollView>
 
-          {/* ── Sabit alt: Sevke Hazır (+ onay kapalıysa Hemen Sevk Et) ── */}
+          {/* ── Sabit alt: Çuval Depoya Kaldır + (onay açık → Kapı Önüne Koy / kapalı → Hemen Sevk Et) ── */}
           <View style={styles.footer}>
             {!canReady && <Text style={styles.footerHint}>{readyHint || 'Çuvala top okut + tart + kod gir.'}</Text>}
-            {confirmationEnabled ? (
-              // Onay açık: ① yalnız hazır eder; çıkış ② "Sevk Çıkışı"ndan onaylanır.
+            <View style={styles.footerRow}>
               <Button
-                mode="contained"
-                icon="truck-check"
-                buttonColor={colors.successDark}
-                disabled={!canReady || readyMut.isPending}
+                mode="contained-tonal"
+                icon="warehouse"
+                disabled={!canReady || readyMut.isPending || moveToDoorMut.isPending || dispatchMut.isPending}
                 loading={readyMut.isPending}
                 onPress={() => readyMut.mutate()}
+                style={styles.footerBtnFlex}
                 contentStyle={styles.footerBtnContent}
-                labelStyle={styles.footerBtnLabel}
               >
-                Sevke Hazır
+                Çuval Depoya
               </Button>
-            ) : (
-              // Onay kapalı: hemen sevk et (stok düşer) ya da ara depoya bırak (Sevke Hazır).
-              <View style={styles.footerRow}>
+              {confirmationEnabled ? (
+                // Onay açık: kapı önüne koy → çıkış ("Alındı") Sevk Çıkışı'ndan onaylanır.
                 <Button
-                  mode="contained-tonal"
-                  icon="truck-check"
-                  disabled={!canReady || readyMut.isPending || dispatchMut.isPending}
-                  loading={readyMut.isPending}
-                  onPress={() => readyMut.mutate()}
+                  mode="contained"
+                  icon="truck-fast"
+                  buttonColor={colors.successDark}
+                  disabled={!canReady || readyMut.isPending || moveToDoorMut.isPending}
+                  loading={moveToDoorMut.isPending}
+                  onPress={() => moveToDoorMut.mutate()}
                   style={styles.footerBtnFlex}
                   contentStyle={styles.footerBtnContent}
                 >
-                  Sevke Hazır
+                  Kapı Önüne Koy
                 </Button>
+              ) : (
+                // Onay kapalı: hemen sevk et (stok düşer, müşteriye gitti).
                 <Button
                   mode="contained"
                   icon="truck-fast"
@@ -740,8 +798,8 @@ export default function PaketlemeScreen() {
                 >
                   Hemen Sevk Et
                 </Button>
-              </View>
-            )}
+              )}
+            </View>
           </View>
         </>
       )}
@@ -836,6 +894,52 @@ export default function PaketlemeScreen() {
         </Surface>
       </AppModal>
 
+      {/* Dolu çuval sil — kısa yol. Depoya dönecek toplar somut listelenir; onaylanınca
+          toplar tek tek çıkarılmadan çuval içeriğiyle silinir. */}
+      <AppModal visible={removeSackTarget !== null} onDismiss={() => setRemoveSackTarget(null)}>
+        <Surface style={styles.sheet} elevation={4}>
+          <Text variant="titleMedium" style={styles.sheetTitle}>
+            Çuval {removeSackTarget?.seq} Sil
+          </Text>
+          <Text style={styles.covMeta}>
+            Bu çuval silinince içindeki {removeSackTarget?.rollCount ?? 0} top depoya dönecek
+            {removeSackTarget && removeSackTarget.swatchCount > 0
+              ? ` (+${removeSackTarget.swatchCount} kartela)`
+              : ''}
+            . Topları tek tek çıkarmana gerek yok.
+          </Text>
+          <ScrollView style={{ maxHeight: 240, marginTop: spacing.sm }}>
+            {(removeSackTarget?.rolls ?? []).map((r) => (
+              <Text key={r.id} style={styles.covMeta}>
+                • {r.barcode ?? '—'} · {r.item.name}
+                {r.color ? ` · ${r.color.name}` : ''} · {mText(r.currentQty)}m
+              </Text>
+            ))}
+            {(removeSackTarget?.swatchCount ?? 0) > 0 && (
+              <Text style={styles.covMeta}>• +{removeSackTarget?.swatchCount} kartela depoya dönecek</Text>
+            )}
+          </ScrollView>
+          <View style={styles.actions}>
+            <Button onPress={() => setRemoveSackTarget(null)} style={styles.actionBtn}>
+              Vazgeç
+            </Button>
+            <Button
+              mode="contained"
+              icon="trash-can-outline"
+              buttonColor={colors.danger}
+              style={styles.actionBtn}
+              loading={removeSackMut.isPending}
+              disabled={removeSackMut.isPending}
+              onPress={() =>
+                removeSackTarget && removeSackMut.mutate({ sackId: removeSackTarget.id, withContents: true })
+              }
+            >
+              Sil — Depoya Döndür
+            </Button>
+          </View>
+        </Surface>
+      </AppModal>
+
       <AppModal visible={cancelOpen} onDismiss={() => setCancelOpen(false)}>
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
@@ -856,7 +960,7 @@ export default function PaketlemeScreen() {
                 {cancelPreview.rolls.map((r) => (
                   <Text key={r.id} style={styles.covMeta}>
                     • {r.barcode ?? '—'} · {r.itemName}
-                    {r.colorName ? ` · ${r.colorName}` : ''} · {Math.round(r.currentQty)}m
+                    {r.colorName ? ` · ${r.colorName}` : ''} · {mText(r.currentQty)}m
                   </Text>
                 ))}
                 {cancelPreview.affectedOrders.map((o) => (
@@ -892,6 +996,29 @@ export default function PaketlemeScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scrollContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
+
+  // ── Sevkiyat başlık şeridi (topbar altı, koyu tema, yatay kayar) ──
+  subBar: {
+    backgroundColor: palette.slate[800],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: palette.slate[700],
+  },
+  subBarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  subBarTitle: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textOnDarkMuted },
+  subBarDivider: { width: 1, height: 14, backgroundColor: palette.slate[600] },
+  subBarCode: {
+    fontSize: typography.size.sm,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+    color: colors.textOnDark,
+    letterSpacing: 0.3,
+  },
 
   loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   loadingText: { fontSize: typography.size.sm, color: colors.textMuted },
@@ -1000,8 +1127,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   sackCardActive: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
-  sackHead: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
-  sackHeadRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  sackHeadRow: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.xs },
+  sackHeadTap: { flex: 1 },
+  sackHeadTapInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
   sackIcon: {
     width: 32,
     height: 32,
@@ -1059,7 +1193,9 @@ const styles = StyleSheet.create({
   footerBtnFlex: { flex: 1 },
 
   // ── Modal'lar ──
-  sheet: { borderRadius: radius.lg, padding: spacing.lg, backgroundColor: colors.surface },
+  // width:'100%' — AppModal center'da contentStyle'sız çocuğa alignItems:'center'
+  // uygular; açık genişlik olmadan Surface içeriğe büzülüp "ince uzun" taşıyordu.
+  sheet: { width: '100%', borderRadius: radius.lg, padding: spacing.lg, backgroundColor: colors.surface },
   sheetTitle: { fontWeight: '700', marginBottom: spacing.xs, color: colors.text },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   actionBtn: { flex: 1 },

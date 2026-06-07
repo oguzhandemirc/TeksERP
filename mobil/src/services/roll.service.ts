@@ -154,6 +154,15 @@ export const rollService = {
       .then((r) => r.data);
   },
 
+  // Depo kapsam sayaçları — serbest / çuval depo (READY) / kapı önü (AT_DOOR).
+  getWarehouseScope: (): Promise<
+    ApiResponse<{
+      free: { count: number; qty: number };
+      sackStore: { count: number; qty: number };
+      atDoor: { count: number; qty: number };
+    }>
+  > => apiClient.get(`/rolls/warehouse-scope`).then((r) => r.data),
+
   getHistory: (
     rollId: string
   ): Promise<

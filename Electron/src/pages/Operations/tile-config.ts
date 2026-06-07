@@ -7,6 +7,7 @@ import {
   Truck,
   SwatchBook,
   Undo2,
+  Warehouse,
   type LucideIcon,
 } from "lucide-react";
 
@@ -58,6 +59,14 @@ export const operationsTiles: OperationsTile[] = [
     description: "Müşteri sevkiyatları + sevk irsaliyesi",
     icon: Truck,
     to: "/operations/shipments",
+    permission: "shipping:read",
+  },
+  {
+    key: "sack-store",
+    title: "Çuval Depo",
+    description: "Çuval depodaki + kapı önündeki sevkler; hangi çuvalda ne, kodu, kg",
+    icon: Warehouse,
+    to: "/operations/sack-store",
     permission: "shipping:read",
   },
   {

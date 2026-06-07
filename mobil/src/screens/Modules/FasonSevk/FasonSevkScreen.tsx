@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppModal from '../../../components/AppModal';
 import {
   Text,
@@ -32,7 +33,10 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   runOnJS,
+  useReducedMotion,
 } from 'react-native-reanimated';
+import { palette } from '../../../theme/tokens';
+import { springs } from '../../../theme/motion';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import ScreenChrome from '../../../components/ScreenChrome';
@@ -70,6 +74,10 @@ import {
 // asla çakışmaz. Yalnızca KESİN ters tipi reddederiz; gerisini backend doğrular.
 const looksLikeRollBarcode = (code: string) => /^TEKS-/i.test(code.trim());
 const looksLikeCardBarcode = (code: string) => /^RK-/i.test(code.trim());
+
+// Android LMK: OS uzun süre arka planda bırakılan uygulamayı öldürür.
+// Form taslağını AsyncStorage'a yazarak uygulama yeniden açılınca geri yükleriz.
+const DRAFT_KEY = 'fason_sevk_draft_v1';
 
 // Detay paneli (telefon) sürükleme — 3 yaslama konumu (kapalı/orta/büyük) +
 // yaylı geçiş. Kapalı yükseklik sabit (başlık görünür kadar); orta/büyük ekran
@@ -181,7 +189,65 @@ export default function FasonSevkScreen() {
   // (onModalHide) yapılır ki hata/başarı toast'ı modal-içi toast yerine KÖK
   // toast'ta görünsün; aksi halde modal kapanışıyla toast anında kayboluyor.
   const pendingCardScanRef = useRef<string | null>(null);
-  const pendingRollScanRef = useRef<string | null>(null);
+
+  // ── Draft yedekleme (Android LMK koruması) ──
+  // OS uygulamayı arka planda öldürünce React state sıfırlanır. Taslağı
+  // AsyncStorage'a yazarak uygulama yeniden açılınca geri yükleriz.
+  // 8 saat (1 vardiya) sonra otomatik sona erer — eski toplar başka sevkte
+  // gönderilmiş olabilir, yeni vardiyanın temiz başlaması daha güvenli.
+  const DRAFT_TTL_MS = 8 * 60 * 60 * 1000;
+  const draftRestoredRef = useRef(false);
+
+  // Mount: daha önce kaydedilmiş taslak varsa ve 8 saatten genç ise geri yükle.
+  useEffect(() => {
+    AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
+      if (raw) {
+        try {
+          const d = JSON.parse(raw) as Record<string, unknown>;
+          const age = typeof d.savedAt === 'number' ? Date.now() - d.savedAt : Infinity;
+          if (age < DRAFT_TTL_MS) {
+            if (typeof d.workOrderId === 'string' && d.workOrderId) setWorkOrderId(d.workOrderId);
+            if (typeof d.workOrderLabel === 'string' && d.workOrderLabel) setWorkOrderLabel(d.workOrderLabel);
+            if (typeof d.stepId === 'string' && d.stepId) setStepId(d.stepId);
+            if (typeof d.subcontractorId === 'string' && d.subcontractorId) setSubcontractorId(d.subcontractorId);
+            if (typeof d.subcontractorLabel === 'string' && d.subcontractorLabel) setSubcontractorLabel(d.subcontractorLabel);
+            if (typeof d.plannedSubId === 'string') setPlannedSubId(d.plannedSubId);
+            if (Array.isArray(d.scannedRolls) && d.scannedRolls.length > 0) setScannedRolls(d.scannedRolls as ScannedRoll[]);
+            if (typeof d.plateNumber === 'string' && d.plateNumber) setPlateNumber(d.plateNumber);
+            if (typeof d.driverName === 'string' && d.driverName) setDriverName(d.driverName);
+            if (typeof d.notes === 'string' && d.notes) setNotes(d.notes);
+            if (typeof d.dyehouseNote === 'string' && d.dyehouseNote) setDyehouseNote(d.dyehouseNote);
+          } else {
+            AsyncStorage.removeItem(DRAFT_KEY);
+          }
+        } catch {
+          AsyncStorage.removeItem(DRAFT_KEY);
+        }
+      }
+      draftRestoredRef.current = true;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Autosave: her değişiklikte 600 ms debounce ile yazar. Restore tamamlanmadan
+  // (draftRestoredRef=false) asla yazmaz — sıfır state ile taslağı silmez.
+  useEffect(() => {
+    if (!draftRestoredRef.current) return;
+    const t = setTimeout(() => {
+      if (!workOrderId && scannedRolls.length === 0) {
+        AsyncStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
+        savedAt: Date.now(),
+        workOrderId, workOrderLabel, stepId,
+        subcontractorId, subcontractorLabel, plannedSubId,
+        scannedRolls, plateNumber, driverName, notes, dyehouseNote,
+      }));
+    }, 600);
+    return () => clearTimeout(t);
+  }, [workOrderId, workOrderLabel, stepId, subcontractorId, subcontractorLabel,
+      plannedSubId, scannedRolls, plateNumber, driverName, notes, dyehouseNote]);
 
   // ── WO picker server-side state ──
   const WO_PAGE_SIZE = 30;
@@ -567,9 +633,12 @@ export default function FasonSevkScreen() {
       setNotes('');
       setDyehouseNote('');
       setDetailsCollapsed(true);
-      // Listeleri tazele (yeni dispatch, WO statüsü)
+      AsyncStorage.removeItem(DRAFT_KEY);
+      // Listeleri tazele (yeni dispatch, WO statüsü). ['rolls'] de invalide edilir:
+      // sevk edilen toplar artık STOCK değil → Top Seç picker cache'i bayat kalmasın.
       qc.invalidateQueries({ queryKey: ['dispatches'] });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
+      qc.invalidateQueries({ queryKey: ['rolls'] });
     },
     onError: (err, vars) => {
       // Backend ITEM_MISMATCH özel durumu — modal göster, retry with override
@@ -741,6 +810,12 @@ export default function FasonSevkScreen() {
     setSubcontractorId('');
     setSubcontractorLabel('');
     setPlannedSubId(null);
+    setScannedRolls([]);
+    setPlateNumber('');
+    setDriverName('');
+    setNotes('');
+    setDyehouseNote('');
+    AsyncStorage.removeItem(DRAFT_KEY);
     snapTo(SHEET_COLLAPSED_H);
   };
   // Katlanmış "Sevk Bilgileri" başlığında gösterilecek özet (doluysa).
@@ -970,6 +1045,12 @@ export default function FasonSevkScreen() {
               <Text style={styles.sectionTitle}>
                 Toplar{scannedRolls.length > 0 ? ` (${scannedRolls.length})` : ''}
               </Text>
+              {orderTotalMeters != null && orderTotalMeters > 0 && (
+                <DispatchProgressBar
+                  current={scannedRollsTotal}
+                  target={orderTotalMeters}
+                />
+              )}
               <ScannerEntryBar
                 value={barcodeInput}
                 onChangeText={setBarcodeInput}
@@ -1271,24 +1352,12 @@ export default function FasonSevkScreen() {
         title="Refakat Kartı Okut"
       />
 
-      {/* ── Top barkodu kamera tarama: okutulan barkod direkt sevk listesine eklenir ── */}
+      {/* ── Top barkodu kamera tarama: sürekli mod — kullanıcı kapatana dek açık kalır ── */}
       <BarcodeScannerModal
         visible={rollScannerOpen}
         onDismiss={() => setRollScannerOpen(false)}
-        onScan={(data) => {
-          // İşlemeyi modal TAM kapandıktan sonraya ertele (onModalHide) —
-          // toast modal-içi yerine kök toast'ta kalıcı görünsün.
-          pendingRollScanRef.current = data;
-          setRollScannerOpen(false);
-        }}
-        onModalHide={() => {
-          const d = pendingRollScanRef.current;
-          pendingRollScanRef.current = null;
-          if (d) {
-            setBarcodeInput(d);
-            void addBarcodeFromString(d);
-          }
-        }}
+        continuous
+        onScan={(data) => void addBarcodeFromString(data)}
         title="Top Barkodunu Okut"
       />
 
@@ -1403,26 +1472,48 @@ function RollPickerModal({
     return () => clearTimeout(t);
   }, [search]);
 
-  const rollsQuery = useQuery({
+  // CURSOR (keyset) + infinite scroll — Roll yüksek hacimli tablo (CLAUDE.md
+  // kuralı). Offset+COUNT(*) yerine: withTotal yok → her açılışta COUNT maliyeti
+  // yok, sabit hız (binlerce/yüzbinlerce ham topta bile). Sıralama+filtre
+  // backend buildRollWhere ile aynı: status IN (STOCK,IN_PRODUCTION), FIRE hariç,
+  // createdAt desc. [status, createdAt] indeksi LIMIT'i seek ile karşılar.
+  const rollsQuery = useInfiniteQuery({
     queryKey: ['rolls', 'fason-picker', debouncedSearch],
-    queryFn: () =>
-      rollService.getAll({
-        page: 1,
-        pageSize: ROLL_PICKER_PAGE_SIZE,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
+    queryFn: ({ pageParam }) =>
+      rollService.getAllCursor({
+        limit: ROLL_PICKER_PAGE_SIZE,
+        cursor: pageParam,
         search: debouncedSearch.trim() || undefined,
-        // Sadece sevke uygun statüler — backend validasyonu da bu ikisini kabul ediyor
-        // (subcontractor.service.ts:240-250). SCRAP/CANCELLED/SHIPPED/AT_SUBCONTRACTOR
-        // vb. picker'da görünmemeli.
+        // Sadece sevke uygun statüler — backend validasyonu da bu ikisini kabul
+        // ediyor. SCRAP/CANCELLED/SHIPPED/AT_SUBCONTRACTOR vb. görünmemeli.
         filters: { status: 'STOCK,IN_PRODUCTION' },
       }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) =>
+      last.pagination.hasMore ? last.pagination.nextCursor : undefined,
     enabled: visible,
-    placeholderData: (prev) => prev,
   });
 
-  const allRolls = rollsQuery.data?.data ?? [];
+  // Modal her açılışında taze veri çek — başka cihaz ya da bir önceki sevk
+  // listeyi değiştirmiş olabilir (sevk edilen toplar artık STOCK değil).
+  // openedAt o açılış anını damgalar; o ana ait taze sonuç gelene dek eski cache
+  // satırları YERİNE skeleton gösterilir → operatör bayat/sevk-edilmiş topu seçemez.
+  const [openedAt, setOpenedAt] = useState(0);
+  useEffect(() => {
+    if (visible) {
+      setOpenedAt(Date.now());
+      rollsQuery.refetch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const allRolls = rollsQuery.data?.pages.flatMap((p) => p.data) ?? [];
   const rolls = allRolls.filter((r) => !excludeIds.includes(r.id));
+
+  // Bu açılışa ait taze sonuç henüz gelmediyse skeleton (bayat satır gösterme).
+  const freshForThisOpen = rollsQuery.dataUpdatedAt >= openedAt;
+  const showSkeleton =
+    rollsQuery.isLoading || (visible && !freshForThisOpen && !rollsQuery.isError);
 
   return (
     <AppModal visible={visible} onDismiss={onDismiss}>
@@ -1470,7 +1561,7 @@ function RollPickerModal({
         />
 
         <View style={pickerStyles.listBox}>
-          {rollsQuery.isLoading ? (
+          {showSkeleton ? (
             <SkeletonList count={6} />
           ) : rollsQuery.isError ? (
             <View style={pickerStyles.empty}>
@@ -1487,6 +1578,17 @@ function RollPickerModal({
             <FlashList
               data={rolls}
               keyExtractor={(r) => r.id}
+              onEndReachedThreshold={0.6}
+              onEndReached={() => {
+                if (rollsQuery.hasNextPage && !rollsQuery.isFetchingNextPage) {
+                  rollsQuery.fetchNextPage();
+                }
+              }}
+              ListFooterComponent={
+                rollsQuery.isFetchingNextPage ? (
+                  <ActivityIndicator style={{ marginVertical: 12 }} />
+                ) : null
+              }
               renderItem={({ item }) => (
                 <TouchableRipple
                   borderless
@@ -1965,6 +2067,79 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, color: '#94a3b8', fontWeight: '600' },
   emptyHint: { fontSize: 13, color: '#cbd5e1', textAlign: 'center', maxWidth: 240 },
   detailScrollContent: { padding: 10, gap: 8, paddingBottom: 24 },
+});
+
+// ── Yükleme ilerleme çubuğu ──
+// WO'nun hedef metraji ile o ana kadar okutulmuş topların toplamını karşılaştırır.
+// Renk: indigo (ilerleme) → emerald (%80+) → amber (hedef aşıldı).
+// fillW Reanimated shared value: her top eklendiğinde/çıkarıldığında yay animasyonlu.
+function DispatchProgressBar({ current, target }: { current: number; target: number }) {
+  const [trackW, setTrackW] = useState(0);
+  const fillW = useSharedValue(0);
+  const reduced = useReducedMotion();
+
+  const ratio = target > 0 ? Math.min(current / target, 1) : 0;
+
+  useEffect(() => {
+    const dest = ratio * trackW;
+    fillW.value = reduced ? dest : withSpring(dest, springs.gentle);
+  }, [ratio, trackW, reduced, fillW]);
+
+  const fillAnim = useAnimatedStyle(() => ({ width: fillW.value }));
+
+  const pct = target > 0 ? Math.round((current / target) * 100) : 0;
+  const isOver = current > target * 1.001;
+  const fillColor = isOver
+    ? palette.amber[500]
+    : pct >= 80
+    ? palette.emerald[500]
+    : palette.indigo[600];
+  const labelColor = isOver
+    ? palette.amber[700]
+    : pct >= 80
+    ? palette.emerald[700]
+    : palette.slate[500];
+
+  return (
+    <View style={pbStyles.wrap}>
+      <View style={pbStyles.labelRow}>
+        <Text style={pbStyles.labelLeft}>
+          {current.toFixed(1)} mt yüklendi
+        </Text>
+        <Text style={[pbStyles.labelRight, { color: labelColor }]}>
+          {isOver
+            ? `%${pct} · ${(current - target).toFixed(1)} mt fazla`
+            : `%${pct} · hedef ${Math.round(target)} mt`}
+        </Text>
+      </View>
+      <View
+        style={pbStyles.track}
+        onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
+      >
+        <Animated.View style={[pbStyles.fill, { backgroundColor: fillColor }, fillAnim]} />
+      </View>
+    </View>
+  );
+}
+
+const pbStyles = StyleSheet.create({
+  wrap: { marginTop: 4, marginBottom: 6, gap: 5 },
+  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  labelLeft: { fontSize: 12, fontWeight: '700', color: palette.slate[700] },
+  labelRight: { fontSize: 11, fontWeight: '600' },
+  track: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: palette.slate[200],
+    overflow: 'hidden',
+  },
+  fill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 4,
+  },
 });
 
 // Sevk listesindeki tek top satırı — React.memo ile parent state değişimlerinde

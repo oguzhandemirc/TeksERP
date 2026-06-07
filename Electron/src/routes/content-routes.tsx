@@ -31,6 +31,8 @@ import { ActivityArchivePage } from "@/pages/System/Archive/ActivityArchivePage"
 import { ArchiveSearchPage } from "@/pages/System/Archive/ArchiveSearchPage";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
 import { LabelTemplateEditPage } from "@/pages/LabelTemplates/LabelTemplateEditPage";
+import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage";
+import { TravelerCardSettingsPage } from "@/pages/Definitions/TravelerCardSettingsPage";
 import { DevicesPage } from "@/pages/Devices/DevicesPage";
 import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
 import { ReportsHubPage } from "@/pages/Reports/ReportsHubPage";
@@ -68,6 +70,7 @@ import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
 import { KursunQueuePage } from "@/pages/Operations/KursunQueue/KursunQueuePage";
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
+import { SackStorePage } from "@/pages/Operations/SackStore/SackStorePage";
 import { KartelaPage } from "@/pages/Operations/Kartela/KartelaPage";
 import { ReturnsPage } from "@/pages/Operations/Returns/ReturnsPage";
 
@@ -156,6 +159,22 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="label-template:write">
         <LabelTemplateEditPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/document-templates",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <DocumentTemplatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/traveler-card",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <TravelerCardSettingsPage />
       </ProtectedRoute>
     ),
   },
@@ -307,6 +326,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="shipping:read">
         <ShipmentsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/sack-store",
+    element: (
+      <ProtectedRoute requirePermission="shipping:read">
+        <SackStorePage />
       </ProtectedRoute>
     ),
   },

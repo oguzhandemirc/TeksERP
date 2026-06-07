@@ -352,6 +352,39 @@ export interface PendingReturnGroup {
   totalQty: number;
 }
 
+/** Liste görünümü için hafif özet — rolls yok, seçimde /step/:stepId lazy-load. */
+export interface PendingReturnSummary {
+  step: {
+    id: string;
+    stepSequence: number;
+    station: Station;
+    notes: string | null;
+    requiredCategory: SubcontractorCategory | null;
+    plannedSubcontractor: Subcontractor | null;
+  };
+  workOrder: {
+    id: string;
+    batchNumber: string;
+    status: WorkOrderStatus;
+  };
+  lastDispatch: {
+    id: string;
+    dispatchNo: string;
+    dispatchedAt: string;
+    plateNumber: string | null;
+    driverName: string | null;
+    subcontractorId: string;
+    subcontractor: Subcontractor;
+  } | null;
+  rollCount: number;
+  totalQty: number;
+  /** Client-side arama özetleri — gruptaki rulolardan distinct (rolls taşınmaz). */
+  itemNames: string[];
+  colorNames: string[];
+  /** WO'nun aktif refakat kart numaraları — kart no ile arama için. */
+  cardNumbers: string[];
+}
+
 /** Alıcı her satır için tek opaque obje gönderir; ölçüm/etiket yapılmaz. */
 export interface ReceiveReturnInput {
   rollId: string;
@@ -591,6 +624,12 @@ export interface TamburRollSummary {
   properties: { id: string; name: string }[];
   errorCount: number;
   errors: TamburRollDefect[];
+  /** Dal (fason partisi) kimliği — null = fasonsuz/doğrudan top. */
+  batchSplitId: string | null;
+  /** Dalın sevk numarası (SubcontractorDispatch.dispatchNo). */
+  dispatchNo: string | null;
+  /** WO içindeki 1-based parti sırası (dispatchedAt'e göre, stabil). */
+  branchOrdinal: number | null;
 }
 
 export interface TamburStepSummary {

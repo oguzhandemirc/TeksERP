@@ -11,6 +11,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { safeFormat } from "@/lib/format";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { DEFAULT_COMPANY_NAME, DEFAULT_COMPANY_LETTERHEAD } from "@/services/featureFlagService";
+import { resolveDocConfig } from "@/services/documentConfig";
+import {
+  PrintLetterhead,
+  SignatureBoxes,
+  DocFooterNote,
+  type DocSheetPreview,
+} from "@/components/print/print-helpers";
 import { shipmentService } from "./service";
 import type { ShipmentDetail } from "./types";
 
@@ -71,7 +80,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
   );
 }
 
-function NoteSheet({ d }: { d: ShipmentDetail }) {
+export function NoteSheet({ d, preview }: { d: ShipmentDetail; preview?: DocSheetPreview }) {
   // Yalnız bu sevkiyatta metraj düşen kalemler (irsaliyede giden mal).
   const lines = d.orders.flatMap((o) =>
     o.lines
@@ -81,11 +90,19 @@ function NoteSheet({ d }: { d: ShipmentDetail }) {
   const totalQty = lines.reduce((s, l) => s + l.thisShipment, 0);
   const docDate = d.dispatchedAt ?? d.readyAt ?? null;
 
+  const flags = useFeatureFlags().data?.data;
+  const cfg = preview?.cfg ?? resolveDocConfig(flags?.documentsConfig, "shipmentDispatch");
+  const companyName = preview?.companyName ?? flags?.companyName ?? DEFAULT_COMPANY_NAME;
+  const letterhead = preview?.letterhead ?? flags?.companyLetterhead ?? DEFAULT_COMPANY_LETTERHEAD;
+
   return (
     <div className="print-area mx-auto max-w-[210mm] bg-white p-6 text-[12px] text-black">
+      {cfg.showLetterhead && (
+        <PrintLetterhead companyName={companyName} letterhead={letterhead} />
+      )}
       <div className="flex items-start justify-between border-b-2 border-black pb-3">
         <div>
-          <div className="text-[18px] font-bold uppercase tracking-wide">Sevk İrsaliyesi</div>
+          <div className="text-[18px] font-bold uppercase tracking-wide">{cfg.title}</div>
           <div className="mt-1 text-[11px]">
             Sevkiyat No:{" "}
             <span className="font-mono font-semibold">{d.shipmentNo}</span>
@@ -101,18 +118,25 @@ function NoteSheet({ d }: { d: ShipmentDetail }) {
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-4">
-        <Section title="Müşteri">
-          <Row label="Adı" value={d.customer.name} />
-          {d.branch && <Row label="Şube" value={d.branch.name} />}
-        </Section>
-        <Section title="Sevk Bilgileri">
-          <Row label="Plaka" value={d.plateNumber || "—"} />
-          <Row label="Sürücü" value={d.driverName || "—"} />
-          <Row label="Taşıyıcı" value={d.carrier || "—"} />
-        </Section>
-      </div>
+      {(cfg.sections.customerInfo || cfg.sections.vehicleInfo) && (
+        <div className="mt-3 grid grid-cols-2 gap-4">
+          {cfg.sections.customerInfo && (
+            <Section title="Müşteri">
+              <Row label="Adı" value={d.customer.name} />
+              {d.branch && <Row label="Şube" value={d.branch.name} />}
+            </Section>
+          )}
+          {cfg.sections.vehicleInfo && (
+            <Section title="Sevk Bilgileri">
+              <Row label="Plaka" value={d.plateNumber || "—"} />
+              <Row label="Sürücü" value={d.driverName || "—"} />
+              <Row label="Taşıyıcı" value={d.carrier || "—"} />
+            </Section>
+          )}
+        </div>
+      )}
 
+      {cfg.sections.itemTable && (
       <div className="mt-4">
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide">
           Gönderilen Kalemler
@@ -157,8 +181,9 @@ function NoteSheet({ d }: { d: ShipmentDetail }) {
           </tbody>
         </table>
       </div>
+      )}
 
-      {d.sacks.length > 0 && (
+      {cfg.sections.sackBreakdown && d.sacks.length > 0 && (
         <div className="mt-4">
           <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide">
             Çuval Dökümü ({d.sacks.length} çuval · {NUMKG.format(d.summary.totalKg)} kg brüt)
@@ -221,17 +246,16 @@ function NoteSheet({ d }: { d: ShipmentDetail }) {
           </div>
         </div>
       )}
-      <div className="mt-2 text-[11px]">
-        <span className="font-semibold">Top sayısı:</span> {d.summary.rollCount} ·{" "}
-        <span className="font-semibold">Toplam metraj:</span>{" "}
-        {NUM.format(d.summary.totalMeters)} m
-      </div>
+      {cfg.sections.totals && (
+        <div className="mt-2 text-[11px]">
+          <span className="font-semibold">Top sayısı:</span> {d.summary.rollCount} ·{" "}
+          <span className="font-semibold">Toplam metraj:</span>{" "}
+          {NUM.format(d.summary.totalMeters)} m
+        </div>
+      )}
 
-      <div className="mt-10 grid grid-cols-3 gap-6 text-[11px]">
-        <Sign label="Sevkeden" />
-        <Sign label="Sürücü" />
-        <Sign label="Teslim Alan" />
-      </div>
+      {cfg.showSignatures && <SignatureBoxes labels={cfg.signatureLabels} />}
+      <DocFooterNote note={cfg.footerNote} />
     </div>
   );
 }
@@ -280,12 +304,3 @@ function Td({
   );
 }
 
-function Sign({ label }: { label: string }) {
-  return (
-    <div>
-      <div className="text-gray-600">{label}</div>
-      <div className="mt-8 border-b border-black" />
-      <div className="mt-1 text-center text-[10px] text-gray-600">Ad-Soyad / İmza</div>
-    </div>
-  );
-}

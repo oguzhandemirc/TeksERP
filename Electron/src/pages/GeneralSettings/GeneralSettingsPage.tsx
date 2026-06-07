@@ -8,7 +8,7 @@ import { SETTINGS_CATEGORIES } from "./settings-config";
 import { FeatureFlagSection } from "./FeatureFlagSection";
 import { DevicePairingSection } from "./DevicePairingSection";
 import { ApiEndpointSection } from "./ApiEndpointSection";
-import { TravelerCardConfigSection } from "./TravelerCardConfigSection";
+import { CompanySettingsSection } from "./CompanySettingsSection";
 
 /**
  * Genel Ayarlar — sol dikey kategori menüsü + sağ içerik. Ayarlar domaine bölünür
@@ -83,7 +83,7 @@ export function GeneralSettingsPage() {
                     )}
                     {cat.kind === "device" && <DevicePairingSection />}
                     {cat.kind === "api" && <ApiEndpointSection />}
-                    {cat.kind === "travelerCard" && <TravelerCardConfigSection />}
+                    {cat.kind === "company" && <CompanySettingsSection />}
                   </CardContent>
                 </Card>
               </TabsContent>

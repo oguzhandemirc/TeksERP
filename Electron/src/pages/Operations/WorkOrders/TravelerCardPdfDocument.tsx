@@ -46,9 +46,13 @@ export function TravelerCardPdfDocument({ workOrder, card, qrDataUrl, config }: 
   const sortedSteps = [...workOrder.steps].sort((a, b) => a.stepSequence - b.stepSequence);
   const orderLinks = workOrder.orderLinks ?? [];
   const companyName = config?.companyName?.trim() || COMPANY_NAME;
+  const addressLine = config?.addressLine?.trim() ?? "";
+  const phone = config?.phone?.trim() ?? "";
   const showOperationGrid = config?.showOperationGrid !== false;
   const showNotes = config?.showNotes !== false;
   const showOrders = config?.showOrders !== false;
+  const showProperties = config?.showProperties !== false;
+  const footerNote = config?.footerNote?.trim() ?? "";
 
   return (
     <Document title={`Refakat Kartı ${card.cardNumber}`} author={companyName}>
@@ -57,6 +61,11 @@ export function TravelerCardPdfDocument({ workOrder, card, qrDataUrl, config }: 
         <View style={s.topbar} fixed>
           <View>
             <Text style={s.company}>{companyName}</Text>
+            {(addressLine || phone) && (
+              <Text style={s.companyMeta}>
+                {[addressLine, phone].filter(Boolean).join("  ·  ")}
+              </Text>
+            )}
             <Text style={s.docTitle}>REFAKAT KARTI</Text>
           </View>
           <View style={s.topRight}>
@@ -101,7 +110,7 @@ export function TravelerCardPdfDocument({ workOrder, card, qrDataUrl, config }: 
           <Cell label="Bitiş" value={fmtDate(workOrder.plannedEndDate)} bottom last />
         </View>
 
-        {workOrder.targetProperties && workOrder.targetProperties.length > 0 && (
+        {showProperties && workOrder.targetProperties && workOrder.targetProperties.length > 0 && (
           <View style={s.properties}>
             <Text style={s.label}>ÖZELLİKLER:</Text>
             {workOrder.targetProperties.map((p) => (
@@ -183,6 +192,12 @@ export function TravelerCardPdfDocument({ workOrder, card, qrDataUrl, config }: 
           </View>
         ))}
 
+        {footerNote !== "" && (
+          <View style={s.footerNote}>
+            <Text style={s.footerNoteText}>{footerNote}</Text>
+          </View>
+        )}
+
         <Text
           style={s.pageNo}
           render={({ pageNumber, totalPages }) =>
@@ -223,6 +238,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 1.2, borderBottomColor: C.border, paddingBottom: 6, marginBottom: 8,
   },
   company: { fontSize: 14, fontWeight: 700, letterSpacing: -0.2 },
+  companyMeta: { fontSize: 7, color: C.muted, marginTop: 1 },
   docTitle: { fontSize: 8, fontWeight: 700, color: C.muted, letterSpacing: 1.5, marginTop: 1 },
   topRight: { alignItems: "flex-end" },
   label: { fontSize: 6.5, fontWeight: 700, color: C.muted, letterSpacing: 0.5, textTransform: "uppercase" },
@@ -291,6 +307,10 @@ const s = StyleSheet.create({
 
   emptyNote: { alignItems: "center", justifyContent: "center", borderWidth: 0.5, borderColor: C.dot, borderStyle: "dashed", padding: 10 },
   emptyText: { fontSize: 9.5, color: C.muted },
+
+  /* Alt not */
+  footerNote: { borderWidth: 0.5, borderColor: C.soft, borderRadius: 3, padding: 6, marginTop: 8 },
+  footerNoteText: { fontSize: 8.5, color: C.muted },
 
   pageNo: { position: "absolute", bottom: 10, left: 0, right: 0, textAlign: "center", fontSize: 7, color: C.muted },
 });

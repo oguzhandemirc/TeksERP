@@ -13,6 +13,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { safeFormat } from "@/lib/format";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { DEFAULT_COMPANY_NAME, DEFAULT_COMPANY_LETTERHEAD } from "@/services/featureFlagService";
+import { resolveDocConfig } from "@/services/documentConfig";
+import {
+  PrintLetterhead,
+  SignatureBoxes,
+  DocFooterNote,
+  type DocSheetPreview,
+} from "@/components/print/print-helpers";
 import { workOrderService, type DispatchPrintSnapshot } from "./service";
 
 interface Props {
@@ -170,16 +179,27 @@ function DyehouseNoteEditor({
   );
 }
 
-function PrintableSheet({ snap }: { snap: DispatchPrintSnapshot }) {
+export function PrintableSheet({
+  snap,
+  preview,
+}: {
+  snap: DispatchPrintSnapshot;
+  preview?: DocSheetPreview;
+}) {
   // Efektif boyahane notu: sevkin kendi notu (override) → yoksa WO notu (default).
   const dyehouseNote = snap.dyehouseNote ?? snap.woDyehouseNote;
+  const flags = useFeatureFlags().data?.data;
+  const cfg = preview?.cfg ?? resolveDocConfig(flags?.documentsConfig, "fasonSevk");
+  const companyName = preview?.companyName ?? flags?.companyName ?? DEFAULT_COMPANY_NAME;
+  const letterhead = preview?.letterhead ?? flags?.companyLetterhead ?? DEFAULT_COMPANY_LETTERHEAD;
   return (
     <div className="print-area mx-auto max-w-[210mm] bg-white p-6 text-[12px] text-black">
+      {cfg.showLetterhead && (
+        <PrintLetterhead companyName={companyName} letterhead={letterhead} />
+      )}
       <div className="flex items-start justify-between border-b-2 border-black pb-3">
         <div>
-          <div className="text-[18px] font-bold uppercase tracking-wide">
-            Fason Sevk İrsaliyesi
-          </div>
+          <div className="text-[18px] font-bold uppercase tracking-wide">{cfg.title}</div>
           <div className="mt-1 text-[11px]">
             Sevk No: <span className="font-mono font-semibold">{snap.dispatchNo}</span>
           </div>
@@ -200,24 +220,31 @@ function PrintableSheet({ snap }: { snap: DispatchPrintSnapshot }) {
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-4 text-[12px]">
-        <Section title="Fason Firma">
-          <Row label="Adı" value={snap.subcontractor.name} />
-          {snap.subcontractor.code && (
-            <Row label="Kod" value={snap.subcontractor.code} />
+      {(cfg.sections.subcontractorInfo || cfg.sections.vehicleInfo) && (
+        <div className="mt-3 grid grid-cols-2 gap-4 text-[12px]">
+          {cfg.sections.subcontractorInfo && (
+            <Section title="Fason Firma">
+              <Row label="Adı" value={snap.subcontractor.name} />
+              {snap.subcontractor.code && (
+                <Row label="Kod" value={snap.subcontractor.code} />
+              )}
+              <Row
+                label="İstasyon"
+                value={`${snap.step.station.name} (Adım ${snap.step.stepSequence})`}
+              />
+            </Section>
           )}
-          <Row
-            label="İstasyon"
-            value={`${snap.step.station.name} (Adım ${snap.step.stepSequence})`}
-          />
-        </Section>
-        <Section title="Sevk Bilgileri">
-          <Row label="Plaka" value={snap.plateNumber || "—"} />
-          <Row label="Sürücü" value={snap.driverName || "—"} />
-          {snap.notes && <Row label="Not" value={snap.notes} />}
-        </Section>
-      </div>
+          {cfg.sections.vehicleInfo && (
+            <Section title="Sevk Bilgileri">
+              <Row label="Plaka" value={snap.plateNumber || "—"} />
+              <Row label="Sürücü" value={snap.driverName || "—"} />
+              {snap.notes && <Row label="Not" value={snap.notes} />}
+            </Section>
+          )}
+        </div>
+      )}
 
+      {cfg.sections.requestedColor && (
       <div className="mt-3 rounded border-2 border-black bg-gray-100 px-3 py-2">
         <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-700">
           İstenen Renk
@@ -237,8 +264,9 @@ function PrintableSheet({ snap }: { snap: DispatchPrintSnapshot }) {
           </div>
         )}
       </div>
+      )}
 
-      {dyehouseNote && (
+      {cfg.sections.dyehouseNote && dyehouseNote && (
         <div className="mt-3 rounded border-2 border-black px-3 py-2">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-700">
             Boyahane Notu
@@ -249,6 +277,7 @@ function PrintableSheet({ snap }: { snap: DispatchPrintSnapshot }) {
         </div>
       )}
 
+      {cfg.sections.rollTable && (
       <div className="mt-4">
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide">
           Sevk Edilen Toplar ({snap.totals.rollCount})
@@ -288,12 +317,10 @@ function PrintableSheet({ snap }: { snap: DispatchPrintSnapshot }) {
           </tbody>
         </table>
       </div>
+      )}
 
-      <div className="mt-10 grid grid-cols-3 gap-6 text-[11px]">
-        <SignatureBox label="Sevkeden" />
-        <SignatureBox label="Sürücü" />
-        <SignatureBox label="Teslim Alan" />
-      </div>
+      {cfg.showSignatures && <SignatureBoxes labels={cfg.signatureLabels} />}
+      <DocFooterNote note={cfg.footerNote} />
     </div>
   );
 }
@@ -348,12 +375,3 @@ function Td({
   );
 }
 
-function SignatureBox({ label }: { label: string }) {
-  return (
-    <div>
-      <div className="text-gray-600">{label}</div>
-      <div className="mt-8 border-b border-black" />
-      <div className="mt-1 text-center text-[10px] text-gray-600">Ad-Soyad / İmza</div>
-    </div>
-  );
-}

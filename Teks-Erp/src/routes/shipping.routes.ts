@@ -80,6 +80,19 @@ router.get("/shipments", verifyToken, READ, controller.listShipments);
 
 /**
  * @openapi
+ * /api/shipping/sack-store:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Çuval Depo board'u — READY (çuval depo) + AT_DOOR (kapı önü) sevkler, çuval içerikleriyle
+ *     description: Her sevk → çuvallar (kod, kg, ürün-renk-metraj dökümü). "Hangi çuvalda hangi kumaş" takibi.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Çuval depo listesi }
+ */
+router.get("/sack-store", verifyToken, READ, controller.listSackStore);
+
+/**
+ * @openapi
  * /api/shipping/shipments/{id}:
  *   get:
  *     tags: [Shipping]
@@ -196,6 +209,54 @@ router.post("/shipments/:id/sacks", verifyToken, WRITE, controller.addSack);
  *       200: { description: Sevke hazır }
  */
 router.post("/shipments/:id/ready", verifyToken, WRITE, controller.markReady);
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/unready:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevke hazırı geri al (READY → PREPARING) — çıkış öncesi düzenleme için (top ekle/çıkar)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Hazırlığa geri alındı }
+ */
+router.post("/shipments/:id/unready", verifyToken, WRITE, controller.unmarkReady);
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/move-to-door:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Kapı Önüne Koy (PREPARING/READY → AT_DOOR) — kamyon bekleme durağı; "Alındı" ile sevk olur
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Kapı önüne kondu }
+ */
+router.post("/shipments/:id/move-to-door", verifyToken, WRITE, controller.moveToDoor);
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/pull-back:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Kapı önünden çuval depoya geri çek (AT_DOOR → READY)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Çuval depoya geri çekildi }
+ */
+router.post("/shipments/:id/pull-back", verifyToken, WRITE, controller.pullBackFromDoor);
 router.post("/shipments/:id/dispatch", verifyToken, WRITE, controller.dispatchShipment);
 router.get("/shipments/:id/cancel-preview", verifyToken, READ, controller.cancelPreview);
 router.post("/shipments/:id/cancel", verifyToken, WRITE, controller.cancelShipment);

@@ -7,7 +7,9 @@ import { z } from "zod";
 import { WorkOrderService } from "../services/workorder.service";
 import "../types/express-augment";
 
-const createSchema = z.object({
+// Create + quick-start ortak alan şeması. refine'siz tutuluyor ki spread ile
+// (quickStartSchema) yeniden kullanılabilsin — refine ZodEffects'e çevirir, spread'i bozar.
+const workOrderCoreShape = {
   batchNumber:       z.string().trim().min(1).optional().nullable(),
   type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).default("ORDER_PRODUCTION"),
   width:             z.number().positive("En değeri pozitif olmalı").optional().nullable(),
@@ -52,10 +54,30 @@ const createSchema = z.object({
     .optional(),
   orderLineIds: z.array(z.string().uuid()).optional().nullable(),
   targetPropertyIds: z.array(z.string().uuid()).optional(),
-}).refine(
-  (d) => Boolean(d.routeTemplateId) || (d.steps && d.steps.length > 0),
-  { message: "Rota şablonu seçin veya özel rota adımları tanımlayın.", path: ["steps"] },
-);
+};
+
+const hasRoute = (d: { routeTemplateId?: string | null; steps?: unknown[] | null }) =>
+  Boolean(d.routeTemplateId) || (Array.isArray(d.steps) && d.steps.length > 0);
+const ROUTE_REFINE_MSG = {
+  message: "Rota şablonu seçin veya özel rota adımları tanımlayın.",
+  path: ["steps"],
+};
+
+const createSchema = z.object(workOrderCoreShape).refine(hasRoute, ROUTE_REFINE_MSG);
+
+/**
+ * Mobil "Hızlı İş Emri": create alanları + okutulan stok top barkodları.
+ * targetItemId opsiyonel — verilmezse servis okutulan topların ürününden türetir
+ * (basit modda operatör ürün seçmez). type verilmezse sipariş bağı varsa
+ * ORDER_PRODUCTION, yoksa STOCK_PRODUCTION'a düşer.
+ */
+const quickStartSchema = z.object({
+  ...workOrderCoreShape,
+  rollBarcodes: z
+    .array(z.string().trim().min(1))
+    .min(1, "En az bir top barkodu okutmalısınız")
+    .max(300, "Tek seferde en fazla 300 top bağlanabilir"),
+}).refine(hasRoute, ROUTE_REFINE_MSG);
 
 const targetPropertiesSchema = z.object({
   propertyIds: z.array(z.string().uuid()),
@@ -150,6 +172,7 @@ export class WorkOrderController {
   constructor() {
     this.service = new WorkOrderService();
     this.create = this.create.bind(this);
+    this.quickStart = this.quickStart.bind(this);
     this.findAll = this.findAll.bind(this);
     this.findById = this.findById.bind(this);
     this.getBranches = this.getBranches.bind(this);
@@ -180,6 +203,24 @@ export class WorkOrderController {
     try {
       const body = createSchema.parse(req.body);
       const result = await this.service.create(body, req.user?.userId);
+      res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/work-orders/quick-start
+   * Mobil hızlı başlangıç: okutulan stok toplarını doğrula → WO oluştur → topları
+   * bağla (tek istek). Hiç top bağlanamazsa WO geri alınır (yetim WO bırakmaz).
+   */
+  async quickStart(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { rollBarcodes, ...woData } = quickStartSchema.parse(req.body);
+      const result = await this.service.quickStart(
+        { ...woData, rollBarcodes },
+        req.user?.userId,
+      );
       res.status(201).json(result);
     } catch (error) {
       next(error);

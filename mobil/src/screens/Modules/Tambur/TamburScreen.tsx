@@ -1343,18 +1343,10 @@ export default function TamburScreen() {
           <Text style={styles.paneEmptyHint}>Sekmeyi kapatabilirsin</Text>
         </View>
       ) : (
-        <FlashList
-          data={activeJob.stepSummary.rolls}
-          keyExtractor={(r) => r.rollId}
-          contentContainerStyle={{ padding: 8 }}
-          renderItem={({ item, index }) => (
-            <RollListItem
-              roll={item}
-              index={index}
-              selected={activeJob.selectedRollId === item.rollId}
-              onPress={() => selectRoll(item.rollId)}
-            />
-          )}
+        <BranchGroupedRollList
+          rolls={activeJob.stepSummary.rolls}
+          selectedRollId={activeJob.selectedRollId}
+          onSelect={selectRoll}
         />
       )}
     </>
@@ -1496,9 +1488,6 @@ export default function TamburScreen() {
               >
                 <Surface style={styles.section} elevation={1}>
                   {/* Uzunluk girişi + Manuel/Otomatik toggle yan yana */}
-                  {recutMode === 'manual' && (
-                    <Text style={styles.entryLabel}>Uzunluk (mt)</Text>
-                  )}
                   <View style={styles.lengthModeRow}>
                     <View style={styles.lengthCol}>
                       {recutMode === 'manual' ? (
@@ -1512,7 +1501,7 @@ export default function TamburScreen() {
                               allowDecimal
                               autoActivate
                               numpadMaxLength={8}
-                              placeholder="Boş = kalanı kes"
+                              placeholder="Boş = kalanı kes (metre)"
                               dense
                               style={styles.input}
                               useNativeKeyboard={compact}
@@ -1951,11 +1940,6 @@ export default function TamburScreen() {
                     })}
                   </View>
 
-                  {/* Label satırın DIŞINDA — böylece aşağıdaki toggle, label'la
-                      değil doğrudan input ile dikeyde ortalanır. */}
-                  {cutMode === 'manual' && (
-                    <Text style={styles.entryLabel}>Uzunluk (mt)</Text>
-                  )}
                   {/* Uzunluk girişi + Manuel/Otomatik yan yana. Otomatik modda
                       sol sütunda büyük "Uzunluk" etiketi durur, toggle sağda. */}
                   <View style={styles.lengthModeRow}>
@@ -1976,7 +1960,7 @@ export default function TamburScreen() {
                               allowDecimal
                               autoActivate
                               numpadMaxLength={8}
-                              placeholder="Boş = kalanı kes"
+                              placeholder="Boş = kalanı kes (metre)"
                               dense
                               style={styles.input}
                               useNativeKeyboard={compact}
@@ -3608,6 +3592,149 @@ function RollListItem({
     </Animated.View>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dal (fason partisi) renk paleti + gruplu liste — aynı WO'nun birden çok fason
+// partisi Tambur'a "yetişince" toplar tek listede karışıyordu. Her parti renkli
+// çerçeveli grup kartında gösterilir (yalnız ≥2 dal varsa; tek dalda düz liste).
+const BRANCH_PALETTE: { border: string; bg: string; text: string; dot: string }[] = [
+  { border: '#2563eb', bg: '#eff6ff', text: '#1e40af', dot: '#2563eb' }, // mavi
+  { border: '#ea580c', bg: '#fff7ed', text: '#c2410c', dot: '#ea580c' }, // turuncu
+  { border: '#16a34a', bg: '#f0fdf4', text: '#15803d', dot: '#16a34a' }, // yeşil
+  { border: '#7c3aed', bg: '#f5f3ff', text: '#6d28d9', dot: '#7c3aed' }, // mor
+  { border: '#db2777', bg: '#fdf2f8', text: '#be185d', dot: '#db2777' }, // pembe
+];
+const BRANCH_NEUTRAL = { border: '#94a3b8', bg: '#f8fafc', text: '#475569', dot: '#94a3b8' };
+
+interface BranchGroup {
+  key: string;
+  ordinal: number | null;
+  dispatchNo: string | null;
+  rolls: TamburRollSummary[];
+  totalQty: number;
+  palette: { border: string; bg: string; text: string; dot: string };
+}
+
+function buildBranchGroups(rolls: TamburRollSummary[]): BranchGroup[] {
+  const byKey = new Map<string, BranchGroup>();
+  for (const r of rolls) {
+    const key = r.batchSplitId ?? '__none__';
+    let g = byKey.get(key);
+    if (!g) {
+      const ordinal = r.branchOrdinal ?? null;
+      const palette =
+        ordinal != null
+          ? BRANCH_PALETTE[(ordinal - 1) % BRANCH_PALETTE.length]
+          : BRANCH_NEUTRAL;
+      g = {
+        key,
+        ordinal,
+        dispatchNo: r.dispatchNo ?? null,
+        rolls: [],
+        totalQty: 0,
+        palette,
+      };
+      byKey.set(key, g);
+    }
+    g.rolls.push(r);
+    g.totalQty += r.currentQty;
+  }
+  // Parti sırasına göre (1,2,3…); fasonsuz (ordinal null) en sona.
+  return [...byKey.values()].sort((a, b) => {
+    if (a.ordinal == null) return 1;
+    if (b.ordinal == null) return -1;
+    return a.ordinal - b.ordinal;
+  });
+}
+
+function BranchGroupedRollList({
+  rolls,
+  selectedRollId,
+  onSelect,
+}: {
+  rolls: TamburRollSummary[];
+  selectedRollId: string | null;
+  onSelect: (rollId: string) => void;
+}) {
+  const groups = useMemo(() => buildBranchGroups(rolls), [rolls]);
+
+  // Tek dal (ya da fasonsuz) → çerçeveye gerek yok, düz liste (eski davranış).
+  if (groups.length <= 1) {
+    return (
+      <FlashList
+        data={rolls}
+        keyExtractor={(r) => r.rollId}
+        contentContainerStyle={{ padding: 8 }}
+        renderItem={({ item, index }) => (
+          <RollListItem
+            roll={item}
+            index={index}
+            selected={selectedRollId === item.rollId}
+            onPress={() => onSelect(item.rollId)}
+          />
+        )}
+      />
+    );
+  }
+
+  // ≥2 dal → her parti renkli çerçeveli grup kartında.
+  return (
+    <FlashList
+      data={groups}
+      keyExtractor={(g) => g.key}
+      contentContainerStyle={{ padding: 8 }}
+      renderItem={({ item: g }) => (
+        <View style={[branchStyles.groupCard, { borderColor: g.palette.border }]}>
+          <View style={[branchStyles.groupHeader, { backgroundColor: g.palette.bg }]}>
+            <View style={[branchStyles.groupDot, { backgroundColor: g.palette.dot }]} />
+            <Text
+              style={[branchStyles.groupTitle, { color: g.palette.text }]}
+              numberOfLines={1}
+            >
+              {g.ordinal != null ? `${g.ordinal}. PARTİ` : 'FASONSUZ'}
+              {g.dispatchNo ? ` · ${g.dispatchNo}` : ''}
+            </Text>
+            <Text style={[branchStyles.groupMeta, { color: g.palette.text }]}>
+              {g.rolls.length} top · {g.totalQty.toFixed(0)} mt
+            </Text>
+          </View>
+          <View style={branchStyles.groupBody}>
+            {g.rolls.map((roll, i) => (
+              <RollListItem
+                key={roll.rollId}
+                roll={roll}
+                index={i}
+                selected={selectedRollId === roll.rollId}
+                onPress={() => onSelect(roll.rollId)}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+    />
+  );
+}
+
+const branchStyles = StyleSheet.create({
+  groupCard: {
+    borderWidth: 2,
+    borderRadius: 12,
+    marginBottom: 10,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+  },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    gap: 8,
+  },
+  groupDot: { width: 12, height: 12, borderRadius: 6 },
+  groupTitle: { flex: 1, fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
+  groupMeta: { fontSize: 12, fontWeight: '700' },
+  groupBody: { paddingHorizontal: 6, paddingVertical: 2 },
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tamamla modal'ı — açık kumaşın kalan metresi için operatör kararı.

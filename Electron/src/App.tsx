@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { MotionProvider } from "@/components/motion";
 import { PreferencesProvider } from "@/providers/PreferencesProvider";
 import { AppShell } from "@/components/layout/AppShell";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { authRouter } from "./router";
 import { useAuthStore } from "@/store/auth";
 import { tokenStore } from "@/lib/secure-token";
@@ -60,16 +61,18 @@ function Root() {
 
 export function App() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <QueryClientProvider client={queryClient}>
-        <AuthHydrator />
-        <PreferencesProvider>
-          <MotionProvider>
-            <Root />
-          </MotionProvider>
-        </PreferencesProvider>
-        <Toaster />
-      </QueryClientProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <QueryClientProvider client={queryClient}>
+          <AuthHydrator />
+          <PreferencesProvider>
+            <MotionProvider>
+              <Root />
+            </MotionProvider>
+          </PreferencesProvider>
+          <Toaster />
+        </QueryClientProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

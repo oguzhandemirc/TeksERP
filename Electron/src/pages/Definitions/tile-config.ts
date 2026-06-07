@@ -16,6 +16,8 @@ import {
   Tablet,
   CalendarClock,
   Undo2,
+  FileText,
+  Printer,
   type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
@@ -174,6 +176,24 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/label-templates",
     group: "system",
     permission: "label-template:read",
+  },
+  {
+    key: "document-templates",
+    title: "Belge Şablonları",
+    description: "İrsaliye/çeki içeriği: bölüm aç-kapa, başlık, künye, imza, alt not (canlı önizleme)",
+    icon: FileText,
+    to: "/definitions/document-templates",
+    group: "system",
+    permission: "admin:settings",
+  },
+  {
+    key: "traveler-card",
+    title: "Refakat Kartı",
+    description: "Refakat kartında basılan firma adı/künyesi ve görünecek bölümler",
+    icon: Printer,
+    to: "/definitions/traveler-card",
+    group: "system",
+    permission: "admin:settings",
   },
   {
     key: "devices",

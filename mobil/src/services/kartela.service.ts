@@ -141,6 +141,8 @@ export interface KartelaOutstandingItem {
     markedForKartela: boolean;
     item: { code: string; name: string };
     color: { code: string; name: string } | null;
+    /** Topun (gönderilen kumaşın) özellikleri — kabul ekranında rozet olarak gösterilir. */
+    properties: { property: { id: string; name: string; color: string | null } }[];
   };
 }
 

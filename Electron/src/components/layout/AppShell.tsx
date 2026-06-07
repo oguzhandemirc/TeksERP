@@ -6,6 +6,7 @@ import { ShortcutsDialog } from "./ShortcutsDialog";
 import { TabHost } from "./tabs";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useTabShortcuts } from "@/hooks/useTabShortcuts";
+import { useServerHeartbeat } from "@/hooks/useServerClock";
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(() => {
@@ -23,6 +24,7 @@ export function AppShell() {
     onOpenHelp: () => setHelpOpen(true),
   });
   useTabShortcuts();
+  useServerHeartbeat();
 
   const toggleSidebar = () =>
     setCollapsed((c) => {

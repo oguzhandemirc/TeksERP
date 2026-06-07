@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Printer } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import {
@@ -9,6 +11,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -19,6 +22,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { kartelaService } from "./service";
+import { KartelaCekiPrintDialog } from "./KartelaCekiPrintDialog";
 
 export type KartelaSelection =
   | { kind: "dispatch"; id: string }
@@ -59,6 +63,7 @@ export function KartelaDetailSheet({
 }
 
 function DispatchDetail({ id }: { id: string }) {
+  const [printOpen, setPrintOpen] = useState(false);
   const query = useQuery({
     queryKey: ["kartela", "dispatch", id],
     queryFn: () => kartelaService.getDispatch(id).then((r) => r.data),
@@ -72,6 +77,20 @@ function DispatchDetail({ id }: { id: string }) {
         <SheetTitle>Kartela Sevki {d ? `· ${d.dispatchNo}` : ""}</SheetTitle>
         <SheetDescription>Çeki listesi — kartela firmasına gönderilen toplar</SheetDescription>
       </SheetHeader>
+
+      <div className="mt-3">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          disabled={!d}
+          onClick={() => setPrintOpen(true)}
+        >
+          <Printer className="h-4 w-4" /> Çeki Yazdır
+        </Button>
+      </div>
+      <KartelaCekiPrintDialog dispatchId={id} open={printOpen} onOpenChange={setPrintOpen} />
 
       <div className="mt-4 space-y-4">
         {query.isLoading || !d ? (

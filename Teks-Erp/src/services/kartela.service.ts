@@ -1073,10 +1073,16 @@ export class KartelaService {
             markedForKartela: true,
             item: { select: { code: true, name: true } },
             color: { select: { code: true, name: true } },
+            properties: {
+              select: { property: { select: { id: true, name: true, color: true } } },
+            },
           },
         },
       },
       orderBy: { dispatch: { dispatchedAt: "asc" } },
+      // AT_KARTELA kendini-boşaltan geçici küme (normalde onlarca-birkaç yüz);
+      // patolojik birikime karşı savunma tavanı (MAX_OFFSET guard'ı ruhunda).
+      take: 2000,
     });
 
     return { success: true, data: items };

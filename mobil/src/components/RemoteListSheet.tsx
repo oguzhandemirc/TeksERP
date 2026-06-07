@@ -1,6 +1,8 @@
 import React from 'react';
 import {
   View,
+  Pressable,
+  Keyboard,
   StyleSheet,
   useWindowDimensions,
   type StyleProp,
@@ -105,6 +107,11 @@ interface Props<T> {
    *  modal). Aynı RNModal portal'ı içinde olduğu için iki ayrı RNModal'ın
    *  çakışmasını engeller. */
   overlay?: React.ReactNode;
+
+  /** Sürükleyerek kapatma (aşağı çek). Default true. Bir overlay (detay/iptal
+   *  modal) AÇIKKEN false geç — yoksa overlay'in tepesinden çekiş bu sheet'in
+   *  swipe'ını tetikleyip YANLIŞ modalı (alttaki listeyi) kapatır. */
+  swipeToDismiss?: boolean;
 }
 
 export default function RemoteListSheet<T>({
@@ -137,6 +144,7 @@ export default function RemoteListSheet<T>({
   footer,
   contentStyle,
   overlay,
+  swipeToDismiss = true,
 }: Props<T>) {
   const { width: winW, height: winH } = useWindowDimensions();
 
@@ -146,7 +154,7 @@ export default function RemoteListSheet<T>({
   const manualRefresh = useManualRefresh(onRefresh, successMessage);
 
   return (
-    <AppModal visible={visible} onDismiss={onDismiss}>
+    <AppModal visible={visible} onDismiss={onDismiss} swipeToDismiss={swipeToDismiss}>
       <View
         style={[
           styles.sheet,
@@ -194,7 +202,14 @@ export default function RemoteListSheet<T>({
           </View>
         )}
 
-        <View style={[styles.listBox, contentStyle]}>
+        {/* Liste alanına tap → klavye kapanır (arama input'lu sheet'lerde boş
+            alana/empty-state'e basınca klavye takılı kalmasın). FlashList scroll'u
+            ve item tap'leri etkilenmez; on-drag ile kaydırınca da kapanır. */}
+        <Pressable
+          style={[styles.listBox, contentStyle]}
+          onPress={() => Keyboard.dismiss()}
+          accessible={false}
+        >
           {loading ? (
             <SkeletonList count={7} />
           ) : isError ? (
@@ -232,9 +247,10 @@ export default function RemoteListSheet<T>({
               onEndReachedThreshold={0.6}
               ListFooterComponent={listFooterComponent ?? undefined}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
             />
           )}
-        </View>
+        </Pressable>
 
         {footer}
 

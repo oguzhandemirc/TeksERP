@@ -66,28 +66,93 @@ export const SETTING_KEYS = {
   /** Refakat kartı marka/içerik ayarı (JSON): firma adı + hangi bölümler basılsın.
    *  Kart oluşturulurken snapshot'a DONDURULUR → reprint düzeni de sabit kalır. */
   TRAVELER_CARD_CONFIG: "traveler.cardConfig",
+  /** ERP'nin kurulduğu firmanın adı — panel başlığı + uygulama genelinde gösterilir.
+   *  Refakat kartının kendi firma adından bağımsızdır (kart snapshot'ı ayrı tutulur). */
+  COMPANY_NAME: "company.name",
+  /** Belge künyesi: irsaliye/çeki başına basılan firma adresi/telefon/vergi bilgisi.
+   *  Firma adı ayrı (COMPANY_NAME); burada sadece ek künye satırları. */
+  COMPANY_LETTERHEAD: "company.letterhead",
+  /** Yazdırılan belgelerin (sevk irsaliyesi, fason sevk, kartela çeki) içerik ayarı:
+   *  hangi bölümler basılsın + başlık/imza/footer override. CANLI okunur (snapshot DEĞİL)
+   *  — irsaliye her açıldığında güncel ayarı yansıtır. Map: { [belgeKey]: DocumentConfig }. */
+  DOCUMENTS_CONFIG: "documents.config",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
+
+/** Firma adı verilmediğinde gösterilen varsayılan. */
+export const DEFAULT_COMPANY_NAME = "Adnan Şahin Tekstil";
 
 /** Refakat kartı marka/içerik ayarı. Snapshot'a dondurulur. */
 export interface TravelerCardConfig {
   /** Kart başlığındaki firma adı. */
   companyName: string;
+  /** Firma adının altında basılan adres satırı (boş → basılmaz). */
+  addressLine: string;
+  /** Firma adının altında basılan telefon (boş → basılmaz). */
+  phone: string;
   /** Operasyon imza grid'i basılsın mı. */
   showOperationGrid: boolean;
   /** Talimatlar/Boyahane notu kutusu basılsın mı. */
   showNotes: boolean;
   /** Bağlı siparişler tablosu basılsın mı. */
   showOrders: boolean;
+  /** Özellikler (ÖZELLİKLER) satırı basılsın mı. */
+  showProperties: boolean;
+  /** Kart altına basılan serbest not (boş → basılmaz). */
+  footerNote: string;
 }
 
 export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   companyName: "Adnan Şahin Tekstil",
+  addressLine: "",
+  phone: "",
   showOperationGrid: true,
   showNotes: true,
   showOrders: true,
+  showProperties: true,
+  footerNote: "",
 };
+
+/** Belge künyesi — irsaliye/çeki başına basılan ek firma bilgisi (firma adı ayrı). */
+export interface CompanyLetterhead {
+  /** Firma adresi (boş → basılmaz). */
+  addressLine: string;
+  /** Telefon (boş → basılmaz). */
+  phone: string;
+  /** Vergi dairesi / no (boş → basılmaz). */
+  taxInfo: string;
+}
+
+export const DEFAULT_COMPANY_LETTERHEAD: CompanyLetterhead = {
+  addressLine: "",
+  phone: "",
+  taxInfo: "",
+};
+
+/**
+ * Yazdırılan belge içerik ayarı (sevk irsaliyesi / fason sevk / kartela çeki).
+ * Tüm alanlar opsiyonel — verilmeyen alan client tarafında belge kayıt defterindeki
+ * (DOC_DEFS) varsayılana çözülür (resolveDocConfig). Backend SADECE saklar; çözüm
+ * client'ta (Electron/mobil) yapılır.
+ */
+export interface DocumentConfig {
+  /** Belge başlığı override ("" / verilmedi → varsayılan başlık). */
+  titleOverride?: string;
+  /** Üst künye bloğu (firma adı + adres/tel/vergi) basılsın mı (default false). */
+  showLetterhead?: boolean;
+  /** Bölüm görünürlükleri: { [bölümKey]: boolean }. Verilmeyen bölüm → açık. */
+  sections?: Record<string, boolean>;
+  /** İmza kutusu etiketleri (boş dizi → varsayılan etiketler). */
+  signatureLabels?: string[];
+  /** İmza kutuları basılsın mı (default true). */
+  showSignatures?: boolean;
+  /** Belge altına basılan serbest not. */
+  footerNote?: string;
+}
+
+/** Belge ayarları haritası: { [belgeKey]: DocumentConfig }. Ham saklanır, client çözer. */
+export type DocumentsConfig = Record<string, DocumentConfig>;
 
 /**
  * Tüm public feature flag'lerin tek atışta okunmuş hali. Frontend app
@@ -96,6 +161,8 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
  * UI rehberi (admin/test araçları field'ları gönderebilir).
  */
 export interface FeatureFlags {
+  /** ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli). */
+  companyName: string;
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
@@ -109,6 +176,10 @@ export interface FeatureFlags {
   shipmentConfirmationEnabled: boolean;
   /** Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri). */
   travelerCardConfig: TravelerCardConfig;
+  /** Belge künyesi (adres/tel/vergi) — irsaliye/çeki üst bloğunda basılır. */
+  companyLetterhead: CompanyLetterhead;
+  /** Yazdırılan belgelerin içerik ayarı (canlı). Ham map; client resolveDocConfig ile çözer. */
+  documentsConfig: DocumentsConfig;
 }
 
 export class SystemSettingService {
@@ -189,6 +260,7 @@ export class SystemSettingService {
    */
   async getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
     const flags: FeatureFlags = {
+      companyName: await readCompanyName(),
       pricingEnabled: await readPricingEnabled(),
       targetQuantityEnabled: await readTargetQuantityEnabled(),
       rawWidthEnabled: await readRawWidthEnabled(),
@@ -198,6 +270,8 @@ export class SystemSettingService {
       devicePairingRequired: await readDevicePairingRequired(),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(),
       travelerCardConfig: await readTravelerCardConfig(),
+      companyLetterhead: await readCompanyLetterhead(),
+      documentsConfig: await readDocumentsConfig(),
     };
     return { success: true, data: flags };
   }
@@ -308,6 +382,19 @@ export class SystemSettingService {
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "companyName")) {
+      if (typeof input.companyName !== "string") {
+        throw AppError.badRequest("companyName metin olmalı");
+      }
+      const trimmed = input.companyName.trim().slice(0, 120);
+      await this.set(
+        SETTING_KEYS.COMPANY_NAME,
+        trimmed || DEFAULT_COMPANY_NAME,
+        "ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli)",
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "travelerCardConfig")) {
       const c = input.travelerCardConfig;
       if (!c || typeof c !== "object") {
@@ -318,14 +405,52 @@ export class SystemSettingService {
           typeof c.companyName === "string" && c.companyName.trim()
             ? c.companyName.trim().slice(0, 120)
             : DEFAULT_TRAVELER_CARD_CONFIG.companyName,
+        addressLine:
+          typeof c.addressLine === "string" ? c.addressLine.trim().slice(0, 200) : "",
+        phone: typeof c.phone === "string" ? c.phone.trim().slice(0, 60) : "",
         showOperationGrid: c.showOperationGrid !== false,
         showNotes: c.showNotes !== false,
         showOrders: c.showOrders !== false,
+        showProperties: c.showProperties !== false,
+        footerNote:
+          typeof c.footerNote === "string" ? c.footerNote.trim().slice(0, 500) : "",
       };
       await this.set(
         SETTING_KEYS.TRAVELER_CARD_CONFIG,
         merged as unknown as Prisma.InputJsonValue,
         "Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "companyLetterhead")) {
+      const c = input.companyLetterhead;
+      if (!c || typeof c !== "object") {
+        throw AppError.badRequest("companyLetterhead nesne olmalı");
+      }
+      const merged: CompanyLetterhead = {
+        addressLine:
+          typeof c.addressLine === "string" ? c.addressLine.trim().slice(0, 200) : "",
+        phone: typeof c.phone === "string" ? c.phone.trim().slice(0, 60) : "",
+        taxInfo: typeof c.taxInfo === "string" ? c.taxInfo.trim().slice(0, 120) : "",
+      };
+      await this.set(
+        SETTING_KEYS.COMPANY_LETTERHEAD,
+        merged as unknown as Prisma.InputJsonValue,
+        "Belge künyesi (irsaliye/çeki üst bloğunda basılan adres/telefon/vergi)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "documentsConfig")) {
+      const c = input.documentsConfig;
+      if (!c || typeof c !== "object" || Array.isArray(c)) {
+        throw AppError.badRequest("documentsConfig nesne olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DOCUMENTS_CONFIG,
+        sanitizeDocumentsConfig(c) as unknown as Prisma.InputJsonValue,
+        "Yazdırılan belge içerik ayarı (bölüm görünürlükleri + başlık/imza/footer)",
         userId
       );
     }
@@ -500,10 +625,108 @@ export async function readTravelerCardConfig(
       typeof o.companyName === "string" && o.companyName.trim()
         ? o.companyName
         : DEFAULT_TRAVELER_CARD_CONFIG.companyName,
+    addressLine: typeof o.addressLine === "string" ? o.addressLine : "",
+    phone: typeof o.phone === "string" ? o.phone : "",
     showOperationGrid: o.showOperationGrid !== false,
     showNotes: o.showNotes !== false,
     showOrders: o.showOrders !== false,
+    showProperties: o.showProperties !== false,
+    footerNote: typeof o.footerNote === "string" ? o.footerNote : "",
   };
+}
+
+/**
+ * Belge künyesini okur (yoksa boş künye). irsaliye/çeki üst bloğunda firma adının
+ * altına basılır.
+ */
+export async function readCompanyLetterhead(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<CompanyLetterhead> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.COMPANY_LETTERHEAD },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (!v || typeof v !== "object" || Array.isArray(v)) {
+    return DEFAULT_COMPANY_LETTERHEAD;
+  }
+  const o = v as Record<string, unknown>;
+  return {
+    addressLine: typeof o.addressLine === "string" ? o.addressLine : "",
+    phone: typeof o.phone === "string" ? o.phone : "",
+    taxInfo: typeof o.taxInfo === "string" ? o.taxInfo : "",
+  };
+}
+
+/**
+ * Yazdırılan belge içerik ayarını HAM okur (yoksa boş map). Çözüm (varsayılanlarla
+ * birleştirme) client tarafında resolveDocConfig ile yapılır — backend yalnız saklar.
+ */
+export async function readDocumentsConfig(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<DocumentsConfig> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DOCUMENTS_CONFIG },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  return sanitizeDocumentsConfig(v as Record<string, unknown>);
+}
+
+/**
+ * Belge ayar map'ini güvenli tipe indirger: bilinmeyen alanları atar, tip uymayan
+ * değerleri yok sayar. Saklamadan önce ve okuduktan sonra uygulanır.
+ */
+function sanitizeDocumentsConfig(raw: Record<string, unknown>): DocumentsConfig {
+  const out: DocumentsConfig = {};
+  for (const [docKey, val] of Object.entries(raw)) {
+    if (!val || typeof val !== "object" || Array.isArray(val)) continue;
+    const o = val as Record<string, unknown>;
+    const cfg: DocumentConfig = {};
+    if (typeof o.titleOverride === "string") {
+      cfg.titleOverride = o.titleOverride.trim().slice(0, 80);
+    }
+    if (typeof o.showLetterhead === "boolean") cfg.showLetterhead = o.showLetterhead;
+    if (typeof o.showSignatures === "boolean") cfg.showSignatures = o.showSignatures;
+    if (typeof o.footerNote === "string") {
+      cfg.footerNote = o.footerNote.trim().slice(0, 500);
+    }
+    if (o.sections && typeof o.sections === "object" && !Array.isArray(o.sections)) {
+      const sections: Record<string, boolean> = {};
+      for (const [sk, sv] of Object.entries(o.sections as Record<string, unknown>)) {
+        if (typeof sv === "boolean") sections[sk] = sv;
+      }
+      cfg.sections = sections;
+    }
+    if (Array.isArray(o.signatureLabels)) {
+      cfg.signatureLabels = o.signatureLabels
+        .filter((x): x is string => typeof x === "string")
+        .slice(0, 6)
+        .map((x) => x.trim().slice(0, 40));
+    }
+    out[docKey] = cfg;
+  }
+  return out;
+}
+
+/**
+ * ERP'nin kurulduğu firmanın adını okur (yoksa/boşsa default'a düşer). Panel
+ * marka başlığı + uygulama geneli kullanır. Refakat kartının kendi firma adından
+ * bağımsızdır (kart snapshot'ı ayrı saklanır, geçmiş kartlar değişmez).
+ */
+export async function readCompanyName(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<string> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.COMPANY_NAME },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return typeof v === "string" && v.trim() ? v : DEFAULT_COMPANY_NAME;
 }
 
 /**

@@ -98,8 +98,10 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={pricingEnabled ? "max-w-5xl" : "max-w-3xl"}>
-        <DialogHeader>
+      <DialogContent
+        className={`flex max-h-[85vh] flex-col ${pricingEnabled ? "max-w-5xl" : "max-w-3xl"}`}
+      >
+        <DialogHeader className="shrink-0">
           <DialogTitle>{isEdit ? "Sipariş Düzenle" : "Yeni Sipariş"}</DialogTitle>
           <DialogDescription>
             {isEdit
@@ -116,8 +118,9 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
           onSubmit={form.handleSubmit(async (v) => {
             await onSubmit(v);
           })}
-          className="space-y-3"
+          className="flex min-h-0 flex-1 flex-col gap-3"
         >
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <FormField
               label="Müşteri"
@@ -220,8 +223,9 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
               İş emri açılmış kalemleri değiştirmek için önce iş emrini iptal et.
             </div>
           )}
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t pt-3">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               İptal
             </Button>

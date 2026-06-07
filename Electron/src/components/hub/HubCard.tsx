@@ -48,14 +48,22 @@ interface HubCardProps {
   tone?: string;
   /** Ton paleti için sıra. */
   index?: number;
+  /** Sağ üst köşeye yerleşen sürükleme tutamacı (yalnız sıralanabilir grid'lerde).
+   *  Verilince köşedeki hover oku yerine bu gösterilir. */
+  dragHandle?: ReactNode;
 }
 
 /** Dashboard tarzı zengin hub kartı — gradient + tonlu ikon + watermark + hareket. */
-export function HubCard({ to, title, description, icon: Icon, tone, index = 0 }: HubCardProps) {
+export function HubCard({ to, title, description, icon: Icon, tone, index = 0, dragHandle }: HubCardProps) {
   const toneClass = tone ?? hubTone(index);
   const target = useTabTarget(to);
   return (
-    <motion.div variants={staggerItem} whileHover={{ y: -3 }} transition={springSnappy}>
+    <motion.div
+      variants={staggerItem}
+      whileHover={{ y: -3 }}
+      transition={springSnappy}
+      className="relative h-full"
+    >
       <button type="button" {...target} className="group block h-full w-full text-left">
         <Card className="card-glow relative h-full overflow-hidden bg-gradient-to-br from-primary/5 to-transparent p-4">
           {/* Dev ikon filigranı — sağ alt, tona boyalı, hover'da hafif büyür */}
@@ -75,12 +83,14 @@ export function HubCard({ to, title, description, icon: Icon, tone, index = 0 }:
             >
               <Icon className="h-5 w-5" />
             </div>
-            <ArrowRight
-              className={cn(
-                "h-4 w-4 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100",
-                toneClass,
-              )}
-            />
+            {!dragHandle && (
+              <ArrowRight
+                className={cn(
+                  "h-4 w-4 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100",
+                  toneClass,
+                )}
+              />
+            )}
           </div>
           <div className="relative mt-4">
             <div className="font-medium">{title}</div>
@@ -88,6 +98,9 @@ export function HubCard({ to, title, description, icon: Icon, tone, index = 0 }:
           </div>
         </Card>
       </button>
+      {/* Sürükleme tutamacı — kart butonunun KARDEŞİ (içinde değil): iç içe
+          buton/interactive sorunu olmaz, tutamaca tık karta yayılmaz. */}
+      {dragHandle && <div className="absolute right-2 top-2 z-20">{dragHandle}</div>}
     </motion.div>
   );
 }

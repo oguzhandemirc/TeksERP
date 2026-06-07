@@ -186,6 +186,26 @@ router.get("/stats", verifyToken, requireAnyPermission("roll:read", ...MOBILE_RO
 
 /**
  * @openapi
+ * /api/rolls/warehouse-scope:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Depo kapsam sayaçları — serbest / çuval depo (READY) / kapı önü (AT_DOOR)
+ *     description: WAREHOUSE topları fiziksel yere göre ayırır. Yalnız "free" satılabilir serbest stoktur.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: "{ free, sackStore, atDoor } — her biri { count, qty }."
+ */
+router.get(
+  "/warehouse-scope",
+  verifyToken,
+  requireAnyPermission("roll:read", ...MOBILE_ROLL_READ),
+  controller.getWarehouseScope
+);
+
+/**
+ * @openapi
  * /api/rolls/{id}:
  *   get:
  *     tags: [Inventory]

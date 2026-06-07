@@ -52,7 +52,7 @@ export function StepStateBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium",
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors duration-300",
         BADGE_CLS[s],
         className,
       )}

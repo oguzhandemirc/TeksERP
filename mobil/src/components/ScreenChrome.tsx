@@ -61,9 +61,11 @@ export default function ScreenChrome({
           <Appbar.Action icon="home" onPress={goHome} color="#fff" accessibilityLabel="Ana sayfa" />
         )}
         <View style={styles.appbarContent}>
-          <Text variant="titleLarge" style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
+          {title ? (
+            <Text variant="titleLarge" style={styles.title} numberOfLines={1}>
+              {title}
+            </Text>
+          ) : null}
           {subtitle && (
             <Text variant="labelMedium" style={styles.subtitle} numberOfLines={1}>
               {subtitle}

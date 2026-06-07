@@ -54,6 +54,8 @@ export const rollStatusTones = {
   RETURNED_FROM_SUBCONTRACTOR: "muted",
   WAREHOUSE: "info",
   TAMBUR_CONSUMED: "muted",
+  AT_KARTELA: "warning",
+  KARTELA_CONSUMED: "muted",
 } as const satisfies Record<string, Tone>;
 
 export const stepStatusTones = {

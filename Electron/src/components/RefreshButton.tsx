@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 
 interface Props {
   queryKey: string | string[];
+  /** Ana key ile BİRLİKTE invalidate edilecek ek query key'ler. Detay
+   *  sayfalarında ana veri + ayrı çocuk query'leri (ör. dallar) tek tuşta
+   *  tazelenmeli — yoksa buton yarım yeniler (ana veri döner, çocuk query
+   *  staleTime nedeniyle eski kalır). */
+  extraKeys?: (string | string[])[];
   label?: string;
   className?: string;
   /** Yenileme tamamlandığında gösterilecek toast mesajı. Varsayılan: "Liste yenilendi" */
@@ -20,6 +25,7 @@ const SUCCESS_FLASH_MS = 900;
 
 export function RefreshButton({
   queryKey,
+  extraKeys,
   label = "Yenile",
   className,
   successMessage = "Liste yenilendi",
@@ -40,7 +46,8 @@ export function RefreshButton({
     setJustDone(false);
     const startedAt = Date.now();
     try {
-      await qc.invalidateQueries({ queryKey: key });
+      const keys = [key, ...(extraKeys ?? []).map((k) => (Array.isArray(k) ? k : [k]))];
+      await Promise.all(keys.map((k) => qc.invalidateQueries({ queryKey: k })));
     } finally {
       const elapsed = Date.now() - startedAt;
       const remaining = MIN_SPIN_MS - elapsed;

@@ -618,6 +618,111 @@ export class WorkOrderService {
   }
 
   /**
+   * Mobil "Hızlı İş Emri" — okutulan stok toplarından tek istekte WO başlatır.
+   *
+   * Akış:
+   *   1) Barkodları ön-doğrula: hepsi var + STOCK + aynı ürün (kural: tek WO = tek
+   *      kumaş). targetItemId verilmemişse topların ürününden türetilir (basit mod).
+   *   2) create() ile WO oluştur (kendi tx'i + refakat kartı).
+   *   3) attachRolls() ile bağla (kendi tx'i; STOCK → IN_PRODUCTION, ilk adım).
+   *   4) Hiç top bağlanamazsa (örn. yarış koşulu) WO'yu arşivle — yetim WO bırakma.
+   *
+   * create/attachRolls kendi transaction'larını sahiplenir; aralarındaki pencere
+   * aynı request içinde milisaniyeler olduğundan ön-doğrulama + telafi yaklaşımı,
+   * iki metodu tek tx'e zorlayan riskli refactor'a tercih edildi.
+   */
+  async quickStart(
+    data: WorkOrderCreateInput & { rollBarcodes: string[] },
+    userId?: string,
+  ): Promise<ApiResponse<{ workOrder: WorkOrder; attached: number; errors: string[] }>> {
+    const { rollBarcodes, ...woInput } = data;
+    const barcodes = [...new Set(rollBarcodes.map((b) => b.trim()).filter(Boolean))];
+    if (barcodes.length === 0) {
+      throw AppError.badRequest("En az bir top barkodu okutmalısınız.");
+    }
+
+    // ── 1) Ön-doğrulama: var + STOCK + aynı ürün ────────────────────────────
+    const rolls = await prisma.roll.findMany({
+      where: { barcode: { in: barcodes } },
+      select: { id: true, barcode: true, status: true, itemId: true },
+    });
+    const byBarcode = new Map(rolls.map((r) => [r.barcode, r]));
+
+    const missing = barcodes.filter((b) => !byBarcode.has(b));
+    if (missing.length > 0) {
+      throw AppError.badRequest(`Şu barkodlar bulunamadı: ${missing.join(", ")}`);
+    }
+
+    const notStock = rolls.filter((r) => r.status !== RollStatus.STOCK);
+    if (notStock.length > 0) {
+      throw AppError.badRequest(
+        "Sadece stoktaki toplar bağlanabilir. Uygun olmayan: " +
+          notStock.map((r) => `${r.barcode} (${r.status})`).join(", "),
+      );
+    }
+
+    const itemIds = [...new Set(rolls.map((r) => r.itemId))];
+    if (itemIds.length > 1) {
+      throw AppError.badRequest(
+        "Okutulan toplar farklı ürünlere ait. Tek iş emri tek kumaş içindir — aynı üründeki topları okutun.",
+      );
+    }
+    const rollsItemId = itemIds[0];
+
+    // type: explicit verilmemişse sipariş bağına göre türet.
+    const hasOrderLink =
+      (woInput.orderLineIds?.length ?? 0) > 0 ||
+      (woInput.orderLineAllocations?.length ?? 0) > 0;
+    const type =
+      (woInput.type as WorkOrder["type"]) ??
+      (hasOrderLink ? "ORDER_PRODUCTION" : "STOCK_PRODUCTION");
+
+    // targetItemId: verilmemişse topların ürününden türet; verilmişse tutarlılık şart.
+    let targetItemId = woInput.targetItemId ?? null;
+    if (!targetItemId) {
+      targetItemId = rollsItemId;
+    } else if (targetItemId !== rollsItemId) {
+      throw AppError.badRequest(
+        "Okutulan topların ürünü, seçilen hedef ürün ile aynı değil.",
+      );
+    }
+
+    // ── 2) WO oluştur ───────────────────────────────────────────────────────
+    const createRes = await this.create({ ...woInput, type, targetItemId }, userId);
+    if (!createRes.success || !createRes.data) {
+      throw AppError.badRequest(createRes.message ?? "İş emri oluşturulamadı.");
+    }
+    const workOrder = createRes.data;
+
+    // ── 3) Topları bağla + 4) telafi (zero-attach → WO'yu arşivle) ──────────
+    let attached = 0;
+    let errors: string[] = [];
+    try {
+      const attachRes = await this.attachRolls(workOrder.id, barcodes, userId);
+      attached = attachRes.data?.attached ?? 0;
+      errors = attachRes.data?.errors ?? [];
+    } catch (err) {
+      await this.hardDelete(workOrder.id, userId).catch(() => undefined);
+      throw err;
+    }
+
+    if (attached === 0) {
+      await this.hardDelete(workOrder.id, userId).catch(() => undefined);
+      throw AppError.conflict(
+        `Hiçbir top bağlanamadı; iş emri oluşturulmadı. ${errors.join("; ")}`.trim(),
+      );
+    }
+
+    return {
+      success: true,
+      data: { workOrder, attached, errors },
+      message:
+        `İş emri ${workOrder.batchNumber} başlatıldı — ${attached} top bağlandı` +
+        (errors.length ? `, ${errors.length} top bağlanamadı.` : "."),
+    };
+  }
+
+  /**
    * List work orders with dynamic filtering, sorting, pagination.
    *
    * Query param: `?withOrderDetail=true`

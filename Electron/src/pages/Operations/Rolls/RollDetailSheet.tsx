@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Tag, Undo2 } from "lucide-react";
+import { History, Tag, Undo2, Palette } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -43,6 +43,8 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   const snapshot = detail?.lastLabelSnapshot ?? null;
   // En güncel iade kaydı (varsa) — müşteriden dönen top notu/nedeni; Tambur kesimden önce görülür.
   const latestReturn = detail?.returns?.[0] ?? null;
+  // AT_KARTELA top: hangi kartela firmasında olduğunu detay panelinde göster.
+  const kartelaDispatch = detail?.kartelaDispatchItems?.[0]?.dispatch ?? null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -200,6 +202,40 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Kartela fasonu — top kartela firmasında işlemde (AT_KARTELA). */}
+            {roll.status === "AT_KARTELA" && (
+              <Card>
+                <CardContent className="space-y-2 p-3 text-sm">
+                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <Palette className="h-3.5 w-3.5" /> Kartela Fasonu
+                  </div>
+                  {detailQuery.isLoading ? (
+                    <Skeleton className="h-10 w-full" />
+                  ) : kartelaDispatch ? (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      <div className="text-xs text-muted-foreground">Firma</div>
+                      <div className="font-medium">
+                        {kartelaDispatch.subcontractor.name}
+                        {kartelaDispatch.subcontractor.code
+                          ? ` (${kartelaDispatch.subcontractor.code})`
+                          : ""}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Sevk No</div>
+                      <div className="font-mono text-xs">{kartelaDispatch.dispatchNo}</div>
+                      <div className="text-xs text-muted-foreground">Gönderim</div>
+                      <div className="text-xs">
+                        {safeFormat(kartelaDispatch.dispatchedAt, "dd.MM.yyyy HH:mm")}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">
+                      Aktif kartela sevki bulunamadı.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Son basılan etiket — yalnız müşteri etiketi taşıyabilen bitmiş toplarda
                 (depo/A1/sevk); ham, üretimde, fason, tüketilmiş → gizli. */}

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeft, Ban, FileText, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RefreshButton } from "@/components/RefreshButton";
 import { StatusBadge, workOrderStatusTones } from "@/components/operations/StatusBadge";
 import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -70,6 +71,11 @@ export function WorkOrderDetailHeader({
         )}
         {wo && (
           <div className="ml-auto flex items-center gap-2">
+            <RefreshButton
+              queryKey={["work-order-detail", wo.id]}
+              extraKeys={[["work-order-branches", wo.id]]}
+              silent
+            />
             {canEdit && (
               <PermissionGate permission="workorder:write">
                 <Button

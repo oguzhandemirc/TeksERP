@@ -39,6 +39,10 @@ const STATUS_GROUPS = {
   KURSUN_PENDING: null,
   TAMBUR_PENDING: null,
   FINISHED_STOCK: null,
+  // Sanal anahtar — tepe-sekme DEĞİL; "Kartela" sekmesinin "Gönderilen Toplar"
+  // alt-görünümü RollsTable'a bunu geçer (status=AT_KARTELA). SUBCONTRACTOR ile
+  // aynı mekanizma.
+  KARTELA_SENT: "AT_KARTELA",
   ARCHIVE: "RETURNED_FROM_SUBCONTRACTOR,TAMBUR_CONSUMED,SUBCONTRACTOR_CONSUMED",
 } as const;
 

@@ -79,7 +79,13 @@ export default function ReceiptRow({ receipt, onShowDetail, onCancel }: Props) {
                 {receipt.step?.station?.name && (
                   <>
                     <Text style={styles.metaSep}>·</Text>
-                    <Text style={styles.metaText} numberOfLines={1}>
+                    {/* İstasyon adı (örn. "Boyahane (Fason)") sağdaki aksiyon
+                        butonlarıyla çakışmasın: üst sınır + responsive küçülme,
+                        taşan kısım ellipsis ile kesilir. */}
+                    <Text
+                      style={[styles.metaText, styles.metaStation]}
+                      numberOfLines={1}
+                    >
                       {receipt.step.station.name}
                     </Text>
                   </>
@@ -275,6 +281,9 @@ const styles = StyleSheet.create({
   manifestTagText: { fontSize: 10, color: '#0369a1', fontWeight: '700' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaText: { fontSize: 11, color: '#64748b', fontWeight: '500' },
+  // İstasyon adı için: kalan alana göre küçülür (flexShrink) ama en fazla 110px
+  // — uzun isim butonlara taşmaz, fazlası "…" ile kesilir.
+  metaStation: { flexShrink: 1, minWidth: 0, maxWidth: 110 },
   metaSep: { fontSize: 11, color: '#cbd5e1' },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   actionBtn: { margin: 0, width: 32, height: 32 },

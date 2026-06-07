@@ -1,4 +1,15 @@
+import { motion, type Variants } from "framer-motion";
 import { cn } from "@/lib/utils";
+
+const STRIP_CONTAINER: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08, delayChildren: 0.4 } },
+};
+
+const STRIP_ITEM: Variants = {
+  hidden: { opacity: 0, y: 12, scale: 0.94 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 340, damping: 24 } },
+};
 import { formatNumber } from "@/lib/format";
 import { stepState, STEP_STATE_DOT, STEP_STATE_LABEL, type StepState } from "./step-state";
 import type { WorkOrderStepLite } from "./types";
@@ -33,7 +44,12 @@ export function RouteDistributionStrip({ steps, className, variant = "detailed" 
   const compact = variant === "compact";
 
   return (
-    <div className={cn("flex items-start", compact ? "gap-0.5" : "gap-1", className)}>
+    <motion.div
+      className={cn("flex items-start", compact ? "gap-0.5" : "gap-1", className)}
+      variants={STRIP_CONTAINER}
+      initial="hidden"
+      animate="show"
+    >
       {steps.map((step, i) => {
         const wip = step.currentRolls;
         const wipCount = wip?.count ?? 0;
@@ -43,19 +59,28 @@ export function RouteDistributionStrip({ steps, className, variant = "detailed" 
         const isLast = i === steps.length - 1;
 
         return (
-          <div key={step.id} className="flex flex-1 flex-col items-center gap-1">
+          <motion.div key={step.id} variants={STRIP_ITEM} className="flex flex-1 flex-col items-center gap-1">
             {/* Numaralı daire + yarım bağlantı çizgileri (soldaki=öncekine, sağdaki=sonrakine) */}
             <div className="flex w-full items-center">
               <span className={cn("h-0.5 flex-1 rounded", isFirst ? "bg-transparent" : "bg-border")} />
-              <span
-                className={cn(
-                  "flex shrink-0 items-center justify-center rounded-full font-bold leading-none",
-                  compact ? "h-4 w-4 text-[8px]" : "h-5 w-5 text-[9px]",
-                  STEP_STATE_DOT[state],
-                  CIRCLE_TEXT[state],
+              <span className="relative flex shrink-0 items-center justify-center">
+                {hasWip && (
+                  <motion.span
+                    className="absolute inset-0 rounded-full bg-primary/40"
+                    animate={{ scale: [1, 2.2, 1], opacity: [0.6, 0, 0.6] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  />
                 )}
-              >
-                {step.stepSequence}
+                <span
+                  className={cn(
+                    "relative flex shrink-0 items-center justify-center rounded-full font-bold leading-none",
+                    compact ? "h-4 w-4 text-[8px]" : "h-5 w-5 text-[9px]",
+                    STEP_STATE_DOT[state],
+                    CIRCLE_TEXT[state],
+                  )}
+                >
+                  {step.stepSequence}
+                </span>
               </span>
               <span className={cn("h-0.5 flex-1 rounded", isLast ? "bg-transparent" : "bg-border")} />
             </div>
@@ -88,9 +113,9 @@ export function RouteDistributionStrip({ steps, className, variant = "detailed" 
                 {STEP_STATE_LABEL[state]}
               </span>
             )}
-          </div>
+          </motion.div>
         );
       })}
-    </div>
+    </motion.div>
   );
 }

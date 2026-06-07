@@ -85,6 +85,7 @@ export class SubcontractorController {
     this.cancelDispatch = this.cancelDispatch.bind(this);
     this.receive = this.receive.bind(this);
     this.pendingReturns = this.pendingReturns.bind(this);
+    this.pendingReturnDetail = this.pendingReturnDetail.bind(this);
     this.listDispatches = this.listDispatches.bind(this);
     this.getDispatch = this.getDispatch.bind(this);
     this.getDispatchPrint = this.getDispatchPrint.bind(this);
@@ -178,6 +179,16 @@ export class SubcontractorController {
     }
   }
 
+  /** GET /api/subcontractor/pending-returns/step/:stepId */
+  async pendingReturnDetail(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getPendingReturnGroupDetail(req.params.stepId as string);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** GET /api/subcontractor/dispatches */
   async listDispatches(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -253,6 +264,10 @@ export class SubcontractorController {
         subcontractorId: typeof req.query.subcontractorId === "string" ? req.query.subcontractorId : undefined,
         page:            typeof req.query.page            === "string" ? Number(req.query.page)     : undefined,
         pageSize:        typeof req.query.pageSize        === "string" ? Number(req.query.pageSize) : undefined,
+        mode:            typeof req.query.mode            === "string" ? req.query.mode            : undefined,
+        limit:           typeof req.query.limit           === "string" ? Number(req.query.limit)   : undefined,
+        cursor:          typeof req.query.cursor          === "string" ? req.query.cursor          : undefined,
+        withTotal:       req.query.withTotal === "true",
         cancellable,
       });
       res.status(200).json(result);

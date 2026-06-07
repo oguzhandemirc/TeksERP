@@ -1,10 +1,11 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatNumber } from "@/lib/format";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
+import { useTabsStore } from "@/store/tabs";
+import { AnimatedNumber, FadeInUp } from "@/components/motion";
 import { workOrderService } from "./service";
 import { WorkOrderDetailHeader } from "./WorkOrderDetailHeader";
 import { WorkOrderHealthBand } from "./WorkOrderHealthBand";
@@ -37,6 +38,14 @@ export function WorkOrderDetailPage() {
     staleTime: 60_000,
   });
   const wo = detail.data?.data ?? null;
+
+  useEffect(() => {
+    if (!wo?.batchNumber || !id) return;
+    const suffix = wo.batchNumber.slice(-6);
+    const title = `İş Emri · ${suffix}`;
+    const tab = useTabsStore.getState().tabs.find((t) => t.path === `/operations/work-orders/${id}`);
+    if (tab) useTabsStore.getState().updateTabTitle(tab.id, title);
+  }, [wo?.batchNumber, id]);
 
   const sortedSteps = useMemo(
     () => (wo?.steps ? [...wo.steps].sort((a, b) => a.stepSequence - b.stepSequence) : []),
@@ -84,58 +93,69 @@ export function WorkOrderDetailPage() {
           )}
 
           {wo && (
-            <div className="mx-auto max-w-6xl space-y-6">
-              {/* C — Sağlık şeridi (hero) */}
-              <WorkOrderHealthBand wo={wo} />
+            <div key={detail.dataUpdatedAt} className="mx-auto max-w-6xl space-y-6">
+              <FadeInUp delay={0}>
+                <WorkOrderHealthBand wo={wo} />
+              </FadeInUp>
 
-              {/* Genel bilgi + ikincil KPI'lar */}
-              <section id="genel" className="grid scroll-mt-16 gap-4 lg:grid-cols-3">
-                <div className="lg:col-span-2">
-                  <WorkOrderInfoCard wo={wo} />
-                </div>
-                <div className="grid grid-cols-2 gap-3 content-start lg:grid-cols-1">
-                  <Kpi
-                    label="Üretime Giren"
-                    value={`${formatNumber(wo.inputRolls?.totalMeters ?? 0, 0)} m`}
-                    sub={(wo.inputRolls?.count ?? 0) > 0 ? `${wo.inputRolls!.count} top` : undefined}
-                  />
-                  {hasOrders && (
-                    <Kpi label="Sipariş Toplam" value={`${formatNumber(orderTotal, 0)} m`} />
+              <FadeInUp delay={0.08}>
+                <section id="genel" className="grid scroll-mt-16 gap-4 lg:grid-cols-3">
+                  <div className="lg:col-span-2">
+                    <WorkOrderInfoCard wo={wo} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 content-start lg:grid-cols-1">
+                    <Kpi
+                      label="Üretime Giren"
+                      value={wo.inputRolls?.totalMeters ?? 0}
+                      unit="m"
+                      sub={(wo.inputRolls?.count ?? 0) > 0 ? `${wo.inputRolls!.count} top` : undefined}
+                    />
+                    {hasOrders && (
+                      <Kpi label="Sipariş Toplam" value={orderTotal} unit="m" />
+                    )}
+                  </div>
+                </section>
+              </FadeInUp>
+
+              <FadeInUp delay={0.16}>
+                <Section id="rota" title="Rota & Dağılım">
+                  {sortedSteps.length > 0 && (
+                    <Card>
+                      <CardContent className="p-4">
+                        <RouteDistributionStrip steps={sortedSteps} />
+                      </CardContent>
+                    </Card>
                   )}
-                </div>
-              </section>
-
-              <Section id="rota" title="Rota & Dağılım">
-                {sortedSteps.length > 0 && (
-                  <Card>
-                    <CardContent className="p-4">
-                      <RouteDistributionStrip steps={sortedSteps} />
-                    </CardContent>
-                  </Card>
-                )}
-                <div className="grid gap-3 md:grid-cols-2">
-                  {sortedSteps.map((step) => (
-                    <StepWipCard key={step.id} step={step} />
-                  ))}
-                </div>
-              </Section>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {sortedSteps.map((step) => (
+                      <StepWipCard key={step.id} step={step} />
+                    ))}
+                  </div>
+                </Section>
+              </FadeInUp>
 
               {hasFason && wo.id && (
-                <Section id="dallar" title="Dallar (Fason Partileri)">
-                  <BranchGantt workOrderId={wo.id} steps={sortedSteps} />
-                  <BranchLanes workOrderId={wo.id} />
-                </Section>
+                <FadeInUp delay={0.24}>
+                  <Section id="dallar" title="Dallar (Fason Partileri)">
+                    <BranchGantt workOrderId={wo.id} steps={sortedSteps} />
+                    <BranchLanes workOrderId={wo.id} />
+                  </Section>
+                </FadeInUp>
               )}
 
               {hasProduced && (
-                <Section id="cikti" title="Üretilen Nihai Toplar">
-                  <ProducedRollsCard wo={wo} />
-                </Section>
+                <FadeInUp delay={0.32}>
+                  <Section id="cikti" title="Üretilen Nihai Toplar">
+                    <ProducedRollsCard wo={wo} />
+                  </Section>
+                </FadeInUp>
               )}
 
-              <Section id="siparis" title="Bağlı Siparişler">
-                <OrderLinksCard wo={wo} />
-              </Section>
+              <FadeInUp delay={0.4}>
+                <Section id="siparis" title="Bağlı Siparişler">
+                  <OrderLinksCard wo={wo} />
+                </Section>
+              </FadeInUp>
             </div>
           )}
         </div>
@@ -153,12 +173,14 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
-function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Kpi({ label, value, unit, sub }: { label: string; value: number; unit?: string; sub?: string }) {
   return (
     <Card>
       <CardContent className="p-3">
         <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="mt-0.5 font-medium tabular-nums">{value}</div>
+        <div className="mt-0.5 font-medium tabular-nums">
+          <AnimatedNumber value={value} /> {unit}
+        </div>
         {sub && <div className="text-[11px] text-muted-foreground">{sub}</div>}
       </CardContent>
     </Card>

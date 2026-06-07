@@ -3,13 +3,13 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  Pressable,
   useWindowDimensions,
 } from 'react-native';
 import { Text, IconButton, ActivityIndicator, Button, Surface, Icon } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 
+import AppModal from '../AppModal';
 import { subcontractorService } from '../../services/subcontractor.service';
 import type { SubcontractorReceipt } from '../../types/models';
 
@@ -19,13 +19,12 @@ interface Props {
 }
 
 /**
- * Mal kabul detayı — absolute fill overlay. RNModal'ı SARMAZ; başka bir
- * RNModal'ın (HistoryReceiptsModal vb.) `overlay` prop'u olarak iletilirse
- * o portal'ın içinde sheet'in üstünde render olur. Üst seviye akışta da
- * tek başına kullanılabilir (parent'a absolute fill olur).
+ * Mal kabul detayı — kendi AppModal'ı (Portal + swipe-to-dismiss). Liste
+ * modalının üstünde ayrı Portal'da açılır; aşağı çekerek kapatılır ve alttaki
+ * listenin swipe'ını tetiklemez (eski "overlay prop" pattern'i kaldırıldı).
  */
 export default function ReceiptDetailModal({ receiptId, onDismiss }: Props) {
-  const { width: winW } = useWindowDimensions();
+  const { width: winW, height: winH } = useWindowDimensions();
   const detailQuery = useQuery({
     queryKey: ['receipt', receiptId],
     queryFn: () => subcontractorService.getReceipt(receiptId as string),
@@ -33,14 +32,17 @@ export default function ReceiptDetailModal({ receiptId, onDismiss }: Props) {
     staleTime: 5 * 60 * 1000,
   });
 
-  if (!receiptId) return null;
-
   const receipt = detailQuery.data?.data as SubcontractorReceipt | undefined;
 
   return (
-    <View style={styles.overlay} pointerEvents="auto">
-      <Pressable style={styles.backdrop} onPress={onDismiss} accessibilityLabel="Kapat" />
-      <View style={[styles.card, { width: winW * 0.88 }]}>
+    <AppModal
+      visible={!!receiptId}
+      onDismiss={onDismiss}
+      position="center"
+      contentStyle={[styles.card, { width: winW * 0.88, height: winH * 0.85 }]}
+    >
+      {receiptId ? (
+        <>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text variant="titleMedium" style={styles.title}>
@@ -232,29 +234,17 @@ export default function ReceiptDetailModal({ receiptId, onDismiss }: Props) {
             </ScrollView>
           ) : null}
         </View>
-      </View>
-    </View>
+        </>
+      ) : null}
+    </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-    zIndex: 10,
-    elevation: 10,
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-  },
   card: {
     backgroundColor: '#fff',
     borderRadius: 14,
     maxWidth: 720,
-    flex: 1,
     elevation: 12,
     shadowColor: '#000',
     shadowOpacity: 0.25,

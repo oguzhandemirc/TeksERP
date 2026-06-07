@@ -22,6 +22,8 @@ const scanSchema = z.object({
 
 const removeRollSchema = z.object({ rollId: z.string().uuid("Geçersiz top ID") });
 const removeSwatchSchema = z.object({ swatchId: z.string().uuid("Geçersiz kartela ID") });
+// Dolu çuval silme kısa yolu — true ise içerik depoya döndürülüp çuval silinir.
+const removeSackSchema = z.object({ withContents: z.boolean().optional() });
 const moveSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
 
 const addSackSchema = z.object({
@@ -72,6 +74,15 @@ export class ShippingController {
   getShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await this.service.getShipmentById(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  listSackStore = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.listSackStore();
       res.status(200).json(result);
     } catch (e) {
       next(e);
@@ -180,7 +191,12 @@ export class ShippingController {
 
   removeSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = await this.service.removeSack(req.params.id as string, req.user?.userId);
+      const body = removeSackSchema.parse(req.body ?? {});
+      const result = await this.service.removeSack(
+        req.params.id as string,
+        req.user?.userId,
+        body.withContents ?? false
+      );
       res.status(200).json(result);
     } catch (e) {
       next(e);
@@ -191,6 +207,33 @@ export class ShippingController {
   markReady = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await this.service.markReady(req.params.id as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  unmarkReady = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.unmarkReady(req.params.id as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  moveToDoor = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.moveToDoor(req.params.id as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  pullBackFromDoor = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.pullBackFromDoor(req.params.id as string, req.user?.userId);
       res.status(200).json(result);
     } catch (e) {
       next(e);

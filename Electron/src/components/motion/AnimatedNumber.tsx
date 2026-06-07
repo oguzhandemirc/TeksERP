@@ -15,13 +15,15 @@ interface Props {
   decimals?: number;
   /** İlk render dışında değer değişince kısa accent vurgusu. */
   flash?: boolean;
+  /** Sayma animasyonu başlamadan önceki gecikme (saniye). */
+  delay?: number;
 }
 
 /**
  * Sayıyı önceki değerden hedefe doğru sayarak gösterir (tr-TR formatı).
  * OS "hareketi azalt" açıksa anında değeri yazar. `flash` ile güncellemede vurgu.
  */
-export function AnimatedNumber({ value, className, decimals = 0, flash = false }: Props) {
+export function AnimatedNumber({ value, className, decimals = 0, flash = false, delay = 0 }: Props) {
   const reduce = useReducedMotion();
   const mv = useMotionValue(0);
   const text = useTransform(mv, (v) =>
@@ -39,9 +41,9 @@ export function AnimatedNumber({ value, className, decimals = 0, flash = false }
       mv.set(value);
       return;
     }
-    const controls = animate(mv, value, { duration: 0.9, ease: [0.16, 1, 0.3, 1] });
+    const controls = animate(mv, value, { duration: 0.9, ease: [0.16, 1, 0.3, 1], delay });
     return () => controls.stop();
-  }, [mv, value, reduce]);
+  }, [mv, value, reduce, delay]);
 
   useEffect(() => {
     if (first.current) {

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { featureFlagService } from "@/services/featureFlagService";
+import { featureFlagService, DEFAULT_COMPANY_NAME } from "@/services/featureFlagService";
 
 const QUERY_KEY = ["feature-flags"];
 
@@ -9,6 +9,12 @@ export function useFeatureFlags() {
     queryFn: () => featureFlagService.get(),
     staleTime: 5 * 60 * 1000,
   });
+}
+
+/** ERP'nin kurulduğu firmanın adı. Yüklenene kadar varsayılana düşer. */
+export function useCompanyName(): string {
+  const q = useFeatureFlags();
+  return q.data?.data?.companyName?.trim() || DEFAULT_COMPANY_NAME;
 }
 
 export function usePricingEnabled(): boolean {

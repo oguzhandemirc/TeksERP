@@ -2,6 +2,13 @@ import axios from "axios";
 import { toast } from "sonner";
 import { tokenStore } from "@/lib/secure-token";
 import { useAuthStore } from "@/store/auth";
+import { useServerStatusStore } from "@/store/serverStatus";
+
+/** Yanıt header'ından `Date`'i (sunucu saati) güvenli oku — yoksa undefined. */
+function readDateHeader(headers: unknown): string | undefined {
+  const d = (headers as Record<string, unknown> | undefined)?.date;
+  return typeof d === "string" ? d : undefined;
+}
 
 /**
  * Build sırasında gömülen varsayılan adres. Çalışma anında kullanıcı bunu
@@ -38,9 +45,20 @@ function buildErrorMessage(body: ApiErrorBody | undefined): string {
 }
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Her başarılı yanıt = backend ulaşılabilir + sunucu saati (Date header).
+    useServerStatusStore.getState().markReachable(readDateHeader(response.headers));
+    return response;
+  },
   async (error) => {
     if (axios.isAxiosError(error)) {
+      // Sunucu cevap verdiyse (4xx/5xx dahil) ulaşılabilir sayılır; yanıt hiç
+      // yoksa (ağ hatası/timeout) offline. Toast bastırılmış olsa da durum güncellenir.
+      if (error.response) {
+        useServerStatusStore.getState().markReachable(readDateHeader(error.response.headers));
+      } else {
+        useServerStatusStore.getState().markUnreachable();
+      }
       const status = error.response?.status;
       const body = error.response?.data as ApiErrorBody | undefined;
       // İstek kendi hata mesajını gösterecekse genel toast'ı atla (duplicate önle).

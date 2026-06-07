@@ -14,6 +14,22 @@ export const WORK_ORDER_TYPE_LABEL: Record<string, string> = {
   STOCK_PRODUCTION: 'Stoğa Üretim',
 };
 
+export const ORDER_STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Beklemede',
+  APPROVED: 'Onaylandı',
+  PARTIAL_SHIPPED: 'Kısmen Sevk',
+  COMPLETED: 'Tamamlandı',
+  CANCELLED: 'İptal Edildi',
+};
+
+export const ORDER_STATUS_COLOR: Record<string, string> = {
+  PENDING: '#64748b',
+  APPROVED: '#2563eb',
+  PARTIAL_SHIPPED: '#f59e0b',
+  COMPLETED: '#10b981',
+  CANCELLED: '#ef4444',
+};
+
 export const STEP_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Beklemede',
   ACTIVE: 'Aktif',
@@ -42,7 +58,27 @@ export const ROLL_STATUS_LABEL: Record<string, string> = {
   A1_STOCK: '2. Kalite',
   SCRAP: 'Fire',
   CANCELLED: 'İptal Edildi',
+  // Tüketilmiş/emekli parent durumları (Tambur kesimi, fason açık-kumaş, kartela)
+  TAMBUR_CONSUMED: 'Tamburda Bölündü',
+  SUBCONTRACTOR_CONSUMED: 'Fasonda Tüketildi',
+  AT_KARTELA: 'Kartelada',
+  KARTELA_CONSUMED: 'Kartelada Tüketildi',
 };
+
+/**
+ * "Tüketilmiş" / emekli top durumları — başka bir kayda dönüştüğü için (Tambur
+ * kesimi, fason açık-kumaş, kartela) artık fiziksel olarak yok. İş emri "bağlı
+ * toplar" gibi yerlerde gizlenir; karışıklık yaratmasın.
+ */
+export const RETIRED_ROLL_STATUSES = [
+  'TAMBUR_CONSUMED',
+  'SUBCONTRACTOR_CONSUMED',
+  'KARTELA_CONSUMED',
+  'CANCELLED',
+];
+
+export const isRetiredRoll = (status: string | null | undefined): boolean =>
+  !!status && RETIRED_ROLL_STATUSES.includes(status);
 
 // Status'lara renk verir — chip/badge için
 export const WORK_ORDER_STATUS_COLOR: Record<string, string> = {
