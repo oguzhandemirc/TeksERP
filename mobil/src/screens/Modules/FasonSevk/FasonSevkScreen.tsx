@@ -16,8 +16,10 @@ import {
 import { FlashList } from '@shopify/flash-list';
 import {
   useQuery,
+  useInfiniteQuery,
   useMutation,
   useQueryClient,
+  keepPreviousData,
   onlineManager,
 } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
@@ -184,7 +186,6 @@ export default function FasonSevkScreen() {
   // ── WO picker server-side state ──
   const WO_PAGE_SIZE = 30;
   type WoSort = 'createdAt' | 'plannedEndDate';
-  const [woPage, setWoPage] = useState(1);
   const [woSearch, setWoSearch] = useState('');
   const [woSort, setWoSort] = useState<WoSort>('createdAt');
 
@@ -192,7 +193,6 @@ export default function FasonSevkScreen() {
   // (Aynı queryKey'e dönülürse react-query cache döner; refetch zorunlu.)
   useEffect(() => {
     if (pickerOpen === 'wo') {
-      setWoPage(1);
       setWoSearch('');
       setWoSort('createdAt');
       qc.invalidateQueries({ queryKey: ['work-orders', 'fason-sevk'] });
@@ -202,39 +202,35 @@ export default function FasonSevkScreen() {
   // ── İş emirleri (PLANNED + IN_PROGRESS) — server-side paginated ──
   // withOrderDetail=true: picker satırı için tarih + termin + ürün + hedef.
   // Detay (müşteri, renk, dispatch progress) seçim sonrası `getById` ile gelir.
-  const woQuery = useQuery({
-    queryKey: ['work-orders', 'fason-sevk', woPage, woSearch, woSort],
-    queryFn: () =>
-      workOrderService.getAll(
+  // Cursor + infinite scroll. Fason (EXTERNAL) adımı sevke açık WO filtresi artık
+  // SUNUCUDA (hasOpenExternalStep) — eski client-side `externalOpenWOs` filtresi
+  // pager'ı yanıltıyor + over-fetch yapıyordu. Çoklu sevk: COMPLETED EXTERNAL adım
+  // da uygundur (backend `status: { not: SKIPPED }`).
+  const woQuery = useInfiniteQuery({
+    queryKey: ['work-orders', 'fason-sevk', woSearch, woSort],
+    queryFn: ({ pageParam }) =>
+      workOrderService.getAllCursor(
         {
-          page: woPage,
-          pageSize: WO_PAGE_SIZE,
+          limit: WO_PAGE_SIZE,
+          cursor: pageParam,
           sortBy: woSort,
           sortOrder: woSort === 'plannedEndDate' ? 'asc' : 'desc',
           filters: { status: 'PLANNED,IN_PROGRESS' },
           search: woSearch || undefined,
         },
-        // Çoklu sevk: açık sevki olan WO'lar da listede kalır (boyahaneye ek
-        // parti gönderilebilir). excludeWithOpenDispatch artık geçilmez.
-        { withOrderDetail: true }
+        { withOrderDetail: true, hasOpenExternalStep: true },
       ),
-    placeholderData: (prev) => prev,
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) =>
+      last.pagination.hasMore ? last.pagination.nextCursor : null,
+    enabled: pickerOpen === 'wo',
+    placeholderData: keepPreviousData,
   });
 
-  // Fason (EXTERNAL) adımı olan WO'ları göster. Çoklu sevk: COMPLETED fason
-  // adımı da uygundur (ek parti için yeniden açılır); sadece SKIPPED/CANCELLED
-  // adımlar sevke kapalı.
-  const externalOpenWOs = useMemo(() => {
-    const list = woQuery.data?.data ?? [];
-    return list.filter((w) =>
-      (w.steps ?? []).some(
-        (s) =>
-          s.station?.type === 'EXTERNAL' &&
-          s.status !== 'SKIPPED' &&
-          s.status !== 'CANCELLED',
-      ),
-    );
-  }, [woQuery.data]);
+  const externalOpenWOs = useMemo(
+    () => woQuery.data?.pages.flatMap((p) => p.data) ?? [],
+    [woQuery.data],
+  );
 
   // Kompakt picker: tarih · termin · ürün · hedef metraj. Müşteri/renk/reçete
   // detayları seçim sonrası sağdaki "İş Emri Detayları" panelinde görünür.
@@ -1176,23 +1172,20 @@ export default function FasonSevkScreen() {
         numColumns={1}
         paginated
         searchValue={woSearch}
-        onSearchSubmit={(q) => {
-          setWoSearch(q);
-          setWoPage(1);
+        onSearchSubmit={(q) => setWoSearch(q)}
+        onEndReached={() => {
+          if (woQuery.hasNextPage && !woQuery.isFetchingNextPage) {
+            woQuery.fetchNextPage();
+          }
         }}
-        page={woQuery.data?.pagination.page ?? woPage}
-        totalPages={woQuery.data?.pagination.totalPages ?? 1}
-        onPageChange={setWoPage}
+        loadingMore={woQuery.isFetchingNextPage}
         fetching={woQuery.isFetching}
         sortOptions={[
           { value: 'createdAt', label: 'Son Eklenen' },
           { value: 'plannedEndDate', label: 'Termini Yakın' },
         ]}
         selectedSort={woSort}
-        onSortChange={(v) => {
-          setWoSort(v as WoSort);
-          setWoPage(1);
-        }}
+        onSortChange={(v) => setWoSort(v as WoSort)}
         onRefresh={() => woQuery.refetch()}
         refreshing={woQuery.isFetching}
         refreshError={woQuery.isError}

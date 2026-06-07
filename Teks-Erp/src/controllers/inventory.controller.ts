@@ -68,6 +68,7 @@ export class InventoryController {
     this.findRollById = this.findRollById.bind(this);
     this.findRollByBarcode = this.findRollByBarcode.bind(this);
     this.getRollHistory = this.getRollHistory.bind(this);
+    this.cancelPreview = this.cancelPreview.bind(this);
     this.softDelete = this.softDelete.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
     this.applyManualProperties = this.applyManualProperties.bind(this);
@@ -232,11 +233,27 @@ export class InventoryController {
    * DELETE /api/rolls/:id
    * Soft-delete: sets roll status to SCRAP.
    */
+  /**
+   * GET /api/rolls/:id/cancel-preview
+   * Top iptal önizlemesi — silmeden önce somut etki (hangi istasyon/iş emri).
+   */
+  async cancelPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getCancelPreview(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async softDelete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      // İstasyonda aktif top için bilinçli onay: ?confirmActive=true.
+      const confirmActive = req.query.confirmActive === "true";
       const result = await this.service.softDelete(
         req.params.id as string,
-        req.user?.userId
+        req.user?.userId,
+        { confirmActive }
       );
       res.status(200).json(result);
     } catch (error) {

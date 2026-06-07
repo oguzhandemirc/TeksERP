@@ -280,6 +280,35 @@ router.post(
   controller.reopenStep
 );
 
+/**
+ * @openapi
+ * /api/kursun-qc/reopen-preview/{stepId}:
+ *   get:
+ *     tags: [KursunQc]
+ *     summary: reopen-step öncesi salt-okunur önizleme (hangi toplar geri çekilecek)
+ *     description: |
+ *       Kapalı bir kart okutulduğunda operatöre onay göstermek için. Hiçbir şeyi
+ *       değiştirmez; reopen güvenlik kontrollerini uygular, engel varsa
+ *       canReopen=false + sebep döner.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: stepId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Önizleme (canReopen + rolls) }
+ *       400: { description: Adım PROCESS_QC tipinde değil }
+ *       404: { description: Adım bulunamadı }
+ *       500: { description: Sunucu hatası }
+ */
+router.get(
+  "/reopen-preview/:stepId",
+  verifyToken,
+  requireAnyPermission("quality:read", "mobile:kk2-kursun"),
+  controller.reopenPreview
+);
+
 // =============================================================================
 // KURŞUN KUYRUĞU — Planlama (Electron) ekranı için
 // =============================================================================

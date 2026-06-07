@@ -47,7 +47,7 @@ npm run dev
 
 | Kullanıcı | Şifre | Hedef Rol | Seed Sonrası Yetki Durumu |
 |-----------|-------|-----|--------|
-| `admin` | `admin123` | Admin | ✅ **Tam yetki** — tüm 42 permission seed'de atanıyor |
+| `admin` | `123123` | Admin | ✅ **Tam yetki** — tüm 42 permission seed'de atanıyor |
 | `mehmet.planlama` | `test123` | Planlama Şefi (hedef) | ⚠️ **Yetkisiz başlar** — login olur ama her endpoint'te `403` alır |
 | `ali.operator` | `test123` | Üretim Operatörü (hedef) | ⚠️ **Yetkisiz başlar** |
 | `ayse.kalite` | `test123` | Kalite Kontrol (hedef) | ⚠️ **Yetkisiz başlar** |
@@ -143,7 +143,7 @@ PENDING → APPROVED → IN_PRODUCTION → PARTIAL_SHIPPED → COMPLETED
 // İstek
 {
   "username": "admin",
-  "password": "admin123"
+  "password": "123123"
 }
 ```
 

@@ -351,6 +351,32 @@ router.post("/initial-entry", verifyToken, requireAnyPermission("roll:write", ..
  */
 router.patch("/:id/identity", verifyToken, requirePermission("roll:write"), controller.applyManualProperties);
 
+/**
+ * @openapi
+ * /api/rolls/{id}/cancel-preview:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Top iptal önizlemesi
+ *     description: |
+ *       Topu iptal etmeden (soft-delete) önce somut etkiyi döner:
+ *       iptal edilebilir mi (canCancel), engelliyse neden (blockReason),
+ *       bir istasyonda/iş emrinde aktif mi (requiresConfirm + activeAt).
+ *       Aktif top'un iptali DELETE ?confirmActive=true gerektirir.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: İptal önizleme bilgisi
+ *       404:
+ *         description: Top bulunamadı
+ */
+router.get("/:id/cancel-preview", verifyToken, requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KK1), controller.cancelPreview);
+
 router.delete("/:id", verifyToken, requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KK1), controller.softDelete);
 
 /**

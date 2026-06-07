@@ -798,7 +798,7 @@ npx tsc --noEmit             # Type-check (build'siz)
 
 | Username | Şifre | Hedef Rol | Seed Sonrası Yetkiler |
 |---|---|---|---|
-| `admin` | `admin123` | Admin | ✅ TÜM 42 permission (seed §4) |
+| `admin` | `123123` | Admin | ✅ TÜM 42 permission (seed §4) |
 | `mehmet.planlama` | `test123` | Planlama Şefi | ⚠️ Boş — admin UI'dan atayın |
 | `ali.operator` | `test123` | Üretim Operatörü | ⚠️ Boş — admin UI'dan atayın |
 | `ayse.kalite` | `test123` | Kalite Kontrol | ⚠️ Boş — admin UI'dan atayın |

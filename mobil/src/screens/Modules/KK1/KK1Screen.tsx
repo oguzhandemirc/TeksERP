@@ -4,6 +4,8 @@ import {
   ScrollView,
   StyleSheet,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   useWindowDimensions,
   TextInput as RNTextInput,
 } from 'react-native';
@@ -30,8 +32,10 @@ import Animated, {
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import {
   useQuery,
+  useInfiniteQuery,
   useMutation,
   useQueryClient,
+  keepPreviousData,
   onlineManager,
 } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
@@ -49,13 +53,19 @@ import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useRawWidthEnabled } from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
+import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { itemService } from '../../../services/item.service';
-import { rollService, InitialEntryRequest } from '../../../services/roll.service';
+import {
+  rollService,
+  InitialEntryRequest,
+  type RollCancelPreview,
+} from '../../../services/roll.service';
 import { hardwareService } from '../../../services/hardware.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import { generateClientBarcode } from '../../../offline/barcode';
+import { useIsOnline } from '../../../offline/hooks';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import {
@@ -159,6 +169,7 @@ export default function KK1Screen() {
 
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
+  const isOnline = useIsOnline();
   // Ham kumaşın eni önemsiz → en girişi feature flag'e bağlı (default kapalı).
   // Kapalıyken alan tamamen gizlidir (elle açma yok); yalnızca flag açıkken görünür.
   const rawWidthEnabled = useRawWidthEnabled();
@@ -182,7 +193,6 @@ export default function KK1Screen() {
   // Listede yeni beliren topu kısa süre vurgulamak için.
   const [flashRollId, setFlashRollId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyPage, setHistoryPage] = useState(1);
   // Etiket basımı — sıralı kuyruk. activePrintRoll = şu an LabelPrinter'a verilen
   // (null = boşta). printQueue = sırada bekleyenler. Offline'da N entry toplu
   // sync olduğunda hepsi print edilebilsin diye queue mantığı; ayrıca manuel
@@ -193,12 +203,15 @@ export default function KK1Screen() {
   // activePrint null ve queue dolu ise → bir sonrakini başlat. Print finish'te
   // activePrint = null olur, bu effect bir sonrakini alır. Sonsuz cycle yok
   // (queue boşalırsa effect no-op).
+  // OFFLINE: LabelPrinter etiket HTML'ini backend'den çekiyor → offline basamaz.
+  // Bu yüzden offline'da kuyruğu İLERLETME; entry'ler birikir, ağ gelince
+  // (isOnline → true, effect tekrar çalışır) sırayla basılır.
   useEffect(() => {
-    if (activePrintRoll === null && printQueue.length > 0) {
+    if (isOnline && activePrintRoll === null && printQueue.length > 0) {
       setActivePrintRoll(printQueue[0]);
       setPrintQueue((q) => q.slice(1));
     }
-  }, [activePrintRoll, printQueue]);
+  }, [isOnline, activePrintRoll, printQueue]);
 
   const enqueuePrint = useCallback((roll: Roll) => {
     setPrintQueue((q) => [...q, roll]);
@@ -309,20 +322,16 @@ export default function KK1Screen() {
       }),
   });
 
-  // ── Tüm kayıtlar (modal): paginated ──
-  const historyRollsQuery = useQuery({
-    queryKey: ['rolls', 'kk1', 'history', historyPage],
-    queryFn: () =>
-      rollService.getAll({
-        page: historyPage,
-        pageSize: HISTORY_PAGE_SIZE,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-        filters: { entrySource: 'SUPPLIER_RECEIPT' },
-      }),
-    enabled: historyOpen,
-    placeholderData: (prev) => prev,
-  });
+  // Manuel "Yenile" — standart hook (offline guard + zaman aşımı + tek tip
+  // animasyon/haptic/toast). Hem tablet header'ı hem telefon drawer'ı paylaşır.
+  const refresh = useManualRefresh(
+    () => recentRollsQuery.refetch(),
+    'Liste güncellendi',
+  );
+
+  // ── Tüm kayıtlar (modal): cursor + infinite scroll ──
+  // Sorgu artık modal bileşeninin içinde (RollHistoryModal). Offset/sayfa state'i
+  // yok — derin sayfada MAX_OFFSET guard'ı + her sayfada COUNT(*) maliyeti kalktı.
 
   const totalCount = recentRollsQuery.data?.pagination.total ?? 0;
   const recentRolls = recentRollsQuery.data?.data ?? [];
@@ -417,41 +426,92 @@ export default function KK1Screen() {
       qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
     },
     onError: (err, _vars, context) => {
+      // "Ürün ... pasif/silinmiş" → ürün başka yerden soft-delete edilmiş.
+      // Seçimi temizle ki operatör aynı silinmiş ürünle tekrar tekrar
+      // denemesin (picker'da artık görünmüyor, kafası karışır). Renk/özellik
+      // "pasif" hataları 'Ürün' içermez → yanlışlıkla temizlemeyiz.
+      const msg = err.message ?? '';
+      const itemDeleted =
+        msg.includes('Ürün') && (msg.includes('pasif') || msg.includes('silin'));
       // Form'u + manuel değerleri geri yükle ki operatör veriyi kaybetmesin
       // (özellikle offline'da beklenmedik backend reddi durumunda kritik).
       if (context) {
-        setForm(context.prevForm);
+        setForm(
+          itemDeleted
+            ? { ...context.prevForm, itemId: '', itemLabel: '' }
+            : context.prevForm,
+        );
         setManualQty(context.prevManualQty);
         setManualWeight(context.prevManualWeight);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({
         type: 'error',
-        text1: 'Kayıt başarısız',
-        text2: err.message,
+        text1: itemDeleted ? 'Ürün silinmiş' : 'Kayıt başarısız',
+        text2: itemDeleted
+          ? 'Seçili ürün artık aktif değil — lütfen yeniden seçin'
+          : err.message,
       });
     },
   });
 
-  // Yanlış giriş / hurda — top SCRAP'a çekilir, open movement'lar kapatılır.
-  const scrapMutation = useMutation({
-    mutationFn: (id: string) => rollService.scrap(id),
-    onSuccess: (res) => {
+  // İptal önizlemesi — scrapTarget set olunca çağrılır. Modalda somut etki
+  // (hard-block neden / hangi istasyonda aktif) gösterilir. staleTime 0:
+  // her açılışta taze (top başka adıma geçmiş olabilir).
+  const cancelPreviewQuery = useQuery({
+    queryKey: ['rolls', 'cancel-preview', scrapTarget?.id],
+    queryFn: () => rollService.getCancelPreview(scrapTarget!.id),
+    // Önizleme online-only (sunucu durumu). Offline'da çekmeye çalışıp paused
+    // kalmasın → modal offline notuyla sade onaya düşer.
+    enabled: !!scrapTarget && isOnline,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const cancelPreview: RollCancelPreview | null =
+    cancelPreviewQuery.data?.data ?? null;
+
+  // Yanlış giriş / hurda — top CANCELLED'a çekilir, open movement'lar kapatılır.
+  // İstasyonda aktif top için backend confirmActive ister (önizlemeden gelir).
+  //
+  // OFFLINE-AWARE: mutationKey ile registry'deki default fn'e bağlı (KK1_SCRAP,
+  // networkMode 'online' → offline'da pause + persist + online resume). onMutate'te
+  // optimistic: top listelerden anında düşer; onError'da geri yüklenir. Backend
+  // softDelete idempotent (zaten iptal = no-op), bu yüzden replay güvenli.
+  const scrapMutation = useMutation<
+    Awaited<ReturnType<typeof rollService.scrap>>,
+    Error,
+    { id: string; confirmActive: boolean },
+    { snapshots: [readonly unknown[], unknown][] }
+  >({
+    mutationKey: STATION_MUT.KK1_SCRAP,
+    onMutate: async ({ id }) => {
+      await qc.cancelQueries({ queryKey: ['rolls', 'kk1'] });
+      const snapshots = qc.getQueriesData({ queryKey: ['rolls', 'kk1'] });
+      snapshots.forEach(([key, data]) => {
+        const d = data as { data?: Roll[] } | undefined;
+        if (d && Array.isArray(d.data)) {
+          qc.setQueryData(key, { ...d, data: d.data.filter((r) => r.id !== id) });
+        }
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
         text1: 'Top iptal edildi',
-        text2: res.data?.barcode ?? undefined,
+        text2: onlineManager.isOnline() ? undefined : 'Çevrimdışı — sync bekliyor',
       });
-      qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
+      return { snapshots };
     },
-    onError: (err: Error) => {
+    onError: (err, _vars, context) => {
+      context?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({
         type: 'error',
         text1: 'İptal edilemedi',
         text2: err.message,
       });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
     },
   });
 
@@ -489,9 +549,13 @@ export default function KK1Screen() {
 
   const confirmScrap = useCallback(() => {
     if (!scrapTarget) return;
-    scrapMutation.mutate(scrapTarget.id);
+    // Hard-block (fason/sevkiyat/zaten iptal) → hiç gönderme.
+    if (cancelPreview && !cancelPreview.canCancel) return;
+    // İstasyonda aktif top için bilinçli onay bayrağı.
+    const confirmActive = cancelPreview?.requiresConfirm ?? false;
+    scrapMutation.mutate({ id: scrapTarget.id, confirmActive });
     setScrapTarget(null);
-  }, [scrapTarget, scrapMutation]);
+  }, [scrapTarget, cancelPreview, scrapMutation]);
 
   // ── Actions ──
   // En'i tek tuşla temizle — operatör değiştirmek isterse defalarca silmesin.
@@ -571,30 +635,18 @@ export default function KK1Screen() {
     });
   };
 
-  const handleRefresh = useCallback(async () => {
-    const result = await recentRollsQuery.refetch();
-    if (result.status === 'success') {
-      Toast.show({ type: 'success', text1: 'Liste güncellendi' });
-    } else if (result.status === 'error') {
+  const handlePrintLabel = (roll: Roll) => {
+    // Satır kendi Roll'unu verir (recents + history modalı aynı). Operatör başka
+    // top için printi tekrar tetikleyene kadar tek print akışı çalışır.
+    enqueuePrint(roll);
+    // Offline'da basılamaz; kuyruğa alınır, ağ gelince otomatik basılır.
+    if (!isOnline) {
       Toast.show({
-        type: 'error',
-        text1: 'Yenileme başarısız',
-        text2: (result.error as Error)?.message,
+        type: 'info',
+        text1: 'Çevrimdışı',
+        text2: 'Etiket kuyruğa alındı — bağlanınca basılacak',
       });
     }
-  }, [recentRollsQuery]);
-
-  const handlePrintLabel = (barcode: string) => {
-    // Listeden top'u bul ve LabelPrinter'a ver. Operatör başka top için printi
-    // tekrar tetikleyene kadar tek print akışı çalışır.
-    const roll =
-      recentRolls.find((r) => r.barcode === barcode) ??
-      historyRollsQuery.data?.data.find((r) => r.barcode === barcode);
-    if (!roll) {
-      Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: barcode });
-      return;
-    }
-    enqueuePrint(roll);
   };
 
   // Basılıyor + sırada bekleyen etiket sayısı (offline'da birikebilir).
@@ -612,7 +664,9 @@ export default function KK1Screen() {
               style={styles.printChip}
             >
               <Pulse color="#fff" size={7} />
-              <Text style={styles.printChipText}>{printingCount} etiket</Text>
+              <Text style={styles.printChipText}>
+                {printingCount} etiket{!isOnline ? ' · çevrimdışı bekliyor' : ''}
+              </Text>
             </Animated.View>
           )}
           <SyncStatusChip />
@@ -631,16 +685,16 @@ export default function KK1Screen() {
               <HeaderChip
                 icon="format-list-bulleted"
                 label="Tümünü Gör"
-                onPress={() => {
-                  setHistoryPage(1);
-                  setHistoryOpen(true);
-                }}
+                onPress={() => setHistoryOpen(true)}
               />
-              <HeaderChip
-                icon="refresh"
+              <RefreshButton
+                headerStyle
                 label="Yenile"
-                spinning={recentRollsQuery.isFetching}
-                onPress={handleRefresh}
+                onPress={refresh.onRefresh}
+                refreshing={refresh.refreshing}
+                isError={refresh.isError}
+                errorMessage={refresh.errorMessage}
+                successMessage={refresh.successMessage}
               />
             </>
           )}
@@ -668,8 +722,15 @@ export default function KK1Screen() {
         ]}
       >
         {/* ── SOL: Form (kaydırılabilir — küçük ekranda taşmasın) ── */}
-        <ScrollView
+        {/* Telefonda native klavye footer'ı örtmesin diye KAV; tablette numpad
+            sağ kolonda (native klavye yok) → enabled=false ile devre dışı. */}
+        <KeyboardAvoidingView
           style={styles.formCol}
+          enabled={compact}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+        <ScrollView
+          style={styles.formScroll}
           contentContainerStyle={[
             styles.formContent,
             compact && styles.formContentCompact,
@@ -843,9 +904,14 @@ export default function KK1Screen() {
             )}
           </Surface>
 
-          {/* OFFLINE-AWARE: mutation'a disabled binding YOK — paused mutation
-              isPending kalsa da sıradaki kayıt engellenmesin. Yalnız `pulling`
-              (makineden okuma, ~1sn) sırasında çift-tetiklemeyi kilitleriz. */}
+        </ScrollView>
+
+        {/* Sticky footer — "Kaydet ve Etiket Bas" forma kaydırmaya gerek
+            kalmadan her zaman en altta görünür.
+            OFFLINE-AWARE: mutation'a disabled binding YOK — paused mutation
+            isPending kalsa da sıradaki kayıt engellenmesin. Yalnız `pulling`
+            (makineden okuma, ~1sn) sırasında çift-tetiklemeyi kilitleriz. */}
+        <View style={[styles.submitFooter, compact && styles.submitFooterCompact]}>
           <Button
             mode="contained"
             icon={pulling ? undefined : justSaved ? 'check-bold' : 'package-check'}
@@ -863,7 +929,8 @@ export default function KK1Screen() {
                 ? 'Kaydedildi ✓'
                 : 'Kaydet ve Etiket Bas'}
           </Button>
-        </ScrollView>
+        </View>
+        </KeyboardAvoidingView>
 
         {/* ── SAĞ: Üstte son kayıtlar + altta Numpad. Aksiyonlar header'a alındı;
             başlık ise kolonun en üstünde (ayrım çizgisiyle) → liste sütunuyla
@@ -935,11 +1002,9 @@ export default function KK1Screen() {
           rolls={recentRolls}
           loading={recentRollsQuery.isLoading}
           error={recentRollsQuery.isError ? (recentRollsQuery.error as Error) : null}
-          fetching={recentRollsQuery.isFetching}
-          onRefresh={handleRefresh}
+          refresh={refresh}
           onOpenHistory={() => {
             // Drawer kapanış animasyonu bitince history açılır (iki-modal çakışması).
-            setHistoryPage(1);
             pendingHistoryRef.current = true;
             setRecentsDrawerOpen(false);
           }}
@@ -953,15 +1018,6 @@ export default function KK1Screen() {
         visible={historyOpen}
         onDismiss={() => setHistoryOpen(false)}
         onClosed={drainPendingScrap}
-        page={historyPage}
-        setPage={setHistoryPage}
-        rolls={historyRollsQuery.data?.data ?? []}
-        totalPages={historyRollsQuery.data?.pagination.totalPages ?? 1}
-        totalCount={historyRollsQuery.data?.pagination.total ?? 0}
-        loading={historyRollsQuery.isLoading}
-        fetching={historyRollsQuery.isFetching}
-        error={historyRollsQuery.isError ? (historyRollsQuery.error as Error) : null}
-        onRetry={() => historyRollsQuery.refetch()}
         onPrint={handlePrintLabel}
         onScrap={handleScrapRoll}
       />
@@ -998,6 +1054,14 @@ export default function KK1Screen() {
       {/* ── Scrap onay modal'ı (kendi modalımız; native Alert'i değiştirdi) ── */}
       <ScrapConfirmModal
         roll={scrapTarget}
+        preview={cancelPreview}
+        previewLoading={cancelPreviewQuery.isLoading}
+        previewError={
+          cancelPreviewQuery.isError
+            ? (cancelPreviewQuery.error as Error)
+            : null
+        }
+        offline={!isOnline}
         loading={scrapMutation.isPending}
         onDismiss={() => setScrapTarget(null)}
         onConfirm={confirmScrap}
@@ -1017,10 +1081,9 @@ interface RecentsDrawerProps {
   rolls: Roll[];
   loading: boolean;
   error: Error | null;
-  fetching: boolean;
-  onRefresh: () => void;
+  refresh: ManualRefresh;
   onOpenHistory: () => void;
-  onPrint: (barcode: string) => void;
+  onPrint: (roll: Roll) => void;
   onScrap: (roll: Roll) => void;
 }
 
@@ -1032,8 +1095,7 @@ function RecentsDrawer({
   rolls,
   loading,
   error,
-  fetching,
-  onRefresh,
+  refresh,
   onOpenHistory,
   onPrint,
   onScrap,
@@ -1072,10 +1134,11 @@ function RecentsDrawer({
             </Text>
           </View>
           <RefreshButton
-            onPress={onRefresh}
-            refreshing={fetching}
-            isError={!!error}
-            errorMessage={error?.message}
+            onPress={refresh.onRefresh}
+            refreshing={refresh.refreshing}
+            isError={refresh.isError}
+            errorMessage={refresh.errorMessage}
+            successMessage={refresh.successMessage}
           />
           <IconButton icon="close" size={24} onPress={onDismiss} accessibilityLabel="Kapat" />
         </View>
@@ -1087,7 +1150,7 @@ function RecentsDrawer({
             <AnimatedEntrance direction="fade" style={drawerStyles.empty}>
               <Text style={drawerStyles.emptyText}>Liste yüklenemedi</Text>
               <Text style={drawerStyles.emptyHint}>{error.message}</Text>
-              <Button mode="outlined" onPress={onRefresh} style={{ marginTop: 12 }}>
+              <Button mode="outlined" onPress={refresh.onRefresh} style={{ marginTop: 12 }}>
                 Tekrar dene
               </Button>
             </AnimatedEntrance>
@@ -1155,16 +1218,7 @@ interface RollHistoryModalProps {
   onDismiss: () => void;
   /** Kapanma animasyonu bittiğinde — RNModal stack çakışmasını çözmek için. */
   onClosed?: () => void;
-  page: number;
-  setPage: (updater: (p: number) => number) => void;
-  rolls: Roll[];
-  totalPages: number;
-  totalCount: number;
-  loading: boolean;
-  fetching: boolean;
-  error: Error | null;
-  onRetry: () => void;
-  onPrint: (barcode: string) => void;
+  onPrint: (roll: Roll) => void;
   onScrap: (roll: Roll) => void;
 }
 
@@ -1172,15 +1226,6 @@ function RollHistoryModal({
   visible,
   onDismiss,
   onClosed,
-  page,
-  setPage,
-  rolls,
-  totalPages,
-  totalCount,
-  loading,
-  fetching,
-  error,
-  onRetry,
   onPrint,
   onScrap,
 }: RollHistoryModalProps) {
@@ -1188,42 +1233,95 @@ function RollHistoryModal({
   const insets = useSafeAreaInsets();
   const isPhone = useDeviceType() === 'phone';
 
+  // ── Cursor + infinite scroll (offset/sayfa YOK) ──
+  // Liste sona yaklaşınca bir sonraki sayfa keyset cursor ile çekilir; derin
+  // sayfada offset taraması + her sayfada COUNT(*) yok. Toplam yalnız ilk
+  // sayfada (withTotal) yaklaşık olarak gelir.
+  const q = useInfiniteQuery({
+    queryKey: ['rolls', 'kk1', 'history'],
+    queryFn: ({ pageParam }) =>
+      rollService.getAllCursor({
+        limit: HISTORY_PAGE_SIZE,
+        cursor: pageParam,
+        filters: { entrySource: 'SUPPLIER_RECEIPT' },
+        withTotal: !pageParam,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) =>
+      last.pagination.hasMore ? last.pagination.nextCursor : undefined,
+    enabled: visible,
+    placeholderData: keepPreviousData,
+  });
+  // Modal her açılışta ilk sayfayı tazele — yeni KK1 girişleri hemen görünsün.
+  useRefetchOnOpen(q.refetch, visible);
+
+  const rolls = useMemo(
+    () => q.data?.pages.flatMap((p) => p.data) ?? [],
+    [q.data],
+  );
+  // withTotal ilk sayfada → totalEstimate. Cursor modunda yaklaşık (anlık).
+  const totalCount = q.data?.pages[0]?.pagination.totalEstimate ?? 0;
+
+  const refresh = useManualRefresh(() => q.refetch(), 'Liste güncellendi');
+
+  // FlashList açılışta/önceki scroll konumunu koruyor → modal her AÇILDIĞINDA
+  // başa sar (en yeni kayıt tepede). Sonraki sayfalar alta eklenir; viewport'u
+  // oynatmaz, o yüzden sadece `visible`'a bağlı (sayfa eklenince başa atlamaz).
+  const listRef = useRef<FlashListRef<Roll>>(null);
+  useEffect(() => {
+    if (!visible) return;
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    });
+  }, [visible]);
+
   return (
-    <AppModal visible={visible} onDismiss={onDismiss} onHidden={onClosed}>
-      {/* Telefonda daha geniş + daha kısa (satırlar compact ile alçaldı).
-          maxWidth/maxHeight ile güvenli alanı (durum/nav çubuğu, çentik) aşmaz. */}
-      <View
-        style={[
-          historyStyles.sheet,
-          {
-            width: winW * (isPhone ? 0.96 : 0.85),
-            height: winH * (isPhone ? 0.86 : 0.92),
-            // Modal ortalanır → her iki kenar boşluğu da en büyük inset'i geçmeli.
-            maxWidth: winW - 2 * Math.max(insets.left, insets.right) - 24,
-            maxHeight: winH - 2 * Math.max(insets.top, insets.bottom) - 24,
-          },
-        ]}
-      >
+    <AppModal
+      visible={visible}
+      onDismiss={onDismiss}
+      onHidden={onClosed}
+      // Boyutu contentStyle ile AppModal'a veriyoruz → sarmalayıcı genişliği
+      // sheet'e eşitlenir ve ekranda DÜZGÜN ortalanır. (Boyutu içteki View'a
+      // verince AppModal 560px "overflow-ortalama" yoluna düşüyor; tablette
+      // geniş sheet tam ortalanmıyordu — telefon/tablet maxWidth/maxHeight ile
+      // güvenli alanı, çubuk/çentik altından kurtarır.)
+      contentStyle={[
+        historyStyles.sheet,
+        {
+          width: winW * (isPhone ? 0.96 : 0.85),
+          height: winH * (isPhone ? 0.86 : 0.92),
+          maxWidth: winW - 2 * Math.max(insets.left, insets.right) - 24,
+          maxHeight: winH - 2 * Math.max(insets.top, insets.bottom) - 24,
+        },
+      ]}
+    >
         <View style={historyStyles.header}>
           <View style={{ flex: 1 }}>
             <Text variant="titleLarge" style={historyStyles.title}>
               Tüm KK1 Kayıtları
             </Text>
             <Text variant="bodySmall" style={historyStyles.subtitle}>
-              Toplam {totalCount} kayıt · Sayfa {page}/{Math.max(totalPages, 1)}
+              Toplam {totalCount} kayıt
             </Text>
           </View>
+          <RefreshButton
+            onPress={refresh.onRefresh}
+            refreshing={refresh.refreshing}
+            isError={refresh.isError}
+            errorMessage={refresh.errorMessage}
+            successMessage={refresh.successMessage}
+          />
           <IconButton icon="close" size={28} onPress={onDismiss} accessibilityLabel="Kapat" />
         </View>
 
         <View style={historyStyles.listBox}>
-          {loading ? (
+          {q.isLoading ? (
             <SkeletonList count={isPhone ? 8 : 10} />
-          ) : error ? (
+          ) : q.isError ? (
             <View style={historyStyles.empty}>
               <Text style={historyStyles.emptyText}>Liste yüklenemedi</Text>
-              <Text style={historyStyles.emptyHint}>{error.message}</Text>
-              <Button mode="outlined" onPress={onRetry} style={{ marginTop: 12 }}>
+              <Text style={historyStyles.emptyHint}>{(q.error as Error)?.message}</Text>
+              <Button mode="outlined" onPress={refresh.onRefresh} style={{ marginTop: 12 }}>
                 Tekrar dene
               </Button>
             </View>
@@ -1233,8 +1331,28 @@ function RollHistoryModal({
             </View>
           ) : (
             <FlashList
+              ref={listRef}
               data={rolls}
               keyExtractor={(r) => r.id}
+              // FlashList v2'de maintainVisibleContentPosition VARSAYILAN AÇIK:
+              // modal açılırken refetch yeni kaydı başa eklediğinde liste eski
+              // üst satıra "tutunup" yeni kaydı görüş alanının ÜSTÜNE itiyordu
+              // (en yeni gizli, 2. sıradaki başta). Bu liste hep createdAt desc
+              // ve hep tepeden başlamalı → tutunmayı kapat, scrollToOffset(0)
+              // yarışı kaybetmesin. (Sonraki sayfalar ALTA eklenir; tutunma kapalı
+              // olduğundan viewport'u oynatmaz.)
+              maintainVisibleContentPosition={{ disabled: true }}
+              onEndReachedThreshold={0.6}
+              onEndReached={() => {
+                if (q.hasNextPage && !q.isFetchingNextPage) q.fetchNextPage();
+              }}
+              ListFooterComponent={
+                q.isFetchingNextPage ? (
+                  <View style={historyStyles.loadingMore}>
+                    <ActivityIndicator size="small" color="#64748b" />
+                  </View>
+                ) : null
+              }
               renderItem={({ item }) => (
                 <RollListItem
                   roll={item}
@@ -1247,32 +1365,6 @@ function RollHistoryModal({
             />
           )}
         </View>
-
-        {totalPages > 1 && (
-          <View style={historyStyles.pagination}>
-            <Button
-              mode="outlined"
-              icon="chevron-left"
-              onPress={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1 || fetching}
-            >
-              Önceki
-            </Button>
-            <Text style={historyStyles.pageInfo}>
-              {page} / {totalPages}
-            </Text>
-            <Button
-              mode="outlined"
-              icon="chevron-right"
-              contentStyle={{ flexDirection: 'row-reverse' }}
-              onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages || fetching}
-            >
-              Sonraki
-            </Button>
-          </View>
-        )}
-      </View>
     </AppModal>
   );
 }
@@ -1299,40 +1391,72 @@ const historyStyles = StyleSheet.create({
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 4 },
   emptyText: { fontSize: 16, color: '#94a3b8', fontWeight: '600' },
   emptyHint: { fontSize: 13, color: '#cbd5e1' },
-  pagination: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    gap: 12,
-  },
-  pageInfo: { fontWeight: '600', color: '#334155' },
+  loadingMore: { paddingVertical: 16, alignItems: 'center' },
 });
 
 // ── Scrap onay modal'ı ──
 // Native Alert telefon yönüyle birlikte dönmüyordu (yan kalıyordu); kendi modal'ımız.
 interface ScrapConfirmModalProps {
   roll: Roll | null;
+  /** Backend iptal önizlemesi (null = henüz gelmedi). */
+  preview: RollCancelPreview | null;
+  previewLoading: boolean;
+  previewError: Error | null;
+  /** Çevrimdışı → önizleme yok; iptal kuyruğa alınır, bağlanınca uygulanır. */
+  offline: boolean;
   loading: boolean;
   onDismiss: () => void;
   onConfirm: () => void;
 }
 
-function ScrapConfirmModal({ roll, loading, onDismiss, onConfirm }: ScrapConfirmModalProps) {
-  const { width: winW, height: winH } = useWindowDimensions();
+/** "X iş emrinin Y adımında aktif" gibi okunur cümle. */
+function activeAtText(activeAt: RollCancelPreview['activeAt']): string {
+  if (!activeAt) return 'Bu top bir istasyonda/iş emrinde aktif.';
+  const wo = activeAt.batchNumber ? `"${activeAt.batchNumber}"` : 'bir';
+  const station = activeAt.stationName ?? 'bir istasyon';
+  return `Bu top ${wo} iş emrinin "${station}" adımında aktif.`;
+}
+
+function ScrapConfirmModal({
+  roll,
+  preview,
+  previewLoading,
+  previewError,
+  offline,
+  loading,
+  onDismiss,
+  onConfirm,
+}: ScrapConfirmModalProps) {
+  const { width: winW } = useWindowDimensions();
   const sheetWidth = Math.min(winW * 0.9, 460);
+
+  // Önizleme henüz gelmedi → güvenli tarafta kal (onay butonu beklemede).
+  const blocked = !offline && !!preview && !preview.canCancel;
+  const needsConfirm = !!preview && preview.canCancel && preview.requiresConfirm;
+  // Hard-block iken hiç gönderme. Önizleme yüklenirken de butonu kilitle ki
+  // operatör requiresConfirm bilinmeden iptal etmesin. Offline'da önizleme yok →
+  // butonu kilitleme (kuyruğa alınır, backend replay'de güvenliği uygular).
+  const confirmDisabled = loading || (!offline && previewLoading) || blocked;
+  // Onay rengi/etiketi duruma göre.
+  const accent = blocked ? colors.danger : needsConfirm ? colors.warningDark : '#dc2626';
 
   return (
     <AppModal visible={!!roll} onDismiss={onDismiss} dismissable={!loading}>
       <View style={[scrapStyles.sheet, { width: sheetWidth }]}>
-        <View style={scrapStyles.iconCircle}>
-          <Icon source="alert-circle-outline" size={36} color="#dc2626" />
+        <View
+          style={[
+            scrapStyles.iconCircle,
+            needsConfirm && { backgroundColor: '#fffbeb' },
+          ]}
+        >
+          <Icon
+            source={blocked ? 'cancel' : 'alert-circle-outline'}
+            size={36}
+            color={accent}
+          />
         </View>
         <Text variant="titleLarge" style={scrapStyles.title}>
-          Topu iptal et?
+          {blocked ? 'Top iptal edilemez' : 'Topu iptal et?'}
         </Text>
 
         {roll && (
@@ -1358,9 +1482,58 @@ function ScrapConfirmModal({ roll, loading, onDismiss, onConfirm }: ScrapConfirm
           </View>
         )}
 
-        <Text style={scrapStyles.hint}>
-          Yanlış giriş için kullan. İptal edilen toplar fire sayılmaz, sadece kayıt geri alınır.
-        </Text>
+        {/* Önizleme durum bölümü */}
+        {offline ? (
+          <View style={scrapStyles.warnBox}>
+            <Icon source="wifi-off" size={18} color={colors.warningDark} />
+            <View style={{ flex: 1 }}>
+              <Text style={scrapStyles.warnText}>
+                Çevrimdışısın — durum önizlemesi yok.
+              </Text>
+              <Text style={scrapStyles.warnSub}>
+                İptal sıraya alınır, bağlanınca uygulanır. Top bu sırada bir
+                istasyonda aktifleştiyse sunucu reddedebilir.
+              </Text>
+            </View>
+          </View>
+        ) : previewLoading ? (
+          <View style={scrapStyles.previewLoadingRow}>
+            <ActivityIndicator size="small" color="#64748b" />
+            <Text style={scrapStyles.previewLoadingText}>
+              Durum kontrol ediliyor…
+            </Text>
+          </View>
+        ) : blocked ? (
+          <View style={scrapStyles.blockBox}>
+            <Icon source="information-outline" size={18} color={colors.danger} />
+            <Text style={scrapStyles.blockText}>{preview!.blockReason}</Text>
+          </View>
+        ) : needsConfirm ? (
+          <View style={scrapStyles.warnBox}>
+            <Icon source="alert" size={18} color={colors.warningDark} />
+            <View style={{ flex: 1 }}>
+              <Text style={scrapStyles.warnText}>
+                {activeAtText(preview!.activeAt)}
+              </Text>
+              <Text style={scrapStyles.warnSub}>
+                İptal edilirse bu adımdan düşülür ve adım durumu geri sarılır.
+                Yine de iptal etmek istiyor musun?
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <>
+            {previewError && (
+              <Text style={scrapStyles.previewErrText}>
+                Durum doğrulanamadı — yine de deneyebilirsin.
+              </Text>
+            )}
+            <Text style={scrapStyles.hint}>
+              Yanlış giriş için kullan. İptal edilen toplar fire sayılmaz, sadece
+              kayıt geri alınır.
+            </Text>
+          </>
+        )}
 
         <View style={scrapStyles.actions}>
           <Button
@@ -1370,21 +1543,23 @@ function ScrapConfirmModal({ roll, loading, onDismiss, onConfirm }: ScrapConfirm
             style={scrapStyles.actionBtn}
             contentStyle={scrapStyles.actionBtnContent}
           >
-            Vazgeç
+            {blocked ? 'Kapat' : 'Vazgeç'}
           </Button>
-          <Button
-            mode="contained"
-            buttonColor="#dc2626"
-            textColor="#fff"
-            icon="trash-can-outline"
-            onPress={onConfirm}
-            loading={loading}
-            disabled={loading}
-            style={scrapStyles.actionBtn}
-            contentStyle={scrapStyles.actionBtnContent}
-          >
-            İptal Et
-          </Button>
+          {!blocked && (
+            <Button
+              mode="contained"
+              buttonColor={needsConfirm ? colors.warningDark : '#dc2626'}
+              textColor="#fff"
+              icon="trash-can-outline"
+              onPress={onConfirm}
+              loading={loading}
+              disabled={confirmDisabled}
+              style={scrapStyles.actionBtn}
+              contentStyle={scrapStyles.actionBtnContent}
+            >
+              {needsConfirm ? 'Yine de İptal Et' : 'İptal Et'}
+            </Button>
+          )}
         </View>
       </View>
     </AppModal>
@@ -1429,6 +1604,58 @@ const scrapStyles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   actionBtn: { flex: 1, borderRadius: 10 },
   actionBtnContent: { height: 48 },
+  previewLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  previewLoadingText: { fontSize: 13, color: '#64748b' },
+  previewErrText: {
+    fontSize: 12,
+    color: colors.warningDark,
+    textAlign: 'center',
+  },
+  // Engelli (hard-block): kırmızı bilgi kutusu
+  blockBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#fef2f2',
+    borderRadius: 10,
+    padding: 12,
+  },
+  blockText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#991b1b',
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  // İstasyonda aktif uyarısı: kehribar kutu
+  warnBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#fffbeb',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  warnText: {
+    fontSize: 14,
+    color: '#92400e',
+    fontWeight: '700',
+    lineHeight: 19,
+  },
+  warnSub: {
+    fontSize: 12.5,
+    color: '#b45309',
+    lineHeight: 17,
+    marginTop: 3,
+  },
 });
 
 // ── Liste satırı: Roll + kim girdi + ne zaman ──
@@ -1441,7 +1668,7 @@ function RollListItem({
   isNew,
 }: {
   roll: Roll;
-  onPrint: (b: string) => void;
+  onPrint: (roll: Roll) => void;
   onScrap?: (roll: Roll) => void;
   compactLayout?: boolean;
   /** Geniş tablet modalı: tüm bilgi tek satıra sığar. */
@@ -1499,7 +1726,7 @@ function RollListItem({
             compact
             buttonColor="#eef2ff"
             textColor="#1e293b"
-            onPress={() => onPrint(roll.barcode!)}
+            onPress={() => onPrint(roll)}
             accessibilityLabel="Etiket bas"
             style={styles.recentActionBtn}
             labelStyle={styles.recentActionLabel}
@@ -1514,7 +1741,7 @@ function RollListItem({
             size={compactLayout ? 20 : 35}
             containerColor="#eef2ff"
             iconColor="#000000ff"
-            onPress={() => onPrint(roll.barcode!)}
+            onPress={() => onPrint(roll)}
             accessibilityLabel="Etiket bas"
             style={[styles.recentPrintBtn, compactLayout && { width: 28, height: 28 }]}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -1590,7 +1817,7 @@ function RollListItem({
       ]}
       elevation={1}
     >
-      {/* Satır 1: top adı + kod (yan yana, sol) — tarih + aksiyonlar (sağda) */}
+      {/* Satır 1: top adı + kod (sol) — aksiyonlar (sağda) */}
       <View style={[styles.recentItemHeader, compactLayout && { gap: 4 }]}>
         <Text
           style={[
@@ -1613,12 +1840,9 @@ function RollListItem({
         >
           {barcode}
         </Text>
-        <Text style={[styles.recentTime, styles.recentTimeRight, compactLayout && { fontSize: 11 }]}>
-          {at ? at.format('DD.MM HH:mm') : ''}
-        </Text>
-        {renderActions(!compactLayout)}
+        <View style={styles.recentHeaderActions}>{renderActions(!compactLayout)}</View>
       </View>
-      {/* Satır 2: boy · en · kalite (sol) — giriş yapan kişi (en sağ) */}
+      {/* Satır 2: boy · en · kalite · tarih (sol) — giriş yapan kişi (en sağ) */}
       <View style={[styles.recentBottomRow, compactLayout && { marginTop: 2, gap: 6 }]}>
         <View style={styles.recentBadgeRow}>
           <View style={[styles.recentBadge, compactLayout && styles.recentBadgeCompact]}>
@@ -1635,6 +1859,10 @@ function RollListItem({
             <Icon source="star-circle" size={compactLayout ? 12 : 14} color="#0f172a" />
             <Text style={[styles.recentBadgeText, compactLayout && { fontSize: 11 }]}>{roll.qualityGrade}</Text>
           </View>
+          {/* Tarih — kalite rozetinin hemen sağında */}
+          <Text style={[styles.recentTime, compactLayout && { fontSize: 11 }]}>
+            {at ? at.format('DD.MM HH:mm') : ''}
+          </Text>
         </View>
 
         <View style={[styles.recentOperatorChip, compactLayout && { maxWidth: '42%' }]}>
@@ -1673,8 +1901,19 @@ const styles = StyleSheet.create({
 
   // Sol — Form
   formCol: { flex: 1.4, backgroundColor: '#f8fafc' },
+  formScroll: { flex: 1 },
   formContent: { padding: 16, gap: 12, flexGrow: 1, paddingBottom: 16 },
   formContentCompact: { padding: 12, gap: 10, paddingBottom: 14 },
+  // Sabit alt aksiyon şeridi — ScrollView'in dışında, hep görünür.
+  submitFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  submitFooterCompact: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10 },
   card: { padding: 14, borderRadius: 12, backgroundColor: '#fff', gap: 4 },
 
   // ── Manuel giriş paneli (üst, açılır-kapanır; amber = "anormal/dikkat") ──
@@ -1903,6 +2142,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   recentBarcode: {
+    flexShrink: 1,
+    minWidth: 0,
     fontFamily: 'monospace',
     fontSize: 13,
     fontWeight: '700',
@@ -1920,13 +2161,14 @@ const styles = StyleSheet.create({
   recentActionBtn: { margin: 0, marginLeft: 4, borderRadius: 10 },
   recentActionContent: { height: 46, paddingHorizontal: 6 },
   recentActionLabel: { fontSize: 14, fontWeight: '700', marginHorizontal: 10, marginVertical: 0 },
+  recentHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto' },
   recentItemScrapped: { opacity: 0.55, backgroundColor: '#f1f5f9' },
   recentBarcodeScrapped: {
     textDecorationLine: 'line-through',
     color: '#64748b',
     backgroundColor: '#e2e8f0',
   },
-  recentItemName: { flexShrink: 1, fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  recentItemName: { flexShrink: 1, minWidth: 0, fontSize: 14, fontWeight: '700', color: '#0f172a' },
   recentBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1934,7 +2176,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 4,
   },
-  recentBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, flexShrink: 1 },
+  recentBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, flexShrink: 1 },
   recentBadge: {
     flexDirection: 'row',
     alignItems: 'center',

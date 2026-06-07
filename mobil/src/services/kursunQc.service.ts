@@ -26,6 +26,9 @@ export interface ReportErrorRequest {
   stepId: string;
   startMeter: number;
   defectTypeId: string;
+  /** Offline kuyruğu için client-üretimi UUID (generateClientUuid). Backend bunu
+   *  RollError.id olarak kullanır → resume/retry idempotent olur. */
+  clientErrorId?: string;
 }
 
 export interface DeleteErrorRequest {
@@ -34,6 +37,22 @@ export interface DeleteErrorRequest {
 
 export interface FinishStepRequest {
   stepId: string;
+}
+
+export interface ReopenPreviewRoll {
+  rollId: string;
+  barcode: string | null;
+  currentQty: number;
+}
+
+export interface ReopenPreview {
+  /** reopenStep güvenli mi (toplar hâlâ sonraki adımda + üretimde mi). */
+  canReopen: boolean;
+  /** canReopen=false ise sebep (örn. top ileri taşınmış). */
+  blockReason: string | null;
+  rollCount: number;
+  /** Yeniden açılırsa Tambur'dan geri çekilecek toplar. */
+  rolls: ReopenPreviewRoll[];
 }
 
 export const kursunQcService = {
@@ -86,5 +105,12 @@ export const kursunQcService = {
   reopenStep: (data: FinishStepRequest): Promise<ApiResponse<{ reopenedRollCount: number }>> =>
     apiClient
       .post<ApiResponse<{ reopenedRollCount: number }>>('/kursun-qc/reopen-step', data)
+      .then((r) => r.data),
+
+  // reopen-step öncesi salt-okunur önizleme — onay modalında hangi topların
+  // Tambur'dan geri çekileceğini göstermek için.
+  reopenPreview: (stepId: string): Promise<ApiResponse<ReopenPreview>> =>
+    apiClient
+      .get<ApiResponse<ReopenPreview>>(`/kursun-qc/reopen-preview/${stepId}`)
       .then((r) => r.data),
 };

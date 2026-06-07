@@ -70,7 +70,7 @@ if [ ! -f /app/data/.seeded ]; then
   echo "[2/3] İlk kurulum tespit edildi — seed çalıştırılıyor..."
 
   if npm run seed; then
-    echo "      ✓ Ana seed tamamlandı (admin / admin123 + 20 permission + 6 kullanıcı)"
+    echo "      ✓ Ana seed tamamlandı (admin / 123123 + 20 permission + 6 kullanıcı)"
 
     # Label template'leri seed.ts içermiyor, ayrı SQL ile yükle
     if [ -f scripts/seed-label-templates.sql ]; then

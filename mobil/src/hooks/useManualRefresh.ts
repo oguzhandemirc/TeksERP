@@ -95,18 +95,28 @@ export function useManualRefresh(
       }
 
       const fns = Array.isArray(refetchRef.current) ? refetchRef.current : [refetchRef.current];
-      const work = Promise.all(fns.map((fn) => Promise.resolve(fn())));
+      // workSettled ASLA reject etmez: hata da, başarı da değere çevrilir. Böylece
+      // timeout yarışı kazandıktan SONRA refetch geç reddederse "unhandled
+      // rejection" oluşmaz (work arka planda sürse de sessizce yutulur).
+      const workSettled = Promise.all(fns.map((fn) => Promise.resolve(fn()))).then(
+        (results) => ({ kind: 'done' as const, results }),
+        (error) => ({ kind: 'error' as const, error }),
+      );
       // Zaman aşımı yarışı: refetch ortada paused olursa / retry uzarsa spinner
-      // sonsuza dönmesin. Timeout kazanırsa altta `work` arka planda sürer.
+      // sonsuza dönmesin. Timeout kazanırsa altta refetch arka planda sürer.
       const raced = await Promise.race([
-        work.then((results) => ({ timedOut: false as const, results })),
-        new Promise<{ timedOut: true }>((resolve) =>
-          setTimeout(() => resolve({ timedOut: true }), REFRESH_TIMEOUT_MS),
+        workSettled,
+        new Promise<{ kind: 'timeout' }>((resolve) =>
+          setTimeout(() => resolve({ kind: 'timeout' }), REFRESH_TIMEOUT_MS),
         ),
       ]);
 
-      if (raced.timedOut) {
+      if (raced.kind === 'timeout') {
         setErrorMessage('Yenileme zaman aşımına uğradı — bağlantıyı kontrol et');
+        return;
+      }
+      if (raced.kind === 'error') {
+        setErrorMessage((raced.error as Error)?.message ?? 'Veri alınamadı');
         return;
       }
 

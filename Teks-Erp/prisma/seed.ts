@@ -154,7 +154,7 @@ async function main() {
   const adminUser = await prisma.user.create({
     data: {
       username: "admin",
-      passwordHash: await hashPassword("admin123"),
+      passwordHash: await hashPassword("123123"),
       fullName: "Sistem Yöneticisi",
     },
   });
@@ -506,7 +506,7 @@ async function main() {
 
   console.log("\n🎉 Seed tamamlandı.\n");
   console.log("Kullanıcılar:");
-  console.log("  admin / admin123        → Tam yetki");
+  console.log("  admin / 123123          → Tam yetki");
   console.log("  Diğerleri / test123     → Yetkisiz (admin UI'dan atayın)\n");
 }
 

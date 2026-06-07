@@ -82,9 +82,16 @@ interface PaginatedProps extends BaseProps {
   paginated: true;
   searchValue: string;
   onSearchSubmit: (q: string) => void;
-  page: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
+  // ── Offset (pager) modu — page/totalPages/onPageChange ile. ──
+  // Infinite scroll modunda bunlar VERİLMEZ; yerine onEndReached gelir.
+  page?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
+  // ── Cursor / infinite scroll modu ── liste sonuna yaklaşınca tetiklenir
+  // (parent fetchNextPage bağlar). loadingMore → alt spinner. onEndReached
+  // verildiğinde pager render EDİLMEZ.
+  onEndReached?: () => void;
+  loadingMore?: boolean;
   sortOptions?: SortOption[];
   selectedSort?: string;
   onSortChange?: (value: string) => void;
@@ -385,6 +392,17 @@ export default function PickerModal(props: Props) {
                   numColumns={effectiveColumns}
                   ListHeaderComponent={pinnedHeader}
                   renderItem={renderItem}
+                  onEndReachedThreshold={0.5}
+                  onEndReached={
+                    paginated ? (props as PaginatedProps).onEndReached : undefined
+                  }
+                  ListFooterComponent={
+                    paginated && (props as PaginatedProps).loadingMore ? (
+                      <View style={styles.loadingMore}>
+                        <ActivityIndicator size="small" color="#4f46e5" />
+                      </View>
+                    ) : undefined
+                  }
                 />
               </View>
               {/* A-Z hızlı indeks — client modda, yeterli kayıt varsa */}
@@ -408,17 +426,20 @@ export default function PickerModal(props: Props) {
           )}
         </View>
 
-        {/* Sayfalama — paginated modda */}
-        {paginated && (
-          <Pager
-            page={(props as PaginatedProps).page}
-            totalPages={(props as PaginatedProps).totalPages}
-            fetching={(props as PaginatedProps).fetching}
-            onPageChange={(props as PaginatedProps).onPageChange}
-            size="medium"
-            style={styles.pagination}
-          />
-        )}
+        {/* Sayfalama — yalnız offset (pager) modunda. Infinite scroll
+            (onEndReached) modunda pager YOK; alt spinner FlashList footer'ında. */}
+        {paginated &&
+          (props as PaginatedProps).onPageChange &&
+          !(props as PaginatedProps).onEndReached && (
+            <Pager
+              page={(props as PaginatedProps).page ?? 1}
+              totalPages={(props as PaginatedProps).totalPages ?? 1}
+              fetching={(props as PaginatedProps).fetching}
+              onPageChange={(props as PaginatedProps).onPageChange!}
+              size="medium"
+              style={styles.pagination}
+            />
+          )}
     </AppModal>
   );
 }
@@ -670,6 +691,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
   },
+  loadingMore: { paddingVertical: 16, alignItems: 'center' },
 
   cardWrap: { flex: 1, padding: 4 },
   card: {

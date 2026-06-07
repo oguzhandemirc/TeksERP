@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, ChevronDown, ChevronRight, FileText, Info, Maximize2, Pencil, Printer } from "lucide-react";
+import { Ban, ChevronDown, ChevronRight, FileText, Info, Maximize2, Pencil, Printer, StickyNote } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -259,7 +259,9 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
 
             <ProducedRollsCard wo={wo} />
 
-            {sortedSteps.length > 0 && <RouteDistributionStrip steps={sortedSteps} />}
+            {sortedSteps.length > 0 && (
+              <RouteDistributionStrip steps={sortedSteps} variant="compact" />
+            )}
 
             <div>
               <button
@@ -295,6 +297,12 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       )}
                       <StepStateBadge step={step} />
                     </div>
+                    {step.notes && step.notes.trim() && (
+                      <div className="mt-1.5 flex items-start gap-1 pl-7 text-[11px] text-muted-foreground">
+                        <StickyNote className="mt-0.5 h-3 w-3 shrink-0 opacity-70" />
+                        <span className="whitespace-pre-wrap italic">{step.notes}</span>
+                      </div>
+                    )}
                     {step.currentRolls && step.currentRolls.count > 0 && (
                       <div className="mt-1.5 pl-7">
                         <div className="flex flex-wrap items-center gap-1 text-[11px]">

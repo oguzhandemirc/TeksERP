@@ -45,7 +45,6 @@ interface Props {
 export function TravelerCardPdfDocument({ workOrder, card, qrDataUrl, config }: Props) {
   const sortedSteps = [...workOrder.steps].sort((a, b) => a.stepSequence - b.stepSequence);
   const orderLinks = workOrder.orderLinks ?? [];
-  const isUrgent = sortedSteps.some((s) => s.isUrgent);
   const companyName = config?.companyName?.trim() || COMPANY_NAME;
   const showOperationGrid = config?.showOperationGrid !== false;
   const showNotes = config?.showNotes !== false;
@@ -72,7 +71,6 @@ export function TravelerCardPdfDocument({ workOrder, card, qrDataUrl, config }: 
           <View style={s.idLeft}>
             <View style={s.batchRow}>
               <Text style={s.batch}>{workOrder.batchNumber}</Text>
-              {isUrgent && <Text style={s.urgent}>ACİL</Text>}
             </View>
             <Text style={s.typeText}>
               {workOrderTypeLabels[workOrder.type]}
@@ -236,10 +234,6 @@ const s = StyleSheet.create({
   idLeft: { flex: 1, paddingRight: 10 },
   batchRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   batch: { fontSize: 22, fontWeight: 700, letterSpacing: -0.3 },
-  urgent: {
-    fontSize: 11, fontWeight: 700, color: "#fff", backgroundColor: C.urgent,
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 3, letterSpacing: 1,
-  },
   typeText: { fontSize: 8.5, color: "#333", marginTop: 2 },
   productLine: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5 },
   productCode: {

@@ -43,7 +43,7 @@ export class AuthController {
    *                 example: admin
    *               password:
    *                 type: string
-   *                 example: admin123
+   *                 example: 123123
    *     responses:
    *       200:
    *         description: Başarılı giriş

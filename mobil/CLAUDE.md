@@ -114,6 +114,35 @@ export const API_URL = 'http://192.168.X.X:4000/api'; // Tablet ve sunucu aynı 
 - **`Card` + `onPress` KULLANMA** — iç `Card.Content` dokunmayı yutuyor; tüm alana tıklamak çalışmıyor. `Card`'ı yalnızca pasif görünüm olarak kullan; tıklanabilir olacaksa **`TouchableRipple` ile sar**.
 - Aynısı modal, picker ve grid hücreleri için de geçerli — operatör hücrenin neresine basarsa bassın seçim olmalı.
 
+## Liste Sayfalama — DEFAULT: cursor + infinite scroll
+
+> **Kural:** Bir listeyi sayfalandırman istendiğinde **varsayılan olarak cursor (keyset) + infinite scroll** kullan — offset/`page`+`pageSize` modeli DEĞİL. Offset modeli yalnızca açıkça istenirse veya tablonun hacmi kalıcı olarak küçük kalacaksa (örn. master-data, kalite dereceleri) seçilir. Yüksek hacimli tablolar (`Roll`, `RollMovement`, `RollOperation`, hareket/log geçmişleri) **her zaman** cursor.
+
+**Neden:** Offset, üretim büyüdükçe iki şekilde bozulur — (1) backend `MAX_OFFSET=10000` guard'ı derin sayfada **HTTP 400** atar (pageSize 20 → sayfa 501 sonrası erişilemez), (2) her sayfa + her yenilemede `COUNT(*)` yeniden hesaplanır. Cursor'da ikisi de yok: sabit hız, offset taraması yok, toplam yalnız ilk sayfada `withTotal` ile yaklaşık gelir.
+
+**Backend hazır:** `GET /rolls?mode=cursor&limit=N&cursor=...&withTotal=true` (bkz. `findAllRolls` cursor dalı, `utils/cursor.ts`). Servis tarafında `rollService.getAllCursor(...)` mevcut; benzer endpoint'ler için aynı `mode=cursor` sözleşmesini izle.
+
+**Mobil pattern** (kanonik örnek: `Tambur` "Üretilen Toplar", `KK1` "Tüm Kayıtlar"):
+
+```ts
+const q = useInfiniteQuery({
+  queryKey: ['rolls', 'kk1', 'history'],
+  queryFn: ({ pageParam }) =>
+    rollService.getAllCursor({ limit: 20, cursor: pageParam,
+      filters: { entrySource: 'SUPPLIER_RECEIPT' }, withTotal: !pageParam }),
+  initialPageParam: null as string | null,
+  getNextPageParam: (last) => last.pagination.hasMore ? last.pagination.nextCursor : undefined,
+  enabled: visible,
+  placeholderData: keepPreviousData,
+});
+const rolls = q.data?.pages.flatMap((p) => p.data) ?? [];
+const total = q.data?.pages[0]?.pagination.totalEstimate ?? 0; // yaklaşık
+```
+
+- Liste: `FlashList` + `onEndReached` → `if (q.hasNextPage && !q.isFetchingNextPage) q.fetchNextPage()`, `onEndReachedThreshold={0.6}`, footer'da `ActivityIndicator` (`q.isFetchingNextPage`).
+- Modal listesi için hazır kabuk: **`RemoteListSheet`** (header + loading/error/empty + infinite scroll prop'ları). Yeni geçmiş/liste modalı önce bunu kullanmayı dener.
+- "Önceki / Sonraki" pager + `Sayfa X/Y` **kullanma** — sonsuz akış var; toplam sayıyı başlıkta yaklaşık göster.
+
 ## Ortak Kurallar
 
 - UUID primary key, `createdAt`/`updatedAt` her modelde

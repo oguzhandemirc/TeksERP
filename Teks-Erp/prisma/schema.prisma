@@ -982,7 +982,10 @@ model WorkOrderStep {
   @@index([workOrderId, status])
   @@index([requiredCategoryId])
   @@index([plannedSubcontractorId])
-  // Kurşun kuyruğu: PROCESS_QC istasyonu + bekleyen step filtreleri için
+  // Kurşun+KK2 / Tambur "Açık Kartlar" kuyruğu: station + bekleyen step + sıra.
+  // @@index tam görünür ama DB'de PARTIAL'dır (WHERE status <> 'COMPLETED') —
+  // COMPLETED yığını indekslenmez, açık kuyruk sorgusu O(açık step). Prisma 7
+  // predicate'i drift saymaz. Migration: 20260607010000.
   @@index([stationId, status, isUrgent, priority, startedAt])
   @@map("work_order_steps")
 }

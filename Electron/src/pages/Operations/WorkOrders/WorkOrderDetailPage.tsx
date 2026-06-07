@@ -1,14 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
-import { AnimatedProgress } from "@/components/motion";
 import { formatNumber } from "@/lib/format";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { workOrderService } from "./service";
 import { WorkOrderDetailHeader } from "./WorkOrderDetailHeader";
+import { WorkOrderHealthBand } from "./WorkOrderHealthBand";
+import { WorkOrderSectionNav, type NavSection } from "./WorkOrderSectionNav";
 import { WorkOrderInfoCard } from "./WorkOrderInfoCard";
 import { RouteDistributionStrip } from "./RouteDistributionStrip";
 import { StepWipCard } from "./StepWipCard";
@@ -28,6 +28,7 @@ const LIST_PATH = "/operations/work-orders";
 export function WorkOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const openTarget = useOpenTarget();
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const detail = useQuery({
     queryKey: ["work-order-detail", id],
@@ -46,117 +47,106 @@ export function WorkOrderDetailPage() {
     [sortedSteps],
   );
   const hasOrders = (wo?.orderLinks?.length ?? 0) > 0;
+  const hasProduced = (wo?.producedRolls?.count ?? 0) > 0;
   const orderTotal = useMemo(
     () => (wo?.orderLinks ?? []).reduce((s, l) => s + Number(l.orderLine?.quantity ?? 0), 0),
     [wo?.orderLinks],
   );
-  const progress =
-    wo?.targetQuantity && wo.targetQuantity > 0 && wo.producedRolls
-      ? (wo.producedRolls.warehouse.totalMeters / wo.targetQuantity) * 100
-      : null;
+
+  const navSections = useMemo<NavSection[]>(() => {
+    const list: NavSection[] = [
+      { id: "genel", label: "Genel" },
+      { id: "rota", label: "Rota & Dağılım" },
+    ];
+    if (hasFason) list.push({ id: "dallar", label: "Dallar" });
+    if (hasProduced) list.push({ id: "cikti", label: "Üretilen" });
+    list.push({ id: "siparis", label: "Siparişler" });
+    return list;
+  }, [hasFason, hasProduced]);
 
   return (
     <div className="flex h-full flex-col">
       <WorkOrderDetailHeader wo={wo} onBack={(e) => openTarget(LIST_PATH, e)} />
 
-      <div className="flex-1 overflow-auto p-4">
-        {detail.isLoading && (
-          <div className="mx-auto max-w-6xl space-y-3">
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-44 w-full" />
-          </div>
-        )}
-        {!detail.isLoading && !wo && (
-          <div className="py-16 text-center text-sm text-muted-foreground">İş emri bulunamadı.</div>
-        )}
+      <div ref={scrollRef} className="flex-1 overflow-auto">
+        {wo && <WorkOrderSectionNav sections={navSections} scrollRef={scrollRef} />}
 
-        {wo && (
-          <div className="mx-auto max-w-6xl space-y-6">
-            {/* Üst: Genel bilgi + KPI/ilerleme */}
-            <div className="grid gap-4 lg:grid-cols-3">
-              <div className="lg:col-span-2">
-                <WorkOrderInfoCard wo={wo} />
-              </div>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  {hasOrders && <Kpi label="Sipariş Toplam" value={`${formatNumber(orderTotal, 0)} m`} />}
+        <div className="p-4">
+          {detail.isLoading && (
+            <div className="mx-auto max-w-6xl space-y-3">
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-28 w-full" />
+              <Skeleton className="h-44 w-full" />
+            </div>
+          )}
+          {!detail.isLoading && !wo && (
+            <div className="py-16 text-center text-sm text-muted-foreground">İş emri bulunamadı.</div>
+          )}
+
+          {wo && (
+            <div className="mx-auto max-w-6xl space-y-6">
+              {/* C — Sağlık şeridi (hero) */}
+              <WorkOrderHealthBand wo={wo} />
+
+              {/* Genel bilgi + ikincil KPI'lar */}
+              <section id="genel" className="grid scroll-mt-16 gap-4 lg:grid-cols-3">
+                <div className="lg:col-span-2">
+                  <WorkOrderInfoCard wo={wo} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 content-start lg:grid-cols-1">
                   <Kpi
                     label="Üretime Giren"
                     value={`${formatNumber(wo.inputRolls?.totalMeters ?? 0, 0)} m`}
                     sub={(wo.inputRolls?.count ?? 0) > 0 ? `${wo.inputRolls!.count} top` : undefined}
                   />
-                  <Kpi
-                    label="Üretilen (depo)"
-                    value={`${formatNumber(wo.producedRolls?.warehouse.totalMeters ?? 0, 0)} m`}
-                    sub={(wo.producedRolls?.warehouse.count ?? 0) > 0 ? `${wo.producedRolls!.warehouse.count} top` : undefined}
-                  />
-                  <Card>
-                    <CardContent className="p-3">
-                      <div className="text-xs text-muted-foreground">Termin</div>
-                      <div className="mt-1">
-                        <DeadlineBadge deadline={wo.plannedEndDate} />
-                      </div>
-                    </CardContent>
-                  </Card>
+                  {hasOrders && (
+                    <Kpi label="Sipariş Toplam" value={`${formatNumber(orderTotal, 0)} m`} />
+                  )}
                 </div>
-                {progress != null && (
+              </section>
+
+              <Section id="rota" title="Rota & Dağılım">
+                {sortedSteps.length > 0 && (
                   <Card>
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Üretim İlerlemesi</span>
-                        <span className="font-medium tabular-nums">
-                          {formatNumber(wo.producedRolls!.warehouse.totalMeters, 0)} /{" "}
-                          {formatNumber(wo.targetQuantity!, 0)} m
-                        </span>
-                      </div>
-                      <AnimatedProgress value={progress} className="mt-2 h-1.5" />
+                    <CardContent className="p-4">
+                      <RouteDistributionStrip steps={sortedSteps} />
                     </CardContent>
                   </Card>
                 )}
-              </div>
-            </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {sortedSteps.map((step) => (
+                    <StepWipCard key={step.id} step={step} />
+                  ))}
+                </div>
+              </Section>
 
-            <Section title="Rota & Dağılım">
-              {sortedSteps.length > 0 && (
-                <Card>
-                  <CardContent className="p-4">
-                    <RouteDistributionStrip steps={sortedSteps} />
-                  </CardContent>
-                </Card>
+              {hasFason && wo.id && (
+                <Section id="dallar" title="Dallar (Fason Partileri)">
+                  <BranchGantt workOrderId={wo.id} steps={sortedSteps} />
+                  <BranchLanes workOrderId={wo.id} />
+                </Section>
               )}
-              <div className="grid gap-3 md:grid-cols-2">
-                {sortedSteps.map((step) => (
-                  <StepWipCard key={step.id} step={step} />
-                ))}
-              </div>
-            </Section>
 
-            {hasFason && wo.id && (
-              <Section title="Dallar (Fason Partileri)">
-                <BranchGantt workOrderId={wo.id} steps={sortedSteps} />
-                <BranchLanes workOrderId={wo.id} />
+              {hasProduced && (
+                <Section id="cikti" title="Üretilen Nihai Toplar">
+                  <ProducedRollsCard wo={wo} />
+                </Section>
+              )}
+
+              <Section id="siparis" title="Bağlı Siparişler">
+                <OrderLinksCard wo={wo} />
               </Section>
-            )}
-
-            {wo.producedRolls && wo.producedRolls.count > 0 && (
-              <Section title="Üretilen Nihai Toplar">
-                <ProducedRollsCard wo={wo} />
-              </Section>
-            )}
-
-            <Section title="Bağlı Siparişler">
-              <OrderLinksCard wo={wo} />
-            </Section>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-3">
+    <section id={id} className="scroll-mt-16 space-y-3">
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{title}</h2>
       {children}
     </section>

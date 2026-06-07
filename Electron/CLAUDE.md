@@ -173,7 +173,7 @@ Yenisi için onay al. Mevcutlar:
 
 ## Test Kullanıcıları
 
-`admin / admin123` (seed'de 42 permission). Diğer 6 test kullanıcısı (`mehmet.planlama, ali.operator, ayse.kalite, fatma.satis, ali.kursun, ahmet.depo` — şifre `test123`) **yetkisiz başlar** ve admin UI'sından (`/admin/users/:id/permissions`) tek tek izin atanmadıkça uygulamaya giremez (`canEnterApp` false).
+`admin / 123123` (seed'de 42 permission). Diğer 6 test kullanıcısı (`mehmet.planlama, ali.operator, ayse.kalite, fatma.satis, ali.kursun, ahmet.depo` — şifre `test123`) **yetkisiz başlar** ve admin UI'sından (`/admin/users/:id/permissions`) tek tek izin atanmadıkça uygulamaya giremez (`canEnterApp` false).
 
 ## Yeni Sayfa Kontrol Listesi
 

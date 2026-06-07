@@ -7,12 +7,19 @@ import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
 import { safeFormat } from "@/lib/format";
 import type { WorkOrder } from "./types";
 
-function progressOf(wo: WorkOrder): { done: number; total: number; pct: number } {
-  const total = wo.steps?.length ?? 0;
-  const done =
-    wo.steps?.filter((s) => s.status === "COMPLETED" || s.status === "SKIPPED").length ?? 0;
-  return { done, total, pct: total === 0 ? 0 : Math.round((done / total) * 100) };
+// İlerleme = üretimden ÇIKAN ÷ üretime GİREN (detay sağlık şeridiyle birebir aynı).
+// Hedef metraj %99 girilmediğinden hedef-bazlı oran kullanılmaz. Tamamlanan-adım
+// sayımı da ÇOKLU-DALDA yanıltıcıydı (adımlar yeniden açıldığı için hep ACTIVE → 0/N);
+// çıkan/giren gerçek "ne kadar bitti"yi verir.
+function progressOf(wo: WorkOrder): { input: number; output: number; pct: number; hasFlow: boolean } {
+  const input = wo.inputMeters ?? 0;
+  const output = wo.producedMeters ?? 0;
+  const hasFlow = input > 0;
+  const pct = hasFlow ? Math.min(100, Math.round((output / input) * 100)) : 0;
+  return { input, output, pct, hasFlow };
 }
+
+const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
 
 export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
@@ -39,9 +46,16 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
           <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
             <div className="h-full bg-foreground/60 transition-all" style={{ width: `${p.pct}%` }} />
           </div>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {p.done}/{p.total}
-          </span>
+          {p.hasFlow ? (
+            <span className="text-xs tabular-nums">
+              <span className="font-medium">%{p.pct}</span>
+              <span className="ml-1 text-muted-foreground">
+                ({fmtM(p.output)} / {fmtM(p.input)} m)
+              </span>
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
         </div>
       );
     },

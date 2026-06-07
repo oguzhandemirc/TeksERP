@@ -47,4 +47,4 @@ Tambur'dan çıkan top **kesinlikle önce depoya** geçer (`status=WAREHOUSE`). 
 
 ## Test Kullanıcıları
 
-En sık kullanılan: `admin` / `admin123` (tam yetki). Seed kullanıcılar `Teks-Erp/ARCHITECTURE.md §13`'te listeli. Admin dışı tüm kullanıcılar `test123` şifresini kullanır.
+En sık kullanılan: `admin` / `123123` (tam yetki). Seed kullanıcılar `Teks-Erp/ARCHITECTURE.md §13`'te listeli. Admin dışı tüm kullanıcılar `test123` şifresini kullanır.

@@ -127,6 +127,41 @@ export interface RollHistoryPayload {
   events: RollHistoryEvent[];
 }
 
+/**
+ * Top iptal (soft-delete) önizlemesi — operatöre silmeden ÖNCE gösterilir.
+ * Yıkıcı işlem kuralı: somut etki (top hangi istasyonda/iş emrinde aktif)
+ * net listelenir, soyut "X kayıt etkilenecek" yetmez. softDelete'in guard
+ * sırasıyla birebir aynı mantık döner.
+ */
+export interface RollCancelPreview {
+  rollId: string;
+  barcode: string | null;
+  status: RollStatus;
+  itemName: string | null;
+  colorName: string | null;
+  initialQty: number;
+  width: number | null;
+  /** Hard-block yoksa true — operatör (gerekirse onaylayarak) iptal edebilir. */
+  canCancel: boolean;
+  /** canCancel=false ise neden (Türkçe, softDelete mesajıyla aynı). */
+  blockReason: string | null;
+  /**
+   * İstasyonda / iş emrinde aktif top mu? true ise iptal için bilinçli onay
+   * (confirmActive) ŞART — uyarısız sessiz iptali engeller.
+   */
+  requiresConfirm: boolean;
+  /** Aktifse şu an nerede (istasyon + iş emri). */
+  activeAt: {
+    stepId: string;
+    stationName: string | null;
+    stationKind: StationKind | null;
+    workOrderId: string;
+    batchNumber: string | null;
+  } | null;
+  /** Kapanmamış (açık) hareket sayısı. */
+  openMovementCount: number;
+}
+
 function operationLabel(type: RollOperationType): string {
   switch (type) {
     case "KURSUN_APPLIED":
@@ -184,10 +219,16 @@ export class InventoryService {
     },
     userId?: string
   ): Promise<ApiResponse<Roll>> {
-    // Verify item exists
-    const item = await prisma.item.findUnique({ where: { id: data.itemId } });
-    if (!item) {
-      throw AppError.notFound("Ürün (Item) bulunamadı");
+    // Ürün var VE aktif olmalı. Soft-delete (isActive=false) edilmiş ürünle
+    // giriş yapılamaz — picker pasifleri gizler ama önceden seçili/persist
+    // edilmiş itemId backend'e kadar gelebiliyordu (renk/özellik kontrolleriyle
+    // aynı sertlik).
+    const item = await prisma.item.findUnique({
+      where: { id: data.itemId },
+      select: { id: true, isActive: true },
+    });
+    if (!item || !item.isActive) {
+      throw AppError.notFound("Ürün bulunamadı veya pasif (silinmiş)");
     }
 
     // Renk verilmişse: var ve aktif olmalı + Item'ın allowed listesindeyse listede
@@ -1016,7 +1057,140 @@ export class InventoryService {
    * - currentStepId temizlenir
    * - Etkilenen step'lerin status'u recompute edilir
    */
-  async softDelete(id: string, userId?: string): Promise<ApiResponse<Roll>> {
+  /**
+   * Top iptal önizlemesi (GET /rolls/:id/cancel-preview). Salt-okunur.
+   * Operatör KK1'de "Sil"e basınca çağrılır → modalda somut etki gösterilir.
+   * Sıcak liste yoluna (rolls listesi) DOKUNMAZ — yalnız bu talep-anında
+   * endpoint join taşır, böylece liste sorgusu hafif kalır.
+   */
+  async getCancelPreview(id: string): Promise<ApiResponse<RollCancelPreview>> {
+    const roll = await prisma.roll.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        initialQty: true,
+        width: true,
+        currentStepId: true,
+        shipmentId: true,
+        item: { select: { name: true } },
+        color: { select: { name: true } },
+        currentStep: {
+          select: {
+            id: true,
+            station: { select: { name: true, kind: true } },
+            workOrder: { select: { id: true, batchNumber: true } },
+          },
+        },
+      },
+    });
+    if (!roll) {
+      throw AppError.notFound("Top bulunamadı");
+    }
+
+    // Açık (kapanmamış) hareket sayısı — currentStepId null olsa bile aktiflik
+    // sinyali olabilir. [rollId, enteredAt desc] indeksli.
+    const openMovementCount = await prisma.rollMovement.count({
+      where: { rollId: id, exitedAt: null },
+    });
+
+    // activeAt: öncelik currentStep; yoksa en güncel açık movement'ın step'i.
+    let activeAt: RollCancelPreview["activeAt"] = null;
+    if (roll.currentStep) {
+      activeAt = {
+        stepId: roll.currentStep.id,
+        stationName: roll.currentStep.station?.name ?? null,
+        stationKind: roll.currentStep.station?.kind ?? null,
+        workOrderId: roll.currentStep.workOrder.id,
+        batchNumber: roll.currentStep.workOrder.batchNumber,
+      };
+    } else if (openMovementCount > 0) {
+      const mv = await prisma.rollMovement.findFirst({
+        where: { rollId: id, exitedAt: null },
+        orderBy: { enteredAt: "desc" },
+        select: {
+          step: {
+            select: {
+              id: true,
+              station: { select: { name: true, kind: true } },
+              workOrder: { select: { id: true, batchNumber: true } },
+            },
+          },
+        },
+      });
+      if (mv?.step) {
+        activeAt = {
+          stepId: mv.step.id,
+          stationName: mv.step.station?.name ?? null,
+          stationKind: mv.step.station?.kind ?? null,
+          workOrderId: mv.step.workOrder.id,
+          batchNumber: mv.step.workOrder.batchNumber,
+        };
+      }
+    }
+
+    // ── Hard-block durumları: softDelete guard sırasıyla BİREBİR aynı ──
+    let blockReason: string | null = null;
+    if (
+      roll.status === RollStatus.CANCELLED ||
+      roll.status === RollStatus.SCRAP
+    ) {
+      blockReason = `Top zaten iptal/hurda: ${roll.barcode}`;
+    } else if (roll.status === RollStatus.AT_SUBCONTRACTOR) {
+      blockReason = "Fasondaki top iptal edilemez — önce fason mal kabul yapın";
+    } else {
+      const openDispatch = await prisma.subcontractorDispatchItem.findFirst({
+        where: { rollId: id, dispatch: { cancelledAt: null } },
+        select: { id: true },
+      });
+      if (openDispatch) {
+        blockReason =
+          "Bu top açık bir fason sevkiyatına bağlı — önce sevki iptal et veya kabul yap";
+      } else if (roll.shipmentId) {
+        const ship = await prisma.shipment.findUnique({
+          where: { id: roll.shipmentId },
+          select: { status: true, shipmentNo: true },
+        });
+        if (
+          ship &&
+          (ship.status === ShipmentStatus.PREPARING ||
+            ship.status === ShipmentStatus.READY)
+        ) {
+          blockReason = `Bu top hazırlanan/bekleyen bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`;
+        }
+      }
+    }
+
+    const canCancel = blockReason === null;
+    // İstasyonda/iş emrinde aktif top: iptal edilebilir ama bilinçli onay şart.
+    const requiresConfirm =
+      canCancel && (roll.currentStepId != null || openMovementCount > 0);
+
+    return {
+      success: true,
+      data: {
+        rollId: roll.id,
+        barcode: roll.barcode,
+        status: roll.status,
+        itemName: roll.item?.name ?? null,
+        colorName: roll.color?.name ?? null,
+        initialQty: Number(roll.initialQty),
+        width: roll.width != null ? Number(roll.width) : null,
+        canCancel,
+        blockReason,
+        requiresConfirm,
+        activeAt,
+        openMovementCount,
+      },
+    };
+  }
+
+  async softDelete(
+    id: string,
+    userId?: string,
+    opts?: { confirmActive?: boolean },
+  ): Promise<ApiResponse<Roll>> {
     const existing = await prisma.roll.findUnique({ where: { id } });
     if (!existing) {
       throw AppError.notFound("Top bulunamadı");
@@ -1068,6 +1242,27 @@ export class InventoryService {
       ) {
         throw AppError.conflict(
           `Bu top hazırlanan/bekleyen bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`,
+        );
+      }
+    }
+
+    // İstasyonda / iş emrinde AKTİF top (currentStepId set VEYA açık movement):
+    // bilinçli onay (confirmActive) olmadan iptal edilmez. Hard-block değil —
+    // operatör önizlemeyi onaylarsa geçer. Amaç: yanlış girilip sonradan bir
+    // istasyona okutulmuş bir topun KK1'den UYARISIZ düşürülmesini engellemek
+    // (silme o adımdan çeker + step status'unu geri sarar). Önizleme endpoint'i
+    // (getCancelPreview) operatöre nerede aktif olduğunu gösterir.
+    if (!opts?.confirmActive) {
+      let activeAtStation = existing.currentStepId != null;
+      if (!activeAtStation) {
+        const openMv = await prisma.rollMovement.count({
+          where: { rollId: id, exitedAt: null },
+        });
+        activeAtStation = openMv > 0;
+      }
+      if (activeAtStation) {
+        throw AppError.conflict(
+          "Bu top bir istasyonda/iş emrinde aktif — iptal için önizlemeyi onaylamanız gerekiyor.",
         );
       }
     }

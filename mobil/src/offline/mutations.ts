@@ -12,6 +12,9 @@ import { queryClient } from './queryClient';
 import {
   kursunQcService,
   type CompleteQc2Request,
+  type ReportErrorRequest,
+  type DeleteErrorRequest,
+  type FinishStepRequest,
 } from '../services/kursunQc.service';
 import { rollService, type InitialEntryRequest } from '../services/roll.service';
 import { tamburService } from '../services/tambur.service';
@@ -31,9 +34,13 @@ import type {
 
 export const STATION_MUT = {
   QC2_COMPLETE: ['station', 'qc2-complete'] as const,
+  QC2_REPORT_ERROR: ['station', 'qc2-report-error'] as const,
+  QC2_DELETE_ERROR: ['station', 'qc2-delete-error'] as const,
+  QC2_FINISH_STEP: ['station', 'qc2-finish-step'] as const,
   KURSUN_FINISH: ['station', 'kursun-finish'] as const,
   TAMBUR_FINALIZE_OPEN_FABRIC: ['station', 'tambur-finalize-open-fabric'] as const,
   KK1_CREATE_ENTRY: ['station', 'kk1-create-entry'] as const,
+  KK1_SCRAP: ['station', 'kk1-scrap'] as const,
   FASON_KABUL_RECEIVE: ['station', 'fason-kabul-receive'] as const,
   FASON_SEVK_DISPATCH: ['station', 'fason-sevk-dispatch'] as const,
   KARTELA_SEVK_DISPATCH: ['station', 'kartela-sevk-dispatch'] as const,
@@ -57,6 +64,29 @@ export function registerStationMutationDefaults(): void {
   // offline'da pause + AsyncStorage persist + online resume.
   queryClient.setMutationDefaults(STATION_MUT.QC2_COMPLETE, {
     mutationFn: (vars: CompleteQc2Request) => kursunQcService.completeQc2(vars),
+    ...OFFLINE_AWARE,
+  });
+  // Leke (RollError) ekleme — client-üretimi UUID (clientErrorId) vars'ta.
+  // Backend idempotent: aynı id ile 2. çağrı mevcut kaydı döner (PK + P2002
+  // catch). KK1 client-barkod pattern'iyle aynı. Operatör offline'ken leke
+  // girişine devam edebilsin diye QC2_COMPLETE ile birlikte kuyruğa alınır —
+  // ikisinden biri eksikse offline akış yarım kalır.
+  queryClient.setMutationDefaults(STATION_MUT.QC2_REPORT_ERROR, {
+    mutationFn: (vars: ReportErrorRequest) => kursunQcService.reportError(vars),
+    ...OFFLINE_AWARE,
+  });
+  // Leke silme — backend idempotent: kayıt yoksa (replay veya offline'da
+  // ekle→sil) başarı döner. Henüz sync olmamış (paused) ekleme silinirse ekran
+  // tarafında o mutation kuyruktan iptal edilir, buraya hiç düşmez.
+  queryClient.setMutationDefaults(STATION_MUT.QC2_DELETE_ERROR, {
+    mutationFn: (vars: DeleteErrorRequest) => kursunQcService.deleteError(vars),
+    ...OFFLINE_AWARE,
+  });
+  // Adımı kapat — barkodlu topların hepsi KK2 işaretliyse topluca Tambur'a taşır.
+  // Resume FIFO: önce QC2/leke mutation'ları, sonra bu. Backend idempotent: adım
+  // zaten kapalıysa (açık movement yok) başarı döner → replay güvenli.
+  queryClient.setMutationDefaults(STATION_MUT.QC2_FINISH_STEP, {
+    mutationFn: (vars: FinishStepRequest) => kursunQcService.finishStep(vars),
     ...OFFLINE_AWARE,
   });
   // Açık kumaş bitirme (fason dönüşü) — barkodlu QC2 ile aynı offline pattern.
@@ -83,6 +113,16 @@ export function registerStationMutationDefaults(): void {
   queryClient.setMutationDefaults(STATION_MUT.KK1_CREATE_ENTRY, {
     mutationFn: (vars: InitialEntryRequest) =>
       rollService.createInitialEntry(vars),
+    ...OFFLINE_AWARE,
+  });
+  // KK1 top iptali (Sil) — offline-aware. Backend softDelete idempotent: top
+  // zaten CANCELLED/SCRAP ise no-op başarı döner. STOCK top istasyonda aktif
+  // olmadığı için confirmActive gerekmez (önizleme online-only); offline iptal
+  // confirmActive=false gider — top bu arada bir istasyonda aktifleştiyse
+  // backend conflict atar, replay'de optimistic kaldırma rollback olur.
+  queryClient.setMutationDefaults(STATION_MUT.KK1_SCRAP, {
+    mutationFn: (vars: { id: string; confirmActive: boolean }) =>
+      rollService.scrap(vars.id, vars.confirmActive),
     ...OFFLINE_AWARE,
   });
   // Fason Kabul — boyahaneden dönen malın kabul kaydı. Backend idempotent:

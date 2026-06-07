@@ -654,6 +654,20 @@ export class WorkOrderService {
         },
       };
     }
+    // Fason Sevk picker: yalnız fason (EXTERNAL) adımı SEVKE AÇIK olan WO'lar.
+    // SKIPPED adım sevke kapalı; COMPLETED EXTERNAL adım uygundur (ek parti için
+    // yeniden açılır — bkz. çoklu sevk). StepStatus'ta CANCELLED yok → tek dışlama
+    // SKIPPED. Önceden client-side `steps.some(EXTERNAL)` filtresi vardı: server
+    // sayfasını daraltıyor, pager'ı yanıltıyor (sayfa say. fason-dışı WO'ları da
+    // sayar) ve over-fetch yapıyordu → sunucuya taşındı.
+    if (req.query.hasOpenExternalStep === "true") {
+      (where as Record<string, unknown>).steps = {
+        some: {
+          station: { type: "EXTERNAL" },
+          status: { not: "SKIPPED" },
+        },
+      };
+    }
     const withOrderDetail = req.query.withOrderDetail === "true";
 
     const select = {
@@ -727,7 +741,7 @@ export class WorkOrderService {
       ]);
 
       const hasMore = items.length > limit;
-      const data = hasMore ? items.slice(0, limit) : items;
+      const data = await this.withProductionMeters(hasMore ? items.slice(0, limit) : items);
       const last = data[data.length - 1] as Record<string, unknown> | undefined;
       const nextCursor = hasMore ? buildNextDynamicCursor(last, sortBy) : null;
 
@@ -747,10 +761,11 @@ export class WorkOrderService {
     const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
     const { skip, take } = buildPagination(params.page, params.pageSize);
 
-    const [data, total] = await Promise.all([
+    const [rawData, total] = await Promise.all([
       prisma.workOrder.findMany({ where, orderBy, skip, take, select }),
       prisma.workOrder.count({ where }),
     ]);
+    const data = await this.withProductionMeters(rawData);
 
     return {
       success: true,
@@ -762,6 +777,76 @@ export class WorkOrderService {
         totalPages: Math.ceil(total / params.pageSize),
       },
     };
+  }
+
+  /**
+   * Liste WO'larına ÜRETİLEN DEPO METRAJINI ekler (ilerleme kolonu için). Detay
+   * sayfasının `producedRolls.warehouse.totalMeters` tanımıyla aynı: WO adımlarında
+   * üretilmiş (producedInStepId), orijinal Tambur kesimi (parent=SUBCONTRACTOR_RETURN),
+   * FIRE/A1 olmayan rulolar; initialQty toplamı. Tek groupBy ile sayfa başına 1 sorgu.
+   */
+  private async withProductionMeters<
+    T extends { id: string; steps: { id: string; stepSequence: number }[] },
+  >(wos: T[]): Promise<(T & { producedMeters: number; inputMeters: number })[]> {
+    const stepIds = wos.flatMap((w) => w.steps.map((s) => s.id));
+    if (stepIds.length === 0) {
+      return wos.map((w) => ({ ...w, producedMeters: 0, inputMeters: 0 }));
+    }
+
+    // ÇIKAN — üretim çıktısı; detay producedRolls.warehouse ile AYNI tanım
+    // (producedInStepId ∈ adımlar, parent=SUBCONTRACTOR_RETURN, FIRE/A1 hariç).
+    const producedRows = await prisma.roll.groupBy({
+      by: ["producedInStepId"],
+      where: {
+        producedInStepId: { in: stepIds },
+        parent: { entrySource: RollEntrySource.SUBCONTRACTOR_RETURN },
+        qualityGrade: { notIn: ["FIRE", "A1"] },
+      },
+      _sum: { initialQty: true },
+    });
+    const producedByStep = new Map<string, number>();
+    for (const r of producedRows) {
+      if (r.producedInStepId) producedByStep.set(r.producedInStepId, Number(r._sum.initialQty ?? 0));
+    }
+
+    // GİREN — her WO'nun İLK adımına (steps stepSequence asc → steps[0]) RollMovement
+    // ile giren ayrık topların initialQty toplamı; status≠CANCELLED/STOCK. Detay
+    // inputRolls ile AYNI tanım, sayfa başına 2 sorguyla batched.
+    const inputByStep = new Map<string, number>();
+    const firstStepIds = wos
+      .map((w) => w.steps[0]?.id)
+      .filter((id): id is string => Boolean(id));
+    if (firstStepIds.length > 0) {
+      const moves = await prisma.rollMovement.findMany({
+        where: { workOrderStepId: { in: firstStepIds } },
+        select: { rollId: true, workOrderStepId: true },
+        distinct: ["rollId", "workOrderStepId"],
+      });
+      const rollIds = [...new Set(moves.map((m) => m.rollId))];
+      if (rollIds.length > 0) {
+        const rolls = await prisma.roll.findMany({
+          where: {
+            id: { in: rollIds },
+            status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
+          },
+          select: { id: true, initialQty: true },
+        });
+        const qtyByRoll = new Map<string, number>();
+        for (const r of rolls) qtyByRoll.set(r.id, Number(r.initialQty ?? 0));
+        for (const m of moves) {
+          if (!m.workOrderStepId) continue;
+          const qty = qtyByRoll.get(m.rollId);
+          if (qty == null) continue; // CANCELLED/STOCK elendi
+          inputByStep.set(m.workOrderStepId, (inputByStep.get(m.workOrderStepId) ?? 0) + qty);
+        }
+      }
+    }
+
+    return wos.map((w) => ({
+      ...w,
+      producedMeters: w.steps.reduce((sum, st) => sum + (producedByStep.get(st.id) ?? 0), 0),
+      inputMeters: inputByStep.get(w.steps[0]?.id ?? "") ?? 0,
+    }));
   }
 
   /**

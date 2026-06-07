@@ -90,7 +90,7 @@ function BranchLaneRow({ branch }: { branch: WorkOrderBranch }) {
                 key={p.label}
                 className="rounded bg-primary/10 px-1.5 py-0.5 tabular-nums text-primary"
               >
-                {p.label}: {p.count} · {formatNumber(p.totalMeters, 0)} m
+                {p.label}: {p.count} top · {formatNumber(p.totalMeters, 0)} m
               </span>
             ))
           ) : (

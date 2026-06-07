@@ -255,10 +255,15 @@ export default function TamburScreen() {
     colorId: string | null;
     colorName: string | null;
     width: number | null;
+    status: string;
   } | null>(null);
   const [recutCutLength, setRecutCutLength] = useState('');
   // Recut (Top Kesme) — açık kumaş akışıyla aynı: manuel/otomatik mod.
   const [recutMode, setRecutMode] = useState<'manual' | 'auto'>('manual');
+  // Ham (renksiz STOCK) top kesiminde her parçanın hedefi: STOCK = üretime devam
+  // (yeni iş emrine bağlanır), WAREHOUSE = sevke hazır ham-bitmiş. Bitmiş/renkli
+  // top kesiminde yok sayılır.
+  const [recutRawDestination, setRecutRawDestination] = useState<'STOCK' | 'WAREHOUSE'>('STOCK');
   // "Kime" — sipariş kısayollarına ek olarak listeden (müşteriye göre aranabilir)
   // açık sipariş satırı seçme picker'ı. Her iki kesim akışı paylaşır.
   const [kimePickerOpen, setKimePickerOpen] = useState(false);
@@ -731,18 +736,21 @@ export default function TamburScreen() {
       qualityGrade,
       targetOrderLineId,
       markedForKartela,
+      rawDestination,
     }: {
       rollId: string;
       cutLength: number;
       qualityGrade: string;
       targetOrderLineId?: string | null;
       markedForKartela?: boolean;
+      rawDestination?: 'STOCK' | 'WAREHOUSE';
     }) =>
       tamburService.cutWarehouseRoll(rollId, {
         cutLength,
         qualityGrade,
         targetOrderLineId: targetOrderLineId ?? null,
         markedForKartela: markedForKartela ?? false,
+        rawDestination,
       }),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1009,11 +1017,16 @@ export default function TamburScreen() {
         Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: trimmed });
         return;
       }
-      if (r.status !== 'WAREHOUSE') {
+      // Bitmiş depo topu (WAREHOUSE) klasik re-cut; renksiz ham stok (STOCK +
+      // colorId yok) da kesilebilir — çıktı operatör hedefine göre ham STOCK
+      // (üretime devam) veya ham-bitmiş WAREHOUSE (sevke hazır). Diğer statüler
+      // (IN_PRODUCTION vb.) kesime uygun değil.
+      const isRawStock = r.status === 'STOCK' && (r.colorId ?? null) === null;
+      if (r.status !== 'WAREHOUSE' && !isRawStock) {
         Toast.show({
           type: 'error',
           text1: 'Top kesime uygun değil',
-          text2: `Durum: ${r.status} (depodaki toplar kesilebilir)`,
+          text2: `Durum: ${r.status} (depodaki bitmiş toplar veya renksiz ham stok kesilebilir)`,
         });
         return;
       }
@@ -1026,7 +1039,10 @@ export default function TamburScreen() {
         colorId: r.colorId ?? null,
         colorName: r.color?.name ?? null,
         width: r.width ?? null,
+        status: r.status,
       });
+      // Ham kesimde varsayılan hedef: üretime devam (STOCK).
+      setRecutRawDestination('STOCK');
       setRecutTargetLineId(null);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
@@ -1064,12 +1080,16 @@ export default function TamburScreen() {
       Toast.show({ type: 'error', text1: 'Kalite seçilmedi' });
       return;
     }
+    // Ham (renksiz STOCK) top → operatörün seçtiği parça hedefini gönder.
+    const isRawStock =
+      recutRollMeta.status === 'STOCK' && recutRollMeta.colorId == null;
     cutWarehouseRollMutation.mutate({
       rollId: recutResolvedRollId,
       cutLength: cut,
       qualityGrade: recutQualityGrade,
       targetOrderLineId: recutTargetLineId,
       markedForKartela: markAsKartela,
+      rawDestination: isRawStock ? recutRawDestination : undefined,
     });
   };
 
@@ -1201,6 +1221,7 @@ export default function TamburScreen() {
     setRecutTargetLineId(null);
     setRecutCutLength('');
     setRecutQualityGrade('1.KALITE');
+    setRecutRawDestination('STOCK');
     setRecutLastParentRoll(null);
   };
 
@@ -1432,6 +1453,13 @@ export default function TamburScreen() {
                     {recutRollMeta.colorName ? ` · ${recutRollMeta.colorName}` : ''}
                     {recutRollMeta.width != null ? ` · ${recutRollMeta.width} cm` : ''}
                   </Text>
+                  {/* Renksiz top = ham kumaş — etiket ham basılır, "bitmiş" değil. */}
+                  {recutRollMeta.colorId == null && (
+                    <View style={styles.hamBadge}>
+                      <Icon source="alpha-h-circle-outline" size={14} color="#fff" />
+                      <Text style={styles.hamBadgeText}>HAM KUMAŞ</Text>
+                    </View>
+                  )}
                 </View>
                 <View
                   style={[styles.headerBoxes, compact && styles.headerBoxesCompact]}
@@ -1532,6 +1560,58 @@ export default function TamburScreen() {
                       })}
                     </View>
                   </View>
+
+                  {/* Ham (renksiz STOCK) top → her parçanın hedefi: üretime devam
+                      (ham STOCK, yeni iş emrine bağlanır) veya sevke hazır
+                      (ham-bitmiş WAREHOUSE). Renkli/bitmiş topta gösterilmez. */}
+                  {recutRollMeta.status === 'STOCK' &&
+                    recutRollMeta.colorId == null && (
+                      <View style={styles.rawDestBlock}>
+                        <Text style={styles.entryLabel}>Ham parça hedefi</Text>
+                        <View style={styles.rawDestToggle}>
+                          {(
+                            [
+                              { key: 'STOCK', label: 'Üretime devam', icon: 'progress-wrench' },
+                              { key: 'WAREHOUSE', label: 'Sevke hazır', icon: 'truck-outline' },
+                            ] as const
+                          ).map((opt) => {
+                            const active = recutRawDestination === opt.key;
+                            return (
+                              <TouchableRipple
+                                key={opt.key}
+                                borderless
+                                onPress={() => setRecutRawDestination(opt.key)}
+                                style={[
+                                  styles.rawDestChip,
+                                  active && styles.rawDestChipActive,
+                                ]}
+                              >
+                                <View style={styles.rawDestChipInner}>
+                                  <Icon
+                                    source={opt.icon}
+                                    size={18}
+                                    color={active ? '#fff' : '#7c3aed'}
+                                  />
+                                  <Text
+                                    style={[
+                                      styles.rawDestChipText,
+                                      active && styles.rawDestChipTextActive,
+                                    ]}
+                                  >
+                                    {opt.label}
+                                  </Text>
+                                </View>
+                              </TouchableRipple>
+                            );
+                          })}
+                        </View>
+                        <Text style={styles.rawDestHint}>
+                          {recutRawDestination === 'STOCK'
+                            ? 'Parça ham stoğa döner — boyahane/KK2/tambur için yeni iş emrine bağlanabilir.'
+                            : 'Parça ham-bitmiş olarak depoya iner — ham etiketle sevk edilebilir.'}
+                        </Text>
+                      </View>
+                    )}
 
                   {/* "Kalanı kullan" butonu kaldırıldı — boş input zaten kalanı
                       keser; footer "Kes — Kalanı Kes (X mt)" ile bunu söyler
@@ -2248,10 +2328,13 @@ export default function TamburScreen() {
         </RightPanelDrawer>
       )}
 
-      {/* Aktif yazdırma — LabelPrinter expo-print ile PDF/sistem yazdırma açar */}
+      {/* Aktif yazdırma — LabelPrinter expo-print ile PDF/sistem yazdırma açar.
+          Renksiz top = ham kumaş → ham etiket (ROLL_RAW); renkli/boyanmış =
+          bitmiş (ROLL_FINISHED). Tambur ham kesim parçaları renksiz olduğundan
+          ham etiketle basılır. */}
       <LabelPrinter
         roll={activePrintRoll}
-        kind="ROLL_FINISHED"
+        kind={activePrintRoll?.colorId == null ? 'ROLL_RAW' : 'ROLL_FINISHED'}
         labelContext={labelContext}
         onDone={() => {
           setActivePrintRoll(null);
@@ -4471,6 +4554,44 @@ const styles = StyleSheet.create({
   cutModeChipActive: { backgroundColor: '#7c3aed' },
   cutModeChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
   cutModeChipTextActive: { color: '#fff' },
+  // Ham kumaş rozeti (header) — renksiz top ham etiketle basılır işareti.
+  hamBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    marginTop: 6,
+    backgroundColor: '#7c3aed',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  hamBadgeText: { color: '#fff', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
+  // Ham parça hedefi seçimi (üretime devam / sevke hazır).
+  rawDestBlock: { marginTop: 14 },
+  rawDestToggle: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
+  rawDestChip: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: '#c4b5fd',
+    backgroundColor: '#f5f3ff',
+  },
+  rawDestChipActive: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
+  rawDestChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  rawDestChipText: { fontSize: 14, fontWeight: '700', color: '#6d28d9' },
+  rawDestChipTextActive: { color: '#fff' },
+  rawDestHint: { marginTop: 6, fontSize: 12, color: '#64748b', lineHeight: 16 },
   // Top Kesme (recut) formu hâlâ klasik başlık + auto-info kullanıyor.
   cutHeaderRow: {
     flexDirection: 'row',

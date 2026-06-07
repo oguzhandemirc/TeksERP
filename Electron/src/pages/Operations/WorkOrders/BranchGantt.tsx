@@ -106,7 +106,7 @@ export function BranchGantt({
                   <div key={ci} className="px-0.5">
                     <div
                       className={cn(
-                        "flex h-6 items-center justify-center rounded text-[9px] tabular-nums",
+                        "flex h-9 flex-col items-center justify-center gap-0 rounded leading-tight tabular-nums",
                         isCurrent
                           ? cn("font-semibold", CUR_CELL[b.status])
                           : isPassed
@@ -115,11 +115,20 @@ export function BranchGantt({
                       )}
                       title={
                         isCurrent
-                          ? `${columns[ci]}: ${pos!.count} parça · ${formatNumber(pos!.meters, 0)} m`
+                          ? `${columns[ci]}: ${pos!.count} top · ${formatNumber(pos!.meters, 0)} m`
                           : undefined
                       }
                     >
-                      {isCurrent ? `${pos!.count}·${formatNumber(pos!.meters, 0)}` : isPassed ? "·" : ""}
+                      {isCurrent ? (
+                        <>
+                          <span className="text-[8.5px]">{pos!.count} top</span>
+                          <span className="text-[8.5px] opacity-90">
+                            {formatNumber(pos!.meters, 0)} m
+                          </span>
+                        </>
+                      ) : isPassed ? (
+                        <span className="text-[11px] opacity-40">·</span>
+                      ) : null}
                     </div>
                   </div>
                 );

@@ -392,8 +392,10 @@ export class LabelService {
   /**
    * Rolün etiket HTML'i — tek doğru kaynak. Hem mobil (expo-print) hem Electron
    * (LabelPreview iframe) bu HTML'i tüketir. Kind otomatik tespit edilir:
-   * renksiz + STOCK + SUPPLIER_RECEIPT → ROLL_RAW, aksi halde ROLL_FINISHED.
-   * Caller `?kind=` ile override edebilir.
+   * RENKSİZ (colorId == null) = ham kumaş → ROLL_RAW, aksi halde ROLL_FINISHED.
+   * Renk = boyanmış = bitmiş; renksiz top hangi statüde olursa olsun (tedarikçi
+   * ham stoğu, tambur'da kesilen ham parça, ham talep eden müşteriye giden
+   * ham-bitmiş depo topu) ham etiketle basılır. Caller `?kind=` ile override eder.
    */
   async getRollLabelHtml(
     rollId: string,
@@ -405,17 +407,13 @@ export class LabelService {
 
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
-      select: { colorId: true, entrySource: true, status: true },
+      select: { colorId: true },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
     const kind: LabelKind =
       kindOverride ??
-      (roll.colorId == null &&
-      roll.entrySource === "SUPPLIER_RECEIPT" &&
-      roll.status === "STOCK"
-        ? LabelKind.ROLL_RAW
-        : LabelKind.ROLL_FINISHED);
+      (roll.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED);
 
     const template = await prisma.labelTemplate.findFirst({
       where: { kind, isDefault: true, isActive: true },

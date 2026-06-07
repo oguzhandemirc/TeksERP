@@ -171,7 +171,7 @@ export default function FasonSevkGecmisiScreen() {
 
   return (
     <ScreenChrome
-      title="Fason Sevk Geçmişi"
+      title="Sevk Geçmişi"
       onBack={() => nav.goBack()}
       headerExtras={
         <RefreshButton

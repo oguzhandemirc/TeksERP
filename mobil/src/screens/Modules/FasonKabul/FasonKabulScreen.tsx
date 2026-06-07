@@ -54,6 +54,7 @@ import dayjs from 'dayjs';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import RefreshButton from '../../../components/RefreshButton';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import RemoteListSheet from '../../../components/RemoteListSheet';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import Pager from '../../../components/Pager';
@@ -257,6 +258,22 @@ export default function FasonKabulScreen() {
   // Modal açılışında otomatik refresh — operatör manuel refresh basmasın.
   useRefetchOnOpen(pendingQuery.refetch, listModalOpen);
   useRefetchOnOpen(receiptsQuery.refetch, historyModalOpen);
+
+  // Header "Yenile" — aktif sağ-tab'ın listesini tazeler. Standart hook:
+  // offline guard + zaman aşımı + tek tip animasyon/haptic/toast (ham
+  // isFetching offline'da hiç dönmüyordu).
+  const refresh = useManualRefresh(
+    () => {
+      if (rightTab === 'pending') return pendingQuery.refetch();
+      if (rightTab === 'cancellable') return cancellableReceiptsQuery.refetch();
+      return receiptsQuery.refetch();
+    },
+    rightTab === 'pending'
+      ? 'Bekleyen sevkler güncellendi'
+      : rightTab === 'cancellable'
+        ? 'İptal listesi güncellendi'
+        : 'Kabul listesi güncellendi',
+  );
 
   // ── Mutations ──
   // OFFLINE-AWARE: mutationFn `setMutationDefaults`'ta tanımlı; persist sonrası
@@ -665,39 +682,11 @@ export default function FasonKabulScreen() {
             <RefreshButton
               headerStyle
               label="Yenile"
-              onPress={() => {
-                if (rightTab === 'pending') pendingQuery.refetch();
-                else if (rightTab === 'cancellable') cancellableReceiptsQuery.refetch();
-                else receiptsQuery.refetch();
-              }}
-              refreshing={
-                rightTab === 'pending'
-                  ? pendingQuery.isFetching
-                  : rightTab === 'cancellable'
-                    ? cancellableReceiptsQuery.isFetching
-                    : receiptsQuery.isFetching
-              }
-              isError={
-                rightTab === 'pending'
-                  ? pendingQuery.isError
-                  : rightTab === 'cancellable'
-                    ? cancellableReceiptsQuery.isError
-                    : receiptsQuery.isError
-              }
-              errorMessage={
-                rightTab === 'pending'
-                  ? (pendingQuery.error as Error | undefined)?.message
-                  : rightTab === 'cancellable'
-                    ? (cancellableReceiptsQuery.error as Error | undefined)?.message
-                    : (receiptsQuery.error as Error | undefined)?.message
-              }
-              successMessage={
-                rightTab === 'pending'
-                  ? 'Bekleyen sevkler güncellendi'
-                  : rightTab === 'cancellable'
-                    ? 'İptal listesi güncellendi'
-                    : 'Kabul listesi güncellendi'
-              }
+              onPress={refresh.onRefresh}
+              refreshing={refresh.refreshing}
+              isError={refresh.isError}
+              errorMessage={refresh.errorMessage}
+              successMessage={refresh.successMessage}
             />
           )}
         </View>

@@ -6,7 +6,7 @@ Windows sunucusuna tek bir `setup.exe` ile kuran paketi üretir.
 - **Docker yok.** PostgreSQL ve backend birer **Windows servisi** olur, sunucu her
   açıldığında (elektrik kesintisi sonrası dahil) otomatik başlar.
 - **Tek kurulum, bir daha uğraşma.** Kurulum DB'yi oluşturur, migration'ları
-  uygular, seed'i (admin/admin123) yükler, firewall'da 4000 portunu açar.
+  uygular, seed'i (admin/123123) yükler, firewall'da 4000 portunu açar.
 - **Güncelleme = aynı setup'ı tekrar çalıştır.** Veriler korunur, sadece yeni
   migration'lar uygulanır, servis yeniden başlar.
 
@@ -82,7 +82,7 @@ $NssmVersion` değişkenlerinden ayarlanır.
 - Sunucuda: `http://localhost:4000`
 - Fabrika ağında: `http://<sunucu-ip>:4000`
 - Swagger: `http://<sunucu-ip>:4000/api-docs`
-- Giriş: `admin / admin123`
+- Giriş: `admin / 123123`
 
 > **Yönetim panelini (Electron) bağlama:** Panelin API adresini
 > `http://<sunucu-ip>:4000` yapman yeterli.

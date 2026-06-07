@@ -109,6 +109,9 @@ export function WorkOrdersPage() {
     fetchFn: workOrderService.listCursor,
     columns: workOrderColumns,
     defaultPageSize: 50,
+    initialVisibility: {
+      targetQuantity: targetQuantityEnabled,
+    },
   });
 
   const createMut = useMutation({

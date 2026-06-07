@@ -39,10 +39,13 @@ export const asyncStoragePersister = createAsyncStoragePersister({
 
 // Bump'lar persist cache'i invalidate eder: registry shape değiştiğinde veya
 // eski persisted mutation'larla incompatible bir değişiklik yapıldığında bump'la.
+// v9: QC2_FINISH_STEP registry'e eklendi (adımı kapat offline-aware).
+// v8: QC2_REPORT_ERROR + QC2_DELETE_ERROR registry'e eklendi (leke offline-aware).
+// v7: KK1_SCRAP registry'e eklendi (top iptali offline-aware).
 // v6: FASON_SEVK_DISPATCH registry'e eklendi.
 // v5: FASON_KABUL_RECEIVE registry'e eklendi.
 // v4: KK1_CREATE_ENTRY registry'e eklendi (client-side barkod ile offline).
 // v3: TAMBUR_FINALIZE_OPEN_FABRIC registry'e eklendi.
 // v2: KURSUN_FINISH registry'e eklendi + default networkMode 'always'a çevrildi.
-export const PERSIST_BUSTER = 'tekserp-v6';
+export const PERSIST_BUSTER = 'tekserp-v9';
 export const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;

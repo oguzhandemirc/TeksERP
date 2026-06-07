@@ -23,6 +23,8 @@ interface Options<T> {
   forceFilters?: Record<string, string | string[]>;
   /** Satır seçimi (toplu işlem) — varsayılan açık. */
   enableSelection?: boolean;
+  /** Varsayılan sütun görünürlük durumları. */
+  initialVisibility?: VisibilityState;
 }
 
 /**
@@ -39,6 +41,7 @@ export function useDataTable<T>({
   defaultPageSize = 50,
   forceFilters,
   enableSelection = true,
+  initialVisibility,
 }: Options<T>) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -66,9 +69,13 @@ export function useDataTable<T>({
     () => prefs.tableOrder?.[queryKey] ?? [],
     [prefs.tableOrder, queryKey],
   );
+  const initialVisibilityStr = JSON.stringify(initialVisibility);
   const columnVisibility = useMemo<VisibilityState>(
-    () => prefs.tableVisibility?.[queryKey] ?? {},
-    [prefs.tableVisibility, queryKey],
+    () => ({
+      ...initialVisibility,
+      ...(prefs.tableVisibility?.[queryKey] ?? {}),
+    }),
+    [prefs.tableVisibility, queryKey, initialVisibilityStr],
   );
   const onColumnOrderChange: OnChangeFn<string[]> = (updater) => {
     const next = typeof updater === "function" ? updater(columnOrder) : updater;

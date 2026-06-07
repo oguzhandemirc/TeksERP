@@ -43,7 +43,7 @@ export interface ShipmentListItem {
   createdAt: string;
   customer: { id: string; code: string; name: string };
   branch: { id: string; name: string } | null;
-  _count: { sacks: number; rolls: number; orders: number };
+  _count: { sacks: number; rolls: number; orders: number; returns: number };
 }
 
 export interface ShipmentDetailLine {

@@ -1,10 +1,13 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { useDataTable } from "@/hooks/useDataTable";
+import { cn } from "@/lib/utils";
 import { customerService } from "@/pages/Customers/service";
 import { returnReasonService } from "@/pages/ReturnReasons/service";
 import { returnColumns } from "./returnsColumns";
@@ -18,6 +21,46 @@ const FILTERS: FilterDef[] = [
   { kind: "lookup", key: "reasonId", label: "Neden", service: returnReasonService, queryKey: "return-reasons" },
   { kind: "dateRange", label: "Tarih", defaultField: "createdAt" },
 ];
+
+// İptal durumu segment kontrolü. `filter[cancelled]` URL param'ı → useDataTable
+// → backend listReturns. Default "active" (param yok); iptal edilenler ayrı görünür.
+const STATUS_OPTIONS = [
+  { value: "active", label: "Aktif" },
+  { value: "cancelled", label: "İptal Edilenler" },
+  { value: "all", label: "Hepsi" },
+] as const;
+
+function ReturnsStatusFilter() {
+  const [sp, setSp] = useSearchParams();
+  const current = sp.get("filter[cancelled]") ?? "active";
+  const set = (value: string) =>
+    setSp(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value === "active") next.delete("filter[cancelled]");
+        else next.set("filter[cancelled]", value);
+        return next;
+      },
+      { replace: true },
+    );
+
+  return (
+    <div className="inline-flex items-center gap-0.5 rounded-md border p-0.5">
+      {STATUS_OPTIONS.map((o) => (
+        <Button
+          key={o.value}
+          type="button"
+          size="sm"
+          variant={current === o.value ? "secondary" : "ghost"}
+          className={cn("h-6 px-2 text-xs", current !== o.value && "text-muted-foreground")}
+          onClick={() => set(o.value)}
+        >
+          {o.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
 
 export function ReturnsPage() {
   const [selected, setSelected] = useState<ReturnRow | null>(null);
@@ -44,7 +87,7 @@ export function ReturnsPage() {
         onSearchChange={setSearch}
         placeholder="Neden / not içinde ara..."
       />
-      <FilterBar filters={FILTERS} />
+      <FilterBar filters={FILTERS} leading={<ReturnsStatusFilter />} />
       {summary && summary.count > 0 && (
         <div className="flex gap-6 border-b px-4 py-2 text-sm">
           <span>

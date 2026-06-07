@@ -128,7 +128,7 @@ export const tamburService = {
    */
   cutWarehouseRoll: (
     rollId: string,
-    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; markedForKartela?: boolean }
+    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; markedForKartela?: boolean; rawDestination?: 'STOCK' | 'WAREHOUSE' }
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> =>
     apiClient
       .post<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>>(

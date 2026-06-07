@@ -10,7 +10,14 @@ export const returnColumns: ColumnDef<ReturnRow>[] = [
     accessorKey: "createdAt",
     header: "Tarih",
     cell: ({ row }) => (
-      <span className="text-xs">{safeFormat(row.original.createdAt, "dd.MM.yyyy HH:mm")}</span>
+      <span className="flex items-center gap-1.5 text-xs">
+        {safeFormat(row.original.createdAt, "dd.MM.yyyy HH:mm")}
+        {row.original.cancelledAt && (
+          <Badge variant="destructive" className="px-1 py-0 text-[10px] leading-tight">
+            İptal
+          </Badge>
+        )}
+      </span>
     ),
   },
   {

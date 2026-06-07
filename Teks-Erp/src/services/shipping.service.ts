@@ -378,7 +378,16 @@ export class ShippingService {
       createdAt: true,
       customer: { select: { id: true, code: true, name: true } },
       branch: { select: { id: true, name: true } },
-      _count: { select: { sacks: true, rolls: true, orders: true } },
+      _count: {
+        select: {
+          sacks: true,
+          rolls: true,
+          orders: true,
+          // Aktif iadeler (iptal hariç) — liste rozeti. İade edilen top shipmentId=null
+          // olduğu için `rolls`'a girmez; RollReturn.fromShipmentId üzerinden sayılır.
+          returns: { where: { cancelledAt: null } },
+        },
+      },
     } as const;
 
     // Electron DataTable → cursor; mobil/eski istemci → array (geri uyum, mobil bozulmaz).

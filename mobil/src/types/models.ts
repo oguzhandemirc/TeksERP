@@ -524,6 +524,9 @@ export interface KursunStepSummary {
   status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'SKIPPED';
   /** İstasyona KURSUN özelliği yetenek olarak atanmış mı? */
   appliesKursun: boolean;
+  /** Bu adıma yazılan not (WorkOrderStep.notes; rotada KK2 istasyonuna özel
+   *  talimat) — kart açıkken üstte gösterilir. */
+  stepNote?: string | null;
   rolls: KursunRollSummary[];
 }
 

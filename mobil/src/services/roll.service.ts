@@ -19,6 +19,31 @@ export interface RollStats {
   byQuality: Record<string, number>;
 }
 
+/** Backend `GET /rolls/:id/cancel-preview` cevabı (inventory.service ile aynı). */
+export interface RollCancelPreview {
+  rollId: string;
+  barcode: string | null;
+  status: string;
+  itemName: string | null;
+  colorName: string | null;
+  initialQty: number;
+  width: number | null;
+  /** Hard-block yoksa true. */
+  canCancel: boolean;
+  /** canCancel=false ise neden (Türkçe). */
+  blockReason: string | null;
+  /** İstasyonda/iş emrinde aktif → iptal için confirmActive şart. */
+  requiresConfirm: boolean;
+  activeAt: {
+    stepId: string;
+    stationName: string | null;
+    stationKind: string | null;
+    workOrderId: string;
+    batchNumber: string | null;
+  } | null;
+  openMovementCount: number;
+}
+
 export interface RollCursorPage {
   success: boolean;
   data: Roll[];
@@ -79,10 +104,25 @@ export const rollService = {
   getByBarcode: (barcode: string): Promise<ApiResponse<Roll>> =>
     apiClient.get<ApiResponse<Roll>>(`/rolls/barcode/${barcode}`).then((r) => r.data),
 
-  /** Soft delete — top SCRAP olarak işaretlenir. Açık movement'lar kapatılır,
-   *  currentStep temizlenir. SHIPPED / AT_SUBCONTRACTOR / açık sevki olan toplar reddedilir. */
-  scrap: (id: string): Promise<ApiResponse<Roll>> =>
-    apiClient.delete<ApiResponse<Roll>>(`/rolls/${id}`).then((r) => r.data),
+  /**
+   * Soft delete — top CANCELLED işaretlenir. Açık movement'lar kapatılır,
+   * currentStep temizlenir. SHIPPED / AT_SUBCONTRACTOR / açık sevki olan toplar
+   * reddedilir. Bir istasyonda/iş emrinde AKTİF top (currentStep/açık movement)
+   * için backend `confirmActive=true` ŞART — önce getCancelPreview ile operatöre
+   * gösterilir, onaylanırsa confirmActive geçilir.
+   */
+  scrap: (id: string, confirmActive = false): Promise<ApiResponse<Roll>> =>
+    apiClient
+      .delete<ApiResponse<Roll>>(
+        `/rolls/${id}${confirmActive ? '?confirmActive=true' : ''}`,
+      )
+      .then((r) => r.data),
+
+  /** İptal önizlemesi — silmeden önce somut etki (hangi istasyon/iş emri). */
+  getCancelPreview: (id: string): Promise<ApiResponse<RollCancelPreview>> =>
+    apiClient
+      .get<ApiResponse<RollCancelPreview>>(`/rolls/${id}/cancel-preview`)
+      .then((r) => r.data),
 
   getAll: (params: Partial<QueryParams>): Promise<PaginatedResponse<Roll>> =>
     apiClient.get<PaginatedResponse<Roll>>(`/rolls${buildQueryString(params)}`).then((r) => r.data),

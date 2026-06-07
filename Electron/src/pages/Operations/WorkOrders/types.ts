@@ -94,6 +94,10 @@ export interface WorkOrder {
   targetQuantity: number | null;
   /** Hedef ağırlık (kg) — opsiyonel; tekstilde mt + kg planlanır. */
   targetWeight: number | null;
+  /** Liste response'unda — üretilen depo metrajı, ÇIKAN (ilerleme kolonu için). */
+  producedMeters?: number;
+  /** Liste response'unda — üretime GİREN ham metraj (ilk adıma giren toplar). */
+  inputMeters?: number;
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   routeTemplateId: string | null;

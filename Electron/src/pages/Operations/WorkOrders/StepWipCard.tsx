@@ -1,3 +1,4 @@
+import { StickyNote } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { safeFormat, formatNumber } from "@/lib/format";
@@ -29,6 +30,13 @@ export function StepWipCard({ step }: { step: WorkOrderStepLite }) {
           </span>
           <StepStateBadge step={step} />
         </div>
+
+        {step.notes && step.notes.trim() && (
+          <div className="flex items-start gap-1 text-[11px] text-muted-foreground">
+            <StickyNote className="mt-0.5 h-3 w-3 shrink-0 opacity-70" />
+            <span className="whitespace-pre-wrap italic">{step.notes}</span>
+          </div>
+        )}
 
         {hasWip ? (
           <div className="space-y-1.5">

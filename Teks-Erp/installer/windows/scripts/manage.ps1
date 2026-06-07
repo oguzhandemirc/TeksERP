@@ -420,7 +420,7 @@ function Invoke-MigrateAndSeed {
         Write-Ok "Migration'lar guncel."
 
         if (-not (Test-Path $SeededFlag)) {
-            Write-Step "Ilk kurulum: seed calistiriliyor (admin/admin123, yetkiler, kalite siniflari)..."
+            Write-Step "Ilk kurulum: seed calistiriliyor (admin/123123, yetkiler, kalite siniflari)..."
             & $NodeExe (Join-Path $AppDir "dist\prisma\seed.js")
             if ($LASTEXITCODE -ne 0) {
                 Write-Warn2 "Seed basarisiz oldu. Sunucu yine de acilacak. Elle: manage.ps1 ile tekrar deneyin."
@@ -655,7 +655,7 @@ function Do-Install {
         foreach ($a in $altIps) { Write-Host "      http://$a`:$ApiPort" }
     }
     Write-Host ""
-    Write-Host "  Test girisi:     admin / admin123"
+    Write-Host "  Test girisi:     admin / 123123"
     Write-Host ""
     Write-Host "  Servisler:       $DbServiceName , $BackendServiceName  (otomatik baslar)"
     Write-Host "  Veri klasoru:    $DataRoot   (yedek/guncelleme bunu korur)"

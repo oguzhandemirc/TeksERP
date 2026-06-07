@@ -18,3 +18,18 @@ export function generateClientBarcode(): string {
   ).join('');
   return `TEKS-${datePart}-${randomPart}`;
 }
+
+// Client-üretimi UUID v4 — offline kayıtların (örn. RollError/leke) backend id'si.
+// Backend Zod `z.string().uuid()` ile doğrular; bu fonksiyon geçerli v4 üretir.
+// Aynı id mutate variables'ına gömülür → resume/retry'da backend idempotent
+// (aynı id ile 2. çağrı mevcut kaydı döner). uuid paketi kurulu değil; KK1
+// barkodu gibi Math.random yeterli (collision pratikte sıfır).
+export function generateClientUuid(): string {
+  const hex = (n: number) =>
+    Array.from({ length: n }, () =>
+      Math.floor(Math.random() * 16).toString(16),
+    ).join('');
+  // 4xxx → versiyon 4; y ∈ {8,9,a,b} → variant.
+  const variant = (8 + Math.floor(Math.random() * 4)).toString(16);
+  return `${hex(8)}-${hex(4)}-4${hex(3)}-${variant}${hex(3)}-${hex(12)}`;
+}

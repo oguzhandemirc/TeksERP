@@ -20,6 +20,8 @@ const reportErrorSchema = z.object({
   stepId: z.string().uuid("Geçersiz adım ID"),
   startMeter: z.number().min(0, "Hata metresi 0 veya daha büyük olmalı"),
   defectTypeId: z.string().uuid("Hata tipi seçilmelidir"),
+  // Mobil offline kuyruğu için opsiyonel client-üretimi UUID (idempotency).
+  clientErrorId: z.string().uuid("Geçersiz hata ID").optional(),
 });
 
 const deleteErrorSchema = z.object({
@@ -63,6 +65,7 @@ export class KursunQcController {
     this.deleteError = this.deleteError.bind(this);
     this.finishStep = this.finishStep.bind(this);
     this.reopenStep = this.reopenStep.bind(this);
+    this.reopenPreview = this.reopenPreview.bind(this);
     this.listQueue = this.listQueue.bind(this);
     this.reorderQueue = this.reorderQueue.bind(this);
     this.setQueueUrgent = this.setQueueUrgent.bind(this);
@@ -137,6 +140,7 @@ export class KursunQcController {
           stepId: body.stepId,
           startMeter: body.startMeter,
           defectTypeId: body.defectTypeId,
+          clientErrorId: body.clientErrorId,
         },
         req.user?.userId
       );
@@ -173,6 +177,17 @@ export class KursunQcController {
     try {
       const body = reopenStepSchema.parse(req.body);
       const result = await this.service.reopenStep(body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/kursun-qc/reopen-preview/:stepId */
+  async reopenPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const stepId = z.string().uuid("Geçersiz adım ID").parse(req.params.stepId);
+      const result = await this.service.reopenPreview(stepId);
       res.status(200).json(result);
     } catch (err) {
       next(err);

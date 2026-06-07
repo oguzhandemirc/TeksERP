@@ -1,5 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { Undo2 } from "lucide-react";
 import { StatusBadge } from "@/components/operations/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { safeFormat } from "@/lib/format";
 import {
   shipmentStatusLabels,
@@ -47,8 +49,17 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
     cell: ({ row }) => {
       const c = row.original._count;
       return (
-        <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+        <span className="flex items-center gap-1.5 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
           {c.orders} sipariş · {c.rolls} top · {c.sacks} çuval
+          {c.returns > 0 && (
+            <Badge
+              variant="outline"
+              className="gap-0.5 border-amber-500/40 px-1 py-0 text-[10px] font-normal text-amber-600"
+              title="Bu sevkiyattan iade edilen top sayısı (detayda dökümü var)"
+            >
+              <Undo2 className="h-3 w-3" /> {c.returns} iade
+            </Badge>
+          )}
         </span>
       );
     },

@@ -61,6 +61,10 @@ interface StepSummary {
   /// İstasyona KURSUN özelliği yetenek olarak atanmış mı? Mobil UI'da
   /// "her top otomatik kurşunlanır" banner'ı için.
   appliesKursun: boolean;
+  /// Bu adıma (Kurşun + KK2) yazılan serbest talimat — WorkOrderStep.notes
+  /// (rotadaki RouteStep.defaultNotes'tan WO açılırken kopyalanır). Operatöre
+  /// kart açıkken üstte sticky şerit olarak gösterilir (Tambur stepNote ile aynı).
+  stepNote: string | null;
   rolls: RollSummary[];
 }
 
@@ -115,6 +119,21 @@ export class KursunQcService {
       throw AppError.badRequest(
         `Bu refakat kartı aktif değil (durum: ${card.status})`
       );
+    }
+
+    // PROCESS_QC adımı KAPALI ise (finishStep yapılmış, toplar Tambur'a geçmiş):
+    // assertWoAtStepKind "açık top yok, mevcut konum: Tambur" diye 400 atardı.
+    // Bunun yerine COMPLETED özeti dön (rolls=[]) → frontend reopen-confirm
+    // akışını tetikler (operatör yanlışlıkla kapattıysa onayla geri açabilsin).
+    // Açık top varken status COMPLETED olamaz (recomputeStepStatus ACTIVE yapar),
+    // o yüzden bu kısayol normal akıştaki açık kartları etkilemez.
+    const pqStep = await prisma.workOrderStep.findFirst({
+      where: { workOrderId: card.workOrderId, station: { kind: StationKind.PROCESS_QC } },
+      orderBy: { stepSequence: "asc" },
+      select: { id: true, status: true },
+    });
+    if (pqStep?.status === StepStatus.COMPLETED) {
+      return this.buildStepSummary(pqStep.id);
     }
 
     // İş emrindeki PROCESS_QC step'ini doğrula. Multi-batch: WO'nun rulları
@@ -366,9 +385,30 @@ export class KursunQcService {
       stepId: string;
       startMeter: number;
       defectTypeId: string;
+      /** Mobil offline kuyruğu için client-üretimi UUID. Verilirse RollError.id
+       *  olarak kullanılır → resume/retry idempotent olur (aynı id'li 2. çağrı
+       *  mevcut kaydı döner). KK1 client-barkod pattern'iyle aynı. */
+      clientErrorId?: string;
     },
     userId?: string
   ): Promise<ApiResponse<RollError>> {
+    // Offline retry/resume idempotency: client kendi UUID'sini verdiyse ve bu id
+    // zaten kayıtlıysa, tekrar oluşturma — mevcut kaydı dön (audit ilk çağrıda
+    // yazıldı). Mobil paused mutation online dönünce tek sefer çalışır; ama
+    // network retry'ında yanıt kaybolursa 2. çağrı buraya düşer.
+    if (data.clientErrorId) {
+      const cached = await prisma.rollError.findUnique({
+        where: { id: data.clientErrorId },
+      });
+      if (cached) {
+        return {
+          success: true,
+          data: cached,
+          message: "Hata zaten kayıtlı (idempotent retry)",
+        };
+      }
+    }
+
     const roll = await prisma.roll.findUnique({ where: { id: data.rollId } });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
@@ -407,17 +447,43 @@ export class KursunQcService {
       );
     }
 
-    const err = await prisma.rollError.create({
-      data: {
-        rollId: data.rollId,
-        startMeter: data.startMeter,
-        defectTypeId: defectType.id,
-        errorType: defectType.name, // snapshot — katalog rename olsa bile sabit kalır
-        isProcessed: false,
-        detectedAtStepId: data.stepId,
-        detectedByUserId: userId ?? null,
-      },
-    });
+    let err: RollError;
+    try {
+      err = await prisma.rollError.create({
+        data: {
+          // clientErrorId verildiyse onu id olarak kullan (offline idempotency);
+          // verilmediyse undefined → Prisma @default(uuid()) üretir.
+          id: data.clientErrorId,
+          rollId: data.rollId,
+          startMeter: data.startMeter,
+          defectTypeId: defectType.id,
+          errorType: defectType.name, // snapshot — katalog rename olsa bile sabit kalır
+          isProcessed: false,
+          detectedAtStepId: data.stepId,
+          detectedByUserId: userId ?? null,
+        },
+      });
+    } catch (e) {
+      // Eşzamanlı replay yarışı: aynı clientErrorId ile 2. create araya girdiyse
+      // PK üzerinde P2002 → mevcut kaydı idempotent dön.
+      if (
+        data.clientErrorId &&
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === "P2002"
+      ) {
+        const dup = await prisma.rollError.findUnique({
+          where: { id: data.clientErrorId },
+        });
+        if (dup) {
+          return {
+            success: true,
+            data: dup,
+            message: "Hata zaten kayıtlı (idempotent retry)",
+          };
+        }
+      }
+      throw e;
+    }
 
     await AuditService.log({
       userId,
@@ -448,7 +514,11 @@ export class KursunQcService {
     userId?: string
   ): Promise<ApiResponse<{ deleted: true }>> {
     const err = await prisma.rollError.findUnique({ where: { id: data.errorId } });
-    if (!err) throw AppError.notFound("Hata kaydı bulunamadı");
+    if (!err) {
+      // Idempotent: kayıt zaten yok (delete replay'i veya offline'da ekle→sil
+      // sırasında ekleme hiç sunucuya ulaşmamış olabilir) → başarı dön.
+      return { success: true, data: { deleted: true }, message: "Hata kaydı zaten yok" };
+    }
     if (err.isProcessed) {
       throw AppError.badRequest(
         "Tambur kararı verilmiş hata kaydı silinemez"
@@ -510,7 +580,14 @@ export class KursunQcService {
     });
 
     if (openMovements.length === 0) {
-      throw AppError.badRequest("Bu adımda açık top yok; kapatılacak hareket bulunamadı.");
+      // Idempotent: offline resume/retry'da adım zaten kapatılmış olabilir
+      // (toplar taşınmış → açık movement kalmaz). "Adımı Kapat" butonu yalnız
+      // top varken çıktığı için boş = zaten kapanmış → hata değil, başarı dön.
+      return {
+        success: true,
+        data: { movedRollCount: 0 },
+        message: "Adım zaten kapalı (idempotent retry)",
+      };
     }
 
     // Tüm açık rollerde QC2_COMPLETED olmalı — tek IN sorgusuyla kontrol et.
@@ -743,6 +820,113 @@ export class KursunQcService {
     };
   }
 
+  /**
+   * `reopenStep`'in salt-okunur önizlemesi — kapalı bir kart okutulduğunda
+   * operatöre "yeniden açarsan şu toplar Tambur'dan geri çekilecek" onayını
+   * SOMUT göstermek için. Hiçbir şeyi değiştirmez; reopenStep'in güvenlik
+   * kontrollerini (top ileri taşınmış / üretimde değil) aynen uygular ve
+   * engel varsa canReopen=false + sebep döner.
+   */
+  async reopenPreview(
+    stepId: string
+  ): Promise<
+    ApiResponse<{
+      canReopen: boolean;
+      blockReason: string | null;
+      rollCount: number;
+      rolls: Array<{ rollId: string; barcode: string | null; currentQty: number }>;
+    }>
+  > {
+    const step = await prisma.workOrderStep.findUnique({
+      where: { id: stepId },
+      include: {
+        station: true,
+        workOrder: {
+          select: {
+            steps: {
+              orderBy: { stepSequence: "asc" },
+              select: { id: true, stepSequence: true },
+            },
+          },
+        },
+      },
+    });
+    if (!step) throw AppError.notFound("Adım bulunamadı");
+    if (step.station.kind !== StationKind.PROCESS_QC) {
+      throw AppError.badRequest("Bu adım Kurşun + QC2 tipinde değil");
+    }
+
+    const block = (reason: string) => ({
+      success: true as const,
+      data: { canReopen: false, blockReason: reason, rollCount: 0, rolls: [] },
+    });
+
+    if (step.status !== StepStatus.COMPLETED) {
+      return block(`Bu adım zaten kapalı değil (durum: ${step.status})`);
+    }
+
+    const nextStep = step.workOrder.steps.find(
+      (s) => s.stepSequence > step.stepSequence
+    );
+
+    const closedMovements = await prisma.rollMovement.findMany({
+      where: {
+        workOrderStepId: step.id,
+        exitedAt: { not: null },
+        notes: "QC2_STEP_FINISHED",
+      },
+      select: {
+        rollId: true,
+        roll: {
+          select: {
+            id: true,
+            status: true,
+            currentStepId: true,
+            barcode: true,
+            currentQty: true,
+          },
+        },
+      },
+    });
+
+    if (closedMovements.length === 0) {
+      return block("Bu adımı yeniden açacak kapalı hareket yok");
+    }
+
+    // reopenStep ile aynı güvenlik kontrolü — ama burada throw etmek yerine
+    // engeli operatöre rapor ediyoruz (önizleme yıkıcı değil).
+    if (nextStep) {
+      for (const cm of closedMovements) {
+        if (cm.roll.currentStepId !== nextStep.id) {
+          return block(
+            `Top (${cm.roll.barcode ?? cm.rollId.slice(0, 8)}) sonraki adımdan ileri taşınmış — yeniden açılamaz`
+          );
+        }
+        if (cm.roll.status !== RollStatus.IN_PRODUCTION) {
+          return block(
+            `Top (${cm.roll.barcode ?? cm.rollId.slice(0, 8)}) artık üretimde değil (${cm.roll.status}) — yeniden açılamaz`
+          );
+        }
+      }
+    }
+
+    const rolls = closedMovements.map((m) => ({
+      rollId: m.roll.id,
+      barcode: m.roll.barcode,
+      currentQty: Number(m.roll.currentQty),
+    }));
+
+    return {
+      success: true,
+      data: {
+        canReopen: true,
+        blockReason: null,
+        rollCount: rolls.length,
+        rolls,
+      },
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // HELPERS
   // ---------------------------------------------------------------------------
@@ -864,6 +1048,7 @@ export class KursunQcService {
         batchNumber: step.workOrder.batchNumber,
         status: step.status,
         appliesKursun: !!kursunCap,
+        stepNote: step.notes,
         rolls,
       },
     };

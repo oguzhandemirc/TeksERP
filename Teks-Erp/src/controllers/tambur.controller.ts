@@ -82,6 +82,9 @@ const cutWarehouseRollSchema = z.object({
   qualityGrade: z.string().max(50).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   markedForKartela: z.boolean().optional(),
+  // Ham (renksiz STOCK) kesiminde çıkan parçanın hedefi. Bitmiş depo topu
+  // kesiminde yok sayılır.
+  rawDestination: z.enum(["STOCK", "WAREHOUSE"]).optional(),
 });
 
 const finalizeWarehouseCutSchema = z.object({

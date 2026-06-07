@@ -949,8 +949,13 @@ export class TamburService {
     };
     const search = params?.search?.trim();
     if (search) {
+      // Barkod: TAM eşleşme (unique index seek) — `contains`/ILIKE en_US.UTF-8
+      // collation'da barcode indeksini KULLANAMAZ → seq scan (ana rulo listesiyle
+      // aynı karar, bkz. inventory.service buildRollWhere). Barkod okutulur/
+      // yapıştırılır; ortasından substring araması saha akışı değil. Ürün/renk/
+      // parti küçük master tablolarda kaldığı için `contains` (fuzzy) korunur.
       where.OR = [
-        { barcode: { contains: search, mode: "insensitive" } },
+        { barcode: search },
         { item: { name: { contains: search, mode: "insensitive" } } },
         { item: { code: { contains: search, mode: "insensitive" } } },
         { color: { name: { contains: search, mode: "insensitive" } } },
@@ -1055,9 +1060,13 @@ export class TamburService {
     if (params?.itemId) where.itemId = params.itemId;
     const search = params?.search?.trim();
     if (search) {
+      // Barkod + kart no: TAM eşleşme (ikisi de @unique → index seek). `contains`/
+      // ILIKE en_US.UTF-8'de unique indeksi KULLANAMAZ → tüm swatch tablosunu seq
+      // scan eder. SW- barkod/kart hep tam okutulur; kısmi tarama saha akışı değil.
+      // Ürün adı/kodu küçük master tabloya join (itemId IN) olduğu için contains kalır.
       where.OR = [
-        { barcode: { contains: search, mode: "insensitive" } },
-        { cardNumber: { contains: search, mode: "insensitive" } },
+        { barcode: search },
+        { cardNumber: search },
         { item: { name: { contains: search, mode: "insensitive" } } },
         { item: { code: { contains: search, mode: "insensitive" } } },
       ];
@@ -1142,9 +1151,13 @@ export class TamburService {
     if (params?.itemId) where.itemId = params.itemId;
     const search = params?.search?.trim();
     if (search) {
+      // Barkod + kart no: TAM eşleşme (ikisi de @unique → index seek). `contains`/
+      // ILIKE en_US.UTF-8'de unique indeksi KULLANAMAZ → tüm swatch tablosunu seq
+      // scan eder. SW- barkod/kart hep tam okutulur; kısmi tarama saha akışı değil.
+      // Ürün adı/kodu küçük master tabloya join (itemId IN) olduğu için contains kalır.
       where.OR = [
-        { barcode: { contains: search, mode: "insensitive" } },
-        { cardNumber: { contains: search, mode: "insensitive" } },
+        { barcode: search },
+        { cardNumber: search },
         { item: { name: { contains: search, mode: "insensitive" } } },
         { item: { code: { contains: search, mode: "insensitive" } } },
       ];
@@ -1444,6 +1457,13 @@ export class TamburService {
       notes?: string | null;
       /** Çıktı top kartelalık işaretlensin (depoda kartela sevki için). */
       markedForKartela?: boolean;
+      /**
+       * Ham (renksiz STOCK) top kesiminde çıkan parçanın hedefi:
+       *   STOCK     → üretime geri döner (yeni iş emrine bağlanabilir: boyahane/KK2/tambur),
+       *   WAREHOUSE → ham-bitmiş, sevke hazır (renksiz olarak depoya iner).
+       * Bitmiş depo topu (WAREHOUSE parent) kesiminde YOK SAYILIR — çıktı her zaman WAREHOUSE.
+       */
+      rawDestination?: "STOCK" | "WAREHOUSE";
     },
     userId?: string,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
@@ -1463,11 +1483,23 @@ export class TamburService {
         "Bu Roll açık kumaş; cutWarehouseRoll sadece barkodlu depo topu için",
       );
     }
-    if (parent.status !== RollStatus.WAREHOUSE) {
+    // Ham (renksiz STOCK) top da "Top Kesme" aracında kesilebilir. Bitmiş depo
+    // topu (WAREHOUSE) klasik akış; ham stok ise operatörün seçtiği hedefe göre
+    // çıktı verir. Diğer statüler (IN_PRODUCTION vb.) kesime uygun değil.
+    const isRawParent =
+      parent.status === RollStatus.STOCK && parent.colorId === null;
+    if (parent.status !== RollStatus.WAREHOUSE && !isRawParent) {
       throw AppError.badRequest(
-        `Top depoda değil (${parent.status}); kesime uygun değil`,
+        `Top kesime uygun değil (${parent.status}) — yalnız depodaki bitmiş toplar veya renksiz ham stok kesilebilir`,
       );
     }
+    // Çocuk top statüsü: ham parent → operatör hedefi (default üretime devam =
+    // STOCK; sevke hazır = WAREHOUSE). Bitmiş parent → her zaman WAREHOUSE.
+    const childStatus: RollStatus = isRawParent
+      ? data.rawDestination === "WAREHOUSE"
+        ? RollStatus.WAREHOUSE
+        : RollStatus.STOCK
+      : RollStatus.WAREHOUSE;
     if (data.cutLength > Number(parent.currentQty)) {
       throw AppError.badRequest(
         `Kesim metresi (${data.cutLength}) topun kalan metresinden (${parent.currentQty}) büyük olamaz`,
@@ -1492,14 +1524,17 @@ export class TamburService {
           initialQty: data.cutLength,
           currentQty: data.cutLength,
           weightKg: null,
-          status: RollStatus.WAREHOUSE,
+          // Bitmiş re-cut → WAREHOUSE; ham kesim → operatör hedefi (STOCK/WAREHOUSE).
+          status: childStatus,
           qualityGrade: resolvedQualityGrade,
           qualityGradeId: resolvedQualityGradeId,
           parentRollId: parent.id,
           entrySource: RollEntrySource.TAMBUR_SPLIT,
           createdById: userId ?? null,
-          // Depo topunun yeniden kesiminde çıktı her zaman WAREHOUSE.
-          markedForKartela: data.markedForKartela ?? false,
+          // Kartelalık yalnız depoya (WAREHOUSE) inen çıktıda anlamlı; ham stoğa
+          // dönen (üretime devam) parçada işaretlenmez.
+          markedForKartela:
+            (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
         },
       });
 
@@ -1584,12 +1619,14 @@ export class TamburService {
       tableName: "ROLL",
       recordId: result.child.id,
       newData: {
-        kind: "TAMBUR_CUT_FROM_WAREHOUSE",
+        kind: isRawParent ? "TAMBUR_CUT_RAW" : "TAMBUR_CUT_FROM_WAREHOUSE",
         parentRollId: parent.id,
         parentBarcode: parent.barcode,
         cutLength: data.cutLength,
         childBarcode: result.child.barcode,
         childQualityGrade: result.child.qualityGrade,
+        childStatus,
+        rawDestination: isRawParent ? (data.rawDestination ?? "STOCK") : null,
         parentRemainingQty: result.newParentQty,
         notes: data.notes ?? null,
       },
@@ -1635,15 +1672,32 @@ export class TamburService {
     if (parent.barcode === null) {
       throw AppError.badRequest("Bu Roll açık kumaş; finalizeWarehouseCut sadece barkodlu depo topu için");
     }
-    if (parent.status !== RollStatus.WAREHOUSE) {
-      throw AppError.badRequest(`Top depoda değil (${parent.status})`);
+    // Ham (renksiz STOCK) kesimi de bu fonksiyonla bitirilir — parent arşivlenir.
+    const isRawParent =
+      parent.status === RollStatus.STOCK && parent.colorId === null;
+    if (parent.status !== RollStatus.WAREHOUSE && !isRawParent) {
+      throw AppError.badRequest(`Top kesime uygun değil (${parent.status})`);
     }
 
     const remainingQty = Number(parent.currentQty);
     const action = data.remainingAction ?? "discard";
     const wantChild = remainingQty > 0 && action !== "discard";
-    const childQualityGrade =
-      action === "keep_1kalite" ? "1.KALITE" : action === "keep_a1" ? "A1" : "FIRE";
+    // Ham parent: kalan parça ham kalır — "keep_*" → ham STOCK (üretime devam),
+    // "scrap" → FIRE/SCRAP. Bitmiş parent: klasik kalite kodu, çıktı WAREHOUSE.
+    const childQualityGrade = isRawParent
+      ? action === "scrap"
+        ? "FIRE"
+        : parent.qualityGrade
+      : action === "keep_1kalite"
+        ? "1.KALITE"
+        : action === "keep_a1"
+          ? "A1"
+          : "FIRE";
+    const childStatus: RollStatus = isRawParent
+      ? action === "scrap"
+        ? RollStatus.SCRAP
+        : RollStatus.STOCK
+      : RollStatus.WAREHOUSE;
     const propertyIds = parent.properties.map((p) => p.propertyId);
 
     const childQualityGradeId = wantChild
@@ -1663,7 +1717,8 @@ export class TamburService {
             initialQty: remainingQty,
             currentQty: remainingQty,
             weightKg: null,
-            status: RollStatus.WAREHOUSE,
+            // Ham parent → kalan ham STOCK/SCRAP; bitmiş parent → WAREHOUSE.
+            status: childStatus,
             qualityGrade: childQualityGrade,
             qualityGradeId: childQualityGradeId,
             parentRollId: parent.id,

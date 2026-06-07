@@ -353,6 +353,20 @@ export class ReturnService {
   // =========================================================================
   async listReturns(req: Request): Promise<Record<string, unknown>> {
     const params = parseQueryParams(req);
+
+    // İptal durumu — Electron FilterBar `filter[cancelled]` ile, doğrudan/legacy
+    // çağrılar `?cancelled=` ham param ile gönderir. RollReturn'de `cancelled`
+    // kolonu YOK (yalnız `cancelledAt`); generic buildWhereClause'a `where.cancelled`
+    // olarak sızarsa Prisma validation (HTTP 500) verir → filters'tan ayıklayıp
+    // ayrı yorumluyoruz.
+    const cancelledParam =
+      (Array.isArray(params.filters.cancelled)
+        ? params.filters.cancelled[0]
+        : params.filters.cancelled) ??
+      (req.query.cancelled as string | undefined) ??
+      "active";
+    delete params.filters.cancelled;
+
     const where = buildWhereClause(
       params.filters,
       RETURN_SEARCH_FIELDS,
@@ -371,8 +385,7 @@ export class ReturnService {
     if (rawReasonId) where.reasonId = rawReasonId;
 
     // İptal filtresi: default yalnız AKTİF (iptal edilmemiş) — rapor/özet iptalleri
-    // saymaz. ?cancelled=cancelled → yalnız iptaller; ?cancelled=all → hepsi.
-    const cancelledParam = (req.query.cancelled as string | undefined) ?? "active";
+    // saymaz. "cancelled" → yalnız iptaller; "all" → hepsi (iptaller İptal rozetiyle).
     if (cancelledParam === "cancelled") where.cancelledAt = { not: null };
     else if (cancelledParam !== "all") where.cancelledAt = null;
 
