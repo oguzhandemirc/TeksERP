@@ -13,7 +13,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { Building2 } from "lucide-react";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
 import type { Customer } from "@/pages/Customers/types";
@@ -132,17 +133,23 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
                 control={form.control}
                 name="customerId"
                 render={({ field }) => (
-                  <ReferenceSelect<Customer>
-                    value={field.value || undefined}
+                  <EntityPickerModal<Customer>
+                    value={field.value || null}
                     onChange={(v) => {
                       field.onChange(v ?? "");
                       form.setValue("branchId", null);
                     }}
                     service={customerService}
-                    queryKey="customers"
+                    queryKey="order-customer"
                     getLabel={(c) => c.name}
+                    getSubLabel={(c) => (c.taxNumber ? `${c.code} · VKN ${c.taxNumber}` : c.code)}
+                    icon={Building2}
+                    iconClassName="text-primary"
+                    title="Müşteri Seç"
+                    description="Müşteri seç veya aramayla daralt — tüm liste sunucuda aranır (ad, kod, vergi no)."
                     placeholder="Müşteri seç..."
                     disabled={headerLocked}
+                    triggerClassName="h-9"
                   />
                 )}
               />

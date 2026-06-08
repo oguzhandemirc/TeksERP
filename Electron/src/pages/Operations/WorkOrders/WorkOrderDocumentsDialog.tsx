@@ -40,15 +40,15 @@ export function WorkOrderDocumentsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[85vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Belgeler</DialogTitle>
           <DialogDescription>
             İş emrinden çıkarılabilecek belgeler.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
           <button
             type="button"
             onClick={onPrintTravelerCard}

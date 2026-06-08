@@ -60,9 +60,33 @@ export interface Roll {
       subcontractor: { id: string; name: string; code: string | null };
     };
   }>;
+  /** Sevkiyat rezervasyonu: dolu ise top "serbest depo" DEĞİL — bir çuvalın
+   *  içinde, bir sevkiyata bağlı (çuval depo / kapı önü). WAREHOUSE statüsüyle
+   *  birlikte "Çuvalda" rozeti gösterilir; serbest stok sorgularına girmez. */
+  shipmentId?: string | null;
+  sackId?: string | null;
+  shipment?: { id: string; shipmentNo: string; status: RollShipmentStatus } | null;
+  sack?: { id: string; sackNo: string; seq: number } | null;
   createdAt: string;
   updatedAt: string;
 }
+
+/** Roll'a bağlı sevkiyatın durumu (rezerve rozetinin alt metni için). */
+export type RollShipmentStatus =
+  | "PREPARING"
+  | "READY"
+  | "AT_DOOR"
+  | "DISPATCHED"
+  | "CANCELLED";
+
+/** Rezerve topun bağlı olduğu sevkiyat aşamasının kullanıcı etiketi. */
+export const shipmentScopeLabels: Record<RollShipmentStatus, string> = {
+  PREPARING: "Çuvallanıyor",
+  READY: "Çuval Depo",
+  AT_DOOR: "Kapı Önü",
+  DISPATCHED: "Sevk Edildi",
+  CANCELLED: "İptal",
+};
 
 export interface RollReturnEntry {
   id: string;

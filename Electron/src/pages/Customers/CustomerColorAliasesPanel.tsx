@@ -95,7 +95,9 @@ export function CustomerColorAliasesPanel({ customerId }: Props) {
         <Skeleton className="h-32 w-full" />
       ) : (
         <AliasList
-          rows={data?.data ?? []}
+          // Yalnızca özel ad verilmiş satırlar (atama-only null kayıtlar burada
+          // gösterilmez; renk↔müşteri ataması renk formundan yönetilir).
+          rows={(data?.data ?? []).filter((r) => r.alias && r.alias.trim())}
           onUpdate={(colorId, alias) => upsertMut.mutate({ colorId, alias })}
           onDelete={setDeletingColorId}
         />
@@ -150,8 +152,8 @@ function AliasRow({
   onUpdate: (colorId: string, alias: string) => void;
   onDelete: (colorId: string) => void;
 }) {
-  const [value, setValue] = useState(row.alias);
-  const dirty = value.trim() !== row.alias;
+  const [value, setValue] = useState(row.alias ?? "");
+  const dirty = value.trim() !== (row.alias ?? "");
 
   return (
     <li className="flex items-center gap-2 p-2 text-sm">

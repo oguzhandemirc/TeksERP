@@ -42,6 +42,7 @@ import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRe
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
+import { useTamburOverQuantityEnabled } from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
@@ -241,6 +242,17 @@ export default function TamburScreen() {
   // işaretlensin (yalnız WAREHOUSE çıktılarda etkili; sevki engellemez). Aynı topu
   // kartelaya kesen operatör için kesimler arası kalıcı, finalize'da sıfırlanır.
   const [markAsKartela, setMarkAsKartela] = useState(false);
+
+  // Tambur'da çıkan top metresi kayıtlı kalanı aşabilir mi (admin flag, default
+  // kapalı). Kapalıyken aşan giriş engellenir; açıkken aşımda onay diyaloğu çıkar
+  // (parmak hatası koruması) ve onaylanınca backend kabul eder (parent tamamen tüketilir).
+  const overQuantityEnabled = useTamburOverQuantityEnabled();
+  // Aşım onayı bekleyen kesim — onaylanınca onConfirm() çalışır (ilgili mutate).
+  const [overCutConfirm, setOverCutConfirm] = useState<{
+    recorded: number;
+    entered: number;
+    onConfirm: () => void;
+  } | null>(null);
 
   // Top Kesme — sağdaki "Top Kesme" butonu → top-level kamera modal → barkod
   // tara → sol panelde "WAREHOUSE topu modu" açılır. Normal Tambur cutOpenFabric
@@ -929,7 +941,10 @@ export default function TamburScreen() {
       Toast.show({ type: 'error', text1: 'Uzunluk pozitif sayı olmalı' });
       return;
     }
-    if (length > selectedRoll.currentQty + 0.001) {
+    // Aşım: girilen uzunluk kalan metrajdan fazla. Flag kapalıyken engelle
+    // (bugünkü davranış); açıkken aşağıda onay diyaloğuyla devam et.
+    const exceedsRemaining = length > selectedRoll.currentQty + 0.001;
+    if (exceedsRemaining && !overQuantityEnabled) {
       Toast.show({
         type: 'error',
         text1: 'Kalan metrajı aşıyor',
@@ -949,15 +964,26 @@ export default function TamburScreen() {
       | 'WAREHOUSE'
       | 'SCRAP'
       | 'A1_STOCK';
-    cutOpenFabricMutation.mutate({
-      rollId: selectedRoll.rollId,
-      lengthMeters: length,
-      status,
-      qualityGrade: qg?.code ?? '1.KALITE',
-      targetOrderLineId: work.voluntaryEntry.targetOrderLineId,
-      targetCustomerId: work.voluntaryEntry.targetCustomerId,
-      markedForKartela: markAsKartela,
-    });
+    const runCut = () =>
+      cutOpenFabricMutation.mutate({
+        rollId: selectedRoll.rollId,
+        lengthMeters: length,
+        status,
+        qualityGrade: qg?.code ?? '1.KALITE',
+        targetOrderLineId: work.voluntaryEntry.targetOrderLineId,
+        targetCustomerId: work.voluntaryEntry.targetCustomerId,
+        markedForKartela: markAsKartela,
+      });
+    // Aşımda parmak hatası koruması: onay iste (açık kumaşın tamamı tek topa döner).
+    if (exceedsRemaining) {
+      setOverCutConfirm({
+        recorded: selectedRoll.currentQty,
+        entered: length,
+        onConfirm: runCut,
+      });
+      return;
+    }
+    runCut();
   };
 
   // Footer "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen.
@@ -1068,7 +1094,10 @@ export default function TamburScreen() {
       Toast.show({ type: 'error', text1: 'Kesim metresi pozitif olmalı' });
       return;
     }
-    if (cut > recutRollMeta.currentQty) {
+    // Aşım: girilen kesim kalan metrajdan fazla. Flag kapalıyken engelle (bugünkü
+    // davranış); açıkken aşağıda onay diyaloğuyla devam et.
+    const exceedsRemaining = cut > recutRollMeta.currentQty;
+    if (exceedsRemaining && !overQuantityEnabled) {
       Toast.show({
         type: 'error',
         text1: 'Geçersiz metraj',
@@ -1083,14 +1112,25 @@ export default function TamburScreen() {
     // Ham (renksiz STOCK) top → operatörün seçtiği parça hedefini gönder.
     const isRawStock =
       recutRollMeta.status === 'STOCK' && recutRollMeta.colorId == null;
-    cutWarehouseRollMutation.mutate({
-      rollId: recutResolvedRollId,
-      cutLength: cut,
-      qualityGrade: recutQualityGrade,
-      targetOrderLineId: recutTargetLineId,
-      markedForKartela: markAsKartela,
-      rawDestination: isRawStock ? recutRawDestination : undefined,
-    });
+    const runCut = () =>
+      cutWarehouseRollMutation.mutate({
+        rollId: recutResolvedRollId,
+        cutLength: cut,
+        qualityGrade: recutQualityGrade,
+        targetOrderLineId: recutTargetLineId,
+        markedForKartela: markAsKartela,
+        rawDestination: isRawStock ? recutRawDestination : undefined,
+      });
+    // Aşımda parmak hatası koruması: onay iste (top tamamen tüketilir).
+    if (exceedsRemaining) {
+      setOverCutConfirm({
+        recorded: recutRollMeta.currentQty,
+        entered: cut,
+        onConfirm: runCut,
+      });
+      return;
+    }
+    runCut();
   };
 
   // Recut "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen (sim).
@@ -1698,10 +1738,12 @@ export default function TamburScreen() {
                   recutRollMeta.currentQty <= 0 ||
                   // Manuelde boş input'a İZİN VER (= kalanı kes). Sadece dolu
                   // ama geçersiz (≤0 / kalanı aşan) değer girilince kilitle.
+                  // Aşım flag'i açıkken kalanı aşan değer kilitlenmez — onayla geçer.
                   (recutMode === 'manual' &&
                     recutCutLength.trim() !== '' &&
                     (parseFloat(recutCutLength) <= 0 ||
-                      parseFloat(recutCutLength) > recutRollMeta.currentQty))
+                      (!overQuantityEnabled &&
+                        parseFloat(recutCutLength) > recutRollMeta.currentQty)))
                 }
                 kesLabel={
                   recutMode === 'auto'
@@ -2280,6 +2322,59 @@ export default function TamburScreen() {
         }}
       />
 
+      {/* Aşım onayı — operatör kayıtlı kalandan fazla metraj girdi (flag açık).
+          Parmak hatası koruması: somut kayıtlı/girilen değerleri göster, onayla geç.
+          Onaylanınca kaynak kumaş tamamen kapanır (backend parent'ı tüketir). */}
+      <AppModal
+        visible={!!overCutConfirm}
+        onDismiss={() => setOverCutConfirm(null)}
+        position="center"
+        swipeToDismiss={false}
+        contentStyle={overCutStyles.sheet}
+      >
+        {overCutConfirm && (
+          <View>
+            <View style={overCutStyles.header}>
+              <Icon source="alert-outline" size={26} color="#b45309" />
+              <Text style={overCutStyles.title}>Kayıtlı metrajı aşıyor</Text>
+            </View>
+            <Text style={overCutStyles.body}>
+              Kayıtlı kalan{' '}
+              <Text style={overCutStyles.strong}>
+                {overCutConfirm.recorded.toFixed(1)} m
+              </Text>
+              , girilen{' '}
+              <Text style={overCutStyles.strong}>
+                {overCutConfirm.entered.toFixed(1)} m
+              </Text>{' '}
+              (+{(overCutConfirm.entered - overCutConfirm.recorded).toFixed(1)} m).
+              Top bu metrajla oluşturulacak ve kaynak kumaş tamamen kapanacak. Emin misin?
+            </Text>
+            <View style={overCutStyles.actions}>
+              <Button
+                mode="outlined"
+                style={overCutStyles.btn}
+                onPress={() => setOverCutConfirm(null)}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                mode="contained"
+                style={overCutStyles.btn}
+                buttonColor="#b45309"
+                onPress={() => {
+                  const fn = overCutConfirm.onConfirm;
+                  setOverCutConfirm(null);
+                  fn();
+                }}
+              >
+                {`Evet, ${overCutConfirm.entered.toFixed(1)} m`}
+              </Button>
+            </View>
+          </View>
+        )}
+      </AppModal>
+
       {/* Tambur'dan çıkmış toplar listesi — geçmişten etiket yeniden basımı */}
       <RecentOutputModal
         visible={recentOutputOpen}
@@ -2726,6 +2821,44 @@ const ORDERS_ACCENT_DARK = '#1e3a8a'; // blue-900 (en koyu — header)
 const ORDERS_ACCENT_SOFT = '#eff6ff'; // blue-50
 const ORDERS_ACCENT_BORDER = '#bfdbfe'; // blue-200
 const ORDERS_ACCENT_ON = '#dbeafe'; // blue-100
+
+const overCutStyles = StyleSheet.create({
+  sheet: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    ...shadow.lg,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  title: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: colors.warningDark,
+  },
+  body: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: colors.text,
+    marginBottom: spacing.lg,
+  },
+  strong: {
+    fontWeight: '800',
+    color: colors.text,
+  },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.md,
+  },
+  btn: {
+    minWidth: 120,
+  },
+});
 
 const ordersModalStyles = StyleSheet.create({
   sheet: {

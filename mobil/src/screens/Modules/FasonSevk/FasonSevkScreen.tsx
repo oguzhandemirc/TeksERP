@@ -1040,7 +1040,7 @@ export default function FasonSevkScreen() {
           </Surface>
 
           {/* ② Toplar — asıl iş: okutma + sevk listesi */}
-          {workOrderId && (
+          {workOrderId && stepId && (
             <Surface style={styles.card} elevation={1}>
               <Text style={styles.sectionTitle}>
                 Toplar{scannedRolls.length > 0 ? ` (${scannedRolls.length})` : ''}
@@ -1325,6 +1325,7 @@ export default function FasonSevkScreen() {
 
       <RollPickerModal
         visible={rollPickerOpen}
+        stepId={stepId}
         excludeIds={scannedRolls.map((r) => r.id)}
         onDismiss={() => setRollPickerOpen(false)}
         onSelect={(r) => {
@@ -1451,11 +1452,13 @@ const ROLL_PICKER_PAGE_SIZE = 30;
 
 function RollPickerModal({
   visible,
+  stepId,
   excludeIds,
   onDismiss,
   onSelect,
 }: {
   visible: boolean;
+  stepId: string;
   excludeIds: string[];
   onDismiss: () => void;
   onSelect: (r: Roll) => void;
@@ -1474,24 +1477,28 @@ function RollPickerModal({
 
   // CURSOR (keyset) + infinite scroll — Roll yüksek hacimli tablo (CLAUDE.md
   // kuralı). Offset+COUNT(*) yerine: withTotal yok → her açılışta COUNT maliyeti
-  // yok, sabit hız (binlerce/yüzbinlerce ham topta bile). Sıralama+filtre
-  // backend buildRollWhere ile aynı: status IN (STOCK,IN_PRODUCTION), FIRE hariç,
-  // createdAt desc. [status, createdAt] indeksi LIMIT'i seek ile karşılar.
+  // yok, sabit hız (binlerce/yüzbinlerce ham topta bile). [status, createdAt]
+  // indeksi LIMIT'i seek ile karşılar.
+  //
+  // Filtre = backend sevk kuralının (subcontractor.service dispatch) AYNISI:
+  //   serbest stok (currentStepId null & STOCK)  VEYA
+  //   bu adımdaki top (currentStepId === stepId & STOCK|IN_PRODUCTION).
+  // dispatchableForStepId bu OR'u backend'de kurar — böylece BAŞKA adımda/iş
+  // emrinde üretimdeki toplar (sevke uygun olmayan) listede görünmez; operatör
+  // yalnızca bu fason sevkine fiilen ekleyebileceği topları görür.
   const rollsQuery = useInfiniteQuery({
-    queryKey: ['rolls', 'fason-picker', debouncedSearch],
+    queryKey: ['rolls', 'fason-picker', stepId, debouncedSearch],
     queryFn: ({ pageParam }) =>
       rollService.getAllCursor({
         limit: ROLL_PICKER_PAGE_SIZE,
         cursor: pageParam,
         search: debouncedSearch.trim() || undefined,
-        // Sadece sevke uygun statüler — backend validasyonu da bu ikisini kabul
-        // ediyor. SCRAP/CANCELLED/SHIPPED/AT_SUBCONTRACTOR vb. görünmemeli.
-        filters: { status: 'STOCK,IN_PRODUCTION' },
+        filters: { dispatchableForStepId: stepId },
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) =>
       last.pagination.hasMore ? last.pagination.nextCursor : undefined,
-    enabled: visible,
+    enabled: visible && !!stepId,
   });
 
   // Modal her açılışında taze veri çek — başka cihaz ya da bir önceki sevk

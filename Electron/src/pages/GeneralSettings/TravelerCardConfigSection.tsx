@@ -17,7 +17,12 @@ import { FlagToggle } from "./SettingRow";
  * basılacağı (toggle) + alt not. Kaydedince yalnızca BUNDAN SONRA basılan kartlara
  * işler — mevcut kartlar basım anında dondurulduğu için (snapshot) değişmez.
  */
-export function TravelerCardConfigSection() {
+export function TravelerCardConfigSection({
+  onPreview,
+}: {
+  /** Taslak değiştikçe (debounce'lu) çağrılır — canlı PDF önizlemesi için. */
+  onPreview?: (cfg: TravelerCardConfig) => void;
+} = {}) {
   const qc = useQueryClient();
   const flagsQ = useFeatureFlags();
   const current = flagsQ.data?.data?.travelerCardConfig ?? DEFAULT_TRAVELER_CARD_CONFIG;
@@ -36,6 +41,12 @@ export function TravelerCardConfigSection() {
     current.showProperties,
     current.footerNote,
   ]);
+
+  // Taslağı önizlemeye bildir — PDF render pahalı olduğu için 300ms debounce.
+  useEffect(() => {
+    const t = setTimeout(() => onPreview?.(draft), 300);
+    return () => clearTimeout(t);
+  }, [draft, onPreview]);
 
   const mut = useMutation({
     mutationFn: (cfg: TravelerCardConfig) =>

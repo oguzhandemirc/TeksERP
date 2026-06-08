@@ -14,7 +14,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { colors } from '../theme/tokens';
+import { colors, palette } from '../theme/tokens';
 import { springs } from '../theme/motion';
 
 export type SupportedBarcodeType =
@@ -48,6 +48,11 @@ interface Props {
    * false = tek-okuma (okuyup modalı kapatan Tambur/KK1/Fason akışları aynen kalır).
    */
   continuous?: boolean;
+  /** Başlık altında vurgulu uyarı bandı (örn. "Taradığın toplar otomatik ilk çuvala eklenir"). */
+  notice?: string;
+  /** Canlı karşılama sayacı (metre): okutulan / istenen. Fazla okutulursa gerçek
+   *  rakam gösterilir — kısıtlama/üst sınır yok. */
+  counter?: { scanned: number; expected: number };
 }
 
 // Sürekli modda iki okuma arası yeniden silahlanma gecikmesi (ms).
@@ -55,6 +60,9 @@ const REARM_MS = 1400;
 
 const FRAME = 260;
 const LINE_H = 3;
+
+// Karşılama sayacı metresi — gerçek değeri göster (44,5 → "44,5"), gereksiz sıfır yok.
+const fmtM = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 
 /**
  * BarcodeScannerModal'ın RNModal sarmasız varyantı — başka modal'ların İÇİNDE
@@ -73,6 +81,8 @@ export function BarcodeScannerView({
   title = 'Barkod / QR Okut',
   barcodeTypes = ['qr', 'code128'],
   continuous = false,
+  notice,
+  counter,
 }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
@@ -179,6 +189,7 @@ export function BarcodeScannerView({
   }));
 
   const cornerColor = busy ? colors.success : '#fff';
+  const over = !!counter && counter.scanned > counter.expected;
 
   const body = !permission ? (
     <View style={styles.center}>
@@ -255,6 +266,25 @@ export function BarcodeScannerView({
           />
         )}
       </View>
+      {notice ? (
+        <View style={styles.notice}>
+          <MaterialCommunityIcons name="alert-circle" size={16} color={palette.amber[500]} />
+          <Text style={styles.noticeText}>{notice}</Text>
+        </View>
+      ) : null}
+      {counter ? (
+        <View style={styles.counter}>
+          <MaterialCommunityIcons name="ruler" size={16} color={colors.textOnDarkMuted} />
+          <Text style={styles.counterLabel}> okutulan </Text>
+          <Text style={[styles.counterValue, over && styles.counterValueOver]}>{fmtM(counter.scanned)}</Text>
+          <Text style={styles.counterLabel}> / istenen </Text>
+          <Text style={styles.counterValue}>{fmtM(counter.expected)}</Text>
+          <Text style={styles.counterLabel}> m</Text>
+          {over ? (
+            <Text style={styles.counterOver}>+{fmtM(counter.scanned - counter.expected)} fazla</Text>
+          ) : null}
+        </View>
+      ) : null}
       {body}
     </View>
   );
@@ -272,6 +302,43 @@ const styles = StyleSheet.create({
     backgroundColor: '#1e293b',
   },
   title: { color: '#fff', fontWeight: '700' },
+  // Uyarı bandı (başlık altı) — "toplar otomatik ilk çuvala eklenir".
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(245,158,11,0.16)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(245,158,11,0.4)',
+  },
+  noticeText: { flex: 1, color: palette.amber[100], fontSize: 13, fontWeight: '600' },
+  // Canlı karşılama sayacı (metre) — okutulan / istenen, fazlada amber.
+  counter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#1e293b',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#334155',
+  },
+  counterLabel: { color: colors.textOnDarkMuted, fontSize: 13, fontWeight: '600' },
+  counterValue: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  counterValueOver: { color: palette.amber[500] },
+  counterOver: {
+    marginLeft: 8,
+    color: palette.amber[500],
+    fontSize: 12,
+    fontWeight: '800',
+    backgroundColor: 'rgba(245,158,11,0.18)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 8 },
   permTitle: { color: '#fff', fontWeight: '700' },
   permBody: { color: colors.textOnDarkMuted, textAlign: 'center' },

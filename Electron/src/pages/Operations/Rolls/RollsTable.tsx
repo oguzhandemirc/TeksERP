@@ -86,6 +86,18 @@ const FILTERS: FilterDef[] = [
   { kind: "dateRange", label: "Tarih", defaultField: "createdAt" },
 ];
 
+// Sadece "Bitmiş Depo" sekmesinde anlamlı: WAREHOUSE topu serbest mi yoksa bir
+// çuvala/sevkiyata rezerve mi? (backend filter[shipmentScope]=free|committed)
+const SHIPMENT_SCOPE_FILTER: FilterDef = {
+  kind: "select",
+  key: "shipmentScope",
+  label: "Sevkiyat",
+  options: [
+    { value: "free", label: "Serbest depo" },
+    { value: "committed", label: "Çuvalda (rezerve)" },
+  ],
+};
+
 interface Props {
   tab: RollStatusTabKey;
 }
@@ -134,6 +146,12 @@ export function RollsTable({ tab }: Props) {
     if (statusVal) out.status = statusVal;
     return out;
   }, [tab]);
+
+  // Serbest/rezerve filtresi yalnız depo (Bitmiş Depo) sekmesinde gösterilir.
+  const filters = useMemo<FilterDef[]>(
+    () => (tab === "FINISHED_STOCK" ? [...FILTERS, SHIPMENT_SCOPE_FILTER] : FILTERS),
+    [tab],
+  );
 
   const { table, query, search, setSearch, pagination } = useDataTable<Roll>({
     queryKey: `rolls:${tab}`,
@@ -202,7 +220,7 @@ export function RollsTable({ tab }: Props) {
           />
         }
       />
-      <FilterBar filters={FILTERS} />
+      <FilterBar filters={filters} />
       <label className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground cursor-pointer select-none">
         <Checkbox
           checked={includeFire}

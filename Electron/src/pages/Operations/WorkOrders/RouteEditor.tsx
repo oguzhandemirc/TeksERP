@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ChevronRight, Plus } from "lucide-react";
+import { motion } from "framer-motion";
+import {
+  AlertTriangle,
+  BookmarkPlus,
+  ChevronRight,
+  MousePointerClick,
+  Plus,
+  Workflow,
+} from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -15,9 +23,12 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { cn } from "@/lib/utils";
+import { springSnappy, springSoft } from "@/lib/motion";
+import { toneFor } from "@/lib/station-colors";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { routeService } from "@/pages/Routes/service";
 import type { ProductionRoute } from "@/pages/Routes/types";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
@@ -91,6 +102,31 @@ export function RouteEditor({
     ? steps.findIndex((s) => s.clientId === selected.clientId)
     : -1;
 
+  // --- Seçili adımın chip'ini, altındaki detay paneline bağlayan ok'un x konumu ---
+  const flowRef = useRef<HTMLDivElement>(null);
+  const chipRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const [connectorX, setConnectorX] = useState<number | null>(null);
+  // İstasyon adı/tipi değişince chip genişliği değişir → yeniden ölç.
+  const flowSig = steps
+    .map((s) => `${s.clientId}:${s.stationName ?? ""}:${s.stationType ?? ""}`)
+    .join("|");
+  useLayoutEffect(() => {
+    const measure = () => {
+      const flow = flowRef.current;
+      const chip = selected ? chipRefs.current.get(selected.clientId) : null;
+      if (!flow || !chip) {
+        setConnectorX(null);
+        return;
+      }
+      const fr = flow.getBoundingClientRect();
+      const cr = chip.getBoundingClientRect();
+      setConnectorX(cr.left + cr.width / 2 - fr.left);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [flowSig, selected]);
+
   // --- Sipariş özelliği/rengi karşılanma uyarısı ---
   const stationIds = useMemo(
     () => Array.from(new Set(steps.map((s) => s.stationId).filter(Boolean))),
@@ -142,7 +178,7 @@ export function RouteEditor({
       {/* Şablondan başla (tohum) */}
       <div className="space-y-1">
         <label className="text-[11px] text-muted-foreground">Şablondan başla (opsiyonel)</label>
-        <ReferenceSelect<ProductionRoute>
+        <EntityPickerModal<ProductionRoute>
           value={seedId}
           onChange={(id) => {
             setSeedId(id);
@@ -150,18 +186,32 @@ export function RouteEditor({
           }}
           service={routeService}
           queryKey="routes"
-          getLabel={(r) => (r.code ? `${r.name} (${r.code})` : r.name)}
-          placeholder="Hazır rota seç — adımlar forma yüklenir..."
+          getLabel={(r) => r.name}
+          getSubLabel={(r) => r.code}
           nullable
           noneLabel="— Boş başla"
+          icon={Workflow}
+          iconClassName="text-primary"
+          title="Rota Şablonu Seç"
+          description="Hazır rota — adımlar forma yüklenir. Yüzlerce şablonda ara."
+          placeholder="Hazır rota seç — adımlar forma yüklenir..."
         />
       </div>
 
       {/* Yatay akış çubuğu */}
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Üretim Akışı
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
+          <Workflow className="h-3.5 w-3.5" />
+          Üretim Akışı
+        </span>
+        {steps.length > 0 && (
+          <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+            <MousePointerClick className="h-3 w-3" />
+            Tıkla → düzenle · sürükle → sırala
+          </span>
+        )}
       </div>
-      <div className="flex flex-wrap items-center gap-1">
+      <div ref={flowRef} className="flex flex-wrap items-center gap-1.5">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
             items={steps.map((s) => s.clientId)}
@@ -172,19 +222,29 @@ export function RouteEditor({
                 key={node.clientId}
                 node={node}
                 index={i}
+                isLast={i === steps.length - 1}
                 active={selected?.clientId === node.clientId}
                 onSelect={() => setSelectedId(node.clientId)}
+                registerRef={(el) => {
+                  if (el) chipRefs.current.set(node.clientId, el);
+                  else chipRefs.current.delete(node.clientId);
+                }}
               />
             ))}
           </SortableContext>
         </DndContext>
-        <Button type="button" size="sm" variant="outline" onClick={onAdd} className="h-8 gap-1">
-          <Plus className="h-3.5 w-3.5" /> Adım
-        </Button>
+        <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.95 }} transition={springSnappy}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onAdd}
+            className="h-8 gap-1 border-dashed"
+          >
+            <Plus className="h-3.5 w-3.5" /> Adım
+          </Button>
+        </motion.div>
       </div>
-      <p className="text-[10px] text-muted-foreground">
-        İpucu: adımları sürükleyerek sırayı değiştirebilirsin.
-      </p>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -204,23 +264,39 @@ export function RouteEditor({
         </div>
       )}
 
-      {/* Seçili adım detayı */}
+      {/* Seçili adım detayı — üstteki chip ile ok'la birleşir */}
       {selected ? (
-        <RouteStepDetail
-          key={selected.clientId}
-          step={selected}
-          sequence={selectedIndex + 1}
-          canMoveUp={selectedIndex > 0}
-          canMoveDown={selectedIndex < steps.length - 1}
-          onPickStation={(id) => onPickStation(selected.clientId, id)}
-          onSetNotes={(notes) => onSetNotes(selected.clientId, notes)}
-          onSetFirm={(patch) => onSetFirm(selected.clientId, patch)}
-          onMove={(dir) => onMove(selected.clientId, dir)}
-          onRemove={() => onRemove(selected.clientId)}
-          target={target}
-        />
+        <div className="relative">
+          {/* Seçili chip'i panele bağlayan ok — adımın tonunda */}
+          {connectorX != null && (
+            <motion.span
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute z-10 h-2.5 w-2.5 border-l border-t bg-muted/10",
+                toneFor(selected.stationType, selected.stationKind).border,
+              )}
+              style={{ top: -5, rotate: 45 }}
+              initial={false}
+              animate={{ left: connectorX - 5 }}
+              transition={springSoft}
+            />
+          )}
+          <RouteStepDetail
+            key={selected.clientId}
+            step={selected}
+            sequence={selectedIndex + 1}
+            canMoveUp={selectedIndex > 0}
+            canMoveDown={selectedIndex < steps.length - 1}
+            onPickStation={(id) => onPickStation(selected.clientId, id)}
+            onSetNotes={(notes) => onSetNotes(selected.clientId, notes)}
+            onSetFirm={(patch) => onSetFirm(selected.clientId, patch)}
+            onMove={(dir) => onMove(selected.clientId, dir)}
+            onRemove={() => onRemove(selected.clientId)}
+            target={target}
+          />
+        </div>
       ) : (
-        <div className="rounded-md border border-dashed bg-muted/20 p-3 text-center text-xs text-muted-foreground">
+        <div className="rounded-lg border border-dashed bg-muted/20 p-3 text-center text-xs text-muted-foreground">
           Akış boş. "Adım" ile başla veya yukarıdan bir şablon seç.
         </div>
       )}
@@ -240,9 +316,11 @@ export function RouteEditor({
           <Button
             type="button"
             size="sm"
+            className="gap-1.5"
             disabled={savePending || !saveName.trim() || steps.length === 0}
             onClick={() => onSaveTemplate(saveName.trim(), forCustomer)}
           >
+            <BookmarkPlus className="h-3.5 w-3.5" />
             {savePending ? "Kaydediliyor..." : "Şablonu kaydet"}
           </Button>
         </div>
@@ -255,49 +333,91 @@ function SortableChip({
   node,
   index,
   active,
+  isLast,
   onSelect,
+  registerRef,
 }: {
   node: DesignerStep;
   index: number;
   active: boolean;
+  isLast: boolean;
   onSelect: () => void;
+  registerRef: (el: HTMLElement | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: node.clientId });
   const ext = node.stationType === "EXTERNAL";
+  const hasStation = Boolean(node.stationId);
+  const tone = toneFor(node.stationType, node.stationKind);
   return (
     <div
       ref={setNodeRef}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: isDragging ? 0.4 : 1,
+        opacity: isDragging ? 0.5 : 1,
+        zIndex: isDragging ? 20 : undefined,
       }}
       className="flex items-center gap-1"
     >
-      <button
+      <motion.button
+        ref={registerRef}
         type="button"
         onClick={onSelect}
         {...attributes}
         {...listeners}
-        className={
-          "flex cursor-grab items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors active:cursor-grabbing " +
-          (active
-            ? "border-primary bg-primary/10"
-            : ext
-              ? "border-amber-300 bg-amber-50/40 hover:bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20"
-              : "bg-background hover:bg-muted/50")
-        }
+        whileHover={{ y: -2 }}
+        whileTap={{ scale: 0.95 }}
+        transition={springSnappy}
+        className={cn(
+          "group relative flex cursor-grab items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-left text-xs shadow-sm transition-colors hover:shadow-md active:cursor-grabbing",
+          !hasStation
+            ? // Yapılandırılmamış adım — "beni seç" çağrısı (kesik kenar + nabız)
+              "border-dashed border-primary/60 bg-primary/5 text-primary"
+            : active
+              ? cn(tone.borderStrong, tone.bgSoft, "ring-1", tone.ring)
+              : cn("bg-background", tone.border, tone.borderHover, tone.bgHover),
+        )}
       >
-        <span className="font-mono text-[10px] text-muted-foreground">{index + 1}</span>
-        <span className="font-medium">{node.stationName || "İstasyon seç"}</span>
-        {ext && (
-          <Badge variant="outline" className="text-[9px]">
+        {/* Yapılandırılmamış adım: nabız atan halka */}
+        {!hasStation && (
+          <motion.span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 rounded-md ring-2 ring-primary/50"
+            animate={{ opacity: [0.55, 0, 0.55] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+          />
+        )}
+        <span
+          className={cn(
+            "relative flex h-4 w-4 items-center justify-center rounded-full font-mono text-[9px] font-semibold transition-colors",
+            !hasStation
+              ? "bg-primary/15 text-primary"
+              : active
+                ? cn(tone.solid, "text-white")
+                : tone.numIdle,
+          )}
+        >
+          {index + 1}
+        </span>
+        <span className={cn("relative font-medium", active && hasStation && tone.text)}>
+          {node.stationName || "İstasyon seç"}
+        </span>
+        {!hasStation && (
+          <MousePointerClick className="relative h-3.5 w-3.5 shrink-0 animate-pulse" />
+        )}
+        {ext && hasStation && (
+          <Badge
+            variant="outline"
+            className={cn("relative border-station-fason/60 text-[9px]", tone.text)}
+          >
             FASON
           </Badge>
         )}
-      </button>
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" />
+      </motion.button>
+      {!isLast && (
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/40" />
+      )}
     </div>
   );
 }

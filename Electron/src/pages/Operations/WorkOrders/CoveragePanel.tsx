@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, PackageCheck } from "lucide-react";
+import { AnimatedNumber } from "@/components/motion";
+import { cn } from "@/lib/utils";
 import { workOrderService, type CoverageLine } from "./service";
 
 interface Props {
@@ -84,8 +86,8 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
   const specs = aggregateBySpec(q.data?.data ?? []);
 
   return (
-    <div className="rounded-md border bg-muted/10 p-3">
-      <div className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="rounded-lg border border-info/30 bg-info/5 p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-info">
         <PackageCheck className="h-3.5 w-3.5" /> Üretim Kapsama
       </div>
       {q.isLoading ? (
@@ -113,31 +115,75 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
                   return (
                     <tr key={s.key} className="border-t [&>td]:px-1.5 [&>td]:py-1">
                       <td className="text-left">
-                        <span className="font-medium">{s.label}</span>
+                        <span className="text-sm font-bold text-foreground">{s.label}</span>
                         {s.count > 1 && (
                           <span className="text-muted-foreground"> · {s.count} kalem</span>
                         )}
                       </td>
-                      <td className="text-right text-foreground">{fmt(s.requested)}</td>
-                      <td className="text-right text-muted-foreground">{fmt(s.shipped)}</td>
-                      <td className="text-right text-muted-foreground">{fmt(s.inProduction)}</td>
-                      <td className="text-right text-muted-foreground">{fmt(s.freeWarehouse)}</td>
-                      <td className="text-right text-muted-foreground">{fmt(s.freeStock)}</td>
-                      <td
-                        className={
-                          "text-right font-semibold " +
-                          (surplus
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-amber-600 dark:text-amber-400")
-                        }
-                      >
-                        <span className="inline-flex items-center justify-end gap-1 whitespace-nowrap">
-                          {surplus ? (
-                            <PackageCheck className="h-3 w-3" />
-                          ) : (
-                            <AlertTriangle className="h-3 w-3" />
+                      <td className="text-right">
+                        <AnimatedNumber
+                          value={s.requested}
+                          flash
+                          className="text-sm font-bold text-foreground"
+                        />
+                      </td>
+                      <td className="text-right">
+                        <AnimatedNumber
+                          value={s.shipped}
+                          flash
+                          className={cn(
+                            "text-sm font-semibold",
+                            s.shipped > 0 ? "text-info" : "text-muted-foreground",
                           )}
-                          {fmt(Math.abs(s.netGap))}
+                        />
+                      </td>
+                      <td className="text-right">
+                        <AnimatedNumber
+                          value={s.inProduction}
+                          flash
+                          className={cn(
+                            "text-sm font-semibold",
+                            s.inProduction > 0
+                              ? "text-station-process"
+                              : "text-muted-foreground",
+                          )}
+                        />
+                      </td>
+                      <td className="text-right">
+                        <AnimatedNumber
+                          value={s.freeWarehouse}
+                          flash
+                          className={cn(
+                            "text-sm font-semibold",
+                            s.freeWarehouse > 0 ? "text-success" : "text-muted-foreground",
+                          )}
+                        />
+                      </td>
+                      <td className="text-right">
+                        <AnimatedNumber
+                          value={s.freeStock}
+                          flash
+                          className={cn(
+                            "text-sm font-semibold",
+                            s.freeStock > 0 ? "text-station-depo" : "text-muted-foreground",
+                          )}
+                        />
+                      </td>
+                      <td className="text-right">
+                        <span
+                          className={cn(
+                            "inline-flex items-center justify-end gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-sm font-bold",
+                            surplus
+                              ? "bg-success/15 text-success"
+                              : "bg-warning/15 text-warning",
+                          )}
+                        >
+                          {surplus ? (
+                            <PackageCheck className="h-3.5 w-3.5" />
+                          ) : (
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                          )}
+                          <AnimatedNumber value={Math.abs(s.netGap)} flash />
                           {surplus ? " fazla" : ""}
                         </span>
                       </td>

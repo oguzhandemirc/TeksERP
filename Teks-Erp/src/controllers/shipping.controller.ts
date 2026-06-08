@@ -80,9 +80,25 @@ export class ShippingController {
     }
   };
 
-  listSackStore = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Çuval Depo board'u (Electron + mobil) — hafif + cursor sayfalı + sunucu-aramalı.
+  listSackStoreBoard = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = await this.service.listSackStore();
+      const limitRaw = parseInt(req.query.limit as string, 10);
+      const result = await this.service.listSackStoreBoard({
+        status: (req.query.status as string | undefined) || undefined,
+        search: (req.query.search as string | undefined) || undefined,
+        cursor: (req.query.cursor as string | undefined) || undefined,
+        limit: Number.isFinite(limitRaw) ? limitRaw : undefined,
+      });
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  getShipmentSackContents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getShipmentSackContents(req.params.id as string);
       res.status(200).json(result);
     } catch (e) {
       next(e);

@@ -23,6 +23,7 @@ import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import RollPickerModal from '../../../components/RollPickerModal';
 import { AnimatedEntrance, MarqueeText } from '../../../components/motion';
 import { colors, palette, spacing, radius, shadow, typography } from '../../../theme';
 import { packingService, type ShipmentSack } from '../../../services/packing.service';
@@ -49,6 +50,17 @@ const randKg = () => (Math.round((10 + Math.random() * 90) * 10) / 10).toString(
 // yuvarlıyordu (yanlış miktar görünüyordu). tr-TR ondalık = virgül, gereksiz sıfır yok.
 const mText = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 
+const pad2 = (n: number) => String(n).padStart(2, '0');
+// Otomatik çuval kodu: <id kuyruğu>-DDMMYY-<sıra3>. Çuval id (UUID) çok uzun olduğundan
+// yalnızca sondan kısa bir kuyruk kullanılır (benzersizlik için yeterli). Sahada çuvalın
+// üstüne yazılan kısım "tarih-001" — sıra 1,2,3… diye gider. Operatör koddan override edebilir.
+const autoSackCode = (sackId: string, seq: number) => {
+  const tail = sackId.replace(/[^a-zA-Z0-9]/g, '').slice(-5).toUpperCase();
+  const d = new Date();
+  const date = `${pad2(d.getDate())}${pad2(d.getMonth() + 1)}${String(d.getFullYear()).slice(-2)}`;
+  return `${tail}-${date}-${String(seq).padStart(3, '0')}`;
+};
+
 export default function PaketlemeScreen() {
   // Portrait kilidi yalnızca telefonda — tablette yatay kalsın.
   usePortraitLock(useDeviceType() === 'phone');
@@ -60,6 +72,11 @@ export default function PaketlemeScreen() {
   const [shipmentId, setShipmentId] = useState<string | null>(params.shipmentId ?? null);
   const [draftOrderIds, setDraftOrderIds] = useState<string[] | null>(params.orderIds ?? null);
   const [scanOpen, setScanOpen] = useState<boolean>(!params.shipmentId && !!params.orderIds);
+  const [listOpen, setListOpen] = useState(false);
+  // Listeden eklenen toplar — picker'da gizle. Eklenen top backend'de committed
+  // olur ama açık picker snapshot'ı anlık güncellenmez → çift-ekleme önlenir.
+  // Modal kapanınca sıfırlanır.
+  const [pickedIds, setPickedIds] = useState<string[]>([]);
   const [cancelOpen, setCancelOpen] = useState(false);
 
   // Aktif çuval — okutma buraya yazılır. State (render) + ref (scan callback yarışını önler).
@@ -390,13 +407,17 @@ export default function PaketlemeScreen() {
   const okCount = covRows.filter((r) => r.openQty - r.thisShipment <= 0).length;
   const covTotal = covRows.length;
   const covProgress = covTotal > 0 ? okCount / covTotal : 0;
+  // Kamera modalı canlı sayacı — toplam metre (fazla okutmada gerçek rakam, kısıtlama yok).
+  const totalWanted = covRows.reduce((a, r) => a + r.openQty, 0);
+  const totalScanned = covRows.reduce((a, r) => a + r.thisShipment, 0);
 
   const loadingReal = shipmentId !== null && (shipQ.isLoading || !ship);
 
   const openWeigh = (s: { id: string; seq: number; weightKg: number | null; manualCode: string | null }) => {
     setWeighTarget({ id: s.id, seq: s.seq });
     setWeighKg(s.weightKg != null ? String(s.weightKg) : '');
-    setWeighCode(s.manualCode ?? '');
+    // Kod girilmemişse otomatik öner (override edilebilir); girilmişse mevcut kodu göster.
+    setWeighCode(s.manualCode?.trim() ? s.manualCode : autoSackCode(s.id, s.seq));
   };
 
   return (
@@ -517,24 +538,9 @@ export default function PaketlemeScreen() {
               </Surface>
             </AnimatedEntrance>
 
-            {/* ── Birincil aksiyon: aktif çuvala Top Okut ── */}
-            <AnimatedEntrance index={1}>
-              <Button
-                mode="contained"
-                icon="barcode-scan"
-                buttonColor={colors.brand}
-                onPress={() => setScanOpen(true)}
-                style={styles.scanBtn}
-                contentStyle={styles.scanBtnContent}
-                labelStyle={styles.scanBtnLabel}
-              >
-                {activeSeq ? `Top Okut → Çuval ${activeSeq}` : 'Top Okut'}
-              </Button>
-            </AnimatedEntrance>
-
             {/* ── Karşılama detayı ── */}
             {covTotal > 0 && (
-              <AnimatedEntrance index={2}>
+              <AnimatedEntrance index={1}>
                 <Surface style={styles.card} elevation={0}>
                   <Text style={styles.cardTitle}>Karşılama</Text>
                   {covRows.map((r, i) => {
@@ -582,7 +588,7 @@ export default function PaketlemeScreen() {
 
             {/* ── Çuvalsız toplar (olmaması beklenir; defansif) ── */}
             {looseRolls.length > 0 && (
-              <AnimatedEntrance index={3}>
+              <AnimatedEntrance index={2}>
                 <Surface style={[styles.card, styles.warnCard]} elevation={0}>
                   <Text style={styles.cardTitle}>Çuvalsız Toplar ({looseRolls.length})</Text>
                   <Text style={styles.emptyHint}>Bu toplar bir çuvala konmalı (Sevke Hazır için).</Text>
@@ -617,7 +623,7 @@ export default function PaketlemeScreen() {
             )}
 
             {/* ── Çuvallar (içerikleriyle) ── */}
-            <AnimatedEntrance index={4}>
+            <AnimatedEntrance index={3}>
               <Surface style={styles.card} elevation={0}>
                 <View style={styles.cardHeadRow}>
                   <Text style={styles.cardTitle}>Çuvallar ({sacks.length})</Text>
@@ -800,6 +806,32 @@ export default function PaketlemeScreen() {
                 </Button>
               )}
             </View>
+
+            {/* ── En altta sabit: Listeden Seç + Top Okut (en sık aksiyon, baş parmağa
+                en yakın) — depo/sevk butonlarının da altında durur. Kamera çalışsa bile
+                operatör depodan listeyle de top seçebilir. ── */}
+            <View style={styles.scanRow}>
+              <Button
+                mode="contained-tonal"
+                icon="format-list-bulleted"
+                onPress={() => setListOpen(true)}
+                style={styles.listBtn}
+                contentStyle={styles.scanBtnContent}
+              >
+                Listeden
+              </Button>
+              <Button
+                mode="contained"
+                icon="barcode-scan"
+                buttonColor={colors.brand}
+                onPress={() => setScanOpen(true)}
+                style={styles.scanBtnFlex}
+                contentStyle={styles.scanBtnContent}
+                labelStyle={styles.scanBtnLabel}
+              >
+                {activeSeq ? `Top Okut → Çuval ${activeSeq}` : 'Top Okut'}
+              </Button>
+            </View>
           </View>
         </>
       )}
@@ -809,11 +841,37 @@ export default function PaketlemeScreen() {
         onDismiss={() => setScanOpen(false)}
         onScan={handleScan}
         title={activeSeq ? `Çuval ${activeSeq}'e okut` : 'Depodan top okut'}
+        notice={activeSeq ? undefined : 'Taradığın toplar otomatik ilk çuvala eklenir.'}
+        counter={covTotal > 0 ? { scanned: totalScanned, expected: totalWanted } : undefined}
         continuous
       />
 
-      {/* Çuval kapat: kod + brüt tartı (ikisi de zorunlu) */}
-      <AppModal visible={weighTarget !== null} onDismiss={() => setWeighTarget(null)}>
+      <RollPickerModal
+        visible={listOpen}
+        onDismiss={() => {
+          setListOpen(false);
+          setPickedIds([]);
+        }}
+        onSelect={(roll) => {
+          setPickedIds((prev) => [...prev, roll.id]);
+          void handleScan(roll.barcode ?? '');
+        }}
+        filters={{ status: 'WAREHOUSE', shipmentScope: 'free' }}
+        title={activeSeq ? `Çuval ${activeSeq}'e Top Seç` : 'Depodan Top Seç'}
+        subtitle="Serbest depodaki toplar · seçince çuvala eklenir"
+        excludeIds={[...pickedIds, ...rolls.map((r) => r.id)]}
+        emptyText="Serbest depoda top yok"
+        accent={colors.brand}
+      />
+
+      {/* Çuval kapat: kod + brüt tartı (ikisi de zorunlu). marginBottom → center
+          yerleşiminde diyalogu yukarı kaydırır (kod+kg girişinde klavye altta
+          modalı örtmesin diye biraz yukarıda dursun). */}
+      <AppModal
+        visible={weighTarget !== null}
+        onDismiss={() => setWeighTarget(null)}
+        contentStyle={{ marginBottom: 160 }}
+      >
         <Surface style={styles.sheet} elevation={4}>
           <Text variant="titleMedium" style={styles.sheetTitle}>
             Çuval {weighTarget?.seq} — Kod + Brüt Tartı
@@ -1072,8 +1130,11 @@ const styles = StyleSheet.create({
   coverCount: { fontSize: typography.size.xs, fontWeight: '600', color: colors.textSecondary },
   progress: { height: 8, borderRadius: radius.full, backgroundColor: colors.surfaceSunken },
 
-  // ── Top Okut CTA ──
-  scanBtn: { borderRadius: radius.md },
+  // ── Top Okut CTA (sabit footer'ın en altında) ──
+  scanBtn: { borderRadius: radius.md, marginTop: spacing.xs },
+  scanRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  listBtn: { borderRadius: radius.md },
+  scanBtnFlex: { flex: 1, borderRadius: radius.md },
   scanBtnContent: { height: 54 },
   scanBtnLabel: { fontSize: typography.size.base, fontWeight: '700', letterSpacing: 0.3 },
 

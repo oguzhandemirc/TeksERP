@@ -1157,17 +1157,126 @@ export class ShippingService {
 
   // =========================================================================
   // ÇUVAL DEPO — çuvallanmış bekleyen mal (READY=çuval depo, AT_DOOR=kapı önü).
-  // "Hangi çuvalda hangi kumaş, çuval kodu, kg" tek bakışta (mobil + Electron board).
   // =========================================================================
-  async listSackStore(): Promise<ApiResponse<unknown>> {
-    const shipments = await prisma.shipment.findMany({
-      where: { status: { in: [ShipmentStatus.READY, ShipmentStatus.AT_DOOR] } },
-      orderBy: [{ status: "asc" }, { readyAt: "asc" }],
+  /**
+   * Çuval Depo board LİSTESİ (Electron + mobil) — HAFİF + sayfalı + sunucu-aramalı.
+   * Rulo ÇEKMEZ: kart sayaçları (çuval/top adedi, kg, metraj) ucuz aggregate'lerden
+   * gelir. Çuval+rulo dökümü ayrı `getShipmentSackContents` ile, karta tıklayınca
+   * lazy yüklenir (READY ihracatta yüzlerce birikebilir → board'ı her seferinde
+   * tüm rulolarla şişirmek ölçeklenmez; CLAUDE.md cursor + over-fetch kuralı).
+   */
+  async listSackStoreBoard(params: {
+    status?: string;
+    search?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<CursorPaginatedResponse<unknown>> {
+    const limit = Math.min(Math.max(1, params.limit ?? 30), 100);
+
+    // Durum: READY (çuval depo) | AT_DOOR (kapı önü) | yok → ikisi birden.
+    const statusFilter: ShipmentStatus[] =
+      params.status === "READY"
+        ? [ShipmentStatus.READY]
+        : params.status === "AT_DOOR"
+          ? [ShipmentStatus.AT_DOOR]
+          : [ShipmentStatus.READY, ShipmentStatus.AT_DOOR];
+
+    const where: Prisma.ShipmentWhereInput = { status: { in: statusFilter } };
+    const search = params.search?.trim();
+    if (search) {
+      // Sunucu-tarafı arama: sevk no / müşteri adı / çuval kodu (küçük-orta set).
+      where.OR = [
+        { shipmentNo: { contains: search, mode: "insensitive" } },
+        { customer: { name: { contains: search, mode: "insensitive" } } },
+        { sacks: { some: { manualCode: { contains: search, mode: "insensitive" } } } },
+      ];
+    }
+
+    // Keyset cursor — readyAt asc (en uzun bekleyen üstte), id tiebreak.
+    // readyAt READY/AT_DOOR'da daima dolu (markReady/moveToDoor yazar).
+    const cursor = decodeDynamicCursor(params.cursor);
+    const finalWhere: Prisma.ShipmentWhereInput = cursor
+      ? { AND: [where, dynamicCursorWhere(cursor, "readyAt", "asc") as Prisma.ShipmentWhereInput] }
+      : where;
+
+    const rows = await prisma.shipment.findMany({
+      where: finalWhere,
+      orderBy: [{ readyAt: "asc" }, { id: "asc" }],
+      take: limit + 1,
       select: {
         id: true,
         shipmentNo: true,
         status: true,
         readyAt: true,
+        customer: { select: { id: true, name: true } },
+        branch: { select: { id: true, name: true } },
+      },
+    });
+
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const ids = pageRows.map((s) => s.id);
+    const nextCursor = hasMore
+      ? buildNextDynamicCursor(pageRows[pageRows.length - 1] as unknown as Record<string, unknown>, "readyAt")
+      : null;
+
+    // Ucuz aggregate (yalnız sayfa kapsamı) — rulo SATIRI çekmeden sayaç/toplam.
+    const [sackAgg, rollAgg] = ids.length
+      ? await Promise.all([
+          prisma.sack.groupBy({
+            by: ["shipmentId"],
+            where: { shipmentId: { in: ids } },
+            _count: { _all: true },
+            _sum: { weightKg: true },
+          }),
+          prisma.roll.groupBy({
+            by: ["shipmentId"],
+            where: { shipmentId: { in: ids } },
+            _count: { _all: true },
+            _sum: { currentQty: true },
+          }),
+        ])
+      : [[], []];
+
+    const sackByShip = new Map(sackAgg.map((g) => [g.shipmentId, g]));
+    const rollByShip = new Map(rollAgg.map((g) => [g.shipmentId, g]));
+
+    const data = pageRows.map((s) => {
+      const sa = sackByShip.get(s.id);
+      const ra = rollByShip.get(s.id);
+      return {
+        id: s.id,
+        shipmentNo: s.shipmentNo,
+        status: s.status,
+        readyAt: s.readyAt,
+        customer: s.customer,
+        branch: s.branch,
+        sackCount: sa?._count._all ?? 0,
+        rollCount: ra?._count._all ?? 0,
+        totalKg: Number(sa?._sum.weightKg ?? 0),
+        totalQty: Number(ra?._sum.currentQty ?? 0),
+      };
+    });
+
+    return { success: true, data, pagination: { nextCursor, hasMore, limit } };
+  }
+
+  /**
+   * Bir SEVKİYATIN tam çuval+rulo dökümü — board kartına tıklayınca slide-over'da
+   * lazy yüklenir. Tek sevkiyat = sınırlı kapsam (birkaç çuval × onlarca top), o
+   * yüzden burada rulları çekmek güvenli; board listesi bunu ASLA çekmez.
+   */
+  async getShipmentSackContents(shipmentId: string): Promise<ApiResponse<unknown>> {
+    const sh = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: {
+        id: true,
+        shipmentNo: true,
+        status: true,
+        readyAt: true,
+        plateNumber: true,
+        driverName: true,
+        carrier: true,
         customer: { select: { id: true, name: true } },
         branch: { select: { id: true, name: true } },
         sacks: {
@@ -1179,74 +1288,99 @@ export class ShippingService {
             manualCode: true,
             weightKg: true,
             rolls: {
+              orderBy: { createdAt: "asc" },
               select: {
+                id: true,
+                barcode: true,
                 currentQty: true,
                 width: true,
-                item: { select: { name: true } },
-                color: { select: { name: true } },
+                qualityGrade: true,
+                item: { select: { id: true, name: true } },
+                color: { select: { id: true, name: true, hex: true } },
               },
             },
-            swatches: { select: { id: true } },
+            swatches: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                id: true,
+                barcode: true,
+                item: { select: { id: true, name: true } },
+                color: { select: { id: true, name: true, hex: true } },
+              },
+            },
           },
         },
       },
     });
+    if (!sh) throw AppError.notFound("Sevkiyat bulunamadı");
 
-    const data = shipments.map((sh) => {
-      let totalKg = D0();
-      let totalQty = D0();
-      const sacks = sh.sacks.map((sk) => {
-        // Çuval içeriğini ürün+renk+en bazında grupla (irsaliye-benzeri döküm).
-        const groups = new Map<
-          string,
-          { itemName: string; colorName: string | null; width: number | null; qty: Prisma.Decimal; rollCount: number }
-        >();
-        let sackQty = D0();
-        for (const r of sk.rolls) {
-          const key = `${r.item.name}|${r.color?.name ?? ""}|${r.width ?? ""}`;
-          const g =
-            groups.get(key) ??
-            { itemName: r.item.name, colorName: r.color?.name ?? null, width: r.width ? Number(r.width) : null, qty: D0(), rollCount: 0 };
-          g.qty = g.qty.plus(r.currentQty);
-          g.rollCount += 1;
-          groups.set(key, g);
-          sackQty = sackQty.plus(r.currentQty);
-        }
-        totalQty = totalQty.plus(sackQty);
-        if (sk.weightKg) totalKg = totalKg.plus(sk.weightKg);
-        return {
-          id: sk.id,
-          sackNo: sk.sackNo,
-          seq: sk.seq,
-          manualCode: sk.manualCode,
-          weightKg: sk.weightKg ? Number(sk.weightKg) : null,
-          rollCount: sk.rolls.length,
-          swatchCount: sk.swatches.length,
-          totalQty: Number(sackQty),
-          contents: [...groups.values()].map((g) => ({
-            itemName: g.itemName,
-            colorName: g.colorName,
-            width: g.width,
-            qty: Number(g.qty),
-            rollCount: g.rollCount,
-          })),
-        };
-      });
+    const sacks = sh.sacks.map((sk) => {
+      // Çuval içeriğini ürün+renk+en bazında grupla (irsaliye-benzeri döküm).
+      const groups = new Map<
+        string,
+        { itemName: string; colorName: string | null; width: number | null; qty: Prisma.Decimal; rollCount: number }
+      >();
+      let sackQty = D0();
+      for (const r of sk.rolls) {
+        const key = `${r.item.name}|${r.color?.name ?? ""}|${r.width ?? ""}`;
+        const g =
+          groups.get(key) ??
+          { itemName: r.item.name, colorName: r.color?.name ?? null, width: r.width ? Number(r.width) : null, qty: D0(), rollCount: 0 };
+        g.qty = g.qty.plus(r.currentQty);
+        g.rollCount += 1;
+        groups.set(key, g);
+        sackQty = sackQty.plus(r.currentQty);
+      }
       return {
+        id: sk.id,
+        sackNo: sk.sackNo,
+        seq: sk.seq,
+        manualCode: sk.manualCode,
+        weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
+        rollCount: sk.rolls.length,
+        swatchCount: sk.swatches.length,
+        totalQty: Number(sackQty),
+        contents: [...groups.values()].map((g) => ({
+          itemName: g.itemName,
+          colorName: g.colorName,
+          width: g.width,
+          qty: Number(g.qty),
+          rollCount: g.rollCount,
+        })),
+        rolls: sk.rolls.map((r) => ({
+          id: r.id,
+          barcode: r.barcode,
+          qty: Number(r.currentQty),
+          width: r.width != null ? Number(r.width) : null,
+          qualityGrade: r.qualityGrade,
+          item: r.item,
+          color: r.color,
+        })),
+        swatches: sk.swatches.map((s) => ({
+          id: s.id,
+          barcode: s.barcode,
+          item: s.item,
+          color: s.color,
+        })),
+      };
+    });
+
+    return {
+      success: true,
+      data: {
         id: sh.id,
         shipmentNo: sh.shipmentNo,
         status: sh.status,
         readyAt: sh.readyAt,
+        plateNumber: sh.plateNumber,
+        driverName: sh.driverName,
+        carrier: sh.carrier,
         customer: sh.customer,
         branch: sh.branch,
         sackCount: sh.sacks.length,
-        totalKg: Number(totalKg),
-        totalQty: Number(totalQty),
         sacks,
-      };
-    });
-
-    return { success: true, data };
+      },
+    };
   }
 
   // =========================================================================

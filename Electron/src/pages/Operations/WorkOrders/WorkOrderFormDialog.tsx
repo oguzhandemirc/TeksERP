@@ -21,12 +21,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { FormField } from "@/components/forms/FormField";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { routeService } from "@/pages/Routes/service";
 import type { ProductionRoute } from "@/pages/Routes/types";
 import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { LinkedOrderLinesField } from "./LinkedOrderLinesField";
+import { WorkOrderLivePreview } from "./WorkOrderLivePreview";
 import { CoveragePanel } from "./CoveragePanel";
 import type { PickedOrderLine } from "./OrderPickerDialog";
 import { productRecipeService } from "@/pages/ProductRecipes/service";
@@ -188,7 +189,7 @@ export function WorkOrderFormDialog({
     },
   });
 
-  // Bu iş emrini reçete olarak kaydet: önce akıştan rota şablonu, sonra reçete.
+  // Bu iş emrini şablon olarak kaydet: önce akıştan rota şablonu, sonra iş emri şablonu.
   const saveRecipeMut = useMutation({
     mutationFn: async (name: string) => {
       const v = form.getValues();
@@ -216,7 +217,7 @@ export function WorkOrderFormDialog({
       } as unknown as Partial<ProductRecipe>);
     },
     onSuccess: (_res, name) => {
-      toast.success(`Reçete kaydedildi: ${name}`);
+      toast.success(`İş emri şablonu kaydedildi: ${name}`);
       void qc.invalidateQueries({ queryKey: ["routes"] });
       void qc.invalidateQueries({ queryKey: ["product-recipes"] });
       setSaveRecipeOpen(false);
@@ -235,14 +236,14 @@ export function WorkOrderFormDialog({
     setRouteError(null);
   }, [routeSteps]);
 
-  // Reçeteden doldur — seçilen reçetenin hedef alanları + rotasını forma yazar.
+  // İş emri şablonundan doldur — seçilen şablonun hedef alanları + rotasını forma yazar.
   const applyRecipe = async (id: string | null) => {
     setRecipeId(id);
     if (!id) return;
     const res = await productRecipeService.getById(id);
     const r = res.data;
     if (!r) return;
-    // Sipariş bağlıysa ürün/renk/en/özellik siparişten gelir (kilitli) — reçeteden
+    // Sipariş bağlıysa ürün/renk/en/özellik siparişten gelir (kilitli) — şablondan
     // yalnız ROTA + kat tipi al. Stoğa üretimde hepsini doldur.
     const orderBound = pickedLines.length > 0;
     if (!orderBound) {
@@ -302,7 +303,7 @@ export function WorkOrderFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[85vh] max-h-[85vh] max-w-6xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[88vh] max-h-[88vh] w-[95vw] max-w-[1400px] flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>{isEdit ? "İş Emrini Düzenle" : "Yeni İş Emri"}</DialogTitle>
           <DialogDescription>
@@ -418,25 +419,30 @@ export function WorkOrderFormDialog({
                     </label>
                   )}
                 </FormField>
-                {/* Reçeteden doldur — yeni + stoğa üretimde hızlı başlangıç */}
+                {/* İş emri şablonundan doldur — yeni + stoğa üretimde hızlı başlangıç */}
                 {!isEdit && (
                   <FormField
-                    label="Reçeteden doldur (opsiyonel)"
+                    label="İş emri şablonundan doldur (opsiyonel)"
                     hint={
                       isOrderProduction
-                        ? "Reçeteden yalnız ROTA + kat tipi gelir (ürün/renk/en sipariş kaleminden)."
-                        : "Hazır reçete seç — kumaş, renk, üretim özellikleri, en ve rota otomatik dolar."
+                        ? "Şablondan yalnız ROTA + kat tipi gelir (ürün/renk/en sipariş kaleminden)."
+                        : "Hazır iş emri şablonu seç — kumaş, renk, üretim özellikleri, en ve rota otomatik dolar."
                     }
                   >
-                    <ReferenceSelect<ProductRecipe>
+                    <EntityPickerModal<ProductRecipe>
                       value={recipeId}
                       onChange={(id) => void applyRecipe(id)}
                       service={productRecipeService}
                       queryKey="product-recipes"
-                      getLabel={(r) => (r.code ? `${r.name} — ${r.code}` : r.name)}
-                      placeholder="Reçete seç..."
+                      getLabel={(r) => r.name}
+                      getSubLabel={(r) => r.code}
                       nullable
-                      noneLabel="— Reçete kullanma"
+                      noneLabel="— Şablon kullanma"
+                      icon={FlaskConical}
+                      iconClassName="text-info"
+                      title="İş Emri Şablonu Seç"
+                      description="Hazır şablon — kumaş, renk, özellik, en ve rota tek tıkla dolar."
+                      placeholder="İş emri şablonu seç..."
                     />
                   </FormField>
                 )}
@@ -492,6 +498,7 @@ export function WorkOrderFormDialog({
                     onProperties: (ids) => form.setValue("targetPropertyIds", ids),
                     colorLocked: Boolean(locks?.targetColor),
                     lockedPropertyIds: locks?.lockedPropertyIds,
+                    customerId: pickedLines[0]?.customerId ?? null,
                   }}
                   error={routeError ?? undefined}
                 />
@@ -708,6 +715,18 @@ export function WorkOrderFormDialog({
                   )}
                 </div>
               </div>
+
+              {/* Sağ panel — canlı iş emri önizlemesi (sol sipariş paneliyle simetrik) */}
+              <aside className="hidden w-[340px] shrink-0 flex-col border-l bg-muted/10 xl:flex">
+                <WorkOrderLivePreview
+                  control={form.control}
+                  routeSteps={routeSteps}
+                  pickedLines={pickedLines}
+                  isOrderProduction={isOrderProduction}
+                  isEdit={isEdit}
+                  showQuantity={targetQuantityEnabled}
+                />
+              </aside>
             </div>
 
             <DialogFooter className="shrink-0 border-t bg-background px-6 py-3 sm:justify-between">
@@ -723,21 +742,21 @@ export function WorkOrderFormDialog({
                       routeSteps.some((s) => !s.stationId)
                     }
                     className="gap-1"
-                    title="Bu iş emrini reçete olarak kaydet"
+                    title="Bu iş emrini şablon olarak kaydet"
                   >
-                    <FlaskConical className="h-3.5 w-3.5" /> Reçete Kaydet
+                    <FlaskConical className="h-3.5 w-3.5" /> Şablon Kaydet
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-80 space-y-2">
-                  <div className="text-xs font-medium">Bu iş emrini reçete olarak kaydet</div>
+                  <div className="text-xs font-medium">Bu iş emrini şablon olarak kaydet</div>
                   <p className="text-[11px] text-muted-foreground">
                     Ürün + renk + özellik + en + akış tek isimle saklanır; sonraki iş
-                    emirlerinde "Reçeteden doldur" ile gelir.
+                    emirlerinde "İş emri şablonundan doldur" ile gelir.
                   </p>
                   <Input
                     value={recipeName}
                     onChange={(e) => setRecipeName(e.target.value)}
-                    placeholder="Reçete adı (örn: Patos Gri 038)"
+                    placeholder="Şablon adı (örn: Patos Gri 038)"
                     className="h-8 text-xs"
                     autoFocus
                   />

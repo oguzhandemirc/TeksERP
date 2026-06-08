@@ -1,8 +1,8 @@
 /**
  * Çuval Depo (Sack Warehouse) tipleri — backend GET /api/shipping/sack-store
- * yanıtıyla birebir. READY = "Çuval Depo" (firma içinde bekleyen), AT_DOOR =
- * "Kapı Önü" (sevke hazır, kapıda). Decimal alanlar backend'de JSON number'a
- * çevrildiği için Number() sarmaya gerek yok.
+ * (HAFİF, sayfalı liste) + /api/shipping/shipments/:id/sack-contents (slide-over).
+ * READY = "Çuval Depo" (firma içinde bekleyen), AT_DOOR = "Kapı Önü" (kapıda).
+ * Decimal alanlar backend'de JSON number'a çevrildiği için Number() sarmaya gerek yok.
  */
 
 export type SackStoreStatus = "READY" | "AT_DOOR";
@@ -12,28 +12,9 @@ export const sackStoreStatusLabels: Record<SackStoreStatus, string> = {
   AT_DOOR: "Kapı Önü",
 };
 
-/** Çuval içindeki bir ürün (spec) satırı — kumaş + renk + en + metraj. */
-export interface SackContent {
-  itemName: string;
-  colorName: string | null;
-  width: number | null;
-  qty: number;
-  rollCount: number;
-}
-
-export interface SackStoreSack {
-  id: string;
-  sackNo: string;
-  seq: number;
-  /** Operatörün çuvala yazdığı serbest kod. */
-  manualCode: string | null;
-  weightKg: number | null;
-  rollCount: number;
-  swatchCount: number;
-  totalQty: number;
-  contents: SackContent[];
-}
-
+// ===========================================================================
+// LİSTE (board kartı) — rulo İÇERMEZ, yalnız ucuz sayaçlar
+// ===========================================================================
 export interface SackStoreShipment {
   id: string;
   shipmentNo: string;
@@ -42,9 +23,87 @@ export interface SackStoreShipment {
   customer: { id: string; name: string };
   branch: { id: string; name: string } | null;
   sackCount: number;
+  rollCount: number;
   totalKg: number;
   totalQty: number;
-  sacks: SackStoreSack[];
+}
+
+/** GET /sack-store query parametreleri (sunucu arama + cursor sayfalama). */
+export interface SackStoreListParams {
+  /** Yok → READY+AT_DOOR birden. */
+  status?: SackStoreStatus;
+  search?: string;
+  cursor?: string | null;
+  limit?: number;
+}
+
+export interface SackStoreListResponse {
+  success: boolean;
+  data: SackStoreShipment[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
+// ===========================================================================
+// SLIDE-OVER (karta tıklayınca) — çuval + içindeki toplar (lazy)
+// ===========================================================================
+
+/** Çuval içeriği — ürün+renk+en bazında grup (irsaliye-benzeri özet döküm). */
+export interface SackContent {
+  itemName: string;
+  colorName: string | null;
+  width: number | null;
+  qty: number;
+  rollCount: number;
+}
+
+/** Çuvaldaki tek tek top (barkodlu döküm). */
+export interface SackRoll {
+  id: string;
+  barcode: string | null;
+  qty: number;
+  width: number | null;
+  qualityGrade: string;
+  item: { id: string; name: string };
+  color: { id: string; name: string; hex: string | null } | null;
+}
+
+export interface SackSwatch {
+  id: string;
+  barcode: string | null;
+  item: { id: string; name: string };
+  color: { id: string; name: string; hex: string | null } | null;
+}
+
+export interface ContentSack {
+  id: string;
+  sackNo: string;
+  seq: number;
+  manualCode: string | null;
+  weightKg: number | null;
+  rollCount: number;
+  swatchCount: number;
+  totalQty: number;
+  contents: SackContent[];
+  rolls: SackRoll[];
+  swatches: SackSwatch[];
+}
+
+export interface ShipmentContents {
+  id: string;
+  shipmentNo: string;
+  status: SackStoreStatus;
+  readyAt: string | null;
+  plateNumber: string | null;
+  driverName: string | null;
+  carrier: string | null;
+  customer: { id: string; name: string };
+  branch: { id: string; name: string } | null;
+  sackCount: number;
+  sacks: ContentSack[];
 }
 
 /** Sevk çıkışı (dispatch) opsiyonel taşıma bilgileri — hepsi nullable. */

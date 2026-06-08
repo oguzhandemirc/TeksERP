@@ -28,6 +28,8 @@ export interface DesignerStep {
   stationCode: string;
   stationName: string;
   stationType: "INTERNAL" | "EXTERNAL";
+  /** Backend StationKind (RAW_QC/PROCESS_QC/TAMBUR…) — adımı renkten okumak için. */
+  stationKind?: string | null;
   notes: string;
   requiredCategoryId: string | null;
   plannedSubcontractorId: string | null;
@@ -215,7 +217,7 @@ export function RouteDesignerDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Özel Rota Tasarla</DialogTitle>
             <DialogDescription>

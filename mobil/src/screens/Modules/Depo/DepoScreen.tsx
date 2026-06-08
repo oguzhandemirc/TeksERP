@@ -52,6 +52,15 @@ const MODE_TABS: { key: ModeFilter; label: string; color: string }[] = [
   { key: 'KARTELALIK', label: 'Kartelalık', color: '#059669' },
 ];
 
+/** Rezerve topun bağlı olduğu sevkiyat aşaması — detay özetindeki "Sevkiyat" satırı. */
+const SHIPMENT_SCOPE_LABEL: Record<string, string> = {
+  PREPARING: 'Çuvallanıyor',
+  READY: 'Çuval Depo',
+  AT_DOOR: 'Kapı Önü',
+  DISPATCHED: 'Sevk Edildi',
+  CANCELLED: 'İptal',
+};
+
 interface RollListItem {
   id: string;
   barcode: string;
@@ -75,6 +84,11 @@ interface RollListItem {
     propertyId: string;
     property?: { id: string; code: string; name: string };
   }[];
+  /** Sevkiyat rezervasyonu — dolu ise top serbest depoda DEĞİL (çuvalda). */
+  shipmentId?: string | null;
+  sackId?: string | null;
+  shipment?: { id: string; shipmentNo: string; status: string } | null;
+  sack?: { id: string; sackNo: string; seq: number } | null;
 }
 
 export default function DepoScreen() {
@@ -752,6 +766,21 @@ function RollDetailModal({
       : []),
     { icon: 'star-circle', label: 'Kalite', value: roll.qualityGrade },
     { icon: 'circle', label: 'Durum', value: trLabel(ROLL_STATUS_LABEL, roll.status) },
+    // Çuvala/sevkiyata rezerve top — serbest stok DEĞİL; barkod okutulunca uyar.
+    ...(roll.shipmentId
+      ? [
+          {
+            icon: 'package-variant-closed',
+            label: 'Sevkiyat',
+            value:
+              'Çuvalda' +
+              (roll.sack ? ` · ${roll.sack.sackNo}` : '') +
+              (roll.shipment
+                ? ` · ${SHIPMENT_SCOPE_LABEL[roll.shipment.status] ?? roll.shipment.status}`
+                : ''),
+          } as SummaryItem,
+        ]
+      : []),
     ...(roll.markedForKartela
       ? [{ icon: 'tag-multiple', label: 'Kartela', value: 'Kartelalık işaretli' } as SummaryItem]
       : []),

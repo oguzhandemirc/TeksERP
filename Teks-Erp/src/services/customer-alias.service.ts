@@ -110,7 +110,11 @@ export class CustomerAliasService {
     await assertCustomer(customerId);
     const rows = await prisma.customerColorAlias.findMany({
       where: { customerId },
-      include: { color: { select: { id: true, code: true, name: true, hex: true } } },
+      include: {
+        color: {
+          select: { id: true, code: true, name: true, hex: true, isActive: true },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
     return { success: true, data: rows };

@@ -7,11 +7,11 @@
 
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
-import { BaseService } from "../services/base.service";
+import { ColorService } from "../services/color.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 
-const service = new BaseService({
+const service = new ColorService({
   modelName: "color",
   tableName: "COLOR",
   searchFields: ["code", "name"],
@@ -87,6 +87,10 @@ router.get("/:id", verifyToken, requirePermission("property:read"), controller.f
  *               name:      { type: string, example: "Mavi" }
  *               hex:       { type: string, example: "#1d4ed8" }
  *               sortOrder: { type: integer, default: 0 }
+ *               customerIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *                 description: Rengin atanacağı müşteriler (M:N CustomerColorAlias).
  *     responses:
  *       201: { description: Oluşturuldu }
  *       409: { description: Kod zaten mevcut }
@@ -115,6 +119,10 @@ router.post("/", verifyToken, requirePermission("property:write"), controller.cr
  *               hex:       { type: string }
  *               sortOrder: { type: integer }
  *               isActive:  { type: boolean }
+ *               customerIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *                 description: Verilirse atamalar bu listeyle senkronlanır; verilmezse dokunulmaz.
  *     responses:
  *       200: { description: Güncellendi }
  */

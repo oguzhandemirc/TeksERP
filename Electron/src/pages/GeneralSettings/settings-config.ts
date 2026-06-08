@@ -100,7 +100,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     label: "Üretim — Saha",
     icon: Factory,
     description: "Sahadaki mobil istasyon ekranlarının davranışı.",
-    keywords: "KK1 ham en genişlik cm boyahane notu fason sevk mobil operatör saha kalite",
+    keywords: "KK1 ham en genişlik cm boyahane notu fason sevk mobil operatör saha kalite tambur metraj aşım fazla ölçüm açık kumaş top",
     kind: "flags",
     flags: [
       {
@@ -112,6 +112,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "dyehouseNoteMobileEntry",
         title: "Fason sevkte boyahane notunu operatör telefondan girebilsin",
         desc: "Kapalıyken (varsayılan) sahadaki operatör mobil Fason Sevk ekranında boyahane notu giremez; not yalnızca iş emrindeki 'Boyahane Notu' alanından gelir. Açıkken operatör sevk sırasında telefondan not girebilir/değiştirebilir (boş bırakırsa iş emrindeki not kullanılır).",
+      },
+      {
+        key: "tamburOverQuantityEnabled",
+        title: "Tambur'da çıkan top metresi giriş metresini aşabilsin",
+        desc: "Açıkken (varsayılan) — Tambur asıl ölçüm noktası olduğu için — operatör kayıtlıdan fazla ölçtüğünde (örn. 100m açık kumaşı 150m top yapma) mobilde onay sonrası kabul edilir; kaynak top tamamen tüketilir. Kapatırsan Tambur'da çıkan top kayıtlı metrajdan fazla olamaz (örn. 100m topa 110m girilemez). Yalnızca aşım anında devreye girer, normal kesim etkilenmez.",
       },
     ],
   },

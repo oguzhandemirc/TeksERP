@@ -12,6 +12,8 @@ export const colorFormSchema = z.object({
     .optional()
     .or(z.literal("")),
   isActive: z.boolean(),
+  /** Rengin atandığı müşteriler (firmaya özel renk). Boş = ortak renk. */
+  customerIds: z.array(z.string()).default([]),
 });
 
 export type ColorFormValues = z.infer<typeof colorFormSchema>;
@@ -20,4 +22,5 @@ export const colorFormDefaults: ColorFormValues = {
   name: "",
   hex: "",
   isActive: true,
+  customerIds: [],
 };

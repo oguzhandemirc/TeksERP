@@ -7,4 +7,6 @@ export interface Color {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  /** findById + create/update yanıtında dolu gelir: rengin atandığı müşteriler. */
+  customerIds?: string[];
 }

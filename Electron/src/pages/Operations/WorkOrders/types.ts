@@ -50,7 +50,7 @@ export interface WorkOrderStepLite {
   id: string;
   stepSequence: number;
   status: StepStatus;
-  station?: { id: string; code: string; name: string; type?: string };
+  station?: { id: string; code: string; name: string; type?: string; kind?: string };
   /** findById include eder; list view'de yok. */
   notes?: string | null;
   requiredCategoryId?: string | null;

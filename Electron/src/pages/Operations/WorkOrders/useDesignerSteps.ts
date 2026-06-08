@@ -15,18 +15,20 @@ interface StationLike {
   code: string;
   name: string;
   type: "INTERNAL" | "EXTERNAL";
+  kind?: string | null;
   defaultCategoryId?: string | null;
 }
 
 function stationToDesigner(s: StationLike): Pick<
   DesignerStep,
-  "stationId" | "stationCode" | "stationName" | "stationType" | "requiredCategoryId"
+  "stationId" | "stationCode" | "stationName" | "stationType" | "stationKind" | "requiredCategoryId"
 > {
   return {
     stationId: s.id,
     stationCode: s.code,
     stationName: s.name,
     stationType: s.type,
+    stationKind: s.kind ?? null,
     requiredCategoryId: s.type === "EXTERNAL" ? s.defaultCategoryId ?? null : null,
   };
 }
@@ -91,6 +93,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
         stationCode: "",
         stationName: "",
         stationType: "INTERNAL",
+        stationKind: null,
         notes: "",
         requiredCategoryId: null,
         plannedSubcontractorId: null,
@@ -114,6 +117,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
           code: s.station?.code ?? "",
           name: s.station?.name ?? "",
           type: s.station?.type ?? "INTERNAL",
+          kind: s.station?.kind ?? null,
           defaultCategoryId: s.station?.defaultCategoryId ?? null,
         }),
         notes: s.defaultNotes ?? "",
@@ -162,6 +166,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
         stationCode: "",
         stationName: "",
         stationType: "INTERNAL",
+        stationKind: null,
         requiredCategoryId: null,
         plannedSubcontractorId: null,
       });

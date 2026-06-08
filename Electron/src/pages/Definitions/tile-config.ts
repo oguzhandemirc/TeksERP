@@ -143,8 +143,8 @@ export const definitionTiles: DefinitionTile[] = [
   },
   {
     key: "product-recipes",
-    title: "Üretim Reçeteleri",
-    description: "Ürün + renk + özellik + en + rota reçete şablonları",
+    title: "İş Emri Şablonları",
+    description: "Ürün + renk + özellik + en + rota — hazır iş emri şablonları",
     icon: FlaskConical,
     to: "/definitions/product-recipes",
     group: "production",

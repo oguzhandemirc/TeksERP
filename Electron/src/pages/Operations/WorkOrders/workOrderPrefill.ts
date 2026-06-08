@@ -165,6 +165,7 @@ export function designerStepsFromWorkOrder(wo: WorkOrder): DesignerStep[] {
       stationCode: s.station?.code ?? "",
       stationName: s.station?.name ?? "—",
       stationType: s.station?.type === "EXTERNAL" ? "EXTERNAL" : "INTERNAL",
+      stationKind: s.station?.kind ?? null,
       notes: s.notes ?? "",
       requiredCategoryId: s.requiredCategoryId ?? null,
       plannedSubcontractorId: s.plannedSubcontractorId ?? null,

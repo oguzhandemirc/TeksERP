@@ -7,6 +7,7 @@
 import type { ShipmentDetail } from "@/pages/Operations/Shipments/types";
 import type { DispatchPrintSnapshot } from "@/pages/Operations/WorkOrders/service";
 import type { KartelaDispatchDetail } from "@/pages/Operations/Kartela/service";
+import type { WorkOrder, TravelerCard } from "@/pages/Operations/WorkOrders/types";
 
 const ISO = "2026-06-07T10:30:00.000Z";
 
@@ -206,4 +207,86 @@ export const MOCK_KARTELA: KartelaDispatchDetail = {
     },
   ],
   receipts: [],
+};
+
+/** Refakat Kartı önizleme verisi — zenginleştirilmiş WO (PDF'in okuduğu alanlar). */
+export const MOCK_TRAVELER_WO: WorkOrder = {
+  id: "preview-wo",
+  batchNumber: "P-260607-014",
+  type: "ORDER_PRODUCTION",
+  status: "IN_PROGRESS",
+  width: 150,
+  targetQuantity: 680,
+  targetWeight: 110,
+  plannedStartDate: "2026-06-07T00:00:00.000Z",
+  plannedEndDate: "2026-06-14T00:00:00.000Z",
+  routeTemplateId: "rt1",
+  targetItemId: "i1",
+  targetColorId: "col1",
+  foldType: "Top",
+  dyehouseNote: "Yıkama yapma, matlaştır",
+  steps: [
+    {
+      id: "step1",
+      stepSequence: 1,
+      status: "COMPLETED",
+      station: { id: "st1", code: "KK1", name: "Ham Kalite (KK1)", type: "INTERNAL" },
+    },
+    {
+      id: "step2",
+      stepSequence: 2,
+      status: "ACTIVE",
+      station: { id: "st2", code: "DYE", name: "Boyahane", type: "EXTERNAL" },
+      plannedSubcontractor: { id: "sub1", name: "Yıldız Boyahane" },
+    },
+    {
+      id: "step3",
+      stepSequence: 3,
+      status: "PENDING",
+      station: { id: "st3", code: "KK2", name: "Kurşun + KK2", type: "INTERNAL" },
+    },
+    {
+      id: "step4",
+      stepSequence: 4,
+      status: "PENDING",
+      station: { id: "st4", code: "TMB", name: "Tambur", type: "INTERNAL" },
+    },
+  ],
+  routeTemplate: { id: "rt1", code: "RT-01", name: "Standart Boyama Rotası" },
+  targetItem: { id: "i1", code: "KMS-001", name: "Pamuklu Astar" },
+  targetColor: { id: "col1", code: "BEJ", name: "Bej", hex: "#d8c9a8" },
+  targetProperties: [
+    { propertyId: "p1", property: { id: "p1", code: "SU", name: "Su İticilik" } },
+  ],
+  orderLinks: [
+    {
+      orderLineId: "ol1",
+      allocatedQty: 680,
+      orderLine: {
+        quantity: 680,
+        width: 150,
+        colorId: "col1",
+        order: {
+          id: "o1",
+          orderNumber: "SIP-2026-0107",
+          customer: { id: "c1", code: "M001", name: "Örnek Tekstil A.Ş." },
+        },
+        item: { id: "i1", name: "Pamuklu Astar" },
+      },
+    },
+  ],
+  createdAt: ISO,
+  updatedAt: ISO,
+};
+
+export const MOCK_TRAVELER_CARD: TravelerCard = {
+  id: "preview-card",
+  cardNumber: "RK-260607-014",
+  barcode: "RK-260607-014-0001",
+  workOrderId: "preview-wo",
+  version: 1,
+  status: "ACTIVE",
+  printedAt: ISO,
+  printedById: null,
+  snapshot: null,
 };

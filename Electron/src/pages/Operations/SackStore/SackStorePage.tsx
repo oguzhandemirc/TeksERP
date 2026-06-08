@@ -1,17 +1,30 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, PackageOpen, DoorOpen } from "lucide-react";
+import { Search, PackageOpen, ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { cn } from "@/lib/utils";
 import { sackStoreService } from "./service";
 import { SackStoreCard } from "./SackStoreCard";
-import { sackStoreStatusLabels, type SackStoreShipment } from "./types";
+import { ShipmentContentsSheet } from "./ShipmentContentsSheet";
+import { sackStoreStatusLabels, type SackStoreShipment, type SackStoreStatus } from "./types";
 
 const QUERY_KEY = "sack-store";
+const PAGE_SIZE = 30;
+
+type StatusFilter = "ALL" | SackStoreStatus;
+
+const STATUS_TABS: { key: StatusFilter; label: string }[] = [
+  { key: "ALL", label: "Tümü" },
+  { key: "READY", label: sackStoreStatusLabels.READY },
+  { key: "AT_DOOR", label: sackStoreStatusLabels.AT_DOOR },
+];
 
 type PendingAction = {
   kind: "move-to-door" | "pull-back" | "dispatch";
@@ -44,15 +57,30 @@ const ACTION_COPY: Record<
 
 export function SackStorePage() {
   const qc = useQueryClient();
+  const [status, setStatus] = useState<StatusFilter>("ALL");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
   const [pending, setPending] = useState<PendingAction | null>(null);
+  const [openShipment, setOpenShipment] = useState<SackStoreShipment | null>(null);
 
-  const query = useQuery({
-    queryKey: [QUERY_KEY],
-    queryFn: () => sackStoreService.list(),
+  const query = useInfiniteQuery({
+    queryKey: [QUERY_KEY, status, debouncedSearch],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      sackStoreService.list({
+        status: status === "ALL" ? undefined : status,
+        search: debouncedSearch || undefined,
+        cursor: pageParam,
+        limit: PAGE_SIZE,
+      }),
+    getNextPageParam: (last) => (last.pagination.hasMore ? last.pagination.nextCursor : undefined),
     staleTime: 30_000,
   });
-  const shipments = query.data?.data ?? [];
+
+  const shipments = useMemo(
+    () => query.data?.pages.flatMap((p) => p.data) ?? [],
+    [query.data],
+  );
 
   const mutation = useMutation({
     mutationFn: (action: PendingAction) => {
@@ -63,35 +91,24 @@ export function SackStorePage() {
     onSuccess: (_data, action) => {
       toast.success(ACTION_COPY[action.kind].success);
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
+      void qc.invalidateQueries({ queryKey: ["sack-contents"] });
       setPending(null);
     },
     // onError yok — apiClient interceptor backend mesajını toast'lar.
   });
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return shipments;
-    return shipments.filter((s) => {
-      if (s.shipmentNo.toLowerCase().includes(term)) return true;
-      if (s.customer.name.toLowerCase().includes(term)) return true;
-      return s.sacks.some((sack) => sack.manualCode?.toLowerCase().includes(term));
-    });
-  }, [shipments, search]);
-
-  const ready = filtered.filter((s) => s.status === "READY");
-  const atDoor = filtered.filter((s) => s.status === "AT_DOOR");
   const busyId = mutation.isPending ? mutation.variables?.shipment.id : undefined;
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Çuval Depo"
-        description="Firma içinde bekleyen (Çuval Depo) ve kapı önündeki (Kapı Önü) paketli sevkler — hangi çuvalda hangi kumaş, çuval kodu ve kg."
+        description="Firma içinde bekleyen (Çuval Depo) ve kapı önündeki (Kapı Önü) paketli sevkler. Karta tıkla → çuval ve top dökümü."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
-      <div className="border-b px-6 py-3">
-        <div className="relative max-w-sm">
+      <div className="flex flex-wrap items-center gap-3 border-b px-6 py-3">
+        <div className="relative max-w-sm flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -100,43 +117,83 @@ export function SackStorePage() {
             className="pl-8"
           />
         </div>
+        <div className="flex items-center gap-1 rounded-md border p-0.5">
+          {STATUS_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setStatus(t.key)}
+              className={cn(
+                "rounded px-3 py-1 text-xs font-medium transition-colors",
+                status === t.key
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto p-6">
         {query.isLoading ? (
           <div className="grid gap-3 lg:grid-cols-2">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-56 w-full" />
+              <Skeleton key={i} className="h-40 w-full" />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : shipments.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-center text-muted-foreground">
             <PackageOpen className="h-8 w-8 opacity-50" />
             <p className="text-sm">
-              {search ? "Aramayla eşleşen sevk yok." : "Çuval depoda bekleyen sevk yok."}
+              {debouncedSearch ? "Aramayla eşleşen sevk yok." : "Çuval depoda bekleyen sevk yok."}
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            <Section
-              icon={<PackageOpen className="h-4 w-4 text-purple-500" />}
-              label={sackStoreStatusLabels.READY}
-              count={ready.length}
-              shipments={ready}
-              busyId={busyId}
-              onAction={setPending}
-            />
-            <Section
-              icon={<DoorOpen className="h-4 w-4 text-warning" />}
-              label={sackStoreStatusLabels.AT_DOOR}
-              count={atDoor.length}
-              shipments={atDoor}
-              busyId={busyId}
-              onAction={setPending}
-            />
-          </div>
+          <>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {shipments.map((s) => (
+                <SackStoreCard
+                  key={s.id}
+                  shipment={s}
+                  busy={busyId === s.id}
+                  onOpen={setOpenShipment}
+                  onMoveToDoor={(sh) => setPending({ kind: "move-to-door", shipment: sh })}
+                  onPullBack={(sh) => setPending({ kind: "pull-back", shipment: sh })}
+                  onDispatch={(sh) => setPending({ kind: "dispatch", shipment: sh })}
+                />
+              ))}
+            </div>
+            <div className="flex justify-center p-6">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!query.hasNextPage || query.isFetchingNextPage}
+                onClick={() => query.fetchNextPage()}
+                className="gap-2"
+              >
+                {query.isFetchingNextPage ? (
+                  "Yükleniyor..."
+                ) : query.hasNextPage ? (
+                  <>
+                    <ChevronDown className="h-4 w-4" />
+                    Daha Fazla Yükle
+                  </>
+                ) : (
+                  "Liste sonu"
+                )}
+              </Button>
+            </div>
+          </>
         )}
       </div>
+
+      <ShipmentContentsSheet
+        shipment={openShipment}
+        open={openShipment !== null}
+        onOpenChange={(o) => !o && setOpenShipment(null)}
+      />
 
       <ConfirmDialog
         open={pending !== null}
@@ -146,49 +203,10 @@ export function SackStorePage() {
         confirmLabel={pending ? ACTION_COPY[pending.kind].confirmLabel : "Onayla"}
         destructive={pending?.kind === "dispatch"}
         isPending={mutation.isPending}
-        onConfirm={() => pending && mutation.mutate(pending)}
+        onConfirm={() => {
+          if (pending) mutation.mutate(pending);
+        }}
       />
     </div>
-  );
-}
-
-function Section({
-  icon,
-  label,
-  count,
-  shipments,
-  busyId,
-  onAction,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  count: number;
-  shipments: SackStoreShipment[];
-  busyId: string | undefined;
-  onAction: (a: PendingAction) => void;
-}) {
-  if (count === 0) return null;
-  return (
-    <section>
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        {icon}
-        {label}
-        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-          {count}
-        </span>
-      </div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        {shipments.map((s) => (
-          <SackStoreCard
-            key={s.id}
-            shipment={s}
-            busy={busyId === s.id}
-            onMoveToDoor={(sh) => onAction({ kind: "move-to-door", shipment: sh })}
-            onPullBack={(sh) => onAction({ kind: "pull-back", shipment: sh })}
-            onDispatch={(sh) => onAction({ kind: "dispatch", shipment: sh })}
-          />
-        ))}
-      </div>
-    </section>
   );
 }

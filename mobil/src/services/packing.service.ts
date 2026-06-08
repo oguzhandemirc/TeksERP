@@ -198,6 +198,23 @@ export interface ShipmentCancelPreview {
 }
 
 // ── Çuval Depo board'u (READY=çuval depo, AT_DOOR=kapı önü) ──
+// LİSTE: hafif kart (rulo içermez, cursor sayfalı). İÇERİK: karta tıklayınca
+// lazy gelen tam çuval+rulo dökümü (ShipmentSackContents). Yüzlerce sevk
+// birikse de board hafif kalır (FlashList + cursor + sunucu araması).
+export interface SackStoreShipmentLite {
+  id: string;
+  shipmentNo: string;
+  status: 'READY' | 'AT_DOOR';
+  readyAt: string | null;
+  customer: Ref;
+  branch: { id: string; name: string } | null;
+  sackCount: number;
+  rollCount: number;
+  totalKg: number;
+  totalQty: number;
+}
+
+// Çuval içeriği — ürün+renk+en bazında grup (irsaliye-benzeri özet).
 export interface SackStoreContent {
   itemName: string;
   colorName: string | null;
@@ -205,7 +222,23 @@ export interface SackStoreContent {
   qty: number;
   rollCount: number;
 }
-export interface SackStoreSack {
+// Çuvaldaki tek tek top / kartela (barkodlu döküm).
+export interface SackStoreRoll {
+  id: string;
+  barcode: string | null;
+  qty: number;
+  width: number | null;
+  qualityGrade: string;
+  item: { id: string; name: string };
+  color: { id: string; name: string; hex: string | null } | null;
+}
+export interface SackStoreSwatch {
+  id: string;
+  barcode: string | null;
+  item: { id: string; name: string };
+  color: { id: string; name: string; hex: string | null } | null;
+}
+export interface SackContentSack {
   id: string;
   sackNo: string;
   seq: number;
@@ -215,18 +248,21 @@ export interface SackStoreSack {
   swatchCount: number;
   totalQty: number;
   contents: SackStoreContent[];
+  rolls: SackStoreRoll[];
+  swatches: SackStoreSwatch[];
 }
-export interface SackStoreShipment {
+export interface ShipmentSackContents {
   id: string;
   shipmentNo: string;
   status: 'READY' | 'AT_DOOR';
   readyAt: string | null;
+  plateNumber: string | null;
+  driverName: string | null;
+  carrier: string | null;
   customer: Ref;
   branch: { id: string; name: string } | null;
   sackCount: number;
-  totalKg: number;
-  totalQty: number;
-  sacks: SackStoreSack[];
+  sacks: SackContentSack[];
 }
 
 export const packingService = {
@@ -340,9 +376,29 @@ export const packingService = {
   unready: (id: string): Promise<ApiResponse<{ shipmentId: string }>> =>
     apiClient.post<ApiResponse<{ shipmentId: string }>>(`/shipping/shipments/${id}/unready`, {}).then((r) => r.data),
 
-  // Çuval Depo board'u — çuvallanmış bekleyen mal (READY + AT_DOOR) çuval içerikleriyle.
-  listSackStore: (): Promise<ApiResponse<SackStoreShipment[]>> =>
-    apiClient.get<ApiResponse<SackStoreShipment[]>>('/shipping/sack-store').then((r) => r.data),
+  // Çuval Depo board'u — HAFİF + cursor sayfalı + sunucu-aramalı (FlashList).
+  // Rulo ÇEKMEZ; kart sayaçları ucuz aggregate'ten. İçerik için getShipmentSackContents.
+  listSackStoreBoard: (params: {
+    status?: 'READY' | 'AT_DOOR';
+    search?: string;
+    cursor?: string | null;
+    limit?: number;
+  }): Promise<CursorPaginatedResponse<SackStoreShipmentLite>> => {
+    const q = new URLSearchParams();
+    q.set('limit', String(params.limit ?? 30));
+    if (params.status) q.set('status', params.status);
+    if (params.search) q.set('search', params.search);
+    if (params.cursor) q.set('cursor', params.cursor);
+    return apiClient
+      .get<CursorPaginatedResponse<SackStoreShipmentLite>>(`/shipping/sack-store/board?${q.toString()}`)
+      .then((r) => r.data);
+  },
+
+  // Tek sevkiyatın çuval+rulo dökümü (içerik modalı) — karta tıklayınca lazy.
+  getShipmentSackContents: (id: string): Promise<ApiResponse<ShipmentSackContents>> =>
+    apiClient
+      .get<ApiResponse<ShipmentSackContents>>(`/shipping/shipments/${id}/sack-contents`)
+      .then((r) => r.data),
 
   // Kapı Önüne Koy (PREPARING/READY → AT_DOOR) — kamyon bekleme durağı; "Alındı" ile sevk olur.
   moveToDoor: (id: string): Promise<ApiResponse<{ shipmentId: string }>> =>

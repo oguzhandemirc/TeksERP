@@ -31,7 +31,10 @@ const DialogContent = React.forwardRef<
       ref={ref}
       data-ui-dialog=""
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-background p-6 shadow-lg sm:rounded-lg",
+        // max-h + overflow varsayılanı: içerik uzasa bile modal ekranı aşmaz,
+        // gövde kayar. Kendi yüksekliğini yöneten dialog'lar (flex + h-[..vh] +
+        // overflow-hidden) bunu tailwind-merge ile override eder.
+        "fixed left-1/2 top-1/2 z-50 grid max-h-[90vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto border bg-background p-6 shadow-lg sm:rounded-lg",
         className,
       )}
       {...props}

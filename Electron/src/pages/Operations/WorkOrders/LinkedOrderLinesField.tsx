@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Link2, Package, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AnimatedNumber } from "@/components/motion";
+import { springSnappy } from "@/lib/motion";
 import { OrderPickerDialog, type PickedOrderLine } from "./OrderPickerDialog";
 
 interface Props {
@@ -112,19 +115,20 @@ export function LinkedOrderLinesField({
           </Button>
         </div>
         {lines.length > 0 && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-            <span className="font-medium text-foreground">{lines.length} kalem</span>
-            <span>·</span>
-            <span className="tabular-nums">
-              {totalQty.toLocaleString("tr-TR")} m
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 font-medium text-primary">
+              <AnimatedNumber value={lines.length} flash className="text-sm font-bold" /> kalem
             </span>
-            <span>·</span>
-            <span>{uniqueCustomers} müşteri</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-info/10 px-2.5 py-1 font-medium tabular-nums text-info">
+              <AnimatedNumber value={totalQty} flash className="text-sm font-bold" /> m
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 font-medium text-muted-foreground">
+              <AnimatedNumber value={uniqueCustomers} flash className="text-sm font-bold text-foreground" /> müşteri
+            </span>
             {deadline && (
-              <>
-                <span>·</span>
-                <span>termin: {deadline}</span>
-              </>
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2.5 py-1 font-medium text-warning">
+                termin <span className="text-sm font-bold">{deadline}</span>
+              </span>
             )}
           </div>
         )}
@@ -142,10 +146,16 @@ export function LinkedOrderLinesField({
           </div>
         ) : (
           <div className="space-y-1.5">
+            <AnimatePresence initial={false}>
             {lines.map((line) => (
-              <div
+              <motion.div
                 key={line.lineId}
-                className="group rounded-md border bg-card p-2 text-[11px]"
+                layout
+                initial={{ opacity: 0, height: 0, scale: 0.96 }}
+                animate={{ opacity: 1, height: "auto", scale: 1 }}
+                exit={{ opacity: 0, height: 0, scale: 0.96 }}
+                transition={springSnappy}
+                className="group overflow-hidden rounded-md border bg-card p-2 text-[11px]"
               >
                 <div className="flex items-start justify-between gap-1">
                   <span className="font-mono text-xs font-semibold">
@@ -200,8 +210,9 @@ export function LinkedOrderLinesField({
                     ))}
                   </div>
                 )}
-              </div>
+              </motion.div>
             ))}
+            </AnimatePresence>
           </div>
         )}
       </div>

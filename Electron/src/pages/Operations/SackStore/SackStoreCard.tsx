@@ -1,4 +1,4 @@
-import { DoorOpen, Undo2, Truck, Package, Scale, Layers } from "lucide-react";
+import { DoorOpen, Undo2, Truck, Package, Scale, Layers, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/operations/StatusBadge";
@@ -14,23 +14,41 @@ const STATUS_TONES = { READY: "neutral", AT_DOOR: "warning" } as const;
 const READY_CLASS =
   "bg-purple-500/15 text-purple-600 dark:text-purple-300 border-transparent";
 
-const fmtKg = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
-const fmtInt = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
-
 interface Props {
   shipment: SackStoreShipment;
   busy: boolean;
+  onOpen: (s: SackStoreShipment) => void;
   onMoveToDoor: (s: SackStoreShipment) => void;
   onPullBack: (s: SackStoreShipment) => void;
   onDispatch: (s: SackStoreShipment) => void;
 }
 
-export function SackStoreCard({ shipment, busy, onMoveToDoor, onPullBack, onDispatch }: Props) {
+export function SackStoreCard({
+  shipment,
+  busy,
+  onOpen,
+  onMoveToDoor,
+  onPullBack,
+  onDispatch,
+}: Props) {
   const isReady = shipment.status === "READY";
 
   return (
-    <Card className={cn("overflow-hidden", isReady ? "border-purple-500/30" : "border-warning/40")}>
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(shipment)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(shipment);
+        }
+      }}
+      className={cn(
+        "cursor-pointer overflow-hidden transition-colors hover:border-primary/50 hover:bg-muted/30",
+        isReady ? "border-purple-500/30" : "border-warning/40",
+      )}
+    >
       <CardContent className="space-y-3 p-4">
         {/* Başlık + durum + müşteri/şube */}
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -63,66 +81,36 @@ export function SackStoreCard({ shipment, busy, onMoveToDoor, onPullBack, onDisp
           />
         </div>
 
-        {/* Özet sayaçlar */}
+        {/* Özet sayaçlar — rulo çekmeden (ucuz aggregate) */}
         <div className="grid grid-cols-3 gap-2">
           <Stat icon={Package} label="Çuval" value={shipment.sackCount} />
           <Stat icon={Scale} label="Kg" value={shipment.totalKg} decimals={1} />
           <Stat icon={Layers} label="Metraj" value={shipment.totalQty} decimals={2} />
         </div>
 
-        {/* Çuvallar — kod, ağırlık, içerik */}
-        <div className="space-y-2">
-          {shipment.sacks.length === 0 ? (
-            <div className="rounded border border-dashed p-2 text-center text-xs text-muted-foreground">
-              Çuval yok
-            </div>
-          ) : (
-            shipment.sacks.map((sack) => (
-              <div key={sack.id} className="rounded border bg-muted/30 p-2">
-                <div className="mb-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs">
-                  <span className="flex items-center gap-1.5 font-semibold">
-                    Çuval #{sack.seq}
-                    {sack.manualCode && (
-                      <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] font-medium text-primary">
-                        {sack.manualCode}
-                      </span>
-                    )}
-                  </span>
-                  <span className="tabular-nums text-muted-foreground">
-                    {sack.weightKg != null ? `${fmtKg(sack.weightKg)} kg` : "tartılmadı"} ·{" "}
-                    {sack.rollCount} top
-                    {sack.swatchCount > 0 ? ` · ${sack.swatchCount} kartela` : ""}
-                  </span>
-                </div>
-                {sack.contents.length === 0 ? (
-                  <div className="text-[11px] text-muted-foreground">boş</div>
-                ) : (
-                  <div className="space-y-0.5 text-[11px]">
-                    {sack.contents.map((c, i) => (
-                      <div key={i} className="flex items-center justify-between gap-2">
-                        <span className="truncate">
-                          {c.itemName}
-                          {c.colorName ? ` · ${c.colorName}` : ""}
-                          {c.width != null ? ` · ${fmtInt(c.width)} cm` : ""}
-                        </span>
-                        <span className="shrink-0 tabular-nums text-muted-foreground">
-                          {fmtM(c.qty)} m · {c.rollCount} top
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
+        {/* İçeriği gör ipucu */}
+        <div className="flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+          {shipment.rollCount} top · içeriği görmek için tıkla
+          <ChevronRight className="h-3.5 w-3.5" />
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function SackStoreActions({ shipment, busy, onMoveToDoor, onPullBack, onDispatch }: Props) {
+function SackStoreActions({
+  shipment,
+  busy,
+  onMoveToDoor,
+  onPullBack,
+  onDispatch,
+}: Omit<Props, "onOpen">) {
   const isReady = shipment.status === "READY";
+  // Aksiyon butonları kart onClick'ini tetiklemesin → stopPropagation.
+  const stop = (fn: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    fn();
+  };
   return (
     <PermissionGate permission="shipping:write">
       <div className="flex shrink-0 flex-wrap items-center gap-1.5">
@@ -133,7 +121,7 @@ function SackStoreActions({ shipment, busy, onMoveToDoor, onPullBack, onDispatch
             size="sm"
             className="gap-1"
             disabled={busy}
-            onClick={() => onMoveToDoor(shipment)}
+            onClick={stop(() => onMoveToDoor(shipment))}
           >
             <DoorOpen className="h-3.5 w-3.5" /> Kapı Önüne Koy
           </Button>
@@ -144,7 +132,7 @@ function SackStoreActions({ shipment, busy, onMoveToDoor, onPullBack, onDispatch
             size="sm"
             className="gap-1"
             disabled={busy}
-            onClick={() => onPullBack(shipment)}
+            onClick={stop(() => onPullBack(shipment))}
           >
             <Undo2 className="h-3.5 w-3.5" /> Çuval Depoya Geri Çek
           </Button>
@@ -154,7 +142,7 @@ function SackStoreActions({ shipment, busy, onMoveToDoor, onPullBack, onDispatch
           size="sm"
           className="gap-1"
           disabled={busy}
-          onClick={() => onDispatch(shipment)}
+          onClick={stop(() => onDispatch(shipment))}
         >
           <Truck className="h-3.5 w-3.5" /> {isReady ? "Sevk Et" : "Sevk Et / Alındı"}
         </Button>

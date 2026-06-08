@@ -91,7 +91,8 @@ export async function batchLoadAliases(
       where: { customerId, colorId: { in: uniqColors } },
       select: { colorId: true, alias: true },
     });
-    for (const r of colorRows) colorAliasByColorId.set(r.colorId, r.alias);
+    // alias null = sadece atama, özel ad yok → etikette standart renk adı kullanılır.
+    for (const r of colorRows) if (r.alias) colorAliasByColorId.set(r.colorId, r.alias);
   }
 
   return { itemAliasByItemId, colorAliasByColorId };

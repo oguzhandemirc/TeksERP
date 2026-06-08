@@ -7,6 +7,7 @@
     "build": "tsc",
     "seed": "npx prisma db seed",
     "seed:scenario": "ts-node prisma/seed-shipping-scenario.ts",
+    "seed:sevkiyat": "ts-node --project prisma/tsconfig.json prisma/seed-sevkiyat-mock.ts",
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate deploy",
     "prisma:studio": "npx prisma studio",

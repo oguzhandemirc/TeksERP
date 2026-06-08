@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat } from "@/lib/format";
 import { rollStatusLabels, RollStatus } from "@/types/enums";
-import type { Roll } from "./types";
+import { type Roll, shipmentScopeLabels } from "./types";
 
 /**
  * Roll'un fiziksel/işlenmiş durumunu renk ve duruma göre türet.
@@ -207,6 +207,48 @@ export const rollColumns: ColumnDef<Roll>[] = [
         tones={rollStatusTones}
       />
     ),
+  },
+  {
+    id: "reservation",
+    header: () => <span className="text-xs">Konum</span>,
+    meta: {
+      label: "Konum",
+      exportValue: (r) =>
+        r.shipmentId
+          ? `Çuvalda${r.sack ? ` (${r.sack.sackNo})` : ""}${
+              r.shipment ? ` · ${r.shipment.shipmentNo}` : ""
+            }`
+          : r.status === RollStatus.WAREHOUSE
+            ? "Serbest depo"
+            : "",
+    },
+    enableSorting: false,
+    cell: ({ row }) => {
+      const r = row.original;
+      // Çuvala/sevkiyata bağlı top serbest stok DEĞİL — sarı "Çuvalda" rozeti.
+      if (r.shipmentId) {
+        const scope = r.shipment ? shipmentScopeLabels[r.shipment.status] : "Çuvalda";
+        return (
+          <div className="flex flex-col gap-0.5">
+            <Badge
+              variant="outline"
+              className="w-fit text-[10px] border-amber-500 text-amber-600"
+            >
+              Çuvalda
+            </Badge>
+            <span className="text-[10px] leading-tight text-muted-foreground">
+              {scope}
+              {r.sack ? ` · ${r.sack.sackNo}` : ""}
+            </span>
+          </div>
+        );
+      }
+      // Çuvallanmamış depo topu = gerçek serbest stok.
+      if (r.status === RollStatus.WAREHOUSE) {
+        return <span className="text-[10px] text-emerald-600">Serbest</span>;
+      }
+      return <span className="text-muted-foreground">—</span>;
+    },
   },
   {
     accessorKey: "createdAt",

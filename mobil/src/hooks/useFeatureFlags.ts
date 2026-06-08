@@ -34,3 +34,9 @@ export function useDyehouseNoteMobileEntry(): boolean {
 export function useShipmentConfirmationEnabled(): boolean {
   return useFeatureFlags().data?.shipmentConfirmationEnabled ?? false;
 }
+
+/** Tambur'da çıkan top metresi kayıtlı metreyi aşabilir mi? Default TRUE (açık →
+ *  aşımda operatöre onay diyaloğu gösterilir). Admin kapatırsa aşan giriş engellenir. */
+export function useTamburOverQuantityEnabled(): boolean {
+  return useFeatureFlags().data?.tamburOverQuantityEnabled ?? true;
+}

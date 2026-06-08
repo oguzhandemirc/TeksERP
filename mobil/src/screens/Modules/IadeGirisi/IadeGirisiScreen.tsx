@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, TextInput, IconButton, Surface, TouchableRipple, Icon, ActivityIndicator } from 'react-native-paper';
+import { Text, TextInput, IconButton, Surface, TouchableRipple, Icon, ActivityIndicator, Button } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -10,6 +10,7 @@ import dayjs from 'dayjs';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
+import RollPickerModal from '../../../components/RollPickerModal';
 import { returnService, type ReturnLookupResult } from '../../../services/return.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { useReturnGradingEnabled } from '../../../hooks/useFeatureFlags';
@@ -34,6 +35,7 @@ export default function IadeGirisiScreen() {
 
   const [barcode, setBarcode] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [rollPickerOpen, setRollPickerOpen] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [result, setResult] = useState<ReturnLookupResult | null>(null);
 
@@ -192,6 +194,14 @@ export default function IadeGirisiScreen() {
               <Text style={styles.emptyText}>
                 Sevk edilmiş bir topun barkodunu okutun. Top doğrudan Hazır Depo'ya iade alınır.
               </Text>
+              <Button
+                mode="contained-tonal"
+                icon="format-list-bulleted"
+                onPress={() => setRollPickerOpen(true)}
+                style={styles.listBtn}
+              >
+                Listeden Seç
+              </Button>
             </Surface>
           ) : (
             <>
@@ -406,6 +416,20 @@ export default function IadeGirisiScreen() {
         }}
         onDismiss={() => setQualityPickerOpen(false)}
       />
+
+      <RollPickerModal
+        visible={rollPickerOpen}
+        onDismiss={() => setRollPickerOpen(false)}
+        onSelect={(roll) => {
+          setRollPickerOpen(false);
+          void lookup(roll.barcode ?? '');
+        }}
+        filters={{ status: 'SHIPPED' }}
+        title="İade Edilecek Top Seç"
+        subtitle="Sevk edilmiş toplar"
+        emptyText="Sevk edilmiş top bulunamadı"
+        accent={ACCENT}
+      />
     </ScreenChrome>
   );
 }
@@ -577,6 +601,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
   emptyText: { fontSize: 13.5, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
+  listBtn: { borderRadius: radius.md, marginTop: spacing.md },
 
   // Alt bar — FasonKabul deseni (dolgulu yeşil hero + amber yan). Tam genişlik
   // bg, içerik tablet için maks-genişlikle ortalanır; güvenli alana uzar.

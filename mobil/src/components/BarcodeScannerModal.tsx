@@ -19,6 +19,10 @@ interface Props {
   onModalHide?: () => void;
   /** Sürekli okuma — modal açık kalıp arka arkaya çok top okutan akışlar için. */
   continuous?: boolean;
+  /** Başlık altında vurgulu uyarı bandı. */
+  notice?: string;
+  /** Canlı karşılama sayacı (metre): okutulan / istenen — fazlada gerçek rakam, kısıtlama yok. */
+  counter?: { scanned: number; expected: number };
 }
 
 /**
@@ -40,6 +44,8 @@ export function BarcodeScannerModal({
   barcodeTypes,
   onModalHide,
   continuous,
+  notice,
+  counter,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -86,6 +92,8 @@ export function BarcodeScannerModal({
           title={title}
           barcodeTypes={barcodeTypes}
           continuous={continuous}
+          notice={notice}
+          counter={counter}
         />
       </View>
     </AppModal>

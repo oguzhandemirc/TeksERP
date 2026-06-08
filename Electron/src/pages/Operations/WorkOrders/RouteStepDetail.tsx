@@ -1,15 +1,20 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Check, Trash2 } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowLeft, ArrowRight, Check, Factory, Trash2, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { easeOut } from "@/lib/motion";
+import { toneFor } from "@/lib/station-colors";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerModal";
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { stationKindLabels } from "@/types/enums";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
 import type { DesignerStep } from "./RouteDesignerDialog";
 
@@ -20,6 +25,9 @@ export interface RouteTargetBinding {
   onProperties: (ids: string[]) => void;
   colorLocked?: boolean;
   lockedPropertyIds?: string[];
+  /** Bağlı sipariş(ler) tek müşteriye çözülüyorsa o müşteri — renk picker'da
+   *  müşterinin renkleri üstte/vurgulu gösterilir. */
+  customerId?: string | null;
 }
 
 interface Props {
@@ -48,6 +56,7 @@ export function RouteStepDetail({
   target,
 }: Props) {
   const isExternal = step.stationType === "EXTERNAL";
+  const tone = toneFor(step.stationType, step.stationKind);
 
   const capQ = useQuery({
     queryKey: ["station-capabilities", step.stationId],
@@ -70,10 +79,12 @@ export function RouteStepDetail({
     else next.add(id);
     target.onProperties(Array.from(next));
   };
-  const pickColor = (id: string) => {
-    if (target.colorLocked) return;
-    target.onColor(target.colorId === id ? null : id);
-  };
+
+  // Bu istasyonun uygulayabildiği renkler = picker'ın izinli kümesi (kısıtlı mod).
+  const stationColorIds = useMemo(
+    () => (cap?.colors ?? []).map((c) => c.id),
+    [cap?.colors],
+  );
 
   const subFilter = step.requiredCategoryId
     ? { categoryId: step.requiredCategoryId }
@@ -85,19 +96,33 @@ export function RouteStepDetail({
       (!cap.canApplyProperty || cap.properties.length === 0));
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={easeOut}
       className={cn(
-        "space-y-3 rounded-md border p-3",
-        isExternal
-          ? "border-amber-300 bg-amber-50/30 dark:border-amber-800 dark:bg-amber-950/20"
-          : "bg-muted/10",
+        "space-y-3 rounded-lg border bg-muted/10 p-3 shadow-sm ring-1",
+        tone.border,
+        tone.ringSoft,
       )}
     >
       <div className="flex items-center gap-2">
-        <Badge variant="muted" className="h-5 w-5 justify-center font-mono text-[10px]">
+        <Badge
+          className={cn(
+            "h-5 min-w-5 justify-center border-transparent px-1 font-mono text-[10px] font-semibold text-white",
+            tone.solid,
+          )}
+        >
           {sequence}
         </Badge>
-        <span className="text-sm font-medium">Adım detayı</span>
+        <span className={cn("text-sm font-semibold", tone.text)}>
+          {step.stationName || "İstasyon seç"}
+        </span>
+        {isExternal && (
+          <Badge variant="outline" className={cn("border-station-fason/60 text-[9px]", tone.text)}>
+            FASON
+          </Badge>
+        )}
         <div className="ml-auto flex gap-1">
           <Button type="button" size="icon" variant="ghost" className="h-7 w-7" disabled={!canMoveUp} onClick={() => onMove(-1)} aria-label="Sola">
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -114,30 +139,50 @@ export function RouteStepDetail({
       <div className={isExternal ? "grid grid-cols-1 gap-2 sm:grid-cols-2" : undefined}>
         <div className="space-y-1">
           <label className="text-[11px] text-muted-foreground">İstasyon</label>
-          <ReferenceSelect<Station>
-            value={step.stationId || undefined}
+          <EntityPickerModal<Station>
+            value={step.stationId || null}
             onChange={onPickStation}
             service={stationService}
             queryKey="stations-wo-step"
-            getLabel={(s) => `${s.name} (${s.code})`}
+            getLabel={(s) => s.name}
+            getSubLabel={(s) => `${s.code} · ${stationKindLabels[s.kind] ?? s.kind}`}
+            renderLeading={(s) => (
+              <span
+                className={cn(
+                  "h-2.5 w-2.5 shrink-0 rounded-full",
+                  toneFor(s.type === "EXTERNAL" ? "EXTERNAL" : "INTERNAL", s.kind).solid,
+                )}
+              />
+            )}
+            filters={{ allowAsWorkOrderStep: "true" }}
+            icon={Factory}
+            iconClassName="text-primary"
+            title="İstasyon Seç"
+            description="İş emri adımının istasyonu. Ada veya koda göre ara."
             placeholder="İstasyon seç..."
-            extraFilters={{ allowAsWorkOrderStep: "true" }}
+            triggerClassName="h-8 text-xs"
           />
         </div>
 
         {isExternal && (
           <div className="space-y-1">
             <label className="text-[11px] text-muted-foreground">Fason Firma</label>
-            <ReferenceSelect<Subcontractor>
+            <EntityPickerModal<Subcontractor>
               value={step.plannedSubcontractorId}
               onChange={(v) => onSetFirm({ plannedSubcontractorId: v })}
               service={subcontractorService}
               queryKey={`subcontractors-${step.requiredCategoryId ?? "all"}`}
               getLabel={(s) => s.name}
-              placeholder={step.requiredCategoryId ? "Firma seç..." : "İstasyona kategori atanmamış"}
+              getSubLabel={(s) => (s.taxNumber ? `VKN ${s.taxNumber}` : s.code)}
+              filters={subFilter}
               nullable
               noneLabel="— Seçilmedi"
-              extraFilters={subFilter}
+              icon={Truck}
+              iconClassName="text-station-fason"
+              title="Fason Firma Seç"
+              description="Bu fason adımını yürütecek firma."
+              placeholder={step.requiredCategoryId ? "Firma seç..." : "İstasyona kategori atanmamış"}
+              triggerClassName="h-8 text-xs"
             />
           </div>
         )}
@@ -157,25 +202,16 @@ export function RouteStepDetail({
                 <label className="text-[11px] text-muted-foreground">
                   Bu istasyonda uygulanan renk
                 </label>
-                <div className="flex flex-wrap gap-1">
-                  {cap!.colors.map((c) => {
-                    const on = target.colorId === c.id;
-                    return (
-                      <Badge
-                        key={c.id}
-                        variant={on ? "default" : "outline"}
-                        className={cn("cursor-pointer gap-1 text-[10px]", target.colorLocked && "cursor-not-allowed opacity-50")}
-                        onClick={() => pickColor(c.id)}
-                      >
-                        {c.hex && (
-                          <span className="h-2 w-2 rounded-full border" style={{ backgroundColor: c.hex }} />
-                        )}
-                        {on && <Check className="h-3 w-3" />}
-                        {c.name}
-                      </Badge>
-                    );
-                  })}
-                </div>
+                <ColorPickerModal
+                  value={target.colorId}
+                  onChange={(id) => target.onColor(id)}
+                  customerId={target.customerId}
+                  allowedColorIds={stationColorIds}
+                  disabled={target.colorLocked}
+                  lockedTooltip="Renk kilitli (bağlı sipariş satırından geliyor)"
+                  triggerClassName="h-8 text-xs"
+                  placeholder="Renk seç..."
+                />
               </div>
             )}
             {cap!.canApplyProperty && cap!.properties.length > 0 && (
@@ -214,6 +250,6 @@ export function RouteStepDetail({
           className="h-8 text-xs"
         />
       </div>
-    </div>
+    </motion.div>
   );
 }

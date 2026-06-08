@@ -55,8 +55,8 @@ export function WorkOrderCancelDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[88vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-destructive" />
             İş emrini iptal et
@@ -71,6 +71,7 @@ export function WorkOrderCancelDialog({
           </DialogDescription>
         </DialogHeader>
 
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
         {impactQ.isLoading ? (
           <Skeleton className="h-32 w-full" />
         ) : impact ? (
@@ -185,8 +186,9 @@ export function WorkOrderCancelDialog({
             </div>
           )
         ) : null}
+        </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 border-t bg-background px-6 py-3">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Vazgeç
           </Button>

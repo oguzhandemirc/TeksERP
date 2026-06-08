@@ -32,6 +32,7 @@ export function ColorsPage() {
     hex: v.hex || null,
     sortOrder: initial?.sortOrder ?? nextOrder,
     isActive: v.isActive,
+    customerIds: v.customerIds,
   });
 
   return (

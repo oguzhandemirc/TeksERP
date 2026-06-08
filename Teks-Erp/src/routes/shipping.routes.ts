@@ -80,16 +80,49 @@ router.get("/shipments", verifyToken, READ, controller.listShipments);
 
 /**
  * @openapi
- * /api/shipping/sack-store:
+ * /api/shipping/sack-store/board:
  *   get:
  *     tags: [Shipping]
- *     summary: Çuval Depo board'u — READY (çuval depo) + AT_DOOR (kapı önü) sevkler, çuval içerikleriyle
- *     description: Her sevk → çuvallar (kod, kg, ürün-renk-metraj dökümü). "Hangi çuvalda hangi kumaş" takibi.
+ *     summary: Çuval Depo board'u (Electron + mobil — HAFİF, sayfalı, aramalı)
+ *     description: >
+ *       Rulo ÇEKMEZ — sadece kart sayaçları (çuval/top adedi, kg, metraj).
+ *       Çuval+rulo dökümü için /shipments/{id}/sack-contents (karta tıklayınca lazy).
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [READY, AT_DOOR] }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: cursor
+ *         schema: { type: string }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 30, maximum: 100 }
  *     responses:
- *       200: { description: Çuval depo listesi }
+ *       200: { description: Çuval depo board listesi (cursor sayfalı) }
  */
-router.get("/sack-store", verifyToken, READ, controller.listSackStore);
+router.get("/sack-store/board", verifyToken, READ, controller.listSackStoreBoard);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/sack-contents:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Bir sevkiyatın tam çuval+rulo dökümü (board kartı slide-over içeriği)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Sevkiyat çuvalları + içlerindeki toplar }
+ *       404: { description: Sevkiyat bulunamadı }
+ */
+router.get("/shipments/:id/sack-contents", verifyToken, READ, controller.getShipmentSackContents);
 
 /**
  * @openapi

@@ -8,7 +8,7 @@ export const recipeFormSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(1, "Reçete adı boş bırakılamaz")
+    .min(1, "Şablon adı boş bırakılamaz")
     .max(100, "En fazla 100 karakter"),
   targetItemId: z.string().nullable().optional(),
   targetColorId: z.string().nullable().optional(),

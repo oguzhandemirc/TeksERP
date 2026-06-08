@@ -76,6 +76,12 @@ export const SETTING_KEYS = {
    *  hangi bölümler basılsın + başlık/imza/footer override. CANLI okunur (snapshot DEĞİL)
    *  — irsaliye her açıldığında güncel ayarı yansıtır. Map: { [belgeKey]: DocumentConfig }. */
   DOCUMENTS_CONFIG: "documents.config",
+  /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi AŞABİLSİN mi. Default TRUE (açık).
+   *  Açıkken operatör tambur asıl ölçüm noktası olduğu için kayıtlıdan fazla ölçtüğünde (örn.
+   *  100m açık kumaşı 150m top yapma) kabul edilir; aşımda parent top tamamen tüketilir. Admin
+   *  kapatırsa çıkış ≤ giriş zorunlu olur (aşan giriş 400 ile reddedilir). Diğer flag'lerin
+   *  aksine backend ENFORCE eder (guard bu flag'e bağlı). */
+  TAMBUR_OVER_QUANTITY_ENABLED: "tambur.overQuantityEnabled",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -180,6 +186,9 @@ export interface FeatureFlags {
   companyLetterhead: CompanyLetterhead;
   /** Yazdırılan belgelerin içerik ayarı (canlı). Ham map; client resolveDocConfig ile çözer. */
   documentsConfig: DocumentsConfig;
+  /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (default TRUE/açık).
+   *  Diğer flag'lerin aksine ENFORCE edilir — tambur kesim guard'ı bu flag'e bağlı. */
+  tamburOverQuantityEnabled: boolean;
 }
 
 export class SystemSettingService {
@@ -272,6 +281,7 @@ export class SystemSettingService {
       travelerCardConfig: await readTravelerCardConfig(),
       companyLetterhead: await readCompanyLetterhead(),
       documentsConfig: await readDocumentsConfig(),
+      tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(),
     };
     return { success: true, data: flags };
   }
@@ -455,6 +465,18 @@ export class SystemSettingService {
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "tamburOverQuantityEnabled")) {
+      if (typeof input.tamburOverQuantityEnabled !== "boolean") {
+        throw AppError.badRequest("tamburOverQuantityEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_OVER_QUANTITY_ENABLED,
+        input.tamburOverQuantityEnabled,
+        "Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin (aşımda parent top tamamen tüketilir)",
+        userId
+      );
+    }
+
     return this.getFeatureFlags();
   }
 }
@@ -601,6 +623,28 @@ export async function readShipmentConfirmationEnabled(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/**
+ * Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi? Default TRUE (açık).
+ * Açıkken operatör (tambur asıl ölçüm noktası olduğu için) kayıtlıdan fazla ölçtüğünde
+ * kabul edilir — aşımda parent top tamamen tüketilir (currentQty=0), negatif kalan oluşmaz.
+ * Admin kapatırsa tambur kesim/finalize'de çıkış > giriş ise 400 ile reddedilir. Diğer
+ * flag'lerin aksine backend ENFORCE eder: tambur guard'ları (finalize / cutOpenFabric /
+ * cutWarehouseRoll) yalnız aşım anında okur.
+ */
+export async function readTamburOverQuantityEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TAMBUR_OVER_QUANTITY_ENABLED },
+    select: { value: true },
+  });
+  // Default AÇIK: kayıt yoksa true döner. Admin açıkça kapatırsa (value=false)
+  // asBoolean false verir → guard'lar tekrar aşımı reddeder.
+  if (!setting) return true;
+  return asBoolean(setting.value);
 }
 
 /**

@@ -29,6 +29,10 @@ export interface FeatureFlags {
    *  ① Sevkiyat ekranında "Hemen Sevk Et" kısayolu görünür; açıkken çıkış yalnız ② "Sevk Çıkışı"
    *  ekranından onaylanır. Ara depoda bekleme + sonradan çıkış flag'den bağımsız her zaman var. */
   shipmentConfirmationEnabled: boolean;
+  /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (default TRUE/açık).
+   *  Açıkken operatör kayıtlıdan fazla ölçtüğünde onay diyaloğu sonrası kabul edilir;
+   *  backend ENFORCE eder (admin kapatırsa aşan giriş 400 döner). */
+  tamburOverQuantityEnabled: boolean;
   /** ERP'nin kurulduğu firmanın adı — sevk irsaliyesi künyesinde basılır. */
   companyName: string;
   /** Belge künyesi (adres/tel/vergi) — irsaliye üst bloğunda basılır. */
@@ -44,6 +48,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   returnGradingEnabled: false,
   dyehouseNoteMobileEntry: false,
   shipmentConfirmationEnabled: false,
+  // Default AÇIK (backend ile aynı) — yüklenene/offline'da da aşıma izin var.
+  tamburOverQuantityEnabled: true,
   companyName: DEFAULT_COMPANY_NAME,
   companyLetterhead: DEFAULT_COMPANY_LETTERHEAD,
   documentsConfig: {},

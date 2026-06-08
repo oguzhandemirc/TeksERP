@@ -13,8 +13,9 @@ export interface CustomerColorAlias {
   id: string;
   customerId: string;
   colorId: string;
-  alias: string;
-  color?: { id: string; code: string; name: string; hex: string | null };
+  /** Müşterideki özel ad — opsiyonel. Null = sadece atama, isim verilmemiş. */
+  alias: string | null;
+  color?: { id: string; code: string; name: string; hex: string | null; isActive: boolean };
 }
 
 export const customerAliasService = {

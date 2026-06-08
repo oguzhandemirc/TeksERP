@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, TextInput, IconButton, Surface, TouchableRipple, Chip, Icon, ActivityIndicator } from 'react-native-paper';
+import { Text, TextInput, IconButton, Surface, TouchableRipple, Chip, Icon, ActivityIndicator, Button } from 'react-native-paper';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -11,6 +11,7 @@ import Toast from 'react-native-toast-message';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
+import RollPickerModal from '../../../components/RollPickerModal';
 import { rollService } from '../../../services/roll.service';
 import { useKartelaFirms } from '../../../hooks/useKartelaFirms';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
@@ -43,6 +44,7 @@ export default function KartelaSevkScreen() {
   const [firmPickerOpen, setFirmPickerOpen] = useState(false);
   const [barcode, setBarcode] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [rollPickerOpen, setRollPickerOpen] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [rolls, setRolls] = useState<ScannedRoll[]>([]);
   const [plateNumber, setPlateNumber] = useState('');
@@ -89,6 +91,19 @@ export default function KartelaSevkScreen() {
           });
           return;
         }
+        // Çuvala/sevkiyata rezerve top serbest stok DEĞİL — kartelaya alınamaz
+        // (backend zaten reddeder; burada operatöre net sebep gösteririz).
+        if (roll.shipmentId) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          Toast.show({
+            type: 'error',
+            text1: 'Top çuvalda — kullanılamaz',
+            text2: roll.shipment
+              ? `${roll.shipment.shipmentNo} sevkiyatına bağlı (çuval depo/kapı önü).`
+              : 'Bu top bir sevkiyatın çuvalında, serbest depoda değil.',
+          });
+          return;
+        }
         setRolls((prev) => [
           ...prev,
           {
@@ -110,6 +125,30 @@ export default function KartelaSevkScreen() {
       }
     },
     [rolls]
+  );
+
+  // Listeden seçim — picker zaten WAREHOUSE + serbest filtreliyor ve tam roll
+  // verisini veriyor; getByBarcode'a gerek yok, doğrudan ekle (dedup korunur).
+  const addRollFromList = useCallback(
+    (roll: Roll & { markedForKartela?: boolean }) => {
+      if (rolls.some((r) => r.id === roll.id)) {
+        Toast.show({ type: 'info', text1: 'Bu top zaten eklendi' });
+        return;
+      }
+      setRolls((prev) => [
+        ...prev,
+        {
+          id: roll.id,
+          barcode: roll.barcode,
+          itemName: roll.item?.name ?? '—',
+          colorName: roll.color?.name ?? null,
+          currentQty: Number(roll.currentQty),
+          markedForKartela: Boolean(roll.markedForKartela),
+        },
+      ]);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    },
+    [rolls],
   );
 
   const removeRoll = (id: string) => setRolls((prev) => prev.filter((r) => r.id !== id));
@@ -171,6 +210,14 @@ export default function KartelaSevkScreen() {
           <Text variant="labelLarge" style={styles.cardTitle}>
             Toplar ({rolls.length}) · {total.toFixed(1)} m
           </Text>
+          <Button
+            mode="contained-tonal"
+            icon="format-list-bulleted"
+            onPress={() => setRollPickerOpen(true)}
+            style={styles.listBtn}
+          >
+            Listeden Seç
+          </Button>
           {manualMode && (
             <View style={styles.manualRow}>
               <TextInput
@@ -335,6 +382,18 @@ export default function KartelaSevkScreen() {
           void addRoll(code);
         }}
       />
+
+      <RollPickerModal
+        visible={rollPickerOpen}
+        onDismiss={() => setRollPickerOpen(false)}
+        onSelect={addRollFromList}
+        filters={{ status: 'WAREHOUSE', shipmentScope: 'free' }}
+        title="Kartelalık Top Seç"
+        subtitle="Depodaki bitmiş toplar · seçince listeye eklenir"
+        excludeIds={rolls.map((r) => r.id)}
+        emptyText="Depoda uygun top yok"
+        accent="#d97706"
+      />
     </ScreenChrome>
   );
 }
@@ -344,6 +403,7 @@ const styles = StyleSheet.create({
   body: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxxl },
   card: { padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, gap: spacing.sm },
   cardTitle: { color: colors.textSecondary },
+  listBtn: { alignSelf: 'flex-start', borderRadius: radius.md, marginTop: spacing.xs },
   firmSelect: {
     borderRadius: radius.md,
     borderWidth: 1,

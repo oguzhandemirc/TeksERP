@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Plus, Trash2, PackagePlus } from "lucide-react";
+import { Plus, Trash2, PackagePlus, Package } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { usePricingEnabled } from "@/hooks/usePricingEnabled";
 import { itemService } from "@/pages/Items/service";
 import type { Item, ItemCreatePayload } from "@/pages/Items/types";
@@ -93,8 +93,8 @@ export function OrderLinesEditor({ value, onChange, error, customerId }: Props) 
                   }`}
                 >
                   <div className="flex-1">
-                    <ReferenceSelect<Item>
-                      value={line.itemId || undefined}
+                    <EntityPickerModal<Item>
+                      value={line.itemId || null}
                       onChange={(v) =>
                         updateLine(line.clientId, {
                           itemId: v ?? "",
@@ -103,9 +103,15 @@ export function OrderLinesEditor({ value, onChange, error, customerId }: Props) 
                         })
                       }
                       service={itemService}
-                      queryKey="items"
+                      queryKey="order-line-item"
                       getLabel={(i) => i.name}
+                      getSubLabel={(i) => i.code}
+                      icon={Package}
+                      iconClassName="text-primary"
+                      title="Ürün Seç"
+                      description="Ürün/kumaş seç veya aramayla daralt — tüm katalog sunucuda aranır."
                       placeholder="Ürün seç..."
+                      triggerClassName="h-9"
                     />
                   </div>
                   <Button
@@ -123,6 +129,7 @@ export function OrderLinesEditor({ value, onChange, error, customerId }: Props) 
                   <OrderLineColorPicker
                     itemId={line.itemId}
                     value={line.colorId ?? null}
+                    customerId={customerId}
                     onChange={(v) => updateLine(line.clientId, { colorId: v })}
                   />
                 </div>

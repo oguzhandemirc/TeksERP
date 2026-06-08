@@ -418,12 +418,23 @@ export class InventoryService {
       ];
     }
 
+    // Fason sevk picker'ı: belirli bir adıma SEVK EDİLEBİLİR toplar.
+    // Filtre, subcontractor.service dispatch() kabul kuralının BİREBİR aynısı:
+    //   serbest stok (currentStepId null & STOCK)              → auto-attach edilir
+    //   bu adımdaki top (currentStepId === stepId & STOCK|IN_PRODUCTION)
+    // Aşağıda OR olarak kurulur; varsayılan STOCK status'u devre dışı kalır
+    // (OR kendi status'unu yönetir). FIRE hariç tutma kuralı korunur.
+    const dispatchableForStepId =
+      typeof f["dispatchableForStepId"] === "string" && f["dispatchableForStepId"]
+        ? (f["dispatchableForStepId"] as string)
+        : null;
+
     // --- Status: statusIn[] > status > default STOCK ---
     const statusIn = readList(f["statusIn"]);
     delete where.statusIn;
     if (statusIn.length > 0) {
       where.status = { in: statusIn as RollStatus[] };
-    } else if (f["status"] === "ALL") {
+    } else if (f["status"] === "ALL" || dispatchableForStepId) {
       delete where.status;
     } else if (!f["status"]) {
       where.status = RollStatus.STOCK;
@@ -520,6 +531,24 @@ export class InventoryService {
       };
     }
 
+    // --- Fason sevk uygunluğu (belirli adım) ---
+    // buildWhereClause düz alan olarak yakaladıysa temizle, sonra OR ile compose et.
+    delete where.dispatchableForStepId;
+    if (dispatchableForStepId) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+        {
+          OR: [
+            { currentStepId: null, status: RollStatus.STOCK },
+            {
+              currentStepId: dispatchableForStepId,
+              status: { in: [RollStatus.STOCK, RollStatus.IN_PRODUCTION] },
+            },
+          ],
+        },
+      ];
+    }
+
     // --- Sevkiyat kapsamı: serbest depo vs çuvallanmış (committed) ---
     // 'free'      = serbest depo (shipmentId null) — yalnız satılabilir/okutulabilir stok.
     // 'committed' = çuvallanmış (shipmentId dolu) — çuval depo/kapı önü/sevk yolundaki.
@@ -597,6 +626,10 @@ export class InventoryService {
           property: { select: { id: true, code: true, name: true } },
         },
       },
+      // Sevkiyat rezervasyonu: WAREHOUSE top bir çuval/sevkiyata bağlıysa "serbest depo"
+      // DEĞİLDİR — listede "Çuvalda" rozeti için sevkiyat no/durum + çuval no döner.
+      shipment: { select: { id: true, shipmentNo: true, status: true } },
+      sack: { select: { id: true, sackNo: true, seq: true } },
     } as const;
 
     // CURSOR MODE — dinamik sortBy desteği (utils/cursor.ts dynamic API).
@@ -759,6 +792,9 @@ export class InventoryService {
         item: true,
         color: true,
         errors: true,
+        // Rezervasyon bilgisi — detay panelinde "çuvalda/sevkiyatta" gösterimi.
+        shipment: { select: { id: true, shipmentNo: true, status: true } },
+        sack: { select: { id: true, sackNo: true, seq: true } },
         operations: {
           select: {
             id: true,
@@ -819,6 +855,9 @@ export class InventoryService {
         item: true,
         color: true,
         errors: true,
+        // Rezervasyon bilgisi — barkod okutmada "bu top çuvalda/sevkiyatta" uyarısı.
+        shipment: { select: { id: true, shipmentNo: true, status: true } },
+        sack: { select: { id: true, sackNo: true, seq: true } },
         // En güncel iade kaydı — Tambur/depo barkod okutmada iade notu/nedeni görünür.
         returns: {
           orderBy: { createdAt: "desc" },

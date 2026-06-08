@@ -19,6 +19,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { resolveQualityGradeId } from "./helpers/quality-grade.helper";
+import { readTamburOverQuantityEnabled } from "./system-setting.service";
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -547,9 +548,16 @@ export class TamburService {
       cumulativeLenD = cumulativeLenD.plus(c.length);
     }
     if (cumulativeLenD.greaterThan(totalQtyD)) {
-      throw AppError.badRequest(
-        `Kesim uzunlukları toplamı (${cumulativeLenD.toString()}m) topun metrajını (${totalQtyD.toString()}m) aşıyor`
-      );
+      // Aşım: kesimlerin toplamı kayıtlı metrajı geçiyor. Tambur asıl ölçüm noktası —
+      // flag açıksa kabul edilir (parent toptan TAMBUR_CONSUMED olur; segmentler
+      // operatörün ölçtüğü uzunlukla yaratılır, "kalan kuyruk" bloğu offsetD >= totalQtyD
+      // olduğu için atlanır → negatif kalan oluşmaz). Flag kapalıyken bugünkü davranış: reddet.
+      const overEnabled = await readTamburOverQuantityEnabled();
+      if (!overEnabled) {
+        throw AppError.badRequest(
+          `Kesim uzunlukları toplamı (${cumulativeLenD.toString()}m) topun metrajını (${totalQtyD.toString()}m) aşıyor`
+        );
+      }
     }
     // Defect ID referansları parent'a ait olmalı.
     for (const c of inputCuts) {
@@ -1497,6 +1505,13 @@ export class TamburService {
         `Top kesime uygun değil (${parent.status}) — yalnız depodaki bitmiş toplar veya renksiz ham stok kesilebilir`,
       );
     }
+    // Çuvala/sevkiyata rezerve top serbest stok DEĞİL — kesilirse sevkiyat içeriği
+    // ve karşılanma bozulur. WAREHOUSE statüsüyle görünse de önce sevkiyattan çıkmalı.
+    if (parent.shipmentId) {
+      throw AppError.badRequest(
+        "Bu top bir sevkiyatın çuvalında (rezerve) — kesilemez. Önce sevkiyattan çıkar.",
+      );
+    }
     // Çocuk top statüsü: ham parent → operatör hedefi (default üretime devam =
     // STOCK; sevke hazır = WAREHOUSE). Bitmiş parent → her zaman WAREHOUSE.
     const childStatus: RollStatus = isRawParent
@@ -1504,7 +1519,11 @@ export class TamburService {
         ? RollStatus.WAREHOUSE
         : RollStatus.STOCK
       : RollStatus.WAREHOUSE;
-    if (data.cutLength > Number(parent.currentQty)) {
+    // Aşım: operatör topu kayıtlıdan fazla ölçtü (tambur asıl ölçüm noktası).
+    // Flag kapalıyken reddet (bugünkü davranış); açıkken kabul → parent top tamamen
+    // tüketilir (aşağıda currentQty/initialQty=0).
+    const exceedsRemaining = data.cutLength > Number(parent.currentQty);
+    if (exceedsRemaining && !(await readTamburOverQuantityEnabled())) {
       throw AppError.badRequest(
         `Kesim metresi (${data.cutLength}) topun kalan metresinden (${parent.currentQty}) büyük olamaz`,
       );
@@ -1594,15 +1613,22 @@ export class TamburService {
       // basar; sistemde "70 / 100" gösterimi yanıltıcı.
       // Atomic decrement — hesap DB-side, gte guard concurrent overdraw'a karşı.
       // Önceki kesim de initialQty=currentQty yaptığı için iki decrement aynı sonucu verir.
+      // Aşımda (cutLength > currentQty) decrement negatife düşer → bunun yerine topu
+      // tamamen tüket (currentQty/initialQty=0). gt:0 guard eşzamanlı çift-tüketimi engeller.
       let updatedParent;
       try {
-        updatedParent = await tx.roll.update({
-          where: { id: parent.id, currentQty: { gte: data.cutLength } },
-          data: {
-            currentQty: { decrement: data.cutLength },
-            initialQty: { decrement: data.cutLength },
-          },
-        });
+        updatedParent = exceedsRemaining
+          ? await tx.roll.update({
+              where: { id: parent.id, currentQty: { gt: 0 } },
+              data: { currentQty: 0, initialQty: 0 },
+            })
+          : await tx.roll.update({
+              where: { id: parent.id, currentQty: { gte: data.cutLength } },
+              data: {
+                currentQty: { decrement: data.cutLength },
+                initialQty: { decrement: data.cutLength },
+              },
+            });
       } catch (err) {
         if (
           err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -1873,7 +1899,11 @@ export class TamburService {
         `Açık kumaş aktif değil (${parent.status})`,
       );
     }
-    if (data.lengthMeters > Number(parent.currentQty)) {
+    // Aşım: operatör açık kumaşı kayıtlıdan fazla ölçtü (tambur asıl ölçüm noktası).
+    // Flag kapalıyken reddet (bugünkü davranış); açıkken kabul → açık kumaşın tamamı
+    // tek topa dönüşür, parent tamamen tüketilir (aşağıda currentQty=0).
+    const exceedsRemaining = data.lengthMeters > Number(parent.currentQty);
+    if (exceedsRemaining && !(await readTamburOverQuantityEnabled())) {
       throw AppError.badRequest(
         `Kesim metresi (${data.lengthMeters}) açık kumaşın kalan metresinden (${parent.currentQty}) büyük olamaz`,
       );
@@ -1971,12 +2001,19 @@ export class TamburService {
       }
 
       // Parent atomic decrement — hesap DB-side, gte guard concurrent overdraw'a karşı.
+      // Aşımda (lengthMeters > currentQty) decrement negatife düşer → bunun yerine açık
+      // kumaşı tamamen tüket (currentQty=0). gt:0 guard eşzamanlı çift-tüketimi engeller.
       let updatedParent;
       try {
-        updatedParent = await tx.roll.update({
-          where: { id: parent.id, currentQty: { gte: data.lengthMeters } },
-          data: { currentQty: { decrement: data.lengthMeters } },
-        });
+        updatedParent = exceedsRemaining
+          ? await tx.roll.update({
+              where: { id: parent.id, currentQty: { gt: 0 } },
+              data: { currentQty: 0 },
+            })
+          : await tx.roll.update({
+              where: { id: parent.id, currentQty: { gte: data.lengthMeters } },
+              data: { currentQty: { decrement: data.lengthMeters } },
+            });
       } catch (err) {
         if (
           err instanceof Prisma.PrismaClientKnownRequestError &&

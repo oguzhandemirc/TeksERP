@@ -39,14 +39,14 @@ function buildPayload(v: RecipeFormValues, isEdit: boolean): RecipePayload {
 export function ProductRecipesPage() {
   return (
     <CrudPage<ProductRecipe>
-      title="Üretim Reçeteleri"
-      description="Ürün + renk + özellik + en + rota şablonları — iş emri açılışını hızlandırır."
-      entityName="Reçete"
+      title="İş Emri Şablonları"
+      description="Ürün + renk + özellik + en + rota — iş emri açılışını hızlandıran hazır şablonlar."
+      entityName="İş Emri Şablonu"
       queryKey="product-recipes"
       service={productRecipeService}
       columns={recipeColumns}
       writePermission="station:write"
-      searchPlaceholder="Reçete adı veya kodu ara..."
+      searchPlaceholder="Şablon adı veya kodu ara..."
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <ProductRecipeFormDialog
           open={open}

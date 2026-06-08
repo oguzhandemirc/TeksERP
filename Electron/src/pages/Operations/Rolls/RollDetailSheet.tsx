@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Tag, Undo2, Palette } from "lucide-react";
+import { History, Tag, Undo2, Palette, PackageOpen } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -14,7 +14,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
 import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from "@/types/enums";
 import { rollService } from "./service";
-import type { Roll } from "./types";
+import { type Roll, shipmentScopeLabels } from "./types";
 
 // "Son Basılan Etiket" kartı yalnız müşteri etiketi taşıyabilen bitmiş toplarda
 // gösterilir: depo (WAREHOUSE), A1 (A1_STOCK), sevk edilmiş (SHIPPED). Ham stok,
@@ -45,6 +45,10 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   const latestReturn = detail?.returns?.[0] ?? null;
   // AT_KARTELA top: hangi kartela firmasında olduğunu detay panelinde göster.
   const kartelaDispatch = detail?.kartelaDispatchItems?.[0]?.dispatch ?? null;
+  // Sevkiyat rezervasyonu: top bir çuvala/sevkiyata bağlıysa "serbest depo" değildir.
+  // Detay endpoint'i shipment+sack döner; liste cevabı da taşıyabilir (fallback).
+  const reservedShipment = detail?.shipment ?? roll?.shipment ?? null;
+  const reservedSack = detail?.sack ?? roll?.sack ?? null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -202,6 +206,43 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Sevkiyat rezervasyonu — top bir çuvalın içinde, serbest stok DEĞİL.
+                WAREHOUSE statüsüyle görünse de başka işe ayrılamaz (çuval depo/kapı önü). */}
+            {reservedShipment && (
+              <Card className="border-amber-300 bg-amber-50/50">
+                <CardContent className="space-y-2 p-3 text-sm">
+                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-amber-700">
+                    <PackageOpen className="h-3.5 w-3.5" /> Sevkiyat Rezervasyonu
+                    <Badge
+                      variant="outline"
+                      className="ml-auto border-amber-500 text-[10px] text-amber-600"
+                    >
+                      {shipmentScopeLabels[reservedShipment.status] ?? reservedShipment.status}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-amber-700/80">
+                    Bu top bir çuvalın içinde ve bir sevkiyata bağlı — serbest depoda
+                    değildir, başka işe (sevk/kartela/iş emri) ayrılamaz.
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <div className="text-xs text-muted-foreground">Sevkiyat</div>
+                    <div className="font-mono text-xs">{reservedShipment.shipmentNo}</div>
+                    {reservedSack && (
+                      <>
+                        <div className="text-xs text-muted-foreground">Çuval</div>
+                        <div className="font-mono text-xs">
+                          {reservedSack.sackNo}
+                          <span className="ml-1 text-muted-foreground">
+                            (Çuval {reservedSack.seq})
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Kartela fasonu — top kartela firmasında işlemde (AT_KARTELA). */}
             {roll.status === "AT_KARTELA" && (

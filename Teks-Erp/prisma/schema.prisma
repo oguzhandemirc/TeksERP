@@ -2071,7 +2071,9 @@ model CustomerColorAlias {
   id         String @id @default(uuid())
   customerId String
   colorId    String
-  alias      String // Müşterideki renk adı
+  // Müşterideki renk adı (etiket basımı için opsiyonel). Null = renk yalnızca
+  // o müşteriye atanmış ama özel ad verilmemiş (atama ≠ isimlendirme).
+  alias      String?
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   color    Color    @relation(fields: [colorId], references: [id], onDelete: Cascade)

@@ -12,11 +12,14 @@ import {
   type KanbanQueueCard,
 } from "./kanbanQueueService";
 import type { Roll } from "./types";
+import { sackStoreService } from "../SackStore/service";
+import type { SackStoreShipment } from "../SackStore/types";
 
 // Üretim akışı kolonları — salt-okunur görselleştirme (sürükleme yok).
 // HİBRİT model: Ham Stok / Fason / Depo rulo statüsünden (tek tek rulo);
-// Kurşun & Tambur "bekleyen" istasyon kuyruğundan (parti = refakat kartı).
-type ColType = "roll" | "kursun" | "tambur" | "placeholder";
+// Kurşun & Tambur "bekleyen" istasyon kuyruğundan (parti = refakat kartı);
+// Sevk kolonunda Çuval Depo (READY) + Kapı Önü (AT_DOOR) grupları.
+type ColType = "roll" | "kursun" | "tambur" | "sack-store";
 
 interface KanbanColumn {
   key: string;
@@ -34,14 +37,14 @@ const COLUMNS: KanbanColumn[] = [
   { key: "kursun", type: "kursun", label: "Kurşun Bekleyen", icon: Cog, dot: "bg-station-process", bar: "bg-station-process" },
   { key: "tambur", type: "tambur", label: "Tambur Bekleyen", icon: Disc3, dot: "bg-station-tambur", bar: "bg-station-tambur" },
   { key: "depo", type: "roll", status: "WAREHOUSE", label: "Depo", icon: Warehouse, dot: "bg-station-depo", bar: "bg-station-depo" },
-  { key: "sevk", type: "placeholder", label: "Sevk", icon: Truck, dot: "bg-emerald-500", bar: "bg-emerald-500" },
+  { key: "sevk", type: "sack-store", label: "Sevk", icon: Truck, dot: "bg-emerald-500", bar: "bg-emerald-500" },
 ];
 const PREVIEW_LIMIT = 12;
 
 type ColumnData =
   | { kind: "roll"; rolls: Roll[]; total: number }
   | { kind: "queue"; cards: KanbanQueueCard[]; total: number }
-  | { kind: "placeholder" };
+  | { kind: "sack-store"; items: SackStoreShipment[] };
 
 export function RollsKanban() {
   const [selected, setSelected] = useState<Roll | null>(null);
@@ -49,7 +52,6 @@ export function RollsKanban() {
   const results = useQueries({
     queries: COLUMNS.map((c) => ({
       queryKey: ["rolls", "kanban", c.key],
-      enabled: c.type !== "placeholder",
       staleTime: 30_000,
       queryFn: async (): Promise<ColumnData> => {
         if (c.type === "roll") {
@@ -63,6 +65,10 @@ export function RollsKanban() {
           });
           return { kind: "roll", rolls: res.data, total: res.pagination.totalEstimate ?? res.data.length };
         }
+        if (c.type === "sack-store") {
+          const res = await sackStoreService.list();
+          return { kind: "sack-store", items: res.data };
+        }
         const q = c.type === "kursun" ? await fetchKursunQueueCards() : await fetchTamburQueueCards();
         return { kind: "queue", cards: q.cards.slice(0, PREVIEW_LIMIT), total: q.total };
       },
@@ -75,12 +81,17 @@ export function RollsKanban() {
         {COLUMNS.map((col, i) => {
           const r = results[i]!;
           const data = r.data;
-          const isPlaceholder = col.type === "placeholder";
           const total =
-            data?.kind === "roll" ? data.total : data?.kind === "queue" ? data.total : 0;
+            data?.kind === "roll" ? data.total
+            : data?.kind === "queue" ? data.total
+            : data?.kind === "sack-store" ? data.items.length
+            : 0;
           const shown =
-            data?.kind === "roll" ? data.rolls.length : data?.kind === "queue" ? data.cards.length : 0;
-          const more = Math.max(0, total - shown);
+            data?.kind === "roll" ? data.rolls.length
+            : data?.kind === "queue" ? data.cards.length
+            : data?.kind === "sack-store" ? data.items.length
+            : 0;
+          const rollMore = data?.kind === "roll" ? Math.max(0, data.total - data.rolls.length) : 0;
 
           return (
             <div key={col.key} className="flex w-64 shrink-0 flex-col rounded-lg border bg-card/40">
@@ -90,18 +101,16 @@ export function RollsKanban() {
                 <col.icon className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-xs font-semibold">{col.label}</span>
                 <span className="ml-auto rounded bg-muted px-1.5 text-[10px] font-medium tabular-nums">
-                  {isPlaceholder ? "—" : r.isLoading ? "…" : total}
+                  {r.isLoading ? "…" : total}
                 </span>
               </div>
               <div className="flex flex-col gap-2 px-2 pb-2">
-                {isPlaceholder ? (
-                  <p className="px-1 py-8 text-center text-[11px] text-muted-foreground">
-                    Sevkiyat modülü yakında
-                  </p>
-                ) : r.isLoading ? (
+                {r.isLoading ? (
                   Array.from({ length: 3 }).map((_, k) => <Skeleton key={k} className="h-16 w-full" />)
                 ) : shown === 0 ? (
                   <p className="px-1 py-6 text-center text-[11px] text-muted-foreground">Boş</p>
+                ) : data?.kind === "sack-store" ? (
+                  <SackStoreColumn items={data.items} />
                 ) : (
                   <Stagger className="flex flex-col gap-2">
                     {data?.kind === "roll" &&
@@ -116,9 +125,9 @@ export function RollsKanban() {
                           <QueueCard card={card} />
                         </StaggerItem>
                       ))}
-                    {more > 0 && (
+                    {rollMore > 0 && (
                       <p className="px-1 pt-1 text-center text-[11px] text-muted-foreground">
-                        +{more} daha
+                        +{rollMore} daha
                       </p>
                     )}
                   </Stagger>
@@ -216,6 +225,74 @@ function QueueCard({ card }: { card: KanbanQueueCard }) {
             Acil
           </span>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Sevk kolonunun tüm içeriği — READY (Çuval Depo) + AT_DOOR (Kapı Önü) grupları. */
+function SackStoreColumn({ items }: { items: SackStoreShipment[] }) {
+  const ready = items.filter((s) => s.status === "READY");
+  const atDoor = items.filter((s) => s.status === "AT_DOOR");
+
+  return (
+    <Stagger className="flex flex-col gap-2">
+      {ready.length > 0 && (
+        <>
+          <SackGroupLabel label="Çuval Depo" count={ready.length} dot="bg-blue-400" />
+          {ready.map((s) => (
+            <StaggerItem key={s.id}>
+              <KanbanSackCard shipment={s} />
+            </StaggerItem>
+          ))}
+        </>
+      )}
+      {atDoor.length > 0 && (
+        <>
+          {ready.length > 0 && <div className="border-t" />}
+          <SackGroupLabel label="Kapı Önü" count={atDoor.length} dot="bg-amber-400" />
+          {atDoor.map((s) => (
+            <StaggerItem key={s.id}>
+              <KanbanSackCard shipment={s} />
+            </StaggerItem>
+          ))}
+        </>
+      )}
+    </Stagger>
+  );
+}
+
+function SackGroupLabel({ label, count, dot }: { label: string; count: number; dot: string }) {
+  return (
+    <div className="flex items-center gap-1.5 px-0.5 pt-0.5">
+      <span className={cn("h-1.5 w-1.5 rounded-full", dot)} />
+      <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
+      <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">{count}</span>
+    </div>
+  );
+}
+
+function KanbanSackCard({ shipment }: { shipment: SackStoreShipment }) {
+  return (
+    <div className="w-full rounded-md border bg-card p-2.5">
+      <div className="flex items-start justify-between gap-1">
+        <span className="truncate text-sm font-semibold leading-tight">{shipment.shipmentNo}</span>
+        {shipment.status === "AT_DOOR" && (
+          <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+            Kapı Önü
+          </span>
+        )}
+      </div>
+      <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+        {shipment.customer.name}
+        {shipment.branch && <span> · {shipment.branch.name}</span>}
+      </div>
+      <div className="mt-1.5 flex items-center gap-1.5 text-[10px] tabular-nums text-muted-foreground">
+        <span>{shipment.sackCount} çuval</span>
+        <span>·</span>
+        <span>{shipment.totalKg.toLocaleString("tr-TR")} kg</span>
+        <span>·</span>
+        <span>{shipment.totalQty.toLocaleString("tr-TR")} m</span>
       </div>
     </div>
   );
