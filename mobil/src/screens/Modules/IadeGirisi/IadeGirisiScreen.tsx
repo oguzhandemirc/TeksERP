@@ -1,8 +1,9 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, TextInput, IconButton, Surface, TouchableRipple, Icon, ActivityIndicator, Button } from 'react-native-paper';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Text, TextInput, IconButton, Surface, TouchableRipple, Icon, ActivityIndicator, Button, Switch } from 'react-native-paper';
+import { useMutation, useQuery, useQueryClient, onlineManager } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import dayjs from 'dayjs';
@@ -26,6 +27,12 @@ import type { MainStackParamList } from '../../../navigation/types';
 const ACCENT = '#d97706';
 const ACCENT_BG = '#fef3c7';
 
+// Android LMK: OS arka plandaki uygulamayı öldürürse React state sıfırlanır. Sticky
+// alanları (neden/not/kalite) AsyncStorage'a yazıp yeniden açılışta geri yükleriz.
+// 8 saat (1 vardiya) sonra otomatik sona erer — yeni vardiya temiz başlasın.
+const DRAFT_KEY = 'iade_giris_draft_v1';
+const DRAFT_TTL_MS = 8 * 60 * 60 * 1000;
+
 export default function IadeGirisiScreen() {
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
@@ -47,6 +54,12 @@ export default function IadeGirisiScreen() {
   const [note, setNote] = useState('');
   const [qualityGradeId, setQualityGradeId] = useState<string | null>(null);
   const [qualityPickerOpen, setQualityPickerOpen] = useState(false);
+
+  // Seri iade: kayıttan sonra kamerayı otomatik yeniden aç (sticky neden/sipariş ile
+  // arka arkaya top okut). Her top yine "İade Al" ile onaylanır (tek tek onay korunur).
+  const [seriMode, setSeriMode] = useState(false);
+  const [seriCount, setSeriCount] = useState(0);
+  const draftRestoredRef = useRef(false);
 
   const reasonsQuery = useQuery({
     queryKey: ['return-reasons'],
@@ -82,6 +95,47 @@ export default function IadeGirisiScreen() {
     [result],
   );
 
+  // ── Draft (Android LMK koruması) — yalnız sticky metadata (neden/not/kalite). Top
+  // değil: top her zaman taze okutulmalı (bayat top iade edilmesin). ──
+  useEffect(() => {
+    AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
+      if (raw) {
+        try {
+          const d = JSON.parse(raw) as Record<string, unknown>;
+          const age = typeof d.savedAt === 'number' ? Date.now() - d.savedAt : Infinity;
+          if (age < DRAFT_TTL_MS) {
+            if (typeof d.reasonId === 'string') setReasonId(d.reasonId);
+            if (typeof d.reasonText === 'string') setReasonText(d.reasonText);
+            if (typeof d.note === 'string') setNote(d.note);
+            if (typeof d.qualityGradeId === 'string') setQualityGradeId(d.qualityGradeId);
+          } else {
+            AsyncStorage.removeItem(DRAFT_KEY);
+          }
+        } catch {
+          AsyncStorage.removeItem(DRAFT_KEY);
+        }
+      }
+      draftRestoredRef.current = true;
+    });
+  }, []);
+
+  // Autosave (600ms debounce). Restore bitmeden yazma — sıfır state ile taslağı silmesin.
+  useEffect(() => {
+    if (!draftRestoredRef.current) return;
+    const t = setTimeout(() => {
+      if (!reasonId && !reasonText && !note && !qualityGradeId) {
+        AsyncStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      AsyncStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ savedAt: Date.now(), reasonId, reasonText, note, qualityGradeId }),
+      );
+    }, 600);
+    return () => clearTimeout(t);
+  }, [reasonId, reasonText, note, qualityGradeId]);
+
+  // Tam temizlik — sticky alanlar dahil her şeyi sıfırla (operatör "Temizle" der).
   const resetForm = useCallback(() => {
     setResult(null);
     setBarcode('');
@@ -90,23 +144,39 @@ export default function IadeGirisiScreen() {
     setReasonText('');
     setNote('');
     setQualityGradeId(null);
+    setSeriCount(0);
+  }, []);
+
+  // Kayıt sonrası — STICKY alanları (neden/sipariş/not/kalite) KORU, yalnız okutulan
+  // topu temizle ki sıradaki top aynı metadata ile hızlı alınsın (toplu iade).
+  const resetForNextRoll = useCallback(() => {
+    setResult(null);
+    setBarcode('');
   }, []);
 
   const lookup = useCallback(async (code: string) => {
     const trimmed = code.trim();
     if (!trimmed) return;
+    if (!onlineManager.isOnline()) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({ type: 'error', text1: 'Çevrimdışı', text2: 'İade için bağlantı gerekli — top sorgulanamıyor.' });
+      return;
+    }
     setResolving(true);
     try {
       const res = await returnService.lookup(trimmed);
       const data = res.data;
       setResult(data);
       setBarcode(trimmed);
-      // Tek aday sipariş → otomatik seç.
-      setOrderId(data.candidateOrders.length === 1 ? data.candidateOrders[0].id : null);
-      setReasonId(null);
-      setReasonText('');
-      setNote('');
-      setQualityGradeId(null);
+      // Sticky sipariş: önceki seçili sipariş yeni topun adaylarında hâlâ varsa koru;
+      // yoksa tek aday otomatik, çok/sıfır aday → temizle. (neden/not/kalite STICKY kalır)
+      setOrderId((prev) =>
+        prev && data.candidateOrders.some((o) => o.id === prev)
+          ? prev
+          : data.candidateOrders.length === 1
+            ? data.candidateOrders[0].id
+            : null,
+      );
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -117,8 +187,9 @@ export default function IadeGirisiScreen() {
   }, []);
 
   const createMutation = useMutation({
-    mutationFn: async () =>
-      (
+    mutationFn: async () => {
+      if (!onlineManager.isOnline()) throw new Error('Çevrimdışı — iade için bağlantı gerekli.');
+      return (
         await returnService.create({
           rollId: result!.roll.id,
           orderId,
@@ -127,13 +198,24 @@ export default function IadeGirisiScreen() {
           note: note.trim() || null,
           qualityGradeId: returnGradingEnabled ? qualityGradeId : null,
         })
-      ).data,
-    onSuccess: () => {
+      ).data;
+    },
+    onSuccess: (data) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'İade alındı', text2: "Top Hazır Depo'ya eklendi" });
-      resetForm();
+      const shelf =
+        data.appliedStatus === 'SCRAP'
+          ? 'Hurdaya'
+          : data.appliedStatus === 'A1_STOCK'
+            ? '2. Kalite Stoğa'
+            : "Hazır Depo'ya";
+      Toast.show({ type: 'success', text1: 'İade alındı', text2: `Top ${shelf} eklendi` });
+      resetForNextRoll(); // sticky neden/sipariş/not/kalite KORUNUR
       qc.invalidateQueries({ queryKey: ['returns'] });
       qc.invalidateQueries({ queryKey: ['rolls'] });
+      if (seriMode) {
+        setSeriCount((c) => c + 1);
+        setScannerOpen(true); // kamerayı hemen yeniden aç → sıradaki topu okut
+      }
     },
     onError: (err) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -141,7 +223,10 @@ export default function IadeGirisiScreen() {
     },
   });
 
-  const canSubmit = !!result && !createMutation.isPending;
+  // Neden ZORUNLU (katalog veya serbest metin) + aday sipariş varsa seçim zorunlu.
+  const hasReason = !!reasonId || reasonText.trim().length > 0;
+  const orderOk = orderOptions.length === 0 || !!orderId;
+  const canSubmit = !!result && hasReason && orderOk && !createMutation.isPending;
   const roll = result?.roll;
   const selectedQualityName =
     qualityOptions.find((o) => o.value === qualityGradeId)?.label ?? roll?.qualityGrade ?? '—';
@@ -151,6 +236,27 @@ export default function IadeGirisiScreen() {
     <ScreenChrome title="İade Girişi">
       <View style={styles.flex}>
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+          {/* Seri iade — açıkken her kayıttan sonra kamera otomatik yeniden açılır
+              (sticky neden/sipariş ile arka arkaya top). Her top yine "İade Al"
+              ile onaylanır (tek tek onay korunur). */}
+          <Surface style={styles.seriRow} elevation={0}>
+            <View style={styles.flex}>
+              <View style={styles.seriTitleRow}>
+                <Icon source="layers-triple-outline" size={18} color={seriMode ? ACCENT : colors.textMuted} />
+                <Text style={styles.seriTitle}>Seri İade</Text>
+                {seriMode && seriCount > 0 && (
+                  <View style={styles.seriBadge}>
+                    <Text style={styles.seriBadgeText}>{seriCount}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.seriHint}>
+                {seriMode ? 'Kayıttan sonra kamera otomatik açılır' : 'Arka arkaya top okutmak için aç'}
+              </Text>
+            </View>
+            <Switch value={seriMode} onValueChange={setSeriMode} color={ACCENT} />
+          </Surface>
+
           {/* Barkod (manuel mod) — kamera alt bardaki "OKUT" ile */}
           {manualMode && (
             <View style={styles.field}>
@@ -240,7 +346,9 @@ export default function IadeGirisiScreen() {
 
               {/* Sipariş seçimi (aday siparişler) */}
               <View style={styles.field}>
-                <FieldLabel hint={orderOptions.length === 0 ? 'aday yok' : undefined}>Sipariş</FieldLabel>
+                <FieldLabel hint={orderOptions.length > 0 && !orderId ? 'seçim zorunlu' : undefined}>
+                  Sipariş
+                </FieldLabel>
                 <SelectField
                   icon="file-document-outline"
                   value={selectedOrderLabel}
@@ -250,11 +358,21 @@ export default function IadeGirisiScreen() {
                   disabled={orderOptions.length === 0}
                   onPress={() => setOrderPickerOpen(true)}
                 />
+                {orderOptions.length === 0 && (
+                  <View style={styles.warnBox}>
+                    <Icon source="alert-outline" size={15} color="#b45309" />
+                    <Text style={styles.warnText}>
+                      Bu sevkiyatta uyan sipariş yok — iade siparişe bağlanmadan kaydedilecek.
+                    </Text>
+                  </View>
+                )}
               </View>
 
-              {/* İade nedeni (katalog) + serbest metin */}
+              {/* İade nedeni (katalog) + serbest metin — EN AZ BİRİ ZORUNLU */}
               <View style={styles.field}>
-                <FieldLabel optional>İade Nedeni</FieldLabel>
+                <FieldLabel required hint={!hasReason ? 'katalog veya açıklama' : undefined}>
+                  İade Nedeni
+                </FieldLabel>
                 <SelectField
                   icon="alert-circle-outline"
                   value={reasonId ? reasonOptions.find((o) => o.value === reasonId)?.label ?? null : null}
@@ -264,7 +382,7 @@ export default function IadeGirisiScreen() {
                 />
                 <TextInput
                   mode="outlined"
-                  placeholder="Açıklama (serbest, opsiyonel)"
+                  placeholder="Açıklama (katalog seçmediysen yaz)"
                   value={reasonText}
                   onChangeText={setReasonText}
                   multiline
@@ -369,6 +487,7 @@ export default function IadeGirisiScreen() {
       <BarcodeScannerModal
         visible={scannerOpen}
         title="İade Edilecek Top QR Okut"
+        notice={seriMode ? `Seri iade · ${seriCount} top alındı` : undefined}
         onDismiss={() => setScannerOpen(false)}
         onScan={(code) => {
           setScannerOpen(false);
@@ -440,15 +559,18 @@ export default function IadeGirisiScreen() {
 function FieldLabel({
   children,
   optional,
+  required,
   hint,
 }: {
   children: React.ReactNode;
   optional?: boolean;
+  required?: boolean;
   hint?: string;
 }) {
   return (
     <Text style={styles.fieldLabel}>
       {children}
+      {required ? <Text style={styles.fieldLabelReq}> *</Text> : null}
       {optional ? <Text style={styles.fieldLabelMuted}> (opsiyonel)</Text> : null}
       {hint ? <Text style={styles.fieldLabelMuted}> — {hint}</Text> : null}
     </Text>
@@ -509,6 +631,37 @@ const styles = StyleSheet.create({
   fieldGap: { marginTop: spacing.sm },
   fieldLabel: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginLeft: 2 },
   fieldLabelMuted: { fontWeight: '500', color: colors.textMuted, fontSize: 12 },
+  fieldLabelReq: { fontWeight: '800', color: '#dc2626', fontSize: 14 },
+
+  // Seri iade anahtarı
+  seriRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  seriTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  seriTitle: { fontSize: 14, fontWeight: '800', color: colors.text },
+  seriBadge: { backgroundColor: ACCENT, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 1 },
+  seriBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  seriHint: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+
+  // Sipariş atfı uyarısı
+  warnBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.xs,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radius.md,
+    backgroundColor: '#fef3c7',
+  },
+  warnText: { flex: 1, fontSize: 12, color: '#92400e', fontWeight: '500' },
 
   // Manuel barkod
   manualRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

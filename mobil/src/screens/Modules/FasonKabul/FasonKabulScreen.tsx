@@ -72,6 +72,7 @@ import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList } from '../../../components/motion';
 import type {
   PendingReturnGroup,
+  PendingReturnParty,
   PendingReturnSummary,
   ReceiveRequest,
   ReceiveNewRollInput,
@@ -142,6 +143,13 @@ export default function FasonKabulScreen() {
 
   // ── Form state ──
   const [selectedGroup, setSelectedGroup] = useState<PendingReturnGroup | null>(null);
+  /**
+   * Çoklu sevkte (aynı adıma birden çok parti) operatör ÖNCE hangi partinin
+   * geldiğini seçer; form yalnız o partinin toplarına/açık kumaşına çalışır.
+   * Tek parti varsa selectGroup otomatik seçer. Her parti ayrı receive() → ayrı
+   * fiş. null + çoklu parti = parti seçim ekranı gösterilir.
+   */
+  const [selectedParty, setSelectedParty] = useState<PendingReturnParty | null>(null);
   const [rows, setRows] = useState<RollRow[]>([]);
   const [manifestNo, setManifestNo] = useState('');
   const [notes, setNotes] = useState('');
@@ -234,6 +242,7 @@ export default function FasonKabulScreen() {
           const age = typeof d.savedAt === 'number' ? Date.now() - d.savedAt : Infinity;
           if (age < DRAFT_TTL_MS) {
             if (d.selectedGroup) setSelectedGroup(d.selectedGroup as PendingReturnGroup);
+            if (d.selectedParty) setSelectedParty(d.selectedParty as PendingReturnParty);
             if (Array.isArray(d.rows) && d.rows.length > 0) {
               setRows((d.rows as RollRow[]).map((r) => ({ ...r, noteOpen: false })));
             }
@@ -270,6 +279,7 @@ export default function FasonKabulScreen() {
       AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
         savedAt: Date.now(),
         selectedGroup,
+        selectedParty,
         rows: rows.map((r) => ({ ...r, noteOpen: false })),
         manifestNo,
         notes,
@@ -279,7 +289,7 @@ export default function FasonKabulScreen() {
       }));
     }, 600);
     return () => clearTimeout(t);
-  }, [selectedGroup, rows, manifestNo, notes, newRolls, appliedColor, appliedProperties]);
+  }, [selectedGroup, selectedParty, rows, manifestNo, notes, newRolls, appliedColor, appliedProperties]);
 
   // ── Queries ──
   // staleTime 30sn: ekran focus / tab geçişi tetikli otomatik refetch'leri susturur,
@@ -477,6 +487,7 @@ export default function FasonKabulScreen() {
   // ── Handlers ──
   const resetForm = () => {
     setSelectedGroup(null);
+    setSelectedParty(null);
     setRows([]);
     setManifestNo('');
     setNotes('');
@@ -507,6 +518,59 @@ export default function FasonKabulScreen() {
     setSubmitArmed(false);
   };
 
+  // Eski/kimliksiz payload (parties yok) için: grubun tamamını tek partiye sar.
+  const syntheticParty = (g: PendingReturnGroup): PendingReturnParty => ({
+    dispatchId: g.lastDispatch?.id ?? null,
+    dispatchNo: g.lastDispatch?.dispatchNo ?? null,
+    dispatchedAt: g.lastDispatch?.dispatchedAt ?? null,
+    plateNumber: g.lastDispatch?.plateNumber ?? null,
+    driverName: g.lastDispatch?.driverName ?? null,
+    subcontractorId: g.lastDispatch?.subcontractorId ?? null,
+    subcontractor: g.lastDispatch?.subcontractor ?? null,
+    rolls: g.rolls,
+    rollCount: g.rolls.length,
+    totalQty: g.totalQty,
+  });
+
+  // Formu SEÇİLEN partiye göre doldur — toplar, açık kumaş satırları, renk/özellik.
+  const applyParty = (g: PendingReturnGroup, party: PendingReturnParty) => {
+    setSelectedGroup(g);
+    setSelectedParty(party);
+    setRows(
+      party.rolls.map((r) => ({
+        rollId: r.id,
+        barcode: r.barcode,
+        itemName: r.item?.name ?? '—',
+        colorName: r.color?.name ?? null,
+        dispatchedQty: r.currentQty,
+        width: r.width ?? null,
+        qualityGrade: r.qualityGrade,
+        checked: true,
+        notes: '',
+        noteOpen: false,
+      }))
+    );
+    setAppliedColor(g.workOrder.targetColor ?? null);
+    setAppliedProperties(g.workOrder.targetProperties ?? []);
+    setNewRolls(
+      party.rolls.length > 0
+        ? party.rolls.map((r) =>
+            makeNewRollRow(r.currentQty > 0 ? String(r.currentQty) : '', true)
+          )
+        : [makeNewRollRow()]
+    );
+    setManifestNo('');
+    setNotes('');
+    setSubmitArmed(false);
+  };
+
+  // Parti seçim ekranından bir parti seçilince.
+  const selectParty = (party: PendingReturnParty) => {
+    if (!selectedGroup) return;
+    applyParty(selectedGroup, party);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   const selectGroup = async (summary: PendingReturnSummary | PendingReturnGroup) => {
     if (groupLoading) return;
 
@@ -529,35 +593,37 @@ export default function FasonKabulScreen() {
       }
     }
 
-    setSelectedGroup(g);
-    setRows(
-      g.rolls.map((r) => ({
-        rollId: r.id,
-        barcode: r.barcode,
-        itemName: r.item?.name ?? '—',
-        colorName: r.color?.name ?? null,
-        dispatchedQty: r.currentQty,
-        width: r.width ?? null,
-        qualityGrade: r.qualityGrade,
-        checked: true,
-        notes: '',
-        noteOpen: false,
-      }))
-    );
-    setAppliedColor(g.workOrder.targetColor ?? null);
-    setAppliedProperties(g.workOrder.targetProperties ?? []);
-    setNewRolls(
-      g.rolls.length > 0
-        ? g.rolls.map((r) =>
-            makeNewRollRow(r.currentQty > 0 ? String(r.currentQty) : '', true)
-          )
-        : [makeNewRollRow()]
-    );
-    setSubmitArmed(false);
+    const parties = g.parties ?? [];
+    if (parties.length > 1) {
+      // Çoklu parti — operatör hangi partinin geldiğini önce seçsin (teyit).
+      setSelectedGroup(g);
+      setSelectedParty(null);
+      setRows([]);
+      setNewRolls([]);
+      setAppliedColor(g.workOrder.targetColor ?? null);
+      setAppliedProperties(g.workOrder.targetProperties ?? []);
+      setManifestNo('');
+      setNotes('');
+      setSubmitArmed(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Toast.show({
+        type: 'info',
+        text1: `${parties.length} parti bekliyor`,
+        text2: 'Hangi parti(ler)in geldiğini seçin — her parti ayrı kabul edilir',
+      });
+      return;
+    }
+
+    // Tek parti (veya eski payload) — doğrudan forma geç.
+    applyParty(g, parties[0] ?? syntheticParty(g));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const appliesColor = !!selectedGroup?.step.requiredCategory?.appliesColor;
+  const partyList = selectedGroup?.parties ?? [];
+  const isMultiParty = partyList.length > 1;
+  // Çoklu parti + henüz parti seçilmedi → parti seçim ekranı göster.
+  const showPartyChooser = !!selectedGroup && !selectedParty && isMultiParty;
 
   const handleResolveCard = async (overrideBarcode?: string) => {
     const barcode = (overrideBarcode ?? cardBarcode).trim();
@@ -691,7 +757,8 @@ export default function FasonKabulScreen() {
 
   const buildPayload = (): ReceiveRequest | null => {
     if (!selectedGroup) return null;
-    const subId = selectedGroup.lastDispatch?.subcontractorId;
+    // Çoklu sevkte seçilen partinin firması; tekli/eski akışta lastDispatch.
+    const subId = selectedParty?.subcontractorId ?? selectedGroup.lastDispatch?.subcontractorId;
     if (!subId) {
       Toast.show({
         type: 'error',
@@ -833,6 +900,75 @@ export default function FasonKabulScreen() {
                   : 'Sağdan bekleyen bir sevke tıklayın veya refakat kartını okutun'}
               </Text>
             </View>
+          ) : showPartyChooser ? (
+            /* ════ Çoklu sevk: ÖNCE hangi parti geldi teyidi ════ */
+            <>
+              <Surface style={styles.headerBand} elevation={2}>
+                <View style={styles.headerCellMain}>
+                  <Text style={styles.headerBatch} numberOfLines={1}>
+                    {selectedGroup.workOrder.batchNumber}
+                  </Text>
+                  <Text style={styles.headerSub} numberOfLines={1}>
+                    Adım {selectedGroup.step.stepSequence} ·{' '}
+                    {selectedGroup.step.station.name}
+                  </Text>
+                </View>
+                <IconButton
+                  icon="close"
+                  size={20}
+                  onPress={resetForm}
+                  accessibilityLabel="Sıfırla"
+                  style={{ margin: 0 }}
+                />
+              </Surface>
+
+              <View style={styles.partyHintCard}>
+                <Icon source="call-split" size={20} color="#b45309" />
+                <Text style={styles.partyHintText}>
+                  Bu adımda {partyList.length} ayrı parti (sevk) boyahanede.
+                  Boyahanede birleşmezler — ayrı ayrı dönebilir. Hangi partinin
+                  geldiğini seçin; her parti AYRI kabul edilir, gelmeyen
+                  parti(ler) beklemede kalır.
+                </Text>
+              </View>
+
+              <ScrollView
+                style={styles.rollsScroll}
+                contentContainerStyle={styles.rollsContent}
+              >
+                {partyList.map((party, idx) => (
+                  <TouchableRipple
+                    key={party.dispatchId ?? `p-${idx}`}
+                    onPress={() => selectParty(party)}
+                    style={styles.partyCard}
+                    borderless
+                  >
+                    <View style={styles.partyCardInner}>
+                      <View style={styles.partyIndexBadge}>
+                        <Text style={styles.partyIndexText}>{idx + 1}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.partyCardTitle} numberOfLines={1}>
+                          {party.dispatchNo ?? 'Parti (kimliksiz)'}
+                        </Text>
+                        <Text style={styles.partyCardMeta} numberOfLines={1}>
+                          {party.rollCount} top · {party.totalQty.toFixed(1)} m
+                          {party.subcontractor?.name
+                            ? ` · ${party.subcontractor.name}`
+                            : ''}
+                        </Text>
+                        {party.dispatchedAt && (
+                          <Text style={styles.partyCardDate}>
+                            Sevk: {dayjs(party.dispatchedAt).format('DD.MM.YYYY HH:mm')}
+                          </Text>
+                        )}
+                      </View>
+                      <Icon source="chevron-right" size={26} color="#94a3b8" />
+                    </View>
+                  </TouchableRipple>
+                ))}
+              </ScrollView>
+            </>
           ) : (
             <>
               {/* Sticky header band */}
@@ -850,7 +986,9 @@ export default function FasonKabulScreen() {
                 <View style={styles.headerCell}>
                   <Icon source="factory" size={14} color="#475569" />
                   <Text style={styles.headerCompany} numberOfLines={1}>
-                    {selectedGroup.lastDispatch?.subcontractor?.name ?? '—'}
+                    {selectedParty?.subcontractor?.name ??
+                      selectedGroup.lastDispatch?.subcontractor?.name ??
+                      '—'}
                   </Text>
                 </View>
                 <IconButton
@@ -861,6 +999,28 @@ export default function FasonKabulScreen() {
                   style={{ margin: 0 }}
                 />
               </Surface>
+
+              {/* Çoklu parti: aktif parti + diğerlerine dönüş */}
+              {isMultiParty && selectedParty && (
+                <TouchableRipple
+                  onPress={() => {
+                    setSelectedParty(null);
+                    setSubmitArmed(false);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  borderless
+                  style={styles.activePartyBar}
+                >
+                  <View style={styles.activePartyBarInner}>
+                    <Icon source="arrow-left" size={18} color="#1d4ed8" />
+                    <Text style={styles.activePartyBarText} numberOfLines={1}>
+                      Parti: {selectedParty.dispatchNo ?? '—'} ·{' '}
+                      diğer {partyList.length - 1} parti beklemede
+                    </Text>
+                    <Text style={styles.activePartyBarChange}>Değiştir</Text>
+                  </View>
+                </TouchableRipple>
+              )}
 
               {/* "Renk veren" kategori (Boyahane vb.) — uygulanacak renk/özellikler */}
               {appliesColor && (
@@ -2400,6 +2560,65 @@ const styles = StyleSheet.create({
   headerDivider: { width: 1, height: 28, backgroundColor: '#334155' },
   headerCell: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
   headerCompany: { fontSize: 12, color: '#e2e8f0', fontWeight: '600' },
+
+  // ── Çoklu parti (çoklu sevk) teyit ekranı ──
+  partyHintCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  partyHintText: { flex: 1, fontSize: 13, lineHeight: 18, color: '#92400e', fontWeight: '600' },
+  partyCard: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  partyCardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  partyIndexBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  partyIndexText: { fontSize: 16, fontWeight: '800', color: '#4338ca' },
+  partyCardTitle: { fontFamily: 'monospace', fontSize: 15, fontWeight: '700', color: '#1e293b' },
+  partyCardMeta: { fontSize: 13, color: '#475569', fontWeight: '600', marginTop: 2 },
+  partyCardDate: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
+
+  // Aktif parti şeridi (form üstünde) — diğer partilere dönüş
+  activePartyBar: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  activePartyBarInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  activePartyBarText: { flex: 1, fontSize: 12.5, color: '#1e3a8a', fontWeight: '700' },
+  activePartyBarChange: { fontSize: 12, color: '#1d4ed8', fontWeight: '800' },
 
   // Mini bilgi şeridi
   warning: {

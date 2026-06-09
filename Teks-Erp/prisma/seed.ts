@@ -209,9 +209,12 @@ async function main() {
   // ===========================================================================
   await prisma.qualityGrade.createMany({
     data: [
-      { code: "1.KALITE", name: "1. Kalite",       color: "#10b981", sortOrder: 10, targetStatus: "WAREHOUSE" },
-      { code: "A1",       name: "A1 (Alt Kalite)", color: "#f59e0b", sortOrder: 20, targetStatus: "WAREHOUSE" },
-      { code: "FIRE",     name: "Fire",            color: "#ef4444", sortOrder: 30, targetStatus: "WAREHOUSE" },
+      // targetStatus = Tambur kesim hedefi (hep WAREHOUSE — proses-only fabrika).
+      // returnTargetStatus = İADE rafı (returnGradingEnabled açıkken): FİRE→hurda,
+      // A1→2.kalite stok, 1.Kalite→Hazır Depo. Tambur bu kolonu OKUMAZ.
+      { code: "1.KALITE", name: "1. Kalite",       color: "#10b981", sortOrder: 10, targetStatus: "WAREHOUSE", returnTargetStatus: "WAREHOUSE" },
+      { code: "A1",       name: "A1 (Alt Kalite)", color: "#f59e0b", sortOrder: 20, targetStatus: "WAREHOUSE", returnTargetStatus: "A1_STOCK" },
+      { code: "FIRE",     name: "Fire",            color: "#ef4444", sortOrder: 30, targetStatus: "WAREHOUSE", returnTargetStatus: "SCRAP" },
     ],
   });
   console.log("✅ 3 kalite sınıfı (1.KALITE/A1/FIRE)");

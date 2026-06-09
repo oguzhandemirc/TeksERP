@@ -12,7 +12,7 @@ import { ProductRecipeService } from "../services/product-recipe.service";
 import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const service = new ProductRecipeService({
   modelName: "productRecipe",
@@ -53,7 +53,7 @@ const router = Router();
  *       200:
  *         description: Reçete listesi
  */
-router.get("/", verifyToken, requirePermission("station:read"), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("station:read", "mobile:hizli-is-emri"), controller.findAll);
 
 /**
  * @openapi
@@ -74,7 +74,7 @@ router.get("/", verifyToken, requirePermission("station:read"), controller.findA
  *       404:
  *         description: Kayıt bulunamadı
  */
-router.get("/:id", verifyToken, requirePermission("station:read"), controller.findById);
+router.get("/:id", verifyToken, requireAnyPermission("station:read", "mobile:hizli-is-emri"), controller.findById);
 
 /**
  * @openapi

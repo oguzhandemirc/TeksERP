@@ -59,6 +59,19 @@
     return (i === 0 ? b : b.toFixed(1)) + " " + u[i];
   }
 
+  // Yüzde: null/NaN → "—", aksi "%42.5".
+  function fmtPct(p) {
+    if (p == null || isNaN(p)) return "—";
+    return "%" + p;
+  }
+
+  // RAM kullanımı: "4.2 GB / 16 GB (%26)".
+  function fmtMemUsage(used, total) {
+    if (used == null || total == null || !total) return "—";
+    var pct = Math.round((used / total) * 100);
+    return fmtBytes(used) + " / " + fmtBytes(total) + " (%" + pct + ")";
+  }
+
   // Son yedek: zaman + "x önce" görece ifade.
   function fmtLastBackup(lb) {
     if (!lb || !lb.time) return "Henüz yedek yok";
@@ -92,6 +105,24 @@
       setText("version", "Sürüm " + (j.version || "—"));
       setText("time", fmtTime(j.time));
       setText("uptime", fmtUptime(j.uptimeSec));
+      setText("procram", fmtBytes(j.procRssBytes));
+      setText("proccpu", fmtPct(j.procCpuPct));
+      setText("sysram", fmtMemUsage(j.sysUsedMemBytes, j.sysTotalMemBytes));
+      setText("syscpu", fmtPct(j.sysCpuPct));
+      // Disk: dolulukla birlikte boş alan; %90+ ise kırmızıya boya (dikkat).
+      var diskEl = document.getElementById("disk");
+      if (diskEl) {
+        if (j.diskFreeBytes != null && j.diskUsedPct != null) {
+          diskEl.textContent = fmtBytes(j.diskFreeBytes) + " boş (%" + j.diskUsedPct + " dolu)";
+          diskEl.style.color = j.diskUsedPct >= 90 ? "var(--bad)" : "";
+        } else {
+          diskEl.textContent = "—";
+          diskEl.style.color = "";
+        }
+      }
+      setText("online",
+        (j.activeUsers != null ? j.activeUsers + " kullanıcı" : "—") +
+        (j.activeDevices != null ? " / " + j.activeDevices + " cihaz" : ""));
       setText("dbsize", dbUp ? fmtBytes(j.dbSizeBytes) : "—");
       setText("conns", j.dbConnections != null ? j.dbConnections + " bağlantı" : "—");
       setText("cachehit", j.cacheHitPct != null ? "%" + j.cacheHitPct : "—");
@@ -105,6 +136,12 @@
       setOverall(false, false);
       setText("time", fmtTime(new Date().toISOString()));
       setText("uptime", "—");
+      setText("procram", "—");
+      setText("proccpu", "—");
+      setText("sysram", "—");
+      setText("syscpu", "—");
+      setText("disk", "—");
+      setText("online", "—");
       setText("dbsize", "—");
       setText("conns", "—");
       setText("cachehit", "—");

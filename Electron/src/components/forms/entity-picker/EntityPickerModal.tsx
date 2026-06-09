@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Loader2, Search, type LucideIcon } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Plus, Search, type LucideIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +43,11 @@ export interface EntityPickerModalProps<T extends { id: string }> {
   title?: string;
   description?: string;
   triggerClassName?: string;
+  /** Modal içinde "hızlı ekle" butonu göster. Tıklanınca modal kapanır, callback çağrılır. */
+  quickAddLabel?: string;
+  onQuickAdd?: () => void;
+  /** Toplam sayı etiketi — "5 toplam {countLabel}" şeklinde gösterilir. Örn: "müşteri", "ürün". */
+  countLabel?: string;
 }
 
 /**
@@ -71,12 +76,15 @@ export function EntityPickerModal<T extends { id: string }>({
   title,
   description,
   triggerClassName,
+  quickAddLabel,
+  onQuickAdd,
+  countLabel,
 }: EntityPickerModalProps<T>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
 
-  const { items, isLoading, hasMore, fetchNext, isFetchingNext } = useEntityPickerData<T>({
+  const { items, total, isLoading, hasMore, fetchNext, isFetchingNext } = useEntityPickerData<T>({
     open,
     service,
     queryKey,
@@ -119,7 +127,7 @@ export function EntityPickerModal<T extends { id: string }>({
       >
         {Icon && <Icon className={cn("h-4 w-4 shrink-0", iconClassName ?? "text-muted-foreground")} />}
         {label && <span className="shrink-0 font-medium">{label}</span>}
-        <div className="ml-auto flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {selected ? (
             <>
               {renderLeading?.(selected)}
@@ -130,8 +138,8 @@ export function EntityPickerModal<T extends { id: string }>({
           ) : (
             <span className="truncate text-xs text-muted-foreground">{placeholder}</span>
           )}
-          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </div>
+        <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -140,12 +148,6 @@ export function EntityPickerModal<T extends { id: string }>({
             <DialogTitle className="flex items-center gap-2">
               {Icon && <Icon className={cn("h-4 w-4", iconClassName ?? "text-primary")} />}
               {title ?? "Seç"}
-              {!isLoading && items.length > 0 && (
-                <Badge variant="muted" className="ml-auto font-normal">
-                  {items.length}
-                  {hasMore ? "+" : ""}
-                </Badge>
-              )}
             </DialogTitle>
             {description && <DialogDescription>{description}</DialogDescription>}
           </DialogHeader>
@@ -214,6 +216,28 @@ export function EntityPickerModal<T extends { id: string }>({
               </div>
             )}
           </div>
+
+          {(onQuickAdd || (countLabel && total !== undefined)) && (
+            <div className="flex items-center justify-between border-t pt-2">
+              {countLabel && total !== undefined ? (
+                <span className="text-sm text-muted-foreground">
+                  Toplam <span className="font-medium text-foreground">{total}</span> {countLabel}
+                </span>
+              ) : <span />}
+              {onQuickAdd && (
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="gap-1.5 shadow-sm hover:shadow-primary/40 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150"
+                  onClick={() => { setOpen(false); onQuickAdd(); }}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {quickAddLabel ?? "Yeni Ekle"}
+                </Button>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>

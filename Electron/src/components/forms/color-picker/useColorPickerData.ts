@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { colorService } from "@/pages/Colors/service";
-import { loadAllForPicker } from "@/lib/picker-loader";
-import { customerAliasService } from "@/pages/Customers/aliasService";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
+import {
+  listPublicColorsCursor,
+  loadAssignedColorsForCustomer,
+  loadPublicColorsForPicker,
+} from "@/pages/Colors/service";
 
 export interface PickerColor {
   id: string;
@@ -24,11 +25,14 @@ interface Args {
 
 /**
  * Renk seçici modalının veri katmanı:
- *  - `pinned`     → müşteriye atanmış aktif renkler (üstte, vurgulu)
+ *  - `pinned`     → müşteriye ATANMIŞ (assigned=true) aktif renkler (üstte, vurgulu)
  *  - `listColors` → "tüm renkler" (kısıtlı: client filtre / sınırsız: sunucu
  *                    cursor araması), atanmışlar dedupe edilir
  *  - `assignedById` → seçili rengin müşteri rengi olup olmadığını çözmek için
  *                     (arama/sayfalamadan bağımsız tam küme)
+ *
+ * NOT: Sadece müşteri panelinden özel ad verilmiş ama atanmamış (assigned=false)
+ * renkler "Müşteri Renkleri" bölümüne GİRMEZ — onlar normal katalog renkleridir.
  */
 export function useColorPickerData({
   open,
@@ -40,34 +44,33 @@ export function useColorPickerData({
   const allowedSet = useMemo(() => new Set(allowedColorIds ?? []), [allowedColorIds]);
   const q = debouncedSearch.trim().toLowerCase();
 
-  // Pinned, müşteri alias endpoint'ini okur (customer-alias:read). İzni olmayan
-  // kullanıcılar için sessizce kapat — 403 toast'ı yerine pinning'siz çalışsın.
-  const { hasPermission } = useRoleAccess();
-  const canReadAliases = hasPermission("customer-alias:read");
-
-  // --- Müşterinin atanmış renkleri. customerId varsa modal kapalıyken de çek
-  //     (queryKey paylaşımlı → tüm satırlar tek istekte dedupe; trigger rozeti
-  //     için gerekli). ---
+  // --- Müşteriye ATANMIŞ renkler. `assignedTo` colors endpoint'inden (property:read)
+  //     gelir — eski alias endpoint'i customer-alias:read gerektiriyordu, o izni
+  //     olmayan satışçı müşterinin özel rengini hiç seçemiyordu. customerId varsa
+  //     modal kapalıyken de çek (queryKey paylaşımlı → trigger rozeti için). ---
   const pinnedQ = useQuery({
     queryKey: ["color-picker", "pinned", customerId],
-    queryFn: () => customerAliasService.listColorAliases(customerId as string),
-    enabled: Boolean(customerId) && canReadAliases,
+    queryFn: () => loadAssignedColorsForCustomer(customerId as string),
+    enabled: Boolean(customerId),
     staleTime: 60_000,
   });
 
-  // --- Kısıtlı mod: izinli küme küçük → tek seferde çek, client filtrele. ---
+  // --- Kısıtlı mod: izinli küme küçük → tek seferde çek, client filtrele.
+  //     scope=public → başka müşterilere atanmış renkler dışlanır (atanmış
+  //     renkler yalnızca pinned bölümünden, ilgili müşteriye gelir). ---
   const restrictedQ = useQuery({
-    queryKey: ["color-picker", "restricted-all"],
-    queryFn: () => loadAllForPicker(colorService),
+    queryKey: ["color-picker", "restricted-public"],
+    queryFn: () => loadPublicColorsForPicker(),
     enabled: open && isRestricted,
     staleTime: 60_000,
   });
 
-  // --- Sınırsız mod: sunucu cursor araması (debounced). ---
+  // --- Sınırsız mod: sunucu cursor araması (debounced). scope=public →
+  //     müşteriye özel renkler "Tüm Renkler"de görünmez. ---
   const listQ = useInfiniteQuery({
     queryKey: ["color-picker", "search", debouncedSearch],
     queryFn: ({ pageParam }) =>
-      colorService.listCursor({
+      listPublicColorsCursor({
         cursor: pageParam,
         limit: PAGE_LIMIT,
         sortBy: "name",
@@ -81,18 +84,13 @@ export function useColorPickerData({
     staleTime: 30_000,
   });
 
-  // Atanmış (aktif) renklerin tam haritası — arama/restrict filtresi YOK.
+  // Atanmış (assigned=true + aktif) renklerin tam haritası — arama/restrict
+  // filtresi YOK. Backend zaten assigned=true + isActive süzüyor.
   const assignedById = useMemo(() => {
     const map = new Map<string, PickerColor>();
-    for (const r of pinnedQ.data?.data ?? []) {
-      const col = r.color;
-      if (col?.isActive) {
-        map.set(r.colorId, {
-          id: r.colorId,
-          code: col.code,
-          name: col.name,
-          hex: col.hex,
-        });
+    for (const c of pinnedQ.data ?? []) {
+      if (c.isActive) {
+        map.set(c.id, { id: c.id, code: c.code, name: c.name, hex: c.hex });
       }
     }
     return map;

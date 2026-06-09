@@ -3,8 +3,15 @@ import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { cva, type VariantProps } from "class-variance-authority";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTabPortalContainer } from "@/components/layout/tabs/tab-portal";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 
-const Sheet = SheetPrimitive.Root;
+/** Sekme içinde slide-over'ı o sekmeye gömer (bkz. Dialog). Dışarıda klasik. */
+function Sheet({ modal, ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
+  const scoped = useTabPortalContainer() != null;
+  return <SheetPrimitive.Root modal={modal ?? !scoped} {...props} />;
+}
+
 const SheetTrigger = SheetPrimitive.Trigger;
 const SheetClose = SheetPrimitive.Close;
 const SheetPortal = SheetPrimitive.Portal;
@@ -37,24 +44,46 @@ interface SheetContentProps
     VariantProps<typeof sheetVariants> {}
 
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
-  ({ side = "right", className, children, ...props }, ref) => (
-    <SheetPortal>
-      <SheetOverlay />
-      <SheetPrimitive.Content
-        ref={ref}
-        data-ui-sheet=""
-        data-side={side}
-        className={cn(sheetVariants({ side }), className)}
-        {...props}
-      >
-        {children}
-        <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100 focus:outline-none">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Kapat</span>
-        </SheetPrimitive.Close>
-      </SheetPrimitive.Content>
-    </SheetPortal>
-  ),
+  ({ side = "right", className, children, onInteractOutside, onEscapeKeyDown, ...props }, ref) => {
+    const tabContainer = useTabPortalContainer();
+    const isTabActive = useIsTabActive();
+    const scoped = tabContainer != null;
+    return (
+      <SheetPortal container={scoped ? tabContainer : undefined}>
+        {scoped ? (
+          <div data-ui-overlay="" aria-hidden className="absolute inset-0 z-50 bg-black/70" />
+        ) : (
+          <SheetOverlay />
+        )}
+        <SheetPrimitive.Content
+          ref={ref}
+          data-ui-sheet=""
+          data-side={side}
+          onEscapeKeyDown={(e) => {
+            if (scoped && !isTabActive) e.preventDefault();
+            onEscapeKeyDown?.(e);
+          }}
+          onInteractOutside={(e) => {
+            onInteractOutside?.(e);
+            if (e.defaultPrevented) return;
+            if (scoped) {
+              const target = (e as unknown as { detail?: { originalEvent?: Event } }).detail
+                ?.originalEvent?.target as HTMLElement | null;
+              if (!target?.closest("[data-ui-overlay]")) e.preventDefault();
+            }
+          }}
+          className={cn(sheetVariants({ side }), scoped && "absolute", className)}
+          {...props}
+        >
+          {children}
+          <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100 focus:outline-none">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Kapat</span>
+          </SheetPrimitive.Close>
+        </SheetPrimitive.Content>
+      </SheetPortal>
+    );
+  },
 );
 SheetContent.displayName = SheetPrimitive.Content.displayName;
 

@@ -41,9 +41,12 @@ export default function WorkOrderHeaderFields({ value, onChange, showBatchNumber
   // Hedef metraj/kg nadiren kullanılır → varsayılan kapalı; değer varsa açık gelir.
   const [qtyOpen, setQtyOpen] = useState(() => !!(value.targetQuantity || value.targetWeight));
 
+  // scope=public → müşteriye özel (assigned) renkler listelenmez. Hızlı İş Emri
+  // stok üretimidir (müşterisiz); exclusive renkler burada çıkmamalı.
   const colorsQuery = useQuery({
-    queryKey: ['colors', 'wo-picker'],
-    queryFn: () => colorService.getAll({ page: 1, pageSize: 300, sortBy: 'name', sortOrder: 'asc' }),
+    queryKey: ['colors', 'wo-picker-public'],
+    queryFn: () =>
+      colorService.listPublicForPicker({ page: 1, pageSize: 300, sortBy: 'name', sortOrder: 'asc' }),
     staleTime: 10 * 60 * 1000,
   });
 
@@ -58,10 +61,24 @@ export default function WorkOrderHeaderFields({ value, onChange, showBatchNumber
     [colorsQuery.data],
   );
 
+  // Seçili renk public listede mi? Değilse (örn. stok roldan türetilen müşteriye
+  // özel renk) tek-renk fallback ile adını çek — yoksa başlık boş ("seç") görünür.
+  const inPublicList = useMemo(
+    () => colorOptions.some((o) => o.value === value.targetColorId),
+    [colorOptions, value.targetColorId],
+  );
+  const fallbackColorQuery = useQuery({
+    queryKey: ['color', value.targetColorId],
+    queryFn: () => colorService.getById(value.targetColorId as string),
+    enabled: !!value.targetColorId && !inPublicList && !colorsQuery.isLoading,
+    staleTime: 10 * 60 * 1000,
+  });
+
   const selectedColorLabel = useMemo(() => {
     if (!value.targetColorId) return null;
-    return colorOptions.find((o) => o.value === value.targetColorId)?.label ?? null;
-  }, [value.targetColorId, colorOptions]);
+    const fromList = colorOptions.find((o) => o.value === value.targetColorId)?.label;
+    return fromList ?? fallbackColorQuery.data?.data?.name ?? null;
+  }, [value.targetColorId, colorOptions, fallbackColorQuery.data]);
 
   return (
     <View style={styles.root}>

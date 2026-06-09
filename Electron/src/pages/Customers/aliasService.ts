@@ -13,8 +13,10 @@ export interface CustomerColorAlias {
   id: string;
   customerId: string;
   colorId: string;
-  /** Müşterideki özel ad — opsiyonel. Null = sadece atama, isim verilmemiş. */
+  /** Müşterideki özel ad — opsiyonel. Null = özel ad verilmemiş. */
   alias: string | null;
+  /** Renk bu müşteriye "özel renk" olarak atandı mı? alias'tan bağımsız. */
+  assigned: boolean;
   color?: { id: string; code: string; name: string; hex: string | null; isActive: boolean };
 }
 

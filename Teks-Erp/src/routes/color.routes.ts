@@ -9,7 +9,7 @@ import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { ColorService } from "../services/color.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const service = new ColorService({
   modelName: "color",
@@ -48,7 +48,7 @@ const router = Router();
  *     responses:
  *       200: { description: Sayfalanmış renk listesi }
  */
-router.get("/", verifyToken, requirePermission("property:read"), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("property:read", "mobile:hizli-is-emri"), controller.findAll);
 
 /**
  * @openapi

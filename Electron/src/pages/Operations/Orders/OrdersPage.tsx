@@ -20,6 +20,8 @@ import { OrderFormDialog } from "./OrderFormDialog";
 import { OrderCancelDialog } from "./OrderCancelDialog";
 import { BulkCreateWorkOrderAction } from "./BulkCreateWorkOrderAction";
 import { customerService } from "@/pages/Customers/service";
+import { itemService } from "@/pages/Items/service";
+import { colorService } from "@/pages/Colors/service";
 import { useTabsStore } from "@/store/tabs";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
@@ -39,6 +41,8 @@ const FILTERS: FilterDef[] = [
     ],
   },
   { kind: "lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
+  { kind: "lookup", key: "itemId", label: "Ürün", service: itemService, queryKey: "items" },
+  { kind: "lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
   {
     kind: "dateRange",
     label: "Tarih",
@@ -183,6 +187,8 @@ export function OrdersPage() {
     defaultPageSize: 50,
   });
 
+  const isEmpty = query.isSuccess && !search && pagination.total === 0;
+
   const createMut = useMutation({
     mutationFn: (payload: CreatePayload) =>
       orderService.create(payload as unknown as Partial<Order>),
@@ -225,8 +231,14 @@ export function OrdersPage() {
           <>
             <RefreshButton queryKey={QUERY_KEY} />
             <PermissionGate permission="order:write">
-              <Button size="sm" onClick={() => setFormOpen(true)}>
-                <Plus className="h-4 w-4" /> Yeni Sipariş
+              <Button
+                size="sm"
+                className={isEmpty ? "animate-pulse" : undefined}
+                onClick={() => setFormOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Yeni Sipariş
+                {isEmpty && <span className="ml-0.5 text-primary-foreground">*</span>}
               </Button>
             </PermissionGate>
           </>
@@ -270,6 +282,7 @@ export function OrdersPage() {
             <CopyMenuItem label="Sipariş no" value={order.orderNumber} />
           </>
         )}
+        selectionHint="İş emri açmak için bir veya daha fazla sipariş seçin."
         bulkActions={(rows) => (
           <BulkCreateWorkOrderAction
             orders={rows}
@@ -287,7 +300,7 @@ export function OrdersPage() {
           // Açılan iş emri sekmesine yönlendir. Panel kapatılmaz — state'i
           // Siparişler sekmesinde açık kalır; başka ürün için kullanıcı bu
           // sekmeye geri dönüp ilgili kalemin "İş emri"ne basabilir.
-          openTab("/operations/work-orders", {
+          openTab("/operations/work-orders/new", {
             forceNew: true,
             state: { seedPickedLines: lines },
           });

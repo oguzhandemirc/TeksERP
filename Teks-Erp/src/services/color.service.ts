@@ -1,15 +1,17 @@
 // =============================================================================
 // TeksERP - Color (Renk Kataloğu) Service
 // =============================================================================
-// Renk kataloğu artık firmaya (müşteriye) özel atama taşır: bir renk bir veya
-// birden fazla müşteriye atanabilir. Atama M:N olarak mevcut CustomerColorAlias
-// tablosunda tutulur (satır = atama, alias = o müşterinin renge verdiği isim;
-// renk tarafından atarken alias default olarak renk adıyla doldurulur, müşteri
-// panelinden override edilebilir).
+// Renk kataloğu firmaya (müşteriye) özel atama taşır: bir renk bir veya birden
+// fazla müşteriye atanabilir. Atama M:N olarak CustomerColorAlias tablosunda
+// `assigned=true` ile tutulur. `assigned` (renk formundan atama) ile `alias`
+// (müşteri panelinden özel ad) BAĞIMSIZ iki sinyaldir — aynı satırda yan yana
+// durabilir. Atama eklerken alias'a dokunulmaz; atama kaldırırken alias varsa
+// satır korunur (assigned=false), yoksa silinir.
 //
 // Aktif/pasif = renk geneli (Color.isActive). Atama bazında aktif/pasif YOK.
 // =============================================================================
 
+import { Request } from "express";
 import prisma from "../lib/prisma";
 import { BaseService } from "./base.service";
 import { AuditService } from "./audit.service";
@@ -20,6 +22,33 @@ const TABLE_ALIAS = "CUSTOMER_COLOR_ALIAS";
 
 export class ColorService extends BaseService {
   /**
+   * Picker scope süzgeci (her ikisi de `property:read` izniyle, müşteri-alias
+   * iznine gerek YOK):
+   *   - `?scope=public` → bir/birden fazla müşteriye ATANMIŞ (`assigned=true`)
+   *     renkler DIŞLANIR. Müşteriye özel renk yalnızca o müşterinin "Müşteri
+   *     Renkleri" (pinned) bölümünde görünmeli; başka müşterinin / müşterisiz
+   *     bağlamın genel kataloğunda çıkmamalı.
+   *   - `?assignedTo=<customerId>` → SADECE o müşteriye atanmış renkler. Picker
+   *     pinned bölümü bunu kullanır (eskiden `customer-alias:read` gerektiren
+   *     alias endpoint'i kullanılıyordu → o izni olmayan satışçı müşteri rengini
+   *     hiç seçemiyordu; bu kaynak `property:read` ile çalışır).
+   *
+   * Renk yönetim sayfası hiçbirini göndermez → tüm renkleri görmeye devam eder.
+   */
+  protected extraWhere(req: Request): Record<string, unknown> | undefined {
+    if (req.query.scope === "public") {
+      return { customerAliases: { none: { assigned: true } } };
+    }
+    const assignedTo = req.query.assignedTo;
+    if (typeof assignedTo === "string" && assignedTo.length > 0) {
+      return {
+        customerAliases: { some: { assigned: true, customerId: assignedTo } },
+      };
+    }
+    return undefined;
+  }
+
+  /**
    * Color create — standart CRUD (BaseService) + `customerIds` müşteri ataması.
    * customerIds payload'dan ayrılır (yoksa Prisma bilinmeyen alan hatası verir),
    * renk oluşturulduktan sonra atamalar senkronlanır.
@@ -28,13 +57,13 @@ export class ColorService extends BaseService {
     data: Record<string, unknown>,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
-    const { customerIds, rest } = splitCustomerIds(data);
+    const { customerIds, customerAliases, rest } = splitCustomerIds(data);
 
     const res = await super.create(rest, userId);
     const color = res.data as { id: string } | null;
 
     if (color && customerIds !== undefined) {
-      await this.syncCustomerAssignments(color.id, customerIds, userId);
+      await this.syncCustomerAssignments(color.id, customerIds, customerAliases, userId);
       (res.data as Record<string, unknown>).customerIds = dedupe(customerIds);
     }
 
@@ -51,7 +80,7 @@ export class ColorService extends BaseService {
     data: Record<string, unknown>,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
-    const { customerIds, rest } = splitCustomerIds(data);
+    const { customerIds, customerAliases, rest } = splitCustomerIds(data);
 
     // rest boşsa gereksiz audit/no-op update üretme — mevcut kaydı çek.
     const res =
@@ -62,7 +91,7 @@ export class ColorService extends BaseService {
     const color = res.data as { id: string } | null;
 
     if (color && customerIds !== undefined) {
-      await this.syncCustomerAssignments(color.id, customerIds, userId);
+      await this.syncCustomerAssignments(color.id, customerIds, customerAliases, userId);
       (res.data as Record<string, unknown>).customerIds = dedupe(customerIds);
     }
 
@@ -70,31 +99,49 @@ export class ColorService extends BaseService {
   }
 
   /**
-   * findById — renge atanmış müşteri id'lerini ekler (edit formu prefill için).
+   * findById — renge ATANMIŞ (assigned=true) müşteri id'lerini ekler (edit formu
+   * prefill için). Sadece müşteri panelinden ad verilmiş ama atanmamış satırlar
+   * (assigned=false) buraya dahil edilmez — yoksa renk o müşteriye atanmış gibi
+   * görünür.
    */
   async findById(id: string): Promise<ApiResponse<unknown>> {
     const res = await super.findById(id);
     if (res.success && res.data) {
       const rows = await prisma.customerColorAlias.findMany({
-        where: { colorId: id },
-        select: { customerId: true },
+        where: { colorId: id, assigned: true },
+        select: { customerId: true, alias: true },
       });
-      (res.data as Record<string, unknown>).customerIds = rows.map((r) => r.customerId);
+      const data = res.data as Record<string, unknown>;
+      data.customerIds = rows.map((r) => r.customerId);
+      // Atanmış müşterilerin özel adları (renk formu prefill — adı temizlemeden
+      // düzenleyebilsin diye). Sadece dolu alias'lar.
+      data.customerAliases = Object.fromEntries(
+        rows.filter((r) => r.alias).map((r) => [r.customerId, r.alias as string]),
+      );
     }
     return res;
   }
 
   // ===========================================================================
-  // Müşteri atama senkronu — replace semantiği. Atama = renk↔müşteri bağı;
-  // alias (müşterideki özel ad) YAZILMAZ (null kalır). Var olan custom alias'lı
-  // satırlar (Müşteri panelinden girilmiş) korunur — sadece bağ eklenir/silinir.
+  // Müşteri atama senkronu — replace semantiği, `assigned` bayrağı üzerinden.
+  // Atama (assigned) ile özel ad (alias) BAĞIMSIZ: aynı satırda yan yana durur.
+  //   - Atama eklerken: satır yoksa oluştur, varsa assigned=true yap.
+  //   - Atama kaldırırken: alias varsa satırı KORU (assigned=false), aksi halde
+  //     (sadece atama olan boş satır) sil.
+  //
+  // `aliasByCustomer` (renk formundan girilen "müşterideki ad") OPSİYONEL ve
+  // NON-CLOBBERING: yalnızca map'te AÇIKÇA bulunan müşterilerin alias'ı yazılır
+  // (boş → null). Map'te olmayan müşterinin (örn. müşteri panelinden girilmiş)
+  // adına DOKUNULMAZ. Atama kaldırılan müşteri de map'te olmaz → adı korunur.
   // ===========================================================================
   private async syncCustomerAssignments(
     colorId: string,
     rawCustomerIds: string[],
+    aliasByCustomer: Record<string, string> | undefined,
     userId?: string,
   ): Promise<void> {
     const customerIds = dedupe(rawCustomerIds);
+    const aliasMap = normalizeAliasMap(aliasByCustomer);
 
     if (customerIds.length > 0) {
       const found = await prisma.customer.findMany({
@@ -108,32 +155,78 @@ export class ColorService extends BaseService {
 
     const existing = await prisma.customerColorAlias.findMany({
       where: { colorId },
-      select: { customerId: true },
+      select: { customerId: true, assigned: true, alias: true },
     });
-    const existingSet = new Set(existing.map((e) => e.customerId));
+    const assignedSet = new Set(
+      existing.filter((e) => e.assigned).map((e) => e.customerId),
+    );
+    const rowByCustomer = new Map(existing.map((e) => [e.customerId, e]));
     const targetSet = new Set(customerIds);
 
-    const toAdd = customerIds.filter((cid) => !existingSet.has(cid));
-    const toRemove = existing
-      .map((e) => e.customerId)
-      .filter((cid) => !targetSet.has(cid));
+    // Hedefte olup şu an ATANMAMIŞ olanlar → eklenecek.
+    const toAdd = customerIds.filter((cid) => !assignedSet.has(cid));
+    // Şu an atanmış olup hedefte olmayanlar → kaldırılacak.
+    const toRemove = [...assignedSet].filter((cid) => !targetSet.has(cid));
 
-    if (toAdd.length === 0 && toRemove.length === 0) return;
+    // Eklenenleri "yeni satır" (hiç kayıt yok) vs "var olan adlı satırı işaretle"
+    // diye ayır; kaldırılanları "adlı satır → koru" vs "boş satır → sil" diye ayır.
+    const toCreate = toAdd.filter((cid) => !rowByCustomer.has(cid));
+    const toMarkAssigned = toAdd.filter((cid) => rowByCustomer.has(cid));
+    const toKeepUnassigned = toRemove.filter((cid) => {
+      const r = rowByCustomer.get(cid);
+      return Boolean(r?.alias && r.alias.trim());
+    });
+    const toDelete = toRemove.filter((cid) => !toKeepUnassigned.includes(cid));
+
+    // Var olan satırlarda alias değişimi (yeni create edilenler aşağıda inline
+    // yazılır). Sadece map'te açıkça verilmiş + değeri farklı olanlar.
+    const aliasUpdates = customerIds
+      .filter((cid) => aliasMap.has(cid) && rowByCustomer.has(cid))
+      .map((cid) => ({ cid, alias: aliasMap.get(cid) ?? null }))
+      .filter(({ cid, alias }) => (rowByCustomer.get(cid)?.alias ?? null) !== alias);
+
+    if (
+      toAdd.length === 0 &&
+      toRemove.length === 0 &&
+      aliasUpdates.length === 0
+    ) {
+      return;
+    }
 
     await prisma.$transaction(async (tx) => {
       // pg adapter: tx içinde Promise.all yasak — seri çalıştır.
-      if (toRemove.length > 0) {
+      if (toDelete.length > 0) {
         await tx.customerColorAlias.deleteMany({
-          where: { colorId, customerId: { in: toRemove } },
+          where: { colorId, customerId: { in: toDelete } },
         });
       }
-      if (toAdd.length > 0) {
+      if (toKeepUnassigned.length > 0) {
+        await tx.customerColorAlias.updateMany({
+          where: { colorId, customerId: { in: toKeepUnassigned } },
+          data: { assigned: false },
+        });
+      }
+      if (toMarkAssigned.length > 0) {
+        await tx.customerColorAlias.updateMany({
+          where: { colorId, customerId: { in: toMarkAssigned } },
+          data: { assigned: true },
+        });
+      }
+      if (toCreate.length > 0) {
         await tx.customerColorAlias.createMany({
-          data: toAdd.map((customerId) => ({
+          data: toCreate.map((customerId) => ({
             customerId,
             colorId,
-            alias: null,
+            alias: aliasMap.has(customerId) ? aliasMap.get(customerId) ?? null : null,
+            assigned: true,
           })),
+        });
+      }
+      // Renk formundan girilen "müşterideki ad" güncellemeleri (seri).
+      for (const { cid, alias } of aliasUpdates) {
+        await tx.customerColorAlias.updateMany({
+          where: { colorId, customerId: cid },
+          data: { alias },
         });
       }
     });
@@ -143,7 +236,12 @@ export class ColorService extends BaseService {
       action: "UPDATE",
       tableName: TABLE_ALIAS,
       recordId: colorId,
-      newData: { colorId, added: toAdd, removed: toRemove },
+      newData: {
+        colorId,
+        added: toAdd,
+        removed: toRemove,
+        aliasUpdated: aliasUpdates.map((a) => a.cid),
+      },
     });
   }
 }
@@ -154,15 +252,38 @@ export class ColorService extends BaseService {
 
 function splitCustomerIds(data: Record<string, unknown>): {
   customerIds: string[] | undefined;
+  customerAliases: Record<string, string> | undefined;
   rest: Record<string, unknown>;
 } {
   const rest = { ...data };
   const raw = rest.customerIds;
   delete rest.customerIds;
+  const rawAliases = rest.customerAliases;
+  delete rest.customerAliases;
   const customerIds = Array.isArray(raw) ? (raw as string[]) : undefined;
-  return { customerIds, rest };
+  const customerAliases =
+    rawAliases && typeof rawAliases === "object" && !Array.isArray(rawAliases)
+      ? (rawAliases as Record<string, string>)
+      : undefined;
+  return { customerIds, customerAliases, rest };
 }
 
 function dedupe(ids: string[]): string[] {
   return [...new Set(ids)];
+}
+
+/**
+ * Renk formundan gelen { customerId: ad } map'ini normalize eder: boş/whitespace
+ * ad → null (özel ad yok). Sadece map'te bulunan müşteriler döner (non-clobbering).
+ */
+function normalizeAliasMap(
+  raw: Record<string, string> | undefined,
+): Map<string, string | null> {
+  const m = new Map<string, string | null>();
+  if (!raw) return m;
+  for (const [cid, val] of Object.entries(raw)) {
+    const t = typeof val === "string" ? val.trim() : "";
+    m.set(cid, t.length === 0 ? null : t);
+  }
+  return m;
 }

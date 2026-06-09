@@ -26,6 +26,7 @@ $ManagePs1 = Join-Path $AppRoot "scripts\manage.ps1"
 if (-not (Test-Path $ManagePs1)) { $ManagePs1 = "C:\Program Files\TeksERP\scripts\manage.ps1" }
 $LogoIco   = Join-Path $AppRoot "branding\TeksERP.ico"
 $LogDir    = "C:\ProgramData\TeksERP\logs"
+$BackupDir = "C:\ProgramData\TeksERP\backups"
 
 # manage.ps1'i yonetici (UAC) yukseltmesiyle, konsol acik birakacak sekilde calistirir.
 # Tray normal kullanici baglaminda calisir; servis islemleri admin gerektirir.
@@ -33,6 +34,30 @@ function Invoke-ManageAdmin($ActionName) {
     if (Test-Path $ManagePs1) {
         Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',"`"$ManagePs1`"",'-Action',$ActionName
     }
+}
+
+# Yedekten geri yukle: YIKICI islem (mevcut verinin uzerine yazar, backend durur).
+# Dosya sectir + acik bir uyari onayi al, sonra manage.ps1 restore'u yonetici
+# yukseltmesiyle calistir (-BackupFile ile). Tray normal kullanicidir; restore
+# admin gerektirir.
+function Invoke-ManageRestore {
+    if (-not (Test-Path $ManagePs1)) { return }
+    $dlg = New-Object System.Windows.Forms.OpenFileDialog
+    $dlg.Title  = "Geri yuklenecek yedek (.dump) dosyasini secin"
+    $dlg.Filter = "TeksERP yedek (*.dump)|*.dump|Tum dosyalar (*.*)|*.*"
+    if (Test-Path $BackupDir) { $dlg.InitialDirectory = $BackupDir }
+    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    $file = $dlg.FileName
+    $confirm = [System.Windows.Forms.MessageBox]::Show(
+        "DIKKAT: Geri yukleme mevcut TUM veritabanini secilen yedekle DEGISTIRIR." + [Environment]::NewLine +
+        "Yedek anindan sonraki tum degisiklikler KAYBOLUR ve backend gecici olarak durur." + [Environment]::NewLine + [Environment]::NewLine +
+        "Dosya:" + [Environment]::NewLine + $file + [Environment]::NewLine + [Environment]::NewLine +
+        "Devam edilsin mi?",
+        "TeksERP - Yedekten Geri Yukle",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Warning)
+    if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+    Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',"`"$ManagePs1`"",'-Action','restore','-BackupFile',"`"$file`""
 }
 
 function Get-PrimaryIp {
@@ -128,6 +153,7 @@ $miStop   = $menu.Items.Add("Servisleri durdur (yonetici)")
 $miRestart= $menu.Items.Add("Servisleri yeniden baslat (yonetici)")
 [void]$menu.Items.Add("-")
 $miBackup = $menu.Items.Add("Simdi yedek al (yonetici)")
+$miRestore= $menu.Items.Add("Yedekten geri yukle (yonetici)")
 $miLogs   = $menu.Items.Add("Loglari ac")
 [void]$menu.Items.Add("-")
 $miUninst = $menu.Items.Add("TeksERP'yi kaldir...")
@@ -141,6 +167,7 @@ $miStart.add_Click({ Invoke-ManageAdmin 'start' })
 $miStop.add_Click({ Invoke-ManageAdmin 'stop' })
 $miRestart.add_Click({ Invoke-ManageAdmin 'restart' })
 $miBackup.add_Click({ Invoke-ManageAdmin 'backup' })
+$miRestore.add_Click({ Invoke-ManageRestore })
 $miLogs.add_Click({
     if (Test-Path $LogDir) { Start-Process explorer.exe $LogDir }
     else { [System.Windows.Forms.MessageBox]::Show("Log klasoru henuz olusmamis:`r`n$LogDir", "TeksERP") | Out-Null }

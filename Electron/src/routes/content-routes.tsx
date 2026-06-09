@@ -29,6 +29,8 @@ import { GeneralSettingsPage } from "@/pages/GeneralSettings/GeneralSettingsPage
 import { SystemEventsPage } from "@/pages/System/Events/SystemEventsPage";
 import { ActivityArchivePage } from "@/pages/System/Archive/ActivityArchivePage";
 import { ArchiveSearchPage } from "@/pages/System/Archive/ArchiveSearchPage";
+import { ServerStatusPage } from "@/pages/System/ServerStatus/ServerStatusPage";
+import { BackupsPage } from "@/pages/System/Backups/BackupsPage";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
 import { LabelTemplateEditPage } from "@/pages/LabelTemplates/LabelTemplateEditPage";
 import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage";
@@ -66,6 +68,7 @@ import { UserActivityPage } from "@/pages/Reports/Audit/UserActivityPage";
 import { OrdersPage } from "@/pages/Operations/Orders/OrdersPage";
 import { WorkOrdersPage } from "@/pages/Operations/WorkOrders/WorkOrdersPage";
 import { WorkOrderDetailPage } from "@/pages/Operations/WorkOrders/WorkOrderDetailPage";
+import { WorkOrderFormPage } from "@/pages/Operations/WorkOrders/WorkOrderFormPage";
 import { RollsPage } from "@/pages/Operations/Rolls/RollsPage";
 import { KursunQueuePage } from "@/pages/Operations/KursunQueue/KursunQueuePage";
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
@@ -239,6 +242,22 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
+    path: "system/server-status",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <ServerStatusPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "system/backups",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <BackupsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: "system/settings",
     element: (
       <ProtectedRoute requirePermission="admin:settings">
@@ -286,6 +305,22 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="workorder:read">
         <WorkOrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/work-orders/new",
+    element: (
+      <ProtectedRoute requirePermission="workorder:write">
+        <WorkOrderFormPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/work-orders/:id/edit",
+    element: (
+      <ProtectedRoute requirePermission="workorder:write">
+        <WorkOrderFormPage />
       </ProtectedRoute>
     ),
   },

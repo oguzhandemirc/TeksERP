@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { itemService } from "@/pages/Items/service";
+import { Palette } from "lucide-react";
 import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerModal";
 
 interface Props {
@@ -10,9 +11,10 @@ interface Props {
   /** Sipariş müşterisi — renkleri picker'da üstte/vurgulu gösterilir. */
   customerId?: string | null;
   disabled?: boolean;
+  triggerClassName?: string;
 }
 
-export function OrderLineColorPicker({ itemId, value, onChange, customerId, disabled }: Props) {
+export function OrderLineColorPicker({ itemId, value, onChange, customerId, disabled, triggerClassName }: Props) {
   const itemQ = useQuery({
     queryKey: ["item-allowed-colors", itemId],
     queryFn: () => itemService.getById(itemId),
@@ -28,8 +30,9 @@ export function OrderLineColorPicker({ itemId, value, onChange, customerId, disa
 
   if (!itemId) {
     return (
-      <div className="flex h-9 items-center rounded-md border border-dashed px-3 text-xs italic text-muted-foreground">
-        Önce ürün
+      <div className="flex h-9 items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 text-xs text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+        <Palette className="h-4 w-4 shrink-0" />
+        <span>Önce ürün seçin</span>
       </div>
     );
   }
@@ -41,7 +44,7 @@ export function OrderLineColorPicker({ itemId, value, onChange, customerId, disa
       customerId={customerId}
       allowedColorIds={allowedColorIds}
       disabled={disabled}
-      triggerClassName="h-9"
+      triggerClassName={triggerClassName ?? "h-9"}
       placeholder="Renk seç..."
     />
   );

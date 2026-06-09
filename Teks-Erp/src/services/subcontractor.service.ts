@@ -19,6 +19,7 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import {
   Prisma,
+  PrintedDocType,
   RollOperationType,
   RollStatus,
   StationKind,
@@ -28,6 +29,12 @@ import {
   WorkOrderStatus,
   ScanType,
 } from "@prisma/client";
+import {
+  printedDocumentService,
+  registerPrintedDocBuilder,
+  type BuiltDocContent,
+  type PrintedDocDb,
+} from "./printed-document.service";
 import { buildPrefixedCardNumber } from "../utils/barcode";
 import { buildPagination } from "../utils/query-parser";
 import {
@@ -195,6 +202,64 @@ function computeBornRollBlockingReasons(roll: BornRollDownstreamShape): string[]
     reasons.push(`Durum: ${roll.status}`);
   }
   return reasons;
+}
+
+/**
+ * Bekleyen kabul gruplarını PARTİ (sevk) bazında alt-grupla. Çoklu sevkte
+ * (aynı adıma parça parça boyahaneye gönderim) operatör "ikisi birlikte mi
+ * geldi, tek parti mi?" teyidini ancak partiler ayrı görünürse yapabilir.
+ *
+ * Parti kimliği = `Roll.batchSplitId` (= sevki yaratan SubcontractorDispatch.id;
+ * sevkte daima set edilir, bkz. dispatch() — bu yüzden AT_SUBCONTRACTOR her top
+ * tek bir açık sevke eşlenir). Mobil bu diziyi düz render eder; her partiyi
+ * ayrı "Geldi/Gelmedi" teyidiyle kabul eder (parti başına bir SubcontractorReceipt).
+ */
+function buildPendingParties<
+  R extends { batchSplitId: string | null; currentQty: Prisma.Decimal },
+  D extends {
+    id: string;
+    dispatchNo: string;
+    dispatchedAt: Date;
+    plateNumber: string | null;
+    driverName: string | null;
+    subcontractorId: string;
+    subcontractor: { id: string; code: string; name: string } | null;
+  },
+>(rolls: R[], dispatches: D[]) {
+  const dispatchById = new Map(dispatches.map((d) => [d.id, d] as const));
+  const byLane = new Map<string, R[]>();
+  for (const r of rolls) {
+    const key = r.batchSplitId ?? "__none__";
+    const arr = byLane.get(key);
+    if (arr) arr.push(r);
+    else byLane.set(key, [r]);
+  }
+  const parties = [...byLane.entries()].map(([key, laneRolls]) => {
+    const d = key === "__none__" ? null : dispatchById.get(key) ?? null;
+    const totalQty = laneRolls.reduce(
+      (s, r) => s.plus(r.currentQty),
+      new Prisma.Decimal(0),
+    );
+    return {
+      dispatchId: d?.id ?? null,
+      dispatchNo: d?.dispatchNo ?? null,
+      dispatchedAt: d?.dispatchedAt ?? null,
+      plateNumber: d?.plateNumber ?? null,
+      driverName: d?.driverName ?? null,
+      subcontractorId: d?.subcontractorId ?? null,
+      subcontractor: d?.subcontractor ?? null,
+      rolls: laneRolls,
+      rollCount: laneRolls.length,
+      totalQty,
+    };
+  });
+  // Sevk tarihine göre artan (parti-1 en üstte); kimliksiz (null) en sona.
+  parties.sort((a, b) => {
+    const at = a.dispatchedAt ? a.dispatchedAt.getTime() : Infinity;
+    const bt = b.dispatchedAt ? b.dispatchedAt.getTime() : Infinity;
+    return at - bt;
+  });
+  return parties;
 }
 
 // -----------------------------------------------------------------------------
@@ -459,67 +524,6 @@ export class SubcontractorService {
       const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "SD", now);
       const dispatchNo = buildPrefixedCardNumber("SD", now, seq);
 
-      // Topların ürün/renk bilgilerini çek (snapshot için)
-      const rollsWithMeta = await tx.roll.findMany({
-        where: { id: { in: data.rollIds } },
-        include: {
-          item: { select: { code: true, name: true } },
-          color: { select: { code: true, name: true } },
-        },
-      });
-
-      const rollSnapshots = rollsWithMeta.map((r, idx) => ({
-        sequence: idx + 1,
-        id: r.id,
-        barcode: r.barcode,
-        itemCode: r.item?.code ?? "",
-        itemName: r.item?.name ?? "",
-        colorCode: r.color?.code ?? null,
-        colorName: r.color?.name ?? null,
-        dispatchedQty: r.currentQty,
-        dispatchedWeight: r.weightKg ?? null,
-        qualityGrade: r.qualityGrade,
-        width: r.width ?? null,
-      }));
-
-      const totalWeight = rollSnapshots.reduce(
-        (s, r) => s.plus(r.dispatchedWeight ?? 0),
-        new Prisma.Decimal(0)
-      );
-
-      const printSnapshot = {
-        dispatchNo,
-        dispatchedAt: now.toISOString(),
-        driverName: data.driverName ?? null,
-        plateNumber: data.plateNumber ?? null,
-        notes: data.notes ?? null,
-        workOrder: {
-          id: wo.id,
-          batchNumber: wo.batchNumber,
-          parameters: (wo.parameters as Record<string, unknown> | null) ?? null,
-          type: wo.type,
-        },
-        subcontractor: {
-          id: subcontractor.id,
-          name: subcontractor.name,
-          code: subcontractor.code ?? null,
-        },
-        step: {
-          id: step.id,
-          stepSequence: step.stepSequence,
-          station: {
-            name: step.station.name,
-            code: step.station.code,
-          },
-        },
-        rolls: rollSnapshots,
-        totals: {
-          rollCount: rollSnapshots.length,
-          totalQty,
-          totalWeight,
-        },
-      };
-
       const dispatch = await tx.subcontractorDispatch.create({
         data: {
           dispatchNo,
@@ -533,13 +537,12 @@ export class SubcontractorService {
           driverName: data.driverName ?? null,
           dispatchedById: userId ?? null,
           notes: data.notes ?? null,
-          // Snapshot'a dondurulmuyor (printSnapshot'a koymuyoruz) — canlı kolon;
-          // sevk sonrası düzenlenebilir, getDispatchPrintSnapshot canlı döner.
+          // Belgeye DONDURULMAZ — canlı kolon; sevk sonrası düzenlenebilir,
+          // baskı her zaman güncel değeri overlay olarak gösterir (talimat alanı).
           // Operatör notu (flag açıkken) öncelikli; boşsa iş emrindeki boyahane
           // notu (WorkOrder.dyehouseNote) default kopyalanır.
           dyehouseNote: (data.dyehouseNote?.trim() || wo.dyehouseNote) ?? null,
           totalQty,
-          printSnapshot: printSnapshot as Prisma.InputJsonValue,
           items: {
             create: rolls.map((r) => ({
               rollId: r.id,
@@ -554,6 +557,16 @@ export class SubcontractorService {
           step: { include: { station: true } },
         },
       });
+
+      // RESMİ BELGE — fason sevk irsaliyesi v1 BURADA donar (PrintedDocument).
+      // Builder az önce yaratılan dispatch+item'ları aynı tx içinden okur;
+      // kaynak sonradan değişse bile belge sabit kalır. Düzeltme = reissue.
+      await printedDocumentService.freezeForSource(
+        tx,
+        PrintedDocType.SUBCONTRACTOR_DISPATCH,
+        dispatch.id,
+        userId
+      );
 
       // Rolls: AT_SUBCONTRACTOR + SUBCONTRACTOR_SENT log (TOPLU — eski kod top
       // başına update+findFirst+create+upsert yapıyordu = N+1).
@@ -736,6 +749,15 @@ export class SubcontractorService {
           cancelReason: trimmedReason,
         },
       });
+
+      // 1b) RESMİ BELGE — irsaliye VOIDED'e çekilir (baskıda İPTAL filigranı).
+      // Belge silinmez; tarihsel kayıt korunur.
+      await printedDocumentService.voidForSource(
+        tx,
+        PrintedDocType.SUBCONTRACTOR_DISPATCH,
+        dispatchId,
+        trimmedReason
+      );
 
       // 2) Toplar: STOCK + currentStepId temizle
       await tx.roll.updateMany({
@@ -1330,8 +1352,24 @@ export class SubcontractorService {
       // ── Refakat kartı akışı: WO'ya özel (küçük sonuç, rolls dahil) ──
       const woId = params.workOrderId;
 
+      // Parti ayırma soy bağı: bu WO'dan ayrılan WO'ları (splitFromId zinciri)
+      // kapsama al. Ayrılan parti fiziksel olarak ESKİ refakat kartını taşır —
+      // eski kart okutulunca operatör çıkmaza girmesin, ayrılan partinin yeni
+      // WO'daki bekleyen grubu da listede görünsün (grup kendi batchNumber'ını
+      // taşır, kabul doğru WO'ya düşer). BFS derinlik ≤3 (ayrılanın ayrılması).
+      const woIds = [woId];
+      let frontier = [woId];
+      for (let depth = 0; depth < 3 && frontier.length > 0; depth++) {
+        const children = await prisma.workOrder.findMany({
+          where: { splitFromId: { in: frontier }, isActive: true },
+          select: { id: true },
+        });
+        frontier = children.map((c) => c.id).filter((id) => !woIds.includes(id));
+        woIds.push(...frontier);
+      }
+
       const subStepCount = await prisma.workOrderStep.count({
-        where: { workOrderId: woId, station: { kind: "SUBCONTRACTOR" } },
+        where: { workOrderId: { in: woIds }, station: { kind: "SUBCONTRACTOR" } },
       });
       if (subStepCount === 0) {
         throw AppError.notFound("Bu iş emrinde fason adımı tanımlı değil");
@@ -1340,13 +1378,13 @@ export class SubcontractorService {
       const pendingCount = await prisma.roll.count({
         where: {
           status: RollStatus.AT_SUBCONTRACTOR,
-          currentStep: { workOrderId: woId, station: { kind: "SUBCONTRACTOR" } },
+          currentStep: { workOrderId: { in: woIds }, station: { kind: "SUBCONTRACTOR" } },
         },
       });
 
       if (pendingCount === 0) {
         const stepsWithRolls = await prisma.workOrderStep.findMany({
-          where: { workOrderId: woId, currentRolls: { some: {} } },
+          where: { workOrderId: { in: woIds }, currentRolls: { some: {} } },
           select: {
             station: { select: { name: true } },
             _count: { select: { currentRolls: true } },
@@ -1369,10 +1407,10 @@ export class SubcontractorService {
       }
 
       const outstandingRolls = await prisma.roll.findMany({
-        where: { status: RollStatus.AT_SUBCONTRACTOR, currentStep: { workOrderId: woId } },
+        where: { status: RollStatus.AT_SUBCONTRACTOR, currentStep: { workOrderId: { in: woIds } } },
         select: {
           id: true, barcode: true, currentQty: true, weightKg: true, width: true,
-          qualityGrade: true, status: true, currentStepId: true,
+          qualityGrade: true, status: true, currentStepId: true, batchSplitId: true,
           item: { select: { id: true, code: true, name: true } },
           color: { select: { id: true, code: true, name: true } },
         },
@@ -1409,7 +1447,8 @@ export class SubcontractorService {
 
       const groups = steps.map((step) => {
         const stepRolls = outstandingRolls.filter((r) => r.currentStepId === step.id);
-        const lastDispatch = byStep.get(step.id)?.[0] ?? null;
+        const stepDispatches = byStep.get(step.id) ?? [];
+        const lastDispatch = stepDispatches[0] ?? null;
         const totalQty = stepRolls.reduce((s, r) => s.plus(r.currentQty), new Prisma.Decimal(0));
         return {
           step: {
@@ -1419,9 +1458,13 @@ export class SubcontractorService {
           },
           workOrder: { id: step.workOrder.id, batchNumber: step.workOrder.batchNumber, status: step.workOrder.status },
           lastDispatch,
+          parties: buildPendingParties(stepRolls, stepDispatches),
           rolls: stepRolls,
           rollCount: stepRolls.length,
           totalQty,
+          // Okutulan karttan FARKLI bir WO'ya ait grup = bu karttan ayrılmış
+          // parti. Mobil batchNumber'ı zaten gösterir; bayrak ileride rozet için.
+          isSplitChild: step.workOrder.id !== woId,
         };
       });
 
@@ -1553,14 +1596,17 @@ export class SubcontractorService {
       where: { status: RollStatus.AT_SUBCONTRACTOR, currentStepId: stepId },
       select: {
         id: true, barcode: true, currentQty: true, weightKg: true, width: true,
-        qualityGrade: true, status: true, currentStepId: true,
+        qualityGrade: true, status: true, currentStepId: true, batchSplitId: true,
         item: { select: { id: true, code: true, name: true } },
         color: { select: { id: true, code: true, name: true } },
       },
     });
 
-    const lastDispatch = await prisma.subcontractorDispatch.findFirst({
-      where: { stepId },
+    // Bu adımın TÜM sevkleri (parti gruplaması için) — iptal edilmemiş.
+    // Eskiden tek `lastDispatch` (findFirst) dönüyordu; çoklu sevkte partiler
+    // ayrışamıyordu. lastDispatch geriye-uyumluluk için en güncel sevk olarak korunur.
+    const dispatches = await prisma.subcontractorDispatch.findMany({
+      where: { stepId, cancelledAt: null },
       select: {
         id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,
@@ -1568,6 +1614,7 @@ export class SubcontractorService {
       },
       orderBy: { dispatchedAt: "desc" },
     });
+    const lastDispatch = dispatches[0] ?? null;
 
     const totalQty = rolls.reduce((s, r) => s.plus(r.currentQty), new Prisma.Decimal(0));
 
@@ -1587,6 +1634,7 @@ export class SubcontractorService {
           targetProperties: step.workOrder.targetProperties.map((p) => p.property),
         },
         lastDispatch,
+        parties: buildPendingParties(rolls, dispatches),
         rolls,
         rollCount: rolls.length,
         totalQty,
@@ -1983,43 +2031,26 @@ export class SubcontractorService {
   }
 
   // ===========================================================================
-  // DISPATCH PRINT SNAPSHOT
+  // DISPATCH BOYA OVERLAY — fason sevk irsaliyesinin CANLI talimat alanları
   // ===========================================================================
-  async getDispatchPrintSnapshot(id: string): Promise<ApiResponse<unknown>> {
+  // Donmuş içerik (toplar/totaller/fasoncu/adım) artık PrintedDocument'te. Burada
+  // yalnız KASTEN canlı tutulan talimat alanları döner: istenen renk (WO hedef
+  // rengi — fason sonrası değişebilir; boyahaneye hangi renge boyanacağını söyler)
+  // + boyahane notu (sevk sonrası düzenlenebilir; kabul/iptalde kilitlenir).
+  async getDispatchDyeOverlay(id: string): Promise<ApiResponse<unknown>> {
     const dispatch = await prisma.subcontractorDispatch.findUnique({
       where: { id },
-      include: {
-        subcontractor: true,
+      select: {
+        cancelledAt: true,
+        dyehouseNote: true,
         workOrder: {
           select: {
-            id: true,
-            batchNumber: true,
-            parameters: true,
-            type: true,
-            // Sevkin kendi boyahane notu boşsa fişte WO notuna düşülür (option B).
             dyehouseNote: true,
-            // Sevk fişinde "fasoncudan ne istiyoruz" → WO'nun hedef rengi.
-            // Snapshot içinde dondurulmuyor; her zaman canlı join'liyoruz.
-            // Fason istasyondan sonraki üretimde renk değişebilir; sevk fişi
-            // boyahanenin hangi renge boyaması gerektiğini söyler.
             targetColor: { select: { id: true, code: true, name: true, hex: true } },
           },
         },
-        step: { include: { station: { select: { name: true, code: true } } } },
-        items: {
-          include: {
-            roll: {
-              include: {
-                item: { select: { code: true, name: true } },
-                color: { select: { code: true, name: true } },
-              },
-            },
-          },
-          orderBy: { createdAt: "asc" },
-        },
       },
     });
-
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
 
     // P4: Boyahane notu düzenleme kilidi — iptal edilmiş ya da (kabul edilmiş =
@@ -2029,89 +2060,22 @@ export class SubcontractorService {
       dispatch.cancelledAt != null ||
       (await prisma.subcontractorReceiptItem.count({
         where: {
-          sourceDispatchItem: { dispatchId: dispatch.id },
+          sourceDispatchItem: { dispatchId: id },
           receipt: { cancelledAt: null },
         },
       })) > 0;
 
-    const requestedColor = dispatch.workOrder.targetColor
-      ? {
-          id: dispatch.workOrder.targetColor.id,
-          code: dispatch.workOrder.targetColor.code,
-          name: dispatch.workOrder.targetColor.name,
-          hex: dispatch.workOrder.targetColor.hex,
-        }
-      : null;
-
-    // Snapshot varsa döndür, yoksa live hesapla (geriye dönük uyumluluk).
-    // requestedColor her iki dalda da canlı join — eski snapshot'larda bile yer alır.
-    if (dispatch.printSnapshot) {
-      return {
-        success: true,
-        // requestedColor + dyehouseNote canlı join/kolon — eski snapshot'larda bile güncel.
-        data: {
-          ...(dispatch.printSnapshot as object),
-          requestedColor,
-          dyehouseNote: dispatch.dyehouseNote,
-          woDyehouseNote: dispatch.workOrder.dyehouseNote,
-          dyehouseNoteLocked,
-        },
-      };
-    }
-
-    const rolls = dispatch.items.map((item, idx) => ({
-      sequence: idx + 1,
-      id: item.roll.id,
-      barcode: item.roll.barcode,
-      itemCode: item.roll.item?.code ?? "",
-      itemName: item.roll.item?.name ?? "",
-      colorCode: item.roll.color?.code ?? null,
-      colorName: item.roll.color?.name ?? null,
-      dispatchedQty: item.dispatchedQty,
-      dispatchedWeight: item.dispatchedWeight ?? null,
-      qualityGrade: item.roll.qualityGrade,
-      width: item.roll.width ?? null,
-    }));
-
-    const totalWeight = rolls.reduce(
-      (s, r) => s.plus(r.dispatchedWeight ?? 0),
-      new Prisma.Decimal(0)
-    );
-
     return {
       success: true,
       data: {
-        dispatchNo: dispatch.dispatchNo,
-        dispatchedAt: dispatch.dispatchedAt.toISOString(),
-        driverName: dispatch.driverName,
-        plateNumber: dispatch.plateNumber,
-        notes: dispatch.notes,
-        workOrder: {
-          id: dispatch.workOrder.id,
-          batchNumber: dispatch.workOrder.batchNumber,
-          parameters: dispatch.workOrder.parameters as Record<string, unknown> | null,
-          type: dispatch.workOrder.type,
-        },
-        subcontractor: {
-          id: dispatch.subcontractor.id,
-          name: dispatch.subcontractor.name,
-          code: dispatch.subcontractor.code ?? null,
-        },
-        step: {
-          id: dispatch.step.id,
-          stepSequence: dispatch.step.stepSequence,
-          station: {
-            name: dispatch.step.station.name,
-            code: dispatch.step.station.code,
-          },
-        },
-        rolls,
-        totals: {
-          rollCount: rolls.length,
-          totalQty: dispatch.totalQty,
-          totalWeight,
-        },
-        requestedColor,
+        requestedColor: dispatch.workOrder.targetColor
+          ? {
+              id: dispatch.workOrder.targetColor.id,
+              code: dispatch.workOrder.targetColor.code,
+              name: dispatch.workOrder.targetColor.name,
+              hex: dispatch.workOrder.targetColor.hex,
+            }
+          : null,
         dyehouseNote: dispatch.dyehouseNote,
         woDyehouseNote: dispatch.workOrder.dyehouseNote,
         dyehouseNoteLocked,
@@ -2548,3 +2512,94 @@ export class SubcontractorService {
     };
   }
 }
+
+// =============================================================================
+// RESMİ BELGE — Fason Sevk İrsaliyesi snapshot builder'ı (PrintedDocument)
+// =============================================================================
+// Tek üretici iki yolda: freeze (sevk create tx'i) + reissue (gerekçeli revizyon).
+// getCurrent belgesi olmayan eski kayıtta bunu lazy-init olarak da kullanır.
+// İstenen renk + boyahane notu KASTEN belgede YOK — canlı overlay alanlarıdır
+// (boyahaneye talimat; kabul/iptalde kilitlenir), getDispatchDyeOverlay döner.
+async function buildFasonDispatchDoc(
+  db: PrintedDocDb,
+  dispatchId: string
+): Promise<BuiltDocContent | null> {
+  const dispatch = await db.subcontractorDispatch.findUnique({
+    where: { id: dispatchId },
+    include: {
+      subcontractor: { select: { id: true, name: true, code: true } },
+      workOrder: { select: { id: true, batchNumber: true, parameters: true, type: true } },
+      step: { include: { station: { select: { name: true, code: true } } } },
+      items: {
+        include: {
+          roll: {
+            include: {
+              item: { select: { code: true, name: true } },
+              color: { select: { code: true, name: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+  if (!dispatch) return null;
+
+  const rolls = dispatch.items.map((item, idx) => ({
+    sequence: idx + 1,
+    id: item.roll.id,
+    barcode: item.roll.barcode,
+    itemCode: item.roll.item?.code ?? "",
+    itemName: item.roll.item?.name ?? "",
+    colorCode: item.roll.color?.code ?? null,
+    colorName: item.roll.color?.name ?? null,
+    dispatchedQty: Number(item.dispatchedQty),
+    dispatchedWeight: item.dispatchedWeight != null ? Number(item.dispatchedWeight) : null,
+    qualityGrade: item.roll.qualityGrade,
+    width: item.roll.width != null ? Number(item.roll.width) : null,
+  }));
+  const totalWeight = rolls.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
+
+  return {
+    documentNo: dispatch.dispatchNo,
+    voidInfo: dispatch.cancelledAt
+      ? { reason: dispatch.cancelReason, at: dispatch.cancelledAt }
+      : null,
+    doc: {
+      dispatchNo: dispatch.dispatchNo,
+      dispatchedAt: dispatch.dispatchedAt.toISOString(),
+      driverName: dispatch.driverName,
+      plateNumber: dispatch.plateNumber,
+      notes: dispatch.notes,
+      workOrder: {
+        id: dispatch.workOrder.id,
+        batchNumber: dispatch.workOrder.batchNumber,
+        parameters: (dispatch.workOrder.parameters as Record<string, unknown> | null) ?? null,
+        type: dispatch.workOrder.type,
+      },
+      subcontractor: {
+        id: dispatch.subcontractor.id,
+        name: dispatch.subcontractor.name,
+        code: dispatch.subcontractor.code ?? null,
+      },
+      step: {
+        id: dispatch.step.id,
+        stepSequence: dispatch.step.stepSequence,
+        station: {
+          name: dispatch.step.station.name,
+          code: dispatch.step.station.code,
+        },
+      },
+      rolls,
+      totals: {
+        rollCount: rolls.length,
+        totalQty: Number(dispatch.totalQty),
+        totalWeight,
+      },
+    },
+  };
+}
+
+registerPrintedDocBuilder(PrintedDocType.SUBCONTRACTOR_DISPATCH, {
+  fresh: buildFasonDispatchDoc,
+});

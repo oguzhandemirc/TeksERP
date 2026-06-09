@@ -23,6 +23,9 @@ interface Props {
   notice?: string;
   /** Canlı karşılama sayacı (metre): okutulan / istenen — fazlada gerçek rakam, kısıtlama yok. */
   counter?: { scanned: number; expected: number };
+  /** Yakalama anında "başarı" haptiği (default true). Çağıran kendi kabul/ret
+   *  titreşimini veriyorsa false geç (çift titreşim olmasın). bkz. BarcodeScannerView. */
+  captureHaptic?: boolean;
 }
 
 /**
@@ -46,6 +49,7 @@ export function BarcodeScannerModal({
   continuous,
   notice,
   counter,
+  captureHaptic,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -94,6 +98,7 @@ export function BarcodeScannerModal({
           continuous={continuous}
           notice={notice}
           counter={counter}
+          captureHaptic={captureHaptic}
         />
       </View>
     </AppModal>

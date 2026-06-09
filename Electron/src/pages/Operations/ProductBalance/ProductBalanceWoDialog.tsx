@@ -96,13 +96,13 @@ export function ProductBalanceWoDialog({ spec, open, onOpenChange }: Props) {
       // Yeni (odaklı) sekmede aç → Ürün Dengesi açık kalır, listeden başka
       // satırlar için de iş emri açılabilir. forceNew: kaydedilmemiş formu
       // ezmemek için her zaman taze sekme.
-      openTab("/operations/work-orders", {
+      openTab("/operations/work-orders/new", {
         state: { seedPickedLines: picked },
         forceNew: true,
       });
     } else {
       // stoğa üret (veya bind ama açık talep kalmamış → stoğa düşer)
-      openTab("/operations/work-orders", {
+      openTab("/operations/work-orders/new", {
         state: {
           seedTarget: {
             itemId: spec.itemId,

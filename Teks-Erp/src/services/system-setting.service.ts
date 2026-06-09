@@ -82,9 +82,27 @@ export const SETTING_KEYS = {
    *  kapatırsa çıkış ≤ giriş zorunlu olur (aşan giriş 400 ile reddedilir). Diğer flag'lerin
    *  aksine backend ENFORCE eder (guard bu flag'e bağlı). */
   TAMBUR_OVER_QUANTITY_ENABLED: "tambur.overQuantityEnabled",
+  /** Oturum (JWT token) ömrü, SAAT. Default 8. Giriş yaptıktan sonra token kaç saat
+   *  geçerli kalır — süre dolunca (aktif kullanırken bile) yeniden giriş gerekir.
+   *  Backend ENFORCE eder: login'de jwt.sign expiresIn buradan okunur. Değişiklik
+   *  yalnız sonraki girişlere uygulanır; mevcut açık token'lar kendi süreleriyle biter. */
+  AUTH_SESSION_DURATION_HOURS: "auth.sessionDurationHours",
+  /** Hareketsizlik (idle) zaman aşımı, DAKİKA. Default 0 (kapalı). >0 iken Electron
+   *  paneli bu kadar dakika hiç işlem (fare/klavye) görmezse otomatik çıkış yapar.
+   *  Frontend ENFORCE eder (backend token'ı yine kendi mutlak ömrüne kadar geçerli). */
+  AUTH_IDLE_TIMEOUT_MINUTES: "auth.idleTimeoutMinutes",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
+
+/** Oturum (JWT) ömrü varsayılanı — saat. Eski sabit "8h" davranışıyla aynı. */
+export const DEFAULT_SESSION_DURATION_HOURS = 8;
+/** Mutlak oturum ömrü tavanı — saat (30 gün). Üstü bu değere kırpılır. */
+const MAX_SESSION_DURATION_HOURS = 720;
+/** Hareketsizlik zaman aşımı varsayılanı — dakika. 0 = kapalı (otomatik çıkış yok). */
+export const DEFAULT_IDLE_TIMEOUT_MINUTES = 0;
+/** Hareketsizlik zaman aşımı tavanı — dakika (24 saat). */
+const MAX_IDLE_TIMEOUT_MINUTES = 1440;
 
 /** Firma adı verilmediğinde gösterilen varsayılan. */
 export const DEFAULT_COMPANY_NAME = "Adnan Şahin Tekstil";
@@ -189,6 +207,30 @@ export interface FeatureFlags {
   /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (default TRUE/açık).
    *  Diğer flag'lerin aksine ENFORCE edilir — tambur kesim guard'ı bu flag'e bağlı. */
   tamburOverQuantityEnabled: boolean;
+  /** Oturum (JWT) ömrü — saat (default 8). Giriş sonrası token kaç saat geçerli.
+   *  Backend ENFORCE eder (login'de jwt.sign expiresIn). */
+  sessionDurationHours: number;
+  /** Hareketsizlik zaman aşımı — dakika (default 0 = kapalı). Panel bu kadar dakika
+   *  işlem görmezse otomatik çıkış. Frontend ENFORCE eder. */
+  idleTimeoutMinutes: number;
+}
+
+// =============================================================================
+// Feature-flag agregat cache
+// =============================================================================
+// getFeatureFlags() her çağrıda 15 ayrı systemSetting.findUnique çalıştırıyor;
+// GET /api/feature-flags app açılışında + her gezinmede sık çağrılır. Toplam
+// sonucu kısa TTL ile bellekte tutuyoruz. set() HER ayar yazımında invalidate
+// eder (tek write chokepoint) → toggle anında taze görünür.
+// ÖNEMLİ: per-flag enforcement reader'ları (readReturnGradingEnabled(tx),
+// readDevicePairingRequired, readTamburOverQuantityEnabled ...) KASITEN cache'siz
+// kalır — transaction içi + middleware tazeliği aynen korunur. Tek-sunucu yerel
+// kurulum → bellek cache yeterli (TTL ayrıca olası out-of-band değişimi bounded tutar).
+let featureFlagsCache: { value: FeatureFlags; expiresAt: number } | null = null;
+const FEATURE_FLAGS_TTL_MS = 30_000;
+
+export function invalidateFeatureFlagsCache(): void {
+  featureFlagsCache = null;
 }
 
 export class SystemSettingService {
@@ -245,6 +287,10 @@ export class SystemSettingService {
       newData: { value: updated.value as Prisma.InputJsonValue },
     });
 
+    // Herhangi bir ayar yazımı feature-flag agregat cache'ini bayatlatabilir →
+    // tek write chokepoint burada invalidate eder (toggle anında taze görünür).
+    invalidateFeatureFlagsCache();
+
     return { success: true, data: updated, message: "Ayar güncellendi" };
   }
 
@@ -268,6 +314,10 @@ export class SystemSettingService {
    * konservatif — fabrika fiyat görmek istemiyor şu an).
    */
   async getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
+    const now = Date.now();
+    if (featureFlagsCache && featureFlagsCache.expiresAt > now) {
+      return { success: true, data: featureFlagsCache.value };
+    }
     const flags: FeatureFlags = {
       companyName: await readCompanyName(),
       pricingEnabled: await readPricingEnabled(),
@@ -282,7 +332,10 @@ export class SystemSettingService {
       companyLetterhead: await readCompanyLetterhead(),
       documentsConfig: await readDocumentsConfig(),
       tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(),
+      sessionDurationHours: await readSessionDurationHours(),
+      idleTimeoutMinutes: await readIdleTimeoutMinutes(),
     };
+    featureFlagsCache = { value: flags, expiresAt: now + FEATURE_FLAGS_TTL_MS };
     return { success: true, data: flags };
   }
 
@@ -473,6 +526,46 @@ export class SystemSettingService {
         SETTING_KEYS.TAMBUR_OVER_QUANTITY_ENABLED,
         input.tamburOverQuantityEnabled,
         "Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin (aşımda parent top tamamen tüketilir)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "sessionDurationHours")) {
+      const v = input.sessionDurationHours;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        v < 1 ||
+        v > MAX_SESSION_DURATION_HOURS
+      ) {
+        throw AppError.badRequest(
+          `Oturum süresi 1–${MAX_SESSION_DURATION_HOURS} saat aralığında olmalı`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_SESSION_DURATION_HOURS,
+        Math.floor(v),
+        "Oturum (JWT token) ömrü, saat — giriş sonrası token kaç saat geçerli kalır",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "idleTimeoutMinutes")) {
+      const v = input.idleTimeoutMinutes;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        v < 0 ||
+        v > MAX_IDLE_TIMEOUT_MINUTES
+      ) {
+        throw AppError.badRequest(
+          `Hareketsizlik zaman aşımı 0–${MAX_IDLE_TIMEOUT_MINUTES} dakika aralığında olmalı (0 = kapalı)`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_IDLE_TIMEOUT_MINUTES,
+        Math.floor(v),
+        "Hareketsizlik zaman aşımı, dakika — panel bu kadar süre işlem görmezse otomatik çıkış (0 = kapalı)",
         userId
       );
     }
@@ -820,4 +913,43 @@ export async function readWorkOrderDefaultPlanDurationDays(
     DEFAULT_DEADLINE_DAYS,
     tx,
   );
+}
+
+/**
+ * Oturum (JWT) ömrünü SAAT olarak okur. Yoksa/geçersizse 8 (eski sabit davranış).
+ * 1 saatin altı → default; tavanı MAX_SESSION_DURATION_HOURS'a (30 gün) kırpılır.
+ * AuthService.login bunu okuyup jwt.sign expiresIn'e (saniye) çevirir.
+ */
+export async function readSessionDurationHours(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_SESSION_DURATION_HOURS },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_SESSION_DURATION_HOURS;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < 1) return DEFAULT_SESSION_DURATION_HOURS;
+  return Math.min(Math.floor(parsed), MAX_SESSION_DURATION_HOURS);
+}
+
+/**
+ * Hareketsizlik zaman aşımını DAKİKA olarak okur. Yoksa/geçersizse 0 (kapalı).
+ * 0 = kapalı (otomatik çıkış yok); tavanı MAX_IDLE_TIMEOUT_MINUTES'a (24 saat) kırpılır.
+ * Frontend (Electron AppShell) bunu okuyup idle logout sayacını kurar — backend
+ * token'ı yine kendi mutlak ömrüne kadar geçerli kalır (idle salt UI tarafı).
+ */
+export async function readIdleTimeoutMinutes(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_IDLE_TIMEOUT_MINUTES },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_IDLE_TIMEOUT_MINUTES;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < 0) return DEFAULT_IDLE_TIMEOUT_MINUTES;
+  return Math.min(Math.floor(parsed), MAX_IDLE_TIMEOUT_MINUTES);
 }

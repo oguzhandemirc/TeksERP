@@ -63,6 +63,34 @@ router.get("/available-for-attach", verifyToken, requirePermission("workorder:wr
 
 /**
  * @openapi
+ * /api/work-orders/check-batch-number:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Parti kodu benzersiz mi (form blur kontrolü)
+ *     description: |
+ *       İş emri formunda parti kodu alanından çıkıldığında çağrılır. Kaydetmeden
+ *       önce "bu numara daha önce verilmiş mi" uyarısı verir. excludeId verilirse
+ *       o iş emri çakışma sayılmaz (düzenleme modu). Boş kod → available=true.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: batchNumber
+ *         schema: { type: string }
+ *       - in: query
+ *         name: excludeId
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ batchNumber, available }" }
+ */
+router.get(
+  "/check-batch-number",
+  verifyToken,
+  requireAnyPermission("workorder:read", "workorder:write", "mobile:hizli-is-emri"),
+  controller.checkBatchNumber,
+);
+
+/**
+ * @openapi
  * /api/work-orders/{id}:
  *   get:
  *     tags: [WorkOrders]
@@ -103,6 +131,46 @@ router.get("/:id", verifyToken, requireAnyPermission("workorder:read", "mobile:f
  *         description: İş emri bulunamadı
  */
 router.get("/:id/branches", verifyToken, requireAnyPermission("workorder:read", "mobile:hizli-is-emri"), controller.getBranches);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/split-preview:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Partiyi (sevk lane'i) yeni iş emrine ayırma önizlemesi
+ *     description: batchSplitId query param ile taşınacak topları + ayrılabilirlik (Faz B1 boyanmadan) durumunu döner. Hiçbir şeyi değiştirmez.
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: batchSplitId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Önizleme }
+ */
+router.get("/:id/split-preview", verifyToken, requirePermission("workorder:read"), controller.getSplitPreview);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/split:
+ *   post:
+ *     tags: [WorkOrders]
+ *     summary: Partiyi yeni iş emrine ayır (aynı rota + özellikler, yeni renk)
+ *     description: Partinin canlı toplarını + açık sevkini yeni WO'nun aynı sıradaki adımlarına taşır (kaldığı yerden devam). Faz B1 - boyanmadan.
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       201: { description: Yeni iş emri oluşturuldu }
+ */
+router.post("/:id/split", verifyToken, requirePermission("workorder:write"), controller.splitBranch);
 
 /**
  * @openapi

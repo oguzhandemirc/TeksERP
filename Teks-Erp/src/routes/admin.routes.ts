@@ -10,6 +10,7 @@ import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
 import { systemSettingService } from "../services/system-setting.service";
 import { SystemLogService } from "../services/system-log.service";
+import { triggerManualBackup, listBackups, resolveBackupPath } from "../services/backup.service";
 import { AppError } from "../utils/app-error";
 import prisma from "../lib/prisma";
 import { z } from "zod";
@@ -818,6 +819,105 @@ router.put(
         req.user?.userId
       );
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================================================
+// MANUEL YEDEK
+// =============================================================================
+
+/**
+ * @openapi
+ * /api/admin/backup:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Şimdi yedek al (gece yedek görevini tetikler)
+ *     description: >
+ *       Backend pg_dump çalıştırmaz; kurulumdaki "TeksERP Gece Yedek" Görev
+ *       Zamanlayıcı görevini tetikler. Ağır iş ayrı SYSTEM prosesinde koşar.
+ *       Yalnızca kurulu Windows sunucusunda çalışır.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       202: { description: Yedek başlatıldı }
+ *       400: { description: Başlatılamadı (Windows değil / görev yok) }
+ */
+router.post(
+  "/backup",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await triggerManualBackup();
+      // İz: kim ne zaman manuel yedek tetikledi (best-effort).
+      await AuditService.logEvent({
+        category: "SYSTEM",
+        action: "BACKUP_TRIGGER",
+        userId: req.user?.userId ?? null,
+        payload: { started: result.started },
+      });
+      res
+        .status(result.started ? 202 : 400)
+        .json({ success: result.started, message: result.message });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/backups:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Yedek (.dump) dosyalarının listesi
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Yedek listesi + yedek klasörü }
+ */
+router.get(
+  "/backups",
+  verifyToken,
+  requirePermission("admin:settings"),
+  (_req: Request, res: Response, next: NextFunction): void => {
+    try {
+      res.status(200).json({ success: true, ...listBackups() });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/backups/{name}/download:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Bir yedek dosyasını indir
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Dosya akışı }
+ *       404: { description: Bulunamadı }
+ */
+router.get(
+  "/backups/:name/download",
+  verifyToken,
+  requirePermission("admin:settings"),
+  (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      const abs = resolveBackupPath(req.params.name as string);
+      if (!abs) {
+        next(AppError.notFound("Yedek dosyası bulunamadı."));
+        return;
+      }
+      res.download(abs, req.params.name as string);
     } catch (error) {
       next(error);
     }

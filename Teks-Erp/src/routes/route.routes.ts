@@ -9,7 +9,7 @@ import { BaseService } from "../services/base.service";
 import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const service = new BaseService({
   modelName: "route",
@@ -21,7 +21,18 @@ const service = new BaseService({
       include: {
         station: {
           include: {
-            defaultCategory: { select: { id: true, code: true, name: true } },
+            defaultCategory: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                // Hızlı İş Emri "Gelişmiş" renk/özellik uygulaması, rotanın bu adımı
+                // gerçekten uygulayıp uygulayamayacağını bu bayraklardan ölçer
+                // (sadece kategori atanmış olması yetmez — appliesColor/Property gerekir).
+                appliesColor: true,
+                appliesProperty: true,
+              },
+            },
           },
         },
       },
@@ -54,7 +65,7 @@ const router = Router();
  *       200:
  *         description: Rota listesi (adımlar dahil)
  */
-router.get("/", verifyToken, requirePermission("station:read"), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("station:read", "mobile:hizli-is-emri"), controller.findAll);
 
 /**
  * @openapi

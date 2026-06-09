@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -13,12 +14,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
-import { Building2 } from "lucide-react";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { UserRound } from "lucide-react";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
+import { CustomerFormDialog } from "@/pages/Customers/CustomerFormDialog";
 import type { Customer } from "@/pages/Customers/types";
+import type { CustomerFormValues } from "@/pages/Customers/schema";
+import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
 import { usePricingEnabled } from "@/hooks/usePricingEnabled";
+import { usePulseSync } from "@/hooks/usePulseSync";
 import { currencyService } from "@/services/featureFlagService";
 import { OrderLinesEditor } from "./OrderLinesEditor";
 import type { Order } from "./types";
@@ -54,11 +60,32 @@ function orderToFormValues(order: Order): OrderFormValues {
       customerItemName: l.customerItemName ?? "",
       customerColorName: l.customerColorName ?? "",
       requiredPropertyIds: (l.requiredProperties ?? []).map((p) => p.propertyId),
+      cutNote: l.cutNote ?? "",
     })),
   };
 }
 
 export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitting }: Props) {
+  const qc = useQueryClient();
+  const [customerFormOpen, setCustomerFormOpen] = useState(false);
+  // Müşteri seçici, kalem alanları ve "Kalem Ekle" butonu aynı paylaşılan saatten
+  // beslenir ([[usePulseSync]]) — hepsi aynı hız + aynı fazda yanıp söner.
+  const dim = usePulseSync();
+
+  const createCustomerMut = useMutation({
+    mutationFn: (payload: Partial<Customer>) => customerService.create(payload),
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: ["customers"] });
+      const created = res.data;
+      if (created?.id) {
+        form.setValue("customerId", created.id);
+        form.setValue("branchId", null);
+        toast.success(`Müşteri oluşturuldu: ${created.name}`);
+      }
+      setCustomerFormOpen(false);
+    },
+  });
+
   const isEdit = Boolean(order);
   const partialShipped = order?.status === "PARTIAL_SHIPPED";
   const headerLocked = partialShipped;
@@ -98,6 +125,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
   }, [order]);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={`flex max-h-[85vh] flex-col ${pricingEnabled ? "max-w-5xl" : "max-w-3xl"}`}
@@ -121,13 +149,12 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
           })}
           className="flex min-h-0 flex-1 flex-col gap-3"
         >
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-1">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField
               label="Müşteri"
               error={form.formState.errors.customerId}
               required
-              className="sm:col-span-2"
             >
               <Controller
                 control={form.control}
@@ -143,13 +170,16 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
                     queryKey="order-customer"
                     getLabel={(c) => c.name}
                     getSubLabel={(c) => (c.taxNumber ? `${c.code} · VKN ${c.taxNumber}` : c.code)}
-                    icon={Building2}
+                    icon={UserRound}
                     iconClassName="text-primary"
                     title="Müşteri Seç"
                     description="Müşteri seç veya aramayla daralt — tüm liste sunucuda aranır (ad, kod, vergi no)."
                     placeholder="Müşteri seç..."
                     disabled={headerLocked}
-                    triggerClassName="h-9"
+                    triggerClassName={!field.value ? `h-9 border-primary shadow-lg shadow-primary/50 ring-2 ring-primary/30 transition-all duration-700 ${dim ? "opacity-50" : "opacity-100"}` : "h-9"}
+                    quickAddLabel="Yeni Müşteri Ekle"
+                    onQuickAdd={() => setCustomerFormOpen(true)}
+                    countLabel="müşteri"
                   />
                 )}
               />
@@ -171,12 +201,17 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-            <FormField label="Termin" htmlFor="deadline" error={form.formState.errors.deadline}>
-              <Input
-                id="deadline"
-                type="date"
-                placeholder="Boş bırakılırsa varsayılan N gün"
-                {...form.register("deadline")}
+            <FormField label="Termin" error={form.formState.errors.deadline}>
+              <Controller
+                control={form.control}
+                name="deadline"
+                render={({ field }) => (
+                  <DatePickerInput
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    placeholder="Boş bırakılırsa varsayılan N gün"
+                  />
+                )}
               />
             </FormField>
             {pricingEnabled && (
@@ -219,6 +254,8 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
                     value={field.value}
                     onChange={field.onChange}
                     error={fieldState.error?.message}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    lineErrors={form.formState.errors.lines as any}
                     customerId={form.watch("customerId") || null}
                   />
                 )}
@@ -233,10 +270,10 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
           </div>
 
           <DialogFooter className="shrink-0 border-t pt-3">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive">
               İptal
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-500 hover:shadow-emerald-500/40 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150">
               {isSubmitting
                 ? isEdit
                   ? "Güncelleniyor..."
@@ -249,5 +286,21 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
         </form>
       </DialogContent>
     </Dialog>
+
+    <CustomerFormDialog
+      open={customerFormOpen}
+      onOpenChange={setCustomerFormOpen}
+      isSubmitting={createCustomerMut.isPending}
+      onSubmit={(v: CustomerFormValues) => {
+        createCustomerMut.mutate({
+          code: generateCode(CODE_PREFIXES.CUSTOMER),
+          name: v.name,
+          taxNumber: v.taxNumber || null,
+          type: v.type,
+          isActive: true,
+        } as Partial<Customer>);
+      }}
+    />
+    </>
   );
 }

@@ -47,7 +47,7 @@ export function TabStrip() {
   };
 
   return (
-    <div className="flex h-9 shrink-0 items-stretch gap-1 border-b border-border/60 bg-card/40 px-1.5">
+    <div className="flex h-9 shrink-0 select-none items-stretch gap-1 border-b border-border/60 bg-card/40 px-1.5">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={ids} strategy={horizontalListSortingStrategy}>
           <div

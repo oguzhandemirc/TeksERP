@@ -1,6 +1,5 @@
-import { useState, type MouseEvent } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Ban, FileText, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -8,47 +7,51 @@ import { StatusBadge, workOrderStatusTones } from "@/components/operations/Statu
 import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
-import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
+import { useTabsStore } from "@/store/tabs";
 import { WorkOrderDocumentsDialog } from "./WorkOrderDocumentsDialog";
 import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
-import { WorkOrderFormDialog } from "./WorkOrderFormDialog";
-import { workOrderService } from "./service";
-import { buildPayload, type CreatePayload } from "./workOrderPayload";
 import type { WorkOrder } from "./types";
 
 /**
  * Tam sayfa detayın sticky başlığı: kimlik (parti no + statü + tip/rota) +
  * aksiyonlar (Düzenle, Belgeler, İptal Et) + ilgili dialoglar. Belgeler içinden
  * refakat kartı ve fason sevk fişi yazdırılır. Düzenleme PLANNED/IN_PROGRESS'te
- * açık; üretimdeyse önce onay sorar.
+ * açık (tam sayfa /edit ekranına götürür); üretimdeyse önce onay sorar.
  */
 export function WorkOrderDetailHeader({
   wo,
   onBack,
+  autoOpenTravelerCard = false,
 }: {
   wo: WorkOrder | null;
   onBack: (e: MouseEvent) => void;
+  /** Parti ayırma akışından gelindi — refakat kartı yazdırma diyaloğunu otomatik aç. */
+  autoOpenTravelerCard?: boolean;
 }) {
   const qc = useQueryClient();
-  const targetQuantityEnabled = useTargetQuantityEnabled();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [travelerCardOpen, setTravelerCardOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
   const [inProgressConfirmOpen, setInProgressConfirmOpen] = useState(false);
   const [printDispatchId, setPrintDispatchId] = useState<string | null>(null);
 
-  const replaceMut = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: CreatePayload }) =>
-      workOrderService.replace(id, payload as unknown as Partial<WorkOrder>),
-    onSuccess: () => {
-      if (wo) qc.invalidateQueries({ queryKey: ["work-order-detail", wo.id] });
-      qc.invalidateQueries({ queryKey: ["work-orders"] });
-      toast.success("İş emri güncellendi");
-    },
-  });
+  // Ayırma akışı: WO yüklenince kart diyaloğunu BİR KEZ otomatik aç (kullanıcı
+  // kapatınca yeniden açılmasın diye ref ile kilitlenir).
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenTravelerCard && wo && !autoOpenedRef.current) {
+      autoOpenedRef.current = true;
+      setTravelerCardOpen(true);
+    }
+  }, [autoOpenTravelerCard, wo]);
+
+  // Düzenleme tam sayfa /edit ekranında — bu sekmede yerinde aç.
+  const goEdit = () => {
+    if (wo) navigateActive(`/operations/work-orders/${wo.id}/edit`);
+  };
 
   const canEdit = wo && (wo.status === "PLANNED" || wo.status === "IN_PROGRESS");
   const canCancel = wo && wo.status !== "COMPLETED" && wo.status !== "CANCELLED";
@@ -84,7 +87,7 @@ export function WorkOrderDetailHeader({
                   variant="outline"
                   className="gap-1"
                   onClick={() =>
-                    wo.status === "IN_PROGRESS" ? setInProgressConfirmOpen(true) : setEditOpen(true)
+                    wo.status === "IN_PROGRESS" ? setInProgressConfirmOpen(true) : goEdit()
                   }
                 >
                   <Pencil className="h-3.5 w-3.5" /> Düzenle
@@ -150,17 +153,6 @@ export function WorkOrderDetailHeader({
           if (wo) qc.invalidateQueries({ queryKey: ["work-order-detail", wo.id] });
         }}
       />
-      <WorkOrderFormDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        workOrder={wo}
-        onSubmit={async (v, meta) => {
-          if (wo) {
-            await replaceMut.mutateAsync({ id: wo.id, payload: buildPayload(v, meta, targetQuantityEnabled) });
-          }
-        }}
-        isSubmitting={replaceMut.isPending}
-      />
       <ConfirmDialog
         open={inProgressConfirmOpen}
         onOpenChange={setInProgressConfirmOpen}
@@ -171,7 +163,7 @@ export function WorkOrderDetailHeader({
         destructive
         onConfirm={() => {
           setInProgressConfirmOpen(false);
-          setEditOpen(true);
+          goEdit();
         }}
       />
     </div>

@@ -127,7 +127,8 @@ const travelerCardRouter = Router();
 travelerCardRouter.get(
   "/",
   verifyToken,
-  requireAnyPermission("workorder:read", "mobile:kk1", "mobile:fason-sevk"),
+  // Hızlı İş Emri akışı da kartı okur (kart çıktısındaki QR barkodu için).
+  requireAnyPermission("workorder:read", "mobile:kk1", "mobile:fason-sevk", "mobile:hizli-is-emri"),
   controller.list
 );
 

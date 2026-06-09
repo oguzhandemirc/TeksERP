@@ -20,7 +20,13 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
-import { Prisma, RollStatus } from "@prisma/client";
+import { Prisma, PrintedDocType, RollStatus } from "@prisma/client";
+import {
+  printedDocumentService,
+  registerPrintedDocBuilder,
+  type BuiltDocContent,
+  type PrintedDocDb,
+} from "./printed-document.service";
 import { buildPrefixedCardNumber, buildPrefixedBarcode } from "../utils/barcode";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildPagination } from "../utils/query-parser";
@@ -251,43 +257,6 @@ export class KartelaService {
         const seq = await nextKartelaDocSequence(tx, "dispatch", "KD", now);
         const dispatchNo = buildPrefixedCardNumber("KD", now, seq);
 
-        const rollSnapshots = rolls.map((r, idx) => ({
-          sequence: idx + 1,
-          id: r.id,
-          barcode: r.barcode,
-          itemCode: r.item?.code ?? "",
-          itemName: r.item?.name ?? "",
-          colorCode: r.color?.code ?? null,
-          colorName: r.color?.name ?? null,
-          dispatchedQty: r.currentQty,
-          dispatchedWeight: r.weightKg ?? null,
-          qualityGrade: r.qualityGrade,
-          width: r.width ?? null,
-        }));
-        const totalWeight = rollSnapshots.reduce(
-          (s, r) => s.plus(r.dispatchedWeight ?? 0),
-          new Prisma.Decimal(0)
-        );
-
-        const printSnapshot = {
-          dispatchNo,
-          dispatchedAt: now.toISOString(),
-          driverName: data.driverName ?? null,
-          plateNumber: data.plateNumber ?? null,
-          notes: data.notes ?? null,
-          subcontractor: {
-            id: subcontractor.id,
-            name: subcontractor.name,
-            code: subcontractor.code ?? null,
-          },
-          rolls: rollSnapshots,
-          totals: {
-            rollCount: rollSnapshots.length,
-            totalQty,
-            totalWeight,
-          },
-        };
-
         const dispatch = await tx.kartelaDispatch.create({
           data: {
             dispatchNo,
@@ -297,7 +266,6 @@ export class KartelaService {
             dispatchedById: userId ?? null,
             notes: data.notes ?? null,
             totalQty,
-            printSnapshot: printSnapshot as Prisma.InputJsonValue,
             items: {
               create: rolls.map((r) => ({
                 rollId: r.id,
@@ -308,6 +276,16 @@ export class KartelaService {
           },
           include: { items: true, subcontractor: true },
         });
+
+        // RESMİ BELGE — kartela çeki listesi v1 BURADA donar (PrintedDocument).
+        // Builder az önce yaratılan dispatch+item'ları aynı tx içinden okur;
+        // kaynak sonradan değişse bile belge sabit kalır. Düzeltme = reissue.
+        await printedDocumentService.freezeForSource(
+          tx,
+          PrintedDocType.KARTELA_DISPATCH,
+          dispatch.id,
+          userId
+        );
 
         // ATOMIK SAHİPLENME: toplar hâlâ depoda (WAREHOUSE) VE bir sevkiyata bağlı
         // değilse (shipmentId null) AT_KARTELA'ya çek. Okuma ile yazma arasında
@@ -411,6 +389,13 @@ export class KartelaService {
           cancelReason: trimmed,
         },
       });
+      // RESMİ BELGE — çeki listesi VOIDED'e çekilir (baskıda İPTAL filigranı).
+      await printedDocumentService.voidForSource(
+        tx,
+        PrintedDocType.KARTELA_DISPATCH,
+        dispatchId,
+        trimmed
+      );
       await tx.roll.updateMany({
         where: { id: { in: rollIds } },
         data: { status: RollStatus.WAREHOUSE },
@@ -1132,3 +1117,76 @@ export class KartelaService {
 }
 
 export const kartelaService = new KartelaService();
+
+// =============================================================================
+// RESMİ BELGE — Kartela Çeki Listesi snapshot builder'ı (PrintedDocument)
+// =============================================================================
+// Tek üretici iki yolda: freeze (sevk create tx'i) + reissue (gerekçeli revizyon).
+// getCurrent belgesi olmayan eski kayıtta bunu lazy-init olarak da kullanır.
+async function buildKartelaDispatchDoc(
+  db: PrintedDocDb,
+  dispatchId: string
+): Promise<BuiltDocContent | null> {
+  const dispatch = await db.kartelaDispatch.findUnique({
+    where: { id: dispatchId },
+    include: {
+      subcontractor: { select: { id: true, name: true, code: true } },
+      items: {
+        include: {
+          roll: {
+            include: {
+              item: { select: { code: true, name: true } },
+              color: { select: { code: true, name: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+  if (!dispatch) return null;
+
+  const rolls = dispatch.items.map((item, idx) => ({
+    sequence: idx + 1,
+    id: item.roll.id,
+    barcode: item.roll.barcode,
+    itemCode: item.roll.item?.code ?? "",
+    itemName: item.roll.item?.name ?? "",
+    colorCode: item.roll.color?.code ?? null,
+    colorName: item.roll.color?.name ?? null,
+    dispatchedQty: Number(item.dispatchedQty),
+    dispatchedWeight: item.dispatchedWeight != null ? Number(item.dispatchedWeight) : null,
+    qualityGrade: item.roll.qualityGrade,
+    width: item.roll.width != null ? Number(item.roll.width) : null,
+  }));
+  const totalWeight = rolls.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
+
+  return {
+    documentNo: dispatch.dispatchNo,
+    voidInfo: dispatch.cancelledAt
+      ? { reason: dispatch.cancelReason, at: dispatch.cancelledAt }
+      : null,
+    doc: {
+      dispatchNo: dispatch.dispatchNo,
+      dispatchedAt: dispatch.dispatchedAt.toISOString(),
+      driverName: dispatch.driverName,
+      plateNumber: dispatch.plateNumber,
+      notes: dispatch.notes,
+      subcontractor: {
+        id: dispatch.subcontractor.id,
+        name: dispatch.subcontractor.name,
+        code: dispatch.subcontractor.code ?? null,
+      },
+      rolls,
+      totals: {
+        rollCount: rolls.length,
+        totalQty: Number(dispatch.totalQty),
+        totalWeight,
+      },
+    },
+  };
+}
+
+registerPrintedDocBuilder(PrintedDocType.KARTELA_DISPATCH, {
+  fresh: buildKartelaDispatchDoc,
+});

@@ -26,6 +26,8 @@ interface Props<T extends { id: string }> {
   extraFilters?: Record<string, string>;
   /** Toolbar yanında render edilecek ek UI (filtre dropdown'ları vb.). */
   filterBar?: ReactNode;
+  /** Kayıt yokken "Yeni" butonunu glow animasyonuyla vurgula. */
+  glowWhenEmpty?: boolean;
   renderForm: (params: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -46,6 +48,7 @@ export function CrudPage<T extends { id: string }>({
   writePermission,
   extraFilters,
   filterBar,
+  glowWhenEmpty,
   renderForm,
 }: Props<T>) {
   const [formOpen, setFormOpen] = useState(false);
@@ -136,6 +139,8 @@ export function CrudPage<T extends { id: string }>({
     setEditing(null);
   };
 
+  const isEmpty = glowWhenEmpty && query.isSuccess && !search && !showInactive && pagination.total === 0;
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
@@ -147,6 +152,7 @@ export function CrudPage<T extends { id: string }>({
             <PermissionGate permission={writePermission}>
               <Button
                 size="sm"
+                className={isEmpty ? "animate-pulse" : undefined}
                 onClick={() => {
                   setEditing(null);
                   setFormOpen(true);

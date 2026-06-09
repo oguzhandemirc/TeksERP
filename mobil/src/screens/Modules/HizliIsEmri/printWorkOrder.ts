@@ -18,22 +18,19 @@ export async function buildWorkOrderCardData(
   // Tüketilmiş/emekli topları çıktıdan da gizle.
   const rolls = (rollsRes.data ?? []).filter((r) => !isRetiredRoll(r.status));
 
-  // Aktif refakat kartının scannable barkodu — batchNumber ile aratıp WO eşleşmesi.
+  // Aktif refakat kartının scannable barkodu — WO'ya BİREBİR filtre (fuzzy
+  // batchNumber araması değil). Çağrı hatası (izin/ağ) YUTULMAZ → çağırana
+  // yükselir; yalnız "kart yok" durumu QR'sız basıma sessizce düşer.
   let cardNumber: string | null = null;
   let barcode: string | null = null;
-  try {
-    const cardsRes = await travelerCardService.list({
-      search: wo.batchNumber,
-      pageSize: 30,
-      filters: { status: 'ACTIVE' },
-    });
-    const card = (cardsRes.data ?? []).find((c) => c.workOrderId === workOrderId);
-    if (card) {
-      cardNumber = card.cardNumber;
-      barcode = card.barcode;
-    }
-  } catch {
-    // kart çözümlenemezse QR'sız basılır (barkod metni de boş kalır)
+  const cardsRes = await travelerCardService.list({
+    filters: { workOrderId, status: 'ACTIVE' },
+    pageSize: 1,
+  });
+  const card = (cardsRes.data ?? [])[0];
+  if (card) {
+    cardNumber = card.cardNumber;
+    barcode = card.barcode;
   }
 
   return {

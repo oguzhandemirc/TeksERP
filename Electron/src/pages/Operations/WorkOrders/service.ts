@@ -8,6 +8,18 @@ const base = createCrudService<WorkOrder>("/api/work-orders");
 export const workOrderService = {
   ...base,
 
+  /**
+   * Parti kodu blur kontrolü — kaydetmeden önce benzersizlik uyarısı.
+   * excludeId düzenleme modunda WO'nun kendi kodunu çakışma saymaz.
+   */
+  checkBatchNumber: (batchNumber: string, excludeId?: string) =>
+    apiClient
+      .get<ApiResponse<{ batchNumber: string; available: boolean }>>(
+        "/api/work-orders/check-batch-number",
+        { params: { batchNumber, ...(excludeId ? { excludeId } : {}) } },
+      )
+      .then((r) => r.data),
+
   /** İptal önizleme: stoğa dönecek toplar + void olacak kart sayısı. */
   getCancelImpact: (id: string) =>
     apiClient
@@ -46,11 +58,12 @@ export const workOrderService = {
       .get<ApiResponse<TravelerCard[]>>(`/api/work-orders/${id}/traveler-cards/history`)
       .then((r) => r.data),
 
-  /** Sevk anında dondurulan fason sevk irsaliyesi snapshot'ı (yazdırma için). */
-  getDispatchPrintSnapshot: (dispatchId: string) =>
+  /** Fason sevk irsaliyesinin CANLI talimat alanları (istenen renk + boyahane
+   *  notu). Donmuş içerik PrintedDocument'ten gelir; bu overlay üzerine biner. */
+  getDispatchDyeOverlay: (dispatchId: string) =>
     apiClient
-      .get<ApiResponse<DispatchPrintSnapshot>>(
-        `/api/subcontractor/dispatches/${dispatchId}/print`,
+      .get<ApiResponse<DispatchDyeOverlay>>(
+        `/api/subcontractor/dispatches/${dispatchId}/dye-overlay`,
       )
       .then((r) => r.data),
 
@@ -66,8 +79,40 @@ export const workOrderService = {
   /** Fason dalları (paralel sevk partileri) — tam sayfa lane görünümü için. */
   getBranches: (id: string) =>
     apiClient
-      .get<ApiResponse<{ branches: WorkOrderBranch[] }>>(
-        `/api/work-orders/${id}/branches`,
+      .get<
+        ApiResponse<{
+          branches: WorkOrderBranch[];
+          /** Bu WO bir partiden ayrıldıysa kaynak WO. */
+          splitFrom: { id: string; batchNumber: string } | null;
+          /** Bu WO'dan ayrılan partilerin yeni WO'ları. */
+          splitChildren: WorkOrderSplitChild[];
+        }>
+      >(`/api/work-orders/${id}/branches`)
+      .then((r) => r.data),
+
+  /** Partiyi (sevk lane'i) ayırma önizleme — taşınacak toplar + ayrılabilirlik. */
+  getSplitPreview: (id: string, batchSplitId: string) =>
+    apiClient
+      .get<ApiResponse<BranchSplitPreview>>(
+        `/api/work-orders/${id}/split-preview`,
+        { params: { batchSplitId } },
+      )
+      .then((r) => r.data),
+
+  /** Partiyi yeni iş emrine ayır (aynı rota + özellikler, yeni renk). */
+  splitBranch: (
+    id: string,
+    payload: {
+      batchSplitId: string;
+      newColorId: string;
+      newBatchNumber?: string | null;
+      orderMode: "stock" | "keep";
+    },
+  ) =>
+    apiClient
+      .post<ApiResponse<{ newWorkOrderId: string; batchNumber: string; movedRollCount: number }>>(
+        `/api/work-orders/${id}/split`,
+        payload,
       )
       .then((r) => r.data),
 
@@ -106,6 +151,49 @@ export interface WorkOrderBranch {
   receipts: { receiptNo: string; receivedAt: string }[];
   /** Dönüşten doğan açık-kumaş toplarının şu anki konum dağılımı. */
   currentPositions: WorkOrderBranchPosition[];
+}
+
+/** Bu WO'dan ayrılan bir partinin yeni iş emri (Dallar panelinde iz satırı). */
+export interface WorkOrderSplitChild {
+  id: string;
+  batchNumber: string;
+  status: string;
+  createdAt: string;
+  targetColor: { id: string; name: string; hex: string | null } | null;
+}
+
+export interface BranchSplitPreviewRoll {
+  id: string;
+  barcode: string | null;
+  currentQty: number;
+  status: string;
+  itemName: string | null;
+  colorName: string | null;
+}
+
+export interface BranchSplitPreviewStep {
+  id: string;
+  stepSequence: number;
+  stationName: string;
+}
+
+/** Partiyi yeni iş emrine ayırma önizlemesi (yıkıcı/yapısal işlem onayı için). */
+export interface BranchSplitPreview {
+  canSplit: boolean;
+  blockReason: string | null;
+  /** 'continue' = boyanmadan kaldığı yerden; 'redye' = boyahaneye geri sar (yeniden boya). */
+  mode: "continue" | "redye" | null;
+  dispatchNo: string;
+  /** Partinin şu anki konumu. */
+  currentStep: BranchSplitPreviewStep | null;
+  /** Yeni WO'nun başlayacağı adım (redye'da boyahane). */
+  reEntryStep: BranchSplitPreviewStep | null;
+  sourceColor: { id: string; name: string; hex: string | null } | null;
+  targetItem: { id: string; name: string } | null;
+  hasOrderLinks: boolean;
+  rolls: BranchSplitPreviewRoll[];
+  rollCount: number;
+  totalQty: number;
 }
 
 export interface CoverageLine {
@@ -152,8 +240,10 @@ export interface WorkOrderCancelImpact {
   rolls: CancelImpactRoll[];
 }
 
+/** Donmuş fason sevk irsaliyesindeki tek top satırı (PrintedDocument.doc.rolls). */
 export interface DispatchPrintRoll {
-  rollId: string;
+  sequence: number;
+  id: string;
   barcode: string | null;
   itemCode: string | null;
   itemName: string | null;
@@ -165,7 +255,8 @@ export interface DispatchPrintRoll {
   width: number | null;
 }
 
-export interface DispatchPrintSnapshot {
+/** Donmuş fason sevk irsaliyesi payload'ı (PrintedDocument.snapshot.doc). */
+export interface FasonDispatchDoc {
   dispatchNo: string;
   dispatchedAt: string;
   driverName: string | null;
@@ -193,17 +284,21 @@ export interface DispatchPrintSnapshot {
     totalQty: number;
     totalWeight: number;
   };
-  /** WO hedef rengi — fasoncudan istenen renk. Snapshot dışı, canlı join. */
+}
+
+/** Fason sevk irsaliyesinin CANLI talimat alanları (donmuş içeriğin dışında). */
+export interface DispatchDyeOverlay {
+  /** WO hedef rengi — fasoncudan istenen renk. Canlı join. */
   requestedColor: {
     id: string;
     code: string;
     name: string;
     hex: string | null;
   } | null;
-  /** Boyahaneye özel talimat — sevk notundan ayrı. Snapshot dışı, canlı kolon. */
+  /** Boyahaneye özel talimat — sevk notundan ayrı, canlı kolon. */
   dyehouseNote: string | null;
   /** WO'daki boyahane notu (default) — sevkin kendi notu boşsa fişte buna düşülür. */
   woDyehouseNote: string | null;
-  /** P4: sevk iptal/kabul edildiyse not düzenlenemez (editör disabled). */
+  /** Sevk iptal/kabul edildiyse not düzenlenemez (editör disabled). */
   dyehouseNoteLocked: boolean;
 }

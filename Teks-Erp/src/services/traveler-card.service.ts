@@ -398,6 +398,12 @@ export class TravelerCardService {
 
     // Status filtresi — explicit 'ALL' verilirse status'a göre filtreleme yapma.
     const where: Prisma.TravelerCardWhereInput = {};
+
+    // WO'ya birebir filtre (Hızlı İş Emri kart çıktısı bunu kullanır — fuzzy
+    // batchNumber araması yerine kesin eşleşme).
+    const woFilter = params.filters.workOrderId;
+    if (typeof woFilter === "string" && woFilter) where.workOrderId = woFilter;
+
     const statusFilter = params.filters.status;
     if (statusFilter === "ALL" || (Array.isArray(statusFilter) && statusFilter.includes("ALL"))) {
       // no status filter
@@ -447,16 +453,11 @@ export class TravelerCardService {
               batchNumber: true,
               status: true,
               type: true,
-              targetItem: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
-                  color: {
-                    select: { id: true, code: true, name: true, hex: true },
-                  },
-                },
-              },
+              // targetItem (iç ürün) + targetColor AYRI alanlar — mobil WorkOrder
+              // tipi/tüketicileri böyle okur. (Item'ın `color` ilişkisi YOK;
+              // önceki targetItem.color select'i geçersizdi → list 400 dönüyordu.)
+              targetItem: { select: { id: true, code: true, name: true } },
+              targetColor: { select: { id: true, code: true, name: true, hex: true } },
             },
           },
         },

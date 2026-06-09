@@ -56,6 +56,35 @@ export function SignatureBoxes({ labels }: { labels: string[] }) {
   );
 }
 
+/**
+ * Belge filigranı — TASLAK (henüz resmi değil) / İPTAL (kaynak iptal edildi).
+ * `.print-area` içine, relative bir kapsayıcının çocuğu olarak konur; çapraz,
+ * yarı saydam, baskıda da görünür. `tone` rengi belirler.
+ */
+export function DocWatermark({
+  text,
+  tone = "draft",
+}: {
+  text: string;
+  tone?: "draft" | "void";
+}) {
+  const color = tone === "void" ? "rgba(220,38,38,0.16)" : "rgba(120,120,120,0.14)";
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden"
+      style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" } as React.CSSProperties}
+    >
+      <span
+        className="select-none whitespace-nowrap font-bold uppercase tracking-widest"
+        style={{ transform: "rotate(-32deg)", fontSize: "84px", color }}
+      >
+        {text}
+      </span>
+    </div>
+  );
+}
+
 /** Belge altı serbest not (boş → basılmaz). */
 export function DocFooterNote({ note }: { note: string }) {
   if (!note.trim()) return null;

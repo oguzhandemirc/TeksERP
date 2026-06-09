@@ -118,6 +118,8 @@ export interface Subcontractor {
   phone?: string | null;
   address?: string | null;
   isActive: boolean;
+  /** İş emri fason adımında firma seçicide default — kategori bazında client eşleşir. */
+  isFavorite?: boolean;
   categories?: SubcontractorToCategory[];
 }
 
@@ -190,6 +192,8 @@ export interface WorkOrder {
   type?: WorkOrderType;
   width?: number | null;
   targetQuantity?: number | null;
+  /** Hedef ağırlık (kg) — refakat kartında "Hedef Kg" olarak basılır, opsiyonel. */
+  targetWeight?: number | null;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   steps?: WorkOrderStep[];
@@ -311,6 +315,8 @@ export interface Roll {
   sackId?: string | null;
   shipment?: { id: string; shipmentNo: string; status: string } | null;
   sack?: { id: string; sackNo: string; seq: number } | null;
+  /** Top Tambur'da kartela sevki için işaretlendi mi (depo "kartelalık" rozeti). */
+  markedForKartela?: boolean;
   createdAt?: string;
 }
 
@@ -354,6 +360,29 @@ export interface PendingReturnGroup {
     subcontractorId: string;
     subcontractor: Subcontractor;
   } | null;
+  /**
+   * Adımdaki bekleyen toplar SEVK (parti) bazında alt-gruplanmış hali. Çoklu
+   * sevkte (aynı adıma parça parça boyahaneye gönderim) operatör "ikisi birlikte
+   * mi geldi, tek parti mi?" teyidini ancak partiler ayrı görünürse yapabilir.
+   * Parti kimliği = Roll.batchSplitId (= sevki yaratan SubcontractorDispatch.id).
+   * Tek parti varsa dizi tek elemanlı; eski payload'larda olmayabilir (guard et).
+   */
+  parties: PendingReturnParty[];
+  rolls: Roll[];
+  rollCount: number;
+  totalQty: number;
+}
+
+/** Bekleyen kabul grubu içindeki tek bir sevk partisi (batchSplitId lane'i). */
+export interface PendingReturnParty {
+  /** Sevkin id'si (= batchSplitId). Eski/kimliksiz akışta null olabilir. */
+  dispatchId: string | null;
+  dispatchNo: string | null;
+  dispatchedAt: string | null;
+  plateNumber: string | null;
+  driverName: string | null;
+  subcontractorId: string | null;
+  subcontractor: Subcontractor | null;
   rolls: Roll[];
   rollCount: number;
   totalQty: number;

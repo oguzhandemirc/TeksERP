@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Plus, Trash2, PackagePlus, Package } from "lucide-react";
+import { Plus, Trash2, PackagePlus, Package, Info } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { usePricingEnabled } from "@/hooks/usePricingEnabled";
+import { usePulseSync } from "@/hooks/usePulseSync";
 import { itemService } from "@/pages/Items/service";
 import type { Item, ItemCreatePayload } from "@/pages/Items/types";
 import { ItemFormDialog } from "@/pages/Items/ItemFormDialog";
@@ -14,19 +15,31 @@ import { OrderLineColorPicker } from "./OrderLineColorPicker";
 import { OrderLineAliasFields } from "./OrderLineAliasFields";
 import { newLineClientId, type OrderLineFormValues } from "./schema";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+
+type LineFieldError = { message?: string } | undefined;
+type LineError = { itemId?: LineFieldError; quantity?: LineFieldError } | undefined;
 
 interface Props {
   value: OrderLineFormValues[];
   onChange: (next: OrderLineFormValues[]) => void;
   error?: string;
+  lineErrors?: (LineError | undefined)[];
   /** Müşterinin aliası — alias suggest için. */
   customerId: string | null;
 }
 
-export function OrderLinesEditor({ value, onChange, error, customerId }: Props) {
+export function OrderLinesEditor({ value, onChange, error, lineErrors, customerId }: Props) {
   const qc = useQueryClient();
   const pricingEnabled = usePricingEnabled();
   const [quickAddForLine, setQuickAddForLine] = useState<string | null>(null);
+
+  // Tüm pulse vurguları TEK paylaşılan saatten beslenir ([[usePulseSync]]) — modaldaki
+  // her yer (müşteri seçici, kalem alanları, "Kalem Ekle" butonu) aynı hız + aynı fazda yanıp söner.
+  const dim = usePulseSync();
+  const breath = `transition-all duration-700 ${dim ? "opacity-50" : "opacity-100"}`;
+  const pulseClass = (active: boolean) =>
+    active ? `border-primary shadow-lg shadow-primary/50 ring-2 ring-primary/30 ${breath}` : "";
 
   const createItemMutation = useMutation({
     mutationFn: (payload: ItemCreatePayload) =>
@@ -72,10 +85,20 @@ export function OrderLinesEditor({ value, onChange, error, customerId }: Props) 
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Kalemler ({value.length})
+          Sipariş Kalemleri ({value.length})
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={addLine} className="gap-1">
-          <Plus className="h-3.5 w-3.5" /> Kalem Ekle
+        <Button
+          type="button"
+          size="sm"
+          onClick={addLine}
+          className={cn(
+            "gap-1.5 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-[transform,box-shadow] duration-150",
+            value.length === 0
+              ? cn("border-primary shadow-md shadow-primary/40 ring-2 ring-primary/30 hover:shadow-primary/50", breath)
+              : "shadow-sm hover:shadow-primary/40"
+          )}
+        >
+          <Plus className="h-3.5 w-3.5" /> Sipariş Kalemi Ekle
         </Button>
       </div>
 
@@ -92,7 +115,7 @@ export function OrderLinesEditor({ value, onChange, error, customerId }: Props) 
                     pricingEnabled ? "sm:col-span-3" : "sm:col-span-5"
                   }`}
                 >
-                  <div className="flex-1">
+                  <div className="flex-1 space-y-1">
                     <EntityPickerModal<Item>
                       value={line.itemId || null}
                       onChange={(v) =>
@@ -111,39 +134,52 @@ export function OrderLinesEditor({ value, onChange, error, customerId }: Props) 
                       title="Ürün Seç"
                       description="Ürün/kumaş seç veya aramayla daralt — tüm katalog sunucuda aranır."
                       placeholder="Ürün seç..."
-                      triggerClassName="h-9"
+                      triggerClassName={
+                        lineErrors?.[idx]?.itemId?.message
+                          ? "h-9 border-destructive"
+                          : `h-9 ${pulseClass(!line.itemId)}`
+                      }
                     />
+                    {lineErrors?.[idx]?.itemId?.message && (
+                      <p className="text-xs text-destructive">{lineErrors[idx]!.itemId!.message}</p>
+                    )}
                   </div>
                   <Button
                     type="button"
-                    size="icon"
-                    variant="outline"
-                    className="h-9 w-9 shrink-0"
+                    size="sm"
+                    variant="default"
+                    className="h-9 shrink-0 gap-1.5 text-xs shadow-sm hover:shadow-primary/40 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150"
                     onClick={() => setQuickAddForLine(line.clientId)}
-                    title="Yeni ürün tanımla"
                   >
                     <PackagePlus className="h-4 w-4" />
+                    Yeni Ürün
                   </Button>
                 </div>
-                <div className="col-span-12 sm:col-span-3">
+                <div className="relative z-10 col-span-12 sm:col-span-3">
                   <OrderLineColorPicker
                     itemId={line.itemId}
                     value={line.colorId ?? null}
                     customerId={customerId}
                     onChange={(v) => updateLine(line.clientId, { colorId: v })}
+                    triggerClassName={`h-9 ${pulseClass(Boolean(line.itemId && !line.colorId))}`}
                   />
                 </div>
+                <div className="col-span-4 sm:col-span-2 space-y-1">
+                  <Input
+                    className={`text-sm w-full ${lineErrors?.[idx]?.quantity?.message ? "border-destructive" : pulseClass(Boolean(line.itemId && !line.quantity))}`}
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    placeholder="Miktar"
+                    value={line.quantity || ""}
+                    onChange={(e) => updateLine(line.clientId, { quantity: Number(e.target.value) || 0 })}
+                  />
+                  {lineErrors?.[idx]?.quantity?.message && (
+                    <p className="text-xs text-destructive">{lineErrors[idx]!.quantity!.message}</p>
+                  )}
+                </div>
                 <Input
-                  className="col-span-4 sm:col-span-2 text-sm"
-                  type="number"
-                  step="0.1"
-                  min={0}
-                  placeholder="Miktar"
-                  value={line.quantity || ""}
-                  onChange={(e) => updateLine(line.clientId, { quantity: Number(e.target.value) || 0 })}
-                />
-                <Input
-                  className="col-span-4 sm:col-span-2 text-sm"
+                  className={`col-span-4 sm:col-span-2 text-sm ${pulseClass(Boolean(line.itemId && !line.width))}`}
                   type="number"
                   step="0.1"
                   min={0}
@@ -206,6 +242,13 @@ export function OrderLinesEditor({ value, onChange, error, customerId }: Props) 
       </ul>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {value.length > 0 && (
+        <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>Özellik isteği eklemek için önce o kalemin ürününü seçmelisiniz.</span>
+        </div>
+      )}
 
       <ItemFormDialog
         open={quickAddForLine !== null}

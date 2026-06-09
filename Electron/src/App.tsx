@@ -3,6 +3,7 @@ import { RouterProvider } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
+import { CopyContextMenu } from "@/components/CopyContextMenu";
 import { MotionProvider } from "@/components/motion";
 import { PreferencesProvider } from "@/providers/PreferencesProvider";
 import { AppShell } from "@/components/layout/AppShell";
@@ -71,6 +72,7 @@ export function App() {
             </MotionProvider>
           </PreferencesProvider>
           <Toaster />
+          <CopyContextMenu />
         </QueryClientProvider>
       </ThemeProvider>
     </ErrorBoundary>

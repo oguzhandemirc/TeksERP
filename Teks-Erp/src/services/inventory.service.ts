@@ -542,7 +542,7 @@ export class InventoryService {
             { currentStepId: null, status: RollStatus.STOCK },
             {
               currentStepId: dispatchableForStepId,
-              status: { in: [RollStatus.STOCK, RollStatus.IN_PRODUCTION] },
+              status: RollStatus.STOCK,
             },
           ],
         },
@@ -1266,9 +1266,10 @@ export class InventoryService {
         if (
           ship &&
           (ship.status === ShipmentStatus.PREPARING ||
-            ship.status === ShipmentStatus.READY)
+            ship.status === ShipmentStatus.READY ||
+            ship.status === ShipmentStatus.AT_DOOR)
         ) {
-          blockReason = `Bu top hazırlanan/bekleyen bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`;
+          blockReason = `Bu top hazırlanan/bekleyen/kapı önündeki bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`;
         }
       }
     }
@@ -1337,10 +1338,10 @@ export class InventoryService {
       );
     }
 
-    // Aktif (PREPARING/READY) bir sevkiyata bağlı mı? Bağlıysa iptal edilemez —
+    // Aktif (PREPARING/READY/AT_DOOR) bir sevkiyata bağlı mı? Bağlıysa iptal edilemez —
     // önce sevkten/çuvaldan çıkarılmalı. Aksi halde iptal edilen top sevkiyatta
-    // kalır, sevk çıkışında (dispatch) SHIPPED'a "diriltilir" ve karşılanmaya
-    // yanlış sayılır.
+    // kalır, karşılanma (commit READY/AT_DOOR'da yazılmış) bayat kalır → sipariş
+    // eksik malla "karşılandı" görünür ve irsaliye dökümünde iptal top kalır.
     if (existing.shipmentId) {
       const ship = await prisma.shipment.findUnique({
         where: { id: existing.shipmentId },
@@ -1349,10 +1350,11 @@ export class InventoryService {
       if (
         ship &&
         (ship.status === ShipmentStatus.PREPARING ||
-          ship.status === ShipmentStatus.READY)
+          ship.status === ShipmentStatus.READY ||
+          ship.status === ShipmentStatus.AT_DOOR)
       ) {
         throw AppError.conflict(
-          `Bu top hazırlanan/bekleyen bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`,
+          `Bu top hazırlanan/bekleyen/kapı önündeki bir sevkiyatta (${ship.shipmentNo}) — önce sevkten çıkarın.`,
         );
       }
     }

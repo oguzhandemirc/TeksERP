@@ -6,6 +6,7 @@ import {
   Truck,
   TabletSmartphone,
   Server,
+  Clock,
   type LucideIcon,
 } from "lucide-react";
 import type { FeatureFlags } from "@/services/featureFlagService";
@@ -26,10 +27,11 @@ export interface FlagDef {
 /**
  * Kategori içeriğinin nasıl render edileceği:
  * - `flags`  → config'teki flag listesini generic toggle olarak çizer
- * - `device` → cihaz eşleştirme (enforce edilen, uyarılı) özel section
- * - `api`    → sunucu adresi (bu bilgisayara özel) özel section
+ * - `device`  → cihaz eşleştirme (enforce edilen, uyarılı) özel section
+ * - `api`     → sunucu adresi (bu bilgisayara özel) özel section
+ * - `session` → oturum süresi + hareketsizlik zaman aşımı (sayısal) özel section
  */
-export type CategoryKind = "flags" | "device" | "api" | "company";
+export type CategoryKind = "flags" | "device" | "api" | "company" | "session";
 
 export interface SettingsCategory {
   id: string;
@@ -147,6 +149,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     description: "Sahadaki tabletlerin eşleştirme zorunluluğu.",
     keywords: "cihaz eşleştirme tablet pairing makine atfı zorunlu kod",
     kind: "device",
+  },
+  {
+    id: "session",
+    label: "Oturum & Güvenlik",
+    icon: Clock,
+    description: "Oturum süresi (token ömrü) ve hareketsizlik zaman aşımı.",
+    keywords:
+      "oturum süre süresi token jwt giriş çıkış logout otomatik hareketsizlik idle zaman aşımı timeout güvenlik session ömür dakika saat",
+    kind: "session",
   },
   {
     id: "system",

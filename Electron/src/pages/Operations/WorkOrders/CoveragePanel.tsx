@@ -193,11 +193,6 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-[10px] leading-tight text-muted-foreground">
-            Net açık = istenen − sevk − depo − üretimde. Ham (işlenmemiş kumaş)
-            buna girmez — yalnız bilgi; üretmen gerekirse kumaş tedariki gerekip
-            gerekmediğini gösterir. Net açık eksi ise fazla var, üretim gerekmeyebilir.
-          </p>
         </>
       )}
     </div>

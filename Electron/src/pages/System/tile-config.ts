@@ -1,4 +1,4 @@
-import { Activity, Archive, FileCode2, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { Activity, Archive, Cpu, DatabaseBackup, FileCode2, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 
 export type SystemTileGroup = "activity" | "archive" | "config";
 
@@ -71,6 +71,22 @@ export const systemTiles: SystemTile[] = [
     to: "/system/archive/search",
     group: "archive",
     adminOnly: true,
+  },
+  {
+    key: "server-status",
+    title: "Sunucu Durumu",
+    description: "Backend CPU/RAM kullanımı, çalışma süresi ve makine kaynakları",
+    icon: Cpu,
+    to: "/system/server-status",
+    group: "config",
+  },
+  {
+    key: "backups",
+    title: "Yedekler",
+    description: "Veritabanı yedeklerini listele, indir, geri yükleme komutunu kopyala",
+    icon: DatabaseBackup,
+    to: "/system/backups",
+    group: "config",
   },
   {
     key: "settings",

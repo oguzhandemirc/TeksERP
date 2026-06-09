@@ -16,6 +16,7 @@ import { OrderStatus, Prisma, RollStatus, WorkOrderStatus } from "@prisma/client
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
+import { assertColorsAssignableToCustomer } from "./helpers/color-assignment.helper";
 import { CustomerAliasService } from "./customer-alias.service";
 import {
   applyDateRange,
@@ -99,6 +100,27 @@ export class OrderService extends BaseService {
 
   constructor(config: BaseServiceConfig) {
     super(config);
+  }
+
+  /**
+   * Liste filtresi `filter[itemId]` / `filter[colorId]` ilişki bazlıdır: Order'da
+   * bu kolonlar yoktur, OrderLine'dadır. `safeFilters` skaler-süzgeci bunları
+   * düşürür (500'ü önler) — burada `lines.some` koşuluna çevirip `findAll`'ın
+   * where'ine AND'liyoruz. İkisi birden verilirse AYNI satır eşleşmeli (ürün X +
+   * renk Y olan kalem); tek başına verilirse yalnız o koşul. Siparişler ekranı
+   * ürün/renk sütun + filtresini besler.
+   */
+  protected extraWhere(req: Request): Record<string, unknown> | undefined {
+    const { filters } = parseQueryParams(req);
+    const lineCond: Record<string, unknown> = {};
+    if (typeof filters.itemId === "string" && filters.itemId) {
+      lineCond.itemId = filters.itemId;
+    }
+    if (typeof filters.colorId === "string" && filters.colorId) {
+      lineCond.colorId = filters.colorId;
+    }
+    if (Object.keys(lineCond).length === 0) return undefined;
+    return { lines: { some: lineCond } };
   }
 
   /**
@@ -215,6 +237,26 @@ export class OrderService extends BaseService {
         }
       }
     });
+  }
+
+  /**
+   * Sipariş kalemlerindeki renkler bu müşteride kullanılabilir mi? Müşteriye
+   * özel (assigned) bir renk, yanlış müşteride veya müşterisiz siparişte
+   * reddedilir. Public renkler serbest. (UI zaten gizler; bu backend enforce.)
+   */
+  private async validateLineColors(
+    lines: unknown,
+    customerId: string | null | undefined,
+  ): Promise<void> {
+    if (!Array.isArray(lines)) return;
+    const colorIds = lines.map((l) => {
+      if (l && typeof l === "object") {
+        const c = (l as Record<string, unknown>).colorId;
+        if (typeof c === "string") return c;
+      }
+      return null;
+    });
+    await assertColorsAssignableToCustomer(colorIds, customerId);
   }
 
   /**
@@ -601,6 +643,11 @@ export class OrderService extends BaseService {
       );
     }
 
+    await this.validateLineColors(
+      data.lines,
+      data.customerId as string | null | undefined,
+    );
+
     // totalAmount: gönderilmediyse lines'tan otomatik hesapla. Gönderilmiş ise
     // (planlamacı override etmiş — KDV/indirim gibi) olduğu gibi bırak.
     if (
@@ -847,6 +894,11 @@ export class OrderService extends BaseService {
         );
       }
       this.validateLines(incomingLines);
+
+      const effectiveCustomerId = customerChanging
+        ? (cleanData.customerId as string | null)
+        : current.customerId;
+      await this.validateLineColors(incomingLines, effectiveCustomerId);
 
       // totalAmount auto-recompute (cleanData'da explicit yoksa)
       if (cleanData.totalAmount === undefined) {

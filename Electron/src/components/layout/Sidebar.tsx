@@ -71,7 +71,7 @@ export function Sidebar({ collapsed }: Props) {
   return (
     <aside
       className={cn(
-        "flex h-full flex-col border-r border-border/60 bg-gradient-to-b from-card/60 via-card/50 to-card/40 backdrop-blur-xl transition-[width] duration-200",
+        "flex h-full select-none flex-col border-r border-border/60 bg-gradient-to-b from-card/60 via-card/50 to-card/40 backdrop-blur-xl transition-[width] duration-200",
         collapsed ? "w-[72px]" : "w-56",
       )}
     >

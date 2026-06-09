@@ -69,7 +69,7 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange }: Props)
         id: p.id,
         label: p.name,
         group: p.category ?? undefined,
-        hint: p.code,
+        hint: undefined,
         swatch: p.color ?? null,
       })),
     [candidateProps],
@@ -85,14 +85,6 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange }: Props)
   }, [allProps, value]);
 
   const removeOne = (id: string) => onChange(value.filter((v) => v !== id));
-
-  if (!itemId) {
-    return (
-      <div className="text-[10px] italic text-muted-foreground">
-        Önce ürün seç — sonra özellik isteği eklenebilir.
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-wrap items-center gap-1">
@@ -111,12 +103,13 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange }: Props)
       ))}
       <Button
         type="button"
-        variant="ghost"
+        variant="default"
         size="sm"
+        disabled={!itemId}
         onClick={() => setOpen(true)}
-        className="h-5 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+        className="h-7 gap-1.5 text-xs shadow-sm hover:shadow-primary/40 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150"
       >
-        <Plus className="h-3 w-3" />
+        <Plus className="h-3.5 w-3.5" />
         {selectedById.length === 0 ? "Özellik isteği ekle" : "Düzenle"}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

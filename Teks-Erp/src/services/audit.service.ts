@@ -11,7 +11,47 @@ type JsonValue = Prisma.InputJsonValue | typeof Prisma.JsonNull;
 
 const ARCHIVE_BATCH_SIZE = 5000;
 
+// =============================================================================
+// Audit yazım sağlığı (best-effort ama sessiz değil)
+// =============================================================================
+// Audit log yazımı ana operasyonu ASLA bozmaz (catch yutar) — ama DB çökerse
+// ya da P2022 gibi bir sebeple log düşerse bunun sessizce kaybolması "kim neyi
+// yaptı" izini sonsuza dek siler ve sistemin haberi olmaz. Bu yüzden başarısız
+// yazımları say + son hatayı tut. `/health` bunu `auditWriteFailures` olarak
+// gösterir → operatör/durum paneli audit kaybını fark eder (yutmaya devam edip
+// ana akışı korurken). Süreç içi sayaç; restart'ta sıfırlanır (kalıcı izleme
+// gerekirse ileride /health metriği bir monitöre bağlanır).
+interface AuditHealth {
+  failureCount: number;
+  lastError: string | null;
+  lastFailureAt: string | null;
+}
+
+const auditFailureState = {
+  count: 0,
+  lastError: null as string | null,
+  lastAt: null as string | null,
+};
+
+function recordAuditFailure(error: unknown): void {
+  auditFailureState.count += 1;
+  auditFailureState.lastError = error instanceof Error ? error.message : String(error);
+  auditFailureState.lastAt = new Date().toISOString();
+}
+
 export class AuditService {
+  /**
+   * `/health` endpoint'i için audit yazım sağlığı. Best-effort log'ların
+   * sessizce düşmediğini izlemek için süreç-içi sayaç döner.
+   */
+  static getHealth(): AuditHealth {
+    return {
+      failureCount: auditFailureState.count,
+      lastError: auditFailureState.lastError,
+      lastFailureAt: auditFailureState.lastAt,
+    };
+  }
+
   /**
    * Log a Create/Update/Delete operation to SystemLog.
    * Bu yol DOMAIN kategorisini doldurur (Activity Page'in beslendiği kanal).
@@ -37,7 +77,9 @@ export class AuditService {
         },
       });
     } catch (error) {
-      // Audit logging should never crash the main operation
+      // Audit logging should never crash the main operation — but don't lose it
+      // silently: sayacı artır ki /health audit kaybını görsün.
+      recordAuditFailure(error);
       console.error("[audit]: Failed to write SystemLog:", error);
     }
   }
@@ -73,6 +115,7 @@ export class AuditService {
         },
       });
     } catch (error) {
+      recordAuditFailure(error);
       console.error("[audit]: Failed to write event SystemLog:", error);
     }
   }

@@ -29,8 +29,12 @@ import { colors, palette, spacing, radius, shadow, typography } from '../../../t
 import { packingService, type ShipmentSack } from '../../../services/packing.service';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
-import { useShipmentConfirmationEnabled, FLAGS_KEY } from '../../../hooks/useFeatureFlags';
-import { buildDispatchNoteHtml } from '../Sevkiyat/dispatchNoteHtml';
+import {
+  useShipmentConfirmationEnabled,
+  useFeatureFlags,
+  FLAGS_KEY,
+} from '../../../hooks/useFeatureFlags';
+import { resolveDispatchNoteHtml } from '../Sevkiyat/dispatchNoteHtml';
 import type { MainStackParamList } from '../../../navigation/types';
 
 // =============================================================================
@@ -68,6 +72,7 @@ export default function PaketlemeScreen() {
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'Paketleme'>>();
   const params = route.params ?? {};
+  const flags = useFeatureFlags().data;
 
   const [shipmentId, setShipmentId] = useState<string | null>(params.shipmentId ?? null);
   const [draftOrderIds, setDraftOrderIds] = useState<string[] | null>(params.orderIds ?? null);
@@ -292,13 +297,14 @@ export default function PaketlemeScreen() {
     onError: (e: Error) => Toast.show({ type: 'error', text1: 'Sevk edilemedi', text2: e.message }),
   });
 
-  // İrsaliye — canlı detaydan A4 belge (expo-print). Çuvalı tartıp koduyla kapattıktan sonra.
+  // İrsaliye — DISPATCHED'da donmuş resmi belge, öncesi TASLAK (expo-print).
   const printNote = async (): Promise<void> => {
-    if (!ship) return;
+    if (!ship || !shipmentId) return;
     try {
       setPrinting(true);
+      const html = await resolveDispatchNoteHtml({ shipmentId, detail: ship, flags });
       await Print.printAsync({
-        html: buildDispatchNoteHtml(ship),
+        html,
         margins: { left: 0, top: 0, right: 0, bottom: 0 },
       });
     } catch (e) {

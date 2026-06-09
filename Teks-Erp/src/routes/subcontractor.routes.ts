@@ -197,11 +197,11 @@ router.get(
 
 /**
  * @openapi
- * /api/subcontractor/dispatches/{id}/print:
+ * /api/subcontractor/dispatches/{id}/dye-overlay:
  *   get:
  *     tags: [Subcontractor]
- *     summary: Fason sevk belgesi yazdırma snapshot'ı
- *     description: Sevk fişi belgesi için gerekli tüm verileri döner (toplar, WO, firma, totaller).
+ *     summary: Fason sevk irsaliyesinin canlı talimat alanları (istenen renk + boyahane notu)
+ *     description: Donmuş içerik PrintedDocument'te; burada yalnız kasten canlı tutulan talimat alanları döner.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -209,14 +209,14 @@ router.get(
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: Snapshot verisi }
+ *       200: { description: requestedColor + dyehouseNote + woDyehouseNote + dyehouseNoteLocked }
  *       404: { description: Sevk belgesi bulunamadı }
  */
 router.get(
-  "/dispatches/:id/print",
+  "/dispatches/:id/dye-overlay",
   verifyToken,
   requireAnyPermission("workorder:read", ...MOBILE_FASON_READ),
-  controller.getDispatchPrint
+  controller.getDispatchDyeOverlay
 );
 
 /**

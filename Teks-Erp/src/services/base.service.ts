@@ -170,16 +170,30 @@ export class BaseService {
     return out;
   }
 
+  /**
+   * Alt sınıfların listeye ekleyebileceği ek `where` koşulu (örn. relation
+   * scope filtresi). `findAll`'ın offset+cursor yollarında üretilen where ile
+   * AND'lenir — `safeFilters` skaler-kolon süzgecine takılmadan ilişki bazlı
+   * kısıt eklemenin yolu. Default: yok (diğer servisler etkilenmez).
+   */
+  protected extraWhere(
+    _req: Request
+  ): Record<string, unknown> | undefined {
+    return undefined;
+  }
+
   protected async findAllOffset(req: Request): Promise<PaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
     params.sortBy = this.safeSortBy(params.sortBy || "createdAt");
     params.filters = this.safeFilters(params.filters);
-    const where = buildWhereClause(
+    const built = buildWhereClause(
       params.filters,
       this.config.searchFields,
       params.search
     );
-    applyDateRange(where, params, this.config.dateFields ?? []);
+    applyDateRange(built, params, this.config.dateFields ?? []);
+    const extra = this.extraWhere(req);
+    const where = extra ? { AND: [built, extra] } : built;
     const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
     const { skip, take } = buildPagination(params.page, params.pageSize);
 
@@ -229,12 +243,16 @@ export class BaseService {
 
     const cursor = decodeDynamicCursor(req.query.cursor as string | undefined);
 
-    const baseWhere = buildWhereClause(
+    const builtWhere = buildWhereClause(
       params.filters,
       this.config.searchFields,
       params.search
     );
-    applyDateRange(baseWhere, params, this.config.dateFields ?? []);
+    applyDateRange(builtWhere, params, this.config.dateFields ?? []);
+    const extra = this.extraWhere(req);
+    const baseWhere: Record<string, unknown> = extra
+      ? { AND: [builtWhere, extra] }
+      : builtWhere;
 
     // İlişki / aggregate sıralaması (customer.name, branch.name, lines _count):
     // keyset imkansız (cursor değeri top-level skaler olmalı) → offset-encoded

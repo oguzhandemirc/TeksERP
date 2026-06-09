@@ -29,6 +29,7 @@ const FILTERS: FilterDef[] = [
     options: [
       { value: "PREPARING", label: shipmentStatusLabels.PREPARING },
       { value: "READY", label: shipmentStatusLabels.READY },
+      { value: "AT_DOOR", label: shipmentStatusLabels.AT_DOOR },
       { value: "DISPATCHED", label: shipmentStatusLabels.DISPATCHED },
       { value: "CANCELLED", label: shipmentStatusLabels.CANCELLED },
     ],

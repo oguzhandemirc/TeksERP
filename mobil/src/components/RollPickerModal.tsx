@@ -8,6 +8,7 @@ import {
   Chip,
   Icon,
   ActivityIndicator,
+  Button,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -40,7 +41,8 @@ const PAGE_SIZE = 30;
 interface Props {
   visible: boolean;
   onDismiss: () => void;
-  onSelect: (roll: Roll) => void;
+  /** Tekli seçim: bir satıra dokununca çağrılır. (multiSelect=false varsayılan akış.) */
+  onSelect?: (roll: Roll) => void;
   /** Aday top filtre seti (backend cursor filtre sözleşmesi). */
   filters: Record<string, string | string[]>;
   title?: string;
@@ -51,6 +53,16 @@ interface Props {
   emptyText?: string;
   /** Satır ripple rengi (default indigo). */
   accent?: string;
+  /**
+   * Çoklu seçim modu — kutucukla birden çok top işaretle, alttaki "Ekle (N)" ile
+   * topluca döndür. Varsayılan kapalı: mevcut tüm kullanımlar (Kartela/Paket/Fason/
+   * İade) tekli `onSelect` ile aynen çalışır. Sahada deste topu hızlı eklemek için.
+   */
+  multiSelect?: boolean;
+  /** Çoklu seçimde "Ekle" basıldığında işaretli tüm topları döndürür. */
+  onConfirm?: (rolls: Roll[]) => void;
+  /** Çoklu seçim onay butonu etiketi (default "Ekle"). */
+  confirmLabel?: string;
 }
 
 export default function RollPickerModal({
@@ -64,11 +76,16 @@ export default function RollPickerModal({
   searchPlaceholder = 'Barkod / ürün ara...',
   emptyText = 'Top bulunamadı',
   accent = '#4f46e5',
+  multiSelect = false,
+  onConfirm,
+  confirmLabel = 'Ekle',
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   const isPhone = useDeviceType() === 'phone';
 
   const [search, setSearch] = useState('');
+  // Çoklu seçimde işaretli toplar (id → Roll). onConfirm bunları döndürür.
+  const [selected, setSelected] = useState<Record<string, Roll>>({});
   // 300ms debounce: her tuş darbesinde HTTP isteği yerine yazma bittikten sonra tek request.
   const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
@@ -115,6 +132,24 @@ export default function RollPickerModal({
   useEffect(() => {
     if (!visible) setSearch('');
   }, [visible]);
+
+  // Her açılış/kapanışta çoklu seçim işaretlerini temizle (taze başla).
+  useEffect(() => {
+    setSelected({});
+  }, [visible]);
+
+  const toggleSelect = (roll: Roll) =>
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (next[roll.id]) delete next[roll.id];
+      else next[roll.id] = roll;
+      return next;
+    });
+  const selectedCount = Object.keys(selected).length;
+  const confirmMulti = () => {
+    onConfirm?.(Object.values(selected));
+    setSelected({});
+  };
 
   return (
     <AppModal visible={visible} onDismiss={onDismiss}>
@@ -188,10 +223,16 @@ export default function RollPickerModal({
                 <TouchableRipple
                   borderless
                   rippleColor={`${accent}26`}
-                  onPress={() => onSelect(item)}
+                  onPress={() => (multiSelect ? toggleSelect(item) : onSelect?.(item))}
                   style={styles.row}
                 >
-                  <View style={[styles.rowInner, isPhone && styles.rowInnerPhone]}>
+                  <View
+                    style={[
+                      styles.rowInner,
+                      isPhone && styles.rowInnerPhone,
+                      multiSelect && selected[item.id] ? { borderWidth: 1.5, borderColor: accent } : null,
+                    ]}
+                  >
                     <View style={{ flex: 1, gap: isPhone ? 2 : 4 }}>
                       <View style={styles.rowTop}>
                         <Text
@@ -207,6 +248,15 @@ export default function RollPickerModal({
                         >
                           {trLabel(ROLL_STATUS_LABEL, item.status)}
                         </Chip>
+                        {item.markedForKartela && (
+                          <Chip
+                            compact
+                            style={styles.rowKartela}
+                            textStyle={isPhone ? styles.rowKartelaTextPhone : styles.rowKartelaText}
+                          >
+                            kartelalık
+                          </Chip>
+                        )}
                       </View>
                       <Text
                         style={[styles.rowName, isPhone && styles.rowNamePhone]}
@@ -258,13 +308,38 @@ export default function RollPickerModal({
                         )}
                       </View>
                     </View>
-                    <Icon source="chevron-right" size={isPhone ? 18 : 24} color="#94a3b8" />
+                    {multiSelect ? (
+                      <Icon
+                        source={selected[item.id] ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                        size={isPhone ? 24 : 28}
+                        color={selected[item.id] ? accent : '#94a3b8'}
+                      />
+                    ) : (
+                      <Icon source="chevron-right" size={isPhone ? 18 : 24} color="#94a3b8" />
+                    )}
                   </View>
                 </TouchableRipple>
               )}
             />
           )}
         </View>
+
+        {multiSelect ? (
+          <View style={styles.footer}>
+            <Button
+              mode="contained"
+              icon="plus"
+              onPress={confirmMulti}
+              disabled={selectedCount === 0}
+              buttonColor={accent}
+              style={styles.footerBtn}
+              contentStyle={styles.footerBtnContent}
+              labelStyle={styles.footerBtnLabel}
+            >
+              {confirmLabel} ({selectedCount})
+            </Button>
+          </View>
+        ) : null}
       </View>
     </AppModal>
   );
@@ -306,7 +381,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   rowInnerPhone: { gap: 4, padding: 6, borderRadius: 6 },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rowTop: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   rowBarcode: {
     fontFamily: 'monospace',
     fontSize: 13,
@@ -320,6 +395,11 @@ const styles = StyleSheet.create({
   rowBarcodePhone: { fontSize: 10, paddingHorizontal: 3, paddingVertical: 1, flexShrink: 1 },
   rowStatus: { backgroundColor: '#e0e7ff' },
   rowStatusTextPhone: { fontSize: 10, lineHeight: 14, marginVertical: 0 },
+  // Kartelalık damgası — top Tambur'da kartela için işaretlendiyse (markedForKartela).
+  // KartelaSevkScreen'deki seçili-liste çipiyle aynı mor dil.
+  rowKartela: { backgroundColor: '#f3e8ff' },
+  rowKartelaText: { color: '#9333ea', fontWeight: '700' },
+  rowKartelaTextPhone: { fontSize: 10, lineHeight: 14, marginVertical: 0, color: '#9333ea', fontWeight: '700' },
   rowName: { fontSize: 13, color: '#475569', marginTop: 4 },
   rowNamePhone: { fontSize: 11, marginTop: 0 },
   rowBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
@@ -336,4 +416,8 @@ const styles = StyleSheet.create({
   rowBadgePhone: { gap: 2, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4 },
   rowBadgeText: { fontSize: 12, color: '#0f172a', fontWeight: '600' },
   rowBadgeTextPhone: { fontSize: 10 },
+  footer: { paddingTop: 8, borderTopWidth: 1, borderTopColor: '#e2e8f0', marginTop: 4 },
+  footerBtn: { borderRadius: 12 },
+  footerBtnContent: { height: 52 },
+  footerBtnLabel: { fontSize: 16, fontWeight: '800' },
 });

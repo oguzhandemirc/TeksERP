@@ -14,8 +14,9 @@ export interface ProductRecipe {
   routeId?: string | null;
   isActive?: boolean;
   item?: { id: string; code: string; name: string };
-  color?: { id: string; code?: string | null; name: string } | null;
-  properties?: { propertyId: string }[];
+  color?: { id: string; code?: string | null; name: string; hex?: string | null } | null;
+  // defaultInclude property adını da döndürür → şablon detayında özellik isimleri gösterilir.
+  properties?: { propertyId: string; property?: { id: string; code?: string | null; name: string } }[];
 }
 
 export const productRecipeService = {

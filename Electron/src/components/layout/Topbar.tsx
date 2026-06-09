@@ -36,7 +36,7 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
 
   return (
-    <header className="app-drag flex h-12 shrink-0 items-center gap-2 border-b border-border/60 bg-card/60 pr-3 backdrop-blur-xl">
+    <header className="app-drag flex h-12 shrink-0 select-none items-center gap-2 border-b border-border/60 bg-card/60 pr-3 backdrop-blur-xl">
       <div className="topbar-leading flex items-center gap-2 pl-2 app-no-drag">
         <Button
           variant="ghost"

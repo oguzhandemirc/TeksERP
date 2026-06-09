@@ -27,7 +27,7 @@
 ```
 Teks-Erp/
 ├── prisma/
-│   ├── schema.prisma          # 52 model, 14 enum
+│   ├── schema.prisma          # 53 model, 16 enum
 │   ├── seed.ts                # Tek dosya: 42 permission + 9 template + 7 kullanıcı + 3 kalite + master demo
 │   └── migrations/            # 2026-05-25: baseline reset (tek `init` migration)
 │
@@ -102,12 +102,28 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 | Inventory | Roll, RollMovement, RollOperation, RollProperty | 4 |
 | Quality | QualityGrade, DefectType, RollError | 3 |
 | Subcontractor | Subcontractor, SubcontractorCategory, SubcontractorToCategory, SubcontractorDispatch, SubcontractorDispatchItem, SubcontractorReceipt, SubcontractorReceiptItem, SubcontractorReceiptProperty | 8 |
-| Documents | TravelerCard, TravelerCardScan, Swatch, Manifest, LabelTemplate | 5 |
+| Documents | TravelerCard, TravelerCardScan, Swatch, Manifest, LabelTemplate, PrintedDocument | 6 |
 | System | SystemSetting | 1 |
 | Audit | SystemLog, SystemLogArchive | 2 |
-| **TOPLAM** | | **52** |
+| **TOPLAM** | | **53** |
 
 > `Manifest` modeli şemada hâlâ tanımlı ama sevkiyat modülü yeniden yazılırken kullanımı askıda; yeni sevkiyat tasarımıyla birlikte revize edilebilir. `CurrentAccount` ve `MachineLog` modelleri 2026-05-25 cleanup'ında silindi (finans modülü ve loom monitoring için kullanılmıyordu).
+
+### Resmi belge defteri — `PrintedDocument` (versiyonlu irsaliye snapshot'ları)
+
+> 2026-06-09. Üç sevk/irsaliye belgesi — **Sevk İrsaliyesi** (`Shipment`), **Fason Sevk İrsaliyesi** (`SubcontractorDispatch`), **Kartela Çeki Listesi** (`KartelaDispatch`) — artık donmuş, versiyonlu resmi belge. Eski `SubcontractorDispatch.printSnapshot` / `KartelaDispatch.printSnapshot` kolonları kaldırıldı (migration `20260609225307`).
+
+Yaşam döngüsü (endüstri standardı): **TASLAK** (kaynak henüz resmileşmedi → tabloda satır YOK, client canlı render) → **freeze** (sevk olayı anında v1 ACTIVE; içerik + şablon override + firma künyesi `snapshot` JSON'una donar) → **reissue** (gerekçeli düzeltme: vN `SUPERSEDED`, vN+1 `ACTIVE` güncel veriden) → **void** (kaynak iptal: ACTIVE belge `VOIDED`, baskıda İPTAL filigranı). Satır içerikleri immutable; yalnız status/supersede/void meta güncellenir.
+
+- **Yeni sevk olayı = yeni `sourceId` = yepyeni belge zinciri.** Önceki belgeye dokunulmaz (örn. fasona 2. parti → yeni `SubcontractorDispatch` → kendi v1'i). Versiyon yalnız *aynı* olayın belgesini düzeltmek içindir.
+- **Polimorfik kaynak** (`docType` + `sourceId`, hard FK yok — 3 tabloya birden bağlanamaz); bütünlük `printed-document.service.ts`'de. `@@unique([docType, sourceId, version])` çift-versiyon yarışını keser.
+- **Freeze, domain servisin sevk transaction'ı İÇİNDEN** çağrılır (`freezeForSource`) → sevk başarılıysa belge de garanti. Her belge tipi kendi snapshot builder'ını `registerPrintedDocBuilder` ile kaydeder (domain servis → printed-document.service tek yönlü bağımlılık).
+- **Fason istisnası:** istenen renk + boyahane notu belgeye DONDURULMAZ — kasten canlı talimat overlay'i (`GET /subcontractor/dispatches/:id/dye-overlay`); kabul/iptalde kilitlenir.
+- **Lazy-init / `reconstructed`:** belgesi olmayan eski DISPATCHED kayıt ilk görüntülemede geriye dönük dondurulur (baskıda "geriye dönük oluşturuldu" dipnotu).
+- **Endpoint:** `GET /api/printed-documents/:docType/:sourceId/current | /versions | /versions/:v`, `POST .../reissue`. İzin docType→kaynak modülün okuma/yazma iznine eşlenir.
+- **Test:** `scripts/test_printed_documents.ts` (24/24) — freeze, değişmezlik, reissue zinciri, yeni-sevk-yeni-belge, void, TASLAK→freeze + alloc geri-indirgeme.
+
+Enum sayısı 14 → **16** (`PrintedDocType`, `PrintedDocStatus`).
 
 ### Enum'lar
 
@@ -544,7 +560,7 @@ Tek-kolon `orderBy` için yeterli; çok-kolon sırada `(createdAt, id) > (?, ?)`
 
 ### 9.6 JSON Alan Sorguları → GIN Index
 
-Schema'da Json alanları: `WorkOrder.parameters`, `WorkOrderStep.stepData`, `RollOperation.metadata`, `MachineLog.details`, `SystemLog.oldData/newData`, `Manifest.snapshot`.
+Schema'da Json alanları: `WorkOrder.parameters`, `WorkOrderStep.stepData`, `RollOperation.metadata`, `MachineLog.details`, `SystemLog.oldData/newData`, `Manifest.snapshot`, `TravelerCard.snapshot`, `PrintedDocument.snapshot`.
 
 Eğer içinde sorgulanmıyorsa (yalnızca okunuyor) — index gerekmez.  
 Eğer sorgulanacaksa raw migration ile GIN index:

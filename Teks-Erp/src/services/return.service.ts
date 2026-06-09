@@ -254,6 +254,14 @@ export class ReturnService {
       orderId = input.orderId;
     }
 
+    // İade nedeni ZORUNLU — en az biri: katalog nedeni VEYA serbest metin açıklama.
+    // (Nedensiz iade kalite geri-besleme verisini değersizleştirir.)
+    const reasonText = input.reasonText?.trim() || null;
+    if (!input.reasonId && !reasonText) {
+      throw AppError.badRequest(
+        "İade nedeni gerekli — katalogdan bir neden seçin veya açıklama yazın."
+      );
+    }
     // Neden seçildiyse var olmalı (pasif neden de seçilebilir — snapshot için sorun değil).
     if (input.reasonId) {
       const reason = await prisma.returnReason.findUnique({
@@ -263,32 +271,36 @@ export class ReturnService {
       if (!reason) throw AppError.badRequest("İade nedeni bulunamadı");
     }
 
-    // Kalite override — YALNIZ returnGradingEnabled açıkken honor edilir.
+    // Kalite override — YALNIZ returnGradingEnabled açıkken honor edilir. Override
+    // varsa topun gideceği raf = seçilen kalitenin returnTargetStatus'u (FİRE→SCRAP,
+    // A1→A1_STOCK, 1.Kalite→WAREHOUSE). Bu kolon Tambur'un targetStatus'undan AYRIDIR
+    // (Tambur'a dokunmaz). Override yoksa / flag kapalıysa top hep WAREHOUSE'a iner.
     const gradingEnabled = await readReturnGradingEnabled();
     let overrideQualityGradeId: string | null = null;
     let overrideQualityCode: string | null = null;
+    let appliedStatus: RollStatus = RollStatus.WAREHOUSE;
     if (gradingEnabled && input.qualityGradeId) {
       const qg = await prisma.qualityGrade.findUnique({
         where: { id: input.qualityGradeId },
-        select: { id: true, code: true },
+        select: { id: true, code: true, returnTargetStatus: true },
       });
       if (!qg) throw AppError.badRequest("Kalite derecesi bulunamadı");
       overrideQualityGradeId = qg.id;
       overrideQualityCode = qg.code;
+      appliedStatus = qg.returnTargetStatus ?? RollStatus.WAREHOUSE;
     }
 
     const qty = new Prisma.Decimal(roll.currentQty);
-    const reasonText = input.reasonText?.trim() || null;
     const note = input.note?.trim() || null;
 
     const created = await prisma.$transaction(async (tx) => {
-      // Top Hazır Depo'ya — statü HER ZAMAN WAREHOUSE (Tambur çıktısıyla tutarlı).
+      // Top iade rafına — appliedStatus (override yoksa WAREHOUSE; FİRE→SCRAP vb.).
       // KOŞULLU flip (status===SHIPPED): eşzamanlı/çift iade'de yalnız ilki başarılı
       // olur; ikincisi count=0 görür → tüm tx geri sarılır, çift RollReturn yazılmaz.
       const flip = await tx.roll.updateMany({
         where: { id: roll.id, status: RollStatus.SHIPPED },
         data: {
-          status: RollStatus.WAREHOUSE,
+          status: appliedStatus,
           shipmentId: null,
           sackId: null,
           ...(overrideQualityGradeId
@@ -313,6 +325,7 @@ export class ReturnService {
           reasonText,
           note,
           qualityGradeId: overrideQualityGradeId,
+          appliedStatus,
           receivedById: userId,
           // İade öncesi snapshot — iptal (geri al) topu bunlarla eski haline döndürür.
           prevSackId: roll.sackId,
@@ -338,13 +351,20 @@ export class ReturnService {
         qty: qty.toString(),
         reasonId: input.reasonId ?? null,
         qualityGradeId: overrideQualityGradeId,
+        appliedStatus,
       },
     });
 
+    const shelfLabel =
+      appliedStatus === RollStatus.SCRAP
+        ? "hurdaya"
+        : appliedStatus === RollStatus.A1_STOCK
+          ? "2. kalite stoğa"
+          : "Hazır Depo'ya";
     return {
       success: true,
-      data: { id: created.id, rollId: roll.id },
-      message: "İade alındı — top Hazır Depo'ya eklendi",
+      data: { id: created.id, rollId: roll.id, appliedStatus },
+      message: `İade alındı — top ${shelfLabel} eklendi`,
     };
   }
 
@@ -403,6 +423,7 @@ export class ReturnService {
       order: { select: { id: true, orderNumber: true, status: true } },
       reason: { select: { id: true, code: true, name: true, color: true } },
       qualityGrade: { select: { id: true, code: true, name: true, color: true } },
+      appliedStatus: true,
       fromShipment: { select: { id: true, shipmentNo: true } },
       receivedBy: { select: { id: true, fullName: true } },
       cancelledAt: true,
@@ -489,6 +510,7 @@ export class ReturnService {
         order: { select: { id: true, orderNumber: true, status: true } },
         reason: { select: { id: true, code: true, name: true, color: true } },
         qualityGrade: { select: { id: true, code: true, name: true, color: true } },
+        appliedStatus: true,
         fromShipment: { select: { id: true, shipmentNo: true } },
         receivedBy: { select: { id: true, fullName: true } },
         cancelledBy: { select: { id: true, fullName: true } },
@@ -525,12 +547,16 @@ export class ReturnService {
         prevSackId: true,
         prevQualityGrade: true,
         prevQualityGradeId: true,
+        appliedStatus: true,
         roll: { select: { barcode: true, status: true, shipmentId: true } },
       },
     });
     if (!rr) throw AppError.notFound("İade kaydı bulunamadı");
     if (rr.cancelledAt) throw AppError.conflict("Bu iade zaten iptal edilmiş.");
-    if (rr.roll.status !== RollStatus.WAREHOUSE || rr.roll.shipmentId !== null) {
+    // İade anında topa uygulanan raf (override yoksa / legacy null → WAREHOUSE). Top hâlâ
+    // tam bu raftaysa ve sevkiyatsızsa iptal edilebilir; sonradan kesim/yeniden sevk → engel.
+    const expectedStatus = rr.appliedStatus ?? RollStatus.WAREHOUSE;
+    if (rr.roll.status !== expectedStatus || rr.roll.shipmentId !== null) {
       throw AppError.conflict(
         `Top iade sonrası işlem görmüş (durum: ${rr.roll.status}) — iade iptal edilemez.`
       );
@@ -553,7 +579,7 @@ export class ReturnService {
     await prisma.$transaction(async (tx) => {
       // KOŞULLU geri-yükleme: yalnız hâlâ WAREHOUSE + sevkiyatsız ise (eşzamanlı koruması).
       const restore = await tx.roll.updateMany({
-        where: { id: rr.rollId, status: RollStatus.WAREHOUSE, shipmentId: null },
+        where: { id: rr.rollId, status: expectedStatus, shipmentId: null },
         data: {
           status: RollStatus.SHIPPED,
           shipmentId: rr.fromShipmentId,
@@ -591,6 +617,65 @@ export class ReturnService {
       success: true,
       data: { id: rr.id, rollId: rr.rollId },
       message: "İade iptal edildi — top sevkiyatına geri döndü",
+    };
+  }
+
+  // =========================================================================
+  // DÜZELT — yalnız defter alanları (neden + not). Topun statüsü / sevkiyat bağı /
+  // kalitesi DEĞİŞMEZ (onu düzeltmek gerekirse iptal+yeniden iade). İptal edilmiş
+  // kayıt düzeltilemez. Neden zorunluluğu burada da korunur (her ikisi de boşalamaz).
+  // =========================================================================
+  async editReturn(
+    id: string,
+    input: { reasonId?: string | null; reasonText?: string | null; note?: string | null },
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    if (!userId) throw AppError.unauthorized();
+
+    const rr = await prisma.rollReturn.findUnique({
+      where: { id },
+      select: { id: true, cancelledAt: true, reasonId: true, reasonText: true, note: true, rollId: true },
+    });
+    if (!rr) throw AppError.notFound("İade kaydı bulunamadı");
+    if (rr.cancelledAt) throw AppError.conflict("İptal edilmiş iade düzeltilemez.");
+
+    // undefined = dokunma; null/boş = temizle. Mevcut değerle birleştirip son hâli doğrula.
+    const nextReasonId = input.reasonId !== undefined ? input.reasonId || null : rr.reasonId;
+    const nextReasonText =
+      input.reasonText !== undefined ? input.reasonText?.trim() || null : rr.reasonText;
+    const nextNote = input.note !== undefined ? input.note?.trim() || null : rr.note;
+
+    if (!nextReasonId && !nextReasonText) {
+      throw AppError.badRequest(
+        "İade nedeni gerekli — katalogdan bir neden seçin veya açıklama yazın."
+      );
+    }
+    if (nextReasonId) {
+      const reason = await prisma.returnReason.findUnique({
+        where: { id: nextReasonId },
+        select: { id: true },
+      });
+      if (!reason) throw AppError.badRequest("İade nedeni bulunamadı");
+    }
+
+    await prisma.rollReturn.update({
+      where: { id: rr.id },
+      data: { reasonId: nextReasonId, reasonText: nextReasonText, note: nextNote },
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL_RETURN",
+      recordId: rr.id,
+      oldData: { reasonId: rr.reasonId, reasonText: rr.reasonText, note: rr.note },
+      newData: { kind: "EDIT", reasonId: nextReasonId, reasonText: nextReasonText, note: nextNote },
+    });
+
+    return {
+      success: true,
+      data: { id: rr.id, rollId: rr.rollId },
+      message: "İade kaydı güncellendi",
     };
   }
 }

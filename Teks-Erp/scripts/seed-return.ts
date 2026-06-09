@@ -46,6 +46,24 @@ const REASONS = [
   const r = await prisma.returnReason.createMany({ data: REASONS, skipDuplicates: true });
   console.log(`✅ ${r.count} iade nedeni eklendi (zaten varsa atlandı)`);
 
+  // 3. İade rafı (returnTargetStatus) — YALNIZ iade akışı okur, Tambur'a dokunmaz.
+  //    3 hazır kalitenin değerini set et (idempotent updateMany by code). Var olan
+  //    DB'lerde kolon null gelir (null=WAREHOUSE); FİRE→hurda, A1→2.kalite stoğa çek.
+  const SHELF = [
+    { code: "1.KALITE", returnTargetStatus: "WAREHOUSE" as const },
+    { code: "A1", returnTargetStatus: "A1_STOCK" as const },
+    { code: "FIRE", returnTargetStatus: "SCRAP" as const },
+  ];
+  let shelfUpdated = 0;
+  for (const s of SHELF) {
+    const res = await prisma.qualityGrade.updateMany({
+      where: { code: s.code },
+      data: { returnTargetStatus: s.returnTargetStatus },
+    });
+    shelfUpdated += res.count;
+  }
+  console.log(`✅ ${shelfUpdated} kalite için iade rafı (returnTargetStatus) ayarlandı`);
+
   await prisma.$disconnect();
 })().catch(async (e) => {
   console.error(e);

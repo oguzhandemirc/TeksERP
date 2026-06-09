@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
-import { Text, Surface, TouchableRipple, Button, ActivityIndicator, Icon } from 'react-native-paper';
+import { Text, Surface, TouchableRipple, Button, ActivityIndicator, Icon, TextInput, IconButton } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
@@ -14,6 +14,7 @@ import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import AppModal from '../../../components/AppModal';
+import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import { SkeletonList } from '../../../components/motion';
 import { returnService, type ReturnRow, type ReturnCancelledFilter } from '../../../services/return.service';
 import { colors, spacing, radius } from '../../../theme';
@@ -26,6 +27,7 @@ const STATUS_TABS: { key: ReturnCancelledFilter; label: string }[] = [
 ];
 
 const PAGE = 30;
+const ACCENT = '#d97706';
 
 function statusOf(item: ReturnRow) {
   return item.cancelledAt
@@ -39,6 +41,7 @@ export default function IadeGecmisiScreen() {
   const [status, setStatus] = useState<ReturnCancelledFilter>('active');
   const [detailTarget, setDetailTarget] = useState<ReturnRow | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ReturnRow | null>(null);
+  const [editTarget, setEditTarget] = useState<ReturnRow | null>(null);
 
   const query = useInfiniteQuery({
     queryKey: ['returns', 'history', status],
@@ -48,6 +51,16 @@ export default function IadeGecmisiScreen() {
     getNextPageParam: (last) => (last.pagination.hasMore ? last.pagination.nextCursor : null),
   });
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.data) ?? [], [query.data]);
+
+  const reasonsQuery = useQuery({
+    queryKey: ['return-reasons'],
+    queryFn: () => returnService.listReasons(),
+    staleTime: 10 * 60 * 1000,
+  });
+  const reasonOptions: PickerOption[] = useMemo(
+    () => (reasonsQuery.data?.data ?? []).map((r) => ({ value: r.id, label: r.name, sublabel: r.code })),
+    [reasonsQuery.data],
+  );
 
   const refresh = useManualRefresh(() => query.refetch(), 'Geçmiş güncellendi');
 
@@ -64,6 +77,22 @@ export default function IadeGecmisiScreen() {
     onError: (err: Error) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'İptal edilemedi', text2: err.message });
+    },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: ({ id, reasonId, reasonText, note }: { id: string; reasonId: string | null; reasonText: string | null; note: string | null }) =>
+      returnService.edit(id, { reasonId, reasonText, note }),
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'İade güncellendi' });
+      setEditTarget(null);
+      qc.invalidateQueries({ queryKey: ['returns'] });
+      void query.refetch();
+    },
+    onError: (err: Error) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: err.message });
     },
   });
 
@@ -129,6 +158,11 @@ export default function IadeGecmisiScreen() {
           setDetailTarget(null);
           setCancelTarget(t);
         }}
+        onEdit={() => {
+          const t = detailTarget;
+          setDetailTarget(null);
+          setEditTarget(t);
+        }}
       />
 
       <ConfirmDialog
@@ -147,6 +181,16 @@ export default function IadeGecmisiScreen() {
         onDismiss={() => setCancelTarget(null)}
         onConfirm={({ reason }) => {
           if (cancelTarget) cancelMutation.mutate({ id: cancelTarget.id, reason: reason ?? '' });
+        }}
+      />
+
+      <EditReturnModal
+        target={editTarget}
+        reasonOptions={reasonOptions}
+        saving={editMutation.isPending}
+        onClose={() => setEditTarget(null)}
+        onSave={(payload) => {
+          if (editTarget) editMutation.mutate({ id: editTarget.id, ...payload });
         }}
       />
     </ScreenChrome>
@@ -220,10 +264,12 @@ function ReturnDetailModal({
   item,
   onClose,
   onCancel,
+  onEdit,
 }: {
   item: ReturnRow | null;
   onClose: () => void;
   onCancel: () => void;
+  onEdit: () => void;
 }) {
   const { height } = useWindowDimensions();
   const [current, setCurrent] = useState<ReturnRow | null>(item);
@@ -303,17 +349,29 @@ function ReturnDetailModal({
 
           <View style={styles.sheetFooter}>
             {cancellable ? (
-              <Button
-                mode="contained"
-                icon="close-circle-outline"
-                buttonColor="#dc2626"
-                textColor="#ffffff"
-                style={styles.sheetCancelBtn}
-                contentStyle={{ height: 48 }}
-                onPress={onCancel}
-              >
-                İadeyi İptal Et
-              </Button>
+              <View style={styles.footerRow}>
+                <Button
+                  mode="outlined"
+                  icon="pencil-outline"
+                  textColor={ACCENT}
+                  style={styles.footerBtn}
+                  contentStyle={{ height: 48 }}
+                  onPress={onEdit}
+                >
+                  Düzelt
+                </Button>
+                <Button
+                  mode="contained"
+                  icon="close-circle-outline"
+                  buttonColor="#dc2626"
+                  textColor="#ffffff"
+                  style={styles.footerBtn}
+                  contentStyle={{ height: 48 }}
+                  onPress={onCancel}
+                >
+                  İptal Et
+                </Button>
+              </View>
             ) : (
               <View style={styles.lockRow}>
                 <Icon source="cancel" size={15} color={colors.textMuted} />
@@ -338,6 +396,118 @@ function DetailRow({ icon, label, value }: { icon: string; label: string; value:
         {value}
       </Text>
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Düzelt — yalnız neden + not (statü/sevkiyat/kalite DEĞİŞMEZ). Neden zorunlu.
+// ---------------------------------------------------------------------------
+function EditReturnModal({
+  target,
+  reasonOptions,
+  saving,
+  onClose,
+  onSave,
+}: {
+  target: ReturnRow | null;
+  reasonOptions: PickerOption[];
+  saving: boolean;
+  onClose: () => void;
+  onSave: (payload: { reasonId: string | null; reasonText: string | null; note: string | null }) => void;
+}) {
+  const [reasonId, setReasonId] = useState<string | null>(null);
+  const [reasonText, setReasonText] = useState('');
+  const [note, setNote] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (target) {
+      setReasonId(target.reason?.id ?? null);
+      setReasonText(target.reasonText ?? '');
+      setNote(target.note ?? '');
+    }
+  }, [target]);
+
+  const hasReason = !!reasonId || reasonText.trim().length > 0;
+
+  return (
+    <>
+      <AppModal visible={!!target} onDismiss={onClose} position="bottom" contentStyle={styles.sheet}>
+        <View>
+          <View style={styles.grabber} />
+          <Text style={styles.editTitle}>İadeyi Düzelt</Text>
+          <Text style={styles.editSub}>Yalnız neden ve not değişir — topun durumu etkilenmez.</Text>
+
+          <Text style={styles.editLabel}>İade Nedeni *</Text>
+          <TouchableRipple style={styles.editSelect} onPress={() => setPickerOpen(true)} borderless>
+            <View style={styles.editSelectInner}>
+              <Icon source="alert-circle-outline" size={18} color={reasonId ? ACCENT : colors.textMuted} />
+              <Text style={[styles.editSelectText, !reasonId && styles.editSelectPlaceholder]} numberOfLines={1}>
+                {reasonId ? reasonOptions.find((o) => o.value === reasonId)?.label ?? '—' : 'Neden seçin…'}
+              </Text>
+              {reasonId ? (
+                <IconButton icon="close-circle" size={18} onPress={() => setReasonId(null)} style={{ margin: 0 }} />
+              ) : null}
+            </View>
+          </TouchableRipple>
+
+          <TextInput
+            mode="outlined"
+            placeholder="Açıklama (katalog seçmediysen yaz)"
+            value={reasonText}
+            onChangeText={setReasonText}
+            multiline
+            outlineColor={colors.border}
+            activeOutlineColor={ACCENT}
+            style={styles.editInput}
+          />
+
+          <Text style={styles.editLabel}>Not</Text>
+          <TextInput
+            mode="outlined"
+            placeholder="Teslim alan notu"
+            value={note}
+            onChangeText={setNote}
+            multiline
+            outlineColor={colors.border}
+            activeOutlineColor={ACCENT}
+            style={styles.editInput}
+          />
+
+          <Button
+            mode="contained"
+            buttonColor={ACCENT}
+            textColor="#fff"
+            disabled={!hasReason || saving}
+            loading={saving}
+            style={styles.editSaveBtn}
+            contentStyle={{ height: 48 }}
+            onPress={() =>
+              onSave({
+                reasonId,
+                reasonText: reasonText.trim() || null,
+                note: note.trim() || null,
+              })
+            }
+          >
+            Kaydet
+          </Button>
+        </View>
+      </AppModal>
+
+      <PickerModal
+        visible={pickerOpen}
+        title="İade Nedeni Seç"
+        options={reasonOptions}
+        selectedValue={reasonId ?? undefined}
+        emptyText="İade nedeni tanımlı değil"
+        onSelect={(v) => {
+          setReasonId(v);
+          setPickerOpen(false);
+        }}
+        onDismiss={() => setPickerOpen(false)}
+      />
+    </>
   );
 }
 
@@ -428,6 +598,25 @@ const styles = StyleSheet.create({
   cancelMeta: { fontSize: 12, color: colors.textMuted },
   sheetFooter: { marginTop: spacing.md },
   sheetCancelBtn: { borderRadius: radius.lg },
+  footerRow: { flexDirection: 'row', gap: spacing.sm },
+  footerBtn: { flex: 1, borderRadius: radius.lg },
   lockRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: spacing.sm },
   notCancellable: { fontSize: 13, color: colors.textMuted, fontStyle: 'italic' },
+
+  // Düzelt formu
+  editTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  editSub: { fontSize: 13, color: colors.textMuted, marginTop: 2, marginBottom: spacing.md },
+  editLabel: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginTop: spacing.sm, marginBottom: spacing.xs, marginLeft: 2 },
+  editSelect: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  editSelectInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 52, paddingLeft: spacing.md, paddingRight: spacing.xs },
+  editSelectText: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text },
+  editSelectPlaceholder: { fontWeight: '500', color: colors.textMuted },
+  editInput: { backgroundColor: colors.surface, minHeight: 52, marginTop: spacing.sm },
+  editSaveBtn: { borderRadius: radius.lg, marginTop: spacing.lg },
 });

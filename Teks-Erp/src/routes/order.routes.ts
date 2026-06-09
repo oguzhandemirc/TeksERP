@@ -319,6 +319,7 @@ router.get(
     "quality:write",
     "mobile:tambur",
     "mobile:tarti-paket",
+    "mobile:hizli-is-emri",
   ),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

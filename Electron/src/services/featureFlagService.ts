@@ -60,6 +60,13 @@ export interface FeatureFlags {
    *  Açıkken operatör kayıtlıdan fazla ölçtüğünde (örn. 100m açık kumaşı 150m top yapma)
    *  onay sonrası kabul edilir; kaynak top tamamen tüketilir. Backend ENFORCE eder. */
   tamburOverQuantityEnabled: boolean;
+  /** Oturum (JWT) ömrü — saat (default 8). Giriş sonrası token kaç saat geçerli kalır;
+   *  süre dolunca (aktif kullanırken bile) yeniden giriş gerekir. Backend ENFORCE eder
+   *  (yalnız sonraki girişlere uygulanır; mevcut açık oturumlar süreleriyle devam eder). */
+  sessionDurationHours: number;
+  /** Hareketsizlik zaman aşımı — dakika (default 0 = kapalı). >0 iken panel bu kadar
+   *  dakika hiç işlem (fare/klavye) görmezse otomatik çıkış yapar. Frontend ENFORCE eder. */
+  idleTimeoutMinutes: number;
   /** Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri). */
   travelerCardConfig: TravelerCardConfig;
   /** Belge künyesi (adres/tel/vergi) — irsaliye/çeki üst bloğunda basılır. */

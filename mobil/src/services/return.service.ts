@@ -50,6 +50,16 @@ export interface CreateReturnPayload {
   qualityGradeId?: string | null;
 }
 
+// İade kaydını düzelt — yalnız defter alanları (neden + not). Gönderilmeyen alan dokunulmaz.
+export interface EditReturnPayload {
+  reasonId?: string | null;
+  reasonText?: string | null;
+  note?: string | null;
+}
+
+// İade anında topa uygulanan raf (override'a göre). WAREHOUSE | A1_STOCK | SCRAP.
+export type ReturnAppliedStatus = 'WAREHOUSE' | 'A1_STOCK' | 'SCRAP';
+
 // --- İade geçmişi (liste + detay + iptal) ---
 export type ReturnCancelledFilter = 'active' | 'cancelled' | 'all';
 
@@ -95,10 +105,21 @@ export const returnService = {
       .get<ApiResponse<ReturnLookupResult>>(`/returns/lookup?barcode=${encodeURIComponent(barcode)}`)
       .then((r) => r.data),
 
-  /** İade al → top Hazır Depo'ya, defter kaydı. */
-  create: (payload: CreateReturnPayload): Promise<ApiResponse<{ id: string; rollId: string }>> =>
+  /** İade al → top iade rafına (WAREHOUSE/A1_STOCK/SCRAP), defter kaydı. */
+  create: (
+    payload: CreateReturnPayload,
+  ): Promise<ApiResponse<{ id: string; rollId: string; appliedStatus: ReturnAppliedStatus }>> =>
     apiClient
-      .post<ApiResponse<{ id: string; rollId: string }>>('/returns', payload)
+      .post<ApiResponse<{ id: string; rollId: string; appliedStatus: ReturnAppliedStatus }>>('/returns', payload)
+      .then((r) => r.data),
+
+  /** İade kaydını düzelt (neden + not) — top statüsü/sevkiyatı değişmez. */
+  edit: (
+    id: string,
+    payload: EditReturnPayload,
+  ): Promise<ApiResponse<{ id: string; rollId: string }>> =>
+    apiClient
+      .patch<ApiResponse<{ id: string; rollId: string }>>(`/returns/${id}`, payload)
       .then((r) => r.data),
 
   /** İade nedeni kataloğu (aktif). İade ekranında seçenek listesi. */

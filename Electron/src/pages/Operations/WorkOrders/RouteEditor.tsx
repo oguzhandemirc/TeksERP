@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-  AlertTriangle,
   BookmarkPlus,
   ChevronRight,
   MousePointerClick,
@@ -28,6 +27,7 @@ import { springSnappy, springSoft } from "@/lib/motion";
 import { toneFor } from "@/lib/station-colors";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { routeService } from "@/pages/Routes/service";
 import type { ProductionRoute } from "@/pages/Routes/types";
@@ -237,31 +237,27 @@ export function RouteEditor({
           <Button
             type="button"
             size="sm"
-            variant="outline"
             onClick={onAdd}
-            className="h-8 gap-1 border-dashed"
+            className="h-8 gap-1 bg-gradient-to-b from-primary to-primary/80 text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-inset ring-white/10 hover:from-primary hover:to-primary hover:shadow-md hover:shadow-primary/40"
           >
             <Plus className="h-3.5 w-3.5" /> Adım
           </Button>
         </motion.div>
       </div>
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <Callout tone="danger">{error}</Callout>}
 
       {/* Karşılanma uyarısı */}
       {(uncoveredPropIds.length > 0 || colorUncovered) && (
-        <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <div>
-            <span className="font-medium">Rotada karşılayan istasyon yok:</span>{" "}
-            {colorUncovered && (
-              <>renk{colorQ.data?.data ? ` (${colorQ.data.data.name})` : ""}</>
-            )}
-            {colorUncovered && uncoveredPropIds.length > 0 && " · "}
-            {uncoveredPropNames.length > 0 && uncoveredPropNames.join(", ")}. Uygun
-            istasyon ekle veya hedeften çıkar.
-          </div>
-        </div>
+        <Callout tone="warning">
+          <strong>Rotada karşılayan istasyon yok:</strong>{" "}
+          {colorUncovered && (
+            <>renk{colorQ.data?.data ? ` (${colorQ.data.data.name})` : ""}</>
+          )}
+          {colorUncovered && uncoveredPropIds.length > 0 && " · "}
+          {uncoveredPropNames.length > 0 && uncoveredPropNames.join(", ")}. Uygun
+          istasyon ekle veya hedeften çıkar.
+        </Callout>
       )}
 
       {/* Seçili adım detayı — üstteki chip ile ok'la birleşir */}
@@ -295,9 +291,26 @@ export function RouteEditor({
             target={target}
           />
         </div>
+      ) : steps.length === 0 ? (
+        // Boş + zorunlu: boş durumun KENDİSİ nabız atan büyük çağrıdır.
+        <motion.button
+          type="button"
+          onClick={onAdd}
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+          transition={springSnappy}
+          className="attention-pulse flex w-full flex-col items-center gap-1 rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 p-4 text-center text-primary transition-colors hover:border-primary/70 hover:bg-primary/10"
+        >
+          <span className="flex items-center gap-1.5 text-sm font-semibold">
+            <Plus className="h-4 w-4" /> İlk üretim adımını ekle
+          </span>
+          <span className="text-[11px] text-primary/70">
+            Tıkla ve başla — ya da yukarıdan hazır şablon seç.
+          </span>
+        </motion.button>
       ) : (
         <div className="rounded-lg border border-dashed bg-muted/20 p-3 text-center text-xs text-muted-foreground">
-          Akış boş. "Adım" ile başla veya yukarıdan bir şablon seç.
+          Düzenlemek için bir adıma tıkla.
         </div>
       )}
 
@@ -313,16 +326,18 @@ export function RouteEditor({
       />
       {saveAsTemplate && (
         <div className="flex justify-end">
-          <Button
-            type="button"
-            size="sm"
-            className="gap-1.5"
-            disabled={savePending || !saveName.trim() || steps.length === 0}
-            onClick={() => onSaveTemplate(saveName.trim(), forCustomer)}
-          >
-            <BookmarkPlus className="h-3.5 w-3.5" />
-            {savePending ? "Kaydediliyor..." : "Şablonu kaydet"}
-          </Button>
+          <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={springSnappy}>
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1.5 bg-gradient-to-b from-primary to-primary/80 text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-inset ring-white/10 hover:from-primary hover:to-primary hover:shadow-md hover:shadow-primary/40"
+              disabled={savePending || !saveName.trim() || steps.length === 0}
+              onClick={() => onSaveTemplate(saveName.trim(), forCustomer)}
+            >
+              <BookmarkPlus className="h-3.5 w-3.5" />
+              {savePending ? "Kaydediliyor..." : "Şablonu kaydet"}
+            </Button>
+          </motion.div>
         </div>
       )}
     </div>

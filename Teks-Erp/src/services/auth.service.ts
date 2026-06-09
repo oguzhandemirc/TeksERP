@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
+import { readSessionDurationHours } from "./system-setting.service";
 
 function loadJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -19,7 +20,6 @@ function loadJwtSecret(): string {
   return secret;
 }
 const JWT_SECRET: string = loadJwtSecret();
-const JWT_EXPIRES_IN = "8h";
 
 export class AuthService {
   /**
@@ -58,7 +58,11 @@ export class AuthService {
       permissions,
     };
 
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    // Oturum ömrü runtime ayardan (auth.sessionDurationHours, default 8) — saniyeye çevrilir.
+    const sessionHours = await readSessionDurationHours();
+    const token = jwt.sign(payload, JWT_SECRET, {
+      expiresIn: sessionHours * 60 * 60,
+    });
 
     return { token, user: payload };
   }

@@ -1,6 +1,7 @@
 import { createMemoryRouter } from "react-router-dom";
 import { contentRoutes } from "@/routes/content-routes";
 import { TabRootLayout } from "./TabRootLayout";
+import { RouteErrorFallback } from "@/components/RouteErrorFallback";
 
 type TabRouter = ReturnType<typeof createMemoryRouter>;
 
@@ -16,7 +17,7 @@ function toEntry(path: string, state?: unknown) {
 
 function build(path: string, state?: unknown): TabRouter {
   return createMemoryRouter(
-    [{ path: "/", element: <TabRootLayout />, children: contentRoutes }],
+    [{ path: "/", element: <TabRootLayout />, errorElement: <RouteErrorFallback />, children: contentRoutes }],
     { initialEntries: [toEntry(path, state)], initialIndex: 0 },
   );
 }

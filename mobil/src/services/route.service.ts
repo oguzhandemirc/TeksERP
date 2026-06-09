@@ -15,7 +15,23 @@ export interface ProductionRoute {
     stationId: string;
     sequence: number;
     defaultNotes?: string | null;
-    station?: { id: string; code?: string | null; name: string; type?: string };
+    station?: {
+      id: string;
+      code?: string | null;
+      name: string;
+      type?: string;
+      // İstasyonun varsayılan fason kategorisi (defaultInclude döndürür). Hızlı İş Emri
+      // "Gelişmiş" renk uygulaması, renk/özellik veren adımı buradan türetir.
+      // appliesColor/appliesProperty: bu kategori gerçekten renk/özellik uyguluyor mu —
+      // kategori atanmış olması yetmez, backend bu bayrakları arar (workorder.service create).
+      defaultCategory?: {
+        id: string;
+        code?: string | null;
+        name: string;
+        appliesColor?: boolean;
+        appliesProperty?: boolean;
+      } | null;
+    };
   }[];
 }
 

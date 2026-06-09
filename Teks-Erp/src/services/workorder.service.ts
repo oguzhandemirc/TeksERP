@@ -52,6 +52,7 @@ import {
   WorkOrderStatus,
   RollStatus,
   RollEntrySource,
+  StepStatus,
   Prisma,
 } from "@prisma/client";
 import {
@@ -231,6 +232,28 @@ export class WorkOrderService {
     if (existing && existing.id !== excludeId) {
       throw AppError.conflict(`Bu parti kodu zaten kullanılıyor: ${batchNumber}`);
     }
+  }
+
+  /**
+   * Verilen parti kodu (batchNumber) kullanılabilir mi? Form alanı blur'unda
+   * canlı kontrol için — kaydetmeden önce "bu numara daha önce verilmiş mi"
+   * uyarısı. excludeId verilirse o iş emrini hariç tutar (düzenleme modu kendi
+   * kodunu çakışma saymaz). Boş kod = kullanılabilir (otomatik üretilecek).
+   */
+  async checkBatchNumber(
+    batchNumber: string,
+    excludeId?: string,
+  ): Promise<{ batchNumber: string; available: boolean }> {
+    const trimmed = batchNumber.trim();
+    if (!trimmed) return { batchNumber: trimmed, available: true };
+    const existing = await prisma.workOrder.findUnique({
+      where: { batchNumber: trimmed },
+      select: { id: true },
+    });
+    return {
+      batchNumber: trimmed,
+      available: !existing || existing.id === excludeId,
+    };
   }
 
   /**
@@ -1326,7 +1349,23 @@ export class WorkOrderService {
   async getBranches(workOrderId: string): Promise<ApiResponse<unknown>> {
     const wo = await prisma.workOrder.findUnique({
       where: { id: workOrderId },
-      select: { id: true },
+      select: {
+        id: true,
+        // Ayrılma soy bağı — Dallar panelinde iki yönlü iz:
+        // splitFrom = "bu WO, P-XXX'ten ayrıldı"; splitChildren = "ayrılan partiler →".
+        splitFrom: { select: { id: true, batchNumber: true } },
+        splitChildren: {
+          where: { isActive: true },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            batchNumber: true,
+            status: true,
+            createdAt: true,
+            targetColor: { select: { id: true, name: true, hex: true } },
+          },
+        },
+      },
     });
     if (!wo) {
       return { success: false, data: null, message: "İş emri bulunamadı" };
@@ -1447,7 +1486,454 @@ export class WorkOrderService {
       };
     });
 
-    return { success: true, data: { branches } };
+    return {
+      success: true,
+      data: {
+        branches,
+        splitFrom: wo.splitFrom,
+        splitChildren: wo.splitChildren.map((c) => ({
+          id: c.id,
+          batchNumber: c.batchNumber,
+          status: c.status,
+          createdAt: c.createdAt,
+          targetColor: c.targetColor,
+        })),
+      },
+    };
+  }
+
+  // ===========================================================================
+  // PARTİYİ YENİ İŞ EMRİNE AYIR (Faz B1: boyanmadan)
+  // ===========================================================================
+
+  /**
+   * Bir partinin (batchSplitId = sevk lane'i) ayrılması için gerekli kaynak
+   * verisini yükler + B1 kapsamında ayrılabilirliği doğrular. Preview ve gerçek
+   * split aynı validasyonu paylaşsın diye tek noktada.
+   *
+   * Faz B1 kapsamı: parti HÂLÂ boyahanede (tüm toplar AT_SUBCONTRACTOR, OPEN),
+   * adım renk veren bir fason adımı. Yeni renk, parti yeni WO'ya kabul edilirken
+   * uygulanır — yeniden boyama (re-dye) yok, geriye sarma yok.
+   */
+  private async loadSplitContext(workOrderId: string, batchSplitId: string) {
+    const sourceWo = await prisma.workOrder.findUnique({
+      where: { id: workOrderId },
+      select: {
+        id: true, batchNumber: true, type: true, width: true, foldType: true,
+        parameters: true, dyehouseNote: true, routeTemplateId: true,
+        targetItemId: true, targetColorId: true, status: true,
+        targetItem: { select: { id: true, name: true } },
+        targetColor: { select: { id: true, name: true, hex: true } },
+        targetProperties: { select: { propertyId: true } },
+        orderLinks: { select: { orderLineId: true, allocatedQty: true } },
+        steps: {
+          orderBy: { stepSequence: "asc" },
+          select: {
+            id: true, stationId: true, stepSequence: true, notes: true,
+            stepData: true, requiredCategoryId: true, plannedSubcontractorId: true,
+            station: { select: { name: true } },
+            requiredCategory: { select: { appliesColor: true } },
+          },
+        },
+      },
+    });
+    if (!sourceWo) throw AppError.notFound("İş emri bulunamadı");
+
+    const dispatch = await prisma.subcontractorDispatch.findUnique({
+      where: { id: batchSplitId },
+      select: { id: true, dispatchNo: true, workOrderId: true, stepId: true, cancelledAt: true },
+    });
+    if (!dispatch || dispatch.workOrderId !== workOrderId) {
+      throw AppError.notFound("Parti (sevk) bu iş emrinde bulunamadı");
+    }
+
+    // Renk veren (boyahane) adım — re-dye'da geri sarılacak hedef.
+    const colorStep = sourceWo.steps.find((s) => s.requiredCategory?.appliesColor) ?? null;
+
+    const laneRolls = await prisma.roll.findMany({
+      where: {
+        batchSplitId,
+        status: {
+          notIn: [
+            RollStatus.SUBCONTRACTOR_CONSUMED,
+            RollStatus.TAMBUR_CONSUMED,
+            RollStatus.CANCELLED,
+          ],
+        },
+      },
+      select: {
+        id: true, barcode: true, currentQty: true, status: true,
+        currentStepId: true, producedInStepId: true,
+        item: { select: { id: true, name: true } },
+        color: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    // Partinin canlı toplarının bulunduğu adım (tek nokta beklenir).
+    const rollStepIds = [
+      ...new Set(laneRolls.map((r) => r.currentStepId).filter(Boolean) as string[]),
+    ];
+    const rollStep =
+      rollStepIds.length === 1
+        ? sourceWo.steps.find((s) => s.id === rollStepIds[0]) ?? null
+        : null;
+
+    // ── Mod + kapsam guard'ı ──
+    // continue (B1): toplar AT_SUBCONTRACTOR (boyahanede) → kaldığı yerden devam.
+    // redye    (B2): toplar boyandı/döndü (IN_PRODUCTION, boyahane sonrası) →
+    //                yeni WO boyahaneye GERİ SARAR, yeni renkle yeniden boyanır.
+    let mode: "continue" | "redye" | null = null;
+    let reEntryStep: (typeof sourceWo.steps)[number] | null = null;
+    let canSplit = true;
+    let blockReason: string | null = null;
+
+    if (dispatch.cancelledAt) {
+      canSplit = false;
+      blockReason = "Bu sevk iptal edilmiş.";
+    } else if (laneRolls.length === 0) {
+      canSplit = false;
+      blockReason = "Bu partide taşınacak aktif top yok.";
+    } else if (!colorStep) {
+      canSplit = false;
+      blockReason = "Rotada renk veren bir fason adımı (boyahane) yok — renk değişimi uygulanamaz.";
+    } else if (!rollStep) {
+      canSplit = false;
+      blockReason = "Parti topları farklı adımlarda — önce hepsi aynı noktada olmalı.";
+    } else if (laneRolls.every((r) => r.status === RollStatus.AT_SUBCONTRACTOR)) {
+      // Boyanmadan — kaldığı yerden devam. Renk veren adımda olmalı.
+      if (rollStep.id !== colorStep.id) {
+        canSplit = false;
+        blockReason = "Parti renk veren adımda (boyahane) değil.";
+      } else {
+        mode = "continue";
+        reEntryStep = colorStep;
+      }
+    } else if (
+      laneRolls.every((r) => r.status === RollStatus.IN_PRODUCTION || r.status === RollStatus.STOCK)
+    ) {
+      // Boyandı/döndü — yeniden boyama. Boyahane sonrasında bekliyor olmalı.
+      if (rollStep.stepSequence <= colorStep.stepSequence) {
+        canSplit = false;
+        blockReason = "Parti henüz boyahane adımında/öncesinde — yeniden boyama gerekmez.";
+      } else {
+        mode = "redye";
+        reEntryStep = colorStep;
+      }
+    } else {
+      canSplit = false;
+      blockReason =
+        "Parti durumu ayırmaya uygun değil — depodaki/sevkli/Tambur sonrası bitmiş top yeniden boyanamaz.";
+    }
+
+    return { sourceWo, dispatch, colorStep, rollStep, laneRolls, mode, reEntryStep, canSplit, blockReason };
+  }
+
+  /**
+   * Partiyi ayırma ÖNİZLEMESİ — hiçbir şeyi değiştirmez. Frontend taşınacak
+   * topları (barkod/metraj/durum) somut listeler, yeni renk + sipariş modu seçer.
+   */
+  async getSplitPreview(
+    workOrderId: string,
+    batchSplitId: string,
+  ): Promise<ApiResponse<unknown>> {
+    const ctx = await this.loadSplitContext(workOrderId, batchSplitId);
+    return {
+      success: true,
+      data: {
+        canSplit: ctx.canSplit,
+        blockReason: ctx.blockReason,
+        // 'continue' = boyanmadan kaldığı yerden; 'redye' = boyahaneye geri sar.
+        mode: ctx.mode,
+        dispatchNo: ctx.dispatch.dispatchNo,
+        currentStep: ctx.rollStep
+          ? {
+              id: ctx.rollStep.id,
+              stepSequence: ctx.rollStep.stepSequence,
+              stationName: ctx.rollStep.station.name,
+            }
+          : null,
+        reEntryStep: ctx.reEntryStep
+          ? {
+              id: ctx.reEntryStep.id,
+              stepSequence: ctx.reEntryStep.stepSequence,
+              stationName: ctx.reEntryStep.station.name,
+            }
+          : null,
+        sourceColor: ctx.sourceWo.targetColor ?? null,
+        targetItem: ctx.sourceWo.targetItem ?? null,
+        hasOrderLinks: ctx.sourceWo.orderLinks.length > 0,
+        rolls: ctx.laneRolls.map((r) => ({
+          id: r.id,
+          barcode: r.barcode,
+          currentQty: Number(r.currentQty),
+          status: r.status,
+          itemName: r.item?.name ?? null,
+          colorName: r.color?.name ?? null,
+        })),
+        rollCount: ctx.laneRolls.length,
+        totalQty: ctx.laneRolls.reduce((s, r) => s + Number(r.currentQty), 0),
+      },
+    };
+  }
+
+  /**
+   * Partiyi (batchSplitId lane'i) YENİ bir iş emrine ayırır. Yeni WO kaynağın
+   * BİREBİR rotasını + iş emri özelliklerini taşır, sadece HEDEF RENK değişir.
+   * Partinin canlı topları (+ açık sevki, movement/operation izleri) yeni WO'nun
+   * AYNI sıradaki adımlarına repoint edilir → "kaldığı yerden devam". Geçmiş
+   * (kapalı sevk/kabul) kaynak WO'da kalır.
+   *
+   * Faz B1: boyanmadan ayırma — yeni renk parti yeni WO'ya kabul edilince uygulanır.
+   */
+  async splitBranch(
+    workOrderId: string,
+    data: {
+      batchSplitId: string;
+      newColorId: string;
+      newBatchNumber?: string | null;
+      /** 'stock' = stok üretimine dönsün (sipariş bağı kopar); 'keep' = aynı siparişe bağlı kalsın. */
+      orderMode: "stock" | "keep";
+    },
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const ctx = await this.loadSplitContext(workOrderId, data.batchSplitId);
+    if (!ctx.canSplit) {
+      throw AppError.badRequest(ctx.blockReason ?? "Bu parti ayrılamaz");
+    }
+
+    const color = await prisma.color.findUnique({
+      where: { id: data.newColorId },
+      select: { id: true, isActive: true },
+    });
+    if (!color || !color.isActive) {
+      throw AppError.badRequest("Yeni renk bulunamadı veya pasif");
+    }
+
+    // batchNumber: verildiyse benzersiz doğrula; yoksa otomatik üret.
+    let batchNumber: string;
+    if (data.newBatchNumber && data.newBatchNumber.trim().length > 0) {
+      batchNumber = data.newBatchNumber.trim();
+      await this.assertBatchNumberUnique(batchNumber);
+    } else {
+      batchNumber = await this.generateBatchNumber();
+    }
+
+    const planDates = await resolvePlanDates(null, null);
+    const { sourceWo } = ctx;
+    const reEntryStep = ctx.reEntryStep!;
+    const rollStep = ctx.rollStep!;
+    const isRedye = ctx.mode === "redye";
+    const S = reEntryStep.stepSequence;
+    const newType = data.orderMode === "keep" ? sourceWo.type : "STOCK_PRODUCTION";
+    const movedTotalQty = ctx.laneRolls.reduce((s, r) => s + Number(r.currentQty), 0);
+
+    const result = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
+      // Tx içinde partiyi yeniden kilitle/doğrula — durum değişmiş olabilir.
+      const fresh = await tx.roll.findMany({
+        where: {
+          batchSplitId: data.batchSplitId,
+          status: {
+            notIn: [
+              RollStatus.SUBCONTRACTOR_CONSUMED,
+              RollStatus.TAMBUR_CONSUMED,
+              RollStatus.CANCELLED,
+            ],
+          },
+        },
+        select: { id: true, status: true, currentQty: true, weightKg: true },
+      });
+      if (fresh.length === 0) {
+        throw AppError.conflict("Parti durumu değişti — taşınacak aktif top kalmadı");
+      }
+      const statusOk = isRedye
+        ? fresh.every((r) => r.status === RollStatus.IN_PRODUCTION || r.status === RollStatus.STOCK)
+        : fresh.every((r) => r.status === RollStatus.AT_SUBCONTRACTOR);
+      if (!statusOk) {
+        throw AppError.conflict("Parti durumu değişti — ayırma iptal edildi, sayfayı yenileyin");
+      }
+      const laneRollIds = fresh.map((r) => r.id);
+
+      // ── Yeni WO: kaynağın birebir rotası + özellikleri, YENİ renk ──
+      const newWo = await tx.workOrder.create({
+        data: {
+          batchNumber,
+          type: newType,
+          width: sourceWo.width,
+          targetQuantity: movedTotalQty,
+          parameters: (sourceWo.parameters as Prisma.InputJsonValue) ?? undefined,
+          status: WorkOrderStatus.IN_PROGRESS,
+          plannedStartDate: planDates.plannedStartDate,
+          plannedEndDate: planDates.plannedEndDate,
+          routeTemplateId: sourceWo.routeTemplateId,
+          targetItemId: sourceWo.targetItemId,
+          targetColorId: data.newColorId,
+          foldType: sourceWo.foldType,
+          dyehouseNote: sourceWo.dyehouseNote,
+          // Soy bağı: eski refakat kartı okutulunca kabul bu WO'yu da bulur;
+          // kaynak WO'nun Dallar panelinde "ayrıldı →" izi buradan okunur.
+          splitFromId: sourceWo.id,
+          steps: {
+            create: sourceWo.steps.map((s) => ({
+              stationId: s.stationId,
+              stepSequence: s.stepSequence,
+              notes: s.notes,
+              stepData: (s.stepData as Prisma.InputJsonValue) ?? undefined,
+              requiredCategoryId: s.requiredCategoryId ?? null,
+              plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+              // "Kaldığı yerden devam": S öncesi adımlar tamamlandı sayılır,
+              // S aktif (parti orada), sonrası bekliyor.
+              status:
+                s.stepSequence < S
+                  ? StepStatus.COMPLETED
+                  : s.stepSequence === S
+                    ? StepStatus.ACTIVE
+                    : StepStatus.PENDING,
+              startedAt: s.stepSequence === S ? planDates.plannedStartDate : null,
+              completedAt: s.stepSequence < S ? new Date() : null,
+            })),
+          },
+          ...(sourceWo.targetProperties.length > 0
+            ? {
+                targetProperties: {
+                  create: sourceWo.targetProperties.map((p) => ({ propertyId: p.propertyId })),
+                },
+              }
+            : {}),
+          ...(data.orderMode === "keep" && sourceWo.orderLinks.length > 0
+            ? {
+                orderLinks: {
+                  create: sourceWo.orderLinks.map((l) => ({
+                    orderLineId: l.orderLineId,
+                    allocatedQty: l.allocatedQty,
+                  })),
+                },
+              }
+            : {}),
+        },
+        include: { steps: { orderBy: { stepSequence: "asc" }, select: { id: true, stepSequence: true } } },
+      });
+
+      // Eski adım → yeni adım (aynı stepSequence) eşlemesi
+      const newStepBySeq = new Map(newWo.steps.map((s) => [s.stepSequence, s.id] as const));
+      const oldToNew = new Map<string, string>();
+      for (const s of sourceWo.steps) {
+        const nid = newStepBySeq.get(s.stepSequence);
+        if (nid) oldToNew.set(s.id, nid);
+      }
+      const newReEntryStepId = newStepBySeq.get(S)!;
+
+      // Partinin TÜM ayak izini (top konumu + movement + operation) yeni WO'nun
+      // aynı sıradaki adımlarına repoint et. recomputeStepStatus WO üyeliğini
+      // movement üzerinden okuduğundan movement repoint ŞART.
+      for (const [oldId, newId] of oldToNew) {
+        await tx.roll.updateMany({
+          where: { id: { in: laneRollIds }, currentStepId: oldId },
+          data: { currentStepId: newId },
+        });
+        await tx.roll.updateMany({
+          where: { id: { in: laneRollIds }, producedInStepId: oldId },
+          data: { producedInStepId: newId },
+        });
+        await tx.rollMovement.updateMany({
+          where: { rollId: { in: laneRollIds }, workOrderStepId: oldId },
+          data: { workOrderStepId: newId },
+        });
+        await tx.rollOperation.updateMany({
+          where: { rollId: { in: laneRollIds }, workOrderStepId: oldId },
+          data: { workOrderStepId: newId },
+        });
+      }
+
+      if (isRedye) {
+        // YENİDEN BOYAMA: partiyi boyahane adımına GERİ SAR. Açık movement'leri
+        // kapat (parti mevcut adımdan fiilen çekiliyor), boyahane adımında taze
+        // açık movement aç (sonraki re-dispatch bunu yeniden kullanır), topları
+        // IN_PRODUCTION @ boyahane yap ve eski lane'den kopar (batchSplitId=null
+        // → yeniden sevkte yeni lane alır).
+        await tx.rollMovement.updateMany({
+          where: { rollId: { in: laneRollIds }, exitedAt: null },
+          data: { exitedAt: new Date(), notes: "REDYE_REWIND" },
+        });
+        for (const r of fresh) {
+          await tx.rollMovement.create({
+            data: {
+              rollId: r.id,
+              workOrderStepId: newReEntryStepId,
+              qtyIn: r.currentQty,
+              weightIn: r.weightKg ?? null,
+              operatorId: userId ?? null,
+              notes: "REDYE_REWIND_IN",
+            },
+          });
+        }
+        await tx.roll.updateMany({
+          where: { id: { in: laneRollIds } },
+          data: {
+            currentStepId: newReEntryStepId,
+            producedInStepId: newReEntryStepId,
+            status: RollStatus.IN_PRODUCTION,
+            batchSplitId: null,
+          },
+        });
+      } else {
+        // BOYANMADAN: açık sevki yeni WO'ya taşı (kabul yeni WO'da düşer;
+        // sourceDispatchItem bağı korunur). Toplar AT_SUBCONTRACTOR + lane korunur.
+        await tx.subcontractorDispatch.update({
+          where: { id: data.batchSplitId },
+          data: { workOrderId: newWo.id, stepId: newReEntryStepId },
+        });
+      }
+
+      // Yeni WO için yeni refakat kartı — parti ayrı WO'da hareket eder,
+      // operatör basıp ayrılan demete takar.
+      await travelerCardService.createForWorkOrder(tx, newWo.id, userId);
+
+      // Kaynak WO'nun, partinin ÇIKTIĞI adımını yeniden hesapla (başka parti
+      // hâlâ orada olabilir → ACTIVE kalır, yoksa PENDING/COMPLETED).
+      await recomputeStepStatus(tx, rollStep.id);
+
+      return { newWorkOrderId: newWo.id, batchNumber: newWo.batchNumber, movedRollCount: laneRollIds.length };
+    }));
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "WORK_ORDER",
+      recordId: sourceWo.id,
+      newData: {
+        action: "SPLIT_SOURCE",
+        mode: ctx.mode,
+        batchSplitId: data.batchSplitId,
+        newWorkOrderId: result.newWorkOrderId,
+        movedRollCount: result.movedRollCount,
+        newColorId: data.newColorId,
+      },
+    });
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "WORK_ORDER",
+      recordId: result.newWorkOrderId,
+      newData: {
+        action: "SPLIT_TARGET",
+        mode: ctx.mode,
+        sourceWorkOrderId: sourceWo.id,
+        batchNumber: result.batchNumber,
+        movedRollCount: result.movedRollCount,
+        targetColorId: data.newColorId,
+        orderMode: data.orderMode,
+      },
+    });
+
+    return {
+      success: true,
+      data: result,
+      message:
+        ctx.mode === "redye"
+          ? `Parti yeni iş emrine ayrıldı: ${result.batchNumber} (${result.movedRollCount} top). Boyahaneye geri sarıldı; yeniden boyamada yeni renk uygulanacak.`
+          : `Parti yeni iş emrine ayrıldı: ${result.batchNumber} (${result.movedRollCount} top). Yeni renk kabulde uygulanacak.`,
+    };
   }
 
   /**

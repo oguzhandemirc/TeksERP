@@ -20,7 +20,6 @@ export default function HizliIsEmriScreen() {
   return (
     <ScreenChrome
       title="Hızlı İş Emri"
-      subtitle={view === 'new' ? 'Yeni iş emri' : undefined}
       onStepBack={view === 'new' ? () => setView('list') : undefined}
     >
       <View style={styles.root}>

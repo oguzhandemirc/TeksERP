@@ -57,4 +57,16 @@ export function useShipmentConfirmationEnabled(): boolean {
   return q.data?.data?.shipmentConfirmationEnabled ?? false;
 }
 
+/** Oturum (JWT) ömrü, saat. Yüklenene kadar 8 (backend varsayılanı). */
+export function useSessionDurationHours(): number {
+  const q = useFeatureFlags();
+  return q.data?.data?.sessionDurationHours ?? 8;
+}
+
+/** Hareketsizlik zaman aşımı, dakika. Yüklenene kadar 0 (kapalı). */
+export function useIdleTimeoutMinutes(): number {
+  const q = useFeatureFlags();
+  return q.data?.data?.idleTimeoutMinutes ?? 0;
+}
+
 export const FEATURE_FLAGS_QUERY_KEY = QUERY_KEY;

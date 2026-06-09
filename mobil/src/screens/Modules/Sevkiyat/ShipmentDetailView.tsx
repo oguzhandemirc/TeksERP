@@ -11,7 +11,7 @@ import {
   type ShipmentStatus,
 } from '../../../services/packing.service';
 import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
-import { buildDispatchNoteHtml } from './dispatchNoteHtml';
+import { resolveDispatchNoteHtml } from './dispatchNoteHtml';
 
 const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-TR');
 
@@ -41,12 +41,9 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
   const printNote = async (): Promise<void> => {
     try {
       setPrinting(true);
+      const html = await resolveDispatchNoteHtml({ shipmentId, detail: d, flags });
       await Print.printAsync({
-        html: buildDispatchNoteHtml(d, {
-          documentsConfig: flags?.documentsConfig,
-          companyName: flags?.companyName,
-          letterhead: flags?.companyLetterhead,
-        }),
+        html,
         margins: { left: 0, top: 0, right: 0, bottom: 0 },
       });
     } catch (e) {

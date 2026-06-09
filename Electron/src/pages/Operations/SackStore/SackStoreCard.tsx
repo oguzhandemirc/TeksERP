@@ -1,4 +1,4 @@
-import { DoorOpen, Undo2, Truck, Package, Scale, Layers, ChevronRight } from "lucide-react";
+import { DoorOpen, Undo2, PackageOpen, Truck, Package, Scale, Layers, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/operations/StatusBadge";
@@ -20,6 +20,7 @@ interface Props {
   onOpen: (s: SackStoreShipment) => void;
   onMoveToDoor: (s: SackStoreShipment) => void;
   onPullBack: (s: SackStoreShipment) => void;
+  onUnready: (s: SackStoreShipment) => void;
   onDispatch: (s: SackStoreShipment) => void;
 }
 
@@ -29,6 +30,7 @@ export function SackStoreCard({
   onOpen,
   onMoveToDoor,
   onPullBack,
+  onUnready,
   onDispatch,
 }: Props) {
   const isReady = shipment.status === "READY";
@@ -77,6 +79,7 @@ export function SackStoreCard({
             busy={busy}
             onMoveToDoor={onMoveToDoor}
             onPullBack={onPullBack}
+            onUnready={onUnready}
             onDispatch={onDispatch}
           />
         </div>
@@ -103,6 +106,7 @@ function SackStoreActions({
   busy,
   onMoveToDoor,
   onPullBack,
+  onUnready,
   onDispatch,
 }: Omit<Props, "onOpen">) {
   const isReady = shipment.status === "READY";
@@ -115,16 +119,28 @@ function SackStoreActions({
     <PermissionGate permission="shipping:write">
       <div className="flex shrink-0 flex-wrap items-center gap-1.5">
         {isReady ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            disabled={busy}
-            onClick={stop(() => onMoveToDoor(shipment))}
-          >
-            <DoorOpen className="h-3.5 w-3.5" /> Kapı Önüne Koy
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              disabled={busy}
+              onClick={stop(() => onUnready(shipment))}
+            >
+              <PackageOpen className="h-3.5 w-3.5" /> Hazırlığa Geri Al
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              disabled={busy}
+              onClick={stop(() => onMoveToDoor(shipment))}
+            >
+              <DoorOpen className="h-3.5 w-3.5" /> Kapı Önüne Koy
+            </Button>
+          </>
         ) : (
           <Button
             type="button"

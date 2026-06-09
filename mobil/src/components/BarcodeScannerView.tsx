@@ -53,6 +53,14 @@ interface Props {
   /** Canlı karşılama sayacı (metre): okutulan / istenen. Fazla okutulursa gerçek
    *  rakam gösterilir — kısıtlama/üst sınır yok. */
   counter?: { scanned: number; expected: number };
+  /**
+   * Yakalama anında "başarı" haptiği verilsin mi (default true). Tek-okuma akışları
+   * (KK1/Tambur/Fason) için doğru: tek geri bildirim budur. Ama çağıran kendi
+   * kabul/ret titreşimini veriyorsa (örn. Hızlı İş Emri: okunan top STOCK mu, aynı
+   * ürün mü diye doğrular) `false` geç → yakalamada "başarı" + sonra "uyarı" çift
+   * titreşimi olmasın. Çağıran isterse yakalama anında kendi hafif tık'ını verir.
+   */
+  captureHaptic?: boolean;
 }
 
 // Sürekli modda iki okuma arası yeniden silahlanma gecikmesi (ms).
@@ -83,6 +91,7 @@ export function BarcodeScannerView({
   continuous = false,
   notice,
   counter,
+  captureHaptic = true,
 }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
@@ -99,6 +108,11 @@ export function BarcodeScannerView({
   useEffect(() => {
     continuousRef.current = continuous;
   }, [continuous]);
+  // Aynı şekilde captureHaptic'i stable callback içinden oku.
+  const captureHapticRef = useRef(captureHaptic);
+  useEffect(() => {
+    captureHapticRef.current = captureHaptic;
+  }, [captureHaptic]);
   // Sürekli modda aynı barkodu üst üste işlememek için son okunan kod.
   const lastScanRef = useRef<string | null>(null);
 
@@ -117,7 +131,9 @@ export function BarcodeScannerView({
     scannedRef.current = true;
     lastScanRef.current = data;
     setBusy(true);
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (captureHapticRef.current) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
     setTimeout(() => onScanRef.current(data), 180);
     // Sürekli modda kısa gecikmeyle yeniden silahlan (modal açık kalır).
     if (continuousRef.current) {

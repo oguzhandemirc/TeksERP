@@ -117,7 +117,8 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       targetColorId: wo.targetColorId ?? null,
       width: wo.width != null ? String(wo.width) : '',
       targetQuantity: wo.targetQuantity != null ? String(wo.targetQuantity) : '',
-      targetWeight: '',
+      // Önceden sabit '' idi → düzenle/kaydet'te Hedef Kg sessizce siliniyordu. Mevcut değeri yükle.
+      targetWeight: wo.targetWeight != null ? String(wo.targetWeight) : '',
       foldType: wo.foldType ?? null,
       batchNumber: wo.batchNumber,
       dyehouseNote: wo.dyehouseNote ?? '',
@@ -147,6 +148,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       ['Kat Tipi', wo.foldType ?? '—'],
       ['Tip', trLabel(WORK_ORDER_TYPE_LABEL, wo.type)],
       ['Hedef Metraj', wo.targetQuantity != null ? `${Math.round(wo.targetQuantity)} m` : '—'],
+      ['Hedef Kg', wo.targetWeight != null ? `${Math.round(wo.targetWeight)} kg` : '—'],
       ['Oluşturma', wo.createdAt ? dayjs(wo.createdAt).format('DD.MM.YYYY HH:mm') : '—'],
     ];
   }, [wo, rolls]);

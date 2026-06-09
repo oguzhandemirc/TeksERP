@@ -1,4 +1,4 @@
-import { NoteSheet } from "@/pages/Operations/Shipments/ShipmentDispatchNote";
+import { ShipmentFrozenSheet } from "@/pages/Operations/Shipments/ShipmentFrozenSheet";
 import { PrintableSheet } from "@/pages/Operations/WorkOrders/FasonSevkPrintDialog";
 import { PrintableCeki } from "@/pages/Operations/Kartela/KartelaCekiPrintDialog";
 import type { DocSheetPreview } from "@/components/print/print-helpers";
@@ -18,11 +18,11 @@ export function DocumentPreview({
 }) {
   const sheet =
     docKey === "shipmentDispatch" ? (
-      <NoteSheet d={MOCK_SHIPMENT} preview={preview} />
+      <ShipmentFrozenSheet doc={MOCK_SHIPMENT} preview={preview} />
     ) : docKey === "fasonSevk" ? (
       <PrintableSheet snap={MOCK_FASON} preview={preview} />
     ) : docKey === "kartelaCeki" ? (
-      <PrintableCeki d={MOCK_KARTELA} preview={preview} />
+      <PrintableCeki doc={MOCK_KARTELA} preview={preview} />
     ) : null;
 
   return (

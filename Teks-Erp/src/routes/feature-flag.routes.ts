@@ -33,6 +33,10 @@ const updateSchema = z.object({
   shipmentConfirmationEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).
   tamburOverQuantityEnabled: z.boolean().optional(),
+  // auth.sessionDurationHours — oturum (JWT) ömrü, saat (1–720). Backend ENFORCE (login).
+  sessionDurationHours: z.number().int().min(1).max(720).optional(),
+  // auth.idleTimeoutMinutes — hareketsizlik zaman aşımı, dakika (0=kapalı, 0–1440). Frontend ENFORCE.
+  idleTimeoutMinutes: z.number().int().min(0).max(1440).optional(),
   // Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri).
   travelerCardConfig: z
     .object({

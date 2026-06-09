@@ -1,9 +1,14 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { safeFormat } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
-import type { ReturnRow } from "./service";
+import type { ReturnAppliedStatus, ReturnRow } from "./service";
 
 const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const SHELF_LABEL: Record<ReturnAppliedStatus, string> = {
+  WAREHOUSE: "Hazır Depo",
+  A1_STOCK: "2. Kalite Stok",
+  SCRAP: "Hurda",
+};
 
 export const returnColumns: ColumnDef<ReturnRow>[] = [
   {
@@ -91,7 +96,20 @@ export const returnColumns: ColumnDef<ReturnRow>[] = [
   {
     id: "quality",
     header: "Kalite",
-    cell: ({ row }) => row.original.qualityGrade?.name ?? "—",
+    cell: ({ row }) => {
+      const applied = row.original.appliedStatus;
+      const shelf = applied && applied !== "WAREHOUSE" ? SHELF_LABEL[applied] : null;
+      return (
+        <div className="flex flex-col gap-0.5">
+          <span>{row.original.qualityGrade?.name ?? "—"}</span>
+          {shelf && (
+            <Badge variant="outline" className="w-fit px-1 py-0 text-[10px] leading-tight">
+              {shelf}
+            </Badge>
+          )}
+        </div>
+      );
+    },
   },
   {
     id: "receivedBy",

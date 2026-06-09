@@ -65,15 +65,21 @@ export function LinkedOrderLinesField({
           <span className="text-muted-foreground">
             Stoğa üretim. İstersen sipariş kalemi bağla — toplar o siparişe yazılır.
           </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="ml-auto h-7 shrink-0 gap-1 text-xs"
-            onClick={() => setPickerOpen(true)}
+          <motion.div
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.96 }}
+            transition={springSnappy}
+            className="ml-auto shrink-0"
           >
-            <Link2 className="h-3 w-3" /> Sipariş Bağla
-          </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 gap-1 bg-gradient-to-b from-primary to-primary/80 text-xs text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-inset ring-white/10 hover:from-primary hover:to-primary hover:shadow-md hover:shadow-primary/40"
+              onClick={() => setPickerOpen(true)}
+            >
+              <Link2 className="h-3 w-3" /> Sipariş Bağla
+            </Button>
+          </motion.div>
         </div>
         <OrderPickerDialog
           open={pickerOpen}
@@ -96,23 +102,24 @@ export function LinkedOrderLinesField({
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Bağlı Sipariş Kalemleri
           </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1 text-xs"
-            onClick={() => setPickerOpen(true)}
-          >
-            {lines.length > 0 ? (
-              <>
-                <Pencil className="h-3 w-3" /> Düzenle
-              </>
-            ) : (
-              <>
-                <Link2 className="h-3 w-3" /> Seç
-              </>
-            )}
-          </Button>
+          <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.96 }} transition={springSnappy}>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 gap-1 bg-gradient-to-b from-primary to-primary/80 text-xs text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-inset ring-white/10 hover:from-primary hover:to-primary hover:shadow-md hover:shadow-primary/40"
+              onClick={() => setPickerOpen(true)}
+            >
+              {lines.length > 0 ? (
+                <>
+                  <Pencil className="h-3 w-3" /> Düzenle
+                </>
+              ) : (
+                <>
+                  <Link2 className="h-3 w-3" /> Seç
+                </>
+              )}
+            </Button>
+          </motion.div>
         </div>
         {lines.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 text-xs">

@@ -40,6 +40,7 @@ export function useEntityPickerData<T extends { id: string }>({
         sortOrder: "asc",
         filters: { isActive: "true", ...filters },
         ...(q ? { search: q } : {}),
+        ...(pageParam === null ? { withTotal: true } : {}),
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.pagination.nextCursor ?? undefined,
@@ -48,9 +49,11 @@ export function useEntityPickerData<T extends { id: string }>({
   });
 
   const items = (listQ.data?.pages ?? []).flatMap((p) => p.data);
+  const total = listQ.data?.pages[0]?.pagination.totalEstimate;
 
   return {
     items,
+    total,
     isLoading: listQ.isLoading,
     hasMore: Boolean(listQ.hasNextPage),
     fetchNext: () => listQ.fetchNextPage(),

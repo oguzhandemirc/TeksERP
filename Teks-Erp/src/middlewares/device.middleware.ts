@@ -20,6 +20,7 @@
 import { Request, Response, NextFunction } from "express";
 import { DeviceService } from "../services/device.service";
 import { readDevicePairingRequired } from "../services/system-setting.service";
+import { touchDevice } from "../lib/presence";
 import "../types/express-augment";
 
 const EXEMPT_PATHS = new Set([
@@ -79,6 +80,7 @@ export const resolveDevice = async (
       name: device.name,
       machineId: device.machineId,
     };
+    touchDevice(device.deviceId); // anlık "bağlı cihaz" izleme (bellekte)
   } catch {
     // DB resolve hatası endpoint'i bloklamamalı — log altyapısı yoksa sessiz geç.
   }

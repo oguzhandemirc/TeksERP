@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { flexRender, type Header, type Table as TanstackTable } from "@tanstack/react-table";
+import { toast } from "sonner";
 import {
   DndContext,
   closestCenter,
@@ -15,13 +16,16 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Download, GripVertical, Inbox } from "lucide-react";
+import { Copy, Download, GripVertical, Inbox, Info, X } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { copyText, getSelectedText } from "@/lib/clipboard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -31,6 +35,11 @@ import { cn } from "@/lib/utils";
 import { DataTablePagination } from "./DataTablePagination";
 import type { DataTablePagination as Pagination } from "@/hooks/useDataTable";
 
+// Satır açılışı bu kadar geciktirilir; bu süre içinde 2. tık gelirse (çift-tık)
+// açılış iptal edilir. Çift-tıkla kelime seçerken satır detayı açılmasın diye.
+// Daha düşük = daha çevik tek-tık ama çok hızlı çift-tıkları kaçırma riski artar.
+const ROW_OPEN_DELAY_MS = 160;
+
 interface Props<T> {
   table: TanstackTable<T>;
   isLoading?: boolean;
@@ -39,6 +48,11 @@ interface Props<T> {
   onRowClick?: (row: T) => void;
   /** Seçim çubuğuna sayfa-özel toplu aksiyon enjekte eder (seçili satırları alır). */
   bulkActions?: (rows: T[]) => ReactNode;
+  /**
+   * Hiç satır seçili değilken seçim çubuğunda gösterilen ipucu. Çubuk artık
+   * kalıcı: 0 seçimde de görünür ve kullanıcıyı seçime yönlendirir.
+   */
+  selectionHint?: ReactNode;
   /**
    * Satıra sağ-tık menüsü. Dönen düğümler `ContextMenuContent` içine yerleşir
    * (örn. `ContextMenuItem` / `RowOpenItems`). `null` dönerse o satır menüsüz kalır.
@@ -53,6 +67,7 @@ export function DataTable<T>({
   emptyText = "Kayıt yok.",
   onRowClick,
   bulkActions,
+  selectionHint = "Toplu işlem için satırları seçin.",
   rowContextMenu,
 }: Props<T>) {
   const rows = table.getRowModel().rows;
@@ -60,6 +75,14 @@ export function DataTable<T>({
   const selected = table.getSelectedRowModel().rows;
   // 8px eşik: küçük hareketler sürükleme değil → başlık sıralama tıklaması bozulmaz.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  // Sağ-tık anındaki metin seçimi — satır menüsüne "Seçimi Kopyala" eklemek için.
+  const selRef = useRef("");
+  // Tek-tık aç / çift-tık seç ayrımı: açılışı kısa süre geciktir, 2. tık
+  // gelirse iptal et → kelimeye çift-tıklayıp seçince satır detayı açılmaz.
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (openTimer.current) clearTimeout(openTimer.current);
+  }, []);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -140,7 +163,25 @@ export function DataTable<T>({
                           data-state={row.getIsSelected() ? "selected" : undefined}
                           className={cn("row-enter", onRowClick && "cursor-pointer")}
                           style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
-                          onClick={() => onRowClick?.(row.original)}
+                          onClick={(e) => {
+                            if (!onRowClick) return;
+                            // Bekleyen açılışı HER tıkta iptal et — çift-tıkın 2. tıkı
+                            // (aşağıdaki guard'lardan erken çıksa bile) 1. tıkın
+                            // zamanlayıcısını öldürsün.
+                            if (openTimer.current) {
+                              clearTimeout(openTimer.current);
+                              openTimer.current = null;
+                            }
+                            // Sürükleyerek/çift-tıkla metin seçildiyse satırı açma.
+                            if (window.getSelection()?.toString()) return;
+                            // 2./3. tık (çift-tık) → boş hücrede bile açma.
+                            if (e.detail > 1) return;
+                            const data = row.original;
+                            openTimer.current = setTimeout(() => {
+                              openTimer.current = null;
+                              onRowClick(data);
+                            }, ROW_OPEN_DELAY_MS);
+                          }}
                         >
                           {selectable && (
                             <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
@@ -163,8 +204,19 @@ export function DataTable<T>({
                       if (!menu) return rowEl;
                       return (
                         <ContextMenu key={row.id}>
-                          <ContextMenuTrigger asChild>{rowEl}</ContextMenuTrigger>
-                          <ContextMenuContent>{menu}</ContextMenuContent>
+                          <ContextMenuTrigger
+                            asChild
+                            onContextMenu={(e) => {
+                              // Sağ-tık anındaki seçimi yakala (menü açılmadan önce).
+                              selRef.current = getSelectedText(e.target);
+                            }}
+                          >
+                            {rowEl}
+                          </ContextMenuTrigger>
+                          <ContextMenuContent>
+                            <SelectionCopyItem getText={() => selRef.current} />
+                            {menu}
+                          </ContextMenuContent>
                         </ContextMenu>
                       );
                     })}
@@ -173,24 +225,48 @@ export function DataTable<T>({
         </DndContext>
       </div>
 
-      {selected.length > 0 && (
-        <div className="flex items-center gap-3 border-t bg-primary/5 px-3 py-2 text-sm">
-          <span className="font-medium">{selected.length} seçili</span>
-          {bulkActions?.(selected.map((r) => r.original))}
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5"
-              onClick={() => exportTableToCsv(table, "secili-kayitlar", selected)}
-            >
-              <Download className="h-3.5 w-3.5" />
-              CSV indir
-            </Button>
-            <Button variant="ghost" size="sm" className="h-8" onClick={() => table.resetRowSelection()}>
-              Seçimi temizle
-            </Button>
-          </div>
+      {/* Seçim çubuğu kalıcı: satır varsa (ve seçim açıksa) hep görünür. 0
+          seçimde ipucu + pasif aksiyon; seçim varken temizle (sola, belirgin)
+          + aksiyon + CSV. */}
+      {selectable && (rows.length > 0 || selected.length > 0) && (
+        <div
+          className={cn(
+            "flex items-center gap-3 border-t px-3 py-2 text-sm",
+            selected.length > 0 ? "bg-primary/5" : "bg-muted/40",
+          )}
+        >
+          {selected.length > 0 ? (
+            <>
+              <span className="font-medium">{selected.length} seçili</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={() => table.resetRowSelection()}
+              >
+                <X className="h-3.5 w-3.5" />
+                Seçimi temizle
+              </Button>
+              {bulkActions?.(selected.map((r) => r.original))}
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto h-8 gap-1.5"
+                onClick={() => exportTableToCsv(table, "secili-kayitlar", selected)}
+              >
+                <Download className="h-3.5 w-3.5" />
+                CSV indir
+              </Button>
+            </>
+          ) : (
+            <>
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                {selectionHint}
+              </span>
+              {bulkActions ? <div className="ml-auto">{bulkActions([])}</div> : null}
+            </>
+          )}
         </div>
       )}
 
@@ -226,5 +302,25 @@ function SortableHead<T>({ header }: { header: Header<T, unknown> }) {
       )}
       {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
     </TableHead>
+  );
+}
+
+/** Satır sağ-tık menüsünün başına "Seçimi Kopyala" — yalnız bir metin seçiliyse.
+ *  `getText` menü açılırken yakalanan seçimi okur (selRef). */
+function SelectionCopyItem({ getText }: { getText: () => string }) {
+  const text = getText();
+  if (!text.trim()) return null;
+  return (
+    <>
+      <ContextMenuItem
+        onSelect={() => {
+          void copyText(text);
+          toast.success("Kopyalandı");
+        }}
+      >
+        <Copy /> Seçimi Kopyala
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+    </>
   );
 }

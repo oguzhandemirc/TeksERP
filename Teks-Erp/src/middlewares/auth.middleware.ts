@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthService } from "../services/auth.service";
 import { AppError } from "../utils/app-error";
+import { touchUser } from "../lib/presence";
 
 /**
  * Middleware: Verify JWT token from Authorization header.
@@ -29,6 +30,7 @@ export const verifyToken = (
 
   try {
     req.user = AuthService.verifyToken(token);
+    touchUser(req.user.userId); // anlık "online" izleme (bellekte, maliyetsiz)
     next();
   } catch (error) {
     next(error);

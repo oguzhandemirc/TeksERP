@@ -1,10 +1,19 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Split } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PermissionGate } from "@/components/PermissionGate";
+import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { safeFormat, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { workOrderService, type WorkOrderBranch } from "./service";
+import {
+  workOrderService,
+  type WorkOrderBranch,
+  type WorkOrderSplitChild,
+} from "./service";
+import { SplitBranchModal } from "./SplitBranchModal";
 
 const STATUS_META: Record<
   WorkOrderBranch["status"],
@@ -31,10 +40,16 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
     staleTime: 60_000,
   });
 
+  const [splitTarget, setSplitTarget] = useState<{ dispatchId: string; dispatchNo: string } | null>(
+    null,
+  );
+
   const branches = q.data?.data?.branches ?? [];
+  const splitFrom = q.data?.data?.splitFrom ?? null;
+  const splitChildren = q.data?.data?.splitChildren ?? [];
 
   if (q.isLoading) return <Skeleton className="h-24 w-full" />;
-  if (branches.length === 0) {
+  if (branches.length === 0 && splitChildren.length === 0 && !splitFrom) {
     return (
       <div className="rounded-md border border-dashed p-4 text-center text-xs italic text-muted-foreground">
         Bu iş emrinde henüz fason sevki (dal) yok.
@@ -44,14 +59,81 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
 
   return (
     <div className="space-y-2">
+      {splitFrom && <SplitFromNote splitFrom={splitFrom} />}
       {branches.map((b) => (
-        <BranchLaneRow key={b.dispatchId} branch={b} />
+        <BranchLaneRow
+          key={b.dispatchId}
+          branch={b}
+          onSplit={() => setSplitTarget({ dispatchId: b.dispatchId, dispatchNo: b.dispatchNo })}
+        />
       ))}
+      {splitChildren.map((c) => (
+        <SplitChildRow key={c.id} child={c} />
+      ))}
+      <SplitBranchModal
+        open={Boolean(splitTarget)}
+        onOpenChange={(o) => !o && setSplitTarget(null)}
+        workOrderId={workOrderId}
+        dispatchId={splitTarget?.dispatchId ?? ""}
+        dispatchNo={splitTarget?.dispatchNo ?? ""}
+      />
     </div>
   );
 }
 
-function BranchLaneRow({ branch }: { branch: WorkOrderBranch }) {
+/** "Bu iş emri P-XXX'ten ayrıldı" — yeni WO'da kaynağa dönüş izi. */
+function SplitFromNote({ splitFrom }: { splitFrom: { id: string; batchNumber: string } }) {
+  const target = useOpenTarget();
+  return (
+    <button
+      type="button"
+      onClick={(e) => target(`/operations/work-orders/${splitFrom.id}`, e)}
+      className="flex w-full items-center gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60"
+    >
+      <Split className="h-3.5 w-3.5 shrink-0" />
+      <span>
+        Bu iş emri <span className="font-mono font-medium text-foreground">{splitFrom.batchNumber}</span>{" "}
+        iş emrinden ayrılan bir partidir.
+      </span>
+      <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0" />
+    </button>
+  );
+}
+
+/** "Ayrılan parti → P-XXX" — kaynak WO'da, ayrılıp giden partinin izi. Sevk yeni
+ *  WO'ya taşındığı için lane buradan kaybolur; bu satır "nereye gitti?"yi yanıtlar. */
+function SplitChildRow({ child }: { child: WorkOrderSplitChild }) {
+  const target = useOpenTarget();
+  return (
+    <button
+      type="button"
+      onClick={(e) => target(`/operations/work-orders/${child.id}`, e)}
+      className="flex w-full items-center gap-2 rounded-md border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-left text-xs transition-colors hover:bg-primary/10"
+    >
+      <Split className="h-3.5 w-3.5 shrink-0 text-primary" />
+      <span className="text-muted-foreground">
+        Ayrılan parti → <span className="font-mono font-medium text-foreground">{child.batchNumber}</span>
+      </span>
+      {child.targetColor && (
+        <span className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
+          {child.targetColor.hex && (
+            <span
+              className="h-2 w-2 rounded-full border"
+              style={{ backgroundColor: child.targetColor.hex }}
+            />
+          )}
+          {child.targetColor.name}
+        </span>
+      )}
+      <span className="ml-auto flex items-center gap-1 tabular-nums text-muted-foreground">
+        {safeFormat(child.createdAt, "dd.MM.yyyy")}
+        <ArrowUpRight className="h-3.5 w-3.5" />
+      </span>
+    </button>
+  );
+}
+
+function BranchLaneRow({ branch, onSplit }: { branch: WorkOrderBranch; onSplit: () => void }) {
   const meta = STATUS_META[branch.status];
 
   return (
@@ -74,6 +156,21 @@ function BranchLaneRow({ branch }: { branch: WorkOrderBranch }) {
           <span className="ml-auto text-xs tabular-nums text-muted-foreground">
             {safeFormat(branch.dispatchedAt, "dd.MM.yyyy")}
           </span>
+          {/* Ayır: iptal olmayan partiler — boyanmadan (OPEN) devam ya da
+              boyandıysa (PARTIAL/RETURNED) yeniden boyama. Modal uygunluğu doğrular. */}
+          {branch.status !== "CANCELLED" && (
+            <PermissionGate permission="workorder:write">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={onSplit}
+              >
+                <Split className="h-3.5 w-3.5" />
+                Ayır
+              </Button>
+            </PermissionGate>
+          )}
         </div>
 
         {/* Mini-track: Sevk → (Fasonda | şu anki konum) */}

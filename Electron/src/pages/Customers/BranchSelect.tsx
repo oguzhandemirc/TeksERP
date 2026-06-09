@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Warehouse } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { customerBranchService } from "./branchService";
 
@@ -50,7 +51,10 @@ export function BranchSelect({
       disabled={disabled}
     >
       <SelectTrigger>
-        <SelectValue placeholder={placeholder} />
+        <div className="flex items-center gap-2 min-w-0">
+          <Warehouse className="h-4 w-4 shrink-0 text-primary" />
+          <SelectValue placeholder={placeholder} />
+        </div>
       </SelectTrigger>
       <SelectContent>
         {nullable && (

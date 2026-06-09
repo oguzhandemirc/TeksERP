@@ -5,7 +5,61 @@ import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBad
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { orderStatusLabels } from "@/types/enums";
-import type { Order } from "./types";
+import type { Order, OrderLine } from "./types";
+
+/**
+ * Sipariş kalemlerindeki benzersiz ürün/renk etiketleri. Müşteri-bazlı ad
+ * (customerItemName/customerColorName) varsa onu, yoksa master adı kullanır.
+ * Renksiz kalemler renk listesine girmez.
+ */
+function distinctLineLabels(
+  lines: OrderLine[] | undefined,
+  kind: "item" | "color",
+): { key: string; label: string; hex?: string | null }[] {
+  const map = new Map<string, { label: string; hex?: string | null }>();
+  for (const l of lines ?? []) {
+    if (kind === "item") {
+      const label = l.customerItemName?.trim() || l.item?.name;
+      if (label && !map.has(l.itemId)) map.set(l.itemId, { label });
+    } else {
+      if (!l.colorId) continue;
+      const label = l.customerColorName?.trim() || l.color?.name;
+      if (label && !map.has(l.colorId)) map.set(l.colorId, { label, hex: l.color?.hex });
+    }
+  }
+  return [...map.entries()].map(([key, v]) => ({ key, ...v }));
+}
+
+function LineLabelsCell({
+  lines,
+  kind,
+}: {
+  lines: OrderLine[] | undefined;
+  kind: "item" | "color";
+}) {
+  const labels = distinctLineLabels(lines, kind);
+  if (labels.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const shown = labels.slice(0, 2);
+  const rest = labels.length - shown.length;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {shown.map((it) => (
+        <span key={it.key} className="inline-flex items-center gap-1 text-xs">
+          {kind === "color" && (
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full border"
+              style={{ backgroundColor: it.hex ?? "transparent" }}
+            />
+          )}
+          <span className="truncate">{it.label}</span>
+        </span>
+      ))}
+      {rest > 0 && <Badge variant="muted">+{rest}</Badge>}
+    </div>
+  );
+}
 
 export function buildOrderColumns(pricingEnabled: boolean): ColumnDef<Order>[] {
   return [
@@ -54,6 +108,18 @@ export const orderColumns: ColumnDef<Order>[] = [
     meta: { label: "Şube" },
     cell: ({ row }) =>
       row.original.branch?.name ?? <span className="text-muted-foreground">—</span>,
+  },
+  {
+    id: "items",
+    header: "Ürün",
+    meta: { label: "Ürün" },
+    cell: ({ row }) => <LineLabelsCell lines={row.original.lines} kind="item" />,
+  },
+  {
+    id: "colors",
+    header: "Renk",
+    meta: { label: "Renk" },
+    cell: ({ row }) => <LineLabelsCell lines={row.original.lines} kind="color" />,
   },
   {
     accessorKey: "orderDate",

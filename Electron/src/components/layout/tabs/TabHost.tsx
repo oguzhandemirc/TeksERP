@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useTabsStore } from "@/store/tabs";
+import { useTabsStore, type TabItem } from "@/store/tabs";
 import { TabStrip } from "./TabStrip";
 import { TabRouter } from "./TabRouter";
 import { TabActiveProvider } from "./tab-active";
+import { TabPortalProvider } from "./tab-portal";
 
 /**
  * Sekme barındırıcı. Açık tüm sekmeler aynı anda mount kalır; yalnız aktif olan
@@ -32,20 +33,38 @@ export function TabHost() {
       <TabStrip />
       <div className="relative min-h-0 flex-1">
         {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            aria-hidden={tab.id !== activeId}
-            className={cn(
-              "absolute inset-0 overflow-auto",
-              tab.id === activeId ? "z-10" : "invisible pointer-events-none",
-            )}
-          >
-            <TabActiveProvider value={tab.id === activeId}>
-              <TabRouter id={tab.id} path={tab.path} />
-            </TabActiveProvider>
-          </div>
+          <TabPane key={tab.id} tab={tab} active={tab.id === activeId} />
         ))}
         {tabs.length === 0 && <EmptyTabs onOpen={() => openTab("/")} />}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Tek sekme katmanı. Dış kutu (`container`) konumlu ama kaymaz — modal/sheet
+ * portallarının hedefi budur; portallanan overlay `absolute inset-0` ile bu
+ * kutuyu sabit kaplar (iç içerik kaysa bile yerinde kalır). Sayfanın kaydırması
+ * iç katmanda olur. Pasif sekme `invisible` olduğundan içindeki açık modal da
+ * sekmeyle birlikte gizlenir; mount kaldığı için geri dönülünce state korunur.
+ */
+function TabPane({ tab, active }: { tab: TabItem; active: boolean }) {
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  return (
+    <div
+      ref={setContainer}
+      aria-hidden={!active}
+      className={cn(
+        "tab-pane absolute inset-0",
+        active ? "z-10" : "invisible pointer-events-none",
+      )}
+    >
+      <div className="absolute inset-0 overflow-auto">
+        <TabActiveProvider value={active}>
+          <TabPortalProvider value={container}>
+            <TabRouter id={tab.id} path={tab.path} />
+          </TabPortalProvider>
+        </TabActiveProvider>
       </div>
     </div>
   );

@@ -31,6 +31,7 @@ const STATIC: Record<string, TabMeta> = {
   "/forbidden": { title: "Yetki yok", icon: ShieldAlert },
   "/definitions": { title: "Tanımlar", icon: Library },
   "/operations": { title: "Operasyon", icon: ClipboardList },
+  "/operations/work-orders/new": { title: "Yeni İş Emri", icon: Factory },
   "/reports": { title: "Raporlar", icon: ScrollText },
   "/access": { title: "Yetkilendirme", icon: ShieldCheck },
   "/system": { title: "Sistem", icon: ServerCog },

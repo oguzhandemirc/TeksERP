@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,8 +28,14 @@ const LIST_PATH = "/operations/work-orders";
  */
 export function WorkOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const openTarget = useOpenTarget();
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Parti ayırma akışından geliyorsak refakat kartı yazdırma diyaloğu otomatik
+  // açılır — yeni kart basılıp ayrılan demete takılmalı (eski kart yanlış WO).
+  const autoPrintTravelerCard = Boolean(
+    (location.state as { printTravelerCard?: boolean } | null)?.printTravelerCard,
+  );
 
   const detail = useQuery({
     queryKey: ["work-order-detail", id],
@@ -75,7 +81,11 @@ export function WorkOrderDetailPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <WorkOrderDetailHeader wo={wo} onBack={(e) => openTarget(LIST_PATH, e)} />
+      <WorkOrderDetailHeader
+        wo={wo}
+        onBack={(e) => openTarget(LIST_PATH, e)}
+        autoOpenTravelerCard={autoPrintTravelerCard}
+      />
 
       <div ref={scrollRef} className="flex-1 overflow-auto">
         {wo && <WorkOrderSectionNav sections={navSections} scrollRef={scrollRef} />}

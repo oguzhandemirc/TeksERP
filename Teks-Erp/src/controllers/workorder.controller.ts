@@ -73,6 +73,12 @@ const createSchema = z.object(workOrderCoreShape).refine(hasRoute, ROUTE_REFINE_
  */
 const quickStartSchema = z.object({
   ...workOrderCoreShape,
+  // Hızlı İş Emri: type verilmezse servis okutulan topların sipariş bağına göre
+  // türetir (sipariş bağı yok → STOCK_PRODUCTION). workOrderCoreShape'deki
+  // .default("ORDER_PRODUCTION") bu türetmeyi bozuyordu (client type yollamayınca
+  // Zod ORDER_PRODUCTION yazıp "sipariş kalemi şart" hatasına düşürüyordu) →
+  // override: optional, default YOK. Sipariş bağlanırsa servis ORDER_PRODUCTION türetir.
+  type: z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).optional(),
   rollBarcodes: z
     .array(z.string().trim().min(1))
     .min(1, "En az bir top barkodu okutmalısınız")
@@ -95,6 +101,13 @@ const detachRollsSchema = z.object({
   rollIds: z
     .array(z.string().uuid())
     .min(1, "En az bir top (roll) id'si gerekli"),
+});
+
+const splitBranchSchema = z.object({
+  batchSplitId: z.string().uuid(),
+  newColorId: z.string().uuid(),
+  newBatchNumber: z.string().trim().min(1).max(64).optional().nullable(),
+  orderMode: z.enum(["stock", "keep"]).default("stock"),
 });
 
 const updateStepPlanningSchema = z.object({
@@ -174,8 +187,11 @@ export class WorkOrderController {
     this.create = this.create.bind(this);
     this.quickStart = this.quickStart.bind(this);
     this.findAll = this.findAll.bind(this);
+    this.checkBatchNumber = this.checkBatchNumber.bind(this);
     this.findById = this.findById.bind(this);
     this.getBranches = this.getBranches.bind(this);
+    this.getSplitPreview = this.getSplitPreview.bind(this);
+    this.splitBranch = this.splitBranch.bind(this);
     this.attachRolls = this.attachRolls.bind(this);
     this.detachRolls = this.detachRolls.bind(this);
     this.updateStepPlanning = this.updateStepPlanning.bind(this);
@@ -240,6 +256,21 @@ export class WorkOrderController {
   }
 
   /**
+   * GET /api/work-orders/check-batch-number?batchNumber=...&excludeId=...
+   * Parti kodu alanı blur kontrolü — kaydetmeden önce benzersizlik uyarısı.
+   */
+  async checkBatchNumber(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const batchNumber = (req.query.batchNumber as string | undefined) ?? "";
+      const excludeId = (req.query.excludeId as string | undefined) || undefined;
+      const result = await this.service.checkBatchNumber(batchNumber, excludeId);
+      res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/work-orders/:id
    */
   async findById(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -266,6 +297,37 @@ export class WorkOrderController {
         return;
       }
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/work-orders/:id/split-preview?batchSplitId=... — partiyi ayırma önizleme
+   */
+  async getSplitPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const batchSplitId =
+        typeof req.query.batchSplitId === "string" ? req.query.batchSplitId : "";
+      if (!batchSplitId) {
+        res.status(400).json({ success: false, data: null, message: "batchSplitId gerekli" });
+        return;
+      }
+      const result = await this.service.getSplitPreview(req.params.id as string, batchSplitId);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/work-orders/:id/split — partiyi yeni iş emrine ayır
+   */
+  async splitBranch(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = splitBranchSchema.parse(req.body);
+      const result = await this.service.splitBranch(req.params.id as string, body, req.user?.userId);
+      res.status(201).json(result);
     } catch (error) {
       next(error);
     }

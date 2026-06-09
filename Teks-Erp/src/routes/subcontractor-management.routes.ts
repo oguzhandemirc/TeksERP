@@ -34,8 +34,8 @@ const subCtrl = new SubcontractorManagementController();
  *     responses:
  *       200: { description: Liste }
  */
-subcontractorRouter.get("/", verifyToken, requireAnyPermission("subcontractor:read", ...MOBILE_FASON_READ), subCtrl.findAll);
-subcontractorRouter.get("/:id", verifyToken, requireAnyPermission("subcontractor:read", ...MOBILE_FASON_READ), subCtrl.findById);
+subcontractorRouter.get("/", verifyToken, requireAnyPermission("subcontractor:read", ...MOBILE_FASON_READ, "mobile:hizli-is-emri"), subCtrl.findAll);
+subcontractorRouter.get("/:id", verifyToken, requireAnyPermission("subcontractor:read", ...MOBILE_FASON_READ, "mobile:hizli-is-emri"), subCtrl.findById);
 subcontractorRouter.post("/", verifyToken, requirePermission("subcontractor:write"), subCtrl.create);
 subcontractorRouter.patch("/:id", verifyToken, requirePermission("subcontractor:write"), subCtrl.update);
 subcontractorRouter.delete("/:id", verifyToken, requirePermission("subcontractor:write"), subCtrl.remove);

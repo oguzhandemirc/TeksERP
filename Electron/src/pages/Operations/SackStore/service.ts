@@ -45,6 +45,12 @@ export const sackStoreService = {
       .post<ApiResponse<{ id: string }>>(`/api/shipping/shipments/${id}/pull-back`, {})
       .then((r) => r.data),
 
+  /** READY → PREPARING ("Hazırlığa Geri Al") — karşılanma geri alınır, içerik düzenlenebilir. */
+  unready: (id: string): Promise<ApiResponse<{ id: string }>> =>
+    apiClient
+      .post<ApiResponse<{ id: string }>>(`/api/shipping/shipments/${id}/unready`, {})
+      .then((r) => r.data),
+
   /** Sevk çıkışı ("Sevk Et" / "Alındı") — taşıma bilgileri opsiyonel. */
   dispatch: (id: string, payload: DispatchPayload = {}): Promise<ApiResponse<{ id: string }>> =>
     apiClient

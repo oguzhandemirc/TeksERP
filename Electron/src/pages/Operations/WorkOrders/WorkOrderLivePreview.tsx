@@ -1,7 +1,19 @@
 import { useWatch, type Control } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ClipboardList, Link2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarClock,
+  ClipboardList,
+  Fingerprint,
+  Link2,
+  Package,
+  Sparkles,
+  Workflow,
+  type LucideIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { SECTION_TONE, type SectionTone } from "@/components/forms/FormSection";
 import { safeFormat } from "@/lib/format";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
@@ -129,7 +141,7 @@ export function WorkOrderLivePreview({
       {/* Scrollable body */}
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
         {/* Kimlik */}
-        <Section title="Kimlik">
+        <Section title="Kimlik" icon={Fingerprint} tone="slate">
           <Row label="Parti Kodu">
             {batchNumber?.trim() ? (
               <span className="font-mono font-medium">{batchNumber}</span>
@@ -148,7 +160,7 @@ export function WorkOrderLivePreview({
         </Section>
 
         {/* Hedef */}
-        <Section title="Hedef">
+        <Section title="Hedef" icon={Package} tone="indigo">
           <Row label="Ürün">
             {itemName ? (
               <span className="font-medium">
@@ -197,7 +209,7 @@ export function WorkOrderLivePreview({
         </Section>
 
         {/* Üretim akışı */}
-        <Section title="Üretim Akışı">
+        <Section title="Üretim Akışı" icon={Workflow} tone="emerald">
           {routeSteps.length === 0 ? (
             <p className="text-xs italic text-muted-foreground">
               Henüz adım yok — soldaki akıştan ekle.
@@ -235,7 +247,7 @@ export function WorkOrderLivePreview({
 
         {/* Üretim özellikleri */}
         {propNames.length > 0 && (
-          <Section title="Üretim Özellikleri">
+          <Section title="Üretim Özellikleri" icon={Sparkles} tone="violet">
             <div className="flex flex-wrap gap-1">
               {propNames.map((n) => (
                 <Badge key={n} variant="outline" className="text-[10px]">
@@ -247,7 +259,7 @@ export function WorkOrderLivePreview({
         )}
 
         {/* Planlama */}
-        <Section title="Planlama">
+        <Section title="Planlama" icon={CalendarClock} tone="amber">
           <Row label="Tarih">
             {hasPlan ? (
               <span className="tabular-nums">
@@ -273,7 +285,7 @@ export function WorkOrderLivePreview({
         )}
 
         {/* Bağlı sipariş özeti */}
-        <Section title="Bağlı Sipariş">
+        <Section title="Bağlı Sipariş" icon={Link2} tone="blue">
           {isOrderProduction ? (
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
               <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
@@ -301,10 +313,27 @@ export function WorkOrderLivePreview({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  icon: Icon,
+  tone = "slate",
+  children,
+}: {
+  title: string;
+  icon?: LucideIcon;
+  tone?: SectionTone;
+  children: React.ReactNode;
+}) {
+  const t = SECTION_TONE[tone];
   return (
-    <div className="rounded-md border bg-card p-2.5">
-      <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+    <div className={cn("rounded-md border border-l-4 bg-card p-2.5", t.border)}>
+      <div
+        className={cn(
+          "mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide",
+          t.icon,
+        )}
+      >
+        {Icon && <Icon className="h-3.5 w-3.5" />}
         {title}
       </div>
       <div className="space-y-1.5">{children}</div>

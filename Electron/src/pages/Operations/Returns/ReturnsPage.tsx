@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@/components/PermissionGate";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
@@ -13,6 +15,7 @@ import { returnReasonService } from "@/pages/ReturnReasons/service";
 import { returnColumns } from "./returnsColumns";
 import { returnsService, type ReturnRow, type ReturnsCursorResponse } from "./service";
 import { ReturnsDetailSheet } from "./ReturnsDetailSheet";
+import { ReturnEntryDialog } from "./ReturnEntryDialog";
 
 const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
 
@@ -64,6 +67,7 @@ function ReturnsStatusFilter() {
 
 export function ReturnsPage() {
   const [selected, setSelected] = useState<ReturnRow | null>(null);
+  const [entryOpen, setEntryOpen] = useState(false);
   const { table, query, search, setSearch, pagination } = useDataTable<ReturnRow>({
     queryKey: "returns",
     fetchFn: returnsService.listCursor,
@@ -80,7 +84,17 @@ export function ReturnsPage() {
       <PageHeader
         title="İade Takibi"
         description="Müşteriden dönen toplar — hangi siparişten, hangi üründen, ne kadar."
-        actions={<RefreshButton queryKey="returns" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <PermissionGate permission="return:write">
+              <Button size="sm" onClick={() => setEntryOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" />
+                Yeni İade
+              </Button>
+            </PermissionGate>
+            <RefreshButton queryKey="returns" />
+          </div>
+        }
       />
       <DataTableToolbar
         search={search}
@@ -108,6 +122,7 @@ export function ReturnsPage() {
         onRowClick={setSelected}
       />
       <ReturnsDetailSheet row={selected} onClose={() => setSelected(null)} />
+      <ReturnEntryDialog open={entryOpen} onOpenChange={setEntryOpen} />
     </div>
   );
 }

@@ -1,10 +1,11 @@
 import type { Tone } from "@/components/operations/StatusBadge";
 
-export type ShipmentStatus = "PREPARING" | "READY" | "DISPATCHED" | "CANCELLED";
+export type ShipmentStatus = "PREPARING" | "READY" | "AT_DOOR" | "DISPATCHED" | "CANCELLED";
 
-export const shipmentStatusLabels = {
+export const shipmentStatusLabels: Record<ShipmentStatus, string> = {
   PREPARING: "Hazırlanıyor",
-  READY: "Hazır",
+  READY: "Çuval Depo",
+  AT_DOOR: "Kapı Önü",
   DISPATCHED: "Sevk Edildi",
   CANCELLED: "İptal",
 };
@@ -12,6 +13,7 @@ export const shipmentStatusLabels = {
 export const shipmentStatusTones: Record<string, Tone> = {
   PREPARING: "warning",
   READY: "info",
+  AT_DOOR: "warning",
   DISPATCHED: "success",
   CANCELLED: "muted",
 };

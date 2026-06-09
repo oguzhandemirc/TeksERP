@@ -88,7 +88,7 @@ export class SubcontractorController {
     this.pendingReturnDetail = this.pendingReturnDetail.bind(this);
     this.listDispatches = this.listDispatches.bind(this);
     this.getDispatch = this.getDispatch.bind(this);
-    this.getDispatchPrint = this.getDispatchPrint.bind(this);
+    this.getDispatchDyeOverlay = this.getDispatchDyeOverlay.bind(this);
     this.listReceipts = this.listReceipts.bind(this);
     this.getReceiptPrint = this.getReceiptPrint.bind(this);
     this.getReceipt = this.getReceipt.bind(this);
@@ -241,10 +241,10 @@ export class SubcontractorController {
     }
   }
 
-  /** GET /api/subcontractor/dispatches/:id/print */
-  async getDispatchPrint(req: Request, res: Response, next: NextFunction): Promise<void> {
+  /** GET /api/subcontractor/dispatches/:id/dye-overlay */
+  async getDispatchDyeOverlay(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.getDispatchPrintSnapshot(req.params.id as string);
+      const result = await this.service.getDispatchDyeOverlay(req.params.id as string);
       res.status(200).json(result);
     } catch (err) {
       next(err);

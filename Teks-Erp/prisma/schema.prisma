@@ -199,6 +199,7 @@ model User {
   cardScans                  TravelerCardScan[]
   rollMovements              RollMovement[]
   printedManifests           Manifest[]              @relation("ManifestPrintedBy")
+  printedDocuments           PrintedDocument[]       @relation("PrintedDocumentPrintedBy")
   dispatches                 SubcontractorDispatch[] @relation("DispatchCreatedBy")
   cancelledDispatches        SubcontractorDispatch[] @relation("DispatchCancelledBy")
   receipts                   SubcontractorReceipt[]  @relation("ReceiptCreatedBy")
@@ -914,6 +915,12 @@ model WorkOrder {
   // WO'ları da getirir.
   isActive Boolean @default(true)
 
+  /// Parti ayırma soy bağı — bu WO, başka bir WO'nun partisinden ayrıldıysa
+  /// kaynak WO'nun id'si. Eski refakat kartı okutulunca kabul ekranı bu bağla
+  /// ayrılan partilerin bekleyen gruplarını da gösterir; Dallar panelinde
+  /// "ayrıldı → P-XXX" izi bu bağdan okunur. NULL = ayrılmamış normal WO.
+  splitFromId String?
+
   // Relations
   steps            WorkOrderStep[]
   orderLinks       WorkOrderToOrderLine[]
@@ -924,6 +931,8 @@ model WorkOrder {
   targetItem       Item?                     @relation("WorkOrderTargetItem", fields: [targetItemId], references: [id])
   targetColor      Color?                    @relation("WorkOrderTargetColor", fields: [targetColorId], references: [id])
   targetProperties WorkOrderTargetProperty[]
+  splitFrom        WorkOrder?                @relation("WorkOrderSplitLineage", fields: [splitFromId], references: [id])
+  splitChildren    WorkOrder[]               @relation("WorkOrderSplitLineage")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -937,6 +946,8 @@ model WorkOrder {
   @@index([status, plannedEndDate])
   // Soft-delete filtreli listeler için
   @@index([isActive])
+  // Ayrılma soy bağı — null-yoğun; migration'da partial'a çevrilir (IS NOT NULL)
+  @@index([splitFromId])
   @@map("work_orders")
 }
 
@@ -1031,6 +1042,12 @@ model QualityGrade {
   /// Tambur'da bu kalite seçildiğinde çocuk top'un alacağı hedef RollStatus.
   /// 1. Kalite → WAREHOUSE, alt kaliteler (A1/A2/2.K) → A1_STOCK, FİRE → SCRAP.
   targetStatus RollStatus @default(SCRAP)
+
+  /// İADE'ye özel hedef statü — müşteri iadesinde (returnGradingEnabled açık) bu
+  /// kalite seçilirse top bu statüye iner (FİRE→SCRAP, A1→A1_STOCK, 1.Kalite→WAREHOUSE).
+  /// `targetStatus`'tan KASTEN AYRI: targetStatus Tambur kesimi içindir (seed hep
+  /// WAREHOUSE, dokunulmaz); bu kolon YALNIZ iade akışınca okunur. null → WAREHOUSE.
+  returnTargetStatus RollStatus?
 
   rolls       Roll[]
   rollReturns RollReturn[]
@@ -1305,12 +1322,12 @@ model SubcontractorDispatch {
   dispatchedAt           DateTime @default(now())
   dispatchedById         String?
   notes                  String?
-  // Boyahaneye özel talimat — genel "sevk notu"ndan (notes) AYRI. printSnapshot'a
+  // Boyahaneye özel talimat — genel "sevk notu"ndan (notes) AYRI. Belgeye
   // DONDURULMAZ; requestedColor gibi canlı tutulur → sevk sonrası (Electron'dan)
-  // düzenlenebilir, baskı her zaman güncel değeri gösterir.
+  // düzenlenebilir, baskı her zaman güncel değeri overlay olarak gösterir.
   dyehouseNote           String?
   totalQty               Decimal  @default(0) @db.Decimal(12, 3) // Toplam sevk edilen metraj (snapshot)
-  printSnapshot          Json? // Sevk anında dondurulan irsaliye verisi
+  // İrsaliye snapshot'ı artık PrintedDocument tablosunda (versiyonlu resmi belge).
 
   // İptal — soft cancel (kayıt silinmez, izlenebilirlik korunur)
   cancelledAt   DateTime?
@@ -1616,7 +1633,7 @@ model KartelaDispatch {
   dispatchedById  String?
   notes           String?
   totalQty        Decimal  @default(0) @db.Decimal(12, 3) // Toplam sevk metrajı (snapshot)
-  printSnapshot   Json? // Çeki listesi / irsaliye snapshot
+  // Çeki listesi snapshot'ı artık PrintedDocument tablosunda (versiyonlu resmi belge).
 
   // İptal — soft cancel (kayıt silinmez, iz korunur)
   cancelledAt   DateTime?
@@ -1737,6 +1754,61 @@ model Manifest {
 
   @@index([workOrderId])
   @@map("manifests")
+}
+
+// =============================================================================
+// 11.6b YAZDIRILABİLİR RESMİ BELGE DEFTERİ — versiyonlu irsaliye snapshot'ları
+// =============================================================================
+// Bir sevk OLAYI (Shipment / SubcontractorDispatch / KartelaDispatch) = bir belge
+// zinciri; her satır bir VERSİYON. İçerik + belge şablon ayarı (override) + firma
+// künyesi freeze anında `snapshot` JSON'una donar — kaynak sonradan değişse bile
+// belge sabit kalır (yasal kayıt). Yeni sevk olayı = yeni sourceId = yepyeni zincir;
+// önceki belge ASLA güncellenmez. Düzeltme = reissue (gerekçeli yeni versiyon,
+// eski SUPERSEDED olarak saklanır). Kaynak iptal edilirse VOIDED (İPTAL filigranı).
+// Satır içerikleri immutable; yalnız status/supersede/void meta alanları güncellenir.
+// =============================================================================
+
+enum PrintedDocType {
+  SHIPMENT_DISPATCH // Sevk irsaliyesi (Shipment)
+  SUBCONTRACTOR_DISPATCH // Fason sevk irsaliyesi (SubcontractorDispatch)
+  KARTELA_DISPATCH // Kartela çeki listesi (KartelaDispatch)
+}
+
+enum PrintedDocStatus {
+  ACTIVE // Güncel versiyon — baskı bunu kullanır
+  SUPERSEDED // Revizyonla yerini yeni versiyona bıraktı (tarihsel kayıt)
+  VOIDED // Kaynak iptal edildi — baskıda İPTAL filigranı
+}
+
+model PrintedDocument {
+  id       String           @id @default(uuid())
+  docType  PrintedDocType
+  // Polimorfik kaynak: shipmentId / subcontractorDispatchId / kartelaDispatchId.
+  // FK YOK (3 tabloya birden bağlanamaz); bütünlük servis katmanında.
+  sourceId String
+  version  Int              @default(1)
+  status   PrintedDocStatus @default(ACTIVE)
+  // İnsan-okur belge no (shipmentNo/dispatchNo) — listede snapshot JSON'u
+  // çekmeden göstermek için ayrı kolon (perf kuralı 13).
+  documentNo String @db.VarChar(64)
+  snapshot   Json
+  // Revizyon (v2+) gerekçesi — v1'de null. Yıkıcı-işlem-onayı konvansiyonu gereği zorunlu.
+  reissueReason String?
+  supersededAt  DateTime?
+  voidedAt      DateTime?
+  voidReason    String?
+  // Lazy-freeze ile (eski kayıttan) geriye dönük üretildi mi — baskıda dipnot.
+  reconstructed Boolean @default(false)
+  printedById   String?
+  printedBy     User?   @relation("PrintedDocumentPrintedBy", fields: [printedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([docType, sourceId, version])
+  @@index([docType, sourceId, status])
+  @@index([printedById])
+  @@map("printed_documents")
 }
 
 // =============================================================================
@@ -1888,6 +1960,11 @@ model RollReturn {
   prevSackId         String? // İade anındaki sackId (iptalde geri yazılır)
   prevQualityGrade   String? // İade anındaki qualityGrade etiketi
   prevQualityGradeId String? // İade anındaki qualityGradeId
+
+  /// İade anında topa UYGULANAN statü (WAREHOUSE/A1_STOCK/SCRAP — kalite override'ına
+  /// göre). İptal (geri al) guard'ı "top hâlâ iade ettiği rafta mı" kontrolünü bununla
+  /// yapar; sonradan kesim/yeniden sevk görmüşse iptal engellenir. null → legacy/WAREHOUSE.
+  appliedStatus RollStatus?
 
   // İptal (yanlış iade kabulü geri alındı) — sebeple birlikte.
   cancelledAt   DateTime?
@@ -2071,9 +2148,16 @@ model CustomerColorAlias {
   id         String @id @default(uuid())
   customerId String
   colorId    String
-  // Müşterideki renk adı (etiket basımı için opsiyonel). Null = renk yalnızca
-  // o müşteriye atanmış ama özel ad verilmemiş (atama ≠ isimlendirme).
+  // Müşterideki renk adı (etiket basımı için opsiyonel). Null = renge müşteri
+  // tarafında özel ad verilmemiş.
   alias      String?
+  // Renk bu müşteriye "özel renk" olarak atandı mı? `assigned` ile `alias` BAĞIMSIZ:
+  //   - assigned=true,  alias=null  → müşterinin özel rengi, özel ad yok
+  //   - assigned=false, alias='..'  → herkeste olan katalog rengi, sadece müşteri adı var
+  //   - assigned=true,  alias='..'  → hem özel renk hem özel adlı
+  // Atama renk formundan (customerIds), ad müşteri panelinden yönetilir. Picker
+  // "Müşteri Renkleri" bölümü SADECE assigned=true satırları gösterir.
+  assigned   Boolean @default(false)
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   color    Color    @relation(fields: [colorId], references: [id], onDelete: Cascade)
@@ -2083,7 +2167,10 @@ model CustomerColorAlias {
 
   @@unique([customerId, colorId])
   @@index([customerId])
-  @@index([colorId])
+  // Picker scope + sipariş guard sorguları: "renk herhangi bir müşteriye atanmış mı"
+  // (none/some assigned) ve "bu renkler atanmış mı" (colorId IN + assigned).
+  // (colorId, assigned) composite, colorId-prefix lookup'ları da karşılar.
+  @@index([colorId, assigned])
   @@map("customer_color_aliases")
 }
 

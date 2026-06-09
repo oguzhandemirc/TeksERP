@@ -1,4 +1,5 @@
 import { createHashRouter, Navigate } from "react-router-dom";
+import { RouteErrorFallback } from "@/components/RouteErrorFallback";
 import { LoginPage } from "@/pages/Login/LoginPage";
 import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { useAuthStore } from "@/store/auth";
@@ -20,7 +21,7 @@ function AuthLanding() {
 }
 
 export const authRouter = createHashRouter([
-  { path: "/login", element: <LoginPage /> },
-  { path: "/forbidden", element: <ForbiddenPage /> },
-  { path: "*", element: <AuthLanding /> },
+  { path: "/login", element: <LoginPage />, errorElement: <RouteErrorFallback /> },
+  { path: "/forbidden", element: <ForbiddenPage />, errorElement: <RouteErrorFallback /> },
+  { path: "*", element: <AuthLanding />, errorElement: <RouteErrorFallback /> },
 ]);

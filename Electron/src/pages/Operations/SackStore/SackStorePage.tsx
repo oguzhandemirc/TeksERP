@@ -27,7 +27,7 @@ const STATUS_TABS: { key: StatusFilter; label: string }[] = [
 ];
 
 type PendingAction = {
-  kind: "move-to-door" | "pull-back" | "dispatch";
+  kind: "move-to-door" | "pull-back" | "unready" | "dispatch";
   shipment: SackStoreShipment;
 };
 
@@ -46,6 +46,13 @@ const ACTION_COPY: Record<
     description: "Sevk kapı önünden çuval depoya (Çuval Depo) geri alınır.",
     confirmLabel: "Geri Çek",
     success: "Çuval depoya geri çekildi",
+  },
+  unready: {
+    title: (s) => `${s.shipmentNo} hazırlığa geri alınsın mı?`,
+    description:
+      "Karşılanma geri alınır (sipariş tekrar 'bekliyor' sayılır), çuval/top içeriği düzenlenebilir olur. Sevk bu listeden çıkar; Paketleme'den düzenlenip tekrar çuval depoya kaldırılabilir.",
+    confirmLabel: "Hazırlığa Geri Al",
+    success: "Hazırlığa geri alındı — düzenlenebilir",
   },
   dispatch: {
     title: (s) => `${s.shipmentNo} sevk edilsin mi?`,
@@ -86,6 +93,7 @@ export function SackStorePage() {
     mutationFn: (action: PendingAction) => {
       if (action.kind === "move-to-door") return sackStoreService.moveToDoor(action.shipment.id);
       if (action.kind === "pull-back") return sackStoreService.pullBack(action.shipment.id);
+      if (action.kind === "unready") return sackStoreService.unready(action.shipment.id);
       return sackStoreService.dispatch(action.shipment.id);
     },
     onSuccess: (_data, action) => {
@@ -161,6 +169,7 @@ export function SackStorePage() {
                   onOpen={setOpenShipment}
                   onMoveToDoor={(sh) => setPending({ kind: "move-to-door", shipment: sh })}
                   onPullBack={(sh) => setPending({ kind: "pull-back", shipment: sh })}
+                  onUnready={(sh) => setPending({ kind: "unready", shipment: sh })}
                   onDispatch={(sh) => setPending({ kind: "dispatch", shipment: sh })}
                 />
               ))}

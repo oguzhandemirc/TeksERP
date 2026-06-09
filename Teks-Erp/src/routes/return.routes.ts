@@ -121,6 +121,44 @@ router.get(
 
 /**
  * @openapi
+ * /api/returns/{id}:
+ *   patch:
+ *     tags: [Returns]
+ *     summary: İade kaydını düzelt (neden + not)
+ *     description: |
+ *       Yalnız defter alanlarını (reasonId/reasonText/note) günceller — topun
+ *       statüsü / sevkiyat bağı / kalitesi DEĞİŞMEZ. Gönderilmeyen alan dokunulmaz;
+ *       neden zorunluluğu korunur (katalog VEYA serbest metin). İptal edilmiş kayıt
+ *       düzeltilemez (409).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reasonId:   { type: string, format: uuid, nullable: true }
+ *               reasonText: { type: string, nullable: true }
+ *               note:       { type: string, nullable: true }
+ *     responses:
+ *       200: { description: İade kaydı güncellendi }
+ *       400: { description: İade nedeni gerekli / geçersiz }
+ *       409: { description: İptal edilmiş iade düzeltilemez }
+ */
+router.patch(
+  "/:id",
+  verifyToken,
+  requireAnyPermission("return:write", "mobile:iade"),
+  controller.edit
+);
+
+/**
+ * @openapi
  * /api/returns/{id}/cancel:
  *   post:
  *     tags: [Returns]

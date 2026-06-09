@@ -1,6 +1,8 @@
 import express, { Express, Request, Response } from "express";
 import path from "path";
 import fs from "fs";
+import os from "os";
+import { monitorEventLoopDelay } from "perf_hooks";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -9,6 +11,7 @@ import { setupSwagger } from "./config/swagger";
 import { errorHandler } from "./middlewares/error.middleware";
 import { installDecimalNumberSerializer } from "./utils/json-replacer";
 import prisma from "./lib/prisma";
+import { AuditService } from "./services/audit.service";
 
 // Tüm res.json() çıktısında Prisma Decimal → number çevirir
 // (Decimal.prototype.toJSON override'ı). Aksi halde Decimal'ler client'a string
@@ -46,6 +49,7 @@ import stationCapabilityRoutes from "./routes/station-capability.routes";
 import labelRoutes from "./routes/label.routes";
 import labelTemplateRoutes from "./routes/label-template.routes";
 import shippingRoutes from "./routes/shipping.routes";
+import printedDocumentRoutes from "./routes/printed-document.routes";
 import returnRoutes from "./routes/return.routes";
 import returnReasonRoutes from "./routes/return-reason.routes";
 import currencyRoutes from "./routes/currency.routes";
@@ -55,6 +59,7 @@ import dashboardRoutes from "./routes/dashboard.routes";
 import reportsRoutes from "./routes/reports.routes";
 import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
+import { getPresence } from "./lib/presence";
 
 const app: Express = express();
 
@@ -136,6 +141,119 @@ function latestBackupInfo(): { name: string; time: string } | null {
 }
 
 // =============================================================================
+// Kaynak (CPU/RAM) ölçümü — backend prosesi + makinenin geneli
+// =============================================================================
+// `process.cpuUsage()` ve `os.cpus()` BİRİKİMLİ değer verir (process başından
+// beri toplam mikrosaniye / tick). "Anlık %" için iki ölçüm arası FARK gerekir.
+// Son örneği modül seviyesinde tutar, her /health çağrısında delta alırız —
+// durum sayfası 5sn'de bir yokladığı için pencere ~5sn olur. İlk çağrıdaki
+// pencere process başlangıcına kadar uzanır (yine de geçerli bir ortalama).
+// Windows NOT: `os.loadavg()` Windows'ta her zaman [0,0,0] döner → KULLANMIYORUZ;
+// makine CPU%'sini os.cpus() idle/total delta'sından hesaplarız (Windows'ta çalışır).
+
+function sampleSysCpu(): { idle: number; total: number; cores: number } {
+  const cpus = os.cpus();
+  let idle = 0;
+  let total = 0;
+  for (const c of cpus) {
+    const t = c.times;
+    idle += t.idle;
+    total += t.user + t.nice + t.sys + t.idle + t.irq;
+  }
+  return { idle, total, cores: cpus.length || 1 };
+}
+
+// Baz örnekler (modül yüklenirken). İlk /health çağrısında bunlara göre delta alınır.
+let lastProcCpu = process.cpuUsage(); // {user, system} — mikrosaniye
+let lastCpuSampleNs = process.hrtime.bigint();
+let lastSysCpu = sampleSysCpu();
+
+// Event loop gecikmesi — native histogram. SÜREKLI çalışır ama tick başına JS işi
+// YOK (libuv seviyesinde ölçer), maliyet ihmal edilebilir. Lag yükselirse uygulama
+// "donuk" hisseder; operatör şikayetinden önce yakalanır. Her okumada reset →
+// değer son ~5sn'lik pencereyi yansıtır (ömür-boyu ortalama değil).
+const eventLoopMonitor = monitorEventLoopDelay({ resolution: 20 });
+eventLoopMonitor.enable();
+
+// Disk: fs.statfs ucuz bir syscall ama disk hızlı değişmez → 30sn cache. Çok
+// sayıda istemci 5sn'de bir yoklasa bile statfs en fazla 30sn'de bir çalışır.
+let diskCache: { diskTotalBytes: number; diskFreeBytes: number; diskUsedPct: number } | null = null;
+let diskCacheAt = 0;
+const DISK_CACHE_MS = 30_000;
+
+function readDiskMetrics(): {
+  diskTotalBytes: number | null;
+  diskFreeBytes: number | null;
+  diskUsedPct: number | null;
+} {
+  const now = Date.now();
+  if (diskCache && now - diskCacheAt < DISK_CACHE_MS) return diskCache;
+  try {
+    // DB verisi + yedekler kurulumda aynı sürücüde (ProgramData/AppDir) → cwd'nin
+    // bulunduğu sürücüyü ölç. statfs unprivileged kullanılabilir blok (bavail) verir.
+    const s = fs.statfsSync(process.cwd());
+    const total = s.blocks * s.bsize;
+    const free = s.bavail * s.bsize;
+    const usedPct = s.blocks > 0 ? Math.round((1 - s.bfree / s.blocks) * 1000) / 10 : 0;
+    diskCache = { diskTotalBytes: total, diskFreeBytes: free, diskUsedPct: usedPct };
+    diskCacheAt = now;
+    return diskCache;
+  } catch {
+    return { diskTotalBytes: null, diskFreeBytes: null, diskUsedPct: null };
+  }
+}
+
+function readResourceMetrics() {
+  // --- Backend prosesinin CPU%'si (makinenin TÜM kapasitesine oranla, 0-100) ---
+  const nowNs = process.hrtime.bigint();
+  const curProcCpu = process.cpuUsage();
+  const elapsedMicros = Number(nowNs - lastCpuSampleNs) / 1000; // ns → µs
+  const procCpuMicros =
+    curProcCpu.user - lastProcCpu.user + (curProcCpu.system - lastProcCpu.system);
+  const sys = sampleSysCpu();
+  const cores = sys.cores;
+  let procCpuPct: number | null = null;
+  if (elapsedMicros > 0) {
+    // procCpuMicros / (geçen süre × çekirdek) → tek çekirdeği değil tüm makineyi baz alır
+    const pct = (procCpuMicros / (elapsedMicros * cores)) * 100;
+    procCpuPct = Math.round(Math.min(100, Math.max(0, pct)) * 10) / 10;
+  }
+  lastProcCpu = curProcCpu;
+  lastCpuSampleNs = nowNs;
+
+  // --- Makine geneli CPU%'si (tüm prosesler dahil) ---
+  const idleDelta = sys.idle - lastSysCpu.idle;
+  const totalDelta = sys.total - lastSysCpu.total;
+  let sysCpuPct: number | null = null;
+  if (totalDelta > 0) {
+    const pct = (1 - idleDelta / totalDelta) * 100;
+    sysCpuPct = Math.round(Math.min(100, Math.max(0, pct)) * 10) / 10;
+  }
+  lastSysCpu = sys;
+
+  const mem = process.memoryUsage();
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+
+  // Event loop ortalama gecikmesi (ms) — okuyup sıfırla (pencere = son poll arası).
+  const eventLoopLagMs = Math.round((eventLoopMonitor.mean / 1e6) * 10) / 10;
+  eventLoopMonitor.reset();
+
+  return {
+    cpuCores: cores,
+    procRssBytes: mem.rss, // backend prosesinin tuttuğu fiziksel RAM
+    procHeapUsedBytes: mem.heapUsed,
+    procHeapTotalBytes: mem.heapTotal,
+    procCpuPct, // backend'in kendi CPU yüzdesi (null = ilk örnek alınamadı)
+    sysCpuPct, // makinenin geneli (backend + PostgreSQL + her şey)
+    sysTotalMemBytes: totalMem,
+    sysFreeMemBytes: freeMem,
+    sysUsedMemBytes: totalMem - freeMem,
+    eventLoopLagMs, // backend yanıt verme gecikmesi (yüksek = donuk hisseder)
+  };
+}
+
+// =============================================================================
 // Health Check  (durum sayfası ve tepsi paneli buradan beslenir)
 // =============================================================================
 // API her zaman UP (bu kod çalışıyorsa); ek olarak DB bağlantısını canlı test
@@ -149,6 +267,7 @@ app.get("/health", async (_req: Request, res: Response) => {
   let cacheHitPct: number | null = null;
   let rollsDeadPct: number | null = null;
   let longestQuerySec: number | null = null;
+  let dbBlockedCount: number | null = null;
   try {
     // Tek round-trip: DB canlılığı + boyut + bağlantı + ucuz sağlık metrikleri
     // (cache isabeti, rolls ölü-satır oranı, en uzun aktif sorgu süresi). Hepsi
@@ -161,6 +280,7 @@ app.get("/health", async (_req: Request, res: Response) => {
         cache_hit: number | null;
         rolls_dead: number | null;
         longest_sec: number | null;
+        blocked: bigint;
       }>
     >`
       SELECT pg_database_size(current_database()) AS size,
@@ -173,7 +293,9 @@ app.get("/health", async (_req: Request, res: Response) => {
                 FROM pg_stat_activity
                 WHERE datname = current_database() AND state = 'active'
                   AND backend_type = 'client backend'
-                  AND query NOT ILIKE '%pg_stat_activity%')::float8 AS longest_sec`;
+                  AND query NOT ILIKE '%pg_stat_activity%')::float8 AS longest_sec,
+             (SELECT count(*) FROM pg_stat_activity
+                WHERE datname = current_database() AND wait_event_type = 'Lock') AS blocked`;
     db = "UP";
     if (rows && rows[0]) {
       dbSizeBytes = Number(rows[0].size);
@@ -182,10 +304,13 @@ app.get("/health", async (_req: Request, res: Response) => {
       rollsDeadPct = rows[0].rolls_dead != null ? Number(rows[0].rolls_dead) : null;
       longestQuerySec =
         rows[0].longest_sec != null ? Math.round(Number(rows[0].longest_sec)) : null;
+      dbBlockedCount = Number(rows[0].blocked);
     }
   } catch {
     db = "DOWN";
   }
+  // Audit yazım sağlığı — best-effort log'lar sessizce düşerse burada görünür.
+  const auditHealth = AuditService.getHealth();
   res.status(200).json({
     status: "UP",
     message: "TeksERP API is running.",
@@ -199,7 +324,18 @@ app.get("/health", async (_req: Request, res: Response) => {
     cacheHitPct,
     rollsDeadPct,
     longestQuerySec,
+    dbBlockedCount, // lock bekleyen oturum sayısı (>0 = bir şey takılmış olabilir)
     lastBackup: latestBackupInfo(),
+    // Disk doluluğu (DB + yedeklerin bulunduğu sürücü) — 30sn cache
+    ...readDiskMetrics(),
+    // Anlık online kullanıcı + bağlı cihaz (bellekte, son 5 dk)
+    ...getPresence(),
+    // Audit kaybı izleme (0 = sağlıklı; >0 ise log yazımı başarısız oluyor)
+    auditWriteFailures: auditHealth.failureCount,
+    lastAuditError: auditHealth.lastError,
+    lastAuditFailureAt: auditHealth.lastFailureAt,
+    // Backend prosesinin + makinenin kaynak kullanımı (CPU/RAM)
+    ...readResourceMetrics(),
   });
 });
 
@@ -235,6 +371,7 @@ app.use("/api/station-capabilities", stationCapabilityRoutes);
 app.use("/api/labels", labelRoutes);
 app.use("/api/label-templates", labelTemplateRoutes);
 app.use("/api/shipping", shippingRoutes);
+app.use("/api/printed-documents", printedDocumentRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/return-reasons", returnReasonRoutes);
 app.use("/api/currencies", currencyRoutes);

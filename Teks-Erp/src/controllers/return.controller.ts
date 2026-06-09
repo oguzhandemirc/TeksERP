@@ -20,6 +20,13 @@ const cancelReturnSchema = z.object({
   reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter olmalı").max(500),
 });
 
+// Düzelt — yalnız defter alanları (neden + not). Gönderilmeyen alan dokunulmaz.
+const editReturnSchema = z.object({
+  reasonId: z.string().uuid("Geçersiz neden ID").optional().nullable(),
+  reasonText: z.string().trim().max(500).optional().nullable(),
+  note: z.string().trim().max(1000).optional().nullable(),
+});
+
 export class ReturnController {
   private service = new ReturnService();
 
@@ -59,6 +66,21 @@ export class ReturnController {
   getById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await this.service.getReturnById(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  /** İade kaydını düzelt (neden + not) — top statüsü/sevkiyatı değişmez. */
+  edit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = editReturnSchema.parse(req.body);
+      const result = await this.service.editReturn(
+        req.params.id as string,
+        body,
+        req.user?.userId
+      );
       res.status(200).json(result);
     } catch (e) {
       next(e);

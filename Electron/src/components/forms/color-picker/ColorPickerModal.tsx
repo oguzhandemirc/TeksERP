@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronsUpDown, Loader2, Palette, Search, Star } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Palette, Search, Star } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { colorService } from "@/pages/Colors/service";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { ColorRow } from "./ColorRow";
+import { ColorSwatchCard } from "./ColorSwatchCard";
 import { useColorPickerData } from "./useColorPickerData";
 
 export interface ColorPickerModalProps {
@@ -66,7 +66,6 @@ export function ColorPickerModal({
     : value && fallbackColor
       ? { name: fallbackColor.name, hex: fallbackColor.hex ?? null }
       : null;
-  const isCustomerColor = Boolean(assignedColor);
   const isOrphan = Boolean(
     value && data.isRestricted && !assignedColor && !data.allowedSet.has(value) && fallbackColor,
   );
@@ -91,13 +90,13 @@ export function ColorPickerModal({
         }}
         title={disabled ? lockedTooltip : undefined}
         className={cn(
-          "flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-left text-sm hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60",
+          "flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-primary/40 hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60",
           triggerClassName,
         )}
       >
-        <Palette className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <Palette className="h-4 w-4 shrink-0 text-primary" />
         {label && <span className="shrink-0 font-medium">{label}</span>}
-        <div className="ml-auto flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {selected ? (
             <>
               <span
@@ -105,12 +104,6 @@ export function ColorPickerModal({
                 style={selected.hex ? { backgroundColor: selected.hex } : undefined}
               />
               <span className="truncate">{selected.name}</span>
-              {isCustomerColor && (
-                <Badge variant="muted" className="gap-1 px-1.5">
-                  <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-500" />
-                  Müşteri
-                </Badge>
-              )}
               {isOrphan && (
                 <span className="text-warning" title="Ürünün izinli renkleri dışında">
                   !
@@ -120,17 +113,17 @@ export function ColorPickerModal({
           ) : (
             <span className="truncate text-xs text-muted-foreground">{placeholder}</span>
           )}
-          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </div>
+        <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex h-[600px] max-h-[85vh] max-w-md flex-col">
+        <DialogContent className="flex h-[600px] max-h-[85vh] max-w-3xl flex-col">
           <DialogHeader className="shrink-0">
             <DialogTitle>{label ?? "Renk Seç"}</DialogTitle>
             <DialogDescription>
               {customerId
-                ? "Müşterinin renkleri üstte ★ ile işaretli. Aramada tüm katalog taranır."
+                ? "Müşteriye atanmış renkler üstte ★ ile işaretli. Aramada tüm katalog taranır."
                 : data.isRestricted
                   ? "Ürüne dahil renklerden birini seç."
                   : "Tüm renk kataloğunda ara."}
@@ -148,61 +141,70 @@ export function ColorPickerModal({
             />
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto rounded-md border">
-            <ul className="divide-y">
-              {showNone && (
-                <ColorRow
-                  selected={!value}
-                  name="Renksiz"
-                  hex={null}
-                  dimmed
-                  onClick={() => choose(null)}
-                />
-              )}
+          <div className="min-h-0 flex-1 overflow-auto rounded-md border p-2">
+            {showNone && (
+              <button
+                type="button"
+                onClick={() => choose(null)}
+                className={cn(
+                  "mb-2 flex w-full items-center gap-2 rounded-md border border-dashed px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent/50",
+                  !value && "border-primary/50 bg-primary/5 text-foreground",
+                )}
+              >
+                <span className="h-4 w-4 shrink-0 rounded-sm border bg-muted" />
+                <span className="italic">Renksiz</span>
+                {!value && <Check className="ml-auto h-4 w-4 text-primary" />}
+              </button>
+            )}
 
-              {data.pinned.length > 0 && (
-                <SectionHeader label="Müşteri Renkleri" count={data.pinned.length} />
-              )}
-              {data.pinned.map((c) => (
-                <ColorRow
-                  key={`pin-${c.id}`}
-                  selected={value === c.id}
-                  name={c.name}
-                  code={c.code}
-                  hex={c.hex}
-                  highlighted
-                  onClick={() => choose(c.id)}
-                />
-              ))}
+            {data.pinned.length > 0 && (
+              <>
+                <SectionHeader label="Müşteri Renkleri" count={data.pinned.length} starred />
+                <ColorGrid>
+                  {data.pinned.map((c) => (
+                    <ColorSwatchCard
+                      key={`pin-${c.id}`}
+                      selected={value === c.id}
+                      name={c.name}
+                      hex={c.hex}
+                      highlighted
+                      onClick={() => choose(c.id)}
+                    />
+                  ))}
+                </ColorGrid>
+              </>
+            )}
 
-              {data.pinned.length > 0 && data.listColors.length > 0 && (
-                <SectionHeader label="Tüm Renkler" />
-              )}
-              {data.listColors.map((c) => (
-                <ColorRow
-                  key={c.id}
-                  selected={value === c.id}
-                  name={c.name}
-                  code={c.code}
-                  hex={c.hex}
-                  onClick={() => choose(c.id)}
-                />
-              ))}
+            {data.listColors.length > 0 && (
+              <>
+                {data.pinned.length > 0 && <SectionHeader label="Tüm Renkler" />}
+                <ColorGrid>
+                  {data.listColors.map((c) => (
+                    <ColorSwatchCard
+                      key={c.id}
+                      selected={value === c.id}
+                      name={c.name}
+                      hex={c.hex}
+                      onClick={() => choose(c.id)}
+                    />
+                  ))}
+                </ColorGrid>
+              </>
+            )}
 
-              {data.isLoading && (
-                <li className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Renkler yükleniyor...
-                </li>
-              )}
-              {nothingFound && (
-                <li className="p-6 text-center text-xs italic text-muted-foreground">
-                  {debouncedSearch.trim() ? `"${debouncedSearch}" eşleşmedi.` : "Renk bulunamadı."}
-                </li>
-              )}
-            </ul>
+            {data.isLoading && (
+              <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Renkler yükleniyor...
+              </div>
+            )}
+            {nothingFound && (
+              <div className="p-6 text-center text-xs italic text-muted-foreground">
+                {debouncedSearch.trim() ? `"${debouncedSearch}" eşleşmedi.` : "Renk bulunamadı."}
+              </div>
+            )}
 
             {data.hasMore && (
-              <div className="border-t p-2">
+              <div className="pt-1">
                 <Button
                   type="button"
                   variant="ghost"
@@ -228,9 +230,26 @@ export function ColorPickerModal({
   );
 }
 
-function SectionHeader({ label, count }: { label: string; count?: number }) {
+function ColorGrid({ children }: { children: React.ReactNode }) {
   return (
-    <li className="sticky top-0 z-10 flex items-center gap-2 bg-card/95 px-3 py-1.5 backdrop-blur">
+    <div className="mb-2 grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-1.5">
+      {children}
+    </div>
+  );
+}
+
+function SectionHeader({
+  label,
+  count,
+  starred,
+}: {
+  label: string;
+  count?: number;
+  starred?: boolean;
+}) {
+  return (
+    <div className="sticky top-0 z-10 -mx-2 mb-2 flex items-center gap-2 bg-card/95 px-3 py-1.5 backdrop-blur">
+      {starred && <Star className="h-3 w-3 fill-amber-400 text-amber-500" />}
       <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
@@ -239,6 +258,6 @@ function SectionHeader({ label, count }: { label: string; count?: number }) {
           {count}
         </Badge>
       )}
-    </li>
+    </div>
   );
 }

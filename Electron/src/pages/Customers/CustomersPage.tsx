@@ -24,6 +24,7 @@ export function CustomersPage() {
       service={customerService}
       columns={customerColumns}
       writePermission="customer:write"
+      glowWhenEmpty
       searchPlaceholder="Kod, ad veya vergi no ara..."
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <CustomerFormDialog

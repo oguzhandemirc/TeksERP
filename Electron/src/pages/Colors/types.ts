@@ -9,4 +9,6 @@ export interface Color {
   updatedAt: string;
   /** findById + create/update yanıtında dolu gelir: rengin atandığı müşteriler. */
   customerIds?: string[];
+  /** findById'de dolu gelir: atanmış müşterilerin "müşterideki ad"ı (customerId → alias). */
+  customerAliases?: Record<string, string>;
 }

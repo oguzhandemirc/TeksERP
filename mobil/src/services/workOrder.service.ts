@@ -27,6 +27,16 @@ export interface WorkOrderPayload {
   foldType?: string | null;
   dyehouseNote?: string | null;
   steps?: WorkOrderStepInput[];
+  /**
+   * routeTemplateId ile birlikte: şablondan klonlanan adımların not/fason planlamasını
+   * `sequence`'e göre override eder (Hızlı İş Emri Gelişmiş modda istasyon notları).
+   */
+  stepPlanning?: {
+    sequence: number;
+    notes?: string | null;
+    requiredCategoryId?: string | null;
+    plannedSubcontractorId?: string | null;
+  }[];
   orderLineIds?: string[];
   targetPropertyIds?: string[];
 }

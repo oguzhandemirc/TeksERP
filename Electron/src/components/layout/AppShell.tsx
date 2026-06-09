@@ -7,6 +7,7 @@ import { TabHost } from "./tabs";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useTabShortcuts } from "@/hooks/useTabShortcuts";
 import { useServerHeartbeat } from "@/hooks/useServerClock";
+import { useIdleLogout } from "@/hooks/useIdleLogout";
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(() => {
@@ -25,6 +26,7 @@ export function AppShell() {
   });
   useTabShortcuts();
   useServerHeartbeat();
+  useIdleLogout();
 
   const toggleSidebar = () =>
     setCollapsed((c) => {

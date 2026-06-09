@@ -9,6 +9,7 @@ import { FeatureFlagSection } from "./FeatureFlagSection";
 import { DevicePairingSection } from "./DevicePairingSection";
 import { ApiEndpointSection } from "./ApiEndpointSection";
 import { CompanySettingsSection } from "./CompanySettingsSection";
+import { SessionSettingsSection } from "./SessionSettingsSection";
 
 /**
  * Genel Ayarlar — sol dikey kategori menüsü + sağ içerik. Ayarlar domaine bölünür
@@ -84,6 +85,7 @@ export function GeneralSettingsPage() {
                     {cat.kind === "device" && <DevicePairingSection />}
                     {cat.kind === "api" && <ApiEndpointSection />}
                     {cat.kind === "company" && <CompanySettingsSection />}
+                    {cat.kind === "session" && <SessionSettingsSection />}
                   </CardContent>
                 </Card>
               </TabsContent>

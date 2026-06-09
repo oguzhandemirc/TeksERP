@@ -107,7 +107,7 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
   // Seçili açık kalemleri (openQty=kalan; link-only) tek iş emri formuna taşır. Yalnız
   // ilgili spec'in açık kalemleri seed edilir — başka ürün/renk karışmaz.
   const goToForm = (pickedLines: PickedOrderLine[]) => {
-    navigateActive("/operations/work-orders", { state: { seedPickedLines: pickedLines } });
+    navigateActive("/operations/work-orders/new", { state: { seedPickedLines: pickedLines } });
     onDone();
   };
 
@@ -135,7 +135,8 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
 
     const groups = groupEligible(eligibleLines);
     if (groups.length > 1) {
-      setIncompatGroups(groups);
+      // En çok kalan metrajı olan grup üstte — operatör önce büyük işi görür.
+      setIncompatGroups([...groups].sort((a, b) => b.openTotal - a.openTotal));
       return;
     }
 
@@ -144,6 +145,8 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
     if (only) goToForm(only.pickedLines);
   };
 
+  const hasSelection = orders.length > 0;
+
   return (
     <PermissionGate permission="workorder:write">
       <Button
@@ -151,6 +154,8 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
         size="sm"
         className="h-8 gap-1.5"
         onClick={handleClick}
+        disabled={!hasSelection}
+        title={hasSelection ? undefined : "Önce bir veya daha fazla sipariş seçin"}
       >
         <Factory className="h-3.5 w-3.5" />
         Seçili siparişlerden iş emri oluştur
@@ -160,8 +165,8 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
         open={incompatGroups !== null}
         onOpenChange={(o) => !o && setIncompatGroups(null)}
       >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[85vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>Bu siparişler tek iş emrinde birleşemez</DialogTitle>
             <DialogDescription>
               Bir iş emri yalnızca aynı ürün, renk ve en için açılır. Seçimin{" "}
@@ -169,7 +174,7 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
               istediğin gruba tıkla; o siparişlerle iş emri formu doğrudan açılır.
             </DialogDescription>
           </DialogHeader>
-          <ul className="space-y-2">
+          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto px-6 py-4">
             {incompatGroups?.map((g) => (
               <li key={g.sig}>
                 <button
@@ -206,7 +211,7 @@ export function BulkCreateWorkOrderAction({ orders, onDone }: Props) {
               </li>
             ))}
           </ul>
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t px-6 py-4">
             <Button variant="outline" onClick={() => setIncompatGroups(null)}>
               Kapat
             </Button>

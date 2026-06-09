@@ -1,17 +1,20 @@
 import dayjs from 'dayjs';
 import type { ShipmentDetail } from '../../../services/packing.service';
+import { printedDocumentService } from '../../../services/printedDocument.service';
 import {
   resolveDocConfig,
   DEFAULT_COMPANY_LETTERHEAD,
   type CompanyLetterhead,
+  type DocumentConfig,
   type DocumentsConfig,
 } from '../../../services/documentConfig';
 
 // =============================================================================
-// Sevk İrsaliyesi HTML — expo-print (Print.printAsync) için A4 belge. Canlı
-// detaydan üretilir (DISPATCHED veri donmuş). Electron irsaliyesinin mobil eşi.
-// İçerik ayarı (bölüm görünürlükleri/başlık/künye/imza/footer) panelden gelir —
-// "documentsConfig" feature flag → resolveDocConfig (Electron ile aynı sözleşme).
+// Sevk İrsaliyesi HTML — expo-print için A4 belge. Normalize edilmiş `doc`
+// şeklinden üretilir (backend buildShipmentDispatchDoc ile birebir). İki kaynak:
+//   • DISPATCHED → PrintedDocument.snapshot.doc (DONMUŞ resmi belge)
+//   • öncesi    → canlı detay map'lenir + TASLAK filigranı (henüz resmi değil)
+// Electron ShipmentDispatchNote'un mobil eşi.
 // =============================================================================
 
 const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-TR');
@@ -21,44 +24,133 @@ const esc = (s: string | null | undefined): string =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c,
   );
 
-/** İrsaliye içerik ayarı — panel feature flag'lerinden türetilir (ShipmentDetailView geçer). */
-export interface DispatchNoteOpts {
-  documentsConfig?: DocumentsConfig;
-  companyName?: string;
-  letterhead?: CompanyLetterhead;
+// --- Normalize edilmiş belge payload'ı (donmuş doc ile aynı şekil) ---
+export interface ShipmentNoteLine {
+  orderNumber: string;
+  itemName: string;
+  colorName: string | null;
+  width: number | null;
+  qty: number;
+}
+export interface ShipmentNoteSack {
+  seq: number;
+  manualCode: string | null;
+  weightKg: number | null;
+  productSummary: {
+    itemName: string;
+    colorName: string | null;
+    width: number | null;
+    totalQty: number;
+    rollCount: number;
+  }[];
+  swatches: { itemName: string | null; colorName: string | null; width: number | null; length: number | null }[];
+}
+export interface ShipmentNoteDoc {
+  shipmentNo: string;
+  dispatchedAt: string | null;
+  readyAt: string | null;
+  plateNumber: string | null;
+  driverName: string | null;
+  carrier: string | null;
+  customer: { name: string };
+  branch: { name: string } | null;
+  lines: ShipmentNoteLine[];
+  sacks: ShipmentNoteSack[];
+  summary: { rollCount: number; sackCount: number; totalMeters: number; totalKg: number };
 }
 
-export function buildDispatchNoteHtml(d: ShipmentDetail, opts?: DispatchNoteOpts): string {
-  const cfg = resolveDocConfig(opts?.documentsConfig, 'shipmentDispatch');
-  const companyName = opts?.companyName?.trim() || 'Adnan Şahin Tekstil';
-  const letterhead = opts?.letterhead ?? DEFAULT_COMPANY_LETTERHEAD;
+/** Canlı sevkiyat detayını TASLAK belge `doc` şekline indirger (DraftSheet eşi). */
+export function shipmentDetailToNoteDoc(d: ShipmentDetail): ShipmentNoteDoc {
   const lines = d.orders.flatMap((o) =>
     o.lines
       .filter((l) => l.thisShipment > 0)
-      .map((l) => ({ ...l, orderNumber: o.orderNumber })),
+      .map((l) => ({
+        orderNumber: o.orderNumber,
+        itemName: l.customerItemName ?? l.item.name,
+        colorName: l.color ? (l.customerColorName ?? l.color.name) : null,
+        width: l.width,
+        qty: l.thisShipment,
+      })),
   );
-  const totalQty = lines.reduce((s, l) => s + l.thisShipment, 0);
-  const docDate = d.dispatchedAt ?? d.readyAt ?? null;
+  const sacks = d.sacks.map((s) => ({
+    seq: s.seq,
+    manualCode: s.manualCode ?? null,
+    weightKg: s.weightKg,
+    productSummary: s.productSummary.map((p) => ({
+      itemName: p.itemName,
+      colorName: p.colorName,
+      width: p.width,
+      totalQty: p.totalQty,
+      rollCount: p.rollCount,
+    })),
+    swatches: s.swatches.map((sw) => ({
+      itemName: sw.item?.name ?? null,
+      colorName: sw.color?.name ?? null,
+      width: sw.width,
+      length: sw.length,
+    })),
+  }));
+  return {
+    shipmentNo: d.shipmentNo,
+    dispatchedAt: d.dispatchedAt,
+    readyAt: d.readyAt,
+    plateNumber: d.plateNumber,
+    driverName: d.driverName,
+    carrier: d.carrier,
+    customer: { name: d.customer.name },
+    branch: d.branch ? { name: d.branch.name } : null,
+    lines,
+    sacks,
+    summary: {
+      rollCount: d.summary.rollCount,
+      sackCount: d.summary.sackCount,
+      totalMeters: d.summary.totalMeters,
+      totalKg: d.summary.totalKg,
+    },
+  };
+}
 
-  const rows = lines.length
-    ? lines
+export interface DispatchNoteOpts {
+  /** Donmuş (resmi) belgenin ham config override'ı — verilirse bu kullanılır. */
+  docConfigOverride?: DocumentConfig | null;
+  /** Canlı panel ayarı (TASLAK yolu) — docConfigOverride yoksa kullanılır. */
+  documentsConfig?: DocumentsConfig;
+  companyName?: string;
+  letterhead?: CompanyLetterhead;
+  /** official=donmuş resmi belge · draft=TASLAK filigranı · voided=İPTAL filigranı. */
+  mode?: 'official' | 'draft' | 'voided';
+}
+
+export function buildDispatchNoteHtml(doc: ShipmentNoteDoc, opts?: DispatchNoteOpts): string {
+  const cfg =
+    opts?.docConfigOverride !== undefined
+      ? resolveDocConfig(
+          opts.docConfigOverride ? { shipmentDispatch: opts.docConfigOverride } : undefined,
+          'shipmentDispatch',
+        )
+      : resolveDocConfig(opts?.documentsConfig, 'shipmentDispatch');
+  const companyName = opts?.companyName?.trim() || 'Adnan Şahin Tekstil';
+  const letterhead = opts?.letterhead ?? DEFAULT_COMPANY_LETTERHEAD;
+  const mode = opts?.mode ?? 'official';
+  const totalQty = doc.lines.reduce((s, l) => s + l.qty, 0);
+  const docDate = doc.dispatchedAt ?? doc.readyAt ?? null;
+
+  const rows = doc.lines.length
+    ? doc.lines
         .map(
           (l, i) => `<tr>
         <td style="text-align:center">${i + 1}</td>
         <td style="font-family:monospace">${esc(l.orderNumber)}</td>
-        <td>${esc(l.customerItemName ?? l.item.name)}</td>
-        <td>${l.color ? esc(l.customerColorName ?? l.color.name) : '—'}</td>
+        <td>${esc(l.itemName)}</td>
+        <td>${l.colorName ? esc(l.colorName) : '—'}</td>
         <td style="text-align:center">${l.width != null ? `${l.width} cm` : '—'}</td>
-        <td style="text-align:right">${n(l.thisShipment)}</td>
+        <td style="text-align:right">${n(l.qty)}</td>
       </tr>`,
         )
         .join('')
     : `<tr><td colspan="6" style="text-align:center;color:#666;padding:8px">Bu sevkiyatta siparişe düşen metraj yok.</td></tr>`;
 
-  // Çuval dökümü — Electron ShipmentDispatchNote ile aynı: her çuval başına
-  // ürün özeti (item·renk·en·metre·top) + kartela satırları. Tek satır özet DEĞİL.
-  const sackRow = (cells: string[]): string =>
-    `<tr>${cells.join('')}</tr>`;
+  // Çuval dökümü — her çuval başına ürün özeti + kartela satırları.
   const sackTd = (
     v: string,
     align: 'left' | 'center' | 'right' = 'left',
@@ -66,34 +158,36 @@ export function buildDispatchNoteHtml(d: ShipmentDetail, opts?: DispatchNoteOpts
   ): string =>
     `<td style="padding:2px 6px;text-align:${align}${muted ? ';color:#555' : ''}">${v}</td>`;
 
-  const sackBox = (s: ShipmentDetail['sacks'][number]): string => {
+  const sackBox = (s: ShipmentNoteSack): string => {
+    const rollCount = s.productSummary.reduce((a, p) => a + p.rollCount, 0);
+    const swatchCount = s.swatches.length;
     const head = `<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #999;background:#f3f4f6;padding:3px 6px;font-size:11px;font-weight:700">
         <span>Çuval #${s.seq}${s.manualCode ? ` · ${esc(s.manualCode)}` : ''}</span>
-        <span style="font-weight:400;color:#555">${s.weightKg != null ? `${n(s.weightKg)} kg` : 'tartılmadı'} · ${s.rollCount} top${s.swatchCount > 0 ? ` · ${s.swatchCount} kartela` : ''}</span>
+        <span style="font-weight:400;color:#555">${s.weightKg != null ? `${n(s.weightKg)} kg` : 'tartılmadı'} · ${rollCount} top${swatchCount > 0 ? ` · ${swatchCount} kartela` : ''}</span>
       </div>`;
-    if (s.productSummary.length === 0 && s.swatchCount === 0) {
+    if (s.productSummary.length === 0 && swatchCount === 0) {
       return `<div style="border:1px solid #999;margin-bottom:6px">${head}<div style="padding:4px 6px;color:#666;font-size:10px">boş</div></div>`;
     }
     const productRows = s.productSummary
       .map((p) =>
-        sackRow([
+        `<tr>${[
           sackTd(esc(p.itemName)),
           sackTd(p.colorName ? esc(p.colorName) : '—'),
           sackTd(p.width != null ? `${p.width} cm` : '—', 'center'),
           sackTd(n(p.totalQty), 'right'),
           sackTd(String(p.rollCount), 'right'),
-        ]),
+        ].join('')}</tr>`,
       )
       .join('');
     const swatchRows = s.swatches
       .map((sw) =>
-        sackRow([
-          sackTd(`Kartela · ${sw.item?.name ? esc(sw.item.name) : '—'}`, 'left', true),
-          sackTd(sw.color?.name ? esc(sw.color.name) : '—', 'left', true),
+        `<tr>${[
+          sackTd(`Kartela · ${sw.itemName ? esc(sw.itemName) : '—'}`, 'left', true),
+          sackTd(sw.colorName ? esc(sw.colorName) : '—', 'left', true),
           sackTd(sw.width != null ? `${sw.width} cm` : '—', 'center', true),
           sackTd(sw.length != null ? `${n(sw.length)} cm` : '—', 'right', true),
           sackTd('1', 'right', true),
-        ]),
+        ].join('')}</tr>`,
       )
       .join('');
     return `<div style="border:1px solid #999;margin-bottom:6px">${head}
@@ -109,13 +203,12 @@ export function buildDispatchNoteHtml(d: ShipmentDetail, opts?: DispatchNoteOpts
       </table></div>`;
   };
 
-  const sacks = d.sacks.length
-    ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">Çuval Dökümü (${d.sacks.length} çuval · ${n(d.summary.totalKg)} kg brüt)</div>${d.sacks
+  const sacks = doc.sacks.length
+    ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">Çuval Dökümü (${doc.sacks.length} çuval · ${n(doc.summary.totalKg)} kg brüt)</div>${doc.sacks
         .map(sackBox)
         .join('')}`
     : 'Çuval yok';
 
-  // ── Panel ayarına göre bölümler (gating) ──
   const lhLines = [letterhead.addressLine, letterhead.phone, letterhead.taxInfo]
     .map((x) => x?.trim())
     .filter((x): x is string => Boolean(x))
@@ -128,15 +221,15 @@ export function buildDispatchNoteHtml(d: ShipmentDetail, opts?: DispatchNoteOpts
 
   const customerBox = cfg.sections.customerInfo
     ? `<div class="box"><h4>Müşteri</h4>
-        <div><b>${esc(d.customer.name)}</b></div>
-        ${d.branch ? `<div>${esc(d.branch.name)}</div>` : ''}
+        <div><b>${esc(doc.customer.name)}</b></div>
+        ${doc.branch ? `<div>${esc(doc.branch.name)}</div>` : ''}
       </div>`
     : '';
   const vehicleBox = cfg.sections.vehicleInfo
     ? `<div class="box"><h4>Sevk Bilgileri</h4>
-        <div>Plaka: ${esc(d.plateNumber) || '—'}</div>
-        <div>Şoför: ${esc(d.driverName) || '—'}</div>
-        <div>Taşıyıcı: ${esc(d.carrier) || '—'}</div>
+        <div>Plaka: ${esc(doc.plateNumber) || '—'}</div>
+        <div>Şoför: ${esc(doc.driverName) || '—'}</div>
+        <div>Taşıyıcı: ${esc(doc.carrier) || '—'}</div>
       </div>`
     : '';
   const infoGrid =
@@ -155,12 +248,10 @@ export function buildDispatchNoteHtml(d: ShipmentDetail, opts?: DispatchNoteOpts
       </table>`
     : '';
 
-  const sacksHtml = cfg.sections.sackBreakdown
-    ? `<div style="margin-top:10px">${sacks}</div>`
-    : '';
+  const sacksHtml = cfg.sections.sackBreakdown ? `<div style="margin-top:10px">${sacks}</div>` : '';
 
   const totalsHtml = cfg.sections.totals
-    ? `<div style="margin-top:4px">Top sayısı: <b>${d.summary.rollCount}</b> · Toplam metraj: <b>${n(d.summary.totalMeters)} m</b></div>`
+    ? `<div style="margin-top:4px">Top sayısı: <b>${doc.summary.rollCount}</b> · Toplam metraj: <b>${n(doc.summary.totalMeters)} m</b></div>`
     : '';
 
   const signHtml =
@@ -177,10 +268,17 @@ export function buildDispatchNoteHtml(d: ShipmentDetail, opts?: DispatchNoteOpts
     ? `<div class="footer-note">${esc(cfg.footerNote)}</div>`
     : '';
 
+  const watermark =
+    mode === 'draft'
+      ? `<div class="wm" style="color:rgba(120,120,120,.14)">TASLAK</div>`
+      : mode === 'voided'
+        ? `<div class="wm" style="color:rgba(220,38,38,.16)">İPTAL</div>`
+        : '';
+
   return `<!doctype html><html><head><meta charset="utf-8" />
 <style>
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, Roboto, "Helvetica Neue", sans-serif; color:#000; font-size:12px; padding:16px; }
+  body { font-family: -apple-system, Roboto, "Helvetica Neue", sans-serif; color:#000; font-size:12px; padding:16px; position:relative; }
   .head { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #000; padding-bottom:8px; }
   .title { font-size:18px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
   .grid { display:flex; gap:16px; margin-top:10px; }
@@ -199,12 +297,14 @@ export function buildDispatchNoteHtml(d: ShipmentDetail, opts?: DispatchNoteOpts
   .lh-name { font-size:15px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
   .lh-meta { font-size:10px; color:#444; margin-top:2px; }
   .footer-note { margin-top:16px; border:1px solid #ccc; border-radius:4px; padding:6px 8px; font-size:11px; white-space:pre-wrap; }
+  .wm { position:fixed; top:42%; left:0; right:0; text-align:center; font-size:90px; font-weight:800; text-transform:uppercase; letter-spacing:8px; transform:rotate(-30deg); z-index:-1; }
 </style></head><body>
+  ${watermark}
   ${letterheadHtml}
   <div class="head">
     <div>
       <div class="title">${esc(cfg.title)}</div>
-      <div style="margin-top:4px">Sevkiyat No: <b style="font-family:monospace">${esc(d.shipmentNo)}</b></div>
+      <div style="margin-top:4px">Sevkiyat No: <b style="font-family:monospace">${esc(doc.shipmentNo)}</b></div>
     </div>
     <div style="text-align:right">Tarih: <b>${docDate ? dayjs(docDate).format('DD.MM.YYYY HH:mm') : '—'}</b></div>
   </div>
@@ -215,4 +315,38 @@ export function buildDispatchNoteHtml(d: ShipmentDetail, opts?: DispatchNoteOpts
   ${signHtml}
   ${footerHtml}
 </body></html>`;
+}
+
+/**
+ * Yazdırılacak HTML'i çözer: DISPATCHED ise donmuş resmi belge (PrintedDocument),
+ * değilse canlı detaydan TASLAK. Hem ShipmentDetailView hem Paketleme kullanır.
+ */
+export async function resolveDispatchNoteHtml(opts: {
+  shipmentId: string;
+  detail: ShipmentDetail;
+  flags?: {
+    documentsConfig?: DocumentsConfig;
+    companyName?: string;
+    companyLetterhead?: CompanyLetterhead;
+  } | null;
+}): Promise<string> {
+  const frozen = await printedDocumentService
+    .getCurrent<ShipmentNoteDoc>('SHIPMENT_DISPATCH', opts.shipmentId)
+    .then((r) => r.data)
+    .catch(() => null);
+
+  if (frozen) {
+    return buildDispatchNoteHtml(frozen.snapshot.doc, {
+      docConfigOverride: frozen.snapshot.docConfigOverride,
+      companyName: frozen.snapshot.company.name,
+      letterhead: frozen.snapshot.company.letterhead,
+      mode: frozen.status === 'VOIDED' ? 'voided' : 'official',
+    });
+  }
+  return buildDispatchNoteHtml(shipmentDetailToNoteDoc(opts.detail), {
+    documentsConfig: opts.flags?.documentsConfig,
+    companyName: opts.flags?.companyName,
+    letterhead: opts.flags?.companyLetterhead,
+    mode: 'draft',
+  });
 }
