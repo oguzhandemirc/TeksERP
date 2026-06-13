@@ -14,6 +14,18 @@ jest.mock("expo-secure-store", () => ({
   deleteItemAsync: jest.fn(async () => undefined),
 }));
 
+// NetInfo — onlineManager wire'ı (queryClient.ts) modül yükünde gerçek native
+// reachability döngüsünü tetikler; testte köprü yok → no-op listener mock'u.
+// Offline durumu testlerde onlineManager.setOnline ile zorlanır, NetInfo'dan değil.
+jest.mock("@react-native-community/netinfo", () => ({
+  __esModule: true,
+  default: {
+    addEventListener: jest.fn(() => jest.fn()), // unsubscribe fn döner
+    fetch: jest.fn(async () => ({ isConnected: true, isInternetReachable: true })),
+    configure: jest.fn(),
+  },
+}));
+
 // Reanimated test ortamında uyarı basmasın — mock'u yükle (varsa).
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
