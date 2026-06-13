@@ -38,31 +38,46 @@ async function main() {
     console.log(`ℹ️  label.copies ayarı mevcut (${JSON.stringify(existing.value)}) — default testi atlandı`);
   }
 
-  const roll = await prisma.roll.findFirst({
-    where: { barcode: { not: null } },
+  // Kendi fixture'ını yarat (hazır veriye dayanma — taze/CI DB'de barkodlu top yok).
+  const item = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
+  if (!item) throw new Error("Seed ürünü yok (npm run seed)");
+  const roll = await prisma.roll.create({
+    data: {
+      barcode: `TEST-LBLC-${Date.now()}`,
+      itemId: item.id,
+      status: "WAREHOUSE",
+      currentQty: 100,
+      initialQty: 100,
+      width: 150,
+      qualityGrade: "A",
+      entrySource: "SUPPLIER_RECEIPT",
+    },
     select: { id: true, barcode: true },
   });
-  if (!roll) throw new Error("Barkodlu top yok (seed çalıştı mı?)");
 
-  const def = await svc.getRollLabelHtml(roll.id);
-  check(
-    `Default baskı ${flagVal} etiket sayfası içeriyor`,
-    countLabels(def.data.html) === flagVal,
-    `sayfa=${countLabels(def.data.html)}`,
-  );
+  try {
+    const def = await svc.getRollLabelHtml(roll.id);
+    check(
+      `Default baskı ${flagVal} etiket sayfası içeriyor`,
+      countLabels(def.data.html) === flagVal,
+      `sayfa=${countLabels(def.data.html)}`,
+    );
 
-  const one = await svc.getRollLabelHtml(roll.id, undefined, { copies: 1 });
-  check("copies=1 override tek etiket", countLabels(one.data.html) === 1);
+    const one = await svc.getRollLabelHtml(roll.id, undefined, { copies: 1 });
+    check("copies=1 override tek etiket", countLabels(one.data.html) === 1);
 
-  const three = await svc.getRollLabelHtml(roll.id, undefined, { copies: 3 });
-  check("copies=3 override üç etiket", countLabels(three.data.html) === 3);
-  check(
-    "3 kopyada 2 sayfa kesmesi var (page-break-after)",
-    (three.data.html.match(/page-break-after: always/g) ?? []).length === 2,
-  );
+    const three = await svc.getRollLabelHtml(roll.id, undefined, { copies: 3 });
+    check("copies=3 override üç etiket", countLabels(three.data.html) === 3);
+    check(
+      "3 kopyada 2 sayfa kesmesi var (page-break-after)",
+      (three.data.html.match(/page-break-after: always/g) ?? []).length === 2,
+    );
 
-  const ten = await svc.getRollLabelHtml(roll.id, undefined, { copies: 10 });
-  check("copies=10 → 5'e kırpılır", countLabels(ten.data.html) === 5);
+    const ten = await svc.getRollLabelHtml(roll.id, undefined, { copies: 10 });
+    check("copies=10 → 5'e kırpılır", countLabels(ten.data.html) === 5);
+  } finally {
+    await prisma.roll.delete({ where: { id: roll.id } }).catch(() => {});
+  }
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
