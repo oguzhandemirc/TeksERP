@@ -23,7 +23,6 @@ export interface OperatorPerformanceRow {
   kursunCount: number;
   qc2Count: number;
   tamburCount: number;
-  packageCount: number;
   subcontractorOps: number;
 }
 

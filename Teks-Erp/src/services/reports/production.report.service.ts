@@ -82,7 +82,6 @@ export interface OperatorPerformanceRow {
   kursunCount: number;
   qc2Count: number;
   tamburCount: number;
-  packageCount: number;
   subcontractorOps: number;
 }
 
@@ -96,7 +95,6 @@ export async function getOperatorPerformance(range: DateRange, limit = 50): Prom
       kursunCount: bigint;
       qc2Count: bigint;
       tamburCount: bigint;
-      packageCount: bigint;
       subcontractorOps: bigint;
     }>
   >(Prisma.sql`
@@ -108,7 +106,6 @@ export async function getOperatorPerformance(range: DateRange, limit = 50): Prom
       COUNT(*) FILTER (WHERE ro."operationType" = 'KURSUN_APPLIED')                   AS "kursunCount",
       COUNT(*) FILTER (WHERE ro."operationType" = 'QC2_COMPLETED')                    AS "qc2Count",
       COUNT(*) FILTER (WHERE ro."operationType" = 'TAMBUR_PROCESSED')                 AS "tamburCount",
-      COUNT(*) FILTER (WHERE ro."operationType" = 'PACKAGED')                         AS "packageCount",
       COUNT(*) FILTER (WHERE ro."operationType" IN ('SUBCONTRACTOR_SENT','SUBCONTRACTOR_RETURNED')) AS "subcontractorOps"
     FROM roll_operations ro
     JOIN users u ON ro."operatorId" = u.id
@@ -127,7 +124,6 @@ export async function getOperatorPerformance(range: DateRange, limit = 50): Prom
     kursunCount: Number(r.kursunCount),
     qc2Count: Number(r.qc2Count),
     tamburCount: Number(r.tamburCount),
-    packageCount: Number(r.packageCount),
     subcontractorOps: Number(r.subcontractorOps),
   }));
 }
