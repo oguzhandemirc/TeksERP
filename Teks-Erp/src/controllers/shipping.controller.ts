@@ -283,6 +283,18 @@ export class ShippingController {
     }
   };
 
+  // Saha #7 (artımlı): retarget SALT-OKUNUR önizleme — aday sipariş kümesi için
+  // karşılanma projeksiyonu (commit etmeden). DB'ye yazmaz.
+  retargetPreview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = orderIdsSchema.parse(req.body);
+      const result = await this.service.previewRetargetOrders(req.params.id as string, body.orderIds);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
   setProcedureCode = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = procedureCodeSchema.parse(req.body);

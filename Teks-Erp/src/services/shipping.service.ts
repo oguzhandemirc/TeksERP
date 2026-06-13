@@ -571,6 +571,160 @@ export class ShippingService {
     return { success: true, data: { shipmentId, orderIds: ids }, message: "Sevkiyat yeniden hedeflendi" };
   }
 
+  /**
+   * Saha #7 (artımlı): retargetOrders'ın SALT-OKUNUR önizlemesi. Operatör sipariş
+   * kümesini değiştirirken, COMMIT ETMEDEN ÖNCE karşılanma projeksiyonunu görür —
+   * "bu kümeyi seçersem hangi sipariş ne kadar karşılanır, fazla mal kalır mı".
+   *
+   * DB'YE HİÇBİR ŞEY YAZMAZ (create/update/delete yok, AuditService.log yok). Projeksiyon
+   * = `retargetOrders`'ın gerçek commit sonucuyla BİREBİR aynı (saf `allocate` aynen
+   * kullanılır). Çift-sayım önleme: bu sevkiyat zaten commit'liyse (READY/AT_DOOR),
+   * kendi ShipmentAllocation katkısını her satırın shippedQty'sinden geri indirir —
+   * yani "bu sevkiyat henüz commit etmemiş gibi" hesaplar (recommit'in reverse'ünün
+   * salt-okunur eşdeğeri). DISPATCHED/CANCELLED'da `editable:false` döner (hata atmaz).
+   */
+  async previewRetargetOrders(
+    shipmentId: string,
+    candidateOrderIds: string[]
+  ): Promise<ApiResponse<unknown>> {
+    const ids = [...new Set(candidateOrderIds)];
+
+    const shipment = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: {
+        id: true,
+        status: true,
+        customerId: true,
+        branchId: true,
+        rolls: {
+          select: { itemId: true, colorId: true, width: true, currentQty: true, status: true },
+        },
+        allocations: { select: { orderLineId: true, qty: true } },
+      },
+    });
+    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
+
+    // Önizleme bilgilendiricidir — sevk/iptal sevkiyatta da projeksiyon dönülür,
+    // yalnız `editable:false` bayrağıyla işaretlenir (retarget butonu UI'da gizli).
+    const editable =
+      shipment.status !== ShipmentStatus.DISPATCHED && shipment.status !== ShipmentStatus.CANCELLED;
+
+    // Aday siparişleri yükle — yalnız GEÇERLİ olanlar tahsise katılır (aynı
+    // müşteri/şube + kapalı değil). Geçersizler `ignored`'a yazılır (atma).
+    const candidates = ids.length
+      ? await prisma.order.findMany({
+          where: { id: { in: ids } },
+          select: {
+            id: true,
+            orderNumber: true,
+            customerId: true,
+            branchId: true,
+            status: true,
+            deadline: true,
+            orderDate: true,
+            lines: {
+              select: { id: true, itemId: true, colorId: true, width: true, quantity: true, shippedQty: true, createdAt: true },
+            },
+          },
+        })
+      : [];
+    const foundIds = new Set(candidates.map((o) => o.id));
+
+    const ignored: { orderNumber: string; reason: string }[] = [];
+    for (const missing of ids.filter((id) => !foundIds.has(id))) {
+      ignored.push({ orderNumber: missing, reason: "Sipariş bulunamadı" });
+    }
+
+    const validOrders = candidates.filter((o) => {
+      if (o.customerId !== shipment.customerId || (o.branchId ?? null) !== (shipment.branchId ?? null)) {
+        ignored.push({ orderNumber: o.orderNumber, reason: "Sevkiyatın müşteri/şubesine ait değil" });
+        return false;
+      }
+      if (o.status === OrderStatus.CANCELLED || o.status === OrderStatus.COMPLETED) {
+        ignored.push({ orderNumber: o.orderNumber, reason: "Sipariş kapalı (iptal/tamamlandı)" });
+        return false;
+      }
+      return true;
+    });
+
+    // Bu sevkiyatın mevcut tahsisi (lineId→qty) — çift sayım önleme için.
+    const ownByLine = new Map<string, Prisma.Decimal>();
+    for (const a of shipment.allocations) {
+      ownByLine.set(a.orderLineId, (ownByLine.get(a.orderLineId) ?? D0()).plus(a.qty));
+    }
+
+    // Sevkiyatın WAREHOUSE topları → RollSpec[] (computeShipmentAllocation ile aynı).
+    const shippableRolls = shipment.rolls.filter((r) => r.status === RollStatus.WAREHOUSE);
+    const rollsForAlloc: RollSpec[] = shippableRolls.map((r) => ({
+      itemId: r.itemId,
+      colorId: r.colorId,
+      width: r.width,
+      currentQty: new Prisma.Decimal(r.currentQty),
+    }));
+
+    // Aday satırlar → LineForAlloc; bu sevkiyatın kendi katkısı shippedQty'den düşülür
+    // (commit'liyse "henüz commit etmemiş gibi" projeksiyon — recommit reverse eşdeğeri).
+    const linesForAlloc: LineForAlloc[] = validOrders.flatMap((o) =>
+      o.lines.map((l) => {
+        const own = ownByLine.get(l.id) ?? D0();
+        return {
+          id: l.id,
+          itemId: l.itemId,
+          colorId: l.colorId,
+          width: l.width,
+          quantity: new Prisma.Decimal(l.quantity),
+          shippedQty: Prisma.Decimal.max(0, new Prisma.Decimal(l.shippedQty).minus(own)),
+          deadline: o.deadline,
+          orderDate: o.orderDate,
+          lineCreatedAt: l.createdAt,
+        };
+      })
+    );
+
+    // Saf allocate — gerçek commit ile birebir aynı sonuç (lineId→projectedQty).
+    const alloc = allocate(rollsForAlloc, linesForAlloc);
+
+    const orders = validOrders.map((o) => {
+      let planned = D0();
+      let alreadyShipped = D0();
+      let projected = D0();
+      for (const l of o.lines) {
+        planned = planned.plus(l.quantity);
+        // alreadyShipped = bu sevkiyatın katkısı hariç önceki karşılanma (çift sayma yok).
+        const own = ownByLine.get(l.id) ?? D0();
+        alreadyShipped = alreadyShipped.plus(Prisma.Decimal.max(0, new Prisma.Decimal(l.shippedQty).minus(own)));
+        projected = projected.plus(alloc.get(l.id) ?? D0());
+      }
+      const totalCovered = alreadyShipped.plus(projected);
+      const coveragePct = planned.greaterThan(0)
+        ? Math.round(totalCovered.dividedBy(planned).times(100).toNumber())
+        : 0;
+      // Aritmetik Decimal; dış yüzde JSON-dostu sayı (UI doğrudan render/renklendirir).
+      return {
+        orderId: o.id,
+        orderNumber: o.orderNumber,
+        planned: Number(planned),
+        alreadyShipped: Number(alreadyShipped),
+        projected: Number(projected),
+        coveragePct,
+      };
+    });
+
+    const goods = rollsForAlloc.reduce((s, r) => s.plus(r.currentQty), D0());
+    const projectedTotal = [...alloc.values()].reduce((s, q) => s.plus(q), D0());
+    const leftover = goods.minus(projectedTotal);
+
+    return {
+      success: true,
+      data: {
+        editable,
+        orders,
+        totals: { goods: Number(goods), projectedTotal: Number(projectedTotal), leftover: Number(leftover) },
+        ignored,
+      },
+    };
+  }
+
   async listShipments(
     req: Request
   ): Promise<ApiResponse<unknown> | CursorPaginatedResponse<unknown>> {
