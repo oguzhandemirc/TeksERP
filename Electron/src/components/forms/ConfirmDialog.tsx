@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
@@ -13,6 +14,13 @@ interface Props {
   isPending?: boolean;
 }
 
+/**
+ * K-A1 fix: çift-tık koruması MERKEZÎ — `isPending` opsiyonel olduğundan 10
+ * kullanım korumasızdı (yıkıcı onayda hızlı çift tık = çift mutation). Onay
+ * butonu tıklanır tıklanmaz kilitlenir; dialog yeniden açılınca veya 2.5sn
+ * sonra (onConfirm hata verip dialog açık kaldıysa retry mümkün olsun diye)
+ * çözülür. `isPending` verilirse o da ayrıca bağlanır (daha hassas).
+ */
 export function ConfirmDialog({
   open,
   onOpenChange,
@@ -24,6 +32,26 @@ export function ConfirmDialog({
   onConfirm,
   isPending,
 }: Props) {
+  const [locked, setLocked] = useState(false);
+  const unlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (open) setLocked(false);
+    return () => {
+      if (unlockTimer.current) clearTimeout(unlockTimer.current);
+    };
+  }, [open]);
+
+  const handleConfirm = () => {
+    if (locked) return;
+    setLocked(true);
+    if (unlockTimer.current) clearTimeout(unlockTimer.current);
+    unlockTimer.current = setTimeout(() => setLocked(false), 2500);
+    void onConfirm();
+  };
+
+  const busy = Boolean(isPending) || locked;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -37,10 +65,10 @@ export function ConfirmDialog({
           </Button>
           <Button
             variant={destructive ? "destructive" : "default"}
-            disabled={isPending}
-            onClick={() => void onConfirm()}
+            disabled={busy}
+            onClick={handleConfirm}
           >
-            {isPending ? "..." : confirmLabel}
+            {busy ? "..." : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

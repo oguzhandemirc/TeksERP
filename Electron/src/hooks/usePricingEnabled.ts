@@ -69,4 +69,10 @@ export function useIdleTimeoutMinutes(): number {
   return q.data?.data?.idleTimeoutMinutes ?? 0;
 }
 
+/** Saha #20: top adı format şablonu. Yüklenene kadar default. */
+export function useRollNameTemplate(): string {
+  const q = useFeatureFlags();
+  return q.data?.data?.rollNameTemplate?.trim() || "{item} {color} {width}";
+}
+
 export const FEATURE_FLAGS_QUERY_KEY = QUERY_KEY;

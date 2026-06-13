@@ -11,7 +11,16 @@ import { UserPreferenceService } from "../services/user-preference.service";
 import "../types/express-augment";
 
 // Gevşek doğrulama: frontend AppPreferences şeklini sahiplenir.
-const preferencesSchema = z.record(z.string(), z.unknown());
+// Boyut sınırı: blob JSON kolonuna olduğu gibi yazıldığından (sorgulanmıyor),
+// bozuk/kötü niyetli bir istemcinin kullanıcı başına çok-MB satır şişirmesini
+// engellemek için serileştirilmiş boyut 64KB ile sınırlı (tipik tercih <5KB).
+const MAX_PREFERENCES_BYTES = 64_000;
+const preferencesSchema = z
+  .record(z.string(), z.unknown())
+  .refine(
+    (v) => JSON.stringify(v).length <= MAX_PREFERENCES_BYTES,
+    "Tercih verisi çok büyük (en fazla 64KB)",
+  );
 
 export class UserPreferenceController {
   /**

@@ -8,6 +8,12 @@ import type { ApiResponse, CursorPaginatedResponse } from '../types/api';
 // =============================================================================
 
 export type ShipmentStatus = 'PREPARING' | 'READY' | 'AT_DOOR' | 'DISPATCHED' | 'CANCELLED';
+/** Saha #19+#22: yurtiçi/yurtdışı sevkiyat kapsamı. */
+export type ShipmentDestination = 'DOMESTIC' | 'EXPORT';
+export const shipmentDestinationLabels: Record<ShipmentDestination, string> = {
+  DOMESTIC: 'Yurtiçi',
+  EXPORT: 'Yurtdışı',
+};
 
 export const SHIPMENT_STATUS_TR: Record<ShipmentStatus, string> = {
   PREPARING: 'Hazırlanıyor',
@@ -145,6 +151,8 @@ export interface ShipmentDetail {
   id: string;
   shipmentNo: string;
   status: ShipmentStatus;
+  destination: ShipmentDestination;
+  procedureCode: string | null;
   plateNumber: string | null;
   driverName: string | null;
   carrier: string | null;
@@ -205,6 +213,8 @@ export interface SackStoreShipmentLite {
   id: string;
   shipmentNo: string;
   status: 'READY' | 'AT_DOOR';
+  destination: ShipmentDestination;
+  procedureCode: string | null;
   readyAt: string | null;
   customer: Ref;
   branch: { id: string; name: string } | null;
@@ -265,6 +275,26 @@ export interface ShipmentSackContents {
   sacks: SackContentSack[];
 }
 
+// Saha #3: locate-roll cevabı — top + bulunduğu çuval/sevkiyat (ikisi de olmayabilir).
+export interface LocatedRoll {
+  id: string;
+  barcode: string;
+  status: string;
+  currentQty: number;
+  width: number | null;
+  qualityGrade: string;
+  item: { id: string; name: string };
+  color: { id: string; name: string; hex: string | null } | null;
+  sack: { id: string; sackNo: string; seq: number; manualCode: string | null; weightKg: number | null } | null;
+  shipment: {
+    id: string;
+    shipmentNo: string;
+    status: ShipmentStatus;
+    customer: { id: string; name: string };
+    branch: { id: string; name: string } | null;
+  } | null;
+}
+
 export const packingService = {
   // ── Sipariş seçim ──
   listOpenOrders: (params?: { customerId?: string; branchId?: string }): Promise<ApiResponse<OpenOrder[]>> => {
@@ -276,9 +306,27 @@ export const packingService = {
   },
 
   // ── Sevkiyat oturumu ──
-  createShipment: (orderIds: string[]): Promise<ApiResponse<{ id: string; shipmentNo: string; status: ShipmentStatus }>> =>
+  createShipment: (
+    orderIds: string[],
+    destination?: ShipmentDestination,
+  ): Promise<ApiResponse<{ id: string; shipmentNo: string; status: ShipmentStatus }>> =>
     apiClient
-      .post<ApiResponse<{ id: string; shipmentNo: string; status: ShipmentStatus }>>('/shipping/shipments', { orderIds })
+      .post<ApiResponse<{ id: string; shipmentNo: string; status: ShipmentStatus }>>('/shipping/shipments', {
+        orderIds,
+        ...(destination ? { destination } : {}),
+      })
+      .then((r) => r.data),
+
+  // Saha #19: yurtiçi/yurtdışı kapsamı değiştir.
+  setDestination: (id: string, destination: ShipmentDestination): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/shipping/shipments/${id}/destination`, { destination })
+      .then((r) => r.data),
+
+  // Saha #21: prosedür/ihracat kodu güncelle (boş = temizle).
+  setProcedureCode: (id: string, procedureCode: string | null): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/shipping/shipments/${id}/procedure-code`, { procedureCode })
       .then((r) => r.data),
 
   getShipment: (id: string): Promise<ApiResponse<ShipmentDetail>> =>
@@ -362,6 +410,16 @@ export const packingService = {
   // Topu çuvaldan çuvala taşı (aynı sevkiyat içi)
   moveRollToSack: (rollId: string, sackId: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/rolls/${rollId}/move-sack`, { sackId }).then((r) => r.data),
+
+  // Saha #3: top yerini bul — barkod tam eşleşme (çuval + sevkiyat + statü).
+  locateRoll: (barcode: string): Promise<ApiResponse<LocatedRoll>> =>
+    apiClient
+      .get<ApiResponse<LocatedRoll>>(`/shipping/locate-roll?barcode=${encodeURIComponent(barcode)}`)
+      .then((r) => r.data),
+
+  // Saha #3: iki topun çuvalını takas et (aynı sevkiyat içi; PREPARING/READY/AT_DOOR).
+  swapRollSacks: (rollAId: string, rollBId: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/shipping/rolls/swap-sacks`, { rollAId, rollBId }).then((r) => r.data),
 
   // ── Sevke Hazır / Sevk / İptal ──
   markReady: (id: string): Promise<ApiResponse<{ shipmentId: string; rollCount: number; allocatedLines: number }>> =>

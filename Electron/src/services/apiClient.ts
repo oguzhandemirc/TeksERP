@@ -30,6 +30,8 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
+let lastSessionExpiredToastAt = 0;
+
 interface ApiErrorBody {
   message?: string;
   errors?: Array<{ field: string; message: string }>;
@@ -56,7 +58,10 @@ apiClient.interceptors.response.use(
       // yoksa (ağ hatası/timeout) offline. Toast bastırılmış olsa da durum güncellenir.
       if (error.response) {
         useServerStatusStore.getState().markReachable(readDateHeader(error.response.headers));
-      } else {
+      } else if (error.code !== "ECONNABORTED") {
+        // O7 fix: istemci timeout'u (ECONNABORTED) ≠ sunucu kapalı — ağır rapor/
+        // büyük indirme 15sn'i aşınca sidebar yanlışlıkla "offline"a düşüyordu.
+        // Yalnız gerçek ağ hatasında unreachable işaretle.
         useServerStatusStore.getState().markUnreachable();
       }
       const status = error.response?.status;
@@ -73,7 +78,12 @@ apiClient.interceptors.response.use(
         await tokenStore.clear();
         // Auth store'u temizle → App.tsx `Root` kapısı oturum-dışı router'a geçer.
         useAuthStore.getState().setUser(null);
-        toast.error("Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
+        // L fix: oturum düşerken uçuştaki paralel istekler 401 yağmuru üretir —
+        // 5sn tekilleştirme ile tek toast.
+        if (Date.now() - lastSessionExpiredToastAt > 5000) {
+          lastSessionExpiredToastAt = Date.now();
+          toast.error("Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
+        }
         return Promise.reject(error);
       }
 

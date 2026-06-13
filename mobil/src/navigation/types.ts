@@ -15,6 +15,8 @@ export type MainStackParamList = {
   SevkiyatGecmisi: undefined;
   SevkiyatDetay: { shipmentId: string; shipmentNo?: string };
   Paketleme: { shipmentId?: string; orderIds?: string[] };
+  CuvalDuzelt: undefined;
+  HizliSiparis: undefined;
   KartelaSevkGecmisi: undefined;
   KartelaKabulGecmisi: undefined;
   FasonSevkGecmisi: undefined;

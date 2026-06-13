@@ -223,10 +223,12 @@ export default function IadeGirisiScreen() {
     },
   });
 
-  // Neden ZORUNLU (katalog veya serbest metin) + aday sipariş varsa seçim zorunlu.
+  // Neden ZORUNLU (katalog veya serbest metin). Sipariş OPSİYONEL — gevşek modelde
+  // top↔sipariş bağı yalnız bilgi amaçlı (backend de orderId opsiyonel bırakır). Tek
+  // top, her şeyden bağımsız iade alınabilir: operatör topu okutur, sadece nedeni
+  // girer. Hangi sipariş/sevkiyattan döndüğü seçilirse bilgi olarak defterde tutulur.
   const hasReason = !!reasonId || reasonText.trim().length > 0;
-  const orderOk = orderOptions.length === 0 || !!orderId;
-  const canSubmit = !!result && hasReason && orderOk && !createMutation.isPending;
+  const canSubmit = !!result && hasReason && !createMutation.isPending;
   const roll = result?.roll;
   const selectedQualityName =
     qualityOptions.find((o) => o.value === qualityGradeId)?.label ?? roll?.qualityGrade ?? '—';
@@ -346,7 +348,7 @@ export default function IadeGirisiScreen() {
 
               {/* Sipariş seçimi (aday siparişler) */}
               <View style={styles.field}>
-                <FieldLabel hint={orderOptions.length > 0 && !orderId ? 'seçim zorunlu' : undefined}>
+                <FieldLabel optional hint="hangi siparişten döndü — bilgi">
                   Sipariş
                 </FieldLabel>
                 <SelectField

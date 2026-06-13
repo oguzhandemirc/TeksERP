@@ -3,11 +3,9 @@
 // =============================================================================
 
 import { Router } from "express";
-import { Request, Response, NextFunction } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { BaseService } from "../services/base.service";
-import prisma from "../lib/prisma";
-import { AuditService } from "../services/audit.service";
+import { stationHardRemove } from "../services/helpers/guarded-hard-remove";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 
@@ -35,6 +33,16 @@ const machineService = new BaseService({
 });
 
 const machineController = new BaseController(machineService);
+
+// --- Machine Hardware (saha donanım config: yazıcı + RS232 ara cihaz desenleri) ---
+const machineHardwareService = new BaseService({
+  modelName: "machineHardware",
+  tableName: "MACHINE_HARDWARE",
+  searchFields: ["printerIp", "printerMac", "kqMac", "mtMac"],
+  defaultInclude: { machine: { select: { id: true, code: true, name: true, stationId: true } } },
+  uniqueField: "machineId",
+});
+const machineHardwareController = new BaseController(machineHardwareService);
 
 const router = Router();
 
@@ -198,57 +206,8 @@ router.patch("/:id", verifyToken, requirePermission("station:write"), stationCon
  */
 router.delete("/:id", verifyToken, requirePermission("station:write"), stationController.remove);
 
-/**
- * Station hard-delete — önce bağlı kaynakları (machines + logs, routeSteps, workOrderSteps)
- * transaction içinde siler, ardından istasyonu veritabanından kaldırır.
- */
-async function stationHardRemove(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  try {
-    const id = String(req.params.id);
-
-    const station = await prisma.station.findUnique({ where: { id } });
-    if (!station) {
-      res.status(404).json({ success: false, data: null, message: "İstasyon bulunamadı" });
-      return;
-    }
-
-    await prisma.$transaction(async (tx) => {
-      // 1. Makineleri sil
-      await tx.machine.deleteMany({ where: { stationId: id } });
-
-      // 2. Rota adımlarını sil (RouteStep)
-      await tx.routeStep.deleteMany({ where: { stationId: id } });
-
-      // 3. İş emri adımlarını sil (WorkOrderStep) — sadece tamamlanmamış olanlar
-      await tx.workOrderStep.deleteMany({ where: { stationId: id } });
-
-      // 5. İstasyonu sil
-      await tx.station.delete({ where: { id } });
-    });
-
-    await AuditService.log({
-      userId: req.user?.userId,
-      action: "DELETE",
-      tableName: "STATION",
-      recordId: id,
-      oldData: station as Record<string, unknown>,
-      newData: null,
-    });
-
-    res.status(200).json({
-      success: true,
-      data: station,
-      message: "İstasyon ve bağlı tüm veriler kalıcı olarak silindi",
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
+// Station hard-delete — guard'lı kalıcı silme; iskelet + guard listesi
+// services/helpers/guarded-hard-remove.ts'te (üç /permanent ucunun tek kaynağı).
 router.delete("/:id/permanent", verifyToken, requirePermission("station:write"), stationHardRemove);
 
 // =============================================================================
@@ -378,5 +337,34 @@ machineRouter.delete("/:id", verifyToken, requirePermission("station:write"), ma
  */
 machineRouter.delete("/:id/permanent", verifyToken, requirePermission("station:write"), machineController.hardRemove);
 
-export { machineRouter };
+// =============================================================================
+// MACHINE HARDWARE ENDPOINTS (/api/machine-hardware) — saha donanım config
+// =============================================================================
+const machineHardwareRouter = Router();
+
+/**
+ * @openapi
+ * /api/machine-hardware:
+ *   get:
+ *     tags: [Machines]
+ *     summary: Makine donanım config listesi (yazıcı + RS232 ara cihaz desenleri)
+ *     description: Sahadaki yazıcı/MAC + regex parse desenleri — dokümantasyon + cihaz/kodlama seçimi.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Donanım config listesi }
+ *   post:
+ *     tags: [Machines]
+ *     summary: Yeni makine donanım config kaydı
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Oluşturuldu }
+ */
+machineHardwareRouter.get("/", verifyToken, requirePermission("station:read"), machineHardwareController.findAll);
+machineHardwareRouter.get("/:id", verifyToken, requirePermission("station:read"), machineHardwareController.findById);
+machineHardwareRouter.post("/", verifyToken, requirePermission("station:write"), machineHardwareController.create);
+machineHardwareRouter.patch("/:id", verifyToken, requirePermission("station:write"), machineHardwareController.update);
+machineHardwareRouter.delete("/:id", verifyToken, requirePermission("station:write"), machineHardwareController.remove);
+machineHardwareRouter.delete("/:id/permanent", verifyToken, requirePermission("station:write"), machineHardwareController.hardRemove);
+
+export { machineRouter, machineHardwareRouter };
 export default router;

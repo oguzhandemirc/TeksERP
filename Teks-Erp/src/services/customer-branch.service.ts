@@ -130,6 +130,24 @@ export class CustomerBranchService {
       return { success: true, data: { id }, message: "Şube zaten pasif" };
     }
 
+    // M-26: şubeye yönlenmiş AÇIK sipariş varsa pasifleştirme bloklanır
+    // (somut sipariş no listesiyle — müşteri softDelete guard'ının aynısı).
+    const openOrders = await prisma.order.findMany({
+      where: {
+        branchId: id,
+        status: { in: ["PENDING", "APPROVED", "PARTIAL_SHIPPED"] },
+      },
+      select: { orderNumber: true },
+      take: 20,
+    });
+    if (openOrders.length > 0) {
+      const list = openOrders.map((o) => o.orderNumber).join(", ");
+      throw AppError.conflict(
+        `Şubeye yönlenmiş açık siparişler var: ${list}${openOrders.length === 20 ? ", …" : ""}. ` +
+          `Önce siparişleri kapatın/iptal edin veya başka şubeye taşıyın.`
+      );
+    }
+
     await prisma.customerBranch.update({
       where: { id },
       data: { isActive: false },

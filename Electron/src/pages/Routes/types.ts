@@ -4,6 +4,9 @@ export interface RouteStep {
   stationId: string;
   sequence: number;
   defaultNotes: string | null;
+  /** Saha #14: şablonda saklanan fason planlaması — WO açılışında default klonlanır. */
+  requiredCategoryId?: string | null;
+  plannedSubcontractorId?: string | null;
   station?: {
     id: string;
     code: string;

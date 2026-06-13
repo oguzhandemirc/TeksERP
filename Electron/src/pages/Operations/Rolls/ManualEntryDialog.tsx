@@ -81,7 +81,9 @@ export function ManualEntryDialog({ open, onOpenChange }: Props) {
     onSuccess: (res) => {
       const barcode = res.data?.barcode ?? "-";
       toast.success(`Top oluşturuldu: ${barcode}`);
-      qc.invalidateQueries({ queryKey: ["rolls:STOCK"] });
+      // Y1 fix: ["rolls:STOCK"] ölü key'di (STOCK sekmesi RAW/FINISHED'a bölündü)
+      // — liste hiç tazelenmiyordu. ["rolls"] tüm sekme tablolarını + stats'ı kapsar.
+      qc.invalidateQueries({ queryKey: ["rolls"] });
       form.reset(defaults);
       onOpenChange(false);
     },

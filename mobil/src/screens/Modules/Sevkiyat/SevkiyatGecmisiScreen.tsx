@@ -19,6 +19,7 @@ import dayjs from 'dayjs';
 import ScreenChrome from '../../../components/ScreenChrome';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
+import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { packingService, type ShipmentListItem } from '../../../services/packing.service';
 import { customerService } from '../../../services/customer.service';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
@@ -65,6 +66,7 @@ export default function SevkiyatGecmisiScreen() {
     staleTime: 60_000,
   });
   const customers = custQ.data?.data ?? [];
+  useTruncationWarning(custQ.data?.pagination, 'Müşteri');
 
   const refresh = useManualRefresh(() => listQ.refetch(), 'Geçmiş güncellendi');
 

@@ -63,6 +63,22 @@ export default [
     },
   },
   {
+    // Test/E2E altyapısı (TS) — TS parser ile lint et (aksi halde `type` import'u
+    // parse error verir). Node ortamı.
+    files: ["e2e/**/*.{ts,tsx}", "playwright.config.ts", "vitest.config.ts"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { ecmaVersion: "latest", sourceType: "module" },
+      globals: nodeGlobals,
+    },
+    plugins: { "@typescript-eslint": tsPlugin },
+    rules: {
+      "no-unused-vars": "off",
+      "no-undef": "off",
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+    },
+  },
+  {
     ignores: [
       "out/**",
       "release/**",

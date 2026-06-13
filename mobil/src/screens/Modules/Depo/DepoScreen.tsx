@@ -174,8 +174,13 @@ export default function DepoScreen() {
     enabled: !isSwatchMode,
     staleTime: 30 * 1000,
   });
+  // O14 fix: PREPARING (sevkiyata okutulmuş, çuval depoya kalkmamış) toplar
+  // artık sayaca dahil — eskiden hiçbir kovada görünmüyor, "Serbest + Çuvalda"
+  // toplamı fiziksel depoyla tutmuyordu.
   const committedCount =
-    (scopeQuery.data?.data?.sackStore.count ?? 0) + (scopeQuery.data?.data?.atDoor.count ?? 0);
+    (scopeQuery.data?.data?.sackStore.count ?? 0) +
+    (scopeQuery.data?.data?.atDoor.count ?? 0) +
+    (scopeQuery.data?.data?.preparing?.count ?? 0);
 
   // Search artık backend'de — queryKey'de yer alır, değişince ilk sayfaya döner.
   const swatchesQuery = useInfiniteQuery({

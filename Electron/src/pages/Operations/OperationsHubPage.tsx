@@ -15,9 +15,11 @@ const TILE_TONES: Record<string, string> = {
 };
 
 export function OperationsHubPage() {
-  const { isAdmin, hasPermission } = useRoleAccess();
+  // Y6 fix: isAdmin bypass'ı kaldırıldı — kısmi admin (örn. yalnız admin:users)
+  // yetkisi olmayan operasyon kartlarını artık görmez (tıklayınca 403 yerine).
+  const { hasPermission } = useRoleAccess();
   const visible = operationsTiles.filter(
-    (t) => isAdmin || !t.permission || hasPermission(t.permission),
+    (t) => !t.permission || hasPermission(t.permission),
   );
 
   // Kullanıcının kayıtlı sırasını uygula (yeni/izin kazanılan kart sona eklenir).

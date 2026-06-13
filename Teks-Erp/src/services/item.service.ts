@@ -17,6 +17,7 @@ import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { validateName, validateCode } from "../lib/string-validators";
+import { normalizeItemName } from "./helpers/name-normalize.helper";
 
 export interface ItemCreateInput {
   code: string;
@@ -49,6 +50,10 @@ export class ItemService extends BaseService {
       required: true,
     });
     if (typeof validatedName === "string") input.name = validatedName;
+    // Saha #13: ürün adları HEPSİ BÜYÜK (tr) — filtre/arama tutarlılığı.
+    if (typeof input.name === "string") {
+      input.name = normalizeItemName(input.name);
+    }
 
     const allowedColorIds = [...new Set(input.allowedColorIds ?? [])];
     const allowedPropertyIds = [...new Set(input.allowedPropertyIds ?? [])];
@@ -186,6 +191,10 @@ export class ItemService extends BaseService {
         required: true,
       });
       if (typeof validated === "string") data.name = validated;
+      // Saha #13: ürün adları HEPSİ BÜYÜK (tr).
+      if (typeof data.name === "string") {
+        data.name = normalizeItemName(data.name);
+      }
     }
 
     const allowedColorIds = data.allowedColorIds as string[] | undefined;
@@ -198,6 +207,36 @@ export class ItemService extends BaseService {
       allowedColorIds !== undefined || allowedPropertyIds !== undefined;
     if (!hasListReplace) {
       return super.update(id, restData, userId);
+    }
+
+    // M-23: replace edilen listeler create() ile AYNI doğrulamadan geçer —
+    // pasif/var-olmayan renk veya özellik izinli listeye sokulamaz (eskiden
+    // doğrulamasızdı; var olmayan id ham P2003'e düşüyordu).
+    if (allowedColorIds !== undefined && allowedColorIds.length > 0) {
+      const colors = await prisma.color.findMany({
+        where: { id: { in: allowedColorIds } },
+        select: { id: true, name: true, isActive: true },
+      });
+      if (colors.length !== allowedColorIds.length) {
+        throw AppError.badRequest("Bazı renkler bulunamadı");
+      }
+      const inactiveColor = colors.find((c) => !c.isActive);
+      if (inactiveColor) {
+        throw AppError.badRequest(`'${inactiveColor.name}' rengi pasif`);
+      }
+    }
+    if (allowedPropertyIds !== undefined && allowedPropertyIds.length > 0) {
+      const props = await prisma.fabricProperty.findMany({
+        where: { id: { in: allowedPropertyIds } },
+        select: { id: true, name: true, isActive: true },
+      });
+      if (props.length !== allowedPropertyIds.length) {
+        throw AppError.badRequest("Bazı özellikler bulunamadı");
+      }
+      const inactiveProp = props.find((p) => !p.isActive);
+      if (inactiveProp) {
+        throw AppError.badRequest(`'${inactiveProp.name}' özelliği pasif`);
+      }
     }
 
     const updated = await prisma.$transaction(async (tx) => {

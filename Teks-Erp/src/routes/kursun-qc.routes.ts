@@ -117,35 +117,9 @@ router.post(
   controller.completeQc2
 );
 
-/**
- * @openapi
- * /api/kursun-qc/undo-qc2:
- *   post:
- *     tags: [KursunQc]
- *     summary: Bir topun QC2 tamamlandı işaretini geri al
- *     security: [{ bearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [rollId, stepId]
- *             properties:
- *               rollId: { type: string, format: uuid }
- *               stepId: { type: string, format: uuid }
- *     responses:
- *       200: { description: İşaret kaldırıldı veya zaten yoktu }
- *       400: { description: Top bu adımda değil }
- *       401: { description: Yetkisiz }
- *       500: { description: Sunucu hatası }
- */
-router.post(
-  "/undo-qc2",
-  verifyToken,
-  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
-  controller.undoQc2
-);
+// K6 (2026-06-12): POST /undo-qc2 kaldırıldı — UI butonu 2026-06-07'de bilinçli
+// silinmişti (yarım geri alma: KURSUN op + RollProperty topta kalıyordu), endpoint
+// çağrısız duruyordu. Kurtarma yolu: kapalı kartı tekrar okut (reopen-preview → reopen).
 
 /**
  * @openapi

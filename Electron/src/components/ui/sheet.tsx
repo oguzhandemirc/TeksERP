@@ -5,11 +5,21 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTabPortalContainer } from "@/components/layout/tabs/tab-portal";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
+import { EscCloseContext, useEscapeTarget } from "@/components/ui/escape-stack";
 
 /** Sekme içinde slide-over'ı o sekmeye gömer (bkz. Dialog). Dışarıda klasik. */
-function Sheet({ modal, ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
+function Sheet({ modal, onOpenChange, ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   const scoped = useTabPortalContainer() != null;
-  return <SheetPrimitive.Root modal={modal ?? !scoped} {...props} />;
+  // O5: Esc yığını controlled sheet'i kapatabilsin (bkz. dialog.tsx).
+  const requestClose = React.useMemo(
+    () => (onOpenChange ? () => onOpenChange(false) : null),
+    [onOpenChange],
+  );
+  return (
+    <EscCloseContext.Provider value={requestClose}>
+      <SheetPrimitive.Root modal={modal ?? !scoped} onOpenChange={onOpenChange} {...props} />
+    </EscCloseContext.Provider>
+  );
 }
 
 const SheetTrigger = SheetPrimitive.Trigger;
@@ -48,10 +58,27 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
     const tabContainer = useTabPortalContainer();
     const isTabActive = useIsTabActive();
     const scoped = tabContainer != null;
+    // Y5 fix: karartma sahipliği — dialog.tsx ile aynı; "herhangi bir overlay"
+    // kontrolü başka sekmedeki/kardeş modalın karartmasıyla bu sheet'i kapatıyordu.
+    const ownOverlayRef = React.useRef<HTMLDivElement>(null);
+    // O5 fix: Esc yönetimi escape-stack'te (bkz. dialog.tsx).
+    const requestClose = React.useContext(EscCloseContext);
+    const isTabActiveRef = React.useRef(isTabActive);
+    isTabActiveRef.current = isTabActive;
+    useEscapeTarget(
+      scoped && requestClose != null,
+      requestClose ?? (() => {}),
+      () => isTabActiveRef.current,
+    );
     return (
       <SheetPortal container={scoped ? tabContainer : undefined}>
         {scoped ? (
-          <div data-ui-overlay="" aria-hidden className="absolute inset-0 z-50 bg-black/70" />
+          <div
+            ref={ownOverlayRef}
+            data-ui-overlay=""
+            aria-hidden
+            className="absolute inset-0 z-50 bg-black/70"
+          />
         ) : (
           <SheetOverlay />
         )}
@@ -59,17 +86,23 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
           ref={ref}
           data-ui-sheet=""
           data-side={side}
+          {...(!scoped ? { "data-global-modal": "" } : {})}
           onEscapeKeyDown={(e) => {
-            if (scoped && !isTabActive) e.preventDefault();
+            if (scoped) e.preventDefault();
             onEscapeKeyDown?.(e);
           }}
           onInteractOutside={(e) => {
             onInteractOutside?.(e);
             if (e.defaultPrevented) return;
             if (scoped) {
+              // Pasif sekmedeki sheet dış tıklamayla kapanmaz (Esc simetriği).
+              if (!isTabActive) {
+                e.preventDefault();
+                return;
+              }
               const target = (e as unknown as { detail?: { originalEvent?: Event } }).detail
                 ?.originalEvent?.target as HTMLElement | null;
-              if (!target?.closest("[data-ui-overlay]")) e.preventDefault();
+              if (!target || target !== ownOverlayRef.current) e.preventDefault();
             }
           }}
           className={cn(sheetVariants({ side }), scoped && "absolute", className)}

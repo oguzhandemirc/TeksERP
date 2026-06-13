@@ -50,11 +50,11 @@ export function MultiSelectCheckboxList({
   const grouped = useMemo(() => {
     const filtered = items.filter((i) => {
       if (!search) return true;
-      const q = search.toLowerCase();
+      const q = search.toLocaleLowerCase("tr");
       return (
-        i.label.toLowerCase().includes(q) ||
-        (i.hint ?? "").toLowerCase().includes(q) ||
-        (i.group ?? "").toLowerCase().includes(q)
+        i.label.toLocaleLowerCase("tr").includes(q) ||
+        (i.hint ?? "").toLocaleLowerCase("tr").includes(q) ||
+        (i.group ?? "").toLocaleLowerCase("tr").includes(q)
       );
     });
     const map = new Map<string, MultiSelectItem[]>();

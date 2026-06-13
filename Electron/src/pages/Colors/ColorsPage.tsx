@@ -5,6 +5,7 @@ import { nextSortOrder } from "@/lib/sort-order";
 import { colorColumns } from "./columns";
 import { colorService } from "./service";
 import { ColorFormDialog } from "./ColorFormDialog";
+import { BulkColorAddDialog } from "./BulkColorAddDialog";
 import type { Color } from "./types";
 import type { ColorFormValues } from "./schema";
 
@@ -43,8 +44,9 @@ export function ColorsPage() {
       queryKey="colors"
       service={colorService}
       columns={colorColumns}
-      writePermission="item:write"
+      writePermission="property:write" // Y7 fix: backend color.routes property:* ister (item:* DEĞİL)
       searchPlaceholder="Kod veya ad ara..."
+      filterBar={<BulkColorAddDialog />}
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <ColorFormDialog
           open={open}

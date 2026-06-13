@@ -15,12 +15,26 @@ import { WorkOrderService } from "../src/services/workorder.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, TravelerCardStatus } from "@prisma/client";
 
-const ITEM = "9d49919d-b1d7-4e06-bb68-f55c5fb09911";
-const GRADE = "a1b5b3e1-e899-4ac3-9d57-b329491056b1";
-const ADMIN = "ff0baa78-8a0f-469e-8f1a-437efb3d4499";
-const ST_BOYA = "9254a500-68ff-4b88-af15-0e3182e3b14e";
-const ST_TAMBUR = "42270197-9e09-4984-a80f-703df2beec2e";
+// Fixture'lar business key ile çözülür (hardcoded UUID seed reset'inde geçersizleşir
+// — UUID migration sonrası kardeş testlerle aynı desen).
+let ITEM = "";
+let GRADE = "";
+let ADMIN = "";
+let ST_BOYA = "";
+let ST_TAMBUR = "";
 const WIDTH = 250;
+
+async function resolveFixtures(): Promise<void> {
+  const need = (v: { id: string } | null, label: string): string => {
+    if (!v) throw new Error(`Seed fixture eksik: ${label} (önce 'npm run seed')`);
+    return v.id;
+  };
+  ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
+  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade 1.KALITE");
+  ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "User admin");
+  ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "Station BOYA_FASON");
+  ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "Station TAMBUR_1");
+}
 
 const sub = new SubcontractorService();
 const wos = new WorkOrderService();
@@ -49,6 +63,7 @@ type Any = any;
 const woIds: string[] = [];
 
 async function main(): Promise<void> {
+  await resolveFixtures();
   const dye = await prisma.subcontractorCategory.findFirst({ where: { appliesColor: true }, select: { id: true } });
   const link = await prisma.subcontractorToCategory.findFirst({ where: { categoryId: dye!.id }, select: { subcontractorId: true } });
   const SUB = link!.subcontractorId;

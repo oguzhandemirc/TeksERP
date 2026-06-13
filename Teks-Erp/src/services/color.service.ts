@@ -17,6 +17,7 @@ import { BaseService } from "./base.service";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
+import { normalizeColorName } from "./helpers/name-normalize.helper";
 
 const TABLE_ALIAS = "CUSTOMER_COLOR_ALIAS";
 
@@ -59,6 +60,12 @@ export class ColorService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     const { customerIds, customerAliases, rest } = splitCustomerIds(data);
 
+    // Saha #13: renk adı standardı — BÜYÜK + tire + sayı blokları başta
+    // ("beyaz 055" → "055-BEYAZ").
+    if (typeof rest.name === "string") {
+      rest.name = normalizeColorName(rest.name);
+    }
+
     const res = await super.create(rest, userId);
     const color = res.data as { id: string } | null;
 
@@ -81,6 +88,11 @@ export class ColorService extends BaseService {
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     const { customerIds, customerAliases, rest } = splitCustomerIds(data);
+
+    // Saha #13: renk adı standardı (create ile aynı normalize).
+    if (typeof rest.name === "string") {
+      rest.name = normalizeColorName(rest.name);
+    }
 
     // rest boşsa gereksiz audit/no-op update üretme — mevcut kaydı çek.
     const res =
@@ -144,12 +156,19 @@ export class ColorService extends BaseService {
     const aliasMap = normalizeAliasMap(aliasByCustomer);
 
     if (customerIds.length > 0) {
+      // M-23: isActive da doğrulanır — pasif müşteriye exclusive atanan renk
+      // tüm public picker'lardan kayboluyor ama atanan müşteri de kullanamıyordu
+      // (renk fiilen "kayboluyordu").
       const found = await prisma.customer.findMany({
         where: { id: { in: customerIds } },
-        select: { id: true },
+        select: { id: true, name: true, isActive: true },
       });
       if (found.length !== customerIds.length) {
         throw AppError.badRequest("Bazı müşteriler bulunamadı");
+      }
+      const inactive = found.find((c) => !c.isActive);
+      if (inactive) {
+        throw AppError.badRequest(`'${inactive.name}' müşterisi pasif — renk atanamaz`);
       }
     }
 

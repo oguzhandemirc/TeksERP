@@ -154,7 +154,11 @@ export function RollsTable({ tab }: Props) {
   );
 
   const { table, query, search, setSearch, pagination } = useDataTable<Roll>({
-    queryKey: `rolls:${tab}`,
+    queryKey: `rolls:${tab}`, // tercih anahtarı (sütun sırası/görünürlük) — değişmeden kalır
+    // Y2 fix: React Query key'i array varyantlı — roll mutate eden her yerin
+    // ["rolls"] invalidate'i artık TÜM sekme tablolarına çarpar (string-suffix
+    // varyant array prefix eşleşmesine asla yakalanmıyordu).
+    queryKeyParts: ["rolls", tab],
     fetchFn: rollService.listCursor,
     columns: rollColumns,
     defaultPageSize: 100,
@@ -171,11 +175,12 @@ export function RollsTable({ tab }: Props) {
     () => ({ ...urlParams.filters, ...forceFilters }),
     [urlParams.filters, forceFilters],
   );
-  // Tablo ile aynı string prefix (`rolls:${tab}`) — RollsPage'deki RefreshButton
-  // bu prefix'i invalidate eder, stats da tabloyla birlikte tazelenir.
+  // Tablo ile aynı array prefix (["rolls", tab]) — ["rolls"] invalidate'i
+  // stats'ı da tabloyla birlikte tazeler.
   const statsQuery = useQuery({
     queryKey: [
-      `rolls:${tab}`,
+      "rolls",
+      tab,
       "stats",
       statsFilters,
       urlParams.search,

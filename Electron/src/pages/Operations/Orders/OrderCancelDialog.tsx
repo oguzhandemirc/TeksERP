@@ -167,6 +167,22 @@ export function OrderCancelDialog({
           </div>
         )}
 
+        {/* O2 fix: aktif sevkiyat bağı = backend her koşulda 409 — operatöre
+            engeli somut göster, onay butonu aşağıda canCancel ile kapanır. */}
+        {!isLoading && !hasError && preview && preview.canCancel === false && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+            <div className="font-medium text-destructive">
+              Bu sipariş aktif sevkiyata bağlı — iptal edilemez.
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Önce şu sevkiyat(lar) tamamlanmalı veya iptal edilmeli:{" "}
+              {preview.activeShipments
+                .map((s) => `${s.shipmentNo} (${s.status})`)
+                .join(", ")}
+            </div>
+          </div>
+        )}
+
         {affected.length > 0 && (
           <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">Özet:</span>{" "}
@@ -197,7 +213,7 @@ export function OrderCancelDialog({
             type="button"
             variant="destructive"
             onClick={() => cancelMut.mutate()}
-            disabled={isLoading || hasError || cancelMut.isPending}
+            disabled={isLoading || hasError || cancelMut.isPending || preview?.canCancel === false}
           >
             {cancelMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             Siparişi İptal Et

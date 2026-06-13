@@ -716,6 +716,10 @@ export default function FasonSevkScreen() {
 
   const handleAddBarcodeFromInput = () => addBarcodeFromString(barcodeInput);
 
+  // K-A5 fix: aynı barkodun EŞZAMANLI iki çözümlenmesi (hızlı çift okutma) iki
+  // resolve'un da bayat listeye karşı dedup geçmesiyle çift satır ekleyebiliyordu.
+  const resolvingBarcodesRef = useRef<Set<string>>(new Set());
+
   const addBarcodeFromString = async (raw: string) => {
     const barcode = raw.trim();
     if (!barcode) return;
@@ -725,6 +729,7 @@ export default function FasonSevkScreen() {
       setBarcodeInput('');
       return;
     }
+    if (resolvingBarcodesRef.current.has(barcode)) return; // aynı kod zaten çözümleniyor
 
     // Yanlış tip: refakat kartı (RK-) top alanına okutulduysa anında net hata.
     if (looksLikeCardBarcode(barcode)) {
@@ -739,6 +744,7 @@ export default function FasonSevkScreen() {
     }
 
     setScanning(true);
+    resolvingBarcodesRef.current.add(barcode);
     try {
       const res = await rollService.getByBarcode(barcode);
       const r = res.data;
@@ -758,6 +764,7 @@ export default function FasonSevkScreen() {
       });
     } finally {
       setScanning(false);
+      resolvingBarcodesRef.current.delete(barcode);
     }
   };
 

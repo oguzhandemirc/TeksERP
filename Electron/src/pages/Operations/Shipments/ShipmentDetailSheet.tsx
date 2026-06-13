@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Package, Undo2 } from "lucide-react";
+import { FileText, Package, Undo2, Target } from "lucide-react";
+import { PermissionGate } from "@/components/PermissionGate";
+import { RetargetOrdersDialog } from "./RetargetOrdersDialog";
 import {
   Sheet,
   SheetContent,
@@ -28,6 +30,7 @@ interface Props {
 
 export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
   const [noteOpen, setNoteOpen] = useState(false);
+  const [retargetOpen, setRetargetOpen] = useState(false);
 
   // Lazy — yalnız açılınca detay çekilir. queryKey irsaliye ile paylaşılır (cache).
   const q = useQuery({
@@ -67,15 +70,31 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
           <p className="mt-4 text-sm text-muted-foreground">Sevkiyat bulunamadı.</p>
         ) : (
           <div className="mt-4 space-y-4">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="gap-1"
-              onClick={() => setNoteOpen(true)}
-            >
-              <FileText className="h-3.5 w-3.5" /> Sevk İrsaliyesi
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-1"
+                onClick={() => setNoteOpen(true)}
+              >
+                <FileText className="h-3.5 w-3.5" /> Sevk İrsaliyesi
+              </Button>
+              {/* Saha #7: yeniden hedefle — sevk edilmemiş her durumda (DISPATCHED/CANCELLED hariç) */}
+              {d.status !== "DISPATCHED" && d.status !== "CANCELLED" && (
+                <PermissionGate permission="shipping:write">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="gap-1"
+                    onClick={() => setRetargetOpen(true)}
+                  >
+                    <Target className="h-3.5 w-3.5" /> Siparişleri Değiştir
+                  </Button>
+                </PermissionGate>
+              )}
+            </div>
 
             <div className="grid grid-cols-3 gap-2">
               <SummaryCard label="Top" value={`${d.summary.rollCount}`} />
@@ -272,6 +291,17 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange }: Props) {
           open={noteOpen}
           onOpenChange={setNoteOpen}
         />
+
+        {d && (
+          <RetargetOrdersDialog
+            shipmentId={d.id}
+            customerId={d.customer.id}
+            branchId={d.branch?.id ?? null}
+            currentOrderIds={d.orders.map((o) => o.id)}
+            open={retargetOpen}
+            onOpenChange={setRetargetOpen}
+          />
+        )}
       </SheetContent>
     </Sheet>
   );

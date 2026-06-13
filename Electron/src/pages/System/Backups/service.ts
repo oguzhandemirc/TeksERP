@@ -30,6 +30,9 @@ export function useBackups() {
 export async function downloadBackup(name: string): Promise<void> {
   const res = await apiClient.get(`/api/admin/backups/${encodeURIComponent(name)}/download`, {
     responseType: "blob",
+    // O7 fix: global 15sn timeout büyük dump dosyasında her seferinde kesiyordu
+    // (off-site kopya alınamaz hale geliyordu). Büyük transfer: 5 dk.
+    timeout: 300_000,
   });
   const url = URL.createObjectURL(res.data as Blob);
   const a = document.createElement("a");

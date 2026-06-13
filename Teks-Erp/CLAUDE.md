@@ -2,7 +2,7 @@
 
 Express 5 + Prisma 7 + PostgreSQL. See root `CLAUDE.md` for domain facts.
 
-> **Deep reference:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) — full schema (52 models, 14 enums), API endpoint map, pattern examples, business rules, performance playbook. Read it when starting non-trivial work.
+> **Deep reference:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) — full schema (66 models, 23 enums), API endpoint map, pattern examples, business rules, performance playbook. Read it when starting non-trivial work. (Not: §4-§6 envanter tabloları sevkiyat/kartela/iade modüllerinden eski — başlık sayıları güncel, tablo gövdeleri eksik olabilir.)
 
 ## Commands
 
@@ -43,13 +43,13 @@ JWT_SECRET="..."
 
 ## Architecture (özet)
 
-**Routes → Controllers → Services → Prisma** — alt katman atlamak yasak.
+**Routes → Controllers → Services → Prisma** — alt katman atlamak yasak. (Bilinçli istisna: ince read/ayar endpoint'leri — admin/dashboard/feature-flag/customer-branch/production-balance/station-capability route'ları controller'sız, route içinde Zod parse + servise delege; iş mantığı yine serviste, prisma import'u route/controller'da YASAK.)
 
-- `controllers/` (15 dosya) — HTTP layer, Zod validate, service çağırır
-- `services/` (22 dosya + `helpers/` + `reports/`) — iş mantığı, transaction, `AuditService.log()`
-- `routes/` (31 dosya + `reports/`) — Swagger JSDoc + `verifyToken` + `requirePermission`
+- `controllers/` (19 dosya) — HTTP layer, Zod validate, service çağırır
+- `services/` (33 dosya + `helpers/` + `reports/`) — iş mantığı, transaction, `AuditService.log()`
+- `routes/` (38 dosya + `reports/`) — Swagger JSDoc + `verifyToken` + `requirePermission`
 - `middlewares/` — `auth` (verifyToken), `rbac` (requirePermission), `error` (AppError + Prisma + Zod mapping), `device` (mobil pairing/token), `uuid-param` (UUID path validate)
-- `prisma/schema.prisma` — 52 model, 14 enum, `@prisma/adapter-pg`
+- `prisma/schema.prisma` — 66 model, 23 enum, `@prisma/adapter-pg`
 
 **Master Data CRUD** için yeni kod yazmadan `BaseController` + `BaseService` kullan (`searchFields` config'i yeterli). Detay: ARCHITECTURE.md §8.1.
 
@@ -66,11 +66,12 @@ Sadece bunlar. Alternatif tanıtma.
 | Docs | `swagger-ui-express`, `swagger-jsdoc` |
 | Logging | `morgan` |
 | Util | `uuid` |
+| Barcode | `bwip-js` |
 | Test data | `@faker-js/faker` (dev only) |
 
 ## RBAC Permission Kodları
 
-`requirePermission(code)` → `req.user.permissions[]` array. Permissions doğrudan kullanıcıya bağlanır (`UserPermission`), tekrar kullanım için `PermissionTemplate` var (rol modeli **yok**). Toplam **42 permission**, **9 modül**:
+`requirePermission(code)` → `req.user.permissions[]` array. Permissions doğrudan kullanıcıya bağlanır (`UserPermission`), tekrar kullanım için `PermissionTemplate` var (rol modeli **yok**). Toplam **54 permission**, **10 modül**:
 
 | Modül | Permissions |
 |---|---|
@@ -79,12 +80,13 @@ Sadece bunlar. Alternatif tanıtma.
 | MASTER_DATA | `item:read/write` |
 | QUALITY | `quality:read/write`, `property:read/write` |
 | SUBCONTRACTOR | `subcontractor:read/write` |
-| LOGISTICS | `label:read`, `label:print`, `label:edit`, `label-template:read/write` |
+| KARTELA | `kartela:read/write` |
+| LOGISTICS | `label:read`, `label:print`, `label:edit`, `label-template:read/write`, `shipping:read/write`, `return:read/write` |
 | REPORTS | `report:production/sales/quality/inventory/subcontract/customer/audit` |
 | ADMIN | `admin:users`, `admin:settings`, `admin:*` (wildcard) |
-| MOBILE | `mobile:kk1/kk2-kursun/tambur/depo/fason-sevk/fason-kabul`, `mobile:*` (wildcard) |
+| MOBILE | `mobile:kk1/kk2-kursun/tambur/depo/fason-sevk/fason-kabul/kartela-sevk/kartela-kabul/tarti-paket/sevkiyat/iade/hizli-is-emri`, `mobile:*` (wildcard) |
 
-> Eski LOGISTICS `shipment:*` ve `allocation:*` permission'ları sevkiyat modülü ile birlikte kaldırıldı. Yeni sevkiyat permission'ları yeniden yazımla birlikte gelecek.
+> Eski `shipment:*` ve `allocation:*` permission'ları 2026-05-25'te silindi; yeni sevkiyat yazımıyla `shipping:read/write` + `return:read/write` (LOGISTICS) ve mobil ekran izinleri geldi.
 
 Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmalı** (yoksa Admin dışı kullanıcılar 403 alır). Yeni permission ekliyorsan: hem `seed.ts`'i güncelle, hem de canlı DB'ye permission + ilgili kullanıcı/template atamalarını INSERT et. Detay: ARCHITECTURE.md §6.
 
@@ -92,7 +94,7 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmal�
 
 > Üretim yüzbinlerce satır barındıracak; ERP yıllarca yerel sunucuda çalışacak. Detay + örnekler: ARCHITECTURE.md §9, §10.1, §10.2.
 
-1. **FK index zorunlu.** Her `@relation` kolonuna `@@index([fkColumn])` — Prisma otomatik yapmaz.
+1. **FK index zorunlu.** Her `@relation` kolonuna `@@index([fkColumn])` — Prisma otomatik yapmaz. (Bilinçli istisna: düşük-trafik "kim yaptı" audit FK'ları — `printedById`, `grantedById`, `updatedById` gibi — sorgulanmadıkça indexlenmez; sorgu yolu doğarsa eklenir.)
 2. **Composite index sırası:** Eşitlik kolonları önce, range/order sonra. Örn: `[status, createdAt]` ✓, `[createdAt, status]` ✗.
 3. **Sık birlikte filtrelenen kolonlar = tek composite.** İki ayrı index bitmap scan'e zorlar.
 4. **Null-yoğun / soft-delete tablolarda partial index.** `WHERE col IS NOT NULL` veya `WHERE isActive = true` — raw SQL migration ile (Prisma şemada native değil). **Drift-free yöntem:** şemada `@@index([col])` BIRAK, migration `DROP INDEX ... ; CREATE INDEX ... WHERE ...` ile partial'a çevir — Prisma 7 partial predicate'i drift saymaz (test edildi). Aktif: `rolls` (sackId, shipmentId, parentReceiptId, batchSplitId — migration `20260606001717`); `work_order_steps` (stationId,status,isUrgent,priority,startedAt **WHERE status <> 'COMPLETED'** — açık-kart kuyruğu, COMPLETED yığını indekslenmez; migration `20260607010000`). `items`/`customers` partial'ı henüz YOK (gerekirse aynı yöntemle).
@@ -104,13 +106,13 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmal�
 10. **Transaction süresi kısa.** External I/O (HTTP, file) tx içinde **yapma** — lock uzar, deadlock riski. DB-level `idle_in_transaction_session_timeout=5min` aktif.
 11. **`tx.*` ile `Promise.all` YASAK.** pg adapter tek connection seri çalıştırır; ESLint kuralı yakalar (`eslint.config.mjs`).
 12. **EXPLAIN ile doğrula.** Yeni endpoint büyük tabloya değiyorsa `EXPLAIN ANALYZE` koş. `Seq Scan` görürsen index eksik.
-13. **Snapshot JSON'ları liste sorgusunda çekme.** `Manifest.snapshot`, `SubcontractorDispatch.printSnapshot` — sadece detay/print endpoint'i `select`'ine al.
+13. **Snapshot JSON'ları liste sorgusunda çekme.** `Manifest.snapshot`, `PrintedDocument.snapshot` — sadece detay/print endpoint'i `select`'ine al. (`SubcontractorDispatch.printSnapshot` migration `20260609225307` ile kaldırıldı — donmuş belgeler artık `PrintedDocument`'ta.)
 14. **Canlı DB'de index migration → vardiya dışında deploy et.** `CREATE INDEX` büyük tabloda yazma kilidi alır (milyon satırda dakikalarca). `prisma migrate deploy` komutunu gece veya hafta sonu çalıştır — operatörler farkına bile varmaz, sabah index hazır olur. Vardiya saatinde index ekleme yasak. (Sıfır-downtime gerekirse `CREATE INDEX CONCURRENTLY` + psql manuel akışı kurulabilir, şu an ihtiyaç yok.)
-    - **⚠️ statement_timeout tuzağı:** App DB'de `statement_timeout=30s` aktif (aşağıdaki operasyonel bakım notu). Bu, **uzun bir DDL'i (büyük tabloda `CREATE INDEX`) 30s'de İPTAL EDER** (doğrulandı: `canceling statement due to statement timeout`). Yüz binlerce+ satıra index ekleyen migration'ın EN BAŞINA `SET statement_timeout = 0;` koy — yoksa migration yarıda kesilir. (Boş/yeni kurulumda risk yok; toplu veri biriktikten sonra index eklerken kritik.)
+    - **⚠️ statement_timeout tuzağı:** App DB'de `statement_timeout=50s` aktif (aşağıdaki operasyonel bakım notu). Bu, **uzun bir DDL'i (büyük tabloda `CREATE INDEX`) 50s'de İPTAL EDER** (doğrulandı: `canceling statement due to statement timeout`). Yüz binlerce+ satıra index ekleyen migration'ın EN BAŞINA `SET statement_timeout = 0;` koy — yoksa migration yarıda kesilir. (Boş/yeni kurulumda risk yok; toplu veri biriktikten sonra index eklerken kritik.)
 
 ## Operasyonel Bakım
 
-- **`statement_timeout=30s`** aktif (uzun sorgu otomatik iptal). DB-level: `ALTER DATABASE "TeksErpDb" SET statement_timeout = '30s'` — migration ile değil, manuel uygulanır. Detay: ARCHITECTURE.md §10.1.
+- **`statement_timeout=50s`** aktif (uzun sorgu otomatik iptal; `pg_db_role_setting`'den 2026-06-12 doğrulandı). DB-level: `ALTER DATABASE <db> SET statement_timeout = '50s'` — migration ile değil, manuel uygulanır. DB adı ortama göre: dev=`adnansahin_db` (.env), Windows production=`TeksErpDb` (installer). Detay: ARCHITECTURE.md §10.1.
 - **Slow query log** (`>500ms`) PostgreSQL log dosyasına düşer.
 - **6 ayda bir** `POST /api/admin/system-logs/archive { "monthsToKeep": 6 }` — `archived=0` dönene kadar tekrar et.
 - **3 ayda bir** ARCHITECTURE.md §10.2 sağlık kontrol SQL'lerini çalıştır.
@@ -127,6 +129,21 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmal�
 - [ ] Fiziksel DELETE değil `isActive: false` veya status değişikliği
 - [ ] `any` yok
 - [ ] `tx` içinde `Promise.all([tx.*])` yok
+- [ ] Dış referans ID'leri (`itemId`/`colorId`/`propertyId`...) var-mı + `isActive` doğrulandı
+- [ ] `@unique` numara/barkod üretiyorsa `withBarcodeRetry` + sequence okuma closure/tx İÇİNDE (`utils/barcode-retry.ts`)
+- [ ] Durum geçişi/tüketim → **atomik claim**: `updateMany WHERE {id, beklenen-durum}` + `count===0` → 409; `findUnique→if→update` check-then-act YASAK (claim sonrası içerik tx İÇİNDE taze yüklenir)
+- [ ] Mobil ekranın dokunacağı endpoint → `requireAnyPermission('<web-izni>', ...MOBILE_X)` (sadece `requirePermission` = saha kullanıcısı 403)
+- [ ] Decimal kolonda JS float aritmetiği yok — DB-side `increment`/`decrement` veya `Prisma.Decimal` (`.plus()/.minus()`)
+- [ ] Sevkiyat içeriğine dokunuyorsa önce `touchShipmentPreparingTx`; çuval içeriği değişiyorsa `resetSackWeightsTx` (bayat kg irsaliyeye gitmesin)
+
+## Test Scriptleri
+
+Test altyapısı `scripts/test_*.ts` dosyalarıdır — **jest/vitest YOK, kurma** (Allowed Packages listesi). Sözleşme:
+
+- Server'sız entegrasyon: service sınıfı + prisma doğrudan import edilir, HTTP yok; `npx tsx scripts/test_X.ts` ile koşar.
+- Fixture: seed master-data'sı business-key ile çözülür (**hardcoded UUID yazma** — reseed'de kırılır); üretilen veri `TEST-` prefix'li benzersiz kodlarla.
+- Çıktı: ✅/❌ `check(label, ok)` sayaçları + sonda `=== Sonuç: N geçti, M başarısız ===` + `process.exit(fail > 0 ? 1 : 0)`.
+- Cleanup `finally` bloğunda (test kendi yarattığını siler) + `prisma.$disconnect()`.
 
 ## Version Gotchas
 

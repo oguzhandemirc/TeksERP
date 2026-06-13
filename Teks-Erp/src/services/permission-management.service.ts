@@ -17,6 +17,15 @@ type GrantInput = {
   validUntil?: Date | null;
 };
 
+// Admin UI'ya dönen kullanıcı alanları (passwordHash asla sızmaz).
+const USER_SELECT = {
+  id: true,
+  username: true,
+  fullName: true,
+  isActive: true,
+  createdAt: true,
+} as const;
+
 export class PermissionManagementService {
   // ---------------------------------------------------------------------------
   // Yetki kataloğu — admin UI grid'i için
@@ -220,6 +229,146 @@ export class PermissionManagementService {
       recordId: userId,
       newData: { username: user.username, resetByAdmin: true },
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Kullanıcı CRUD (oluştur / güncelle / pasife al) — eskiden admin.routes
+  // handler'ı içinde inline'dı (Routes→Services katman atlama). Tek sahip burası.
+  // ---------------------------------------------------------------------------
+  static async createUser(
+    input: { username: string; fullName: string; password: string; isActive?: boolean },
+    actorUserId: string | undefined
+  ) {
+    const exists = await prisma.user.findUnique({
+      where: { username: input.username },
+      select: { id: true },
+    });
+    if (exists) throw AppError.conflict("Bu kullanıcı adı zaten kullanılıyor");
+
+    const passwordHash = await bcrypt.hash(input.password, 10);
+    const user = await prisma.user.create({
+      data: {
+        username: input.username,
+        fullName: input.fullName,
+        passwordHash,
+        isActive: input.isActive ?? true,
+      },
+      select: USER_SELECT,
+    });
+
+    await AuditService.log({
+      userId: actorUserId,
+      action: "CREATE",
+      tableName: "users",
+      recordId: user.id,
+      newData: { username: user.username, fullName: user.fullName, isActive: user.isActive },
+    });
+
+    return user;
+  }
+
+  static async updateUser(
+    id: string,
+    input: { fullName?: string; isActive?: boolean },
+    actorUserId: string | undefined
+  ) {
+    const existing = await prisma.user.findUnique({
+      where: { id },
+      select: USER_SELECT,
+    });
+    if (!existing) throw AppError.notFound("Kullanıcı bulunamadı");
+
+    // M-32: self-deactivation guard'ı SERVİSTE (tek kaynak) — eskiden yalnız
+    // DELETE route'undaydı; Electron edit formu PATCH isActive:false ile bu
+    // yoldan geçiyor ve tek admin:users kullanıcısı kendini kilitleyebiliyordu
+    // (kurtarma DB müdahalesi).
+    if (input.isActive === false) {
+      this.assertNotSelfDeactivation(id, actorUserId);
+      await this.assertNotLastActiveAdmin(id);
+    }
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: input,
+      select: USER_SELECT,
+    });
+
+    await AuditService.log({
+      userId: actorUserId,
+      action: "UPDATE",
+      tableName: "users",
+      recordId: id,
+      oldData: { fullName: existing.fullName, isActive: existing.isActive },
+      newData: input,
+    });
+
+    return user;
+  }
+
+  private static assertNotSelfDeactivation(
+    targetId: string,
+    actorUserId: string | undefined
+  ): void {
+    if (actorUserId && actorUserId === targetId) {
+      throw AppError.badRequest("Kendi hesabınızı pasife alamazsınız");
+    }
+  }
+
+  /** Pasifleştirilecek kullanıcı SON aktif admin:users sahibiyse blokla —
+   *  kimse kullanıcı yönetimine giremez hale gelmesin. */
+  private static async assertNotLastActiveAdmin(targetId: string): Promise<void> {
+    const targetHasAdmin = await prisma.userPermission.findFirst({
+      where: {
+        userId: targetId,
+        permission: { code: { in: ["admin:users", "admin:*"] } },
+      },
+      select: { id: true },
+    });
+    if (!targetHasAdmin) return;
+    const otherActiveAdmin = await prisma.user.findFirst({
+      where: {
+        id: { not: targetId },
+        isActive: true,
+        permissions: {
+          some: { permission: { code: { in: ["admin:users", "admin:*"] } } },
+        },
+      },
+      select: { id: true },
+    });
+    if (!otherActiveAdmin) {
+      throw AppError.conflict(
+        "Bu kullanıcı son aktif kullanıcı-yöneticisi (admin:users) — pasife alınamaz. Önce başka bir yöneticiye yetki verin."
+      );
+    }
+  }
+
+  /** Soft delete (isActive=false). Self-deactivation + son-admin guard'ları serviste. */
+  static async deactivateUser(id: string, actorUserId: string | undefined) {
+    const existing = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, isActive: true },
+    });
+    if (!existing) throw AppError.notFound("Kullanıcı bulunamadı");
+
+    this.assertNotSelfDeactivation(id, actorUserId);
+    await this.assertNotLastActiveAdmin(id);
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: { isActive: false },
+      select: USER_SELECT,
+    });
+
+    await AuditService.log({
+      userId: actorUserId,
+      action: "DELETE",
+      tableName: "users",
+      recordId: id,
+      oldData: { isActive: existing.isActive },
+      newData: { isActive: false },
+    });
+
+    return user;
   }
 
   // ---------------------------------------------------------------------------

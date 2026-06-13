@@ -4,7 +4,9 @@
 //
 // Kapsam (kullanıcı soruları + bulgu avı):
 //   A. Çuvaldan çuvala okutma: re-scan = taşı (çift kayıt yok), idempotent, sevkiyatlar arası red.
-//   B. Çuval Depo (READY) kilitleri: okutma/çıkarma/taşıma/tartı/çuval-silme hepsi reddedilir.
+//   B. Çuval Depo (READY) davranışı (saha #3 sonrası YENİ sözleşme): okutma + çuval silme
+//      hâlâ reddedilir; top çıkarma ÇALIŞIR (recommit + boşalan çuval silinir) ve
+//      tartı/kod güncelleme ÇALIŞIR (içerik düzeltmesi sonrası yeniden tartı yolu).
 //   C. Geri çekme zinciri: AT_DOOR→READY (pull-back), READY→PREPARING (unready, commit geri),
 //      top sevkiyattan çıkarma → serbest depo → başka sevkiyata okutulabilir; dolu çuval silme.
 //   D. Sertleştirme doğrulamaları (2026-06-10 denetiminde bulunan 5 bulgunun fix'leri):
@@ -102,7 +104,11 @@ async function makeSwatch(cancelled = false): Promise<{ id: string; barcode: str
 }
 
 async function makeShipment(orderId: string): Promise<string> {
-  const created = (await ship.createShipment({ orderIds: [orderId] })) as { data: { id: string } };
+  // Saha #19: bu test çuval tartısı zorunluluğunu (B0b vb.) varsayıyor → EXPORT
+  // sevkiyat kullan (yurtiçi sevkte tartı zorunlu değildir; ayrı testte ele alınır).
+  const created = (await ship.createShipment({ orderIds: [orderId], destination: "EXPORT" })) as {
+    data: { id: string };
+  };
   createdShipments.push(created.data.id);
   return created.data.id;
 }
@@ -191,25 +197,34 @@ async function main() {
   await expectErr("B2 READY'de okutma reddedilir", "Yalnızca hazırlanan sevkiyata", () =>
     ship.scanIntoShipment({ shipmentId: ship1, barcode: r1.barcode, sackId: sack1 })
   );
-  await expectErr("B3 READY'de top çıkarma reddedilir", "çıkarılamaz", () =>
-    ship.removeRollFromShipment({ shipmentId: ship1, rollId: r1.id })
+  // Saha #3 YENİ sözleşme: READY'de top çıkarma ÇALIŞIR — recommit (65→40, r2=25
+  // düştü) + içeriği değişen çuvalın tartısı sıfır + boşalan çuval otomatik silinir.
+  await ship.removeRollFromShipment({ shipmentId: ship1, rollId: r2.id });
+  check("B3 READY'de top çıkarma çalışır + recommit (65→40)", (await shippedQtyOf(line1)) === 40);
+  const r2AfterB3 = await rollState(r2.id);
+  check(
+    "B3b çıkan top serbest depoya döndü",
+    r2AfterB3.status === RollStatus.WAREHOUSE && r2AfterB3.shipmentId === null && r2AfterB3.sackId === null
   );
-  await expectErr("B4 READY'de çuval değiştirme reddedilir", "çuval değiştirilemez", () =>
-    ship.moveRollToSack({ rollId: r1.id, sackId: sack1 })
+  check(
+    "B4 boşalan çuval READY'de otomatik silindi",
+    (await prisma.sack.findUnique({ where: { id: sack1 } })) === null
   );
-  await expectErr("B5 READY'de tartı/kod değiştirme reddedilir", "değiştirilemez", () =>
-    ship.updateSack({ sackId: sack1, weightKg: 50 })
-  );
-  await expectErr("B6 READY'de çuval silme reddedilir", "silinemez", () => ship.removeSack(sack1));
+  // Saha #3: tartı/kod güncelleme READY'de ÇALIŞIR (içerik düzeltmesi tartıyı
+  // sıfırlayınca yeniden tartı bu yoldan girilir — unready'siz akış).
+  await ship.updateSack({ sackId: sack2, weightKg: 50, manualCode: "TEST-K2" });
+  const sack2W = await prisma.sack.findUnique({ where: { id: sack2 }, select: { weightKg: true } });
+  check("B5 READY'de tartı/kod güncelleme çalışır (yeniden tartı yolu)", Number(sack2W?.weightKg) === 50);
+  await expectErr("B6 READY'de çuval silme reddedilir", "silinemez", () => ship.removeSack(sack2));
 
   // ── C: Geri çekme zinciri ──
   console.log("\n--- C: Kapı önünden / çuval depodan geri çekme ---");
   await ship.moveToDoor(ship1);
   check("C1 kapı önüne kondu (AT_DOOR)", (await statusOf(ship1)) === ShipmentStatus.AT_DOOR);
-  check("C1b çift commit yok (65)", (await shippedQtyOf(line1)) === 65);
+  check("C1b çift commit yok (40)", (await shippedQtyOf(line1)) === 40);
   await ship.pullBackFromDoor(ship1);
   check("C2 kapı önünden geri çekildi (READY)", (await statusOf(ship1)) === ShipmentStatus.READY);
-  check("C2b commit korundu (65)", (await shippedQtyOf(line1)) === 65);
+  check("C2b commit korundu (40)", (await shippedQtyOf(line1)) === 40);
 
   await ship.unmarkReady(ship1);
   check("C3 hazırlığa geri alındı (PREPARING)", (await statusOf(ship1)) === ShipmentStatus.PREPARING);
@@ -220,7 +235,7 @@ async function main() {
     r1AfterUnready.status === RollStatus.WAREHOUSE && r1AfterUnready.shipmentId === ship1 && r1AfterUnready.sackId === sack2
   );
 
-  await ship.removeRollFromShipment({ shipmentId: ship1, rollId: r2.id });
+  // r2 B3'te READY'deyken çıkarılmıştı — hâlâ serbest depoda olmalı.
   const r2Free = await rollState(r2.id);
   check(
     "C4 top sevkiyattan çıktı → serbest depo",
@@ -244,7 +259,9 @@ async function main() {
   console.log("\n--- D: Sertleştirme doğrulamaları ---");
 
   // D1: boş çuval (tartılı+kodlu olsa da) Sevke Hazır'ı bloklar (hayalet çuval yok)
-  await ship.scanIntoShipment({ shipmentId: ship1, barcode: r1.barcode, sackId: sack1 }); // r1 geri ship1/sack1'e
+  // sack1 B3'te otomatik silindi, sack2 C7'de içeriğiyle silindi → r1 için taze çuval aç.
+  const sackD = await makeSack(ship1);
+  await ship.scanIntoShipment({ shipmentId: ship1, barcode: r1.barcode, sackId: sackD }); // r1 geri ship1'e
   const sack3 = await makeSack(ship1); // boş kalacak
   await ship.updateSack({ sackId: sack3, weightKg: 7, manualCode: "TEST-BOS" });
   await expectErr("D1 boş çuval Sevke Hazır'ı bloklar (hayalet çuval irsaliyeye giremez)", "çuvallar boş", () =>
@@ -253,24 +270,22 @@ async function main() {
   await ship.removeSack(sack3); // boş çuvalı temizle
 
   // D2: tartı sonrası içerik değişimi → İKİ çuvalın da tartısı sıfırlanır (yeniden tartı zorunlu)
-  await ship.updateSack({ sackId: sack1, weightKg: 42, manualCode: "TEST-K1" }); // C'de içerik değişimi sıfırlamıştı, yeniden tart
+  await ship.updateSack({ sackId: sackD, weightKg: 42, manualCode: "TEST-K1" });
   const sack4 = await makeSack(ship1);
   await ship.updateSack({ sackId: sack4, weightKg: 9, manualCode: "TEST-K4" });
-  await ship.moveRollToSack({ rollId: r1.id, sackId: sack4 }); // sack1→sack4: ikisinin de içeriği değişti
-  const [sack1W, sack4W] = await Promise.all([
-    prisma.sack.findUnique({ where: { id: sack1 }, select: { weightKg: true } }),
-    prisma.sack.findUnique({ where: { id: sack4 }, select: { weightKg: true } }),
-  ]);
+  await ship.moveRollToSack({ rollId: r1.id, sackId: sack4 }); // sackD→sack4: ikisinin de içeriği değişti
+  const sackDW = await prisma.sack.findUnique({ where: { id: sackD }, select: { weightKg: true } });
+  const sack4W = await prisma.sack.findUnique({ where: { id: sack4 }, select: { weightKg: true } });
   check(
     "D2 içerik değişince iki çuvalın da tartısı sıfırlanır (bayat kg irsaliyeye gidemez)",
-    sack1W?.weightKg === null && sack4W?.weightKg === null,
-    `çuval-1: ${sack1W?.weightKg ?? "null"}, çuval-4: ${sack4W?.weightKg ?? "null"}`
+    sackDW?.weightKg === null && sack4W?.weightKg === null,
+    `çuval-D: ${sackDW?.weightKg ?? "null"}, çuval-4: ${sack4W?.weightKg ?? "null"}`
   );
 
   // D3: iptal edilmiş kartela okutulamaz (soft-delete giriş guard'ı)
   const swCancelled = await makeSwatch(true);
   await expectErr("D3 iptal edilmiş kartela okutulamaz", "İptal edilmiş kartela okutulamaz", () =>
-    ship.scanIntoShipment({ shipmentId: ship1, barcode: swCancelled.barcode, sackId: sack1 })
+    ship.scanIntoShipment({ shipmentId: ship1, barcode: swCancelled.barcode, sackId: sack4 })
   );
 
   // D4: kartela eşzamanlı okutmada atomik claim — tam 1 kazanan (top ile aynı desen)

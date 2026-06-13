@@ -80,11 +80,10 @@ export function RollsPage() {
         description="Envanterdeki ve üretimdeki tüm topların listesi."
         actions={
           <>
-            {/* Aktif sekmenin queryKey'i `rolls:<tab>` formatında (useDataTable);
-                "rolls" prefix match etmiyor — tek string'in başlangıcı array
-                matching ile yakalanmaz. */}
+            {/* Y2 fix: tablo key'leri artık ["rolls", tab] array formunda —
+                aktif sekmeyi hedefli tazele; KANBAN'da ["rolls"] hepsini kapsar. */}
             <RefreshButton
-              queryKey={tab === "KANBAN" ? "rolls" : `rolls:${tab}`}
+              queryKey={tab === "KANBAN" ? ["rolls"] : ["rolls", tab]}
             />
             {tab === "RAW_STOCK" && (
               <PermissionGate permission="roll:write">

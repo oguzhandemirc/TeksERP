@@ -31,6 +31,10 @@ export interface OrderCancelPreview {
   orderId: string;
   orderNumber: string;
   affectedWorkOrders: OrderCancelPreviewWO[];
+  /** O2 fix: aktif sevkiyat bağları — varken backend iptali 409 ile bloklar;
+   *  UI onay butonunu kapatıp engelleri somut listeler. */
+  activeShipments: Array<{ shipmentNo: string; status: string }>;
+  canCancel: boolean;
 }
 
 export const orderService = {

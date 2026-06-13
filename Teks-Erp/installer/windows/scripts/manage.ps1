@@ -380,8 +380,11 @@ log_min_duration_statement = 500
         Invoke-Psql -Sql "CREATE DATABASE ""$DbName"" OWNER $DbUser ENCODING 'UTF8'" -SuperPass $Secrets.pgSuperPassword
         Write-Ok "Veritabani olusturuldu: $DbName"
     }
-    # CLAUDE.md operasyonel notu: per-DB statement_timeout
-    Invoke-Psql -Sql "ALTER DATABASE ""$DbName"" SET statement_timeout = '30s'" -SuperPass $Secrets.pgSuperPassword
+    # CLAUDE.md operasyonel notu: per-DB statement_timeout.
+    # 50s = postgresql.conf'taki degerle ve dev DB'yle AYNI olmali — per-DB ayar
+    # conf'u ezdigi icin buradaki deger gercek efektif degerdir (2026-06-12: 30s
+    # yaziyordu, conf 50s'ti — uretim/dev tutarsizligi duzeltildi).
+    Invoke-Psql -Sql "ALTER DATABASE ""$DbName"" SET statement_timeout = '50s'" -SuperPass $Secrets.pgSuperPassword
 }
 
 # -----------------------------------------------------------------------------

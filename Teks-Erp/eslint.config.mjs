@@ -47,4 +47,27 @@ export default [
       ],
     },
   },
+  // --- Katman guardrail'i: route/controller'da prisma client yasak ----------
+  // Routes → Controllers → Services → Prisma (CLAUDE.md). Prisma client'ı
+  // yalnız service katmanı import eder; route/controller'dan DB'ye inen kod
+  // katman ihlali + audit/sanitize bypass'ıdır. Enum TİPLERİ için
+  // `import { X } from "@prisma/client"` serbesttir (sadece client instance
+  // modülü kısıtlı). Mevcut tarihi ihlaller satır bazlı disable + TODO taşır.
+  {
+    files: ["src/routes/**/*.ts", "src/controllers/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/lib/prisma"],
+              message:
+                "Route/controller katmanında prisma client import'u YASAK — iş mantığını servise taşı (CLAUDE.md katman kuralı).",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];

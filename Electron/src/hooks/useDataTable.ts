@@ -15,6 +15,13 @@ import { usePreferences } from "@/providers/PreferencesProvider";
 
 interface Options<T> {
   queryKey: string;
+  /** React Query key'inin array hali — invalidation prefix-match'i İÇİN.
+   *  Verilirse query key `[...queryKeyParts, baseKey]` olur; `queryKey` string'i
+   *  yalnız tablo tercih anahtarı (sütun sırası/görünürlük) olarak kalır.
+   *  Varyantlı tablolarda ("rolls:RAW_STOCK" gibi) MUTLAKA ver: string-suffix
+   *  varyant `["rolls"]` invalidate'ine ASLA yakalanmaz (kural: queryKey
+   *  varyantları array elemanı olmalı). */
+  queryKeyParts?: readonly string[];
   fetchFn: (params: CursorParams) => Promise<CursorPaginatedResponse<T>>;
   columns: ColumnDef<T>[];
   /** Sayfa başına satır (cursor `limit`). Default 50. */
@@ -36,6 +43,7 @@ interface Options<T> {
  */
 export function useDataTable<T>({
   queryKey,
+  queryKeyParts,
   fetchFn,
   columns,
   defaultPageSize = 50,
@@ -136,7 +144,7 @@ export function useDataTable<T>({
   );
 
   const query = useInfiniteQuery({
-    queryKey: [queryKey, baseKey],
+    queryKey: [...(queryKeyParts ?? [queryKey]), baseKey],
     queryFn: ({ pageParam }) =>
       fetchFn({
         cursor: pageParam,

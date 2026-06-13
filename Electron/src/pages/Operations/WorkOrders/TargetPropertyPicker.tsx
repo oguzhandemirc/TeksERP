@@ -102,12 +102,12 @@ export function TargetPropertyPicker({
   }, [isUnrestricted, allowed, fullPropsQ.data]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim().toLocaleLowerCase("tr");
     if (!q) return effective;
     return effective.filter(
       (a) =>
-        a.property.name.toLowerCase().includes(q) ||
-        a.property.code.toLowerCase().includes(q),
+        a.property.name.toLocaleLowerCase("tr").includes(q) ||
+        a.property.code.toLocaleLowerCase("tr").includes(q),
     );
   }, [effective, search]);
 

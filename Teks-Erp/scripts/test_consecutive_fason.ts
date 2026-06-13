@@ -12,15 +12,32 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, StepStatus } from "@prisma/client";
 
-const ITEM = "9d49919d-b1d7-4e06-bb68-f55c5fb09911"; // PATOS
-const GRADE = "a1b5b3e1-e899-4ac3-9d57-b329491056b1"; // 1.KALITE
-const ADMIN = "ff0baa78-8a0f-469e-8f1a-437efb3d4499";
-const ST_BOYA = "9254a500-68ff-4b88-af15-0e3182e3b14e"; // Boyahane (Fason)
-const ST_ZIMPARA = "776f40bf-4116-4d7f-8c42-801a6496d904"; // Zımpara (Fason)
-const ST_TAMBUR = "42270197-9e09-4984-a80f-703df2beec2e"; // Tambur
-const SUB_BOYER = "f83bcbf5-1f59-4eef-953d-fd4526c5c070"; // Boyer Boyacılık
-const SUB_KESTEL = "9050b4ba-0e85-44b6-a523-01332d157957"; // Kestel Zımpara
+// Fixture id'leri seed'den runtime'da çözülür: seed her çalıştığında yeni uuid
+// üretir → hardcoded id re-seed sonrası kırılırdı. Business key (code/username) ile bağla.
+let ITEM = "";
+let GRADE = "";
+let ADMIN = "";
+let ST_BOYA = "";
+let ST_ZIMPARA = "";
+let ST_TAMBUR = "";
+let SUB_BOYER = "";
+let SUB_KESTEL = "";
 const WIDTH = 250;
+
+async function resolveFixtures(): Promise<void> {
+  const need = (v: { id: string } | null, label: string): string => {
+    if (!v) throw new Error(`Seed fixture eksik: ${label} (önce 'npm run seed')`);
+    return v.id;
+  };
+  ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
+  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade 1.KALITE");
+  ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "User admin");
+  ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "Station BOYA_FASON");
+  ST_ZIMPARA = need(await prisma.station.findFirst({ where: { code: "ZIMPARA_FASON" }, select: { id: true } }), "Station ZIMPARA_FASON");
+  ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "Station TAMBUR_1");
+  SUB_BOYER = need(await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } }), "Subcontractor BOYER");
+  SUB_KESTEL = need(await prisma.subcontractor.findFirst({ where: { code: "KESTEL" }, select: { id: true } }), "Subcontractor KESTEL");
+}
 
 const sub = new SubcontractorService();
 const cards = new TravelerCardService();
@@ -65,6 +82,7 @@ let woId = "";
 const stepIds: string[] = [];
 
 async function main(): Promise<void> {
+  await resolveFixtures();
   // ── 1) İş emri: ardışık iki fason adımı + tambur ──
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({

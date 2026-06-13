@@ -14,13 +14,27 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, StepStatus } from "@prisma/client";
 
-const ITEM = "9d49919d-b1d7-4e06-bb68-f55c5fb09911"; // PATOS
-const GRADE = "a1b5b3e1-e899-4ac3-9d57-b329491056b1"; // 1.KALITE
-const ADMIN = "ff0baa78-8a0f-469e-8f1a-437efb3d4499";
-const ST_BOYA = "9254a500-68ff-4b88-af15-0e3182e3b14e"; // Boyahane (Fason)
-const ST_TAMBUR = "42270197-9e09-4984-a80f-703df2beec2e"; // Tambur
-const SUB_BOYER = "f83bcbf5-1f59-4eef-953d-fd4526c5c070"; // Boyer Boyacılık
+// Fixture id'leri seed'den runtime'da çözülür (re-seed sonrası hardcoded id kırılırdı).
+let ITEM = "";
+let GRADE = "";
+let ADMIN = "";
+let ST_BOYA = "";
+let ST_TAMBUR = "";
+let SUB_BOYER = "";
 const WIDTH = 250;
+
+async function resolveFixtures(): Promise<void> {
+  const need = (v: { id: string } | null, label: string): string => {
+    if (!v) throw new Error(`Seed fixture eksik: ${label} (önce 'npm run seed')`);
+    return v.id;
+  };
+  ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
+  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade 1.KALITE");
+  ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "User admin");
+  ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "Station BOYA_FASON");
+  ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "Station TAMBUR_1");
+  SUB_BOYER = need(await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } }), "Subcontractor BOYER");
+}
 
 const sub = new SubcontractorService();
 const cards = new TravelerCardService();
@@ -68,6 +82,7 @@ const stepIds: string[] = [];
 type Any = any;
 
 async function main(): Promise<void> {
+  await resolveFixtures();
   const stamp = `${Date.now()}`.slice(-6);
   const wo = await prisma.workOrder.create({
     data: {

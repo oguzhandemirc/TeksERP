@@ -93,7 +93,7 @@ export const API_URL = 'http://192.168.X.X:4000/api'; // Tablet ve sunucu aynı 
 5. **Fason** — Sevk oluştur / mal kabul
 6. **Dashboard** — İş emri özet görünümü
 
-> NOT: Tartı / paket / sevkiyat mobil ekranları yeni sevkiyat modülü tasarlanınca eklenecek — backend tarafı şu an yok.
+> NOT: Tartı/Paket ve Sevkiyat mobil ekranları CANLI — `src/screens/Modules/TartiPaket/` ("Sevkiyat" etiketi) ve `Sevkiyat/` ("Sevk Çıkışı" etiketi); izinler `mobile:tarti-paket` / `mobile:sevkiyat`; backend `/api/shipping`. (Ekran key ≠ görünen etiket.)
 
 ## UI/UX Kuralları (Tablet + Telefon)
 

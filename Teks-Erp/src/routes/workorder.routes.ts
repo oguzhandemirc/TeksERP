@@ -46,20 +46,10 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  */
 router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.findAll);
 
-/**
- * @openapi
- * /api/work-orders/available-for-attach:
- *   get:
- *     tags: [WorkOrders]
- *     summary: Bağlama için bekleyen iş emirleri
- *     description: Planlama tarafından oluşturulmuş ancak topları henüz bağlanmamış PLANNED durumundaki iş emirlerini listeler.
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Bekleyen iş emri listesi
- */
-router.get("/available-for-attach", verifyToken, requirePermission("workorder:write"), controller.findAvailableForAttach);
+// K6 (2026-06-12): GET /available-for-attach, PATCH /:id/attach-rolls ve
+// PATCH /:id/detach-rolls HTTP uçları kaldırıldı — hiçbir frontend çağırmıyordu
+// (Electron+mobil grep'le doğrulandı). attachRolls/detachRolls SERVİS metodları
+// yaşıyor: quick-start ve seed scriptleri içeriden çağırır.
 
 /**
  * @openapi
@@ -430,72 +420,6 @@ router.patch("/:id", verifyToken, requireAnyPermission("workorder:write", "mobil
  *       409: { description: Üretim başlamış (sadece PLANNED + roll bağlı olmayan WO) }
  */
 router.put("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.replace);
-
-/**
- * @openapi
- * /api/work-orders/{id}/attach-rolls:
- *   patch:
- *     tags: [WorkOrders]
- *     summary: İş emrine top bağla
- *     description: |
- *       El terminali ile okunan barkodları iş emrine bağlar.
- *       Topların STOCK durumunda olması gerekir; status IN_PRODUCTION'a çevrilir.
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [barcodes]
- *             properties:
- *               barcodes:
- *                 type: array
- *                 items: { type: string }
- *                 example: ["TEKS-20260415-A1B2C3D4", "TEKS-20260415-E5F6G7H8"]
- *     responses:
- *       200:
- *         description: Toplar bağlandı (başarılı/hatalı sayıları ile)
- *       404:
- *         description: İş emri bulunamadı
- */
-router.patch("/:id/attach-rolls", verifyToken, requirePermission("workorder:write"), controller.attachRolls);
-
-/**
- * @openapi
- * /api/work-orders/{id}/detach-rolls:
- *   patch:
- *     tags: [WorkOrders]
- *     summary: İş emrinden (sepetten) top çıkar
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [rollIds]
- *             properties:
- *               rollIds:
- *                 type: array
- *                 items: { type: string, format: uuid }
- *     responses:
- *       200:
- *         description: Toplar sepetten çıkarıldı
- */
-router.patch("/:id/detach-rolls", verifyToken, requirePermission("workorder:write"), controller.detachRolls);
 
 /**
  * @openapi

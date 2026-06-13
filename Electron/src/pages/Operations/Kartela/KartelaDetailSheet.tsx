@@ -66,6 +66,7 @@ function DispatchDetail({ id }: { id: string }) {
   const [printOpen, setPrintOpen] = useState(false);
   const query = useQuery({
     queryKey: ["kartela", "dispatch", id],
+    staleTime: 0, // L: mobil iptal/kabul aninda gorunsun — 5dk global default bayat birakiyordu
     queryFn: () => kartelaService.getDispatch(id).then((r) => r.data),
     enabled: !!id,
   });
@@ -164,6 +165,7 @@ function DispatchDetail({ id }: { id: string }) {
 function ReceiptDetail({ id }: { id: string }) {
   const query = useQuery({
     queryKey: ["kartela", "receipt", id],
+    staleTime: 0,
     queryFn: () => kartelaService.getReceipt(id).then((r) => r.data),
     enabled: !!id,
   });

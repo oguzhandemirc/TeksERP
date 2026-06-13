@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { printDocumentArea } from "@/lib/print";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
@@ -32,6 +33,7 @@ interface Props {
 const DOC_TYPE = "SUBCONTRACTOR_DISPATCH" as const;
 
 export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) {
+  const printRef = useRef<HTMLDivElement>(null); // Y3: izole iframe baskısının kök alanı
   const { hasPermission } = useRoleAccess();
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
 
@@ -40,7 +42,9 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
     queryKey: ["printed-doc", DOC_TYPE, dispatchId],
     queryFn: () => printedDocumentService.getCurrent<FasonDispatchDoc>(DOC_TYPE, dispatchId!),
     enabled: open && Boolean(dispatchId),
-    staleTime: 5 * 60_000,
+    // K-A2 fix: belge durumu (ACTIVE/VOIDED/SUPERSEDED) başka istemciden değişir —
+    // 5dk cache, iptal edilmiş belgeyi İPTAL filigransız bastırabiliyordu.
+    staleTime: 0,
   });
   const currentDoc = docQuery.data?.data ?? null;
 
@@ -94,7 +98,7 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto rounded-md border bg-muted/30 p-4">
+        <div ref={printRef} className="flex-1 overflow-auto rounded-md border bg-muted/30 p-4">
           {loading && (
             <div className="space-y-2">
               <Skeleton className="h-20 w-full" />
@@ -104,6 +108,25 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
           {!loading && !shown && (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               Sevk bilgisi bulunamadı.
+            </div>
+          )}
+          {/* O4 fix: canlı overlay (istenen renk + boyahane notu) alınamadıysa
+              fiş RENKSİZ/NOTSUZ basılırdı — boyahaneye yanlış talimat. Baskıyı
+              blokla, yeniden dene sun. */}
+          {!loading && shown && overlayQuery.isError && (
+            <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+              <div className="font-medium text-destructive">
+                Renk/boyahane notu yüklenemedi — fiş eksik talimatla BASILMAZ.
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                onClick={() => void overlayQuery.refetch()}
+              >
+                Yeniden Dene
+              </Button>
             </div>
           )}
           {!loading && shown && dispatchId && (
@@ -125,13 +148,16 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
                   locked={overlay.dyehouseNoteLocked}
                 />
               )}
-              {sheetData && (
+              {sheetData && !overlayQuery.isError && (
                 <PrintableSheet
                   snap={sheetData}
                   companyName={shown.snapshot.company.name}
                   letterhead={shown.snapshot.company.letterhead}
                   docConfigOverride={shown.snapshot.docConfigOverride}
                   voided={shown.status === "VOIDED"}
+                superseded={shown.status === "SUPERSEDED"}
+                docNo={shown.documentNo}
+                docVersion={shown.version}
                 />
               )}
             </>
@@ -145,8 +171,8 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
           <Button
             type="button"
             className="gap-1"
-            disabled={!sheetData}
-            onClick={() => window.print()}
+            disabled={!sheetData || overlayQuery.isError}
+            onClick={() => printDocumentArea(printRef.current)}
           >
             <Printer className="h-4 w-4" /> Yazdır
           </Button>

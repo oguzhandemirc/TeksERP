@@ -304,12 +304,22 @@ export default function NewWorkOrderView() {
     }
   }, []);
 
+  // K-A4 fix: çözümleme sürerken gelen okuma SESSİZCE düşüyordu (yavaş ağda
+  // operatör art arda okutur, kamera ✓ verir, top listeye girmez). Paketleme'deki
+  // FIFO kuyruğun aynısı: meşgulken kuyruğa al, bitince sıradakini işle.
+  const pendingScanQueueRef = useRef<string[]>([]);
+
   const handleScan = useCallback(
     async (raw: string) => {
       const barcode = raw.trim();
       if (!barcode) return;
-      if (resolvingRef.current) return;
       if (scannedRef.current.some((s) => s.barcode === barcode)) return; // bilinen mükerrer → sessiz, ağ çağrısı yok
+      if (resolvingRef.current) {
+        if (!pendingScanQueueRef.current.includes(barcode)) {
+          pendingScanQueueRef.current.push(barcode);
+        }
+        return;
+      }
       resolvingRef.current = true;
       Haptics.selectionAsync().catch(() => {}); // yakalama anında hafif tık (kabul/ret sonra)
       try {
@@ -324,6 +334,8 @@ export default function NewWorkOrderView() {
         reject(`${barcode} okunamadı`);
       } finally {
         resolvingRef.current = false;
+        const next = pendingScanQueueRef.current.shift();
+        if (next) void handleScan(next);
       }
     },
     [addRolls],

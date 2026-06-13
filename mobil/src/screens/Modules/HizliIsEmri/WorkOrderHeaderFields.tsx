@@ -4,6 +4,7 @@ import { Text, TextInput, TouchableRipple, Icon } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import { colorService } from '../../../services/color.service';
+import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { colors, spacing, radius } from '../../../theme';
 
 // Gelişmiş mod + Düzenle formu ortak alanları (rota/sipariş HARİÇ — onlar New'e özel).
@@ -49,6 +50,8 @@ export default function WorkOrderHeaderFields({ value, onChange, showBatchNumber
       colorService.listPublicForPicker({ page: 1, pageSize: 300, sortBy: 'name', sortOrder: 'asc' }),
     staleTime: 10 * 60 * 1000,
   });
+
+  useTruncationWarning(colorsQuery.data?.pagination, 'Renk');
 
   const colorOptions: PickerOption[] = useMemo(
     () =>

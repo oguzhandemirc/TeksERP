@@ -710,6 +710,25 @@ export function WorkOrderFormView({
                 }}
                 error={routeError ?? undefined}
               />
+              {/* Saha #15: Boyahane notu fason adımının alanı — rotada fason
+                  (EXTERNAL) adım varsa burada; "Gelişmiş" akordeonunda gömülü değil. */}
+              {routeSteps.some((s) => s.stationType === "EXTERNAL") && (
+                <FormField
+                  label="Boyahane Notu"
+                  htmlFor="dyehouseNote"
+                  error={form.formState.errors.dyehouseNote}
+                  hintTone="info"
+                  hint="Fason sevkinde boyahaneye iletilir (örn. yıkama yapma, matlaştır). Sevk fişinde 'İstenen Renk'in yanında basılır."
+                >
+                  <textarea
+                    id="dyehouseNote"
+                    rows={2}
+                    placeholder="Boyahaneye özel talimat…"
+                    {...form.register("dyehouseNote")}
+                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                </FormField>
+              )}
             </FormSection>
 
             {/* 4 — Takip + planlama. Parti kodu izler; gelişmiş alanlar opsiyonel. */}
@@ -851,21 +870,6 @@ export function WorkOrderFormView({
                         />
                       </FormField>
                     </div>
-                    <FormField
-                      label="Boyahane Notu"
-                      htmlFor="dyehouseNote"
-                      error={form.formState.errors.dyehouseNote}
-                      hintTone="info"
-                      hint="Fason sevkinde boyahaneye iletilir (örn. yıkama yapma, matlaştır). Sevk fişinde 'İstenen Renk'in yanında basılır."
-                    >
-                      <textarea
-                        id="dyehouseNote"
-                        rows={2}
-                        placeholder="Boyahaneye özel talimat…"
-                        {...form.register("dyehouseNote")}
-                        className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </FormField>
                   </div>
                 )}
               </div>

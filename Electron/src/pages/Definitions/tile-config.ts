@@ -18,6 +18,7 @@ import {
   Undo2,
   FileText,
   Printer,
+  Cpu,
   type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
@@ -58,7 +59,7 @@ export const definitionTiles: DefinitionTile[] = [
     icon: Palette,
     to: "/definitions/colors",
     group: "catalog",
-    permission: "item:read",
+    permission: "property:read", // Y7 fix: backend color.routes property:read ister
   },
   {
     key: "quality-grades",
@@ -120,6 +121,15 @@ export const definitionTiles: DefinitionTile[] = [
     description: "İstasyonlardaki makine envanteri",
     icon: Cog,
     to: "/definitions/machines",
+    group: "production",
+    permission: "station:read",
+  },
+  {
+    key: "machine-hardware",
+    title: "Makine Donanımı",
+    description: "Sahadaki yazıcı + RS232 ara cihaz MAC/IP + veri çözen regex desenleri",
+    icon: Cpu,
+    to: "/definitions/machine-hardware",
     group: "production",
     permission: "station:read",
   },

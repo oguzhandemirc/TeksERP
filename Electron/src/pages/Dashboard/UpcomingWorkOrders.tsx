@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { CalendarPlus } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,12 +11,20 @@ import { useTabsStore } from "@/store/tabs";
 import { fetchUpcomingWorkOrders } from "./dashboardService";
 
 export function UpcomingWorkOrders() {
+  // O8 fix: izin yoksa sorgu HİÇ atılmaz (enabled) ve widget gizlenir — dar
+  // yetkili kullanıcıda login anındaki 403 toast fırtınası önlenir.
+  // Erken return HOOK'lardan SONRA (rules-of-hooks).
+  const { hasPermission } = useRoleAccess();
+  const allowed = hasPermission("workorder:read");
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard", "upcomingWorkOrders"],
     queryFn: fetchUpcomingWorkOrders,
     staleTime: 60_000,
+    enabled: allowed,
   });
+
+  if (!allowed) return null;
 
   return (
     <Card className="border-t-2 border-t-warning/60">

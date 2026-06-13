@@ -172,6 +172,17 @@ export const errorHandler = (
       return;
     }
 
+    // P2007 — Data validation error (örn. uuid kolonuna geçersiz formatlı
+    // string). L (düşük bulgu): eskiden generic dala düşüp belirsiz mesaj +
+    // console gürültüsü üretiyordu; net 400'e eşlendi.
+    if (prismaErr.code === "P2007") {
+      res.status(400).json({
+        success: false,
+        message: "Geçersiz veri formatı (örn. hatalı ID). Gönderilen değerleri kontrol edin.",
+      });
+      return;
+    }
+
     // P2020 — Value out of range for the type.
     // Yüksek sayı, taşmış decimal, geçersiz tarih vb.
     if (prismaErr.code === "P2020") {

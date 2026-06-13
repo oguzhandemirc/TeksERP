@@ -88,21 +88,44 @@ export function buildNextCursor(
 
 const NULL_MARKER = "\u0000NULL\u0000";
 
+/** Cursor değer tipi etiketi: s=string, n=number/Decimal, d=Date, b=boolean. */
+export type CursorValueTag = "s" | "n" | "d" | "b";
+
 export interface DynamicCursor {
-  /** sortBy kolonunun serileştirilmiş değeri. null = NULL_MARKER. */
+  /** sortBy kolonunun serileştirilmiş değeri. null = sıralama kolonu NULL. */
   v: string | null;
   id: string;
+  /** Değer tipi — decode tarafında TAHMİN yerine bu kullanılır. Eski (etiketsiz)
+   *  token'larda yoktur; geriye-uyum için coerceCursorValue fallback'i kalır. */
+  t?: CursorValueTag;
 }
 
 export function encodeDynamicCursor(c: DynamicCursor): string {
-  const v = c.v === null ? NULL_MARKER : c.v;
-  return Buffer.from(`${v}${SEP}${c.id}`, "utf8").toString("base64url");
+  // JSON format (v2): tip etiketi taşır. Eski `v__id` formatı decode'da hâlâ kabul edilir.
+  return Buffer.from(JSON.stringify({ v: c.v, id: c.id, t: c.t }), "utf8").toString(
+    "base64url",
+  );
 }
 
 export function decodeDynamicCursor(token: string | undefined): DynamicCursor | null {
   if (!token) return null;
   try {
     const raw = Buffer.from(token, "base64url").toString("utf8");
+    // v2 (JSON) format
+    if (raw.startsWith("{")) {
+      const parsed = JSON.parse(raw) as { v?: unknown; id?: unknown; t?: unknown };
+      if (typeof parsed.id !== "string" || !parsed.id) return null;
+      const v =
+        parsed.v === null || typeof parsed.v === "string"
+          ? (parsed.v as string | null)
+          : null;
+      const t =
+        parsed.t === "s" || parsed.t === "n" || parsed.t === "d" || parsed.t === "b"
+          ? (parsed.t as CursorValueTag)
+          : undefined;
+      return { v, id: parsed.id, t };
+    }
+    // v1 (legacy) format: `v__id`
     const idx = raw.lastIndexOf(SEP);
     if (idx === -1) return null;
     const vStr = raw.slice(0, idx);
@@ -115,8 +138,11 @@ export function decodeDynamicCursor(token: string | undefined): DynamicCursor | 
 }
 
 /**
- * Cursor'daki string değeri Prisma'nın anlayacağı tipe dönüştürür.
- * ISO date pattern → Date, sayı → number, aksi halde string.
+ * Cursor'daki string değeri Prisma'nın anlayacağı tipe dönüştürür — yalnız
+ * etiketsiz LEGACY token'lar için tahmin. Tip etiketi varsa typedFromTag
+ * kullanılır: '10245' gibi tamamen rakamsal ürün/renk kodlarının number'a
+ * çevrilip string kolonda PrismaClientValidationError (2. sayfa 400) üretmesi
+ * böylece engellenir.
  */
 function coerceCursorValue(v: string): unknown {
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) {
@@ -130,40 +156,67 @@ function coerceCursorValue(v: string): unknown {
   return v;
 }
 
+function typedFromTag(tag: CursorValueTag, v: string): unknown {
+  switch (tag) {
+    case "d": {
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? v : d;
+    }
+    case "n": {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : v;
+    }
+    case "b":
+      return v === "true";
+    default:
+      return v;
+  }
+}
+
 /**
  * Dinamik cursor için where clause.
  *
  * asc:  (field > val) OR (field = val AND id > cursor.id)
  * desc: (field < val) OR (field = val AND id < cursor.id)
  *
- * Null cursor değeri: nulls-last varsayımıyla, null grubu içinde id ile devam.
- * (Nullable kolonların tam doğru sayfalaması Phase 1 kapsamında değil — null
- * sayısı az olduğunda çalışır; uç durumda offset mode'a düşmek gerekebilir.)
+ * NULLABLE sıralama kolonu (`sortNullable=true` — orderBy `nulls:'last'` İLE
+ * birlikte kullanılmalı): null grubu her iki yönde de EN SONA gelir; non-null
+ * fazın where'ine `OR {field: null}` dalı eklenir ki sayfa sınırı non-null
+ * grubun sonuna gelince null kuyruğuna geçilebilsin. (Eskiden gt/lt üç-değerli
+ * mantıkta NULL satırları elediği için kuyruk sessizce düşüyordu; DESC'te ise
+ * Postgres default NULLS FIRST cursor'ı null grubuna kilitleyip non-null
+ * kayıtların TAMAMINI yutuyordu.)
  */
 export function dynamicCursorWhere(
   cursor: DynamicCursor,
   sortField: string,
   sortOrder: "asc" | "desc",
+  sortNullable = false,
 ): Record<string, unknown> {
   const op = sortOrder === "asc" ? "gt" : "lt";
 
   if (cursor.v === null) {
+    // Null fazı: nulls-last sıralamada null grubu SON grup — id ile devam.
     return {
       [sortField]: null,
       id: { [op]: cursor.id },
     };
   }
 
-  const typed = coerceCursorValue(cursor.v);
+  const typed = cursor.t ? typedFromTag(cursor.t, cursor.v) : coerceCursorValue(cursor.v);
 
-  return {
-    OR: [
-      { [sortField]: { [op]: typed } },
-      {
-        AND: [{ [sortField]: typed }, { id: { [op]: cursor.id } }],
-      },
-    ],
-  };
+  const branches: Record<string, unknown>[] = [
+    { [sortField]: { [op]: typed } },
+    {
+      AND: [{ [sortField]: typed }, { id: { [op]: cursor.id } }],
+    },
+  ];
+  if (sortNullable) {
+    // Non-null faz bitince null kuyruğuna geçiş (nulls-last ile null'lar "sonra").
+    branches.push({ [sortField]: null });
+  }
+
+  return { OR: branches };
 }
 
 export function buildNextDynamicCursor(
@@ -173,10 +226,31 @@ export function buildNextDynamicCursor(
   if (!lastItem) return null;
   const v = lastItem[sortField];
   let serialized: string | null;
-  if (v === null || v === undefined) serialized = null;
-  else if (v instanceof Date) serialized = v.toISOString();
-  else serialized = String(v);
-  return encodeDynamicCursor({ v: serialized, id: lastItem.id as string });
+  let tag: CursorValueTag | undefined;
+  if (v === null || v === undefined) {
+    serialized = null;
+  } else if (v instanceof Date) {
+    serialized = v.toISOString();
+    tag = "d";
+  } else if (typeof v === "boolean") {
+    serialized = String(v);
+    tag = "b";
+  } else if (typeof v === "number") {
+    serialized = String(v);
+    tag = "n";
+  } else if (
+    typeof v === "object" &&
+    v !== null &&
+    typeof (v as { toNumber?: unknown }).toNumber === "function"
+  ) {
+    // Prisma.Decimal (duck-type — bu util prisma'ya bağımlı değil)
+    serialized = String(v);
+    tag = "n";
+  } else {
+    serialized = String(v);
+    tag = "s";
+  }
+  return encodeDynamicCursor({ v: serialized, id: lastItem.id as string, t: tag });
 }
 
 // =============================================================================

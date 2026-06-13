@@ -46,6 +46,8 @@ interface Props {
 
 function orderToFormValues(order: Order): OrderFormValues {
   return {
+    // Düzenlemede numara salt-okunur gösterilir (backend update'te zaten yazmaz).
+    orderNumber: order.orderNumber ?? "",
     customerId: order.customerId,
     branchId: order.branchId,
     currency: order.currency,
@@ -199,6 +201,21 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
               />
             </FormField>
           </div>
+
+          {/* Saha #16: sipariş no görünür + override edilebilir (boş = otomatik). */}
+          <FormField label="Sipariş No" error={form.formState.errors.orderNumber}>
+            <Input
+              {...form.register("orderNumber")}
+              placeholder="Boş bırak — otomatik üretilir (YYYYAAGG-N)"
+              disabled={!!order}
+              className="sm:max-w-md"
+            />
+            {!!order && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Mevcut siparişin numarası değiştirilemez (muhasebe/irsaliye izi).
+              </p>
+            )}
+          </FormField>
 
           <div className="grid grid-cols-2 gap-3 sm:max-w-md">
             <FormField label="Termin" error={form.formState.errors.deadline}>

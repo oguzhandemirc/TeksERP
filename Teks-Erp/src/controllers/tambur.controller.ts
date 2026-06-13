@@ -26,7 +26,7 @@ const finalizeSchema = z.object({
   cuts: z
     .array(
       z.object({
-        length: z.number().positive("Kesim uzunluğu pozitif olmalı"),
+        length: z.number().positive("Kesim uzunluğu pozitif olmalı").max(100_000, "Kesim uzunluğu gerçekçi değil (max 100.000 m)"),
         qualityGrade: z.string().min(1, "Kalite seçilmelidir"),
         relatedErrorIds: z.array(z.string().uuid()).default([]),
       })
@@ -51,12 +51,12 @@ const finalizeSchema = z.object({
 const reportErrorSchema = z.object({
   rollId: z.string().uuid(),
   stepId: z.string().uuid(),
-  startMeter: z.number().min(0),
+  startMeter: z.number().min(0).max(100_000, "Metre değeri gerçekçi değil"),
   defectTypeId: z.string().uuid(),
 });
 
 const cutOpenFabricSchema = z.object({
-  lengthMeters: z.number().positive("Kesim metresi pozitif olmalı"),
+  lengthMeters: z.number().positive("Kesim metresi pozitif olmalı").max(100_000, "Kesim metresi gerçekçi değil (max 100.000 m)"),
   status: z.enum(["WAREHOUSE", "SCRAP", "A1_STOCK"], {
     message: "Status WAREHOUSE | SCRAP | A1_STOCK olmalı",
   }),
@@ -78,7 +78,7 @@ const finalizeOpenFabricSchema = z.object({
 });
 
 const cutWarehouseRollSchema = z.object({
-  cutLength: z.number().positive("Kesim metresi pozitif olmalı"),
+  cutLength: z.number().positive("Kesim metresi pozitif olmalı").max(100_000, "Kesim metresi gerçekçi değil (max 100.000 m)"),
   qualityGrade: z.string().max(50).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   markedForKartela: z.boolean().optional(),

@@ -16,11 +16,6 @@ export interface CompleteQc2Request {
   notes?: string | null;
 }
 
-export interface UndoQc2Request {
-  rollId: string;
-  stepId: string;
-}
-
 export interface ReportErrorRequest {
   rollId: string;
   stepId: string;
@@ -79,11 +74,6 @@ export const kursunQcService = {
   completeQc2: (data: CompleteQc2Request): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>('/kursun-qc/complete-qc2', data)
-      .then((r) => r.data),
-
-  undoQc2: (data: UndoQc2Request): Promise<ApiResponse<{ removed: boolean }>> =>
-    apiClient
-      .post<ApiResponse<{ removed: boolean }>>('/kursun-qc/undo-qc2', data)
       .then((r) => r.data),
 
   reportError: (data: ReportErrorRequest): Promise<ApiResponse<unknown>> =>

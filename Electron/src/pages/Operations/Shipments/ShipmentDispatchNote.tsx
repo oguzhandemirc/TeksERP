@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import {
@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { printDocumentArea } from "@/lib/print";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { resolveDocConfig } from "@/services/documentConfig";
@@ -33,6 +34,7 @@ interface Props {
 const DOC_TYPE = "SHIPMENT_DISPATCH" as const;
 
 export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) {
+  const printRef = useRef<HTMLDivElement>(null); // Y3: izole iframe baskısının kök alanı
   const { hasPermission } = useRoleAccess();
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
 
@@ -41,7 +43,10 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
     queryKey: ["printed-doc", DOC_TYPE, shipmentId],
     queryFn: () => printedDocumentService.getCurrent<ShipmentDoc>(DOC_TYPE, shipmentId!),
     enabled: open && Boolean(shipmentId),
-    staleTime: 30_000,
+    // K-A2 fix: resmi belge durumu (ACTIVE/VOIDED/SUPERSEDED) baska istemciden
+    // degisebilir — dialog HER acilista taze ceker (30sn cache IPTAL filigranini
+    // geciktirebiliyordu).
+    staleTime: 0,
   });
   const currentDoc = docQuery.data?.data ?? null;
 
@@ -84,7 +89,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto rounded-md border bg-muted/30 p-4">
+        <div ref={printRef} className="flex-1 overflow-auto rounded-md border bg-muted/30 p-4">
           {loading && <Skeleton className="h-64 w-full" />}
 
           {!loading && shown && shipmentId && (
@@ -103,6 +108,9 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
                 letterhead={shown.snapshot.company.letterhead}
                 docConfigOverride={shown.snapshot.docConfigOverride}
                 voided={shown.status === "VOIDED"}
+                superseded={shown.status === "SUPERSEDED"}
+                docNo={shown.documentNo}
+                docVersion={shown.version}
               />
             </>
           )}
@@ -124,7 +132,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange }: Props) 
             type="button"
             className="gap-1"
             disabled={!shown && !draft}
-            onClick={() => window.print()}
+            onClick={() => printDocumentArea(printRef.current)}
           >
             <Printer className="h-4 w-4" /> Yazdır
           </Button>

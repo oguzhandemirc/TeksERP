@@ -33,6 +33,14 @@ export const orderLineSchema = z.object({
 });
 
 export const orderFormSchema = z.object({
+  // Saha #16: boş bırakılırsa backend otomatik üretir (YYYYMMDD-N);
+  // elle girilirse o numara kullanılır (benzersizlik backend'de doğrulanır).
+  orderNumber: z
+    .string()
+    .trim()
+    .max(40, "Sipariş numarası en fazla 40 karakter olabilir")
+    .optional()
+    .or(z.literal("")),
   customerId: z.string().min(1, "Müşteri seçilmeli"),
   branchId: z.string().nullable().optional(),
   currency: z
@@ -67,6 +75,7 @@ export function newLineClientId(): string {
 }
 
 export const orderFormDefaults: OrderFormValues = {
+  orderNumber: "",
   customerId: "",
   branchId: null,
   currency: "TRY",

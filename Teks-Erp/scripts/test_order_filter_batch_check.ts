@@ -83,9 +83,22 @@ async function main(): Promise<void> {
     nestedCreateFields: ["lines"],
   });
 
-  const items = await prisma.item.findMany({ where: { isActive: true }, take: 2, select: { id: true } });
-  const colors = await prisma.color.findMany({ where: { isActive: true }, take: 2, select: { id: true } });
-  const customer = await prisma.customer.findFirst({ where: { isActive: true }, select: { id: true } });
+  // Part B kendi master verisini yaratır (minimal seed'de yalnız 1 ürün olabilir;
+  // seed kompozisyonundan bağımsız olsun diye 2 ürün + 2 renk + 1 müşteri üretilir).
+  // Sonda (finally) temizlenir.
+  const tsB = Date.now();
+  const customer = await prisma.customer.create({
+    data: { code: `TST-CUS-${tsB}`, name: "Test Müşteri" },
+    select: { id: true },
+  });
+  const items = await Promise.all([
+    prisma.item.create({ data: { code: `TST-ITMA-${tsB}`, name: "Test Ürün A", itemType: "FABRIC", unit: "MT" }, select: { id: true } }),
+    prisma.item.create({ data: { code: `TST-ITMB-${tsB}`, name: "Test Ürün B", itemType: "FABRIC", unit: "MT" }, select: { id: true } }),
+  ]);
+  const colors = await Promise.all([
+    prisma.color.create({ data: { code: `TST-CLRA-${tsB}`, name: "Test Renk A" }, select: { id: true } }),
+    prisma.color.create({ data: { code: `TST-CLRB-${tsB}`, name: "Test Renk B" }, select: { id: true } }),
+  ]);
 
   if (items.length < 2 || colors.length < 2 || !customer) {
     check("B. Yeterli master veri yok (2 ürün + 2 renk + 1 müşteri)", false, "Part B atlandı");
@@ -156,6 +169,9 @@ async function main(): Promise<void> {
         `total=${resNone.pagination.total}`);
     } finally {
       await prisma.order.deleteMany({ where: { id: { in: createdIds } } });
+      await prisma.customer.delete({ where: { id: customer.id } });
+      await prisma.item.deleteMany({ where: { id: { in: [itemA.id, itemB.id] } } });
+      await prisma.color.deleteMany({ where: { id: { in: [colorA.id, colorB.id] } } });
     }
   }
 

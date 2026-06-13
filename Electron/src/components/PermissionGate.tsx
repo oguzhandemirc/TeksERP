@@ -10,9 +10,10 @@ interface Props {
 }
 
 export function PermissionGate({ permission, anyOf, allOf, fallback = null, children }: Props) {
-  const { hasPermission, hasAnyPermission, hasAllPermissions, isAdmin } = useRoleAccess();
-
-  if (isAdmin) return <>{children}</>;
+  // Y6 fix: isAdmin bypass'ı kaldırıldı — hasPermission artık backend'le aynı
+  // wildcard semantiğini kullanıyor (admin:* yalnız admin:... kodlarını kapsar);
+  // kısmi admin, yetkisi olmayan modülün butonlarını artık GÖRMEZ.
+  const { hasPermission, hasAnyPermission, hasAllPermissions } = useRoleAccess();
 
   if (permission && !hasPermission(permission)) return <>{fallback}</>;
   if (anyOf && !hasAnyPermission(anyOf)) return <>{fallback}</>;

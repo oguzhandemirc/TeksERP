@@ -19,6 +19,7 @@ export const sackStoreService = {
     const sp = new URLSearchParams();
     if (params.status) sp.set("status", params.status);
     if (params.search) sp.set("search", params.search);
+    if (params.destination) sp.set("destination", params.destination);
     if (params.cursor) sp.set("cursor", params.cursor);
     if (params.limit) sp.set("limit", String(params.limit));
     const qs = sp.toString();
@@ -55,5 +56,17 @@ export const sackStoreService = {
   dispatch: (id: string, payload: DispatchPayload = {}): Promise<ApiResponse<{ id: string }>> =>
     apiClient
       .post<ApiResponse<{ id: string }>>(`/api/shipping/shipments/${id}/dispatch`, payload)
+      .then((r) => r.data),
+
+  /** Saha #19: yurtiçi/yurtdışı kapsamı değiştir. */
+  setDestination: (id: string, destination: "DOMESTIC" | "EXPORT"): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/destination`, { destination })
+      .then((r) => r.data),
+
+  /** Saha #21: prosedür/ihracat kodu güncelle (boş = temizle). */
+  setProcedureCode: (id: string, procedureCode: string | null): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/procedure-code`, { procedureCode })
       .then((r) => r.data),
 };

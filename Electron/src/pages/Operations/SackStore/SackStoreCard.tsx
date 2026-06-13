@@ -6,7 +6,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber";
 import { safeFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { sackStoreStatusLabels, type SackStoreShipment } from "./types";
+import { sackStoreStatusLabels, destinationLabels, type SackStoreShipment } from "./types";
 
 // Tone seti "purple" içermiyor; Çuval Depo (READY) için mor className ile
 // override; Kapı Önü (AT_DOOR) için mevcut "warning" (amber) tonu.
@@ -55,7 +55,7 @@ export function SackStoreCard({
         {/* Başlık + durum + müşteri/şube */}
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-sm font-semibold">{shipment.shipmentNo}</span>
               <StatusBadge
                 status={shipment.status}
@@ -63,10 +63,27 @@ export function SackStoreCard({
                 tones={STATUS_TONES}
                 className={isReady ? READY_CLASS : undefined}
               />
+              {/* Saha #22: yurtiçi/yurtdışı rozeti — farkedilebilirlik (sıkı ayrım değil) */}
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                  shipment.destination === "EXPORT"
+                    ? "bg-sky-500/15 text-sky-600 dark:text-sky-300"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {destinationLabels[shipment.destination]}
+              </span>
             </div>
             <div className="mt-0.5 truncate text-sm text-muted-foreground">
               {shipment.customer.name}
               {shipment.branch ? ` · ${shipment.branch.name}` : ""}
+              {/* Saha #21: prosedür/ihracat kodu veya müşteri/şube kodu */}
+              {(shipment.procedureCode || shipment.branch?.code || shipment.customer.code) && (
+                <span className="ml-1 font-mono text-xs">
+                  · {shipment.procedureCode || shipment.branch?.code || shipment.customer.code}
+                </span>
+              )}
             </div>
             {shipment.readyAt && (
               <div className="text-xs text-muted-foreground">

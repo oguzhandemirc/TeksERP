@@ -12,6 +12,7 @@ import { ItemsPage } from "@/pages/Items/ItemsPage";
 import { CustomersPage } from "@/pages/Customers/CustomersPage";
 import { StationsPage } from "@/pages/Stations/StationsPage";
 import { MachinesPage } from "@/pages/Machines/MachinesPage";
+import { MachineHardwarePage } from "@/pages/MachineHardware/MachineHardwarePage";
 import { DefectTypesPage } from "@/pages/DefectTypes/DefectTypesPage";
 import { QualityGradesPage } from "@/pages/QualityGrades/QualityGradesPage";
 import { ColorsPage } from "@/pages/Colors/ColorsPage";
@@ -74,6 +75,8 @@ import { KursunQueuePage } from "@/pages/Operations/KursunQueue/KursunQueuePage"
 import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBalancePage";
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
 import { SackStorePage } from "@/pages/Operations/SackStore/SackStorePage";
+import { SackSearchPage } from "@/pages/Operations/SackSearch/SackSearchPage";
+import { AccountingDispatchPage } from "@/pages/Operations/AccountingDispatch/AccountingDispatchPage";
 import { KartelaPage } from "@/pages/Operations/Kartela/KartelaPage";
 import { ReturnsPage } from "@/pages/Operations/Returns/ReturnsPage";
 
@@ -90,17 +93,91 @@ export const contentRoutes: RouteObject[] = [
   { path: "settings", element: <SettingsPage /> },
   { path: "forbidden", element: <ForbiddenPage /> },
 
-  // Tanımlar — hub sayfası ve alt sayfalar
+  // Tanımlar — hub sayfası ve alt sayfalar.
+  // K-A7 fix: rotalar tile-config izinleriyle korunur (URL ile direkt gidilince
+  // izinsiz kullanıcı 403 toast yığını yerine net "yetki yok" ekranı görür).
   { path: "definitions", element: <DefinitionsHubPage /> },
-  { path: "definitions/items", element: <ItemsPage /> },
-  { path: "definitions/customers", element: <CustomersPage /> },
-  { path: "definitions/stations", element: <StationsPage /> },
-  { path: "definitions/machines", element: <MachinesPage /> },
-  { path: "definitions/routes", element: <RoutesPage /> },
-  { path: "definitions/product-recipes", element: <ProductRecipesPage /> },
-  { path: "definitions/defect-types", element: <DefectTypesPage /> },
-  { path: "definitions/quality-grades", element: <QualityGradesPage /> },
-  { path: "definitions/colors", element: <ColorsPage /> },
+  {
+    path: "definitions/items",
+    element: (
+      <ProtectedRoute requirePermission="item:read">
+        <ItemsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/customers",
+    element: (
+      <ProtectedRoute requirePermission="customer:read">
+        <CustomersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/stations",
+    element: (
+      <ProtectedRoute requirePermission="station:read">
+        <StationsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/machines",
+    element: (
+      <ProtectedRoute requirePermission="station:read">
+        <MachinesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/machine-hardware",
+    element: (
+      <ProtectedRoute requirePermission="station:read">
+        <MachineHardwarePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/routes",
+    element: (
+      <ProtectedRoute requirePermission="station:read">
+        <RoutesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/product-recipes",
+    element: (
+      <ProtectedRoute requirePermission="station:read">
+        <ProductRecipesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/defect-types",
+    element: (
+      <ProtectedRoute requirePermission="quality:read">
+        <DefectTypesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/quality-grades",
+    element: (
+      <ProtectedRoute requirePermission="quality:read">
+        <QualityGradesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Y7 fix: backend color.routes property:read ister — rota da aynı izinle korunur.
+    path: "definitions/colors",
+    element: (
+      <ProtectedRoute requirePermission="property:read">
+        <ColorsPage />
+      </ProtectedRoute>
+    ),
+  },
   {
     path: "definitions/return-reasons",
     element: (
@@ -369,6 +446,22 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="shipping:read">
         <SackStorePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/sack-search",
+    element: (
+      <ProtectedRoute requirePermission="shipping:read">
+        <SackSearchPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/accounting-dispatch",
+    element: (
+      <ProtectedRoute requireAnyPermission={["shipping:read", "report:sales"]}>
+        <AccountingDispatchPage />
       </ProtectedRoute>
     ),
   },

@@ -188,8 +188,11 @@ export class KartelaService {
 
     const subcontractor = await prisma.subcontractor.findUnique({
       where: { id: data.subcontractorId },
+      select: { id: true, isActive: true },
     });
     if (!subcontractor) throw AppError.notFound("Kartela firması bulunamadı");
+    // Soft-delete guard: pasife alınmış firmaya yeni kartela sevki açılamaz.
+    if (!subcontractor.isActive) throw AppError.badRequest("Kartela firması pasif durumda");
 
     const rolls = await prisma.roll.findMany({
       where: { id: { in: data.rollIds } },
@@ -381,14 +384,19 @@ export class KartelaService {
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.kartelaDispatch.update({
-        where: { id: dispatchId },
+      // ATOMİK CLAIM: cancelledAt kontrolü tx DIŞINDA — eşzamanlı çift iptalin
+      // kaybedeni burada 409 alır.
+      const cancelClaim = await tx.kartelaDispatch.updateMany({
+        where: { id: dispatchId, cancelledAt: null },
         data: {
           cancelledAt: new Date(),
           cancelledById: userId ?? null,
           cancelReason: trimmed,
         },
       });
+      if (cancelClaim.count === 0) {
+        throw AppError.conflict("Bu sevk az önce başka bir kullanıcı tarafından iptal edilmiş.");
+      }
       // RESMİ BELGE — çeki listesi VOIDED'e çekilir (baskıda İPTAL filigranı).
       await printedDocumentService.voidForSource(
         tx,
@@ -396,10 +404,18 @@ export class KartelaService {
         dispatchId,
         trimmed
       );
-      await tx.roll.updateMany({
-        where: { id: { in: rollIds } },
+      // ATOMİK CLAIM (dispatch()'teki desenin aynası): movedRolls kontrolü tx
+      // DIŞINDA — pencerede kabul/başka işlem araya girdiyse count uyuşmaz →
+      // 409 + rollback (toplar kabul edilmişken depoya dönmesin).
+      const reverted = await tx.roll.updateMany({
+        where: { id: { in: rollIds }, status: RollStatus.AT_KARTELA },
         data: { status: RollStatus.WAREHOUSE },
       });
+      if (reverted.count !== rollIds.length) {
+        throw AppError.conflict(
+          "Toplardan biri bu sırada başka bir işlemle değişmiş — sevk iptal edilemedi. Listeyi yenileyip tekrar deneyin."
+        );
+      }
     });
 
     await AuditService.log({
@@ -434,8 +450,11 @@ export class KartelaService {
 
     const subcontractor = await prisma.subcontractor.findUnique({
       where: { id: data.subcontractorId },
+      select: { id: true, isActive: true },
     });
     if (!subcontractor) throw AppError.notFound("Kartela firması bulunamadı");
+    // Soft-delete guard: pasife alınmış firmadan kartela kabulü yapılamaz.
+    if (!subcontractor.isActive) throw AppError.badRequest("Kartela firması pasif durumda");
 
     // Doğrula: adet + ölçüm tutarlılığı
     for (const ret of data.returns) {
@@ -594,10 +613,20 @@ export class KartelaService {
 
         // Toplu yazma: tek-tek create yerine createMany / updateMany.
         await tx.kartelaReceiptItem.createMany({ data: receiptItemData });
-        await tx.roll.updateMany({
-          where: { id: { in: consumedRollIds } },
+        // ATOMİK CLAIM (dispatch()'teki desenin aynası): AT_KARTELA ön-kontrolü
+        // tx DIŞINDA — iki eşzamanlı kabul ikisinde de geçerdi ve withBarcodeRetry
+        // receiptNo/SW-barkod P2002'sinde tx'i ön-kontrolsüz tekrar deneyip yarışı
+        // BAŞARILI çift makbuz+çift kartelaya çevirirdi. Statü koşulu + count ile
+        // kaybeden 409 alır (conflict P2002 olmadığından retry'a girmez).
+        const consumedClaim = await tx.roll.updateMany({
+          where: { id: { in: consumedRollIds }, status: RollStatus.AT_KARTELA },
           data: { status: RollStatus.KARTELA_CONSUMED },
         });
+        if (consumedClaim.count !== consumedRollIds.length) {
+          throw AppError.conflict(
+            "Toplardan biri bu sırada başka bir işlemle (kabul/iptal) değişmiş. Listeyi yenileyip tekrar deneyin."
+          );
+        }
         await tx.swatch.createMany({ data: swatchData });
 
         return { receipt, totalSwatches: swatchData.length };
@@ -703,28 +732,44 @@ export class KartelaService {
     const swatchIds = receipt.swatches.map((s) => s.id);
 
     await prisma.$transaction(async (tx) => {
-      // Kabul soft-cancel
-      await tx.kartelaReceipt.update({
-        where: { id: receiptId },
+      // Kabul soft-cancel — ATOMİK CLAIM: cancelledAt kontrolü tx DIŞINDA;
+      // eşzamanlı çift iptalin kaybedeni burada 409 alır.
+      const receiptClaim = await tx.kartelaReceipt.updateMany({
+        where: { id: receiptId, cancelledAt: null },
         data: {
           cancelledAt: new Date(),
           cancelledById: userId ?? null,
           cancelReason: trimmed,
         },
       });
-      // Doğan kartelalar soft-delete
+      if (receiptClaim.count === 0) {
+        throw AppError.conflict("Bu kabul az önce başka bir kullanıcı tarafından iptal edilmiş.");
+      }
+      // Doğan kartelalar soft-delete — downstream guard'ı tx DIŞINDA okunduğu
+      // için pencerede sevkiyata/çuvala bağlanan kartela varsa iptal etme.
       if (swatchIds.length > 0) {
-        await tx.swatch.updateMany({
-          where: { id: { in: swatchIds } },
+        const cancelledSwatches = await tx.swatch.updateMany({
+          where: { id: { in: swatchIds }, shipmentId: null, sackId: null, cancelledAt: null },
           data: { cancelledAt: new Date(), cancelReason: trimmed },
         });
+        if (cancelledSwatches.count !== swatchIds.length) {
+          throw AppError.conflict(
+            "Kartelalardan biri bu sırada sevkiyata/çuvala bağlanmış — kabul iptal edilemedi. Önce sevkiyattan çıkarın."
+          );
+        }
       }
       // Tüketilen toplar AT_KARTELA'ya döner (firma hâlâ malı işlemiş sayılır).
+      // ATOMİK CLAIM: beklenen statüde değilse (eşzamanlı işlem) 409 + rollback.
       if (rollIds.length > 0) {
-        await tx.roll.updateMany({
-          where: { id: { in: rollIds } },
+        const reverted = await tx.roll.updateMany({
+          where: { id: { in: rollIds }, status: RollStatus.KARTELA_CONSUMED },
           data: { status: RollStatus.AT_KARTELA },
         });
+        if (reverted.count !== rollIds.length) {
+          throw AppError.conflict(
+            "Toplardan biri bu sırada başka bir işlemle değişmiş — kabul iptali yapılamadı. Listeyi yenileyip tekrar deneyin."
+          );
+        }
       }
     });
 

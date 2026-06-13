@@ -30,6 +30,9 @@ interface BuildArgs {
   template: LabelTemplate | null;
   barcodeSvg: string;
   qrSvg: string;
+  /** Saha #6: aynı etiket kaç sayfa basılsın (default 1; ayar default'u 2 —
+   *  topun üstüne + altına yapıştırılıyor). 1-5'e kırpılır. */
+  copies?: number;
 }
 
 export function buildRollLabelHtml({
@@ -37,6 +40,7 @@ export function buildRollLabelHtml({
   template,
   barcodeSvg,
   qrSvg,
+  copies = 1,
 }: BuildArgs): string {
   const fields: TemplateField[] | null = template
     ? (template.fields as unknown as TemplateField[])
@@ -74,7 +78,7 @@ export function buildRollLabelHtml({
   // alanı bilerek isVisible=false yaptıysa gizlenir.
   const visKartela = isVisibleDefaultOn(fields, "kartelaMark");
 
-  return `<!doctype html>
+  const fullHtml = `<!doctype html>
 <html lang="tr">
 <head>
 <meta charset="utf-8" />
@@ -272,6 +276,18 @@ export function buildRollLabelHtml({
   </div>
 </body>
 </html>`;
+
+  // Saha #6: çoklu kopya — gövdedeki etiket bloğunu N sayfaya çoğalt
+  // (her kopya kendi A6 sayfasında; yazıcı arka arkaya basar).
+  const copiesCount = Math.max(1, Math.min(5, Math.floor(copies)));
+  if (copiesCount <= 1) return fullHtml;
+  const bodyOpen = fullHtml.indexOf("<body>") + "<body>".length;
+  const bodyClose = fullHtml.indexOf("</body>");
+  const labelMarkup = fullHtml.slice(bodyOpen, bodyClose);
+  const pages = Array.from({ length: copiesCount }, (_, i) =>
+    `<div style="${i < copiesCount - 1 ? "page-break-after: always;" : ""}">${labelMarkup}</div>`,
+  ).join("\n");
+  return fullHtml.slice(0, bodyOpen) + "\n" + pages + "\n" + fullHtml.slice(bodyClose);
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +313,9 @@ function isVisibleDefaultOn(fields: TemplateField[] | null, key: string): boolea
 
 function fieldLabel(fields: TemplateField[] | null, key: string, fallback: string): string {
   if (!fields) return fallback;
-  return fields.find((x) => x.key === key)?.label ?? fallback;
+  // L (düşük bulgu): label admin girdisidir ve HTML'e gömülür — değerler gibi
+  // başlıklar da escape edilir (yazdırma penceresinde markup enjeksiyonu olmasın).
+  return escapeHtml(fields.find((x) => x.key === key)?.label ?? fallback);
 }
 
 const FONT_SIZE_MAP: Record<string, string> = {

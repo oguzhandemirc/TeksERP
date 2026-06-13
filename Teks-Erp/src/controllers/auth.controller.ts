@@ -5,7 +5,6 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
-import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
 import { readDevicePairingRequired } from "../services/system-setting.service";
 import "../types/express-augment";
@@ -16,11 +15,8 @@ const loginSchema = z.object({
   password: z.string().min(1, "Şifre gerekli"),
 });
 
-const registerSchema = z.object({
-  username: z.string().min(3, "Kullanıcı adı en az 3 karakter olmalı"),
-  password: z.string().min(6, "Şifre en az 6 karakter olmalı"),
-  fullName: z.string().min(1, "Ad soyad gerekli"),
-});
+// K6 (2026-06-12): register endpoint'i + şeması kaldırıldı — kullanıcı
+// oluşturmanın tek yolu POST /api/admin/users (PermissionManagementService).
 
 export class AuthController {
   /**
@@ -97,75 +93,6 @@ export class AuthController {
 
   /**
    * @openapi
-   * /api/auth/register:
-   *   post:
-   *     tags: [Auth]
-   *     summary: Yeni kullanıcı kaydı
-   *     description: Yeni bir kullanıcı oluşturur (sadece admin yetkisi ile).
-   *     security:
-   *       - bearerAuth: []
-   *     requestBody:
-   *       required: true
-   *       content:
-   *         application/json:
-   *           schema:
-   *             type: object
-   *             required: [username, password, fullName]
-   *             properties:
-   *               username:
-   *                 type: string
-   *               password:
-   *                 type: string
-   *               fullName:
-   *                 type: string
-   *     responses:
-   *       201:
-   *         description: Kullanıcı oluşturuldu
-   *       400:
-   *         description: Validasyon hatası
-   *       409:
-   *         description: Kullanıcı adı zaten mevcut
-   */
-  static async register(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = registerSchema.parse(req.body);
-      const passwordHash = await AuthService.hashPassword(body.password);
-
-      const user = await prisma.user.create({
-        data: {
-          username: body.username,
-          passwordHash,
-          fullName: body.fullName,
-        },
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          isActive: true,
-          createdAt: true,
-        },
-      });
-
-      await AuditService.log({
-        userId: req.user?.userId,
-        action: "CREATE",
-        tableName: "USER",
-        recordId: user.id,
-        newData: { username: user.username, fullName: user.fullName },
-      });
-
-      res.status(201).json({
-        success: true,
-        data: user,
-        message: "Kullanıcı başarıyla oluşturuldu",
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
-   * @openapi
    * /api/auth/mobile-users:
    *   get:
    *     tags: [Auth]
@@ -200,18 +127,7 @@ export class AuthController {
         return;
       }
 
-      const users = await prisma.user.findMany({
-        where: {
-          isActive: true,
-          permissions: {
-            some: {
-              permission: { code: { startsWith: "mobile:" } },
-            },
-          },
-        },
-        select: { id: true, username: true, fullName: true },
-        orderBy: { fullName: "asc" },
-      });
+      const users = await AuthService.listMobileUsers();
 
       res.status(200).json({
         success: true,
@@ -248,11 +164,8 @@ export class AuthController {
         return;
       }
 
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { id: true, username: true, fullName: true, isActive: true },
-      });
-      if (!user || !user.isActive) {
+      const user = await AuthService.getActiveUserSummary(userId);
+      if (!user) {
         res.status(401).json({ success: false, message: "Kullanıcı bulunamadı veya pasif" });
         return;
       }

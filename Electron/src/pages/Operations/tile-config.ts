@@ -2,12 +2,14 @@ import {
   ShoppingCart,
   Factory,
   Package,
+  PackageSearch,
   Layers,
   Scale,
   Truck,
   SwatchBook,
   Undo2,
   Warehouse,
+  ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 
@@ -67,6 +69,22 @@ export const operationsTiles: OperationsTile[] = [
     description: "Çuval depodaki + kapı önündeki sevkler; hangi çuvalda ne, kodu, kg",
     icon: Warehouse,
     to: "/operations/sack-store",
+    permission: "shipping:read",
+  },
+  {
+    key: "sack-search",
+    title: "Çuval & Top Arama",
+    description: "Hangi üründen hangi çuvalda ne kadar; top hangi çuvalda",
+    icon: PackageSearch,
+    to: "/operations/sack-search",
+    permission: "shipping:read",
+  },
+  {
+    key: "accounting-dispatch",
+    title: "Sevk Edilenler (Muhasebe)",
+    description: "Sevki tamamlananlar — salt-okunur + ürün/çuval/çeki fişi",
+    icon: ClipboardList,
+    to: "/operations/accounting-dispatch",
     permission: "shipping:read",
   },
   {

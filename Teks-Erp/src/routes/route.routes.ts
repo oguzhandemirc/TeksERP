@@ -3,11 +3,9 @@
 // =============================================================================
 
 import { Router } from "express";
-import { Request, Response, NextFunction } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { BaseService } from "../services/base.service";
-import prisma from "../lib/prisma";
-import { AuditService } from "../services/audit.service";
+import { routeHardRemove } from "../services/helpers/guarded-hard-remove";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
@@ -160,49 +158,8 @@ router.patch("/:id", verifyToken, requirePermission("station:write"), controller
  */
 router.delete("/:id", verifyToken, requirePermission("station:write"), controller.remove);
 
-/**
- * Route hard-delete — önce bağlı route_steps'leri transaction içinde siler,
- * ardından rotayı veritabanından tamamen kaldırır.
- */
-async function routeHardRemove(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  try {
-    const id = String(req.params.id);
-
-    const route = await prisma.route.findUnique({ where: { id } });
-    if (!route) {
-      res.status(404).json({ success: false, data: null, message: "Rota bulunamadı" });
-      return;
-    }
-
-    await prisma.$transaction(async (tx) => {
-      // 1. Rota adımlarını sil (route_steps)
-      await tx.routeStep.deleteMany({ where: { routeId: id } });
-      // 2. Rotayı sil
-      await tx.route.delete({ where: { id } });
-    });
-
-    await AuditService.log({
-      userId:    req.user?.userId,
-      action:    "DELETE",
-      tableName: "ROUTE",
-      recordId:  id,
-      oldData:   route as Record<string, unknown>,
-      newData:   null,
-    });
-
-    res.status(200).json({
-      success: true,
-      data:    route,
-      message: "Rota ve tüm adımları kalıcı olarak silindi",
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+// Route hard-delete — guard'lı kalıcı silme; iskelet + guard listesi
+// services/helpers/guarded-hard-remove.ts'te (üç /permanent ucunun tek kaynağı).
 
 /**
  * @openapi

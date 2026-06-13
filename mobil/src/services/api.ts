@@ -1,4 +1,5 @@
 import axios from 'axios';
+import Toast from 'react-native-toast-message';
 import { storage } from '../utils/storage';
 import { API_URL } from '../constants/api';
 import { getCurrentBaseUrl } from '../store/baseUrlStore';
@@ -13,6 +14,7 @@ export const apiClient = axios.create({
 // 401 → kullanıcıyı login ekranına döndür. Eşleşme korunur (machineId silinmez);
 // cihaz pasifleştirilse bile admin aktif yapınca aynı eşleşme ile devam edilir.
 let onUnauthorized: (() => void) | null = null;
+let lastUnauthorizedToastAt = 0;
 export const setUnauthorizedHandler = (fn: () => void) => {
   onUnauthorized = fn;
 };
@@ -42,12 +44,32 @@ apiClient.interceptors.response.use(
 
     // Login çağrısındaki 401 (yanlış şifre / pasif cihaz) LoginScreen'de inline
     // gösterilir — global handler tetiklenmez. Diğer 401'lerde logout.
+    // Y12 fix: logout artık SESSİZ değil — operatör vardiya ortasında neden
+    // login ekranına düştüğünü görmeli (8h JWT süresi dolması en yaygın sebep).
+    // 5sn tekilleştirme: eşzamanlı isteklerin 401 yağmuru tek toast üretir.
     if (status === 401 && !isLoginCall && onUnauthorized) {
+      const now = Date.now();
+      if (now - lastUnauthorizedToastAt > 5000) {
+        lastUnauthorizedToastAt = now;
+        Toast.show({
+          type: 'error',
+          text1: 'Oturum süresi doldu',
+          text2: 'Lütfen tekrar giriş yapın — bekleyen kayıtlar girişten sonra gönderilir.',
+          visibilityTime: 6000,
+        });
+      }
       onUnauthorized();
     }
 
-    const message =
-      error.response?.data?.message || error.message || 'Sunucu hatası';
+    // K-A3 fix: backend mesajı yoksa ham axios İngilizcesi ('Network Error',
+    // 'timeout of 10000ms exceeded') operatöre sızıyordu — Türkçe karşılıkları.
+    const fallback =
+      error.code === 'ECONNABORTED'
+        ? 'Sunucu yanıt vermedi (zaman aşımı) — ağ bağlantısını kontrol edin'
+        : !error.response
+          ? 'Sunucuya ulaşılamıyor — Wi-Fi/ağ bağlantısını kontrol edin'
+          : 'Sunucu hatası';
+    const message = error.response?.data?.message || fallback;
     // Backend AppError.details payload'ı koru — frontend "ITEM_MISMATCH" gibi
     // özel handling için (modal göster, override ile retry) bu yapıya bakar.
     const details = error.response?.data?.details;

@@ -12,9 +12,9 @@ import "../types/express-augment";
 const workOrderCoreShape = {
   batchNumber:       z.string().trim().min(1).optional().nullable(),
   type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).default("ORDER_PRODUCTION"),
-  width:             z.number().positive("En değeri pozitif olmalı").optional().nullable(),
-  targetQuantity:    z.number().positive().optional().nullable(),
-  targetWeight:      z.number().positive().optional().nullable(),
+  width:             z.number().positive("En değeri pozitif olmalı").max(999_999_999, "En çok büyük").optional().nullable(),
+  targetQuantity:    z.number().positive().max(999_999_999, "Hedef metraj çok büyük").optional().nullable(),
+  targetWeight:      z.number().positive().max(999_999_999, "Hedef ağırlık çok büyük").optional().nullable(),
   parameters:        z.record(z.string(), z.unknown()).optional().nullable(),
   plannedStartDate:  z.string().optional().nullable(),
   plannedEndDate:    z.string().optional().nullable(),
@@ -89,20 +89,6 @@ const targetPropertiesSchema = z.object({
   propertyIds: z.array(z.string().uuid()),
 });
 
-const attachRollsSchema = z.object({
-  barcodes: z
-    .array(z.string().min(1))
-    .min(1, "En az bir barkod gerekli")
-    // Cap: bağlama tx'inde barkod başına ~2 sorgu; cömert üst sınır (tx timeout/kilit koruması).
-    .max(300, "Tek seferde en fazla 300 top bağlanabilir"),
-});
-
-const detachRollsSchema = z.object({
-  rollIds: z
-    .array(z.string().uuid())
-    .min(1, "En az bir top (roll) id'si gerekli"),
-});
-
 const splitBranchSchema = z.object({
   batchSplitId: z.string().uuid(),
   newColorId: z.string().uuid(),
@@ -135,9 +121,9 @@ const updateWorkOrderSchema = z.object({
 const replaceWorkOrderSchema = z.object({
   batchNumber:       z.string().trim().min(1).optional().nullable(),
   type:              z.enum(["ORDER_PRODUCTION", "STOCK_PRODUCTION"]).optional(),
-  width:             z.number().positive("En değeri pozitif olmalı").optional().nullable(),
-  targetQuantity:    z.number().positive().optional().nullable(),
-  targetWeight:      z.number().positive().optional().nullable(),
+  width:             z.number().positive("En değeri pozitif olmalı").max(999_999_999, "En çok büyük").optional().nullable(),
+  targetQuantity:    z.number().positive().max(999_999_999, "Hedef metraj çok büyük").optional().nullable(),
+  targetWeight:      z.number().positive().max(999_999_999, "Hedef ağırlık çok büyük").optional().nullable(),
   parameters:        z.record(z.string(), z.unknown()).optional().nullable(),
   plannedStartDate:  z.string().optional().nullable(),
   plannedEndDate:    z.string().optional().nullable(),
@@ -192,8 +178,6 @@ export class WorkOrderController {
     this.getBranches = this.getBranches.bind(this);
     this.getSplitPreview = this.getSplitPreview.bind(this);
     this.splitBranch = this.splitBranch.bind(this);
-    this.attachRolls = this.attachRolls.bind(this);
-    this.detachRolls = this.detachRolls.bind(this);
     this.updateStepPlanning = this.updateStepPlanning.bind(this);
     this.update = this.update.bind(this);
     this.replace = this.replace.bind(this);
@@ -207,7 +191,6 @@ export class WorkOrderController {
     this.cancelImpact = this.cancelImpact.bind(this);
     this.softDelete = this.softDelete.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
-    this.findAvailableForAttach = this.findAvailableForAttach.bind(this);
     this.getTargetPropertiesImpact = this.getTargetPropertiesImpact.bind(this);
     this.updateTargetProperties = this.updateTargetProperties.bind(this);
   }
@@ -333,39 +316,9 @@ export class WorkOrderController {
     }
   }
 
-  /**
-   * PATCH /api/work-orders/:id/attach-rolls
-   */
-  async attachRolls(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = attachRollsSchema.parse(req.body);
-      const result = await this.service.attachRolls(
-        req.params.id as string,
-        body.barcodes,
-        req.user?.userId
-      );
-      res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
-   * PATCH /api/work-orders/:id/detach-rolls
-   */
-  async detachRolls(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = detachRollsSchema.parse(req.body);
-      const result = await this.service.detachRolls(
-        req.params.id as string,
-        body.rollIds,
-        req.user?.userId
-      );
-      res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
+  // K6 (2026-06-12): attachRolls/detachRolls/findAvailableForAttach controller
+  // metodları kaldırıldı — HTTP uçları ölüydü (frontend çağırmıyor). Servis
+  // metodları (workorder.service attachRolls/detachRolls) içeriden kullanılıyor.
 
   /**
    * PATCH /api/work-orders/:id
@@ -566,19 +519,6 @@ export class WorkOrderController {
         req.params.id as string,
         req.user?.userId
       );
-      res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
-   * GET /api/work-orders/available-for-attach
-   * List work orders that are PLANNED and ready for roll attachment.
-   */
-  async findAvailableForAttach(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const result = await this.service.findAvailableForAttach();
       res.status(200).json(result);
     } catch (error) {
       next(error);

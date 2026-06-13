@@ -67,6 +67,10 @@ export interface FeatureFlags {
   /** Hareketsizlik zaman aşımı — dakika (default 0 = kapalı). >0 iken panel bu kadar
    *  dakika hiç işlem (fare/klavye) görmezse otomatik çıkış yapar. Frontend ENFORCE eder. */
   idleTimeoutMinutes: number;
+  /** Saha #6: top etiketi kopya adedi (default 2 — topun üstüne + altına). 1-5. */
+  labelCopies: number;
+  /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). */
+  rollNameTemplate: string;
   /** Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri). */
   travelerCardConfig: TravelerCardConfig;
   /** Belge künyesi (adres/tel/vergi) — irsaliye/çeki üst bloğunda basılır. */

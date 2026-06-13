@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { RouterProvider } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
@@ -17,7 +17,14 @@ import { canEnterApp } from "@/types/auth";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      // L fix: deterministik 4xx'i (401/403/404/validasyon) yeniden DENEME —
+      // aynı cevabı bir kez daha alıp hata anını geciktiriyordu. Ağ/5xx tek retry.
+      retry: (failureCount, error) => {
+        const status = (error as { response?: { status?: number } } | null)?.response
+          ?.status;
+        if (status && status >= 400 && status < 500) return false;
+        return failureCount < 1;
+      },
       refetchOnWindowFocus: false,
       staleTime: 5 * 60 * 1000,
     },
@@ -33,13 +40,39 @@ function AuthHydrator() {
       const token = await tokenStore.get();
       if (token) {
         const decoded = decodeJwt(token);
-        if (decoded) setUser(decoded);
-        else await tokenStore.clear();
+        // L fix: süresi DOLMUŞ token'la uygulamayı açma — ilk istekte zaten 401
+        // yenilecekti; exp kontrolüyle doğrudan login'e düşür (boş açılış yok).
+        const expMs =
+          decoded && typeof (decoded as { exp?: number }).exp === "number"
+            ? (decoded as { exp?: number }).exp! * 1000
+            : null;
+        if (decoded && (expMs === null || expMs > Date.now())) {
+          setUser(decoded);
+        } else {
+          await tokenStore.clear();
+        }
       }
       setHydrated(true);
     })();
   }, [setUser, setHydrated]);
 
+  return null;
+}
+
+/**
+ * L fix: kullanıcı değişiminde/çıkışında React Query cache'i temizlenir —
+ * önceki kullanıcının 5dk'lık stale verisi yeni oturumda ağa çıkmadan
+ * gösterilmesin (farklı yetkili kullanıcılar aynı makinede nöbetleşir).
+ */
+function CacheUserGuard() {
+  const userId = useAuthStore((s) => s.user?.userId ?? null);
+  const prev = useRef<string | null>(null);
+  useEffect(() => {
+    if (prev.current !== null && prev.current !== userId) {
+      queryClient.clear();
+    }
+    prev.current = userId;
+  }, [userId]);
   return null;
 }
 
@@ -66,6 +99,7 @@ export function App() {
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
         <QueryClientProvider client={queryClient}>
           <AuthHydrator />
+          <CacheUserGuard />
           <PreferencesProvider>
             <MotionProvider>
               <Root />

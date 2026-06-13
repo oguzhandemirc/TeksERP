@@ -6,11 +6,9 @@
 // ayrı katman; rota tekrar-kullanılabilir kalır.
 
 import { Router } from "express";
-import { Request, Response, NextFunction } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { ProductRecipeService } from "../services/product-recipe.service";
-import prisma from "../lib/prisma";
-import { AuditService } from "../services/audit.service";
+import { recipeHardRemove } from "../services/helpers/guarded-hard-remove";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
@@ -150,47 +148,8 @@ router.patch("/:id", verifyToken, requirePermission("station:write"), controller
  */
 router.delete("/:id", verifyToken, requirePermission("station:write"), controller.remove);
 
-/**
- * ProductRecipe hard-delete — önce bağlı properties pivot'unu transaction içinde
- * siler (onDelete: Cascade'e ek güvence), ardından reçeteyi kalıcı kaldırır.
- */
-async function recipeHardRemove(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const id = String(req.params.id);
-
-    const recipe = await prisma.productRecipe.findUnique({ where: { id } });
-    if (!recipe) {
-      res.status(404).json({ success: false, data: null, message: "Reçete bulunamadı" });
-      return;
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.productRecipeProperty.deleteMany({ where: { recipeId: id } });
-      await tx.productRecipe.delete({ where: { id } });
-    });
-
-    await AuditService.log({
-      userId: req.user?.userId,
-      action: "DELETE",
-      tableName: "PRODUCT_RECIPE",
-      recordId: id,
-      oldData: recipe as Record<string, unknown>,
-      newData: null,
-    });
-
-    res.status(200).json({
-      success: true,
-      data: recipe,
-      message: "Reçete kalıcı olarak silindi",
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+// ProductRecipe hard-delete — guard'lı kalıcı silme; iskelet + konfig
+// services/helpers/guarded-hard-remove.ts'te (üç /permanent ucunun tek kaynağı).
 
 /**
  * @openapi

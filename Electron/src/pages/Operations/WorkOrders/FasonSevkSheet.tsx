@@ -35,6 +35,9 @@ export function PrintableSheet({
   letterhead,
   docConfigOverride,
   voided = false,
+  superseded = false,
+  docNo,
+  docVersion,
   preview,
 }: {
   snap: FasonSheetData;
@@ -42,6 +45,11 @@ export function PrintableSheet({
   letterhead?: CompanyLetterhead;
   docConfigOverride?: DocumentConfig | null;
   voided?: boolean;
+  /** Y4: revize edilmis eski versiyon — kagida REVIZE filigrani basilir. */
+  superseded?: boolean;
+  /** Y4: PrintedDocument.documentNo — kagit uzerinde belge kimligi. */
+  docNo?: string | null;
+  docVersion?: number | null;
   preview?: DocSheetPreview;
 }) {
   const cfg = preview
@@ -57,6 +65,14 @@ export function PrintableSheet({
   return (
     <div className="print-area relative mx-auto max-w-[210mm] bg-white p-6 text-[12px] text-black">
       {voided && <DocWatermark text="İPTAL" tone="void" />}
+      {/* Y4: eski versiyon guncel resmi belgeyle karistirilmasin — kagitta gorunur iz */}
+      {!voided && superseded && <DocWatermark text="REVİZE EDİLDİ" tone="superseded" />}
+      {docNo != null && (
+        <div className="absolute right-6 top-2 text-[9px] text-neutral-500">
+          Belge No: {docNo}
+          {docVersion != null ? ` · Rev.${docVersion}` : ""}
+        </div>
+      )}
       {cfg.showLetterhead && <PrintLetterhead companyName={company} letterhead={lh} />}
       <div className="flex items-start justify-between border-b-2 border-black pb-3">
         <div>

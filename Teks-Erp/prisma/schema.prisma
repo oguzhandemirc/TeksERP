@@ -185,7 +185,7 @@ enum Currency {
 // =============================================================================
 
 model User {
-  id           String  @id @default(uuid())
+  id           String @db.Uuid  @id @default(uuid())
   username     String  @unique @db.VarChar(50)
   passwordHash String
   fullName     String  @db.VarChar(100)
@@ -231,8 +231,8 @@ model User {
 /// `AppPreferences` tipini sahiplenir, alan eklemek migration gerektirmez.
 /// Sorgulanmaz (yalnız PK by userId fetch), bu yüzden GIN index gerekmez.
 model UserPreference {
-  id          String @id @default(uuid())
-  userId      String @unique
+  id          String @db.Uuid @id @default(uuid())
+  userId      String @db.Uuid @unique
   preferences Json
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -247,7 +247,7 @@ model UserPreference {
 /// `category` admin UI'sında gruplamak için: "web" (web ekran/aksiyon), "mobile"
 /// (mobil ekran), "admin" (admin operasyonları).
 model Permission {
-  id          String             @id @default(uuid())
+  id          String @db.Uuid             @id @default(uuid())
   code        String             @unique @db.VarChar(64) // "order:read", "mobile:kk2", "admin:users", "mobile:*"
   module      String // "SALES", "PRODUCTION", "FINANCE", "MOBILE"
   category    PermissionCategory @default(web)
@@ -271,12 +271,12 @@ model Permission {
 /// zaman sınırlı atamalar için. Null ise sınırsız.
 /// `grantedById` audit izi için: yetkiyi hangi admin verdi.
 model UserPermission {
-  id           String    @id @default(uuid())
-  userId       String
-  permissionId String
+  id           String @db.Uuid    @id @default(uuid())
+  userId       String @db.Uuid
+  permissionId String @db.Uuid
   validFrom    DateTime?
   validUntil   DateTime?
-  grantedById  String?
+  grantedById  String? @db.Uuid
 
   user       User       @relation("UserPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
@@ -296,7 +296,7 @@ model UserPermission {
 /// permission'ları UserPermission'a kopyalanır ve şablon-user bağı kalmaz.
 /// Bu sayede şablonu sonradan değiştirmek mevcut kullanıcıları etkilemez.
 model PermissionTemplate {
-  id          String  @id @default(uuid())
+  id          String @db.Uuid  @id @default(uuid())
   name        String  @unique @db.VarChar(64)
   description String? @db.VarChar(200)
   isActive    Boolean @default(true)
@@ -310,8 +310,8 @@ model PermissionTemplate {
 }
 
 model PermissionTemplateItem {
-  templateId   String
-  permissionId String
+  templateId   String @db.Uuid
+  permissionId String @db.Uuid
 
   template   PermissionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   permission Permission         @relation(fields: [permissionId], references: [id], onDelete: Cascade)
@@ -328,7 +328,7 @@ model PermissionTemplateItem {
 // =============================================================================
 
 model Station {
-  id         String      @id @default(uuid())
+  id         String @db.Uuid      @id @default(uuid())
   code       String      @unique @db.VarChar(32) // e.g. "BOYAHANE_DIS", "KURSUN_1"
   name       String      @db.VarChar(100)
   type       StationType // INTERNAL or EXTERNAL
@@ -343,7 +343,7 @@ model Station {
 
   // EXTERNAL istasyonlar için varsayılan fason kategorisi. WO oluşturulurken
   // fason planlama modalında otomatik önerilir (kullanıcı değiştirebilir).
-  defaultCategoryId String?
+  defaultCategoryId String? @db.Uuid
   defaultCategory   SubcontractorCategory? @relation("StationDefaultCategory", fields: [defaultCategoryId], references: [id])
 
   // Relations
@@ -364,15 +364,16 @@ model Station {
 }
 
 model Machine {
-  id        String  @id @default(uuid())
-  stationId String
+  id        String @db.Uuid  @id @default(uuid())
+  stationId String @db.Uuid
   code      String  @unique @db.VarChar(32)
   name      String  @db.VarChar(100)
   isActive  Boolean @default(true)
 
   // Relations
-  station        Station         @relation(fields: [stationId], references: [id])
+  station        Station          @relation(fields: [stationId], references: [id])
   devices        Device[]
+  hardware       MachineHardware? // saha #cihaz: yazıcı/RS232 donanım config (1:1)
   pairingCodes   PairingCode[]
   rollOperations RollOperation[]
   rollMovements  RollMovement[]
@@ -389,10 +390,10 @@ model Machine {
 /// `machineId` null ise cihaz henüz eşlenmemiş — pairing ekranı gerekir.
 /// Cihaz değişmedikçe operatör değişse bile hangi makinede işlendiği bilinir.
 model Device {
-  id         String    @id @default(uuid())
+  id         String @db.Uuid    @id @default(uuid())
   deviceId   String    @unique @db.VarChar(64) // Tablet local UUID
   name       String    @db.VarChar(100) // Admin'in verdiği etiket — "Tambur-1 Tablet"
-  machineId  String?
+  machineId  String? @db.Uuid
   lastSeenAt DateTime?
   isActive   Boolean   @default(true)
 
@@ -406,13 +407,49 @@ model Device {
   @@map("devices")
 }
 
+/// Makineye bağlı SAHA DONANIM konfigürasyonu (yazıcı + RS232 ara cihazları).
+/// Tablet pairing'i tutan `Device`'tan AYRI: bu, makinenin yanındaki etiket
+/// yazıcısı + RS232 köprü cihazlarının (kantar/metre okuyucu vb.) ağ/MAC
+/// bilgisi + gelen veriyi çözen regex DESENLERİDİR. AMAÇ: aylar sonra "nerede
+/// ne kullanmışız" dokümantasyonu + cihaz/kodlama değişince koda dokunmadan
+/// seçimle (desen) davranışı değiştirebilme. Faz-1 donanım SİMÜLE; bu tablo
+/// konfigürasyon/dokümantasyon kaydıdır. Makine başına tek kayıt (1:1).
+model MachineHardware {
+  id        String @db.Uuid @id @default(uuid())
+  machineId String @db.Uuid @unique
+
+  // Etiket yazıcısı
+  printerIp  String? @db.VarChar(64) // örn 192.168.1.50
+  printerMac String? @db.VarChar(32) // örn 00:23:09:01:15:01
+
+  // RS232 ara cihazları (MAC) — kq: 1. cihaz, mt: 2. cihaz (2 kanal)
+  kqMac  String? @db.VarChar(32)
+  mtMac  String? @db.VarChar(32)
+  mtMac2 String? @db.VarChar(32)
+
+  // Gelen veriyi çözen regex desenleri (cihaz/kodlama değişince burada güncellenir)
+  kqPattern  String? @db.VarChar(255)
+  mtPattern  String? @db.VarChar(255)
+  mtPattern2 String? @db.VarChar(255)
+
+  notes    String? @db.VarChar(500)
+  isActive Boolean @default(true)
+
+  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("machine_hardware")
+}
+
 /// Tablet eşleştirmesi için admin tarafından üretilen tek seferlik 6 haneli kod.
 /// `expiresAt` sonrası geçersiz; `usedAt` doldurulduğunda yeniden kullanılamaz.
 model PairingCode {
   code         String    @id @db.VarChar(50) // 6 haneli (000000-999999)
-  machineId    String
+  machineId    String @db.Uuid
   deviceName   String    @db.VarChar(100) // Eşleşmeden önce admin'in girdiği etiket
-  createdById  String?
+  createdById  String? @db.Uuid
   expiresAt    DateTime
   usedAt       DateTime?
   usedDeviceId String?
@@ -428,12 +465,12 @@ model PairingCode {
 }
 
 model Route {
-  id          String  @id @default(uuid())
+  id          String @db.Uuid  @id @default(uuid())
   code        String? @unique @db.VarChar(32) // Opsiyonel kısa kod: "BKT-STD"
   name        String  @db.VarChar(100) // e.g. "Boyahane + Kursun + Tambur"
   description String?
   isFavorite  Boolean @default(false) // Sık kullanılan şablon
-  customerId  String? // Müşteriye özel default rota (opsiyonel)
+  customerId  String? @db.Uuid // Müşteriye özel default rota (opsiyonel)
   isActive    Boolean @default(true)
 
   // Relations
@@ -451,20 +488,32 @@ model Route {
 }
 
 model RouteStep {
-  id           String  @id @default(uuid())
-  routeId      String
-  stationId    String
+  id           String @db.Uuid  @id @default(uuid())
+  routeId      String @db.Uuid
+  stationId    String @db.Uuid
   sequence     Int // Order in the route
   defaultNotes String? // Şablonda saklanan istasyon talimatı — WO oluşturulurken notes'a kopyalanır
+  // Saha #14: rota şablonu fason planlamasını da saklasın — eskiden yalnız
+  // WO formunun stepPlanning overlay'i vardı, şablona seçilen firma KAYBOLUYORDU.
+  // WO açılışında bu değerler default olarak klonlanır (overlay yine ezebilir).
+  requiredCategoryId     String? @db.Uuid
+  plannedSubcontractorId String? @db.Uuid
 
   // Relations
   route   Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
   station Station @relation(fields: [stationId], references: [id])
+  requiredCategory     SubcontractorCategory? @relation("RouteStepRequiredCategory", fields: [requiredCategoryId], references: [id])
+  plannedSubcontractor Subcontractor?         @relation("RouteStepPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([routeId, sequence])
+  // K7: stationId lider-kolon index'i — "bu istasyon hangi rotalarda?" sorguları
+  // (station hardRemove guard'ı dahil) composite'in 2. kolonunu kullanamıyordu.
+  @@index([stationId])
+  @@index([requiredCategoryId])
+  @@index([plannedSubcontractorId])
   @@map("route_steps")
 }
 
@@ -473,14 +522,14 @@ model RouteStep {
 /// otomatik dolar (örn "PATOS GRİ-038"). Rota tekrar-kullanılabilir kalır;
 /// reçete rotanın ÜSTÜNDE ayrı bir katmandır — rotayı dönüştürmez.
 model ProductRecipe {
-  id       String   @id @default(uuid())
+  id       String @db.Uuid   @id @default(uuid())
   code     String   @unique @db.VarChar(32)
   name     String   @db.VarChar(100)
-  itemId   String
-  colorId  String?
+  itemId   String @db.Uuid
+  colorId  String? @db.Uuid
   width    Decimal? @db.Decimal(12, 3)
   foldType String?
-  routeId  String?
+  routeId  String? @db.Uuid
   isActive Boolean  @default(true)
 
   // Relations
@@ -501,9 +550,9 @@ model ProductRecipe {
 /// ProductRecipe ↔ FabricProperty M:N — reçetenin üretim özellikleri.
 /// Append-only pivot (sadece createdAt).
 model ProductRecipeProperty {
-  id         String @id @default(uuid())
-  recipeId   String
-  propertyId String
+  id         String @db.Uuid @id @default(uuid())
+  recipeId   String @db.Uuid
+  propertyId String @db.Uuid
 
   recipe   ProductRecipe  @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   property FabricProperty @relation(fields: [propertyId], references: [id])
@@ -524,7 +573,7 @@ model ProductRecipeProperty {
 /// taşınır. Üründe sadece "izin verilen renk/özellik listesi" tutulur (M:N).
 /// Boş liste = tüm aktif renk/özelliğe izin var.
 model Item {
-  id       String   @id @default(uuid())
+  id       String @db.Uuid   @id @default(uuid())
   code     String   @unique @db.VarChar(32)
   name     String   @db.VarChar(100)
   itemType ItemType // YARN, FABRIC, CONSUMABLE
@@ -553,17 +602,17 @@ model Item {
 }
 
 model Roll {
-  id      String  @id @default(uuid())
+  id      String @db.Uuid  @id @default(uuid())
   /// Fiziksel barkod. KK1 girişinde + Tambur kesim çıktısında basılır.
   /// Açık kumaş Roll'ları (Kurşun/KK2'de doğan) için NULL — fiziksel etiket basılmaz.
   /// Unique constraint: PostgreSQL'de NULL'lar tek olabilir (multiple NULLs allowed).
   barcode String? @unique @db.VarChar(64)
-  itemId  String
+  itemId  String @db.Uuid
   /// Rulonun kazandığı renk. Üretim sürecinde "renk veren" fason adımı (örn.
   /// boyahane) başarıyla tamamlandıktan sonra WO.targetColorId'den kopyalanır.
   /// NULL = ham (henüz renk kazanmamış). Rulonun "ham/işlenmiş" ayrımının tek
   /// kaynak doğrusudur.
-  colorId String?
+  colorId String? @db.Uuid
 
   // Measurements
   initialQty Decimal  @db.Decimal(12, 3) // Initial measurement (meters)
@@ -577,7 +626,7 @@ model Roll {
   qualityGrade   String
   /// Canonical — QualityGrade kataloğundaki gerçek kayda referans.
   /// Eski satırlarda null kalabilir; yeni Tambur finalize kayıtlarında doldurulur.
-  qualityGradeId String?
+  qualityGradeId String? @db.Uuid
   width          Decimal?   @db.Decimal(12, 3) // En (cm) — KK1 girişinde ölçülen kumaş eni
 
   // Top'un sisteme nasıl girdiği — raporlama ayrımı için.
@@ -590,16 +639,16 @@ model Roll {
   markedForKartela Boolean @default(false)
 
   // Production Links (real relations — not plain strings)
-  producedInStepId String? // Hangi WO step'inde üretildi (KK1 girişi / Tambur çıktısı)
-  currentStepId    String? // Şu anda hangi WO step'inde
+  producedInStepId String? @db.Uuid // Hangi WO step'inde üretildi (KK1 girişi / Tambur çıktısı)
+  currentStepId    String? @db.Uuid // Şu anda hangi WO step'inde
 
   // Lineage — fason dönüşünde veya tambur kesiminde kaynak rulo
-  parentRollId String?
+  parentRollId String? @db.Uuid
 
   // Lineage — fason kabul (boyahane vb.) sonrası açık kumaş olarak doğan Roll'ların
   // kaynak SubcontractorReceipt'i. Receipt = batch (renk + property) referansı.
   // Açık kumaş ileride Tambur'da bölünüp gerçek toplara dönüşür (parentRollId).
-  parentReceiptId String?
+  parentReceiptId String? @db.Uuid
 
   // Fason dalı / parti kimliği — paralel akış (lane) izlenebilirliği (Phase 4).
   // origin = sevki yaratan SubcontractorDispatch.id; fason kabulde born roll'a,
@@ -610,20 +659,20 @@ model Roll {
 
   // Audit — KK1 girişinde / sistem genelinde topu kim oluşturdu
   // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
-  createdById String?
+  createdById String? @db.Uuid
 
   // Paketleme — topun okutulduğu sevkiyat oturumu. NULL = henüz sevkiyata girmedi
   // (serbest depo). Çuvallanan top PREPARING/READY/AT_DOOR boyunca WAREHOUSE kalır ama
   // shipmentId dolu → SERBEST stoktan düşer (çuval depo/kapı önü). SHIPPED'a yalnız
   // DISPATCHED'te (kamyon aldı) çekilir; iptalde shipmentId temizlenir, serbest depoya döner.
   // GEVŞEK MODEL: top→sipariş bağı YOK; etiket müşterisi baskı anında seçilir.
-  shipmentId String?
+  shipmentId String? @db.Uuid
 
   // Çuval — topun fiziksel olarak içinde bulunduğu çuval (Sack). NULL = sevkiyata
   // okutuldu ama henüz çuvalda değil. Çuval-önce akışta okutma doğrudan aktif çuvala
   // yazar. Çuval içeriği = sackId'si o çuval olan toplar (irsaliyede ürün-bazlı döküm +
   // claim/iz sürme). shipment ile tutarlı: sack.shipmentId == roll.shipmentId.
-  sackId String?
+  sackId String? @db.Uuid
 
   // GEVŞEK MODEL: topun ÜSTÜNDEKİ son basılan etiketin denormalize snapshot'ı
   // (müşteri/sipariş/ürün-renk adı + baskı tarihi/operatör). BAĞ DEĞİL — yalnız
@@ -705,7 +754,7 @@ model Roll {
 // =============================================================================
 
 model Customer {
-  id        String      @id @default(uuid())
+  id        String @db.Uuid      @id @default(uuid())
   code      String      @unique @db.VarChar(32)
   name      String      @db.VarChar(100)
   taxNumber String?
@@ -735,8 +784,8 @@ model Customer {
 // sevkiyatları ayrı planlanır. Soft delete: isActive=false.
 // =============================================================================
 model CustomerBranch {
-  id           String  @id @default(uuid())
-  customerId   String
+  id           String @db.Uuid  @id @default(uuid())
+  customerId   String @db.Uuid
   code         String? @db.VarChar(50) // Müşterinin iç şube kodu (opsiyonel)
   name         String  @db.VarChar(100) // "Ankara Şubesi", "Merkez Depo" gibi
   address      String?
@@ -759,10 +808,10 @@ model CustomerBranch {
 }
 
 model Order {
-  id          String  @id @default(uuid())
+  id          String @db.Uuid  @id @default(uuid())
   orderNumber String  @unique @db.VarChar(64)
-  customerId  String
-  branchId    String? // Hedef şube — opsiyonel; bir sipariş tek bir şubeye gider. Mevcut kayıtlar için null kabul.
+  customerId  String @db.Uuid
+  branchId    String? @db.Uuid // Hedef şube — opsiyonel; bir sipariş tek bir şubeye gider. Mevcut kayıtlar için null kabul.
 
   // Finance & Pricing
   currency    Currency @default(TRY)
@@ -778,7 +827,7 @@ model Order {
 
   // Tamamlanma kaydı
   completedAt       DateTime? // İlk COMPLETED'a düştüğü an (otomatik veya manuel)
-  manualClosedById  String? // Manuel kapatan kullanıcı (null = otomatik kapandı)
+  manualClosedById  String? @db.Uuid // Manuel kapatan kullanıcı (null = otomatik kapandı)
   manualCloseReason String?   @db.Text
 
   // Relations
@@ -805,12 +854,12 @@ model Order {
 // Planlamacı WO açarken bu üçü targetItem/targetColor/targetProperties
 // önerisi olarak kullanır.
 model OrderLine {
-  id         String   @id @default(uuid())
-  orderId    String
-  itemId     String
+  id         String @db.Uuid   @id @default(uuid())
+  orderId    String @db.Uuid
+  itemId     String @db.Uuid
   /// Müşterinin istediği renk. NULL = ham talep (ileride satılabilir; bugün
   /// default akış değil). Item.allowedColors dolu ise bu listeden olmalı.
-  colorId    String?
+  colorId    String? @db.Uuid
   quantity   Decimal  @db.Decimal(12, 3) // Requested quantity (meters)
   /// Denormalize sevk toplamı (m) — Σ(ShipmentAllocation.qty). Tek yazma noktası:
   /// sevkiyat READY/cancel akışı. recomputeOrderStatus bunu okur.
@@ -852,9 +901,9 @@ model OrderLine {
 /// OrderLine ↔ FabricProperty M:N — müşterinin sipariş satırı için
 /// istediği özellikler. WO oluşturulurken planlamacıya öneri olarak gelir.
 model OrderLineRequiredProperty {
-  id          String @id @default(uuid())
-  orderLineId String
-  propertyId  String
+  id          String @db.Uuid @id @default(uuid())
+  orderLineId String @db.Uuid
+  propertyId  String @db.Uuid
 
   orderLine OrderLine      @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
   property  FabricProperty @relation(fields: [propertyId], references: [id])
@@ -871,7 +920,7 @@ model OrderLineRequiredProperty {
 // =============================================================================
 
 model WorkOrder {
-  id               String          @id @default(uuid())
+  id               String @db.Uuid          @id @default(uuid())
   batchNumber      String          @unique @db.VarChar(64) // Parti Numarası
   type             WorkOrderType   @default(ORDER_PRODUCTION)
   width            Decimal?        @db.Decimal(12, 3) // En (cm) — kumaş eni
@@ -883,7 +932,7 @@ model WorkOrder {
   plannedEndDate   DateTime? // Planlanan termin / bitiş tarihi
 
   // 3.1 — Rota şablonu referansı (snapshot kopya sonrası bile tutulur; analytics için)
-  routeTemplateId String?
+  routeTemplateId String? @db.Uuid
   routeTemplate   Route?  @relation(fields: [routeTemplateId], references: [id])
 
   // Hedef ürün — planlamacının "ne üretiyoruz" cevabı. Item'ın kendisini işaret
@@ -894,8 +943,8 @@ model WorkOrder {
   // her ikisini de yapabilir (Boyahane gibi).
   // ORDER_PRODUCTION: orderLine.itemId/colorId/properties'den otomatik
   // STOCK_PRODUCTION: zorunlu (manuel seçilir)
-  targetItemId  String?
-  targetColorId String?
+  targetItemId  String? @db.Uuid
+  targetColorId String? @db.Uuid
 
   /// Tambur planlama bilgisi — kumaşın kaç-kat sarılacağı ("2-KAT" / "4-KAT" gibi).
   /// Tambur ekranında **bilgi olarak** gösterilir; nihai kararı operatör verir
@@ -919,7 +968,7 @@ model WorkOrder {
   /// kaynak WO'nun id'si. Eski refakat kartı okutulunca kabul ekranı bu bağla
   /// ayrılan partilerin bekleyen gruplarını da gösterir; Dallar panelinde
   /// "ayrıldı → P-XXX" izi bu bağdan okunur. NULL = ayrılmamış normal WO.
-  splitFromId String?
+  splitFromId String? @db.Uuid
 
   // Relations
   steps            WorkOrderStep[]
@@ -952,9 +1001,9 @@ model WorkOrder {
 }
 
 model WorkOrderStep {
-  id           String     @id @default(uuid())
-  workOrderId  String
-  stationId    String
+  id           String @db.Uuid     @id @default(uuid())
+  workOrderId  String @db.Uuid
+  stationId    String @db.Uuid
   stepSequence Int // Order in the route: 1, 2, 3
   status       StepStatus @default(PENDING)
   stepData     Json? // Station-specific data (e.g. Tambur: { "foldType": "4-kat" })
@@ -966,8 +1015,8 @@ model WorkOrderStep {
   // EXTERNAL adımlar için planlama alanları:
   //   requiredCategoryId    : Adım hangi tür fason hizmeti gerektiriyor (Boyahane, Yıkama vs)
   //   plannedSubcontractorId: Planlamada hangi firma seçildi (opsiyonel — sevk anında değiştirilebilir)
-  requiredCategoryId     String?
-  plannedSubcontractorId String?
+  requiredCategoryId     String? @db.Uuid
+  plannedSubcontractorId String? @db.Uuid
 
   /// Planlamanın atadığı sıralama önceliği (Kurşun/KK2 kuyruğu gibi WO bazlı
   /// kuyruklar için). Düşük değer önce işlenir; tablet `open-cards`
@@ -1010,8 +1059,8 @@ model WorkOrderStep {
 /// Join table: WorkOrder ↔ OrderLine (N:N)
 /// 3.2 — `allocatedQty`: bu WO'nun bu sipariş satırından tahsis ettiği metraj
 model WorkOrderToOrderLine {
-  workOrderId  String
-  orderLineId  String
+  workOrderId  String @db.Uuid
+  orderLineId  String @db.Uuid
   allocatedQty Decimal @default(0) @db.Decimal(12, 3) // Metraj/kg cinsinden tahsis (sipariş birimiyle aynı)
 
   workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
@@ -1032,7 +1081,7 @@ model WorkOrderToOrderLine {
 /// buton olarak çıkar. Admin yönetir. Roll.qualityGrade alanı bu katalogdan
 /// seçilen code'un snapshot'ıdır (katalog değişse bile eski toplar bozulmaz).
 model QualityGrade {
-  id           String     @id @default(uuid())
+  id           String @db.Uuid     @id @default(uuid())
   code         String     @unique @db.VarChar(32) // "1.KALITE", "A1", "A2", "FIRE" (eski) veya KAL-YYMM-XXXX (admin)
   name         String     @db.VarChar(100) // UI'da görünen etiket
   description  String?
@@ -1063,7 +1112,7 @@ model QualityGrade {
 /// metin (RollReturn.reasonText) de girilebilir, ikisi de opsiyonel/boş bırakılabilir.
 /// Soft-delete (isActive=false); mevcut RollReturn.reasonId snapshot'ları korunur.
 model ReturnReason {
-  id          String  @id @default(uuid())
+  id          String @db.Uuid  @id @default(uuid())
   code        String  @unique @db.VarChar(32) // "YANLIS_URUN", "HASARLI" ...
   name        String  @db.VarChar(100)
   description String?
@@ -1083,7 +1132,7 @@ model ReturnReason {
 /// Hata tipi kataloğu — operatör ekranında buton olarak çıkar, elle girilmez.
 /// Yönetici ekranı üzerinden eklenir/silinir. severity hataya görsel öncelik verir.
 model DefectType {
-  id          String          @id @default(uuid())
+  id          String @db.Uuid          @id @default(uuid())
   code        String          @unique @db.VarChar(32)
   name        String          @db.VarChar(100)
   description String?
@@ -1106,23 +1155,23 @@ model DefectType {
 ///   - errorType    → DefectType.name'in snapshot'ı (katalog ileride yeniden
 ///                    adlandırılsa bile historik etiket korunur)
 model RollError {
-  id           String           @id @default(uuid())
-  rollId       String
+  id           String @db.Uuid           @id @default(uuid())
+  rollId       String @db.Uuid
   /// Hatanın tespit edildiği metre noktası (KK2 operatörü "60. metrede hata"
   /// girer). Hata sadece NOKTA olarak takip edilir; aralık bilgisi tutulmaz.
   /// Tambur operatörü ekranda bu noktayı görüp fiziksel kesim kararı verir.
   startMeter   Decimal          @db.Decimal(12, 3)
-  defectTypeId String?
+  defectTypeId String? @db.Uuid
   errorType    String? // DefectType.name snapshot (kayıt anında kopyalanır)
   isProcessed  Boolean          @default(false) // Tambur kararı verildi mi?
   actionTaken  RollErrorAction? // Tambur kararı
 
   // Lifecycle — tespit (Kurşun/QC2) ve işlem (Tambur) ayrı izlenir.
-  detectedAtStepId  String?
-  detectedByUserId  String?
+  detectedAtStepId  String? @db.Uuid
+  detectedByUserId  String? @db.Uuid
   detectedAt        DateTime  @default(now())
-  processedAtStepId String?
-  processedByUserId String?
+  processedAtStepId String? @db.Uuid
+  processedByUserId String? @db.Uuid
   processedAt       DateTime?
 
   // Relations
@@ -1144,6 +1193,9 @@ model RollError {
   @@index([rollId, isProcessed])
   // Operatör performans raporu: kim hangi tarihte hata kapadı
   @@index([processedByUserId, processedAt])
+  // Dashboard "bugün açılan hata" + kalite raporu tarih aralıkları (H-14):
+  @@index([detectedAt])
+  @@index([processedAt])
   @@map("roll_errors")
 }
 
@@ -1151,19 +1203,19 @@ model RollError {
 /// Boolean bayrak yerine tarih + operatör + metadata ile tam iz bırakır.
 /// Aynı roll × step × type için tek kayıt (@@unique) — idempotent tekrar basışlarda overwrite edilmez.
 model RollOperation {
-  id                        String            @id @default(uuid())
-  rollId                    String
-  workOrderStepId           String
+  id                        String @db.Uuid            @id @default(uuid())
+  rollId                    String @db.Uuid
+  workOrderStepId           String @db.Uuid
   operationType             RollOperationType
-  operatorId                String?
+  operatorId                String? @db.Uuid
   /// Aynı istasyonda birden fazla makine varsa hangisinde işlendiğinin kaydı.
   /// İşlemin tabletten geldiği durumlarda Device→Machine üzerinden otomatik dolar.
-  machineId                 String?
+  machineId                 String? @db.Uuid
   metadata                  Json? // Operasyona özgü veri (qty, weight, cutPoints, foldType vb.)
   /// Tambur bölünmesinde parent'tan kopyalanan op'larda parent.id; orijinal kayıtlarda null.
   /// Aggregation/istatistik sorguları bu satırları "WHERE inheritedFromParentRollId IS NULL"
   /// ile filtreleyerek çift sayımı önler.
-  inheritedFromParentRollId String?
+  inheritedFromParentRollId String? @db.Uuid
 
   // Relations
   roll                Roll          @relation(fields: [rollId], references: [id])
@@ -1182,6 +1234,8 @@ model RollOperation {
   @@index([inheritedFromParentRollId])
   // Bir adımın işlem log'u (workOrderStepId filtreli + zaman sıralı)
   @@index([workOrderStepId, createdAt])
+  // Operatör performans raporu createdAt aralığıyla tarar (H-14)
+  @@index([createdAt])
   @@map("roll_operations")
 }
 
@@ -1196,7 +1250,7 @@ model SystemSetting {
   /// Reader fonksiyonları JsonValue'dan beklenen tipi çıkarır.
   value       Json
   description String?
-  updatedById String?
+  updatedById String? @db.Uuid
 
   updatedBy User? @relation(fields: [updatedById], references: [id])
 
@@ -1211,14 +1265,14 @@ model SystemSetting {
 // =============================================================================
 
 model TravelerCard {
-  id          String             @id @default(uuid())
+  id          String @db.Uuid             @id @default(uuid())
   cardNumber  String             @unique @db.VarChar(64) // İnsan okur: RK-YYMM-000123
   barcode     String             @unique @db.VarChar(64) // Tarama: RK-YYMM-XXXXXX-C (Code128 uyumlu)
-  workOrderId String
+  workOrderId String @db.Uuid
   version     Int                @default(1) // Aynı WO için kaçıncı basım (reprint)
   status      TravelerCardStatus @default(ACTIVE)
   printedAt   DateTime           @default(now())
-  printedById String?
+  printedById String? @db.Uuid
   voidedAt    DateTime?
   voidReason  String?
 
@@ -1242,13 +1296,13 @@ model TravelerCard {
 }
 
 model TravelerCardScan {
-  id              String   @id @default(uuid())
-  cardId          String
-  stationId       String
-  workOrderStepId String? // Eşleştirilen WO adımı (server-side otomatik çözümlenir)
+  id              String @db.Uuid   @id @default(uuid())
+  cardId          String @db.Uuid
+  stationId       String @db.Uuid
+  workOrderStepId String? @db.Uuid // Eşleştirilen WO adımı (server-side otomatik çözümlenir)
   scanType        ScanType
   scannedAt       DateTime @default(now())
-  scannedById     String?
+  scannedById     String? @db.Uuid
   deviceId        String? // El terminali MAC/serial
   notes           String?
 
@@ -1273,18 +1327,18 @@ model TravelerCardScan {
 // =============================================================================
 
 model RollMovement {
-  id              String    @id @default(uuid())
-  rollId          String
-  workOrderStepId String
+  id              String @db.Uuid    @id @default(uuid())
+  rollId          String @db.Uuid
+  workOrderStepId String @db.Uuid
   qtyIn           Decimal   @db.Decimal(12, 3) // İstasyona girişteki metraj
   qtyOut          Decimal?  @db.Decimal(12, 3) // İstasyon çıkışındaki metraj (FINISH/SKIP'te doldurulur)
   weightIn        Decimal?  @db.Decimal(12, 3)
   weightOut       Decimal?  @db.Decimal(12, 3)
   enteredAt       DateTime  @default(now())
   exitedAt        DateTime?
-  operatorId      String?
+  operatorId      String? @db.Uuid
   /// Aynı istasyonda birden fazla makine varsa hangisinde işlendiğinin kaydı.
-  machineId       String?
+  machineId       String? @db.Uuid
   notes           String?
 
   // Relations
@@ -1297,10 +1351,19 @@ model RollMovement {
 
   @@index([workOrderStepId])
   @@index([enteredAt])
+  // Dashboard "bugün biten" + tarih aralıklı raporlar (H-14). DB'de PARTIAL'dır
+  // (WHERE "exitedAt" IS NOT NULL — açık hareket sorguları zaten küçük partial
+  // unique'i tarar; migration 20260612102000, drift-free desen).
+  @@index([exitedAt])
   @@index([operatorId])
   @@index([machineId])
   // Bir topun hareket geçmişi (rollId filtreli + zaman sıralı)
   @@index([rollId, enteredAt(sort: Desc)])
+  // DB'de ayrıca ŞEMA-DIŞI partial unique var: roll_movements_one_open_per_roll_step_uq
+  // (rollId, workOrderStepId) WHERE "exitedAt" IS NULL — "bir top bir adımda en
+  // fazla BİR açık movement" invariant'ının DB seddi (çift START/SKIP/FINISH
+  // yarışlarının kaybedeni P2002 alır). Migration 20260612101000. Partial UNIQUE
+  // @@index ile eşleşmediğinden şemada karşılığı bilinçli olarak YOK.
   @@map("roll_movements")
 }
 
@@ -1309,18 +1372,18 @@ model RollMovement {
 // =============================================================================
 
 model SubcontractorDispatch {
-  id                     String   @id @default(uuid())
+  id                     String @db.Uuid   @id @default(uuid())
   dispatchNo             String   @unique @db.VarChar(64) // SD-YYMM-NNNNNN
-  workOrderId            String
-  stepId                 String
-  subcontractorId        String // Gerçekleşen fason firma
+  workOrderId            String @db.Uuid
+  stepId                 String @db.Uuid
+  subcontractorId        String @db.Uuid // Gerçekleşen fason firma
   // Sevk anında "plan ne diyordu" snapshot'ı — rapor için.
   // step.plannedSubcontractorId değişebilir; bu alan o anki değeri dondurur.
-  plannedSubcontractorId String?
+  plannedSubcontractorId String? @db.Uuid
   plateNumber            String?
   driverName             String?
   dispatchedAt           DateTime @default(now())
-  dispatchedById         String?
+  dispatchedById         String? @db.Uuid
   notes                  String?
   // Boyahaneye özel talimat — genel "sevk notu"ndan (notes) AYRI. Belgeye
   // DONDURULMAZ; requestedColor gibi canlı tutulur → sevk sonrası (Electron'dan)
@@ -1331,7 +1394,7 @@ model SubcontractorDispatch {
 
   // İptal — soft cancel (kayıt silinmez, izlenebilirlik korunur)
   cancelledAt   DateTime?
-  cancelledById String?
+  cancelledById String? @db.Uuid
   cancelReason  String?
 
   // Relations
@@ -1361,9 +1424,9 @@ model SubcontractorDispatch {
 }
 
 model SubcontractorDispatchItem {
-  id               String   @id @default(uuid())
-  dispatchId       String
-  rollId           String
+  id               String @db.Uuid   @id @default(uuid())
+  dispatchId       String @db.Uuid
+  rollId           String @db.Uuid
   dispatchedQty    Decimal  @db.Decimal(12, 3)
   dispatchedWeight Decimal? @db.Decimal(12, 3)
 
@@ -1380,14 +1443,14 @@ model SubcontractorDispatchItem {
 }
 
 model SubcontractorReceipt {
-  id              String   @id @default(uuid())
+  id              String @db.Uuid   @id @default(uuid())
   receiptNo       String   @unique @db.VarChar(64) // SR-YYMM-NNNNNN
   manifestNo      String?  @db.VarChar(64) // İrsaliye no (fason firma tarafından verilir, opsiyonel)
-  workOrderId     String
-  stepId          String
-  subcontractorId String
+  workOrderId     String @db.Uuid
+  stepId          String @db.Uuid
+  subcontractorId String @db.Uuid
   receivedAt      DateTime @default(now())
-  receivedById    String?
+  receivedById    String? @db.Uuid
   notes           String?
   // Ölçüm (metraj/ağırlık/fire) fason kabulde yapılmaz; sonraki istasyonun
   // FINISH akışı kendi qty/weight değerlerini kaydeder.
@@ -1397,13 +1460,13 @@ model SubcontractorReceipt {
   /// receipt'ten doğar. appliedColorId + appliedProperties = receipt seviyesinde
   /// uygulanan kimlik (renk + özellikler); yeni Roll'lar bunu inherit eder.
   /// Renk vermeyen fason kategorilerinde (yıkama, zımpara) NULL kalır.
-  appliedColorId String?
+  appliedColorId String? @db.Uuid
 
   // Soft-cancel — kabul yanlış girilmişse operatör geri çeker.
   // Rulalar AT_SUBCONTRACTOR'a döner, colorId/RollProperty (renk veren adımdan
   // gelmişse) sıfırlanır. Belge silinmez, audit izi kalır.
   cancelledAt   DateTime?
-  cancelledById String?
+  cancelledById String? @db.Uuid
   cancelReason  String?
 
   // Relations
@@ -1438,9 +1501,9 @@ model SubcontractorReceipt {
 /// dönüşünde Roll'lar terminal'e çekilir; yeni doğan açık kumaş Roll'ları bu
 /// listeyi inherit eder.
 model SubcontractorReceiptProperty {
-  id         String @id @default(uuid())
-  receiptId  String
-  propertyId String
+  id         String @db.Uuid @id @default(uuid())
+  receiptId  String @db.Uuid
+  propertyId String @db.Uuid
 
   receipt  SubcontractorReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   property FabricProperty       @relation(fields: [propertyId], references: [id])
@@ -1453,15 +1516,15 @@ model SubcontractorReceiptProperty {
 }
 
 model SubcontractorReceiptItem {
-  id                   String  @id @default(uuid())
-  receiptId            String
+  id                   String @db.Uuid  @id @default(uuid())
+  receiptId            String @db.Uuid
   /// Fason dönüşünde kabul edilen orijinal top (yeni etiket basılmaz).
   /// Composite unique ile (receiptId, newRollId) — aynı top birden fazla
   /// CANCELLED receipt'te audit izi olarak kalabilir, sadece aktif receipt
   /// içinde tek satır olur. Globally @unique idi → cancel sonrası tekrar
   /// kabul "Unique constraint" ile patlıyordu.
-  newRollId            String
-  sourceDispatchItemId String? // Göz kontrolü ile eşleştirilen kaynak sevk kalemi
+  newRollId            String @db.Uuid
+  sourceDispatchItemId String? @db.Uuid // Göz kontrolü ile eşleştirilen kaynak sevk kalemi
   notes                String?
 
   // Relations
@@ -1486,7 +1549,7 @@ model SubcontractorReceiptItem {
 // liste; firma birden fazla kategoride hizmet verebilir (M:N).
 
 model SubcontractorCategory {
-  id          String  @id @default(uuid())
+  id          String @db.Uuid  @id @default(uuid())
   code        String  @unique @db.VarChar(32) // DYE_HOUSE, SANDING, PRINTING...
   name        String  @db.VarChar(100) // "Boyahane", "Zımpara"
   description String?
@@ -1509,6 +1572,7 @@ model SubcontractorCategory {
   // Relations
   subcontractors  SubcontractorToCategory[]
   workOrderSteps  WorkOrderStep[]           @relation("StepRequiredCategory")
+  routeSteps      RouteStep[]               @relation("RouteStepRequiredCategory")
   defaultStations Station[]                 @relation("StationDefaultCategory")
 
   createdAt DateTime @default(now())
@@ -1518,7 +1582,7 @@ model SubcontractorCategory {
 }
 
 model Subcontractor {
-  id         String  @id @default(uuid())
+  id         String @db.Uuid  @id @default(uuid())
   code       String  @unique @db.VarChar(32)
   name       String  @db.VarChar(100)
   taxNumber  String?
@@ -1534,6 +1598,7 @@ model Subcontractor {
   plannedDispatches SubcontractorDispatch[]   @relation("DispatchPlannedSubcontractor")
   receipts          SubcontractorReceipt[]    @relation("ReceiptSubcontractor")
   plannedSteps      WorkOrderStep[]           @relation("StepPlannedSubcontractor")
+  plannedRouteSteps RouteStep[]               @relation("RouteStepPlannedSubcontractor")
   kartelaDispatches KartelaDispatch[]         @relation("KartelaDispatchSub")
   kartelaReceipts   KartelaReceipt[]          @relation("KartelaReceiptSub")
 
@@ -1545,8 +1610,8 @@ model Subcontractor {
 
 /// M:N — bir firma birden fazla kategoride hizmet verebilir
 model SubcontractorToCategory {
-  subcontractorId String
-  categoryId      String
+  subcontractorId String @db.Uuid
+  categoryId      String @db.Uuid
 
   subcontractor Subcontractor         @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
   category      SubcontractorCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -1563,26 +1628,26 @@ model SubcontractorToCategory {
 // =============================================================================
 
 model Swatch {
-  id              String   @id @default(uuid())
+  id              String @db.Uuid   @id @default(uuid())
   cardNumber      String   @unique @db.VarChar(64) // SW-YYMM-NNN
   barcode         String   @unique @db.VarChar(64) // SW-YYMM-XXXXXX-C (Crockford checksum)
-  itemId          String
+  itemId          String @db.Uuid
   /// Kartelanın rengi — kaynak rolden veya manuel girilir.
-  colorId         String?
+  colorId         String? @db.Uuid
   width           Decimal? @db.Decimal(12, 3) // cm
   length          Decimal? @db.Decimal(12, 3) // cm (örn. 30cm) — kabulde opsiyonel girilir
   weightKg        Decimal? @db.Decimal(12, 3) // kabulde/tartıda opsiyonel girilir (ihracat araç kg kapasitesi için)
   // Doğum batch'i — kartela fason kabulinde bu receipt'ten doğdu.
-  parentReceiptId String?
+  parentReceiptId String? @db.Uuid
   // Kaynak (tükenen) orijinal top — kartelanın çıktığı bitmiş ürün.
-  parentRollId    String?
+  parentRollId    String? @db.Uuid
   purpose         String? // Müşteri sunumu, arşiv, laboratuvar vb.
-  createdById     String?
+  createdById     String? @db.Uuid
 
   // Sevkiyat — kartelanın okutulduğu sevkiyat oturumu (top gibi gönderilir, siparişe sayılmaz).
-  shipmentId String?
+  shipmentId String? @db.Uuid
   // Çuval — kartela da bitmiş ürün gibi çuvala konur; çuval içeriğinde/irsaliyede görünür.
-  sackId     String?
+  sackId     String? @db.Uuid
 
   // Soft delete — kartela fason kabulü iptal edilince doğan kartelalar geri alınır
   // (fiziksel DELETE yok). Listeler default cancelledAt: null filtreler.
@@ -1624,20 +1689,20 @@ model Swatch {
 // Swatch → parentReceipt → dispatch → firma + Swatch.parentRoll (kaynak top).
 
 model KartelaDispatch {
-  id              String   @id @default(uuid())
+  id              String @db.Uuid   @id @default(uuid())
   dispatchNo      String   @unique @db.VarChar(64) // KD-YYMM-NNNNNN
-  subcontractorId String // Kartela fason firma
+  subcontractorId String @db.Uuid // Kartela fason firma
   plateNumber     String?
   driverName      String?
   dispatchedAt    DateTime @default(now())
-  dispatchedById  String?
+  dispatchedById  String? @db.Uuid
   notes           String?
   totalQty        Decimal  @default(0) @db.Decimal(12, 3) // Toplam sevk metrajı (snapshot)
   // Çeki listesi snapshot'ı artık PrintedDocument tablosunda (versiyonlu resmi belge).
 
   // İptal — soft cancel (kayıt silinmez, iz korunur)
   cancelledAt   DateTime?
-  cancelledById String?
+  cancelledById String? @db.Uuid
   cancelReason  String?
 
   // Relations
@@ -1658,9 +1723,9 @@ model KartelaDispatch {
 }
 
 model KartelaDispatchItem {
-  id               String   @id @default(uuid())
-  dispatchId       String
-  rollId           String
+  id               String @db.Uuid   @id @default(uuid())
+  dispatchId       String @db.Uuid
+  rollId           String @db.Uuid
   dispatchedQty    Decimal  @db.Decimal(12, 3)
   dispatchedWeight Decimal? @db.Decimal(12, 3)
 
@@ -1677,18 +1742,18 @@ model KartelaDispatchItem {
 }
 
 model KartelaReceipt {
-  id              String   @id @default(uuid())
+  id              String @db.Uuid   @id @default(uuid())
   receiptNo       String   @unique @db.VarChar(64) // KR-YYMM-NNNNNN
   manifestNo      String?  @db.VarChar(64) // Fason firma irsaliye no (opsiyonel)
-  dispatchId      String? // Bilgi amaçlı; asıl bağ top üzerinden (receiptItem.consumedRoll)
-  subcontractorId String
+  dispatchId      String? @db.Uuid // Bilgi amaçlı; asıl bağ top üzerinden (receiptItem.consumedRoll)
+  subcontractorId String @db.Uuid
   receivedAt      DateTime @default(now())
-  receivedById    String?
+  receivedById    String? @db.Uuid
   notes           String?
 
   // İptal — soft cancel
   cancelledAt   DateTime?
-  cancelledById String?
+  cancelledById String? @db.Uuid
   cancelReason  String?
 
   // Relations
@@ -1711,10 +1776,10 @@ model KartelaReceipt {
 }
 
 model KartelaReceiptItem {
-  id                   String  @id @default(uuid())
-  receiptId            String
-  consumedRollId       String // KARTELA_CONSUMED'a çekilen orijinal (tükenen) top
-  sourceDispatchItemId String? // Otomatik eşleşen kaynak sevk kalemi
+  id                   String @db.Uuid  @id @default(uuid())
+  receiptId            String @db.Uuid
+  consumedRollId       String @db.Uuid // KARTELA_CONSUMED'a çekilen orijinal (tükenen) top
+  sourceDispatchItemId String? @db.Uuid // Otomatik eşleşen kaynak sevk kalemi
   kartelaCount         Int // Bu toptan doğan kartela adedi (1 top → N kartela)
   notes                String?
 
@@ -1737,11 +1802,11 @@ model KartelaReceiptItem {
 // =============================================================================
 
 model Manifest {
-  id          String   @id @default(uuid())
+  id          String @db.Uuid   @id @default(uuid())
   manifestNo  String   @unique @db.VarChar(64)
-  workOrderId String
+  workOrderId String @db.Uuid
   printedAt   DateTime @default(now())
-  printedById String?
+  printedById String? @db.Uuid
   snapshot    Json // Yazdırma anındaki roll listesi (immutable belge)
   notes       String?
 
@@ -1781,7 +1846,7 @@ enum PrintedDocStatus {
 }
 
 model PrintedDocument {
-  id       String           @id @default(uuid())
+  id       String @db.Uuid           @id @default(uuid())
   docType  PrintedDocType
   // Polimorfik kaynak: shipmentId / subcontractorDispatchId / kartelaDispatchId.
   // FK YOK (3 tabloya birden bağlanamaz); bütünlük servis katmanında.
@@ -1799,7 +1864,7 @@ model PrintedDocument {
   voidReason    String?
   // Lazy-freeze ile (eski kayıttan) geriye dönük üretildi mi — baskıda dipnot.
   reconstructed Boolean @default(false)
-  printedById   String?
+  printedById   String? @db.Uuid
   printedBy     User?   @relation("PrintedDocumentPrintedBy", fields: [printedById], references: [id])
 
   createdAt DateTime @default(now())
@@ -1830,14 +1895,22 @@ enum ShipmentStatus {
   CANCELLED // İptal — toplar serbest depoya döner, karşılanma (commit) geri alınır
 }
 
+/// Saha #19+#22: sevkiyat varış kapsamı. Yurtiçi default; çuval tartısı zorunluluğu
+/// yalnız EXPORT'ta (yurtiçi kg girilmeden Sevke Hazır/Sevk edilebilir). Çuval depo /
+/// kapı önünde rozet + filtre olarak görünür (sıkı bir ayrım değil, farkedilebilirlik).
+enum ShipmentDestination {
+  DOMESTIC // Yurtiçi
+  EXPORT // Yurtdışı / ihracat
+}
+
 /// Çuval — fiziksel paket birimi. Brüt tartı (no + kg) + İÇERİK: hangi toplar/kartelalar
 /// bu çuvalda (Roll.sackId / Swatch.sackId). Çuval-önce akışta önce açılır, içine okutulur,
 /// brüt tartılır, kapatılır. İrsaliyedeki çuval-bazlı ürün dökümü buradan türetilir.
 /// Tek çuval = tek müşteri (sevkiyat seviyesinde garanti); içinde karışık ürün serbest.
 model Sack {
-  id         String   @id @default(uuid())
+  id         String @db.Uuid   @id @default(uuid())
   sackNo     String   @unique @db.VarChar(64) // Client-üretimi barkod (offline-aware)
-  shipmentId String? // Bağlı olduğu sevkiyat
+  shipmentId String? @db.Uuid // Bağlı olduğu sevkiyat
   seq        Int      @default(0) // Sevkiyat içinde sıra (Çuval 1, 2, 3...)
   manualCode String?  @db.VarChar(64) // Operatörün çuval üstüne elle yazdığı kod (sevkiyat-içi benzersiz; ready/sevk için zorunlu)
   weightKg   Decimal? @db.Decimal(12, 3) // Brüt tartı (kumaş + dara); tekli top kg tutulmaz
@@ -1851,6 +1924,11 @@ model Sack {
   updatedAt DateTime @updatedAt
 
   @@index([shipmentId])
+  // Saha #5: AMB%05d otomatik kod üretimi global max okur — range seek için.
+  @@index([manualCode])
+  // Sevkiyat içinde cuval sırası benzersiz — silme sonrası yeniden ekleme/yarış
+  // çift "Çuval N" üretemez (M-17; migration 20260612103000)
+  @@unique([shipmentId, seq])
   @@map("sacks")
 }
 
@@ -1858,11 +1936,16 @@ model Sack {
 /// siparişler + okutulan toplar/kartelalar + çuval ağırlıkları + karşılanma tahsisi.
 /// READY (Sevke Hazır) = kapıda, karşılanma düşüldü; DISPATCHED = kamyona yüklendi.
 model Shipment {
-  id         String         @id @default(uuid())
+  id         String @db.Uuid         @id @default(uuid())
   shipmentNo String         @unique @db.VarChar(64)
-  customerId String
-  branchId   String?
+  customerId String @db.Uuid
+  branchId   String? @db.Uuid
   status     ShipmentStatus @default(PREPARING)
+  // Saha #19+#22: yurtiçi/yurtdışı — tartı zorunluluğu yalnız EXPORT, board'da rozet+filtre.
+  destination ShipmentDestination @default(DOMESTIC)
+  // Saha #21: sevkiyata özel prosedür / ihracat referans kodu (örn. gümrük beyanname no).
+  // Boşsa ekranlarda müşteri/şube `code`'u gösterilir; bu alan sevkiyat bazında override.
+  procedureCode String? @db.VarChar(64)
 
   // Araç / sürücü (dispatch'te girilir)
   plateNumber String? @db.VarChar(32)
@@ -1894,8 +1977,8 @@ model Shipment {
 /// Sevkiyat ↔ Order (N:N) — paketleme oturumunda seçilen siparişler.
 /// Tahsis (allocation) yalnız bu siparişlere dağılır (kapsam = seçim). Append-only.
 model ShipmentOrder {
-  shipmentId String
-  orderId    String
+  shipmentId String @db.Uuid
+  orderId    String @db.Uuid
 
   shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   order    Order    @relation(fields: [orderId], references: [id])
@@ -1912,9 +1995,9 @@ model ShipmentOrder {
 /// İptalde silinir → shippedQty geri alınır. "Hangi top" değil "ne kadar metraj"
 /// (top↔sipariş bağı yok; aggregate muhasebe).
 model ShipmentAllocation {
-  id          String  @id @default(uuid())
-  shipmentId  String
-  orderLineId String
+  id          String @db.Uuid  @id @default(uuid())
+  shipmentId  String @db.Uuid
+  orderLineId String @db.Uuid
   qty         Decimal @db.Decimal(12, 3) // Bu sevkiyatın bu satıra düşürdüğü metraj
 
   shipment  Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
@@ -1922,7 +2005,10 @@ model ShipmentAllocation {
 
   createdAt DateTime @default(now())
 
-  @@index([shipmentId])
+  // L (düşük bulgu): çift-commit'e DB seddi — commit claim'lerle zaten serileşik,
+  // unique saf savunma katmanı (aynı sevkiyat+satıra ikinci tahsis imkânsız).
+  // shipmentId lider kolonu olduğu için eski @@index([shipmentId])'i de kapsar.
+  @@unique([shipmentId, orderLineId])
   @@index([orderLineId])
   @@map("shipment_allocations")
 }
@@ -1934,27 +2020,27 @@ model ShipmentAllocation {
 /// (statü hep WAREHOUSE — Tambur çıktısıyla tutarlı); kalite yalnız personel
 /// (returnGradingEnabled açıkken) override ederse `qualityGradeId`'de saklanır.
 model RollReturn {
-  id             String  @id @default(uuid())
-  rollId         String // İade edilen top
-  fromShipmentId String? // Geldiği sevkiyat (varsa)
-  customerId     String // Müşteri (sevkiyattan türetilir)
-  orderId        String? // Personelin seçtiği sipariş (tek aday=otomatik; yoksa null)
+  id             String @db.Uuid  @id @default(uuid())
+  rollId         String @db.Uuid // İade edilen top
+  fromShipmentId String? @db.Uuid // Geldiği sevkiyat (varsa)
+  customerId     String @db.Uuid // Müşteri (sevkiyattan türetilir)
+  orderId        String? @db.Uuid // Personelin seçtiği sipariş (tek aday=otomatik; yoksa null)
 
   // Spec snapshot — top sonradan Tambur'da kesilse bile rapor sağlam kalsın
-  itemId  String
-  colorId String?
+  itemId  String @db.Uuid
+  colorId String? @db.Uuid
   width   Decimal? @db.Decimal(12, 3)
   qty     Decimal  @db.Decimal(12, 3) // İade anındaki currentQty
 
   // Neden + not (hepsi opsiyonel; ikisi de boş olabilir)
-  reasonId   String? // ReturnReason FK (seçilen)
+  reasonId   String? @db.Uuid // ReturnReason FK (seçilen)
   reasonText String? @db.Text // Serbest metin neden
   note       String? @db.Text // Teslim alan personel notu
 
   // Kalite — yalnız personel override ettiyse dolar (yoksa top çıktığı kaliteyle döner)
-  qualityGradeId String?
+  qualityGradeId String? @db.Uuid
 
-  receivedById String // İadeyi teslim alan personel
+  receivedById String @db.Uuid // İadeyi teslim alan personel
 
   // İade öncesi durum snapshot'ı — iptal (geri al) bunlarla topu eski haline döndürür.
   prevSackId         String? // İade anındaki sackId (iptalde geri yazılır)
@@ -1969,7 +2055,7 @@ model RollReturn {
   // İptal (yanlış iade kabulü geri alındı) — sebeple birlikte.
   cancelledAt   DateTime?
   cancelReason  String?   @db.Text
-  cancelledById String?
+  cancelledById String? @db.Uuid
 
   createdAt DateTime @default(now())
 
@@ -1988,6 +2074,9 @@ model RollReturn {
   @@index([orderId])
   @@index([customerId, createdAt])
   @@index([itemId, colorId, width])
+  // K7: colorId lider-kolon index'i — renge göre iade sorgusu composite'in
+  // 2. kolonunu kullanamıyordu (renk pasifleştirme/rapor yolları).
+  @@index([colorId])
   @@index([fromShipmentId])
   @@index([rollId])
   @@index([reasonId])
@@ -2024,7 +2113,7 @@ model RollReturn {
 /// Roll, OrderLine, WorkOrder.targetColor, Swatch ve Item.allowedColors buradan
 /// referans alır.
 model Color {
-  id        String   @id @default(uuid())
+  id        String @db.Uuid   @id @default(uuid())
   code      String   @unique @db.VarChar(32) // "MAVI", "KIRMIZI"
   name      String   @db.VarChar(100)
   hex       String?  @db.VarChar(7) // UI rozeti için #RRGGBB
@@ -2057,7 +2146,7 @@ model Color {
 ///   - WorkOrderTargetProperty : bir iş emrinin üretim çıktısında olacak özellikler
 ///   - RollProperty   : bir rulonun fiilen sahip olduğu özellikler
 model FabricProperty {
-  id          String   @id @default(uuid())
+  id          String @db.Uuid   @id @default(uuid())
   code        String   @unique @db.VarChar(32) // "YANMAZLIK", "KAYGAN"
   name        String   @db.VarChar(100)
   category    String? // "Dayanıklılık", "Yüzey", "Kimyasal" vb. (UI gruplama için)
@@ -2087,9 +2176,9 @@ model FabricProperty {
 /// Item kimliğini ETKİLEMEZ (Item kimliği sadece kod). Sadece sipariş/WO
 /// planlamada filter kaynağıdır. Boş = tüm aktif FabricProperty serbest.
 model ItemAllowedProperty {
-  id         String @id @default(uuid())
-  itemId     String
-  propertyId String
+  id         String @db.Uuid @id @default(uuid())
+  itemId     String @db.Uuid
+  propertyId String @db.Uuid
 
   item     Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
   property FabricProperty @relation(fields: [propertyId], references: [id])
@@ -2105,9 +2194,9 @@ model ItemAllowedProperty {
 /// Item kimliğini ETKİLEMEZ. Sipariş satırında ve WO targetColor'da filter
 /// kaynağıdır. Boş = tüm aktif Color serbest.
 model ItemAllowedColor {
-  id      String @id @default(uuid())
-  itemId  String
-  colorId String
+  id      String @db.Uuid @id @default(uuid())
+  itemId  String @db.Uuid
+  colorId String @db.Uuid
 
   item  Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
   color Color @relation(fields: [colorId], references: [id])
@@ -2125,9 +2214,9 @@ model ItemAllowedColor {
 /// olarak buradan okunur. Operatörün uyguladığı OrderLine override bu kaydı
 /// EZMEZ — bir-seferlik talep için.
 model CustomerItemAlias {
-  id         String @id @default(uuid())
-  customerId String
-  itemId     String
+  id         String @db.Uuid @id @default(uuid())
+  customerId String @db.Uuid
+  itemId     String @db.Uuid
   alias      String // Müşterideki ad (örn. "AKTOS")
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
@@ -2145,9 +2234,9 @@ model CustomerItemAlias {
 /// Customer ↔ Color alias — aynı mantık, renk için. Örn: bizde "MAVI",
 /// ABC müşterisinde "ROYAL BLUE".
 model CustomerColorAlias {
-  id         String @id @default(uuid())
-  customerId String
-  colorId    String
+  id         String @db.Uuid @id @default(uuid())
+  customerId String @db.Uuid
+  colorId    String @db.Uuid
   // Müşterideki renk adı (etiket basımı için opsiyonel). Null = renge müşteri
   // tarafında özel ad verilmemiş.
   alias      String?
@@ -2186,7 +2275,7 @@ model CustomerColorAlias {
 ///     { "key": "customerName","label": "Müşteri", "order": 3, "isVisible": true }
 ///   ]
 model LabelTemplate {
-  id        String    @id @default(uuid())
+  id        String @db.Uuid    @id @default(uuid())
   name      String    @db.VarChar(100) // "Standart Top Etiketi", "Müşteri X Özel"
   kind      LabelKind
   isDefault Boolean   @default(false)
@@ -2207,9 +2296,9 @@ model LabelTemplate {
 /// üretim özellikleri. Tambur'da finalize sırasında bu liste otomatik olarak
 /// üretilen Roll'lara RollProperty olarak yazılır. Step planlaması YOK.
 model WorkOrderTargetProperty {
-  id          String @id @default(uuid())
-  workOrderId String
-  propertyId  String
+  id          String @db.Uuid @id @default(uuid())
+  workOrderId String @db.Uuid
+  propertyId  String @db.Uuid
 
   workOrder WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   property  FabricProperty @relation(fields: [propertyId], references: [id])
@@ -2226,9 +2315,9 @@ model WorkOrderTargetProperty {
 /// Fason Kabul'ünde WO.targetProperties'tan kopyalanır. Sonradan
 /// inventory.applyManualProperties ile düzenlenebilir.
 model RollProperty {
-  id         String @id @default(uuid())
-  rollId     String
-  propertyId String
+  id         String @db.Uuid @id @default(uuid())
+  rollId     String @db.Uuid
+  propertyId String @db.Uuid
 
   roll     Roll           @relation(fields: [rollId], references: [id], onDelete: Cascade)
   property FabricProperty @relation(fields: [propertyId], references: [id])
@@ -2243,9 +2332,9 @@ model RollProperty {
 /// İstasyon ↔ Color M:N — bir istasyonun uygulayabileceği renkler.
 /// WO planlamada hedef rengin atandığı adımın bu yetkinliğe sahip olması ZORUNLUDUR.
 model StationColor {
-  id        String @id @default(uuid())
-  stationId String
-  colorId   String
+  id        String @db.Uuid @id @default(uuid())
+  stationId String @db.Uuid
+  colorId   String @db.Uuid
 
   station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
   color   Color   @relation(fields: [colorId], references: [id], onDelete: Cascade)
@@ -2261,9 +2350,9 @@ model StationColor {
 /// İstasyon ↔ FabricProperty M:N — bir istasyonun uygulayabileceği özellikler.
 /// WO planlamada hedef özelliğin atandığı adımın bu yetkinliğe sahip olması ZORUNLUDUR.
 model StationProperty {
-  id         String @id @default(uuid())
-  stationId  String
-  propertyId String
+  id         String @db.Uuid @id @default(uuid())
+  stationId  String @db.Uuid
+  propertyId String @db.Uuid
 
   station  Station        @relation(fields: [stationId], references: [id], onDelete: Cascade)
   property FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -2281,8 +2370,8 @@ model StationProperty {
 // =============================================================================
 
 model SystemLog {
-  id        String            @id @default(uuid())
-  userId    String?
+  id        String @db.Uuid            @id @default(uuid())
+  userId    String? @db.Uuid
   category  SystemLogCategory @default(DOMAIN)
   action    String // DOMAIN: CREATE/UPDATE/DELETE — AUTH: LOGIN_SUCCESS/LOGIN_FAILED — SYSTEM: STARTUP/ERROR
   tableName String // domain table OR event source (e.g. "AUTH", "SYSTEM")
@@ -2312,8 +2401,8 @@ model SystemLog {
 /// system_logs tablosundan X aydan eski kayıtlar buraya taşınır.
 /// Arşiv sorgulanmaz, sadece yasal/uyum amaçlı saklanır.
 model SystemLogArchive {
-  id         String            @id // Orijinal UUID — arşivleme sonrası aynı kalır
-  userId     String?
+  id         String @db.Uuid            @id // Orijinal UUID — arşivleme sonrası aynı kalır
+  userId     String? @db.Uuid
   category   SystemLogCategory @default(DOMAIN)
   action     String
   tableName  String
