@@ -1,11 +1,36 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { ShippingService } from "../services/shipping.service";
+import { sackSearchService } from "../services/sack-search.service";
 import "../types/express-augment";
+
+// Çuval/Top Arama (saha #1+#23) sorgu şeması — tümü opsiyonel, kombinlenebilir.
+const sackSearchQuerySchema = z.object({
+  itemId: z.string().uuid("Geçersiz ürün ID").optional(),
+  colorId: z.string().uuid("Geçersiz renk ID").optional(),
+  width: z.coerce.number().positive("En pozitif olmalı").optional(),
+  customerId: z.string().uuid("Geçersiz müşteri ID").optional(),
+  shipmentNo: z.string().trim().max(64).optional(),
+  sackCode: z.string().trim().max(64).optional(),
+  includeDispatched: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
 
 // ---- Zod şemaları ----------------------------------------------------------
 const createShipmentSchema = z.object({
   orderIds: z.array(z.string().uuid("Geçersiz sipariş ID")).min(1, "En az bir sipariş seçilmeli"),
+  // Saha #19: yurtiçi/yurtdışı — verilmezse DOMESTIC.
+  destination: z.enum(["DOMESTIC", "EXPORT"]).optional(),
+});
+
+const destinationSchema = z.object({ destination: z.enum(["DOMESTIC", "EXPORT"]) });
+// Saha #21: prosedür/ihracat kodu override (boş = temizle)
+const procedureCodeSchema = z.object({
+  procedureCode: z.string().trim().max(64).nullable().optional(),
 });
 
 const orderIdsSchema = z.object({
@@ -25,17 +50,22 @@ const removeSwatchSchema = z.object({ swatchId: z.string().uuid("Geçersiz karte
 // Dolu çuval silme kısa yolu — true ise içerik depoya döndürülüp çuval silinir.
 const removeSackSchema = z.object({ withContents: z.boolean().optional() });
 const moveSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
+// Saha #3: iki topun çuvalını takas et (aynı sevkiyat içi)
+const swapRollsSchema = z.object({
+  rollAId: z.string().uuid("Geçersiz top ID"),
+  rollBId: z.string().uuid("Geçersiz top ID"),
+});
 
 const addSackSchema = z.object({
   // Çuval-önce akışta boş açılır (kg + kod sonra girilir) → opsiyonel
-  weightKg: z.number().positive("Kg pozitif olmalı").optional().nullable(),
+  weightKg: z.number().positive("Kg pozitif olmalı").max(999_999_999, "Kg çok büyük").optional().nullable(),
   sackNo: z.string().trim().min(1).max(64).optional().nullable(),
   manualCode: z.string().trim().max(64).optional().nullable(),
 });
 // Çuval güncelle — tartı ve/veya elle yazılan kod. En az biri verilmeli.
 const weighSackSchema = z
   .object({
-    weightKg: z.number().positive("Kg pozitif olmalı").optional(),
+    weightKg: z.number().positive("Kg pozitif olmalı").max(999_999_999, "Kg çok büyük").optional(),
     manualCode: z.string().trim().max(64).optional(),
   })
   .refine((v) => v.weightKg !== undefined || v.manualCode !== undefined, {
@@ -87,6 +117,7 @@ export class ShippingController {
       const result = await this.service.listSackStoreBoard({
         status: (req.query.status as string | undefined) || undefined,
         search: (req.query.search as string | undefined) || undefined,
+        destination: (req.query.destination as string | undefined) || undefined,
         cursor: (req.query.cursor as string | undefined) || undefined,
         limit: Number.isFinite(limitRaw) ? limitRaw : undefined,
       });
@@ -99,6 +130,46 @@ export class ShippingController {
   getShipmentSackContents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await this.service.getShipmentSackContents(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  // Saha #2: muhasebe sevk fişi (ürün/çuval/çeki listesi) — salt-okunur.
+  getDispatchReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getDispatchReport(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  // ---- ÇUVAL/TOP ARAMA (saha #1+#23) — salt-okunur -------------------------
+  searchSacks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const q = sackSearchQuerySchema.parse(req.query);
+      const result = await sackSearchService.searchSacks(q);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  getSackContents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await sackSearchService.getSackContents(req.params.id as string);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  locateRoll = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const barcode = z.string().trim().min(1, "Barkod gerekli").max(64).parse(req.query.barcode);
+      const result = await sackSearchService.locateRoll(barcode);
       res.status(200).json(result);
     } catch (e) {
       next(e);
@@ -170,6 +241,54 @@ export class ShippingController {
       const body = moveSackSchema.parse(req.body);
       const result = await this.service.moveRollToSack(
         { rollId: req.params.rollId as string, sackId: body.sackId },
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  swapRollSacks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = swapRollsSchema.parse(req.body);
+      const result = await this.service.swapRollSacks(body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  setDestination = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = destinationSchema.parse(req.body);
+      const result = await this.service.setDestination(
+        req.params.id as string,
+        body.destination,
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  retargetOrders = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = orderIdsSchema.parse(req.body);
+      const result = await this.service.retargetOrders(req.params.id as string, body.orderIds, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  setProcedureCode = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = procedureCodeSchema.parse(req.body);
+      const result = await this.service.setProcedureCode(
+        req.params.id as string,
+        body.procedureCode ?? null,
         req.user?.userId
       );
       res.status(200).json(result);

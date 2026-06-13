@@ -29,7 +29,7 @@ function getLanAddresses(): Array<{ iface: string; address: string }> {
     return out;
 }
 
-app.listen(Number(PORT), HOST, () => {
+const server = app.listen(Number(PORT), HOST, () => {
     const lan = getLanAddresses();
 
     console.log("");
@@ -62,3 +62,25 @@ app.listen(Number(PORT), HOST, () => {
         },
     });
 });
+
+// L (düşük bulgu): graceful shutdown — eskiden hiç handler yoktu, restart'ta
+// (nssm/servis güncellemesi, Ctrl+C) uçuştaki istekler TCP düzeyinde kopuyordu.
+// server.close() yeni bağlantıyı reddedip mevcut istekleri bitirir; 5s'de
+// kapanmazsa zorla çıkılır (asılı keep-alive bağlantıları sonsuza dek bekletmesin).
+let shuttingDown = false;
+function gracefulShutdown(signal: string): void {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n${signal} alındı — sunucu kapatılıyor (uçuştaki istekler bitiriliyor)...`);
+    const forceTimer = setTimeout(() => {
+        console.warn("Kapanış 5s'de tamamlanmadı — zorla çıkılıyor.");
+        process.exit(1);
+    }, 5000);
+    forceTimer.unref();
+    server.close(() => {
+        console.log("Sunucu kapandı.");
+        process.exit(0);
+    });
+}
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

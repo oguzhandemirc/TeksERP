@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, TextInput, IconButton, Surface, TouchableRipple, Chip, Icon, ActivityIndicator, Button } from 'react-native-paper';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, onlineManager } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import SyncStatusChip from '../../../components/SyncStatusChip';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import RollPickerModal from '../../../components/RollPickerModal';
@@ -16,11 +17,17 @@ import { rollService } from '../../../services/roll.service';
 import { useKartelaFirms } from '../../../hooks/useKartelaFirms';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
-import { kartelaService, type KartelaDispatchListItem } from '../../../services/kartela.service';
+import { type KartelaDispatchRequest } from '../../../services/kartela.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import { colors, spacing, radius } from '../../../theme';
 import type { Roll } from '../../../types/models';
 import type { MainStackParamList } from '../../../navigation/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// O12 fix: okutulmuş top listesi Android LMK kill'inde sıfırlanıyordu —
+// FasonKabul draft deseni (debounce + savedAt + 8h TTL).
+const DRAFT_KEY = 'kartela_sevk_draft_v1';
+const DRAFT_TTL_MS = 8 * 60 * 60 * 1000;
 
 interface ScannedRoll {
   id: string;
@@ -51,6 +58,48 @@ export default function KartelaSevkScreen() {
   const [driverName, setDriverName] = useState('');
   const [notes, setNotes] = useState('');
   const [extrasOpen, setExtrasOpen] = useState(false);
+
+  // O12: draft restore + debounced save (LMK kill'e karşı).
+  const draftRestoredRef = useRef(false);
+  useEffect(() => {
+    AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
+      if (raw) {
+        try {
+          const d = JSON.parse(raw) as Record<string, unknown>;
+          const age = typeof d.savedAt === 'number' ? Date.now() - d.savedAt : Infinity;
+          if (age < DRAFT_TTL_MS) {
+            if (typeof d.firmId === 'string') setFirmId(d.firmId);
+            if (typeof d.firmName === 'string') setFirmName(d.firmName);
+            if (Array.isArray(d.rolls) && d.rolls.length > 0) setRolls(d.rolls as ScannedRoll[]);
+            if (typeof d.plateNumber === 'string' && d.plateNumber) setPlateNumber(d.plateNumber);
+            if (typeof d.driverName === 'string' && d.driverName) setDriverName(d.driverName);
+            if (typeof d.notes === 'string' && d.notes) setNotes(d.notes);
+          } else {
+            AsyncStorage.removeItem(DRAFT_KEY);
+          }
+        } catch {
+          AsyncStorage.removeItem(DRAFT_KEY);
+        }
+      }
+      draftRestoredRef.current = true;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!draftRestoredRef.current) return;
+    const t = setTimeout(() => {
+      if (rolls.length === 0 && !firmId) {
+        AsyncStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      AsyncStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ savedAt: Date.now(), firmId, firmName, rolls, plateNumber, driverName, notes }),
+      );
+    }, 600);
+    return () => clearTimeout(t);
+  }, [firmId, firmName, rolls, plateNumber, driverName, notes]);
 
   const { firms, isLoading: firmsLoading, categoryMissing, refetch: refetchFirms } = useKartelaFirms();
   // Picker her açıldığında firmaları taze çek — admin'deki kategori/atama
@@ -153,25 +202,32 @@ export default function KartelaSevkScreen() {
 
   const removeRoll = (id: string) => setRolls((prev) => prev.filter((r) => r.id !== id));
 
-  const dispatchMutation = useMutation<KartelaDispatchListItem, Error, void>({
+  // Y8 fix: KK1/FasonSevk deseniyle hizalandı — mutationFn registry default'undan
+  // gelir (offline/mutations.ts), payload VARIABLES olarak geçer. Eski kod kendi
+  // closure fn'ini tanımlayıp mutate()'i parametresiz çağırıyordu: persist katmanı
+  // yalnız mutationKey+variables sakladığından, offline pause + app restart
+  // sonrası replay dispatch(undefined) ile boş body atıyor ve SEVK KAYBOLUYORDU.
+  const dispatchMutation = useMutation<unknown, Error, KartelaDispatchRequest>({
     mutationKey: STATION_MUT.KARTELA_SEVK_DISPATCH,
-    mutationFn: async () =>
-      (
-        await kartelaService.dispatch({
-          subcontractorId: firmId!,
-          rollIds: rolls.map((r) => r.id),
-          plateNumber: plateNumber.trim() || null,
-          driverName: driverName.trim() || null,
-          notes: notes.trim() || null,
-        })
-      ).data,
-    onSuccess: () => {
+    // O11 fix: FasonSevk deseni — offline'da operatör kaydın sıraya girdiğini
+    // bilsin (eskiden Gönder sonsuz spinner'da kalıyordu, hiçbir iz yoktu).
+    onMutate: () => {
+      if (!onlineManager.isOnline()) {
+        Toast.show({
+          type: 'info',
+          text1: 'Çevrimdışı — sevk sıraya alındı',
+          text2: 'Bağlantı gelince otomatik gönderilecek',
+        });
+      }
+    },
+    onSuccess: (_data, vars) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Kartela sevki oluşturuldu', text2: `${rolls.length} top gönderildi` });
+      Toast.show({ type: 'success', text1: 'Kartela sevki oluşturuldu', text2: `${vars.rollIds.length} top gönderildi` });
       setRolls([]);
       setPlateNumber('');
       setDriverName('');
       setNotes('');
+      AsyncStorage.removeItem(DRAFT_KEY); // O12: başarılı sevk → taslak temizle
       qc.invalidateQueries({ queryKey: ['kartela'] });
     },
     onError: (err) => {
@@ -180,10 +236,18 @@ export default function KartelaSevkScreen() {
     },
   });
 
+  const buildDispatchPayload = (): KartelaDispatchRequest => ({
+    subcontractorId: firmId!,
+    rollIds: rolls.map((r) => r.id),
+    plateNumber: plateNumber.trim() || null,
+    driverName: driverName.trim() || null,
+    notes: notes.trim() || null,
+  });
+
   const canDispatch = !!firmId && rolls.length > 0 && !dispatchMutation.isPending;
 
   return (
-    <ScreenChrome title="Kartela Sevk">
+    <ScreenChrome title="Kartela Sevk" headerExtras={<SyncStatusChip />}>
       <View style={styles.flex}>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {/* Firma seçimi */}
@@ -328,7 +392,7 @@ export default function KartelaSevkScreen() {
 
           <View style={styles.barCellSide}>
             <TouchableRipple
-              onPress={() => canDispatch && dispatchMutation.mutate()}
+              onPress={() => canDispatch && dispatchMutation.mutate(buildDispatchPayload())}
               disabled={!canDispatch}
               style={styles.barBtn}
               rippleColor="rgba(217, 119, 6, 0.12)"

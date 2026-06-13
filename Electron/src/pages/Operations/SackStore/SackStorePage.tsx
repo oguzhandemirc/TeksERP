@@ -13,17 +13,30 @@ import { cn } from "@/lib/utils";
 import { sackStoreService } from "./service";
 import { SackStoreCard } from "./SackStoreCard";
 import { ShipmentContentsSheet } from "./ShipmentContentsSheet";
-import { sackStoreStatusLabels, type SackStoreShipment, type SackStoreStatus } from "./types";
+import {
+  sackStoreStatusLabels,
+  destinationLabels,
+  type SackStoreShipment,
+  type SackStoreStatus,
+  type ShipmentDestination,
+} from "./types";
 
 const QUERY_KEY = "sack-store";
 const PAGE_SIZE = 30;
 
 type StatusFilter = "ALL" | SackStoreStatus;
+type DestFilter = "ALL" | ShipmentDestination;
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: "ALL", label: "Tümü" },
   { key: "READY", label: sackStoreStatusLabels.READY },
   { key: "AT_DOOR", label: sackStoreStatusLabels.AT_DOOR },
+];
+
+const DEST_TABS: { key: DestFilter; label: string }[] = [
+  { key: "ALL", label: "Tümü" },
+  { key: "DOMESTIC", label: destinationLabels.DOMESTIC },
+  { key: "EXPORT", label: destinationLabels.EXPORT },
 ];
 
 type PendingAction = {
@@ -65,17 +78,19 @@ const ACTION_COPY: Record<
 export function SackStorePage() {
   const qc = useQueryClient();
   const [status, setStatus] = useState<StatusFilter>("ALL");
+  const [destination, setDestination] = useState<DestFilter>("ALL");
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [openShipment, setOpenShipment] = useState<SackStoreShipment | null>(null);
 
   const query = useInfiniteQuery({
-    queryKey: [QUERY_KEY, status, debouncedSearch],
+    queryKey: [QUERY_KEY, status, destination, debouncedSearch],
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) =>
       sackStoreService.list({
         status: status === "ALL" ? undefined : status,
+        destination: destination === "ALL" ? undefined : destination,
         search: debouncedSearch || undefined,
         cursor: pageParam,
         limit: PAGE_SIZE,
@@ -100,9 +115,27 @@ export function SackStorePage() {
       toast.success(ACTION_COPY[action.kind].success);
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
       void qc.invalidateQueries({ queryKey: ["sack-contents"] });
+      // O1 fix: bu geçişler sevkiyatın kendisini de değiştirir — dispatch
+      // DISPATCHED+SHIPPED yapar, unready commit'i GERİ SARIP sipariş durumunu
+      // yeniden hesaplar. Açık Sevkiyat/Sipariş sekmeleri bayat kalmasın.
+      void qc.invalidateQueries({ queryKey: ["shipments"] });
+      void qc.invalidateQueries({ queryKey: ["shipment-detail", action.shipment.id] });
+      if (action.kind === "unready" || action.kind === "dispatch") {
+        void qc.invalidateQueries({ queryKey: ["orders"] });
+      }
+      if (action.kind === "dispatch") {
+        // Toplar SHIPPED'e düştü — top tabloları + stats tazelensin.
+        void qc.invalidateQueries({ queryKey: ["rolls"] });
+      }
       setPending(null);
     },
-    // onError yok — apiClient interceptor backend mesajını toast'lar.
+    // Toast apiClient interceptor'dan gelir; L: 409'da (atomik claim — başka
+    // operatör aynı sevkiyatı değiştirdi) liste tazelensin ki bayat kartla
+    // aynı hata tekrarlanmasın.
+    onError: () => {
+      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
+      setPending(null);
+    },
   });
 
   const busyId = mutation.isPending ? mutation.variables?.shipment.id : undefined;
@@ -135,6 +168,24 @@ export function SackStorePage() {
                 "rounded px-3 py-1 text-xs font-medium transition-colors",
                 status === t.key
                   ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {/* Saha #22: yurtiçi/yurtdışı filtresi */}
+        <div className="flex items-center gap-1 rounded-md border p-0.5">
+          {DEST_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setDestination(t.key)}
+              className={cn(
+                "rounded px-3 py-1 text-xs font-medium transition-colors",
+                destination === t.key
+                  ? "bg-sky-600 text-white"
                   : "text-muted-foreground hover:bg-muted",
               )}
             >

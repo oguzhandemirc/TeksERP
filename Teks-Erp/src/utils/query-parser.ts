@@ -150,9 +150,21 @@ export function buildWhereClause(
 
   // Full-text search across multiple fields via OR + contains
   if (search && searchFields && searchFields.length > 0) {
-    where.OR = searchFields.map((field) => ({
+    const clauses: Record<string, unknown>[] = searchFields.map((field) => ({
       [field]: { contains: search, mode: "insensitive" },
     }));
+    // Türkçe İ/ı: adlar BÜYÜK saklanıyor (saha #13) ama ILIKE en_US.UTF-8'de
+    // i↔İ ve ı↔I'yı eşlemez ("siyah" %...% 'SİYAH' = false). Sorgunun tr-upper
+    // varyantını da (case-sensitive contains) OR'a ekle.
+    // 'i' → 'İ' ve 'ı' → 'I' dönüşümleri ILIKE'ın katlayamadığı tek durumlar;
+    // sorguda bu harfler yoksa insensitive clause yeterli, varyant eklenmez.
+    if (/[ıi]/.test(search)) {
+      const trUpper = search.toLocaleUpperCase("tr-TR");
+      for (const field of searchFields) {
+        clauses.push({ [field]: { contains: trUpper } });
+      }
+    }
+    where.OR = clauses;
   }
 
   return where;

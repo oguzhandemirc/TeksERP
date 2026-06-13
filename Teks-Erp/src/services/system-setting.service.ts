@@ -91,6 +91,14 @@ export const SETTING_KEYS = {
    *  paneli bu kadar dakika hiç işlem (fare/klavye) görmezse otomatik çıkış yapar.
    *  Frontend ENFORCE eder (backend token'ı yine kendi mutlak ömrüne kadar geçerli). */
   AUTH_IDLE_TIMEOUT_MINUTES: "auth.idleTimeoutMinutes",
+  /** Saha #6: top etiketi kaç kopya basılır (default 2 — topun bir üstüne bir
+   *  altına yapıştırılıyor). /labels/rolls/:id/html bu kadar sayfa döner;
+   *  çağıran ?copies= ile tek baskı için override edebilir. 1-5 arası. */
+  LABEL_COPIES: "label.copies",
+  /** Saha #20: top adı (birleşik ürün tanımı) format şablonu. Token'lar:
+   *  {item} {color} {width} {quality}. Default "{item} {color} {width}". Boş
+   *  token'lar (renksiz vb.) atlanır, fazla boşluk sadeleşir. Frontend okur. */
+  ROLL_NAME_TEMPLATE: "roll.nameTemplate",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -213,6 +221,10 @@ export interface FeatureFlags {
   /** Hareketsizlik zaman aşımı — dakika (default 0 = kapalı). Panel bu kadar dakika
    *  işlem görmezse otomatik çıkış. Frontend ENFORCE eder. */
   idleTimeoutMinutes: number;
+  /** Saha #6: top etiketi kopya adedi (default 2 — üst+alt yapıştırma). 1-5. */
+  labelCopies: number;
+  /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). Frontend okur. */
+  rollNameTemplate: string;
 }
 
 // =============================================================================
@@ -318,22 +330,41 @@ export class SystemSettingService {
     if (featureFlagsCache && featureFlagsCache.expiresAt > now) {
       return { success: true, data: featureFlagsCache.value };
     }
+    // Tek sorguda tüm ayarları çek → reader'lara in-memory client enjekte et.
+    // Eski kod 15 ardışık findUnique = 15 round-trip yapıyordu. Reader'lar her
+    // flag'in key/parse/default mantığının TEK kaynağı kalır; yalnız veri kaynağı
+    // DB yerine map olur (system_settings tablosu küçük → tüm satırları çekmek ucuz).
+    const rows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
+    const valueByKey = new Map(rows.map((r) => [r.key, r.value] as const));
+    const cacheClient = {
+      systemSetting: {
+        findUnique: (args: { where: { key: string } }) =>
+          Promise.resolve(
+            valueByKey.has(args.where.key)
+              ? { value: valueByKey.get(args.where.key) }
+              : null,
+          ),
+      },
+    } as unknown as Pick<typeof prisma, "systemSetting">;
+
     const flags: FeatureFlags = {
-      companyName: await readCompanyName(),
-      pricingEnabled: await readPricingEnabled(),
-      targetQuantityEnabled: await readTargetQuantityEnabled(),
-      rawWidthEnabled: await readRawWidthEnabled(),
-      returnGradingEnabled: await readReturnGradingEnabled(),
-      partyCodeAuto: await readPartyCodeAuto(),
-      dyehouseNoteMobileEntry: await readDyehouseNoteMobileEntry(),
-      devicePairingRequired: await readDevicePairingRequired(),
-      shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(),
-      travelerCardConfig: await readTravelerCardConfig(),
-      companyLetterhead: await readCompanyLetterhead(),
-      documentsConfig: await readDocumentsConfig(),
-      tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(),
-      sessionDurationHours: await readSessionDurationHours(),
-      idleTimeoutMinutes: await readIdleTimeoutMinutes(),
+      companyName: await readCompanyName(cacheClient),
+      pricingEnabled: await readPricingEnabled(cacheClient),
+      targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
+      rawWidthEnabled: await readRawWidthEnabled(cacheClient),
+      returnGradingEnabled: await readReturnGradingEnabled(cacheClient),
+      partyCodeAuto: await readPartyCodeAuto(cacheClient),
+      dyehouseNoteMobileEntry: await readDyehouseNoteMobileEntry(cacheClient),
+      devicePairingRequired: await readDevicePairingRequired(cacheClient),
+      shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
+      travelerCardConfig: await readTravelerCardConfig(cacheClient),
+      companyLetterhead: await readCompanyLetterhead(cacheClient),
+      documentsConfig: await readDocumentsConfig(cacheClient),
+      tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(cacheClient),
+      sessionDurationHours: await readSessionDurationHours(cacheClient),
+      idleTimeoutMinutes: await readIdleTimeoutMinutes(cacheClient),
+      labelCopies: await readLabelCopies(cacheClient),
+      rollNameTemplate: await readRollNameTemplate(cacheClient),
     };
     featureFlagsCache = { value: flags, expiresAt: now + FEATURE_FLAGS_TTL_MS };
     return { success: true, data: flags };
@@ -570,6 +601,40 @@ export class SystemSettingService {
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "labelCopies")) {
+      const v = input.labelCopies;
+      if (typeof v !== "number" || !Number.isFinite(v) || v < 1 || v > 5) {
+        throw AppError.badRequest("Etiket kopya adedi 1–5 aralığında olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.LABEL_COPIES,
+        Math.floor(v),
+        "Top etiketi kopya adedi — bir baskıda kaç etiket çıkar (üst+alt için 2)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "rollNameTemplate")) {
+      const v = input.rollNameTemplate;
+      if (typeof v !== "string") {
+        throw AppError.badRequest("Top adı şablonu metin olmalı");
+      }
+      const trimmed = v.trim();
+      if (trimmed.length > 100) {
+        throw AppError.badRequest("Top adı şablonu en fazla 100 karakter olabilir");
+      }
+      // En az bir geçerli token bulunmalı (boş/anlamsız şablon engellenir).
+      if (trimmed && !/\{(item|color|width|quality)\}/.test(trimmed)) {
+        throw AppError.badRequest("Şablon en az bir token içermeli: {item} {color} {width} {quality}");
+      }
+      await this.set(
+        SETTING_KEYS.ROLL_NAME_TEMPLATE,
+        trimmed || DEFAULT_ROLL_NAME_TEMPLATE,
+        "Top adı format şablonu — {item} {color} {width} {quality} token'ları",
+        userId
+      );
+    }
+
     return this.getFeatureFlags();
   }
 }
@@ -600,8 +665,11 @@ export async function readShippingToleranceMeters(
  * bu flag'e göre order create/list/detail ekranlarındaki currency dropdown +
  * unitPrice + totalAmount alanlarını render eder.
  */
-export async function readPricingEnabled(): Promise<boolean> {
-  const setting = await prisma.systemSetting.findUnique({
+export async function readPricingEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.FINANCE_PRICING_ENABLED },
     select: { value: true },
   });
@@ -612,8 +680,11 @@ export async function readPricingEnabled(): Promise<boolean> {
  * İş emri "hedef metraj" alanı gösterilsin mi? Default false (proses-only
  * fabrika; üretim miktarını giren kumaş belirler). İleride örgü/üretim eklenirse açılır.
  */
-export async function readTargetQuantityEnabled(): Promise<boolean> {
-  const setting = await prisma.systemSetting.findUnique({
+export async function readTargetQuantityEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.WORKORDER_TARGET_QUANTITY_ENABLED },
     select: { value: true },
   });
@@ -626,8 +697,11 @@ export async function readTargetQuantityEnabled(): Promise<boolean> {
  * operatör isterse manuel override ile yine girebilir. Bitmiş topun eni KK1'den
  * değil WorkOrder.width'ten damgalanır (bkz. tambur.service finalize).
  */
-export async function readRawWidthEnabled(): Promise<boolean> {
-  const setting = await prisma.systemSetting.findUnique({
+export async function readRawWidthEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.KK1_RAW_WIDTH_ENABLED },
     select: { value: true },
   });
@@ -639,8 +713,11 @@ export async function readRawWidthEnabled(): Promise<boolean> {
  * Sadece UI rehberi — backend ENFORCE ETMEZ: batchNumber boş gelirse her iki modda
  * da otomatik üretir. Flag yalnızca formun manuel/otomatik davranışını belirler.
  */
-export async function readPartyCodeAuto(): Promise<boolean> {
-  const setting = await prisma.systemSetting.findUnique({
+export async function readPartyCodeAuto(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.WORKORDER_PARTY_CODE_AUTO },
     select: { value: true },
   });
@@ -953,3 +1030,39 @@ export async function readIdleTimeoutMinutes(
   if (parsed === null || parsed < 0) return DEFAULT_IDLE_TIMEOUT_MINUTES;
   return Math.min(Math.floor(parsed), MAX_IDLE_TIMEOUT_MINUTES);
 }
+/**
+ * Saha #6: top etiketi kopya adedi (default 2 — topun üstüne + altına).
+ * 1-5 aralığına kırpılır; geçersiz/yok → 2.
+ */
+export const DEFAULT_LABEL_COPIES = 2;
+export async function readLabelCopies(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.LABEL_COPIES },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_LABEL_COPIES;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < 1) return DEFAULT_LABEL_COPIES;
+  return Math.min(Math.floor(parsed), 5);
+}
+
+/**
+ * Saha #20: top adı (birleşik ürün tanımı) format şablonu. Token'lar:
+ * {item} {color} {width} {quality}. Yoksa/boşsa default. Maks 100 karakter.
+ */
+export const DEFAULT_ROLL_NAME_TEMPLATE = "{item} {color} {width}";
+export async function readRollNameTemplate(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<string> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.ROLL_NAME_TEMPLATE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return typeof v === "string" && v.trim() ? v.slice(0, 100) : DEFAULT_ROLL_NAME_TEMPLATE;
+}
+

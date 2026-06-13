@@ -154,8 +154,19 @@ export async function getStockDistribution(): Promise<StockDistribution> {
     totalQty: Math.round(Number(r.totalQty ?? 0) * 10) / 10,
   }));
 
-  const totalRolls = byItemColor.reduce((a, r) => a + r.rollCount, 0);
-  const totalQty = Math.round(byItemColor.reduce((a, r) => a + r.totalQty, 0) * 10) / 10;
+  // M-33: başlık toplamları LİMİTSİZ ayrı aggregate'ten — eskiden LIMIT 100'lük
+  // byItemColor listesinin reduce'üydü; ürün×renk kombinasyonu 100'ü aşınca
+  // toplamlar sessizce eksik kalıyor ve aynı rapordaki (LIMIT'siz) byWidth ile
+  // çelişiyordu. Tek satırlık aggregate, [status] index'iyle ucuz.
+  const totalsRow = await prisma.$queryRaw<
+    Array<{ rollCount: bigint; totalQty: number | null }>
+  >(Prisma.sql`
+    SELECT COUNT(*) AS "rollCount", SUM(r."currentQty")::float AS "totalQty"
+    FROM rolls r
+    WHERE r.status IN ('WAREHOUSE','STOCK','PRODUCED')
+  `);
+  const totalRolls = Number(totalsRow[0]?.rollCount ?? 0);
+  const totalQty = Math.round(Number(totalsRow[0]?.totalQty ?? 0) * 10) / 10;
 
   return { totalRolls, totalQty, byItemColor, byWidth };
 }

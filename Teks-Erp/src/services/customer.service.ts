@@ -9,6 +9,8 @@ import { BaseService, BaseServiceConfig } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { validateName, validateCode } from "../lib/string-validators";
+import prisma from "../lib/prisma";
+import { OrderStatus } from "@prisma/client";
 
 /**
  * VKN (10 hane), TCKN (11 hane) ve yabancı VAT/EIN (12-15 hane) için ortak
@@ -83,5 +85,30 @@ export class CustomerService extends BaseService {
       data.taxNumber = validated;
     }
     return super.update(id, data, userId);
+  }
+
+  /**
+   * M-26: AÇIK siparişi olan müşteri pasifleştirilemez — yoksa pasif müşterinin
+   * siparişleri MRP'de talep olarak yaşamaya devam eder, planlamacı pasif
+   * müşteri için üretim açar, sevkiyat FIFO bu satırlara tahsis eder.
+   * "Yıkıcı işlemde somut liste" kuralı: bloklanırken sipariş no'ları döner.
+   */
+  async softDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const openOrders = await prisma.order.findMany({
+      where: {
+        customerId: id,
+        status: { in: [OrderStatus.PENDING, OrderStatus.APPROVED, OrderStatus.PARTIAL_SHIPPED] },
+      },
+      select: { orderNumber: true },
+      take: 20,
+    });
+    if (openOrders.length > 0) {
+      const list = openOrders.map((o) => o.orderNumber).join(", ");
+      throw AppError.conflict(
+        `Müşterinin açık siparişleri var: ${list}${openOrders.length === 20 ? ", …" : ""}. ` +
+          `Önce siparişleri kapatın/iptal edin, sonra müşteriyi pasife alın.`
+      );
+    }
+    return super.softDelete(id, userId);
   }
 }

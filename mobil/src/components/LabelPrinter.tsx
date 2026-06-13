@@ -102,6 +102,11 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
         // info toast göster. "did not complete" expo-print'in iptal mesajı.
         const msg = (err as Error).message ?? '';
         const isCancel = /did not complete|cancel/i.test(msg);
+        // TEŞHİS: gerçek hata mesajını logla + toast'ta göster — "Yazıcıya
+        // gönderilemedi" altındaki asıl sebebi ayırt etmek için (fetch hatası mı,
+        // Print.printAsync native hatası mı, eksik PrintSpooler mı). Kök neden
+        // bulununca bu satır kaldırılacak.
+        console.warn('[LabelPrinter] print failed:', msg, err);
         void Haptics.notificationAsync(
           isCancel
             ? Haptics.NotificationFeedbackType.Warning
@@ -110,7 +115,8 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
         Toast.show({
           type: isCancel ? 'info' : 'error',
           text1: isCancel ? 'Yazdırma iptal edildi' : 'Yazdırma hatası',
-          text2: isCancel ? 'Etiket basılmadı' : 'Yazıcıya gönderilemedi',
+          text2: isCancel ? 'Etiket basılmadı' : msg || 'Yazıcıya gönderilemedi',
+          visibilityTime: isCancel ? 3000 : 8000,
         });
       } finally {
         if (mountedRef.current) onDoneRef.current();

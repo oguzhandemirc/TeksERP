@@ -70,7 +70,14 @@ export function PermissionsTab({ userId }: Props) {
   const mutation = useMutation({
     mutationFn: (ids: string[]) => adminUserService.setPermissions(userId, ids),
     onSuccess: () => {
-      toast.success("Yetkiler güncellendi.");
+      // O9 fix: yetkiler JWT'de taşınır (backend token'dan okur, DB'ye bakmaz) —
+      // hedef kullanıcının açık oturumu (8 saate kadar) ESKİ yetkilerle devam
+      // eder. Admin bunu bilsin; acil iptal gerekiyorsa kullanıcı çıkış yapmalı.
+      toast.success("Yetkiler güncellendi.", {
+        description:
+          "Değişiklik, kullanıcı bir sonraki girişinde etkili olur — açık oturumu eski yetkilerle sürer.",
+        duration: 8000,
+      });
       void qc.invalidateQueries({ queryKey: userKey });
       void qc.invalidateQueries({ queryKey: ["admin-users"] });
     },

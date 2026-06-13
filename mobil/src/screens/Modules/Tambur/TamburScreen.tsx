@@ -38,6 +38,7 @@ import RemoteListSheet from '../../../components/RemoteListSheet';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
+import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
@@ -50,6 +51,7 @@ import AppModal from '../../../components/AppModal';
 import LabelTargetSheet, { type LabelTargetContext } from '../../../components/LabelTargetSheet';
 import { LabelPreviewSheet } from '../../../components/labels/LabelPreviewSheet';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
+import RollPickerModal from '../../../components/RollPickerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { tamburService } from '../../../services/tambur.service';
 import { rollService } from '../../../services/roll.service';
@@ -393,8 +395,14 @@ export default function TamburScreen() {
   const activeRefresh = useManualRefresh(refetchActiveJob, 'İş güncellendi');
 
   // ── Kart çözümleme ──
+  // K-A5: cift cozumleme guard ref'i.
+  const resolveInFlightRef = useRef(false);
+
   const resolveCard = async (barcode: string, fromInput: boolean) => {
     if (!barcode) return;
+    // K-A5 fix: cozumleme ucustayken ikinci tetik (cift okutma/cift Enter) ayni
+    // kartin IKI sekme acilmasina yol aciyordu — in-flight guard.
+    if (resolveInFlightRef.current) return;
     const existing = openJobs.find((j) => j.cardBarcode === barcode);
     if (existing) {
       setActiveCardId(existing.cardId);
@@ -403,6 +411,7 @@ export default function TamburScreen() {
       return;
     }
 
+    resolveInFlightRef.current = true;
     setResolvingCard(true);
     try {
       // Refactor 4 — yanlış istasyonda 400 mesajı catch ile yakalanır
@@ -444,6 +453,7 @@ export default function TamburScreen() {
       });
     } finally {
       setResolvingCard(false);
+      resolveInFlightRef.current = false;
     }
   };
 
@@ -593,11 +603,14 @@ export default function TamburScreen() {
       // OTOMATİK BİTİŞ: açık kumaşın kalanı ihmal edilebilir (<10cm) ise ayrı
       // "Tamamla" beklemeden finalize et — son kesim işi otomatik kapatır,
       // sıradakine geçer. Eşik küçük yuvarlama artıklarını da yutar.
+      // Y11 fix: KESİLEN top variables.rollId'den alınır — eski kod yanıt
+      // anındaki selectedRoll'u kullanıyordu; kesim isteği uçuştayken operatör
+      // listeden başka açık kumaşa tıklarsa İLGİSİZ topu finalize ediyordu.
       const remaining = data?.parentRemainingQty ?? 0;
-      if (remaining < 0.1 && selectedRoll) {
+      if (remaining < 0.1 && variables.rollId) {
         Toast.show({ type: 'success', text1: 'Açık kumaş tamamlandı' });
         finalizeOpenFabricMutation.mutate({
-          rollId: selectedRoll.rollId,
+          rollId: variables.rollId,
           remainingAction: 'discard',
           foldType: work.foldType ?? null,
         });
@@ -1031,6 +1044,53 @@ export default function TamburScreen() {
   // (onModalHide) SONRA çalışır — aksi halde animation sırasında recutMode
   // mount edilirse invisible modal overlay tıklamayı yutuyor (RN nested modal).
   const [pendingRecutScan, setPendingRecutScan] = useState<string | null>(null);
+  // O15 fix: Top Kesme'ye "Listeden Seç" alternatifi — kamera/etiket çalışmasa
+  // da akış kilitlenmez (proje kuralı: okutulan her ekranda liste seçimi).
+  const [recutPickerOpen, setRecutPickerOpen] = useState(false);
+  const recutPickFromListPending = useRef(false);
+
+  /** Kesim adayı doğrulaması: bitmiş depo topu VEYA renksiz ham stok. */
+  const validateRecutCandidate = (r: { status: string; colorId?: string | null }): boolean => {
+    const isRawStock = r.status === 'STOCK' && (r.colorId ?? null) === null;
+    if (r.status !== 'WAREHOUSE' && !isRawStock) {
+      Toast.show({
+        type: 'error',
+        text1: 'Top kesime uygun değil',
+        text2: `Durum: ${r.status} (depodaki bitmiş toplar veya renksiz ham stok kesilebilir)`,
+      });
+      return false;
+    }
+    return true;
+  };
+
+  /** Doğrulanmış kesim topunu akışa uygula (kamera + liste ortak yolu). */
+  const applyRecutRoll = (r: {
+    id: string;
+    barcode: string | null;
+    currentQty: number | string;
+    item?: { name: string } | null;
+    itemId: string;
+    colorId?: string | null;
+    color?: { name: string } | null;
+    width?: number | null;
+    status: string;
+  }) => {
+    setRecutResolvedRollId(r.id);
+    setRecutRollMeta({
+      barcode: r.barcode,
+      currentQty: Number(r.currentQty),
+      item: r.item?.name ?? '—',
+      itemId: r.itemId,
+      colorId: r.colorId ?? null,
+      colorName: r.color?.name ?? null,
+      width: r.width ?? null,
+      status: r.status,
+    });
+    // Ham kesimde varsayılan hedef: üretime devam (STOCK).
+    setRecutRawDestination('STOCK');
+    setRecutTargetLineId(null);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
 
   const handleRecutScanned = async (barcode: string) => {
     const trimmed = barcode.trim();
@@ -1043,34 +1103,8 @@ export default function TamburScreen() {
         Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: trimmed });
         return;
       }
-      // Bitmiş depo topu (WAREHOUSE) klasik re-cut; renksiz ham stok (STOCK +
-      // colorId yok) da kesilebilir — çıktı operatör hedefine göre ham STOCK
-      // (üretime devam) veya ham-bitmiş WAREHOUSE (sevke hazır). Diğer statüler
-      // (IN_PRODUCTION vb.) kesime uygun değil.
-      const isRawStock = r.status === 'STOCK' && (r.colorId ?? null) === null;
-      if (r.status !== 'WAREHOUSE' && !isRawStock) {
-        Toast.show({
-          type: 'error',
-          text1: 'Top kesime uygun değil',
-          text2: `Durum: ${r.status} (depodaki bitmiş toplar veya renksiz ham stok kesilebilir)`,
-        });
-        return;
-      }
-      setRecutResolvedRollId(r.id);
-      setRecutRollMeta({
-        barcode: r.barcode,
-        currentQty: r.currentQty,
-        item: r.item?.name ?? '—',
-        itemId: r.itemId,
-        colorId: r.colorId ?? null,
-        colorName: r.color?.name ?? null,
-        width: r.width ?? null,
-        status: r.status,
-      });
-      // Ham kesimde varsayılan hedef: üretime devam (STOCK).
-      setRecutRawDestination('STOCK');
-      setRecutTargetLineId(null);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (!validateRecutCandidate(r)) return;
+      applyRecutRoll(r);
     } catch (err) {
       Toast.show({
         type: 'error',
@@ -1161,6 +1195,8 @@ export default function TamburScreen() {
     enabled: kimePickerOpen && !recutRollMeta,
     staleTime: 60_000,
   });
+
+  useTruncationWarning(customersQuery.data?.pagination, 'Müşteri');
 
   // Picker seçenekleri: recut → WO sipariş satırları; ana akış → TÜM müşteriler
   // (siparişteki müşteriler en üstte, "✓ siparişi var" etiketiyle).
@@ -2246,7 +2282,30 @@ export default function TamburScreen() {
             const b = pendingRecutScan;
             setPendingRecutScan(null);
             void handleRecutScanned(b);
+          } else if (recutPickFromListPending.current) {
+            // O15: "Listeden Seç" — scanner tamamen kapandıktan sonra picker aç
+            // (RN nested modal: animasyon sırasında mount edilirse overlay yutar).
+            recutPickFromListPending.current = false;
+            setRecutPickerOpen(true);
           }
+        }}
+        onPickFromList={() => {
+          recutPickFromListPending.current = true;
+        }}
+      />
+
+      {/* O15: Top Kesme — listeden seçim. Filtre statüleri kesim adaylarını
+          kapsar (WAREHOUSE + STOCK); renkli STOCK seçilirse doğrulama net
+          mesajla reddeder (backend kuralının aynısı). */}
+      <RollPickerModal
+        visible={recutPickerOpen}
+        onDismiss={() => setRecutPickerOpen(false)}
+        title="Top Kesme — Listeden Seç"
+        filters={{ status: 'WAREHOUSE,STOCK' }}
+        onSelect={(r) => {
+          if (!validateRecutCandidate(r)) return;
+          setRecutPickerOpen(false);
+          applyRecutRoll(r);
         }}
       />
 

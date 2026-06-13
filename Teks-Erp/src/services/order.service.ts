@@ -12,7 +12,33 @@ import { AuditService } from "./audit.service";
 import { BaseService, BaseServiceConfig } from "./base.service";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
-import { OrderStatus, Prisma, RollStatus, WorkOrderStatus } from "@prisma/client";
+import { OrderStatus, Prisma, RollStatus, ShipmentStatus, WorkOrderStatus } from "@prisma/client";
+import { withBarcodeRetry } from "../utils/barcode-retry";
+
+// MASS-ASSIGNMENT WHITELIST'leri (M-3): route'larda Zod yok (BaseController ham
+// body); muhasebe/kimlik alanları (status, shippedQty, completedAt,
+// manualClosedById, orderNumber, orderId) istemciden YAZILAMAZ. Statü
+// geçişleri yalnız özel endpoint'lerden (cancel, manual-close) ve
+// recomputeOrderStatus'tan akar (şemadaki "tek yazma noktası" notları).
+const ORDER_HEADER_WRITABLE = new Set([
+  "customerId",
+  "branchId",
+  "currency",
+  "totalAmount",
+  "deadline",
+  "orderDate",
+]);
+const ORDER_LINE_WRITABLE = new Set([
+  "itemId",
+  "colorId",
+  "quantity",
+  "unitPrice",
+  "width",
+  "pieceLengthM",
+  "cutNote",
+  "customerItemName",
+  "customerColorName",
+]);
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
@@ -225,6 +251,10 @@ export class OrderService extends BaseService {
           `Sipariş kalemi #${idx + 1}: miktar pozitif olmalı (0'dan büyük).`
         );
       }
+      // Decimal(12,3) tavanı — aşımda DB'de P2020 yerine alan-düzeyinde net hata.
+      if (qty > 999_999_999) {
+        throw AppError.badRequest(`Sipariş kalemi #${idx + 1}: miktar çok büyük.`);
+      }
       if (line.unitPrice != null) {
         const price =
           typeof line.unitPrice === "string"
@@ -233,6 +263,11 @@ export class OrderService extends BaseService {
         if (!Number.isFinite(price) || price < 0) {
           throw AppError.badRequest(
             `Sipariş kalemi #${idx + 1}: birim fiyat negatif olamaz.`
+          );
+        }
+        if (price > 999_999_999) {
+          throw AppError.badRequest(
+            `Sipariş kalemi #${idx + 1}: birim fiyat çok büyük.`
           );
         }
       }
@@ -257,6 +292,102 @@ export class OrderService extends BaseService {
       return null;
     });
     await assertColorsAssignableToCustomer(colorIds, customerId);
+  }
+
+  /**
+   * Sipariş kalemlerindeki ürün (itemId) ve istenen özelliklerin
+   * (requiredPropertyIds) var + aktif olduğunu doğrular. Pasife alınmış
+   * (soft-deleted) bir ürün/özellik DB FK kontrolünü geçer ve canlı sipariş
+   * satırına yazılabilir — master-data'nın emekliye ayırdığı kayda finansal/
+   * üretim bağı kurulur. KK1/WO ile aynı soft-delete-entry guard sınıfı.
+   * (Var-olmayan UUID zaten P2003→400 ile yakalanır; bu guard pasif kayıtları kapatır.)
+   */
+  private async validateLineItems(lines: unknown): Promise<void> {
+    if (!Array.isArray(lines)) return;
+
+    const itemIds = new Set<string>();
+    const propertyIds = new Set<string>();
+    const colorIds = new Set<string>();
+    const pairs: Array<{ itemId: string; colorId: string | null; propIds: string[] }> = [];
+    for (const raw of lines) {
+      if (!raw || typeof raw !== "object") continue;
+      const line = raw as Record<string, unknown>;
+      const itemId = typeof line.itemId === "string" && line.itemId ? line.itemId : null;
+      const colorId = typeof line.colorId === "string" && line.colorId ? line.colorId : null;
+      const propIds = Array.isArray(line.requiredPropertyIds)
+        ? (line.requiredPropertyIds as unknown[]).filter(
+            (p): p is string => typeof p === "string" && p.length > 0,
+          )
+        : [];
+      if (itemId) {
+        itemIds.add(itemId);
+        pairs.push({ itemId, colorId, propIds });
+      }
+      if (colorId) colorIds.add(colorId);
+      for (const p of propIds) propertyIds.add(p);
+    }
+
+    if (itemIds.size > 0) {
+      // M-24: Item.allowedColors/allowedProperties kuralı (dolu = bu listeden;
+      // boş = sınırsız) artık SİPARİŞ satırında da enforce edilir — KK1'in
+      // zaten uyguladığı kuralın simetriği. Yoksa üretilemez renkte satır MRP
+      // talebi yaratıyor, hata ancak KK1/üretimde patlıyordu.
+      const live = await prisma.item.findMany({
+        where: { id: { in: [...itemIds] }, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          allowedColors: { select: { colorId: true } },
+          allowedProperties: { select: { propertyId: true } },
+        },
+      });
+      if (live.length !== itemIds.size) {
+        throw AppError.badRequest("Sipariş kaleminde bulunmayan veya pasif ürün var");
+      }
+      const itemById = new Map(live.map((i) => [i.id, i]));
+      for (const pair of pairs) {
+        const item = itemById.get(pair.itemId);
+        if (!item) continue;
+        const allowedColorSet = new Set(item.allowedColors.map((c) => c.colorId));
+        if (pair.colorId && allowedColorSet.size > 0 && !allowedColorSet.has(pair.colorId)) {
+          throw AppError.badRequest(
+            `Seçilen renk '${item.name}' ürününün izinli renk listesinde değil`,
+          );
+        }
+        const allowedPropSet = new Set(item.allowedProperties.map((p) => p.propertyId));
+        if (allowedPropSet.size > 0) {
+          const outside = pair.propIds.find((p) => !allowedPropSet.has(p));
+          if (outside) {
+            throw AppError.badRequest(
+              `Seçilen özelliklerden biri '${item.name}' ürününün izinli özellik listesinde değil`,
+            );
+          }
+        }
+      }
+    }
+
+    // M-23: satır rengi varlık + isActive (item/property gibi — pasif renk
+    // canlı sipariş satırına yazılamaz; assertColorsAssignableToCustomer
+    // yalnız atama kuralına bakar, aktifliğe bakmaz).
+    if (colorIds.size > 0) {
+      const liveColors = await prisma.color.findMany({
+        where: { id: { in: [...colorIds] }, isActive: true },
+        select: { id: true },
+      });
+      if (liveColors.length !== colorIds.size) {
+        throw AppError.badRequest("Sipariş kaleminde bulunmayan veya pasif renk var");
+      }
+    }
+
+    if (propertyIds.size > 0) {
+      const live = await prisma.fabricProperty.findMany({
+        where: { id: { in: [...propertyIds] }, isActive: true },
+        select: { id: true },
+      });
+      if (live.length !== propertyIds.size) {
+        throw AppError.badRequest("Sipariş kaleminde bulunmayan veya pasif özellik var");
+      }
+    }
   }
 
   /**
@@ -631,6 +762,7 @@ export class OrderService extends BaseService {
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     this.validateLines(data.lines);
+    await this.validateLineItems(data.lines);
 
     if (data.customerId) {
       await this.validateCustomer(data.customerId as string);
@@ -696,46 +828,27 @@ export class OrderService extends BaseService {
       String(today.getMonth() + 1).padStart(2, "0") +
       String(today.getDate()).padStart(2, "0");
 
-    // orderNumber server-tarafında otomatik üretilir; istemci gönderse de
-    // göz ardı edilir (doc-code uyumu için açıkça siliyoruz).
-    if ("orderNumber" in data) {
-      delete data.orderNumber;
-    }
-
-    // Numeric tail sort: "20260523-9" > "20260523-10" hatası (lex sort) için
-    // bugünün tüm orderNumber'larını çekip JS'te numeric max alıyoruz. Tek-gün
-    // sipariş sayısı sınırlı (yüzler), maliyet ihmal edilebilir.
-    //
-    // Race condition: iki eşzamanlı POST aynı seq'i hesaplayabilir → P2002.
-    // Bunu Postgres SERIAL kolonu ile veya retry-on-conflict ile çözmek
-    // ayrı bir iyileştirme. Tipik kullanımda eşzamanlı insert nadir.
-    const todaysOrders = await prisma.order.findMany({
-      where: { orderNumber: { startsWith: prefix } },
-      select: { orderNumber: true },
-    });
-    const maxSeq = todaysOrders.reduce((max, o) => {
-      const tail = o.orderNumber.split("-")[1] ?? "";
-      const n = parseInt(tail, 10);
-      return Number.isFinite(n) && n > max ? n : max;
-    }, 0);
-    const orderNumber = `${prefix}-${maxSeq + 1}`;
-
+    // HEADER + SATIR WHITELIST (M-3): orderNumber/status/shippedQty gibi
+    // muhasebe alanları istemciden yazılamaz; bilinmeyen anahtarlar atılır.
     const prismaData: Record<string, unknown> = {
-      ...data,
-      orderNumber,
       // Sipariş oluşturulur oluşturulmaz üretime/sevke açık olsun;
       // ayrı bir "onay" adımı kullanılmıyor.
       status: OrderStatus.APPROVED,
     };
+    for (const key of Object.keys(data)) {
+      if (ORDER_HEADER_WRITABLE.has(key)) prismaData[key] = data[key];
+    }
 
-    // Lines: requiredPropertyIds varsa { create: [...] } formatına çevir.
-    if (Array.isArray(prismaData.lines)) {
-      prismaData.lines = (prismaData.lines as Record<string, unknown>[]).map((rawLine) => {
-        const line = { ...rawLine };
-        const ids = Array.isArray(line.requiredPropertyIds)
-          ? [...new Set((line.requiredPropertyIds as string[]).filter(Boolean))]
+    // Lines: whitelist + requiredPropertyIds → { create: [...] } formatı.
+    if (Array.isArray(data.lines)) {
+      prismaData.lines = (data.lines as Record<string, unknown>[]).map((rawLine) => {
+        const line: Record<string, unknown> = {};
+        for (const key of Object.keys(rawLine)) {
+          if (ORDER_LINE_WRITABLE.has(key)) line[key] = rawLine[key];
+        }
+        const ids = Array.isArray(rawLine.requiredPropertyIds)
+          ? [...new Set((rawLine.requiredPropertyIds as string[]).filter(Boolean))]
           : [];
-        delete line.requiredPropertyIds;
         if (ids.length > 0) {
           line.requiredProperties = {
             create: ids.map((propertyId) => ({ propertyId })),
@@ -753,12 +866,68 @@ export class OrderService extends BaseService {
       }
     }
 
-    const record = (await this.delegate.create({
-      data: prismaData,
-      ...(this.config.defaultInclude
-        ? { include: this.config.defaultInclude }
-        : {}),
+    // Saha #16: kullanıcı sipariş numarasını ELLE verebilir (override) —
+    // whitelist'ten BİLEREK ayrı işlenir (mass-assignment koruması korunur;
+    // yalnız bu alan kontrollü kabul edilir). Boş/verilmemiş → otomatik üretim.
+    const manualOrderNumber =
+      typeof data.orderNumber === "string" && data.orderNumber.trim()
+        ? data.orderNumber.trim()
+        : null;
+    if (manualOrderNumber) {
+      if (manualOrderNumber.length > 40) {
+        throw AppError.badRequest("Sipariş numarası en fazla 40 karakter olabilir");
+      }
+      const clash = await prisma.order.findUnique({
+        where: { orderNumber: manualOrderNumber },
+        select: { id: true },
+      });
+      if (clash) {
+        throw AppError.conflict(`'${manualOrderNumber}' numaralı sipariş zaten var`);
+      }
+    }
+
+    // orderNumber üretimi + create RETRY KAPSAMINDA (M-25): eşzamanlı iki POST
+    // aynı seq'i hesaplarsa kaybeden P2002 sonrası taze max ile yeniden dener
+    // (eskiden kullanıcıya 409 dönüyordu — koddaki eski yorum yarışı kabul
+    // ediyordu). startsWith yerine range: en_US.UTF-8 collation'da LIKE-prefix
+    // unique btree'yi KULLANAMAZ (her create'te seq scan — EXPLAIN ile
+    // doğrulandı); gte/lt range her collation'da index seek yapar.
+    // Manuel numarada retry'a gerek yok ama P2002 yarışına (aynı anda aynı
+    // manuel no) karşı yine sarılır — ikinci deneme clash kontrolünde 409'a düşer.
+    const record = (await withBarcodeRetry(async () => {
+      if (manualOrderNumber) {
+        const stillFree = await prisma.order.findUnique({
+          where: { orderNumber: manualOrderNumber },
+          select: { id: true },
+        });
+        if (stillFree) {
+          throw AppError.conflict(`'${manualOrderNumber}' numaralı sipariş zaten var`);
+        }
+        return this.delegate.create({
+          data: { ...prismaData, orderNumber: manualOrderNumber },
+          ...(this.config.defaultInclude
+            ? { include: this.config.defaultInclude }
+            : {}),
+        });
+      }
+      const todaysOrders = await prisma.order.findMany({
+        where: { orderNumber: { gte: prefix, lt: `${prefix}￿` } },
+        select: { orderNumber: true },
+      });
+      // Numeric tail max: "20260523-9" > "20260523-10" lex-sort hatasına karşı.
+      const maxSeq = todaysOrders.reduce((max, o) => {
+        const tail = o.orderNumber.split("-")[1] ?? "";
+        const n = parseInt(tail, 10);
+        return Number.isFinite(n) && n > max ? n : max;
+      }, 0);
+      return this.delegate.create({
+        data: { ...prismaData, orderNumber: `${prefix}-${maxSeq + 1}` },
+        ...(this.config.defaultInclude
+          ? { include: this.config.defaultInclude }
+          : {}),
+      });
     })) as Record<string, unknown>;
+    const orderNumber = record.orderNumber as string;
 
     await AuditService.log({
       userId,
@@ -779,6 +948,98 @@ export class OrderService extends BaseService {
     );
 
     return { success: true, data: record, message: "Sipariş oluşturuldu" };
+  }
+
+  /**
+   * Saha #11: ham/stok toplardan HIZLI SİPARİŞ. Operatör 70 topu tek tek satıra
+   * girmek yerine okutur → müşteri seçer → sistem topları spec (ürün+renk+en)
+   * bazında gruplayıp sipariş satırlarına çevirir, siparişi APPROVED açar ve
+   * STOK topları WAREHOUSE'a (sevke hazır) alır.
+   *
+   * GEVŞEK MODEL KORUNUR: toplar siparişe BAĞLANMAZ — satırlar yalnız spec-toplam
+   * talebi temsil eder; karşılanma yine spec-toplam üzerinden işler (sevkte). Top
+   * okutmak burada yalnız "ne kadar/ne tür satır açılacağını" türetmek içindir.
+   */
+  async quickOrderFromRolls(
+    data: { customerId: string; branchId?: string | null; rollIds: string[] },
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const rollIds = [...new Set(data.rollIds)];
+    if (rollIds.length === 0) throw AppError.badRequest("En az bir top okutulmalı");
+
+    const rolls = await prisma.roll.findMany({
+      where: { id: { in: rollIds } },
+      select: {
+        id: true,
+        barcode: true,
+        itemId: true,
+        colorId: true,
+        width: true,
+        currentQty: true,
+        status: true,
+        shipmentId: true,
+        currentStepId: true,
+      },
+    });
+    if (rolls.length !== rollIds.length) throw AppError.notFound("Bazı toplar bulunamadı");
+
+    // Her top serbest + satılabilir statüde olmalı (STOCK ham veya WAREHOUSE).
+    for (const r of rolls) {
+      if (r.shipmentId) throw AppError.conflict(`Top bir sevkiyatta: ${r.barcode ?? r.id}`);
+      if (r.currentStepId) throw AppError.conflict(`Top bir iş emri adımında: ${r.barcode ?? r.id}`);
+      if (r.status !== RollStatus.STOCK && r.status !== RollStatus.WAREHOUSE) {
+        throw AppError.badRequest(`Top satışa uygun değil (${r.status}): ${r.barcode ?? r.id}`);
+      }
+    }
+
+    // Spec (ürün+renk+en) bazında grupla → satır metrajı = grup currentQty toplamı.
+    const groups = new Map<
+      string,
+      { itemId: string; colorId: string | null; width: number | null; quantity: Prisma.Decimal }
+    >();
+    for (const r of rolls) {
+      const key = `${r.itemId}|${r.colorId ?? ""}|${r.width == null ? "" : Number(r.width)}`;
+      const g =
+        groups.get(key) ??
+        { itemId: r.itemId, colorId: r.colorId, width: r.width != null ? Number(r.width) : null, quantity: new Prisma.Decimal(0) };
+      g.quantity = g.quantity.plus(r.currentQty);
+      groups.set(key, g);
+    }
+    const lines = [...groups.values()].map((g) => ({
+      itemId: g.itemId,
+      colorId: g.colorId,
+      width: g.width,
+      quantity: Number(g.quantity),
+    }));
+
+    // Siparişi normal create ile aç (orderNumber + doğrulama + audit + alias terfisi).
+    const created = await this.create(
+      { customerId: data.customerId, branchId: data.branchId ?? null, lines },
+      userId,
+    );
+    const order = created.data as { id: string; orderNumber: string };
+
+    // STOK toplar → WAREHOUSE (sevke hazır). Atomik: hâlâ STOCK + serbest olanlar.
+    const stockRollIds = rolls.filter((r) => r.status === RollStatus.STOCK).map((r) => r.id);
+    if (stockRollIds.length > 0) {
+      await prisma.roll.updateMany({
+        where: { id: { in: stockRollIds }, status: RollStatus.STOCK, shipmentId: null, currentStepId: null },
+        data: { status: RollStatus.WAREHOUSE },
+      });
+      await AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "ROLL",
+        recordId: order.id,
+        newData: { kind: "QUICK_ORDER_RAW_TO_WAREHOUSE", rollIds: stockRollIds, orderNumber: order.orderNumber },
+      });
+    }
+
+    return {
+      success: true,
+      data: { order, lineCount: lines.length, rollCount: rolls.length, preparedToWarehouse: stockRollIds.length },
+      message: `Hızlı sipariş açıldı: ${order.orderNumber} (${lines.length} satır, ${rolls.length} top)`,
+    };
   }
 
   /**
@@ -836,6 +1097,17 @@ export class OrderService extends BaseService {
     const cleanData: Record<string, unknown> = { ...data };
     delete cleanData.lines;
 
+    // HEADER WHITELIST (mass-assignment guard'ı — M-3): status / shippedQty /
+    // completedAt / manualClosedById / orderNumber gibi muhasebe+kimlik alanları
+    // istemci gövdesinden YAZILAMAZ. PATCH {"status":"CANCELLED"} cancel
+    // kaskadını (WO-unbind matrisi), {"status":"COMPLETED"} manuel kapatma
+    // gerekçesini atlardı; shippedQty "tek yazma noktası: sevkiyat akışı +
+    // recomputeOrderStatus" invariant'ını (şema notu) bozardı. Statü/kapatma
+    // için özel endpoint'ler var (cancel, manual-close).
+    for (const key of Object.keys(cleanData)) {
+      if (!ORDER_HEADER_WRITABLE.has(key)) delete cleanData[key];
+    }
+
     // PARTIAL_SHIPPED: sadece deadline. Lines kabul edilmez, diğer header
     // alanları sessizce yutulur (eski davranış korunur).
     if (current.status === OrderStatus.PARTIAL_SHIPPED) {
@@ -877,6 +1149,31 @@ export class OrderService extends BaseService {
         ? (cleanData.customerId as string)
         : current.customerId;
 
+      // M-22: müşteri değişiminde yeni müşteri varlık+isActive doğrulanır
+      // (create() ile simetrik — pasif müşteriye sipariş taşınamaz).
+      if (customerChanging) {
+        await this.validateCustomer(finalCustomerId);
+
+        // Lines payload'ı yoksa MEVCUT satır renkleri yeni müşteriye karşı
+        // yeniden doğrulanır — eski müşteriye exclusive atanmış renk, sipariş
+        // taşınınca satırda kalamaz (renk exclusivity backend-ENFORCE garantisi).
+        if (!incomingLines) {
+          const existingColorIds = [
+            ...new Set(
+              (
+                await prisma.orderLine.findMany({
+                  where: { orderId: id, colorId: { not: null } },
+                  select: { colorId: true },
+                })
+              ).map((l) => l.colorId as string),
+            ),
+          ];
+          if (existingColorIds.length > 0) {
+            await assertColorsAssignableToCustomer(existingColorIds, finalCustomerId);
+          }
+        }
+      }
+
       if (finalBranchId) {
         await this.validateBranch(finalBranchId, finalCustomerId);
       }
@@ -894,6 +1191,7 @@ export class OrderService extends BaseService {
         );
       }
       this.validateLines(incomingLines);
+      await this.validateLineItems(incomingLines);
 
       const effectiveCustomerId = customerChanging
         ? (cleanData.customerId as string | null)
@@ -929,11 +1227,14 @@ export class OrderService extends BaseService {
             ? [...new Set((raw.requiredPropertyIds as string[]).filter(Boolean))]
             : [];
 
-          const lineData: Record<string, unknown> = { ...raw };
-          delete lineData.id;
-          delete lineData.requiredPropertyIds;
-          // clientId frontend-internal — Prisma'da kolon yok, sızdırma.
-          delete lineData.clientId;
+          // SATIR WHITELIST (M-3): shippedQty (sevk defteri — forge edilirse
+          // recompute header'a TERFİ ettirir) ve orderId (satırı başka siparişe
+          // taşıma) dahil bilinmeyen her anahtar atılır; yalnız gerçek
+          // düzenlenebilir kalem alanları geçer.
+          const lineData: Record<string, unknown> = {};
+          for (const key of Object.keys(raw)) {
+            if (ORDER_LINE_WRITABLE.has(key)) lineData[key] = raw[key];
+          }
 
           const existingLine =
             typeof raw.id === "string" ? existingById.get(raw.id as string) : undefined;
@@ -1036,10 +1337,61 @@ export class OrderService extends BaseService {
    *   - IN_PROGRESS / PAUSED / COMPLETED durumda WO varsa → 409 conflict.
    *     Operatör önce o WO'yu iptal etmeli.
    */
+  /**
+   * Siparişin bağlı olduğu AKTİF (PREPARING/READY/AT_DOOR) sevkiyatları döner.
+   * İptal/manuel kapatma bu bağ varken bloklanır: aktif sevkiyat dispatch'te
+   * bu siparişe tahsis+shippedQty yazacaktı; computeShipmentAllocation iptal/
+   * kapalı siparişi tahsis dışı bıraksa da operatör niyeti netleşmeli — önce
+   * sipariş sevkiyattan çıkarılmalı ya da sevkiyat tamamlanmalı/iptal edilmeli.
+   */
+  private async getActiveShipmentLinks(
+    orderId: string
+  ): Promise<Array<{ id: string; shipmentNo: string; status: ShipmentStatus }>> {
+    const links = await prisma.shipmentOrder.findMany({
+      where: {
+        orderId,
+        shipment: {
+          status: {
+            in: [ShipmentStatus.PREPARING, ShipmentStatus.READY, ShipmentStatus.AT_DOOR],
+          },
+        },
+      },
+      select: {
+        shipment: { select: { id: true, shipmentNo: true, status: true } },
+      },
+    });
+    return links.map((l) => l.shipment);
+  }
+
+  private assertNoActiveShipments(
+    activeShipments: Array<{ shipmentNo: string; status: ShipmentStatus }>,
+    eylem: string
+  ): void {
+    if (activeShipments.length === 0) return;
+    const list = activeShipments.map((s) => `${s.shipmentNo} (${s.status})`).join(", ");
+    throw AppError.conflict(
+      `Sipariş aktif sevkiyat(lar)a bağlı: ${list}. ${eylem} için önce siparişi sevkiyattan çıkarın veya sevkiyatı tamamlayın/iptal edin.`
+    );
+  }
+
+  /**
+   * Fiziksel silme YOK ("asla fiziksel DELETE" kuralı). BaseService.hardDelete
+   * guard'sız prisma.delete çalıştırır ve Order→OrderLine→WorkOrderToOrderLine
+   * Cascade zinciri üretimdeki WO'yu sessizce yetim bırakır, MRP talebi
+   * kaybolur, SystemLog recordId'leri boşa düşer — softDelete'in 409 blokajı,
+   * cancel-preview ve CONVERT_TO_STOCK akışının tamamı atlanırdı. /permanent
+   * çağrısı guard'lı iptale yönlendirilir (WorkOrderService.hardDelete'in
+   * arşive çevrilmesiyle aynı desen).
+   */
+  async hardDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    return this.softDelete(id, userId);
+  }
+
   async softDelete(
     id: string,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    this.assertNoActiveShipments(await this.getActiveShipmentLinks(id), "İptal");
     const oldRecord = await prisma.order.findUnique({
       where: { id },
       include: {
@@ -1235,12 +1587,18 @@ export class OrderService extends BaseService {
       })
     );
 
+    // Aktif sevkiyat bağları — somut listele (uygulamada cancelWithActions/
+    // softDelete bu bağ varken 409 ile bloklar; preview operatöre nedeni gösterir).
+    const activeShipments = await this.getActiveShipmentLinks(orderId);
+
     return {
       success: true,
       data: {
         orderId: order.id,
         orderNumber: order.orderNumber,
         affectedWorkOrders,
+        activeShipments,
+        canCancel: activeShipments.length === 0,
       },
     };
   }
@@ -1261,6 +1619,7 @@ export class OrderService extends BaseService {
     workOrderActions: Array<{ workOrderId: string; action: CancelAction }>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    this.assertNoActiveShipments(await this.getActiveShipmentLinks(orderId), "İptal");
     const previewRes = await this.getCancelPreview(orderId);
     const preview = previewRes.data as {
       orderId: string;
@@ -1371,6 +1730,10 @@ export class OrderService extends BaseService {
       select: { id: true, orderNumber: true, status: true, completedAt: true },
     });
     if (!order) throw AppError.notFound("Sipariş bulunamadı");
+    this.assertNoActiveShipments(
+      await this.getActiveShipmentLinks(id),
+      "Manuel kapatma"
+    );
     if (order.status === OrderStatus.COMPLETED) {
       throw AppError.badRequest("Sipariş zaten tamamlanmış");
     }

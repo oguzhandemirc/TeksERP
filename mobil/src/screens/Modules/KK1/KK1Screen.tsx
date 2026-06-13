@@ -50,6 +50,7 @@ import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
+import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { useRawWidthEnabled } from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
@@ -264,6 +265,8 @@ export default function KK1Screen() {
         filters: { isActive: 'true', itemType: 'FABRIC' },
       }),
   });
+
+  useTruncationWarning(itemsQuery.data?.pagination, 'Kumaş');
 
   // Item picker'ı her açıldığında listeyi tazele — admin yeni kumaş eklediyse
   // operatör Pull-to-refresh basmadan görsün.

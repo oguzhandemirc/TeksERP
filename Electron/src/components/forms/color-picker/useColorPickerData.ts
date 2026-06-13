@@ -42,7 +42,7 @@ export function useColorPickerData({
 }: Args) {
   const isRestricted = Boolean(allowedColorIds && allowedColorIds.length > 0);
   const allowedSet = useMemo(() => new Set(allowedColorIds ?? []), [allowedColorIds]);
-  const q = debouncedSearch.trim().toLowerCase();
+  const q = debouncedSearch.trim().toLocaleLowerCase("tr");
 
   // --- Müşteriye ATANMIŞ renkler. `assignedTo` colors endpoint'inden (property:read)
   //     gelir — eski alias endpoint'i customer-alias:read gerektiriyordu, o izni
@@ -147,5 +147,5 @@ function toPickerColor(c: {
 
 function matchesSearch(c: PickerColor, q: string): boolean {
   if (!q) return true;
-  return c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q);
+  return c.name.toLocaleLowerCase("tr").includes(q) || c.code.toLocaleLowerCase("tr").includes(q);
 }

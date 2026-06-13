@@ -21,6 +21,7 @@ import {
   Prisma,
   RollStatus,
   ShipmentStatus,
+  ShipmentDestination,
   OrderStatus,
   PrintedDocType,
 } from "@prisma/client";
@@ -72,11 +73,16 @@ function datePrefix(prefix: string): string {
   );
 }
 
+// L (düşük bulgu): startsWith ICU collation'da unique index'i kullanamıyordu
+// (seq scan) ve 999 sonrası lexicographic desc hep "999"u görüp aynı numarayı
+// üretiyordu (withBarcodeRetry 5 denemede tükenir → kalıcı 409). Fix: gte/lt
+// range (index seek — orderNumber üretimiyle aynı desen) + createdAt ile
+// gerçek-son kayıt (gün içi numara monotonik artar, 1000+ doğru devam eder).
 async function nextShipmentNo(): Promise<string> {
   const prefix = datePrefix("SVK-");
   const last = await prisma.shipment.findFirst({
-    where: { shipmentNo: { startsWith: prefix } },
-    orderBy: { shipmentNo: "desc" },
+    where: { shipmentNo: { gte: prefix, lt: prefix + "￿" } },
+    orderBy: { createdAt: "desc" },
     select: { shipmentNo: true },
   });
   const seq = last ? parseInt(last.shipmentNo.split("-").pop() ?? "0", 10) + 1 : 1;
@@ -86,8 +92,8 @@ async function nextShipmentNo(): Promise<string> {
 async function nextSackNo(): Promise<string> {
   const prefix = datePrefix("CV-");
   const last = await prisma.sack.findFirst({
-    where: { sackNo: { startsWith: prefix } },
-    orderBy: { sackNo: "desc" },
+    where: { sackNo: { gte: prefix, lt: prefix + "￿" } },
+    orderBy: { createdAt: "desc" },
     select: { sackNo: true },
   });
   const seq = last ? parseInt(last.sackNo.split("-").pop() ?? "0", 10) + 1 : 1;
@@ -255,7 +261,7 @@ export class ShippingService {
    * Tüm siparişler aynı müşteri + aynı şube + açık olmalı (tek oturum = tek alıcı).
    */
   async createShipment(
-    data: { orderIds: string[] },
+    data: { orderIds: string[]; destination?: ShipmentDestination; procedureCode?: string | null },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     const orderIds = [...new Set(data.orderIds)];
@@ -309,9 +315,11 @@ export class ShippingService {
           customerId,
           branchId,
           status: ShipmentStatus.PREPARING,
+          destination: data.destination ?? ShipmentDestination.DOMESTIC, // saha #19: yurtiçi default
+          procedureCode: data.procedureCode?.trim() || null, // saha #21
           orders: { create: orderIds.map((orderId) => ({ orderId })) },
         },
-        select: { id: true, shipmentNo: true, status: true },
+        select: { id: true, shipmentNo: true, status: true, destination: true },
       });
     });
 
@@ -320,10 +328,62 @@ export class ShippingService {
       action: "CREATE",
       tableName: "SHIPMENT",
       recordId: shipment.id,
-      newData: { shipmentNo: shipment.shipmentNo, customerId, branchId, orderIds },
+      newData: { shipmentNo: shipment.shipmentNo, customerId, branchId, orderIds, destination: shipment.destination },
     });
 
     return { success: true, data: shipment, message: `Sevkiyat açıldı: ${shipment.shipmentNo}` };
+  }
+
+  /**
+   * Yurtiçi/yurtdışı kapsamını değiştir (saha #19). Sevk edilmemiş her durumda
+   * serbest: commit/kapsama etkilenmez. DOMESTIC→EXPORT geçişinde tartısız çuval
+   * varsa sevk, invariant gereği yeniden tartıya kadar bloklanır (bilinçli).
+   */
+  async setDestination(
+    shipmentId: string,
+    destination: ShipmentDestination,
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    await prisma.$transaction(async (tx) => {
+      await this.touchShipmentEditableTx(tx, shipmentId); // sevk edilmişse 409
+      await tx.shipment.update({ where: { id: shipmentId }, data: { destination } });
+    });
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SHIPMENT",
+      recordId: shipmentId,
+      newData: { kind: "DESTINATION", destination },
+    });
+    return {
+      success: true,
+      data: { shipmentId, destination },
+      message: destination === ShipmentDestination.EXPORT ? "Yurtdışı sevk olarak işaretlendi" : "Yurtiçi sevk olarak işaretlendi",
+    };
+  }
+
+  /**
+   * Sevkiyata özel prosedür/ihracat kodu güncelle (saha #21). Boş → temizler
+   * (ekranlar müşteri/şube `code`'una düşer). Sevk edilmemiş her durumda serbest.
+   */
+  async setProcedureCode(
+    shipmentId: string,
+    procedureCode: string | null,
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    const code = procedureCode?.trim() || null;
+    await prisma.$transaction(async (tx) => {
+      await this.touchShipmentEditableTx(tx, shipmentId); // sevk edilmişse 409
+      await tx.shipment.update({ where: { id: shipmentId }, data: { procedureCode: code } });
+    });
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SHIPMENT",
+      recordId: shipmentId,
+      newData: { kind: "PROCEDURE_CODE", procedureCode: code },
+    });
+    return { success: true, data: { shipmentId, procedureCode: code }, message: "Prosedür kodu güncellendi" };
   }
 
   /** Açık sevkiyata sipariş ekle (aynı müşteri+şube, açık, PREPARING). */
@@ -371,9 +431,12 @@ export class ShippingService {
       throw AppError.conflict(`Sipariş zaten başka bir sevkiyatta (${alreadyIn.shipment.shipmentNo}).`);
     }
 
-    await prisma.shipmentOrder.createMany({
-      data: ids.map((orderId) => ({ shipmentId, orderId })),
-      skipDuplicates: true,
+    await prisma.$transaction(async (tx) => {
+      await this.touchShipmentPreparingTx(tx, shipmentId); // M-2: finalize ile serileş
+      await tx.shipmentOrder.createMany({
+        data: ids.map((orderId) => ({ shipmentId, orderId })),
+        skipDuplicates: true,
+      });
     });
     await AuditService.log({
       userId,
@@ -399,7 +462,10 @@ export class ShippingService {
     if (shipment.status !== ShipmentStatus.PREPARING) {
       throw AppError.conflict("Yalnızca hazırlanan sevkiyattan sipariş çıkarılabilir");
     }
-    await prisma.shipmentOrder.deleteMany({ where: { shipmentId, orderId } });
+    await prisma.$transaction(async (tx) => {
+      await this.touchShipmentPreparingTx(tx, shipmentId); // M-2: finalize ile serileş
+      await tx.shipmentOrder.deleteMany({ where: { shipmentId, orderId } });
+    });
     await AuditService.log({
       userId,
       action: "UPDATE",
@@ -408,6 +474,91 @@ export class ShippingService {
       newData: { kind: "REMOVE_ORDER", orderId },
     });
     return { success: true, data: {}, message: "Sipariş çıkarıldı" };
+  }
+
+  /**
+   * Saha #7: sevkiyatı YENİDEN HEDEFLE — bağlı sipariş kümesini TAMAMEN değiştir
+   * (replace). Gevşek model: toplar siparişe bağlı değil; "hedefleme" = karşılanma
+   * spec-set'ini (hangi siparişlere sayılacağı) değiştirmek. PREPARING'de düz set;
+   * READY/AT_DOOR'da commit GERİ SARILIR → set değişir → TAZE içerikle yeniden
+   * commit edilir (eski siparişlerin shippedQty'si düşer, yenilere yazılır).
+   * DISPATCHED değiştirilemez (stok çıkmış, irsaliye donmuş).
+   */
+  async retargetOrders(
+    shipmentId: string,
+    orderIds: string[],
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    const ids = [...new Set(orderIds)];
+    if (ids.length === 0) throw AppError.badRequest("En az bir sipariş seçilmeli");
+
+    const shipment = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: { id: true, status: true, customerId: true, branchId: true },
+    });
+    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
+    if (shipment.status === ShipmentStatus.DISPATCHED || shipment.status === ShipmentStatus.CANCELLED) {
+      throw AppError.conflict("Sevk edilmiş/iptal sevkiyatın siparişleri değiştirilemez");
+    }
+
+    // Hedef siparişler: var + aynı müşteri/şube + kapalı değil.
+    const orders = await prisma.order.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, orderNumber: true, customerId: true, branchId: true, status: true },
+    });
+    if (orders.length !== ids.length) throw AppError.notFound("Bazı siparişler bulunamadı");
+    for (const o of orders) {
+      if (o.customerId !== shipment.customerId || (o.branchId ?? null) !== (shipment.branchId ?? null)) {
+        throw AppError.badRequest(`Sipariş ${o.orderNumber} sevkiyatın müşteri/şubesine ait değil`);
+      }
+      if (o.status === "CANCELLED" || o.status === "COMPLETED") {
+        throw AppError.badRequest(`Kapalı sipariş hedeflenemez: ${o.orderNumber}`);
+      }
+    }
+    // Başka aktif sevkiyatta olan sipariş hedeflenemez.
+    const elsewhere = await prisma.shipmentOrder.findFirst({
+      where: {
+        orderId: { in: ids },
+        shipmentId: { not: shipmentId },
+        shipment: { status: { in: [ShipmentStatus.PREPARING, ShipmentStatus.READY, ShipmentStatus.AT_DOOR] } },
+      },
+      select: { shipment: { select: { shipmentNo: true } } },
+    });
+    if (elsewhere) {
+      throw AppError.conflict(`Sipariş zaten başka bir sevkiyatta (${elsewhere.shipment.shipmentNo}).`);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const lockedStatus = await this.touchShipmentEditableTx(tx, shipmentId);
+      const committed = lockedStatus !== ShipmentStatus.PREPARING;
+      // Commit'liyse önce eski tahsisi geri sar (eski siparişlerin shippedQty'si düşsün).
+      if (committed) {
+        const allocations = await tx.shipmentAllocation.findMany({
+          where: { shipmentId },
+          select: { orderLineId: true, qty: true },
+        });
+        const oldOrders = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
+        await this.reverseCommitTx(tx, shipmentId, allocations, oldOrders.map((o) => o.orderId));
+      }
+      // Sipariş kümesini replace et.
+      await tx.shipmentOrder.deleteMany({ where: { shipmentId } });
+      await tx.shipmentOrder.createMany({ data: ids.map((orderId) => ({ shipmentId, orderId })) });
+      // Commit'liyse yeni kümeyle taze commit.
+      if (committed) {
+        const fresh = await this.loadShipmentForFinalize(shipmentId, tx);
+        if (!fresh) throw AppError.notFound("Sevkiyat bulunamadı");
+        const { alloc, orderIds: freshOrderIds } = this.computeShipmentAllocation(fresh);
+        await this.commitGoodsTx(tx, shipmentId, alloc, freshOrderIds);
+      }
+    });
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SHIPMENT",
+      recordId: shipmentId,
+      newData: { kind: "RETARGET_ORDERS", orderIds: ids },
+    });
+    return { success: true, data: { shipmentId, orderIds: ids }, message: "Sevkiyat yeniden hedeflendi" };
   }
 
   async listShipments(
@@ -516,6 +667,8 @@ export class ShippingService {
         id: true,
         shipmentNo: true,
         status: true,
+        destination: true, // saha #19
+        procedureCode: true, // saha #21
         plateNumber: true,
         driverName: true,
         carrier: true,
@@ -523,7 +676,7 @@ export class ShippingService {
         dispatchedAt: true,
         createdAt: true,
         customer: { select: { id: true, code: true, name: true } },
-        branch: { select: { id: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
         orders: {
           select: {
             order: {
@@ -741,6 +894,8 @@ export class ShippingService {
         id: shipment.id,
         shipmentNo: shipment.shipmentNo,
         status: shipment.status,
+        destination: shipment.destination,
+        procedureCode: shipment.procedureCode,
         plateNumber: shipment.plateNumber,
         driverName: shipment.driverName,
         carrier: shipment.carrier,
@@ -837,6 +992,7 @@ export class ShippingService {
         if (targetSackId && roll.sackId !== targetSackId) {
           const fromSackId = roll.sackId;
           await prisma.$transaction(async (tx) => {
+            await this.touchShipmentPreparingTx(tx, data.shipmentId); // M-2: finalize ile serileş
             await tx.roll.update({ where: { id: roll.id }, data: { sackId: targetSackId } });
             await this.resetSackWeightsTx(tx, [fromSackId, targetSackId]);
           });
@@ -868,6 +1024,7 @@ export class ShippingService {
       // (başka sevkiyat okutması / kartela sevki) topu kapmışsa count=0 döner →
       // çift-bağ yerine temiz çakışma hatası. (TOCTOU guard.)
       await prisma.$transaction(async (tx) => {
+        await this.touchShipmentPreparingTx(tx, data.shipmentId); // M-2: finalize ile serileş
         const claimed = await tx.roll.updateMany({
           where: { id: roll.id, shipmentId: null, status: RollStatus.WAREHOUSE },
           data: { shipmentId: data.shipmentId, sackId: targetSackId },
@@ -908,6 +1065,7 @@ export class ShippingService {
       if (targetSackId && swatch.sackId !== targetSackId) {
         const fromSackId = swatch.sackId;
         await prisma.$transaction(async (tx) => {
+          await this.touchShipmentPreparingTx(tx, data.shipmentId); // M-2: finalize ile serileş
           await tx.swatch.update({ where: { id: swatch.id }, data: { sackId: targetSackId } });
           await this.resetSackWeightsTx(tx, [fromSackId, targetSackId]);
         });
@@ -926,6 +1084,7 @@ export class ShippingService {
     // ATOMİK SAHİPLENME (top ile aynı desen): kartela hâlâ boştaysa bu sevkiyata bağla —
     // eşzamanlı iki okutmada yalnız biri kazanır, kaybeden temiz 409 alır (TOCTOU guard).
     await prisma.$transaction(async (tx) => {
+      await this.touchShipmentPreparingTx(tx, data.shipmentId); // M-2: finalize ile serileş
       const claimed = await tx.swatch.updateMany({
         where: { id: swatch.id, shipmentId: null, cancelledAt: null },
         data: { shipmentId: data.shipmentId, sackId: targetSackId },
@@ -945,7 +1104,83 @@ export class ShippingService {
     return { success: true, data: { kind: "SWATCH", swatchId: swatch.id, sackId: targetSackId }, message: targetSackId ? "Kartela çuvala eklendi" : "Kartela sevkiyata eklendi" };
   }
 
-  /** Yanlış okutulan topu sevkiyattan çıkar (depoya geri döner). */
+  /**
+   * Sevk edilmemiş (PREPARING/READY/AT_DOOR) sevkiyat satırını kilitle — içerik
+   * tx'lerini markReady/dispatch claim'leriyle serileştirir (touchShipmentPreparingTx'in
+   * READY-farkındalı kardeşi; saha #3). Kilitlenen statüyü döndürür.
+   */
+  private async touchShipmentEditableTx(
+    tx: Prisma.TransactionClient,
+    shipmentId: string
+  ): Promise<ShipmentStatus> {
+    const touched = await tx.shipment.updateMany({
+      where: {
+        id: shipmentId,
+        status: { in: [ShipmentStatus.PREPARING, ShipmentStatus.READY, ShipmentStatus.AT_DOOR] },
+      },
+      data: { updatedAt: new Date() },
+    });
+    if (touched.count === 0) {
+      throw AppError.conflict(
+        "Sevkiyat bu sırada sevk/iptal edildi — içerik artık değiştirilemez. Sayfayı yenileyin."
+      );
+    }
+    const fresh = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { status: true } });
+    return fresh!.status;
+  }
+
+  /**
+   * COMMIT'i içerik değişiminden sonra YENİDEN senkronla (saha #3) — READY/AT_DOOR'da
+   * top çıkarılırsa eski tahsis/shippedQty bayatlar. Eski tahsis geri alınır, taze
+   * içerikle yeniden yazılır. Mutasyondan SONRA, aynı tx içinde çağrılır.
+   */
+  private async recommitShipmentTx(
+    tx: Prisma.TransactionClient,
+    shipmentId: string
+  ): Promise<void> {
+    const allocations = await tx.shipmentAllocation.findMany({
+      where: { shipmentId },
+      select: { orderLineId: true, qty: true },
+    });
+    const shipOrders = await tx.shipmentOrder.findMany({
+      where: { shipmentId },
+      select: { orderId: true },
+    });
+    await this.reverseCommitTx(tx, shipmentId, allocations, shipOrders.map((o) => o.orderId));
+    // Taze yükleme reverse'ten SONRA: satır shippedQty'leri geri alınmış halde
+    // okunmalı, yoksa need=quantity-shippedQty hep 0 çıkar ve tahsis boş yazılır.
+    const fresh = await this.loadShipmentForFinalize(shipmentId, tx);
+    if (!fresh) throw AppError.notFound("Sevkiyat bulunamadı");
+    const { alloc, orderIds } = this.computeShipmentAllocation(fresh);
+    await this.commitGoodsTx(tx, shipmentId, alloc, orderIds);
+  }
+
+  /**
+   * Kaynak çuval içerik çıkışıyla BOŞALDIYSA ve sevkiyat commit'li (READY/AT_DOOR)
+   * ise çuvalı sil — hayalet çuval dispatch invariant'ını bloklar, READY'de operatörün
+   * Paketleme'ye dönmeden temizleme yolu yok (saha #3). PREPARING'de SİLİNMEZ
+   * (operatör çuvalı doldurmaya devam edebilir).
+   */
+  private async dropSackIfEmptiedTx(
+    tx: Prisma.TransactionClient,
+    sackId: string | null | undefined,
+    status: ShipmentStatus
+  ): Promise<void> {
+    if (!sackId || status === ShipmentStatus.PREPARING) return;
+    const [rollCount, swatchCount] = [
+      await tx.roll.count({ where: { sackId } }),
+      await tx.swatch.count({ where: { sackId } }),
+    ];
+    if (rollCount === 0 && swatchCount === 0) {
+      await tx.sack.delete({ where: { id: sackId } });
+    }
+  }
+
+  /**
+   * Topu sevkiyattan çıkar (depoya geri döner). Saha #3: PREPARING'e ek olarak
+   * READY/AT_DOOR'da da çalışır — tartı sıfırlanır (yeniden tartı şart), commit
+   * taze içerikle yeniden yazılır, boşalan çuval silinir.
+   */
   async removeRollFromShipment(
     data: { shipmentId: string; rollId: string },
     userId?: string
@@ -956,19 +1191,25 @@ export class ShippingService {
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
     if (roll.shipmentId !== data.shipmentId) throw AppError.badRequest("Top bu sevkiyatta değil");
-    if (roll.shipment && roll.shipment.status !== ShipmentStatus.PREPARING) {
-      throw AppError.conflict("Sevke hazır/sevk edilmiş sevkiyattan top çıkarılamaz");
+    if (roll.shipment && roll.shipment.status === ShipmentStatus.DISPATCHED) {
+      throw AppError.conflict("Sevk edilmiş sevkiyattan top çıkarılamaz");
     }
+    let lockedStatus: ShipmentStatus = ShipmentStatus.PREPARING;
     await prisma.$transaction(async (tx) => {
+      lockedStatus = await this.touchShipmentEditableTx(tx, data.shipmentId); // M-2: finalize ile serileş
       await tx.roll.update({ where: { id: data.rollId }, data: { shipmentId: null, sackId: null } });
       await this.resetSackWeightsTx(tx, [roll.sackId]); // içeriği değişen çuvalın tartısı bayatladı
+      await this.dropSackIfEmptiedTx(tx, roll.sackId, lockedStatus);
+      if (lockedStatus !== ShipmentStatus.PREPARING) {
+        await this.recommitShipmentTx(tx, data.shipmentId); // karşılanma taze içerikle senkron
+      }
     });
     await AuditService.log({
       userId,
       action: "UPDATE",
       tableName: "ROLL",
       recordId: data.rollId,
-      newData: { kind: "SHIPMENT_UNSCAN", shipmentId: null, sackId: null },
+      newData: { kind: "SHIPMENT_UNSCAN", shipmentId: null, sackId: null, shipmentStatus: lockedStatus },
     });
     return { success: true, data: {}, message: "Top sevkiyattan çıkarıldı" };
   }
@@ -984,12 +1225,15 @@ export class ShippingService {
     });
     if (!swatch) throw AppError.notFound("Kartela bulunamadı");
     if (swatch.shipmentId !== data.shipmentId) throw AppError.badRequest("Kartela bu sevkiyatta değil");
-    if (swatch.shipment && swatch.shipment.status !== ShipmentStatus.PREPARING) {
-      throw AppError.conflict("Sevke hazır/sevk edilmiş sevkiyattan kartela çıkarılamaz");
+    if (swatch.shipment && swatch.shipment.status === ShipmentStatus.DISPATCHED) {
+      throw AppError.conflict("Sevk edilmiş sevkiyattan kartela çıkarılamaz");
     }
     await prisma.$transaction(async (tx) => {
+      // Saha #3: READY/AT_DOOR'da da çalışır. Kartela tahsise girmez → recommit yok.
+      const lockedStatus = await this.touchShipmentEditableTx(tx, data.shipmentId); // M-2: finalize ile serileş
       await tx.swatch.update({ where: { id: data.swatchId }, data: { shipmentId: null, sackId: null } });
       await this.resetSackWeightsTx(tx, [swatch.sackId]); // içeriği değişen çuvalın tartısı bayatladı
+      await this.dropSackIfEmptiedTx(tx, swatch.sackId, lockedStatus);
     });
     await AuditService.log({
       userId,
@@ -1021,8 +1265,8 @@ export class ShippingService {
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
     if (!roll.shipmentId) throw AppError.badRequest("Top bir sevkiyatta değil");
-    if (roll.shipment && roll.shipment.status !== ShipmentStatus.PREPARING) {
-      throw AppError.conflict("Sevke hazır/sevk edilmiş sevkiyatta çuval değiştirilemez");
+    if (roll.shipment && roll.shipment.status === ShipmentStatus.DISPATCHED) {
+      throw AppError.conflict("Sevk edilmiş sevkiyatta çuval değiştirilemez");
     }
     const sack = await prisma.sack.findUnique({
       where: { id: data.sackId },
@@ -1036,8 +1280,12 @@ export class ShippingService {
     }
     const fromSackId = roll.sackId;
     await prisma.$transaction(async (tx) => {
+      // Saha #3: READY/AT_DOOR'da da çalışır — kapsam değişmez (aynı sevkiyat),
+      // recommit gerekmez; yalnız iki çuvalın tartısı bayatlar + boşalan silinir.
+      const lockedStatus = await this.touchShipmentEditableTx(tx, roll.shipmentId!); // M-2: finalize ile serileş
       await tx.roll.update({ where: { id: roll.id }, data: { sackId: data.sackId } });
       await this.resetSackWeightsTx(tx, [fromSackId, data.sackId]); // iki çuvalın da tartısı bayatladı
+      await this.dropSackIfEmptiedTx(tx, fromSackId, lockedStatus);
     });
     await AuditService.log({
       userId,
@@ -1047,6 +1295,63 @@ export class ShippingService {
       newData: { kind: "SACK_MOVE", sackId: data.sackId, fromSackId, barcode: roll.barcode },
     });
     return { success: true, data: { rollId: roll.id, sackId: data.sackId }, message: `Top Çuval ${sack.seq}'e taşındı` };
+  }
+
+  /**
+   * İki topun çuvalını TAKAS et (saha #3) — aynı sevkiyat içinde, farklı çuvallardaki
+   * iki top yer değiştirir. Kapsam değişmez (recommit yok); iki çuvalın da tartısı
+   * sıfırlanır. PREPARING/READY/AT_DOOR'da çalışır. Hiçbir çuval boşalamaz (her
+   * çuvala karşı top girer).
+   */
+  async swapRollSacks(
+    data: { rollAId: string; rollBId: string },
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    if (data.rollAId === data.rollBId) throw AppError.badRequest("Aynı top kendisiyle takas edilemez");
+    const rolls = await prisma.roll.findMany({
+      where: { id: { in: [data.rollAId, data.rollBId] } },
+      select: {
+        id: true,
+        barcode: true,
+        shipmentId: true,
+        sackId: true,
+        shipment: { select: { status: true } },
+      },
+    });
+    const a = rolls.find((r) => r.id === data.rollAId);
+    const b = rolls.find((r) => r.id === data.rollBId);
+    if (!a || !b) throw AppError.notFound("Top bulunamadı");
+    if (!a.shipmentId || !b.shipmentId) throw AppError.badRequest("İki top da bir sevkiyatta olmalı");
+    if (a.shipmentId !== b.shipmentId) {
+      throw AppError.badRequest(
+        "Toplar farklı sevkiyatlarda — takas yalnız aynı sevkiyat içinde yapılır. Önce topu sevkiyattan çıkarıp diğerine okutun."
+      );
+    }
+    if (a.shipment?.status === ShipmentStatus.DISPATCHED) {
+      throw AppError.conflict("Sevk edilmiş sevkiyatta takas yapılamaz");
+    }
+    if (!a.sackId || !b.sackId) throw AppError.badRequest("İki top da bir çuvalda olmalı");
+    if (a.sackId === b.sackId) {
+      return { success: true, data: {}, message: "İki top zaten aynı çuvalda" };
+    }
+    await prisma.$transaction(async (tx) => {
+      await this.touchShipmentEditableTx(tx, a.shipmentId!); // M-2: finalize ile serileş
+      await tx.roll.update({ where: { id: a.id }, data: { sackId: b.sackId } });
+      await tx.roll.update({ where: { id: b.id }, data: { sackId: a.sackId } });
+      await this.resetSackWeightsTx(tx, [a.sackId, b.sackId]); // iki çuvalın da tartısı bayatladı
+    });
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: a.id,
+      newData: {
+        kind: "SACK_SWAP",
+        rollA: { id: a.id, barcode: a.barcode, fromSackId: a.sackId, toSackId: b.sackId },
+        rollB: { id: b.id, barcode: b.barcode, fromSackId: b.sackId, toSackId: a.sackId },
+      },
+    });
+    return { success: true, data: {}, message: "İki topun çuvalı takas edildi" };
   }
 
   // =========================================================================
@@ -1075,19 +1380,50 @@ export class ShippingService {
 
     const code = data.manualCode?.trim() || null; // serbest format, benzersizlik aranmaz
 
-    const sack = await withBarcodeRetry(async () => {
-      const sackNo = data.sackNo?.trim() || (await nextSackNo());
-      return prisma.sack.create({
-        data: {
-          sackNo,
-          shipmentId: data.shipmentId,
-          seq: shipment._count.sacks + 1,
-          manualCode: code,
-          weightKg: data.weightKg != null ? new Prisma.Decimal(data.weightKg) : null,
-        },
-        select: { id: true, sackNo: true, seq: true, weightKg: true, manualCode: true },
-      });
-    });
+    const sack = await withBarcodeRetry(() =>
+      prisma.$transaction(async (tx) => {
+        await this.touchShipmentPreparingTx(tx, data.shipmentId); // M-2: finalize ile serileş
+        const sackNo = data.sackNo?.trim() || (await nextSackNo());
+        // seq = max(seq)+1 (closure İÇİNDE taze okunur). Eski _count tabanlı
+        // hesap deterministik çakışıyordu: 3 çuval aç → #2'yi sil → yeni ekle →
+        // _count=2 → yeni seq=3 mevcut #3 ile çakışır, donmuş irsaliyede iki
+        // "Çuval 3" kalıcılaşırdı. DB seddi: @@unique([shipmentId, seq]) —
+        // eşzamanlı çift addSack'in kaybedeni P2002 alır, retry taze max okur.
+        const maxSeqRow = await tx.sack.findFirst({
+          where: { shipmentId: data.shipmentId },
+          orderBy: { seq: "desc" },
+          select: { seq: true },
+        });
+        // Saha #5: müşteri çuval kodu standardı — operatör kod girmediyse
+        // AMB%05d formatında GLOBAL sıradan otomatik üret (eski sistemin
+        // örnek fişindeki AMB00001 düzeniyle birebir). manualCode unique
+        // DEĞİL (serbest alan) — best-effort max+1; tx içinde okunduğundan
+        // pratik çakışma penceresi yok denecek kadar dar.
+        let effectiveCode = code;
+        if (!effectiveCode) {
+          const lastAmb = await tx.sack.findFirst({
+            where: { manualCode: { gte: "AMB00000", lt: "AMB99999￿" } },
+            orderBy: { manualCode: "desc" },
+            select: { manualCode: true },
+          });
+          const lastNum = lastAmb?.manualCode
+            ? parseInt(lastAmb.manualCode.replace(/^AMB/, ""), 10)
+            : 0;
+          const nextNum = Number.isFinite(lastNum) ? lastNum + 1 : 1;
+          effectiveCode = `AMB${String(nextNum).padStart(5, "0")}`;
+        }
+        return tx.sack.create({
+          data: {
+            sackNo,
+            shipmentId: data.shipmentId,
+            seq: (maxSeqRow?.seq ?? 0) + 1,
+            manualCode: effectiveCode,
+            weightKg: data.weightKg != null ? new Prisma.Decimal(data.weightKg) : null,
+          },
+          select: { id: true, sackNo: true, seq: true, weightKg: true, manualCode: true },
+        });
+      })
+    );
     await AuditService.log({
       userId,
       action: "CREATE",
@@ -1121,11 +1457,14 @@ export class ShippingService {
 
     const sack = await prisma.sack.findUnique({
       where: { id: data.sackId },
-      select: { id: true, shipment: { select: { status: true } } },
+      select: { id: true, shipmentId: true, shipment: { select: { status: true } } },
     });
     if (!sack) throw AppError.notFound("Çuval bulunamadı");
-    if (sack.shipment && sack.shipment.status !== ShipmentStatus.PREPARING) {
-      throw AppError.conflict("Sevke hazır/sevk edilmiş sevkiyatın çuvalı değiştirilemez");
+    // Saha #3: READY/AT_DOOR'da içerik düzeltmesi tartıyı sıfırlar — yeniden tartı
+    // BU endpoint'ten girilmek zorunda (unready'siz akış kapanmasın). Tartı/kod
+    // kapsamı/karşılanmayı değiştirmez → commit'e dokunmadan güvenli. DISPATCHED ret.
+    if (sack.shipment && sack.shipment.status === ShipmentStatus.DISPATCHED) {
+      throw AppError.conflict("Sevk edilmiş sevkiyatın çuvalı değiştirilemez");
     }
 
     const update: Prisma.SackUpdateInput = {};
@@ -1137,7 +1476,10 @@ export class ShippingService {
       codeForLog = code;
     }
 
-    await prisma.sack.update({ where: { id: data.sackId }, data: update });
+    await prisma.$transaction(async (tx) => {
+      if (sack.shipmentId) await this.touchShipmentEditableTx(tx, sack.shipmentId); // M-2: finalize ile serileş
+      await tx.sack.update({ where: { id: data.sackId }, data: update });
+    });
     await AuditService.log({
       userId,
       action: "UPDATE",
@@ -1163,6 +1505,7 @@ export class ShippingService {
       select: {
         id: true,
         sackNo: true,
+        shipmentId: true,
         shipment: { select: { status: true } },
         _count: { select: { rolls: true, swatches: true } },
       },
@@ -1183,6 +1526,7 @@ export class ShippingService {
       // Denetim için silinmeden önce barkodları topla.
       const rolls = await prisma.roll.findMany({ where: { sackId }, select: { id: true, barcode: true } });
       await prisma.$transaction(async (tx) => {
+        if (sack.shipmentId) await this.touchShipmentPreparingTx(tx, sack.shipmentId); // M-2: finalize ile serileş
         // Toplar/kartelalar sevkiyattan düşer → depoya döner (PREPARING'de statü zaten WAREHOUSE).
         await tx.roll.updateMany({ where: { sackId }, data: { shipmentId: null, sackId: null } });
         await tx.swatch.updateMany({ where: { sackId }, data: { shipmentId: null, sackId: null } });
@@ -1205,7 +1549,10 @@ export class ShippingService {
       return { success: true, data: { returnedToWarehouse: n }, message: `Çuval silindi — ${n} top/kartela depoya döndü` };
     }
 
-    await prisma.sack.delete({ where: { id: sackId } });
+    await prisma.$transaction(async (tx) => {
+      if (sack.shipmentId) await this.touchShipmentPreparingTx(tx, sack.shipmentId); // M-2: finalize ile serileş
+      await tx.sack.delete({ where: { id: sackId } });
+    });
     await AuditService.log({
       userId,
       action: "DELETE",
@@ -1229,6 +1576,7 @@ export class ShippingService {
   async listSackStoreBoard(params: {
     status?: string;
     search?: string;
+    destination?: string;
     cursor?: string;
     limit?: number;
   }): Promise<CursorPaginatedResponse<unknown>> {
@@ -1243,6 +1591,10 @@ export class ShippingService {
           : [ShipmentStatus.READY, ShipmentStatus.AT_DOOR];
 
     const where: Prisma.ShipmentWhereInput = { status: { in: statusFilter } };
+    // Saha #22: yurtiçi/yurtdışı filtresi (rozet ayrımı — sıkı değil).
+    if (params.destination === "DOMESTIC" || params.destination === "EXPORT") {
+      where.destination = params.destination as ShipmentDestination;
+    }
     const search = params.search?.trim();
     if (search) {
       // Sunucu-tarafı arama: sevk no / müşteri adı / çuval kodu (küçük-orta set).
@@ -1268,9 +1620,11 @@ export class ShippingService {
         id: true,
         shipmentNo: true,
         status: true,
+        destination: true, // saha #22: rozet
+        procedureCode: true, // saha #21
         readyAt: true,
-        customer: { select: { id: true, name: true } },
-        branch: { select: { id: true, name: true } },
+        customer: { select: { id: true, code: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
       },
     });
 
@@ -1309,6 +1663,8 @@ export class ShippingService {
         id: s.id,
         shipmentNo: s.shipmentNo,
         status: s.status,
+        destination: s.destination,
+        procedureCode: s.procedureCode,
         readyAt: s.readyAt,
         customer: s.customer,
         branch: s.branch,
@@ -1444,17 +1800,175 @@ export class ShippingService {
     };
   }
 
+  /**
+   * Saha #2: muhasebe sevk fişi (ornek-fis.pdf birebir) — 3 bölüm:
+   *  1) ÜRÜN LİSTESİ: ürün+renk+en bazında grup → top adedi + toplam metre
+   *  2) ÇUVAL LİSTESİ: çuval (AMB) → metre toplamı + kg toplamı + paket sayısı (top adedi)
+   *  3) ÇEKİ LİSTESİ: çuval × top → barkod | desen(ürün) | varyant(renk) | metre | kg
+   *     (kg yalnız çuvalın İLK topunda; geri kalan 0 — çeki cetveli formatı)
+   * Salt-okunur; DISPATCHED'ta içerik dondurulmuştur (toplar SHIPPED, değişmez).
+   */
+  async getDispatchReport(shipmentId: string): Promise<ApiResponse<unknown>> {
+    const sh = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: {
+        id: true,
+        shipmentNo: true,
+        status: true,
+        procedureCode: true,
+        destination: true,
+        dispatchedAt: true,
+        createdAt: true,
+        customer: { select: { id: true, code: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
+        sacks: {
+          orderBy: { seq: "asc" },
+          select: {
+            id: true,
+            seq: true,
+            manualCode: true,
+            weightKg: true,
+            rolls: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                id: true,
+                barcode: true,
+                currentQty: true,
+                width: true,
+                item: { select: { name: true } },
+                color: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!sh) throw AppError.notFound("Sevkiyat bulunamadı");
+
+    // 1) ÜRÜN LİSTESİ — ürün+renk+en grubu. STOK ADI birleşik (ürün + renk + en cm).
+    const productMap = new Map<
+      string,
+      { name: string; rollCount: number; totalMeters: Prisma.Decimal }
+    >();
+    // 2) ÇUVAL LİSTESİ
+    const sackRows = sh.sacks.map((sk) => {
+      let sackMeters = D0();
+      for (const r of sk.rolls) {
+        sackMeters = sackMeters.plus(r.currentQty);
+        const itemName = r.item.name;
+        const colorName = r.color?.name ?? "";
+        const widthStr = r.width != null ? `${Number(r.width)}cm.` : "";
+        const stokAdi = [itemName, colorName, widthStr].filter(Boolean).join(" ");
+        const key = stokAdi;
+        const g = productMap.get(key) ?? { name: stokAdi, rollCount: 0, totalMeters: D0() };
+        g.rollCount += 1;
+        g.totalMeters = g.totalMeters.plus(r.currentQty);
+        productMap.set(key, g);
+      }
+      return {
+        code: sk.manualCode ?? `#${sk.seq}`,
+        seq: sk.seq,
+        totalMeters: Number(sackMeters),
+        totalKg: sk.weightKg != null ? Number(sk.weightKg) : 0,
+        packageCount: sk.rolls.length,
+      };
+    });
+
+    // 3) ÇEKİ LİSTESİ — çuval × top; kg yalnız ilk topta.
+    const cekiRows: Array<{
+      rollId: string;
+      sackCode: string;
+      barcode: string | null;
+      desen: string;
+      varyant: string;
+      meters: number;
+      kg: number;
+    }> = [];
+    for (const sk of sh.sacks) {
+      sk.rolls.forEach((r, idx) => {
+        cekiRows.push({
+          rollId: r.id, // saha #7: toplu etiket için
+          sackCode: sk.manualCode ?? `#${sk.seq}`,
+          barcode: r.barcode,
+          desen: r.item.name,
+          varyant: r.color?.name ?? "",
+          meters: Number(r.currentQty),
+          // Çeki formatı: kg çuval brütü, yalnız çuvalın ilk topu satırında basılır.
+          kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0,
+        });
+      });
+    }
+
+    const products = [...productMap.values()].map((p) => ({
+      name: p.name,
+      rollCount: p.rollCount,
+      totalMeters: Number(p.totalMeters),
+    }));
+    const totalRolls = products.reduce((s, p) => s + p.rollCount, 0);
+    const totalMeters = sackRows.reduce((s, r) => s + r.totalMeters, 0);
+    const totalKg = sackRows.reduce((s, r) => s + r.totalKg, 0);
+
+    return {
+      success: true,
+      data: {
+        header: {
+          shipmentNo: sh.shipmentNo,
+          customerName: sh.customer.name,
+          customerCode: sh.customer.code,
+          branchName: sh.branch?.name ?? null,
+          procedureCode: sh.procedureCode,
+          destination: sh.destination,
+          status: sh.status,
+          date: sh.dispatchedAt ?? sh.createdAt,
+        },
+        products,
+        sacks: sackRows,
+        cekiRows,
+        totals: { totalRolls, totalMeters, totalKg, sackCount: sh.sacks.length },
+      },
+    };
+  }
+
   // =========================================================================
   // SEVKE HAZIR (READY, rezerve) + SEVK (DISPATCH, stok+karşılanma burada düşer)
   // =========================================================================
 
   /** markReady / dispatch için sevkiyatı içerikle yükle (toplar + çuvallar + sipariş satırları). */
-  private loadShipmentForFinalize(shipmentId: string) {
-    return prisma.shipment.findUnique({
+  /**
+   * İçerik-mutasyon tx'lerinde sevkiyat satırına KOŞULLU dokunuş (M-2).
+   * İki işlevi var: (1) PREPARING dışındaki sevkiyatta içerik değişikliğini
+   * 409 ile reddeder; (2) shipment SATIR KİLİDİNİ alır — finalize claim'leri
+   * aynı satıra updateMany attığından içerik tx'i ile durum geçişi tamamen
+   * SERİLEŞİR. Bu olmadan içerik endpoint'leri shipment satırına hiç
+   * dokunmadığından kilit çakışması yoktu: dispatch ile yarışan removeRoll
+   * hayalet SHIPPED top (depoda ama hiçbir listede yok), eşzamanlı scan ise
+   * DISPATCHED sevkiyata bağlı kurtarılamaz WAREHOUSE rezervi bırakırdı.
+   */
+  private async touchShipmentPreparingTx(
+    tx: Prisma.TransactionClient,
+    shipmentId: string
+  ): Promise<void> {
+    const touched = await tx.shipment.updateMany({
+      where: { id: shipmentId, status: ShipmentStatus.PREPARING },
+      data: { updatedAt: new Date() },
+    });
+    if (touched.count === 0) {
+      throw AppError.conflict(
+        "Sevkiyat bu sırada hazırlık aşamasından çıktı (sevk/iptal edilmiş olabilir) — sayfayı yenileyin."
+      );
+    }
+  }
+
+  private loadShipmentForFinalize(
+    shipmentId: string,
+    client: Prisma.TransactionClient | typeof prisma = prisma
+  ) {
+    return client.shipment.findUnique({
       where: { id: shipmentId },
       select: {
         id: true,
         status: true,
+        destination: true, // saha #19: tartı invariant'ı kapsama göre
         readyAt: true,
         rolls: { select: { id: true, barcode: true, sackId: true, itemId: true, colorId: true, width: true, currentQty: true, status: true } },
         swatches: { select: { id: true, barcode: true, sackId: true } },
@@ -1464,6 +1978,7 @@ export class ShippingService {
             orderId: true,
             order: {
               select: {
+                status: true,
                 deadline: true,
                 orderDate: true,
                 lines: {
@@ -1516,13 +2031,17 @@ export class ShippingService {
         `Şu çuvallar boş: ${emptySacks.map((n) => `#${n}`).join(", ")} — silin veya içine top/kartela okutun`
       );
     }
-    const unweighed = shipment.sacks
-      .filter((s) => s.weightKg == null || !new Prisma.Decimal(s.weightKg).greaterThan(0))
-      .map((s) => s.seq);
-    if (unweighed.length > 0) {
-      throw AppError.badRequest(
-        `Şu çuvalların tartısı girilmemiş: ${unweighed.map((n) => `#${n}`).join(", ")}`
-      );
+    // Saha #19: tartı zorunluluğu yalnız EXPORT — yurtiçi sevk kg'sız çıkabilir
+    // (irsaliyede kg boş kalır). Kod zorunluluğu iki kapsamda da sürer.
+    if (shipment.destination === ShipmentDestination.EXPORT) {
+      const unweighed = shipment.sacks
+        .filter((s) => s.weightKg == null || !new Prisma.Decimal(s.weightKg).greaterThan(0))
+        .map((s) => s.seq);
+      if (unweighed.length > 0) {
+        throw AppError.badRequest(
+          `Şu çuvalların tartısı girilmemiş (yurtdışı sevk): ${unweighed.map((n) => `#${n}`).join(", ")}`
+        );
+      }
     }
     const uncoded = shipment.sacks.filter((s) => !s.manualCode || !s.manualCode.trim()).map((s) => s.seq);
     if (uncoded.length > 0) {
@@ -1536,7 +2055,15 @@ export class ShippingService {
   private computeShipmentAllocation(
     shipment: NonNullable<Awaited<ReturnType<ShippingService["loadShipmentForFinalize"]>>>
   ): { alloc: Map<string, Prisma.Decimal>; orderIds: string[]; rollIds: string[] } {
-    const linesForAlloc: LineForAlloc[] = shipment.orders.flatMap((so) =>
+    // Sipariş eklenirken CANCELLED/COMPLETED reddedilir ama finalize anına kadar
+    // sipariş iptal/kapatılmış olabilir (PREPARING penceresi günler sürebilir).
+    // İptal/kapalı siparişin satırlarına tahsis + shippedQty YAZILMAZ — fiziken
+    // çıkan mal iptal siparişe alacaklanmaz, aynı spec'teki canlı siparişler açık
+    // kalmaz. Sevkiyat bloklanmaz; mal yine çıkar, yalnız o siparişe sayılmaz.
+    const allocatableOrders = shipment.orders.filter(
+      (so) => so.order.status !== "CANCELLED" && so.order.status !== "COMPLETED"
+    );
+    const linesForAlloc: LineForAlloc[] = allocatableOrders.flatMap((so) =>
       so.order.lines.map((l) => ({
         id: l.id,
         itemId: l.itemId,
@@ -1613,7 +2140,6 @@ export class ShippingService {
     }
     this.assertReadyInvariants(shipment);
 
-    const { alloc, orderIds } = this.computeShipmentAllocation(shipment);
     await prisma.$transaction(async (tx) => {
       // ATOMİK CLAIM: status'u ÖNCE koşullu flip et — eşzamanlı 2. markReady (ikisi de
       // PREPARING okumuş) count===0 alıp temiz 409'la çıkar; aksi halde commitGoodsTx
@@ -1625,6 +2151,14 @@ export class ShippingService {
       if (claim.count === 0) {
         throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
       }
+      // İÇERİĞİ TX İÇİNDE, claim SONRASI yeniden yükle (M-2): içerik tx'leri
+      // touchShipmentPreparingTx ile aynı satırı kilitlediğinden bu noktada
+      // içerik artık değişemez — tahsis/commit her zaman TAZE kümeyle yazılır.
+      // (Pre-tx yükleme yalnız erken/ucuz 4xx'ler için kalır.)
+      const fresh = await this.loadShipmentForFinalize(shipmentId, tx);
+      if (!fresh) throw AppError.notFound("Sevkiyat bulunamadı");
+      this.assertReadyInvariants(fresh);
+      const { alloc, orderIds } = this.computeShipmentAllocation(fresh);
       await this.commitGoodsTx(tx, shipmentId, alloc, orderIds);
     });
     await AuditService.log({
@@ -1658,7 +2192,6 @@ export class ShippingService {
     this.assertReadyInvariants(shipment);
 
     const fromPreparing = shipment.status === ShipmentStatus.PREPARING;
-    const { alloc, orderIds } = this.computeShipmentAllocation(shipment);
     await prisma.$transaction(async (tx) => {
       // ATOMİK CLAIM: gözlenen TAM status'a (PREPARING|READY) koşullu flip — fromPreparing
       // kararı tutarlı kalır. Aksi halde READY'ye kaçan kayıt için fromPreparing bayatlar
@@ -1670,7 +2203,14 @@ export class ShippingService {
       if (claim.count === 0) {
         throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
       }
-      if (fromPreparing) await this.commitGoodsTx(tx, shipmentId, alloc, orderIds);
+      // İçerik TX İÇİNDE, claim SONRASI yeniden yüklenir (M-2 — markReady ile aynı).
+      if (fromPreparing) {
+        const fresh = await this.loadShipmentForFinalize(shipmentId, tx);
+        if (!fresh) throw AppError.notFound("Sevkiyat bulunamadı");
+        this.assertReadyInvariants(fresh);
+        const { alloc, orderIds } = this.computeShipmentAllocation(fresh);
+        await this.commitGoodsTx(tx, shipmentId, alloc, orderIds);
+      }
     });
     await AuditService.log({
       userId,
@@ -1802,10 +2342,9 @@ export class ShippingService {
     this.assertReadyInvariants(shipment);
 
     const fromPreparing = shipment.status === ShipmentStatus.PREPARING;
-    const { alloc, orderIds, rollIds } = this.computeShipmentAllocation(shipment);
     const now = new Date();
 
-    await prisma.$transaction(async (tx) => {
+    const { alloc, rollIds } = await prisma.$transaction(async (tx) => {
       // ATOMİK CLAIM: gözlenen TAM status'tan DISPATCHED'e koşullu flip et (sevk meta'sıyla
       // birlikte). Eşzamanlı 2. sevk count===0 → 409 → çift commit / çift stok-çıkışı YOK;
       // fromPreparing kararı tutarlı kalır.
@@ -1823,12 +2362,20 @@ export class ShippingService {
       if (claim.count === 0) {
         throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
       }
+      // İÇERİK TX İÇİNDE, claim SONRASI yeniden yüklenir (M-2): tahsis, SHIPPED
+      // flip'i ve donan irsaliye HER ZAMAN taze kümeyle yazılır — eşzamanlı
+      // removeRoll'un düşürdüğü top SHIPPED'a "diriltilemez", eşzamanlı scan'in
+      // eklediği top irsaliyesiz kalamaz (içerik tx'leri touch ile serileşir).
+      const freshShipment = await this.loadShipmentForFinalize(shipmentId, tx);
+      if (!freshShipment) throw AppError.notFound("Sevkiyat bulunamadı");
+      this.assertReadyInvariants(freshShipment);
+      const fresh = this.computeShipmentAllocation(freshShipment);
       // Henüz commit edilmemişse (PREPARING'den direkt sevk) karşılanmayı kesinleştir.
-      if (fromPreparing) await this.commitGoodsTx(tx, shipmentId, alloc, orderIds);
+      if (fromPreparing) await this.commitGoodsTx(tx, shipmentId, fresh.alloc, fresh.orderIds);
       // FİZİKSEL STOK ÇIKIŞI — toplar SHIPPED (yalnız bu noktada bina dışı).
-      if (rollIds.length > 0) {
+      if (fresh.rollIds.length > 0) {
         await tx.roll.updateMany({
-          where: { id: { in: rollIds }, status: RollStatus.WAREHOUSE },
+          where: { id: { in: fresh.rollIds }, status: RollStatus.WAREHOUSE },
           data: { status: RollStatus.SHIPPED },
         });
       }
@@ -1842,6 +2389,7 @@ export class ShippingService {
         shipmentId,
         userId
       );
+      return { alloc: fresh.alloc, rollIds: fresh.rollIds };
     });
 
     const allocatedTotal = [...alloc.values()].reduce((s, q) => s.plus(q), D0());
@@ -1991,12 +2539,13 @@ export class ShippingService {
       }
       // Toplar serbest — shipment/çuval bağı kopar. PREPARING/READY'de status zaten WAREHOUSE;
       // tahsis varsa (legacy SHIPPED) WAREHOUSE'a geri çek.
-      if (rollIds.length > 0) {
-        await tx.roll.updateMany({
-          where: { id: { in: rollIds } },
-          data: { shipmentId: null, sackId: null, ...(hadAllocations ? { status: RollStatus.WAREHOUSE } : {}) },
-        });
-      }
+      // CANLI where (M-2): snapshot rollIds, claim öncesi okunduğundan eşzamanlı
+      // scan'le eklenen topu kaçırır ve top CANCELLED sevkiyata bağlı kalırdı —
+      // swatch temizliğiyle aynı dil (where: {shipmentId}).
+      await tx.roll.updateMany({
+        where: { shipmentId },
+        data: { shipmentId: null, sackId: null, ...(hadAllocations ? { status: RollStatus.WAREHOUSE } : {}) },
+      });
       // Kartelalar serbest
       await tx.swatch.updateMany({ where: { shipmentId }, data: { shipmentId: null, sackId: null } });
       // Çuvallar (tartı) silinir

@@ -60,7 +60,6 @@ export class KursunQcController {
     this.getStep = this.getStep.bind(this);
     this.listOpenCards = this.listOpenCards.bind(this);
     this.completeQc2 = this.completeQc2.bind(this);
-    this.undoQc2 = this.undoQc2.bind(this);
     this.reportError = this.reportError.bind(this);
     this.deleteError = this.deleteError.bind(this);
     this.finishStep = this.finishStep.bind(this);
@@ -111,20 +110,6 @@ export class KursunQcController {
         req.device?.machineId ?? null
       );
       res.status(201).json(result);
-    } catch (err) {
-      next(err);
-    }
-  }
-
-  /** POST /api/kursun-qc/undo-qc2 */
-  async undoQc2(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const body = z.object({
-        rollId: z.string().uuid(),
-        stepId: z.string().uuid(),
-      }).parse(req.body);
-      const result = await this.service.undoQc2(body, req.user?.userId);
-      res.status(200).json(result);
     } catch (err) {
       next(err);
     }

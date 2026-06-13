@@ -124,6 +124,16 @@ export const rollService = {
       .get<ApiResponse<RollCancelPreview>>(`/rolls/${id}/cancel-preview`)
       .then((r) => r.data),
 
+  /**
+   * Saha #4: top etiketini değiştir (renk/özellik/en/kalite). Yalnız serbest
+   * stok/depo veya PREPARING sevkiyattaki top; commit'li sevkiyatta 409.
+   */
+  relabel: (
+    id: string,
+    data: { colorId?: string | null; propertyIds?: string[]; width?: number | null; qualityGrade?: string },
+  ): Promise<ApiResponse<unknown>> =>
+    apiClient.patch<ApiResponse<unknown>>(`/rolls/${id}/label`, data).then((r) => r.data),
+
   getAll: (params: Partial<QueryParams>): Promise<PaginatedResponse<Roll>> =>
     apiClient.get<PaginatedResponse<Roll>>(`/rolls${buildQueryString(params)}`).then((r) => r.data),
 
@@ -154,10 +164,13 @@ export const rollService = {
       .then((r) => r.data);
   },
 
-  // Depo kapsam sayaçları — serbest / çuval depo (READY) / kapı önü (AT_DOOR).
+  // Depo kapsam sayaçları — serbest / hazırlanan (PREPARING) / çuval depo
+  // (READY) / kapı önü (AT_DOOR). O14: backend 'preparing' kovasını ekledi —
+  // sevkiyata okutulmuş ama henüz çuval depoya kalkmamış toplar.
   getWarehouseScope: (): Promise<
     ApiResponse<{
       free: { count: number; qty: number };
+      preparing: { count: number; qty: number };
       sackStore: { count: number; qty: number };
       atDoor: { count: number; qty: number };
     }>

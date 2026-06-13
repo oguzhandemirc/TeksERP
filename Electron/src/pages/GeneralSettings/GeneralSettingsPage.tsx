@@ -10,6 +10,7 @@ import { DevicePairingSection } from "./DevicePairingSection";
 import { ApiEndpointSection } from "./ApiEndpointSection";
 import { CompanySettingsSection } from "./CompanySettingsSection";
 import { SessionSettingsSection } from "./SessionSettingsSection";
+import { LabelSettingsSection } from "./LabelSettingsSection";
 
 /**
  * Genel Ayarlar — sol dikey kategori menüsü + sağ içerik. Ayarlar domaine bölünür
@@ -86,6 +87,7 @@ export function GeneralSettingsPage() {
                     {cat.kind === "api" && <ApiEndpointSection />}
                     {cat.kind === "company" && <CompanySettingsSection />}
                     {cat.kind === "session" && <SessionSettingsSection />}
+                    {cat.kind === "label" && <LabelSettingsSection />}
                   </CardContent>
                 </Card>
               </TabsContent>

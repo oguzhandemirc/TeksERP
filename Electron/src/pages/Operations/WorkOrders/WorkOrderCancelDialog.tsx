@@ -74,6 +74,23 @@ export function WorkOrderCancelDialog({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
         {impactQ.isLoading ? (
           <Skeleton className="h-32 w-full" />
+        ) : impactQ.isError ? (
+          // K-A6 fix: etki önizlemesi yüklenemeyince boş gövde kalıyordu —
+          // operatör neden onaylayamadığını göremiyordu.
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm">
+            <div className="font-medium text-destructive">
+              Etki önizlemesi yüklenemedi — önizleme görülmeden iptal onaylanamaz.
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              onClick={() => void impactQ.refetch()}
+            >
+              Yeniden Dene
+            </Button>
+          </div>
         ) : impact ? (
           impact.canCancel ? (
             <div className="space-y-3 text-sm">

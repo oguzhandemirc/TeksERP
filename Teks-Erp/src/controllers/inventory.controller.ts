@@ -14,10 +14,10 @@ import "../types/express-augment";
 const initialEntrySchema = z.object({
   itemId:       z.string().uuid("Geçersiz ürün ID"),
   colorId:      z.string().uuid("Geçersiz renk ID").optional().nullable(),
-  initialQty:   z.number().positive("Miktar pozitif olmalı"),
-  weightKg:     z.number().positive("Ağırlık pozitif olmalı").optional(),
+  initialQty:   z.number().positive("Miktar pozitif olmalı").max(999_999_999, "Miktar çok büyük"),
+  weightKg:     z.number().positive("Ağırlık pozitif olmalı").max(999_999_999, "Ağırlık çok büyük").optional(),
   qualityGrade: z.string().optional(),
-  width:        z.number().positive("En pozitif olmalı").optional().nullable(),
+  width:        z.number().positive("En pozitif olmalı").max(999_999_999, "En çok büyük").optional().nullable(),
   propertyIds:  z.array(z.string().uuid("Geçersiz özellik ID")).optional().default([]),
   // Offline KK1 girişi için opsiyonel client-üretimi barkod (sync replay
   // idempotency anchor — aynı barkodla 2. çağrı cached Roll döner).
@@ -27,15 +27,19 @@ const initialEntrySchema = z.object({
     .optional(),
 });
 
-const applyPropertiesSchema = z.object({
-  colorId:     z.string().uuid("Geçersiz renk ID").nullable(),
-  propertyIds: z.array(z.string().uuid()).default([]),
-});
-
 const openFabricSchema = z.object({
   receiptId: z.string().uuid("Geçersiz mal kabul ID"),
   stepId:    z.string().uuid("Geçersiz adım ID"),
   notes:     z.string().max(1000).optional().nullable(),
+});
+
+// Saha #4: top etiketi değiştir (renk/özellik/en/kalite). Tümü opsiyonel; renk
+// null=renksiz. propertyIds verilirse TAM liste (replace).
+const relabelSchema = z.object({
+  colorId:      z.string().uuid("Geçersiz renk ID").optional().nullable(),
+  propertyIds:  z.array(z.string().uuid("Geçersiz özellik ID")).optional(),
+  width:        z.number().positive("En pozitif olmalı").max(999_999_999).optional().nullable(),
+  qualityGrade: z.string().trim().max(50).optional(),
 });
 
 // Yeni model: KK2 ölçüm yapmaz; totalMeters opsiyonel — verilmezse roll'un
@@ -72,7 +76,6 @@ export class InventoryController {
     this.cancelPreview = this.cancelPreview.bind(this);
     this.softDelete = this.softDelete.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
-    this.applyManualProperties = this.applyManualProperties.bind(this);
     this.createOpenFabric = this.createOpenFabric.bind(this);
     this.kursunFinish = this.kursunFinish.bind(this);
   }
@@ -100,25 +103,6 @@ export class InventoryController {
       const id = req.params.id as string;
       const body = kursunFinishSchema.parse(req.body);
       const result = await this.service.kursunFinish(id, body, req.user?.userId);
-      res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
-   * PATCH /api/rolls/:id/identity
-   * Manuel renk/özellik override (hibrit mod).
-   */
-  async applyManualProperties(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const id = req.params.id as string;
-      const body = applyPropertiesSchema.parse(req.body);
-      const result = await this.service.applyManualProperties(
-        id,
-        body,
-        req.user?.userId,
-      );
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -281,6 +265,42 @@ export class InventoryController {
         req.params.id as string,
         req.user?.userId
       );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/rolls/:id/label — Saha #4: etiket (renk/özellik/en/kalite) değiştir.
+   * Tartı/paket ekranından yanlış/eksik etiketli stok topu düzeltilip yeniden basılır.
+   */
+  async relabel(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = relabelSchema.parse(req.body);
+      const result = await this.service.applyManualProperties(
+        req.params.id as string,
+        {
+          colorId: body.colorId ?? null,
+          propertyIds: body.propertyIds ?? [],
+          width: body.width,
+          qualityGrade: body.qualityGrade,
+        },
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/rolls/:id/prepare-for-sale — Saha #10: ham/stok topu satışa hazırla
+   * (STOCK → WAREHOUSE). Sevk akışı (scan + kapsama + dispatch) bundan sonra çalışır.
+   */
+  async prepareForSale(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.prepareRawForSale(req.params.id as string, req.user?.userId);
       res.status(200).json(result);
     } catch (error) {
       next(error);

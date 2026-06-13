@@ -1,7 +1,8 @@
 // =============================================================================
 // TeksERP - Audit (SystemLog) Service
 // =============================================================================
-// Every CUD operation MUST log via this service (core-architecture.md rule).
+// Every CUD operation MUST log via this service (kök CLAUDE.md kuralı).
+// Best-effort: yazım hatası isteği DÜŞÜRMEZ (/health sayacına düşer); tx DIŞINDA çağrılır.
 // =============================================================================
 
 import prisma from "../lib/prisma";
@@ -147,6 +148,8 @@ export class AuditService {
           id: log.id,
           userId: log.userId,
           action: log.action,
+          category: log.category,
+          ipAddress: log.ipAddress,
           tableName: log.tableName,
           recordId: log.recordId,
           oldData: log.oldData as Prisma.InputJsonValue,
@@ -160,5 +163,36 @@ export class AuditService {
     });
 
     return { archived: logsToArchive.length, cutoff: cutoff.toISOString() };
+  }
+
+  /**
+   * GET /api/admin/system-logs/stats için tablo boyutu istatistikleri.
+   * K4: prisma erişimi admin.routes'tan servise taşındı (katman kuralı).
+   * Global pool client'la Promise.all serbest (tx değil).
+   */
+  static async getLogStats(): Promise<{
+    activeCount: number;
+    archiveCount: number;
+    oldestLog: Date | null;
+    lastAutoArchiveAt: string | null;
+  }> {
+    const [activeCount, archiveCount, oldest, lastRun] = await Promise.all([
+      prisma.systemLog.count(),
+      prisma.systemLogArchive.count(),
+      prisma.systemLog.findFirst({
+        orderBy: { createdAt: "asc" },
+        select: { createdAt: true },
+      }),
+      prisma.systemSetting.findUnique({
+        where: { key: "audit.lastArchiveAt" },
+        select: { value: true },
+      }),
+    ]);
+    return {
+      activeCount,
+      archiveCount,
+      oldestLog: oldest?.createdAt ?? null,
+      lastAutoArchiveAt: (lastRun?.value as string | null) ?? null,
+    };
   }
 }

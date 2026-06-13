@@ -140,6 +140,10 @@ export function RouteDesignerDialog({
           stationId: s.stationId,
           sequence: i + 1,
           defaultNotes: s.notes.trim() || null,
+          // Saha #14: fason planlaması artık ŞABLONA da kaydedilir — eskiden
+          // burada düşürülüyordu, şablon tekrar kullanılınca firma boş geliyordu.
+          requiredCategoryId: s.requiredCategoryId,
+          plannedSubcontractorId: s.plannedSubcontractorId,
         })),
       };
       return routeService.create(payload as unknown as Partial<ProductionRoute>);

@@ -110,24 +110,37 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
       });
       const route = res.data;
       if (!route) return;
-      let newSteps: DesignerStep[] = (route.steps ?? []).map((s) => ({
-        clientId: newClientId(),
-        ...stationToDesigner({
-          id: s.station?.id ?? s.stationId,
-          code: s.station?.code ?? "",
-          name: s.station?.name ?? "",
-          type: s.station?.type ?? "INTERNAL",
-          kind: s.station?.kind ?? null,
-          defaultCategoryId: s.station?.defaultCategoryId ?? null,
-        }),
-        notes: s.defaultNotes ?? "",
-        plannedSubcontractorId: null,
-      }));
-      // Fason adımlarına kategorinin favori firmasını default ata.
-      if (newSteps.some((s) => s.stationType === "EXTERNAL" && s.requiredCategoryId)) {
+      let newSteps: DesignerStep[] = (route.steps ?? []).map((s) => {
+        const base = {
+          clientId: newClientId(),
+          ...stationToDesigner({
+            id: s.station?.id ?? s.stationId,
+            code: s.station?.code ?? "",
+            name: s.station?.name ?? "",
+            type: s.station?.type ?? "INTERNAL",
+            kind: s.station?.kind ?? null,
+            defaultCategoryId: s.station?.defaultCategoryId ?? null,
+          }),
+          notes: s.defaultNotes ?? "",
+        };
+        // Saha #14: şablon artık fason planlamasını saklıyor — kayıtlı değer
+        // varsa onu kullan (kategori dahil); yoksa istasyon default'u kalır.
+        return {
+          ...base,
+          requiredCategoryId: s.requiredCategoryId ?? base.requiredCategoryId,
+          plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+        };
+      });
+      // Fason adımlarına (şablonda firma kayıtlı DEĞİLSE) kategorinin favori
+      // firmasını default ata.
+      if (
+        newSteps.some(
+          (s) => s.stationType === "EXTERNAL" && s.requiredCategoryId && !s.plannedSubcontractorId,
+        )
+      ) {
         const favs = await fetchFavoriteFirms();
         newSteps = newSteps.map((s) =>
-          s.stationType === "EXTERNAL" && s.requiredCategoryId
+          s.stationType === "EXTERNAL" && s.requiredCategoryId && !s.plannedSubcontractorId
             ? { ...s, plannedSubcontractorId: pickFavoriteFirmId(favs, s.requiredCategoryId) }
             : s,
         );

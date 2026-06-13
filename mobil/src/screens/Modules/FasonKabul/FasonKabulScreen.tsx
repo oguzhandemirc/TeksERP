@@ -831,9 +831,9 @@ export default function FasonKabulScreen() {
   }, [allGroups, highlightedWorkOrderId]);
 
   const filteredGroups = useMemo(() => {
-    const q = searchQ.trim().toLowerCase();
+    const q = searchQ.trim().toLocaleLowerCase('tr');
     if (q.length < 2) return sortedGroups;
-    const hit = (s?: string | null) => !!s && s.toLowerCase().includes(q);
+    const hit = (s?: string | null) => !!s && s.toLocaleLowerCase('tr').includes(q);
     const hitAny = (arr?: string[]) => !!arr && arr.some((s) => hit(s));
     return sortedGroups.filter(
       (g) =>

@@ -15,13 +15,22 @@ export const sackStoreStatusLabels: Record<SackStoreStatus, string> = {
 // ===========================================================================
 // LİSTE (board kartı) — rulo İÇERMEZ, yalnız ucuz sayaçlar
 // ===========================================================================
+export type ShipmentDestination = "DOMESTIC" | "EXPORT";
+
+export const destinationLabels: Record<ShipmentDestination, string> = {
+  DOMESTIC: "Yurtiçi",
+  EXPORT: "Yurtdışı",
+};
+
 export interface SackStoreShipment {
   id: string;
   shipmentNo: string;
   status: SackStoreStatus;
+  destination: ShipmentDestination;
+  procedureCode: string | null;
   readyAt: string | null;
-  customer: { id: string; name: string };
-  branch: { id: string; name: string } | null;
+  customer: { id: string; code?: string; name: string };
+  branch: { id: string; code?: string | null; name: string } | null;
   sackCount: number;
   rollCount: number;
   totalKg: number;
@@ -33,6 +42,8 @@ export interface SackStoreListParams {
   /** Yok → READY+AT_DOOR birden. */
   status?: SackStoreStatus;
   search?: string;
+  /** Saha #22: yurtiçi/yurtdışı filtresi. */
+  destination?: ShipmentDestination;
   cursor?: string | null;
   limit?: number;
 }

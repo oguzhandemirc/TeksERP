@@ -16,6 +16,8 @@
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
+import { withBarcodeRetry } from "../utils/barcode-retry";
+import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
 import {
   Prisma,
@@ -373,8 +375,11 @@ export class SubcontractorService {
 
     const subcontractor = await prisma.subcontractor.findUnique({
       where: { id: data.subcontractorId },
+      select: { id: true, isActive: true },
     });
     if (!subcontractor) throw AppError.notFound("Fason firma bulunamadı");
+    // Soft-delete guard: pasife alınmış firmaya yeni sevk açılamaz.
+    if (!subcontractor.isActive) throw AppError.badRequest("Fason firma pasif durumda");
 
     // Adımın hizmet kategorisi tanımlıysa, seçilen fason firmanın bu kategoride
     // hizmet veriyor olması zorunlu (SubcontractorToCategory eşleşmesi).
@@ -490,7 +495,11 @@ export class SubcontractorService {
       new Prisma.Decimal(0)
     );
 
-    const result = await prisma.$transaction(async (tx) => {
+    // withBarcodeRetry: dispatchNo (@unique) tx içinde nextPrefixedSequence ile
+    // üretiliyor; eşzamanlı iki sevk aynı SD-YYMM-NNNNNN'i hesaplarsa P2002
+    // çakışmasında tx baştan denenir → sıra yeniden okunur (kartela/shipping deseni).
+    const result = await withBarcodeRetry(() =>
+      prisma.$transaction(async (tx) => {
       // Otomatik attach: serbest stoktaki toplar bu adıma bağlanır.
       // (status STOCK kalır — alt blok aynı transaction içinde AT_SUBCONTRACTOR'a çekecek.)
       if (autoAttachIds.size > 0) {
@@ -574,10 +583,25 @@ export class SubcontractorService {
 
       // 1) status → AT_SUBCONTRACTOR + dal kimliği (Phase 4): bu sevk = bir dal,
       //    anahtarı dispatch.id. Born roll (kabul) ve Tambur çocuğu bunu kalıtır.
-      await tx.roll.updateMany({
-        where: { id: { in: dispatchRollIds } },
+      //
+      // ATOMİK CLAIM: status kontrolü (satır ~400 + 468-485) tx DIŞINDA yapıldığı
+      // için iki operatör aynı topu eşzamanlı sevke okutursa ikisi de guard'ı geçip
+      // burada koşulsuz flip yapabilirdi → top iki dispatch'e girer, batchSplitId
+      // ezilirdi. WHERE'e kabul-statülerini koyup etkilenen satır sayısını doğrula
+      // (kartela.dispatch ile aynı desen). autoAttach topları bu tx'te STOCK kalır,
+      // diğerleri STOCK|IN_PRODUCTION → ikisi de bu küme içinde.
+      const claimed = await tx.roll.updateMany({
+        where: {
+          id: { in: dispatchRollIds },
+          status: { in: [RollStatus.IN_PRODUCTION, RollStatus.STOCK] },
+        },
         data: { status: RollStatus.AT_SUBCONTRACTOR, batchSplitId: dispatch.id },
       });
+      if (claimed.count !== dispatchRollIds.length) {
+        throw AppError.conflict(
+          "Toplardan biri bu sırada başka bir sevke alınmış. Listeyi yenileyip tekrar deneyin."
+        );
+      }
 
       // 2) Açık movement'ı olan topları tek sorguda bul; OLMAYANLAR için yeni
       //    movement aç (açık movement kapanmasın — operatör START atmamış olabilir).
@@ -626,7 +650,8 @@ export class SubcontractorService {
       );
 
       return dispatch;
-    });
+      })
+    );
 
     await AuditService.log({
       userId,
@@ -740,15 +765,20 @@ export class SubcontractorService {
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1) Dispatch'i soft-cancel
-      await tx.subcontractorDispatch.update({
-        where: { id: dispatchId },
+      // 1) Dispatch'i soft-cancel — ATOMİK CLAIM: yukarıdaki guard'lar tx
+      //    DIŞINDA; eşzamanlı çift iptal ikisinde de geçerdi. cancelledAt:null
+      //    koşuluyla kaybeden burada 409 alır.
+      const cancelClaim = await tx.subcontractorDispatch.updateMany({
+        where: { id: dispatchId, cancelledAt: null },
         data: {
           cancelledAt: new Date(),
           cancelledById: userId ?? null,
           cancelReason: trimmedReason,
         },
       });
+      if (cancelClaim.count === 0) {
+        throw AppError.conflict("Bu sevk az önce başka bir kullanıcı tarafından iptal edilmiş.");
+      }
 
       // 1b) RESMİ BELGE — irsaliye VOIDED'e çekilir (baskıda İPTAL filigranı).
       // Belge silinmez; tarihsel kayıt korunur.
@@ -759,32 +789,43 @@ export class SubcontractorService {
         trimmedReason
       );
 
-      // 2) Toplar: STOCK + currentStepId temizle
-      await tx.roll.updateMany({
-        where: { id: { in: rollIds } },
-        data: { status: RollStatus.STOCK, currentStepId: null },
-      });
-
-      // 3) Açık RollMovement'ları CANCEL notuyla kapat
-      const openMovements = await tx.rollMovement.findMany({
+      // 2) Toplar: STOCK + currentStepId temizle — ATOMİK CLAIM (movedRolls
+      //    kontrolü tx dışında; eşzamanlı kabul/başka işlem pencerede araya
+      //    girdiyse count uyuşmaz → 409 + rollback). batchSplitId da temizlenir:
+      //    iptal edilen sevkte parti hiç yaşanmamış sayılır — top yeniden
+      //    üretime girerse eski (iptal) dalın lane ayak izini taşımasın.
+      //    (Gerçekleşmiş partilerde lot kimliği depoya kadar kalıcıdır; bu
+      //    temizlik yalnız iptal yoluna özgüdür.)
+      const reverted = await tx.roll.updateMany({
         where: {
-          rollId: { in: rollIds },
-          workOrderStepId: dispatch.stepId,
-          exitedAt: null,
+          id: { in: rollIds },
+          status: RollStatus.AT_SUBCONTRACTOR,
+          currentStepId: dispatch.stepId,
         },
-        select: { id: true, notes: true },
+        data: { status: RollStatus.STOCK, currentStepId: null, batchSplitId: null },
       });
-      for (const mv of openMovements) {
-        await tx.rollMovement.update({
-          where: { id: mv.id },
-          data: {
-            exitedAt: new Date(),
-            notes: mv.notes
-              ? `${mv.notes} | CANCEL:${dispatch.dispatchNo}`
-              : `CANCEL:${dispatch.dispatchNo}`,
-          },
-        });
+      if (reverted.count !== rollIds.length) {
+        throw AppError.conflict(
+          "Toplardan biri bu sırada başka bir işlemle (kabul/taşıma) değişmiş — sevk iptal edilemedi. Listeyi yenileyip tekrar deneyin."
+        );
       }
+
+      // 3) Açık RollMovement'ları CANCEL notuyla kapat — tek raw UPDATE (eski kod
+      //    movement başına findMany+update = N+1; iptal edilen sevkte yüzlerce roll
+      //    olabilir). notes per-row eski değere bağlı olduğundan CASE ile concat:
+      //    doluysa "eski | CANCEL:x", boş/null ise "CANCEL:x".
+      const cancelTag = `CANCEL:${dispatch.dispatchNo}`;
+      await tx.$executeRaw`
+        UPDATE "roll_movements"
+        SET "exitedAt" = NOW(),
+            "notes" = CASE
+              WHEN "notes" IS NULL OR "notes" = '' THEN ${cancelTag}
+              ELSE "notes" || ' | ' || ${cancelTag}
+            END
+        WHERE "rollId" = ANY(${rollIds}::uuid[])
+          AND "workOrderStepId" = ${dispatch.stepId}::uuid
+          AND "exitedAt" IS NULL
+      `;
 
       // 4) SUBCONTRACTOR_SENT operation log'larını sil (idempotent — yoksa atla)
       await tx.rollOperation.deleteMany({
@@ -795,19 +836,62 @@ export class SubcontractorService {
         },
       });
 
-      // 5) Step'te başka aktif (iptal edilmemiş) dispatch yoksa PENDING'e döndür
-      const otherActive = await tx.subcontractorDispatch.count({
-        where: {
-          stepId: dispatch.stepId,
-          cancelledAt: null,
-          id: { not: dispatchId },
-        },
-      });
-      if (otherActive === 0 && dispatch.step.status === StepStatus.ACTIVE) {
-        await tx.workOrderStep.update({
-          where: { id: dispatch.stepId },
-          data: { status: StepStatus.PENDING, startedAt: null },
+      // 5) Adım durumunu yeniden değerlendir. Eski sayaç KABUL EDİLMİŞ sevkleri
+      //    de "aktif" sayıyordu ve COMPLETED'a dönüş yolu yoktu: D1 tamamen
+      //    kabul edildi + ek parti D2 iptal edildi → adım boş ama sonsuza dek
+      //    ACTIVE kalıyor, WO hiç tamamlanamıyordu (tek kurtarma yeni fiziksel
+      //    sevk ya da DB müdahalesiydi).
+      if (dispatch.step.status === StepStatus.ACTIVE) {
+        // Hâlâ AÇIK sevk (kabul görmemiş kalemi olan) veya bekleyen top var mı?
+        const openDispatchCount = await tx.subcontractorDispatch.count({
+          where: {
+            stepId: dispatch.stepId,
+            cancelledAt: null,
+            id: { not: dispatchId },
+            items: {
+              some: { receiptItems: { none: { receipt: { cancelledAt: null } } } },
+            },
+          },
         });
+        const remainingAtSub = await tx.roll.count({
+          where: { currentStepId: dispatch.stepId, status: RollStatus.AT_SUBCONTRACTOR },
+        });
+        if (openDispatchCount === 0 && remainingAtSub === 0) {
+          const receiptCount = await tx.subcontractorReceipt.count({
+            where: { stepId: dispatch.stepId, cancelledAt: null },
+          });
+          if (receiptCount > 0) {
+            // Geçmişte kabul var → adım tamamlanmış sayılır (COMPLETED'a geri dön).
+            await tx.workOrderStep.update({
+              where: { id: dispatch.stepId },
+              data: { status: StepStatus.COMPLETED, completedAt: new Date() },
+            });
+            // Bu adım WO'nun son eksik adımıysa WO'yu tamamla (receive'daki
+            // kontrolün aynası — iptal sonrası WO IN_PROGRESS'te takılmasın).
+            const remainingSteps = await tx.workOrderStep.count({
+              where: {
+                workOrderId: dispatch.workOrderId,
+                status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
+              },
+            });
+            if (remainingSteps === 0) {
+              await tx.workOrder.update({
+                where: { id: dispatch.workOrderId },
+                data: { status: WorkOrderStatus.COMPLETED },
+              });
+              await tx.travelerCard.updateMany({
+                where: { workOrderId: dispatch.workOrderId, status: "ACTIVE" },
+                data: { status: "COMPLETED" },
+              });
+            }
+          } else {
+            // Hiç kabul yok → sevk öncesi duruma (PENDING) dön.
+            await tx.workOrderStep.update({
+              where: { id: dispatch.stepId },
+              data: { status: StepStatus.PENDING, startedAt: null },
+            });
+          }
+        }
       }
 
       // 6) Refakat kartı INFO scan (sevk iptal bildirimi)
@@ -928,9 +1012,11 @@ export class SubcontractorService {
 
     const subcontractor = await prisma.subcontractor.findUnique({
       where: { id: data.subcontractorId },
-      select: { id: true },
+      select: { id: true, isActive: true },
     });
     if (!subcontractor) throw AppError.notFound("Fason firma bulunamadı");
+    // Soft-delete guard: pasife alınmış firmadan kabul yapılamaz.
+    if (!subcontractor.isActive) throw AppError.badRequest("Fason firma pasif durumda");
 
     // İrsaliye no opsiyonel — boş geldiyse null sakla.
     const manifestNoTrimmed =
@@ -975,6 +1061,13 @@ export class SubcontractorService {
       },
     });
     if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+    // Çapraz kontrol (dispatch ile simetrik): uyuşmaz çiftte makbuz yanlış
+    // WO'ya yazılır, born roll'lar yanlış WO'nun targetItem/width'ini alır ve
+    // WO-tamamlama bloğu BAŞKA iş emrini COMPLETED'a çekebilirdi (parti-ayırma
+    // akışında istemcinin kart-WO/parti-adım eşleştirmesi tam bu hataya açık).
+    if (step.workOrderId !== data.workOrderId) {
+      throw AppError.badRequest("Adım bu iş emrine ait değil");
+    }
     if (step.station.type !== StationType.EXTERNAL) {
       throw AppError.badRequest(
         "Mal kabul yalnızca EXTERNAL istasyon adımları için yapılabilir"
@@ -1005,12 +1098,40 @@ export class SubcontractorService {
         : appliesColor
           ? wo.targetColorId
           : null;
-    const resolvedAppliedPropertyIds =
-      data.appliedPropertyIds !== undefined
-        ? data.appliedPropertyIds
-        : appliesProperty
-          ? wo.targetProperties.map((p) => p.propertyId)
-          : [];
+    // Dedupe ŞART: payload'da tekrar eden property, rollProperty @@unique
+    // P2002'sine çarpıp withBarcodeRetry'ı yanlış tetikliyordu (koca kabul
+    // tx'i 5 kez boşuna denenip yanıltıcı "Barkod üretimi başarısız" 409'u).
+    const resolvedAppliedPropertyIds = [
+      ...new Set(
+        data.appliedPropertyIds !== undefined
+          ? data.appliedPropertyIds
+          : appliesProperty
+            ? wo.targetProperties.map((p) => p.propertyId)
+            : [],
+      ),
+    ];
+
+    // Override varlık + isActive doğrulaması (soft-delete giriş guard'ı —
+    // SEC-2/SEC-3'ün fason kabuldeki kardeşi): pasif renk/özellik born
+    // roll'lara sessizce işlenmesin.
+    if (data.appliedColorId) {
+      const colorRow = await prisma.color.findUnique({
+        where: { id: data.appliedColorId },
+        select: { isActive: true },
+      });
+      if (!colorRow || !colorRow.isActive) {
+        throw AppError.badRequest("Uygulanan renk bulunamadı veya pasif");
+      }
+    }
+    if (data.appliedPropertyIds !== undefined && resolvedAppliedPropertyIds.length > 0) {
+      const propRows = await prisma.fabricProperty.findMany({
+        where: { id: { in: resolvedAppliedPropertyIds }, isActive: true },
+        select: { id: true },
+      });
+      if (propRows.length !== resolvedAppliedPropertyIds.length) {
+        throw AppError.badRequest("Uygulanan özelliklerden bazıları bulunamadı veya pasif");
+      }
+    }
 
     // Bu step'te halen AT_SUBCONTRACTOR olan roller
     const outstandingRolls = await prisma.roll.findMany({
@@ -1048,7 +1169,10 @@ export class SubcontractorService {
     const nextStep =
       currentIndex < allSteps.length - 1 ? allSteps[currentIndex + 1] : null;
 
-    const result = await prisma.$transaction(async (tx) => {
+    // withBarcodeRetry: receiptNo (@unique) tx içinde nextPrefixedSequence ile
+    // üretiliyor; eşzamanlı kabullerde P2002 çakışmasında tx baştan denenir.
+    const result = await withBarcodeRetry(() =>
+      prisma.$transaction(async (tx) => {
       const now = new Date();
       const seq = await nextPrefixedSequence(tx, "subcontractorReceipt", "SR", now);
       const receiptNo = buildPrefixedCardNumber("SR", now, seq);
@@ -1096,22 +1220,38 @@ export class SubcontractorService {
             "notes"     = ${`RETURNED_VIA_RECEIPT:${receiptNo}`}
         FROM "rolls" r
         WHERE rm."rollId" = r."id"
-          AND rm."workOrderStepId" = ${data.stepId}
+          AND rm."workOrderStepId" = ${data.stepId}::uuid
           AND rm."exitedAt" IS NULL
-          AND rm."rollId" = ANY(${returnRollIds}::text[])
+          AND rm."rollId" = ANY(${returnRollIds}::uuid[])
       `;
 
       // 2) Orijinal Roll'lar TERMINAL'e: SUBCONTRACTOR_CONSUMED, currentStepId=null.
       //    Top fasona gittiyse mutlaka açıldı — boyahane/zımpara fark etmez,
       //    kimliği kaybeder. currentQty / colorId / RollProperty dokunulmaz —
       //    son hayatın izi audit/raporlamada kalsın.
-      await tx.roll.updateMany({
-        where: { id: { in: returnRollIds } },
+      //
+      // ATOMİK CLAIM (dispatch'teki desenin aynası): idempotency + outstanding
+      // guard'ları tx DIŞINDA okunuyor; iki operatör aynı partiyi eşzamanlı
+      // kabul ederse ikisi de geçer ve İKİ makbuz + İKİ SET born roll doğardı.
+      // withBarcodeRetry bunu kötüleştirir: receiptNo P2002'sinde yalnız tx
+      // yeniden denenir, tx-dışı guard'lar koşmaz — kaybeden retry'da temiz
+      // commit ederdi. WHERE'e AT_SUBCONTRACTOR koyup count'u doğrula: kaybeden
+      // burada 409 alır (AppError.conflict P2002 olmadığından retry'a girmez).
+      const consumed = await tx.roll.updateMany({
+        where: {
+          id: { in: returnRollIds },
+          status: RollStatus.AT_SUBCONTRACTOR,
+        },
         data: {
           status: RollStatus.SUBCONTRACTOR_CONSUMED,
           currentStepId: null,
         },
       });
+      if (consumed.count !== returnRollIds.length) {
+        throw AppError.conflict(
+          "Toplardan biri bu sırada başka bir işlemle (kabul/iptal) değişmiş. Listeyi yenileyip tekrar deneyin."
+        );
+      }
 
       // 3) Receipt item kayıtları — orijinal Roll referansı (audit + UI'da
       //    "bu receipt hangi orijinal toplara karşılık" görünmek için).
@@ -1235,61 +1375,70 @@ export class SubcontractorService {
         const bornBatchSplitId =
           sourceLotRolls.find((r) => r.batchSplitId)?.batchSplitId ?? null;
 
-        for (const nr of data.newRolls) {
+        // Pre-validate + explicit UUID üret → top başına create+create (N+1) yerine
+        // createMany batch. createMany nested write desteklemediği ve eklenen id'leri
+        // sıralı döndürmediği için id'leri burada üretip roll→movement/property eşliyoruz.
+        // (Born roll'larda barcode null — açık kumaş, sequence retry gerekmez.)
+        const bornRollInputs = data.newRolls.map((nr) => {
           if (!Number.isFinite(nr.qty) || nr.qty <= 0) {
             throw AppError.badRequest("Yeni Roll metrajı pozitif olmalı");
           }
-          const created = await tx.roll.create({
-            data: {
-              itemId: bornItemId,
-              colorId: resolvedAppliedColorId,
-              initialQty: nr.qty,
-              currentQty: nr.qty,
-              weightKg: nr.weightKg ?? null,
-              width: bornWidth,
-              // Sonraki adım varsa top fiilen üretimde (currentStepId dolu) → IN_PRODUCTION.
-              // STOCK yapmak yanlış etiketleme: serbest stok listesinde "müsait" görünür
-              // ve Tambur açık-kumaş akışı (cutOpenFabric IN_PRODUCTION ister) tutarsızlaşır.
-              status: nextStep ? RollStatus.IN_PRODUCTION : RollStatus.STOCK,
-              qualityGrade: defaultQualityGradeCode,
-              qualityGradeId: defaultQualityGradeId,
-              entrySource: "SUBCONTRACTOR_RETURN",
-              parentReceiptId: receipt.id,
-              batchSplitId: bornBatchSplitId,
-              // Born açık-kumaş topu bu fason adımında "üretildi" — roll→WO bağı.
-              // Bu olmadan (eski hali null) tambur WO-tamamlama, WO ürettiği-toplar
-              // raporu, WO iptalinde kurtarma ve soy-ağacı hepsi fason için kopuyordu.
-              producedInStepId: data.stepId,
-              currentStepId: nextStep ? nextStep.id : null,
-              createdById: userId ?? null,
-              // barcode null — açık kumaş, fiziksel etiket yok
-              ...(resolvedAppliedPropertyIds.length > 0
-                ? {
-                    properties: {
-                      create: resolvedAppliedPropertyIds.map((propertyId) => ({
-                        property: { connect: { id: propertyId } },
-                      })),
-                    },
-                  }
-                : {}),
-            },
+          return { id: uuidv4(), nr };
+        });
+
+        await tx.roll.createMany({
+          data: bornRollInputs.map(({ id, nr }) => ({
+            id,
+            itemId: bornItemId,
+            colorId: resolvedAppliedColorId,
+            initialQty: nr.qty,
+            currentQty: nr.qty,
+            weightKg: nr.weightKg ?? null,
+            width: bornWidth,
+            // Sonraki adım varsa top fiilen üretimde (currentStepId dolu) → IN_PRODUCTION.
+            // STOCK yapmak yanlış etiketleme: serbest stok listesinde "müsait" görünür
+            // ve Tambur açık-kumaş akışı (cutOpenFabric IN_PRODUCTION ister) tutarsızlaşır.
+            status: nextStep ? RollStatus.IN_PRODUCTION : RollStatus.STOCK,
+            qualityGrade: defaultQualityGradeCode,
+            qualityGradeId: defaultQualityGradeId,
+            entrySource: "SUBCONTRACTOR_RETURN",
+            parentReceiptId: receipt.id,
+            batchSplitId: bornBatchSplitId,
+            // Born açık-kumaş topu bu fason adımında "üretildi" — roll→WO bağı.
+            // Bu olmadan (eski hali null) tambur WO-tamamlama, WO ürettiği-toplar
+            // raporu, WO iptalinde kurtarma ve soy-ağacı hepsi fason için kopuyordu.
+            producedInStepId: data.stepId,
+            currentStepId: nextStep ? nextStep.id : null,
+            createdById: userId ?? null,
+            // barcode null — açık kumaş, fiziksel etiket yok
+          })),
+        });
+
+        // Receipt-seviyesi özellikler tüm born roll'larda aynı (resolvedAppliedPropertyIds)
+        // → roll × property cross product tek createMany ile. skipDuplicates:
+        // @@unique(rollId,propertyId) çakışması koca tx'i retry'a sokmasın
+        // (receiptProperty createMany'siyle aynı savunma).
+        if (resolvedAppliedPropertyIds.length > 0) {
+          await tx.rollProperty.createMany({
+            data: bornRollInputs.flatMap(({ id }) =>
+              resolvedAppliedPropertyIds.map((propertyId) => ({ rollId: id, propertyId }))
+            ),
+            skipDuplicates: true,
           });
-          // Sonraki step varsa açılış RollMovement'i (qty/weight in)
-          if (nextStep) {
-            await tx.rollMovement.create({
-              data: {
-                rollId: created.id,
-                workOrderStepId: nextStep.id,
-                qtyIn: nr.qty,
-                weightIn: nr.weightKg ?? null,
-                operatorId: userId ?? null,
-                notes: `RECEIPT_OPEN_FABRIC:${receiptNo}`,
-              },
-            });
-          }
         }
-        // Sonraki step var ise status'unu güncelle (PENDING → ACTIVE / vb.)
+
+        // Sonraki step varsa açılış RollMovement'leri (per-roll qty/weight in) + status.
         if (nextStep) {
+          await tx.rollMovement.createMany({
+            data: bornRollInputs.map(({ id, nr }) => ({
+              rollId: id,
+              workOrderStepId: nextStep.id,
+              qtyIn: nr.qty,
+              weightIn: nr.weightKg ?? null,
+              operatorId: userId ?? null,
+              notes: `RECEIPT_OPEN_FABRIC:${receiptNo}`,
+            })),
+          });
           await recomputeStepStatus(tx, nextStep.id);
         }
       }
@@ -1316,7 +1465,8 @@ export class SubcontractorService {
           items: { include: { newRoll: true } },
         },
       });
-    });
+      })
+    );
 
     await AuditService.log({
       userId,
@@ -2318,6 +2468,29 @@ export class SubcontractorService {
     await prisma.$transaction(async (tx) => {
       // 0) Cascade: bornRoll'ları iptal et (varsa)
       if (bornRollIds.length > 0) {
+        // Race koruması (tx İÇİ): yukarıdaki computeBornRollBlockingReasons
+        // kontrolü tx DIŞINDA — preview ile tx arasında Kurşun operatörü born
+        // roll'a işlem açmış olabilir. Aynı kontrolü taze veriyle tekrarla.
+        const freshBornRolls = await tx.roll.findMany({
+          where: { id: { in: bornRollIds } },
+          select: {
+            id: true,
+            currentStepId: true,
+            status: true,
+            operations: { select: { id: true }, take: 1 },
+            movements: { select: { exitedAt: true } },
+            children: { select: { id: true }, take: 1 },
+            dispatchItems: { select: { id: true }, take: 1 },
+          },
+        });
+        for (const roll of freshBornRolls) {
+          const reasons = computeBornRollBlockingReasons(roll);
+          if (reasons.length > 0) {
+            throw AppError.conflict(
+              `Top bu sırada işlenmiş, iptal güvenli değil (Roll ${roll.id.slice(0, 8)}…): ${reasons.join(", ")}`,
+            );
+          }
+        }
         // RollMovement: bu roll'lara ait, receipt'in açtığı open-fabric movement
         await tx.rollMovement.deleteMany({
           where: {
@@ -2350,15 +2523,19 @@ export class SubcontractorService {
         }
       }
 
-      // 1) Receipt'i soft-cancel
-      await tx.subcontractorReceipt.update({
-        where: { id: receiptId },
+      // 1) Receipt'i soft-cancel — ATOMİK CLAIM: cancelledAt kontrolü tx
+      //    DIŞINDA; eşzamanlı çift iptal kaybedeni burada 409 alır.
+      const receiptClaim = await tx.subcontractorReceipt.updateMany({
+        where: { id: receiptId, cancelledAt: null },
         data: {
           cancelledAt: new Date(),
           cancelledById: userId ?? null,
           cancelReason: trimmedReason,
         },
       });
+      if (receiptClaim.count === 0) {
+        throw AppError.conflict("Bu mal kabul az önce başka bir kullanıcı tarafından iptal edilmiş.");
+      }
 
       // 2) Bu adım için kapatılmış RollMovement'ları geri aç (RETURNED_VIA_RECEIPT
       //    notuyla kapatılmıştı)
@@ -2376,14 +2553,21 @@ export class SubcontractorService {
         },
       });
 
-      // 3) Orijinal Roll'ları SUBCONTRACTOR_CONSUMED'dan AT_SUBCONTRACTOR'a geri çek
-      await tx.roll.updateMany({
-        where: { id: { in: rollIds } },
+      // 3) Orijinal Roll'ları SUBCONTRACTOR_CONSUMED'dan AT_SUBCONTRACTOR'a geri
+      //    çek — ATOMİK CLAIM: beklenen statüde olmayan top varsa (eşzamanlı
+      //    başka işlem) count uyuşmaz → 409 + rollback.
+      const revertedRolls = await tx.roll.updateMany({
+        where: { id: { in: rollIds }, status: RollStatus.SUBCONTRACTOR_CONSUMED },
         data: {
           status: RollStatus.AT_SUBCONTRACTOR,
           currentStepId: receipt.stepId,
         },
       });
+      if (revertedRolls.count !== rollIds.length) {
+        throw AppError.conflict(
+          "Toplardan biri bu sırada başka bir işlemle değişmiş — kabul iptali yapılamadı. Listeyi yenileyip tekrar deneyin."
+        );
+      }
 
       // 4) SUBCONTRACTOR_RETURNED operation log'larını sil
       await tx.rollOperation.deleteMany({

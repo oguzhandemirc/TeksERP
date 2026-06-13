@@ -149,24 +149,11 @@ async function makeOpenFabricRollOnTamburStep(itemId: string, qty: number) {
   return roll.id;
 }
 
-/** finalize için minimal roll: barkodsuz, step'siz (movement/WO blokları guard'lı atlanır). */
+/** finalize için roll: barkodsuz, Tambur step'inde IN_PRODUCTION.
+ *  (Eskiden step'sizdi; finalize artık kardeş yollar gibi "Tambur adımında +
+ *  IN_PRODUCTION" guard'ı taşıdığından gerçek akışla aynı fixture kullanılır.) */
 async function makeFinalizeRoll(itemId: string, qty: number) {
-  const roll = await prisma.roll.create({
-    data: {
-      barcode: null,
-      itemId,
-      colorId: null,
-      width: 150,
-      initialQty: qty,
-      currentQty: qty,
-      status: RollStatus.IN_PRODUCTION,
-      qualityGrade: "1.KALITE",
-      entrySource: RollEntrySource.SUBCONTRACTOR_RETURN,
-    },
-    select: { id: true },
-  });
-  createdRolls.push(roll.id);
-  return roll.id;
+  return makeOpenFabricRollOnTamburStep(itemId, qty);
 }
 
 async function trackChildren(parentId: string) {

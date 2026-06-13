@@ -68,6 +68,14 @@ export default function MainNavigator() {
         getComponent={() => require('../screens/Modules/TartiPaket/PaketlemeScreen').default}
       />
       <Stack.Screen
+        name="CuvalDuzelt"
+        getComponent={() => require('../screens/Modules/TartiPaket/CuvalDuzeltScreen').default}
+      />
+      <Stack.Screen
+        name="HizliSiparis"
+        getComponent={() => require('../screens/Modules/TartiPaket/HizliSiparisScreen').default}
+      />
+      <Stack.Screen
         name="KartelaSevkGecmisi"
         getComponent={() => require('../screens/Modules/KartelaSevk/KartelaSevkGecmisiScreen').default}
       />

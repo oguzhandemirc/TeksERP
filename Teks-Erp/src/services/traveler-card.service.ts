@@ -184,7 +184,7 @@ export class TravelerCardService {
 
     const wo = await prisma.workOrder.findUnique({
       where: { id: workOrderId },
-      include: { travelerCards: { orderBy: { version: "desc" } } },
+      select: { id: true, status: true },
     });
 
     if (!wo) {
@@ -198,22 +198,36 @@ export class TravelerCardService {
       throw AppError.conflict(`Bu durumda reprint yapılamaz: ${wo.status}`);
     }
 
-    const activeCard = wo.travelerCards.find((c) => c.status === TravelerCardStatus.ACTIVE);
-    const lastVersion = wo.travelerCards[0]?.version ?? 0;
-
     // Eski kartı REPRINTED'a çek, yeni kartı üret (transaction içinde).
     // Barkod sequence çakışırsa (P2002) tx'i baştan dener.
     const card = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
+        // Aktif kart + son versiyon TX/RETRY İÇİNDE taze okunur — eskiden tx
+        // dışındaydı: P2002 retry'ı bayat activeCard'ı tekrar REPRINTED'a çekip
+        // bayat lastVersion+1 ile İKİNCİ bir ACTIVE kart üretebiliyordu.
+        const cards = await tx.travelerCard.findMany({
+          where: { workOrderId },
+          orderBy: { version: "desc" },
+          select: { id: true, version: true, status: true, snapshot: true },
+        });
+        const activeCard = cards.find((c) => c.status === TravelerCardStatus.ACTIVE);
+        const lastVersion = cards[0]?.version ?? 0;
+
         if (activeCard) {
-          await tx.travelerCard.update({
-            where: { id: activeCard.id },
+          // Koşullu flip: eşzamanlı reprint/void araya girdiyse 0 eşler → 409.
+          const flipped = await tx.travelerCard.updateMany({
+            where: { id: activeCard.id, status: TravelerCardStatus.ACTIVE },
             data: {
               status: TravelerCardStatus.REPRINTED,
               voidReason: `REPRINT: ${reason}`,
               voidedAt: new Date(),
             },
           });
+          if (flipped.count === 0) {
+            throw AppError.conflict(
+              "Kart bu sırada başka bir işlemle değişti. Listeyi yenileyip tekrar deneyin.",
+            );
+          }
         }
         // Not: createCardInternal kendi küçük transaction'ı var; burada dış
         // transaction'a katılması için tx'i direkt geçiremeyiz. Basit çözüm:
@@ -223,6 +237,14 @@ export class TravelerCardService {
         const cardNumber = buildCardNumber(now, seq);
         const barcode = buildBarcode(now, seq);
 
+        // DONMUŞ BELGE: reprint orijinali birebir üretir (schema sözleşmesi) —
+        // eski kartın snapshot'ı kopyalanır. Legacy (snapshot'sız) kartta
+        // güncel veriden yeniden dondurulur; null bırakılırsa Electron canlı
+        // WO verisi + istemci default config basıyordu (sözleşme ihlali).
+        const snapshot =
+          (activeCard?.snapshot as Prisma.InputJsonValue | null | undefined) ??
+          (await this.buildSnapshot(tx, workOrderId));
+
         return tx.travelerCard.create({
           data: {
             cardNumber,
@@ -231,6 +253,7 @@ export class TravelerCardService {
             version: lastVersion + 1,
             status: TravelerCardStatus.ACTIVE,
             printedById: userId ?? null,
+            snapshot,
           },
         });
       })

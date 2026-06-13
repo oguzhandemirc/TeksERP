@@ -27,9 +27,9 @@
 ```
 Teks-Erp/
 ├── prisma/
-│   ├── schema.prisma          # 53 model, 16 enum
-│   ├── seed.ts                # Tek dosya: 42 permission + 9 template + 7 kullanıcı + 3 kalite + master demo
-│   └── migrations/            # 2026-05-25: baseline reset (tek `init` migration)
+│   ├── schema.prisma          # 66 model, 23 enum
+│   ├── seed.ts                # Tek dosya: 54 permission + 14 template + 7 kullanıcı + 3 kalite + master demo
+│   └── migrations/            # 2026-05-25 baseline reset + 44 migration (son: 20260612103000)
 │
 ├── src/
 │   ├── server.ts              # Entry point
@@ -84,7 +84,9 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 
 ---
 
-## 4. Schema — 52 Model + 14 Enum
+## 4. Schema — 66 Model + 23 Enum
+
+> **Güncellik notu (2026-06-12):** Aşağıdaki model/enum tabloları sevkiyat yeniden-yazımı ÖNCESİNDEN kalma — gerçek envanter 66 model / 23 enum. Tabloda eksik olanlar: `Sack`, `Shipment`, `ShipmentOrder`, `ShipmentAllocation`, `PrintedDocument`, `RollReturn`, `ReturnReason`, `KartelaDispatch(+Item)`, `KartelaReceipt(+Item)`, `ProductRecipe(+Property)`, `UserPreference`; enum'larda `ShipmentStatus`, `PrintedDocType/Status`, `RollErrorAction`, `DefectSeverity` vb. Kesin liste için `prisma/schema.prisma`'ya bak.
 
 ### Modeller (gruplandırılmış)
 
@@ -169,13 +171,15 @@ STOCK ─┬─→ IN_PRODUCTION ─→ AT_SUBCONTRACTOR ─→ RETURNED_FROM_SU
 geçmediği durumlarda kullanılır (tek-adımlı WO veya rota Tambur içermiyor).
 Normal Tambur'lu akışta top doğrudan child Roll'lar olarak `WAREHOUSE`'a düşer.
 
-> **NOT:** Tartı / paket / sevkiyat akışı yeniden yazılıyor; `READY_FOR_SHIP` ve `SHIPPED` enum değerleri yeni modül için saklı.
+> **NOT (2026-06-12):** Sevkiyat modülü canlı: WAREHOUSE → çuval (`Sack`) → `Shipment` PREPARING → READY (Çuval Depo) → AT_DOOR (Kapı Önü) → DISPATCHED. Stok DISPATCH'te `SHIPPED`'e düşer (READY = rezerv). `READY_FOR_SHIP` enum'u şemada YOK (kaldırıldı). Kartela akışı `AT_KARTELA`/`KARTELA_CONSUMED`, fason dönüş `SUBCONTRACTOR_CONSUMED` + born-roll kullanır (§7.2).
 
 ---
 
 ## 5. API Endpoint Haritası
 
-`app.ts` üzerinden mount edilen tüm route prefix'leri (32 mount).
+`app.ts` üzerinden mount edilen route prefix'leri.
+
+> **Güncellik notu (2026-06-12):** Gerçek mount sayısı 39 — aşağıdaki haritada eksik olanlar: `/api/shipping`, `/api/printed-documents`, `/api/returns`, `/api/return-reasons`, `/api/kartela`, `/api/product-recipes`, `/api/production-balance`, `/api/customer-branches`. Kesin liste için `src/app.ts`'e bak.
 
 ### Public (auth gerekmez)
 
@@ -220,11 +224,9 @@ Normal Tambur'lu akışta top doğrudan child Roll'lar olarak `WAREHOUSE`'a dü�
 | Endpoint | Permission |
 |---|---|
 | `/api/orders` (CRUD) | `order:read` / `order:write` |
-| `/api/work-orders` (+ `/attach-rolls`, `/detach-rolls`, `/lock`, `/manifest`, `/travel-card`, `/rolls`) | `workorder:read` / `workorder:write` |
-| `/api/production/active-steps`, `/step-info` | `workorder:read` |
-| `/api/production/step-action` | `roll:write` |
-| `/api/production/report-error` | `quality:write` |
-| `/api/kursun-qc/*` | `quality:read` / `quality:write` |
+| `/api/work-orders` (+ `/lock`, `/manifest`, `/travel-card`, `/rolls`; `attach-rolls`/`detach-rolls`/`available-for-attach` 2026-06-12'de kaldırıldı — servis metodları yaşıyor) | `workorder:read` / `workorder:write` |
+| ~~`/api/production/*`~~ — **2026-06-12'de KALDIRILDI** (jenerik istasyon akışı; yerini kursun-qc/tambur/subcontractor modülleri aldı, frontend çağıranı yoktu) | — |
+| `/api/kursun-qc/*` (`undo-qc2` 2026-06-12'de kaldırıldı — kurtarma yolu reopen) | `quality:read` / `quality:write` |
 | `/api/tambur/*` | `quality:read` / `quality:write` |
 
 ### Fason (Subcontractor)
@@ -257,7 +259,7 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 
 ## 6. RBAC Permission Kodları
 
-`requirePermission(code)` middleware'i `req.user.permissions[]` array'ini kontrol eder. Toplam **42 permission**, 9 modül. Permissions doğrudan kullanıcıya bağlanır (`UserPermission` modeli); ayrıca tekrar kullanılabilir setler için `PermissionTemplate` / `PermissionTemplateItem` var (rol modeli **yok**).
+`requirePermission(code)` middleware'i `req.user.permissions[]` array'ini kontrol eder. Toplam **54 permission**, 10 modül. Permissions doğrudan kullanıcıya bağlanır (`UserPermission` modeli); ayrıca tekrar kullanılabilir setler için `PermissionTemplate` / `PermissionTemplateItem` var (rol modeli **yok**).
 
 | Modül | Permissions |
 |---|---|
@@ -266,16 +268,17 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 | MASTER_DATA | `item:read`, `item:write` |
 | QUALITY | `quality:read`, `quality:write`, `property:read`, `property:write` |
 | SUBCONTRACTOR | `subcontractor:read`, `subcontractor:write` |
-| LOGISTICS | `label:read`, `label:print`, `label:edit`, `label-template:read`, `label-template:write` |
+| KARTELA | `kartela:read`, `kartela:write` |
+| LOGISTICS | `label:read`, `label:print`, `label:edit`, `label-template:read`, `label-template:write`, `shipping:read`, `shipping:write`, `return:read`, `return:write` |
 | REPORTS | `report:production`, `report:sales`, `report:quality`, `report:inventory`, `report:subcontract`, `report:customer`, `report:audit` |
 | ADMIN | `admin:users`, `admin:settings`, `admin:*` (wildcard) |
-| MOBILE | `mobile:kk1`, `mobile:kk2-kursun`, `mobile:tambur`, `mobile:depo`, `mobile:fason-sevk`, `mobile:fason-kabul`, `mobile:*` (wildcard) |
+| MOBILE | `mobile:kk1`, `mobile:kk2-kursun`, `mobile:tambur`, `mobile:depo`, `mobile:fason-sevk`, `mobile:fason-kabul`, `mobile:kartela-sevk`, `mobile:kartela-kabul`, `mobile:tarti-paket`, `mobile:sevkiyat`, `mobile:iade`, `mobile:hizli-is-emri`, `mobile:*` (wildcard) |
 
-> Eski `LOGISTICS | shipment:*, allocation:*` permission'ları sevkiyat modülü ile birlikte kaldırıldı. Yeni LOGISTICS sadece etiket modülünü kapsar.
+> Eski `LOGISTICS | shipment:*, allocation:*` permission'ları 2026-05-25'te sevkiyat modülüyle birlikte silindi; yeni sevkiyat yazımıyla LOGISTICS'e `shipping:*` + `return:*`, MOBILE'a 6 yeni ekran izni eklendi.
 
 ### Seed Sonrası Yetki Dağılımı
 
-`seed.ts` **yalnız `admin`'e tüm 42 permission'ı atar** (`prisma/seed.ts` §4). Diğer test kullanıcıları (`mehmet.planlama`, `ali.operator`, `ayse.kalite`, `fatma.satis`, `ali.kursun`, `ahmet.depo`) yetkisiz başlar — admin web UI'sından (`POST /api/admin/users/:id/permissions`) tek tek atanır.
+`seed.ts` **yalnız `admin`'e tüm 54 permission'ı atar** (`prisma/seed.ts` §4). Diğer test kullanıcıları (`mehmet.planlama`, `ali.operator`, `ayse.kalite`, `fatma.satis`, `ali.kursun`, `ahmet.depo`) yetkisiz başlar — admin web UI'sından (`POST /api/admin/users/:id/permissions`) tek tek atanır.
 
 ### Yeni Endpoint Yazarken
 
@@ -307,20 +310,24 @@ Kalan = 500 - 228 = 272m  → otomatik son child (parent.qualityGrade=1.KALITE)
   ↓
 Toplam 5 child Roll yaratılır, hepsinde parentRollId set, yeni barcode
 Quality → Status mapping QualityGrade kataloğundan:
-  1.KALITE → WAREHOUSE, FIRE → SCRAP (katalogda yoksa SCRAP fallback)
+  seed'de ÜÇ kalite de (1.KALITE/A1/FIRE) → WAREHOUSE; fallback de WAREHOUSE
+  (tambur.service resolveCutStatus — proses-only fabrika, kalite farkı qualityGrade alanında;
+   QualityGrade.targetStatus katalogdan override edilebilir)
 Parent retire: status = TAMBUR_CONSUMED, currentQty = 0, currentStepId = null
 İlişkili RollError'lar: actionTaken = CUT | NO_CUT, isProcessed = true
 ```
 
 **Validasyon:** `sum(cuts[].length) ≤ parent.currentQty`. cuts boş gönderilirse tüm metraj tek child top olur (parent.qualityGrade ile).
 
-### 7.2 Fason Dönüş — Ölçüm YOKKEN
+### 7.2 Fason Dönüş — Consumed + Born-Roll Modeli
 
 ```
-SubcontractorReceipt'te qty/weight ALINMAZ.
-Roll'lar AT_SUBCONTRACTOR → RETURNED_FROM_SUBCONTRACTOR'a geçer (yeni barkod basılmaz).
-Ölçüm bir sonraki istasyonun FINISH akışında yapılır
-(RollMovement.qtyOut/weightOut alanlarına yazılır).
+Kabul (receive): orijinal Roll'lar AT_SUBCONTRACTOR → SUBCONTRACTOR_CONSUMED (retire).
+Receipt üzerinden YENİ açık-kumaş Roll'lar doğar:
+  entrySource = SUBCONTRACTOR_RETURN, parentReceiptId dolu, barcode null,
+  qty kabulde ZORUNLU (weightKg opsiyonel), batchSplitId sevkten kalıtılır.
+Kesin ölçüm bir sonraki istasyonun FINISH akışında damgalanır
+(RollMovement.qtyOut/weightOut). RETURNED_FROM_SUBCONTRACTOR = eski model (legacy).
 ```
 
 ### 7.3 İş Emri Esnekliği (`workorder.service.ts`)
@@ -386,7 +393,18 @@ export default router;
 app.use("/api/warehouses", warehouseRoutes);
 ```
 
-`BaseController` 6 endpoint sağlar: `GET /`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` (soft), `DELETE /:id/permanent` (hard).
+`BaseController` 6 endpoint sağlar: `GET /`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` (soft), `DELETE /:id/permanent` (hard — bağımlılıklı modeller için `services/helpers/guarded-hard-remove.ts` factory'siyle guard'lı override kullan).
+
+**BaseService genişletme hook'ları** (base.service.ts — yeni servis yazarken bil):
+
+| Hook / config | Davranış |
+|---|---|
+| `searchFields` | `?search=` OR-contains araması |
+| `extraWhere(req)` | İlişki bazlı scope filtresi eklemenin TEK yolu — safeFilters skaler süzgecine takılmadan AND'lenir (örn. Color exclusive-scope) |
+| `sanitizeWriteData` (otomatik) | create/update gövdesi dmmf scalar/enum whitelist'inden geçer; ilişki adlı nested write operatörleri + id/createdAt/updatedAt **SESSİZCE atılır** — hata fırlatılmaz! Bilinçli nested create alanı `nestedCreateFields`'a yazılmalı, yoksa düşer |
+| `safeSortBy` / `safeFilters` (otomatik) | Bilinmeyen kolon createdAt'a/sessiz düşmeye iner (500 önleme) |
+| `uniqueField` | create() pasif eş bulursa YENİ kayıt yerine REACTIVATE eder (eski ID döner — farklı ID bekleme) |
+| `relationSortMap` | İlişki kolonu sıralaması; cursor istekleri offset-cursor'a düşer |
 
 ### 8.2 Karmaşık İş Mantığı Modülü
 
@@ -441,6 +459,8 @@ await AuditService.log({
 
 `BaseService` bunu otomatik yapar; özel servislerde manuel çağırmak gerekir.
 
+**Best-effort sözleşmesi:** `AuditService.log/logEvent` içte try/catch'lidir — audit yazımı başarısız olsa istek PATLAMAZ (sayaç `/health`'e düşer). Çağrı genelde iş transaction'ının DIŞINDA, commit SONRASI yapılır (tx süresini uzatmamak için). Yani audit garantili değil, gözlemlenebilir-kayıplıdır; audit'i tx içine taşıyıp "audit başarısızsa rollback" garantisi VARSAYMA.
+
 ### 8.6 Hata Yönetimi
 
 `AppError` factory'leri (`utils/app-error.ts`):
@@ -479,6 +499,45 @@ await AuditService.log({
   "errors": [{ "field": "initialQty", "message": "Miktar pozitif olmalı" }]
 }
 ```
+
+**Decimal alanlar number olarak serileşir:** `app.ts` açılışta `installDecimalNumberSerializer()` çağırır (`utils/json-replacer.ts` — `Prisma.Decimal.prototype.toJSON` patch'i). TÜM `res.json` çıktılarında Decimal string (`"5.50"`) değil number (`5.5`) gider; frontend'ler `Number()` sarmaz. Bu patch'i kaldırma/değiştirme — tüm frontend aritmetiği buna güvenir. (Express `json replacer` ayarı BİLEREK kullanılmıyor: toJSON replacer'dan önce koşar — gerekçe dosyada.)
+
+### 8.8 Eşzamanlılık: Atomik Claim Deseni
+
+Durum geçişi veya tüketim yapan her kritik yazma `findUnique → if(guard) → update` (check-then-act) ile DEĞİL, **atomik claim** ile yazılır:
+
+```typescript
+const claim = await tx.shipment.updateMany({
+  where: { id, status: ShipmentStatus.READY },   // gözlenen TAM durum
+  data: { status: ShipmentStatus.AT_DOOR },
+});
+if (claim.count === 0) {
+  throw AppError.conflict("Sevkiyat bu sırada değişti — sayfayı yenileyin");
+}
+```
+
+İki incelik:
+1. **Claim sonrası taze yükleme:** içerik (toplar/satırlar) tx İÇİNDE yeniden okunur — tx-öncesi okuma yalnız erken/ucuz 4xx içindir, yazma asla bayat snapshot'tan yapılmaz.
+2. **Idempotent akışlarda kaybeden ayrımı:** claim kaybedilince fresh-read ile "paralel AYNI işlem mi (idempotent yanıt dön) / BAŞKA işlem mi (409)" ayrılır (örn. `tambur.service` raceLost deseni).
+
+Kodda 24+ nokta / 10 servis (shipping 9, tambur 3, ...). Test örnekleri: `test_unmark_ready_race.ts`, `test_shipment_transition_races.ts`.
+
+### 8.9 Numara/Barkod Üretimi: withBarcodeRetry
+
+`@unique` numara/barkod üreten her create `withBarcodeRetry(() => prisma.$transaction(...))` ile sarılır (`utils/barcode-retry.ts`): P2002'de closure baştan koşar (max 5), düşmezse 409. ÜÇ kural:
+
+1. **Sequence okuma closure/tx İÇİNDE olmalı** (`nextPrefixedSequence` vb.) — dışarıda hesaplanıp kapatılırsa retry hep aynı çakışan numarayı dener → kesin 409.
+2. **Sequence DIŞI unique çakışabilecek girdi ÖNCE dedupe/valide edilmeli** — yoksa koca tx 5 kez boşuna döner ve gerçek validasyon hatası "Barkod üretimi başarısız" kılığında çıkar.
+3. **tx-dışı guard'lar retry'da TEKRAR KOŞMAZ** — idempotency/varlık kontrollerini buna göre yerleştir (H-2/H-9 bulgu sınıfı: retry yarışı sessizce tamamlıyordu).
+
+Numara sorgusu `startsWith` DEĞİL `gte/lt` range ile yazılır (ICU collation'da index seek) ve gün-içi son kayıt `createdAt desc` ile bulunur (999→1000 geçişinde lexicographic tuzak yok).
+
+### 8.10 Sevkiyat İçerik-Mutasyon Şablonu
+
+Sevkiyat İÇERİĞİNİ değiştiren her yeni endpoint iki çağrıya UYMAK ZORUNDA (`shipping.service.ts`):
+
+1. **`touchShipmentPreparingTx(tx, shipmentId)`** — tx'in İLK işi: shipment satırına koşullu dokunuş (`WHERE status=PREPARING`, count 0 → 409). Çift işlev: PREPARING dışı içerik değişikliğini reddeder VE satır kilidi alarak markReady/dispatch finalize claim'leriyle TAM serileşir. Atlanırsa: dispatch ile yarışan içerik değişikliği "depoda ama listede yok" top veya kurtarılamaz rezerv bırakır (yaşanmış bug sınıfı).
+2. **`resetSackWeightsTx(tx, sackIds)`** — çuval içeriği değişiyorsa (ekle/çıkar/taşı — taşımada KAYNAK + HEDEF iki çuval birden) etkilenen çuvalların brüt tartısı sıfırlanır; yoksa bayat kg resmi irsaliyeye gider.
 
 ---
 
@@ -557,6 +616,11 @@ const next = await prisma.roll.findMany({
 ```
 
 Tek-kolon `orderBy` için yeterli; çok-kolon sırada `(createdAt, id) > (?, ?)` raw query gerekebilir.
+
+> **GERÇEK İMPLEMENTASYON (2026-06-12):** Üstteki basit Prisma-cursor şablonu tarihsel — canlı kod `utils/cursor.ts` + `BaseService.findAllCursor` kullanır ve sözleşmesi daha zengindir:
+> - **Token opak base64url, ÜÇ format bir arada:** (1) legacy `ISO__uuid`; (2) dinamik v2 `JSON {v, id, t}` — `t` tip etiketi (s/n/d/b) decode'da tahmin yerine kullanılır (tamamen rakamsal ürün kodu number'a çevrilip 2. sayfada 400 vermesin); etiketsiz eski token'lar coerce fallback'iyle çalışmaya devam eder; (3) ilişki/aggregate sıralamada keyset imkânsız → offset-encoded `o__N`.
+> - **Null-aware keyset:** nullable kolonda `sortNullable=true` + `orderBy nulls:'last'` BİRLİKTE; non-null faza `OR {field: null}` dalı eklenir — yoksa null kuyruğu sessizce düşer.
+> - **Sayfa deseni:** `take = limit + 1` → hasMore → `buildNextCursor`. Token formatını DEĞİŞTİRME — eski istemci token'ları kırılır.
 
 ### 9.6 JSON Alan Sorguları → GIN Index
 
@@ -675,6 +739,10 @@ Tüm hot-path tablolarında indeks durumu:
 | `items_active_type_name_idx` | `items` | `WHERE "isActive" = true` üstüne `(itemType, name)` | `20260427150000_add_partial_active_indexes` |
 | `customers_active_type_name_idx` | `customers` | `WHERE "isActive" = true` üstüne `(type, name)` | `20260427150000_add_partial_active_indexes` |
 | `traveler_cards_workOrderId_active_key` | `traveler_cards` | `WHERE status = 'ACTIVE'` üstüne `workOrderId` (unique) | (mevcut) |
+| `rolls` null-yoğun FK partial'ları (9 adet: `sackId`, `shipmentId`, `parentReceiptId`, `batchSplitId`...) | `rolls` | `WHERE col IS NOT NULL` | `20260606001717` → UUID geçişi sonrası `20260612100000_repartialize_after_native_uuid` |
+| `work_order_steps` açık-kart kuyruğu | `work_order_steps` | `(stationId, status, isUrgent, priority, startedAt)` `WHERE status <> 'COMPLETED'` | `20260607010000` |
+| `roll_movements_one_open_per_roll_step_uq` | `roll_movements` | partial **UNIQUE** `(rollId, workOrderStepId)` `WHERE "exitedAt" IS NULL` — **şema-DIŞI bilinçli** (Prisma partial unique desteklemez) | `20260612101000` |
+| swatch/sack partial'ları | `swatches` / `sacks` | `WHERE "cancelledAt" IS NULL` vb. | `20260609120000` |
 
 ### Gelecekte Düşünülmesi Gerekenler
 
@@ -707,7 +775,9 @@ WHERE name IN ('statement_timeout','idle_in_transaction_session_timeout',
 
 **Yeni kurulum / DB taşıma sonrası uygulamak için:**
 ```sql
-ALTER DATABASE "TeksErpDb" SET statement_timeout = '30s';
+-- DB adı ortama göre: dev = adnansahin_db (.env), Windows production = TeksErpDb (installer).
+-- Canlı dev değeri 50s (pg_db_role_setting, 2026-06-12 doğrulandı).
+ALTER DATABASE "TeksErpDb" SET statement_timeout = '50s';
 ALTER DATABASE "TeksErpDb" SET idle_in_transaction_session_timeout = '5min';
 ALTER DATABASE "TeksErpDb" SET log_min_duration_statement = '500ms';
 ALTER DATABASE "TeksErpDb" SET log_lock_waits = 'on';
@@ -814,7 +884,7 @@ npx tsc --noEmit             # Type-check (build'siz)
 
 | Username | Şifre | Hedef Rol | Seed Sonrası Yetkiler |
 |---|---|---|---|
-| `admin` | `123123` | Admin | ✅ TÜM 42 permission (seed §4) |
+| `admin` | `123123` | Admin | ✅ TÜM 54 permission (seed §4) |
 | `mehmet.planlama` | `test123` | Planlama Şefi | ⚠️ Boş — admin UI'dan atayın |
 | `ali.operator` | `test123` | Üretim Operatörü | ⚠️ Boş — admin UI'dan atayın |
 | `ayse.kalite` | `test123` | Kalite Kontrol | ⚠️ Boş — admin UI'dan atayın |

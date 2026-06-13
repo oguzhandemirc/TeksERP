@@ -86,6 +86,41 @@ export class AuthService {
   }
 
   /**
+   * Mobil login ekranı için aktif mobil kullanıcı listesi —
+   * yalnız `mobile:*`/`mobile:<ekran>` yetkisi olanlar (web kullanıcıları sızdırılmaz).
+   */
+  static async listMobileUsers(): Promise<
+    Array<{ id: string; username: string; fullName: string }>
+  > {
+    return prisma.user.findMany({
+      where: {
+        isActive: true,
+        permissions: {
+          some: {
+            permission: { code: { startsWith: "mobile:" } },
+          },
+        },
+      },
+      select: { id: true, username: true, fullName: true },
+      orderBy: { fullName: "asc" },
+    });
+  }
+
+  /**
+   * GET /api/auth/me için aktif kullanıcı özeti — pasif/yok ise null.
+   */
+  static async getActiveUserSummary(
+    userId: string
+  ): Promise<{ id: string; username: string; fullName: string } | null> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, fullName: true, isActive: true },
+    });
+    if (!user || !user.isActive) return null;
+    return { id: user.id, username: user.username, fullName: user.fullName };
+  }
+
+  /**
    * Bir kullanıcının şu an geçerli efektif permission code'larını döner.
    * validFrom/validUntil pencereleri filtrelenir.
    */

@@ -47,6 +47,9 @@ export function ActivityArchivePage() {
           : `${res.archived.toLocaleString("tr-TR")} kayıt arşivlendi (${res.batches} batch)`,
       );
       void qc.invalidateQueries({ queryKey: [STATS_KEY] });
+      // L: arsivleme satirlari TASIR — aktif Aktivite listesi ve Arsiv aramasi da tazelensin.
+      void qc.invalidateQueries({ queryKey: ["system-logs"] });
+      void qc.invalidateQueries({ queryKey: ["system-logs-archive"] });
       setProgress(null);
     },
     onError: () => {

@@ -52,6 +52,37 @@ function sortableFieldsFor(modelName: string): Set<string> | null {
   return result;
 }
 
+// Model adı → NULLABLE (isRequired=false) skaler alanlar. Nullable kolona göre
+// cursor sıralamasında orderBy'a `nulls:'last'` verilir ve cursor where'i
+// null-aware kurulur (Postgres default'u DESC'te NULLS FIRST — cursor null
+// grubuna kilitlenip non-null kayıtları sessizce yutuyordu).
+const modelNullableFieldCache = new Map<string, Set<string>>();
+function nullableFieldsFor(modelName: string): Set<string> {
+  const key = modelName.toLowerCase();
+  const cached = modelNullableFieldCache.get(key);
+  if (cached) return cached;
+  const models = (
+    Prisma as unknown as {
+      dmmf?: {
+        datamodel?: {
+          models?: Array<{
+            name: string;
+            fields: Array<{ name: string; kind: string; isRequired?: boolean }>;
+          }>;
+        };
+      };
+    }
+  ).dmmf?.datamodel?.models;
+  const model = models?.find((m) => m.name.toLowerCase() === key);
+  const result = new Set(
+    (model?.fields ?? [])
+      .filter((f) => (f.kind === "scalar" || f.kind === "enum") && f.isRequired === false)
+      .map((f) => f.name)
+  );
+  modelNullableFieldCache.set(key, result);
+  return result;
+}
+
 export interface CursorPaginatedResponse<T> {
   success: boolean;
   data: T[];
@@ -297,15 +328,23 @@ export class BaseService {
       };
     }
 
+    // Nullable sıralama kolonu: nulls her iki yönde de EN SONA (cursor where'i
+    // ile tutarlı) — yoksa DESC'te Postgres NULLS FIRST cursor'ı null grubuna
+    // kilitler ve non-null kayıtların tamamı sayfalamadan düşer.
+    const sortNullable = nullableFieldsFor(this.config.modelName).has(sortBy);
+    const orderByPrimary = sortNullable
+      ? { [sortBy]: { sort: sortOrder, nulls: "last" as const } }
+      : { [sortBy]: sortOrder };
+
     const where = cursor
-      ? { AND: [baseWhere, dynamicCursorWhere(cursor, sortBy, sortOrder)] }
+      ? { AND: [baseWhere, dynamicCursorWhere(cursor, sortBy, sortOrder, sortNullable)] }
       : baseWhere;
 
     // limit + 1 çekiyoruz; fazla 1 varsa hasMore=true
     const [items, totalEstimate] = await Promise.all([
       this.delegate.findMany({
         where,
-        orderBy: [{ [sortBy]: sortOrder }, { id: sortOrder }],
+        orderBy: [orderByPrimary, { id: sortOrder }],
         take: limit + 1,
         ...(this.config.defaultInclude
           ? { include: this.config.defaultInclude }
@@ -356,10 +395,34 @@ export class BaseService {
    * yeni kayıt yerine reactivate eder (eski ID + tarihçe korunur).
    * Aynı değere sahip aktif kayıt varsa AppError fırlatır.
    */
+  /**
+   * İstemci gövdesini modelin GERÇEK yazılabilir kolonlarına süzer (M-4):
+   * - yalnız scalar/enum alanlar geçer (dmmf); ilişki adıyla gönderilen nested
+   *   write operatörleri (`{"rolls":{"deleteMany":...}}` gibi) ATILIR — generic
+   *   CRUD üzerinden fiziksel silme / ilişki manipülasyonu / audit'siz çocuk
+   *   mutasyonu kapanır (13 bare-BaseController route'u tek noktadan korunur);
+   * - `id`/`createdAt`/`updatedAt` sistem alanları atılır;
+   * - `config.nestedCreateFields` anahtarları (bilinçli nested create) korunur.
+   * Model dmmf'te bulunamazsa süzme yapılmaz (geri uyum — safeSortBy ile aynı).
+   */
+  protected sanitizeWriteData(data: Record<string, unknown>): Record<string, unknown> {
+    const allowed = sortableFieldsFor(this.config.modelName);
+    if (!allowed) return data;
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (key === "id" || key === "createdAt" || key === "updatedAt") continue;
+      if (allowed.has(key) || this.config.nestedCreateFields?.includes(key)) {
+        out[key] = value;
+      }
+    }
+    return out;
+  }
+
   async create(
-    data: Record<string, unknown>,
+    rawData: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    const data = this.sanitizeWriteData(rawData);
     if (this.config.uniqueField) {
       const key = this.config.uniqueField;
       const incomingValue = data[key];
@@ -455,9 +518,10 @@ export class BaseService {
    */
   async update(
     id: string,
-    data: Record<string, unknown>,
+    rawData: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    const data = this.sanitizeWriteData(rawData);
     // Fetch old data for audit
     const oldRecord = await this.delegate.findUnique({ where: { id } });
 

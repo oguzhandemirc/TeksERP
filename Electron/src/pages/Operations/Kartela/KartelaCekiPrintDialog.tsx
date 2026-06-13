@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import {
@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { printDocumentArea } from "@/lib/print";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
@@ -34,6 +35,7 @@ const DOC_TYPE = "KARTELA_DISPATCH" as const;
  * belge (PrintedDocument). İçerik düzeltmesi için "Revize Et" (yeni versiyon).
  */
 export function KartelaCekiPrintDialog({ dispatchId, open, onOpenChange }: Props) {
+  const printRef = useRef<HTMLDivElement>(null); // Y3: izole iframe baskısının kök alanı
   const { hasPermission } = useRoleAccess();
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
 
@@ -41,7 +43,9 @@ export function KartelaCekiPrintDialog({ dispatchId, open, onOpenChange }: Props
     queryKey: ["printed-doc", DOC_TYPE, dispatchId],
     queryFn: () => printedDocumentService.getCurrent<KartelaDispatchDoc>(DOC_TYPE, dispatchId!),
     enabled: open && Boolean(dispatchId),
-    staleTime: 5 * 60_000,
+    // K-A2 fix: belge durumu başka istemciden değişir — 5dk cache iptal edilmiş
+    // belgeyi İPTAL filigransız bastırabiliyordu.
+    staleTime: 0,
   });
   const currentDoc = docQuery.data?.data ?? null;
 
@@ -67,7 +71,7 @@ export function KartelaCekiPrintDialog({ dispatchId, open, onOpenChange }: Props
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto rounded-md border bg-muted/30 p-4">
+        <div ref={printRef} className="flex-1 overflow-auto rounded-md border bg-muted/30 p-4">
           {loading && (
             <div className="space-y-2">
               <Skeleton className="h-20 w-full" />
@@ -95,6 +99,9 @@ export function KartelaCekiPrintDialog({ dispatchId, open, onOpenChange }: Props
                 letterhead={shown.snapshot.company.letterhead}
                 docConfigOverride={shown.snapshot.docConfigOverride}
                 voided={shown.status === "VOIDED"}
+                superseded={shown.status === "SUPERSEDED"}
+                docNo={shown.documentNo}
+                docVersion={shown.version}
               />
             </>
           )}
@@ -104,7 +111,7 @@ export function KartelaCekiPrintDialog({ dispatchId, open, onOpenChange }: Props
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Kapat
           </Button>
-          <Button type="button" className="gap-1" disabled={!shown} onClick={() => window.print()}>
+          <Button type="button" className="gap-1" disabled={!shown} onClick={() => printDocumentArea(printRef.current)}>
             <Printer className="h-4 w-4" /> Yazdır
           </Button>
         </DialogFooter>

@@ -98,7 +98,7 @@ export function KartelaPage() {
       <PageHeader
         title="Kartela"
         description="Kartela sevk/kabul belgeleri, fasondaki toplar ve üretilen kartelalar — tek yerden."
-        actions={<RefreshButton queryKey={refreshKey} />}
+        actions={<RefreshButton queryKey={refreshKey} extraKeys={[["kartela"]]} />}
       />
       <KartelaTabBar tab={tab} onTab={setTab} />
 

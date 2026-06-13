@@ -272,9 +272,17 @@ export class DeviceService {
     return updated;
   }
 
+  // lastSeenAt yazım throttle'ı — resolveDevice her `x-device-id`'li istekte çalışır
+  // (sahada her tarama). Her istekte bir `UPDATE devices SET lastSeenAt` yazmak
+  // küçük-sıcak satırda yazma amplifikasyonu (satır-versiyon churn / ölü tuple /
+  // WAL / autovacuum baskısı) yaratıyordu. lastSeenAt'in saniye hassasiyeti gerekmez
+  // → cihaz başına en fazla THROTTLE_MS'de bir yaz. Map cihaz sayısıyla sınırlı (küçük).
+  private static lastSeenWrites = new Map<string, number>();
+  private static readonly LAST_SEEN_THROTTLE_MS = 60_000;
+
   /**
    * Middleware: x-device-id header'ından device + machineId çöz.
-   * lastSeenAt güncellenir (fire-and-forget).
+   * lastSeenAt güncellenir (fire-and-forget, cihaz başına throttle'lı).
    */
   static async resolveDevice(deviceId: string) {
     const device = await prisma.device.findUnique({
@@ -288,10 +296,15 @@ export class DeviceService {
       },
     });
     if (!device || !device.isActive) return null;
-    // Fire-and-forget lastSeenAt
-    void prisma.device
-      .update({ where: { deviceId }, data: { lastSeenAt: new Date() } })
-      .catch(() => undefined);
+    // Fire-and-forget lastSeenAt — son yazımdan THROTTLE_MS geçtiyse yaz, yoksa atla.
+    const now = Date.now();
+    const lastWrite = DeviceService.lastSeenWrites.get(deviceId) ?? 0;
+    if (now - lastWrite > DeviceService.LAST_SEEN_THROTTLE_MS) {
+      DeviceService.lastSeenWrites.set(deviceId, now);
+      void prisma.device
+        .update({ where: { deviceId }, data: { lastSeenAt: new Date() } })
+        .catch(() => undefined);
+    }
     return device;
   }
 }

@@ -6,12 +6,14 @@ import { canEnterApp } from "@/types/auth";
 interface Props {
   children: React.ReactNode;
   requirePermission?: string;
+  /** Bunlardan HERHANGİ biri yeterli (örn. muhasebe = shipping:read VEYA report:sales). */
+  requireAnyPermission?: string[];
 }
 
-export function ProtectedRoute({ children, requirePermission }: Props) {
+export function ProtectedRoute({ children, requirePermission, requireAnyPermission }: Props) {
   const user = useAuthStore((s) => s.user);
   const isHydrated = useAuthStore((s) => s.isHydrated);
-  const { hasPermission } = useRoleAccess();
+  const { hasPermission, hasAnyPermission } = useRoleAccess();
   const location = useLocation();
 
   if (!isHydrated) return null;
@@ -25,6 +27,10 @@ export function ProtectedRoute({ children, requirePermission }: Props) {
   }
 
   if (requirePermission && !hasPermission(requirePermission)) {
+    return <Navigate to="/forbidden" replace />;
+  }
+
+  if (requireAnyPermission && requireAnyPermission.length > 0 && !hasAnyPermission(requireAnyPermission)) {
     return <Navigate to="/forbidden" replace />;
   }
 

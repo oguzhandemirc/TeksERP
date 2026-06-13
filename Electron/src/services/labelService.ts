@@ -72,4 +72,14 @@ export const labelService = {
     apiClient
       .post<ApiResponse<{ rollId: string }>>(`/api/labels/rolls/${rollId}/print`)
       .then((r) => r.data),
+
+  /** Saha #7: toplu etiket HTML'i — seçili topların hepsi tek belgede (her top kendi sayfası). */
+  getBulkRollLabelsHtml: (rollIds: string[], copies?: number): Promise<string> =>
+    apiClient
+      .post<string>(
+        `/api/labels/rolls/bulk-html`,
+        { rollIds, ...(copies ? { copies } : {}) },
+        { responseType: "text", transformResponse: [(d) => d] },
+      )
+      .then((r) => r.data),
 };

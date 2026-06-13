@@ -113,7 +113,12 @@ export default function SevkiyatScreen() {
       setCarrier('');
       refresh();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Sevk edilemedi', text2: e.message }),
+    // L fix: 409'da (baska operator ayni sevkiyati degistirdi) board tazelensin —
+    // bayat kartla ayni hata tekrarlanmasin.
+    onError: (e: Error) => {
+      Toast.show({ type: 'error', text1: 'Sevk edilemedi', text2: e.message });
+      refresh();
+    },
   });
 
   const moveToDoorMut = useMutation({
@@ -123,7 +128,10 @@ export default function SevkiyatScreen() {
       Toast.show({ type: 'success', text1: 'Kapı önüne kondu', text2: res.message });
       refresh();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Kapı önüne konamadı', text2: e.message }),
+    onError: (e: Error) => {
+      Toast.show({ type: 'error', text1: 'Kapı önüne konamadı', text2: e.message });
+      refresh();
+    },
   });
 
   const pullBackMut = useMutation({
@@ -133,7 +141,10 @@ export default function SevkiyatScreen() {
       Toast.show({ type: 'success', text1: 'Çuval depoya geri çekildi', text2: res.message });
       refresh();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Geri çekilemedi', text2: e.message }),
+    onError: (e: Error) => {
+      Toast.show({ type: 'error', text1: 'Geri çekilemedi', text2: e.message });
+      refresh();
+    },
   });
 
   const unreadyMut = useMutation({
@@ -145,7 +156,10 @@ export default function SevkiyatScreen() {
       refresh();
       nav.navigate('Paketleme', { shipmentId: id });
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Geri alınamadı', text2: e.message }),
+    onError: (e: Error) => {
+      Toast.show({ type: 'error', text1: 'Geri alınamadı', text2: e.message });
+      refresh();
+    },
   });
 
   const openDispatch = (sh: SackStoreShipmentLite) => {
@@ -168,6 +182,12 @@ export default function SevkiyatScreen() {
             <View style={[styles.statusChip, isReady ? styles.chipReady : styles.chipDoor]}>
               <Text style={[styles.statusChipText, { color: isReady ? '#7c3aed' : '#b45309' }]}>
                 {isReady ? 'Çuval Depo' : 'Kapı Önü'}
+              </Text>
+            </View>
+            {/* Saha #22: yurtiçi/yurtdışı rozeti */}
+            <View style={[styles.statusChip, sh.destination === 'EXPORT' ? styles.chipExport : styles.chipDomestic]}>
+              <Text style={[styles.statusChipText, { color: sh.destination === 'EXPORT' ? '#0369a1' : '#475569' }]}>
+                {sh.destination === 'EXPORT' ? 'Yurtdışı' : 'Yurtiçi'}
               </Text>
             </View>
           </View>
@@ -416,6 +436,8 @@ const styles = StyleSheet.create({
   statusChip: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   chipReady: { backgroundColor: '#f3e8ff' },
   chipDoor: { backgroundColor: '#fef3c7' },
+  chipExport: { backgroundColor: '#e0f2fe' },
+  chipDomestic: { backgroundColor: '#f1f5f9' },
   statusChipText: { fontSize: 10, fontWeight: '700' },
   meta: { fontSize: 12, color: '#64748b' },
   customer: { fontSize: 13, color: '#334155', marginTop: 2 },

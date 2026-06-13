@@ -2,7 +2,7 @@
 // TeksERP - Base Controller (Generic CRUD Endpoints)
 // =============================================================================
 // Master Data endpoints (Items, Customers, Stations, Routes) extend this.
-// No additional backend code is needed for basic CRUD (core-architecture.md).
+// No additional backend code is needed for basic CRUD (bkz. Teks-Erp/CLAUDE.md + ARCHITECTURE.md §8.1).
 // =============================================================================
 
 import { Request, Response, NextFunction } from "express";

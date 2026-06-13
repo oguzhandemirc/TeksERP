@@ -278,7 +278,10 @@ router.get("/", verifyToken, requirePermission("order:read"), controller.findAll
 router.get(
   "/wo-picker",
   verifyToken,
-  requirePermission("order:read"),
+  // O10 fix (frontend incelemesi): WO formunun sipariş picker'ı — kardeşi
+  // /order-lines/coverage gibi WO izinleriyle de erişilebilir olmalı; yalnız
+  // order:read istemek workorder:write'lı planlamacının formunu kilitliyordu.
+  requireAnyPermission("order:read", "workorder:read", "workorder:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await service.findAvailableForWorkOrder(req);
@@ -450,6 +453,52 @@ router.get("/:id", verifyToken, requirePermission("order:read"), controller.find
  *         description: Geçersiz para birimi veya validasyon hatası
  */
 router.post("/", verifyToken, requirePermission("order:write"), controller.create);
+
+/**
+ * @openapi
+ * /api/orders/quick-from-rolls:
+ *   post:
+ *     tags: [Orders]
+ *     summary: Saha #11 — ham/stok toplardan hızlı sipariş (okut→müşteri→otomatik satır)
+ *     description: |
+ *       Okutulan topları spec (ürün+renk+en) bazında gruplayıp sipariş satırlarına
+ *       çevirir, siparişi APPROVED açar ve STOK topları sevke hazır (WAREHOUSE) alır.
+ *       Toplar siparişe BAĞLANMAZ (gevşek model — karşılanma spec-toplam üzerinden).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [customerId, rollIds]
+ *             properties:
+ *               customerId: { type: string, format: uuid }
+ *               branchId: { type: string, format: uuid, nullable: true }
+ *               rollIds: { type: array, items: { type: string, format: uuid } }
+ *     responses:
+ *       201: { description: Hızlı sipariş açıldı }
+ *       409: { description: Top uygun değil (sevkiyatta/iş emrinde/yanlış statü) }
+ */
+router.post(
+  "/quick-from-rolls",
+  verifyToken,
+  requireAnyPermission("order:write", "mobile:hizli-is-emri", "mobile:tarti-paket"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schema = z.object({
+        customerId: z.string().uuid("Geçersiz müşteri ID"),
+        branchId: z.string().uuid("Geçersiz şube ID").optional().nullable(),
+        rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top okutulmalı").max(500),
+      });
+      const body = schema.parse(req.body);
+      const result = await service.quickOrderFromRolls(body, req.user?.userId);
+      res.status(201).json(result);
+    } catch (e) {
+      next(e);
+    }
+  }
+);
 
 /**
  * @openapi

@@ -1,5 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
-import { Package, Scale, Layers, Truck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Package, Scale, Layers, Truck, Globe, Pencil, Check } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -9,10 +11,19 @@ import {
 } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PermissionGate } from "@/components/PermissionGate";
+import { cn } from "@/lib/utils";
 import { safeFormat } from "@/lib/format";
 import { sackStoreService } from "./service";
-import { sackStoreStatusLabels, type SackStoreShipment } from "./types";
+import {
+  sackStoreStatusLabels,
+  destinationLabels,
+  type SackStoreShipment,
+  type ShipmentDestination,
+} from "./types";
 
 const fmtKg = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
 const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
@@ -30,6 +41,7 @@ interface Props {
  * dökümünü LAZY çeker (board listesi rulo taşımaz). Tek sevkiyat = sınırlı kapsam.
  */
 export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
+  const qc = useQueryClient();
   const query = useQuery({
     queryKey: ["sack-contents", shipment?.id],
     queryFn: () => sackStoreService.shipmentContents(shipment!.id),
@@ -37,6 +49,10 @@ export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
     staleTime: 30_000,
   });
   const detail = query.data?.data;
+
+  const invalidateBoard = () => {
+    void qc.invalidateQueries({ queryKey: ["sack-store"] });
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -58,6 +74,9 @@ export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
 
         {shipment && (
           <div className="mt-4 space-y-4">
+            {/* Saha #19+#21+#22: yurtiçi/yurtdışı + prosedür kodu (board'dan düzenlenebilir) */}
+            <DestinationProcedureEditor shipment={shipment} onMutated={invalidateBoard} />
+
             {/* Özet sayaçlar + taşıma bilgisi */}
             <div className="grid grid-cols-3 gap-2">
               <SummaryStat icon={Package} label="Çuval" value={fmtInt(shipment.sackCount)} />
@@ -170,6 +189,127 @@ export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * Saha #19+#21: yurtiçi/yurtdışı toggle + prosedür/ihracat kodu düzenleme.
+ * Board kartından açılan slide-over içinde; sevk edilmemiş her durumda serbest.
+ */
+function DestinationProcedureEditor({
+  shipment,
+  onMutated,
+}: {
+  shipment: SackStoreShipment;
+  onMutated: () => void;
+}) {
+  const [editingCode, setEditingCode] = useState(false);
+  const [code, setCode] = useState(shipment.procedureCode ?? "");
+  useEffect(() => {
+    setCode(shipment.procedureCode ?? "");
+    setEditingCode(false);
+  }, [shipment.id, shipment.procedureCode]);
+
+  const destMut = useMutation({
+    mutationFn: (d: ShipmentDestination) => sackStoreService.setDestination(shipment.id, d),
+    onSuccess: (res) => {
+      toast.success(res.message ?? "Güncellendi");
+      onMutated();
+    },
+  });
+  const codeMut = useMutation({
+    mutationFn: (c: string | null) => sackStoreService.setProcedureCode(shipment.id, c),
+    onSuccess: (res) => {
+      toast.success(res.message ?? "Güncellendi");
+      setEditingCode(false);
+      onMutated();
+    },
+  });
+
+  return (
+    <Card>
+      <CardContent className="space-y-2 p-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1 font-medium text-muted-foreground">
+            <Globe className="h-3.5 w-3.5" /> Kapsam
+          </span>
+          <PermissionGate
+            permission="shipping:write"
+            fallback={<Badge variant="outline">{destinationLabels[shipment.destination]}</Badge>}
+          >
+            <div className="flex items-center gap-1 rounded-md border p-0.5">
+              {(["DOMESTIC", "EXPORT"] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  disabled={destMut.isPending}
+                  onClick={() => shipment.destination !== d && destMut.mutate(d)}
+                  className={cn(
+                    "rounded px-2 py-0.5 font-medium transition-colors",
+                    shipment.destination === d
+                      ? d === "EXPORT"
+                        ? "bg-sky-600 text-white"
+                        : "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {destinationLabels[d]}
+                </button>
+              ))}
+            </div>
+          </PermissionGate>
+          {shipment.destination === "EXPORT" && (
+            <span className="text-[10px] text-muted-foreground">(çuval tartısı zorunlu)</span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-muted-foreground">Prosedür / İhracat No</span>
+          <PermissionGate
+            permission="shipping:write"
+            fallback={
+              <span className="font-mono">
+                {shipment.procedureCode || shipment.branch?.code || shipment.customer.code || "—"}
+              </span>
+            }
+          >
+            {editingCode ? (
+              <span className="flex items-center gap-1">
+                <Input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="örn. gümrük beyanname no"
+                  className="h-7 w-48 font-mono text-xs"
+                  maxLength={64}
+                  autoFocus
+                />
+                <Button
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={codeMut.isPending}
+                  onClick={() => codeMut.mutate(code.trim() || null)}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </Button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingCode(true)}
+                className="flex items-center gap-1 font-mono hover:text-primary"
+              >
+                {shipment.procedureCode || (
+                  <span className="italic text-muted-foreground">
+                    {shipment.branch?.code || shipment.customer.code || "kod yok"} (varsayılan)
+                  </span>
+                )}
+                <Pencil className="h-3 w-3" />
+              </button>
+            )}
+          </PermissionGate>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

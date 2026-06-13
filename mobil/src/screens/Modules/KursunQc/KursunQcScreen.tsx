@@ -222,7 +222,14 @@ export default function KursunQcScreen() {
     queryFn: () => defectTypeService.list({ pageSize: 100 }),
     staleTime: 10 * 60 * 1000, // 10 dk: katalog nadir değişir
   });
-  const defectTypes = defectTypesQuery.data?.data ?? [];
+  // Saha #18: "GENEL" hata tipi her zaman İLK tuş — operatör tip belirtmek
+  // istemediğinde varsayılan olarak ona basar (katalog sırası ne olursa olsun).
+  const defectTypes = useMemo(() => {
+    const list = defectTypesQuery.data?.data ?? [];
+    const idx = list.findIndex((d) => d.code === 'GENEL');
+    if (idx <= 0) return list;
+    return [list[idx]!, ...list.slice(0, idx), ...list.slice(idx + 1)];
+  }, [defectTypesQuery.data]);
 
   // Aktif iş ve seçili top
   const activeJob = useMemo(
@@ -264,8 +271,14 @@ export default function KursunQcScreen() {
 
   // ── Kart çözümleme ─────────────────────────────────────────────────────────
   // Barkod parametreli ortak çözüm — input + kamera modalı bunu paylaşır.
+  // K-A5: cift cozumleme guard ref'i.
+  const resolveInFlightRef = useRef(false);
+
   const resolveCard = async (barcode: string, fromInput: boolean) => {
     if (!barcode) return;
+    // K-A5 fix: cozumleme ucustayken ikinci tetik (cift okutma/cift Enter) ayni
+    // kartin IKI sekme acilmasina yol aciyordu — in-flight guard.
+    if (resolveInFlightRef.current) return;
 
     // Aynı kart zaten açıksa o sekmeye geç
     const existing = openJobs.find((j) => j.cardBarcode === barcode);
@@ -280,6 +293,7 @@ export default function KursunQcScreen() {
       return;
     }
 
+    resolveInFlightRef.current = true;
     setResolvingCard(true);
     setCardError(null);
     try {
@@ -322,6 +336,7 @@ export default function KursunQcScreen() {
       });
     } finally {
       setResolvingCard(false);
+      resolveInFlightRef.current = false;
     }
   };
 
@@ -814,6 +829,20 @@ export default function KursunQcScreen() {
   });
 
   // ── Handler shortcuts ──────────────────────────────────────────────────────
+  // Y10 fix: footer aksiyonlarına ref-tabanlı kısa cooldown. onMutate seçimi
+  // anında SONRAKİ topa ilerlettiği için kazara çift basışın ikinci vuruşu aynı
+  // ekran konumundaki butona düşüp HİÇ İNCELENMEMİŞ topu işaretliyor, hatta son
+  // topta footer "Adımı Kapat"a dönüşüp adımı kapatıyordu. isPending'e bağlamak
+  // offline'da kilitlenme yarattığından (paused mutation isPending=true kalır)
+  // bilinçli olarak zaman-tabanlı throttle kullanılır — optimistic akış korunur.
+  const footerPressRef = useRef(0);
+  const footerThrottled = (fn: () => void) => {
+    const now = Date.now();
+    if (now - footerPressRef.current < 700) return;
+    footerPressRef.current = now;
+    fn();
+  };
+
   const handleCompleteQc2 = () => {
     if (!activeJob || !selectedRoll) return;
     completeQc2Mutation.mutate({
@@ -1357,7 +1386,7 @@ export default function KursunQcScreen() {
                   <Button
                     mode="contained"
                     icon="flag-checkered"
-                    onPress={handleFinishStep}
+                    onPress={() => footerThrottled(handleFinishStep)}
                     buttonColor="#1e40af"
                     style={styles.footerBtn}
                     contentStyle={styles.footerBtnContent}
@@ -1378,7 +1407,7 @@ export default function KursunQcScreen() {
                     label="Kumaşı Bitir (Tambur'a)"
                     compact={compact}
                     onPress={() =>
-                      kursunFinishMutation.mutate(selectedRoll.rollId)
+                      footerThrottled(() => kursunFinishMutation.mutate(selectedRoll.rollId))
                     }
                   />
                 ) : selectedRoll.qc2Completed ? (
@@ -1401,7 +1430,7 @@ export default function KursunQcScreen() {
                   <Button
                     mode="contained"
                     icon="check-all"
-                    onPress={handleCompleteQc2}
+                    onPress={() => footerThrottled(handleCompleteQc2)}
                     buttonColor="#059669"
                     style={styles.footerBtn}
                     contentStyle={styles.footerBtnContent}

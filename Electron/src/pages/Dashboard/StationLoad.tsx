@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { Activity } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,11 +40,18 @@ function sortByFlow(list: StationLiveState[]): StationLiveState[] {
 }
 
 export function StationLoad() {
+  // O8 fix: izin yoksa sorgu HİÇ atılmaz (enabled) ve widget gizlenir.
+  // Erken return HOOK'lardan SONRA (rules-of-hooks).
+  const { hasPermission } = useRoleAccess();
+  const allowed = hasPermission("station:read");
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard", "stationLiveState"],
     queryFn: fetchStationLiveState,
     staleTime: 30_000,
+    enabled: allowed,
   });
+
+  if (!allowed) return null;
 
   return (
     <Card className="border-t-2 border-t-primary/50">

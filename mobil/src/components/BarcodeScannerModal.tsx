@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Button } from 'react-native-paper';
 import AppModal from './AppModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarcodeScannerView, type SupportedBarcodeType } from './BarcodeScannerView';
@@ -26,6 +27,10 @@ interface Props {
   /** Yakalama anında "başarı" haptiği (default true). Çağıran kendi kabul/ret
    *  titreşimini veriyorsa false geç (çift titreşim olmasın). bkz. BarcodeScannerView. */
   captureHaptic?: boolean;
+  /** O15: verilirse kameranın altında "Listeden Seç" butonu çıkar — proje
+   *  kuralı: top okutulan her ekranda listeden seçim alternatifi olmalı
+   *  (kamera çalışmasa/etiket okunmasa da akış kilitlenmez). */
+  onPickFromList?: () => void;
 }
 
 /**
@@ -50,6 +55,7 @@ export function BarcodeScannerModal({
   notice,
   counter,
   captureHaptic,
+  onPickFromList,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -100,6 +106,20 @@ export function BarcodeScannerModal({
           counter={counter}
           captureHaptic={captureHaptic}
         />
+        {onPickFromList && (
+          <View style={styles.pickRow}>
+            <Button
+              mode="contained-tonal"
+              icon="format-list-bulleted"
+              onPress={() => {
+                onDismiss();
+                onPickFromList();
+              }}
+            >
+              Listeden Seç
+            </Button>
+          </View>
+        )}
       </View>
     </AppModal>
   );
@@ -110,5 +130,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
     borderRadius: 16,
     overflow: 'hidden',
+  },
+  pickRow: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
 });

@@ -18,7 +18,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
-import { resolveQualityGradeId } from "./helpers/quality-grade.helper";
+import { resolveQualityGradeId, resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
 import { readTamburOverQuantityEnabled } from "./system-setting.service";
 import {
   decodeDynamicCursor,
@@ -447,6 +447,7 @@ export class TamburService {
       where: { id: data.rollId },
       include: {
         item: true,
+        currentStep: { select: { id: true, station: { select: { kind: true } } } },
         producedInStep: {
           select: {
             workOrder: {
@@ -506,6 +507,22 @@ export class TamburService {
 
     if (roll.status === RollStatus.TAMBUR_CONSUMED) {
       return buildIdempotentResponse();
+    }
+
+    // DURUM GUARD'LARI (kardeş yollar cutOpenFabric/cutWarehouseRoll ile aynı):
+    // KK2 reopen ile geri çekilmiş (KK2 adımındaki), çuvala rezerve WAREHOUSE,
+    // SHIPPED, CANCELLED/SCRAP top bayat tablet listesinden finalize EDİLEMEZ.
+    // Bu kontroller olmadan claim ("not TAMBUR_CONSUMED") her statüyü tüketirdi.
+    if (roll.status !== RollStatus.IN_PRODUCTION) {
+      throw AppError.badRequest(
+        `Top Tambur'da işlenebilir durumda değil (${roll.status}). Listeyi yenileyip tekrar deneyin.`
+      );
+    }
+    if (!roll.currentStep || roll.currentStep.station.kind !== StationKind.TAMBUR) {
+      throw AppError.badRequest(
+        `Top Tambur adımında değil (${roll.currentStep?.station.kind ?? "STEPSIZ"}). ` +
+          `KK2'ye geri çekilmiş olabilir — listeyi yenileyin.`
+      );
     }
 
     // Parent barkodlu (klasik) ise child barkodlar parent prefix'i ile üretilir;
@@ -589,14 +606,13 @@ export class TamburService {
     });
 
     // Cut'lardaki + parent qualityGrade'lerini topla → katalog target status'larını çek.
-    // Map<code, RollStatus> — katalogda yoksa SCRAP fallback'i resolveCutStatus'ta.
     const allQualityCodes = Array.from(
       new Set([...inputCuts.map((c) => c.qualityGrade), roll.qualityGrade])
     );
     const qualityGradeRows = allQualityCodes.length
       ? await prisma.qualityGrade.findMany({
           where: { code: { in: allQualityCodes } },
-          select: { id: true, code: true, targetStatus: true },
+          select: { id: true, code: true, targetStatus: true, isActive: true },
         })
       : [];
     const targetStatusByCode = new Map<string, RollStatus>(
@@ -605,6 +621,21 @@ export class TamburService {
     const qualityGradeIdByCode = new Map<string, string>(
       qualityGradeRows.map((q) => [q.code, q.id])
     );
+
+    // OPERATÖR GİRDİSİ kalite kodları katalogda VAR + AKTİF olmalı (soft-delete
+    // giriş guard'ı): typo'lu kod ("FİRE" gibi) eskiden sessizce WAREHOUSE'a
+    // düşüp satılabilir stok oluyordu, qualityGradeId null kalıyordu. Parent'ın
+    // kendi snapshot kodu lenient kalır (legacy/pasif kod finalize'ı bloklamaz).
+    const activeCodeSet = new Set(
+      qualityGradeRows.filter((q) => q.isActive).map((q) => q.code)
+    );
+    for (const c of inputCuts) {
+      if (!activeCodeSet.has(c.qualityGrade)) {
+        throw AppError.badRequest(
+          `Bilinmeyen veya pasif kalite kodu: ${c.qualityGrade}`
+        );
+      }
+    }
 
     const splitRolls: Roll[] = [];
     let processedCount = 0;
@@ -623,13 +654,45 @@ export class TamburService {
       // count=1 verir; kaybeden count=0 alır → tx geri sarılır, mükerrer child
       // Roll üretilmez. (Ön-kontrol tek başına yetmez: iki çağrı da henüz commit
       // etmeden ön-kontrolü geçebilir.)
+      // Claim koşulu IN_PRODUCTION + aynı Tambur adımına daraltıldı: yukarıdaki
+      // guard'lar tx DIŞINDA olduğundan pencerede statü DEĞİL ama adım da
+      // değişebilir (KK2 reopen statüyü korur, currentStepId'yi değiştirir).
       const claim = await tx.roll.updateMany({
-        where: { id: data.rollId, status: { not: RollStatus.TAMBUR_CONSUMED } },
+        where: {
+          id: data.rollId,
+          status: RollStatus.IN_PRODUCTION,
+          currentStepId: roll.currentStepId,
+        },
         data: { status: RollStatus.TAMBUR_CONSUMED },
       });
       if (claim.count === 0) {
-        raceLost = true;
-        throw new Error("TAMBUR_RACE_LOST");
+        // Ayrım: paralel finalize mi (idempotent dön), başka işlem mi (409)?
+        const fresh = await tx.roll.findUnique({
+          where: { id: data.rollId },
+          select: { status: true },
+        });
+        if (fresh?.status === RollStatus.TAMBUR_CONSUMED) {
+          raceLost = true;
+          throw new Error("TAMBUR_RACE_LOST");
+        }
+        throw AppError.conflict(
+          `Top bu sırada başka bir işlemle değişti (durum: ${fresh?.status ?? "?"}). Listeyi yenileyip tekrar deneyin.`
+        );
+      }
+
+      // BAYAT METRAJ GUARD'I: cuts validasyonu ve segment hesabı tx DIŞINDA
+      // okunan currentQty ile yapıldı. Okuma ile claim arasına bir kesim
+      // (cutOpenFabric/cutWarehouseRoll) commit ettiyse bayat toplamla fazla
+      // metraj üretirdik. Claim satır kilidini aldı; taze değer artık sabit —
+      // uyuşmuyorsa operatöre yenile dedir.
+      const freshQtyRow = await tx.roll.findUnique({
+        where: { id: data.rollId },
+        select: { currentQty: true },
+      });
+      if (!freshQtyRow || !new Prisma.Decimal(freshQtyRow.currentQty).equals(totalQtyD)) {
+        throw AppError.conflict(
+          `Topun metrajı bu sırada değişti (${totalQtyD.toString()}m → ${freshQtyRow?.currentQty ?? "?"}m). Listeyi yenileyip tekrar deneyin.`
+        );
       }
 
       // Defect lifecycle — relatedErrorIds'da geçen defect'ler CUT, diğerleri NO_CUT.
@@ -1532,7 +1595,7 @@ export class TamburService {
     const resolvedQualityGrade = data.qualityGrade ?? parent.qualityGrade;
     const resolvedQualityGradeId =
       data.qualityGrade && data.qualityGrade !== parent.qualityGrade
-        ? await resolveQualityGradeId(resolvedQualityGrade)
+        ? await resolveQualityGradeIdStrict(resolvedQualityGrade)
         : parent.qualityGradeId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
     const childBarcode = generateTamburChildBarcode();
@@ -1710,10 +1773,14 @@ export class TamburService {
     if (parent.status !== RollStatus.WAREHOUSE && !isRawParent) {
       throw AppError.badRequest(`Top kesime uygun değil (${parent.status})`);
     }
+    // Çuvala/sevkiyata rezerve top arşivlenemez (cutWarehouseRoll ile aynı kural).
+    if (parent.shipmentId) {
+      throw AppError.badRequest(
+        "Top bir sevkiyata rezerve edilmiş — önce sevkiyattan/çuvaldan çıkarın."
+      );
+    }
 
-    const remainingQty = Number(parent.currentQty);
     const action = data.remainingAction ?? "discard";
-    const wantChild = remainingQty > 0 && action !== "discard";
     // Ham parent: kalan parça ham kalır — "keep_*" → ham STOCK (üretime devam),
     // "scrap" → FIRE/SCRAP. Bitmiş parent: klasik kalite kodu, çıktı WAREHOUSE.
     const childQualityGrade = isRawParent
@@ -1732,11 +1799,34 @@ export class TamburService {
       : RollStatus.WAREHOUSE;
     const propertyIds = parent.properties.map((p) => p.propertyId);
 
-    const childQualityGradeId = wantChild
-      ? await resolveQualityGradeId(childQualityGrade)
-      : null;
+    // Koşulsuz resolve: wantChild kararı artık tx İÇİNDE taze metrajla veriliyor.
+    const childQualityGradeId = await resolveQualityGradeId(childQualityGrade);
 
     const result = await prisma.$transaction(async (tx) => {
+      // ATOMİK CLAIM (finalize()'daki desen): tüm ön-kontroller tx DIŞINDA —
+      // eşzamanlı çift çağrı ikisinde de geçer ve kalan child İKİ kez basılırdı
+      // (uuid barkodlar çakışmaz, P2002 dedup yok). Statü+shipmentId koşulu ile
+      // kaybeden 409 alır; ardışık çift çağrıyı zaten pre-check 400'lüyor.
+      const claim = await tx.roll.updateMany({
+        where: { id: parent.id, status: parent.status, shipmentId: null },
+        data: { status: RollStatus.TAMBUR_CONSUMED },
+      });
+      if (claim.count === 0) {
+        throw AppError.conflict(
+          "Top bu sırada başka bir işlemle değişmiş (eşzamanlı kesim/çift dokunuş olabilir). Listeyi yenileyip tekrar deneyin."
+        );
+      }
+
+      // TAZE KALAN METRAJ: pre-tx okuma ile claim arasına bir kesim commit'i
+      // girmiş olabilir — kalan child bayat (kesim öncesi) metrajla doğmasın.
+      // Claim satır kilidini aldı; bu değer artık değişemez.
+      const freshRow = await tx.roll.findUnique({
+        where: { id: parent.id },
+        select: { currentQty: true },
+      });
+      const remainingQty = Number(freshRow?.currentQty ?? 0);
+      const wantChild = remainingQty > 0 && action !== "discard";
+
       let remainingChild: Roll | null = null;
 
       if (wantChild) {
@@ -1800,16 +1890,18 @@ export class TamburService {
         remainingChild = child as Roll;
       }
 
-      // Parent retire — TAMBUR_CONSUMED (arşive)
+      // L (düşük bulgu): depo kesiminde de parent'ın açık hataları NO_CUT ile
+      // kapansın — finalize/finalizeOpenFabric ile aynı hijyen, yoksa tüketilmiş
+      // topta sonsuza dek "açık hata" kalıyordu. Depo topu adımsız → stepId null.
+      await closeOrphanRollErrors(tx, parent.id, null, userId);
+
+      // Parent retire — statüyü claim çevirdi; metrajı sıfırla
       await tx.roll.update({
         where: { id: parent.id },
-        data: {
-          status: RollStatus.TAMBUR_CONSUMED,
-          currentQty: 0,
-        },
+        data: { currentQty: 0 },
       });
 
-      return { remainingChild };
+      return { remainingChild, remainingQty };
     });
 
     await AuditService.log({
@@ -1822,7 +1914,7 @@ export class TamburService {
         parentBarcode: parent.barcode,
         remainingAction: action,
         remainingChildId: result.remainingChild?.id ?? null,
-        remainingQty,
+        remainingQty: result.remainingQty,
         notes: data.notes ?? null,
       },
     });
@@ -1832,11 +1924,11 @@ export class TamburService {
       data: {
         rollId: parent.id,
         remainingChild: result.remainingChild,
-        remainingQty,
+        remainingQty: result.remainingQty,
       },
       message: result.remainingChild
-        ? `Top Kesme bitti: ${parent.barcode} arşivlendi · kalan ${remainingQty}m ${childQualityGrade} olarak kayıtlı`
-        : `Top Kesme bitti: ${parent.barcode} arşivlendi${remainingQty > 0 ? ` · ${remainingQty}m fire` : ""}`,
+        ? `Top Kesme bitti: ${parent.barcode} arşivlendi · kalan ${result.remainingQty}m ${childQualityGrade} olarak kayıtlı`
+        : `Top Kesme bitti: ${parent.barcode} arşivlendi${result.remainingQty > 0 ? ` · ${result.remainingQty}m fire` : ""}`,
     };
   }
 
@@ -1924,7 +2016,11 @@ export class TamburService {
     const propertyIds = parent.properties.map((p) => p.propertyId);
     const childBarcode = generateTamburChildBarcode();
 
-    const resolvedQualityGradeId = await resolveQualityGradeId(resolvedQualityGrade);
+    // Operatör explicit kod verdiyse SIKI doğrula (katalog+aktif); sistem-türetimli
+    // ("1.KALITE"/"A1"/"FIRE" sabitleri) lenient kalır.
+    const resolvedQualityGradeId = data.qualityGrade
+      ? await resolveQualityGradeIdStrict(resolvedQualityGrade)
+      : await resolveQualityGradeId(resolvedQualityGrade);
 
     const result = await prisma.$transaction(async (tx) => {
       // Child Roll oluştur
@@ -2145,11 +2241,9 @@ export class TamburService {
       throw AppError.badRequest(`Açık kumaş aktif değil (${parent.status})`);
     }
 
-    const remainingQty = Number(parent.currentQty);
     // remainingAction varsa onu kullan; yoksa eski scrapRemaining'den türet.
     const action: "keep_1kalite" | "keep_a1" | "scrap" | "discard" =
       data.remainingAction ?? (data.scrapRemaining === true ? "scrap" : "discard");
-    const wantChild = remainingQty > 0 && action !== "discard";
     const childQualityGrade: string =
       action === "keep_1kalite" ? "1.KALITE" : action === "keep_a1" ? "A1" : "FIRE";
     const tamburStepId = parent.currentStep.id;
@@ -2164,11 +2258,38 @@ export class TamburService {
     const overriddenFoldType =
       data.foldType !== undefined && data.foldType !== plannedFoldType;
 
-    const childQualityGradeId = wantChild
-      ? await resolveQualityGradeId(childQualityGrade)
-      : null;
+    // Koşulsuz resolve: wantChild kararı artık tx İÇİNDE taze metrajla veriliyor.
+    const childQualityGradeId = await resolveQualityGradeId(childQualityGrade);
 
     const result = await prisma.$transaction(async (tx) => {
+      // ATOMİK CLAIM (finalize()'daki desen): idempotency ön-kontrolü tx DIŞINDA
+      // check-then-act — eşzamanlı çift çağrı ikisinde de geçer ve kalan child
+      // İKİ kez basılırdı (TAMBUR_PROCESSED upsert'i ikinci tx'i düşürmez:
+      // update:{} dalına düşer, child create upsert'ten önce). Kaybeden 409 alır;
+      // istemci retry'ı idempotent ön-kontrole düşer.
+      const claim = await tx.roll.updateMany({
+        where: {
+          id: parent.id,
+          status: RollStatus.IN_PRODUCTION,
+          currentStepId: tamburStepId,
+        },
+        data: { status: RollStatus.TAMBUR_CONSUMED },
+      });
+      if (claim.count === 0) {
+        throw AppError.conflict(
+          "Açık kumaş bu sırada başka bir işlemle değişmiş (eşzamanlı finalize/kesim olabilir). Listeyi yenileyip tekrar deneyin."
+        );
+      }
+
+      // TAZE KALAN METRAJ: okuma ile claim arasına bir cutOpenFabric commit'i
+      // girmiş olabilir — kalan child bayat (kesim öncesi) metrajla doğmasın.
+      const freshRow = await tx.roll.findUnique({
+        where: { id: parent.id },
+        select: { currentQty: true },
+      });
+      const remainingQty = Number(freshRow?.currentQty ?? 0);
+      const wantChild = remainingQty > 0 && action !== "discard";
+
       let remainingChildId: string | null = null;
 
       // Kalan metre için child Roll oluştur (action != discard ve kalan > 0).
@@ -2209,11 +2330,10 @@ export class TamburService {
       // #8 — parent tüketilmeden kalan açık hatalar NO_CUT olarak kapansın.
       await closeOrphanRollErrors(tx, parent.id, tamburStepId, userId);
 
-      // Parent CONSUMED_AT_TAMBUR — currentQty=0, currentStepId=null
+      // Parent CONSUMED_AT_TAMBUR — statüyü claim çevirdi; metraj+adım temizle
       await tx.roll.update({
         where: { id: parent.id },
         data: {
-          status: RollStatus.TAMBUR_CONSUMED,
           currentQty: 0,
           currentStepId: null,
         },
@@ -2287,7 +2407,7 @@ export class TamburService {
         });
       }
 
-      return { remainingChildId };
+      return { remainingChildId, remainingQty, wantChild };
     });
 
     await AuditService.log({
@@ -2299,16 +2419,16 @@ export class TamburService {
         finalizedAt: new Date().toISOString(),
         remainingAction: action,
         remainingChildId: result.remainingChildId,
-        remainingChildQuality: wantChild ? childQualityGrade : null,
-        remainingQty,
+        remainingChildQuality: result.wantChild ? childQualityGrade : null,
+        remainingQty: result.remainingQty,
         notes: data.notes ?? null,
       },
     });
 
-    const message = wantChild
-      ? `Açık kumaş finalize: kalan ${remainingQty} mt ${childQualityGrade} kalitede top olarak kaydedildi.`
-      : action === "discard" && remainingQty > 0
-        ? `Açık kumaş finalize: kalan ${remainingQty} mt kayıt dışı (operatör attı).`
+    const message = result.wantChild
+      ? `Açık kumaş finalize: kalan ${result.remainingQty} mt ${childQualityGrade} kalitede top olarak kaydedildi.`
+      : action === "discard" && result.remainingQty > 0
+        ? `Açık kumaş finalize: kalan ${result.remainingQty} mt kayıt dışı (operatör attı).`
         : "Açık kumaş finalize edildi.";
 
     return {
@@ -2316,7 +2436,7 @@ export class TamburService {
       data: {
         rollId: parent.id,
         remainingChildId: result.remainingChildId,
-        remainingQty,
+        remainingQty: result.remainingQty,
       },
       message,
     };

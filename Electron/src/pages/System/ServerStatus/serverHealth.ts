@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import apiClient from "@/services/apiClient";
 
 /** Backend `/health` ucunun döndürdüğü tam şekil. */
@@ -49,8 +50,13 @@ const HISTORY_CAP = 24; // 24 × 5sn = son ~2 dk
  * /health'i 5sn'de bir çeker (YALNIZ sayfa açıkken — yük bindirmez) ve istemci
  * tarafında son ~2 dk'lık örnek tamponu tutar (sparkline için, backend/DB'ye
  * EK MALİYET YOK). Her başarılı fetch'te (yeni dataUpdatedAt) tek örnek eklenir.
+ *
+ * K-A8 fix: sekme sistemi pasif sekmeleri MOUNT tutar — "sayfa açıkken" varsayımı
+ * arka planda bırakılan Sunucu Durumu sekmesinde süresiz 5sn polling'e dönüşüyordu.
+ * Pasif sekmedeyken interval durur; sekmeye dönünce kaldığı yerden sürer.
  */
 export function useServerHealth() {
+  const isTabActive = useIsTabActive();
   const q = useQuery({
     queryKey: ["server-health"],
     queryFn: async () => {
@@ -59,7 +65,7 @@ export function useServerHealth() {
       });
       return res.data;
     },
-    refetchInterval: REFRESH_MS,
+    refetchInterval: isTabActive ? REFRESH_MS : false,
     refetchOnWindowFocus: true,
     retry: false,
   });

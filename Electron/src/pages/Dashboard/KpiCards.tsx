@@ -22,6 +22,7 @@ import {
   fetchRollCount,
 } from "./dashboardService";
 import { useDashboardLayout } from "./useDashboardLayout";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 
 interface KpiDef {
   key: string;
@@ -29,6 +30,10 @@ interface KpiDef {
   icon: LucideIcon;
   tone: string;
   query: () => Promise<number>;
+  /** O8 fix: backend endpoint'inin istediği izin — yoksa kart hiç render edilmez
+   *  ve sorgu HİÇ atılmaz (dar yetkili kullanıcıda login anında 403 toast
+   *  fırtınası yaşanıyordu; canEnterApp tek izinle bile geçer). */
+  permission: string;
   /** Tıklandığında gidilecek route — query string ile filtre/tab taşır. */
   to?: string;
 }
@@ -40,6 +45,7 @@ const KPIS: KpiDef[] = [
     icon: ClipboardList,
     tone: "text-info",
     query: fetchOpenOrderCount,
+    permission: "order:read",
     to: "/operations/orders?filter[status]=PENDING,APPROVED,PARTIAL_SHIPPED",
   },
   {
@@ -48,6 +54,7 @@ const KPIS: KpiDef[] = [
     icon: Factory,
     tone: "text-primary",
     query: fetchOpenWorkOrderCount,
+    permission: "workorder:read",
     to: "/operations/work-orders?filter[status]=PLANNED,IN_PROGRESS,PAUSED",
   },
   {
@@ -56,6 +63,7 @@ const KPIS: KpiDef[] = [
     icon: Warehouse,
     tone: STATION_TEXT.depo,
     query: () => fetchRollCount("WAREHOUSE"),
+    permission: "roll:read",
     to: "/operations/rolls?tab=FINISHED_STOCK",
   },
   {
@@ -64,6 +72,7 @@ const KPIS: KpiDef[] = [
     icon: Truck,
     tone: STATION_TEXT.fason,
     query: () => fetchRollCount("AT_SUBCONTRACTOR"),
+    permission: "roll:read",
     to: "/operations/rolls?tab=SUBCONTRACTOR",
   },
   {
@@ -72,18 +81,21 @@ const KPIS: KpiDef[] = [
     icon: Cog,
     tone: STATION_TEXT.process,
     query: fetchProductionActiveRollCount,
+    permission: "roll:read",
     to: "/operations/rolls?tab=PRODUCTION",
   },
 ];
 
 export function KpiCards() {
   const navigateActive = useTabsStore((s) => s.navigateActive);
+  const { hasPermission } = useRoleAccess();
   const { isVisible, itemOrder } = useDashboardLayout();
   const kpiByFullKey = new Map(KPIS.map((k) => [`kpi:${k.key}`, k]));
   const visibleKpis = itemOrder("kpi")
     .filter((fullKey) => isVisible(fullKey))
     .map((fullKey) => kpiByFullKey.get(fullKey))
-    .filter((k): k is KpiDef => Boolean(k));
+    .filter((k): k is KpiDef => Boolean(k))
+    .filter((k) => hasPermission(k.permission));
 
   const results = useQueries({
     queries: visibleKpis.map((k) => ({

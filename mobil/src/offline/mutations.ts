@@ -55,7 +55,17 @@ export interface TamburFinalizeOpenFabricVars {
 
 const OFFLINE_AWARE = {
   networkMode: 'online' as const,
-  retry: 3,
+  // Y12 fix: 401 retry edilmez — ilk 401 token'ı sildiğinden kalan denemeler de
+  // 401 alıyordu; 3 deneme boyunca dönmek hem kuyruğu oyalıyor hem hata anını
+  // geciktiriyordu. 401'de hemen düş; operatör yeniden girişten sonra kaydı
+  // tekrar gönderir (api.ts artık 'oturum doldu' toast'ı gösteriyor).
+  retry: (failureCount: number, error: unknown) => {
+    const status = (error as { status?: number } | null)?.status;
+    // L fix (Y12 genislemesi): TUM deterministik 4xx fail-fast — 400/403/404/409
+    // yeniden denenince ayni cevabi alir, hata toastini ~8sn geciktirirdi.
+    if (status && status >= 400 && status < 500) return false;
+    return failureCount < 3;
+  },
   retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 30_000),
 };
 

@@ -2,36 +2,11 @@ import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 
 // =============================================================================
-// Sevkiyat ekranı için sipariş listesi
+// Sipariş servisleri — Tambur "Kime?" picker'ı + sipariş bağı yardımcıları.
+// L fix (2026-06-13): ReadyOrder/getReadyOrders kaldırıldı — backend'de hiç
+// var olmayan /shipping/ready-orders'a (eski, silinen sevkiyat tasarımının
+// kalıntısı) gidiyordu; hiçbir ekran çağırmıyordu.
 // =============================================================================
-// TartıPaket artık sipariş seçmez (kuyruktan çeker — packagingQueue.service);
-// bu dosya sadece sevkiyat ekranının ihtiyacı olan ready-orders'ı tutar.
-// =============================================================================
-
-export interface ReadyOrderLine {
-  lineId: string;
-  itemName: string;
-  itemCode?: string;
-  variantName?: string | null;
-  variantCode?: string | null;
-  requestedQty: number;
-  allocatedRolls: Array<{
-    rollId: string;
-    barcode: string;
-    currentQty: number;
-    status: string;
-  }>;
-}
-
-export interface ReadyOrder {
-  orderId: string;
-  orderNumber: string;
-  customerName: string;
-  customerId: string;
-  status: string;
-  deadline: string | null;
-  lines: ReadyOrderLine[];
-}
 
 /** Bir topun özelliğine uyan açık sipariş kalemi (Açık>0). Tambur yeniden-kes "Kime?" picker'ı. */
 export interface AvailableOrderLine {
@@ -52,10 +27,14 @@ export interface AvailableOrderLine {
   openQty: number;
 }
 
-export const orderService = {
-  getReadyOrders: (): Promise<ApiResponse<ReadyOrder[]>> =>
-    apiClient.get<ApiResponse<ReadyOrder[]>>('/shipping/ready-orders').then((r) => r.data),
+export interface QuickOrderResult {
+  order: { id: string; orderNumber: string };
+  lineCount: number;
+  rollCount: number;
+  preparedToWarehouse: number;
+}
 
+export const orderService = {
   /** Özelliğe (itemId + opsiyonel colorId/width) uyan açık sipariş kalemleri. */
   getAvailableOrderLines: (params: {
     itemId: string;
@@ -69,4 +48,12 @@ export const orderService = {
       .get<ApiResponse<AvailableOrderLine[]>>(`/orders/order-lines/available?${q.toString()}`)
       .then((r) => r.data);
   },
+
+  /** Saha #11: ham/stok toplardan hızlı sipariş (okut→müşteri→otomatik satır). */
+  quickFromRolls: (data: {
+    customerId: string;
+    branchId?: string | null;
+    rollIds: string[];
+  }): Promise<ApiResponse<QuickOrderResult>> =>
+    apiClient.post<ApiResponse<QuickOrderResult>>('/orders/quick-from-rolls', data).then((r) => r.data),
 };

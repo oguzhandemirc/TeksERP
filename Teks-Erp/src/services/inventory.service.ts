@@ -10,7 +10,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
-import { resolveQualityGradeId } from "./helpers/quality-grade.helper";
+import { resolveQualityGradeId, resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
 import {
   parseQueryParams,
   buildWhereClause,
@@ -293,8 +293,14 @@ export class InventoryService {
     // Tüm item tipleri (fabric, yarn, consumable, vb) tedarikçiden gelir → SUPPLIER_RECEIPT.
     const entrySource: RollEntrySource = RollEntrySource.SUPPLIER_RECEIPT;
 
+    // Operatör explicit kalite verdiyse SIKI doğrula (katalog + aktif —
+    // soft-delete giriş guard'ı; typo'lu kod byQuality istatistiklerini
+    // parçalayıp FIRE-dışlama string filtresinden kaçıyordu); default sabit
+    // "1.KALITE" lenient kalır.
     const qualityGradeCode = data.qualityGrade ?? "1.KALITE";
-    const qualityGradeId = await resolveQualityGradeId(qualityGradeCode);
+    const qualityGradeId = data.qualityGrade
+      ? await resolveQualityGradeIdStrict(qualityGradeCode)
+      : await resolveQualityGradeId(qualityGradeCode);
 
     // Renkli manuel giriş = hazır/işlenmiş kumaş (dışarıdan boyalı/işlemli geldi),
     // doğrudan depoya gider. Renksiz giriş = ham kumaş, üretim akışına girecek
@@ -449,23 +455,43 @@ export class InventoryService {
 
     const processingStatus = f["processingStatus"] as string | undefined;
     delete where.processingStatus;
+    // M-29: istemci explicit status verdiyse processingStatus/rollScope onu
+    // EZMEZ — AND ile kesişir (eski son-yazan-kazanır davranışı çelişen
+    // kombinasyonda sessiz yanlış sonuç veriyordu). Explicit yoksa default
+    // STOCK yerine dalın kendi kümesi geçer (eski davranış).
+    const hasExplicitStatus = statusIn.length > 0 || Boolean(f["status"]);
+    const applyStatusScope = (scope: unknown) => {
+      if (hasExplicitStatus) {
+        where.AND = [
+          ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+          { status: scope },
+        ];
+      } else {
+        where.status = scope;
+      }
+    };
     if (processingStatus === "raw") {
       where.colorId = null;
     } else if (processingStatus === "processed") {
       where.colorId = { not: null };
-      where.status = {
-        notIn: [
-          RollStatus.WAREHOUSE,
-          RollStatus.TAMBUR_CONSUMED,
-          RollStatus.SUBCONTRACTOR_CONSUMED,
-          RollStatus.SCRAP,
+      // İzinli statüler EXPLICIT (in) — eski notIn listesi CANCELLED/SHIPPED/
+      // A1_STOCK/AT_KARTELA/KARTELA_CONSUMED/RETURNED'ı "işlenmekte" listesine
+      // ve aynı where'i paylaşan /rolls/stats toplamlarına sızdırıyordu
+      // (sözleşme: renk kazanmış + henüz Tambur'a ulaşmamış AKTİF toplar).
+      applyStatusScope({
+        in: [
+          RollStatus.STOCK,
+          RollStatus.IN_PRODUCTION,
+          RollStatus.PRODUCED,
+          RollStatus.AT_SUBCONTRACTOR,
+          RollStatus.RETURNED_FROM_SUBCONTRACTOR,
         ],
-      };
+      });
     } else if (processingStatus === "open_fabric") {
       where.barcode = null;
-      where.status = RollStatus.IN_PRODUCTION;
+      applyStatusScope(RollStatus.IN_PRODUCTION);
     } else if (processingStatus === "finished") {
-      where.status = RollStatus.WAREHOUSE;
+      applyStatusScope(RollStatus.WAREHOUSE);
     }
 
     const qualityGradeFilter =
@@ -526,9 +552,9 @@ export class InventoryService {
         },
       ];
     } else if (rollScope === "FINISHED_STOCK") {
-      where.status = {
+      applyStatusScope({
         in: [RollStatus.WAREHOUSE, RollStatus.A1_STOCK, RollStatus.PRODUCED],
-      };
+      });
     }
 
     // --- Fason sevk uygunluğu (belirli adım) ---
@@ -539,10 +565,15 @@ export class InventoryService {
         ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
         {
           OR: [
+            // (a) serbest stok → auto-attach edilir
             { currentStepId: null, status: RollStatus.STOCK },
+            // (b) bu adımdaki top → STOCK *veya* IN_PRODUCTION (dispatch() kabul
+            //     kuralının birebir aynısı: subcontractor.service guard). Eski kod
+            //     yalnız STOCK kabul ediyordu → bu adımda fiilen üretimdeki
+            //     (IN_PRODUCTION) toplar picker'da HATALI gizleniyordu.
             {
               currentStepId: dispatchableForStepId,
-              status: RollStatus.STOCK,
+              status: { in: [RollStatus.STOCK, RollStatus.IN_PRODUCTION] },
             },
           ],
         },
@@ -640,15 +671,24 @@ export class InventoryService {
 
       const sortBy = params.sortBy || "createdAt";
       const sortOrder: "asc" | "desc" = params.sortOrder === "asc" ? "asc" : "desc";
+      // Nullable sıralama kolonları (barcode: fason dönüş açık kumaşı; width:
+      // rawWidthEnabled kapalıyken stokun çoğu null): nulls EN SONA + null-aware
+      // cursor — yoksa DESC'te NULLS FIRST cursor'ı null grubuna kilitler ve
+      // "En"/"Barkod" başlığına tıklayan operatör listenin çoğunu hiç göremezdi.
+      const NULLABLE_ROLL_SORT = new Set(["barcode", "width", "qualityGrade"]);
+      const sortNullable = NULLABLE_ROLL_SORT.has(sortBy);
+      const orderByPrimary = sortNullable
+        ? { [sortBy]: { sort: sortOrder, nulls: "last" as const } }
+        : { [sortBy]: sortOrder };
       const cursor = decodeDynamicCursor(req.query.cursor as string | undefined);
       const cursorWhereClause = cursor
-        ? { AND: [where, dynamicCursorWhere(cursor, sortBy, sortOrder)] }
+        ? { AND: [where, dynamicCursorWhere(cursor, sortBy, sortOrder, sortNullable)] }
         : where;
 
       const [items, totalEstimate] = await Promise.all([
         prisma.roll.findMany({
           where: cursorWhereClause,
-          orderBy: [{ [sortBy]: sortOrder }, { id: sortOrder }],
+          orderBy: [orderByPrimary, { id: sortOrder }],
           take: limit + 1,
           include,
         }),
@@ -752,14 +792,18 @@ export class InventoryService {
 
   /**
    * Depo kapsam sayaçları — WAREHOUSE topları fiziksel yere göre ayır:
-   *  - serbest:   shipmentId null (satılabilir/okutulabilir gerçek serbest stok)
+   *  - serbest:    shipmentId null (satılabilir/okutulabilir gerçek serbest stok)
+   *  - hazırlanan: shipment.status PREPARING (sevkiyata okutuldu, henüz çuval depoda değil)
    *  - çuval depo: shipment.status READY (çuvallandı, firma içi bekliyor)
-   *  - kapı önü:  shipment.status AT_DOOR (kamyon bekliyor)
+   *  - kapı önü:   shipment.status AT_DOOR (kamyon bekliyor)
    * Hepsi hâlâ binada (WAREHOUSE) ama yalnız "serbest" satılabilir stoktur. SHIPPED hariç.
+   * L (düşük bulgu): PREPARING'deki toplar eskiden HİÇBİR kovada sayılmıyordu —
+   * serbest + çuval + kapı toplamı fiziksel depoyla tutmuyordu.
    */
   async getWarehouseScope(): Promise<
     ApiResponse<{
       free: { count: number; qty: number };
+      preparing: { count: number; qty: number };
       sackStore: { count: number; qty: number };
       atDoor: { count: number; qty: number };
     }>
@@ -768,6 +812,7 @@ export class InventoryService {
       prisma.roll.aggregate({ where, _count: { _all: true }, _sum: { currentQty: true } });
 
     const free = await agg({ status: RollStatus.WAREHOUSE, shipmentId: null });
+    const preparing = await agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.PREPARING } });
     const sackStore = await agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.READY } });
     const atDoor = await agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.AT_DOOR } });
 
@@ -778,7 +823,12 @@ export class InventoryService {
 
     return {
       success: true,
-      data: { free: pick(free), sackStore: pick(sackStore), atDoor: pick(atDoor) },
+      data: {
+        free: pick(free),
+        preparing: pick(preparing),
+        sackStore: pick(sackStore),
+        atDoor: pick(atDoor),
+      },
     };
   }
 
@@ -1403,14 +1453,27 @@ export class InventoryService {
         });
       }
 
-      // Top: CANCELLED + currentStepId temizle
-      const r = await tx.roll.update({
-        where: { id },
+      // Top: CANCELLED + currentStepId temizle — ATOMİK CLAIM (M-30): tüm
+      // guard'lar (fason/açık sevk/aktif sevkiyat) tx DIŞINDA okundu; pencerede
+      // fason dispatch claim'i veya çuvala okutma (shipmentId claim'i) commit
+      // ettiyse top fasondayken/çuvaldayken iptal edilirdi. Gözlenen statü +
+      // shipmentId koşuluyla kaybeden 409 alır (unmarkReady deseni); shipmentId
+      // de temizlenir (CANCELLED top sevkiyat rezervi taşıyamaz).
+      const cancelClaim = await tx.roll.updateMany({
+        where: { id, status: existing.status, shipmentId: existing.shipmentId },
         data: {
           status: RollStatus.CANCELLED,
           currentStepId: null,
+          shipmentId: null,
+          sackId: null,
         },
       });
+      if (cancelClaim.count === 0) {
+        throw AppError.conflict(
+          "Top bu sırada başka bir işleme girdi (sevk/çuval/fason olabilir) — tekrar deneyin."
+        );
+      }
+      const r = await tx.roll.findUniqueOrThrow({ where: { id } });
 
       // Etkilenen step'lerin status'unu recompute et
       for (const stepId of affectedStepIds) {
@@ -1518,16 +1581,37 @@ export class InventoryService {
    */
   async applyManualProperties(
     rollId: string,
-    data: { colorId: string | null; propertyIds: string[] },
+    data: { colorId: string | null; propertyIds: string[]; width?: number | null; qualityGrade?: string },
     userId?: string,
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
-      select: { id: true, barcode: true, itemId: true, colorId: true, status: true },
+      select: {
+        id: true,
+        barcode: true,
+        itemId: true,
+        colorId: true,
+        status: true,
+        width: true,
+        qualityGrade: true,
+        shipmentId: true,
+        shipment: { select: { status: true } },
+      },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
     if (roll.status === RollStatus.SCRAP || roll.status === RollStatus.CANCELLED) {
       throw AppError.badRequest("Hurda/iptal edilmiş topun rengi/özelliği değiştirilemez");
+    }
+    // Saha #4: etiket (renk/özellik/en/kalite) değiştirme. Commit'li sevkiyatta
+    // (READY/AT_DOOR/DISPATCHED) renk/en değişimi spec-karşılanmayı bozar → reddet;
+    // operatör önce "Hazırlığa Geri Al" yapmalı. PREPARING + serbest WAREHOUSE/STOCK serbest.
+    if (roll.shipment && roll.shipment.status !== "PREPARING") {
+      throw AppError.conflict(
+        "Bu top sevke hazır/kapı önü/sevk edilmiş bir sevkiyatta — etiketi değiştirmeden önce sevkiyatı hazırlığa geri alın.",
+      );
+    }
+    if (data.width !== undefined && data.width !== null && !(data.width > 0)) {
+      throw AppError.badRequest("Geçerli bir en (cm) girilmeli");
     }
 
     // Catalog doğrulamaları (varsa)
@@ -1565,13 +1649,18 @@ export class InventoryService {
       }
     }
 
+    // Roll skaler güncellemeleri (renk her zaman; en/kalite verildiyse).
+    const rollData: Prisma.RollUncheckedUpdateInput = {};
+    if (roll.colorId !== data.colorId) rollData.colorId = data.colorId;
+    if (data.width !== undefined) rollData.width = data.width === null ? null : new Prisma.Decimal(data.width);
+    if (data.qualityGrade !== undefined && data.qualityGrade.trim()) {
+      rollData.qualityGrade = data.qualityGrade.trim();
+    }
+
     await prisma.$transaction(async (tx) => {
-      // 1) Roll.colorId güncelle
-      if (roll.colorId !== data.colorId) {
-        await tx.roll.update({
-          where: { id: rollId },
-          data: { colorId: data.colorId },
-        });
+      // 1) Roll skaler alanları (renk/en/kalite)
+      if (Object.keys(rollData).length > 0) {
+        await tx.roll.update({ where: { id: rollId }, data: rollData });
       }
 
       // 2) Roll.properties replace
@@ -1588,10 +1677,17 @@ export class InventoryService {
           action: "UPDATE",
           tableName: "ROLL_MANUAL_OVERRIDE",
           recordId: rollId,
-          oldData: { colorId: roll.colorId } as Prisma.InputJsonValue,
+          oldData: {
+            colorId: roll.colorId,
+            width: roll.width != null ? Number(roll.width) : null,
+            qualityGrade: roll.qualityGrade,
+          } as Prisma.InputJsonValue,
           newData: {
             colorId: data.colorId,
             propertyIds: dedupedProps,
+            width: data.width,
+            qualityGrade: data.qualityGrade,
+            event: "RELABEL",
           } as Prisma.InputJsonValue,
         },
       });
@@ -1603,9 +1699,55 @@ export class InventoryService {
         rollId,
         colorId: data.colorId,
         propertyIds: dedupedProps,
+        width: data.width,
+        qualityGrade: data.qualityGrade,
       },
-      message: `Top rengi/özellikleri güncellendi`,
+      message: `Top etiketi güncellendi`,
     };
+  }
+
+  /**
+   * Saha #10: ham/stok kumaşı doğrudan satışa hazırla — STOCK topu WAREHOUSE'a
+   * geçirir (sevke hazır). Fabrika işlemeden gelen ham kumaş bu yolla sevk akışına
+   * girer (kapsama renk-null spec eşleşmesiyle çalışır). Guard: top serbest olmalı
+   * — bir WO adımında/sevkiyatta/fasonda DEĞİL. Sadece STOCK → WAREHOUSE.
+   */
+  async prepareRawForSale(rollId: string, userId?: string): Promise<ApiResponse<Record<string, unknown>>> {
+    const roll = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: { id: true, barcode: true, status: true, shipmentId: true, currentStepId: true },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+    if (roll.status === RollStatus.WAREHOUSE) {
+      return { success: true, data: { rollId, status: "WAREHOUSE" }, message: "Top zaten sevke hazır (depoda)" };
+    }
+    if (roll.status !== RollStatus.STOCK) {
+      throw AppError.badRequest(`Yalnız STOCK topu satışa hazırlanabilir (bu top: ${roll.status})`);
+    }
+    if (roll.shipmentId) throw AppError.conflict("Top bir sevkiyatta — önce çıkarın");
+    if (roll.currentStepId) throw AppError.conflict("Top bir iş emri adımında — önce üretimden çıkarın");
+    const openDispatch = await prisma.subcontractorDispatchItem.findFirst({
+      where: { rollId, dispatch: { cancelledAt: null } },
+      select: { id: true },
+    });
+    if (openDispatch) throw AppError.conflict("Top açık bir fason sevkiyatında");
+
+    // Atomik: hâlâ STOCK + serbest iken WAREHOUSE'a çek.
+    const claimed = await prisma.roll.updateMany({
+      where: { id: rollId, status: RollStatus.STOCK, shipmentId: null, currentStepId: null },
+      data: { status: RollStatus.WAREHOUSE },
+    });
+    if (claimed.count === 0) {
+      throw AppError.conflict("Top az önce başka bir akışa girdi — tekrar deneyin");
+    }
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: rollId,
+      newData: { kind: "RAW_FOR_SALE", status: "WAREHOUSE", barcode: roll.barcode },
+    });
+    return { success: true, data: { rollId, status: "WAREHOUSE" }, message: "Ham top satışa hazırlandı (depoya alındı)" };
   }
 
   // ===========================================================================
@@ -1865,23 +2007,19 @@ export class InventoryService {
       }
     }
 
-    // DefectType doğrulamaları (varsa)
+    // DefectType doğrulamaları (varsa) — M-28: isActive da aranır (pasif hata
+    // tipiyle kayıt açılamaz — soft-delete giriş guard'ı); eskiden birebir aynı
+    // findMany iki kez koşuyordu, tek sorguya indirildi.
     const defectIds = [...new Set(errors.map((e) => e.defectTypeId).filter((x): x is string => !!x))];
-    if (defectIds.length > 0) {
-      const found = await prisma.defectType.findMany({
-        where: { id: { in: defectIds } },
-        select: { id: true, name: true },
-      });
-      if (found.length !== defectIds.length) {
-        throw AppError.badRequest("Bazı hata tipleri bulunamadı");
-      }
-    }
     const defectMap = new Map<string, string>();
     if (defectIds.length > 0) {
       const found = await prisma.defectType.findMany({
-        where: { id: { in: defectIds } },
+        where: { id: { in: defectIds }, isActive: true },
         select: { id: true, name: true },
       });
+      if (found.length !== defectIds.length) {
+        throw AppError.badRequest("Bazı hata tipleri bulunamadı veya pasif");
+      }
       for (const d of found) defectMap.set(d.id, d.name);
     }
 
@@ -1900,6 +2038,10 @@ export class InventoryService {
       select: { id: true },
     });
 
+    // Eşzamanlı çift çağrıda kaybeden tx movement kapatmada 0 satır eşler →
+    // tüm tx (mükerrer RollError'lar dahil) geri sarılır, idempotent cevap döner.
+    let raceLost = false;
+    try {
     await prisma.$transaction(async (tx) => {
       // 1) Roll metraj güncelle
       await tx.roll.update({
@@ -1955,7 +2097,10 @@ export class InventoryService {
       await copyStationCapabilitiesToRoll(tx, { stationId, rollId });
 
       // 4) Kurşun/KK2 movement'ı kapat (qtyOut = ölçülen toplam metre)
-      await tx.rollMovement.updateMany({
+      //    ATOMİK CLAIM (BL-3 kardeşi): idempotency guard'ı tx DIŞINDA — iki
+      //    eşzamanlı çağrı ikisi de geçer ve Tambur'da İKİNCİ açık movement +
+      //    mükerrer RollError üretirdi. 0 satır = kaybeden → tx geri sar.
+      const closedMove = await tx.rollMovement.updateMany({
         where: {
           rollId,
           workOrderStepId: stepId,
@@ -1966,6 +2111,10 @@ export class InventoryService {
           exitedAt: new Date(),
         },
       });
+      if (closedMove.count === 0) {
+        raceLost = true;
+        throw new Error("KURSUN_FINISH_RACE_LOST");
+      }
 
       // 5) Sonraki step (Tambur) için movement aç + Roll.currentStepId.
       // Status IN_PRODUCTION — Tambur cutOpenFabric bunu zorunlu kılar.
@@ -1995,6 +2144,20 @@ export class InventoryService {
       await recomputeStepStatus(tx, stepId);
       await ensureWorkOrderInProgress(tx, woId);
     });
+    } catch (e) {
+      if (raceLost) {
+        return {
+          success: true,
+          data: {
+            rollId,
+            totalMeters: totalMeters,
+            nextStepId: nextStep?.id ?? null,
+          },
+          message: "Bu top için Kurşun/KK2 zaten tamamlanmış (eşzamanlı çift istek — idempotent).",
+        };
+      }
+      throw e;
+    }
 
     await AuditService.log({
       userId,

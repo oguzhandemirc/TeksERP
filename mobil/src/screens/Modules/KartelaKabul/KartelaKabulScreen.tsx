@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -19,7 +19,7 @@ import {
   Icon,
   ActivityIndicator,
 } from 'react-native-paper';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, onlineManager } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,6 +38,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import SyncStatusChip from '../../../components/SyncStatusChip';
 import RefreshButton from '../../../components/RefreshButton';
 import AppModal from '../../../components/AppModal';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
@@ -45,12 +46,19 @@ import { SkeletonList } from '../../../components/motion';
 import {
   kartelaService,
   type KartelaOutstandingItem,
-  type KartelaReceiptListItem,
+  type KartelaReceiveRequest,
   type KartelaReceiveReturn,
 } from '../../../services/kartela.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// O12 fix: uzun kabul formu (per-top sayım + cm/kg ölçümleri) Android LMK
+// kill'inde sıfırlanıyordu — FasonKabul'daki draft deseni (debounce + savedAt
+// + 8h TTL + restore guard) buraya da uygulandı.
+const DRAFT_KEY = 'kartela_kabul_draft_v1';
+const DRAFT_TTL_MS = 8 * 60 * 60 * 1000;
 
 type RollProp = { id: string; name: string; color: string | null };
 
@@ -217,6 +225,47 @@ export default function KartelaKabulScreen() {
   const [notes, setNotes] = useState('');
   const [extrasOpen, setExtrasOpen] = useState(false);
 
+  // O12: draft restore (mount'ta bir kez) + debounced save. savedAt guard'ı
+  // eski taslağın (önceki vardiya) üzerine yazmayı engeller.
+  const draftRestoredRef = useRef(false);
+  useEffect(() => {
+    AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
+      if (raw) {
+        try {
+          const d = JSON.parse(raw) as Record<string, unknown>;
+          const age = typeof d.savedAt === 'number' ? Date.now() - d.savedAt : Infinity;
+          if (age < DRAFT_TTL_MS) {
+            if (typeof d.selectedDispatchId === 'string') setSelectedDispatchId(d.selectedDispatchId);
+            if (d.rows && typeof d.rows === 'object') setRows(d.rows as Record<string, RollEntry>);
+            if (typeof d.manifestNo === 'string' && d.manifestNo) setManifestNo(d.manifestNo);
+            if (typeof d.notes === 'string' && d.notes) setNotes(d.notes);
+          } else {
+            AsyncStorage.removeItem(DRAFT_KEY);
+          }
+        } catch {
+          AsyncStorage.removeItem(DRAFT_KEY);
+        }
+      }
+      draftRestoredRef.current = true;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!draftRestoredRef.current) return;
+    const t = setTimeout(() => {
+      if (!selectedDispatchId) {
+        AsyncStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      AsyncStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ savedAt: Date.now(), selectedDispatchId, rows, manifestNo, notes }),
+      );
+    }, 600);
+    return () => clearTimeout(t);
+  }, [selectedDispatchId, rows, manifestNo, notes]);
+
   // Firmasız: kartela fasonundaki TÜM açık işleri (AT_KARTELA toplar) getirir.
   const outstandingQuery = useQuery({
     queryKey: ['kartela', 'outstanding'],
@@ -262,9 +311,9 @@ export default function KartelaKabulScreen() {
   }, [outstanding]);
 
   const filteredJobs = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim().toLocaleLowerCase('tr');
     if (q.length < 2) return jobs;
-    const hit = (s?: string | null) => !!s && s.toLowerCase().includes(q);
+    const hit = (s?: string | null) => !!s && s.toLocaleLowerCase('tr').includes(q);
     const hitAny = (arr: string[]) => arr.some((s) => hit(s));
     return jobs.filter(
       (j) =>
@@ -350,30 +399,36 @@ export default function KartelaKabulScreen() {
     setSheetRollId(null);
   };
 
-  const receiveMutation = useMutation<KartelaReceiptListItem, Error, void>({
+  // Y9 fix: KK1/FasonKabul deseniyle hizalandı — mutationFn registry default'undan
+  // gelir (offline/mutations.ts), payload VARIABLES olarak geçer. Eski kod closure
+  // fn + parametresiz mutate() kullanıyordu: persist yalnız mutationKey+variables
+  // sakladığından, offline pause + app restart sonrası replay receive(undefined)
+  // ile boş body atıyor ve per-top SAYIM/ÖLÇÜM KAYBOLUYORDU.
+  const receiveMutation = useMutation<unknown, Error, KartelaReceiveRequest>({
     mutationKey: STATION_MUT.KARTELA_KABUL_RECEIVE,
-    mutationFn: async () =>
-      (
-        await kartelaService.receive({
-          subcontractorId: selectedJob!.firm.id,
-          dispatchId: selectedJob!.dispatchId,
-          manifestNo: manifestNo.trim() || null,
-          notes: notes.trim() || null,
-          returns: selectedReturns,
-        })
-      ).data,
-    onSuccess: () => {
+    // O11 fix: offline'da kabul sıraya girdi bilgisi (FasonSevk deseni).
+    onMutate: () => {
+      if (!onlineManager.isOnline()) {
+        Toast.show({
+          type: 'info',
+          text1: 'Çevrimdışı — kabul sıraya alındı',
+          text2: 'Bağlantı gelince otomatik gönderilecek',
+        });
+      }
+    },
+    onSuccess: (_data, vars) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
         text1: 'Kartela kabulü yapıldı',
-        text2: `${selectedReturns.length} top → ${totalKartela} kartela`,
+        text2: `${vars.returns.length} top → ${vars.returns.reduce((s, r) => s + r.count, 0)} kartela`,
       });
       setRows({});
       setManifestNo('');
       setNotes('');
       setSheetRollId(null);
       setSelectedDispatchId(null);
+      AsyncStorage.removeItem(DRAFT_KEY); // O12: başarılı kabul → taslak temizle
       qc.invalidateQueries({ queryKey: ['kartela'] });
       outstandingQuery.refetch();
     },
@@ -383,21 +438,33 @@ export default function KartelaKabulScreen() {
     },
   });
 
+  const buildReceivePayload = (): KartelaReceiveRequest => ({
+    subcontractorId: selectedJob!.firm.id,
+    dispatchId: selectedJob!.dispatchId,
+    manifestNo: manifestNo.trim() || null,
+    notes: notes.trim() || null,
+    returns: selectedReturns,
+  });
+
   const canSubmit = !!selectedJob && selectedReturns.length > 0 && !receiveMutation.isPending;
 
   return (
     <ScreenChrome
       title="Kartela Kabul"
       headerExtras={
-        <RefreshButton
-          headerStyle
-          label="Yenile"
-          onPress={refresh.onRefresh}
-          refreshing={refresh.refreshing}
-          isError={refresh.isError}
-          errorMessage={refresh.errorMessage}
-          successMessage={refresh.successMessage}
-        />
+        <>
+          {/* O11 fix: offline kuyruk göstergesi — diğer istasyon ekranlarıyla aynı. */}
+          <SyncStatusChip />
+          <RefreshButton
+            headerStyle
+            label="Yenile"
+            onPress={refresh.onRefresh}
+            refreshing={refresh.refreshing}
+            isError={refresh.isError}
+            errorMessage={refresh.errorMessage}
+            successMessage={refresh.successMessage}
+          />
+        </>
       }
     >
       <View style={styles.flex}>
@@ -566,7 +633,7 @@ export default function KartelaKabulScreen() {
               <TouchableRipple
                 onPress={() => {
                   if (canSubmit) {
-                    receiveMutation.mutate();
+                    receiveMutation.mutate(buildReceivePayload());
                   } else {
                     Toast.show({
                       type: 'info',

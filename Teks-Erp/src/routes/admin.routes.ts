@@ -6,13 +6,11 @@ import { Router, Request, Response, NextFunction } from "express";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { AuditService } from "../services/audit.service";
-import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
 import { systemSettingService } from "../services/system-setting.service";
 import { SystemLogService } from "../services/system-log.service";
 import { triggerManualBackup, listBackups, resolveBackupPath } from "../services/backup.service";
 import { AppError } from "../utils/app-error";
-import prisma from "../lib/prisma";
 import { z } from "zod";
 import "../types/express-augment";
 
@@ -85,14 +83,6 @@ const updateUserSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-const userSelect = {
-  id: true,
-  username: true,
-  fullName: true,
-  isActive: true,
-  createdAt: true,
-} as const;
-
 /**
  * @openapi
  * /api/admin/users:
@@ -108,32 +98,10 @@ router.post(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = createUserSchema.parse(req.body);
-
-      const exists = await prisma.user.findUnique({
-        where: { username: body.username },
-        select: { id: true },
-      });
-      if (exists) throw AppError.conflict("Bu kullanıcı adı zaten kullanılıyor");
-
-      const passwordHash = await AuthService.hashPassword(body.password);
-      const user = await prisma.user.create({
-        data: {
-          username: body.username,
-          fullName: body.fullName,
-          passwordHash,
-          isActive: body.isActive ?? true,
-        },
-        select: userSelect,
-      });
-
-      await AuditService.log({
-        userId: req.user?.userId,
-        action: "CREATE",
-        tableName: "users",
-        recordId: user.id,
-        newData: { username: user.username, fullName: user.fullName, isActive: user.isActive },
-      });
-
+      const user = await PermissionManagementService.createUser(
+        body,
+        req.user?.userId
+      );
       res.status(201).json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -157,28 +125,11 @@ router.patch(
     try {
       const id = req.params.id as string;
       const body = updateUserSchema.parse(req.body);
-
-      const existing = await prisma.user.findUnique({
-        where: { id },
-        select: userSelect,
-      });
-      if (!existing) throw AppError.notFound("Kullanıcı bulunamadı");
-
-      const user = await prisma.user.update({
-        where: { id },
-        data: body,
-        select: userSelect,
-      });
-
-      await AuditService.log({
-        userId: req.user?.userId,
-        action: "UPDATE",
-        tableName: "users",
-        recordId: id,
-        oldData: { fullName: existing.fullName, isActive: existing.isActive },
-        newData: body,
-      });
-
+      const user = await PermissionManagementService.updateUser(
+        id,
+        body,
+        req.user?.userId
+      );
       res.status(200).json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -204,28 +155,10 @@ router.delete(
       if (req.user?.userId === id) {
         throw AppError.badRequest("Kendi hesabınızı pasife alamazsınız");
       }
-
-      const existing = await prisma.user.findUnique({
-        where: { id },
-        select: { id: true, isActive: true },
-      });
-      if (!existing) throw AppError.notFound("Kullanıcı bulunamadı");
-
-      const user = await prisma.user.update({
-        where: { id },
-        data: { isActive: false },
-        select: userSelect,
-      });
-
-      await AuditService.log({
-        userId: req.user?.userId,
-        action: "DELETE",
-        tableName: "users",
-        recordId: id,
-        oldData: { isActive: existing.isActive },
-        newData: { isActive: false },
-      });
-
+      const user = await PermissionManagementService.deactivateUser(
+        id,
+        req.user?.userId
+      );
       res.status(200).json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -562,27 +495,8 @@ router.get(
   requirePermission("admin:settings"),
   async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const [activeCount, archiveCount, oldest, lastRun] = await Promise.all([
-        prisma.systemLog.count(),
-        prisma.systemLogArchive.count(),
-        prisma.systemLog.findFirst({
-          orderBy: { createdAt: "asc" },
-          select: { createdAt: true },
-        }),
-        prisma.systemSetting.findUnique({
-          where: { key: "audit.lastArchiveAt" },
-          select: { value: true },
-        }),
-      ]);
-      res.status(200).json({
-        success: true,
-        data: {
-          activeCount,
-          archiveCount,
-          oldestLog: oldest?.createdAt ?? null,
-          lastAutoArchiveAt: lastRun?.value ?? null,
-        },
-      });
+      const stats = await AuditService.getLogStats();
+      res.status(200).json({ success: true, data: stats });
     } catch (error) {
       next(error);
     }

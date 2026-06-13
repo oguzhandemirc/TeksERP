@@ -387,6 +387,17 @@ export class ReturnService {
       "active";
     delete params.filters.cancelled;
 
+    // L (düşük bulgu): filter[] anahtarları whitelist'ten geçer — bilinmeyen
+    // anahtar generic buildWhereClause üzerinden Prisma validation 500'üne
+    // dönüşüyordu (base.service safeFilters davranışının yereli: sessiz düş).
+    const ALLOWED_RETURN_FILTERS = new Set([
+      "customerId", "orderId", "itemId", "colorId", "reasonId",
+      "qualityGradeId", "rollId", "fromShipmentId", "receivedById",
+    ]);
+    for (const key of Object.keys(params.filters)) {
+      if (!ALLOWED_RETURN_FILTERS.has(key)) delete params.filters[key];
+    }
+
     const where = buildWhereClause(
       params.filters,
       RETURN_SEARCH_FIELDS,
@@ -542,6 +553,7 @@ export class ReturnService {
       select: {
         id: true,
         cancelledAt: true,
+        createdAt: true,
         rollId: true,
         fromShipmentId: true,
         prevSackId: true,
@@ -563,6 +575,24 @@ export class ReturnService {
     }
     if (!rr.fromShipmentId) {
       throw AppError.conflict("İadenin sevkiyat bağı yok — geri alınamaz.");
+    }
+
+    // RECENCY GUARD'I: iptal yalnız topun EN SON aktif iadesinde yapılabilir.
+    // Sevk→iade R1→yeniden sevk→iade R2 geçmişinde R1 yanlışlıkla iptal
+    // edilirse şekil-kontrolleri geçer ve top YILLAR ÖNCEKİ sevkiyata (R1.
+    // fromShipmentId) SHIPPED yazılır, eski kalite etiketini giyerdi.
+    const newerReturn = await prisma.rollReturn.findFirst({
+      where: {
+        rollId: rr.rollId,
+        cancelledAt: null,
+        createdAt: { gt: rr.createdAt },
+      },
+      select: { id: true },
+    });
+    if (newerReturn) {
+      throw AppError.conflict(
+        "Bu topun daha yeni bir iade kaydı var — önce onu iptal edin."
+      );
     }
 
     // Eski çuval hâlâ duruyor mu? (sevkiyat iptalinde çuvallar silinmiş olabilir) →

@@ -7,6 +7,7 @@ import {
   TabletSmartphone,
   Server,
   Clock,
+  Tags,
   type LucideIcon,
 } from "lucide-react";
 import type { FeatureFlags } from "@/services/featureFlagService";
@@ -31,7 +32,7 @@ export interface FlagDef {
  * - `api`     → sunucu adresi (bu bilgisayara özel) özel section
  * - `session` → oturum süresi + hareketsizlik zaman aşımı (sayısal) özel section
  */
-export type CategoryKind = "flags" | "device" | "api" | "company" | "session";
+export type CategoryKind = "flags" | "device" | "api" | "company" | "session" | "label";
 
 export interface SettingsCategory {
   id: string;
@@ -158,6 +159,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     keywords:
       "oturum süre süresi token jwt giriş çıkış logout otomatik hareketsizlik idle zaman aşımı timeout güvenlik session ömür dakika saat",
     kind: "session",
+  },
+  {
+    id: "label",
+    label: "Etiket Baskısı",
+    icon: Tags,
+    description: "Top etiketi baskı ayarları (kopya adedi).",
+    keywords: "etiket label baskı yazdır kopya adet çift üst alt yapıştır tambur",
+    kind: "label",
   },
   {
     id: "system",

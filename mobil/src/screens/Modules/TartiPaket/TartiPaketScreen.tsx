@@ -1,13 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import {
   Text,
+  TextInput,
   Button,
   ActivityIndicator,
   TouchableRipple,
   Divider,
   Appbar,
 } from 'react-native-paper';
+import { FlashList } from '@shopify/flash-list';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -116,6 +118,33 @@ export default function TartiPaketScreen() {
     return [...base.filter((o) => inSelGroup(o)), ...base.filter((o) => !inSelGroup(o))];
   }, [openOrders, selGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // O17 fix: müşteri/sipariş arama — operatör 300 kartı kaydırarak aramasın.
+  const [orderSearch, setOrderSearch] = useState('');
+  const filteredOrders = useMemo(() => {
+    const q = orderSearch.trim().toLocaleLowerCase('tr');
+    if (!q) return displayOrders;
+    return displayOrders.filter(
+      (o) =>
+        o.order.orderNumber.toLocaleLowerCase('tr').includes(q) ||
+        o.order.customer.name.toLocaleLowerCase('tr').includes(q) ||
+        (o.order.branch?.name ?? '').toLocaleLowerCase('tr').includes(q),
+    );
+  }, [displayOrders, orderSearch]);
+
+  // O17 fix: düz ScrollView+map (kötü durumda ~300 kart × satırlar tek frame'de
+  // mount) → FlashList satırları. Grup ayracı da satır tipi olarak listede.
+  type OrderRow = { kind: 'order'; o: OpenOrder } | { kind: 'sep' };
+  const orderRows = useMemo<OrderRow[]>(() => {
+    if (!selGroup) return filteredOrders.map((o) => ({ kind: 'order' as const, o }));
+    const inG = filteredOrders.filter((o) => inSelGroup(o));
+    const outG = filteredOrders.filter((o) => !inSelGroup(o));
+    return [
+      ...inG.map((o) => ({ kind: 'order' as const, o })),
+      ...(outG.length > 0 ? [{ kind: 'sep' as const }] : []),
+      ...outG.map((o) => ({ kind: 'order' as const, o })),
+    ];
+  }, [filteredOrders, selGroup]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const renderOrderCard = (o: OpenOrder) => {
     const active = o.order.activeShipment;
     // Zaten aktif sevkiyatta → seçilemez, "Sürdür" (Paketleme'ye git).
@@ -198,6 +227,18 @@ export default function TartiPaketScreen() {
             successMessage={headerRefresh.successMessage}
           />
           <Appbar.Action
+            icon="lightning-bolt"
+            color="#fff"
+            onPress={() => nav.navigate('HizliSiparis')}
+            accessibilityLabel="Hızlı sipariş — ham top okut → sipariş"
+          />
+          <Appbar.Action
+            icon="package-variant"
+            color="#fff"
+            onPress={() => nav.navigate('CuvalDuzelt')}
+            accessibilityLabel="Çuval düzeltme — top çıkar / taşı / takasla"
+          />
+          <Appbar.Action
             icon="history"
             color="#fff"
             onPress={() => nav.navigate('SevkiyatGecmisi')}
@@ -206,78 +247,98 @@ export default function TartiPaketScreen() {
         </>
       }
     >
-      <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent}>
-        {canShip && readyCount > 0 && (
-          <TouchableRipple onPress={() => nav.navigate('Sevkiyat')} style={styles.bridge}>
-            <View style={styles.bridgeInner}>
-              <Text style={styles.bridgeText}>{readyCount} sevkiyat kapıda (kamyon bekliyor)</Text>
-              <Text style={styles.bridgeCta}>Sevkiyat →</Text>
+      <FlashList
+        data={orderRows}
+        keyExtractor={(r) => (r.kind === 'order' ? r.o.order.id : 'group-sep')}
+        renderItem={({ item }) =>
+          item.kind === 'order' ? (
+            renderOrderCard(item.o)
+          ) : (
+            <View style={styles.otherSep}>
+              <Divider style={{ flex: 1 }} />
+              <Text style={styles.otherSepText}>Diğer (farklı müşteri/şube)</Text>
+              <Divider style={{ flex: 1 }} />
             </View>
-          </TouchableRipple>
-        )}
-
-        {/* Devam eden sevkiyatlar */}
-        {preparing.length > 0 && (
-          <>
-            <Text variant="titleSmall" style={styles.section}>
-              Devam Eden ({preparing.length})
-            </Text>
-            {(showAllPreparing ? preparing : preparing.slice(0, PREPARING_CAP)).map((sh) => (
-              <TouchableRipple
-                key={sh.id}
-                onPress={() => nav.navigate('Paketleme', { shipmentId: sh.id })}
-                style={styles.resumeCard}
-              >
+          )
+        }
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={
+          <View>
+            {canShip && readyCount > 0 && (
+              <TouchableRipple onPress={() => nav.navigate('Sevkiyat')} style={styles.bridge}>
                 <View style={styles.bridgeInner}>
-                  <View>
-                    <Text style={styles.rollBarcode}>{sh.shipmentNo}</Text>
-                    <Text style={styles.covMeta}>
-                      {sh.customer.name}
-                      {sh.branch ? ` · ${sh.branch.name}` : ''} · {sh._count.rolls} top · {sh._count.sacks} çuval
-                    </Text>
-                  </View>
-                  <Text style={styles.bridgeCta}>Sürdür →</Text>
+                  <Text style={styles.bridgeText}>{readyCount} sevkiyat kapıda (kamyon bekliyor)</Text>
+                  <Text style={styles.bridgeCta}>Sevkiyat →</Text>
                 </View>
               </TouchableRipple>
-            ))}
-            {preparing.length > PREPARING_CAP && (
-              <TouchableRipple onPress={() => setShowAllPreparing((v) => !v)} style={styles.morePreparing}>
-                <Text style={styles.morePreparingText}>
-                  {showAllPreparing
-                    ? 'Daha az göster ▴'
-                    : `+${preparing.length - PREPARING_CAP} sevkiyat daha göster ▾`}
+            )}
+
+            {/* Devam eden sevkiyatlar */}
+            {preparing.length > 0 && (
+              <>
+                <Text variant="titleSmall" style={styles.section}>
+                  Devam Eden ({preparing.length})
                 </Text>
-              </TouchableRipple>
+                {(showAllPreparing ? preparing : preparing.slice(0, PREPARING_CAP)).map((sh) => (
+                  <TouchableRipple
+                    key={sh.id}
+                    onPress={() => nav.navigate('Paketleme', { shipmentId: sh.id })}
+                    style={styles.resumeCard}
+                  >
+                    <View style={styles.bridgeInner}>
+                      <View>
+                        <Text style={styles.rollBarcode}>{sh.shipmentNo}</Text>
+                        <Text style={styles.covMeta}>
+                          {sh.customer.name}
+                          {sh.branch ? ` · ${sh.branch.name}` : ''} · {sh._count.rolls} top · {sh._count.sacks} çuval
+                        </Text>
+                      </View>
+                      <Text style={styles.bridgeCta}>Sürdür →</Text>
+                    </View>
+                  </TouchableRipple>
+                ))}
+                {preparing.length > PREPARING_CAP && (
+                  <TouchableRipple onPress={() => setShowAllPreparing((v) => !v)} style={styles.morePreparing}>
+                    <Text style={styles.morePreparingText}>
+                      {showAllPreparing
+                        ? 'Daha az göster ▴'
+                        : `+${preparing.length - PREPARING_CAP} sevkiyat daha göster ▾`}
+                    </Text>
+                  </TouchableRipple>
+                )}
+                <Divider style={{ marginVertical: 12 }} />
+              </>
             )}
-            <Divider style={{ marginVertical: 12 }} />
-          </>
-        )}
 
-        <Text variant="titleSmall" style={styles.section}>
-          Açık Siparişler
-        </Text>
-        <Text style={styles.hint}>Tek müşteri + şube seç. Depo karşılaması satırda görünür.</Text>
-
-        {openOrdersQ.isLoading ? (
-          <ActivityIndicator style={{ marginTop: 24 }} />
-        ) : displayOrders.length === 0 ? (
-          <Text style={styles.emptySub}>Açık sipariş yok.</Text>
-        ) : selGroup ? (
-          <>
-            {displayOrders.filter((o) => inSelGroup(o)).map(renderOrderCard)}
-            {displayOrders.some((o) => !inSelGroup(o)) && (
-              <View style={styles.otherSep}>
-                <Divider style={{ flex: 1 }} />
-                <Text style={styles.otherSepText}>Diğer (farklı müşteri/şube)</Text>
-                <Divider style={{ flex: 1 }} />
-              </View>
-            )}
-            {displayOrders.filter((o) => !inSelGroup(o)).map(renderOrderCard)}
-          </>
-        ) : (
-          displayOrders.map(renderOrderCard)
-        )}
-      </ScrollView>
+            <Text variant="titleSmall" style={styles.section}>
+              Açık Siparişler
+            </Text>
+            <Text style={styles.hint}>Tek müşteri + şube seç. Depo karşılaması satırda görünür.</Text>
+            {/* O17: müşteri / sipariş no / şube araması */}
+            <TextInput
+              mode="outlined"
+              dense
+              value={orderSearch}
+              onChangeText={setOrderSearch}
+              placeholder="Müşteri, sipariş no veya şube ara…"
+              left={<TextInput.Icon icon="magnify" />}
+              right={
+                orderSearch ? <TextInput.Icon icon="close" onPress={() => setOrderSearch('')} /> : null
+              }
+              style={styles.searchBox}
+            />
+            {openOrdersQ.isLoading && <ActivityIndicator style={{ marginTop: 24 }} />}
+          </View>
+        }
+        ListEmptyComponent={
+          openOrdersQ.isLoading ? null : (
+            <Text style={styles.emptySub}>
+              {orderSearch ? 'Aramayla eşleşen açık sipariş yok.' : 'Açık sipariş yok.'}
+            </Text>
+          )
+        }
+      />
 
       {selected.length > 0 && (
         <View style={styles.footer}>
@@ -293,6 +354,7 @@ export default function TartiPaketScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scrollContent: { padding: 12, paddingBottom: 32 },
+  searchBox: { marginBottom: 10, backgroundColor: '#fff' },
   bridge: { borderRadius: 10, backgroundColor: '#1e40af', marginBottom: 10 },
   bridgeInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12 },
   bridgeText: { color: '#fff', fontWeight: '600' },

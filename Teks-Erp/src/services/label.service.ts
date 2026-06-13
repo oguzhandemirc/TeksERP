@@ -18,6 +18,7 @@
 // =============================================================================
 
 import bwipjs from "bwip-js";
+import { readLabelCopies } from "./system-setting.service";
 import { LabelKind, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
@@ -400,7 +401,13 @@ export class LabelService {
   async getRollLabelHtml(
     rollId: string,
     kindOverride?: LabelKind,
-    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean },
+    opts?: {
+      orderLineId?: string | null;
+      customerId?: string | null;
+      stock?: boolean;
+      /** Saha #6: kopya adedi override (1-5). Verilmezse label.copies ayarı (default 2). */
+      copies?: number;
+    },
   ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
     const payloadResp = await this.getRollLabel(rollId, opts);
     const payload = payloadResp.data;
@@ -438,8 +445,48 @@ export class LabelService {
         })
       : "";
 
-    const html = buildRollLabelHtml({ payload, template, barcodeSvg, qrSvg });
+    // Saha #6: kopya adedi — istek override > ayar (default 2, üst+alt yapıştırma).
+    const copies = opts?.copies ?? (await readLabelCopies());
+    const html = buildRollLabelHtml({ payload, template, barcodeSvg, qrSvg, copies });
     return { success: true, data: { html, kind } };
+  }
+
+  /**
+   * Saha #7: TOPLU etiket — bir sevkiyatın (veya seçili çuvalların) tüm toplarının
+   * etiketlerini TEK belgede birleştirir (her etiket kendi A6 sayfası). Tek baskıda
+   * yüzlerce top etiketi çıkarmak için. İlk etiketin <head>/<style>'ı paylaşılır;
+   * sonraki etiketlerin yalnız <body> içeriği eklenir.
+   */
+  async getBulkRollLabelsHtml(
+    rollIds: string[],
+    opts?: { copies?: number },
+  ): Promise<ApiResponse<{ html: string; count: number }>> {
+    const ids = [...new Set(rollIds)];
+    if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
+    const copies = opts?.copies ?? (await readLabelCopies());
+
+    const bodyRe = /<body[^>]*>([\s\S]*?)<\/body>/i;
+    let head = "";
+    const bodies: string[] = [];
+    for (const id of ids) {
+      const res = await this.getRollLabelHtml(id, undefined, { copies });
+      const full = res.data.html;
+      if (!head) {
+        // İlk belgenin <head> dahil <body ...> açılışına kadarki kısmı.
+        const openIdx = full.search(/<body[^>]*>/i);
+        head = openIdx >= 0 ? full.slice(0, full.match(/<body[^>]*>/i)![0].length + openIdx) : "";
+      }
+      const m = full.match(bodyRe);
+      if (m) bodies.push(m[1]);
+    }
+    // Her topu kendi sayfasında tut (etiket .label zaten A6; topu ayır).
+    const combinedBody = bodies
+      .map((b, i) => (i === 0 ? b : `<div style="page-break-before: always;">${b}</div>`))
+      .join("\n");
+    const html = head
+      ? `${head}\n${combinedBody}\n</body></html>`
+      : `<!doctype html><html><head><meta charset="utf-8"></head><body>${combinedBody}</body></html>`;
+    return { success: true, data: { html, count: bodies.length } };
   }
 
   /**

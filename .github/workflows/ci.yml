@@ -1,0 +1,137 @@
+name: CI
+
+# TeksERP monorepo — 3 alt proje (Teks-Erp backend, Electron panel, mobil).
+# Her push + PR'da tip kontrolü + test takımları koşar. Backend testleri yerel
+# PostgreSQL gerektirir (service container + migrate deploy + seed); Electron
+# (Vitest/jsdom) ve mobil (jest-expo) DB'siz çalışır.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ===========================================================================
+  # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test
+  # ===========================================================================
+  backend:
+    name: Backend (tsc + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Teks-Erp
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: teks_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/teks_ci?schema=public
+      JWT_SECRET: ci-test-secret-not-for-production
+      PORT: "4000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Teks-Erp/package-lock.json
+      - run: npm ci
+      - name: Prisma generate
+        run: npx prisma generate
+      - name: Migrate deploy (tüm migration'ları uygula)
+        run: npx prisma migrate deploy
+      - name: Seed (business-key fixture'ları)
+        run: npm run seed
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Test suite (scripts/test_*.ts runner)
+        run: npm test
+
+  # ===========================================================================
+  # ELECTRON — React 19 / Vite 7 renderer; Vitest (jsdom). Electron binary GEREKMEZ.
+  # ===========================================================================
+  electron:
+    name: Electron (tsc + vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Electron
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1" # renderer testleri binary istemez → hızlı/güvenli kurulum
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Electron/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Test (Vitest)
+        run: npm test
+
+  # ===========================================================================
+  # MOBİL — Expo 54 / RN 0.81; jest-expo (node ortamı, native build GEREKMEZ).
+  # ===========================================================================
+  mobile:
+    name: Mobil (tsc + jest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobil
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobil/package-lock.json
+      - run: npm ci
+      - name: Lint (expo lint)
+        run: npm run lint
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Test (jest-expo)
+        run: npm test
+
+  # ===========================================================================
+  # E2E — Electron uygulaması gerçekten açılıp Login render oluyor mu (Playwright
+  # _electron.launch). Headless Linux'ta xvfb gerekir. continue-on-error: CI'da
+  # olası kırılganlık unit job'larını BLOKLAMASIN (E2E sinyali yine görünür).
+  # ===========================================================================
+  e2e:
+    name: Electron E2E (smoke)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: Electron
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Electron/package-lock.json
+      - run: npm ci # E2E electron binary İSTER → ELECTRON_SKIP_BINARY_DOWNLOAD verilmez
+      - name: Playwright + Electron sistem bağımlılıkları
+        run: npx playwright install-deps
+      - name: E2E (build + headless launch)
+        run: xvfb-run --auto-servernum npm run e2e

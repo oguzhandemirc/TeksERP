@@ -333,44 +333,9 @@ router.post("/initial-entry", verifyToken, requireAnyPermission("roll:write", ..
  *       404:
  *         description: Top bulunamadı
  */
-/**
- * @openapi
- * /api/rolls/{id}/identity:
- *   patch:
- *     tags: [Inventory]
- *     summary: Topun kimliğini manuel olarak güncelle (renk + özellikler)
- *     description: |
- *       Hibrit mod — fason kabul sonrası operatör bir rulonun rengini/
- *       özelliklerini elle düzeltir. Replace semantics: gönderilen liste
- *       yeni TAM listedir. baseItem (ham kimlik) korunur.
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string, format: uuid }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               colorId:
- *                 type: string
- *                 format: uuid
- *                 nullable: true
- *               propertyIds:
- *                 type: array
- *                 items: { type: string, format: uuid }
- *     responses:
- *       200:
- *         description: Yeni kimlik (itemId, itemCode, itemName)
- *       404:
- *         description: Top bulunamadı
- */
-router.patch("/:id/identity", verifyToken, requirePermission("roll:write"), controller.applyManualProperties);
+// K6 (2026-06-12): PATCH /:id/identity kaldırıldı — hiçbir frontend çağırmıyordu
+// ('identity' Electron+mobil'de hiç geçmiyor). Servis metodu applyManualProperties
+// yaşıyor (domain mantığı, ileride yeniden açılabilir).
 
 /**
  * @openapi
@@ -425,6 +390,69 @@ router.delete("/:id", verifyToken, requireAnyPermission("roll:write", ...MOBILE_
  *         description: Top bulunamadı
  */
 router.delete("/:id/permanent", verifyToken, requirePermission("roll:write"), controller.hardDelete);
+
+/**
+ * @openapi
+ * /api/rolls/{id}/label:
+ *   patch:
+ *     tags: [Inventory]
+ *     summary: Top etiketini değiştir (saha #4 — renk/özellik/en/kalite) + yeniden bas
+ *     description: |
+ *       Yanlış/eksik etiketli stok topunu tartı-paket/sevkiyat ekranından düzeltir.
+ *       Yalnız serbest STOCK/WAREHOUSE veya PREPARING sevkiyattaki toplar; sevke
+ *       hazır/sevk edilmiş sevkiyatta önce "Hazırlığa Geri Al" gerekir (kapsama bütünlüğü).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               colorId: { type: string, format: uuid, nullable: true }
+ *               propertyIds: { type: array, items: { type: string, format: uuid } }
+ *               width: { type: number, nullable: true }
+ *               qualityGrade: { type: string }
+ *     responses:
+ *       200: { description: Etiket güncellendi }
+ *       409: { description: Top commit'li sevkiyatta — önce hazırlığa geri al }
+ */
+router.patch(
+  "/:id/label",
+  verifyToken,
+  requireAnyPermission("roll:write", "label:edit", "mobile:tarti-paket", "mobile:sevkiyat"),
+  controller.relabel,
+);
+
+/**
+ * @openapi
+ * /api/rolls/{id}/prepare-for-sale:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Ham/stok topu satışa hazırla (saha #10 — STOCK → WAREHOUSE)
+ *     description: |
+ *       İşlenmeden gelen ham kumaşı sevke hazır (WAREHOUSE) statüsüne alır; sonrasında
+ *       normal sevk akışı (paketleme + karşılanma + dispatch) çalışır. Top serbest olmalı.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Top satışa hazırlandı (WAREHOUSE) }
+ *       409: { description: Top serbest değil (sevkiyat/iş emri/fason) }
+ */
+router.post(
+  "/:id/prepare-for-sale",
+  verifyToken,
+  requireAnyPermission("roll:write", "mobile:tarti-paket", "mobile:sevkiyat", "mobile:hizli-is-emri"),
+  controller.prepareForSale,
+);
 
 /**
  * @openapi

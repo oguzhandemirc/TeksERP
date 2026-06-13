@@ -14,8 +14,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { colorService } from "@/pages/Colors/service";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { ColorSwatchCard } from "./ColorSwatchCard";
 import { useColorPickerData } from "./useColorPickerData";
+import { QuickAddColor } from "./QuickAddColor";
 
 export interface ColorPickerModalProps {
   value: string | null;
@@ -49,8 +51,12 @@ export function ColorPickerModal({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
+  const { hasPermission } = useRoleAccess();
 
   const data = useColorPickerData({ open, customerId, allowedColorIds, debouncedSearch });
+  // Saha #12: hızlı ekleme — kısıtlı modda (ürün izinli renkleri) anlamsız,
+  // yeni renk izinli listede olmayacağı için gizli.
+  const canQuickAdd = hasPermission("property:write") && !data.isRestricted;
 
   // --- Seçili rengin trigger gösterimi (arama/sayfalamadan bağımsız) ---
   const assignedColor = value ? data.assignedById.get(value) : undefined;
@@ -224,6 +230,12 @@ export function ColorPickerModal({
               </div>
             )}
           </div>
+
+          {canQuickAdd && (
+            <div className="shrink-0">
+              <QuickAddColor onCreated={(id) => choose(id)} />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>

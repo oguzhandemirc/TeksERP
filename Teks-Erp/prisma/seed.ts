@@ -10,8 +10,8 @@
 //   npm run seed
 //
 // Yüklenenler:
-//   1. 45 permission (web + mobil + admin)
-//   2. 10 permission template (Admin Tam Yetki + 9 mobil rol)
+//   1. 54 permission (web + mobil + admin)
+//   2. 14 permission template (Admin Tam Yetki + mobil/masaüstü roller)
 //   3. 7 kullanıcı (admin + 6 test — admin dışı yetkisiz başlar)
 //   4. Admin'e tüm yetkiler atanır
 //   5. 3 kalite sınıfı (1.KALITE / A1 / FIRE)
@@ -253,12 +253,12 @@ async function main() {
 
   // --- Renkler ---
   const colorData = [
-    { code: "BEYAZ",    name: "Beyaz",    hex: "#FFFFFF", sortOrder: 10 },
-    { code: "SIYAH",    name: "Siyah",    hex: "#000000", sortOrder: 20 },
-    { code: "LACIVERT", name: "Lacivert", hex: "#1e3a8a", sortOrder: 30 },
-    { code: "KIRMIZI",  name: "Kırmızı",  hex: "#dc2626", sortOrder: 40 },
-    { code: "MAVI",     name: "Mavi",     hex: "#2563eb", sortOrder: 50 },
-    { code: "BEJ",      name: "Bej",      hex: "#d4b896", sortOrder: 60 },
+    { code: "BEYAZ",    name: "BEYAZ",    hex: "#FFFFFF", sortOrder: 10 },
+    { code: "SIYAH",    name: "SİYAH",    hex: "#000000", sortOrder: 20 },
+    { code: "LACIVERT", name: "LACİVERT", hex: "#1e3a8a", sortOrder: 30 },
+    { code: "KIRMIZI",  name: "KIRMIZI",  hex: "#dc2626", sortOrder: 40 },
+    { code: "MAVI",     name: "MAVİ",     hex: "#2563eb", sortOrder: 50 },
+    { code: "BEJ",      name: "BEJ",      hex: "#d4b896", sortOrder: 60 },
   ];
   const colors = await Promise.all(colorData.map((c) => prisma.color.create({ data: c })));
   const colorByCode = new Map(colors.map((c) => [c.code, c]));
@@ -382,6 +382,51 @@ async function main() {
   });
   console.log("✅ 3 makine (KK1-M1, KK2-M1, TAMBUR-M1)");
 
+  // --- Makine donanımı (saha yazıcı + RS232 ara cihaz config örnekleri) ---
+  // Dokümantasyon + cihaz/kodlama seçimi. Faz-1 donanım SİMÜLE; bu kayıtlar örnek.
+  const seededMachines = await prisma.machine.findMany({
+    where: { code: { in: ["KK1-M1", "KK2-M1", "TAMBUR-M1"] } },
+    select: { id: true, code: true },
+  });
+  const mById = (code: string) => seededMachines.find((m) => m.code === code)?.id;
+  const hwData = [
+    {
+      code: "KK1-M1",
+      printerIp: "192.168.1.50",
+      printerMac: "00:23:09:01:15:01",
+      kqMac: "00:23:09:01:1D:17",
+      mtMac: "00:23:09:01:1D:17",
+      kqPattern: "(\\d+(?:\\.\\d+)?)",
+      mtPattern: "y",
+      notes: "KK1 — kantar + metre okuyucu (örnek config)",
+    },
+    {
+      code: "KK2-M1",
+      printerIp: "192.168.1.51",
+      printerMac: "00:23:09:01:AB:B9",
+      kqMac: "00:23:09:01:37:89",
+      mtMac: "00:23:09:01:37:89",
+      notes: "KK2/Kurşun — yazıcı + tek RS232 köprü",
+    },
+    {
+      code: "TAMBUR-M1",
+      printerIp: "192.168.1.52",
+      printerMac: "00:23:09:01:A6:87",
+      kqMac: "00:23:09:01:19:C7",
+      mtMac: "00:23:09:01:05:5E",
+      mtMac2: "00:23:09:01:1E:1B",
+      notes: "Tambur — 2 kanal metre okuyucu",
+    },
+  ];
+  for (const h of hwData) {
+    const machineId = mById(h.code);
+    if (!machineId) continue;
+    const { code: _c, ...rest } = h;
+    void _c;
+    await prisma.machineHardware.create({ data: { machineId, ...rest } });
+  }
+  console.log(`✅ ${hwData.length} makine donanım config (örnek yazıcı/RS232 desenleri)`);
+
   // --- İstasyon yetenekleri ---
   // Boyahane: tüm 6 renk + 5 özellik (Kurşun ve Zımparalı hariç — onlar başka istasyonun işi)
   await prisma.stationColor.createMany({
@@ -403,13 +448,16 @@ async function main() {
   console.log("✅ İstasyon yetenekleri (Boya=6 renk+5 özellik, Kurşun=KURSUN, Zımpara=ZIMPARALI)");
 
   // --- Hata tipleri ---
+  // Saha #18: GENEL — KK2'de hata tipini belirtmek istemeyen operatör için
+  // varsayılan/hızlı tuş (mobil ekran code'a göre öne çıkarır).
   await prisma.defectType.createMany({
     data: [
+      { code: "GENEL",  name: "Genel Hata", severity: "MINOR" },
       { code: "YIRTIK", name: "Yırtık",  severity: "MAJOR" },
       { code: "LEKE",   name: "Lekeli",  severity: "MINOR" },
     ],
   });
-  console.log("✅ 2 hata tipi (Yırtık, Lekeli)");
+  console.log("✅ 3 hata tipi (Genel Hata, Yırtık, Lekeli)");
 
   // --- Rota şablonları (generic + 1 ARDA-özel) ---
   await prisma.route.create({
@@ -450,7 +498,7 @@ async function main() {
   // --- Patos kumaşı + tüm renk/özellik izinli ---
   const patos = await prisma.item.create({
     data: {
-      code: "PATOS", name: "Patos", itemType: "FABRIC", unit: "MT",
+      code: "PATOS", name: "PATOS", itemType: "FABRIC", unit: "MT",
       allowedColors:     { create: colors.map((c) => ({ colorId: c.id })) },
       allowedProperties: { create: properties.map((p) => ({ propertyId: p.id })) },
     },

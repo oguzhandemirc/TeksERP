@@ -53,6 +53,7 @@ import {
   RollStatus,
   RollEntrySource,
   StepStatus,
+  OrderStatus,
   Prisma,
 } from "@prisma/client";
 import {
@@ -179,6 +180,81 @@ const TARGET_PROP_MUTABLE_STATUSES: RollStatus[] = [
   ...TARGET_PROP_FINISHED_STATUSES,
   ...TARGET_PROP_INPROD_STATUSES,
 ];
+
+/**
+ * Rota adımlarındaki istasyon/kategori/firma referanslarının var + aktif olduğunu
+ * doğrular (soft-delete guard, SEC-3). create() ve replace() ortak kullanır —
+ * pasife alınmış (isActive=false) kayıt DB FK kontrolünü geçer ama WorkOrderStep
+ * emekli istasyona işaret etmemeli. Var-olmayan UUID zaten P2003→400 ile yakalanır.
+ */
+async function assertRouteRefsActive(
+  steps: Array<{
+    stationId: string;
+    requiredCategoryId?: string | null;
+    plannedSubcontractorId?: string | null;
+  }>,
+): Promise<void> {
+  const stationIds = [...new Set(steps.map((s) => s.stationId).filter(Boolean))];
+  if (stationIds.length > 0) {
+    const live = await prisma.station.findMany({
+      where: { id: { in: stationIds }, isActive: true },
+      select: { id: true },
+    });
+    if (live.length !== stationIds.length) {
+      throw AppError.badRequest("Rotada bulunmayan veya pasif istasyon var");
+    }
+  }
+  const categoryIds = [
+    ...new Set(steps.map((s) => s.requiredCategoryId).filter((x): x is string => !!x)),
+  ];
+  if (categoryIds.length > 0) {
+    const live = await prisma.subcontractorCategory.findMany({
+      where: { id: { in: categoryIds }, isActive: true },
+      select: { id: true },
+    });
+    if (live.length !== categoryIds.length) {
+      throw AppError.badRequest("Rotada bulunmayan veya pasif fason kategorisi var");
+    }
+  }
+  const subIds = [
+    ...new Set(steps.map((s) => s.plannedSubcontractorId).filter((x): x is string => !!x)),
+  ];
+  if (subIds.length > 0) {
+    const live = await prisma.subcontractor.findMany({
+      where: { id: { in: subIds }, isActive: true },
+      select: { id: true },
+    });
+    if (live.length !== subIds.length) {
+      throw AppError.badRequest("Rotada bulunmayan veya pasif fason firma var");
+    }
+  }
+}
+
+/**
+ * L (düşük bulgu): WO'ya bağlanacak sipariş satırları için giriş guard'ı —
+ * var olmayan satır ve İPTAL edilmiş siparişin satırı reddedilir (eskiden
+ * iptal siparişe sessizce yeni üretim bağlanabiliyordu). create + replace ortak.
+ */
+function assertOrderLinesLinkable(
+  requestedIds: string[],
+  found: Array<{ id: string; order: { status: OrderStatus; orderNumber: string } }>,
+): void {
+  if (found.length !== new Set(requestedIds).size) {
+    throw AppError.badRequest("Bazı sipariş satırları bulunamadı");
+  }
+  const cancelled = [
+    ...new Set(
+      found
+        .filter((l) => l.order.status === OrderStatus.CANCELLED)
+        .map((l) => l.order.orderNumber),
+    ),
+  ];
+  if (cancelled.length > 0) {
+    throw AppError.badRequest(
+      `İptal edilmiş siparişe iş emri bağlanamaz: ${cancelled.join(", ")}`,
+    );
+  }
+}
 
 export class WorkOrderService {
   /**
@@ -311,8 +387,11 @@ export class WorkOrderService {
         return {
           stationId: s.stationId,
           notes:     overlay?.notes ?? s.defaultNotes ?? null,
-          requiredCategoryId:     overlay?.requiredCategoryId ?? null,
-          plannedSubcontractorId: overlay?.plannedSubcontractorId ?? null,
+          // Saha #14: şablonda kayıtlı fason planlaması artık default olarak
+          // klonlanır (eskiden şablon bunu saklayamıyordu, hep boş geliyordu);
+          // formdaki stepPlanning overlay'i yine ezebilir.
+          requiredCategoryId:     overlay?.requiredCategoryId ?? s.requiredCategoryId ?? null,
+          plannedSubcontractorId: overlay?.plannedSubcontractorId ?? s.plannedSubcontractorId ?? null,
         };
       });
     } else {
@@ -328,6 +407,11 @@ export class WorkOrderService {
         plannedSubcontractorId: s.plannedSubcontractorId ?? null,
       }));
     }
+
+    // ── Soft-delete guard (SEC-3): rotadaki istasyon/kategori/firma referansları
+    // var + aktif olmalı. Custom rota VE şablon yolunu birlikte kapsar (şablon
+    // aktif olsa da içindeki istasyon sonradan pasife alınmış olabilir).
+    await assertRouteRefsActive(finalSteps);
 
     // ── Sipariş bağları + tahsis miktarları (3.2) ───────────────────────────
     let allocations: { orderLineId: string; allocatedQty: number }[] = [];
@@ -374,8 +458,12 @@ export class WorkOrderService {
     if (type === "ORDER_PRODUCTION" && allocations.length > 0) {
       const orderLineItems = await prisma.orderLine.findMany({
         where: { id: { in: allocations.map((a) => a.orderLineId) } },
-        select: { id: true, itemId: true, colorId: true },
+        select: {
+          id: true, itemId: true, colorId: true,
+          order: { select: { status: true, orderNumber: true } },
+        },
       });
+      assertOrderLinesLinkable(allocations.map((a) => a.orderLineId), orderLineItems);
       const distinctItems = new Set(orderLineItems.map((l) => l.itemId));
       if (distinctItems.size === 1) {
         const onlyItemId = Array.from(distinctItems)[0];
@@ -515,17 +603,19 @@ export class WorkOrderService {
 
     // ── batchNumber / Parti Kodu ────────────────────────────────────────────
     // Kullanıcı verdiyse (manuel veya otomatik-override) benzersizliğini doğrula;
-    // vermediyse otomatik üret (P-YYMMDD-NNN).
-    let batchNumber: string;
+    // vermediyse otomatik üret (P-YYMMDD-NNN) — üretim RETRY KAPSAMINDA, tx
+    // içinde yapılır: eskiden closure dışındaydı ve eşzamanlı iki create aynı
+    // günlük max'ı okuyunca P2002 retry'ları hep AYNI numarayla çakışıp
+    // yanıltıcı "Barkod üretimi 5 denemede başarısız" 409'u veriyordu.
+    let manualBatchNumber: string | null = null;
     if (data.batchNumber && data.batchNumber.trim().length > 0) {
-      batchNumber = data.batchNumber.trim();
-      await this.assertBatchNumberUnique(batchNumber);
-    } else {
-      batchNumber = await this.generateBatchNumber();
+      manualBatchNumber = data.batchNumber.trim();
+      await this.assertBatchNumberUnique(manualBatchNumber);
     }
 
-    // Refakat kartı barkodu sequence çakışırsa (P2002) tx'i baştan dene.
+    // Refakat kartı barkodu / parti kodu sequence çakışırsa (P2002) tx'i baştan dene.
     const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
+      const batchNumber = manualBatchNumber ?? (await this.generateBatchNumber());
       // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK. Sipariş bağı yalnız
       // "bu iş emri hangi siparişler için" niyetidir (metraj taşımaz); fazla
       // üretim Tambur'da stoğa düşer. Yalnız satırların varlığını doğrula.
@@ -1531,6 +1621,7 @@ export class WorkOrderService {
           select: {
             id: true, stationId: true, stepSequence: true, notes: true,
             stepData: true, requiredCategoryId: true, plannedSubcontractorId: true,
+            status: true, isUrgent: true, priority: true,
             station: { select: { name: true } },
             requiredCategory: { select: { appliesColor: true } },
           },
@@ -1710,13 +1801,13 @@ export class WorkOrderService {
       throw AppError.badRequest("Yeni renk bulunamadı veya pasif");
     }
 
-    // batchNumber: verildiyse benzersiz doğrula; yoksa otomatik üret.
-    let batchNumber: string;
+    // batchNumber: verildiyse benzersiz doğrula; yoksa otomatik üret (üretim
+    // RETRY KAPSAMINDA tx içinde — create() ile aynı gerekçe: closure dışında
+    // üretilirse P2002 retry'ları hep aynı numarayla çakışır).
+    let manualBatchNumber: string | null = null;
     if (data.newBatchNumber && data.newBatchNumber.trim().length > 0) {
-      batchNumber = data.newBatchNumber.trim();
-      await this.assertBatchNumberUnique(batchNumber);
-    } else {
-      batchNumber = await this.generateBatchNumber();
+      manualBatchNumber = data.newBatchNumber.trim();
+      await this.assertBatchNumberUnique(manualBatchNumber);
     }
 
     const planDates = await resolvePlanDates(null, null);
@@ -1726,9 +1817,9 @@ export class WorkOrderService {
     const isRedye = ctx.mode === "redye";
     const S = reEntryStep.stepSequence;
     const newType = data.orderMode === "keep" ? sourceWo.type : "STOCK_PRODUCTION";
-    const movedTotalQty = ctx.laneRolls.reduce((s, r) => s + Number(r.currentQty), 0);
 
     const result = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
+      const batchNumber = manualBatchNumber ?? (await this.generateBatchNumber());
       // Tx içinde partiyi yeniden kilitle/doğrula — durum değişmiş olabilir.
       const fresh = await tx.roll.findMany({
         where: {
@@ -1753,6 +1844,13 @@ export class WorkOrderService {
         throw AppError.conflict("Parti durumu değişti — ayırma iptal edildi, sayfayı yenileyin");
       }
       const laneRollIds = fresh.map((r) => r.id);
+      // Hedef metraj TX İÇİNDE, taze partiden ve Decimal ile (eski kod tx-öncesi
+      // laneRolls'tan JS float reduce kullanıyordu — hem bayat hem float kuralı
+      // ihlali; computeLiveManifest'teki Decimal.plus deseniyle hizalandı).
+      const movedTotalQty = fresh.reduce(
+        (s, r) => s.plus(r.currentQty),
+        new Prisma.Decimal(0),
+      );
 
       // ── Yeni WO: kaynağın birebir rotası + özellikleri, YENİ renk ──
       const newWo = await tx.workOrder.create({
@@ -1781,14 +1879,21 @@ export class WorkOrderService {
               stepData: (s.stepData as Prisma.InputJsonValue) ?? undefined,
               requiredCategoryId: s.requiredCategoryId ?? null,
               plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+              // L (düşük bulgu): kuyruk önceliği klona taşınır — kaynaktaki acil
+              // parti ayrılınca yeni WO kuyruk sonuna düşmesin.
+              isUrgent: s.isUrgent,
+              priority: s.priority,
               // "Kaldığı yerden devam": S öncesi adımlar tamamlandı sayılır,
-              // S aktif (parti orada), sonrası bekliyor.
+              // S aktif (parti orada), sonrası bekliyor. SKIPPED adımlar (S hariç)
+              // SKIPPED kalır — klon planlamacının atlama kararını diriltmesin.
               status:
-                s.stepSequence < S
-                  ? StepStatus.COMPLETED
-                  : s.stepSequence === S
-                    ? StepStatus.ACTIVE
-                    : StepStatus.PENDING,
+                s.status === StepStatus.SKIPPED && s.stepSequence !== S
+                  ? StepStatus.SKIPPED
+                  : s.stepSequence < S
+                    ? StepStatus.COMPLETED
+                    : s.stepSequence === S
+                      ? StepStatus.ACTIVE
+                      : StepStatus.PENDING,
               startedAt: s.stepSequence === S ? planDates.plannedStartDate : null,
               completedAt: s.stepSequence < S ? new Date() : null,
             })),
@@ -1855,20 +1960,27 @@ export class WorkOrderService {
           where: { rollId: { in: laneRollIds }, exitedAt: null },
           data: { exitedAt: new Date(), notes: "REDYE_REWIND" },
         });
-        for (const r of fresh) {
-          await tx.rollMovement.create({
-            data: {
-              rollId: r.id,
-              workOrderStepId: newReEntryStepId,
-              qtyIn: r.currentQty,
-              weightIn: r.weightKg ?? null,
-              operatorId: userId ?? null,
-              notes: "REDYE_REWIND_IN",
-            },
-          });
-        }
-        await tx.roll.updateMany({
-          where: { id: { in: laneRollIds } },
+        // Tek createMany — satırlar rollId/qtyIn/weightIn dışında özdeş (eski kod
+        // roll başına create = N+1; partide yüzlerce roll olabilir).
+        await tx.rollMovement.createMany({
+          data: fresh.map((r) => ({
+            rollId: r.id,
+            workOrderStepId: newReEntryStepId,
+            qtyIn: r.currentQty,
+            weightIn: r.weightKg ?? null,
+            operatorId: userId ?? null,
+            notes: "REDYE_REWIND_IN",
+          })),
+        });
+        // ATOMİK CLAIM (M-1): WHERE'e lane kimliği + beklenen statüler kondu —
+        // eşzamanlı ikinci split/işlem partiyi bu arada değiştirdiyse count
+        // uyuşmaz → 409 + tüm tx (yeni WO dahil) geri sarılır.
+        const redyeClaim = await tx.roll.updateMany({
+          where: {
+            id: { in: laneRollIds },
+            batchSplitId: data.batchSplitId,
+            status: { in: [RollStatus.IN_PRODUCTION, RollStatus.STOCK] },
+          },
           data: {
             currentStepId: newReEntryStepId,
             producedInStepId: newReEntryStepId,
@@ -1876,13 +1988,52 @@ export class WorkOrderService {
             batchSplitId: null,
           },
         });
+        if (redyeClaim.count !== laneRollIds.length) {
+          throw AppError.conflict(
+            "Parti bu sırada başka bir işlemle değişti — ayırma iptal edildi, sayfayı yenileyin."
+          );
+        }
+        // M-13: geri sarılan topların KK2'de açılmış AÇIK hatalarını karara
+        // bağla. Toplar yeniden boyaya gidip kabulde SUBCONTRACTOR_CONSUMED
+        // olunca bu rollId'ler bir daha hiçbir Tambur akışına giremez (hatayı
+        // kapatan tek yer tambur, rollId bazlı) → açık hata sayacı ve kalite
+        // raporları her redye'de KALICI şişerdi. NO_CUT + processedAtStepId=null
+        // = "kesimsiz kapatıldı, istasyon kararı değil" (closeOrphanRollErrors
+        // semantiği); kumaş yeniden boyanır, kabul sonrası KK2 gerekirse yeni
+        // kayıt açar.
+        await tx.rollError.updateMany({
+          where: { rollId: { in: laneRollIds }, isProcessed: false },
+          data: {
+            isProcessed: true,
+            actionTaken: "NO_CUT",
+            processedAtStepId: null,
+            processedAt: new Date(),
+          },
+        });
       } else {
         // BOYANMADAN: açık sevki yeni WO'ya taşı (kabul yeni WO'da düşer;
         // sourceDispatchItem bağı korunur). Toplar AT_SUBCONTRACTOR + lane korunur.
-        await tx.subcontractorDispatch.update({
-          where: { id: data.batchSplitId },
+        //
+        // ATOMİK CLAIM (M-1): tx-içi yeniden doğrulama yalnız top STATÜLERİNE
+        // bakıyor — continue modunda ayırma statü değiştirmediği için ikinci
+        // istek ilk commit'ten SONRA bile geçerdi: repoint'ler 0 satır eşler
+        // ama guard'sız dispatch.update sevki İKİNCİ yeni WO'ya taşırdı
+        // (toplar A'da, sevk B'de; ortada iki hayalet WO+kart). WHERE'e kaynak
+        // WO + iptal-değil koşulu: kaybeden 409 alır, tx (yeni WO dahil) geri
+        // sarılır. cancelledAt koşulu dispatch-iptal yarışını da kapatır.
+        const dispatchClaim = await tx.subcontractorDispatch.updateMany({
+          where: {
+            id: data.batchSplitId,
+            workOrderId: sourceWo.id,
+            cancelledAt: null,
+          },
           data: { workOrderId: newWo.id, stepId: newReEntryStepId },
         });
+        if (dispatchClaim.count === 0) {
+          throw AppError.conflict(
+            "Sevk bu sırada başka bir işlemle değişti (ayrılmış veya iptal edilmiş olabilir) — sayfayı yenileyin."
+          );
+        }
       }
 
       // Yeni WO için yeni refakat kartı — parti ayrı WO'da hareket eder,
@@ -1950,21 +2101,28 @@ export class WorkOrderService {
     }
 
     const stepIds = wo.steps.map((s) => s.id);
+    const rollWhere = {
+      OR: [
+        { producedInStepId: { in: stepIds } },
+        { currentStepId: { in: stepIds } },
+      ],
+    };
+    // M-11: liste 200 ile sınırlı (UI) ama SAYILAR limitsiz count'tan gelir —
+    // 200+ toplu WO'da onay ekranı eksik sayı göstermesin; truncated bayrağı
+    // UI'a "tamamı bu kadar değil" der.
+    const totalRollCount =
+      stepIds.length > 0 ? await prisma.roll.count({ where: rollWhere }) : 0;
     const rolls =
       stepIds.length > 0
         ? await prisma.roll.findMany({
-            where: {
-              OR: [
-                { producedInStepId: { in: stepIds } },
-                { currentStepId: { in: stepIds } },
-              ],
-            },
+            where: rollWhere,
             select: {
               id: true,
               barcode: true,
               status: true,
               currentQty: true,
               colorId: true,
+              currentStepId: true,
               entrySource: true,
               color: { select: { name: true, hex: true } },
               _count: { select: { properties: true } },
@@ -2005,7 +2163,11 @@ export class WorkOrderService {
           })
         : 0;
 
-    // Her top için: ham mı işlenmiş mi (boyalı/özellikli/fason-dönüşü) + hâlâ fasonda mı.
+    // Her top için: ham mı işlenmiş mi (boyalı/özellikli/fason-dönüşü) + hâlâ
+    // fasonda mı + İPTALDE GERÇEKTEN STOCK'A DÖNECEK Mİ (M-11: softDelete'in
+    // mutasyon predicate'iyle birebir aynı koşul — onay ekranı değişmeyecek
+    // depo/bitmiş topları "etkilenecek" gibi göstermesin).
+    const stepIdSet = new Set(stepIds);
     const mappedRolls = rolls.map((r) => ({
       id: r.id,
       barcode: r.barcode,
@@ -2021,9 +2183,38 @@ export class WorkOrderService {
         r.status === RollStatus.AT_SUBCONTRACTOR ||
         r.status === RollStatus.RETURNED_FROM_SUBCONTRACTOR,
       atSubcontractor: r.status === RollStatus.AT_SUBCONTRACTOR,
+      willRevertToStock:
+        r.currentStepId !== null &&
+        stepIdSet.has(r.currentStepId) &&
+        r.status === RollStatus.IN_PRODUCTION &&
+        String(r.entrySource) !== "SUBCONTRACTOR_RETURN",
     }));
-    const atSubcontractorCount = mappedRolls.filter((r) => r.atSubcontractor).length;
-    const processedCount = mappedRolls.filter((r) => r.processed).length;
+    // Sayılar LİMİTSİZ count'lardan (liste 200 ile kırpılı olabilir).
+    const atSubcontractorCount =
+      stepIds.length > 0
+        ? await prisma.roll.count({
+            where: { AND: [rollWhere, { status: RollStatus.AT_SUBCONTRACTOR }] },
+          })
+        : 0;
+    const processedCount =
+      stepIds.length > 0
+        ? await prisma.roll.count({
+            where: {
+              AND: [
+                rollWhere,
+                {
+                  OR: [
+                    { colorId: { not: null } },
+                    { properties: { some: {} } },
+                    { entrySource: RollEntrySource.SUBCONTRACTOR_RETURN },
+                    { status: RollStatus.AT_SUBCONTRACTOR },
+                    { status: RollStatus.RETURNED_FROM_SUBCONTRACTOR },
+                  ],
+                },
+              ],
+            },
+          })
+        : 0;
 
     let blockReason: string | null = null;
     if (wo.status === WorkOrderStatus.CANCELLED) {
@@ -2046,11 +2237,13 @@ export class WorkOrderService {
         canCancel: blockReason === null,
         blockReason,
         travelerCardCount,
-        rollCount: rolls.length,
+        rollCount: totalRollCount,
         processedCount,
         atSubcontractorCount,
         fasonInFlightCount,
         rolls: mappedRolls,
+        // Liste 200 ile kırpıldıysa UI "ilk 200 gösteriliyor" diyebilsin.
+        rollsTruncated: totalRollCount > rolls.length,
       },
     };
   }
@@ -2154,6 +2347,31 @@ export class WorkOrderService {
         });
       }
 
+      // M-12: iptal edilen WO'nun adımlarındaki TÜM açık movement'ları kapat —
+      // yoksa süresiz açık kalır: dashboard WIP sayacı kalıcı şişer, açık-kart
+      // partial index'i ölü adımlarla dolar, serbest STOCK top "istasyonda
+      // aktif" görünür. qtyOut topun son metrajından (detachRolls deseni).
+      if (stepIds.length > 0) {
+        await tx.$executeRaw`
+          UPDATE roll_movements m
+          SET "exitedAt" = now(),
+              "qtyOut" = COALESCE(m."qtyOut", r."currentQty"),
+              "weightOut" = COALESCE(m."weightOut", r."weightKg"),
+              notes = CASE WHEN m.notes IS NULL OR m.notes = '' THEN 'WO_CANCELLED'
+                           ELSE m.notes || ' | WO_CANCELLED' END
+          FROM rolls r
+          WHERE m."rollId" = r.id
+            AND m."workOrderStepId" = ANY(${stepIds}::uuid[])
+            AND m."exitedAt" IS NULL
+        `;
+        // Başlamamış/yarım adımlar terminal duruma (SKIPPED) — ölü WO'nun
+        // adımları kuyruk/WIP istatistiklerinde "içeride" sayılmasın.
+        await tx.workOrderStep.updateMany({
+          where: { workOrderId: id, status: { in: [StepStatus.PENDING, StepStatus.ACTIVE] } },
+          data: { status: StepStatus.SKIPPED, skipReason: "WO_CANCELLED" },
+        });
+      }
+
       // WO iptal olunca tüm ACTIVE refakat kartlarını VOIDED'a çek
       await tx.travelerCard.updateMany({
         where: { workOrderId: id, status: "ACTIVE" },
@@ -2235,7 +2453,38 @@ export class WorkOrderService {
             currentStepId: null,
           },
         });
+
+        // M-12: arşivlenen WO'nun açık movement'larını kapat + adımları
+        // terminal duruma çek (softDelete ile aynı gerekçe).
+        await tx.$executeRaw`
+          UPDATE roll_movements m
+          SET "exitedAt" = now(),
+              "qtyOut" = COALESCE(m."qtyOut", r."currentQty"),
+              "weightOut" = COALESCE(m."weightOut", r."weightKg"),
+              notes = CASE WHEN m.notes IS NULL OR m.notes = '' THEN 'WO_ARCHIVED'
+                           ELSE m.notes || ' | WO_ARCHIVED' END
+          FROM rolls r
+          WHERE m."rollId" = r.id
+            AND m."workOrderStepId" = ANY(${stepIds}::uuid[])
+            AND m."exitedAt" IS NULL
+        `;
+        await tx.workOrderStep.updateMany({
+          where: { workOrderId: id, status: { in: [StepStatus.PENDING, StepStatus.ACTIVE] } },
+          data: { status: StepStatus.SKIPPED, skipReason: "WO_ARCHIVED" },
+        });
       }
+
+      // ACTIVE refakat kartı VOID edilir — quickStart zero-attach telafisi ve
+      // planlamacı arşivi DB'de arşivli WO'ya bağlı hayalet ACTIVE kart
+      // bırakmasın (softDelete'teki bloğun simetriği).
+      await tx.travelerCard.updateMany({
+        where: { workOrderId: id, status: "ACTIVE" },
+        data: {
+          status: "VOIDED",
+          voidedAt: new Date(),
+          voidReason: "WO_ARCHIVED",
+        },
+      });
 
       return tx.workOrder.update({
         where: { id },
@@ -2482,6 +2731,40 @@ export class WorkOrderService {
       );
     }
 
+    // ── Fiziksel taahhüt kilitleri (replace() ile AYNI kurallar — PUT/PATCH
+    // drift'i kapatıldı: bu yol mobil düzenlemede aktif kullanılıyor). PATCH
+    // kısmi semantik: yalnız GÖNDERİLEN ve fiilen DEĞİŞEN alan kilide çarpar;
+    // değişmeyen alanın yeniden gönderilmesi serbesttir (bayat form zararsız).
+    const locks = await computeWorkOrderLocks(prisma, id);
+    if (
+      data.width != null &&
+      normNum(wo.width) !== normNum(data.width) &&
+      locks.width
+    ) {
+      throw AppError.conflict(locks.reasons.width ?? "En kilitli.");
+    }
+    if (
+      data.targetItemId !== undefined &&
+      (wo.targetItemId ?? null) !== (data.targetItemId ?? null) &&
+      locks.targetItem
+    ) {
+      throw AppError.conflict(locks.reasons.targetItem ?? "Hedef ürün kilitli.");
+    }
+    if (
+      data.targetColorId !== undefined &&
+      (wo.targetColorId ?? null) !== (data.targetColorId ?? null) &&
+      locks.targetColor
+    ) {
+      throw AppError.conflict(locks.reasons.targetColor ?? "Hedef renk kilitli.");
+    }
+    if (
+      data.foldType !== undefined &&
+      (wo.foldType ?? null) !== (data.foldType ?? null) &&
+      locks.foldType
+    ) {
+      throw AppError.conflict(locks.reasons.foldType ?? "Kat tipi kilitli.");
+    }
+
     // STOCK_PRODUCTION'da targetItemId zorunlu — null'a çevirme yasak
     if (wo.type === "STOCK_PRODUCTION" && data.targetItemId === null) {
       throw AppError.badRequest(
@@ -2504,6 +2787,32 @@ export class WorkOrderService {
       });
       if (!color || !color.isActive) {
         throw AppError.badRequest("Hedef renk bulunamadı veya pasif");
+      }
+    }
+
+    // Hedef ürün/renk değişiyorsa ürünün izinli renk listesi doğrulanır
+    // (dolu = bu listeden; boş = sınırsız — create/replace ile aynı kural).
+    const finalItemId =
+      data.targetItemId === undefined ? wo.targetItemId : data.targetItemId;
+    const finalColorId =
+      data.targetColorId === undefined ? wo.targetColorId : data.targetColorId;
+    const targetPairChanged =
+      (data.targetItemId !== undefined &&
+        (wo.targetItemId ?? null) !== (data.targetItemId ?? null)) ||
+      (data.targetColorId !== undefined &&
+        (wo.targetColorId ?? null) !== (data.targetColorId ?? null));
+    if (targetPairChanged && finalItemId && finalColorId) {
+      const itemFull = await prisma.item.findUnique({
+        where: { id: finalItemId },
+        select: { allowedColors: { select: { colorId: true } } },
+      });
+      const allowedColorSet = new Set(
+        (itemFull?.allowedColors ?? []).map((c) => c.colorId),
+      );
+      if (allowedColorSet.size > 0 && !allowedColorSet.has(finalColorId)) {
+        throw AppError.badRequest(
+          "Hedef renk bu ürünün izinli renk listesinde değil",
+        );
       }
     }
 
@@ -2696,8 +3005,9 @@ export class WorkOrderService {
           id: existingStepIdBySeq.get(s.sequence),
           stationId: s.stationId,
           notes: overlay?.notes ?? s.defaultNotes ?? null,
-          requiredCategoryId: overlay?.requiredCategoryId ?? null,
-          plannedSubcontractorId: overlay?.plannedSubcontractorId ?? null,
+          // Saha #14: şablondaki fason planlaması replace'te de default klonlanır.
+          requiredCategoryId: overlay?.requiredCategoryId ?? s.requiredCategoryId ?? null,
+          plannedSubcontractorId: overlay?.plannedSubcontractorId ?? s.plannedSubcontractorId ?? null,
         };
       });
     } else {
@@ -2714,6 +3024,9 @@ export class WorkOrderService {
         plannedSubcontractorId: s.plannedSubcontractorId ?? null,
       }));
     }
+
+    // ── Soft-delete guard (SEC-3, create() ile ortak helper) ────────────────
+    await assertRouteRefsActive(finalSteps);
 
     // ── Sipariş bağları + tahsis miktarları ─────────────────────────────────
     let allocations: { orderLineId: string; allocatedQty: number }[] = [];
@@ -2755,8 +3068,12 @@ export class WorkOrderService {
     if (type === "ORDER_PRODUCTION" && allocations.length > 0) {
       const orderLineItems = await prisma.orderLine.findMany({
         where: { id: { in: allocations.map((a) => a.orderLineId) } },
-        select: { id: true, itemId: true, colorId: true },
+        select: {
+          id: true, itemId: true, colorId: true,
+          order: { select: { status: true, orderNumber: true } },
+        },
       });
+      assertOrderLinesLinkable(allocations.map((a) => a.orderLineId), orderLineItems);
       const distinctItems = new Set(orderLineItems.map((l) => l.itemId));
       if (distinctItems.size === 1) {
         const onlyItemId = Array.from(distinctItems)[0];
@@ -2947,6 +3264,7 @@ export class WorkOrderService {
           id: true,
           stepSequence: true,
           status: true,
+          stationId: true,
           _count: {
             select: {
               movements: true,
@@ -2986,12 +3304,44 @@ export class WorkOrderService {
         await tx.workOrderStep.delete({ where: { id: old.id } });
       }
 
+      // 1b) Başlamış (PENDING olmayan) adımların GÖRELİ SIRASI değişemez —
+      //     COMPLETED bir adım ACTIVE'in arkasına taşınırsa kart okutma ve
+      //     "sonraki adım" hesabı (stepSequence) bozulur. Silme zaten guard'lı;
+      //     bu kontrol yeniden sıralamayı yakalar. (Araya yeni PENDING adım
+      //     eklemek serbesttir — göreli sıra korunur.)
+      const startedOldOrder = existingStepRows
+        .filter((s) => s.status !== "PENDING")
+        .sort((a, b) => a.stepSequence - b.stepSequence)
+        .map((s) => s.id);
+      const startedNewOrder = finalSteps
+        .map((s) => s.id)
+        .filter(
+          (sid): sid is string =>
+            !!sid &&
+            existingStepById.has(sid) &&
+            existingStepById.get(sid)!.status !== "PENDING",
+        );
+      if (startedOldOrder.join("|") !== startedNewOrder.join("|")) {
+        throw AppError.conflict(
+          "Başlamış (aktif/tamamlanmış) adımların sırası değiştirilemez.",
+        );
+      }
+
       // 2) Step'leri güncelle veya ekle. stepSequence yeni listedeki indeks
       //    bazlı yeniden numaralandırılır. (workOrderId, stepSequence)
       //    üzerinde unique kısıtı olmadığı için iki-aşamalı güncelleme gerekmez.
       for (const [index, incoming] of finalSteps.entries()) {
         const stepSequence = index + 1;
         if (incoming.id && existingStepById.has(incoming.id)) {
+          // Başlamış adımın İSTASYONU değişemez (üzerinde açık movement/geçmiş
+          // kayıt var — silme guard'ının güncelleme simetriği). Not/kategori/
+          // planlanan firma serbest kalır.
+          const old = existingStepById.get(incoming.id)!;
+          if (old.status !== "PENDING" && old.stationId !== incoming.stationId) {
+            throw AppError.conflict(
+              `${old.stepSequence}. adım başlamış — istasyonu değiştirilemez (yalnız not/kategori/planlanan firma güncellenebilir).`,
+            );
+          }
           await tx.workOrderStep.update({
             where: { id: incoming.id },
             data: {
@@ -3106,8 +3456,10 @@ export class WorkOrderService {
   }
 
   /**
-   * WO targetProperties güncelle. Status farketmez (PLANNED de IN_PROGRESS de
-   * COMPLETED de). Bağlı tüm Roll'ların properties'i senkronize edilir.
+   * WO targetProperties güncelle. Bağlı tüm Roll'ların properties'i
+   * senkronize edilir. Fiziksel taahhüt kilitleri replace() ile AYNI:
+   * istasyonu adımını tamamlamış (fiilen uygulanmış) özellik kaldırılamaz,
+   * eklenen özelliği uygulayabilecek açık istasyon rotada olmalı.
    *
    * Frontend bu çağrıdan ÖNCE getRollImpact ile etkilenecek rulo sayısını
    * göstermeli ve onay almalıdır.
@@ -3122,6 +3474,7 @@ export class WorkOrderService {
       select: {
         id: true,
         targetItemId: true,
+        targetProperties: { select: { propertyId: true } },
         targetItem: {
           select: {
             allowedProperties: { select: { propertyId: true } },
@@ -3132,6 +3485,29 @@ export class WorkOrderService {
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
 
     const dedupedIds = [...new Set(propertyIds)];
+
+    // ── Fiziksel taahhüt kilitleri (replace()'teki özellik diff'inin aynısı —
+    // bu endpoint eskiden kilitsizdi ve COMPLETED adımda uygulanmış özelliği
+    // hem WO'dan hem toplardan silebiliyordu).
+    const locks = await computeWorkOrderLocks(prisma, id);
+    const existingPropIds = new Set(wo.targetProperties.map((p) => p.propertyId));
+    const incomingSet = new Set(dedupedIds);
+    for (const lockedId of locks.lockedPropertyIds) {
+      if (existingPropIds.has(lockedId) && !incomingSet.has(lockedId)) {
+        throw AppError.conflict(
+          locks.reasons.properties?.[lockedId] ?? "Bu özellik artık kaldırılamaz.",
+        );
+      }
+    }
+    const applicableSet = new Set(locks.applicablePropertyIds);
+    for (const newId of dedupedIds) {
+      if (existingPropIds.has(newId)) continue;
+      if (!applicableSet.has(newId)) {
+        throw AppError.conflict(
+          "Eklenen özelliği uygulayabilecek istasyon bu rotada yok veya adımı tamamlanmış.",
+        );
+      }
+    }
 
     if (dedupedIds.length > 0) {
       const propRows = await prisma.fabricProperty.findMany({
@@ -3382,25 +3758,79 @@ export class WorkOrderService {
       throw AppError.badRequest("İş emrinin adımları bulunamadı.");
     }
 
-    const detached: { id: string; barcode: string | null }[] = [];
+    // Çıkarılabilir statüler: bu WO'da üretimde olan + (bilinçli kurtarma akışı)
+    // fasona gitmiş/dönmüş toplar. WAREHOUSE/SHIPPED/CANCELLED/CONSUMED toplar
+    // "STOCK'a diriltilemez" — bayat UI/yanlış istek sessizce depo-sevk
+    // muhasebesini bozamaz (attachRolls'taki claim deseninin simetriği).
+    const DETACHABLE_STATUSES: RollStatus[] = [
+      RollStatus.IN_PRODUCTION,
+      RollStatus.AT_SUBCONTRACTOR,
+      RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+    ];
+
+    const detached: { id: string; barcode: string | null; prevStatus: RollStatus }[] = [];
+    const errorMessages: string[] = [];
 
     await prisma.$transaction(async (tx) => {
       // TOPLU (eski kod top başına findUnique+update+updateMany = N+1).
       const found = await tx.roll.findMany({
         where: { id: { in: rollIds } },
-        select: { id: true, barcode: true },
+        select: { id: true, barcode: true, status: true, currentStepId: true },
       });
-      const foundIds = found.map((r) => r.id);
-      if (foundIds.length === 0) return;
+      const foundIds = new Set(found.map((r) => r.id));
+      for (const reqId of rollIds) {
+        if (!foundIds.has(reqId)) errorMessages.push(`${reqId}: top bulunamadı`);
+      }
 
-      // 1) Toplar → STOCK + pointer temizle (currentQty'ye dokunulmaz).
-      await tx.roll.updateMany({
-        where: { id: { in: foundIds } },
+      // ÜYELİK + STATÜ GUARD'I: top BU iş emrinin bir adımında olmalı ve
+      // çıkarılabilir statüde olmalı. Başka WO'nun topu / depodaki / sevk
+      // edilmiş / iptal top sessizce sıfırlanamaz — sebep belirtilerek raporlanır.
+      const stepIdSet = new Set(stepIds);
+      const detachable = found.filter(
+        (r) =>
+          r.currentStepId !== null &&
+          stepIdSet.has(r.currentStepId) &&
+          DETACHABLE_STATUSES.includes(r.status),
+      );
+      const detachableIds = detachable.map((r) => r.id);
+      for (const r of found) {
+        if (detachableIds.includes(r.id)) continue;
+        const ref = r.barcode ?? r.id;
+        if (!r.currentStepId || !stepIdSet.has(r.currentStepId)) {
+          errorMessages.push(`${ref}: top bu iş emrine bağlı değil`);
+        } else {
+          errorMessages.push(`${ref}: top çıkarılabilir durumda değil (${r.status})`);
+        }
+      }
+      if (detachableIds.length === 0) return;
+
+      // 1) Toplar → STOCK + pointer/dal kimliği temizle (currentQty'ye
+      //    dokunulmaz). ATOMİK CLAIM: aynı koşullar WHERE'de — okuma ile
+      //    update arasına başka işlem girerse count uyuşmaz → 409 + rollback.
+      const claimed = await tx.roll.updateMany({
+        where: {
+          id: { in: detachableIds },
+          currentStepId: { in: stepIds },
+          status: { in: DETACHABLE_STATUSES },
+        },
         data: {
           status: RollStatus.STOCK,
-          producedInStepId: null,
           currentStepId: null,
+          batchSplitId: null,
         },
+      });
+      if (claimed.count !== detachableIds.length) {
+        throw AppError.conflict(
+          "Toplardan biri bu sırada başka bir işlemle değişti. Listeyi yenileyip tekrar deneyin.",
+        );
+      }
+
+      // 1b) producedInStepId yalnız BU WO'nun adımını gösteriyorsa temizlenir
+      //     (attachRolls'un set ettiği işaretin geri alınması). Başka WO'da
+      //     üretilmiş topun soy izi korunur.
+      await tx.roll.updateMany({
+        where: { id: { in: detachableIds }, producedInStepId: { in: stepIds } },
+        data: { producedInStepId: null },
       });
 
       // 2) Açık RollMovement'ları DETACH notuyla kapat. qtyOut/weightOut her top
@@ -3415,30 +3845,44 @@ export class WorkOrderService {
             notes = 'DETACHED_FROM_WO'
         FROM rolls r
         WHERE m."rollId" = r.id
-          AND m."rollId" IN (${Prisma.join(foundIds)})
-          AND m."workOrderStepId" IN (${Prisma.join(stepIds)})
+          AND m."rollId" = ANY(${detachableIds}::uuid[])
+          AND m."workOrderStepId" = ANY(${stepIds}::uuid[])
           AND m."exitedAt" IS NULL
       `;
 
-      detached.push(...found.map((r) => ({ id: r.id, barcode: r.barcode })));
+      // 3) Boşalan adımların durumunu yeniden hesapla (tüm toplar çıkarıldıysa
+      //    adım ACTIVE kalmasın).
+      const affectedStepIds = [
+        ...new Set(detachable.map((r) => r.currentStepId!).filter(Boolean)),
+      ];
+      for (const sid of affectedStepIds) {
+        await recomputeStepStatus(tx, sid);
+      }
+
+      detached.push(
+        ...detachable.map((r) => ({ id: r.id, barcode: r.barcode, prevStatus: r.status })),
+      );
     });
 
-    // R8 fix: audit recordId = UUID
+    // R8 fix: audit recordId = UUID. oldData GERÇEK önceki statü (hardcode değil).
     for (const r of detached) {
       await AuditService.log({
         userId,
         action: "UPDATE",
         tableName: "ROLL",
         recordId: r.id,
-        oldData: { status: "IN_PRODUCTION", workOrderId },
+        oldData: { status: r.prevStatus, workOrderId },
         newData: { status: "STOCK", workOrderId: null, barcode: r.barcode },
       });
     }
 
     return {
       success: true,
-      data: { detached: detached.length },
-      message: `${detached.length} top iş emrinden başarıyla çıkarıldı.`,
+      data: { detached: detached.length, errors: errorMessages },
+      message:
+        errorMessages.length > 0
+          ? `${detached.length} top çıkarıldı, ${errorMessages.length} top çıkarılamadı.`
+          : `${detached.length} top iş emrinden başarıyla çıkarıldı.`,
     };
   }
 
@@ -3705,24 +4149,30 @@ export class WorkOrderService {
       String(now.getDate()).padStart(2, "0") +
       "-";
 
-    const last = await prisma.manifest.findFirst({
-      where: { manifestNo: { startsWith: prefix } },
-      orderBy: { manifestNo: "desc" },
-      select: { manifestNo: true },
-    });
-    const seq = last
-      ? parseInt(last.manifestNo.split("-").pop() ?? "0", 10) + 1
-      : 1;
-    const manifestNo = `${prefix}${String(seq).padStart(3, "0")}`;
+    // manifestNo @unique + günlük sequence TÜM WO'lar arasında paylaşımlı —
+    // eşzamanlı iki basım aynı NNN'i hesaplardı; projedeki diğer tüm belge
+    // numaraları gibi withBarcodeRetry ile sarıldı (P2002'de sequence closure
+    // içinde yeniden okunur).
+    const manifest = await withBarcodeRetry(async () => {
+      const last = await prisma.manifest.findFirst({
+        where: { manifestNo: { startsWith: prefix } },
+        orderBy: { manifestNo: "desc" },
+        select: { manifestNo: true },
+      });
+      const seq = last
+        ? parseInt(last.manifestNo.split("-").pop() ?? "0", 10) + 1
+        : 1;
+      const manifestNo = `${prefix}${String(seq).padStart(3, "0")}`;
 
-    const manifest = await prisma.manifest.create({
-      data: {
-        manifestNo,
-        workOrderId,
-        printedById: userId ?? null,
-        snapshot: live as Prisma.InputJsonValue,
-        notes: notes ?? null,
-      },
+      return prisma.manifest.create({
+        data: {
+          manifestNo,
+          workOrderId,
+          printedById: userId ?? null,
+          snapshot: live as Prisma.InputJsonValue,
+          notes: notes ?? null,
+        },
+      });
     });
 
     await AuditService.log({
@@ -3730,7 +4180,7 @@ export class WorkOrderService {
       action: "CREATE",
       tableName: "MANIFEST",
       recordId: manifest.id,
-      newData: { manifestNo, workOrderId },
+      newData: { manifestNo: manifest.manifestNo, workOrderId },
     });
 
     return {
@@ -3741,7 +4191,7 @@ export class WorkOrderService {
         printedAt: manifest.printedAt,
         snapshot: manifest.snapshot,
       },
-      message: `Çeki listesi oluşturuldu: ${manifestNo}`,
+      message: `Çeki listesi oluşturuldu: ${manifest.manifestNo}`,
     };
   }
 

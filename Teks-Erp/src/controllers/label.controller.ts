@@ -8,6 +8,11 @@ import { LabelKind } from "@prisma/client";
 import { LabelService } from "../services/label.service";
 import "../types/express-augment";
 
+const bulkLabelsSchema = z.object({
+  rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top").max(2000),
+  copies: z.number().int().min(1).max(5).optional(),
+});
+
 const updateNamesSchema = z.object({
   customerItemName:  z.string().max(200).nullable().optional(),
   customerColorName: z.string().max(200).nullable().optional(),
@@ -74,10 +79,25 @@ export class LabelController {
           orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
           customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
           stock: req.query.stock === "1" || req.query.stock === "true",
+          // Saha #6: ?copies= override — verilmezse label.copies ayarı (default 2).
+          copies:
+            typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
+              ? parseInt(req.query.copies, 10)
+              : undefined,
         },
       );
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("X-Label-Kind", result.data.kind);
+      res.status(200).send(result.data.html);
+    } catch (e) { next(e); }
+  };
+
+  // Saha #7: toplu etiket HTML — { rollIds: [...], copies? } → tek birleşik belge.
+  getBulkRollLabelsHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = bulkLabelsSchema.parse(req.body);
+      const result = await this.service.getBulkRollLabelsHtml(body.rollIds, { copies: body.copies });
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(200).send(result.data.html);
     } catch (e) { next(e); }
   };

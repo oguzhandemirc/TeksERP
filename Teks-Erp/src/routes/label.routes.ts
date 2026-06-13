@@ -95,6 +95,33 @@ router.get(
 
 /**
  * @openapi
+ * /api/labels/rolls/bulk-html:
+ *   post:
+ *     tags: [Labels]
+ *     summary: Toplu top etiketi HTML'i (saha #7 — çuval/sevkiyat bazlı toplu baskı)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollIds]
+ *             properties:
+ *               rollIds: { type: array, items: { type: string, format: uuid } }
+ *               copies: { type: integer, minimum: 1, maximum: 5 }
+ *     responses:
+ *       200: { description: Birleşik etiket HTML'i (her top kendi sayfasında) }
+ */
+router.post(
+  "/rolls/bulk-html",
+  verifyToken,
+  requireAnyPermission("label:read", ...MOBILE_LABEL_PRINTERS),
+  controller.getBulkRollLabelsHtml,
+);
+
+/**
+ * @openapi
  * /api/labels/preview/html:
  *   post:
  *     tags: [Labels]

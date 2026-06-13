@@ -66,9 +66,14 @@ export function DocWatermark({
   tone = "draft",
 }: {
   text: string;
-  tone?: "draft" | "void";
+  tone?: "draft" | "void" | "superseded";
 }) {
-  const color = tone === "void" ? "rgba(220,38,38,0.16)" : "rgba(120,120,120,0.14)";
+  const color =
+    tone === "void"
+      ? "rgba(220,38,38,0.16)"
+      : tone === "superseded"
+        ? "rgba(217,119,6,0.18)" // Y4: revize edilmis eski versiyon — amber
+        : "rgba(120,120,120,0.14)";
   return (
     <div
       aria-hidden

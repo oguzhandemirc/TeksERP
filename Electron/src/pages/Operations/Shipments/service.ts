@@ -18,4 +18,10 @@ export const shipmentService = {
     apiClient
       .get<ApiResponse<ShipmentDetail>>(`/api/shipping/shipments/${id}`)
       .then((r) => r.data),
+
+  /** Saha #7: sevkiyatı yeniden hedefle — bağlı sipariş kümesini değiştir (replace). */
+  retargetOrders: (id: string, orderIds: string[]): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/retarget-orders`, { orderIds })
+      .then((r) => r.data),
 };

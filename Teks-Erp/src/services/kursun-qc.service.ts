@@ -26,6 +26,7 @@ import {
   RollStatus,
   StationKind,
   StepStatus,
+  WorkOrderStatus,
 } from "@prisma/client";
 import { assertWoAtStepKind } from "./helpers/roll-step.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
@@ -328,45 +329,9 @@ export class KursunQcService {
     return { success: true, data: op, message: "Kalite Kontrol 2 tamamlandı" };
   }
 
-  /**
-   * Bir topun QC2_COMPLETED işaretini geri al — operatör yanlış işaretlediyse
-   * veya reopen sonrası geriye almak isterse. Top hâlâ bu adımdaysa çalışır.
-   */
-  async undoQc2(
-    data: { rollId: string; stepId: string },
-    userId?: string
-  ): Promise<ApiResponse<{ removed: boolean }>> {
-    await this.assertRollInStep(data.rollId, data.stepId, StationKind.PROCESS_QC);
-
-    const existing = await prisma.rollOperation.findUnique({
-      where: {
-        rollId_workOrderStepId_operationType: {
-          rollId: data.rollId,
-          workOrderStepId: data.stepId,
-          operationType: RollOperationType.QC2_COMPLETED,
-        },
-      },
-    });
-    if (!existing) {
-      return { success: true, data: { removed: false }, message: "Zaten işaretli değil" };
-    }
-
-    await prisma.rollOperation.delete({ where: { id: existing.id } });
-
-    await AuditService.log({
-      userId,
-      action: "DELETE",
-      tableName: "ROLL_OPERATION",
-      recordId: existing.id,
-      oldData: {
-        rollId: data.rollId,
-        stepId: data.stepId,
-        type: RollOperationType.QC2_COMPLETED,
-      },
-    });
-
-    return { success: true, data: { removed: true }, message: "QC2 işareti kaldırıldı" };
-  }
+  // K6 (2026-06-12): undoQc2 kaldırıldı — yarım geri alıyordu (KURSUN op +
+  // RollProperty topta kalıyordu), UI butonu 2026-06-07'de silinmişti, endpoint
+  // çağrısızdı. Kurtarma yolu: kapalı kartı tekrar okut (reopenStep).
 
   // ---------------------------------------------------------------------------
   // DEFECT ENTRY
@@ -617,22 +582,44 @@ export class KursunQcService {
     // Lazily import helper to avoid circular (roll-step.helper → prisma)
     const { recomputeStepStatus } = await import("./helpers/roll-step.helper");
 
-    const movementIds = openMovements.map((m) => m.id);
     const result = await prisma.$transaction(async (tx) => {
-      // 1) Açık movement'leri toplu kapat — qty/weight per-row eşitlik raw SQL ile.
-      await tx.$executeRaw`
+      // 1) Açık movement'leri ATOMİK kapat (qty/weight per-row eşitlik) + RETURNING
+      //    ile fiilen BİZİM kapattığımız rolleri al. `exitedAt IS NULL` guard'ı:
+      //    movement seti tx DIŞINDA okunduğundan (satır ~577) bu guard olmasa iki
+      //    eşzamanlı finishStep aynı seti kapatıp createMany'yi iki kez çalıştırır →
+      //    rol sonraki adıma çift açık IN movement ile ilerlerdi. Guard ile her satır
+      //    yalnız tek tx'e düşer; ilerletme yalnız RETURNING'deki rollere yapılır.
+      //
+      //    KAPSAM DARALTMASI ("rollId" = ANY): QC2 doğrulaması yukarıda tx DIŞI
+      //    okunan rollIds setine yapıldı. Bu kısıt olmadan, doğrulama ile tx
+      //    arasında adıma yeni giren top (fason kabul / önceki adım FINISH)
+      //    QC2_COMPLETED'sız süpürülüp Tambur'a ilerlerdi. Yeni gelen top açık
+      //    kalır; recomputeStepStatus adımı ACTIVE tutar.
+      const closed = await tx.$queryRaw<
+        Array<{ rollId: string; qtyIn: Prisma.Decimal; weightIn: Prisma.Decimal | null }>
+      >`
         UPDATE "roll_movements"
         SET "qtyOut" = "qtyIn",
             "weightOut" = "weightIn",
             "exitedAt" = NOW(),
             "notes" = 'QC2_STEP_FINISHED'
-        WHERE id = ANY(${movementIds}::text[])
+        WHERE "workOrderStepId" = ${step.id}::uuid
+          AND "exitedAt" IS NULL
+          AND "rollId" = ANY(${rollIds}::uuid[])
+        RETURNING "rollId", "qtyIn", "weightIn"
       `;
 
+      // Eşzamanlı çağrı zaten kapatmışsa hiç satır dönmez → sonraki adım movement'i
+      // AÇMA (idempotent). Sıralı retry zaten yukarıda (openMovements.length===0) yakalanır.
+      if (closed.length === 0) {
+        return { moved: 0 };
+      }
+      const closedRollIds = closed.map((m) => m.rollId);
+
       if (nextStep) {
-        // 2a) Sonraki step için movement'leri toplu oluştur.
+        // 2a) Sonraki step için movement'leri toplu oluştur (yalnız biz kapatanlar).
         await tx.rollMovement.createMany({
-          data: openMovements.map((m) => ({
+          data: closed.map((m) => ({
             rollId: m.rollId,
             workOrderStepId: nextStep.id,
             qtyIn: m.qtyIn,
@@ -643,21 +630,46 @@ export class KursunQcService {
         });
         // 3a) Roll currentStepId'leri toplu güncelle.
         await tx.roll.updateMany({
-          where: { id: { in: rollIds } },
+          where: { id: { in: closedRollIds } },
           data: { currentStepId: nextStep.id },
         });
         // 4a) Step durumlarını birer kez recompute et (per-roll değil).
         await recomputeStepStatus(tx, nextStep.id);
       } else {
-        // 2b) Son adımdıysa current pointer'ı toplu temizle.
+        // 2b) Son adımdıysa toplar PRODUCED'a düşer + WO/refakat kartı
+        // tamamlama kontrolü koşar (M-27 — production.handleStepFinish ve
+        // inventory.kursunFinish kardeş yollarıyla aynı semantik). Eskiden
+        // yalnız pointer temizleniyordu: toplar IN_PRODUCTION limbosunda
+        // kalıyor, WO sonsuza dek IN_PROGRESS görünüyordu (rota tanımı
+        // PROCESS_QC ile bitebiliyor — son-adım kuralı yok).
         await tx.roll.updateMany({
-          where: { id: { in: rollIds } },
-          data: { currentStepId: null },
+          where: { id: { in: closedRollIds } },
+          data: { currentStepId: null, status: RollStatus.PRODUCED },
         });
       }
 
       await recomputeStepStatus(tx, step.id);
-      return { moved: openMovements.length };
+
+      if (!nextStep) {
+        const remainingSteps = await tx.workOrderStep.count({
+          where: {
+            workOrderId: step.workOrderId,
+            status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
+          },
+        });
+        if (remainingSteps === 0) {
+          await tx.workOrder.update({
+            where: { id: step.workOrderId },
+            data: { status: WorkOrderStatus.COMPLETED },
+          });
+          await tx.travelerCard.updateMany({
+            where: { workOrderId: step.workOrderId, status: "ACTIVE" },
+            data: { status: "COMPLETED" },
+          });
+        }
+      }
+
+      return { moved: closed.length };
     });
 
     await AuditService.log({
@@ -779,11 +791,25 @@ export class KursunQcService {
             rollId: { in: rollIds },
           },
         });
-        // Roll.currentStepId'yi bu step'e geri al
-        await tx.roll.updateMany({
-          where: { id: { in: rollIds } },
+        // Roll.currentStepId'yi bu step'e geri al — ATOMİK CLAIM: yukarıdaki
+        // güvenlik kontrolleri tx DIŞINDA okunuyor; onay penceresinde Tambur
+        // operatörü bir topu finalize ederse (TAMBUR_CONSUMED, adım null) top
+        // yine de KK2'ye geri çekilir ve çelişik durumda kalırdı. WHERE'e
+        // "hâlâ sonraki adımda + üretimde" koşulları kondu; uyuşmazsa 409 +
+        // rollback (finishStep'in atomik kapatmasıyla aynı sertlik).
+        const pulledBack = await tx.roll.updateMany({
+          where: {
+            id: { in: rollIds },
+            currentStepId: nextStep.id,
+            status: RollStatus.IN_PRODUCTION,
+          },
           data: { currentStepId: step.id },
         });
+        if (pulledBack.count !== rollIds.length) {
+          throw AppError.conflict(
+            "Toplardan biri bu sırada ilerledi/değişti (örn. Tambur'da işlendi). Listeyi yenileyip tekrar deneyin."
+          );
+        }
       }
 
       // Bu step'in kapatılmış movement'lerini geri aç
@@ -794,7 +820,7 @@ export class KursunQcService {
 
       // QC2_COMPLETED / KURSUN_APPLIED işaretleri ve RollProperty kayıtları
       // korunur — operatör eski veriyi görsün, üzerinde oynayabilsin.
-      // Sıfırlamak isterse per-roll `undoQc2` kullanır.
+      // Sıfırlamak isterse kartı yeniden okutup reopen akışını kullanır.
 
       // Step durumlarını güncelle
       await recomputeStepStatus(tx, step.id);
@@ -1171,7 +1197,7 @@ export class KursunQcService {
     await prisma.$executeRaw`
       UPDATE "work_order_steps" AS wos
       SET "priority" = data."priority"
-      FROM unnest(${updateIds}::text[], ${updatePriorities}::int[]) AS data("id", "priority")
+      FROM unnest(${updateIds}::uuid[], ${updatePriorities}::int[]) AS data("id", "priority")
       WHERE wos."id" = data."id"
     `;
 
