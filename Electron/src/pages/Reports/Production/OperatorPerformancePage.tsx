@@ -12,7 +12,6 @@ const columns: ColumnDef<OperatorPerformanceRow>[] = [
   { accessorKey: "kursunCount", header: "Kurşun", cell: ({ getValue }) => fmtInt(getValue() as number) },
   { accessorKey: "qc2Count", header: "QC2", cell: ({ getValue }) => fmtInt(getValue() as number) },
   { accessorKey: "tamburCount", header: "Tambur", cell: ({ getValue }) => fmtInt(getValue() as number) },
-  { accessorKey: "packageCount", header: "Paket", cell: ({ getValue }) => fmtInt(getValue() as number) },
   { accessorKey: "subcontractorOps", header: "Fason", cell: ({ getValue }) => fmtInt(getValue() as number) },
 ];
 

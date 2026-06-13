@@ -32,7 +32,7 @@ import {
   getDefectDistribution,
   getQc2Decisions,
 } from "../src/services/reports/quality.report.service";
-import { getScrapSummary } from "../src/services/reports/production.report.service";
+import { getScrapSummary, getOperatorPerformance } from "../src/services/reports/production.report.service";
 
 let pass = 0;
 let fail = 0;
@@ -74,6 +74,7 @@ async function main() {
   let defectRollId = "";
   let workOrderId = "";
   let workOrderStepId = "";
+  let rollOperationId = "";
   const rollErrorIds: string[] = [];
   const systemLogIds: string[] = [];
 
@@ -416,8 +417,31 @@ async function main() {
       Array.isArray(scrap.byDefect) && !!myScrap && myScrap.count === 1,
       myScrap ? `count=${myScrap.count}` : "byDefect satırı yok",
     );
+
+    // 9) PRODUCTION — getOperatorPerformance: eskiden satır içi 'PACKAGED' (RollOperationType'da
+    //    YOK) literali yüzünden HER çağrıda 22P02/500 atıyordu (packageCount kolonu kaldırıldı).
+    //    Admin'e 1 QC2_COMPLETED operasyonu yaz, raporun operatörü doğru saydığını doğrula.
+    const op = await prisma.rollOperation.create({
+      data: {
+        rollId: defectRollId,
+        workOrderStepId: workOrderStepId,
+        operationType: "QC2_COMPLETED",
+        operatorId: user.id,
+        createdAt: ANCHOR,
+      },
+      select: { id: true },
+    });
+    rollOperationId = op.id;
+    const perf = await getOperatorPerformance(range);
+    const myPerf = perf.find((r) => r.userId === user.id);
+    check(
+      "getOperatorPerformance: admin satırı qc2Count=1 + totalOps=1 (PACKAGED 22P02 yok)",
+      !!myPerf && myPerf.qc2Count === 1 && myPerf.totalOps === 1 && myPerf.kursunCount === 0,
+      myPerf ? `qc2=${myPerf.qc2Count} total=${myPerf.totalOps}` : "operatör satırı yok",
+    );
   } finally {
     // Cleanup — kendi yarattıklarımızı sil (ters bağımlılık sırası)
+    if (rollOperationId) await prisma.rollOperation.delete({ where: { id: rollOperationId } }).catch(() => {});
     for (const id of rollErrorIds) await prisma.rollError.delete({ where: { id } }).catch(() => {});
     for (const id of systemLogIds) await prisma.systemLog.delete({ where: { id } }).catch(() => {});
     if (aliasItemId) await prisma.customerItemAlias.delete({ where: { id: aliasItemId } }).catch(() => {});
