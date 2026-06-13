@@ -344,7 +344,7 @@ export async function getScrapSummary(range: DateRange): Promise<ScrapSummary> {
     ORDER BY 1 ASC
   `);
 
-  // Tambur tarafından "CUT_FOR_SCRAP" kararı verilen hatalar → defect kırılımı
+  // Tambur tarafından "CUT" (hata parçası kesildi/scrap) kararı verilen hatalar → defect kırılımı
   const defectRows = await prisma.$queryRaw<
     Array<{ defectName: string; count: bigint }>
   >(Prisma.sql`
@@ -353,7 +353,7 @@ export async function getScrapSummary(range: DateRange): Promise<ScrapSummary> {
       COUNT(*)                                         AS count
     FROM roll_errors re
     LEFT JOIN defect_types dt ON re."defectTypeId" = dt.id
-    WHERE re."actionTaken" = 'CUT_FOR_SCRAP'
+    WHERE re."actionTaken" = 'CUT'
       AND re."processedAt" >= ${range.from} AND re."processedAt" <= ${range.to}
     GROUP BY COALESCE(dt.name, re."errorType", 'Bilinmiyor')
     ORDER BY count DESC

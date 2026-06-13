@@ -35,9 +35,9 @@ export async function getDefectDistribution(range: DateRange): Promise<DefectDis
       COALESCE(dt.name, re."errorType", 'Bilinmiyor')      AS "defectName",
       COUNT(*)                                              AS count,
       COUNT(*) FILTER (WHERE re."isProcessed")              AS "processedCount",
-      COUNT(*) FILTER (WHERE re."actionTaken" = 'CUT_FOR_SCRAP') AS "scrapCount",
-      COUNT(*) FILTER (WHERE re."actionTaken" = 'KEPT_AS_A1')    AS "keptAsA1Count",
-      COUNT(*) FILTER (WHERE re."actionTaken" = 'NO_ACTION' OR re."actionTaken" IS NULL) AS "noActionCount"
+      COUNT(*) FILTER (WHERE re."actionTaken" = 'CUT')    AS "scrapCount",
+      COUNT(*) FILTER (WHERE re."actionTaken" = 'NO_CUT') AS "keptAsA1Count",
+      COUNT(*) FILTER (WHERE re."actionTaken" IS NULL)    AS "noActionCount"
     FROM roll_errors re
     LEFT JOIN defect_types dt ON re."defectTypeId" = dt.id
     WHERE re."detectedAt" >= ${range.from} AND re."detectedAt" <= ${range.to}
@@ -136,12 +136,12 @@ export async function getQc2Decisions(range: DateRange): Promise<Qc2DecisionsSum
     Array<{ action: string; count: bigint }>
   >(Prisma.sql`
     SELECT
-      COALESCE(re."actionTaken", 'NO_ACTION') AS action,
-      COUNT(*)                                AS count
+      COALESCE(re."actionTaken"::text, 'NO_ACTION') AS action,
+      COUNT(*)                                      AS count
     FROM roll_errors re
     WHERE re."isProcessed" = true
       AND re."processedAt" >= ${range.from} AND re."processedAt" <= ${range.to}
-    GROUP BY COALESCE(re."actionTaken", 'NO_ACTION')
+    GROUP BY COALESCE(re."actionTaken"::text, 'NO_ACTION')
     ORDER BY count DESC
   `);
 
@@ -160,8 +160,10 @@ export async function getQc2Decisions(range: DateRange): Promise<Qc2DecisionsSum
     totalProcessed: Number(tamburProcessedRow[0]?.total ?? 0),
     decisions,
     totalErrorsClosed,
-    scrapClosed: decisions.find((d) => d.action === "CUT_FOR_SCRAP")?.count ?? 0,
-    keptAsA1: decisions.find((d) => d.action === "KEPT_AS_A1")?.count ?? 0,
+    // RollErrorAction enum CUT|NO_CUT (eski CUT_FOR_SCRAP/KEPT_AS_A1/NO_ACTION kaldırıldı):
+    // CUT=hata parçası kesildi (scrap), NO_CUT=hataya rağmen tutuldu, NULL=işlenmemiş.
+    scrapClosed: decisions.find((d) => d.action === "CUT")?.count ?? 0,
+    keptAsA1: decisions.find((d) => d.action === "NO_CUT")?.count ?? 0,
     noAction: decisions.find((d) => d.action === "NO_ACTION")?.count ?? 0,
   };
 }
