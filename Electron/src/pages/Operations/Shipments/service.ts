@@ -24,4 +24,35 @@ export const shipmentService = {
     apiClient
       .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/retarget-orders`, { orderIds })
       .then((r) => r.data),
+
+  /**
+   * Saha #7 (artımlı): yeniden hedefleme SALT-OKUNUR projeksiyonu. Aday sipariş
+   * kümesi için karşılanma etkisini COMMIT ETMEDEN döner (backend DB'ye yazmaz).
+   */
+  retargetPreview: (
+    id: string,
+    orderIds: string[],
+  ): Promise<ApiResponse<RetargetPreview>> =>
+    apiClient
+      .post<ApiResponse<RetargetPreview>>(
+        `/api/shipping/shipments/${id}/retarget-preview`,
+        { orderIds },
+      )
+      .then((r) => r.data),
 };
+
+// Saha #7 önizleme yanıt şekli (backend previewRetargetOrders ile eşleşir).
+export interface RetargetPreviewOrder {
+  orderId: string;
+  orderNumber: string;
+  planned: number;
+  alreadyShipped: number;
+  projected: number;
+  coveragePct: number;
+}
+export interface RetargetPreview {
+  editable: boolean;
+  orders: RetargetPreviewOrder[];
+  totals: { goods: number; projectedTotal: number; leftover: number };
+  ignored: { orderNumber: string; reason: string }[];
+}

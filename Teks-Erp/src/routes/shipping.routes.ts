@@ -331,6 +331,74 @@ router.post("/shipments/:id/retarget-orders", verifyToken, WRITE, controller.ret
 
 /**
  * @openapi
+ * /api/shipping/shipments/{id}/retarget-preview:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Yeniden hedefleme önizlemesi (saha #7 — SALT-OKUNUR projeksiyon)
+ *     description: |
+ *       Aday sipariş kümesi için karşılanma projeksiyonunu COMMIT ETMEDEN döner.
+ *       DB'ye hiçbir şey yazmaz. Sonuç gerçek retarget commit'iyle birebir aynıdır.
+ *       Her sipariş için planlanan/karşılanmış/projeksiyon/kapsama%; toplamda
+ *       mal/tahsis/artan (leftover). Geçersiz adaylar `ignored`'da listelenir.
+ *       DISPATCHED/CANCELLED'da `editable:false` döner (hata atmaz).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderIds]
+ *             properties:
+ *               orderIds: { type: array, items: { type: string, format: uuid } }
+ *     responses:
+ *       200:
+ *         description: Projeksiyon
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     editable: { type: boolean }
+ *                     orders:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           orderId: { type: string }
+ *                           orderNumber: { type: string }
+ *                           planned: { type: number }
+ *                           alreadyShipped: { type: number }
+ *                           projected: { type: number }
+ *                           coveragePct: { type: number }
+ *                     totals:
+ *                       type: object
+ *                       properties:
+ *                         goods: { type: number }
+ *                         projectedTotal: { type: number }
+ *                         leftover: { type: number }
+ *                     ignored:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           orderNumber: { type: string }
+ *                           reason: { type: string }
+ *       404: { description: Sevkiyat bulunamadı }
+ */
+router.post("/shipments/:id/retarget-preview", verifyToken, READ, controller.retargetPreview);
+
+/**
+ * @openapi
  * /api/shipping/shipments/{id}/scan:
  *   post:
  *     tags: [Shipping]

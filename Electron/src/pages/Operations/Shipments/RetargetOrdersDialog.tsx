@@ -14,9 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { safeFormat } from "@/lib/format";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { orderService } from "@/pages/Operations/Orders/service";
 import type { Order } from "@/pages/Operations/Orders/types";
 import { shipmentService } from "./service";
+import { RetargetProjection } from "./RetargetProjection";
 
 interface Props {
   shipmentId: string;
@@ -71,6 +73,22 @@ export function RetargetOrdersDialog({
   // Şu an bağlı ama "açık" listesine girmeyen siparişler de seçili görünebilmeli.
   const orders = useMemo<Order[]>(() => ordersQ.data?.data ?? [], [ordersQ.data]);
 
+  // Saha #7 (artımlı): seçim değişince 300ms debounce'la SALT-OKUNUR projeksiyon çek.
+  // Stabil key için seçili id'leri sıralı stringe çevir → set sırası farkı yeniden
+  // fetch tetiklemez. Seçim boşsa istek atılmaz (enabled).
+  const selectedKey = useMemo(() => [...selected].sort().join(","), [selected]);
+  const debouncedKey = useDebouncedValue(selectedKey, 300);
+  const previewIds = useMemo(
+    () => (debouncedKey ? debouncedKey.split(",") : []),
+    [debouncedKey],
+  );
+  const previewQ = useQuery({
+    queryKey: ["shipment", "retarget-preview", shipmentId, debouncedKey],
+    queryFn: () => shipmentService.retargetPreview(shipmentId, previewIds),
+    enabled: open && previewIds.length > 0,
+    staleTime: 10_000,
+  });
+
   const mut = useMutation({
     mutationFn: () => shipmentService.retargetOrders(shipmentId, [...selected]),
     onSuccess: (res) => {
@@ -104,7 +122,10 @@ export function RetargetOrdersDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-auto rounded-md border p-1">
+        <div
+          data-testid="retarget-order-list"
+          className="min-h-0 flex-1 overflow-auto rounded-md border p-1"
+        >
           {ordersQ.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : orders.length === 0 ? (
@@ -134,6 +155,12 @@ export function RetargetOrdersDialog({
             })
           )}
         </div>
+
+        <RetargetProjection
+          preview={previewQ.data?.data}
+          isFetching={previewQ.isFetching}
+          hasSelection={selected.size > 0}
+        />
 
         <DialogFooter className="items-center justify-between gap-2 sm:justify-between">
           <span className="text-xs text-muted-foreground">{selected.size} sipariş seçili</span>
