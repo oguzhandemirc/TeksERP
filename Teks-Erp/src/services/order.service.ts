@@ -910,8 +910,12 @@ export class OrderService extends BaseService {
             : {}),
         });
       }
+      // collation-güvenli: eski `lt: prefix+"￿"` üst sınırı glibc'de (U+FFFF
+      // ignorable) bugünün satırlarını dışlar → numara hep 1'den başlar → P2002.
+      // `gte` (index seek, bugün+sonrası) + `startsWith` (LIKE, collation-bağımsız
+      // tam-prefix; prefix'ten yüksek sıralanan manuel orderNumber'ları eler).
       const todaysOrders = await prisma.order.findMany({
-        where: { orderNumber: { gte: prefix, lt: `${prefix}￿` } },
+        where: { orderNumber: { gte: prefix, startsWith: prefix } },
         select: { orderNumber: true },
       });
       // Numeric tail max: "20260523-9" > "20260523-10" lex-sort hatasına karşı.

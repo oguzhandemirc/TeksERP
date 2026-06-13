@@ -73,15 +73,25 @@ function datePrefix(prefix: string): string {
   );
 }
 
-// L (düşük bulgu): startsWith ICU collation'da unique index'i kullanamıyordu
-// (seq scan) ve 999 sonrası lexicographic desc hep "999"u görüp aynı numarayı
-// üretiyordu (withBarcodeRetry 5 denemede tükenir → kalıcı 409). Fix: gte/lt
-// range (index seek — orderNumber üretimiyle aynı desen) + createdAt ile
-// gerçek-son kayıt (gün içi numara monotonik artar, 1000+ doğru devam eder).
+// Günlük sıralı numara üretimi — collation tuzağı (CI'da 6 sevkiyat testi patlattı).
+// Eski üst sınır `lt: prefix + "￿"` U+FFFF'i "en yüksek karakter" varsayardı; bu
+// macOS libc'de doğru ama Linux glibc (CI + Windows-dışı sunucu) altında U+FFFF
+// noncharacter IGNORABLE sayılır → "prefix￿" ≈ "prefix" → aralık "prefix###"
+// satırlarını DIŞLAR → findFirst hep null → seq hep 1 → INSERT'te @unique P2002 →
+// withBarcodeRetry 5 denemede kalıcı 409 (yerelde macOS olduğu için gizliydi).
+// Daha öncesinde de salt `startsWith` denenmiş ama (a) tek başına lexicographic
+// `orderBy desc` 999'dan sonra "999"u görüp aynı no üretiyordu, (b) ICU'da seq scan.
+// NİHAİ fix — collation-implementasyon-bağımsız + index-dostu, ikisini de çözer:
+//   • `gte: prefix`  → mevcut unique index Index Scan ile sürülür ve yalnız
+//                       bugünün satırları döner (önceki gün daha küçük sıralanır,
+//                       gelecek gün yok). Alt sınır `>=` her collation'da güvenli.
+//   • `startsWith`   → LIKE 'prefix%' collation'dan bağımsız tam-prefix filtresi;
+//                       prefix'ten yüksek sıralanan serbest-form/manuel kodları eler.
+//   • orderBy createdAt desc + numeric tail → gün içi monotonik, 1000+ doğru devam.
 async function nextShipmentNo(): Promise<string> {
   const prefix = datePrefix("SVK-");
   const last = await prisma.shipment.findFirst({
-    where: { shipmentNo: { gte: prefix, lt: prefix + "￿" } },
+    where: { shipmentNo: { gte: prefix, startsWith: prefix } },
     orderBy: { createdAt: "desc" },
     select: { shipmentNo: true },
   });
@@ -92,7 +102,7 @@ async function nextShipmentNo(): Promise<string> {
 async function nextSackNo(): Promise<string> {
   const prefix = datePrefix("CV-");
   const last = await prisma.sack.findFirst({
-    where: { sackNo: { gte: prefix, lt: prefix + "￿" } },
+    where: { sackNo: { gte: prefix, startsWith: prefix } },
     orderBy: { createdAt: "desc" },
     select: { sackNo: true },
   });
@@ -1401,8 +1411,13 @@ export class ShippingService {
         // pratik çakışma penceresi yok denecek kadar dar.
         let effectiveCode = code;
         if (!effectiveCode) {
+          // Sabit-genişlik 5 hane → collation-güvenli kapalı aralık (gte/lte);
+          // "AMB99999￿" sentinel'i glibc'de U+FFFF ignorable olduğundan AMB99999'u
+          // dışlardı, ayrıca gereksiz. lte: "AMB99999" üst değeri dahil eder, AMB+harf
+          // (örn "AMBALAJ") glibc'de "AMB9.."den büyük sıralanıp eşleşmez. orderBy
+          // manualCode desc zero-pad eşit-genişlikte numerik sırayla aynıdır.
           const lastAmb = await tx.sack.findFirst({
-            where: { manualCode: { gte: "AMB00000", lt: "AMB99999￿" } },
+            where: { manualCode: { gte: "AMB00000", lte: "AMB99999" } },
             orderBy: { manualCode: "desc" },
             select: { manualCode: true },
           });

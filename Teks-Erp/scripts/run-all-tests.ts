@@ -56,8 +56,10 @@ function main() {
     const icon = ok ? "✅" : "❌";
     console.log(`${icon} ${file.padEnd(42)} ${summary.padEnd(24)} ${(ms / 1000).toFixed(1)}s`);
     if (!ok && res.status !== 0) {
-      // Başarısız testin son satırlarını göster (teşhis).
-      const tail = out.trim().split("\n").slice(-6).join("\n");
+      // Başarısız testin son satırlarını göster (teşhis). 16 satır: hata mesajı
+      // ("Error: <mesaj>" ilk satırda) + stack + {statusCode} objesi sığsın —
+      // CI'da bu blok PR yorumuna gider, tek bakışta kök neden görülsün.
+      const tail = out.trim().split("\n").slice(-16).join("\n");
       console.log(`   ↳ çıkış kodu ${res.status}\n${tail.replace(/^/gm, "   | ")}`);
     }
   }
