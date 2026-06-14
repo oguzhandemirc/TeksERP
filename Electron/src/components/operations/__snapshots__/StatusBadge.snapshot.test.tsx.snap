@@ -1,0 +1,39 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`StatusBadge — yapısal snapshot > bilinmeyen durum → ham status + defaultTone (neutral) 1`] = `
+<div
+  class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-foreground/10 text-foreground border-transparent"
+>
+  UNKNOWN_STATE
+</div>
+`;
+
+exports[`StatusBadge — yapısal snapshot > sipariş durumları için ton/etiket sınıfları sabit kalır 1`] = `
+<div>
+  <div
+    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-warning/15 text-warning border-transparent"
+  >
+    Bekliyor
+  </div>
+  <div
+    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-info/15 text-info border-transparent"
+  >
+    Onaylandı
+  </div>
+  <div
+    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-info/15 text-info border-transparent"
+  >
+    PARTIAL_SHIPPED
+  </div>
+  <div
+    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-success/15 text-success border-transparent"
+  >
+    Tamamlandı
+  </div>
+  <div
+    class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors bg-muted text-muted-foreground border-transparent"
+  >
+    İptal
+  </div>
+</div>
+`;

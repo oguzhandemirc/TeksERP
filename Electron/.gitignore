@@ -10,3 +10,7 @@ dist/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# Stryker mutation testing — rapor/temp çıktıları (on-demand, commit edilmez)
+reports/mutation/
+.stryker-tmp/
