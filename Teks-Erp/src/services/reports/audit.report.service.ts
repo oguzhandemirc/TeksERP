@@ -19,46 +19,66 @@ export interface SystemLogSummary {
 }
 
 export async function getSystemLogSummary(range: DateRange): Promise<SystemLogSummary> {
-  const totalRow = await prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
-    SELECT COUNT(*) AS total
-    FROM system_logs
-    WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
-  `);
+  // PERF (Faz C2 — ÖLÇÜLDÜ, bkz. SCALE-REPORT.md §8): system_logs en hızlı
+  // büyüyen tablo; 365-gün worst-case'de bu rapor tabloyu tarar. Worst-case
+  // toplam ~2.66× hızlandı (p50 1064→400ms, 430k satır). Üç katman:
+  //   0) ASIL KAZANÇ (2.14×) KODDA DEĞİL: `daily` sorgusunun
+  //      GROUP BY DATE_TRUNC('day',"createdAt")::date ifadesi için EKLENEN ifade
+  //      istatistiği (migration 20260614120000_system_log_daily_stats). Onsuz
+  //      planner grup sayısını yanlış (≈satır sayısı) tahmin edip diske-taşan
+  //      tek-thread Sort+GroupAggregate seçer (258ms); statsla gerçek günü (≤366)
+  //      bilir → paralel in-memory HashAggregate (113ms). ⚠️ daily'nin WHERE/
+  //      GROUP BY ifadesini değiştirirsen stats devre dışı kalır (yavaşlar, ama
+  //      DOĞRU sonuç verir) — migration'ı da güncelle.
+  //   1) `total` sorgusu KALDIRILDI — `byAction` LIMIT'siz + `action` NOT NULL
+  //      olduğundan totalLogs = Σ byAction.count (cebirsel olarak birebir). Bir
+  //      tam-tablo taraması bedavaya elendi (4 → 3).
+  //   2) Kalan 3 sorgu Promise.all ile PARALEL (1→2 ek 1.24×). Base prisma client
+  //      havuzlu (pg Pool max:30, tx DEĞİL) → ayrı connection'larda gerçekten
+  //      eşzamanlı koşar; süre ardışık-toplam yerine ~en-yavaş-sorgu olur. (Kural
+  //      #11'deki "tx.* + Promise.all YASAK" yalnız tek-connection tx client'ı
+  //      içindir; bu salt-okuma rapor tx kullanmaz.) NOT: paralelleştirme yalnız
+  //      (0) sonrası kazanç — daily baskınken (ilk ölçüm) contention yüzünden
+  //      REGRESYON veriyordu; stats onu dengeleyince kazanca döndü. GROUPING SETS
+  //      denemesi (C2 ilk tur) plan değişimiyle regresyon vermişti; bu yaklaşım
+  //      SQL şeklini değiştirmez → regresyon yapısal olarak imkânsız.
+  const [actionRows, tableRows, dailyRows] = await Promise.all([
+    prisma.$queryRaw<Array<{ action: string; count: bigint }>>(Prisma.sql`
+      SELECT action, COUNT(*) AS count
+      FROM system_logs
+      WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
+      GROUP BY action
+      ORDER BY count DESC
+    `),
+    prisma.$queryRaw<Array<{ tableName: string; count: bigint }>>(Prisma.sql`
+      SELECT "tableName", COUNT(*) AS count
+      FROM system_logs
+      WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
+      GROUP BY "tableName"
+      ORDER BY count DESC
+      LIMIT 30
+    `),
+    prisma.$queryRaw<
+      Array<{ day: Date; createCount: bigint; updateCount: bigint; deleteCount: bigint }>
+    >(Prisma.sql`
+      SELECT
+        DATE_TRUNC('day', "createdAt")::date           AS day,
+        COUNT(*) FILTER (WHERE action = 'CREATE')      AS "createCount",
+        COUNT(*) FILTER (WHERE action = 'UPDATE')      AS "updateCount",
+        COUNT(*) FILTER (WHERE action = 'DELETE')      AS "deleteCount"
+      FROM system_logs
+      WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
+      GROUP BY 1
+      ORDER BY 1
+    `),
+  ]);
 
-  const actionRows = await prisma.$queryRaw<Array<{ action: string; count: bigint }>>(Prisma.sql`
-    SELECT action, COUNT(*) AS count
-    FROM system_logs
-    WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
-    GROUP BY action
-    ORDER BY count DESC
-  `);
-
-  const tableRows = await prisma.$queryRaw<Array<{ tableName: string; count: bigint }>>(Prisma.sql`
-    SELECT "tableName", COUNT(*) AS count
-    FROM system_logs
-    WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
-    GROUP BY "tableName"
-    ORDER BY count DESC
-    LIMIT 30
-  `);
-
-  const dailyRows = await prisma.$queryRaw<
-    Array<{ day: Date; createCount: bigint; updateCount: bigint; deleteCount: bigint }>
-  >(Prisma.sql`
-    SELECT
-      DATE_TRUNC('day', "createdAt")::date           AS day,
-      COUNT(*) FILTER (WHERE action = 'CREATE')      AS "createCount",
-      COUNT(*) FILTER (WHERE action = 'UPDATE')      AS "updateCount",
-      COUNT(*) FILTER (WHERE action = 'DELETE')      AS "deleteCount"
-    FROM system_logs
-    WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
-    GROUP BY 1
-    ORDER BY 1
-  `);
+  const byAction = actionRows.map((r) => ({ action: r.action, count: Number(r.count) }));
+  const totalLogs = byAction.reduce((sum, r) => sum + r.count, 0);
 
   return {
-    totalLogs: Number(totalRow[0]?.total ?? 0),
-    byAction: actionRows.map((r) => ({ action: r.action, count: Number(r.count) })),
+    totalLogs,
+    byAction,
     byTable: tableRows.map((r) => ({ tableName: r.tableName, count: Number(r.count) })),
     daily: dailyRows.map((r) => ({
       day: r.day.toISOString().slice(0, 10),

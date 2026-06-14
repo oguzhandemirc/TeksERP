@@ -225,9 +225,74 @@ Prisma `include: { items: { include: { newRoll } } }` → **3 sabit sorgu** (ana
 ### Öneri B — audit arşivleme → operasyonel (kod yok)
 `POST /api/admin/system-logs/archive { monthsToKeep: 6 }` mevcut; 6 ayda bir çalıştırma CLAUDE.md'de operasyonel disiplin olarak yazılı. Scheduler kapsam dışı.
 
-### Faz C net sonucu
-**Sistem ölçeğe hazır.** 1 yıl / 100 sipariş-gün (~2,18M satır, ~805 MB): tüm hot yollar index'li/hızlı, N+1 yok; tek darboğaz adayının önerilen fix'i **ölçümde regresyon** verdiği için uygulanmadı + production default'u (30 gün) zaten index kullanıyor. **Yapılan kod değişikliği: yok** (disiplinli "önce ölç, regresyonu uygulama"). Faz C teslimatı: ölçüm altyapısı (`seed-load-scale.ts` + `scale_report.ts`) + bu rapor.
+### Faz C net sonucu (C2 ilk tur)
+**Sistem ölçeğe hazır.** 1 yıl / 100 sipariş-gün (~2,18M satır, ~805 MB): tüm hot yollar index'li/hızlı, N+1 yok; production default'u (30 gün) zaten index kullanıyor. C2'nin **ilk turunda** denenen iki fix (GROUPING SETS tek-geçiş, sonradan paralelleştirme) ölçümde regresyon/nötr verdiği için uygulanmamıştı.
+
+> **GÜNCELLEME (§8):** İlk tur "darboğaz adayı"nı yüzeyden ele aldı (tarama sayısı). **§8'de kök nedene inildi** — darboğazın %73'ü tek bir alt-sorguymuş (`daily`) ve sebebi eksik **ifade istatistiği** (planner diske-taşan tek-thread plan seçiyor). Düzeltilince worst-case **2,66× hızlandı** ve bu kez **kod + migration UYGULANDI** (ölçüldü, regresyon yok). Yani "kod değişikliği yok" sonucu §8 ile **aşıldı**.
 ```
+
+---
+
+## 8. Faz C2 — Gerçek çözüm: kök neden + UYGULANAN düzeltme (ÖLÇÜLDÜ)
+
+> İlk tur (§7) darboğazı "4 tarama" diye yüzeyden okudu ve iki "tarama-azaltan" fix de regresyon verince durdu. Bu tur **kök nedene** indi: darboğaz tarama sayısı değil, **tek bir alt-sorgu** ve onun **kötü planı**.
+
+### 8.1 Kök neden — `daily` alt-sorgusu maliyetin %73'ü, sebebi eksik ifade istatistiği
+
+`getSystemLogSummary` 4 alt-sorgunun süresi **eşit değil** (430k satır, 365-gün, izolasyon probu p50):
+
+| Alt-sorgu | p50 | Plan |
+|---|---:|---|
+| total (COUNT) | ~35 ms | paralel seq scan |
+| byAction (GROUP BY action) | ~41 ms | **paralel** Partial HashAggregate → Gather (2 worker) |
+| byTable (GROUP BY tableName LIMIT 30) | ~88 ms | paralel HashAggregate |
+| **daily** (GROUP BY güne + 3 FILTER) | **~258–452 ms** | **tek-thread Sort+GroupAggregate, diske taşma** |
+
+`daily` tek başına toplamın **~%73'ü**. EXPLAIN sebebi gösterdi: sorgu `GROUP BY DATE_TRUNC('day',"createdAt")::date` yapıyor; bu **ifadenin** distinct-değer istatistiği olmadığından planner her satırı ayrı grup sanıyor (`rows=430000`) → HashAggregate'i "çok büyük" zannedip **diske-taşan tek-thread Sort + GroupAggregate** seçiyor (`external merge Disk: 9312kB`). `byAction` ise gerçek kolon (`action`, 7 distinct, istatistik var) üzerinden **paralel in-memory HashAggregate** alıyor — 10× fark buradan.
+
+### 8.2 Düzeltme 0 (ASIL KAZANÇ) — tam-eşleşen ifade istatistiği
+
+`CREATE STATISTICS sl_day_exact ON ((DATE_TRUNC('day',"createdAt")::date)) FROM system_logs` (migration `20260614120000_system_log_daily_stats`). Planner artık gerçek günü (≤366) biliyor → `daily` de **byAction'ın paralel in-memory HashAggregate planına** geçiyor:
+
+| `daily` tek-sorgu | Plan | EXPLAIN exec |
+|---|---|---:|
+| Önce | Sort+GroupAggregate, diske taşma, tek-thread | **258 ms** |
+| Sonra | Parallel Seq Scan → HashAggregate → Gather (2 worker), bellekte 42 kB | **113 ms** |
+
+> İlk turdaki ifade-stats denemesi (`DATE_TRUNC('day',"createdAt")` — `::date` cast'sız) ifade ağacı eşleşmediği için işe yaramamıştı; **tam eşleşme** (`::date` dahil) şarttır. ⚠️ daily sorgusunun ifadesi değişirse stats sessizce devre dışı kalır (yavaşlar, **doğru** sonuç verir) → migration'ı da güncelle.
+> **Maliyet:** Yazma yoluna **SIFIR** — ifade istatistiği yalnız ANALYZE/autovacuum'da güncellenir, her INSERT'te değil. En hızlı büyüyen tabloya **index eklemeden** plan düzeltir (CLAUDE.md "hot tabloya index ekleme" uyarısıyla uyumlu).
+
+### 8.3 Düzeltme 1+2 (kod) — derive-total + paralel sorgular
+
+`audit.report.service.ts:getSystemLogSummary`:
+1. **`total` sorgusu kaldırıldı** — `byAction` LIMIT'siz + `action` NOT NULL → `totalLogs = Σ byAction.count` (cebirsel olarak birebir). 4 tarama → 3.
+2. **Kalan 3 sorgu `Promise.all` ile PARALEL** — base prisma client havuzlu (pg Pool max:30, **tx değil**) → ayrı connection'larda gerçekten eşzamanlı; süre ardışık-toplam yerine ~en-yavaş-sorgu. (Kural #11 yalnız tek-connection tx client'ı içindir.)
+
+> Paralelleştirme **ancak Düzeltme 0 sonrası** kazanç: `daily` 452 ms ile baskınken onu hafif sorgularla eşzamanlı koşmak çekirdek/bellek-bandı için yarıştırıp **regresyon** veriyordu (probe: 0,78×) — bu yüzden ilk turda reddedilmişti. Stats `daily`'yi 113 ms'e indirip 3 sorguyu dengeleyince paralel **kazanca döndü**. SQL şekli değişmediği için (GROUPING SETS'in aksine) plan-regresyon riski yok.
+
+### 8.4 BEFORE/AFTER — katkı ayrıştırması (aynı veri, 430k satır, 365-gün worst-case)
+
+`scripts/bench_audit_final.ts` (stats'ı toggle ederek 3 senaryo, N=25, p50/min):
+
+| Senaryo | p50 | min |
+|---|---:|---:|
+| **0) baseline** — 4 ardışık, stats yok (eski production) | 1064 ms | 654 ms |
+| **1) +stats** — 4 ardışık + `sl_day_exact` | 498 ms | 330 ms |
+| **2) +kod (final)** — 3 paralel + derive-total + stats | **400 ms** | **231 ms** |
+
+- **0→1 (istatistik): 2,14× / 1,98×** ← asıl kazanç, kodda değil.
+- **1→2 (kod): 1,24× / 1,43×** ← paralel + derive-total ek kazanç.
+- **TOPLAM 0→2: 2,66× (p50) / 2,83× (min)** — worst-case ~1064 → ~400 ms.
+
+> Mutlak ms değerleri §2'deki sıcak-önbellek 296 ms'ten yüksek; çünkü bu bench fresh-seed + eşzamanlı ölçüm yükü altında koştu (yüksek varyans). **Oranlar** ve **EXPLAIN exec** (daily 258→113 ms) temiz sinyal. Üretim default'u zaten 30 gün (index scan, <100 ms); bu kazanç **365-gün worst-case'i** (kullanıcı bilerek "1 yıl" seçince) iyileştirir.
+
+### 8.5 Doğruluk + kapsam
+
+- **Çıktı birebir korundu:** `bench_audit_summary.ts` 430k satırda eski (4-sorgu) ↔ yeni (servis) deep-equal → **AYNI** (total/byAction/byTable/daily). `test_reports.ts` **17/17** (total 0→3 derive-total doğrulandı). `tsc` temiz.
+- **Uygulandı:** migration (dev'e `migrate deploy` ile) + servis kodu. `getUserActivity` aynı `daily`-tipi ifade kullanmaz → dokunulmadı (78 ms, darboğaz değil).
+- **Teslim:** `bench_audit_summary.ts` (seed+A/B+doğruluk kapısı), `bench_audit_probe.ts` (paralellik izolasyonu), `bench_audit_final.ts` (katkı ayrıştırması).
+
+---
 
 > **Tekrar üretmek için:**
 > ```bash
@@ -237,5 +302,9 @@ Prisma `include: { items: { include: { newRoll } } }` → **3 sabit sorgu** (ana
 > cd Teks-Erp && npx prisma migrate deploy && npm run seed
 > ORDERS_PER_DAY=50 DAYS=365 npx tsx scripts/seed-load-scale.ts
 > npx tsx scripts/scale_report.ts
+> # §8 audit özeti çözümü (bench'ler system_logs'u kendi seed eder, ~430k):
+> npx tsx scripts/bench_audit_summary.ts   # A/B + doğruluk kapısı (deep-equal)
+> npx tsx scripts/bench_audit_probe.ts     # paralellik izolasyonu + EXPLAIN
+> npx tsx scripts/bench_audit_final.ts     # katkı ayrıştırması (stats toggle)
 > dropdb teks_loadtest
 > ```
