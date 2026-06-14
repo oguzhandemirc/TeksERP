@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 
-// Servisi mock'la — gerçek HTTP yok.
 const getDirectShipPreview = vi.fn();
 const directShip = vi.fn();
 vi.mock("./service", () => ({
@@ -47,70 +46,79 @@ const render = () =>
     <DirectShipModal open onOpenChange={() => {}} workOrderId="wo1" dispatchId="d1" dispatchNo="SD-2606-000001" />,
   );
 
+const rollChecks = () => within(screen.getByTestId("ship-rolls")).getAllByRole("checkbox");
+
 describe("DirectShipModal (fasondan doğrudan sevk UI)", () => {
   beforeEach(() => {
     getDirectShipPreview.mockReset().mockResolvedValue(previewData());
     directShip.mockReset().mockResolvedValue({ success: true, data: { dispatchNo: "SD-2606-000001", consumedRollCount: 2 } });
   });
 
-  it("önizleme verisini render eder: top sayısı + atlanacak adım + WO tamamlanacak rozeti", async () => {
+  it("önizlemeyi render eder: toplar (checkbox) + iş emrini tamamla toggle", async () => {
     render();
-    // "2" ayrı <span>'de → bölünmemiş metin parçasıyla eşleştir.
-    expect(await screen.findByText(/top tüketilecek/i)).toBeInTheDocument();
-    expect(screen.getByText(/Sonraki/i)).toBeInTheDocument();
-    expect(screen.getByText(/Tambur/)).toBeInTheDocument();
-    expect(screen.getByText(/İş emri TAMAMLANACAK/i)).toBeInTheDocument();
-    // somut top listesi
+    expect(await screen.findByText(/Sevk edilecek toplar/i)).toBeInTheDocument();
     expect(screen.getByText("BC-1")).toBeInTheDocument();
     expect(screen.getByText("BC-2")).toBeInTheDocument();
+    expect(rollChecks()).toHaveLength(2);
+    // tüm toplar default seçili
+    rollChecks().forEach((c) => expect(c).toBeChecked());
+    expect(screen.getByText(/Bu iş emrini tamamla/i)).toBeInTheDocument();
+    // toggle KAPALI iken "açık kalır" mesajı
+    expect(screen.getByText(/iş emri AÇIK kalır/i)).toBeInTheDocument();
   });
 
   it("sebep boşken buton disabled; sebep girilince aktif", async () => {
     const user = userEvent.setup();
     render();
-    // Önce önizleme yüklensin (textarea render olsun) — footer butonu hep var.
     const textarea = await screen.findByPlaceholderText(/Boyahane/i);
-    const btn = screen.getByRole("button", { name: /Doğrudan Sevk Et/i });
+    const btn = screen.getByRole("button", { name: /Sevk Et/i });
     expect(btn).toBeDisabled();
     await user.type(textarea, "doğrudan sevk sebebi");
     await waitFor(() => expect(btn).toBeEnabled());
   });
 
-  it("sipariş seçip onaylayınca directShip reason + allocations ile çağrılır", async () => {
+  it("tüm toplar seçili + sipariş seç → directShip rollIds(tümü)+completeWorkOrder(false)+alloc", async () => {
     const user = userEvent.setup();
     render();
     await user.type(await screen.findByPlaceholderText(/Boyahane/i), "müşteriye gitti");
-    // aday satırı seç (checkbox) → qty suggestedQty(400) ile prefill
-    await user.click(screen.getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: /Doğrudan Sevk Et/i }));
+    await user.click(within(screen.getByTestId("ship-orders")).getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: /Sevk Et/i }));
     await waitFor(() => expect(directShip).toHaveBeenCalledTimes(1));
-    const [dispatchId, payload] = directShip.mock.calls[0] as [string, { reason: string; orderLineAllocations: { orderLineId: string; qty: number }[] }];
+    const [dispatchId, payload] = directShip.mock.calls[0] as [string, { reason: string; rollIds: string[]; completeWorkOrder: boolean; orderLineAllocations: { orderLineId: string; qty: number }[] }];
     expect(dispatchId).toBe("d1");
-    expect(payload.reason).toBe("müşteriye gitti");
+    expect([...payload.rollIds].sort()).toEqual(["r1", "r2"]);
+    expect(payload.completeWorkOrder).toBe(false);
     expect(payload.orderLineAllocations).toEqual([{ orderLineId: "ol1", qty: 400 }]);
   });
 
-  it("karşılanma seçilmezse directShip boş allocations ile çağrılır (yalnız WO kapanır)", async () => {
+  it("'iş emrini tamamla' toggle açılınca payload.completeWorkOrder=true + atlama uyarısı", async () => {
     const user = userEvent.setup();
     render();
-    await user.type(await screen.findByPlaceholderText(/Boyahane/i), "karşılanma yok");
-    await user.click(screen.getByRole("button", { name: /Doğrudan Sevk Et/i }));
+    await user.type(await screen.findByPlaceholderText(/Boyahane/i), "fason son durak");
+    await user.click(screen.getByRole("checkbox", { name: /İş emrini tamamla/i }));
+    expect(await screen.findByText(/sonraki adım atlanacak/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Sevk Et \+ WO/i }));
     await waitFor(() => expect(directShip).toHaveBeenCalledTimes(1));
-    const [, payload] = directShip.mock.calls[0] as [string, { orderLineAllocations: unknown[] }];
-    expect(payload.orderLineAllocations).toEqual([]);
+    const [, payload] = directShip.mock.calls[0] as [string, { completeWorkOrder: boolean }];
+    expect(payload.completeWorkOrder).toBe(true);
   });
 
-  it("woWillComplete=false ise 'iş emri açık kalacak' uyarısı gösterilir", async () => {
-    getDirectShipPreview.mockResolvedValue(previewData({ woWillComplete: false, otherAtSubcontractor: 2 }));
+  it("per-roll: bir top seçimden çıkarılınca rollIds yalnız seçili + uyarı", async () => {
+    const user = userEvent.setup();
     render();
-    expect(await screen.findByText(/İş emri açık kalacak/i)).toBeInTheDocument();
+    await user.type(await screen.findByPlaceholderText(/Boyahane/i), "kısmi sevk");
+    await user.click(rollChecks()[1]!); // r2'yi çıkar
+    expect(await screen.findByText(/1 top fasonda kalacak/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Sevk Et/i }));
+    await waitFor(() => expect(directShip).toHaveBeenCalledTimes(1));
+    const [, payload] = directShip.mock.calls[0] as [string, { rollIds: string[] }];
+    expect(payload.rollIds).toEqual(["r1"]);
   });
 
   it("zaten doğrudan sevk edilmiş sevk → engel mesajı + onay yok", async () => {
     getDirectShipPreview.mockResolvedValue(previewData({ alreadyDirectShipped: true }));
     render();
     expect(await screen.findByText(/zaten doğrudan sevk edilmiş/i)).toBeInTheDocument();
-    const btn = screen.getByRole("button", { name: /Doğrudan Sevk Et/i });
-    expect(btn).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Sevk Et/i })).toBeDisabled();
   });
 });

@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { workOrderService } from "./service";
 
 interface Props {
@@ -26,14 +27,16 @@ interface Props {
 }
 
 /**
- * Fasondan Doğrudan Sevk — fason fiilen son durak olduğunda (mal fabrikaya
- * dönmeden müşteriye sevk) açık sevki manuel kapatır: toplar tüketilir, kalan
- * adımlar atlanır, WO tamamlanır. İstenirse hangi sipariş(ler)e gittiği
- * karşılanmaya işlenir (operatör seçer — WO'nun bağlı siparişi olmayabilir).
+ * Fasondan Doğrudan Sevk — fasondaki topların TÜMÜ veya BİR KISMI doğrudan müşteriye
+ * sevk edilir (seçilmeyenler fasonda kalır, normal kabulle döner). Operatör ayrıca
+ * "iş emrini tamamla" derse kalan adımlar atlanır + WO kapanır; demezse WO açık kalır
+ * (kalan üretim devam). İstenirse hangi sipariş(ler)e gittiği karşılanmaya işlenir.
  */
 export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, dispatchNo }: Props) {
   const qc = useQueryClient();
   const [reason, setReason] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [completeWO, setCompleteWO] = useState(false);
   // orderLineId → karşılanan metraj (yalnız seçili satırlar).
   const [alloc, setAlloc] = useState<Record<string, number>>({});
 
@@ -45,18 +48,26 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
   });
   const preview = previewQ.data?.data;
 
-  // Modal her açılışta temizlensin (önceki sevkin değerleri taşmasın).
+  // Açılışta/önizleme yüklenince: tüm toplar seçili (default), diğer alanlar temiz.
   useEffect(() => {
     if (open) {
       setReason("");
       setAlloc({});
+      setCompleteWO(false);
     }
   }, [open, dispatchId]);
+  useEffect(() => {
+    if (preview?.affectedRolls) {
+      setSelected(new Set(preview.affectedRolls.map((r) => r.id)));
+    }
+  }, [preview?.affectedRolls]);
 
   const mut = useMutation({
     mutationFn: () =>
       workOrderService.directShip(dispatchId, {
         reason: reason.trim(),
+        rollIds: [...selected],
+        completeWorkOrder: completeWO,
         orderLineAllocations: Object.entries(alloc)
           .filter(([, qty]) => qty > 0)
           .map(([orderLineId, qty]) => ({ orderLineId, qty })),
@@ -74,13 +85,24 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
     () => Object.values(alloc).reduce((s, q) => s + (q > 0 ? q : 0), 0),
     [alloc],
   );
+  const total = preview?.affectedRolls.length ?? 0;
+  const selectedCount = selected.size;
+  const allSelected = total > 0 && selectedCount === total;
   const canSubmit =
     !!preview &&
     !preview.cancelled &&
     !preview.alreadyDirectShipped &&
-    preview.affectedRolls.length > 0 &&
+    selectedCount > 0 &&
     reason.trim().length >= 3 &&
     !mut.isPending;
+
+  const toggleRoll = (id: string, checked: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   const toggleLine = (id: string, suggested: number, checked: boolean) =>
     setAlloc((prev) => {
@@ -99,8 +121,8 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
             Fasondan Doğrudan Sevk
           </DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{dispatchNo}</span> — mal fasondan bize dönmeden doğrudan
-            sevk edildi olarak kapatılır. Bu işlem geri alınamaz.
+            <span className="font-mono">{dispatchNo}</span> — seçilen toplar fasondan doğrudan sevk
+            edilir; seçilmeyenler fasonda kalır (normal kabulle döner). Bu işlem geri alınamaz.
           </DialogDescription>
         </DialogHeader>
 
@@ -131,63 +153,91 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
               </div>
             ) : (
               <>
-                {/* Ne olacak özeti */}
-                <div className="rounded-md border bg-muted/20 p-3 text-sm">
-                  <div className="mb-1 font-medium">Bu işlem şunları yapacak:</div>
-                  <ul className="ml-4 list-disc space-y-1 text-muted-foreground">
-                    <li>
-                      <span className="font-medium text-foreground">{preview.affectedRolls.length}</span>{" "}
-                      top tüketilecek (fasonda kapanır)
-                    </li>
-                    {preview.downstreamStepsToSkip.length > 0 && (
-                      <li>
-                        Sonraki{" "}
-                        <span className="font-medium text-foreground">
-                          {preview.downstreamStepsToSkip.length}
-                        </span>{" "}
-                        adım atlanacak:{" "}
-                        {preview.downstreamStepsToSkip.map((s) => s.stationName).join(", ")}
-                      </li>
-                    )}
-                    <li>
-                      {preview.woWillComplete ? (
-                        <span className="inline-flex items-center gap-1 text-success">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> İş emri TAMAMLANACAK
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-warning">
-                          <AlertTriangle className="h-3.5 w-3.5" /> İş emri açık kalacak (bu adımda{" "}
-                          {preview.otherAtSubcontractor} top daha fasonda)
-                        </span>
-                      )}
-                    </li>
+                {/* Sevk edilecek toplar — per-roll seçim */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Sevk edilecek toplar ({selectedCount}/{total})
+                    </span>
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-primary hover:underline"
+                      onClick={() =>
+                        setSelected(
+                          allSelected ? new Set() : new Set(preview.affectedRolls.map((r) => r.id)),
+                        )
+                      }
+                    >
+                      {allSelected ? "Hiçbirini" : "Tümünü seç"}
+                    </button>
+                  </div>
+                  <ul data-testid="ship-rolls" className="max-h-36 space-y-1 overflow-y-auto rounded-md border p-2">
+                    {preview.affectedRolls.map((r) => {
+                      const on = selected.has(r.id);
+                      return (
+                        <li
+                          key={r.id}
+                          className={cn(
+                            "flex items-center gap-2 rounded px-1 py-0.5 text-xs",
+                            !on && "opacity-50",
+                          )}
+                        >
+                          <Checkbox checked={on} onCheckedChange={(v) => toggleRoll(r.id, Boolean(v))} />
+                          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <span className="font-mono">{r.barcode ?? "açık kumaş"}</span>
+                            <span className="truncate text-muted-foreground">{r.itemName}</span>
+                            {r.colorName && (
+                              <Badge variant="muted" className="text-[10px]">
+                                {r.colorName}
+                              </Badge>
+                            )}
+                          </span>
+                          <span className="shrink-0 tabular-nums text-muted-foreground">
+                            {formatNumber(r.currentQty, 0)} m
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
+                  {selectedCount < total && (
+                    <div className="mt-1 inline-flex items-center gap-1 text-[11px] text-warning">
+                      <AlertTriangle className="h-3 w-3" />
+                      {total - selectedCount} top fasonda kalacak (kabulle döner)
+                    </div>
+                  )}
                 </div>
 
-                {/* Etkilenecek toplar */}
-                <div>
-                  <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Sevk edilecek toplar ({preview.affectedRolls.length})
-                  </div>
-                  <ul className="max-h-32 space-y-1 overflow-y-auto rounded-md border p-2">
-                    {preview.affectedRolls.map((r) => (
-                      <li key={r.id} className="flex items-center justify-between gap-2 text-xs">
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <span className="font-mono">{r.barcode ?? "açık kumaş"}</span>
-                          <span className="truncate text-muted-foreground">{r.itemName}</span>
-                          {r.colorName && (
-                            <Badge variant="muted" className="text-[10px]">
-                              {r.colorName}
-                            </Badge>
-                          )}
+                {/* İş emrini tamamla toggle */}
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-start gap-2 rounded-md border p-3 text-sm transition-colors",
+                    completeWO
+                      ? "border-success/50 bg-success/5"
+                      : "border-border hover:bg-muted/40",
+                  )}
+                >
+                  <Checkbox
+                    checked={completeWO}
+                    onCheckedChange={(v) => setCompleteWO(Boolean(v))}
+                    aria-label="İş emrini tamamla"
+                    className="mt-0.5"
+                  />
+                  <span className="min-w-0">
+                    <span className="font-medium">Bu iş emrini tamamla</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {completeWO ? (
+                        <span className="inline-flex items-center gap-1 text-warning">
+                          <AlertTriangle className="h-3 w-3" />
+                          {preview.downstreamStepsToSkip.length > 0
+                            ? `${preview.downstreamStepsToSkip.length} sonraki adım atlanacak (${preview.downstreamStepsToSkip.map((s) => s.stationName).join(", ")}) ve WO KAPANACAK.`
+                            : "Adım tamamlanacak ve WO KAPANACAK."}
                         </span>
-                        <span className="shrink-0 tabular-nums text-muted-foreground">
-                          {formatNumber(r.currentQty, 0)} m
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                      ) : (
+                        "Kapalı: yalnız seçilen toplar sevk edilir, iş emri AÇIK kalır (kalan üretim devam eder)."
+                      )}
+                    </span>
+                  </span>
+                </label>
 
                 {/* Sebep */}
                 <div>
@@ -212,10 +262,10 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                   </div>
                   {preview.candidateOrderLines.length === 0 ? (
                     <div className="rounded-md border border-dashed p-2 text-center text-xs italic text-muted-foreground">
-                      Eşleşen açık sipariş satırı yok. Boş bırakılırsa yalnız WO kapanır.
+                      Eşleşen açık sipariş satırı yok. Boş bırakılırsa karşılanmaya dokunulmaz.
                     </div>
                   ) : (
-                    <ul className="space-y-1 rounded-md border p-2">
+                    <ul data-testid="ship-orders" className="space-y-1 rounded-md border p-2">
                       {preview.candidateOrderLines.map((l) => {
                         const checked = l.orderLineId in alloc;
                         return (
@@ -275,8 +325,16 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Vazgeç
           </Button>
-          <Button disabled={!canSubmit} onClick={() => mut.mutate()}>
-            {mut.isPending ? "Sevk ediliyor..." : "Doğrudan Sevk Et"}
+          <Button
+            disabled={!canSubmit}
+            className={cn(completeWO && "bg-success text-white hover:bg-success/90")}
+            onClick={() => mut.mutate()}
+          >
+            {mut.isPending
+              ? "Sevk ediliyor..."
+              : completeWO
+                ? `Sevk Et + WO'yu Tamamla (${selectedCount})`
+                : `Doğrudan Sevk Et (${selectedCount})`}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -12,11 +12,14 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerModal";
 import { useTabsStore } from "@/store/tabs";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
+import { rollStatusLabels } from "@/types/enums";
+import type { RollStatus } from "@/types/enums";
 import { workOrderService } from "./service";
 
 interface Props {
@@ -34,6 +37,7 @@ export function SplitBranchModal({ open, onOpenChange, workOrderId, dispatchId, 
 
   const [newColorId, setNewColorId] = useState<string | null>(null);
   const [orderMode, setOrderMode] = useState<"stock" | "keep">("stock");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Modal her açılışta temiz başlasın.
   useEffect(() => {
@@ -51,12 +55,18 @@ export function SplitBranchModal({ open, onOpenChange, workOrderId, dispatchId, 
   });
   const preview = previewQ.data?.data;
 
+  // Önizleme yüklenince: tüm toplar seçili (default).
+  useEffect(() => {
+    if (preview?.rolls) setSelected(new Set(preview.rolls.map((r) => r.id)));
+  }, [preview?.rolls]);
+
   const splitMut = useMutation({
     mutationFn: () =>
       workOrderService.splitBranch(workOrderId, {
         batchSplitId: dispatchId,
         newColorId: newColorId as string,
         orderMode,
+        rollIds: [...selected],
       }),
     onSuccess: (res) => {
       const newId = res.data?.newWorkOrderId;
@@ -79,7 +89,17 @@ export function SplitBranchModal({ open, onOpenChange, workOrderId, dispatchId, 
     },
   });
 
-  const canSubmit = Boolean(preview?.canSplit && newColorId) && !splitMut.isPending;
+  const totalRolls = preview?.rolls.length ?? 0;
+  const allSelected = totalRolls > 0 && selected.size === totalRolls;
+  const canSubmit =
+    Boolean(preview?.canSplit && newColorId) && selected.size > 0 && !splitMut.isPending;
+  const toggleRoll = (id: string, checked: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -128,29 +148,53 @@ export function SplitBranchModal({ open, onOpenChange, workOrderId, dispatchId, 
                   </div>
                 )}
 
-                {/* Taşınacak toplar (per-record liste — yapısal işlem onayı) */}
+                {/* Taşınacak toplar — per-roll seçim (yalnız seçilenler yeni WO'ya) */}
                 <div>
-                  <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Taşınacak toplar ({preview.rollCount} · {formatNumber(preview.totalQty, 0)} m)
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Taşınacak toplar ({selected.size}/{totalRolls})
+                    </span>
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-primary hover:underline"
+                      onClick={() =>
+                        setSelected(allSelected ? new Set() : new Set(preview.rolls.map((r) => r.id)))
+                      }
+                    >
+                      {allSelected ? "Hiçbirini" : "Tümünü seç"}
+                    </button>
                   </div>
                   <ul className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
-                    {preview.rolls.map((r) => (
-                      <li key={r.id} className="flex items-center justify-between gap-2 text-xs">
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <span className="font-mono">{r.barcode ?? "açık kumaş"}</span>
-                          {r.itemName && (
-                            <span className="truncate text-muted-foreground">{r.itemName}</span>
-                          )}
-                        </span>
-                        <span className="flex shrink-0 items-center gap-2">
-                          <Badge variant="outline" className="text-[10px] text-warning">
-                            {r.status}
-                          </Badge>
-                          <span className="tabular-nums text-muted-foreground">{r.currentQty} m</span>
-                        </span>
-                      </li>
-                    ))}
+                    {preview.rolls.map((r) => {
+                      const on = selected.has(r.id);
+                      return (
+                        <li
+                          key={r.id}
+                          className={cn("flex items-center gap-2 text-xs", !on && "opacity-50")}
+                        >
+                          <Checkbox checked={on} onCheckedChange={(v) => toggleRoll(r.id, Boolean(v))} />
+                          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <span className="font-mono">{r.barcode ?? "açık kumaş"}</span>
+                            {r.itemName && (
+                              <span className="truncate text-muted-foreground">{r.itemName}</span>
+                            )}
+                          </span>
+                          <span className="flex shrink-0 items-center gap-2">
+                            <Badge variant="outline" className="text-[10px] text-warning">
+                              {rollStatusLabels[r.status as RollStatus] ?? r.status}
+                            </Badge>
+                            <span className="tabular-nums text-muted-foreground">{r.currentQty} m</span>
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
+                  {selected.size > 0 && selected.size < totalRolls && (
+                    <div className="mt-1 inline-flex items-center gap-1 text-[11px] text-warning">
+                      <AlertTriangle className="h-3 w-3" />
+                      {totalRolls - selected.size} top kaynak iş emrinde kalacak
+                    </div>
+                  )}
                 </div>
 
                 {/* Renk değişimi: kaynak → yeni */}

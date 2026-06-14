@@ -32,6 +32,10 @@ const cancelDispatchSchema = z.object({
 
 const directShipSchema = z.object({
   reason: z.string().trim().min(3, "Doğrudan sevk sebebi en az 3 karakter").max(500),
+  /** Sevk edilecek topların alt-kümesi (yok/boş = sevkin tümü). */
+  rollIds: z.array(z.string().uuid()).max(500).optional(),
+  /** true → fason son durak: kalan adımlar atlanır, WO tamamlanır. */
+  completeWorkOrder: z.boolean().optional(),
   /** Opsiyonel karşılanma: mal hangi sipariş satır(lar)ına ne kadar gitti. */
   orderLineAllocations: z
     .array(z.object({ orderLineId: z.string().uuid(), qty: z.number().positive() }))
@@ -335,7 +339,13 @@ export class SubcontractorController {
       const id = req.params.id as string;
       const body = directShipSchema.parse(req.body);
       const result = await this.service.executeDirectShip(
-        { dispatchId: id, reason: body.reason, orderLineAllocations: body.orderLineAllocations },
+        {
+          dispatchId: id,
+          reason: body.reason,
+          rollIds: body.rollIds,
+          completeWorkOrder: body.completeWorkOrder,
+          orderLineAllocations: body.orderLineAllocations,
+        },
         req.user?.userId,
       );
       res.status(200).json(result);

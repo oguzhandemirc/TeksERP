@@ -74,7 +74,9 @@ function decodeSequenceFromBarcode(barcode: string): number | null {
   return n;
 }
 
-async function nextPrefixedSequence(
+// Export: workorder.service per-roll split'te taşınan toplar için yeni SD dispatch
+// numarası üretirken yeniden kullanır (aynı sequence kaynağı).
+export async function nextPrefixedSequence(
   tx: Prisma.TransactionClient,
   table: "subcontractorDispatch" | "subcontractorReceipt" | "swatch" | "roll",
   prefix: string,
@@ -2948,6 +2950,12 @@ export class SubcontractorService {
     data: {
       dispatchId: string;
       reason: string;
+      /** Sevk edilecek topların alt-kümesi (yok/boş = sevkin TÜMÜ). Seçilmeyenler
+       *  AT_SUBCONTRACTOR kalır → normal fason kabulüyle fabrikaya döner. */
+      rollIds?: string[];
+      /** true → fason fiilen son durak: kalan adımlar SKIPPED + WO COMPLETED.
+       *  false (default) → sadece toplar sevk edilir, WO açık kalır (kalan üretim devam). */
+      completeWorkOrder?: boolean;
       orderLineAllocations?: Array<{ orderLineId: string; qty: number }>;
     },
     userId?: string,
@@ -2956,6 +2964,7 @@ export class SubcontractorService {
     if (!trimmedReason || trimmedReason.length < 3) {
       throw AppError.badRequest("Doğrudan sevk sebebi en az 3 karakter olmalı");
     }
+    const completeWorkOrder = data.completeWorkOrder === true;
 
     const dispatch = await prisma.subcontractorDispatch.findUnique({
       where: { id: data.dispatchId },
@@ -2997,11 +3006,24 @@ export class SubcontractorService {
       );
     }
 
-    const rollIds = dispatch.items.map((i) => i.rollId);
-    // Defansif: tüm toplar hâlâ AT_SUBCONTRACTOR + bu adımda olmalı (cancel deseni).
+    const dispatchRollIds = dispatch.items.map((i) => i.rollId);
+    // Sevk edilecek toplar: alt-küme verildiyse doğrula, yoksa tümü.
+    let shipRollIds = dispatchRollIds;
+    if (data.rollIds && data.rollIds.length > 0) {
+      const dispatchSet = new Set(dispatchRollIds);
+      if (data.rollIds.some((id) => !dispatchSet.has(id))) {
+        throw AppError.badRequest("Seçilen toplardan bazıları bu sevke ait değil");
+      }
+      shipRollIds = [...new Set(data.rollIds)];
+    }
+    if (shipRollIds.length === 0) {
+      throw AppError.badRequest("Sevk edilecek en az bir top seçilmeli");
+    }
+
+    // Defansif: sevk edilecek toplar hâlâ AT_SUBCONTRACTOR + bu adımda olmalı.
     const movedRolls = await prisma.roll.findMany({
       where: {
-        id: { in: rollIds },
+        id: { in: shipRollIds },
         OR: [
           { status: { not: RollStatus.AT_SUBCONTRACTOR } },
           { currentStepId: { not: dispatch.stepId } },
@@ -3016,11 +3038,19 @@ export class SubcontractorService {
       );
     }
 
+    // Bu sevk, dispatch'in TÜM (hâlâ fasonda) toplarını mı kapsıyor? Kısmi sevkte
+    // dispatch AÇIK kalır (kalan toplar normal kabulle döner), directShippedAt
+    // SET EDİLMEZ, donmuş belge üretilmez (belge tüm dispatch'i gösterir).
+    const dispatchStillAtSub = await prisma.roll.count({
+      where: { id: { in: dispatchRollIds }, status: RollStatus.AT_SUBCONTRACTOR },
+    });
+    const isFullDispatchShip = dispatchStillAtSub === shipRollIds.length;
+
     // Opsiyonel karşılanma doğrulaması (verilmişse).
     const allocations = data.orderLineAllocations ?? [];
     if (allocations.length > 0) {
       const rollSpecs = await prisma.roll.findMany({
-        where: { id: { in: rollIds } },
+        where: { id: { in: shipRollIds } },
         select: { itemId: true, colorId: true, width: true },
       });
       const lineIds = allocations.map((a) => a.orderLineId);
@@ -3067,17 +3097,21 @@ export class SubcontractorService {
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1) Dispatch atomik claim — doğrudan sevk işareti.
-      const claim = await tx.subcontractorDispatch.updateMany({
-        where: { id: data.dispatchId, directShippedAt: null, cancelledAt: null },
-        data: {
-          directShippedAt: new Date(),
-          directShippedById: userId ?? null,
-          directShipReason: trimmedReason,
-        },
-      });
-      if (claim.count === 0) {
-        throw AppError.conflict("Bu sevk az önce başka bir işlemle değişmiş. Listeyi yenileyin.");
+      // 1) Dispatch işareti — yalnız dispatch'in TÜMÜ sevk edildiyse directShippedAt
+      //    set edilir (atomik claim). Kısmi sevkte dispatch AÇIK kalır; atomiklik
+      //    aşağıdaki roll claim'iyle (status=AT_SUBCONTRACTOR + count) sağlanır.
+      if (isFullDispatchShip) {
+        const claim = await tx.subcontractorDispatch.updateMany({
+          where: { id: data.dispatchId, directShippedAt: null, cancelledAt: null },
+          data: {
+            directShippedAt: new Date(),
+            directShippedById: userId ?? null,
+            directShipReason: trimmedReason,
+          },
+        });
+        if (claim.count === 0) {
+          throw AppError.conflict("Bu sevk az önce başka bir işlemle değişmiş. Listeyi yenileyin.");
+        }
       }
 
       // 2) Açık RollMovement'leri kapat (DIRECT_SHIP notu).
@@ -3095,16 +3129,17 @@ export class SubcontractorService {
         WHERE rm."rollId" = r."id"
           AND rm."workOrderStepId" = ${dispatch.stepId}::uuid
           AND rm."exitedAt" IS NULL
-          AND rm."rollId" = ANY(${rollIds}::uuid[])
+          AND rm."rollId" = ANY(${shipRollIds}::uuid[])
       `;
 
-      // 3) Toplar TERMINAL: SUBCONTRACTOR_CONSUMED (gerçek sevk; batchSplitId KORUNUR
-      //    — receive deseni, cancel'ın aksine). Atomik claim.
+      // 3) Sevk edilen toplar TERMINAL: SUBCONTRACTOR_CONSUMED (gerçek sevk;
+      //    batchSplitId KORUNUR — receive deseni). Atomik claim. Seçilmeyen toplar
+      //    AT_SUBCONTRACTOR kalır (normal kabulle döner).
       const consumed = await tx.roll.updateMany({
-        where: { id: { in: rollIds }, status: RollStatus.AT_SUBCONTRACTOR },
+        where: { id: { in: shipRollIds }, status: RollStatus.AT_SUBCONTRACTOR },
         data: { status: RollStatus.SUBCONTRACTOR_CONSUMED, currentStepId: null },
       });
-      if (consumed.count !== rollIds.length) {
+      if (consumed.count !== shipRollIds.length) {
         throw AppError.conflict(
           "Toplardan biri bu sırada başka bir işlemle değişmiş. Listeyi yenileyip tekrar deneyin.",
         );
@@ -3112,7 +3147,7 @@ export class SubcontractorService {
 
       // 4) RollOperation log (SUBCONTRACTOR_RETURNED + directShip metadata).
       await tx.rollOperation.createMany({
-        data: rollIds.map((rid) => ({
+        data: shipRollIds.map((rid) => ({
           rollId: rid,
           workOrderStepId: dispatch.stepId,
           operationType: RollOperationType.SUBCONTRACTOR_RETURNED,
@@ -3126,7 +3161,9 @@ export class SubcontractorService {
         skipDuplicates: true,
       });
 
-      // 5) Adım + WO kapanışı — yalnız bu adımda başka fason topu kalmadıysa.
+      // 5) Adım kapanışı: bu adımda başka fason topu kalmadıysa adım COMPLETED.
+      //    (Kısmi sevkte seçilmeyen toplar AT_SUBCONTRACTOR kaldığından adım ACTIVE
+      //    kalır; çoklu açık dispatch'te de aynı.)
       const stillAtSubcontractor = await tx.roll.count({
         where: { currentStepId: dispatch.stepId, status: RollStatus.AT_SUBCONTRACTOR },
       });
@@ -3136,44 +3173,48 @@ export class SubcontractorService {
           data: { status: StepStatus.COMPLETED, completedAt: new Date() },
         });
 
-        // Downstream planlı adımları SKIPPED (fason fiilen son durak).
-        await tx.$executeRaw`
-          UPDATE "roll_movements"
-          SET "exitedAt" = NOW(),
-              "notes" = CASE WHEN "notes" IS NULL OR "notes" = '' THEN 'FASON_DIRECT_SHIP'
-                             ELSE "notes" || ' | FASON_DIRECT_SHIP' END
-          WHERE "workOrderStepId" IN (
-            SELECT "id" FROM "work_order_steps"
-            WHERE "workOrderId" = ${dispatch.workOrderId}::uuid
-              AND "stepSequence" > ${dispatch.step.stepSequence}
-              AND "status" IN ('PENDING','ACTIVE')
-          ) AND "exitedAt" IS NULL
-        `;
-        await tx.workOrderStep.updateMany({
-          where: {
-            workOrderId: dispatch.workOrderId,
-            stepSequence: { gt: dispatch.step.stepSequence },
-            status: { in: [StepStatus.PENDING, StepStatus.ACTIVE] },
-          },
-          data: { status: StepStatus.SKIPPED, skipReason: "FASON_DIRECT_SHIP" },
-        });
+        // WO'yu TAMAMLA + kalan adımları ATLA — YALNIZ operatör "iş emrini tamamla"
+        // dediyse (completeWorkOrder). Aksi halde downstream adımlar PENDING + WO
+        // IN_PROGRESS kalır: kalan üretim devam eder (operatör sonra daha çok top
+        // gönderebilir; fason adımı yeni sevkte yeniden açılır).
+        if (completeWorkOrder) {
+          await tx.$executeRaw`
+            UPDATE "roll_movements"
+            SET "exitedAt" = NOW(),
+                "notes" = CASE WHEN "notes" IS NULL OR "notes" = '' THEN 'FASON_DIRECT_SHIP'
+                               ELSE "notes" || ' | FASON_DIRECT_SHIP' END
+            WHERE "workOrderStepId" IN (
+              SELECT "id" FROM "work_order_steps"
+              WHERE "workOrderId" = ${dispatch.workOrderId}::uuid
+                AND "stepSequence" > ${dispatch.step.stepSequence}
+                AND "status" IN ('PENDING','ACTIVE')
+            ) AND "exitedAt" IS NULL
+          `;
+          await tx.workOrderStep.updateMany({
+            where: {
+              workOrderId: dispatch.workOrderId,
+              stepSequence: { gt: dispatch.step.stepSequence },
+              status: { in: [StepStatus.PENDING, StepStatus.ACTIVE] },
+            },
+            data: { status: StepStatus.SKIPPED, skipReason: "FASON_DIRECT_SHIP" },
+          });
 
-        // WO COMPLETED (receive bloğunun aynası).
-        const remaining = await tx.workOrderStep.count({
-          where: {
-            workOrderId: dispatch.workOrderId,
-            status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
-          },
-        });
-        if (remaining === 0) {
-          await tx.workOrder.update({
-            where: { id: dispatch.workOrderId },
-            data: { status: WorkOrderStatus.COMPLETED },
+          const remaining = await tx.workOrderStep.count({
+            where: {
+              workOrderId: dispatch.workOrderId,
+              status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
+            },
           });
-          await tx.travelerCard.updateMany({
-            where: { workOrderId: dispatch.workOrderId, status: TravelerCardStatus.ACTIVE },
-            data: { status: TravelerCardStatus.COMPLETED },
-          });
+          if (remaining === 0) {
+            await tx.workOrder.update({
+              where: { id: dispatch.workOrderId },
+              data: { status: WorkOrderStatus.COMPLETED },
+            });
+            await tx.travelerCard.updateMany({
+              where: { workOrderId: dispatch.workOrderId, status: TravelerCardStatus.ACTIVE },
+              data: { status: TravelerCardStatus.COMPLETED },
+            });
+          }
         }
       }
 
@@ -3198,13 +3239,17 @@ export class SubcontractorService {
         await recomputeOrderStatusForOrders(tx, [...orderIds]);
       }
 
-      // 7) Donmuş resmi belge (yeni docType — ayrı zincir).
-      await printedDocumentService.freezeForSource(
-        tx,
-        PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP,
-        data.dispatchId,
-        userId,
-      );
+      // 7) Donmuş resmi belge (yeni docType — ayrı zincir). Yalnız dispatch'in
+      //    TÜMÜ sevk edilince: belge tüm dispatch toplarını gösterir, kısmi sevkte
+      //    yanıltıcı olurdu (kalan toplar dönüş bekliyor).
+      if (isFullDispatchShip) {
+        await printedDocumentService.freezeForSource(
+          tx,
+          PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP,
+          data.dispatchId,
+          userId,
+        );
+      }
 
       // 8) Refakat kartı INFO scan.
       await logTravelerScan(
@@ -3226,7 +3271,9 @@ export class SubcontractorService {
       newData: {
         kind: "DIRECT_SHIP",
         reason: trimmedReason,
-        consumedRollCount: rollIds.length,
+        consumedRollCount: shipRollIds.length,
+        partialShip: !isFullDispatchShip,
+        completeWorkOrder,
         allocatedOrderLineCount: allocations.length,
         manualOverride: true,
       },
@@ -3234,8 +3281,14 @@ export class SubcontractorService {
 
     return {
       success: true,
-      data: { id: data.dispatchId, dispatchNo: dispatch.dispatchNo, consumedRollCount: rollIds.length },
-      message: `Fasondan doğrudan sevk edildi: ${dispatch.dispatchNo}`,
+      data: {
+        id: data.dispatchId,
+        dispatchNo: dispatch.dispatchNo,
+        consumedRollCount: shipRollIds.length,
+        partialShip: !isFullDispatchShip,
+        workOrderCompleted: completeWorkOrder,
+      },
+      message: `Fasondan doğrudan sevk edildi: ${dispatch.dispatchNo} (${shipRollIds.length} top)`,
     };
   }
 }

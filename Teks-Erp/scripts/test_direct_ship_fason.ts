@@ -149,7 +149,7 @@ async function main(): Promise<void> {
   const dispatchId = (disp.data as { id: string }).id;
 
   await sub.executeDirectShip(
-    { dispatchId, reason: "Boyahane malı doğrudan müşteriye sevk etti", orderLineAllocations: [{ orderLineId: lineId, qty: 500 }] },
+    { dispatchId, reason: "Boyahane malı doğrudan müşteriye sevk etti", completeWorkOrder: true, orderLineAllocations: [{ orderLineId: lineId, qty: 500 }] },
     ADMIN,
   );
 
@@ -198,7 +198,7 @@ async function main(): Promise<void> {
   const r3 = await stockRoll(200);
   const { lineId: lineB } = await makeOrderWithLine(500);
   const dispB = await sub.dispatch({ workOrderId: woB, stepId: stepsB[0], subcontractorId: SUB_BOYER, rollIds: [r3] }, ADMIN);
-  await sub.executeDirectShip({ dispatchId: (dispB.data as { id: string }).id, reason: "doğrudan sevk, karşılanma yok" }, ADMIN);
+  await sub.executeDirectShip({ dispatchId: (dispB.data as { id: string }).id, reason: "doğrudan sevk, karşılanma yok", completeWorkOrder: true }, ADMIN);
   const woAfterB = await prisma.workOrder.findUnique({ where: { id: woB }, select: { status: true } });
   check("Karşılanmasız: WO COMPLETED", woAfterB?.status === WorkOrderStatus.COMPLETED);
   const lineBafter = await prisma.orderLine.findUnique({ where: { id: lineB }, select: { shippedQty: true } });
