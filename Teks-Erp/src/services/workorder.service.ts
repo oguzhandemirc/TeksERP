@@ -1470,6 +1470,8 @@ export class WorkOrderService {
         dispatchedAt: true,
         totalQty: true,
         cancelledAt: true,
+        directShippedAt: true,
+        directShipReason: true,
         step: { select: { station: { select: { name: true } } } },
         subcontractor: { select: { id: true, name: true } },
         items: {
@@ -1554,8 +1556,11 @@ export class WorkOrderService {
         }
       }
 
-      let status: "OPEN" | "PARTIAL" | "RETURNED" | "CANCELLED";
+      let status: "OPEN" | "PARTIAL" | "RETURNED" | "CANCELLED" | "DIRECT_SHIPPED";
       if (d.cancelledAt) status = "CANCELLED";
+      // Doğrudan sevk: mal fasondan müşteriye gitti (receive yok) — iptal değil,
+      // dönüş de değil; ayrı terminal durum (lane'de "Doğrudan Sevk" rozeti).
+      else if (d.directShippedAt) status = "DIRECT_SHIPPED";
       else if (receivedItemCount === 0) status = "OPEN";
       else if (receivedItemCount >= itemCount) status = "RETURNED";
       else status = "PARTIAL";
@@ -1571,6 +1576,8 @@ export class WorkOrderService {
         rollCount: itemCount,
         receivedItemCount,
         status,
+        directShippedAt: d.directShippedAt,
+        directShipReason: d.directShipReason,
         receipts: [...receiptMap.values()],
         currentPositions: positions ? [...positions.values()] : [],
       };

@@ -115,13 +115,16 @@ async function nextSackNo(): Promise<string> {
 // ---------------------------------------------------------------------------
 const D0 = () => new Prisma.Decimal(0);
 
-interface RollSpec {
+// NOT: RollSpec/LineForAlloc/specMatch/allocate export edilir — fasondan doğrudan
+// sevk önizlemesi (subcontractor.service.previewDirectShip) aynı FIFO/spec-eşleşme
+// mantığını yeniden kullanır (tek karşılanma kaynağı; kopya algoritma yok).
+export interface RollSpec {
   itemId: string;
   colorId: string | null;
   width: Prisma.Decimal | null;
   currentQty: Prisma.Decimal;
 }
-interface LineForAlloc {
+export interface LineForAlloc {
   id: string;
   itemId: string;
   colorId: string | null;
@@ -134,7 +137,7 @@ interface LineForAlloc {
 }
 
 // item kesin; renk/en ikisi de doluysa eşit olmalı, biri null ise gevşek eşleşir.
-function specMatch(
+export function specMatch(
   a: { itemId: string; colorId: string | null; width: Prisma.Decimal | null },
   b: { itemId: string; colorId: string | null; width: Prisma.Decimal | null }
 ): boolean {
@@ -184,7 +187,7 @@ function lineFifoCmp(a: LineForAlloc, b: LineForAlloc): number {
   return a.lineCreatedAt.getTime() - b.lineCreatedAt.getTime();
 }
 
-function allocate(rolls: RollSpec[], lines: LineForAlloc[]): Map<string, Prisma.Decimal> {
+export function allocate(rolls: RollSpec[], lines: LineForAlloc[]): Map<string, Prisma.Decimal> {
   const pool = buildPool(rolls);
   const sorted = [...lines].sort(lineFifoCmp);
 

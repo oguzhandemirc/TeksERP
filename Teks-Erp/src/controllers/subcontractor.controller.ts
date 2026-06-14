@@ -30,6 +30,15 @@ const cancelDispatchSchema = z.object({
   reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(500),
 });
 
+const directShipSchema = z.object({
+  reason: z.string().trim().min(3, "Doğrudan sevk sebebi en az 3 karakter").max(500),
+  /** Opsiyonel karşılanma: mal hangi sipariş satır(lar)ına ne kadar gitti. */
+  orderLineAllocations: z
+    .array(z.object({ orderLineId: z.string().uuid(), qty: z.number().positive() }))
+    .max(200)
+    .optional(),
+});
+
 const cancelReceiptSchema = z.object({
   reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(500),
   /** Receipt'ten doğan açık kumaş roll'larını cascade iptal et. Liste backend
@@ -94,6 +103,8 @@ export class SubcontractorController {
     this.getReceipt = this.getReceipt.bind(this);
     this.cancelReceipt = this.cancelReceipt.bind(this);
     this.getCancelPreview = this.getCancelPreview.bind(this);
+    this.getDirectShipPreview = this.getDirectShipPreview.bind(this);
+    this.directShip = this.directShip.bind(this);
   }
 
   /** POST /api/subcontractor/dispatch */
@@ -301,6 +312,32 @@ export class SubcontractorController {
     try {
       const id = req.params.id as string;
       const result = await this.service.getCancelPreview(id);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/subcontractor/dispatches/:id/direct-ship-preview */
+  async getDirectShipPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const result = await this.service.previewDirectShip(id);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/subcontractor/dispatches/:id/direct-ship */
+  async directShip(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const body = directShipSchema.parse(req.body);
+      const result = await this.service.executeDirectShip(
+        { dispatchId: id, reason: body.reason, orderLineAllocations: body.orderLineAllocations },
+        req.user?.userId,
+      );
       res.status(200).json(result);
     } catch (err) {
       next(err);
