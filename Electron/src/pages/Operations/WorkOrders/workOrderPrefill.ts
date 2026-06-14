@@ -182,3 +182,24 @@ export function stepsToCustom(steps: DesignerStep[]): CustomRouteStep[] {
     plannedSubcontractorId: s.plannedSubcontractorId,
   }));
 }
+
+/**
+ * DesignerStep[] → ROTA ŞABLONU create steps payload (route şeması alan adları:
+ * sequence + defaultNotes). `stepsToCustom`'un route-create kardeşi.
+ *
+ * KRİTİK: fason planlamasını (requiredCategoryId + plannedSubcontractorId) KORUR.
+ * WO formundaki "Şablon kaydet" / "İş emri şablonu kaydet" kısayolları eskiden bu
+ * iki alanı düşürüyordu → şablona seçilen fason firma kaydedilmiyor, rota tekrar
+ * uygulanınca firma boş geliyordu. (Standalone RouteDesignerDialog zaten gönderir.)
+ */
+export function routeStepsToCreatePayload(
+  steps: DesignerStep[],
+): { stationId: string; sequence: number; defaultNotes: string | null; requiredCategoryId: string | null; plannedSubcontractorId: string | null }[] {
+  return steps.map((s, i) => ({
+    stationId: s.stationId,
+    sequence: i + 1,
+    defaultNotes: s.notes.trim() || null,
+    requiredCategoryId: s.requiredCategoryId,
+    plannedSubcontractorId: s.plannedSubcontractorId,
+  }));
+}

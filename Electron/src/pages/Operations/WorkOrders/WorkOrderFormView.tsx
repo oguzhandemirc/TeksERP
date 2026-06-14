@@ -55,6 +55,7 @@ import {
   pickedLinesFromWorkOrder,
   designerStepsFromWorkOrder,
   stepsToCustom,
+  routeStepsToCreatePayload,
 } from "./workOrderPrefill";
 import type { WorkOrder } from "./types";
 
@@ -231,11 +232,8 @@ export function WorkOrderFormView({
         customerId: params.forCustomer ? pickedLines[0]?.customerId ?? null : null,
         isActive: true,
         isFavorite: false,
-        steps: routeSteps.map((s, i) => ({
-          stationId: s.stationId,
-          sequence: i + 1,
-          defaultNotes: s.notes.trim() || null,
-        })),
+        // Fason planlamasını (kategori + firma) KORUR — bkz. routeStepsToCreatePayload.
+        steps: routeStepsToCreatePayload(routeSteps),
       };
       return routeService.create(payload as unknown as Partial<ProductionRoute>);
     },
@@ -254,11 +252,8 @@ export function WorkOrderFormView({
         code: generateCode(CODE_PREFIXES.ROUTE),
         isActive: true,
         isFavorite: false,
-        steps: routeSteps.map((s, i) => ({
-          stationId: s.stationId,
-          sequence: i + 1,
-          defaultNotes: s.notes.trim() || null,
-        })),
+        // Fason planlamasını (kategori + firma) KORUR — bkz. routeStepsToCreatePayload.
+        steps: routeStepsToCreatePayload(routeSteps),
       } as unknown as Partial<ProductionRoute>);
       const routeId = (routeRes.data as { id: string }).id;
       return productRecipeService.create({
