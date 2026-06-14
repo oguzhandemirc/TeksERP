@@ -124,7 +124,64 @@ export const workOrderService = {
         ...(excludeWorkOrderId ? { excludeWorkOrderId } : {}),
       })
       .then((r) => r.data),
+
+  /** Fasondan doğrudan sevk önizlemesi (salt-okunur). */
+  getDirectShipPreview: (dispatchId: string) =>
+    apiClient
+      .get<ApiResponse<DirectShipPreview>>(
+        `/api/subcontractor/dispatches/${dispatchId}/direct-ship-preview`,
+      )
+      .then((r) => r.data),
+
+  /** Fasondan doğrudan sevk — sevki kapat, WO'yu tamamla, (ops.) karşılanma. */
+  directShip: (
+    dispatchId: string,
+    payload: { reason: string; orderLineAllocations?: { orderLineId: string; qty: number }[] },
+  ) =>
+    apiClient
+      .post<ApiResponse<{ id: string; dispatchNo: string; consumedRollCount: number }>>(
+        `/api/subcontractor/dispatches/${dispatchId}/direct-ship`,
+        payload,
+      )
+      .then((r) => r.data),
 };
+
+/** Fasondan doğrudan sevk önizleme verisi (backend previewDirectShip). */
+export interface DirectShipPreview {
+  dispatchId: string;
+  dispatchNo: string;
+  cancelled: boolean;
+  alreadyDirectShipped: boolean;
+  subcontractor: { id: string; name: string };
+  workOrder: { id: string; batchNumber: string; status: string };
+  fasonStep: { id: string; stepSequence: number; stationName: string };
+  affectedRolls: {
+    id: string;
+    barcode: string | null;
+    currentQty: number;
+    weightKg: number | null;
+    itemCode: string;
+    itemName: string;
+    colorName: string | null;
+  }[];
+  downstreamStepsToSkip: { id: string; stepSequence: number; stationName: string }[];
+  otherAtSubcontractor: number;
+  woWillComplete: boolean;
+  candidateOrderLines: {
+    orderLineId: string;
+    orderId: string;
+    orderNumber: string;
+    itemCode: string;
+    itemName: string;
+    colorName: string | null;
+    width: number | null;
+    quantity: number;
+    shippedQty: number;
+    remaining: number;
+    suggestedQty: number;
+    isWorkOrderLinked: boolean;
+  }[];
+}
 
 /** Bir fason dalının (sevk partisi) doğan toplarının şu anki konum dağılımı. */
 export interface WorkOrderBranchPosition {
@@ -146,8 +203,12 @@ export interface WorkOrderBranch {
   rollCount: number;
   /** Dönüşü yapılmış sevk kalemi sayısı. */
   receivedItemCount: number;
-  /** OPEN = fasonda · PARTIAL = kısmi dönüş · RETURNED = döndü · CANCELLED = iptal. */
-  status: "OPEN" | "PARTIAL" | "RETURNED" | "CANCELLED";
+  /** OPEN = fasonda · PARTIAL = kısmi dönüş · RETURNED = döndü · CANCELLED = iptal ·
+   *  DIRECT_SHIPPED = fasondan doğrudan sevk (mal dönmeden müşteriye gitti). */
+  status: "OPEN" | "PARTIAL" | "RETURNED" | "CANCELLED" | "DIRECT_SHIPPED";
+  /** Doğrudan sevk işareti (DIRECT_SHIPPED dalları için). */
+  directShippedAt?: string | null;
+  directShipReason?: string | null;
   receipts: { receiptNo: string; receivedAt: string }[];
   /** Dönüşten doğan açık-kumaş toplarının şu anki konum dağılımı. */
   currentPositions: WorkOrderBranchPosition[];

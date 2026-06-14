@@ -202,6 +202,7 @@ model User {
   printedDocuments           PrintedDocument[]       @relation("PrintedDocumentPrintedBy")
   dispatches                 SubcontractorDispatch[] @relation("DispatchCreatedBy")
   cancelledDispatches        SubcontractorDispatch[] @relation("DispatchCancelledBy")
+  directShippedDispatches    SubcontractorDispatch[] @relation("DispatchDirectShippedBy")
   receipts                   SubcontractorReceipt[]  @relation("ReceiptCreatedBy")
   cancelledReceipts          SubcontractorReceipt[]  @relation("ReceiptCancelledBy")
   kartelaDispatches          KartelaDispatch[]       @relation("KartelaDispatchBy")
@@ -888,6 +889,7 @@ model OrderLine {
   workOrderLinks      WorkOrderToOrderLine[]
   requiredProperties  OrderLineRequiredProperty[]
   shipmentAllocations ShipmentAllocation[]
+  directShipAllocations SubcontractorDirectShipAllocation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1397,6 +1399,13 @@ model SubcontractorDispatch {
   cancelledById String? @db.Uuid
   cancelReason  String?
 
+  // Doğrudan sevk — fason fiilen son durak; mal fabrikaya dönmeden fasondan
+  // doğrudan müşteriye sevk edildi. Bu sevk receive() ile değil bu işaretle
+  // kapanır (toplar SUBCONTRACTOR_CONSUMED, adım/WO tamamlanır).
+  directShippedAt   DateTime?
+  directShippedById String? @db.Uuid
+  directShipReason  String?
+
   // Relations
   workOrder            WorkOrder                   @relation(fields: [workOrderId], references: [id])
   step                 WorkOrderStep               @relation(fields: [stepId], references: [id])
@@ -1404,7 +1413,9 @@ model SubcontractorDispatch {
   plannedSubcontractor Subcontractor?              @relation("DispatchPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
   dispatchedBy         User?                       @relation("DispatchCreatedBy", fields: [dispatchedById], references: [id])
   cancelledBy          User?                       @relation("DispatchCancelledBy", fields: [cancelledById], references: [id])
+  directShippedBy      User?                       @relation("DispatchDirectShippedBy", fields: [directShippedById], references: [id])
   items                SubcontractorDispatchItem[]
+  directShipAllocations SubcontractorDirectShipAllocation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1440,6 +1451,28 @@ model SubcontractorDispatchItem {
   @@index([dispatchId])
   @@index([rollId])
   @@map("subcontractor_dispatch_items")
+}
+
+/// Fasondan doğrudan sevkte (Shipment'sız) hangi sipariş satırına ne kadar
+/// metraj karşılandığını kaydeder. ShipmentAllocation'ın dispatch-merkezli
+/// kardeşi (ShipmentAllocation shipmentId-bağlı, reuse edilemez). OrderLine.
+/// shippedQty bu kayıtların + ShipmentAllocation'ların toplamıdır. Append-only,
+/// izlenebilirlik için (doğrudan sevk terminaldir, geri-alma kapsam dışı).
+model SubcontractorDirectShipAllocation {
+  id          String  @db.Uuid @id @default(uuid())
+  dispatchId  String  @db.Uuid
+  orderLineId String  @db.Uuid
+  qty         Decimal @db.Decimal(12, 3)
+
+  dispatch  SubcontractorDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  orderLine OrderLine             @relation(fields: [orderLineId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  // Aynı sevkte bir satıra iki kez karşılanma yazılamaz (ShipmentAllocation deseni)
+  @@unique([dispatchId, orderLineId])
+  @@index([orderLineId])
+  @@map("subcontractor_direct_ship_allocations")
 }
 
 model SubcontractorReceipt {
@@ -1837,6 +1870,9 @@ enum PrintedDocType {
   SHIPMENT_DISPATCH // Sevk irsaliyesi (Shipment)
   SUBCONTRACTOR_DISPATCH // Fason sevk irsaliyesi (SubcontractorDispatch)
   KARTELA_DISPATCH // Kartela çeki listesi (KartelaDispatch)
+  // NOT: ALTER TYPE ADD VALUE enum'a SONA ekler; sıra DB ile uyumlu kalsın diye
+  // (drift-free) en altta. (migration 20260614130000_subcontractor_direct_ship)
+  SUBCONTRACTOR_DIRECT_SHIP // Fasondan doğrudan sevk irsaliyesi (son durak fason)
 }
 
 enum PrintedDocStatus {

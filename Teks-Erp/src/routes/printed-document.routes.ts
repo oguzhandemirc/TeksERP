@@ -23,6 +23,10 @@ const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
     read: ["workorder:read", "workorder:write", "mobile:fason-sevk", "mobile:fason-kabul"],
     write: ["workorder:write"],
   },
+  SUBCONTRACTOR_DIRECT_SHIP: {
+    read: ["workorder:read", "workorder:write", "mobile:fason-sevk", "mobile:fason-kabul"],
+    write: ["workorder:write"],
+  },
   KARTELA_DISPATCH: {
     read: ["kartela:read", "kartela:write", "mobile:kartela-sevk", "mobile:kartela-kabul"],
     write: ["kartela:write"],
@@ -52,7 +56,7 @@ function requireDocPermission(kind: "read" | "write") {
  *       - in: path
  *         name: docType
  *         required: true
- *         schema: { type: string, enum: [SHIPMENT_DISPATCH, SUBCONTRACTOR_DISPATCH, KARTELA_DISPATCH] }
+ *         schema: { type: string, enum: [SHIPMENT_DISPATCH, SUBCONTRACTOR_DISPATCH, SUBCONTRACTOR_DIRECT_SHIP, KARTELA_DISPATCH] }
  *       - in: path
  *         name: sourceId
  *         required: true

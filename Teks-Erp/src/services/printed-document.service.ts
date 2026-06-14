@@ -35,6 +35,7 @@ type Db = PrintedDocDb;
 const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   SHIPMENT_DISPATCH: "shipmentDispatch",
   SUBCONTRACTOR_DISPATCH: "fasonSevk",
+  SUBCONTRACTOR_DIRECT_SHIP: "fasonDirectShip",
   KARTELA_DISPATCH: "kartelaCeki",
 };
 

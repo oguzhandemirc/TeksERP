@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ArrowUpRight, Split } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Split, Truck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,6 +14,7 @@ import {
   type WorkOrderSplitChild,
 } from "./service";
 import { SplitBranchModal } from "./SplitBranchModal";
+import { DirectShipModal } from "./DirectShipModal";
 
 const STATUS_META: Record<
   WorkOrderBranch["status"],
@@ -23,6 +24,7 @@ const STATUS_META: Record<
   PARTIAL: { label: "Kısmi dönüş", cls: "border-primary/40 bg-primary/10 text-primary" },
   RETURNED: { label: "Döndü", cls: "border-success/40 bg-success/10 text-success" },
   CANCELLED: { label: "İptal", cls: "border-border bg-muted text-muted-foreground" },
+  DIRECT_SHIPPED: { label: "Doğrudan Sevk", cls: "border-primary/40 bg-primary/10 text-primary" },
 };
 
 /**
@@ -43,6 +45,10 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
   const [splitTarget, setSplitTarget] = useState<{ dispatchId: string; dispatchNo: string } | null>(
     null,
   );
+  const [directShipTarget, setDirectShipTarget] = useState<{
+    dispatchId: string;
+    dispatchNo: string;
+  } | null>(null);
 
   const branches = q.data?.data?.branches ?? [];
   const splitFrom = q.data?.data?.splitFrom ?? null;
@@ -65,6 +71,9 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
           key={b.dispatchId}
           branch={b}
           onSplit={() => setSplitTarget({ dispatchId: b.dispatchId, dispatchNo: b.dispatchNo })}
+          onDirectShip={() =>
+            setDirectShipTarget({ dispatchId: b.dispatchId, dispatchNo: b.dispatchNo })
+          }
         />
       ))}
       {splitChildren.map((c) => (
@@ -76,6 +85,13 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
         workOrderId={workOrderId}
         dispatchId={splitTarget?.dispatchId ?? ""}
         dispatchNo={splitTarget?.dispatchNo ?? ""}
+      />
+      <DirectShipModal
+        open={Boolean(directShipTarget)}
+        onOpenChange={(o) => !o && setDirectShipTarget(null)}
+        workOrderId={workOrderId}
+        dispatchId={directShipTarget?.dispatchId ?? ""}
+        dispatchNo={directShipTarget?.dispatchNo ?? ""}
       />
     </div>
   );
@@ -133,7 +149,15 @@ function SplitChildRow({ child }: { child: WorkOrderSplitChild }) {
   );
 }
 
-function BranchLaneRow({ branch, onSplit }: { branch: WorkOrderBranch; onSplit: () => void }) {
+function BranchLaneRow({
+  branch,
+  onSplit,
+  onDirectShip,
+}: {
+  branch: WorkOrderBranch;
+  onSplit: () => void;
+  onDirectShip: () => void;
+}) {
   const meta = STATUS_META[branch.status];
 
   return (
@@ -158,7 +182,7 @@ function BranchLaneRow({ branch, onSplit }: { branch: WorkOrderBranch; onSplit: 
           </span>
           {/* Ayır: iptal olmayan partiler — boyanmadan (OPEN) devam ya da
               boyandıysa (PARTIAL/RETURNED) yeniden boyama. Modal uygunluğu doğrular. */}
-          {branch.status !== "CANCELLED" && (
+          {branch.status !== "CANCELLED" && branch.status !== "DIRECT_SHIPPED" && (
             <PermissionGate permission="workorder:write">
               <Button
                 variant="outline"
@@ -168,6 +192,21 @@ function BranchLaneRow({ branch, onSplit }: { branch: WorkOrderBranch; onSplit: 
               >
                 <Split className="h-3.5 w-3.5" />
                 Ayır
+              </Button>
+            </PermissionGate>
+          )}
+          {/* Doğrudan sevk: yalnız fasonda bekleyen (OPEN) sevkte — mal dönmeden
+              müşteriye gittiyse manuel kapat. */}
+          {branch.status === "OPEN" && (
+            <PermissionGate permission="workorder:write">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={onDirectShip}
+              >
+                <Truck className="h-3.5 w-3.5" />
+                Doğrudan Sevk
               </Button>
             </PermissionGate>
           )}
@@ -181,6 +220,8 @@ function BranchLaneRow({ branch, onSplit }: { branch: WorkOrderBranch; onSplit: 
           <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
           {branch.status === "OPEN" ? (
             <span className="text-warning">Boyahanede — dönüş bekleniyor</span>
+          ) : branch.status === "DIRECT_SHIPPED" ? (
+            <span className="text-primary">Fasondan doğrudan sevk edildi (müşteriye)</span>
           ) : branch.currentPositions.length > 0 ? (
             branch.currentPositions.map((p) => (
               <span

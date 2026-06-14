@@ -13,12 +13,14 @@ const CUR_CELL: Record<Status, string> = {
   PARTIAL: "bg-primary text-primary-foreground",
   RETURNED: "bg-success text-white",
   CANCELLED: "bg-muted-foreground/40 text-foreground",
+  DIRECT_SHIPPED: "bg-primary text-primary-foreground",
 };
 const DOT: Record<Status, string> = {
   OPEN: "bg-warning",
   PARTIAL: "bg-primary",
   RETURNED: "bg-success",
   CANCELLED: "bg-muted-foreground",
+  DIRECT_SHIPPED: "bg-primary",
 };
 
 /**

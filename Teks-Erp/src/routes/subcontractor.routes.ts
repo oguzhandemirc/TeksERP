@@ -257,6 +257,70 @@ router.post(
   controller.cancelDispatch
 );
 
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/direct-ship-preview:
+ *   get:
+ *     tags: [Subcontractor]
+ *     summary: Fasondan doğrudan sevk önizlemesi (salt-okunur — etkilenecek toplar/adımlar + aday siparişler)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Önizleme }
+ *       404: { description: Sevk bulunamadı }
+ */
+router.get(
+  "/dispatches/:id/direct-ship-preview",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:fason-sevk"),
+  controller.getDirectShipPreview
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/direct-ship:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: Fasondan doğrudan sevk (fason son durak — mal dönmeden sevk; WO kapanır)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string, minLength: 3, maxLength: 500 }
+ *               orderLineAllocations:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     orderLineId: { type: string, format: uuid }
+ *                     qty: { type: number }
+ *     responses:
+ *       200: { description: Doğrudan sevk edildi }
+ *       400: { description: Geçersiz istek }
+ *       404: { description: Sevk bulunamadı }
+ *       409: { description: İptal/kabul edilmiş veya toplar değişmiş }
+ */
+router.post(
+  "/dispatches/:id/direct-ship",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:fason-sevk"),
+  controller.directShip
+);
+
 router.get(
   "/receipts",
   verifyToken,
