@@ -202,6 +202,31 @@ Prisma `include: { items: { include: { newRoll } } }` → **3 sabit sorgu** (ana
 - **İkincil (orta):** `getUserActivity` (78 ms sıcak), yıllık aralıkta seq scan kaçınılmaz; dar default aralık çözer.
 - **Geri kalan tüm hot yollar** (rolls liste/stats/barkod, stok dağılımı, sipariş karşılanma, audit liste/derin sayfa, sevkiyat detay) **index'li, hızlı, N+1 yok.** MAX_OFFSET guard aktif. Dead-tuple %0, cache hit %99.
 - **Faz C2'de uygulanmaya değer:** Öneri A (tek-geçiş audit özeti) + Öneri B (arşivleme operasyonu) + Öneri C (dar default aralık). Diğer her şey için **darboğaz yok — dokunma.**
+
+---
+
+## 7. Faz C2 — Önerilerin uygulanma sonucu (BEFORE/AFTER + dürüst karar)
+
+> §5 önerileri C2'de **ölçülerek** değerlendirildi. Sonuç: **uygulanacak faydalı KOD değişikliği YOK** — biri ölçümde regresyon çıktı, diğeri zaten mevcuttu. (before/after ölçümünün amacı tam olarak budur: teoride iyi görünen "fix"i körlemesine uygulamamak.)
+
+### Öneri A — `getSystemLogSummary` tek-geçiş GROUPING SETS → **UYGULANMADI (ölçüm çürüttü)**
+4 ayrı sorgu tek GROUPING SETS sorgusuna indirildi, aynı veride (400.000 system_log, 365-gün worst-case) A/B ölçüldü:
+
+| Yaklaşım | p50 | p95 |
+|---|---:|---:|
+| ESKİ (4 ayrı sorgu) | **220 ms** | 301 ms |
+| YENİ (1 GROUPING SETS) | 383 ms | 451 ms |
+
+**GROUPING SETS ~%75 DAHA YAVAŞ (0,57×).** Neden: tek tarama olsa da 4 grouping-set + 3 `FILTER` agregatı tüm satırlarda hesaplanır; PostgreSQL'in 4 ayrı **paralel HashAggregate**'i daha verimli. Değişiklik **geri alındı**; orijinal davranış `test_reports.ts` ile doğrulandı.
+
+### Öneri C — audit raporu dar default aralık → **ZATEN MEVCUT**
+`src/services/reports/_shared.ts`: `DEFAULT_RANGE_DAYS = 30` → `resolveDateRange` boş `dateFrom`'da son 30 gün uygular. Production'da audit özeti varsayılan 30 günle çağrılır → yüksek seçicilik → `@@index([createdAt])` index scan (hızlı). §2'deki 296 ms, `scale_report.ts`'in **365-gün stres** çağrısıdır; gerçek default değil. Ek değişiklik gerekmez.
+
+### Öneri B — audit arşivleme → operasyonel (kod yok)
+`POST /api/admin/system-logs/archive { monthsToKeep: 6 }` mevcut; 6 ayda bir çalıştırma CLAUDE.md'de operasyonel disiplin olarak yazılı. Scheduler kapsam dışı.
+
+### Faz C net sonucu
+**Sistem ölçeğe hazır.** 1 yıl / 100 sipariş-gün (~2,18M satır, ~805 MB): tüm hot yollar index'li/hızlı, N+1 yok; tek darboğaz adayının önerilen fix'i **ölçümde regresyon** verdiği için uygulanmadı + production default'u (30 gün) zaten index kullanıyor. **Yapılan kod değişikliği: yok** (disiplinli "önce ölç, regresyonu uygulama"). Faz C teslimatı: ölçüm altyapısı (`seed-load-scale.ts` + `scale_report.ts`) + bu rapor.
 ```
 
 > **Tekrar üretmek için:**
