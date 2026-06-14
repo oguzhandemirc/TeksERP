@@ -87,6 +87,54 @@ jobs:
         shell: bash
 
   # ===========================================================================
+  # YÜK TESTİ — HTTP throughput / p50-p95-p99 ölçümü (Node eşzamanlılığı, yeni paket
+  # YOK). continue-on-error: paylaşımlı runner'da geçici yavaşlama PR'ı BLOKLAMASIN —
+  # amaç ölçüm + ciddi regresyon (N+1/kilit/hata patlaması) sinyali. a11y + yapısal
+  # snapshot testleri Electron job'unun `npm test`'inde otomatik koşar (ek job yok).
+  # ===========================================================================
+  load-test:
+    name: Yük testi (throughput/p95)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: Teks-Erp
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: teks_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/teks_ci?schema=public
+      JWT_SECRET: ci-test-secret-not-for-production
+      PORT: "4000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Teks-Erp/package-lock.json
+      - run: npm ci
+      - name: Prisma generate
+        run: npx prisma generate
+      - name: Migrate deploy
+        run: npx prisma migrate deploy
+      - name: Seed (business-key fixture'ları)
+        run: npm run seed
+      - name: Yük testi (npm run test:load)
+        run: npm run test:load
+
+  # ===========================================================================
   # ELECTRON — React 19 / Vite 7 renderer; Vitest (jsdom). Electron binary GEREKMEZ.
   # ===========================================================================
   electron:

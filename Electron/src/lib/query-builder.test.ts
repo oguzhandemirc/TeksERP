@@ -24,15 +24,15 @@ describe("buildQueryString", () => {
 
 describe("buildCursorQueryString", () => {
   it("mode=cursor + limit zorunlu", () => {
-    const qs = buildCursorQueryString({ limit: 30 });
+    const qs = buildCursorQueryString({ limit: 30, filters: {} });
     expect(qs).toContain("mode=cursor");
     expect(qs).toContain("limit=30");
   });
   it("withTotal yalnız true iken", () => {
-    expect(buildCursorQueryString({ limit: 20, withTotal: true })).toContain("withTotal=true");
-    expect(buildCursorQueryString({ limit: 20 })).not.toContain("withTotal");
+    expect(buildCursorQueryString({ limit: 20, withTotal: true, filters: {} })).toContain("withTotal=true");
+    expect(buildCursorQueryString({ limit: 20, filters: {} })).not.toContain("withTotal");
   });
   it("cursor verilince eklenir", () => {
-    expect(buildCursorQueryString({ limit: 20, cursor: "abc123" })).toContain("cursor=abc123");
+    expect(buildCursorQueryString({ limit: 20, cursor: "abc123", filters: {} })).toContain("cursor=abc123");
   });
 });

@@ -32,10 +32,11 @@ function ensureListener(): void {
       // Global bloklayan modal açıksa Esc onu kapatmalı — Radix'e bırak.
       if (document.querySelector("[data-global-modal]")) return;
       for (let i = stack.length - 1; i >= 0; i--) {
-        if (stack[i].isActive()) {
+        const entry = stack[i];
+        if (entry?.isActive()) {
           e.preventDefault();
           e.stopPropagation();
-          stack[i].close();
+          entry.close();
           return;
         }
       }
