@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -185,7 +186,7 @@ export function WorkOrderCancelDialog({
                                 : "text-[10px]"
                             }
                           >
-                            {r.status}
+                            {rollStatusLabels[r.status as RollStatus] ?? r.status}
                           </Badge>
                           <span className="tabular-nums text-muted-foreground">
                             {r.currentQty} m

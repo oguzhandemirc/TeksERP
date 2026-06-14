@@ -198,19 +198,19 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                 <Card>
                   <CardContent className="p-3">
                     <div className="text-xs text-muted-foreground">Sipariş Toplam</div>
-                    <div className="mt-0.5 font-medium tabular-nums">
+                    <div className="mt-0.5 text-base font-bold tabular-nums">
                       {formatNumber(orderTotal, 0)}
-                      <span className="ml-1 text-xs text-muted-foreground">m</span>
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">m</span>
                     </div>
                   </CardContent>
                 </Card>
               )}
-              <Card>
+              <Card className="border-l-2 border-l-primary/50">
                 <CardContent className="p-3">
                   <div className="text-xs text-muted-foreground">Üretime Giren</div>
-                  <div className="mt-0.5 font-medium tabular-nums">
+                  <div className="mt-0.5 text-base font-bold tabular-nums text-primary">
                     {formatNumber(wo.inputRolls?.totalMeters ?? 0, 0)}
-                    <span className="ml-1 text-xs text-muted-foreground">m</span>
+                    <span className="ml-1 text-xs font-normal text-muted-foreground">m</span>
                   </div>
                   {(wo.inputRolls?.count ?? 0) > 0 && (
                     <div className="text-[11px] text-muted-foreground">
@@ -222,7 +222,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               <Card>
                 <CardContent className="p-3">
                   <div className="text-xs text-muted-foreground">En</div>
-                  <div className="mt-0.5 font-medium tabular-nums">
+                  <div className="mt-0.5 text-base font-bold tabular-nums">
                     {wo.width != null ? `${wo.width} cm` : "—"}
                   </div>
                 </CardContent>
@@ -237,23 +237,32 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               </Card>
             </div>
 
-            {wo.targetQuantity != null && wo.targetQuantity > 0 && wo.producedRolls && (
-              <Card>
-                <CardContent className="p-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Üretim İlerlemesi (bitmiş depo)</span>
-                    <span className="font-medium tabular-nums">
-                      {formatNumber(wo.producedRolls.warehouse.totalMeters, 0)} /{" "}
-                      {formatNumber(wo.targetQuantity, 0)} m
-                    </span>
-                  </div>
-                  <AnimatedProgress
-                    value={(wo.producedRolls.warehouse.totalMeters / wo.targetQuantity) * 100}
-                    className="mt-2 h-1.5"
-                  />
-                </CardContent>
-              </Card>
-            )}
+            {wo.targetQuantity != null && wo.targetQuantity > 0 && wo.producedRolls && (() => {
+              const pct = (wo.producedRolls.warehouse.totalMeters / wo.targetQuantity) * 100;
+              const done = pct >= 100;
+              return (
+                <Card className={cn("border-l-2", done ? "border-l-success" : "border-l-primary/50")}>
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Üretim İlerlemesi (bitmiş depo)</span>
+                      <span
+                        className={cn(
+                          "font-bold tabular-nums",
+                          done ? "text-success" : "text-primary",
+                        )}
+                      >
+                        {formatNumber(wo.producedRolls.warehouse.totalMeters, 0)} /{" "}
+                        {formatNumber(wo.targetQuantity, 0)} m
+                        <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                          (%{formatNumber(Math.min(pct, 999), 0)})
+                        </span>
+                      </span>
+                    </div>
+                    <AnimatedProgress value={pct} className="mt-2 h-1.5" />
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             <WorkOrderInfoCard wo={wo} />
 
@@ -278,7 +287,14 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               </button>
               <ol className="space-y-1.5">
                 {(stepsExpanded ? sortedSteps : collapsedSteps).map((step) => (
-                  <li key={step.id} className="rounded-md border p-2.5">
+                  <li
+                    key={step.id}
+                    className={cn(
+                      "rounded-md border p-2.5 transition-colors",
+                      (step.currentRolls?.count ?? 0) > 0 &&
+                        "border-l-2 border-l-primary bg-primary/[0.04]",
+                    )}
+                  >
                     <div className="flex items-center gap-2">
                       <Badge
                         variant="muted"
@@ -306,8 +322,8 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                     {step.currentRolls && step.currentRolls.count > 0 && (
                       <div className="mt-1.5 pl-7">
                         <div className="flex flex-wrap items-center gap-1 text-[11px]">
-                          <span className="text-muted-foreground">Şu an:</span>
-                          <span className="font-medium tabular-nums">
+                          <span className="font-medium text-primary">Şu an:</span>
+                          <span className="font-semibold tabular-nums text-primary">
                             {step.currentRolls.count} parça
                           </span>
                           <span className="text-muted-foreground">·</span>

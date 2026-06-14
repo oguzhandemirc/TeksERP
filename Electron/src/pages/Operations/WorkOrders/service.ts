@@ -107,6 +107,7 @@ export const workOrderService = {
       newColorId: string;
       newBatchNumber?: string | null;
       orderMode: "stock" | "keep";
+      rollIds?: string[];
     },
   ) =>
     apiClient
@@ -133,10 +134,15 @@ export const workOrderService = {
       )
       .then((r) => r.data),
 
-  /** Fasondan doğrudan sevk — sevki kapat, WO'yu tamamla, (ops.) karşılanma. */
+  /** Fasondan doğrudan sevk — seçilen topları sevk et, (ops.) WO tamamla + karşılanma. */
   directShip: (
     dispatchId: string,
-    payload: { reason: string; orderLineAllocations?: { orderLineId: string; qty: number }[] },
+    payload: {
+      reason: string;
+      rollIds?: string[];
+      completeWorkOrder?: boolean;
+      orderLineAllocations?: { orderLineId: string; qty: number }[];
+    },
   ) =>
     apiClient
       .post<ApiResponse<{ id: string; dispatchNo: string; consumedRollCount: number }>>(

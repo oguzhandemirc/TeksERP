@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { useTabsStore } from "@/store/tabs";
 import { AnimatedNumber, FadeInUp } from "@/components/motion";
+import { cn } from "@/lib/utils";
 import { workOrderService } from "./service";
 import { WorkOrderDetailHeader } from "./WorkOrderDetailHeader";
 import { WorkOrderHealthBand } from "./WorkOrderHealthBand";
@@ -118,6 +119,7 @@ export function WorkOrderDetailPage() {
                       label="Üretime Giren"
                       value={wo.inputRolls?.totalMeters ?? 0}
                       unit="m"
+                      tone="primary"
                       sub={(wo.inputRolls?.count ?? 0) > 0 ? `${wo.inputRolls!.count} top` : undefined}
                     />
                     {hasOrders && (
@@ -146,7 +148,7 @@ export function WorkOrderDetailPage() {
 
               {hasFason && wo.id && (
                 <FadeInUp delay={0.24}>
-                  <Section id="dallar" title="Dallar (Fason Partileri)">
+                  <Section id="dallar" title="Dallar (Fason Partileri)" tone="warning">
                     <BranchGantt workOrderId={wo.id} steps={sortedSteps} />
                     <BranchLanes workOrderId={wo.id} />
                   </Section>
@@ -155,14 +157,14 @@ export function WorkOrderDetailPage() {
 
               {hasProduced && (
                 <FadeInUp delay={0.32}>
-                  <Section id="cikti" title="Üretilen Nihai Toplar">
+                  <Section id="cikti" title="Üretilen Nihai Toplar" tone="success">
                     <ProducedRollsCard wo={wo} />
                   </Section>
                 </FadeInUp>
               )}
 
               <FadeInUp delay={0.4}>
-                <Section id="siparis" title="Bağlı Siparişler">
+                <Section id="siparis" title="Bağlı Siparişler" tone="info">
                   <OrderLinksCard wo={wo} />
                 </Section>
               </FadeInUp>
@@ -174,22 +176,65 @@ export function WorkOrderDetailPage() {
   );
 }
 
-function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+const SECTION_BAR: Record<string, string> = {
+  primary: "bg-primary",
+  warning: "bg-warning",
+  success: "bg-success",
+  info: "bg-info",
+};
+function Section({
+  id,
+  title,
+  tone = "primary",
+  children,
+}: {
+  id: string;
+  title: string;
+  tone?: keyof typeof SECTION_BAR;
+  children: React.ReactNode;
+}) {
   return (
     <section id={id} className="scroll-mt-16 space-y-3">
-      <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{title}</h2>
+      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-foreground/80">
+        <span className={cn("h-3.5 w-1 rounded-full", SECTION_BAR[tone])} />
+        {title}
+      </h2>
       {children}
     </section>
   );
 }
 
-function Kpi({ label, value, unit, sub }: { label: string; value: number; unit?: string; sub?: string }) {
+function Kpi({
+  label,
+  value,
+  unit,
+  sub,
+  tone = "default",
+}: {
+  label: string;
+  value: number;
+  unit?: string;
+  sub?: string;
+  tone?: "default" | "primary" | "success";
+}) {
   return (
-    <Card>
+    <Card
+      className={cn(
+        tone === "primary" && "border-l-2 border-l-primary/50",
+        tone === "success" && "border-l-2 border-l-success/50",
+      )}
+    >
       <CardContent className="p-3">
         <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="mt-0.5 font-medium tabular-nums">
-          <AnimatedNumber value={value} /> {unit}
+        <div
+          className={cn(
+            "mt-0.5 text-base font-bold tabular-nums",
+            tone === "primary" && "text-primary",
+            tone === "success" && "text-success",
+          )}
+        >
+          <AnimatedNumber value={value} />{" "}
+          <span className="text-xs font-normal text-muted-foreground">{unit}</span>
         </div>
         {sub && <div className="text-[11px] text-muted-foreground">{sub}</div>}
       </CardContent>

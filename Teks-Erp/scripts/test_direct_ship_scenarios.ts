@@ -137,7 +137,7 @@ async function main(): Promise<void> {
     const { woId, stepIds: s } = await makeWo([{ stationId: ST_BOYA, seq: 1 }, { stationId: ST_ZIMPARA, seq: 2 }, { stationId: ST_TAMBUR, seq: 3 }]);
     const r = await stockRoll(400);
     const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r]);
-    await sub.executeDirectShip({ dispatchId: dId, reason: "boyahane son durak oldu" }, ADMIN);
+    await sub.executeDirectShip({ dispatchId: dId, reason: "boyahane son durak oldu", completeWorkOrder: true }, ADMIN);
     const steps = await prisma.workOrderStep.findMany({ where: { id: { in: s } }, select: { id: true, status: true, skipReason: true } });
     const m = (id: string) => steps.find((x) => x.id === id)!;
     check("BOYA COMPLETED", m(s[0]).status === StepStatus.COMPLETED);
@@ -265,6 +265,43 @@ async function main(): Promise<void> {
     check("Top TAM BİR KEZ tüketildi (CONSUMED + tek SUBCONTRACTOR_RETURNED op)", rollNow?.status === RollStatus.SUBCONTRACTOR_CONSUMED && rollOps === 1, `status=${rollNow?.status} ops=${rollOps}`);
     const doc = await prisma.printedDocument.count({ where: { sourceId: dId, docType: PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP } });
     check("Tek DIRECT_SHIP belgesi (çift freeze yok)", doc === 1, String(doc));
+  }
+
+  // 11) completeWorkOrder=FALSE → WO AÇIK kalır, downstream ATLANMAZ (P-2606-4-1 fix)
+  console.log("\n=== 11) completeWorkOrder=false → WO açık kalır, downstream PENDING ===");
+  {
+    const { woId, stepIds: s } = await makeWo([{ stationId: ST_BOYA, seq: 1 }, { stationId: ST_TAMBUR, seq: 2 }]);
+    const r1 = await stockRoll(150), r2 = await stockRoll(150);
+    const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r1, r2]);
+    // Tüm topları sevk et ama "iş emrini tamamla" DEME.
+    await sub.executeDirectShip({ dispatchId: dId, reason: "kısmi sipariş, kalan üretim devam", completeWorkOrder: false }, ADMIN);
+    const steps = await prisma.workOrderStep.findMany({ where: { id: { in: s } }, select: { id: true, status: true } });
+    const m = (id: string) => steps.find((x) => x.id === id)!;
+    check("BOYA adımı COMPLETED (top kalmadı)", m(s[0]).status === StepStatus.COMPLETED, m(s[0]).status);
+    check("TAMBUR adımı PENDING (ATLANMADI)", m(s[1]).status === StepStatus.PENDING, m(s[1]).status);
+    const wo = await prisma.workOrder.findUnique({ where: { id: woId }, select: { status: true } });
+    check("WO IN_PROGRESS (KAPANMADI — kalan üretim devam)", wo?.status === WorkOrderStatus.IN_PROGRESS, String(wo?.status));
+    const rollsConsumed = await prisma.roll.count({ where: { id: { in: [r1, r2] }, status: RollStatus.SUBCONTRACTOR_CONSUMED } });
+    check("Sevk edilen 2 top CONSUMED", rollsConsumed === 2);
+  }
+
+  // 12) KISMİ SEVK (rollIds alt-küme) → seçilmeyen fasonda kalır, dispatch açık
+  console.log("\n=== 12) Kısmi sevk — 2 toptan 1'i sevk, diğeri fasonda kalır ===");
+  {
+    const { woId, stepIds: s } = await makeWo([{ stationId: ST_BOYA, seq: 1 }]);
+    const r1 = await stockRoll(200), r2 = await stockRoll(200);
+    const dId = await dispatchRolls(woId, s[0], SUB_BOYER, [r1, r2]);
+    await sub.executeDirectShip({ dispatchId: dId, reason: "yalnız bir topu doğrudan sevk", rollIds: [r1] }, ADMIN);
+    const r1a = await prisma.roll.findUnique({ where: { id: r1 }, select: { status: true } });
+    const r2a = await prisma.roll.findUnique({ where: { id: r2 }, select: { status: true } });
+    check("Sevk edilen top (r1) CONSUMED", r1a?.status === RollStatus.SUBCONTRACTOR_CONSUMED, String(r1a?.status));
+    check("Sevk EDİLMEYEN top (r2) hâlâ AT_SUBCONTRACTOR (fasonda kaldı)", r2a?.status === RollStatus.AT_SUBCONTRACTOR, String(r2a?.status));
+    const step = await prisma.workOrderStep.findUnique({ where: { id: s[0] }, select: { status: true } });
+    check("Fason adımı ACTIVE (r2 bekliyor)", step?.status === StepStatus.ACTIVE, String(step?.status));
+    const disp = await prisma.subcontractorDispatch.findUnique({ where: { id: dId }, select: { directShippedAt: true } });
+    check("Dispatch AÇIK (directShippedAt null — kısmi sevk)", disp?.directShippedAt === null);
+    const wo = await prisma.workOrder.findUnique({ where: { id: woId }, select: { status: true } });
+    check("WO IN_PROGRESS", wo?.status === WorkOrderStatus.IN_PROGRESS);
   }
 
   console.log(`\n──────────────────────────────────────────`);

@@ -64,6 +64,9 @@ import { computeWorkOrderLocks } from "./helpers/workorder-locks.helper";
 import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { buildPrefixedCardNumber } from "../utils/barcode";
+// Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
+import { nextPrefixedSequence } from "./subcontractor.service";
 
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
@@ -1792,6 +1795,10 @@ export class WorkOrderService {
       newBatchNumber?: string | null;
       /** 'stock' = stok üretimine dönsün (sipariş bağı kopar); 'keep' = aynı siparişe bağlı kalsın. */
       orderMode: "stock" | "keep";
+      /** Ayrılacak topların alt-kümesi (yok/boş = partinin tümü). Kalan toplar
+       *  kaynak WO'da kalır. continue modunda kısmi ayırmada taşınanlara yeni
+       *  SD dispatch (lane) açılır; orijinal sevk kalan toplarla kaynak WO'da kalır. */
+      rollIds?: string[];
     },
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
@@ -1850,11 +1857,20 @@ export class WorkOrderService {
       if (!statusOk) {
         throw AppError.conflict("Parti durumu değişti — ayırma iptal edildi, sayfayı yenileyin");
       }
-      const laneRollIds = fresh.map((r) => r.id);
-      // Hedef metraj TX İÇİNDE, taze partiden ve Decimal ile (eski kod tx-öncesi
-      // laneRolls'tan JS float reduce kullanıyordu — hem bayat hem float kuralı
-      // ihlali; computeLiveManifest'teki Decimal.plus deseniyle hizalandı).
-      const movedTotalQty = fresh.reduce(
+      // Taşınacak toplar: alt-küme verildiyse onu (lane ile kesişim), yoksa tümü.
+      let laneRollIds = fresh.map((r) => r.id);
+      if (data.rollIds && data.rollIds.length > 0) {
+        const freshSet = new Set(laneRollIds);
+        const sel = [...new Set(data.rollIds)].filter((id) => freshSet.has(id));
+        if (sel.length === 0) {
+          throw AppError.conflict("Ayrılacak geçerli top kalmadı — sayfayı yenileyin");
+        }
+        laneRollIds = sel;
+      }
+      const isFullLane = laneRollIds.length === fresh.length;
+      const movedFresh = fresh.filter((r) => laneRollIds.includes(r.id));
+      // Hedef metraj TX İÇİNDE, TAŞINAN toplardan ve Decimal ile.
+      const movedTotalQty = movedFresh.reduce(
         (s, r) => s.plus(r.currentQty),
         new Prisma.Decimal(0),
       );
@@ -1970,7 +1986,7 @@ export class WorkOrderService {
         // Tek createMany — satırlar rollId/qtyIn/weightIn dışında özdeş (eski kod
         // roll başına create = N+1; partide yüzlerce roll olabilir).
         await tx.rollMovement.createMany({
-          data: fresh.map((r) => ({
+          data: movedFresh.map((r) => ({
             rollId: r.id,
             workOrderStepId: newReEntryStepId,
             qtyIn: r.currentQty,
@@ -2017,17 +2033,12 @@ export class WorkOrderService {
             processedAt: new Date(),
           },
         });
-      } else {
-        // BOYANMADAN: açık sevki yeni WO'ya taşı (kabul yeni WO'da düşer;
+      } else if (isFullLane) {
+        // BOYANMADAN + TÜM parti: açık sevki yeni WO'ya taşı (kabul yeni WO'da düşer;
         // sourceDispatchItem bağı korunur). Toplar AT_SUBCONTRACTOR + lane korunur.
         //
-        // ATOMİK CLAIM (M-1): tx-içi yeniden doğrulama yalnız top STATÜLERİNE
-        // bakıyor — continue modunda ayırma statü değiştirmediği için ikinci
-        // istek ilk commit'ten SONRA bile geçerdi: repoint'ler 0 satır eşler
-        // ama guard'sız dispatch.update sevki İKİNCİ yeni WO'ya taşırdı
-        // (toplar A'da, sevk B'de; ortada iki hayalet WO+kart). WHERE'e kaynak
-        // WO + iptal-değil koşulu: kaybeden 409 alır, tx (yeni WO dahil) geri
-        // sarılır. cancelledAt koşulu dispatch-iptal yarışını da kapatır.
+        // ATOMİK CLAIM (M-1): WHERE'e kaynak WO + iptal-değil koşulu: kaybeden 409
+        // alır, tx (yeni WO dahil) geri sarılır.
         const dispatchClaim = await tx.subcontractorDispatch.updateMany({
           where: {
             id: data.batchSplitId,
@@ -2041,6 +2052,52 @@ export class WorkOrderService {
             "Sevk bu sırada başka bir işlemle değişti (ayrılmış veya iptal edilmiş olabilir) — sayfayı yenileyin."
           );
         }
+      } else {
+        // BOYANMADAN + KISMİ: taşınan toplar için YENİ SD dispatch (klon) açılır;
+        // orijinal sevk KALAN toplarla kaynak WO'da kalır. Toplar fiziksel olarak
+        // boyahanede → yeni WO'da da AT_SUBCONTRACTOR; receive() yeni dispatch
+        // üzerinden işler. (Orijinalin donmuş irsaliyesi tarihsel kalır.)
+        const now = new Date();
+        const src = await tx.subcontractorDispatch.findUnique({
+          where: { id: data.batchSplitId },
+          select: {
+            subcontractorId: true, plannedSubcontractorId: true,
+            dispatchedById: true, dyehouseNote: true, cancelledAt: true,
+          },
+        });
+        if (!src || src.cancelledAt) {
+          throw AppError.conflict("Sevk bu sırada değişti veya iptal edildi — sayfayı yenileyin.");
+        }
+        const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "SD", now);
+        const newDispatch = await tx.subcontractorDispatch.create({
+          data: {
+            dispatchNo: buildPrefixedCardNumber("SD", now, seq),
+            workOrderId: newWo.id,
+            stepId: newReEntryStepId,
+            subcontractorId: src.subcontractorId,
+            plannedSubcontractorId: src.plannedSubcontractorId,
+            dispatchedById: src.dispatchedById,
+            dyehouseNote: src.dyehouseNote,
+            totalQty: movedTotalQty,
+          },
+        });
+        // Taşınan topların sevk kalemlerini yeni dispatch'e ATOMİK taşı.
+        const movedItems = await tx.subcontractorDispatchItem.updateMany({
+          where: { dispatchId: data.batchSplitId, rollId: { in: laneRollIds } },
+          data: { dispatchId: newDispatch.id },
+        });
+        if (movedItems.count !== laneRollIds.length) {
+          throw AppError.conflict("Sevk kalemleri bu sırada değişti — sayfayı yenileyin.");
+        }
+        // Orijinal dispatch totalQty'sini düş; taşınanların lane kimliği = yeni dispatch.
+        await tx.subcontractorDispatch.update({
+          where: { id: data.batchSplitId },
+          data: { totalQty: { decrement: movedTotalQty } },
+        });
+        await tx.roll.updateMany({
+          where: { id: { in: laneRollIds } },
+          data: { batchSplitId: newDispatch.id },
+        });
       }
 
       // Yeni WO için yeni refakat kartı — parti ayrı WO'da hareket eder,
