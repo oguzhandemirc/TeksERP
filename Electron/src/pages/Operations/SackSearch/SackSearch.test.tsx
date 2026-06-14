@@ -9,7 +9,22 @@ const contents = vi.fn();
 vi.mock("./service", () => ({
   sackSearchService: { contents: (...a: unknown[]) => contents(...a) },
 }));
+// loadAllForPicker GERÇEK şekli: PaginatedResponse ({ success, data, pagination }).
+// Eski SearchFilters tüm yanıtı `items` sanıp `items.map is not a function` ile
+// sayfayı çökertiyordu; bu mock o şekli verir → regresyon kilidi.
+const loadAllForPicker = vi.fn((..._a: unknown[]) =>
+  Promise.resolve({
+    success: true,
+    data: [{ id: "i1", name: "PATOS", code: "PTS" }],
+    pagination: { total: 1, page: 1, pageSize: 500, totalPages: 1 },
+  }),
+);
+vi.mock("@/lib/picker-loader", () => ({
+  loadAllForPicker: (...a: unknown[]) => loadAllForPicker(...a),
+  PICKER_MAX_PAGE_SIZE: 500,
+}));
 import { SackResultCard } from "./SackResultCard";
+import { SearchFilters } from "./SearchFilters";
 
 const baseRoll: LocatedRoll = {
   id: "r1",
@@ -106,5 +121,25 @@ describe("SackResultCard — çuval satırı + lazy içerik", () => {
     await waitFor(() => expect(contents).toHaveBeenCalledWith("sk1"));
     expect(await screen.findByText("BRK-1")).toBeInTheDocument();
     expect(screen.getByText("PATOS")).toBeInTheDocument();
+  });
+});
+
+describe("SearchFilters — picker PaginatedResponse şekli (regresyon)", () => {
+  beforeEach(() => loadAllForPicker.mockClear());
+
+  it("loadAllForPicker PaginatedResponse döndürünce ÇÖKMEDEN render eder", async () => {
+    renderWithProviders(<SearchFilters filters={{}} onChange={() => {}} />);
+    // 3 lookup select mount'ta loadAllForPicker çağırır → çözülünce re-render.
+    // ESKİ kod bu re-render'da `items.map is not a function` ile tüm SearchFilters'ı
+    // (dolayısıyla sayfayı) çökertiyordu; vitest çözülmemiş hatayı testte yakalar.
+    await waitFor(() => expect(loadAllForPicker).toHaveBeenCalledTimes(3));
+    // Çözüm re-render'ı sonrası inputlar HÂLÂ DOM'da = çökme yok (3 LookupSelect
+    // + inputlar render edildi).
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/Çuval kodu/)).toBeInTheDocument();
+    });
+    expect(screen.getByPlaceholderText(/En \(cm\)/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Sevk no/)).toBeInTheDocument();
+    expect(screen.getAllByRole("combobox").length).toBe(3); // 3 picker mount oldu
   });
 });

@@ -34,7 +34,9 @@ function LookupSelect({
     queryFn: () => loadAllForPicker(service),
     staleTime: 60_000,
   });
-  const items = (data ?? []) as Array<{ id: string; name?: string; code?: string }>;
+  // loadAllForPicker PaginatedResponse döndürür → dizi `.data` içinde (eski kod
+  // tüm yanıtı items sanıp `items.map is not a function` ile sayfayı çökertiyordu).
+  const items = (data?.data ?? []) as Array<{ id: string; name?: string; code?: string }>;
   return (
     <Select value={value ?? NONE} onValueChange={(v) => onChange(v === NONE ? undefined : v)}>
       <SelectTrigger className="h-8 w-auto min-w-[150px] gap-1 text-xs">
