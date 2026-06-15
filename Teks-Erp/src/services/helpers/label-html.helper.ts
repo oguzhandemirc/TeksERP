@@ -25,6 +25,25 @@ interface TemplateField {
   fontSize?: "sm" | "md" | "lg" | "xl";
 }
 
+/** Fiziksel etiket geometrisi — `LabelFormatProfile`'ın render girdisi.
+ *  widthMm/heightMm = medya (fiziksel etiket); marginMm = GÜVENLİK PAYI (her
+ *  kenardan içerik insetı, ölçüm/etiket toleransını emer). İçerik = width − 2×margin. */
+export interface LabelFormatGeometry {
+  widthMm: number;
+  heightMm: number;
+  marginMm: number;
+  orientation?: "PORTRAIT" | "LANDSCAPE";
+}
+
+/** Default geometri — DB boş / format verilmemişse. Argox OS 214 plus güvenli:
+ *  100×148mm medya + 3mm pay → içerik 94×142mm (104mm kafa sınırının altında). */
+export const DEFAULT_LABEL_FORMAT: Required<LabelFormatGeometry> = {
+  widthMm: 100,
+  heightMm: 148,
+  marginMm: 3,
+  orientation: "PORTRAIT",
+};
+
 interface BuildArgs {
   payload: LabelPayload;
   template: LabelTemplate | null;
@@ -33,6 +52,8 @@ interface BuildArgs {
   /** Saha #6: aynı etiket kaç sayfa basılsın (default 1; ayar default'u 2 —
    *  topun üstüne + altına yapıştırılıyor). 1-5'e kırpılır. */
   copies?: number;
+  /** Fiziksel baskı geometrisi (medya + pay). Verilmezse DEFAULT_LABEL_FORMAT. */
+  format?: LabelFormatGeometry;
 }
 
 export function buildRollLabelHtml({
@@ -41,7 +62,14 @@ export function buildRollLabelHtml({
   barcodeSvg,
   qrSvg,
   copies = 1,
+  format,
 }: BuildArgs): string {
+  // Geometri çöz — medya boyutu + her kenardan güvenlik payı. PORTRAIT'te sayfa =
+  // width×height; LANDSCAPE'te dış sayfa boyutları takas (iç tipografi portrait kalır).
+  const fmt = { ...DEFAULT_LABEL_FORMAT, ...(format ?? {}) };
+  const pageW = fmt.orientation === "LANDSCAPE" ? fmt.heightMm : fmt.widthMm;
+  const pageH = fmt.orientation === "LANDSCAPE" ? fmt.widthMm : fmt.heightMm;
+  const contentWidthMm = Math.max(0, pageW - fmt.marginMm * 2);
   const fields: TemplateField[] | null = template
     ? (template.fields as unknown as TemplateField[])
     : null;
@@ -84,11 +112,11 @@ export function buildRollLabelHtml({
 <meta charset="utf-8" />
 <title>Top Etiketi · ${barcode || "—"}</title>
 <style>
-  @page { size: A6 portrait; margin: 0; }
+  @page { size: ${pageW}mm ${pageH}mm; margin: ${fmt.marginMm}mm; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #0f172a; }
   .label {
-    width: 105mm;
+    width: ${contentWidthMm}mm;
     margin: 0;
     border: 1.5px solid #0f172a;
     border-radius: 4mm;

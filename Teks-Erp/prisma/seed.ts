@@ -382,6 +382,36 @@ async function main() {
   });
   console.log("✅ 3 makine (KK1-M1, KK2-M1, TAMBUR-M1)");
 
+  // --- Yazıcı modeli kataloğu + etiket format profilleri ---
+  // "Yazıcı değişse de format/komut tanımları kaybolmasın" → kalıcı katalog.
+  // Argox OS 214 plus: 203dpi, max 104mm. Profil medya 100×148 + 3mm GÜVENLİK PAYI
+  // (içerik ~94×142) — etiket birkaç mm küçük çıksa bile kırpılmaz; admin'den ayarlanır.
+  const argoxProfile = await prisma.labelFormatProfile.create({
+    data: {
+      code: "ARGOX_TOP_100x148",
+      name: "Argox 100×148 mm Top (3mm pay)",
+      widthMm: 100, heightMm: 148, marginMm: 3, gapMm: 2, dpi: 203, orientation: "PORTRAIT",
+    },
+  });
+  // Sistem default profili — Electron (device yok) ve resolver fallback bunu kullanır.
+  await prisma.labelFormatProfile.create({
+    data: {
+      code: "DEFAULT",
+      name: "Varsayılan Top Etiketi (100×148, 3mm pay)",
+      widthMm: 100, heightMm: 148, marginMm: 3, gapMm: 2, dpi: 203, orientation: "PORTRAIT",
+    },
+  });
+  const argox = await prisma.printerModel.create({
+    data: {
+      code: "ARGOX_OS214_PLUS",
+      name: "Argox OS 214 plus",
+      manufacturer: "Argox",
+      dpi: 203, maxWidthMm: 104, language: "PPLA",
+      defaultProfileId: argoxProfile.id,
+    },
+  });
+  console.log("✅ Yazıcı modeli (Argox OS 214 plus, PPLA) + 2 etiket format profili");
+
   // --- Makine donanımı (saha yazıcı + RS232 ara cihaz config örnekleri) ---
   // Dokümantasyon + cihaz/kodlama seçimi. Faz-1 donanım SİMÜLE; bu kayıtlar örnek.
   const seededMachines = await prisma.machine.findMany({
@@ -423,7 +453,9 @@ async function main() {
     if (!machineId) continue;
     const { code: _c, ...rest } = h;
     void _c;
-    await prisma.machineHardware.create({ data: { machineId, ...rest } });
+    await prisma.machineHardware.create({
+      data: { machineId, ...rest, printerModelId: argox.id, formatProfileId: argoxProfile.id },
+    });
   }
   console.log(`✅ ${hwData.length} makine donanım config (örnek yazıcı/RS232 desenleri)`);
 

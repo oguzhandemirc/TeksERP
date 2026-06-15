@@ -39,7 +39,11 @@ const machineHardwareService = new BaseService({
   modelName: "machineHardware",
   tableName: "MACHINE_HARDWARE",
   searchFields: ["printerIp", "printerMac", "kqMac", "mtMac"],
-  defaultInclude: { machine: { select: { id: true, code: true, name: true, stationId: true } } },
+  defaultInclude: {
+    machine: { select: { id: true, code: true, name: true, stationId: true } },
+    printerModel: { select: { id: true, code: true, name: true } },
+    formatProfile: { select: { id: true, code: true, name: true } },
+  },
   uniqueField: "machineId",
 });
 const machineHardwareController = new BaseController(machineHardwareService);

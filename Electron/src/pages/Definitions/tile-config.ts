@@ -19,6 +19,7 @@ import {
   FileText,
   Printer,
   Cpu,
+  Ruler,
   type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
@@ -130,6 +131,24 @@ export const definitionTiles: DefinitionTile[] = [
     description: "Sahadaki yazıcı + RS232 ara cihaz MAC/IP + veri çözen regex desenleri",
     icon: Cpu,
     to: "/definitions/machine-hardware",
+    group: "production",
+    permission: "station:read",
+  },
+  {
+    key: "printer-models",
+    title: "Yazıcı Modelleri",
+    description: "Termal yazıcı kataloğu (Argox vb.) — DPI, max genişlik, dil (HTML/PPLA)",
+    icon: Printer,
+    to: "/definitions/printer-models",
+    group: "production",
+    permission: "station:read",
+  },
+  {
+    key: "label-formats",
+    title: "Etiket Format Profilleri",
+    description: "Top etiketinin fiziksel boyutu (mm) + güvenlik payı; yazıcıya uygun format",
+    icon: Ruler,
+    to: "/definitions/label-formats",
     group: "production",
     permission: "station:read",
   },

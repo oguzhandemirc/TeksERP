@@ -13,6 +13,8 @@ import { CustomersPage } from "@/pages/Customers/CustomersPage";
 import { StationsPage } from "@/pages/Stations/StationsPage";
 import { MachinesPage } from "@/pages/Machines/MachinesPage";
 import { MachineHardwarePage } from "@/pages/MachineHardware/MachineHardwarePage";
+import { PrinterModelsPage } from "@/pages/PrinterModels/PrinterModelsPage";
+import { LabelFormatProfilesPage } from "@/pages/LabelFormatProfiles/LabelFormatProfilesPage";
 import { DefectTypesPage } from "@/pages/DefectTypes/DefectTypesPage";
 import { QualityGradesPage } from "@/pages/QualityGrades/QualityGradesPage";
 import { ColorsPage } from "@/pages/Colors/ColorsPage";
@@ -135,6 +137,22 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="station:read">
         <MachineHardwarePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/printer-models",
+    element: (
+      <ProtectedRoute requirePermission="station:read">
+        <PrinterModelsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/label-formats",
+    element: (
+      <ProtectedRoute requirePermission="station:read">
+        <LabelFormatProfilesPage />
       </ProtectedRoute>
     ),
   },

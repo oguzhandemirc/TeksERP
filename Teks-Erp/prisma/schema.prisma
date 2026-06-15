@@ -136,6 +136,22 @@ enum LabelKind {
   SWATCH
 }
 
+/// Yazıcı dili — etiket render driver registry anahtarı. Faz-1: yalnız
+/// RASTER_HTML fiziksel basar (HTML + OS sürücü); PPLA ÜRETİLİR (Argox native
+/// komut), ham gönderim simüle (donanım I/O Faz-2). PPLB/ZPL gelecek.
+enum PrinterLanguage {
+  RASTER_HTML
+  PPLA
+  PPLB
+  ZPL
+}
+
+/// Etiket yönü — format profili geometrisi.
+enum LabelOrientation {
+  PORTRAIT
+  LANDSCAPE
+}
+
 /// Tambur kararında bir hata için yapılan aksiyon.
 enum RollErrorAction {
   CUT
@@ -436,12 +452,75 @@ model MachineHardware {
   notes    String? @db.VarChar(500)
   isActive Boolean @default(true)
 
+  // Yazıcı modeli + etiket format profili (model değişse de tanımlar kalıcı
+  // katalogda; bu makine sadece REFERANS tutar). formatProfileId boş → model default'u.
+  printerModelId  String?             @db.Uuid
+  printerModel    PrinterModel?       @relation(fields: [printerModelId], references: [id], onDelete: Restrict)
+  formatProfileId String?             @db.Uuid
+  formatProfile   LabelFormatProfile? @relation(fields: [formatProfileId], references: [id], onDelete: Restrict)
+
   machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([printerModelId])
+  @@index([formatProfileId])
   @@map("machine_hardware")
+}
+
+/// Yazıcı modeli kataloğu — termal yazıcı tanımları (Argox OS 214 plus vb.).
+/// "Format/komut tanımları yazıcı değişse de kaybolmasın" = modeller + profiller
+/// kalıcı tablo; MachineHardware yalnız referans. Faz-1: RASTER_HTML fiziksel
+/// basar, PPLA üretilir (gönderim simüle).
+model PrinterModel {
+  id           String          @db.Uuid @id @default(uuid())
+  code         String          @unique @db.VarChar(48) // "ARGOX_OS214_PLUS"
+  name         String          @db.VarChar(100)
+  manufacturer String?         @db.VarChar(64)
+  dpi          Int             @default(203) // 203 = 8 dot/mm
+  maxWidthMm   Int             @default(104) // fiziksel max baskı genişliği
+  language     PrinterLanguage @default(RASTER_HTML)
+  isActive     Boolean         @default(true)
+
+  // Bu model için varsayılan format profili (yeni donanım bağlanınca öneri).
+  defaultProfileId String?             @db.Uuid
+  defaultProfile   LabelFormatProfile? @relation("ModelDefaultProfile", fields: [defaultProfileId], references: [id], onDelete: SetNull)
+
+  hardware MachineHardware[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([defaultProfileId])
+  @@map("printer_models")
+}
+
+/// Etiketin fiziksel baskı geometrisi — sabit-kodlu A6'nın DB hali.
+/// widthMm/heightMm = medya (fiziksel etiket boyutu); marginMm = GÜVENLİK PAYI
+/// (her kenardan içerik insetı; ölçüm/etiket toleransını emer). İçerik genişliği
+/// = widthMm − 2×marginMm. Bir profil çok istasyon/model tarafından paylaşılır.
+model LabelFormatProfile {
+  id          String           @db.Uuid @id @default(uuid())
+  code        String           @unique @db.VarChar(48) // "ARGOX_TOP_100x148"
+  name        String           @db.VarChar(100)
+  widthMm     Decimal          @db.Decimal(6, 2)
+  heightMm    Decimal          @db.Decimal(6, 2)
+  marginMm    Decimal          @default(3) @db.Decimal(5, 2) // güvenlik payı
+  gapMm       Decimal          @default(2) @db.Decimal(5, 2) // etiketler arası (gelecek native)
+  dpi         Int              @default(203)
+  orientation LabelOrientation @default(PORTRAIT)
+  isActive    Boolean          @default(true)
+
+  hardware         MachineHardware[]
+  defaultForModels PrinterModel[]    @relation("ModelDefaultProfile")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("label_format_profiles")
 }
 
 /// Tablet eşleştirmesi için admin tarafından üretilen tek seferlik 6 haneli kod.

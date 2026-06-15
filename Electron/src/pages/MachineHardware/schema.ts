@@ -13,6 +13,8 @@ export const machineHardwareFormSchema = z.object({
   mtPattern: z.string().trim().max(255).optional().default(""),
   mtPattern2: z.string().trim().max(255).optional().default(""),
   notes: z.string().trim().max(500).optional().default(""),
+  printerModelId: z.string().optional().default(""),
+  formatProfileId: z.string().optional().default(""),
   isActive: z.boolean(),
 });
 
@@ -33,6 +35,8 @@ export function buildMachineHardwarePayload(v: MachineHardwareFormValues) {
     mtPattern: nn(v.mtPattern),
     mtPattern2: nn(v.mtPattern2),
     notes: nn(v.notes),
+    printerModelId: nn(v.printerModelId),
+    formatProfileId: nn(v.formatProfileId),
     isActive: v.isActive,
   };
 }
@@ -48,5 +52,7 @@ export const machineHardwareFormDefaults: MachineHardwareFormValues = {
   mtPattern: "",
   mtPattern2: "",
   notes: "",
+  printerModelId: "",
+  formatProfileId: "",
   isActive: true,
 };

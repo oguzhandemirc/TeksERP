@@ -33,6 +33,21 @@ export const machineHardwareColumns: ColumnDef<MachineHardware>[] = [
     ),
   },
   {
+    id: "printer",
+    header: "Yazıcı / Profil",
+    cell: ({ row }) =>
+      row.original.printerModel ? (
+        <div className="min-w-0">
+          <div className="truncate text-xs">{row.original.printerModel.name}</div>
+          <div className="font-mono text-[10px] text-muted-foreground">
+            {row.original.formatProfile?.code ?? "(model default)"}
+          </div>
+        </div>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     accessorKey: "isActive",
     header: "Durum",
     cell: ({ row }) =>

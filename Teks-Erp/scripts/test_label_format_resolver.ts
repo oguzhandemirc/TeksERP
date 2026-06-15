@@ -1,0 +1,85 @@
+// =============================================================================
+// Test: etiket format çözümü (resolveLabelFormat) öncelik zinciri
+// Çalıştır: npx tsx scripts/test_label_format_resolver.ts
+// Doğrulananlar: explicit profileId > machineId(hw.profile > model.default) >
+// sistem-default > kod-fallback; yazıcı dili modelden; inactive profil atlanır.
+// =============================================================================
+import prisma from "../src/lib/prisma";
+import { resolveLabelFormat } from "../src/services/helpers/label-format.resolver";
+
+let pass = 0;
+let fail = 0;
+function check(label: string, ok: boolean, extra = "") {
+  if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
+  else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
+}
+
+async function main() {
+  const ts = Date.now();
+  const station = await prisma.station.create({
+    data: { code: `TST-RES-ST-${ts}`, name: "TEST RES İST", type: "INTERNAL" },
+    select: { id: true },
+  });
+  const machine = await prisma.machine.create({
+    data: { stationId: station.id, code: `TST-RES-M-${ts}`, name: "TEST RES MAK" },
+    select: { id: true },
+  });
+  const p1 = await prisma.labelFormatProfile.create({
+    data: { code: `RES-P1-${ts}`, name: "P1", widthMm: 110, heightMm: 160, marginMm: 5, dpi: 203, orientation: "PORTRAIT" },
+  });
+  const p2 = await prisma.labelFormatProfile.create({
+    data: { code: `RES-P2-${ts}`, name: "P2", widthMm: 90, heightMm: 120, marginMm: 2, dpi: 300, orientation: "PORTRAIT" },
+  });
+  const pInactive = await prisma.labelFormatProfile.create({
+    data: { code: `RES-PX-${ts}`, name: "PX", widthMm: 200, heightMm: 200, marginMm: 9, dpi: 203, orientation: "PORTRAIT", isActive: false },
+  });
+  const model = await prisma.printerModel.create({
+    data: { code: `RES-MOD-${ts}`, name: "TEST MOD", language: "PPLA", maxWidthMm: 104, dpi: 203, defaultProfileId: p2.id },
+  });
+  const hw = await prisma.machineHardware.create({
+    data: { machineId: machine.id, printerModelId: model.id, formatProfileId: p1.id, printerIp: "10.0.0.9" },
+    select: { id: true },
+  });
+
+  try {
+    // 1) explicit profileId → P1
+    const r1 = await resolveLabelFormat({ profileId: p1.id });
+    check("explicit profileId → P1 geometri", r1.widthMm === 110 && r1.marginMm === 5 && r1.source === "explicit");
+
+    // 2) machineId → hw.formatProfile (P1) + dil modelden (PPLA)
+    const r2 = await resolveLabelFormat({ machineId: machine.id });
+    check("machineId → hw.formatProfile P1", r2.widthMm === 110 && r2.source === "machine");
+    check("machineId → dil modelden (PPLA)", r2.language === "PPLA");
+
+    // 3) hw.formatProfile null → model.defaultProfile (P2)
+    await prisma.machineHardware.update({ where: { id: hw.id }, data: { formatProfileId: null } });
+    const r3 = await resolveLabelFormat({ machineId: machine.id });
+    check("machineId → model.defaultProfile P2", r3.widthMm === 90 && r3.dpi === 300 && r3.source === "machine");
+    check("P2 yolunda da dil PPLA", r3.language === "PPLA");
+
+    // 4) explicit inactive profil → ATLANIR → sistem-default'a düşer
+    const r4 = await resolveLabelFormat({ profileId: pInactive.id });
+    check("inactive profil atlandı (explicit değil)", r4.source !== "explicit" && r4.profileId !== pInactive.id);
+
+    // 5) opts yok → sistem default (DEFAULT profili backfill/seed'den) veya kod-fallback
+    const r5 = await resolveLabelFormat();
+    check("opts yok → system-default/code-fallback", r5.source === "system-default" || r5.source === "code-fallback");
+    check("opts yok → geçerli geometri (width>0, pay≥0)", r5.widthMm > 0 && r5.marginMm >= 0);
+  } finally {
+    await prisma.machineHardware.deleteMany({ where: { id: hw.id } });
+    await prisma.printerModel.deleteMany({ where: { id: model.id } });
+    await prisma.labelFormatProfile.deleteMany({ where: { id: { in: [p1.id, p2.id, pInactive.id] } } });
+    await prisma.machine.deleteMany({ where: { id: machine.id } });
+    await prisma.station.deleteMany({ where: { id: station.id } });
+  }
+
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  await prisma.$disconnect();
+  process.exit(fail > 0 ? 1 : 0);
+}
+
+main().catch(async (e) => {
+  console.error(e);
+  await prisma.$disconnect();
+  process.exit(1);
+});

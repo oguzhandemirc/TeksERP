@@ -16,6 +16,11 @@ export interface MachineHardware {
   mtPattern2: string | null;
   notes: string | null;
   isActive: boolean;
+  /** Yazıcı modeli + etiket format profili referansı (boş = tanımsız/model default). */
+  printerModelId: string | null;
+  formatProfileId: string | null;
+  printerModel?: { id: string; code: string; name: string } | null;
+  formatProfile?: { id: string; code: string; name: string } | null;
   machine?: { id: string; code: string; name: string; stationId: string };
   createdAt: string;
   updatedAt: string;

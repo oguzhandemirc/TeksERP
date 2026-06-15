@@ -19,13 +19,15 @@
 
 import bwipjs from "bwip-js";
 import { readLabelCopies } from "./system-setting.service";
-import { LabelKind, Prisma } from "@prisma/client";
+import { LabelKind, PrinterLanguage, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { resolveName, normalizeOverride, NameSource } from "./helpers/customer-name.helper";
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
+import { resolveLabelFormat } from "./helpers/label-format.resolver";
+import { renderLabel } from "./helpers/label-renderer.registry";
 
 const TABLE_ORDER_LINE = "ORDER_LINE";
 const TABLE_LABEL_PRINT = "LABEL_PRINT_EVENT";
@@ -407,6 +409,10 @@ export class LabelService {
       stock?: boolean;
       /** Saha #6: kopya adedi override (1-5). Verilmezse label.copies ayarı (default 2). */
       copies?: number;
+      /** Fiziksel format profili — explicit override. */
+      profileId?: string | null;
+      /** İstasyon makinesi — yazıcı/profil oto çözülür (mobil: req.device.machineId). */
+      machineId?: string | null;
     },
   ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
     const payloadResp = await this.getRollLabel(rollId, opts);
@@ -447,8 +453,49 @@ export class LabelService {
 
     // Saha #6: kopya adedi — istek override > ayar (default 2, üst+alt yapıştırma).
     const copies = opts?.copies ?? (await readLabelCopies());
-    const html = buildRollLabelHtml({ payload, template, barcodeSvg, qrSvg, copies });
+    // Fiziksel geometri (medya + güvenlik payı) — profileId/machineId'den çözülür;
+    // mobil baskı istasyon yazıcısını oto çözer (req.device.machineId), Electron default.
+    const format = await resolveLabelFormat({
+      profileId: opts?.profileId,
+      machineId: opts?.machineId,
+    });
+    const html = buildRollLabelHtml({ payload, template, barcodeSvg, qrSvg, copies, format });
     return { success: true, data: { html, kind } };
+  }
+
+  /**
+   * Rolün Argox PPLA native komut string'i — `/html`'in native analoğu. Faz-1:
+   * yalnız ÜRETİLİR (saf string; HTML üretmek gibi izinli). Fiziksel ham-gönderim
+   * `printer-transport` içinde SİMÜLE (Faz-2'de gerçek socket/USB). Format profili
+   * (medya boyutu + güvenlik payı) `/html` ile AYNI resolver'dan gelir.
+   */
+  async getRollLabelPpla(
+    rollId: string,
+    opts?: {
+      orderLineId?: string | null;
+      customerId?: string | null;
+      stock?: boolean;
+      copies?: number;
+      profileId?: string | null;
+      machineId?: string | null;
+    },
+  ): Promise<ApiResponse<{ ppla: string; profileId: string | null }>> {
+    const payloadResp = await this.getRollLabel(rollId, opts);
+    const payload = payloadResp.data;
+    const copies = opts?.copies ?? (await readLabelCopies());
+    const format = await resolveLabelFormat({
+      profileId: opts?.profileId,
+      machineId: opts?.machineId,
+    });
+    const rendered = renderLabel(PrinterLanguage.PPLA, {
+      payload,
+      template: null,
+      barcodeSvg: "",
+      qrSvg: "",
+      copies,
+      format,
+    });
+    return { success: true, data: { ppla: rendered.content, profileId: format.profileId } };
   }
 
   /**
