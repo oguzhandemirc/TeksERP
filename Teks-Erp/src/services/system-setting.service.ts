@@ -5,7 +5,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, PrinterLanguage } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -99,6 +99,11 @@ export const SETTING_KEYS = {
    *  {item} {color} {width} {quality}. Default "{item} {color} {width}". Boş
    *  token'lar (renksiz vb.) atlanır, fazla boşluk sadeleşir. Frontend okur. */
   ROLL_NAME_TEMPLATE: "roll.nameTemplate",
+  /** Varsayılan etiket yazıcı dili — top etiketi native render'ı bu dilde üretilir
+   *  (default PPLA). Bir yazıcı modeli kendi dilini belirtirse (Argox=PPLA, Zebra=ZPL)
+   *  o istasyonda model dili ÖNCELİKLİDİR; bu global ayar model bağlamı çözülemeyen
+   *  baskılar için (Electron/varsayılan) ve genel varsayılan olarak kullanılır. */
+  LABEL_PRINTER_LANGUAGE: "label.printerLanguage",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -225,6 +230,9 @@ export interface FeatureFlags {
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). Frontend okur. */
   rollNameTemplate: string;
+  /** Varsayılan etiket yazıcı dili (RASTER_HTML | PPLA | PPLB | ZPL; default PPLA).
+   *  Native render bu dilde üretilir; istasyon yazıcı modeli kendi dilini belirtirse o önceliklidir. */
+  printerLanguage: PrinterLanguage;
 }
 
 // =============================================================================
@@ -365,6 +373,7 @@ export class SystemSettingService {
       idleTimeoutMinutes: await readIdleTimeoutMinutes(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
       rollNameTemplate: await readRollNameTemplate(cacheClient),
+      printerLanguage: await readPrinterLanguage(cacheClient),
     };
     featureFlagsCache = { value: flags, expiresAt: now + FEATURE_FLAGS_TTL_MS };
     return { success: true, data: flags };
@@ -631,6 +640,21 @@ export class SystemSettingService {
         SETTING_KEYS.ROLL_NAME_TEMPLATE,
         trimmed || DEFAULT_ROLL_NAME_TEMPLATE,
         "Top adı format şablonu — {item} {color} {width} {quality} token'ları",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "printerLanguage")) {
+      const v = input.printerLanguage;
+      if (!PRINTER_LANGUAGES.includes(v as PrinterLanguage)) {
+        throw AppError.badRequest(
+          `Geçersiz yazıcı dili. İzinli: ${PRINTER_LANGUAGES.join(", ")}`,
+        );
+      }
+      await this.set(
+        SETTING_KEYS.LABEL_PRINTER_LANGUAGE,
+        v as string,
+        "Varsayılan etiket yazıcı dili (native render: PPLA/PPLB/ZPL veya HTML)",
         userId
       );
     }
@@ -1064,5 +1088,26 @@ export async function readRollNameTemplate(
   });
   const v = setting?.value;
   return typeof v === "string" && v.trim() ? v.slice(0, 100) : DEFAULT_ROLL_NAME_TEMPLATE;
+}
+
+/**
+ * Varsayılan etiket yazıcı dili — native render (PPLA/PPLB/ZPL) veya HTML.
+ * Default PPLA. Yazıcı modeli kendi dilini belirtirse o istasyonda model önceliklidir;
+ * bu ayar model bağlamı yoksa (Electron/fallback) ve genel varsayılan olarak okunur.
+ */
+export const PRINTER_LANGUAGES: PrinterLanguage[] = ["RASTER_HTML", "PPLA", "PPLB", "ZPL"];
+export const DEFAULT_PRINTER_LANGUAGE: PrinterLanguage = "PPLA";
+export async function readPrinterLanguage(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<PrinterLanguage> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return typeof v === "string" && PRINTER_LANGUAGES.includes(v as PrinterLanguage)
+    ? (v as PrinterLanguage)
+    : DEFAULT_PRINTER_LANGUAGE;
 }
 

@@ -38,6 +38,16 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
 /** Firma adı verilmediğinde gösterilen varsayılan (backend ile aynı). */
 export const DEFAULT_COMPANY_NAME = "Adnan Şahin Tekstil";
 
+/** Etiket yazıcı dili (backend PrinterLanguage enum ile aynı). */
+export type PrinterLanguage = "RASTER_HTML" | "PPLA" | "PPLB" | "ZPL";
+export const DEFAULT_PRINTER_LANGUAGE: PrinterLanguage = "PPLA";
+export const PRINTER_LANGUAGE_LABELS: Record<PrinterLanguage, string> = {
+  RASTER_HTML: "HTML (OS yazıcı sürücüsü)",
+  PPLA: "Argox PPLA",
+  PPLB: "PPLB (EPL2)",
+  ZPL: "Zebra ZPL",
+};
+
 export interface FeatureFlags {
   /** ERP'nin kurulduğu firmanın adı — panel başlığı + uygulama geneli. */
   companyName: string;
@@ -71,6 +81,9 @@ export interface FeatureFlags {
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). */
   rollNameTemplate: string;
+  /** Varsayılan etiket yazıcı dili (RASTER_HTML | PPLA | PPLB | ZPL; default PPLA).
+   *  Native render bu dilde; istasyon yazıcı modeli kendi dilini belirtirse o önceliklidir. */
+  printerLanguage: PrinterLanguage;
   /** Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri). */
   travelerCardConfig: TravelerCardConfig;
   /** Belge künyesi (adres/tel/vergi) — irsaliye/çeki üst bloğunda basılır. */

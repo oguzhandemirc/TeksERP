@@ -27,7 +27,7 @@ import { ApiResponse } from "../types/api.types";
 import { resolveName, normalizeOverride, NameSource } from "./helpers/customer-name.helper";
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
-import { renderLabel } from "./helpers/label-renderer.registry";
+import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
 
 const TABLE_ORDER_LINE = "ORDER_LINE";
 const TABLE_LABEL_PRINT = "LABEL_PRINT_EVENT";
@@ -95,6 +95,19 @@ export interface SwatchLabelPayload {
 export interface UpdateOrderLineCustomerNamesInput {
   customerItemName?: string | null;
   customerColorName?: string | null;
+}
+
+/** Top etiketi render opsiyonları — müşteri bağlamı + kopya + format profili/makine. */
+export interface RollLabelRenderOpts {
+  orderLineId?: string | null;
+  customerId?: string | null;
+  stock?: boolean;
+  /** Saha #6: kopya adedi override (1-5). Verilmezse label.copies ayarı (default 2). */
+  copies?: number;
+  /** Fiziksel format profili — explicit override. */
+  profileId?: string | null;
+  /** İstasyon makinesi — yazıcı/profil + dil oto çözülür (mobil: req.device.machineId). */
+  machineId?: string | null;
 }
 
 export class LabelService {
@@ -400,21 +413,15 @@ export class LabelService {
    * ham stoğu, tambur'da kesilen ham parça, ham talep eden müşteriye giden
    * ham-bitmiş depo topu) ham etiketle basılır. Caller `?kind=` ile override eder.
    */
-  async getRollLabelHtml(
+  /**
+   * Ortak render girdisi — payload + kind (ROLL_RAW/FINISHED) + default template +
+   * barkod/QR SVG + kopya + format profili. Tüm diller (html/ppla/pplb/zpl) paylaşır.
+   */
+  private async buildRollRenderInput(
     rollId: string,
-    kindOverride?: LabelKind,
-    opts?: {
-      orderLineId?: string | null;
-      customerId?: string | null;
-      stock?: boolean;
-      /** Saha #6: kopya adedi override (1-5). Verilmezse label.copies ayarı (default 2). */
-      copies?: number;
-      /** Fiziksel format profili — explicit override. */
-      profileId?: string | null;
-      /** İstasyon makinesi — yazıcı/profil oto çözülür (mobil: req.device.machineId). */
-      machineId?: string | null;
-    },
-  ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
+    kindOverride: LabelKind | undefined,
+    opts?: RollLabelRenderOpts,
+  ): Promise<{ input: LabelRenderInput; kind: LabelKind }> {
     const payloadResp = await this.getRollLabel(rollId, opts);
     const payload = payloadResp.data;
 
@@ -425,77 +432,64 @@ export class LabelService {
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
     const kind: LabelKind =
-      kindOverride ??
-      (roll.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED);
+      kindOverride ?? (roll.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED);
 
     const template = await prisma.labelTemplate.findFirst({
       where: { kind, isDefault: true, isActive: true },
     });
-
     const barcodeSvg = payload.barcode
-      ? bwipjs.toSVG({
-          bcid: "code128",
-          text: payload.barcode,
-          scale: 3,
-          height: 10,
-          includetext: false,
-          backgroundcolor: "FFFFFF",
-        })
+      ? bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" })
       : "";
     const qrSvg = payload.barcode
-      ? bwipjs.toSVG({
-          bcid: "qrcode",
-          text: payload.barcode,
-          scale: 3,
-          backgroundcolor: "FFFFFF",
-        })
+      ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
       : "";
-
     // Saha #6: kopya adedi — istek override > ayar (default 2, üst+alt yapıştırma).
     const copies = opts?.copies ?? (await readLabelCopies());
-    // Fiziksel geometri (medya + güvenlik payı) — profileId/machineId'den çözülür;
-    // mobil baskı istasyon yazıcısını oto çözer (req.device.machineId), Electron default.
-    const format = await resolveLabelFormat({
-      profileId: opts?.profileId,
-      machineId: opts?.machineId,
-    });
-    const html = buildRollLabelHtml({ payload, template, barcodeSvg, qrSvg, copies, format });
+    // Fiziksel geometri (medya + güvenlik payı) + etkin dil — profileId/machineId'den
+    // çözülür; mobil istasyon yazıcısını oto çözer (req.device.machineId), Electron default.
+    const format = await resolveLabelFormat({ profileId: opts?.profileId, machineId: opts?.machineId });
+    return { input: { payload, template, barcodeSvg, qrSvg, copies, format }, kind };
+  }
+
+  async getRollLabelHtml(
+    rollId: string,
+    kindOverride?: LabelKind,
+    opts?: RollLabelRenderOpts,
+  ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
+    const { input, kind } = await this.buildRollRenderInput(rollId, kindOverride, opts);
+    const html = renderLabel(PrinterLanguage.RASTER_HTML, input).content;
     return { success: true, data: { html, kind } };
   }
 
   /**
-   * Rolün Argox PPLA native komut string'i — `/html`'in native analoğu. Faz-1:
-   * yalnız ÜRETİLİR (saf string; HTML üretmek gibi izinli). Fiziksel ham-gönderim
-   * `printer-transport` içinde SİMÜLE (Faz-2'de gerçek socket/USB). Format profili
-   * (medya boyutu + güvenlik payı) `/html` ile AYNI resolver'dan gelir.
+   * Rolün Argox PPLA native komut string'i (explicit). Faz-1: yalnız ÜRETİLİR
+   * (saf string); ham gönderim `printer-transport` ile SİMÜLE (Faz-2). Dilden
+   * bağımsız PPLA verir — incelemeye yönelik. Seçili dil için `getRollLabelNative`.
    */
   async getRollLabelPpla(
     rollId: string,
-    opts?: {
-      orderLineId?: string | null;
-      customerId?: string | null;
-      stock?: boolean;
-      copies?: number;
-      profileId?: string | null;
-      machineId?: string | null;
-    },
+    opts?: RollLabelRenderOpts,
   ): Promise<ApiResponse<{ ppla: string; profileId: string | null }>> {
-    const payloadResp = await this.getRollLabel(rollId, opts);
-    const payload = payloadResp.data;
-    const copies = opts?.copies ?? (await readLabelCopies());
-    const format = await resolveLabelFormat({
-      profileId: opts?.profileId,
-      machineId: opts?.machineId,
-    });
-    const rendered = renderLabel(PrinterLanguage.PPLA, {
-      payload,
-      template: null,
-      barcodeSvg: "",
-      qrSvg: "",
-      copies,
-      format,
-    });
-    return { success: true, data: { ppla: rendered.content, profileId: format.profileId } };
+    const { input } = await this.buildRollRenderInput(rollId, undefined, opts);
+    const ppla = renderLabel(PrinterLanguage.PPLA, input).content;
+    return { success: true, data: { ppla, profileId: input.format.profileId } };
+  }
+
+  /**
+   * Rolün etiketini SEÇİLİ dilde render eder — global ayar `label.printerLanguage`
+   * (default PPLA) veya istasyon yazıcı modelinin dili (resolver çözer). RASTER_HTML
+   * → HTML; PPLA/PPLB/ZPL → native komut. Faz-1: üretim gerçek, ham gönderim simüle.
+   */
+  async getRollLabelNative(
+    rollId: string,
+    opts?: RollLabelRenderOpts,
+  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind; profileId: string | null }>> {
+    const { input, kind } = await this.buildRollRenderInput(rollId, undefined, opts);
+    const r = renderLabel(input.format.language, input);
+    return {
+      success: true,
+      data: { content: r.content, language: r.language, contentType: r.contentType, kind, profileId: input.format.profileId },
+    };
   }
 
   /**
