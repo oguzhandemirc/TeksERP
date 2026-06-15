@@ -129,6 +129,35 @@ router.get(
 
 /**
  * @openapi
+ * /api/labels/rolls/{id}/native:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Rolün etiketi SEÇİLİ yazıcı dilinde (global ayar / model dili)
+ *     description: |
+ *       Etkin dil = istasyon yazıcı modelinin dili (varsa) ya da global ayar
+ *       `label.printerLanguage` (default PPLA). RASTER_HTML → text/html; PPLA/PPLB/ZPL
+ *       → text/plain native komut. Dil `X-Label-Language` header'ında. Faz-1: native
+ *       komutlar ÜRETİLİR, ham gönderim simüle (Faz-2). Format `?profileId=`/`?machineId=`
+ *       veya istasyon (mobil oto) ile çözülür.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Seçili dilde etiket (HTML veya native komut) }
+ *       404: { description: Top bulunamadı }
+ */
+router.get(
+  "/rolls/:id/native",
+  verifyToken,
+  requireAnyPermission("label:read", ...MOBILE_LABEL_PRINTERS),
+  controller.getRollLabelNative,
+);
+
+/**
+ * @openapi
  * /api/labels/rolls/bulk-html:
  *   post:
  *     tags: [Labels]

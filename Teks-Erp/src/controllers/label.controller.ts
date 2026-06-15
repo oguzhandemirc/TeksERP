@@ -129,6 +129,30 @@ export class LabelController {
     } catch (e) { next(e); }
   };
 
+  /**
+   * Rolün etiketini SEÇİLİ dilde döner — global ayar `label.printerLanguage`
+   * (default PPLA) veya istasyon yazıcı modelinin dili. RASTER_HTML → text/html;
+   * PPLA/PPLB/ZPL → text/plain native komut. Dil X-Label-Language header'ında.
+   */
+  getRollLabelNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getRollLabelNative(req.params.id as string, {
+        orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
+        customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
+        stock: req.query.stock === "1" || req.query.stock === "true",
+        copies:
+          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
+            ? parseInt(req.query.copies, 10)
+            : undefined,
+        ...parseFormatOpts(req),
+      });
+      res.setHeader("Content-Type", result.data.contentType);
+      res.setHeader("X-Label-Language", result.data.language);
+      res.setHeader("X-Label-Kind", result.data.kind);
+      res.status(200).send(result.data.content);
+    } catch (e) { next(e); }
+  };
+
   // Saha #7: toplu etiket HTML — { rollIds: [...], copies? } → tek birleşik belge.
   getBulkRollLabelsHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

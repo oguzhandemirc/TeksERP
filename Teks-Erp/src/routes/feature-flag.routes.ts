@@ -37,6 +37,12 @@ const updateSchema = z.object({
   sessionDurationHours: z.number().int().min(1).max(720).optional(),
   // auth.idleTimeoutMinutes — hareketsizlik zaman aşımı, dakika (0=kapalı, 0–1440). Frontend ENFORCE.
   idleTimeoutMinutes: z.number().int().min(0).max(1440).optional(),
+  // Saha #6: top etiketi kopya adedi (1–5). (Servis ayrıca doğrular.)
+  labelCopies: z.number().int().min(1).max(5).optional(),
+  // Saha #20: top adı format şablonu (maks 100; servis token doğrular).
+  rollNameTemplate: z.string().max(100).optional(),
+  // label.printerLanguage — varsayılan etiket yazıcı dili (native render formatı).
+  printerLanguage: z.enum(["RASTER_HTML", "PPLA", "PPLB", "ZPL"]).optional(),
   // Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri).
   travelerCardConfig: z
     .object({

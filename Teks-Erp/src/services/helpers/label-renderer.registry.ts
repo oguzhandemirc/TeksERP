@@ -1,10 +1,11 @@
 // =============================================================================
 // Etiket render driver registry — yazıcı diline göre çıktı seç
 // =============================================================================
-// Faz-1: RASTER_HTML (mevcut HTML hattı, fiziksel baskı bugün çalışır) + PPLA
-// (Argox native komut üretimi). PPLB/ZPL gelecekte buraya eklenir; model→dil
-// eşlemesi DB'de (PrinterModel.language) → "yazıcı değişse de kodlar kaybolmaz".
-// Bilinmeyen/eksik driver → RASTER_HTML failsafe.
+// 4 dil de hazır: RASTER_HTML (HTML hattı, fiziksel baskı bugün OS-sürücüyle), PPLA
+// (Argox/Datamax-DPL), PPLB (Eltron/EPL2), ZPL (Zebra) — komut ÜRETİMİ gerçek;
+// ham gönderim Faz-2 (printer-transport simüle). Dil seçimi: global ayar
+// `label.printerLanguage` (default PPLA) + istasyon yazıcı modeli (PrinterModel.language)
+// override. Bilinmeyen/eksik driver → RASTER_HTML failsafe.
 // =============================================================================
 
 import { PrinterLanguage, type LabelTemplate } from "@prisma/client";
@@ -12,6 +13,8 @@ import type { LabelPayload } from "../label.service";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
 import { buildRollLabelHtml } from "./label-html.helper";
 import { buildRollLabelPpla } from "./label-ppla.helper";
+import { buildRollLabelPplb } from "./label-pplb.helper";
+import { buildRollLabelZpl } from "./label-zpl.helper";
 
 export interface LabelRenderInput {
   payload: LabelPayload;
@@ -44,7 +47,8 @@ const RENDERERS: Partial<Record<PrinterLanguage, Renderer>> = {
       format: i.format,
     }),
   PPLA: (i) => buildRollLabelPpla({ payload: i.payload, format: i.format, copies: i.copies }),
-  // PPLB / ZPL: gelecek (Faz-2) — eklenince model.language otomatik dispatch eder.
+  PPLB: (i) => buildRollLabelPplb({ payload: i.payload, format: i.format, copies: i.copies }),
+  ZPL: (i) => buildRollLabelZpl({ payload: i.payload, format: i.format, copies: i.copies }),
 };
 
 const CONTENT_TYPES: Record<PrinterLanguage, string> = {

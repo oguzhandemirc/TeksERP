@@ -1,0 +1,113 @@
+// =============================================================================
+// Test: çok-dilli native etiket (PPLB/ZPL üreteçleri + registry dispatch +
+//       global yazıcı dili ayarı + resolver dil fallback)
+// Çalıştır: npx tsx scripts/test_label_native_languages.ts
+// =============================================================================
+import prisma from "../src/lib/prisma";
+import { buildRollLabelPplb } from "../src/services/helpers/label-pplb.helper";
+import { buildRollLabelZpl } from "../src/services/helpers/label-zpl.helper";
+import { renderLabel } from "../src/services/helpers/label-renderer.registry";
+import { resolveLabelFormat } from "../src/services/helpers/label-format.resolver";
+import { readPrinterLanguage, SETTING_KEYS, DEFAULT_PRINTER_LANGUAGE } from "../src/services/system-setting.service";
+import type { ResolvedLabelFormat } from "../src/services/helpers/label-format.resolver";
+import type { LabelPayload } from "../src/services/label.service";
+
+let pass = 0;
+let fail = 0;
+function check(label: string, ok: boolean, extra = "") {
+  if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
+  else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
+}
+
+const format: ResolvedLabelFormat = {
+  widthMm: 100, heightMm: 148, marginMm: 3, orientation: "PORTRAIT",
+  dpi: 203, language: "PPLA", profileId: "p1", source: "machine",
+};
+const payload = {
+  barcode: "TEKS-20260615-XY99", qualityGrade: "1.KALITE", widthCm: 150,
+  lengthMeters: 320, weightKg: 40, itemName: "PATOS", colorName: "MAVI",
+  customerName: "ACME", batchNumber: "P-1",
+} as unknown as LabelPayload;
+
+async function main() {
+  // --- PPLB (EPL2) ---
+  const pplb = buildRollLabelPplb({ payload, format, copies: 2 });
+  check("PPLB: N (buffer temizle)", /^N/m.test(pplb));
+  check("PPLB: q<genişlik> + Q<boy>", /q\d+/.test(pplb) && /Q\d+,\d+/.test(pplb));
+  check("PPLB: A metin alanı + ürün", /A\d+,\d+,0,\d+,1,1,N,"PATOS"/.test(pplb));
+  check("PPLB: B Code128 + barkod", /B\d+,\d+,0,1,/.test(pplb) && pplb.includes("TEKS-20260615-XY99"));
+  check("PPLB: b QR", /b\d+,\d+,Q,/.test(pplb));
+  check("PPLB: P2 (kopya)", pplb.includes("P2"));
+
+  // --- ZPL ---
+  const zpl = buildRollLabelZpl({ payload, format, copies: 3 });
+  check("ZPL: ^XA…^XZ frame", zpl.includes("^XA") && zpl.trimEnd().endsWith("^XZ"));
+  check("ZPL: ^PW + ^LL", /\^PW\d+/.test(zpl) && /\^LL\d+/.test(zpl));
+  check("ZPL: ^FO/^A0N metin + ürün", /\^FO\d+,\d+\^A0N,\d+,\d+\^FDPATOS\^FS/.test(zpl));
+  check("ZPL: ^BCN Code128 + barkod", zpl.includes("^BCN") && zpl.includes("TEKS-20260615-XY99"));
+  check("ZPL: ^BQN QR", zpl.includes("^BQN"));
+  check("ZPL: ^PQ3 (kopya)", zpl.includes("^PQ3"));
+
+  // --- registry dispatch ---
+  const mk = (language: ResolvedLabelFormat["language"]) =>
+    renderLabel(language, { payload, template: null, barcodeSvg: "", qrSvg: "", copies: 1, format: { ...format, language } });
+  check("registry RASTER_HTML → html", mk("RASTER_HTML").content.includes("<!doctype html") && mk("RASTER_HTML").contentType.includes("text/html"));
+  check("registry PPLA → STX L", mk("PPLA").content.includes("\x02L") && mk("PPLA").contentType.includes("text/plain"));
+  check("registry PPLB → N/q", /^N/m.test(mk("PPLB").content));
+  check("registry ZPL → ^XA", mk("ZPL").content.includes("^XA"));
+
+  // --- sanitize: ZPL ^/~ ve PPLB " enjeksiyonu temizlenir ---
+  const dirtyZpl = buildRollLabelZpl({ payload: { ...payload, itemName: "A^B~C" } as unknown as LabelPayload, format, copies: 1 });
+  check("ZPL sanitize: ^ ~ veriden ayıklandı", dirtyZpl.includes("A B C") && !dirtyZpl.includes("A^B~C"));
+  const dirtyPplb = buildRollLabelPplb({ payload: { ...payload, itemName: 'A"B' } as unknown as LabelPayload, format, copies: 1 });
+  check("PPLB sanitize: \" veriden ayıklandı", !dirtyPplb.includes('"A"B"'));
+
+  // --- global ayar (readPrinterLanguage) + resolver dil fallback ---
+  check("default dil = PPLA", DEFAULT_PRINTER_LANGUAGE === "PPLA");
+  // Operatörün ayarlamış olabileceği değeri SİLME — sakla, finally'de geri yükle.
+  const originalLang = await prisma.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE },
+    select: { value: true },
+  });
+
+  try {
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE } });
+    check("ayar yokken read → PPLA", (await readPrinterLanguage()) === "PPLA");
+
+    // geçersiz değer → default'a düşer
+    await prisma.systemSetting.upsert({
+      where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE },
+      update: { value: "GARBAGE" }, create: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE, value: "GARBAGE" },
+    });
+    check("geçersiz değer → PPLA fallback", (await readPrinterLanguage()) === "PPLA");
+
+    // geçerli değer (PPLB) → okunur + resolver model'siz yolda bunu kullanır
+    await prisma.systemSetting.update({
+      where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE }, data: { value: "PPLB" },
+    });
+    check("ayar PPLB → read PPLB", (await readPrinterLanguage()) === "PPLB");
+    const r = await resolveLabelFormat(); // model bağlamı yok → global ayar
+    check("resolver (model'siz) → dil global ayardan (PPLB)", r.language === "PPLB");
+  } finally {
+    // Orijinal değeri geri yükle (yoksa sil) — operatör ayarı korunsun.
+    if (originalLang && typeof originalLang.value === "string") {
+      const v = originalLang.value;
+      await prisma.systemSetting.upsert({
+        where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE },
+        update: { value: v }, create: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE, value: v },
+      });
+    } else {
+      await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE } });
+    }
+  }
+
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  await prisma.$disconnect();
+  process.exit(fail > 0 ? 1 : 0);
+}
+
+main().catch(async (e) => {
+  console.error(e);
+  await prisma.$disconnect();
+  process.exit(1);
+});
