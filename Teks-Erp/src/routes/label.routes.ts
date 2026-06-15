@@ -95,6 +95,40 @@ router.get(
 
 /**
  * @openapi
+ * /api/labels/rolls/{id}/ppla:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Rolün Argox PPLA native komut string'i (text/plain)
+ *     description: |
+ *       `/html`'in native analoğu — Argox OS 214 plus PPLA (Datamax DPL) komutları.
+ *       Faz-1: yalnız ÜRETİLİR (saf string; inceleme/önizleme/gelecek native baskı için);
+ *       ham-bayt gönderim simüle (donanım I/O Faz-2). Format profili (medya + güvenlik payı)
+ *       `/html` ile aynı resolver'dan: `?profileId=` / `?machineId=` veya istasyon (mobil oto).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: profileId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: machineId
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: PPLA komut string'i, content: { text/plain: { schema: { type: string } } } }
+ *       404: { description: Top bulunamadı }
+ */
+router.get(
+  "/rolls/:id/ppla",
+  verifyToken,
+  requireAnyPermission("label:read", ...MOBILE_LABEL_PRINTERS),
+  controller.getRollLabelPpla,
+);
+
+/**
+ * @openapi
  * /api/labels/rolls/bulk-html:
  *   post:
  *     tags: [Labels]

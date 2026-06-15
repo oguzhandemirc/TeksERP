@@ -5,6 +5,10 @@ import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { Input } from "@/components/ui/input";
 import { machineService } from "@/pages/Machines/service";
 import type { Machine } from "@/pages/Machines/types";
+import { printerModelService } from "@/pages/PrinterModels/service";
+import type { PrinterModel } from "@/pages/PrinterModels/types";
+import { labelFormatProfileService } from "@/pages/LabelFormatProfiles/service";
+import type { LabelFormatProfile } from "@/pages/LabelFormatProfiles/types";
 import {
   machineHardwareFormDefaults,
   machineHardwareFormSchema,
@@ -33,6 +37,8 @@ export function MachineHardwareFormDialog({ open, onOpenChange, initial, onSubmi
         mtPattern: initial.mtPattern ?? "",
         mtPattern2: initial.mtPattern2 ?? "",
         notes: initial.notes ?? "",
+        printerModelId: initial.printerModelId ?? "",
+        formatProfileId: initial.formatProfileId ?? "",
         isActive: initial.isActive,
       }
     : machineHardwareFormDefaults;
@@ -73,6 +79,45 @@ export function MachineHardwareFormDialog({ open, onOpenChange, initial, onSubmi
             </FormField>
             <FormField label="Yazıcı MAC">
               <Input className="font-mono" {...form.register("printerMac")} placeholder="00:23:09:01:15:01" />
+            </FormField>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/20 p-3">
+            <FormField label="Yazıcı Modeli" hint="Bu istasyonun yazıcısı (Argox vb.) — etiket dili buradan.">
+              <Controller
+                control={form.control}
+                name="printerModelId"
+                render={({ field }) => (
+                  <ReferenceSelect<PrinterModel>
+                    value={field.value || null}
+                    onChange={(v) => field.onChange(v ?? "")}
+                    service={printerModelService}
+                    queryKey="printer-models"
+                    getLabel={(m) => `${m.code} — ${m.name}`}
+                    placeholder="Model seç..."
+                    nullable
+                    noneLabel="— (tanımsız)"
+                  />
+                )}
+              />
+            </FormField>
+            <FormField label="Format Profili" hint="Boş → modelin varsayılan profili.">
+              <Controller
+                control={form.control}
+                name="formatProfileId"
+                render={({ field }) => (
+                  <ReferenceSelect<LabelFormatProfile>
+                    value={field.value || null}
+                    onChange={(v) => field.onChange(v ?? "")}
+                    service={labelFormatProfileService}
+                    queryKey="label-format-profiles"
+                    getLabel={(p) => `${p.code} — ${p.name}`}
+                    placeholder="Profil seç..."
+                    nullable
+                    noneLabel="— (model default)"
+                  />
+                )}
+              />
             </FormField>
           </div>
 

@@ -30,6 +30,21 @@ const previewSchema = z.object({
   })),
 });
 
+/**
+ * Fiziksel format çözümü girdisi: explicit ?profileId= veya makine bağlamı.
+ * machineId — mobil isteklerde device.middleware'den (req.device.machineId) OTO;
+ * Electron'da yoksa opsiyonel ?machineId= query. Yoksa resolver sistem-default'a düşer.
+ */
+function parseFormatOpts(req: Request): { profileId?: string; machineId?: string } {
+  const machineId =
+    req.device?.machineId ??
+    (typeof req.query.machineId === "string" ? req.query.machineId : undefined);
+  return {
+    profileId: typeof req.query.profileId === "string" ? req.query.profileId : undefined,
+    machineId: machineId ?? undefined,
+  };
+}
+
 export class LabelController {
   private service = new LabelService();
 
@@ -84,11 +99,33 @@ export class LabelController {
             typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
               ? parseInt(req.query.copies, 10)
               : undefined,
+          ...parseFormatOpts(req),
         },
       );
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("X-Label-Kind", result.data.kind);
       res.status(200).send(result.data.html);
+    } catch (e) { next(e); }
+  };
+
+  /**
+   * Rolün Argox PPLA native komut string'i (text/plain). `/html`'in native analoğu.
+   * Faz-1: yalnız ÜRETİLİR (gönderim simüle). Format profili `/html` ile aynı resolver.
+   */
+  getRollLabelPpla = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getRollLabelPpla(req.params.id as string, {
+        orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
+        customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
+        stock: req.query.stock === "1" || req.query.stock === "true",
+        copies:
+          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
+            ? parseInt(req.query.copies, 10)
+            : undefined,
+        ...parseFormatOpts(req),
+      });
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.status(200).send(result.data.ppla);
     } catch (e) { next(e); }
   };
 
