@@ -39,6 +39,23 @@ export interface OrderLineOverridePayload {
   customerColorName?: string | null;
 }
 
+/**
+ * Etiketi belirli bir müşteri/sipariş bağlamında render/bas — Yeniden-Etiketleme
+ * istasyonu "B müşterisi için yeniden bas" akışı. Boş bırakılırsa (varsayılan)
+ * backend `lastLabelSnapshot`'a düşer = mevcut davranış (geriye uyumlu).
+ */
+export interface LabelCustomerContext {
+  customerId?: string | null;
+  orderLineId?: string | null;
+}
+
+function customerContextQuery(opts?: LabelCustomerContext): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (opts?.customerId) params.customerId = opts.customerId;
+  if (opts?.orderLineId) params.orderLineId = opts.orderLineId;
+  return params;
+}
+
 export const labelService = {
   getRollLabel: (rollId: string): Promise<ApiResponse<RollLabelPayload>> =>
     apiClient
@@ -47,11 +64,13 @@ export const labelService = {
 
   /**
    * Etiketin tam HTML'i — backend `LabelTemplate` config'ine göre render edilir,
-   * mobil basım ve LabelTemplates önizlemesi ile birebir aynı çıktı.
+   * mobil basım ve LabelTemplates önizlemesi ile birebir aynı çıktı. `opts` ile
+   * belirli müşteri/sipariş bağlamı geçilebilir (relabel "B için bas" önizlemesi).
    */
-  getRollLabelHtml: (rollId: string): Promise<string> =>
+  getRollLabelHtml: (rollId: string, opts?: LabelCustomerContext): Promise<string> =>
     apiClient
       .get<string>(`/api/labels/rolls/${rollId}/html`, {
+        params: customerContextQuery(opts),
         responseType: "text",
         transformResponse: [(d) => d],
       })
@@ -68,9 +87,15 @@ export const labelService = {
       )
       .then((r) => r.data),
 
-  printRollLabel: (rollId: string): Promise<ApiResponse<{ rollId: string }>> =>
+  printRollLabel: (
+    rollId: string,
+    opts?: LabelCustomerContext,
+  ): Promise<ApiResponse<{ rollId: string }>> =>
     apiClient
-      .post<ApiResponse<{ rollId: string }>>(`/api/labels/rolls/${rollId}/print`)
+      .post<ApiResponse<{ rollId: string }>>(`/api/labels/rolls/${rollId}/print`, {
+        ...(opts?.customerId ? { customerId: opts.customerId } : {}),
+        ...(opts?.orderLineId ? { orderLineId: opts.orderLineId } : {}),
+      })
       .then((r) => r.data),
 
   /** Saha #7: toplu etiket HTML'i — seçili topların hepsi tek belgede (her top kendi sayfası). */

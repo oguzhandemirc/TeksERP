@@ -128,6 +128,56 @@ export interface RollHistoryPayload {
 }
 
 /**
+ * Yeniden-Etiketleme istasyonu — "B" müşteri adayı. Topu üreten iş emrinin
+ * bağlı sipariş satırlarından distinct müşteriler; operatöre "etiket bu müşteri
+ * için yeniden bas" önerisi olarak sunulur. orderLineId = o müşterinin temsil
+ * sipariş satırı (müşteriye özel ad override'ı varsa bundan çözülür).
+ */
+export interface RelabelCandidateCustomer {
+  customerId: string;
+  customerCode: string;
+  customerName: string;
+  orderLineId: string;
+  orderNumber: string;
+}
+
+/**
+ * Yeniden-Etiketleme istasyonu için zengin top bağlamı — `findRollByBarcode`'un
+ * lean lookup'ından AYRI: relabel formunun seed'i (renk/kalite/en/özellik),
+ * konum/guard (sevkiyat/çuval), son basıldığı yer ("A") ve "B" adayları.
+ */
+export interface RelabelContext {
+  id: string;
+  barcode: string | null;
+  status: RollStatus;
+  entrySource: string;
+  itemId: string;
+  item: { id: string; code: string; name: string };
+  colorId: string | null;
+  color: { id: string; code: string; name: string; hex: string | null } | null;
+  /** Donmuş kalite snapshot string'i (örn "1.KALITE") — relabel PATCH'i bunu yazar. */
+  qualityGrade: string;
+  qualityGradeId: string | null;
+  qualityGradeRef: { id: string; code: string; name: string; color: string | null } | null;
+  width: number | null;
+  currentQty: number;
+  weightKg: number | null;
+  markedForKartela: boolean;
+  /** Topta hâlihazırda damgalı özellikler — relabel formu TAM liste olarak replace eder. */
+  properties: { id: string; code: string; name: string; color: string | null }[];
+  propertyIds: string[];
+  /** Son basılan etiketin künyesi ("A": kime/hangi sipariş/ne zaman) — null=hiç basılmadı/stok. */
+  lastLabelSnapshot: Prisma.JsonValue | null;
+  /** Bulunduğu sevkiyat — committed (PREPARING dışı) ise spec düzenleme kilitlenir (backend de 409). */
+  shipment: { id: string; shipmentNo: string; status: ShipmentStatus } | null;
+  sack: { id: string; sackNo: string; seq: number } | null;
+  /** Spec düzenleme kilitli mi (committed sevkiyatta) — frontend kolaylığı; backend guard ayrıca enforce eder. */
+  specLocked: boolean;
+  /** "B" önerileri — topu üreten WO'nun bağlı siparişlerinden distinct müşteriler. */
+  candidateCustomers: RelabelCandidateCustomer[];
+}
+
+/**
  * Top iptal (soft-delete) önizlemesi — operatöre silmeden ÖNCE gösterilir.
  * Yıkıcı işlem kuralı: somut etki (top hangi istasyonda/iş emrinde aktif)
  * net listelenir, soyut "X kayıt etkilenecek" yetmez. softDelete'in guard
@@ -930,6 +980,127 @@ export class InventoryService {
     }
 
     return { success: true, data: roll };
+  }
+
+  /**
+   * Yeniden-Etiketleme istasyonu için zengin bağlam — barkod okutunca topun tüm
+   * spec'i (renk/kalite/en/özellik), konumu/guard'ı (sevkiyat/çuval), son basıldığı
+   * yer (`lastLabelSnapshot` = "A") ve "B" müşteri adayları (topu üreten WO'nun
+   * bağlı siparişlerinden) döner. Salt-okunur — relabel'in kendisi mevcut
+   * `applyManualProperties` (spec) + label.service (bas) uçlarıyla yapılır.
+   *
+   * `findRollByBarcode`'tan AYRI tutulur: o lean lookup (depo/Tambur okutması, hot
+   * path); bu method üretim-zinciri include'larını yalnız relabel istasyonu için taşır.
+   */
+  async getRelabelContext(barcode: string): Promise<ApiResponse<RelabelContext | null>> {
+    const roll = await prisma.roll.findUnique({
+      where: { barcode },
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        entrySource: true,
+        itemId: true,
+        item: { select: { id: true, code: true, name: true } },
+        colorId: true,
+        color: { select: { id: true, code: true, name: true, hex: true } },
+        qualityGrade: true,
+        qualityGradeId: true,
+        qualityGradeRef: { select: { id: true, code: true, name: true, color: true } },
+        width: true,
+        currentQty: true,
+        weightKg: true,
+        markedForKartela: true,
+        lastLabelSnapshot: true,
+        properties: {
+          select: {
+            propertyId: true,
+            property: { select: { id: true, code: true, name: true, color: true } },
+          },
+        },
+        shipment: { select: { id: true, shipmentNo: true, status: true } },
+        sack: { select: { id: true, sackNo: true, seq: true } },
+        producedInStep: {
+          select: {
+            workOrder: {
+              select: {
+                orderLinks: {
+                  // Aday müşteri temsilcisi deterministik olsun: aynı müşterinin
+                  // bu WO'da birden çok satırı varsa (farklı override'larla) hep aynı
+                  // orderLineId seçilsin — yoksa "first seen" Prisma'da rastgele.
+                  orderBy: [{ orderLine: { order: { orderNumber: "asc" } } }, { orderLineId: "asc" }],
+                  select: {
+                    orderLine: {
+                      select: {
+                        id: true,
+                        order: {
+                          select: {
+                            orderNumber: true,
+                            customer: { select: { id: true, code: true, name: true } },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!roll) {
+      return { success: false, data: null, message: "Barkod bulunamadı" };
+    }
+
+    // "B" adayları — topu üreten WO'nun bağlı sipariş satırlarından distinct müşteri.
+    // Aynı müşteri birden çok satırda olabilir; ilk görülen satır temsil seçilir.
+    const candidateMap = new Map<string, RelabelCandidateCustomer>();
+    for (const link of roll.producedInStep?.workOrder?.orderLinks ?? []) {
+      const ol = link.orderLine;
+      const cust = ol.order.customer;
+      if (!candidateMap.has(cust.id)) {
+        candidateMap.set(cust.id, {
+          customerId: cust.id,
+          customerCode: cust.code,
+          customerName: cust.name,
+          orderLineId: ol.id,
+          orderNumber: ol.order.orderNumber,
+        });
+      }
+    }
+
+    const specLocked =
+      roll.shipment != null && roll.shipment.status !== ShipmentStatus.PREPARING;
+
+    return {
+      success: true,
+      data: {
+        id: roll.id,
+        barcode: roll.barcode,
+        status: roll.status,
+        entrySource: roll.entrySource,
+        itemId: roll.itemId,
+        item: roll.item,
+        colorId: roll.colorId,
+        color: roll.color,
+        qualityGrade: roll.qualityGrade,
+        qualityGradeId: roll.qualityGradeId,
+        qualityGradeRef: roll.qualityGradeRef,
+        width: roll.width != null ? Number(roll.width) : null,
+        currentQty: Number(roll.currentQty),
+        weightKg: roll.weightKg != null ? Number(roll.weightKg) : null,
+        markedForKartela: roll.markedForKartela,
+        lastLabelSnapshot: roll.lastLabelSnapshot,
+        properties: roll.properties.map((p) => p.property),
+        propertyIds: roll.properties.map((p) => p.propertyId),
+        shipment: roll.shipment,
+        sack: roll.sack,
+        specLocked,
+        candidateCustomers: [...candidateMap.values()],
+      },
+    };
   }
 
   /**

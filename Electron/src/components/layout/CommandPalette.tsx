@@ -24,7 +24,7 @@ interface Props {
 
 export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
-  const { isAdmin, hasPermission } = useRoleAccess();
+  const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
   const { favorites } = useFavorites();
   const { prefs, setPreference } = usePreferences();
   const { theme, setTheme } = useTheme();
@@ -52,6 +52,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   };
 
   const isVisible = (entry: CommandEntry) => {
+    if (entry.permissionAny) return hasAnyPermission(entry.permissionAny);
     if (entry.permission) return hasPermission(entry.permission);
     if (entry.adminOnly) return isAdmin;
     return true;
