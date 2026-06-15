@@ -73,6 +73,15 @@ export function LabelSettingsSection() {
     },
   });
 
+  const nativeOn = flagsQ.data?.data?.nativeSendEnabled ?? false;
+  const nativeMut = useMutation({
+    mutationFn: (payload: { nativeSendEnabled: boolean }) => featureFlagService.update(payload),
+    onSuccess: () => {
+      toast.success("Doğrudan gönderim ayarı kaydedildi.");
+      void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
+    },
+  });
+
   if (flagsQ.isLoading) return <Skeleton className="h-24 w-full" />;
 
   const num = Number(copies);
@@ -199,6 +208,29 @@ export function LabelSettingsSection() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Faz-2: doğrudan yazıcıya gönderim (opt-in) */}
+        <div className="border-t pt-4">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={nativeOn}
+              disabled={nativeMut.isPending}
+              onChange={(e) => nativeMut.mutate({ nativeSendEnabled: e.target.checked })}
+            />
+            <span>
+              <span className="font-medium">Doğrudan yazıcıya gönder (native)</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                Açıkken etiket komutları (PPLA/ZPL) backend'den yazıcıya doğrudan (TCP 9100)
+                gönderilir — OS yazıcı diyaloğu çıkmaz. <strong>Kapalıyken (varsayılan)</strong>{" "}
+                simüle edilir; fiziksel baskı HTML + OS sürücüyle yapılır. Açmadan önce makinelerin
+                <em> Yazıcı IP</em>'si tanımlı olmalı (Tanımlar → Makine Donanımı) ve bir test baskısıyla
+                doğrulanmalı.
+              </span>
+            </span>
+          </label>
         </div>
       </div>
     </PermissionGate>

@@ -18,6 +18,7 @@
 
 import type { LabelPayload } from "../label.service";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
+import { asciiFold } from "./native-label.shared";
 
 const STX = "\x02";
 const CR = "\r";
@@ -32,10 +33,10 @@ function mmToDots(mm: number, dpi: number): number {
   return Math.round((mm * dpi) / 25.4);
 }
 
-/** Veriden kontrol karakterlerini (STX/CR/LF vb.) ayıkla — komut frame'ini bozmasın. */
+/** Kontrol karakterini ayıkla + ASCII'ye katla (latin1 kaybı/komut-baytı enjeksiyonu yok). */
 function clean(s: string | number | null | undefined): string {
   // eslint-disable-next-line no-control-regex
-  return String(s ?? "").replace(/[\x00-\x1f]/g, " ").trim();
+  return asciiFold(String(s ?? "").replace(/[\x00-\x1f]/g, " ")).trim();
 }
 
 function pad4(n: number): string {

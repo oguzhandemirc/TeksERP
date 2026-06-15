@@ -1,7 +1,11 @@
+import { useState } from "react";
 import { Controller } from "react-hook-form";
+import { Printer } from "lucide-react";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TestPrintDialog } from "./TestPrintDialog";
 import {
   Select,
   SelectContent,
@@ -25,6 +29,7 @@ interface Props {
 }
 
 export function LabelFormatProfileFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+  const [testId, setTestId] = useState<string | null>(null);
   const defaults: LabelFormatProfileFormValues = initial
     ? {
         code: initial.code,
@@ -40,6 +45,7 @@ export function LabelFormatProfileFormDialog({ open, onOpenChange, initial, onSu
     : labelFormatProfileFormDefaults;
 
   return (
+    <>
     <EntityFormDialog<LabelFormatProfileFormValues>
       open={open}
       onOpenChange={onOpenChange}
@@ -51,6 +57,13 @@ export function LabelFormatProfileFormDialog({ open, onOpenChange, initial, onSu
     >
       {(form) => (
         <>
+          {initial && (
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setTestId(initial.id)}>
+                <Printer className="h-3.5 w-3.5" /> Test Baskısı
+              </Button>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Kod" error={form.formState.errors.code} required>
               <Input className="font-mono" {...form.register("code")} placeholder="ARGOX_TOP_100x148" disabled={Boolean(initial)} />
@@ -107,5 +120,11 @@ export function LabelFormatProfileFormDialog({ open, onOpenChange, initial, onSu
         </>
       )}
     </EntityFormDialog>
+    <TestPrintDialog
+      profileId={testId}
+      profileName={initial?.name}
+      onOpenChange={(o) => !o && setTestId(null)}
+    />
+    </>
   );
 }

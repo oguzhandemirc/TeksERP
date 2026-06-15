@@ -18,7 +18,7 @@
 // =============================================================================
 
 import bwipjs from "bwip-js";
-import { readLabelCopies } from "./system-setting.service";
+import { readLabelCopies, readLabelNativeSendEnabled } from "./system-setting.service";
 import { LabelKind, PrinterLanguage, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
@@ -28,6 +28,7 @@ import { resolveName, normalizeOverride, NameSource } from "./helpers/customer-n
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
+import { dispatchNativeSend, type PrinterTransportResult } from "./helpers/printer-transport";
 
 const TABLE_ORDER_LINE = "ORDER_LINE";
 const TABLE_LABEL_PRINT = "LABEL_PRINT_EVENT";
@@ -490,6 +491,137 @@ export class LabelService {
       success: true,
       data: { content: r.content, language: r.language, contentType: r.contentType, kind, profileId: input.format.profileId },
     };
+  }
+
+  /** HTML dilinde doğrudan gönderim yok (OS sürücü); aksi halde transport'a delege. */
+  private async dispatchOrGuard(
+    rendered: { content: string; language: PrinterLanguage },
+    opts: { enabled: boolean; printerIp?: string | null; port?: number },
+  ): Promise<PrinterTransportResult> {
+    if (rendered.language === PrinterLanguage.RASTER_HTML) {
+      return {
+        delivered: false,
+        simulated: !opts.enabled,
+        language: rendered.language,
+        bytes: Buffer.byteLength(rendered.content, "utf8"),
+        target: opts.printerIp ? `${opts.printerIp}:${opts.port ?? 9100}` : "—",
+        note: "HTML dilinde doğrudan gönderim yok — OS yazıcı sürücüsü kullanılır.",
+      };
+    }
+    return dispatchNativeSend(rendered.content, {
+      language: rendered.language,
+      enabled: opts.enabled,
+      printerIp: opts.printerIp,
+      port: opts.port,
+    });
+  }
+
+  /**
+   * FAZ-2 PRODUCTION: rolün etiketini seçili native dilde üretip İSTASYONUN yazıcısına
+   * RAW TCP (9100) ile gönderir — `label.nativeSendEnabled` AÇIKKEN. Kapalıyken simüle
+   * eder (Faz-1, hiç socket yok). Hedef IP istasyon makinesinden (MachineHardware.printerIp).
+   */
+  async printRollNative(
+    rollId: string,
+    userId?: string,
+    opts?: RollLabelRenderOpts & { port?: number },
+  ): Promise<ApiResponse<PrinterTransportResult & { kind: LabelKind }>> {
+    const { input, kind } = await this.buildRollRenderInput(rollId, undefined, opts);
+    const rendered = renderLabel(input.format.language, input);
+    const enabled = await readLabelNativeSendEnabled();
+    let printerIp: string | null = null;
+    if (opts?.machineId) {
+      const hw = await prisma.machineHardware.findUnique({
+        where: { machineId: opts.machineId },
+        select: { printerIp: true },
+      });
+      printerIp = hw?.printerIp ?? null;
+    }
+    const result = await this.dispatchOrGuard(rendered, { enabled, printerIp, port: opts?.port });
+    // İz (best-effort, tx dışı).
+    await AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "LABEL_NATIVE_PRINT",
+      recordId: rollId,
+      newData: {
+        language: result.language,
+        delivered: result.delivered,
+        simulated: result.simulated,
+        target: result.target,
+        ...(result.error ? { error: result.error } : {}),
+      },
+    }).catch(() => undefined);
+    return { success: true, data: { ...result, kind } };
+  }
+
+  /**
+   * Test Et: profil geometrisinde ÖRNEK etiket HTML'i — boyut/pay görsel doğrulaması
+   * (Faz-1, her zaman güvenli). Gerçek top gerekmez; mock veri.
+   */
+  async getSampleLabelHtml(profileId?: string | null): Promise<ApiResponse<{ html: string }>> {
+    const input = await this.buildSampleRenderInput(profileId);
+    const html = renderLabel(PrinterLanguage.RASTER_HTML, input).content;
+    return { success: true, data: { html } };
+  }
+
+  /**
+   * Test Et: ÖRNEK etiketi seçili dilde üretip verilen yazıcı IP'sine gönderir.
+   * `label.nativeSendEnabled` açıkken gerçek gönderir, kapalıyken simüle — admin'in
+   * gerçek yazıcıyı (Faz-2) doğrulama aracı.
+   */
+  async testNativeSend(opts: {
+    profileId?: string | null;
+    printerIp: string;
+    port?: number;
+    language?: PrinterLanguage;
+  }): Promise<ApiResponse<PrinterTransportResult>> {
+    const input = await this.buildSampleRenderInput(opts.profileId);
+    const lang = opts.language ?? input.format.language;
+    const rendered = renderLabel(lang, input);
+    const enabled = await readLabelNativeSendEnabled();
+    const result = await this.dispatchOrGuard(rendered, {
+      enabled,
+      printerIp: opts.printerIp,
+      port: opts.port,
+    });
+    return { success: true, data: result };
+  }
+
+  /** Örnek (mock) top etiketi render girdisi — Test Et için. profileId geometriyi belirler. */
+  private async buildSampleRenderInput(profileId?: string | null): Promise<LabelRenderInput> {
+    const sampleBarcode = "TEKS-ORNEK-0001";
+    const payload: LabelPayload = {
+      rollId: "ornek-id",
+      barcode: sampleBarcode,
+      status: "WAREHOUSE",
+      qualityGrade: "1.KALITE",
+      widthCm: 150,
+      lengthMeters: 320,
+      weightKg: 42,
+      markedForKartela: false,
+      itemCode: "ORNEK",
+      itemName: "ÖRNEK ÜRÜN",
+      itemNameDefault: "ÖRNEK ÜRÜN",
+      itemNameSource: "DEFAULT",
+      colorCode: "MV",
+      colorName: "MAVİ",
+      colorNameDefault: "MAVİ",
+      colorNameSource: "DEFAULT",
+      customerName: "ÖRNEK MÜŞTERİ",
+      customerId: null,
+      orderNumber: "ORN-0001",
+      orderLineId: null,
+      batchNumber: "P-ORNEK-001",
+      printedAt: new Date().toISOString(),
+    };
+    const template = await prisma.labelTemplate.findFirst({
+      where: { kind: LabelKind.ROLL_FINISHED, isDefault: true, isActive: true },
+    });
+    const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: sampleBarcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
+    const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: sampleBarcode, scale: 3, backgroundcolor: "FFFFFF" });
+    const format = await resolveLabelFormat({ profileId });
+    return { payload, template, barcodeSvg, qrSvg, copies: 1, format };
   }
 
   /**

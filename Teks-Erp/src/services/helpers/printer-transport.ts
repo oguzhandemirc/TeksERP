@@ -1,42 +1,131 @@
 // =============================================================================
-// Yazıcı transport — native komutların yazıcıya GÖNDERİMİ (FAZ-1 SİMÜLE)
+// Yazıcı transport — native komutların yazıcıya gönderimi
 // =============================================================================
-// Faz-1 kuralı (CLAUDE.md): "COM port / donanım entegrasyonları sadece simüle
-// edilir." Bu modül gerçek socket(9100)/USB/COM AÇMAZ — sadece "ne, nereye, kaç
-// bayt" özetini döner (mobil/hardware.service.ts random-değer simülasyon kalıbıyla
-// aynı felsefe). RASTER_HTML fiziksel baskı OS-sürücüyle (Electron iframe / mobil
-// expo-print) yapılır; bu transport native diller (PPLA/ZPL) içindir.
+// FAZ-1 (varsayılan): GÖNDERME SİMÜLE — global ayar `label.nativeSendEnabled`
+// KAPALI iken hiçbir socket açılmaz, sadece "ne, nereye, kaç bayt" özeti döner
+// (CLAUDE.md "donanım sadece simüle" kuralı korunur).
 //
-// FAZ-2: gerçek `net.Socket` / USB yazısı buraya takılır; imza değişmeden.
+// FAZ-2 (opt-in): ayar AÇIK + hedef yazıcı IP'si varsa → backend RAW TCP (port 9100)
+// ile PPLA/ZPL baytlarını DOĞRUDAN yazıcıya gönderir. Backend fabrika LAN'ındadır,
+// yazıcıya ulaşır; tablet/Electron sadece tetikler. Default kapalı olduğu için
+// hiç yapılandırılmamış kurulumlar Faz-1 davranışında kalır.
+//
+// Doğrulama: localhost sahte TCP dinleyiciyle bağlantı + bayt doğrulanır
+// (scripts/test_printer_transport.ts). Fiziksel baskı sahada gerçek Argox ile teyit.
 // =============================================================================
 
+import net from "net";
 import { PrinterLanguage } from "@prisma/client";
 
 export interface PrinterTransportResult {
-  /** Faz-1'de daima false — gerçek gönderim yok. */
+  /** Gerçekten yazıcıya yazıldı mı (Faz-2, ayar açık + IP var + bağlantı OK). */
   delivered: boolean;
-  /** Faz-1'de daima true. */
+  /** Faz-1 simülasyon mu (ayar kapalı). */
   simulated: boolean;
   language: PrinterLanguage;
   bytes: number;
-  /** "ip:port" veya bağlı değilse açıklama. */
+  /** "ip:port" veya açıklama. */
   target: string;
+  /** Gönderim hatası (bağlantı/zaman aşımı) — varsa. */
+  error?: string;
   note: string;
 }
 
-export function simulateNativeSend(
+const DEFAULT_PORT = 9100;
+const DEFAULT_TIMEOUT_MS = 5000;
+
+/** Ham native baytları yazıcıya RAW TCP ile yaz. PPLA/ZPL latin1/binary kodlanır. */
+function sendOverTcp(
   content: string,
-  opts: { language: PrinterLanguage; printerIp?: string | null; port?: number },
-): PrinterTransportResult {
-  const target = opts.printerIp
-    ? `${opts.printerIp}:${opts.port ?? 9100}`
-    : "(yazıcı IP'si tanımsız)";
-  return {
-    delivered: false,
-    simulated: true,
-    language: opts.language,
-    bytes: Buffer.byteLength(content, "utf8"),
-    target,
-    note: "Faz-1 simülasyon — fiziksel baskı HTML+OS sürücüyle; native ham-gönderim Faz-2.",
-  };
+  host: string,
+  port: number,
+  timeoutMs: number,
+): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const buf = Buffer.from(content, "latin1");
+    const socket = new net.Socket();
+    let settled = false;
+    const finish = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      if (err) reject(err);
+      else resolve(buf.length);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once("error", (e) => finish(e instanceof Error ? e : new Error(String(e))));
+    socket.once("timeout", () => finish(new Error("Yazıcı bağlantısı zaman aşımı")));
+    socket.connect(port, host, () => {
+      socket.write(buf, () => {
+        // Yazıcının buffer'ı boşaltması için end ile nazik kapanış.
+        socket.end(() => finish());
+      });
+    });
+  });
+}
+
+/**
+ * Native komut gönderimini yönet — Faz-1 simüle / Faz-2 gerçek.
+ * `enabled=false` (default) → simülasyon (hiç socket yok). `enabled=true` + host → RAW TCP.
+ */
+export async function dispatchNativeSend(
+  content: string,
+  opts: {
+    language: PrinterLanguage;
+    enabled: boolean;
+    printerIp?: string | null;
+    port?: number;
+    timeoutMs?: number;
+  },
+): Promise<PrinterTransportResult> {
+  const port = opts.port ?? DEFAULT_PORT;
+  const bytes = Buffer.byteLength(content, "latin1");
+
+  // FAZ-1 / opt-out → simüle (socket açma)
+  if (!opts.enabled) {
+    return {
+      delivered: false,
+      simulated: true,
+      language: opts.language,
+      bytes,
+      target: opts.printerIp ? `${opts.printerIp}:${port}` : "(yazıcı IP'si tanımsız)",
+      note: "Simülasyon (label.nativeSendEnabled kapalı) — fiziksel baskı HTML+OS sürücüyle.",
+    };
+  }
+
+  // FAZ-2 açık ama IP yok → gönderemez
+  if (!opts.printerIp) {
+    return {
+      delivered: false,
+      simulated: false,
+      language: opts.language,
+      bytes,
+      target: "(yazıcı IP'si tanımsız)",
+      error: "Hedef yazıcı IP'si tanımlı değil (Makine Donanımı → Yazıcı IP).",
+      note: "Gönderilemedi.",
+    };
+  }
+
+  // FAZ-2 gerçek gönderim
+  try {
+    const sent = await sendOverTcp(content, opts.printerIp, port, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    return {
+      delivered: true,
+      simulated: false,
+      language: opts.language,
+      bytes: sent,
+      target: `${opts.printerIp}:${port}`,
+      note: "Yazıcıya gönderildi.",
+    };
+  } catch (e) {
+    return {
+      delivered: false,
+      simulated: false,
+      language: opts.language,
+      bytes,
+      target: `${opts.printerIp}:${port}`,
+      error: e instanceof Error ? e.message : String(e),
+      note: "Gönderim hatası.",
+    };
+  }
 }
