@@ -72,6 +72,7 @@ export class InventoryController {
     this.getWarehouseScope = this.getWarehouseScope.bind(this);
     this.findRollById = this.findRollById.bind(this);
     this.findRollByBarcode = this.findRollByBarcode.bind(this);
+    this.getRelabelContext = this.getRelabelContext.bind(this);
     this.getRollHistory = this.getRollHistory.bind(this);
     this.cancelPreview = this.cancelPreview.bind(this);
     this.softDelete = this.softDelete.bind(this);
@@ -213,6 +214,29 @@ export class InventoryController {
         return;
       }
       const result = await this.service.findRollByBarcode(rawBarcode.trim());
+      if (!result.success) {
+        res.status(404).json(result);
+        return;
+      }
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/rolls/barcode/:barcode/relabel-context
+   * Yeniden-Etiketleme istasyonu — barkod okut, topun tüm spec'i + konum/guard +
+   * son basıldığı yer + "B" müşteri adayları. Salt-okunur.
+   */
+  async getRelabelContext(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const rawBarcode = req.params.barcode;
+      if (typeof rawBarcode !== "string" || rawBarcode.trim() === "") {
+        res.status(400).json({ success: false, message: "Barkod parametresi gerekli" });
+        return;
+      }
+      const result = await this.service.getRelabelContext(rawBarcode.trim());
       if (!result.success) {
         res.status(404).json(result);
         return;

@@ -151,6 +151,35 @@ router.get("/", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_RE
  */
 router.get("/barcode/:barcode", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.findRollByBarcode);
 
+/**
+ * @openapi
+ * /api/rolls/barcode/{barcode}/relabel-context:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Yeniden-Etiketleme bağlamı (spec + guard + son baskı + müşteri adayları)
+ *     description: |
+ *       Yeniden-Etiketleme istasyonu için zengin bağlam. Topun tüm spec'i
+ *       (renk/kalite/en/özellik), konumu/guard'ı (sevkiyat/çuval — `specLocked`),
+ *       son basıldığı yer (`lastLabelSnapshot` = "A") ve "B" müşteri adaylarını
+ *       (topu üreten WO'nun bağlı siparişlerinden) döner. Salt-okunur.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: barcode
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: RelabelContext }
+ *       404: { description: Barkod bulunamadı }
+ */
+router.get(
+  "/barcode/:barcode/relabel-context",
+  verifyToken,
+  requireAnyPermission("roll:read", "roll:write", "label:read", "label:edit", ...MOBILE_ROLL_READ),
+  controller.getRelabelContext,
+);
+
 // `/barcode` veya `/barcode/` (boş param) — Express trailing slash'i strip
 // edip `/barcode` route'una yönlendirir; ardından `/:id` route'u "barcode"
 // string'ini UUID olarak doğrulamaya çalışır (BUG-17 sonrası 400 verir

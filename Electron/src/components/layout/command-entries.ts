@@ -14,6 +14,8 @@ export interface CommandEntry {
   icon: LucideIcon;
   to: string;
   permission?: string;
+  /** Birden çok izinden HERHANGİ biri yeterli (tile permissionAny ile hizalı). */
+  permissionAny?: string[];
   adminOnly?: boolean;
   /** Görünmeyen ek arama anahtarları (cmdk eşleşme değerine eklenir). */
   keywords?: string;
@@ -45,6 +47,7 @@ export const commandSections: CommandSection[] = [
       icon: tile.icon,
       to: tile.to,
       permission: tile.permission,
+      permissionAny: tile.permissionAny,
     })),
   },
   ...definitionGroups.map<CommandSection>((group) => ({

@@ -1,0 +1,63 @@
+// Yeniden-Etiketleme istasyonu — backend `RelabelContext` (inventory.service.ts)
+// şekliyle birebir. Salt-okunur bağlam: spec seed + konum/guard + son baskı + adaylar.
+
+export interface RelabelCandidateCustomer {
+  customerId: string;
+  customerCode: string;
+  customerName: string;
+  orderLineId: string;
+  orderNumber: string;
+}
+
+/** `Roll.lastLabelSnapshot` — son basılan etiketin künyesi ("A"). Tüm alanlar opsiyonel. */
+export interface RelabelLastLabelSnapshot {
+  customerId?: string;
+  customerName?: string;
+  orderNumber?: string;
+  orderLineId?: string;
+  itemName?: string;
+  colorName?: string;
+  printedAt?: string;
+  operatorName?: string;
+  stock?: boolean;
+}
+
+export interface RelabelChip {
+  id: string;
+  code: string;
+  name: string;
+  color: string | null;
+}
+
+export interface RelabelContext {
+  id: string;
+  barcode: string | null;
+  status: string;
+  entrySource: string;
+  itemId: string;
+  item: { id: string; code: string; name: string };
+  colorId: string | null;
+  color: { id: string; code: string; name: string; hex: string | null } | null;
+  qualityGrade: string;
+  qualityGradeId: string | null;
+  qualityGradeRef: { id: string; code: string; name: string; color: string | null } | null;
+  width: number | null;
+  currentQty: number;
+  weightKg: number | null;
+  markedForKartela: boolean;
+  properties: RelabelChip[];
+  propertyIds: string[];
+  lastLabelSnapshot: RelabelLastLabelSnapshot | null;
+  shipment: { id: string; shipmentNo: string; status: string } | null;
+  sack: { id: string; sackNo: string; seq: number } | null;
+  specLocked: boolean;
+  candidateCustomers: RelabelCandidateCustomer[];
+}
+
+/** `PATCH /api/rolls/:id/label` gövdesi — applyManualProperties. propertyIds TAM liste (replace). */
+export interface RelabelSpecPayload {
+  colorId: string | null;
+  propertyIds: string[];
+  width: number | null;
+  qualityGrade?: string;
+}

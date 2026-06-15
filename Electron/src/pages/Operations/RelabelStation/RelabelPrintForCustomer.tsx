@@ -1,0 +1,163 @@
+import { useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Printer, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { customerService } from "@/pages/Customers/service";
+import type { Customer } from "@/pages/Customers/types";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { labelService } from "@/services/labelService";
+import type { RelabelContext } from "./types";
+
+/**
+ * "B müşterisi için yeniden bas" — etiket A için basılmış ama mal B'ye gidecek.
+ * Müşteri seçilince önizleme `customerId` ile yeniden render olur (master alias
+ * cascade), Bas → audit `lastLabelSnapshot`'a B yazar. Spec'e DOKUNMAZ.
+ * `key={ctx.id}` ile remount → seçim taze top'ta sıfırlanır.
+ */
+export function RelabelPrintForCustomer({
+  ctx,
+  onPrinted,
+}: {
+  ctx: RelabelContext;
+  /** Basımdan sonra üst bağlamı tazele — "Son baskı (A)" afişi B'yi göstersin. */
+  onPrinted?: () => void;
+}) {
+  const { hasPermission } = useRoleAccess();
+  const canPrint = hasPermission("label:print");
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // null = müşterisiz (varsayılan/master) render.
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [orderLineId, setOrderLineId] = useState<string | null>(null);
+
+  const htmlQuery = useQuery({
+    queryKey: ["relabel-html", ctx.id, customerId, orderLineId],
+    queryFn: () => labelService.getRollLabelHtml(ctx.id, { customerId, orderLineId }),
+    staleTime: 0,
+  });
+
+  const printMut = useMutation({
+    mutationFn: () => labelService.printRollLabel(ctx.id, { customerId, orderLineId }),
+    onSuccess: () => {
+      toast.success("Etiket basıldı (audit kaydı oluşturuldu).");
+      onPrinted?.(); // backend lastLabelSnapshot=B yazdı → bağlamı tazele
+    },
+  });
+
+  const handlePrint = () => {
+    iframeRef.current?.contentWindow?.print();
+    printMut.mutate();
+  };
+
+  const hasBarcode = Boolean(ctx.barcode);
+
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Müşteri İçin Yeniden Bas</h3>
+        <span className="text-xs text-muted-foreground">A → B</span>
+      </div>
+
+      {/* "B" önerileri — topu üreten WO'nun bağlı siparişlerinden */}
+      {ctx.candidateCustomers.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {ctx.candidateCustomers.map((c) => {
+            const active = customerId === c.customerId && orderLineId === c.orderLineId;
+            return (
+              <button
+                key={c.customerId}
+                type="button"
+                onClick={() => {
+                  setCustomerId(c.customerId);
+                  setOrderLineId(c.orderLineId);
+                }}
+                className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                  active
+                    ? "border-indigo-500 bg-indigo-50 font-medium text-indigo-700"
+                    : "border-input hover:bg-accent"
+                }`}
+                title={`${c.orderNumber} · ${c.customerCode}`}
+              >
+                {c.customerName}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-[16rem] flex-1">
+          <EntityPickerModal<Customer>
+            value={customerId}
+            onChange={(id) => {
+              setCustomerId(id);
+              setOrderLineId(null); // serbest müşteri → sipariş yok; master alias cascade
+            }}
+            service={customerService}
+            queryKey="customers"
+            getLabel={(c) => `${c.code} — ${c.name}`}
+            nullable
+          />
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={customerId === null}
+          onClick={() => {
+            setCustomerId(null);
+            setOrderLineId(null);
+          }}
+          className="gap-1"
+        >
+          <RotateCcw className="h-3.5 w-3.5" /> Müşterisiz
+        </Button>
+      </div>
+
+      {/* Canlı önizleme — seçilen müşteriyle */}
+      {htmlQuery.isLoading ? (
+        <Skeleton className="h-[520px] w-full" />
+      ) : htmlQuery.isError ? (
+        <div className="rounded-md border border-dashed p-6 text-center text-sm text-destructive">
+          Etiket alınamadı: {(htmlQuery.error as Error).message}
+        </div>
+      ) : (
+        <iframe
+          ref={iframeRef}
+          title="Yeniden etiket önizleme"
+          srcDoc={htmlQuery.data ?? ""}
+          sandbox="allow-same-origin allow-modals"
+          className="h-[520px] w-full rounded border bg-white"
+        />
+      )}
+
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs text-muted-foreground">
+          {customerId ? "Seçili müşteri için basılacak" : "Müşterisiz (varsayılan ad) basılacak"}
+        </div>
+        {canPrint ? (
+          <Button
+            type="button"
+            size="sm"
+            disabled={!hasBarcode || htmlQuery.isLoading || printMut.isPending}
+            onClick={handlePrint}
+            className="gap-1"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {printMut.isPending ? "Basılıyor..." : "Bas"}
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">Basım yetkiniz yok</span>
+        )}
+      </div>
+      {!hasBarcode && (
+        <p className="text-[11px] text-amber-700">
+          Bu topun barkodu yok (açık kumaş) — etiket basılamaz; önce Tambur'da kesilmeli.
+        </p>
+      )}
+    </div>
+  );
+}

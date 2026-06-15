@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Tag, Undo2, Palette, PackageOpen } from "lucide-react";
+import { History, Tag, Tags, Undo2, Palette, PackageOpen } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -11,7 +11,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedProgress } from "@/components/motion";
 import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadge";
 import { PermissionGate } from "@/components/PermissionGate";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { RollLabelDialog } from "@/components/labels/RollLabelDialog";
+import { RelabelDialog } from "@/pages/Operations/RelabelStation/RelabelDialog";
 import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from "@/types/enums";
 import { rollService } from "./service";
 import { type Roll, shipmentScopeLabels } from "./types";
@@ -29,6 +31,9 @@ interface Props {
 
 export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   const [labelRollId, setLabelRollId] = useState<string | null>(null);
+  const [relabelBarcode, setRelabelBarcode] = useState<string | null>(null);
+  const { hasAnyPermission } = useRoleAccess();
+  const canRelabel = hasAnyPermission(["roll:write", "label:edit"]);
 
   // Liste cevabı `operations` taşımıyor — detay endpoint'i (`/api/rolls/:id`)
   // operation log'unu select ile döndürüyor. Sheet açıldığında lazy fetch.
@@ -68,7 +73,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
         </SheetHeader>
 
         {roll && (
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <PermissionGate permission="label:read">
               <Button
                 type="button"
@@ -80,12 +85,27 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 <Tag className="h-3.5 w-3.5" /> Etiket
               </Button>
             </PermissionGate>
+            {canRelabel && roll.barcode && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-1"
+                onClick={() => setRelabelBarcode(roll.barcode)}
+              >
+                <Tags className="h-3.5 w-3.5" /> Yeniden Etiketle
+              </Button>
+            )}
           </div>
         )}
 
         <RollLabelDialog
           rollId={labelRollId}
           onOpenChange={(open) => !open && setLabelRollId(null)}
+        />
+        <RelabelDialog
+          barcode={relabelBarcode}
+          onOpenChange={(open) => !open && setRelabelBarcode(null)}
         />
 
         {roll && (

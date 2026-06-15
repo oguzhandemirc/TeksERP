@@ -7,6 +7,7 @@ import {
   Scale,
   Truck,
   SwatchBook,
+  Tags,
   Undo2,
   Warehouse,
   ClipboardList,
@@ -20,6 +21,8 @@ export interface OperationsTile {
   icon: LucideIcon;
   to: string;
   permission?: string;
+  /** Birden çok izinden HERHANGİ biri yeterli (route requireAnyPermission ile hizalı). */
+  permissionAny?: string[];
 }
 
 export const operationsTiles: OperationsTile[] = [
@@ -78,6 +81,15 @@ export const operationsTiles: OperationsTile[] = [
     icon: PackageSearch,
     to: "/operations/sack-search",
     permission: "shipping:read",
+  },
+  {
+    key: "relabel-station",
+    title: "Yeniden Etiketle",
+    description: "Barkod okut → spec düzelt (renk/kalite/en) veya A→B müşteri için yeniden bas",
+    icon: Tags,
+    to: "/operations/relabel-station",
+    // Route ile hizalı: roll:write VEYA label:edit olan kullanıcı erişebilir/görebilir.
+    permissionAny: ["roll:write", "label:edit"],
   },
   {
     key: "accounting-dispatch",

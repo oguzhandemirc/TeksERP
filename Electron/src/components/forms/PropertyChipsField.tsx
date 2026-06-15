@@ -14,13 +14,15 @@ interface Props {
   onChange: (next: string[]) => void;
   /** Hiç özellik bulunmadığında gösterilecek not. */
   emptyHint?: string;
+  /** Salt-okunur: çipler ve temizle butonu pasifleşir (örn. kilitli/yetkisiz form). */
+  disabled?: boolean;
 }
 
 /**
  * Inline çoklu seçim: tüm uygun (allowed) özellikler chip olarak çıkar,
  * tek tıkla seçilir/kaldırılır. Popover/dialog yok — form içinde anlık görsel.
  */
-export function PropertyChipsField({ itemId, value, onChange, emptyHint }: Props) {
+export function PropertyChipsField({ itemId, value, onChange, emptyHint, disabled = false }: Props) {
   const itemQuery = useQuery({
     queryKey: ["item-allowed", itemId],
     queryFn: () => itemService.getById(itemId),
@@ -87,10 +89,12 @@ export function PropertyChipsField({ itemId, value, onChange, emptyHint }: Props
               key={p.id}
               variant={isOn ? "default" : "outline"}
               className={cn(
-                "cursor-pointer gap-1 px-2 py-1 text-xs transition-colors",
-                isOn ? "hover:bg-primary/85" : "hover:bg-accent",
+                "gap-1 px-2 py-1 text-xs transition-colors",
+                disabled
+                  ? "cursor-not-allowed opacity-60"
+                  : cn("cursor-pointer", isOn ? "hover:bg-primary/85" : "hover:bg-accent"),
               )}
-              onClick={() => toggle(p.id)}
+              onClick={disabled ? undefined : () => toggle(p.id)}
             >
               {isOn ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
               {p.name}
@@ -109,6 +113,7 @@ export function PropertyChipsField({ itemId, value, onChange, emptyHint }: Props
             variant="ghost"
             size="sm"
             className="h-6 px-2 text-xs"
+            disabled={disabled}
             onClick={() => onChange([])}
           >
             Tümünü temizle
