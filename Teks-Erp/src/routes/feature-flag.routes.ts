@@ -43,6 +43,8 @@ const updateSchema = z.object({
   rollNameTemplate: z.string().max(100).optional(),
   // label.printerLanguage — varsayılan etiket yazıcı dili (native render formatı).
   printerLanguage: z.enum(["RASTER_HTML", "PPLA", "PPLB", "ZPL"]).optional(),
+  // label.nativeSendEnabled — Faz-2 doğrudan yazıcıya gönderim (default false).
+  nativeSendEnabled: z.boolean().optional(),
   // Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri).
   travelerCardConfig: z
     .object({

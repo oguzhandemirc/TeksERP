@@ -1,7 +1,19 @@
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
+import type { PrinterLanguage } from "./featureFlagService";
 
 export type LabelNameSource = "OVERRIDE" | "MASTER" | "DEFAULT";
+
+/** Native gönderim sonucu (printer-transport). */
+export interface NativeSendResult {
+  delivered: boolean;
+  simulated: boolean;
+  language: PrinterLanguage;
+  bytes: number;
+  target: string;
+  error?: string;
+  note: string;
+}
 
 export interface RollLabelPayload {
   rollId: string;
@@ -106,5 +118,25 @@ export const labelService = {
         { rollIds, ...(copies ? { copies } : {}) },
         { responseType: "text", transformResponse: [(d) => d] },
       )
+      .then((r) => r.data),
+
+  /** Test Et: format profili geometrisinde örnek etiket HTML'i (boyut/pay önizleme). */
+  getFormatProfileSampleHtml: (profileId: string): Promise<string> =>
+    apiClient
+      .get<string>(`/api/labels/format-profiles/${profileId}/sample-html`, {
+        responseType: "text",
+        transformResponse: [(d) => d],
+      })
+      .then((r) => r.data),
+
+  /** Test Et: örnek etiketi seçili dilde verilen yazıcıya gönder (nativeSendEnabled açıksa gerçek). */
+  testNativeSend: (body: {
+    profileId?: string;
+    printerIp: string;
+    port?: number;
+    language?: PrinterLanguage;
+  }): Promise<ApiResponse<NativeSendResult>> =>
+    apiClient
+      .post<ApiResponse<NativeSendResult>>(`/api/labels/test-native`, body)
       .then((r) => r.data),
 };

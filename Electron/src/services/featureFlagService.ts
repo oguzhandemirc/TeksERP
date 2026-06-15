@@ -84,6 +84,8 @@ export interface FeatureFlags {
   /** Varsayılan etiket yazıcı dili (RASTER_HTML | PPLA | PPLB | ZPL; default PPLA).
    *  Native render bu dilde; istasyon yazıcı modeli kendi dilini belirtirse o önceliklidir. */
   printerLanguage: PrinterLanguage;
+  /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
+  nativeSendEnabled: boolean;
   /** Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri). */
   travelerCardConfig: TravelerCardConfig;
   /** Belge künyesi (adres/tel/vergi) — irsaliye/çeki üst bloğunda basılır. */

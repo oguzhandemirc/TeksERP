@@ -104,6 +104,10 @@ export const SETTING_KEYS = {
    *  o istasyonda model dili ÖNCELİKLİDİR; bu global ayar model bağlamı çözülemeyen
    *  baskılar için (Electron/varsayılan) ve genel varsayılan olarak kullanılır. */
   LABEL_PRINTER_LANGUAGE: "label.printerLanguage",
+  /** Faz-2 opt-in: native etiket komutları (PPLA/ZPL) backend RAW TCP (9100) ile
+   *  yazıcıya DOĞRUDAN gönderilsin mi (default false = Faz-1 simülasyon). Açıkken
+   *  ENFORCE — printer-transport gerçek socket açar; kapalıyken hiç socket yok. */
+  LABEL_NATIVE_SEND_ENABLED: "label.nativeSendEnabled",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -233,6 +237,8 @@ export interface FeatureFlags {
   /** Varsayılan etiket yazıcı dili (RASTER_HTML | PPLA | PPLB | ZPL; default PPLA).
    *  Native render bu dilde üretilir; istasyon yazıcı modeli kendi dilini belirtirse o önceliklidir. */
   printerLanguage: PrinterLanguage;
+  /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
+  nativeSendEnabled: boolean;
 }
 
 // =============================================================================
@@ -374,6 +380,7 @@ export class SystemSettingService {
       labelCopies: await readLabelCopies(cacheClient),
       rollNameTemplate: await readRollNameTemplate(cacheClient),
       printerLanguage: await readPrinterLanguage(cacheClient),
+      nativeSendEnabled: await readLabelNativeSendEnabled(cacheClient),
     };
     featureFlagsCache = { value: flags, expiresAt: now + FEATURE_FLAGS_TTL_MS };
     return { success: true, data: flags };
@@ -655,6 +662,18 @@ export class SystemSettingService {
         SETTING_KEYS.LABEL_PRINTER_LANGUAGE,
         v as string,
         "Varsayılan etiket yazıcı dili (native render: PPLA/PPLB/ZPL veya HTML)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "nativeSendEnabled")) {
+      if (typeof input.nativeSendEnabled !== "boolean") {
+        throw AppError.badRequest("nativeSendEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.LABEL_NATIVE_SEND_ENABLED,
+        input.nativeSendEnabled,
+        "Faz-2: native etiket komutlarını yazıcıya doğrudan (RAW TCP 9100) gönder (kapalıyken simülasyon)",
         userId
       );
     }
@@ -1109,5 +1128,21 @@ export async function readPrinterLanguage(
   return typeof v === "string" && PRINTER_LANGUAGES.includes(v as PrinterLanguage)
     ? (v as PrinterLanguage)
     : DEFAULT_PRINTER_LANGUAGE;
+}
+
+/**
+ * Faz-2 opt-in: native etiket komutları yazıcıya doğrudan (RAW TCP 9100) gönderilsin mi.
+ * Default false (Faz-1 simülasyon — hiç socket açılmaz). Açıkken printer-transport
+ * gerçek gönderim yapar; ENFORCE edilir.
+ */
+export async function readLabelNativeSendEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.LABEL_NATIVE_SEND_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
 }
 

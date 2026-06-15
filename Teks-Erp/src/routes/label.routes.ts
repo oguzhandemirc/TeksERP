@@ -158,6 +158,76 @@ router.get(
 
 /**
  * @openapi
+ * /api/labels/rolls/{id}/print-native:
+ *   post:
+ *     tags: [Labels]
+ *     summary: FAZ-2 — rolün etiketini istasyon yazıcısına native gönder (RAW TCP 9100)
+ *     description: |
+ *       `label.nativeSendEnabled` AÇIKKEN gerçek gönderir (backend → printerIp:9100),
+ *       kapalıyken SİMÜLE eder (Faz-1, socket yok). Hedef IP istasyon makinesinden
+ *       (mobil: req.device.machineId). JSON sonuç: { delivered, simulated, bytes, target, error? }.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Gönderim sonucu }
+ *       404: { description: Top bulunamadı }
+ */
+router.post(
+  "/rolls/:id/print-native",
+  verifyToken,
+  requireAnyPermission("label:print", ...MOBILE_LABEL_PRINTERS),
+  controller.printRollNative,
+);
+
+/**
+ * @openapi
+ * /api/labels/format-profiles/{id}/sample-html:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Test Et — profil geometrisinde örnek etiket HTML'i (boyut/pay önizleme)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Örnek etiket HTML, content: { text/html: { schema: { type: string } } } }
+ */
+router.get(
+  "/format-profiles/:id/sample-html",
+  verifyToken,
+  requireAnyPermission("label:read", "station:read", ...MOBILE_LABEL_PRINTERS),
+  controller.getSampleLabelHtml,
+);
+
+/**
+ * @openapi
+ * /api/labels/test-native:
+ *   post:
+ *     tags: [Labels]
+ *     summary: Test Et — örnek etiketi seçili dilde verilen yazıcıya gönder (Faz-2 doğrulama)
+ *     description: |
+ *       Body { profileId?, printerIp, port?, language? }. nativeSendEnabled açıkken gerçek
+ *       gönderir, kapalıyken simüle — admin'in gerçek Argox'u doğrulama aracı.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Gönderim sonucu }
+ *       400: { description: Geçersiz girdi }
+ */
+router.post(
+  "/test-native",
+  verifyToken,
+  requireAnyPermission("label:print", "station:write"),
+  controller.testNativeSend,
+);
+
+/**
+ * @openapi
  * /api/labels/rolls/bulk-html:
  *   post:
  *     tags: [Labels]

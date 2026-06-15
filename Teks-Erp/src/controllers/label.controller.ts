@@ -30,6 +30,14 @@ const previewSchema = z.object({
   })),
 });
 
+// Test Et: örnek etiketi verilen yazıcıya gönder (Faz-2 doğrulama).
+const testNativeSchema = z.object({
+  profileId: z.string().uuid("Geçersiz profil ID").optional(),
+  printerIp: z.string().trim().min(3, "Yazıcı IP gerekli").max(64),
+  port: z.number().int().min(1).max(65535).optional(),
+  language: z.enum(["RASTER_HTML", "PPLA", "PPLB", "ZPL"]).optional(),
+});
+
 /**
  * Fiziksel format çözümü girdisi: explicit ?profileId= veya makine bağlamı.
  * machineId — mobil isteklerde device.middleware'den (req.device.machineId) OTO;
@@ -150,6 +158,43 @@ export class LabelController {
       res.setHeader("X-Label-Language", result.data.language);
       res.setHeader("X-Label-Kind", result.data.kind);
       res.status(200).send(result.data.content);
+    } catch (e) { next(e); }
+  };
+
+  /**
+   * FAZ-2 PRODUCTION: rolün etiketini istasyon yazıcısına native gönder
+   * (label.nativeSendEnabled açıkken gerçek, kapalıyken simüle). JSON sonuç döner.
+   */
+  printRollNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.printRollNative(req.params.id as string, req.user?.userId, {
+        orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
+        customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
+        stock: req.query.stock === "1" || req.query.stock === "true",
+        ...parseFormatOpts(req),
+      });
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** Test Et: profil geometrisinde örnek etiket HTML'i (boyut/pay önizleme). */
+  getSampleLabelHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const profileId =
+        (req.params.id as string | undefined) ??
+        (typeof req.query.profileId === "string" ? req.query.profileId : undefined);
+      const result = await this.service.getSampleLabelHtml(profileId);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.status(200).send(result.data.html);
+    } catch (e) { next(e); }
+  };
+
+  /** Test Et: örnek etiketi seçili dilde verilen yazıcı IP'sine gönder (gerçek/simüle). */
+  testNativeSend = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = testNativeSchema.parse(req.body);
+      const result = await this.service.testNativeSend(body);
+      res.status(200).json(result);
     } catch (e) { next(e); }
   };
 

@@ -4,6 +4,7 @@
 // Çalıştır: npx tsx scripts/test_label_native_languages.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { buildRollLabelPpla } from "../src/services/helpers/label-ppla.helper";
 import { buildRollLabelPplb } from "../src/services/helpers/label-pplb.helper";
 import { buildRollLabelZpl } from "../src/services/helpers/label-zpl.helper";
 import { renderLabel } from "../src/services/helpers/label-renderer.registry";
@@ -61,6 +62,22 @@ async function main() {
   check("ZPL sanitize: ^ ~ veriden ayıklandı", dirtyZpl.includes("A B C") && !dirtyZpl.includes("A^B~C"));
   const dirtyPplb = buildRollLabelPplb({ payload: { ...payload, itemName: 'A"B' } as unknown as LabelPayload, format, copies: 1 });
   check("PPLB sanitize: \" veriden ayıklandı", !dirtyPplb.includes('"A"B"'));
+
+  // --- Türkçe → ASCII katlama: latin1 kaybı + komut-baytı enjeksiyonu engellenir ---
+  // (Ş latin1'de 0x5E '^' = ZPL öneki; İ→'0'. ASCII'ye katlanınca hem doğru hem güvenli.)
+  const tr = { ...payload, itemName: "ÖRNEK İĞNE", colorName: "ŞAHİN MAVİ", customerName: "ÇĞÜ ışık" } as unknown as LabelPayload;
+  const isAscii = (s: string) => /^[\x00-\x7f]*$/.test(s) && Buffer.from(s, "latin1").toString("latin1") === s;
+  const trZpl = buildRollLabelZpl({ payload: tr, format, copies: 1 });
+  const trPpla = buildRollLabelPpla({ payload: tr, format, copies: 1 });
+  const trPplb = buildRollLabelPplb({ payload: tr, format, copies: 1 });
+  check("Türkçe→ASCII: ZPL saf ASCII (latin1-kayıpsız)", isAscii(trZpl));
+  check("Türkçe→ASCII: PPLA saf ASCII", isAscii(trPpla));
+  check("Türkçe→ASCII: PPLB saf ASCII", isAscii(trPplb));
+  check("Türkçe map doğru (İĞNE→IGNE, ŞAHİN MAVİ→SAHIN MAVI, ÇĞÜ ışık→CGU isik)",
+    trZpl.includes("ORNEK IGNE") && trZpl.includes("SAHIN MAVI") && trZpl.includes("CGU isik"));
+  // Güvenlik: Ş→S katlandığı için latin1'de '^' (0x5E) üretmez → ZPL/PPLA komut frame'i
+  // veriyle bozulamaz. isAscii zaten latin1-dışı/komut-baytı kalmadığını kanıtlar.
+  check("güvenlik: PPLA çıktısı tek STX L ile başlar (veri frame bozmadı)", trPpla.indexOf("\x02L") === trPpla.lastIndexOf("\x02L"));
 
   // --- global ayar (readPrinterLanguage) + resolver dil fallback ---
   check("default dil = PPLA", DEFAULT_PRINTER_LANGUAGE === "PPLA");
