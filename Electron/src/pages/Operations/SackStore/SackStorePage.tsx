@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useScanSeed } from "@/hooks/useScanSeed";
 import { cn } from "@/lib/utils";
 import { sackStoreService } from "./service";
 import { SackStoreCard } from "./SackStoreCard";
@@ -83,6 +84,9 @@ export function SackStorePage() {
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [openShipment, setOpenShipment] = useState<SackStoreShipment | null>(null);
+
+  // "Her yerde okut" → çuval kodu aramaya uygulanır (ilgili sevkiyatı bulur).
+  useScanSeed("scanCode", (code) => setSearch(code));
 
   const query = useInfiniteQuery({
     queryKey: [QUERY_KEY, status, destination, debouncedSearch],

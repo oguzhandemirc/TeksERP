@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ScanLine } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { ScanField } from "@/components/scanner/ScanField";
+import { useScanSeed } from "@/hooks/useScanSeed";
 import { relabelService } from "./service";
 import { RelabelSpecForm } from "./RelabelSpecForm";
 import { RelabelPrintForCustomer } from "./RelabelPrintForCustomer";
@@ -26,15 +25,16 @@ export function RelabelStationPage() {
     onError: () => setCtx(null),
   });
 
-  const submit = () => {
-    const code = barcode.trim();
-    if (code) lookup.mutate(code);
-  };
-
   // Spec kaydedilince bağlamı tazele — yeni renk/kalite + güncel specLocked yansısın.
   const refresh = () => {
     if (ctx?.barcode) lookup.mutate(ctx.barcode);
   };
+
+  // "Her yerde okut" → bu sekmeye yönlendirme: kodu otomatik getir.
+  useScanSeed("scanCode", (code) => {
+    setBarcode(code);
+    lookup.mutate(code);
+  });
 
   return (
     <div className="flex h-full flex-col">
@@ -43,22 +43,18 @@ export function RelabelStationPage() {
         description="Barkodu okut → topun spec'ini düzelt ya da farklı müşteri için etiketi yeniden bas."
       />
 
-      <div className="flex items-center gap-2 border-b px-6 py-3">
-        <div className="relative max-w-sm flex-1">
-          <ScanLine className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={barcode}
-            onChange={(e) => setBarcode(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-            placeholder="Top barkodu okut/yaz → getir"
-            className="pl-8"
-            autoFocus
-          />
-        </div>
-        <Button size="sm" onClick={submit} disabled={!barcode.trim() || lookup.isPending}>
-          {lookup.isPending ? "Getiriliyor…" : "Topu Getir"}
-        </Button>
-      </div>
+      <ScanField
+        className="border-b px-6 py-3"
+        value={barcode}
+        onChange={setBarcode}
+        onScan={(code) => lookup.mutate(code)}
+        placeholder="Top barkodu okut/yaz → getir"
+        autoFocus
+        expectPrefix="ROLL"
+        submitLabel="Topu Getir"
+        busy={lookup.isPending}
+        busyLabel="Getiriliyor…"
+      />
 
       <div className="flex-1 overflow-auto p-6">
         {!ctx ? (

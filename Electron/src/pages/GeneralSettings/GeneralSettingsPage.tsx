@@ -11,6 +11,7 @@ import { ApiEndpointSection } from "./ApiEndpointSection";
 import { CompanySettingsSection } from "./CompanySettingsSection";
 import { SessionSettingsSection } from "./SessionSettingsSection";
 import { LabelSettingsSection } from "./LabelSettingsSection";
+import { ScannerSettingsSection } from "./ScannerSettingsSection";
 
 /**
  * Genel Ayarlar — sol dikey kategori menüsü + sağ içerik. Ayarlar domaine bölünür
@@ -88,6 +89,7 @@ export function GeneralSettingsPage() {
                     {cat.kind === "company" && <CompanySettingsSection />}
                     {cat.kind === "session" && <SessionSettingsSection />}
                     {cat.kind === "label" && <LabelSettingsSection />}
+                    {cat.kind === "scanner" && <ScannerSettingsSection />}
                   </CardContent>
                 </Card>
               </TabsContent>

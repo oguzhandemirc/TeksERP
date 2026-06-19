@@ -11,6 +11,7 @@ import {
   Undo2,
   Warehouse,
   ClipboardList,
+  ScanBarcode,
   type LucideIcon,
 } from "lucide-react";
 
@@ -81,6 +82,14 @@ export const operationsTiles: OperationsTile[] = [
     icon: PackageSearch,
     to: "/operations/sack-search",
     permission: "shipping:read",
+  },
+  {
+    key: "scan-dispatch",
+    title: "Okutarak Sevk",
+    description: "Kapıda çuvalları okut → sevkiyatına göre grupla → kapıya taşı / sevk et",
+    icon: ScanBarcode,
+    to: "/operations/scan-dispatch",
+    permission: "shipping:write",
   },
   {
     key: "relabel-station",

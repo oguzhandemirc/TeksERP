@@ -1770,9 +1770,13 @@ export class ShippingService {
     const search = params.search?.trim();
     if (search) {
       // Sunucu-tarafı arama: sevk no / müşteri adı / çuval kodu (küçük-orta set).
+      // Çuval kodu = hem sistem `sackNo` (CV-YYMMDD-NNN) hem elle yazılan
+      // `manualCode` (AMB.. / serbest) — tabancayla okutulan etiket ikisinden
+      // biri olabilir, "Okutarak Sevk" akışı her ikisini de bulabilsin.
       where.OR = [
         { shipmentNo: { contains: search, mode: "insensitive" } },
         { customer: { name: { contains: search, mode: "insensitive" } } },
+        { sacks: { some: { sackNo: { contains: search, mode: "insensitive" } } } },
         { sacks: { some: { manualCode: { contains: search, mode: "insensitive" } } } },
       ];
     }

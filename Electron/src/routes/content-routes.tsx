@@ -78,6 +78,7 @@ import { ProductBalancePage } from "@/pages/Operations/ProductBalance/ProductBal
 import { ShipmentsPage } from "@/pages/Operations/Shipments/ShipmentsPage";
 import { SackStorePage } from "@/pages/Operations/SackStore/SackStorePage";
 import { SackSearchPage } from "@/pages/Operations/SackSearch/SackSearchPage";
+import { ScanDispatchPage } from "@/pages/Operations/ScanDispatch/ScanDispatchPage";
 import { RelabelStationPage } from "@/pages/Operations/RelabelStation/RelabelStationPage";
 import { AccountingDispatchPage } from "@/pages/Operations/AccountingDispatch/AccountingDispatchPage";
 import { KartelaPage } from "@/pages/Operations/Kartela/KartelaPage";
@@ -473,6 +474,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="shipping:read">
         <SackSearchPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/scan-dispatch",
+    element: (
+      <ProtectedRoute requirePermission="shipping:write">
+        <ScanDispatchPage />
       </ProtectedRoute>
     ),
   },

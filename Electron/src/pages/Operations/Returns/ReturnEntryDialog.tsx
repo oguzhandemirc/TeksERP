@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, AlertTriangle, PackageSearch } from "lucide-react";
@@ -25,14 +25,16 @@ import { useReturnGradingEnabled } from "@/hooks/usePricingEnabled";
 import { returnReasonService } from "@/pages/ReturnReasons/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { returnsService, type ReturnLookupResult } from "./service";
+import { ReturnRollCard } from "./ReturnRollCard";
 
-const DEC = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
 const TEXTAREA_CLS =
   "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Tabancayla okutularak açıldıysa: bu barkod otomatik sorgulanır. */
+  initialBarcode?: string;
 }
 
 /**
@@ -40,7 +42,7 @@ interface Props {
  * top + aday siparişler gelir → neden (zorunlu) + sipariş + kalite + not → İade Al.
  * İade rafı (FİRE→hurda vb.) backend'de returnGradingEnabled'a göre belirlenir.
  */
-export function ReturnEntryDialog({ open, onOpenChange }: Props) {
+export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props) {
   const qc = useQueryClient();
   const gradingEnabled = useReturnGradingEnabled();
 
@@ -95,6 +97,22 @@ export function ReturnEntryDialog({ open, onOpenChange }: Props) {
     },
     onError: () => setResult(null),
   });
+
+  // Tabancayla okutularak açıldıysa barkodu bir kez otomatik sorgula.
+  const seededRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open) {
+      seededRef.current = null;
+      return;
+    }
+    if (initialBarcode && seededRef.current !== initialBarcode) {
+      seededRef.current = initialBarcode;
+      setBarcode(initialBarcode);
+      lookupMut.mutate(initialBarcode);
+    }
+    // lookupMut kararlı değil; yalnız open+initialBarcode değişiminde tetikle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialBarcode]);
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -176,27 +194,9 @@ export function ReturnEntryDialog({ open, onOpenChange }: Props) {
             </div>
           </FormField>
 
-          {roll && (
+          {roll && result && (
             <>
-              {/* Top kimlik kartı */}
-              <div className="space-y-1 rounded-md border bg-card/40 p-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-sm font-semibold">{roll.barcode ?? roll.id.slice(0, 8)}</span>
-                  <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
-                    {DEC.format(roll.currentQty)} m
-                  </span>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {roll.item?.name ?? "—"}
-                  {roll.color ? ` · ${roll.color.name}` : ""}
-                  {roll.width != null ? ` · ${roll.width} cm` : ""}
-                  {roll.qualityGrade ? ` · ${roll.qualityGrade}` : ""}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {result?.customer?.name ?? "—"}
-                  {result?.shipment ? ` · ${result.shipment.shipmentNo}` : ""}
-                </div>
-              </div>
+              <ReturnRollCard result={result} />
 
               {/* Sipariş atfı */}
               <FormField label="Sipariş">

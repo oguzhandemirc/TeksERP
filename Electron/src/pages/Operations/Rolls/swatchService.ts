@@ -90,6 +90,13 @@ export const swatchService = {
       .then((r) => r.data);
   },
 
+  /** Tek kartelayı barkoduyla getir (SW-...). Tabanca/scan ile detay açmak için. */
+  getByBarcode(barcode: string): Promise<ApiResponse<Swatch>> {
+    return apiClient
+      .get<ApiResponse<Swatch>>(`/api/swatches/by-barcode/${encodeURIComponent(barcode)}`)
+      .then((r) => r.data);
+  },
+
   /** Listeyle aynı filtre setini paylaşan aggregate (count + totalLength). */
   getStats(
     params: Pick<QueryParams, "filters" | "search">,

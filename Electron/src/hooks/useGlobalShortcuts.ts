@@ -1,16 +1,6 @@
 import { useEffect } from "react";
 import { useTabsStore } from "@/store/tabs";
-
-function isTyping(el: EventTarget | null): boolean {
-  const t = el as HTMLElement | null;
-  if (!t || !t.tagName) return false;
-  return (
-    t.tagName === "INPUT" ||
-    t.tagName === "TEXTAREA" ||
-    t.tagName === "SELECT" ||
-    t.isContentEditable
-  );
-}
+import { isTyping } from "@/lib/scanner/is-typing";
 
 // "g" sonrası tuş → hedef route (g-then-key gezinme deseni).
 const GO: Record<string, string> = {
@@ -23,6 +13,8 @@ const GO: Record<string, string> = {
 interface Options {
   onOpenCommand: () => void;
   onOpenHelp: () => void;
+  /** Barkod-wedge scan birikiyorsa true — tek-tuş kısayolları bastırılır. */
+  isScannerCapturing?: () => boolean;
 }
 
 /**
@@ -30,8 +22,11 @@ interface Options {
  *  - `g` ardından `d/o/t/r` → Anasayfa/Operasyon/Tanımlar/Raporlar
  *  - `/` → arama (komut paleti)
  *  - `?` → kısayol rehberi
+ *
+ * Bir barkod tabancası scan'i sürerken (`isScannerCapturing`) bu kısayollar
+ * bastırılır — kodun ilk karakteri yanlışlıkla `g`/`/` gibi davranmasın.
  */
-export function useGlobalShortcuts({ onOpenCommand, onOpenHelp }: Options) {
+export function useGlobalShortcuts({ onOpenCommand, onOpenHelp, isScannerCapturing }: Options) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
 
   useEffect(() => {
@@ -46,6 +41,12 @@ export function useGlobalShortcuts({ onOpenCommand, onOpenHelp }: Options) {
     const handler = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isTyping(e.target)) return;
+      // Barkod scan ortasındaysa kısayolları yut — wedge capture fazında çalışır,
+      // bu yüzden burada (bubble) isCapturing() zaten güncel.
+      if (isScannerCapturing?.()) {
+        clearGo();
+        return;
+      }
 
       if (goPending) {
         const dest = GO[e.key.toLowerCase()];
@@ -78,5 +79,5 @@ export function useGlobalShortcuts({ onOpenCommand, onOpenHelp }: Options) {
       window.removeEventListener("keydown", handler);
       clearGo();
     };
-  }, [navigateActive, onOpenCommand, onOpenHelp]);
+  }, [navigateActive, onOpenCommand, onOpenHelp, isScannerCapturing]);
 }
