@@ -55,6 +55,7 @@ async function resolveRoll(code: string): Promise<ScanResolution> {
     actions: [
       { label: "Detayı aç (Toplar)", to: "/operations/rolls", state: { scanBarcode: code }, primary: true },
       { label: "Nerede? (Çuval Arama)", to: "/operations/sack-search", state: { scanCode: code } },
+      { label: "Çuvalını düzenle", to: "/operations/sack-content-edit", state: { focusBarcode: code } },
       { label: "Yeniden Etiketle", to: "/operations/relabel-station", state: { scanCode: code } },
     ],
   };
@@ -132,6 +133,7 @@ async function resolveSackByCode(code: string, kind: BarcodeKind): Promise<ScanR
     ]),
     actions: [
       { label: "Çuval Depo'da aç", to: "/operations/sack-store", state: { scanCode: code }, primary: true },
+      { label: "İçeriğini düzenle", to: "/operations/sack-content-edit", state: { focusBarcode: code } },
       { label: "Çuval Arama'da aç", to: "/operations/sack-search", state: { scanCode: code } },
     ],
   };

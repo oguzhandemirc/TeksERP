@@ -12,6 +12,7 @@ import {
   Warehouse,
   ClipboardList,
   ScanBarcode,
+  PackageOpen,
   type LucideIcon,
 } from "lucide-react";
 
@@ -89,6 +90,14 @@ export const operationsTiles: OperationsTile[] = [
     description: "Kapıda çuvalları okut → sevkiyatına göre grupla → kapıya taşı / sevk et",
     icon: ScanBarcode,
     to: "/operations/scan-dispatch",
+    permission: "shipping:write",
+  },
+  {
+    key: "sack-content-edit",
+    title: "Çuval Düzelt / Paketleme",
+    description: "Top/çuval okut → çuvala ekle/çıkar/taşı/takasla, çuval aç/tart/sil, sevke hazırla",
+    icon: PackageOpen,
+    to: "/operations/sack-content-edit",
     permission: "shipping:write",
   },
   {
