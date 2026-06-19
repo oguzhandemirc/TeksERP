@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Package, Scale, Layers, Truck, Globe, Pencil, Check } from "lucide-react";
 import {
@@ -16,7 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { cn } from "@/lib/utils";
-import { safeFormat } from "@/lib/format";
+import { SackList } from "@/pages/Operations/SackContentEdit/SackList";
+import { useShipmentDetail } from "@/pages/Operations/SackContentEdit/useShipmentDetail";
 import { sackStoreService } from "./service";
 import {
   sackStoreStatusLabels,
@@ -42,12 +43,8 @@ interface Props {
  */
 export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
   const qc = useQueryClient();
-  const query = useQuery({
-    queryKey: ["sack-contents", shipment?.id],
-    queryFn: () => sackStoreService.shipmentContents(shipment!.id),
-    enabled: open && !!shipment?.id,
-    staleTime: 30_000,
-  });
+  // Düzenlenebilir içerik için tam sevkiyat detayı (Çuval Düzelt ile ortak kaynak).
+  const query = useShipmentDetail(open && shipment ? shipment.id : null);
   const detail = query.data?.data;
 
   const invalidateBoard = () => {
@@ -97,93 +94,17 @@ export function ShipmentContentsSheet({ shipment, open, onOpenChange }: Props) {
               </Card>
             )}
 
-            {/* Çuvallar → içindeki toplar */}
+            {/* Çuvallar → içindeki toplar (düzenlenebilir — çıkar/taşı/takas/tartı) */}
             {query.isLoading ? (
               <div className="space-y-2">
                 {[0, 1, 2].map((i) => (
                   <Skeleton key={i} className="h-24 w-full" />
                 ))}
               </div>
-            ) : !detail || detail.sacks.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Bu sevkiyatta çuval yok.
-              </p>
+            ) : detail ? (
+              <SackList detail={detail} />
             ) : (
-              <div className="space-y-3">
-                {detail.sacks.map((sack) => (
-                  <Card key={sack.id}>
-                    <CardContent className="space-y-2 p-3">
-                      {/* Çuval başlığı */}
-                      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs">
-                        <span className="flex items-center gap-1.5 font-semibold">
-                          Çuval #{sack.seq}
-                          {sack.manualCode && (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] font-medium text-primary">
-                              {sack.manualCode}
-                            </span>
-                          )}
-                        </span>
-                        <span className="tabular-nums text-muted-foreground">
-                          {sack.weightKg != null ? `${fmtKg(sack.weightKg)} kg` : "tartılmadı"} ·{" "}
-                          {sack.rollCount} top
-                          {sack.swatchCount > 0 ? ` · ${sack.swatchCount} kartela` : ""}
-                        </span>
-                      </div>
-
-                      {/* Tek tek toplar (barkodlu) */}
-                      {sack.rolls.length === 0 && sack.swatches.length === 0 ? (
-                        <div className="text-[11px] text-muted-foreground">Boş çuval.</div>
-                      ) : (
-                        <ul className="space-y-1">
-                          {sack.rolls.map((r) => (
-                            <li
-                              key={r.id}
-                              className="flex items-center justify-between gap-2 rounded border bg-muted/30 px-2 py-1 text-[11px]"
-                            >
-                              <span className="flex min-w-0 items-center gap-1.5">
-                                {r.color?.hex && (
-                                  <span
-                                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/10"
-                                    style={{ backgroundColor: r.color.hex }}
-                                  />
-                                )}
-                                <span className="truncate font-mono font-medium">
-                                  {r.barcode ?? "Açık Kumaş"}
-                                </span>
-                              </span>
-                              <span className="shrink-0 truncate text-muted-foreground">
-                                {r.item.name}
-                                {r.color ? ` · ${r.color.name}` : ""}
-                                {r.width != null ? ` · ${fmtInt(r.width)} cm` : ""}
-                                {r.qualityGrade && r.qualityGrade !== "1.KALITE"
-                                  ? ` · ${r.qualityGrade}`
-                                  : ""}
-                              </span>
-                              <span className="shrink-0 tabular-nums font-medium">
-                                {fmtM(r.qty)} m
-                              </span>
-                            </li>
-                          ))}
-                          {sack.swatches.map((s) => (
-                            <li
-                              key={s.id}
-                              className="flex items-center justify-between gap-2 rounded border border-dashed bg-muted/30 px-2 py-1 text-[11px]"
-                            >
-                              <span className="truncate font-mono font-medium">
-                                {s.barcode ?? "Kartela"}
-                              </span>
-                              <span className="shrink-0 truncate text-muted-foreground">
-                                {s.item.name}
-                                {s.color ? ` · ${s.color.name}` : ""} · kartela
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              <p className="py-8 text-center text-sm text-muted-foreground">İçerik yüklenemedi.</p>
             )}
           </div>
         )}
