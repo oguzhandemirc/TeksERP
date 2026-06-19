@@ -1,13 +1,18 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { TabHost } from "./tabs";
+import { ScanResultOverlay } from "@/components/scanner/ScanResultOverlay";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useTabShortcuts } from "@/hooks/useTabShortcuts";
 import { useServerHeartbeat } from "@/hooks/useServerClock";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
+import { useScannerWedge } from "@/hooks/useScannerWedge";
+import { useDeviceScanner } from "@/hooks/useDeviceScanner";
+import { useScannerStore } from "@/store/scanner";
+import { usePreferences } from "@/providers/PreferencesProvider";
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(() => {
@@ -20,9 +25,31 @@ export function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
+  // Barkod tabancası — "her yerde okut" (opt-in, default kapalı). Wedge global
+  // keydown'ı dinler, nitelikli burst'ü store'a iter; overlay sonucu gösterir.
+  const { prefs } = usePreferences();
+  const scannerPrefs = prefs.scanner;
+  const pushScan = useScannerStore((s) => s.pushScan);
+  const wedgeConfig = useMemo(
+    () => ({
+      terminator: scannerPrefs?.terminator,
+      maxInterKeyMs: scannerPrefs?.maxInterKeyMs,
+      minLength: scannerPrefs?.minLength,
+    }),
+    [scannerPrefs?.terminator, scannerPrefs?.maxInterKeyMs, scannerPrefs?.minLength],
+  );
+  const { isCapturing } = useScannerWedge({
+    enabled: scannerPrefs?.scanAnywhere ?? false,
+    onScan: (r) => pushScan(r.code, "wedge"),
+    config: wedgeConfig,
+  });
+  // Faz-2: seri/HID cihaz okuyucu (opt-in) — aynı pushScan boru hattını besler.
+  useDeviceScanner();
+
   useGlobalShortcuts({
     onOpenCommand: () => setPaletteOpen(true),
     onOpenHelp: () => setHelpOpen(true),
+    isScannerCapturing: isCapturing,
   });
   useTabShortcuts();
   useServerHeartbeat();
@@ -57,6 +84,7 @@ export function AppShell() {
         onShowHelp={() => setHelpOpen(true)}
       />
       <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      <ScanResultOverlay />
     </div>
   );
 }

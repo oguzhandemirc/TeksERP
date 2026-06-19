@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { ApiBridge, AppPlatform } from "@shared/ipc-contract";
+import type {
+  ApiBridge,
+  AppPlatform,
+  ScannerStatus,
+  ScannerTransport,
+  ScannerOpenOpts,
+} from "@shared/ipc-contract";
 
 const api: ApiBridge = {
   secureStore: {
@@ -20,6 +26,23 @@ const api: ApiBridge = {
   system: {
     openExternal: (url) => ipcRenderer.invoke("system:open-external", url),
     showInFolder: (path) => ipcRenderer.send("system:show-in-folder", path),
+  },
+  scanner: {
+    list: (transport: ScannerTransport) => ipcRenderer.invoke("scanner:list", transport),
+    open: (opts: ScannerOpenOpts) => ipcRenderer.invoke("scanner:open", opts),
+    close: () => ipcRenderer.invoke("scanner:close"),
+    status: () => ipcRenderer.invoke("scanner:status"),
+    mockEmit: (code: string) => ipcRenderer.send("scanner:mock-emit", code),
+    onData: (cb: (code: string) => void) => {
+      const listener = (_e: unknown, code: string) => cb(code);
+      ipcRenderer.on("scanner:data", listener);
+      return () => ipcRenderer.removeListener("scanner:data", listener);
+    },
+    onStatus: (cb: (status: ScannerStatus) => void) => {
+      const listener = (_e: unknown, status: ScannerStatus) => cb(status);
+      ipcRenderer.on("scanner:status", listener);
+      return () => ipcRenderer.removeListener("scanner:status", listener);
+    },
   },
 };
 

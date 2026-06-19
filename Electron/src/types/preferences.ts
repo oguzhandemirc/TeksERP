@@ -2,6 +2,8 @@
 // frontend kontratı. Backend gevşek doğrular; şekli burası sahiplenir. Yeni alan
 // eklemek migration gerektirmez (sadece bu tip + uygulama mantığı).
 
+import type { ScannerTransport, ScanTerminatorPref } from "@shared/ipc-contract";
+
 export type ThemePref = "light" | "dark" | "system";
 export type DensityPref = "comfortable" | "compact";
 
@@ -36,6 +38,31 @@ export interface AppPreferences {
     hidden?: string[];
     groupOrder?: string[];
     itemOrders?: Record<string, string[]>;
+  };
+  /**
+   * Barkod tabancası ayarları — bu iş istasyonuna özel (org-geneli değil).
+   * `scanAnywhere`: input odaklı değilken global "her yerde okut" yönlendirici.
+   * Zamanlama alanları gerçek tabancaya göre ince ayar (genelde dokunulmaz).
+   */
+  scanner?: {
+    scanAnywhere?: boolean;
+    terminator?: "Enter" | "Tab" | "both";
+    maxInterKeyMs?: number;
+    minLength?: number;
+    /**
+     * Faz-2 — klavye-wedge YAPAMAYAN (seri/HID'e kilitli) tabanca. Bu iş
+     * istasyonuna fiziksel bağlı cihaz; opt-in, default kapalı. Donanım okuması
+     * Electron ana-süreçte (window.api.scanner); aynı `pushScan` boru hattını besler.
+     */
+    device?: {
+      enabled?: boolean;
+      transport?: ScannerTransport;
+      path?: string;
+      baudRate?: number;
+      vendorId?: number;
+      productId?: number;
+      frameTerminator?: ScanTerminatorPref;
+    };
   };
 }
 

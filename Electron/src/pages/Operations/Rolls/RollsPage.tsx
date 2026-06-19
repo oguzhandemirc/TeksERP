@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
 import {
   Package,
   Cog,
@@ -16,11 +17,15 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ReorderableTabBar } from "@/components/layout/ReorderableTabBar";
+import { ScanField } from "@/components/scanner/ScanField";
 import { useTabOrder } from "@/hooks/useTabOrder";
+import { useScanSeed } from "@/hooks/useScanSeed";
 import { RollsTable } from "./RollsTable";
 import { RollsKanban } from "./RollsKanban";
 import { ManualEntryDialog } from "./ManualEntryDialog";
-import type { RollStatusTabKey } from "./service";
+import { RollDetailSheet } from "./RollDetailSheet";
+import { rollService, type RollStatusTabKey } from "./service";
+import type { Roll } from "./types";
 
 type RollTabKey = RollStatusTabKey | "KANBAN";
 
@@ -56,7 +61,20 @@ export function RollsPage() {
     isRollTabKey(urlTab) ? urlTab : "RAW_STOCK",
   );
   const [manualOpen, setManualOpen] = useState(false);
+  const [scanBarcode, setScanBarcode] = useState("");
+  const [scanRoll, setScanRoll] = useState<Roll | null>(null);
   const { ordered, reorder } = useTabOrder("rolls", REORDERABLE_KEYS);
+
+  // Barkod okut → topu getir → detay panelini aç (404 toast'ı interceptor'dan).
+  const scanLookup = useMutation({
+    mutationFn: (code: string) => rollService.getByBarcode(code),
+    onSuccess: (res) => setScanRoll(res.data ?? null),
+  });
+  const openByBarcode = (code: string) => {
+    setScanBarcode(code);
+    scanLookup.mutate(code);
+  };
+  useScanSeed("scanBarcode", openByBarcode);
   const orderedTabs = ordered.flatMap((k) => {
     const t = TABS.find((x) => x.key === k);
     return t ? [t] : [];
@@ -96,6 +114,23 @@ export function RollsPage() {
         }
       />
       <ManualEntryDialog open={manualOpen} onOpenChange={setManualOpen} />
+      <ScanField
+        className="border-b px-4 py-2"
+        widthClassName="max-w-xs"
+        value={scanBarcode}
+        onChange={setScanBarcode}
+        onScan={openByBarcode}
+        placeholder="Top barkodu okut → detayı aç"
+        expectPrefix="ROLL"
+        submitLabel="Aç"
+        busy={scanLookup.isPending}
+        busyLabel="…"
+      />
+      <RollDetailSheet
+        roll={scanRoll}
+        open={Boolean(scanRoll)}
+        onOpenChange={(o) => !o && setScanRoll(null)}
+      />
       <ReorderableTabBar
         tabs={orderedTabs}
         pinnedTab={ARCHIVE_TAB}

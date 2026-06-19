@@ -9,6 +9,7 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { useDataTable } from "@/hooks/useDataTable";
+import { ScanField } from "@/components/scanner/ScanField";
 import { cn } from "@/lib/utils";
 import { customerService } from "@/pages/Customers/service";
 import { returnReasonService } from "@/pages/ReturnReasons/service";
@@ -68,6 +69,15 @@ function ReturnsStatusFilter() {
 export function ReturnsPage() {
   const [selected, setSelected] = useState<ReturnRow | null>(null);
   const [entryOpen, setEntryOpen] = useState(false);
+  const [scanBarcode, setScanBarcode] = useState("");
+  const [scanSeed, setScanSeed] = useState<string | undefined>(undefined);
+
+  // Tabanca: sevk edilmiş top okut → İade Girişi'ni o barkodla aç (oto-sorgu).
+  const startReturnScan = (code: string) => {
+    setScanSeed(code);
+    setEntryOpen(true);
+    setScanBarcode("");
+  };
   const { table, query, search, setSearch, pagination } = useDataTable<ReturnRow>({
     queryKey: "returns",
     fetchFn: returnsService.listCursor,
@@ -96,6 +106,18 @@ export function ReturnsPage() {
           </div>
         }
       />
+      <PermissionGate permission="return:write">
+        <ScanField
+          className="border-b px-4 py-2"
+          widthClassName="max-w-xs"
+          value={scanBarcode}
+          onChange={setScanBarcode}
+          onScan={startReturnScan}
+          placeholder="Sevk edilmiş top barkodu okut → iade gir"
+          expectPrefix="ROLL"
+          submitLabel="İade Gir"
+        />
+      </PermissionGate>
       <DataTableToolbar
         search={search}
         onSearchChange={setSearch}
@@ -122,7 +144,14 @@ export function ReturnsPage() {
         onRowClick={setSelected}
       />
       <ReturnsDetailSheet row={selected} onClose={() => setSelected(null)} />
-      <ReturnEntryDialog open={entryOpen} onOpenChange={setEntryOpen} />
+      <ReturnEntryDialog
+        open={entryOpen}
+        onOpenChange={(o) => {
+          setEntryOpen(o);
+          if (!o) setScanSeed(undefined);
+        }}
+        initialBarcode={scanSeed}
+      />
     </div>
   );
 }

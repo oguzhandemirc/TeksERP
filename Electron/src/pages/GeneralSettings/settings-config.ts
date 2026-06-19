@@ -8,6 +8,7 @@ import {
   Server,
   Clock,
   Tags,
+  ScanLine,
   type LucideIcon,
 } from "lucide-react";
 import type { FeatureFlags } from "@/services/featureFlagService";
@@ -32,7 +33,14 @@ export interface FlagDef {
  * - `api`     → sunucu adresi (bu bilgisayara özel) özel section
  * - `session` → oturum süresi + hareketsizlik zaman aşımı (sayısal) özel section
  */
-export type CategoryKind = "flags" | "device" | "api" | "company" | "session" | "label";
+export type CategoryKind =
+  | "flags"
+  | "device"
+  | "api"
+  | "company"
+  | "session"
+  | "label"
+  | "scanner";
 
 export interface SettingsCategory {
   id: string;
@@ -167,6 +175,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     description: "Top etiketi baskı ayarları (kopya adedi).",
     keywords: "etiket label baskı yazdır kopya adet çift üst alt yapıştır tambur",
     kind: "label",
+  },
+  {
+    id: "scanner",
+    label: "Barkod Tabancası",
+    icon: ScanLine,
+    description: "USB/Bluetooth barkod okuyucu davranışı (bu bilgisayara özel).",
+    keywords:
+      "barkod qr tabanca okuyucu scanner wedge klavye usb bluetooth her yerde okut terminator enter tab hassasiyet test",
+    kind: "scanner",
   },
   {
     id: "system",

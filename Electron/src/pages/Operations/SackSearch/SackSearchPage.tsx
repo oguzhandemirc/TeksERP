@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
-import { ChevronDown, PackageSearch, ScanLine } from "lucide-react";
+import { ChevronDown, PackageSearch } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScanField } from "@/components/scanner/ScanField";
+import { classifyBarcode } from "@/lib/scanner/barcode-kind";
+import { useScanSeed } from "@/hooks/useScanSeed";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { sackSearchService } from "./service";
 import { SearchFilters } from "./SearchFilters";
@@ -44,10 +47,22 @@ export function SackSearchPage() {
     onError: () => setLocated(null),
   });
 
-  const submitBarcode = () => {
-    const code = barcode.trim();
-    if (code) locate.mutate(code);
+  // Top barkodu → "nerede?"; çuval kodu (CV-) → çuval filtresine yönlendir.
+  const handleScan = (code: string) => {
+    if (classifyBarcode(code).kind === "SACK") {
+      setFilters((f) => ({ ...f, sackCode: code }));
+      setBarcode("");
+      toast.info(`Çuval kodu filtreye uygulandı: ${code}`);
+      return;
+    }
+    locate.mutate(code);
   };
+
+  // "Her yerde okut" → bu sekmeye yönlendirme (top: nerede; çuval: filtre).
+  useScanSeed("scanCode", (code) => {
+    setBarcode(code);
+    handleScan(code);
+  });
 
   return (
     <div className="flex h-full flex-col">
@@ -57,22 +72,18 @@ export function SackSearchPage() {
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
-      {/* Top bul — barkod okutma/yapıştırma */}
-      <div className="flex items-center gap-2 border-b px-6 py-3">
-        <div className="relative max-w-sm flex-1">
-          <ScanLine className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={barcode}
-            onChange={(e) => setBarcode(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submitBarcode()}
-            placeholder="Top barkodu okut/yaz → nerede?"
-            className="pl-8"
-          />
-        </div>
-        <Button size="sm" onClick={submitBarcode} disabled={!barcode.trim() || locate.isPending}>
-          {locate.isPending ? "Aranıyor…" : "Topu Bul"}
-        </Button>
-      </div>
+      {/* Top bul — barkod okutma/yapıştırma (CV- çuval kodu filtreye yönlenir) */}
+      <ScanField
+        className="border-b px-6 py-3"
+        value={barcode}
+        onChange={setBarcode}
+        onScan={handleScan}
+        placeholder="Top barkodu okut/yaz → nerede? (çuval kodu → filtre)"
+        expectPrefix={["ROLL", "SACK"]}
+        submitLabel="Topu Bul"
+        busy={locate.isPending}
+        busyLabel="Aranıyor…"
+      />
 
       <SearchFilters
         filters={filters}

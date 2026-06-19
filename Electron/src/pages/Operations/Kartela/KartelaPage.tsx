@@ -1,49 +1,17 @@
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Send, PackageCheck, Package, Palette } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { cn } from "@/lib/utils";
-import { DataTable } from "@/components/data-table/DataTable";
-import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
-import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
-import { useDataTable } from "@/hooks/useDataTable";
-import { subcontractorService } from "@/pages/Subcontractors/service";
+import { ScanField } from "@/components/scanner/ScanField";
+import { useScanSeed } from "@/hooks/useScanSeed";
 import { RollsTable } from "@/pages/Operations/Rolls/RollsTable";
 import { SwatchesPanel } from "@/pages/Operations/Rolls/SwatchesPanel";
-import { kartelaService, type KartelaDispatchListItem, type KartelaReceiptListItem } from "./service";
-import { kartelaDispatchColumns, kartelaReceiptColumns } from "./kartelaColumns";
+import { SwatchDetailSheet } from "@/pages/Operations/Rolls/SwatchDetailSheet";
+import { swatchService, type Swatch } from "@/pages/Operations/Rolls/swatchService";
 import { KartelaDetailSheet, type KartelaSelection } from "./KartelaDetailSheet";
-
-const STATUS_FILTER: FilterDef = {
-  kind: "select",
-  key: "status",
-  label: "Durum",
-  options: [
-    { value: "active", label: "Aktif" },
-    { value: "cancelled", label: "İptal" },
-    { value: "all", label: "Tümü" },
-  ],
-};
-
-const FIRM_FILTER: FilterDef = {
-  kind: "lookup",
-  key: "subcontractorId",
-  label: "Firma",
-  service: subcontractorService,
-  queryKey: "subcontractors",
-};
-
-const DISPATCH_FILTERS: FilterDef[] = [
-  STATUS_FILTER,
-  FIRM_FILTER,
-  { kind: "dateRange", label: "Tarih", defaultField: "dispatchedAt" },
-];
-
-const RECEIPT_FILTERS: FilterDef[] = [
-  STATUS_FILTER,
-  FIRM_FILTER,
-  { kind: "dateRange", label: "Tarih", defaultField: "receivedAt" },
-];
+import { DispatchesTab, ReceiptsTab } from "./KartelaTabs";
 
 // Tek kokpit: belge akışı (Sevkler/Kabuller) + envanter (Kartelada Toplar =
 // AT_KARTELA rulolar, Üretilen Kartelalar = swatch'lar). Envanter görünümleri
@@ -83,6 +51,19 @@ function KartelaTabBar({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
 export function KartelaPage() {
   const [tab, setTab] = useState<Tab>("dispatches");
   const [selection, setSelection] = useState<KartelaSelection>(null);
+  const [scanCode, setScanCode] = useState("");
+  const [scanSwatch, setScanSwatch] = useState<Swatch | null>(null);
+
+  // Kartela (SW-) barkodu okut → kartela detayını aç (404 toast'ı interceptor'dan).
+  const swatchLookup = useMutation({
+    mutationFn: (code: string) => swatchService.getByBarcode(code),
+    onSuccess: (res) => setScanSwatch(res.data ?? null),
+  });
+  const openSwatch = (code: string) => {
+    setScanCode(code);
+    swatchLookup.mutate(code);
+  };
+  useScanSeed("scanCode", openSwatch);
 
   const refreshKey =
     tab === "dispatches"
@@ -101,6 +82,19 @@ export function KartelaPage() {
         actions={<RefreshButton queryKey={refreshKey} extraKeys={[["kartela"]]} />}
       />
       <KartelaTabBar tab={tab} onTab={setTab} />
+      <ScanField
+        className="border-b px-4 py-2"
+        widthClassName="max-w-xs"
+        value={scanCode}
+        onChange={setScanCode}
+        onScan={openSwatch}
+        placeholder="Kartela barkodu okut → detay (SW-…)"
+        expectPrefix="SWATCH"
+        validateChecksum
+        submitLabel="Aç"
+        busy={swatchLookup.isPending}
+        busyLabel="…"
+      />
 
       {tab === "dispatches" ? (
         <DispatchesTab onSelect={setSelection} />
@@ -113,62 +107,11 @@ export function KartelaPage() {
       )}
 
       <KartelaDetailSheet selection={selection} onClose={() => setSelection(null)} />
+      <SwatchDetailSheet
+        swatch={scanSwatch}
+        open={Boolean(scanSwatch)}
+        onOpenChange={(o) => !o && setScanSwatch(null)}
+      />
     </div>
-  );
-}
-
-function DispatchesTab({ onSelect }: { onSelect: (s: KartelaSelection) => void }) {
-  const { table, query, search, setSearch, pagination } = useDataTable<KartelaDispatchListItem>({
-    queryKey: "kartela-dispatches",
-    fetchFn: kartelaService.listDispatchesCursor,
-    columns: kartelaDispatchColumns,
-    defaultPageSize: 50,
-    enableSelection: false,
-  });
-
-  return (
-    <>
-      <DataTableToolbar
-        search={search}
-        onSearchChange={setSearch}
-        placeholder="Belge no / firma ara..."
-      />
-      <FilterBar filters={DISPATCH_FILTERS} />
-      <DataTable<KartelaDispatchListItem>
-        table={table}
-        isLoading={query.isLoading}
-        pagination={pagination}
-        emptyText="Kartela sevki bulunamadı."
-        onRowClick={(d) => onSelect({ kind: "dispatch", id: d.id })}
-      />
-    </>
-  );
-}
-
-function ReceiptsTab({ onSelect }: { onSelect: (s: KartelaSelection) => void }) {
-  const { table, query, search, setSearch, pagination } = useDataTable<KartelaReceiptListItem>({
-    queryKey: "kartela-receipts",
-    fetchFn: kartelaService.listReceiptsCursor,
-    columns: kartelaReceiptColumns,
-    defaultPageSize: 50,
-    enableSelection: false,
-  });
-
-  return (
-    <>
-      <DataTableToolbar
-        search={search}
-        onSearchChange={setSearch}
-        placeholder="Belge no / irsaliye / firma ara..."
-      />
-      <FilterBar filters={RECEIPT_FILTERS} />
-      <DataTable<KartelaReceiptListItem>
-        table={table}
-        isLoading={query.isLoading}
-        pagination={pagination}
-        emptyText="Kartela kabulü bulunamadı."
-        onRowClick={(r) => onSelect({ kind: "receipt", id: r.id })}
-      />
-    </>
   );
 }
