@@ -384,21 +384,22 @@ async function main() {
 
   // --- Yazıcı modeli kataloğu + etiket format profilleri ---
   // "Yazıcı değişse de format/komut tanımları kaybolmasın" → kalıcı katalog.
-  // Argox OS 214 plus: 203dpi, max 104mm. Profil medya 100×148 + 3mm GÜVENLİK PAYI
-  // (içerik ~94×142) — etiket birkaç mm küçük çıksa bile kırpılmaz; admin'den ayarlanır.
+  // Argox OS 214 plus: 203dpi, max 104mm. Kumaş etiketi medya 100×60 mm YATAY +
+  // 3mm GÜVENLİK PAYI (içerik ~94×54) — topa yatay yapıştırılır; iki kolon
+  // (sol QR+barkod, sağ metin). Etiket birkaç mm küçük çıksa bile kırpılmaz.
   const argoxProfile = await prisma.labelFormatProfile.create({
     data: {
-      code: "ARGOX_TOP_100x148",
-      name: "Argox 100×148 mm Top (3mm pay)",
-      widthMm: 100, heightMm: 148, marginMm: 3, gapMm: 2, dpi: 203, orientation: "PORTRAIT",
+      code: "ARGOX_TOP_100x60",
+      name: "Argox 100×60 mm Yatay Top (3mm pay)",
+      widthMm: 100, heightMm: 60, marginMm: 3, gapMm: 2, dpi: 203, orientation: "LANDSCAPE",
     },
   });
   // Sistem default profili — Electron (device yok) ve resolver fallback bunu kullanır.
   await prisma.labelFormatProfile.create({
     data: {
       code: "DEFAULT",
-      name: "Varsayılan Top Etiketi (100×148, 3mm pay)",
-      widthMm: 100, heightMm: 148, marginMm: 3, gapMm: 2, dpi: 203, orientation: "PORTRAIT",
+      name: "Varsayılan Top Etiketi (100×60 yatay, 3mm pay)",
+      widthMm: 100, heightMm: 60, marginMm: 3, gapMm: 2, dpi: 203, orientation: "LANDSCAPE",
     },
   });
   const argox = await prisma.printerModel.create({

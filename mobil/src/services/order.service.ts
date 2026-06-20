@@ -19,12 +19,17 @@ export interface AvailableOrderLine {
   itemCode: string;
   itemName: string;
   customerItemName: string | null;
+  colorId: string | null;
   colorCode: string | null;
   colorName: string | null;
   customerColorName: string | null;
   width: number | null;
   quantity: number;
   openQty: number;
+  /** Yalnız withInProduction istendiğinde dolar (Hızlı İş Emri). */
+  inProduction?: number;
+  /** Net açık = açık − üretimdeki (withInProduction). Yoksa openQty kullan. */
+  netOpenQty?: number;
 }
 
 export interface QuickOrderResult {
@@ -40,10 +45,13 @@ export const orderService = {
     itemId: string;
     colorId?: string | null;
     width?: number | null;
+    /** true → satırlara inProduction + netOpenQty eklenir (Hızlı İş Emri). */
+    withInProduction?: boolean;
   }): Promise<ApiResponse<AvailableOrderLine[]>> => {
     const q = new URLSearchParams({ itemId: params.itemId });
     if (params.colorId) q.set('colorId', params.colorId);
     if (params.width != null) q.set('width', String(params.width));
+    if (params.withInProduction) q.set('withInProduction', 'true');
     return apiClient
       .get<ApiResponse<AvailableOrderLine[]>>(`/orders/order-lines/available?${q.toString()}`)
       .then((r) => r.data);

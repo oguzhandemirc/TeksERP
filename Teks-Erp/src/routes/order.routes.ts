@@ -335,7 +335,14 @@ router.get(
       const widthRaw = req.query.width as string | undefined;
       const width =
         widthRaw != null && widthRaw !== "" ? Number(widthRaw) : undefined;
-      const result = await service.findAvailableOrderLines({ itemId, colorId, width });
+      // Hızlı İş Emri "ne kadar daha üretmeliyim" için üretimdeki düşülmüş net açık ister.
+      const withInProduction = req.query.withInProduction === "true";
+      const result = await service.findAvailableOrderLines({
+        itemId,
+        colorId,
+        width,
+        withInProduction,
+      });
       res.json(result);
     } catch (e) {
       next(e);

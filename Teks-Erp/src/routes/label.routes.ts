@@ -272,7 +272,7 @@ router.post(
  *             type: object
  *             required: [kind, fields]
  *             properties:
- *               kind: { type: string, enum: [ROLL_RAW, ROLL_FINISHED] }
+ *               kind: { type: string, enum: [ROLL_RAW, ROLL_FINISHED, SWATCH] }
  *               fields:
  *                 type: array
  *                 items: { type: object }
@@ -309,6 +309,59 @@ router.get(
   verifyToken,
   requireAnyPermission("label:read", "mobile:tambur", "mobile:tarti-paket"),
   controller.getSwatchLabel,
+);
+
+/**
+ * @openapi
+ * /api/labels/swatches/{id}/html:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Kartela etiketinin tam HTML'i (100×60 yatay)
+ *     description: |
+ *       `/rolls/:id/html`'in kartela analoğu. Mobil expo-print basar, Electron iframe
+ *       srcDoc ile gösterir. Format `?profileId=`/`?machineId=` veya sistem default.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: HTML, content: { text/html: { schema: { type: string } } } }
+ *       404: { description: Kartela bulunamadı }
+ */
+router.get(
+  "/swatches/:id/html",
+  verifyToken,
+  requireAnyPermission("label:read", "mobile:tambur", "mobile:tarti-paket"),
+  controller.getSwatchLabelHtml,
+);
+
+/**
+ * @openapi
+ * /api/labels/swatches/{id}/native:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Kartela etiketi SEÇİLİ yazıcı dilinde (HTML veya native komut)
+ *     description: |
+ *       `/rolls/:id/native`'in kartela analoğu. RASTER_HTML → text/html; PPLA/PPLB/ZPL
+ *       → text/plain native komut (Faz-1: üretilir, gönderim simüle). Dil
+ *       `X-Label-Language` header'ında.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Seçili dilde kartela etiketi }
+ *       404: { description: Kartela bulunamadı }
+ */
+router.get(
+  "/swatches/:id/native",
+  verifyToken,
+  requireAnyPermission("label:read", "mobile:tambur", "mobile:tarti-paket"),
+  controller.getSwatchLabelNative,
 );
 
 /**

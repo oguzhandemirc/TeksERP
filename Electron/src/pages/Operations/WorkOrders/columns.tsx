@@ -61,6 +61,20 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     },
   },
   {
+    id: "ordered",
+    header: "Sipariş",
+    // Bağlı sipariş satırlarının toplam talep metrajı — çıkan/giren ile kıyas.
+    // Stok üretiminde (siparişe bağlı değil) değer yok → "—".
+    cell: ({ row }) => {
+      const m = row.original.orderedMeters ?? 0;
+      return m > 0 ? (
+        <span className="tabular-nums text-xs">{fmtM(m)} m</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      );
+    },
+  },
+  {
     accessorKey: "targetQuantity",
     header: () => <SortableHeader field="targetQuantity" label="Hedef" />,
     meta: { label: "Hedef" },

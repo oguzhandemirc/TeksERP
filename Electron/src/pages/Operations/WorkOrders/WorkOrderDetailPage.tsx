@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { GitBranch, PackageCheck, Route, ShoppingCart } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
@@ -11,6 +12,7 @@ import { workOrderService } from "./service";
 import { WorkOrderDetailHeader } from "./WorkOrderDetailHeader";
 import { WorkOrderHealthBand } from "./WorkOrderHealthBand";
 import { WorkOrderSectionNav, type NavSection } from "./WorkOrderSectionNav";
+import { SectionBlock } from "./WorkOrderSection";
 import { WorkOrderInfoCard } from "./WorkOrderInfoCard";
 import { RouteDistributionStrip } from "./RouteDistributionStrip";
 import { StepWipCard } from "./StepWipCard";
@@ -130,7 +132,7 @@ export function WorkOrderDetailPage() {
               </FadeInUp>
 
               <FadeInUp delay={0.16}>
-                <Section id="rota" title="Rota & Dağılım">
+                <SectionBlock id="rota" title="Rota & Dağılım" tone="process" icon={Route}>
                   {sortedSteps.length > 0 && (
                     <Card>
                       <CardContent className="p-4">
@@ -143,64 +145,36 @@ export function WorkOrderDetailPage() {
                       <StepWipCard key={step.id} step={step} />
                     ))}
                   </div>
-                </Section>
+                </SectionBlock>
               </FadeInUp>
 
               {hasFason && wo.id && (
                 <FadeInUp delay={0.24}>
-                  <Section id="dallar" title="Dallar (Fason Partileri)" tone="warning">
+                  <SectionBlock id="dallar" title="Dallar (Fason Partileri)" tone="warning" icon={GitBranch}>
                     <BranchGantt workOrderId={wo.id} steps={sortedSteps} />
                     <BranchLanes workOrderId={wo.id} />
-                  </Section>
+                  </SectionBlock>
                 </FadeInUp>
               )}
 
               {hasProduced && (
                 <FadeInUp delay={0.32}>
-                  <Section id="cikti" title="Üretilen Nihai Toplar" tone="success">
+                  <SectionBlock id="cikti" title="Üretilen Nihai Toplar" tone="success" icon={PackageCheck}>
                     <ProducedRollsCard wo={wo} />
-                  </Section>
+                  </SectionBlock>
                 </FadeInUp>
               )}
 
               <FadeInUp delay={0.4}>
-                <Section id="siparis" title="Bağlı Siparişler" tone="info">
+                <SectionBlock id="siparis" title="Bağlı Siparişler" tone="info" icon={ShoppingCart}>
                   <OrderLinksCard wo={wo} />
-                </Section>
+                </SectionBlock>
               </FadeInUp>
             </div>
           )}
         </div>
       </div>
     </div>
-  );
-}
-
-const SECTION_BAR: Record<string, string> = {
-  primary: "bg-primary",
-  warning: "bg-warning",
-  success: "bg-success",
-  info: "bg-info",
-};
-function Section({
-  id,
-  title,
-  tone = "primary",
-  children,
-}: {
-  id: string;
-  title: string;
-  tone?: keyof typeof SECTION_BAR;
-  children: React.ReactNode;
-}) {
-  return (
-    <section id={id} className="scroll-mt-16 space-y-3">
-      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-foreground/80">
-        <span className={cn("h-3.5 w-1 rounded-full", SECTION_BAR[tone])} />
-        {title}
-      </h2>
-      {children}
-    </section>
   );
 }
 

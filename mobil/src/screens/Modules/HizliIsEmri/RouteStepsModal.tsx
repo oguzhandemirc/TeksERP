@@ -23,10 +23,17 @@ interface Props {
   /** sequence → not (parent state'inde tutulur). */
   notes: Record<number, string>;
   onChangeNote: (sequence: number, text: string) => void;
+  /** Her fason adımı için etkin firma id (sequence → id|null). */
+  selectedFirmBySeq?: Record<number, string | null>;
+  /** Kategori id → seçilebilir fason firmaları. */
+  firmOptionsByCategory?: Record<string, { id: string; name: string; isFavorite?: boolean }[]>;
+  /** Firma id → ad (salt-görüntüleme). */
+  firmNameById?: Record<string, string>;
+  onChangeSubcontractor?: (sequence: number, firmId: string) => void;
 }
 
-// Rota şablonunun adımlarını gösterir. Gelişmiş modda her istasyona not girilir →
-// parent bunları `stepPlanning` (sequence eşleşmesi) olarak quickStart'a yollar.
+// Rota şablonunun adımlarını gösterir. Gelişmiş modda her istasyona not + fason firma
+// girilir → parent bunları `stepPlanning` (sequence eşleşmesi) olarak quickStart'a yollar.
 export default function RouteStepsModal({
   visible,
   onDismiss,
@@ -34,6 +41,10 @@ export default function RouteStepsModal({
   editable = false,
   notes,
   onChangeNote,
+  selectedFirmBySeq = {},
+  firmOptionsByCategory = {},
+  firmNameById = {},
+  onChangeSubcontractor,
 }: Props) {
   const steps = route?.steps ?? [];
 
@@ -45,7 +56,7 @@ export default function RouteStepsModal({
             {route?.name ?? 'Rota Şablonu'}
           </Text>
           <Text style={styles.subtitle}>
-            {steps.length} adım{editable ? ' · her istasyona not girebilirsiniz' : ''}
+            {steps.length} adım{editable ? ' · not + fason firma girebilirsiniz' : ''}
           </Text>
         </View>
         <TouchableRipple onPress={onDismiss} borderless style={styles.closeBtn}>
@@ -57,40 +68,87 @@ export default function RouteStepsModal({
         {steps.length === 0 ? (
           <Text style={styles.empty}>Bu rotada adım tanımlı değil.</Text>
         ) : (
-          steps.map((s) => (
-            <View key={s.id} style={styles.stepCard}>
-              <View style={styles.stepHead}>
-                <Text style={styles.seq}>{s.sequence}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.stationName} numberOfLines={1}>
-                    {s.station?.name ?? '—'}
-                  </Text>
-                  {s.station?.type ? (
-                    <Text style={styles.stationType}>{trLabel(STATION_TYPE_LABEL, s.station.type)}</Text>
-                  ) : null}
-                  {s.station?.defaultCategory ? (
-                    <Text style={styles.stationCat}>
-                      Fason: {s.station.defaultCategory.name}
-                      {applySuffix(s.station.defaultCategory)}
+          steps.map((s) => {
+            const cat = s.station?.defaultCategory ?? null;
+            const selectedFirmId = cat ? selectedFirmBySeq[s.sequence] ?? null : null;
+            const firmOptions = cat ? firmOptionsByCategory[cat.id] ?? [] : [];
+            return (
+              <View key={s.id} style={styles.stepCard}>
+                <View style={styles.stepHead}>
+                  <Text style={styles.seq}>{s.sequence}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.stationName} numberOfLines={1}>
+                      {s.station?.name ?? '—'}
                     </Text>
-                  ) : null}
+                    {s.station?.type ? (
+                      <Text style={styles.stationType}>{trLabel(STATION_TYPE_LABEL, s.station.type)}</Text>
+                    ) : null}
+                    {cat ? (
+                      <Text style={styles.stationCat}>
+                        Fason: {cat.name}
+                        {applySuffix(cat)}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
+
+                {editable ? (
+                  <TextInput
+                    mode="outlined"
+                    dense
+                    value={notes[s.sequence] ?? ''}
+                    onChangeText={(t) => onChangeNote(s.sequence, t)}
+                    placeholder={s.defaultNotes ? `Varsayılan: ${s.defaultNotes}` : 'İstasyon notu (opsiyonel)'}
+                    multiline
+                    style={styles.noteInput}
+                  />
+                ) : s.defaultNotes ? (
+                  <Text style={styles.defaultNote}>{s.defaultNotes}</Text>
+                ) : null}
+
+                {/* Fason firma — sadece fason (defaultCategory'li) adımlarda */}
+                {cat ? (
+                  <View style={styles.firmBlock}>
+                    <View style={styles.firmHeadRow}>
+                      <Icon source="factory" size={14} color={colors.brand} />
+                      <Text style={styles.firmLabel}>Fason firma</Text>
+                      <Text style={styles.firmCurrent} numberOfLines={1}>
+                        {selectedFirmId ? firmNameById[selectedFirmId] ?? '—' : 'Seçilmedi'}
+                      </Text>
+                    </View>
+                    {editable ? (
+                      firmOptions.length > 0 ? (
+                        <View style={styles.firmChips}>
+                          {firmOptions.map((f) => {
+                            const active = selectedFirmId === f.id;
+                            return (
+                              <TouchableRipple
+                                key={f.id}
+                                onPress={() => onChangeSubcontractor?.(s.sequence, f.id)}
+                                style={[styles.firmChip, active && styles.firmChipActive]}
+                                borderless
+                                rippleColor="rgba(79,70,229,0.12)"
+                              >
+                                <Text
+                                  style={[styles.firmChipText, active && styles.firmChipTextActive]}
+                                  numberOfLines={1}
+                                >
+                                  {f.isFavorite ? '★ ' : ''}
+                                  {f.name}
+                                </Text>
+                              </TouchableRipple>
+                            );
+                          })}
+                        </View>
+                      ) : (
+                        <Text style={styles.firmEmpty}>Bu kategoride kayıtlı firma yok.</Text>
+                      )
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
-              {editable ? (
-                <TextInput
-                  mode="outlined"
-                  dense
-                  value={notes[s.sequence] ?? ''}
-                  onChangeText={(t) => onChangeNote(s.sequence, t)}
-                  placeholder={s.defaultNotes ? `Varsayılan: ${s.defaultNotes}` : 'İstasyon notu (opsiyonel)'}
-                  multiline
-                  style={styles.noteInput}
-                />
-              ) : s.defaultNotes ? (
-                <Text style={styles.defaultNote}>{s.defaultNotes}</Text>
-              ) : null}
-            </View>
-          ))
+            );
+          })
         )}
         <View style={{ height: spacing.md }} />
       </ScrollView>
@@ -146,6 +204,24 @@ const styles = StyleSheet.create({
   stationCat: { fontSize: 12, color: colors.brand, fontWeight: '700', marginTop: 1 },
   noteInput: { backgroundColor: colors.surface, minHeight: 48 },
   defaultNote: { fontSize: 13, color: colors.textSecondary, fontStyle: 'italic', paddingLeft: 40 },
+  firmBlock: { gap: spacing.xs, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
+  firmHeadRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  firmLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
+  firmCurrent: { flex: 1, textAlign: 'right', fontSize: 13, fontWeight: '700', color: colors.text },
+  firmChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: 2 },
+  firmChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+    maxWidth: 200,
+  },
+  firmChipActive: { borderColor: colors.brand, backgroundColor: colors.brandSoft, borderWidth: 2 },
+  firmChipText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
+  firmChipTextActive: { color: colors.brand },
+  firmEmpty: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic' },
   footer: { padding: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
   footerBtn: { borderRadius: radius.md },
   footerBtnContent: { height: 52 },

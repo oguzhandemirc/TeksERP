@@ -5,6 +5,7 @@
 // üretir; her dil renderer'ı kendi sözdiziminde konumlar. 203dpi = 8 dot/mm.
 // =============================================================================
 
+import { LabelKind } from "@prisma/client";
 import type { LabelPayload } from "../label.service";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
 
@@ -13,6 +14,10 @@ export interface NativeRenderInput {
   format: ResolvedLabelFormat;
   copies: number;
 }
+
+/** Yatay (100×60) düzende sol tarama kolonu genişliği (QR + barkod) — sağ metin
+ *  kolonu buradan sonra başlar. Üç native dil de paylaşır. */
+export const LEFT_COL_MM = 30;
 
 export function mmToDots(mm: number, dpi: number): number {
   return Math.round((mm * dpi) / 25.4);
@@ -54,11 +59,22 @@ export interface RollTextLine {
   big?: boolean;
 }
 
-/** Top etiketinin sıralı metin satırları (barkod hariç) — diller paylaşır. */
+/** Etiketin sıralı metin satırları (barkod hariç) — üç native dil paylaşır.
+ *  kind=SWATCH (kartela) iken metraj yerine En×Boy + Kart No / Ana Top satırları. */
 export function rollTextLines(p: LabelPayload): RollTextLine[] {
   const lines: RollTextLine[] = [];
   lines.push({ text: cleanCtl(p.itemName || "-"), big: true });
   if (p.colorName) lines.push({ text: `Renk: ${cleanCtl(p.colorName)}` });
+
+  if (p.kind === LabelKind.SWATCH) {
+    lines.push({ text: `En: ${p.widthCm ?? "-"} cm   Boy: ${p.lengthCm ?? "-"} cm`, big: true });
+    if (p.weightKg != null) lines.push({ text: `Agirlik: ${cleanCtl(p.weightKg)} kg` });
+    if (p.cardNumber) lines.push({ text: `Kart No: ${cleanCtl(p.cardNumber)}` });
+    if (p.customerName) lines.push({ text: `Musteri: ${cleanCtl(p.customerName)}` });
+    if (p.parentRollBarcode) lines.push({ text: `Ana Top: ${cleanCtl(p.parentRollBarcode)}` });
+    return lines;
+  }
+
   lines.push({ text: `Kalite: ${cleanCtl(p.qualityGrade ?? "-")}` });
   lines.push({ text: `${cleanCtl(p.lengthMeters)} mt   En: ${p.widthCm ?? "-"} cm`, big: true });
   if (p.weightKg != null) lines.push({ text: `Agirlik: ${cleanCtl(p.weightKg)} kg` });

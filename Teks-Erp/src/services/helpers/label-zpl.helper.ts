@@ -10,7 +10,7 @@
 // test baskısıyla (Faz-2) ince ayarlanır.
 // =============================================================================
 
-import { cleanCtl, clampCopies, mmToDots, rollTextLines, type NativeRenderInput } from "./native-label.shared";
+import { cleanCtl, clampCopies, mmToDots, rollTextLines, LEFT_COL_MM, type NativeRenderInput } from "./native-label.shared";
 
 /** ZPL ^FD verisi ^FS'e dek sürer; kontrol önekleri `^` ve `~` veriden ayıklanır. */
 function zplData(s: string): string {
@@ -23,6 +23,7 @@ export function buildRollLabelZpl({ payload, format, copies }: NativeRenderInput
   const widthDots = d(format.widthMm);
   const heightDots = d(format.heightMm);
   const margin = d(format.marginMm);
+  const textX = margin + d(LEFT_COL_MM); // sağ metin kolonu (sol = QR/barkod)
   const lines: string[] = [];
 
   lines.push("^XA"); // etiket başlangıcı
@@ -30,22 +31,21 @@ export function buildRollLabelZpl({ payload, format, copies }: NativeRenderInput
   lines.push(`^PW${widthDots}`); // baskı genişliği (dot)
   lines.push(`^LL${heightDots}`); // etiket boyu (dot)
 
-  // Metin alanları — ^FO x,y ^A0N,h,w ^FD veri ^FS (origin sol-üst)
+  // Sağ kolon metin alanları — ^FO x,y ^A0N,h,w ^FD veri ^FS (origin sol-üst)
   let y = margin;
   for (const ln of rollTextLines(payload)) {
-    const h = ln.big ? d(6) : d(4);
-    lines.push(`^FO${margin},${Math.round(y)}^A0N,${h},${h}^FD${zplData(ln.text)}^FS`);
-    y += ln.big ? d(9) : d(6);
+    const h = ln.big ? d(5) : d(4);
+    lines.push(`^FO${textX},${Math.round(y)}^A0N,${h},${h}^FD${zplData(ln.text)}^FS`);
+    y += ln.big ? d(7) : d(5); // 60mm'e sığsın diye sıkı adım
   }
 
-  // Barkod (Code128) + QR
+  // Sol kolon: QR (üst) + Code128 (alt)
   if (payload.barcode) {
     const bc = zplData(payload.barcode);
-    const bcY = Math.max(margin, heightDots - d(30));
-    // Code128: ^BCN,height,printInterpretation(Y),N,N
-    lines.push(`^FO${margin},${bcY}^BCN,${d(12)},Y,N,N^FD${bc}^FS`);
-    // QR: ^BQN,2,mag ^FD QA,veri
-    lines.push(`^FO${Math.max(margin, widthDots - margin - d(22))},${bcY}^BQN,2,4^FDQA,${bc}^FS`);
+    // QR: ^BQN,2,mag ^FD QA,veri — sol üst
+    lines.push(`^FO${margin},${margin}^BQN,2,3^FDQA,${bc}^FS`);
+    // Code128: ^BCN,height,printInterpretation(Y),N,N — QR'ın altı
+    lines.push(`^FO${margin},${margin + d(28)}^BCN,${d(10)},Y,N,N^FD${bc}^FS`);
   }
 
   lines.push(`^PQ${clampCopies(copies)}`); // kopya adedi

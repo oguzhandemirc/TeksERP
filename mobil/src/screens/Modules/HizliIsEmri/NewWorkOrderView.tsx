@@ -8,6 +8,7 @@ import {
   IconButton,
   TextInput,
   Surface,
+  ActivityIndicator,
 } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient, onlineManager } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
@@ -31,11 +32,11 @@ import { routeService } from '../../../services/route.service';
 import { productRecipeService } from '../../../services/productRecipe.service';
 import { subcontractorService } from '../../../services/subcontractor.service';
 import { workOrderService, type QuickStartRequest } from '../../../services/workOrder.service';
-import { useDeviceSettingsStore, type QuickWoMode } from '../../../store/deviceSettingsStore';
+import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import type { Roll } from '../../../types/models';
-import { colors, spacing, radius, shadow } from '../../../theme';
+import { colors, spacing, radius } from '../../../theme';
 
 interface ScannedRoll {
   id: string;
@@ -55,10 +56,14 @@ const errMessage = (err: unknown): string => {
   return e?.response?.data?.message ?? e?.message ?? 'Bilinmeyen hata';
 };
 
-export default function NewWorkOrderView() {
+interface NewWorkOrderViewProps {
+  /** "Listeden Seç" modalı dışarıdan (header simge butonu) açılabilsin. */
+  rollListOpen?: boolean;
+  onRollListOpenChange?: (v: boolean) => void;
+}
+
+export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }: NewWorkOrderViewProps) {
   const qc = useQueryClient();
-  const mode = useDeviceSettingsStore((s) => s.quickWoMode);
-  const setMode = useDeviceSettingsStore((s) => s.setQuickWoMode);
   const manualMode = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   const lastRouteTemplateId = useDeviceSettingsStore((s) => s.lastRouteTemplateId);
   const setLastRouteTemplateId = useDeviceSettingsStore((s) => s.setLastRouteTemplateId);
@@ -69,7 +74,12 @@ export default function NewWorkOrderView() {
 
   const [scanned, setScanned] = useState<ScannedRoll[]>([]);
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [listOpen, setListOpen] = useState(false);
+  const [listOpenInternal, setListOpenInternal] = useState(false);
+  const listOpen = rollListOpen ?? listOpenInternal;
+  const setListOpen = (v: boolean) => {
+    if (onRollListOpenChange) onRollListOpenChange(v);
+    else setListOpenInternal(v);
+  };
   const [manualBarcode, setManualBarcode] = useState('');
   const resolvingRef = useRef(false);
   // addRolls async tarama closure'ında güncel listeyi okumak için ayna ref.
@@ -96,9 +106,19 @@ export default function NewWorkOrderView() {
   const [header, setHeader] = useState<WoHeaderFieldValues>(EMPTY_HEADER_FIELDS);
   const [orderLineIds, setOrderLineIds] = useState<string[]>([]);
   const [targetPropertyIds, setTargetPropertyIds] = useState<string[]>([]);
-  // Gelişmiş modda istasyon başına not (route step sequence → not) → stepPlanning.
+  // İstasyon başına not (route step sequence → not) → stepPlanning.
   const [stepNotes, setStepNotes] = useState<Record<number, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Özet satırı için: Detaylar kartındaki renk seçici, çözdüğü hedef renk adını buraya bildirir.
+  const [colorLabel, setColorLabel] = useState<string | null>(null);
+  // Sipariş kalemi seçici modalı — hem Detaylar kartından hem alt bardan açılır.
+  const [orderPickerOpen, setOrderPickerOpen] = useState(false);
+  // Sipariş kaleminden gelen renk adı — kilitli renk alanı + özette doğrudan göster
+  // (public-dışı/müşteri-özel renkte picker'da olmayabilir).
+  const [orderColorName, setOrderColorName] = useState<string | null>(null);
+  // Rota fason adımlarında operatör firma override'ı (sequence → firma id).
+  // Boş → route'un kayıtlı fasonu, o da yoksa favori kullanılır (selectedFirmBySeq).
+  const [stepSubcontractors, setStepSubcontractors] = useState<Record<number, string>>({});
 
   const [result, setResult] = useState<{ batchNumber: string; attached: number; errors: string[]; woId: string } | null>(
     null,
@@ -213,6 +233,34 @@ export default function NewWorkOrderView() {
     [subcontractorsQuery.data],
   );
 
+  // Fason firma seçenekleri (kategori bazında) + id→ad haritası — rota adımları modalı için.
+  const firmOptionsByCategory = useMemo(() => {
+    const subs = subcontractorsQuery.data?.data ?? [];
+    const out: Record<string, { id: string; name: string; isFavorite?: boolean }[]> = {};
+    for (const catId of fasonCategoryIds) {
+      out[catId] = subs
+        .filter((s) => s.categories?.some((c) => c.categoryId === catId))
+        .map((s) => ({ id: s.id, name: s.name, isFavorite: s.isFavorite }));
+    }
+    return out;
+  }, [subcontractorsQuery.data, fasonCategoryIds]);
+  const firmNameById = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const s of subcontractorsQuery.data?.data ?? []) out[s.id] = s.name;
+    return out;
+  }, [subcontractorsQuery.data]);
+  // Her fason adımı için etkin firma: operatör override'ı ?? rota kaydı ?? favori.
+  const selectedFirmBySeq = useMemo(() => {
+    const out: Record<number, string | null> = {};
+    for (const s of selectedRoute?.steps ?? []) {
+      const cat = s.station?.defaultCategory;
+      if (!cat) continue;
+      out[s.sequence] =
+        stepSubcontractors[s.sequence] ?? s.plannedSubcontractorId ?? favoriteFirmFor(cat.id) ?? null;
+    }
+    return out;
+  }, [selectedRoute, stepSubcontractors, favoriteFirmFor]);
+
   // Rota hızlı çipleri: son kullanılan + favoriler (max 4, tekilleştirilmiş).
   const routeChips = useMemo(() => {
     const all = routesQuery.data?.data ?? [];
@@ -242,6 +290,7 @@ export default function NewWorkOrderView() {
   const chooseRoute = (id: string | null) => {
     setRouteTemplateId(id);
     setStepNotes({}); // rota değişti → eski sequence notları geçersiz
+    setStepSubcontractors({}); // rota değişti → eski firma override'ları geçersiz
     setSubmitError(null);
   };
 
@@ -359,12 +408,14 @@ export default function NewWorkOrderView() {
       if (r.routeId) {
         setRouteTemplateId(r.routeId);
         setStepNotes({}); // rota değişti → eski sequence notları geçersiz
+        setStepSubcontractors({}); // rota değişti → eski firma override'ları geçersiz
       }
       setHeader((h) => ({
         ...h,
         targetColorId: r.colorId ?? null,
         width: r.width != null ? String(r.width) : '',
-        foldType: r.foldType ?? null,
+        // Şablon kat tipi belirtmiyorsa mevcut seçimi koru — kat tipi boş kalamaz.
+        foldType: r.foldType ?? h.foldType,
       }));
       const propRows = r.properties ?? [];
       setTargetPropertyIds(propRows.map((p) => p.propertyId));
@@ -387,7 +438,8 @@ export default function NewWorkOrderView() {
     setTemplateId(null);
     setAppliedTemplate(null);
     setTargetPropertyIds([]);
-    setHeader((h) => ({ ...h, targetColorId: null, width: '', foldType: null }));
+    // Kat tipi varsayılana döner (boş bırakılamaz).
+    setHeader((h) => ({ ...h, targetColorId: null, width: '', foldType: EMPTY_HEADER_FIELDS.foldType }));
     setSubmitError(null);
   };
 
@@ -419,7 +471,7 @@ export default function NewWorkOrderView() {
     },
   });
 
-  const canSubmit = scanned.length > 0 && !!routeTemplateId && !mutation.isPending;
+  const canSubmit = scanned.length > 0 && !!routeTemplateId && !!header.foldType && !mutation.isPending;
 
   const submit = () => {
     setSubmitError(null);
@@ -437,6 +489,10 @@ export default function NewWorkOrderView() {
       setSubmitError('Bir rota şablonu seçmelisiniz.');
       return;
     }
+    if (!header.foldType) {
+      setSubmitError('Kat tipi seçmelisiniz (2-KAT veya 4-KAT).');
+      return;
+    }
     const apply = hasColorOrProps;
     if (apply && !routeCanApply) {
       setSubmitError(
@@ -445,8 +501,8 @@ export default function NewWorkOrderView() {
       return;
     }
 
-    // stepPlanning'i sequence bazında birleştir: önce istasyon notları, sonra (apply ise)
-    // fason kategori + favori firma. Backend create() bunları rota adımına sequence ile uygular.
+    // stepPlanning'i sequence bazında birleştir: istasyon notları + her fason adımının
+    // kategori & planlanan firması. Backend create() bunları rota adımına sequence ile uygular.
     const planBySeq = new Map<
       number,
       { notes?: string; requiredCategoryId?: string; plannedSubcontractorId?: string }
@@ -455,17 +511,17 @@ export default function NewWorkOrderView() {
       const t = v.trim();
       if (t) planBySeq.set(Number(seq), { ...(planBySeq.get(Number(seq)) ?? {}), notes: t });
     }
-    if (apply) {
-      for (const s of selectedRoute?.steps ?? []) {
-        const cat = s.station?.defaultCategory;
-        if (!cat) continue;
-        const firm = favoriteFirmFor(cat.id);
-        planBySeq.set(s.sequence, {
-          ...(planBySeq.get(s.sequence) ?? {}),
-          requiredCategoryId: cat.id,
-          ...(firm ? { plannedSubcontractorId: firm } : {}),
-        });
-      }
+    // Fason adımları (defaultCategory'li) → kategori + firma (override ?? rota kaydı ?? favori).
+    // apply'dan bağımsız: fason adımı renk uygulamasa da bir firmaya gönderilir.
+    for (const s of selectedRoute?.steps ?? []) {
+      const cat = s.station?.defaultCategory;
+      if (!cat) continue;
+      const firm = selectedFirmBySeq[s.sequence] ?? undefined;
+      planBySeq.set(s.sequence, {
+        ...(planBySeq.get(s.sequence) ?? {}),
+        requiredCategoryId: cat.id,
+        ...(firm ? { plannedSubcontractorId: firm } : {}),
+      });
     }
     const stepPlanning = [...planBySeq.entries()].map(([sequence, v]) => ({ sequence, ...v }));
 
@@ -480,7 +536,7 @@ export default function NewWorkOrderView() {
       dyehouseNote: header.dyehouseNote.trim() || null,
       // Boş → backend Electron ile aynı algoritmayı (P-YYMMDD-NNN) üretir; doluysa override.
       batchNumber: header.batchNumber.trim() || undefined,
-      orderLineIds: mode === 'advanced' && orderLineIds.length ? orderLineIds : undefined,
+      orderLineIds: orderLineIds.length ? orderLineIds : undefined,
       targetPropertyIds: apply && targetPropertyIds.length ? targetPropertyIds : undefined,
       stepPlanning: stepPlanning.length ? stepPlanning : undefined,
       // targetItemId verilmiyor → backend okutulan topların ürününden türetir
@@ -496,6 +552,9 @@ export default function NewWorkOrderView() {
     setHeader(EMPTY_HEADER_FIELDS);
     setOrderLineIds([]);
     setStepNotes({});
+    setStepSubcontractors({});
+    setOrderColorName(null);
+    setColorLabel(null);
     setSubmitError(null);
     setResult(null);
   };
@@ -544,32 +603,10 @@ export default function NewWorkOrderView() {
     );
   }
 
-  const isAdvanced = mode === 'advanced';
-
   return (
     <View style={styles.root}>
       {QrSink}
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {/* Mod seçici */}
-        <View style={styles.modeRow}>
-          {(['simple', 'advanced'] as QuickWoMode[]).map((m) => {
-            const active = mode === m;
-            return (
-              <TouchableRipple
-                key={m}
-                onPress={() => setMode(m)}
-                style={[styles.modeChip, active && styles.modeChipActive]}
-                borderless
-                rippleColor="rgba(79,70,229,0.12)"
-              >
-                <Text style={[styles.modeText, active && styles.modeTextActive]}>
-                  {m === 'simple' ? 'Basit' : 'Gelişmiş'}
-                </Text>
-              </TouchableRipple>
-            );
-          })}
-        </View>
-
         {/* Toplar kartı */}
         <Surface style={styles.card} elevation={1}>
           <View style={styles.cardHeader}>
@@ -579,27 +616,6 @@ export default function NewWorkOrderView() {
                 <Text style={styles.clearAllText}>Temizle</Text>
               </TouchableRipple>
             ) : null}
-          </View>
-
-          <View style={styles.addBtnRow}>
-            <Button
-              mode="contained"
-              icon="barcode-scan"
-              onPress={() => setScannerOpen(true)}
-              style={styles.addBtn}
-              contentStyle={styles.addBtnContent}
-            >
-              Okut
-            </Button>
-            <Button
-              mode="contained-tonal"
-              icon="format-list-checks"
-              onPress={() => setListOpen(true)}
-              style={styles.addBtn}
-              contentStyle={styles.addBtnContent}
-            >
-              Listeden Seç
-            </Button>
           </View>
 
           {manualMode ? (
@@ -774,22 +790,40 @@ export default function NewWorkOrderView() {
             autoCapitalize="characters"
             style={styles.input}
           />
-
-          {mode === 'simple' ? (
-            <Text style={styles.hint}>Hedef ürün okutulan toplardan otomatik belirlenir.</Text>
-          ) : null}
         </Surface>
 
-        {/* Detay kartı — yalnız Gelişmiş */}
-        {isAdvanced ? (
-          <Surface style={styles.card} elevation={1}>
-            <Text style={styles.cardTitle}>Detaylar</Text>
-            <WorkOrderHeaderFields value={header} onChange={(p) => setHeader((h) => ({ ...h, ...p }))} />
-            <OrderLinkPicker itemId={lockedItemId} value={orderLineIds} onChange={setOrderLineIds} />
-          </Surface>
-        ) : null}
+        {/* Detay kartı */}
+        <Surface style={styles.card} elevation={1}>
+          <Text style={styles.cardTitle}>Detaylar</Text>
+          <WorkOrderHeaderFields
+            value={header}
+            onChange={(p) => setHeader((h) => ({ ...h, ...p }))}
+            onColorLabelResolved={setColorLabel}
+            lockColorWidth={orderLineIds.length > 0}
+            colorLabelOverride={orderLineIds.length > 0 ? orderColorName : null}
+          />
+          <OrderLinkPicker
+            itemId={lockedItemId}
+            value={orderLineIds}
+            onChange={(ids) => {
+              setOrderLineIds(ids);
+              if (ids.length === 0) setOrderColorName(null);
+            }}
+            open={orderPickerOpen}
+            onOpenChange={setOrderPickerOpen}
+            onLinePicked={(line) => {
+              setHeader((h) => ({
+                ...h,
+                targetColorId: line.colorId,
+                width: line.width != null ? String(line.width) : '',
+              }));
+              // Renk adını doğrudan order kaleminden al (gerçek colorId varsa).
+              setOrderColorName(line.colorId ? (line.colorName ?? line.customerColorName ?? null) : null);
+            }}
+          />
+        </Surface>
 
-        <View style={{ height: 160 }} />
+        <View style={{ height: 200 }} />
       </ScrollView>
 
       {/* Sticky başlat alanı */}
@@ -801,23 +835,80 @@ export default function NewWorkOrderView() {
           </View>
         ) : null}
         <View style={styles.footerSummary}>
-          <Text style={styles.footerSummaryText} numberOfLines={1}>
-            {scanned.length > 0 ? `${scanned.length} top · ${Math.round(totalQty)} m` : 'Top eklenmedi'}
-            {routeLabel ? ` · ${routeLabel}` : ' · Rota seçin'}
+          <Text style={styles.footerSummaryText} numberOfLines={2}>
+            {[
+              scanned.length > 0 ? `${scanned.length} top · ${Math.round(totalQty)} m` : 'Top eklenmedi',
+              routeLabel ?? 'Rota seçin',
+              colorLabel ?? 'Renksiz / Ham',
+              header.width.trim() ? `${header.width.trim()} cm` : null,
+              header.foldType ?? 'Kat tipi seçin',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </Text>
         </View>
-        <Button
-          mode="contained"
-          icon="rocket-launch"
-          onPress={submit}
-          disabled={!canSubmit}
-          loading={mutation.isPending}
-          style={styles.submitBtn}
-          contentStyle={styles.submitBtnContent}
-          labelStyle={styles.submitLabel}
-        >
-          İş Emrini Başlat{scanned.length > 0 ? ` (${scanned.length})` : ''}
-        </Button>
+        <View style={styles.bottomBar}>
+          {/* Okut */}
+          <View style={styles.bottomBarCellSide}>
+            <TouchableRipple
+              onPress={() => setScannerOpen(true)}
+              style={styles.bottomBarBtn}
+              rippleColor="rgba(79,70,229,0.12)"
+              accessibilityLabel="Top okut"
+            >
+              <View style={styles.bottomBarBtnInner}>
+                <Icon source="barcode-scan" size={22} color={colors.brand} />
+                <Text style={[styles.bottomBarBtnText, styles.bottomBarBtnTextSide]} numberOfLines={2}>
+                  Okut
+                </Text>
+              </View>
+            </TouchableRipple>
+          </View>
+
+          {/* İş Emrini Başlat — ana eylem (hero) */}
+          <View style={styles.bottomBarCellPrimary}>
+            <TouchableRipple
+              onPress={submit}
+              disabled={!canSubmit}
+              style={[
+                styles.bottomBarBtn,
+                styles.bottomBarBtnPrimaryFill,
+                !canSubmit && styles.bottomBarBtnDisabled,
+              ]}
+              rippleColor="rgba(255,255,255,0.25)"
+              accessibilityLabel="İş emrini başlat"
+            >
+              <View style={styles.bottomBarBtnInner}>
+                {mutation.isPending ? (
+                  <ActivityIndicator size={20} color="#fff" />
+                ) : (
+                  <Icon source="rocket-launch" size={24} color="#fff" />
+                )}
+                <Text style={[styles.bottomBarBtnText, styles.bottomBarBtnTextPrimary]} numberOfLines={2}>
+                  İş Emrini Başlat{scanned.length > 0 ? ` (${scanned.length})` : ''}
+                </Text>
+              </View>
+            </TouchableRipple>
+          </View>
+
+          {/* Sipariş Bağla */}
+          <View style={styles.bottomBarCellSide}>
+            <TouchableRipple
+              onPress={() => setOrderPickerOpen(true)}
+              disabled={!lockedItemId}
+              style={[styles.bottomBarBtn, !lockedItemId && styles.bottomBarBtnDisabled]}
+              rippleColor="rgba(79,70,229,0.12)"
+              accessibilityLabel="Sipariş bağla"
+            >
+              <View style={styles.bottomBarBtnInner}>
+                <Icon source="link-variant" size={22} color={colors.brand} />
+                <Text style={[styles.bottomBarBtnText, styles.bottomBarBtnTextSide]} numberOfLines={2}>
+                  {orderLineIds.length > 0 ? `Sipariş (${orderLineIds.length})` : 'Sipariş Bağla'}
+                </Text>
+              </View>
+            </TouchableRipple>
+          </View>
+        </View>
       </View>
 
       {/* Sürekli tarayıcı — kendi kabul/ret titreşimimiz var, yakalama haptiği kapalı. */}
@@ -930,14 +1021,20 @@ export default function NewWorkOrderView() {
         </ScrollView>
       </AppModal>
 
-      {/* Rota adımları — info ile açılır; Gelişmiş modda istasyon notu girilir */}
+      {/* Rota adımları — info ile açılır; istasyon notu + fason firma girilir */}
       <RouteStepsModal
         visible={routeStepsOpen}
         onDismiss={() => setRouteStepsOpen(false)}
         route={selectedRoute}
-        editable={isAdvanced}
+        editable
         notes={stepNotes}
         onChangeNote={(seq, text) => setStepNotes((prev) => ({ ...prev, [seq]: text }))}
+        selectedFirmBySeq={selectedFirmBySeq}
+        firmOptionsByCategory={firmOptionsByCategory}
+        firmNameById={firmNameById}
+        onChangeSubcontractor={(seq, firmId) =>
+          setStepSubcontractors((prev) => ({ ...prev, [seq]: firmId }))
+        }
       />
     </View>
   );
@@ -947,21 +1044,12 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.appBg },
   scroll: { padding: spacing.md, gap: spacing.md },
 
-  modeRow: { flexDirection: 'row', gap: spacing.sm, backgroundColor: colors.surfaceMuted, borderRadius: radius.full, padding: 4 },
-  modeChip: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: radius.full },
-  modeChipActive: { backgroundColor: colors.surface, ...shadow.sm },
-  modeText: { fontWeight: '700', color: colors.textSecondary, fontSize: 14 },
-  modeTextActive: { color: colors.brand },
-
   card: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.xs },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardTitle: { fontSize: 16, fontWeight: '800', color: colors.text, marginBottom: spacing.xs },
   clearAll: { paddingHorizontal: spacing.sm, paddingVertical: 8 },
   clearAllText: { color: colors.danger, fontWeight: '700', fontSize: 13 },
 
-  addBtnRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  addBtn: { flex: 1, borderRadius: radius.md },
-  addBtnContent: { height: 56 },
   manualRow: { marginTop: spacing.sm },
   manualInput: { backgroundColor: colors.surface },
 
@@ -980,7 +1068,6 @@ const styles = StyleSheet.create({
 
   label: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginTop: spacing.sm, marginBottom: 2 },
   req: { color: colors.danger },
-  hint: { fontSize: 12, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 17 },
   rowGap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   selectField: { borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 16, backgroundColor: colors.surface },
   selectFieldFlex: { flex: 1, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 16, backgroundColor: colors.surface },
@@ -1022,10 +1109,29 @@ const styles = StyleSheet.create({
   errorBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.dangerContainer, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 10 },
   errorBannerText: { flex: 1, color: colors.dangerText, fontSize: 13, fontWeight: '600', lineHeight: 18 },
   footerSummary: { alignItems: 'center' },
-  footerSummaryText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
-  submitBtn: { borderRadius: radius.md },
-  submitBtnContent: { height: 56 },
-  submitLabel: { fontSize: 16, fontWeight: '800' },
+  footerSummaryText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, textAlign: 'center' },
+
+  // Alt aksiyon barı — Fason Kabul standardı: yan · ana (hero) · yan.
+  bottomBar: { flexDirection: 'row', gap: spacing.sm },
+  bottomBarCellSide: { flex: 3 },
+  bottomBarCellPrimary: { flex: 4 },
+  bottomBarBtn: {
+    minHeight: 60,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  bottomBarBtnPrimaryFill: { backgroundColor: colors.brand, borderColor: colors.brand },
+  bottomBarBtnDisabled: { opacity: 0.45 },
+  bottomBarBtnInner: { alignItems: 'center', gap: 2, paddingHorizontal: 4 },
+  bottomBarBtnText: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  bottomBarBtnTextSide: { color: colors.brand },
+  bottomBarBtnTextPrimary: { color: '#fff' },
 
   successWrap: { flex: 1, backgroundColor: colors.appBg, justifyContent: 'center', padding: spacing.lg },
   successCard: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.xxl, alignItems: 'center', gap: spacing.sm },

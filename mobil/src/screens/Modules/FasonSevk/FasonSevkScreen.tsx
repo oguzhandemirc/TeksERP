@@ -845,6 +845,11 @@ export default function FasonSevkScreen() {
         0,
       )
     : null;
+  // Bu WO'dan fason firmaya zaten gönderilen (iptal edilmemiş sevkler toplamı).
+  // "Toplar" ilerleme çubuğu KALAN hedefi gösterir: WO hedefi − gönderilen.
+  const dispatchedSoFar = Number(selectedWo?.dispatchedTotalQty ?? 0);
+  const remainingTarget =
+    orderTotalMeters != null ? Math.max(0, orderTotalMeters - dispatchedSoFar) : null;
   const metaRight = [
     selectedWo?.width != null ? `En ${selectedWo.width} cm` : null,
     orderTotalMeters && orderTotalMeters > 0 ? `${Math.round(orderTotalMeters)} m` : null,
@@ -940,9 +945,10 @@ export default function FasonSevkScreen() {
               {workOrderId ? (
                 <Button
                   compact
-                  mode="text"
+                  mode="contained-tonal"
                   icon="close-circle-outline"
-                  textColor="#64748b"
+                  buttonColor="#fee2e2"
+                  textColor="#dc2626"
                   onPress={clearWorkOrder}
                 >
                   Vazgeç
@@ -1052,12 +1058,16 @@ export default function FasonSevkScreen() {
               <Text style={styles.sectionTitle}>
                 Toplar{scannedRolls.length > 0 ? ` (${scannedRolls.length})` : ''}
               </Text>
-              {orderTotalMeters != null && orderTotalMeters > 0 && (
+              {remainingTarget != null && remainingTarget > 0 ? (
                 <DispatchProgressBar
                   current={scannedRollsTotal}
-                  target={orderTotalMeters}
+                  target={remainingTarget}
                 />
-              )}
+              ) : orderTotalMeters != null && orderTotalMeters > 0 && dispatchedSoFar > 0 ? (
+                <Text style={{ fontSize: 12, fontWeight: '600', color: palette.slate[500], paddingVertical: 6 }}>
+                  Sevk hedefi doldu · {Math.round(dispatchedSoFar)} mt gönderildi
+                </Text>
+              ) : null}
               <ScannerEntryBar
                 value={barcodeInput}
                 onChangeText={setBarcodeInput}

@@ -29,6 +29,22 @@ interface Props {
   isSubmitting?: boolean;
 }
 
+// Rota adımını forma çevir — fason planlaması (Saha #14) dahil. EXTERNAL adımda
+// kategori kayıtlı değilse istasyonun varsayılan kategorisine düşer.
+function stepToForm(s: ProductionRoute["steps"][number]) {
+  const isExternal = s.station?.type === "EXTERNAL";
+  return {
+    clientId: newClientId(),
+    stationId: s.stationId,
+    defaultNotes: s.defaultNotes ?? "",
+    stationType: s.station?.type,
+    requiredCategoryId: isExternal
+      ? s.requiredCategoryId ?? s.station?.defaultCategoryId ?? null
+      : null,
+    plannedSubcontractorId: isExternal ? s.plannedSubcontractorId ?? null : null,
+  };
+}
+
 function buildDefaults(initial?: ProductionRoute | null): RouteFormValues {
   if (!initial) return routeFormDefaults;
   return {
@@ -37,13 +53,7 @@ function buildDefaults(initial?: ProductionRoute | null): RouteFormValues {
     customerId: initial.customerId,
     isFavorite: initial.isFavorite,
     isActive: initial.isActive,
-    steps: [...initial.steps]
-      .sort((a, b) => a.sequence - b.sequence)
-      .map((s) => ({
-        clientId: newClientId(),
-        stationId: s.stationId,
-        defaultNotes: s.defaultNotes ?? "",
-      })),
+    steps: [...initial.steps].sort((a, b) => a.sequence - b.sequence).map(stepToForm),
   };
 }
 
@@ -54,13 +64,7 @@ function buildCopyValues(source: ProductionRoute): RouteFormValues {
     customerId: source.customerId,
     isFavorite: false,
     isActive: true,
-    steps: [...source.steps]
-      .sort((a, b) => a.sequence - b.sequence)
-      .map((s) => ({
-        clientId: newClientId(),
-        stationId: s.stationId,
-        defaultNotes: s.defaultNotes ?? "",
-      })),
+    steps: [...source.steps].sort((a, b) => a.sequence - b.sequence).map(stepToForm),
   };
 }
 

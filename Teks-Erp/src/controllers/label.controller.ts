@@ -19,7 +19,7 @@ const updateNamesSchema = z.object({
 });
 
 const previewSchema = z.object({
-  kind: z.enum([LabelKind.ROLL_RAW, LabelKind.ROLL_FINISHED]),
+  kind: z.enum([LabelKind.ROLL_RAW, LabelKind.ROLL_FINISHED, LabelKind.SWATCH]),
   fields: z.array(z.object({
     key: z.string().min(1),
     label: z.string().min(1),
@@ -212,6 +212,46 @@ export class LabelController {
     try {
       const result = await this.service.getSwatchLabel(req.params.id as string);
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /**
+   * Kartela etiketinin tam HTML'i (text/html). `/rolls/:id/html`'in kartela analoğu.
+   * Kartela hep 100×60 yatay düzende basılır; format `?profileId=`/`?machineId=` veya
+   * sistem default ile çözülür.
+   */
+  getSwatchLabelHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getSwatchLabelHtml(req.params.id as string, {
+        copies:
+          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
+            ? parseInt(req.query.copies, 10)
+            : undefined,
+        ...parseFormatOpts(req),
+      });
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("X-Label-Kind", result.data.kind);
+      res.status(200).send(result.data.html);
+    } catch (e) { next(e); }
+  };
+
+  /**
+   * Kartela etiketi SEÇİLİ yazıcı dilinde (RASTER_HTML → text/html; PPLA/PPLB/ZPL →
+   * text/plain native komut). `/rolls/:id/native`'in kartela analoğu.
+   */
+  getSwatchLabelNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getSwatchLabelNative(req.params.id as string, {
+        copies:
+          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
+            ? parseInt(req.query.copies, 10)
+            : undefined,
+        ...parseFormatOpts(req),
+      });
+      res.setHeader("Content-Type", result.data.contentType);
+      res.setHeader("X-Label-Language", result.data.language);
+      res.setHeader("X-Label-Kind", result.data.kind);
+      res.status(200).send(result.data.content);
     } catch (e) { next(e); }
   };
 

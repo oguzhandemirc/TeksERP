@@ -153,7 +153,9 @@ const EMPTY_VOLUNTARY_ENTRY: VoluntaryEntryState = {
 };
 const EMPTY_WORK: RollWorkState = {
   decisions: {},
-  foldType: null,
+  // Kat seçimi asla boş kalmaz — operatör değiştirebilir ama biri hep seçili.
+  // İş emrinde plan varsa effect bunu override eder (bkz. defaultFold).
+  foldType: '2-KAT',
   voluntaryCuts: [],
   voluntaryEntry: EMPTY_VOLUNTARY_ENTRY,
   errorEntry: EMPTY_ERROR_ENTRY,
@@ -285,6 +287,11 @@ export default function TamburScreen() {
   const [recutScannerOpen, setRecutScannerOpen] = useState(false);
   // "Kime?" — depo topundan kesilen parça hangi siparişe (null = stok). Etiket buradan basılır.
   const [recutTargetLineId, setRecutTargetLineId] = useState<string | null>(null);
+  // Recut'ta sipariş DIŞI müşteri hedefi — "Listeden Seç" ile topa siparişi olmayan
+  // herhangi bir müşteriye de kesilebilir (etiket o müşteriye basılır). Satır ↔ müşteri
+  // karşılıklı dışlar (biri seçilince diğeri temizlenir).
+  const [recutTargetCustomerId, setRecutTargetCustomerId] = useState<string | null>(null);
+  const [recutTargetCustomerName, setRecutTargetCustomerName] = useState<string | undefined>(undefined);
   // Topun özelliğine (item+color+width) uyan açık sipariş kalemleri (Kime? picker'ı).
   const recutLinesQuery = useQuery({
     queryKey: [
@@ -362,12 +369,12 @@ export default function TamburScreen() {
     );
   }, [activeJob]);
 
-  // Top/sekme değişimi → çalışma state'i temizlenir. Planlamada belirtilen
-  // katlama (2-KAT / 4-KAT) varsa otomatik seçili gelir; operatör değiştirebilir.
+  // Top/sekme değişimi → çalışma state'i temizlenir. İş emrinde planlanan
+  // katlama (2-KAT / 4-KAT) otomatik seçili gelir; plan yoksa 2-KAT varsayılır.
+  // Operatör değiştirebilir ama biri her zaman seçilidir (asla boş kalmaz).
   useEffect(() => {
     const planned = activeJob?.context?.plannedFoldType;
-    const defaultFold: TamburFoldType | null =
-      planned === '2-KAT' || planned === '4-KAT' ? planned : null;
+    const defaultFold: TamburFoldType = planned === '4-KAT' ? '4-KAT' : '2-KAT';
     setWork({ ...EMPTY_WORK, foldType: defaultFold });
   }, [activeCardId, activeJob?.selectedRollId, activeJob?.context?.plannedFoldType]);
 
@@ -767,6 +774,9 @@ export default function TamburScreen() {
       cutLength: number;
       qualityGrade: string;
       targetOrderLineId?: string | null;
+      /** Sipariş-dışı müşteri hedefi — backend cut'a GİTMEZ; onSuccess'te etiket
+       *  baskısının müşterisi olur (label print {customerId}). */
+      targetCustomerId?: string | null;
       markedForKartela?: boolean;
       rawDestination?: 'STOCK' | 'WAREHOUSE';
     }) =>
@@ -786,7 +796,11 @@ export default function TamburScreen() {
         // değilse = stok (explicit müşterisiz etiket — WO tahmini sızmasın);
         // sonradan "Etiket Değiştir" ile yönlendirilebilir.
         setLabelContext(
-          variables.targetOrderLineId ? { orderLineId: variables.targetOrderLineId } : { stock: true },
+          variables.targetCustomerId
+            ? { customerId: variables.targetCustomerId }
+            : variables.targetOrderLineId
+              ? { orderLineId: variables.targetOrderLineId }
+              : { stock: true },
         );
         setActivePrintRoll(data.childRoll);
       }
@@ -1089,6 +1103,8 @@ export default function TamburScreen() {
     // Ham kesimde varsayılan hedef: üretime devam (STOCK).
     setRecutRawDestination('STOCK');
     setRecutTargetLineId(null);
+    setRecutTargetCustomerId(null);
+    setRecutTargetCustomerName(undefined);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
@@ -1152,6 +1168,7 @@ export default function TamburScreen() {
         cutLength: cut,
         qualityGrade: recutQualityGrade,
         targetOrderLineId: recutTargetLineId,
+        targetCustomerId: recutTargetCustomerId,
         markedForKartela: markAsKartela,
         rawDestination: isRawStock ? recutRawDestination : undefined,
       });
@@ -1188,11 +1205,12 @@ export default function TamburScreen() {
     () => new Set((activeJob?.context?.orders ?? []).map((o) => o.customerId)),
     [activeJob],
   );
-  // Tüm müşteriler — yalnızca "Listeden Seç" açıkken çekilir (ana akış).
+  // Tüm müşteriler — "Listeden Seç" açıkken çekilir (recut + ana akış). Recut'ta da
+  // sipariş-dışı müşteriye kesebilmek için gerekir.
   const customersQuery = useQuery({
     queryKey: ['customers', 'tambur-kime-picker'],
     queryFn: () => customerService.getAll({ page: 1, pageSize: 500 }),
-    enabled: kimePickerOpen && !recutRollMeta,
+    enabled: kimePickerOpen,
     staleTime: 60_000,
   });
 
@@ -1200,7 +1218,25 @@ export default function TamburScreen() {
 
   // Picker seçenekleri: recut → WO sipariş satırları; ana akış → TÜM müşteriler
   // (siparişteki müşteriler en üstte, "✓ siparişi var" etiketiyle).
+  // Ana liste = sipariş-DIŞI tüm müşteriler. Recut'ta da geçerli: topa siparişi
+  // olmayan müşteriye kesmek için. Siparişi olanlar pinned'de (recut → satır,
+  // ana akış → müşteri).
   const kimeOptions = useMemo<PickerOption[]>(() => {
+    const all = customersQuery.data?.data ?? [];
+    if (recutRollMeta) {
+      const lineCustomerIds = new Set(recutLineOptions.map((l) => l.customerId));
+      return all
+        .filter((c) => !lineCustomerIds.has(c.id))
+        .map((c) => ({ value: c.id, label: c.name, sublabel: c.code ?? undefined }));
+    }
+    return all
+      .filter((c) => !orderCustomerIds.has(c.id))
+      .map((c) => ({ value: c.id, label: c.name, sublabel: c.code ?? undefined }));
+  }, [recutRollMeta, recutLineOptions, customersQuery.data, orderCustomerIds]);
+
+  // Çerçeveli (pinned) grup — recut: topa uyan açık sipariş SATIRLARI (value=lineId);
+  // ana akış: bu iş emrinde siparişi olan müşteriler (value=customerId).
+  const kimePinnedOptions = useMemo<PickerOption[]>(() => {
     if (recutRollMeta) {
       return recutLineOptions.map((l) => ({
         value: l.lineId,
@@ -1210,17 +1246,6 @@ export default function TamburScreen() {
         }`,
       }));
     }
-    // Ana liste = sipariş DIŞI müşteriler (çerçevenin dışında). Sipariştekiler
-    // ayrı `kimePinnedOptions` ile çerçeve içinde verilir.
-    const all = customersQuery.data?.data ?? [];
-    return all
-      .filter((c) => !orderCustomerIds.has(c.id))
-      .map((c) => ({ value: c.id, label: c.name, sublabel: c.code ?? undefined }));
-  }, [recutRollMeta, recutLineOptions, customersQuery.data, orderCustomerIds]);
-
-  // Çerçeveli grup — bu iş emrinde siparişi olan müşteriler (ana akış).
-  const kimePinnedOptions = useMemo<PickerOption[]>(() => {
-    if (recutRollMeta) return [];
     const all = customersQuery.data?.data ?? [];
     return all
       .filter((c) => orderCustomerIds.has(c.id))
@@ -1229,11 +1254,23 @@ export default function TamburScreen() {
         label: c.name,
         sublabel: c.code ?? undefined,
       }));
-  }, [recutRollMeta, customersQuery.data, orderCustomerIds]);
+  }, [recutRollMeta, recutLineOptions, customersQuery.data, orderCustomerIds]);
 
   const handleKimeSelect = (value: string) => {
     if (recutRollMeta) {
-      setRecutTargetLineId(value);
+      // Pinned = sipariş satırı (value=lineId); ana liste = müşteri (value=customerId).
+      // İkisi karşılıklı dışlar; aynı değere 2. kez basınca seçim kalkar.
+      const line = recutLineOptions.find((l) => l.lineId === value);
+      if (line) {
+        setRecutTargetLineId((prev) => (prev === value ? null : value));
+        setRecutTargetCustomerId(null);
+        setRecutTargetCustomerName(undefined);
+      } else {
+        const c = (customersQuery.data?.data ?? []).find((x) => x.id === value);
+        setRecutTargetCustomerId((prev) => (prev === value ? null : value));
+        setRecutTargetCustomerName(c?.name);
+        setRecutTargetLineId(null);
+      }
       return;
     }
     // Ana akış: value = customerId. 2. kez seçilirse seçim kalkar.
@@ -1253,8 +1290,9 @@ export default function TamburScreen() {
   };
 
   // "Listeden Seç" — SABİT satır; tüm müşteriler. Müşteri seçiliyse adını gösterir.
-  const kimeCustomerActive =
-    !recutRollMeta && !!work.voluntaryEntry.targetCustomerId;
+  const kimeCustomerActive = recutRollMeta
+    ? !!recutTargetCustomerId
+    : !!work.voluntaryEntry.targetCustomerId;
   const kimeListChip = (
     <TouchableRipple
       borderless
@@ -1279,7 +1317,9 @@ export default function TamburScreen() {
           numberOfLines={1}
         >
           {kimeCustomerActive
-            ? work.voluntaryEntry.targetCustomerName
+            ? recutRollMeta
+              ? recutTargetCustomerName
+              : work.voluntaryEntry.targetCustomerName
             : 'Listeden Seç'}
         </Text>
       </View>
@@ -1295,6 +1335,8 @@ export default function TamburScreen() {
     setRecutResolvedRollId(null);
     setRecutRollMeta(null);
     setRecutTargetLineId(null);
+    setRecutTargetCustomerId(null);
+    setRecutTargetCustomerName(undefined);
     setRecutCutLength('');
     setRecutQualityGrade('1.KALITE');
     setRecutRawDestination('STOCK');
@@ -1699,9 +1741,11 @@ export default function TamburScreen() {
                               <TouchableRipple
                                 key={l.lineId}
                                 borderless
-                                onPress={() =>
-                                  setRecutTargetLineId(active ? null : l.lineId)
-                                }
+                                onPress={() => {
+                                  setRecutTargetLineId(active ? null : l.lineId);
+                                  setRecutTargetCustomerId(null);
+                                  setRecutTargetCustomerName(undefined);
+                                }}
                                 style={[
                                   styles.listOption,
                                   active && styles.listOptionActive,
@@ -1846,24 +1890,6 @@ export default function TamburScreen() {
                 <View
                   style={[styles.headerBoxes, compact && styles.headerBoxesCompact]}
                 >
-                  {/* Planlanan katlama — kutu (mt kalan / sipariş ile aynı yükseklik) */}
-                  {!!activeJob?.context?.plannedFoldType && (
-                    <View
-                      style={[
-                        styles.headerBox,
-                        styles.headerBoxDark,
-                        compact && styles.headerBoxFlex,
-                      ]}
-                    >
-                      <Text style={styles.headerBoxValue}>
-                        {activeJob.context.plannedFoldType === '4-KAT'
-                          ? '4-Kat'
-                          : '2-Kat'}
-                      </Text>
-                      <Text style={styles.headerBoxSub}>katlama</Text>
-                    </View>
-                  )}
-
                   {/* Kalan metre — operatörün ana ölçeği */}
                   <View
                     style={[
@@ -1878,6 +1904,26 @@ export default function TamburScreen() {
                       {(segmentPreview?.remaining ?? selectedRoll.currentQty).toFixed(1)}
                     </Text>
                     <Text style={styles.headerBoxSub}>mt kalan</Text>
+                  </View>
+
+                  {/* İş emrinde belirlenen katlama — metre kutusunun yanında, mor.
+                      SABİT referans: iş emrinin planı (plannedFoldType). Aşağıdaki
+                      düzenlenebilir kat chip'lerinden BAĞIMSIZ — operatör chip'i
+                      değiştirse bile burası iş emrinin değerini gösterir.
+                      "2 Kat / sarım" şeklinde okunur. */}
+                  <View
+                    style={[
+                      styles.headerBox,
+                      styles.headerBoxFold,
+                      compact && styles.headerBoxFlex,
+                    ]}
+                  >
+                    <Text style={styles.headerBoxValue}>
+                      {activeJob?.context?.plannedFoldType === '4-KAT'
+                        ? '4 Kat'
+                        : '2 Kat'}
+                    </Text>
+                    <Text style={styles.headerBoxSub}>sarım</Text>
                   </View>
 
                   {/* Siparişler — modal trigger */}
@@ -2000,9 +2046,9 @@ export default function TamburScreen() {
                         <TouchableRipple
                           key={ft}
                           borderless
-                          onPress={() =>
-                            setWork((w) => ({ ...w, foldType: active ? null : ft }))
-                          }
+                          // Biri her zaman seçili kalmalı → aktif chip'e basınca
+                          // boşa düşmez; sadece diğerine geçiş yapılır.
+                          onPress={() => setWork((w) => ({ ...w, foldType: ft }))}
                           style={[styles.foldChipSm, active && styles.foldChipActive]}
                         >
                           <Text
@@ -2487,21 +2533,19 @@ export default function TamburScreen() {
         title={recutRollMeta ? 'Müşteri / Sipariş Seç' : 'Müşteri Seç (tüm müşteriler)'}
         options={kimeOptions}
         pinnedOptions={kimePinnedOptions}
-        pinnedLabel="Bu iş emrinde siparişi olan müşteriler"
+        pinnedLabel={
+          recutRollMeta ? 'Bu topa uyan açık siparişler' : 'Bu iş emrinde siparişi olan müşteriler'
+        }
         selectedValue={
           recutRollMeta
-            ? recutTargetLineId
+            ? recutTargetLineId ?? recutTargetCustomerId
             : work.voluntaryEntry.targetCustomerId
         }
         numColumns={compact ? 1 : 2}
         onSelect={handleKimeSelect}
         onDismiss={() => setKimePickerOpen(false)}
         emptyText={
-          recutRollMeta
-            ? 'Açık sipariş satırı yok'
-            : customersQuery.isLoading
-              ? 'Müşteriler yükleniyor…'
-              : 'Müşteri bulunamadı'
+          customersQuery.isLoading ? 'Müşteriler yükleniyor…' : 'Müşteri bulunamadı'
         }
       />
 
@@ -4556,6 +4600,8 @@ const styles = StyleSheet.create({
   headerBoxDark: { backgroundColor: '#1e293b' },
   headerBoxGreen: { backgroundColor: '#059669' },
   headerBoxDanger: { backgroundColor: '#dc2626' },
+  // İş emrinde belirlenen katlama kutusu — yeşil metre / koyu sipariş'ten ayrışsın.
+  headerBoxFold: { backgroundColor: '#7c3aed' },
   headerBoxValue: { fontSize: 20, fontWeight: '800', color: '#fff', lineHeight: 24 },
   headerBoxSub: {
     fontSize: 10,

@@ -1005,13 +1005,40 @@ export class WorkOrderService {
    * sayfasının `producedRolls.warehouse.totalMeters` tanımıyla aynı: WO adımlarında
    * üretilmiş (producedInStepId), orijinal Tambur kesimi (parent=SUBCONTRACTOR_RETURN),
    * FIRE/A1 olmayan rulolar; initialQty toplamı. Tek groupBy ile sayfa başına 1 sorgu.
+   * Ayrıca üretime GİREN ham metrajı ve bağlı SİPARİŞ TOPLAMINI (talep) ekler.
    */
   private async withProductionMeters<
     T extends { id: string; steps: { id: string; stepSequence: number }[] },
-  >(wos: T[]): Promise<(T & { producedMeters: number; inputMeters: number })[]> {
+  >(
+    wos: T[]
+  ): Promise<(T & { producedMeters: number; inputMeters: number; orderedMeters: number })[]> {
+    // SİPARİŞ TOPLAMI — WO'ya bağlı sipariş satırlarının talep metrajı (quantity)
+    // toplamı; üretim çıktısını/girişini sipariş talebiyle kıyaslamak için. STOK
+    // üretiminde bağ yok → 0 (frontend "—" gösterir). Pivot PK (workOrderId,...)
+    // lider kolonuyla indeksli, sayfa başına tek sorgu.
+    const orderedByWo = new Map<string, number>();
+    const woIds = wos.map((w) => w.id);
+    if (woIds.length > 0) {
+      const links = await prisma.workOrderToOrderLine.findMany({
+        where: { workOrderId: { in: woIds } },
+        select: { workOrderId: true, orderLine: { select: { quantity: true } } },
+      });
+      for (const l of links) {
+        orderedByWo.set(
+          l.workOrderId,
+          (orderedByWo.get(l.workOrderId) ?? 0) + Number(l.orderLine.quantity)
+        );
+      }
+    }
+
     const stepIds = wos.flatMap((w) => w.steps.map((s) => s.id));
     if (stepIds.length === 0) {
-      return wos.map((w) => ({ ...w, producedMeters: 0, inputMeters: 0 }));
+      return wos.map((w) => ({
+        ...w,
+        producedMeters: 0,
+        inputMeters: 0,
+        orderedMeters: orderedByWo.get(w.id) ?? 0,
+      }));
     }
 
     // ÇIKAN — üretim çıktısı; detay producedRolls.warehouse ile AYNI tanım
@@ -1067,6 +1094,7 @@ export class WorkOrderService {
       ...w,
       producedMeters: w.steps.reduce((sum, st) => sum + (producedByStep.get(st.id) ?? 0), 0),
       inputMeters: inputByStep.get(w.steps[0]?.id ?? "") ?? 0,
+      orderedMeters: orderedByWo.get(w.id) ?? 0,
     }));
   }
 

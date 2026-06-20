@@ -41,11 +41,14 @@ function LineLabelsCell({
   if (labels.length === 0) {
     return <span className="text-muted-foreground">—</span>;
   }
-  const shown = labels.slice(0, 2);
-  const rest = labels.length - shown.length;
+  // İlk 3 etiketi virgülle ayrılmış göster; fazlası varsa "…" işareti koy.
+  // Satıra tıklayınca yan panel (OrderDetailSheet) tüm kalemleri açar.
+  const LIMIT = 3;
+  const shown = labels.slice(0, LIMIT);
+  const hasMore = labels.length > LIMIT;
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      {shown.map((it) => (
+    <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
+      {shown.map((it, i) => (
         <span key={it.key} className="inline-flex items-center gap-1 text-xs">
           {kind === "color" && (
             <span
@@ -53,10 +56,20 @@ function LineLabelsCell({
               style={{ backgroundColor: it.hex ?? "transparent" }}
             />
           )}
-          <span className="truncate">{it.label}</span>
+          <span className="truncate">
+            {it.label}
+            {i < shown.length - 1 ? "," : ""}
+          </span>
         </span>
       ))}
-      {rest > 0 && <Badge variant="muted">+{rest}</Badge>}
+      {hasMore && (
+        <span
+          className="text-muted-foreground text-xs font-semibold"
+          title="Daha fazla kalem — detay için satıra tıklayın"
+        >
+          …
+        </span>
+      )}
     </div>
   );
 }

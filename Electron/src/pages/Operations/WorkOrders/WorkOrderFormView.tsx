@@ -191,12 +191,7 @@ export function WorkOrderFormView({
       setPickedLines(pickedLinesFromWorkOrder(workOrder));
       resetRouteSteps(designerStepsFromWorkOrder(workOrder));
       setAdvancedOpen(
-        Boolean(
-          values.foldType ||
-            values.plannedStartDate ||
-            values.plannedEndDate ||
-            values.dyehouseNote,
-        ),
+        Boolean(values.plannedStartDate || values.plannedEndDate),
       );
     } else {
       form.reset(workOrderFormDefaults);
@@ -392,6 +387,15 @@ export function WorkOrderFormView({
                 message: "Sipariş bağlı değil — stoğa üretim için hedef ürün seçilmeli.",
               });
               manualErrors.push("Stoğa üretim için hedef ürün seçilmeli.");
+            }
+            // Kat tipi yeni iş emrinde zorunlu — boş bırakılamaz (varsayılan 2-KAT,
+            // ama recipe/temizleme ile boşalmışsa burada yakalanır).
+            if (!isEdit && !(v.foldType ?? "").trim()) {
+              form.setError("foldType", {
+                type: "manual",
+                message: "Kat tipi seçilmeli (2-KAT veya 4-KAT).",
+              });
+              manualErrors.push("Kat tipi seçilmeli.");
             }
             if (manualErrors.length > 0) {
               toast.error("İş emri oluşturulamadı — eksik/hatalı alanlar var", {
@@ -705,6 +709,47 @@ export function WorkOrderFormView({
                 }}
                 error={routeError ?? undefined}
               />
+
+              {/* Kat Tipi — rotanın hemen altında (üretim spec'i). Zorunlu: yeni iş
+                  emrinde bir tanesi mutlaka seçili olmalı; aktif düğmeye tekrar
+                  basınca seçim kaldırılmaz. Tambur operatörü için planlanan kat. */}
+              <FormField
+                label="Kat Tipi"
+                required={!isEdit}
+                error={form.formState.errors.foldType}
+                hint={
+                  locks?.foldType
+                    ? locks.reasons.foldType
+                    : "Tambur operatörüne bilgi; operatör gerekirse değiştirebilir."
+                }
+              >
+                <Controller
+                  control={form.control}
+                  name="foldType"
+                  render={({ field }) => (
+                    <div className="grid grid-cols-2 gap-2 sm:max-w-xs">
+                      {(["2-KAT", "4-KAT"] as const).map((opt) => {
+                        const active = field.value === opt;
+                        return (
+                          <Button
+                            key={opt}
+                            type="button"
+                            variant={active ? "default" : "outline"}
+                            disabled={Boolean(locks?.foldType)}
+                            title={
+                              locks?.foldType ? locks.reasons.foldType : undefined
+                            }
+                            onClick={() => field.onChange(opt)}
+                          >
+                            {opt}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  )}
+                />
+              </FormField>
+
               {/* Saha #15: Boyahane notu fason adımının alanı — rotada fason
                   (EXTERNAL) adım varsa burada; "Gelişmiş" akordeonunda gömülü değil. */}
               {routeSteps.some((s) => s.stationType === "EXTERNAL") && (
@@ -732,7 +777,7 @@ export function WorkOrderFormView({
               title="Takip & Planlama"
               icon={ClipboardList}
               tone="slate"
-              description="Parti kodu üretimi izler. Tambur bilgisi ve tarihler opsiyonel."
+              description="Parti kodu üretimi izler. Planlama tarihleri opsiyonel."
             >
               {/* Parti Kodu — takip için. Otomatik modda kilitli (backend üretir),
                   'elle gir' ile override; manuel modda + düzenlemede zorunlu. */}
@@ -785,7 +830,7 @@ export function WorkOrderFormView({
                 )}
               </FormField>
 
-              {/* Gelişmiş accordion — tambur bilgisi + planlama tarihleri */}
+              {/* Gelişmiş accordion — planlama tarihleri */}
               <div className="rounded-md border border-dashed bg-muted/10">
                 <button
                   type="button"
@@ -794,7 +839,7 @@ export function WorkOrderFormView({
                   aria-expanded={advancedOpen}
                 >
                   <span className="uppercase tracking-wide">
-                    Gelişmiş — Tambur Bilgisi &amp; Planlama
+                    Gelişmiş — Planlama Tarihleri
                   </span>
                   <ChevronDown
                     className={`h-4 w-4 transition-transform ${advancedOpen ? "rotate-180" : ""}`}
@@ -802,41 +847,6 @@ export function WorkOrderFormView({
                 </button>
                 {advancedOpen && (
                   <div className="space-y-3 border-t border-dashed p-3">
-                    <FormField
-                      label="Kat Tipi"
-                      error={form.formState.errors.foldType}
-                      hint={
-                        locks?.foldType
-                          ? locks.reasons.foldType
-                          : "Tambur operatörüne bilgi; operatör gerekirse değiştirebilir."
-                      }
-                    >
-                      <Controller
-                        control={form.control}
-                        name="foldType"
-                        render={({ field }) => (
-                          <div className="grid grid-cols-2 gap-2">
-                            {(["2-KAT", "4-KAT"] as const).map((opt) => {
-                              const active = field.value === opt;
-                              return (
-                                <Button
-                                  key={opt}
-                                  type="button"
-                                  variant={active ? "default" : "outline"}
-                                  disabled={Boolean(locks?.foldType)}
-                                  title={
-                                    locks?.foldType ? locks.reasons.foldType : undefined
-                                  }
-                                  onClick={() => field.onChange(active ? "" : opt)}
-                                >
-                                  {opt}
-                                </Button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      />
-                    </FormField>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <FormField label="Planlı Başlangıç">
                         <Controller

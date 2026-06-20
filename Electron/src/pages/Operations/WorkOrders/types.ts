@@ -98,6 +98,9 @@ export interface WorkOrder {
   producedMeters?: number;
   /** Liste response'unda — üretime GİREN ham metraj (ilk adıma giren toplar). */
   inputMeters?: number;
+  /** Liste response'unda — bağlı sipariş satırlarının toplam talep metrajı (m).
+   *  Stok üretiminde / siparişe bağlı değilken 0. Çıkan/giren ile sipariş kıyası için. */
+  orderedMeters?: number;
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   routeTemplateId: string | null;

@@ -146,23 +146,52 @@ export function OrderSelectionPanel({ onStarted }: Props) {
                       const allCovered = o.lines.every((l) => l.covered);
                       return (
                         <li key={o.order.id}>
-                          <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-muted/40">
+                          <label className="flex cursor-pointer items-start gap-3 px-3 py-2 text-sm hover:bg-muted/40">
                             <input
                               type="checkbox"
                               checked={checked}
                               onChange={() => toggle(o)}
-                              className="h-4 w-4"
+                              className="mt-1 h-4 w-4 shrink-0"
                             />
-                            <span className="flex-1">
-                              <span className="font-mono font-medium">{o.order.orderNumber}</span>
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                {o.lines.length} kalem
-                                {o.order.deadline
-                                  ? ` · termin ${safeFormat(o.order.deadline, "dd.MM.yyyy")}`
-                                  : ""}
-                              </span>
-                            </span>
-                            <Badge variant={allCovered ? "secondary" : "outline"} className="text-[10px]">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-medium">{o.order.orderNumber}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {o.lines.length} kalem
+                                  {o.order.deadline
+                                    ? ` · termin ${safeFormat(o.order.deadline, "dd.MM.yyyy")}`
+                                    : ""}
+                                </span>
+                              </div>
+                              {/* Özet — müşteri ne istiyor: ilk kalemler + açık metraj */}
+                              <div className="mt-0.5 space-y-0.5">
+                                {o.lines.slice(0, 3).map((l) => (
+                                  <div key={l.lineId} className="truncate text-xs text-muted-foreground">
+                                    {l.customerItemName ?? l.item.name}
+                                    {l.color ? ` · ${l.customerColorName ?? l.color.name}` : ""}
+                                    {l.width != null ? ` · ${l.width}cm` : ""}
+                                    {" — "}
+                                    <span
+                                      className={cn(
+                                        "tabular-nums",
+                                        l.openQty > 0 && "font-medium text-foreground",
+                                      )}
+                                    >
+                                      {Math.round(l.openQty)}m açık
+                                    </span>
+                                  </div>
+                                ))}
+                                {o.lines.length > 3 ? (
+                                  <div className="text-xs text-muted-foreground">
+                                    +{o.lines.length - 3} kalem daha
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                            <Badge
+                              variant={allCovered ? "secondary" : "outline"}
+                              className="mt-0.5 shrink-0 text-[10px]"
+                            >
                               {allCovered ? "depoda var" : "kısmi/eksik"}
                             </Badge>
                           </label>

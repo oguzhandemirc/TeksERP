@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useShipmentDetail } from "./useShipmentDetail";
 import { ScanInBar } from "./ScanInBar";
 import { SackList } from "./SackList";
+import { OrderRequirements } from "./OrderRequirements";
 import { ShipmentLifecycleFooter } from "./ShipmentLifecycleFooter";
 import { shipmentStatusLabels, destinationLabels } from "./types";
 
@@ -73,6 +74,13 @@ export function PackingWorkspace({ shipmentId, onExit }: Props) {
           activeSackId={activeSackId}
           onSetActiveSack={setActiveSackId}
         />
+      )}
+
+      {/* Sipariş içeriği — sayfada sabit, belirgin: müşteri ne istiyor (modal/inline değil). */}
+      {detail && detail.orders.length > 0 && (
+        <div className="border-b bg-muted/20 px-6 py-3">
+          <OrderRequirements orders={detail.orders} />
+        </div>
       )}
 
       <div className="flex-1 overflow-auto p-6">

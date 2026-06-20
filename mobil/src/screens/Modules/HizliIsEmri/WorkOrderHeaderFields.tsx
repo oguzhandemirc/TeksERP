@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, TextInput, TouchableRipple, Icon } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
@@ -23,7 +23,9 @@ export const EMPTY_HEADER_FIELDS: WoHeaderFieldValues = {
   width: '',
   targetQuantity: '',
   targetWeight: '',
-  foldType: null,
+  // Kat tipi her iş emrinde belirli olmalı (kumaş 2 veya 4 kat sarılır).
+  // Varsayılan 2-KAT; operatör değiştirebilir ama boş bırakamaz.
+  foldType: '2-KAT',
   batchNumber: '',
   dyehouseNote: '',
 };
@@ -35,9 +37,24 @@ interface Props {
   onChange: (patch: Partial<WoHeaderFieldValues>) => void;
   /** Parti kodu alanı gösterilsin mi (Yeni'de otomatik olduğundan gizli, Düzenle'de açık). */
   showBatchNumber?: boolean;
+  /** Seçili hedef renk adı çözümlendiğinde üst bileşene bildir (özet satırı için). */
+  onColorLabelResolved?: (label: string | null) => void;
+  /** Sipariş bağlıyken renk + en sipariş kaleminden gelir ve kilitlenir (backend
+   *  bağlı siparişte farklı spec kabul etmiyor). */
+  lockColorWidth?: boolean;
+  /** Renk adını dışarıdan dayat (sipariş kaleminden gelen ad) — public picker'da
+   *  olmayan müşteri-özel renkte de doğru ad görünsün, round-trip beklenmesin. */
+  colorLabelOverride?: string | null;
 }
 
-export default function WorkOrderHeaderFields({ value, onChange, showBatchNumber }: Props) {
+export default function WorkOrderHeaderFields({
+  value,
+  onChange,
+  showBatchNumber,
+  onColorLabelResolved,
+  lockColorWidth,
+  colorLabelOverride,
+}: Props) {
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   // Hedef metraj/kg nadiren kullanılır → varsayılan kapalı; değer varsa açık gelir.
   const [qtyOpen, setQtyOpen] = useState(() => !!(value.targetQuantity || value.targetWeight));
@@ -83,22 +100,40 @@ export default function WorkOrderHeaderFields({ value, onChange, showBatchNumber
     return fromList ?? fallbackColorQuery.data?.data?.name ?? null;
   }, [value.targetColorId, colorOptions, fallbackColorQuery.data]);
 
+  // Dışarıdan dayatılan ad (sipariş kalemi) öncelikli; yoksa picker/fallback çözümü.
+  const effectiveColorLabel = colorLabelOverride ?? selectedColorLabel;
+
+  // Özet satırı için üst bileşene çözümlenen renk adını bildir.
+  useEffect(() => {
+    onColorLabelResolved?.(effectiveColorLabel);
+  }, [effectiveColorLabel, onColorLabelResolved]);
+
   return (
     <View style={styles.root}>
+      {lockColorWidth ? (
+        <View style={styles.lockHint}>
+          <Icon source="lock" size={13} color={colors.textMuted} />
+          <Text style={styles.lockHintText}>
+            Renk ve en sipariş kaleminden gelir, değiştirilemez.
+          </Text>
+        </View>
+      ) : null}
+
       {/* Renk */}
       <Text style={styles.label}>Hedef Renk</Text>
       <View style={styles.rowGap}>
         <TouchableRipple
           onPress={() => setColorPickerOpen(true)}
-          style={styles.selectField}
+          disabled={lockColorWidth}
+          style={[styles.selectField, lockColorWidth && styles.fieldLocked]}
           borderless
           rippleColor="rgba(79,70,229,0.12)"
         >
-          <Text style={[styles.selectText, !selectedColorLabel && styles.placeholder]} numberOfLines={1}>
-            {selectedColorLabel ?? 'Renksiz / Ham (seç)'}
+          <Text style={[styles.selectText, !effectiveColorLabel && styles.placeholder]} numberOfLines={1}>
+            {effectiveColorLabel ?? 'Renksiz / Ham (seç)'}
           </Text>
         </TouchableRipple>
-        {value.targetColorId ? (
+        {value.targetColorId && !lockColorWidth ? (
           <TouchableRipple onPress={() => onChange({ targetColorId: null })} style={styles.clearBtn} borderless>
             <Text style={styles.clearText}>Temizle</Text>
           </TouchableRipple>
@@ -116,18 +151,23 @@ export default function WorkOrderHeaderFields({ value, onChange, showBatchNumber
             value={value.width}
             onChangeText={(t) => onChange({ width: t.replace(',', '.') })}
             placeholder="örn. 150"
+            disabled={lockColorWidth}
             style={styles.input}
           />
         </View>
         <View style={styles.col}>
-          <Text style={styles.label}>Kat Tipi</Text>
+          <Text style={styles.label}>
+            Kat Tipi <Text style={styles.req}>*</Text>
+          </Text>
+          {/* Zorunlu — bir tanesi mutlaka seçili olmalı; aktif çipe tekrar basınca seçim
+              kaldırılmaz (sarım tipi boş bırakılamaz). */}
           <View style={styles.chipsRow}>
             {FOLD_OPTIONS.map((f) => {
               const active = value.foldType === f;
               return (
                 <TouchableRipple
                   key={f}
-                  onPress={() => onChange({ foldType: active ? null : f })}
+                  onPress={() => onChange({ foldType: f })}
                   style={[styles.chip, active && styles.chipActive]}
                   borderless
                   rippleColor="rgba(79,70,229,0.12)"
@@ -222,6 +262,7 @@ export default function WorkOrderHeaderFields({ value, onChange, showBatchNumber
 const styles = StyleSheet.create({
   root: { gap: spacing.xs },
   label: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginTop: spacing.sm, marginBottom: 2 },
+  req: { color: colors.danger },
   rowGap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   selectField: {
     flex: 1,
@@ -234,6 +275,9 @@ const styles = StyleSheet.create({
   },
   selectText: { fontSize: 15, color: colors.text, fontWeight: '600' },
   placeholder: { color: colors.textMuted, fontWeight: '400' },
+  fieldLocked: { backgroundColor: colors.surfaceMuted },
+  lockHint: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs },
+  lockHintText: { fontSize: 11, color: colors.textMuted, fontWeight: '600', flex: 1 },
   clearBtn: { paddingHorizontal: spacing.sm, paddingVertical: 10 },
   clearText: { color: colors.danger, fontWeight: '700', fontSize: 13 },
   twoCol: { flexDirection: 'row', gap: spacing.md },

@@ -477,19 +477,24 @@ export default function PaketlemeScreen() {
   const unweighed = sacks.filter((s) => (s.weightKg ?? 0) <= 0);
   const uncoded = sacks.filter((s) => !s.manualCode || !s.manualCode.trim());
   const hasContent = summary.rollCount + summary.swatchCount > 0;
+  // Saha #19: çuval tartısı YALNIZ yurtdışı (EXPORT) sevkte zorunlu — yurtiçi sevk
+  // kg'sız çıkabilir (backend assertReadyInvariants ile birebir). Çuval kodu addSack'te
+  // otomatik (AMB%05d) atandığından pratikte hep doludur → "Çuval Depoya"/"Hemen Sevk Et"
+  // yurtiçinde tartı beklemeden aktif olur.
+  const requireWeigh = currentDestination === 'EXPORT';
   const canReady =
     !isDraft &&
     hasContent &&
     sacks.length > 0 &&
     looseRolls.length === 0 &&
-    unweighed.length === 0 &&
+    (!requireWeigh || unweighed.length === 0) &&
     uncoded.length === 0;
 
   let readyHint = '';
   if (!hasContent) readyHint = 'Önce çuvala top/kartela okut.';
   else if (sacks.length === 0) readyHint = 'En az bir çuval aç.';
   else if (looseRolls.length > 0) readyHint = `${looseRolls.length} top henüz çuvalda değil.`;
-  else if (unweighed.length > 0) readyHint = `${unweighed.length} çuval tartılmadı.`;
+  else if (requireWeigh && unweighed.length > 0) readyHint = `${unweighed.length} çuval tartılmadı (yurtdışı).`;
   else if (uncoded.length > 0) readyHint = `${uncoded.length} çuvalın kodu girilmedi.`;
 
   const covRows = ship
@@ -941,7 +946,7 @@ export default function PaketlemeScreen() {
 
           {/* ── Sabit alt: Çuval Depoya Kaldır + (onay açık → Kapı Önüne Koy / kapalı → Hemen Sevk Et) ── */}
           <View style={styles.footer}>
-            {!canReady && <Text style={styles.footerHint}>{readyHint || 'Çuvala top okut + tart + kod gir.'}</Text>}
+            {!canReady && <Text style={styles.footerHint}>{readyHint || 'Çuvala top okut.'}</Text>}
             <View style={styles.footerRow}>
               <Button
                 mode="contained-tonal"

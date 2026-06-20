@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, TouchableRipple, Icon } from 'react-native-paper';
+import { Text, TouchableRipple, Icon, Appbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
@@ -16,15 +16,34 @@ export default function HizliIsEmriScreen() {
   const [view, setView] = useState<View2>('list');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // "Yeni" formundaki "Listeden Seç" modalı — header simge butonundan açılır.
+  const [rollListOpen, setRollListOpen] = useState(false);
 
   return (
     <ScreenChrome
       title="Hızlı İş Emri"
-      onStepBack={view === 'new' ? () => setView('list') : undefined}
+      onStepBack={
+        view === 'new'
+          ? () => {
+              setRollListOpen(false);
+              setView('list');
+            }
+          : undefined
+      }
+      headerExtras={
+        view === 'new' ? (
+          <Appbar.Action
+            icon="format-list-checks"
+            color="#fff"
+            onPress={() => setRollListOpen(true)}
+            accessibilityLabel="Listeden top seç"
+          />
+        ) : undefined
+      }
     >
       <View style={styles.root}>
         {view === 'new' ? (
-          <NewWorkOrderView />
+          <NewWorkOrderView rollListOpen={rollListOpen} onRollListOpenChange={setRollListOpen} />
         ) : (
           <>
             <View style={styles.listWrap}>

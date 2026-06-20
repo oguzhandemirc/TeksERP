@@ -15,6 +15,10 @@ export interface ProductionRoute {
     stationId: string;
     sequence: number;
     defaultNotes?: string | null;
+    // Saha #14: rota şablonunda saklanan fason planlaması (WO açılışında default klonlanır).
+    requiredCategoryId?: string | null;
+    plannedSubcontractorId?: string | null;
+    plannedSubcontractor?: { id: string; name: string } | null;
     station?: {
       id: string;
       code?: string | null;

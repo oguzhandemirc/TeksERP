@@ -12,18 +12,41 @@ interface Props {
   itemId: string | null;
   value: string[];
   onChange: (lineIds: string[]) => void;
+  /** Bir kalem işaretlenince (seçilince) çağrılır — renk/en otomatik doldurma için. */
+  onLinePicked?: (line: AvailableOrderLine) => void;
+  /** Modal açık durumu dışarıdan kontrol edilsin (alt bar butonundan açmak için).
+   *  Verilmezse bileşen kendi iç state'ini kullanır. */
+  open?: boolean;
+  onOpenChange?: (v: boolean) => void;
 }
 
-// Gelişmiş modda "iş emrini siparişe bağla" — itemId'ye uyan açık kalemleri
-// çoklu seçtirir. Seçim varsa quickStart ORDER_PRODUCTION olur.
-export default function OrderLinkPicker({ itemId, value, onChange }: Props) {
-  const [open, setOpen] = useState(false);
+// "İş emrini siparişe bağla" — itemId'ye uyan açık kalemleri çoklu seçtirir.
+// Seçim varsa quickStart ORDER_PRODUCTION olur; seçilen kalemden renk/en
+// otomatik doldurulur (onLinePicked).
+export default function OrderLinkPicker({
+  itemId,
+  value,
+  onChange,
+  onLinePicked,
+  open: openProp,
+  onOpenChange,
+}: Props) {
+  const [openInternal, setOpenInternal] = useState(false);
+  const open = openProp ?? openInternal;
+  const setOpen = (v: boolean) => {
+    if (onOpenChange) onOpenChange(v);
+    else setOpenInternal(v);
+  };
 
   const q = useQuery({
     queryKey: ['available-order-lines', itemId],
-    queryFn: () => orderService.getAvailableOrderLines({ itemId: itemId as string }),
+    // withInProduction: açık'tan üretimdeki düşülmüş netOpenQty gelsin (WO oluşturma).
+    queryFn: () =>
+      orderService.getAvailableOrderLines({ itemId: itemId as string, withInProduction: true }),
     enabled: open && !!itemId,
-    staleTime: 60 * 1000,
+    // Picker her açıldığında taze çek — colorId gibi yeni alanlar bayat cache'te
+    // kalmasın (renk otomatik dolması buna bağlı).
+    staleTime: 0,
   });
 
   const lines = q.data?.data ?? [];
@@ -33,11 +56,20 @@ export default function OrderLinkPicker({ itemId, value, onChange }: Props) {
   );
 
   const toggle = (lineId: string) => {
-    onChange(value.includes(lineId) ? value.filter((id) => id !== lineId) : [...value, lineId]);
+    const isSelected = value.includes(lineId);
+    onChange(isSelected ? value.filter((id) => id !== lineId) : [...value, lineId]);
+    // Yeni işaretlenen kalemden renk/en'i üst forma taşı (sipariş bağlıyken kilitlenir).
+    if (!isSelected) {
+      const line = lines.find((l) => l.lineId === lineId);
+      if (line) onLinePicked?.(line);
+    }
   };
 
   const renderRow = ({ item }: { item: AvailableOrderLine }) => {
     const checked = value.includes(item.lineId);
+    // Net açık = açık − üretimdeki (backend withInProduction). Yoksa ham açık.
+    const netOpen = Math.round(Number(item.netOpenQty ?? item.openQty));
+    const inProd = Math.round(Number(item.inProduction ?? 0));
     return (
       <TouchableRipple onPress={() => toggle(item.lineId)} style={styles.row} borderless>
         <View style={styles.rowInner}>
@@ -54,9 +86,10 @@ export default function OrderLinkPicker({ itemId, value, onChange }: Props) {
               {item.customerItemName ?? item.itemName}
               {item.colorName ? ` · ${item.colorName}` : ''}
               {item.width != null ? ` · ${item.width}cm` : ''}
+              {inProd > 0 ? ` · ${inProd}m üretimde` : ''}
             </Text>
           </View>
-          <Text style={styles.openQty}>Açık: {Math.round(item.openQty)}m</Text>
+          <Text style={styles.openQty}>Açık: {netOpen}m</Text>
         </View>
       </TouchableRipple>
     );

@@ -889,7 +889,14 @@ export default function FasonKabulScreen() {
     >
       <View style={[styles.body, isPhone && styles.bodyPhone]}>
         {/* ════════ SOL: form ════════ */}
-        <View style={[styles.formCol, isPhone && styles.formColPhone]}>
+        {/* KAV: edge-to-edge'de Android klavyeyi input'ların üstüne biner; sol kolonu
+            sarınca footer + "Dönen Açık Kumaş" Metre input'ları klavyenin üstünde kalır.
+            enabled verilmez → telefon + tablette aktif (KK1 deseni; KK1 tablette numpad
+            kullandığından orada devre dışı, burada Metre native klavye açar). */}
+        <KeyboardAvoidingView
+          style={[styles.formCol, isPhone && styles.formColPhone]}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           {!selectedGroup ? (
             <View style={styles.emptyState}>
               <Icon source="package-down" size={64} color="#cbd5e1" />
@@ -1242,11 +1249,6 @@ export default function FasonKabulScreen() {
                               style={styles.newRollQty}
                               error={!qtyValid && r.qty.length > 0}
                             />
-                            {r.prefilled && (
-                              <View style={styles.prefilledBadge}>
-                                <Text style={styles.prefilledBadgeText}>SEVKTEN</Text>
-                              </View>
-                            )}
                             <IconButton
                               icon={
                                 r.noteOpen
@@ -1364,7 +1366,7 @@ export default function FasonKabulScreen() {
               </Surface>
             </>
           )}
-        </View>
+        </KeyboardAvoidingView>
 
         {/* ════════ SAĞ: bekleyen + geçmiş (tablet) / sadece manuel input (telefon + kamera arızalı) ════════
             Telefon dikey + kamera-only modda kart okuma, liste ve geçmiş aksiyonları
@@ -2825,20 +2827,6 @@ const styles = StyleSheet.create({
   },
   newRollIndexText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   newRollQty: { flex: 1, backgroundColor: '#fff' },
-  prefilledBadge: {
-    backgroundColor: '#e0e7ff',
-    borderColor: '#6366f1',
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  prefilledBadgeText: {
-    color: '#3730a3',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
   newRollNoteWrap: { marginTop: 4 },
   newRollNotePreview: {
     fontSize: 11,

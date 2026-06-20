@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   DndContext,
   closestCenter,
@@ -15,6 +16,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +25,8 @@ import { Badge } from "@/components/ui/badge";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
+import { subcontractorService } from "@/pages/Subcontractors/service";
+import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { newClientId, type RouteStepFormValues } from "./schema";
 
 interface Props {
@@ -30,7 +35,40 @@ interface Props {
   error?: string;
 }
 
+// Favori (isFavorite) firmaları getir — client-side kategoriye göre eşleşir.
+async function fetchFavoriteFirms(qc: QueryClient): Promise<Subcontractor[]> {
+  try {
+    const res = await qc.fetchQuery({
+      queryKey: ["subcontractors", "favorites"],
+      queryFn: () =>
+        subcontractorService.getAll({
+          page: 1,
+          pageSize: 100,
+          sortBy: "name",
+          sortOrder: "asc",
+          filters: { isFavorite: "true", isActive: "true" },
+        }),
+      staleTime: 60_000,
+    });
+    return res.data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function pickFavoriteFirmId(favs: Subcontractor[], categoryId: string): string | null {
+  return (
+    favs.find((f) => f.isFavorite && f.categories.some((c) => c.categoryId === categoryId))?.id ??
+    null
+  );
+}
+
 export function RouteStepEditor({ value, onChange, error }: Props) {
+  const qc = useQueryClient();
+  // Async istasyon seçiminde (fetch sonrası) güncel listeyi okumak için ayna ref.
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -46,7 +84,7 @@ export function RouteStepEditor({ value, onChange, error }: Props) {
   };
 
   const updateStep = (clientId: string, patch: Partial<RouteStepFormValues>) => {
-    onChange(value.map((s) => (s.clientId === clientId ? { ...s, ...patch } : s)));
+    onChange(valueRef.current.map((s) => (s.clientId === clientId ? { ...s, ...patch } : s)));
   };
 
   const removeStep = (clientId: string) => {
@@ -58,6 +96,39 @@ export function RouteStepEditor({ value, onChange, error }: Props) {
       ...value,
       { clientId: newClientId(), stationId: "", defaultNotes: "" },
     ]);
+  };
+
+  // İstasyon seçimi: tip + (EXTERNAL ise) varsayılan kategori + favori fason firmasını çöz.
+  const handleStationPick = async (clientId: string, stationId: string | null) => {
+    if (!stationId) {
+      updateStep(clientId, {
+        stationId: "",
+        stationType: undefined,
+        requiredCategoryId: null,
+        plannedSubcontractorId: null,
+      });
+      return;
+    }
+    updateStep(clientId, { stationId }); // seçimi anında yansıt
+    try {
+      const res = await qc.fetchQuery({
+        queryKey: ["station", stationId, "route-step"],
+        queryFn: () => stationService.getById(stationId),
+        staleTime: 5 * 60_000,
+      });
+      const station = res.data;
+      if (!station) return;
+      const isExternal = station.type === "EXTERNAL";
+      const requiredCategoryId = isExternal ? station.defaultCategoryId ?? null : null;
+      // Fason adımıysa kategorinin favori firmasını default seç.
+      let plannedSubcontractorId: string | null = null;
+      if (isExternal && requiredCategoryId) {
+        plannedSubcontractorId = pickFavoriteFirmId(await fetchFavoriteFirms(qc), requiredCategoryId);
+      }
+      updateStep(clientId, { stationType: station.type, requiredCategoryId, plannedSubcontractorId });
+    } catch {
+      toast.error("İstasyon bilgisi yüklenemedi.");
+    }
   };
 
   return (
@@ -84,6 +155,7 @@ export function RouteStepEditor({ value, onChange, error }: Props) {
                   key={step.clientId}
                   step={step}
                   index={index}
+                  onStationPick={(v) => handleStationPick(step.clientId, v)}
                   onUpdate={(patch) => updateStep(step.clientId, patch)}
                   onRemove={() => removeStep(step.clientId)}
                 />
@@ -101,11 +173,12 @@ export function RouteStepEditor({ value, onChange, error }: Props) {
 interface RowProps {
   step: RouteStepFormValues;
   index: number;
+  onStationPick: (stationId: string | null) => void;
   onUpdate: (patch: Partial<RouteStepFormValues>) => void;
   onRemove: () => void;
 }
 
-function StepRow({ step, index, onUpdate, onRemove }: RowProps) {
+function StepRow({ step, index, onStationPick, onUpdate, onRemove }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: step.clientId,
   });
@@ -131,21 +204,48 @@ function StepRow({ step, index, onUpdate, onRemove }: RowProps) {
       </Badge>
 
       <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
-        <ReferenceSelect<Station>
-          value={step.stationId || undefined}
-          onChange={(v) => onUpdate({ stationId: v ?? "" })}
-          service={stationService}
-          queryKey="stations-route-step"
-          getLabel={(s) => `${s.code} — ${s.name}`}
-          placeholder="İstasyon seç..."
-          extraFilters={{ allowAsWorkOrderStep: "true" }}
-        />
+        <div className="space-y-1">
+          <ReferenceSelect<Station>
+            value={step.stationId || undefined}
+            onChange={onStationPick}
+            service={stationService}
+            queryKey="stations-route-step"
+            getLabel={(s) => `${s.code} — ${s.name}`}
+            placeholder="İstasyon seç..."
+            extraFilters={{ allowAsWorkOrderStep: "true" }}
+          />
+          {step.stationType === "EXTERNAL" && (
+            <Badge variant="outline" className="text-[10px]">
+              FASON
+            </Badge>
+          )}
+        </div>
         <Input
           value={step.defaultNotes ?? ""}
           onChange={(e) => onUpdate({ defaultNotes: e.target.value })}
           placeholder="Bu adıma özel not (opsiyonel)"
           className="text-sm"
         />
+
+        {/* Fason firma — yalnız EXTERNAL adımda; default favori firma seçilir. */}
+        {step.stationType === "EXTERNAL" && (
+          <div className="space-y-1 sm:col-span-2">
+            <label className="text-xs text-muted-foreground">
+              Fason Firma <span className="text-muted-foreground/70">(default: favori)</span>
+            </label>
+            <ReferenceSelect<Subcontractor>
+              value={step.plannedSubcontractorId ?? null}
+              onChange={(v) => onUpdate({ plannedSubcontractorId: v })}
+              service={subcontractorService}
+              queryKey={`subcontractors-${step.requiredCategoryId ?? "all"}`}
+              getLabel={(s) => s.name}
+              placeholder="Firma seç..."
+              nullable
+              noneLabel="— Seçilmedi"
+              extraFilters={step.requiredCategoryId ? { categoryId: step.requiredCategoryId } : undefined}
+            />
+          </div>
+        )}
       </div>
 
       <Button

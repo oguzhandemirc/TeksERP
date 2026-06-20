@@ -16,28 +16,20 @@
 // veri tamdır; üretim/önizleme/inceleme bugün çalışır.
 // =============================================================================
 
-import type { LabelPayload } from "../label.service";
-import type { ResolvedLabelFormat } from "./label-format.resolver";
-import { asciiFold } from "./native-label.shared";
+import {
+  cleanCtl,
+  clampCopies,
+  mmToDots,
+  rollTextLines,
+  LEFT_COL_MM,
+  type NativeRenderInput,
+} from "./native-label.shared";
 
 const STX = "\x02";
 const CR = "\r";
 
-export interface PplaRenderInput {
-  payload: LabelPayload;
-  format: ResolvedLabelFormat;
-  copies: number;
-}
-
-function mmToDots(mm: number, dpi: number): number {
-  return Math.round((mm * dpi) / 25.4);
-}
-
-/** Kontrol karakterini ayıkla + ASCII'ye katla (latin1 kaybı/komut-baytı enjeksiyonu yok). */
-function clean(s: string | number | null | undefined): string {
-  // eslint-disable-next-line no-control-regex
-  return asciiFold(String(s ?? "").replace(/[\x00-\x1f]/g, " ")).trim();
-}
+/** PPLA/DPL = NativeRenderInput; üç dil ortak girdiyi paylaşır. */
+export type PplaRenderInput = NativeRenderInput;
 
 function pad4(n: number): string {
   return String(Math.max(0, Math.min(9999, Math.round(n)))).padStart(4, "0");
@@ -45,55 +37,44 @@ function pad4(n: number): string {
 
 export function buildRollLabelPpla({ payload, format, copies }: PplaRenderInput): string {
   const dpi = format.dpi || 203;
-  const marginDots = mmToDots(format.marginMm, dpi);
-  const topDots = mmToDots(format.heightMm - format.marginMm, dpi);
-  const contentWidthDots = mmToDots(format.widthMm - format.marginMm * 2, dpi);
-  const colLeft = marginDots;
+  const d = (mm: number) => mmToDots(mm, dpi);
+  const marginDots = d(format.marginMm);
+  const colText = marginDots + d(LEFT_COL_MM); // sağ metin kolonu (sol = QR/barkod)
   const lines: string[] = [];
 
   // --- Başlık: birim, etiket boyu, ısı/yoğunluk ---
   lines.push(`${STX}n`); // ölçü birimi = nokta (dot)
-  lines.push(`${STX}M${pad4(mmToDots(format.heightMm, dpi))}`); // maksimum etiket boyu
+  lines.push(`${STX}M${pad4(d(format.heightMm))}`); // maksimum etiket boyu
   lines.push(`${STX}L`); // etiket format moduna gir
   lines.push("D11"); // yoğunluk/çözünürlük modülü (203dpi)
   lines.push("H10"); // ısı (heat) — fiziksel test baskısıyla ayarlanır
 
-  // --- Metin alanları ---
-  // DPL alan kaydı: <rot><font><wMul><hMul>"000"<RRRR row><CCCC col><veri>
-  //   rot=1 (0°), font=3 (standart) / 4 (büyük); satır dot ÜSTTEN, sütun SOLDAN (pay'lı).
-  let row = topDots - mmToDots(6, dpi);
-  const lineStep = mmToDots(7, dpi);
-  const textField = (text: string, font = "3", wMul = "1", hMul = "1"): void => {
-    const t = clean(text);
-    if (!t) return;
-    lines.push(`1${font}${wMul}${hMul}000${pad4(row)}${pad4(colLeft)}${t}`);
-    row -= lineStep;
-  };
+  // DPL metin kaydı: <rot><font><wMul><hMul>"000"<RRRR row><CCCC col><veri>
+  //   rot=1 (0°), font=3 (standart) / 4 (büyük); satır dot ÜSTTEN, sütun SOLDAN.
+  const dplText = (text: string, rowDot: number, colDot: number, font = "3"): string =>
+    `1${font}11000${pad4(rowDot)}${pad4(colDot)}${cleanCtl(text)}`;
 
-  textField(payload.itemName || "-", "4", "1", "1"); // ürün adı (büyük font)
-  if (payload.colorName) textField(`Renk: ${payload.colorName}`);
-  textField(`Kalite: ${payload.qualityGrade ?? "-"}`);
-  textField(`${clean(payload.lengthMeters)} mt   En: ${payload.widthCm ?? "-"} cm`, "4", "2", "2");
-  if (payload.weightKg != null) textField(`Agirlik: ${payload.weightKg} kg`);
-  if (payload.customerName) textField(`Musteri: ${payload.customerName}`);
-  if (payload.batchNumber) textField(`Parti: ${payload.batchNumber}`);
+  // --- Sağ kolon: metin satırları (üstten aşağı; paylaşılan kind-bilinçli liste) ---
+  let row = marginDots;
+  for (const ln of rollTextLines(payload)) {
+    lines.push(dplText(ln.text, row, colText, ln.big ? "4" : "3"));
+    row += ln.big ? d(7) : d(5); // 60mm'e sığsın diye sıkı adım
+  }
 
-  // --- Barkod (Code128) + okunabilir metin + QR ---
+  // --- Sol kolon: QR (üst) + Code128 (alt) + okunabilir metin ---
   if (payload.barcode) {
-    const bc = clean(payload.barcode);
-    const bcRow = mmToDots(18, dpi);
-    const bcHeight = mmToDots(12, dpi);
-    // DPL barkod kaydı: <rot>"e"<narrow><wide><HHHH height><RRRR><CCCC><veri> (e=Code128)
-    lines.push(`1e22${pad4(bcHeight)}${pad4(bcRow)}${pad4(colLeft)}${bc}`);
+    const bc = cleanCtl(payload.barcode);
+    // QR — DPL 2D kaydı ("W1c"...) sol üst köşe
+    lines.push(`1W1c0606${pad4(marginDots)}${pad4(marginDots)}${bc}`);
+    // Code128 (QR'ın altı): <rot>"e"<narrow><wide><HHHH height><RRRR><CCCC><veri>
+    const bcRow = marginDots + d(28);
+    lines.push(`1e22${pad4(d(10))}${pad4(bcRow)}${pad4(marginDots)}${bc}`);
     // okunabilir barkod metni (barkodun altı)
-    lines.push(`131100${pad4(mmToDots(5, dpi))}${pad4(colLeft)}${bc}`);
-    // QR (DPL 2D kaydı: "W1c"<...> — kılavuza göre) — sağ üst köşeye
-    const qrCol = colLeft + contentWidthDots - mmToDots(26, dpi);
-    lines.push(`1W1c0606${pad4(bcRow)}${pad4(Math.max(colLeft, qrCol))}${bc}`);
+    lines.push(dplText(bc, bcRow + d(11), marginDots));
   }
 
   // --- Kopya + bitir/bas ---
-  lines.push(`Q${pad4(Math.max(1, Math.min(5, copies || 1)))}`); // kopya adedi (1-5)
+  lines.push(`Q${pad4(clampCopies(copies))}`); // kopya adedi (1-5)
   lines.push("E"); // formatı bitir + bas
 
   return lines.join(CR) + CR;

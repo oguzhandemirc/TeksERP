@@ -305,8 +305,8 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                   <Text style={styles.rollLineBarcode} numberOfLines={1}>
                     {r.barcode ?? '—'}
                   </Text>
-                  <Text style={styles.rollLineMeta}>
-                    {trLabel(ROLL_STATUS_LABEL, r.status)} · {Math.round(Number(r.currentQty))}m
+                  <Text style={styles.rollLineMeta} numberOfLines={1}>
+                    {r.item?.name ?? '—'} · {Math.round(Number(r.currentQty))}m
                   </Text>
                 </View>
               ))

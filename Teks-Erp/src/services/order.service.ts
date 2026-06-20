@@ -540,11 +540,15 @@ export class OrderService extends BaseService {
    * AÇIK sipariş kalemlerini döner. Tambur "Yeniden Kes" (depo topu → müşteri
    * etiketi) ve top-önce paketleme picker'ları için.
    * Açık = quantity − sevk (OrderLine.shippedQty); WO bağı açığı etkilemez.
+   * `withInProduction` verilirse her satıra ayrıca `inProduction` (üretimdeki) +
+   * `netOpenQty` (= açık − üretimdeki) eklenir — Hızlı İş Emri "ne kadar daha
+   * üretmeliyim" için. Tambur/Etiket bunu GÖNDERMEZ (bitmiş mal ataması; açık aynı kalır).
    */
   async findAvailableOrderLines(params: {
     itemId: string;
     colorId?: string | null;
     width?: number | null;
+    withInProduction?: boolean;
   }): Promise<ApiResponse<unknown>> {
     const where: Prisma.OrderLineWhereInput = {
       itemId: params.itemId,
@@ -561,6 +565,7 @@ export class OrderService extends BaseService {
         id: true,
         quantity: true,
         width: true,
+        colorId: true,
         customerItemName: true,
         customerColorName: true,
         order: {
@@ -580,12 +585,53 @@ export class OrderService extends BaseService {
     const lineIds = lines.map((l) => l.id);
     const covMap = await computeLineCoverage(prisma, lineIds);
 
+    // Opsiyonel: üretimdeki (canlı WO committed − finished) spec-havuz bazında.
+    // getCoverageForLines ile aynı mantık; yalnız bu itemId için hesaplanır.
+    const specKey = (
+      colorId: string | null,
+      width: Prisma.Decimal | number | null,
+    ): string =>
+      `${params.itemId}|${colorId ?? ""}|${width == null ? "" : new Prisma.Decimal(width).toString()}`;
+    let inProdBySpec: Map<string, Prisma.Decimal> | null = null;
+    if (params.withInProduction) {
+      const liveWos = await prisma.workOrder.findMany({
+        where: {
+          status: {
+            in: [
+              WorkOrderStatus.PLANNED,
+              WorkOrderStatus.IN_PROGRESS,
+              WorkOrderStatus.PAUSED,
+            ],
+          },
+          isActive: true,
+          targetItemId: params.itemId,
+        },
+        select: { id: true, targetColorId: true, width: true },
+      });
+      const woMat = await computeWoMaterial(prisma, liveWos.map((w) => w.id));
+      inProdBySpec = new Map<string, Prisma.Decimal>();
+      for (const w of liveWos) {
+        const mat = woMat.get(w.id);
+        const inFlight = Prisma.Decimal.max(
+          0,
+          (mat?.committed ?? new Prisma.Decimal(0)).minus(mat?.finished ?? 0),
+        );
+        if (inFlight.lessThanOrEqualTo(0)) continue;
+        const key = specKey(w.targetColorId, w.width);
+        inProdBySpec.set(key, (inProdBySpec.get(key) ?? new Prisma.Decimal(0)).plus(inFlight));
+      }
+    }
+
     const data = lines
       .map((l) => {
         const cov = covMap.get(l.id);
         const openQty = new Prisma.Decimal(l.quantity).minus(
           cov?.shipped ?? new Prisma.Decimal(0),
         );
+        const inProduction =
+          inProdBySpec?.get(specKey(l.colorId, l.width)) ?? new Prisma.Decimal(0);
+        // Net açık = açık − üretimdeki (0'ın altına inmez). Yalnız withInProduction'da anlamlı.
+        const netOpenQty = Prisma.Decimal.max(0, openQty.minus(inProduction));
         return {
           lineId: l.id,
           orderId: l.order.id,
@@ -597,12 +643,15 @@ export class OrderService extends BaseService {
           itemCode: l.item.code,
           itemName: l.item.name,
           customerItemName: l.customerItemName,
+          colorId: l.colorId,
           colorCode: l.color?.code ?? null,
           colorName: l.color?.name ?? null,
           customerColorName: l.customerColorName,
           width: l.width,
           quantity: l.quantity,
           openQty,
+          inProduction,
+          netOpenQty,
         };
       })
       .filter((l) => l.openQty.greaterThan(0));

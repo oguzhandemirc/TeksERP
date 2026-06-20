@@ -32,11 +32,12 @@ export function buildLabelFormatProfilePayload(v: LabelFormatProfileFormValues) 
 export const labelFormatProfileFormDefaults: LabelFormatProfileFormValues = {
   code: "",
   name: "",
+  // Kumaş etiketi standardı: 100×60 mm YATAY (topa yatay yapıştırılır, iki kolon).
   widthMm: 100,
-  heightMm: 148,
+  heightMm: 60,
   marginMm: 3,
   gapMm: 2,
   dpi: 203,
-  orientation: "PORTRAIT",
+  orientation: "LANDSCAPE",
   isActive: true,
 };

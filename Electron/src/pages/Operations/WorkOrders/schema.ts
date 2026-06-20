@@ -86,6 +86,8 @@ export const workOrderFormDefaults: WorkOrderFormValues = {
   targetWeight: null,
   plannedStartDate: "",
   plannedEndDate: "",
-  foldType: "",
+  // Kat tipi her iş emrinde belirli olmalı (kumaş 2 veya 4 kat sarılır). Yeni
+  // kayıtta varsayılan 2-KAT; operatör değiştirebilir ama boş bırakamaz.
+  foldType: "2-KAT",
   dyehouseNote: "",
 };

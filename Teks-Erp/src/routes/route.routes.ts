@@ -33,6 +33,10 @@ const service = new BaseService({
             },
           },
         },
+        // Saha #14: rota şablonunda saklı fason firması — istemci kayıtlı firmanın
+        // adını ayrı sorgu olmadan gösterebilsin. (Scalar plannedSubcontractorId
+        // zaten include ile dönüyor; bu yalnız adı ekler.)
+        plannedSubcontractor: { select: { id: true, name: true } },
       },
       orderBy: { sequence: "asc" },
     },

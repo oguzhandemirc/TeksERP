@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, ChevronDown, ChevronRight, FileText, Info, Maximize2, Pencil, Printer, StickyNote } from "lucide-react";
+import { Ban, ChevronDown, ChevronRight, ClipboardList, FileText, Info, Maximize2, PackageCheck, Pencil, Printer, Route, ShoppingCart, StickyNote } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { RouteDistributionStrip } from "./RouteDistributionStrip";
+import { SectionBlock } from "./WorkOrderSection";
 import { WorkOrderInfoCard } from "./WorkOrderInfoCard";
 import { ProducedRollsCard } from "./ProducedRollsCard";
 import { OrderLinksCard } from "./OrderLinksCard";
@@ -93,6 +94,9 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
       ),
     [wo?.orderLinks],
   );
+  const hasProduced = (wo?.producedRolls?.count ?? 0) > 0;
+  // Sipariş bölgesi: bağlı sipariş varsa ya da stoğa üretim notu gösterilecekse.
+  const showOrders = hasOrders || wo?.type === "STOCK_PRODUCTION";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -195,10 +199,10 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               )}
             >
               {hasOrders && (
-                <Card>
+                <Card className="border-l-2 border-l-info bg-info/[0.04]">
                   <CardContent className="p-3">
                     <div className="text-xs text-muted-foreground">Sipariş Toplam</div>
-                    <div className="mt-0.5 text-base font-bold tabular-nums">
+                    <div className="mt-0.5 text-base font-bold tabular-nums text-info">
                       {formatNumber(orderTotal, 0)}
                       <span className="ml-1 text-xs font-normal text-muted-foreground">m</span>
                     </div>
@@ -264,28 +268,32 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               );
             })()}
 
-            <WorkOrderInfoCard wo={wo} />
-
-            <ProducedRollsCard wo={wo} />
+            <SectionBlock title="İş Emri Künyesi" tone="primary" icon={ClipboardList}>
+              <WorkOrderInfoCard wo={wo} />
+            </SectionBlock>
 
             {sortedSteps.length > 0 && (
-              <RouteDistributionStrip steps={sortedSteps} variant="compact" />
-            )}
-
-            <div>
-              <button
-                type="button"
-                onClick={() => setStepsExpanded((v) => !v)}
-                className="mb-2 flex w-full items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
+              <SectionBlock
+                title="Rota & İstasyonlar"
+                tone="process"
+                icon={Route}
+                trailing={
+                  <button
+                    type="button"
+                    onClick={() => setStepsExpanded((v) => !v)}
+                    className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    {stepsExpanded ? (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    )}
+                    {stepsExpanded ? "Daralt" : `Tümü (${sortedSteps.length})`}
+                  </button>
+                }
               >
-                {stepsExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
-                )}
-                Rota Adımları ({sortedSteps.length})
-              </button>
-              <ol className="space-y-1.5">
+                <RouteDistributionStrip steps={sortedSteps} variant="compact" />
+                <ol className="space-y-1.5">
                 {(stepsExpanded ? sortedSteps : collapsedSteps).map((step) => (
                   <li
                     key={step.id}
@@ -407,10 +415,21 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                     )}
                   </li>
                 ))}
-              </ol>
-            </div>
+                </ol>
+              </SectionBlock>
+            )}
 
-            <OrderLinksCard wo={wo} />
+            {hasProduced && (
+              <SectionBlock title="Üretilen Toplar" tone="success" icon={PackageCheck}>
+                <ProducedRollsCard wo={wo} />
+              </SectionBlock>
+            )}
+
+            {showOrders && (
+              <SectionBlock title="Bağlı Sipariş(ler)" tone="info" icon={ShoppingCart}>
+                <OrderLinksCard wo={wo} />
+              </SectionBlock>
+            )}
           </div>
         )}
 

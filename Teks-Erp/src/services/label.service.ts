@@ -67,6 +67,17 @@ export interface LabelPayload {
   // Batch
   batchNumber: string | null;
   printedAt: string;
+
+  // --- SWATCH (kartela) için opsiyonel alanlar — roll payload'unda undefined.
+  //     Builder'lar yalnız `kind === SWATCH` iken basar; roll çağrıları dokunmaz. ---
+  /** Etiket türü ayırt edici — verilmezse roll (ROLL_RAW/ROLL_FINISHED) kabul edilir. */
+  kind?: LabelKind;
+  /** Kartela kart no (SW-...). */
+  cardNumber?: string | null;
+  /** Kartela Boy (cm) — roll'da metraj (lengthMeters) kullanılır. */
+  lengthCm?: number | null;
+  /** Kartelanın doğduğu bitmiş topun barkodu. */
+  parentRollBarcode?: string | null;
 }
 
 export interface SwatchLabelPayload {
@@ -109,6 +120,43 @@ export interface RollLabelRenderOpts {
   profileId?: string | null;
   /** İstasyon makinesi — yazıcı/profil + dil oto çözülür (mobil: req.device.machineId). */
   machineId?: string | null;
+}
+
+/**
+ * SwatchLabelPayload → LabelPayload eşlemesi — landscape/native builder'ları
+ * (kind=SWATCH) kartela alanlarını (cardNumber/Boy/parentRollBarcode) basabilsin
+ * diye. Roll'a özgü alanlar nötr doldurulur (markedForKartela=false, lengthMeters=0,
+ * qualityGrade=""). Kartela her zaman 100×60 landscape düzeninde basılır.
+ */
+function swatchPayloadToLabelPayload(sw: SwatchLabelPayload): LabelPayload {
+  return {
+    rollId: sw.swatchId,
+    barcode: sw.barcode,
+    status: "WAREHOUSE",
+    qualityGrade: "",
+    widthCm: sw.widthCm,
+    lengthMeters: 0,
+    weightKg: sw.weightKg,
+    markedForKartela: false,
+    itemCode: sw.itemCode,
+    itemName: sw.itemName,
+    itemNameDefault: sw.itemNameDefault,
+    itemNameSource: sw.itemNameSource,
+    colorCode: sw.colorCode,
+    colorName: sw.colorName,
+    colorNameDefault: sw.colorNameDefault,
+    colorNameSource: sw.colorNameSource,
+    customerName: sw.customerName,
+    customerId: sw.customerId,
+    orderNumber: sw.orderNumber,
+    orderLineId: sw.orderLineId,
+    batchNumber: sw.batchNumber,
+    printedAt: sw.printedAt,
+    kind: LabelKind.SWATCH,
+    cardNumber: sw.cardNumber,
+    lengthCm: sw.lengthCm,
+    parentRollBarcode: sw.parentRollBarcode,
+  };
 }
 
 export class LabelService {
@@ -370,6 +418,11 @@ export class LabelService {
       orderLineId: "preview",
       batchNumber: "PRT-A24",
       printedAt: new Date().toISOString(),
+      // SWATCH önizlemesinde kartela alanları görünsün (roll düzeninde yok sayılır).
+      kind: input.kind,
+      cardNumber: "SW-2026-05-0042",
+      lengthCm: 30,
+      parentRollBarcode: "TR-2026-05-26-R0123",
     };
     const mockTemplate = {
       id: "preview",
@@ -397,11 +450,15 @@ export class LabelService {
       backgroundcolor: "FFFFFF",
     });
 
+    // Önizleme sistem-default formatını (reseed sonrası 100×60 yatay) kullanır —
+    // editör yeni boyutu/düzeni canlı göstersin (yoksa kod fallback 100×148 dikey).
+    const format = await resolveLabelFormat({});
     const html = buildRollLabelHtml({
       payload: mockPayload,
       template: mockTemplate,
       barcodeSvg,
       qrSvg,
+      format,
     });
     return { success: true, data: { html } };
   }
@@ -785,6 +842,59 @@ export class LabelService {
     };
 
     return { success: true, data: payload };
+  }
+
+  /**
+   * Kartela render girdisi — payload (SwatchLabelPayload → LabelPayload map) +
+   * SWATCH default template + barkod/QR SVG + kopya + format profili. Roll'un
+   * `buildRollRenderInput` analoğu; tüm diller (html/ppla/pplb/zpl) paylaşır.
+   */
+  private async buildSwatchRenderInput(
+    swatchId: string,
+    opts?: RollLabelRenderOpts,
+  ): Promise<{ input: LabelRenderInput; kind: LabelKind }> {
+    const payloadResp = await this.getSwatchLabel(swatchId);
+    const payload = swatchPayloadToLabelPayload(payloadResp.data);
+
+    const template = await prisma.labelTemplate.findFirst({
+      where: { kind: LabelKind.SWATCH, isDefault: true, isActive: true },
+    });
+    const barcodeSvg = payload.barcode
+      ? bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" })
+      : "";
+    const qrSvg = payload.barcode
+      ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
+      : "";
+    const copies = opts?.copies ?? (await readLabelCopies());
+    const format = await resolveLabelFormat({ profileId: opts?.profileId, machineId: opts?.machineId });
+    return { input: { payload, template, barcodeSvg, qrSvg, copies, format }, kind: LabelKind.SWATCH };
+  }
+
+  /** Kartela etiketinin HTML'i — roll `getRollLabelHtml` analoğu (mobil + Electron). */
+  async getSwatchLabelHtml(
+    swatchId: string,
+    opts?: RollLabelRenderOpts,
+  ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
+    const { input, kind } = await this.buildSwatchRenderInput(swatchId, opts);
+    const html = renderLabel(PrinterLanguage.RASTER_HTML, input).content;
+    return { success: true, data: { html, kind } };
+  }
+
+  /**
+   * Kartela etiketini SEÇİLİ dilde döner — global ayar `label.printerLanguage`
+   * (default PPLA) veya istasyon yazıcı modelinin dili. RASTER_HTML → HTML;
+   * PPLA/PPLB/ZPL → native komut. Roll `getRollLabelNative` analoğu.
+   */
+  async getSwatchLabelNative(
+    swatchId: string,
+    opts?: RollLabelRenderOpts,
+  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind; profileId: string | null }>> {
+    const { input, kind } = await this.buildSwatchRenderInput(swatchId, opts);
+    const r = renderLabel(input.format.language, input);
+    return {
+      success: true,
+      data: { content: r.content, language: r.language, contentType: r.contentType, kind, profileId: input.format.profileId },
+    };
   }
 
   /**

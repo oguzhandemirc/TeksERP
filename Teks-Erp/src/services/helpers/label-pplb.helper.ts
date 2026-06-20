@@ -10,7 +10,7 @@
 // fiziksel test baskısıyla (Faz-2) ince ayarlanır.
 // =============================================================================
 
-import { cleanCtl, clampCopies, mmToDots, rollTextLines, type NativeRenderInput } from "./native-label.shared";
+import { cleanCtl, clampCopies, mmToDots, rollTextLines, LEFT_COL_MM, type NativeRenderInput } from "./native-label.shared";
 
 const CRLF = "\r\n";
 
@@ -25,6 +25,7 @@ export function buildRollLabelPplb({ payload, format, copies }: NativeRenderInpu
   const widthDots = d(format.widthMm);
   const heightDots = d(format.heightMm);
   const margin = d(format.marginMm);
+  const textX = margin + d(LEFT_COL_MM); // sağ metin kolonu (sol = QR/barkod)
   const lines: string[] = [];
 
   lines.push("N"); // görüntü buffer'ını temizle
@@ -32,22 +33,21 @@ export function buildRollLabelPplb({ payload, format, copies }: NativeRenderInpu
   lines.push(`Q${heightDots},${d(2)}`); // etiket boyu + aralar arası boşluk (gap)
   lines.push("D8"); // yoğunluk (density) — fiziksel test baskısıyla ayar
 
-  // Metin alanları — A x,y,rot,font,hMul,vMul,N,"veri" (origin sol-üst, y aşağı)
+  // Sağ kolon metin alanları — A x,y,rot,font,hMul,vMul,N,"veri" (origin sol-üst, y aşağı)
   let y = margin;
   for (const ln of rollTextLines(payload)) {
     const font = ln.big ? "4" : "2";
-    lines.push(`A${margin},${Math.round(y)},0,${font},1,1,N,"${eplData(ln.text)}"`);
-    y += ln.big ? d(9) : d(6);
+    lines.push(`A${textX},${Math.round(y)},0,${font},1,1,N,"${eplData(ln.text)}"`);
+    y += ln.big ? d(7) : d(5); // 60mm'e sığsın diye sıkı adım
   }
 
-  // Barkod (Code128) + QR
+  // Sol kolon: QR (üst) + Code128 (alt) + okunur metin
   if (payload.barcode) {
     const bc = eplData(payload.barcode);
-    const bcY = Math.max(margin, heightDots - d(30));
-    // B x,y,rot,type(1=Code128),narrow,wide,height,human(B),"veri"
-    lines.push(`B${margin},${bcY},0,1,2,4,${d(12)},B,"${bc}"`);
-    // b x,y,Q(QR),m2,s4,"veri"
-    lines.push(`b${Math.max(margin, widthDots - margin - d(24))},${bcY},Q,m2,s4,"${bc}"`);
+    // b x,y,Q(QR),m2,s3,"veri" — sol üst
+    lines.push(`b${margin},${margin},Q,m2,s3,"${bc}"`);
+    // B x,y,rot,type(1=Code128),narrow,wide,height,human(B),"veri" — QR'ın altı
+    lines.push(`B${margin},${margin + d(28)},0,1,2,3,${d(10)},B,"${bc}"`);
   }
 
   lines.push(`P${clampCopies(copies)}`); // kopya adedi → bas

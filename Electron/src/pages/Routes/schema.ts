@@ -10,6 +10,11 @@ export const routeStepSchema = z.object({
     .max(500, "Not en fazla 500 karakter olabilir")
     .optional()
     .or(z.literal("")),
+  // Saha #14: fason planlaması — EXTERNAL istasyonlarda rota ile birlikte saklanır.
+  // stationType yalnız UI koşulu içindir (payload'a girmez); diğer ikisi persist olur.
+  stationType: z.enum(["INTERNAL", "EXTERNAL"]).optional(),
+  requiredCategoryId: z.string().nullable().optional(),
+  plannedSubcontractorId: z.string().nullable().optional(),
 });
 
 export const routeFormSchema = z.object({

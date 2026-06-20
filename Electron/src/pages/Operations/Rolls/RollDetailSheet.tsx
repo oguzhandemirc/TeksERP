@@ -18,11 +18,6 @@ import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from
 import { rollService } from "./service";
 import { type Roll, shipmentScopeLabels } from "./types";
 
-// "Son Basılan Etiket" kartı yalnız müşteri etiketi taşıyabilen bitmiş toplarda
-// gösterilir: depo (WAREHOUSE), A1 (A1_STOCK), sevk edilmiş (SHIPPED). Ham stok,
-// üretimde, fasonda, tüketilmiş ve fire/iptal toplarda gizli (etiket basılmaz).
-const LABELED_STATUSES = ["WAREHOUSE", "A1_STOCK", "SHIPPED"];
-
 interface Props {
   roll: Roll | null;
   open: boolean;
@@ -43,9 +38,9 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
     enabled: open && !!roll?.id,
     staleTime: 30_000,
   });
-  // lastLabelSnapshot (topun üstündeki son basılan etiket) yalnız detay endpoint'inden gelir.
+  // Detay endpoint'i liste cevabında olmayan alanları (operation log, iade, kartela,
+  // sevk/çuval) taşır; sheet açıldığında lazy fetch edilir.
   const detail = detailQuery.data?.data;
-  const snapshot = detail?.lastLabelSnapshot ?? null;
   // En güncel iade kaydı (varsa) — müşteriden dönen top notu/nedeni; Tambur kesimden önce görülür.
   const latestReturn = detail?.returns?.[0] ?? null;
   // AT_KARTELA top: hangi kartela firmasında olduğunu detay panelinde göster.
@@ -296,59 +291,6 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                   )}
                 </CardContent>
               </Card>
-            )}
-
-            {/* Son basılan etiket — yalnız müşteri etiketi taşıyabilen bitmiş toplarda
-                (depo/A1/sevk); ham, üretimde, fason, tüketilmiş → gizli. */}
-            {LABELED_STATUSES.includes(roll.status) && (
-            <Card>
-              <CardContent className="space-y-2 p-3 text-sm">
-                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <Tag className="h-3.5 w-3.5" /> Son Basılan Etiket
-                  <span className="ml-auto text-[10px] normal-case text-muted-foreground">
-                    değişebilir
-                  </span>
-                </div>
-                {detailQuery.isLoading ? (
-                  <Skeleton className="h-10 w-full" />
-                ) : snapshot?.customerName ? (
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    <div className="text-xs text-muted-foreground">Müşteri</div>
-                    <div className="font-medium">{snapshot.customerName}</div>
-                    {snapshot.orderNumber && (
-                      <>
-                        <div className="text-xs text-muted-foreground">Sipariş</div>
-                        <div className="font-mono text-xs">{snapshot.orderNumber}</div>
-                      </>
-                    )}
-                    {snapshot.itemName && (
-                      <>
-                        <div className="text-xs text-muted-foreground">Etiketteki Ürün</div>
-                        <div>{snapshot.itemName}</div>
-                      </>
-                    )}
-                    {snapshot.colorName && (
-                      <>
-                        <div className="text-xs text-muted-foreground">Etiketteki Renk</div>
-                        <div>{snapshot.colorName}</div>
-                      </>
-                    )}
-                    <div className="text-xs text-muted-foreground">Basıldı</div>
-                    <div className="text-xs">
-                      {safeFormat(snapshot.printedAt, "dd.MM.yyyy HH:mm")}
-                      {snapshot.operatorName ? ` · ${snapshot.operatorName}` : ""}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-xs text-muted-foreground">
-                    <Badge variant="outline" className="mr-2 text-[10px]">
-                      Stok etiketli
-                    </Badge>
-                    Bu top müşteri etiketiyle basılmamış (depoda serbest stok). Müşteri sevkte belli olur.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
             )}
 
             {/* İade bilgisi — müşteriden dönmüş top. Not + neden burada; Tambur kesimden önce görür. */}

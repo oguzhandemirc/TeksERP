@@ -66,7 +66,7 @@ router.get("/", verifyToken, requireAnyPermission("property:read", "mobile:hizli
  *       200: { description: Renk detayı }
  *       404: { description: Bulunamadı }
  */
-router.get("/:id", verifyToken, requirePermission("property:read"), controller.findById);
+router.get("/:id", verifyToken, requireAnyPermission("property:read", "mobile:hizli-is-emri"), controller.findById);
 
 /**
  * @openapi

@@ -9,6 +9,8 @@ interface StepCreate {
   stationId: string;
   sequence: number;
   defaultNotes: string | null;
+  requiredCategoryId: string | null;
+  plannedSubcontractorId: string | null;
 }
 
 interface CreatePayload {
@@ -28,6 +30,9 @@ function buildPayload(v: RouteFormValues, isEdit: boolean): CreatePayload {
     stationId: s.stationId,
     sequence: i + 1,
     defaultNotes: s.defaultNotes?.trim() ? s.defaultNotes.trim() : null,
+    // Fason planlaması (INTERNAL adımda buildDefaults/handleStationPick null tutar).
+    requiredCategoryId: s.requiredCategoryId ?? null,
+    plannedSubcontractorId: s.plannedSubcontractorId ?? null,
   }));
 
   const base = {
