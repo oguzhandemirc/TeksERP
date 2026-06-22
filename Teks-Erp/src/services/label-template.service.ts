@@ -2,8 +2,10 @@
 // TeksERP - Label Template Service
 // =============================================================================
 // Etiket standardı (alan + sıra + Türkçe başlık + bold/font) yönetimi.
-// Her LabelKind için en fazla 1 isDefault=true — service-level enforcement
-// (transaction içinde diğer default'lar düşürülür).
+// Her LabelKind için en fazla 1 isDefault=true — transaction içinde diğer
+// default'lar düşürülür VE DB seddi: partial unique index
+// `label_templates_one_default_per_kind` ON (kind) WHERE isDefault=true
+// (migration). Eşzamanlı iki setDefault'ta kaybeden P2002 alır → 409 (aşağıda).
 //
 // fields validation: src/config/label-fields.ts catalog'undan.
 // - Sadece izinli key'ler kabul (whitelist)
@@ -33,6 +35,26 @@ import {
 } from "../config/label-fields";
 
 const TABLE = "LABEL_TEMPLATE";
+
+/**
+ * "kind içinde tek default" partial unique index ihlalini (eşzamanlı setDefault/
+ * create/update yarışı) 409'a çevirir. Diğer P2002'leri (örn. @@unique[kind,name]
+ * isim çakışması) aynen geçirir — target'ta "default" geçip geçmediğine bakar.
+ */
+function rethrowDefaultConflict(e: unknown): never {
+  if (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    e.code === "P2002" &&
+    String((e.meta as { target?: unknown } | undefined)?.target ?? "")
+      .toLowerCase()
+      .includes("default")
+  ) {
+    throw AppError.conflict(
+      "Bu tür için varsayılan az önce değişti — sayfayı yenileyip tekrar deneyin."
+    );
+  }
+  throw e;
+}
 
 export interface LabelTemplateInput {
   name: string;
@@ -123,7 +145,7 @@ export class LabelTemplateService {
           fields: fields as unknown as Prisma.InputJsonValue,
         },
       });
-    });
+    }).catch(rethrowDefaultConflict);
 
     await AuditService.log({
       userId,
@@ -170,7 +192,7 @@ export class LabelTemplateService {
       // isDefault=false'a düşürülüyorsa engelle: kind'da en az 1 default kalmalı
       // değil aslında — operatör hepsini default-değil yapabilir. UI'da uyarı verir.
       return tx.labelTemplate.update({ where: { id }, data });
-    });
+    }).catch(rethrowDefaultConflict);
 
     await AuditService.log({
       userId,
@@ -213,7 +235,7 @@ export class LabelTemplateService {
         where: { id },
         data: { isDefault: true },
       });
-    });
+    }).catch(rethrowDefaultConflict);
 
     await AuditService.log({
       userId,

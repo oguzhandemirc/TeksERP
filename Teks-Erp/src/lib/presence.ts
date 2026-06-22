@@ -5,7 +5,11 @@
 // günceller (Map.set — sabit maliyet). /health son WINDOW_MS içinde görülenleri
 // sayar ve bu sırada bayatlayan kayıtları temizler (lazy prune → sınırsız
 // büyümez). Restart'ta sıfırlanır; "şu an online" anlamı budur, kalıcı oturum
-// defteri DEĞİL. JWT stateless olduğu için sunucuda oturum tablosu yok.
+// defteri DEĞİL.
+//
+// ⚠️ TEK-PROCESS INVARIANT: bu Map process-local. Birden çok worker/replica'da her
+// process kendi sayısını tutar → toplam parçalanır. Ölçeklenirse Redis'e taşı
+// (bkz. server.ts "TEK-PROCESS INVARIANT" + ARCHITECTURE.md "Single-process").
 
 const WINDOW_MS = 5 * 60_000; // son 5 dk istek attıysa "online" sayılır
 

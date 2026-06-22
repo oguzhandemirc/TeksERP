@@ -38,6 +38,7 @@ export class AuthService {
         username: true,
         passwordHash: true,
         isActive: true,
+        tokenVersion: true,
       },
     });
 
@@ -56,6 +57,7 @@ export class AuthService {
       userId: user.id,
       username: user.username,
       permissions,
+      tokenVersion: user.tokenVersion,
     };
 
     // Oturum ömrü runtime ayardan (auth.sessionDurationHours, default 8) — saniyeye çevrilir.

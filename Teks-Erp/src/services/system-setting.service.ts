@@ -254,9 +254,16 @@ export interface FeatureFlags {
 // kurulum → bellek cache yeterli (TTL ayrıca olası out-of-band değişimi bounded tutar).
 let featureFlagsCache: { value: FeatureFlags; expiresAt: number } | null = null;
 const FEATURE_FLAGS_TTL_MS = 30_000;
+// Lost-invalidation guard: getFeatureFlags okumaya BAŞLAMADAN önce bu sayacı yakalar.
+// findMany sürerken araya bir set()+invalidate girerse sayaç artar ve okuma bayat
+// veriyi cache'e YAZMAZ (taze döner) — yoksa pencerede başlamış okuma, invalidate'i
+// "atlayıp" eski değeri TTL boyunca (30sn) pinleyebiliyordu (enforced flag'ler için
+// geçici yanlış davranış). NOT: tek-process varsayımı (process-local sayaç).
+let cacheGeneration = 0;
 
 export function invalidateFeatureFlagsCache(): void {
   featureFlagsCache = null;
+  cacheGeneration++;
 }
 
 export class SystemSettingService {
@@ -344,6 +351,7 @@ export class SystemSettingService {
     if (featureFlagsCache && featureFlagsCache.expiresAt > now) {
       return { success: true, data: featureFlagsCache.value };
     }
+    const gen = cacheGeneration; // okumanın başladığı sürüm (lost-invalidation guard)
     // Tek sorguda tüm ayarları çek → reader'lara in-memory client enjekte et.
     // Eski kod 15 ardışık findUnique = 15 round-trip yapıyordu. Reader'lar her
     // flag'in key/parse/default mantığının TEK kaynağı kalır; yalnız veri kaynağı
@@ -382,7 +390,11 @@ export class SystemSettingService {
       printerLanguage: await readPrinterLanguage(cacheClient),
       nativeSendEnabled: await readLabelNativeSendEnabled(cacheClient),
     };
-    featureFlagsCache = { value: flags, expiresAt: now + FEATURE_FLAGS_TTL_MS };
+    // Yalnız okuma sürerken invalidate OLMADIYSA cache'le; olduysa bayat veriyi
+    // pinleme (taze değeri döndür, cache'i bir sonraki okuma tazeler).
+    if (cacheGeneration === gen) {
+      featureFlagsCache = { value: flags, expiresAt: now + FEATURE_FLAGS_TTL_MS };
+    }
     return { success: true, data: flags };
   }
 

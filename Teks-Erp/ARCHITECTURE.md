@@ -854,6 +854,26 @@ grep "duration:" /var/log/postgresql/postgresql-*.log \
 
 ---
 
+## 10.3 Single-process Invariant (load-bearing)
+
+Backend **tek Express process** olarak çalışır (`server.ts` tek `app.listen`;
+cluster / PM2-cluster / worker_threads **yok**). Bu, LAN-only tek-sunucu kurulumda
+**kasıtlı** bir varsayımdır ve şu bellek-içi mekanizmalar buna bağlıdır:
+
+| Mekanizma | Dosya | 2. worker/replica'da ne bozulur |
+|---|---|---|
+| Presence ("şu an online") | `lib/presence.ts` | Her process kendi `Map`'i → toplam sayım parçalanır |
+| Feature-flag agregat cache (30sn TTL) | `system-setting.service.ts` | `invalidate` process-local → diğer process bayat flag servis eder |
+| Audit arşiv scheduler (lastRun check-then-act) | `jobs/archive-scheduler.ts` | İki scheduler yarışır → çift-arşiv (kod yorumunda not var) |
+| JWT iptal (`tokenVersion`) | `auth.middleware.ts` | Etkilenmez — DB-backed (process'ler arası tutarlı) |
+
+**Yatay ölçeklenirse** taşıma katmanı gerekir: presence + feature-flag cache →
+Redis (pub/sub invalidation); archive-scheduler → DB advisory lock veya tek ayrı
+worker. Bu kuyruk dökümante edilmiştir; kod-içi zorlama YOKTUR (YAGNI) — ikinci
+worker ekleyen kişi bu tabloyu görmeli.
+
+---
+
 ## 11. Ortam Değişkenleri
 
 | Var | Açıklama | Örnek |

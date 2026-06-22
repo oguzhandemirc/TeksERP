@@ -29,6 +29,17 @@ function getLanAddresses(): Array<{ iface: string; address: string }> {
     return out;
 }
 
+// =============================================================================
+// TEK-PROCESS INVARIANT (load-bearing) — tek `app.listen`, cluster/PM2-cluster/
+// worker_threads YOK. Şu bellek-içi mekanizmalar buna BAĞLI ve 2. worker/replica
+// eklenince SESSİZCE bozulur:
+//   - presence (lib/presence.ts) → her process kendi Map'i (sayım parçalanır)
+//   - feature-flag cache (system-setting.service.ts) → invalidate process-local
+//   - archive-scheduler (jobs/archive-scheduler.ts) → lastRun check-then-act çift-arşiv
+// Yatay ölçeklenirse taşıma katmanı gerekir: presence/cache → Redis (pub/sub
+// invalidation), scheduler → DB advisory lock veya ayrı tek worker. Bu varsayım
+// LAN-only tek-sunucu kurulumda kasıtlıdır (ARCHITECTURE.md "Single-process").
+// =============================================================================
 const server = app.listen(Number(PORT), HOST, () => {
     const lan = getLanAddresses();
 
