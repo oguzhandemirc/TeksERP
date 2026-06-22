@@ -35,7 +35,11 @@ import {
   type PrintedDocDb,
 } from "./printed-document.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { recomputeOrderStatusForOrders } from "./helpers/order-status.helper";
+import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
+import {
+  touchShipmentPreparingTx as touchPreparingTx,
+  touchShipmentEditableTx as touchEditableTx,
+} from "./helpers/shipment-locks.helper";
 import { readShipmentConfirmationEnabled } from "./system-setting.service";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
@@ -1160,7 +1164,14 @@ export class ShippingService {
           const fromSackId = roll.sackId;
           await prisma.$transaction(async (tx) => {
             await this.touchShipmentPreparingTx(tx, data.shipmentId); // M-2: finalize ile serileş
-            await tx.roll.update({ where: { id: roll.id }, data: { sackId: targetSackId } });
+            // Race: bayat üyelik → atomik guarded claim (move/swap ile aynı gerekçe).
+            const moved = await tx.roll.updateMany({
+              where: { id: roll.id, shipmentId: data.shipmentId, sackId: fromSackId },
+              data: { sackId: targetSackId },
+            });
+            if (moved.count !== 1) {
+              throw AppError.conflict("Top bu sırada taşınmış/çıkarılmış — tekrar deneyin");
+            }
             await this.resetSackWeightsTx(tx, [fromSackId, targetSackId]);
           });
           await AuditService.log({
@@ -1233,7 +1244,14 @@ export class ShippingService {
         const fromSackId = swatch.sackId;
         await prisma.$transaction(async (tx) => {
           await this.touchShipmentPreparingTx(tx, data.shipmentId); // M-2: finalize ile serileş
-          await tx.swatch.update({ where: { id: swatch.id }, data: { sackId: targetSackId } });
+          // Race: bayat üyelik → atomik guarded claim (roll move-branch ile aynı).
+          const moved = await tx.swatch.updateMany({
+            where: { id: swatch.id, shipmentId: data.shipmentId, sackId: fromSackId },
+            data: { sackId: targetSackId },
+          });
+          if (moved.count !== 1) {
+            throw AppError.conflict("Kartela bu sırada taşınmış/çıkarılmış — tekrar deneyin");
+          }
           await this.resetSackWeightsTx(tx, [fromSackId, targetSackId]);
         });
         await AuditService.log({
@@ -1276,24 +1294,34 @@ export class ShippingService {
    * tx'lerini markReady/dispatch claim'leriyle serileştirir (touchShipmentPreparingTx'in
    * READY-farkındalı kardeşi; saha #3). Kilitlenen statüyü döndürür.
    */
-  private async touchShipmentEditableTx(
+  private touchShipmentEditableTx(
     tx: Prisma.TransactionClient,
     shipmentId: string
   ): Promise<ShipmentStatus> {
-    const touched = await tx.shipment.updateMany({
-      where: {
-        id: shipmentId,
-        status: { in: [ShipmentStatus.PREPARING, ShipmentStatus.READY, ShipmentStatus.AT_DOOR] },
-      },
-      data: { updatedAt: new Date() },
+    return touchEditableTx(tx, shipmentId);
+  }
+
+  /**
+   * Bu sevkiyatın bağlı olduğu siparişlerin TÜM OrderLine satırlarını kilitle —
+   * karşılanma (commit) yazılmadan ÖNCE. İki ayrı sevkiyat aynı siparişi
+   * kapsıyorsa, ikinci commit burada bloklanır ve ilk commit'ten sonra TAZE
+   * shippedQty okur → `allocate()` cap'i doğru clamp'ler (over-coverage yok).
+   * Kilit sırası touchOrderLinesTx içinde id-sıralıdır (deadlock güvenli).
+   */
+  private async lockShipmentOrderLinesTx(
+    tx: Prisma.TransactionClient,
+    shipmentId: string
+  ): Promise<void> {
+    const links = await tx.shipmentOrder.findMany({
+      where: { shipmentId },
+      select: { orderId: true },
     });
-    if (touched.count === 0) {
-      throw AppError.conflict(
-        "Sevkiyat bu sırada sevk/iptal edildi — içerik artık değiştirilemez. Sayfayı yenileyin."
-      );
-    }
-    const fresh = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { status: true } });
-    return fresh!.status;
+    if (links.length === 0) return;
+    const lines = await tx.orderLine.findMany({
+      where: { orderId: { in: links.map((l) => l.orderId) } },
+      select: { id: true },
+    });
+    await touchOrderLinesTx(tx, lines.map((l) => l.id));
   }
 
   /**
@@ -1305,6 +1333,9 @@ export class ShippingService {
     tx: Prisma.TransactionClient,
     shipmentId: string
   ): Promise<void> {
+    // OVER-COVER guard: reverse+recommit'in tamamı OrderLine kilidi altında olsun
+    // (markReady ile aynı satırlarda serileşir).
+    await this.lockShipmentOrderLinesTx(tx, shipmentId);
     const allocations = await tx.shipmentAllocation.findMany({
       where: { shipmentId },
       select: { orderLineId: true, qty: true },
@@ -1450,7 +1481,17 @@ export class ShippingService {
       // Saha #3: READY/AT_DOOR'da da çalışır — kapsam değişmez (aynı sevkiyat),
       // recommit gerekmez; yalnız iki çuvalın tartısı bayatlar + boşalan silinir.
       const lockedStatus = await this.touchShipmentEditableTx(tx, roll.shipmentId!); // M-2: finalize ile serileş
-      await tx.roll.update({ where: { id: roll.id }, data: { sackId: data.sackId } });
+      // Race: pre-tx üyelik bayat olabilir → atomik guarded claim (swap ile aynı
+      // gerekçe). Eşzamanlı remove/move topu kaçırmışsa count!==1 → temiz 409.
+      const moved = await tx.roll.updateMany({
+        where: { id: roll.id, shipmentId: roll.shipmentId!, sackId: fromSackId },
+        data: { sackId: data.sackId },
+      });
+      if (moved.count !== 1) {
+        throw AppError.conflict(
+          "Top bu sırada taşınmış/çıkarılmış — sayfayı yenileyip tekrar deneyin"
+        );
+      }
       await this.resetSackWeightsTx(tx, [fromSackId, data.sackId]); // iki çuvalın da tartısı bayatladı
       await this.dropSackIfEmptiedTx(tx, fromSackId, lockedStatus);
     });
@@ -1503,8 +1544,22 @@ export class ShippingService {
     }
     await prisma.$transaction(async (tx) => {
       await this.touchShipmentEditableTx(tx, a.shipmentId!); // M-2: finalize ile serileş
-      await tx.roll.update({ where: { id: a.id }, data: { sackId: b.sackId } });
-      await tx.roll.update({ where: { id: b.id }, data: { sackId: a.sackId } });
+      // Race: pre-tx okunan sackId/shipmentId BAYAT olabilir (eşzamanlı remove/move/
+      // re-scan). Bare update yerine ATOMİK guarded claim — üyeliği tx içinde pinle;
+      // top bu sırada çıkarılmış/taşınmışsa count!==1 → hayalet rulo yerine temiz 409.
+      const movedA = await tx.roll.updateMany({
+        where: { id: a.id, shipmentId: a.shipmentId!, sackId: a.sackId! },
+        data: { sackId: b.sackId! },
+      });
+      const movedB = await tx.roll.updateMany({
+        where: { id: b.id, shipmentId: b.shipmentId!, sackId: b.sackId! },
+        data: { sackId: a.sackId! },
+      });
+      if (movedA.count !== 1 || movedB.count !== 1) {
+        throw AppError.conflict(
+          "Toplardan biri bu sırada taşınmış/çıkarılmış — sayfayı yenileyip tekrar deneyin"
+        );
+      }
       await this.resetSackWeightsTx(tx, [a.sackId, b.sackId]); // iki çuvalın da tartısı bayatladı
     });
     await AuditService.log({
@@ -2120,19 +2175,11 @@ export class ShippingService {
    * hayalet SHIPPED top (depoda ama hiçbir listede yok), eşzamanlı scan ise
    * DISPATCHED sevkiyata bağlı kurtarılamaz WAREHOUSE rezervi bırakırdı.
    */
-  private async touchShipmentPreparingTx(
+  private touchShipmentPreparingTx(
     tx: Prisma.TransactionClient,
     shipmentId: string
   ): Promise<void> {
-    const touched = await tx.shipment.updateMany({
-      where: { id: shipmentId, status: ShipmentStatus.PREPARING },
-      data: { updatedAt: new Date() },
-    });
-    if (touched.count === 0) {
-      throw AppError.conflict(
-        "Sevkiyat bu sırada hazırlık aşamasından çıktı (sevk/iptal edilmiş olabilir) — sayfayı yenileyin."
-      );
-    }
+    return touchPreparingTx(tx, shipmentId);
   }
 
   private loadShipmentForFinalize(
@@ -2331,6 +2378,10 @@ export class ShippingService {
       // touchShipmentPreparingTx ile aynı satırı kilitlediğinden bu noktada
       // içerik artık değişemez — tahsis/commit her zaman TAZE kümeyle yazılır.
       // (Pre-tx yükleme yalnız erken/ucuz 4xx'ler için kalır.)
+      // OVER-COVER guard: kapsama yazılmadan ÖNCE bu siparişlerin OrderLine'larını
+      // kilitle — aynı siparişi paylaşan ikinci bir sevkiyatın commit'i burada
+      // bloklanır, taze shippedQty okunur → allocate() cap'i doğru clamp'ler.
+      await this.lockShipmentOrderLinesTx(tx, shipmentId);
       const fresh = await this.loadShipmentForFinalize(shipmentId, tx);
       if (!fresh) throw AppError.notFound("Sevkiyat bulunamadı");
       this.assertReadyInvariants(fresh);
@@ -2381,6 +2432,7 @@ export class ShippingService {
       }
       // İçerik TX İÇİNDE, claim SONRASI yeniden yüklenir (M-2 — markReady ile aynı).
       if (fromPreparing) {
+        await this.lockShipmentOrderLinesTx(tx, shipmentId); // over-cover guard (markReady ile aynı)
         const fresh = await this.loadShipmentForFinalize(shipmentId, tx);
         if (!fresh) throw AppError.notFound("Sevkiyat bulunamadı");
         this.assertReadyInvariants(fresh);
@@ -2542,6 +2594,10 @@ export class ShippingService {
       // flip'i ve donan irsaliye HER ZAMAN taze kümeyle yazılır — eşzamanlı
       // removeRoll'un düşürdüğü top SHIPPED'a "diriltilemez", eşzamanlı scan'in
       // eklediği top irsaliyesiz kalamaz (içerik tx'leri touch ile serileşir).
+      // PREPARING'den direkt sevkte commit BURADA olur → cap taze okunmadan önce
+      // OrderLine'ları kilitle (over-cover guard, markReady ile aynı). READY/AT_DOOR'dan
+      // gelen sevkte commit zaten yazılmış, kilide gerek yok.
+      if (fromPreparing) await this.lockShipmentOrderLinesTx(tx, shipmentId);
       const freshShipment = await this.loadShipmentForFinalize(shipmentId, tx);
       if (!freshShipment) throw AppError.notFound("Sevkiyat bulunamadı");
       this.assertReadyInvariants(freshShipment);

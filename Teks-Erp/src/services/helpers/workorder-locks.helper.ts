@@ -28,6 +28,27 @@
 
 import type { Prisma, PrismaClient, StepStatus } from "@prisma/client";
 
+/**
+ * WorkOrder satırını write-kilitle — fason completion yollarını serileştirir.
+ *
+ * Neden: `receive` / `executeDirectShip` / `cancel` adım+WO'yu "tüm toplar döndü"
+ * sayımına göre COMPLETED yapar (`roll.count(status=AT_SUBCONTRACTOR)===0`). Bu
+ * sayım atomik değildir ve eşzamanlı bir `dispatch`'in aynı adıma henüz commit
+ * etmediği yeni AT_SUBCONTRACTOR toplarını GÖREMEZ (READ COMMITTED) → mal hâlâ
+ * fasondayken WO/refakat kartı COMPLETED'a kaçar (kurtarması manuel). Dispatch ve
+ * completion yollarının HEPSİ tx başında bu satırı kilitlerse, sayım eşzamanlı
+ * dispatch'in commit'li toplarını her zaman görür.
+ */
+export async function touchWorkOrderTx(
+  tx: Prisma.TransactionClient,
+  workOrderId: string
+): Promise<void> {
+  await tx.workOrder.updateMany({
+    where: { id: workOrderId },
+    data: { updatedAt: new Date() },
+  });
+}
+
 export interface WorkOrderLocks {
   /** Rota+sevk durumuna göre fiziksel taahhüt var mı. */
   materialCommitted: boolean;

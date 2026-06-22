@@ -81,6 +81,7 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
+import { touchShipmentPreparingTx } from "./helpers/shipment-locks.helper";
 
 export interface RollStats {
   totalCount: number;
@@ -1821,7 +1822,7 @@ export class InventoryService {
     }
 
     // Roll skaler güncellemeleri (renk her zaman; en/kalite verildiyse).
-    const rollData: Prisma.RollUncheckedUpdateInput = {};
+    const rollData: Prisma.RollUncheckedUpdateManyInput = {};
     if (roll.colorId !== data.colorId) rollData.colorId = data.colorId;
     if (data.width !== undefined) rollData.width = data.width === null ? null : new Prisma.Decimal(data.width);
     if (data.qualityGrade !== undefined && data.qualityGrade.trim()) {
@@ -1829,9 +1830,28 @@ export class InventoryService {
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1) Roll skaler alanları (renk/en/kalite)
+      // Saha #4 TOCTOU: PREPARING kontrolü (yukarıda) tx DIŞINDA okundu. Sevkiyat bu
+      // sırada commit edilebilir (markReady/dispatch) → commit'li sevkiyattaki rulonun
+      // renk/en'i değişir, donmuş tahsis/irsaliye bayatlar. Çözüm: shipment bağını tx
+      // İÇİNDE taze oku; varsa touchShipmentPreparingTx ile finalize'a serileş (PREPARING
+      // değilse 409) ve roll yazımını bu shipmentId'ye pinle (eşzamanlı scan-in/çıkarma → 409).
+      const cur = await tx.roll.findUnique({ where: { id: rollId }, select: { shipmentId: true } });
+      if (!cur) throw AppError.notFound("Top bulunamadı");
+      if (cur.shipmentId) {
+        await touchShipmentPreparingTx(tx, cur.shipmentId);
+      }
+
+      // 1) Roll skaler alanları (renk/en/kalite) — üyelik PİNLİ atomik claim.
       if (Object.keys(rollData).length > 0) {
-        await tx.roll.update({ where: { id: rollId }, data: rollData });
+        const upd = await tx.roll.updateMany({
+          where: { id: rollId, shipmentId: cur.shipmentId },
+          data: rollData,
+        });
+        if (upd.count === 0) {
+          throw AppError.conflict(
+            "Top bu sırada bir sevkiyata okutuldu/çıkarıldı — etiket güncellenemedi, yenileyip tekrar deneyin",
+          );
+        }
       }
 
       // 2) Roll.properties replace

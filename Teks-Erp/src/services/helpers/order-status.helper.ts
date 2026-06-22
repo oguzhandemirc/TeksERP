@@ -16,6 +16,33 @@ import { Prisma, OrderStatus } from "@prisma/client";
 import { readShippingToleranceMeters } from "../system-setting.service";
 
 /**
+ * Verilen OrderLine satırlarını write-kilitle (sevk muhasebesini serileştirmek için).
+ *
+ * Neden: `OrderLine.shippedQty` denormalize bir toplamdır ve birden fazla yol
+ * (iki ayrı sevkiyatın markReady'si, iki paralel fason directShip) aynı satıra
+ * göreli `increment` yazabilir. Kapasite (`quantity - shippedQty`) tx DIŞINDA
+ * okunup tx İÇİNDE artırılırsa, READ COMMITTED altında iki işlem birbirinin
+ * commit'ini görmeden geçer ve toplam `quantity`'yi aşar (over-coverage).
+ * Bu yardımcı, kapasite TAZE okunmadan ÖNCE çağrılır: ikinci işlem burada bloklanır,
+ * ilk commit'ten sonra güncel `shippedQty`'yi okur → cap doğru hesaplanır.
+ *
+ * Deadlock güvenliği: ID'ler SIRALI kilitlenir (her çağrı aynı sırayı izler).
+ * Set-bazlı tek `UPDATE ... WHERE id = ANY()` kilit sırasını GARANTİ ETMEZ
+ * (tarama sırası); o yüzden bilinçli olarak id başına ayrı updateMany (await
+ * döngüsü — ESLint `Promise.all(tx.*)` yasağına da uygun). Satır sayısı bir
+ * sevkiyat/sevk başına küçüktür.
+ */
+export async function touchOrderLinesTx(
+  tx: Prisma.TransactionClient,
+  orderLineIds: string[]
+): Promise<void> {
+  const ids = [...new Set(orderLineIds)].sort();
+  for (const id of ids) {
+    await tx.orderLine.updateMany({ where: { id }, data: { updatedAt: new Date() } });
+  }
+}
+
+/**
  * Bir siparişin shippedQty ve status'unu yeniden hesaplar.
  *
  * Kurallar:
