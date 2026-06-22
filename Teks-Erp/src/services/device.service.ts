@@ -108,6 +108,18 @@ export class DeviceService {
     }
 
     const device = await prisma.$transaction(async (tx) => {
+      // ATOMİK CLAIM: tek-kullanımlık kodu yalnız kullanılmamış + geçerliyken
+      // sahiplen — eşzamanlı iki pair aynı kodu kapatamasın (kod tek cihaza bağlanır).
+      // Pre-tx usedAt kontrolü erken/ucuz reddetme; otoriter claim burada (count===0→409).
+      const claim = await tx.pairingCode.updateMany({
+        where: { code: pairing.code, usedAt: null, expiresAt: { gt: new Date() } },
+        data: { usedAt: new Date() },
+      });
+      if (claim.count === 0) {
+        throw AppError.conflict(
+          "Eşleştirme kodu az önce kullanıldı veya süresi doldu — yeni kod isteyin."
+        );
+      }
       const upserted = await tx.device.upsert({
         where: { deviceId: input.deviceId },
         create: {
@@ -126,7 +138,7 @@ export class DeviceService {
       });
       await tx.pairingCode.update({
         where: { code: pairing.code },
-        data: { usedAt: new Date(), usedDeviceId: upserted.id },
+        data: { usedDeviceId: upserted.id },
       });
       return upserted;
     });

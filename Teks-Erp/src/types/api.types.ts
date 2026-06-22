@@ -42,4 +42,8 @@ export interface JwtPayload {
   userId: string;
   username: string;
   permissions: string[];
+  /** Login anındaki User.tokenVersion — verifyToken her istekte DB'yle karşılaştırır
+   *  (yetki/şifre değişince bump → eski token geçersiz). Eski (sürümsüz) tokenlar
+   *  deploy sonrası bir kez re-login gerektirir. */
+  tokenVersion: number;
 }

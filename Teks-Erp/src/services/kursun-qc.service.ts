@@ -484,13 +484,24 @@ export class KursunQcService {
       // sırasında ekleme hiç sunucuya ulaşmamış olabilir) → başarı dön.
       return { success: true, data: { deleted: true }, message: "Hata kaydı zaten yok" };
     }
-    if (err.isProcessed) {
-      throw AppError.badRequest(
-        "Tambur kararı verilmiş hata kaydı silinemez"
-      );
-    }
 
-    await prisma.rollError.delete({ where: { id: data.errorId } });
+    // ATOMİK guard: yalnız İŞLENMEMİŞ kayıt silinir — findUnique↔delete arası
+    // eşzamanlı Tambur finalize'ı isProcessed=true yaparsa count=0 → silinmez
+    // (eski bare delete TOCTOU'su: işlenen hata kaydı sessizce silinebiliyordu).
+    const deleted = await prisma.rollError.deleteMany({
+      where: { id: data.errorId, isProcessed: false },
+    });
+    if (deleted.count === 0) {
+      // Pencerede ya Tambur işledi ya başka bir silme aldı — taze duruma bak.
+      const after = await prisma.rollError.findUnique({
+        where: { id: data.errorId },
+        select: { id: true },
+      });
+      if (!after) {
+        return { success: true, data: { deleted: true }, message: "Hata kaydı zaten yok" };
+      }
+      throw AppError.badRequest("Tambur kararı verilmiş hata kaydı silinemez");
+    }
 
     await AuditService.log({
       userId,

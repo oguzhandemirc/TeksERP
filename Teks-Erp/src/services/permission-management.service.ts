@@ -99,6 +99,9 @@ export class PermissionManagementService {
       include: { permission: true },
     });
 
+    // Yetki değişti → uçuştaki token'ı geçersiz kıl (anında re-login, taze izinler).
+    await prisma.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } });
+
     await AuditService.log({
       userId: actorUserId,
       action: "CREATE",
@@ -160,6 +163,10 @@ export class PermissionManagementService {
           })),
         });
       }
+      // Yetki seti değişti → token'ı geçersiz kıl (anında re-login, taze izinler).
+      if (toAdd.length || toRemove.length) {
+        await tx.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } });
+      }
     });
 
     await AuditService.log({
@@ -190,6 +197,9 @@ export class PermissionManagementService {
 
     await prisma.userPermission.delete({ where: { id: existing.id } });
 
+    // Yetki kaldırıldı → token'ı geçersiz kıl (iptal ANINDA geçerli).
+    await prisma.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } });
+
     await AuditService.log({
       userId: actorUserId,
       action: "DELETE",
@@ -217,9 +227,10 @@ export class PermissionManagementService {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
+    // Şifre sıfırlandı → mevcut tüm oturumları düşür (tokenVersion bump).
     await prisma.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
     });
 
     await AuditService.log({

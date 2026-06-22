@@ -206,6 +206,9 @@ model User {
   passwordHash String
   fullName     String  @db.VarChar(100)
   isActive     Boolean @default(true)
+  // JWT iptal sayacı: yetki grant/revoke/set + şifre sıfırlamada artar. verifyToken
+  // her istekte token'daki sürümle karşılaştırır → eski oturum anında düşer.
+  tokenVersion Int     @default(1)
 
   // Relations
   permissions                UserPermission[]        @relation("UserPermissionUser")
