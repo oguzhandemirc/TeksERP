@@ -49,7 +49,8 @@ import {
   ensureWorkOrderInProgress,
 } from "./helpers/roll-step.helper";
 import { resolveQualityGradeId } from "./helpers/quality-grade.helper";
-import { recomputeOrderStatusForOrders } from "./helpers/order-status.helper";
+import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 // Fasondan doğrudan sevk önizlemesi karşılanma projeksiyonunu shipping'in saf
 // FIFO/spec-eşleşmesiyle üretir (tek karşılanma kaynağı; circular yok — shipping
 // subcontractor'ı import etmez).
@@ -508,6 +509,28 @@ export class SubcontractorService {
     // çakışmasında tx baştan denenir → sıra yeniden okunur (kartela/shipping deseni).
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
+      // Fason completion yarışı (subcon #4): dispatch/receive/cancel/cancelReceipt/
+      // directShip aynı WO satırını kilitlesin ki "tüm toplar döndü" sayımları
+      // eşzamanlı dispatch'in commit'li AT_SUBCONTRACTOR toplarını görsün (yoksa
+      // mal hâlâ fasondayken WO/refakat kartı yanlışlıkla COMPLETED'a kaçar).
+      await touchWorkOrderTx(tx, data.workOrderId);
+      // Stale-read guard (subcon #4): wo.status tx DIŞINDA (yukarıda 312) okundu;
+      // eşzamanlı receive/cancel WO'yu bu sırada COMPLETED yapmış olabilir. Kilit
+      // altında TAZE doğrula — yoksa mal hâlâ fasondayken COMPLETED WO'ya ek parti
+      // sevk edilir (receive-first sıralaması).
+      const woFresh = await tx.workOrder.findUnique({
+        where: { id: data.workOrderId },
+        select: { status: true },
+      });
+      if (
+        !woFresh ||
+        (woFresh.status !== WorkOrderStatus.PLANNED &&
+          woFresh.status !== WorkOrderStatus.IN_PROGRESS)
+      ) {
+        throw AppError.conflict(
+          `Bu iş emrinde sevk yapılamaz: ${woFresh?.status ?? "bulunamadı"}. Sayfayı yenileyin.`
+        );
+      }
       // Otomatik attach: serbest stoktaki toplar bu adıma bağlanır.
       // (status STOCK kalır — alt blok aynı transaction içinde AT_SUBCONTRACTOR'a çekecek.)
       if (autoAttachIds.size > 0) {
@@ -773,6 +796,9 @@ export class SubcontractorService {
     }
 
     await prisma.$transaction(async (tx) => {
+      // Fason completion yarışı (subcon #4): WO satırını kilitle — adım/WO yeniden
+      // değerlendirmesi (openDispatchCount/remainingAtSub) eşzamanlı dispatch'le serileşsin.
+      await touchWorkOrderTx(tx, dispatch.workOrderId);
       // 1) Dispatch'i soft-cancel — ATOMİK CLAIM: yukarıdaki guard'lar tx
       //    DIŞINDA; eşzamanlı çift iptal ikisinde de geçerdi. cancelledAt:null
       //    koşuluyla kaybeden burada 409 alır.
@@ -1181,6 +1207,9 @@ export class SubcontractorService {
     // üretiliyor; eşzamanlı kabullerde P2002 çakışmasında tx baştan denenir.
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
+      // Fason completion yarışı (subcon #4): WO satırını kilitle — stillAtSubcontractor
+      // sayımı eşzamanlı dispatch'in commit'li toplarını görsün.
+      await touchWorkOrderTx(tx, data.workOrderId);
       const now = new Date();
       const seq = await nextPrefixedSequence(tx, "subcontractorReceipt", "SR", now);
       const receiptNo = buildPrefixedCardNumber("SR", now, seq);
@@ -2476,6 +2505,9 @@ export class SubcontractorService {
     }
 
     await prisma.$transaction(async (tx) => {
+      // Fason completion yarışı (subcon #4): WO satırını kilitle — adım recompute'u
+      // (COMPLETED→ACTIVE re-open) eşzamanlı dispatch/receive ile serileşsin.
+      await touchWorkOrderTx(tx, receipt.workOrderId);
       // 0) Cascade: bornRoll'ları iptal et (varsa)
       if (bornRollIds.length > 0) {
         // Race koruması (tx İÇİ): yukarıdaki computeBornRollBlockingReasons
@@ -3073,6 +3105,8 @@ export class SubcontractorService {
         if (!(a.qty > 0)) throw AppError.badRequest("Karşılanan metraj 0'dan büyük olmalı");
         const line = lineById.get(a.orderLineId);
         if (!line) throw AppError.badRequest(`Sipariş satırı bulunamadı: ${a.orderLineId}`);
+        // Erken/ucuz reddetme — otoriter terminal+cap kontrolü tx İÇİNDE taze
+        // veriyle yapılır (subcon #2).
         if (line.order.status === "CANCELLED") {
           throw AppError.badRequest("İptal edilmiş siparişe karşılanma yazılamaz");
         }
@@ -3097,6 +3131,9 @@ export class SubcontractorService {
     }
 
     await prisma.$transaction(async (tx) => {
+      // Fason completion yarışı (subcon #4): WO satırını kilitle — stillAtSubcontractor
+      // sayımı + downstream SKIP eşzamanlı dispatch'le serileşsin.
+      await touchWorkOrderTx(tx, dispatch.workOrderId);
       // 1) Dispatch işareti — yalnız dispatch'in TÜMÜ sevk edildiyse directShippedAt
       //    set edilir (atomik claim). Kısmi sevkte dispatch AÇIK kalır; atomiklik
       //    aşağıdaki roll claim'iyle (status=AT_SUBCONTRACTOR + count) sağlanır.
@@ -3220,8 +3257,40 @@ export class SubcontractorService {
 
       // 6) Opsiyonel karşılanma (commitGoodsTx aynası — yeni alloc tablosuna).
       if (allocations.length > 0) {
+        // OVER-COVER guard (subcon #2): kapasite (3081) tx DIŞINDA okundu → iki paralel
+        // directShip aynı satırı bayat cap'le aşabilirdi (shippedQty > quantity). Satırları
+        // kilitle, TAZE shippedQty/quantity/status oku ve cap'i tx İÇİNDE yeniden doğrula.
+        const allocLineIds = allocations.map((a) => a.orderLineId);
+        await touchOrderLinesTx(tx, allocLineIds);
+        const freshLines = await tx.orderLine.findMany({
+          where: { id: { in: allocLineIds } },
+          select: {
+            id: true,
+            quantity: true,
+            shippedQty: true,
+            order: { select: { status: true, manualClosedById: true } },
+          },
+        });
+        const freshById = new Map(freshLines.map((l) => [l.id, l]));
         const orderIds = new Set<string>();
         for (const a of allocations) {
+          const line = freshById.get(a.orderLineId);
+          if (!line) throw AppError.notFound(`Sipariş satırı bulunamadı: ${a.orderLineId}`);
+          if (
+            line.order.status === "CANCELLED" ||
+            (line.order.status === "COMPLETED" && line.order.manualClosedById != null)
+          ) {
+            throw AppError.conflict(
+              "Sipariş bu sırada kapatıldı/iptal edildi — karşılanma yazılamaz, yenileyin",
+            );
+          }
+          const remaining = new Prisma.Decimal(line.quantity).minus(line.shippedQty);
+          if (new Prisma.Decimal(a.qty).greaterThan(remaining)) {
+            throw AppError.conflict(
+              `Karşılanan metraj (${a.qty}) satırın kalan kapasitesini (${remaining.toString()}) aştı — ` +
+                "başka bir sevk bu satırı bu sırada doldurmuş olabilir, yenileyip tekrar deneyin",
+            );
+          }
           await tx.subcontractorDirectShipAllocation.create({
             data: {
               dispatchId: data.dispatchId,
