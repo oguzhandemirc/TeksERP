@@ -2,7 +2,8 @@
 // Test: boyut-bilinçli HTML render (buildRollLabelHtml format/pay)
 // Çalıştır: npx tsx scripts/test_label_html_format.ts
 // Doğrulananlar: @page size = medya, margin = pay; .label width = medya − 2×pay;
-// default (format yok) = 100×148+3 (içerik 94); landscape sayfa takası.
+// default (format yok) = 100×148+3 (içerik 94); landscape = iki-kolon düzen
+// (sayfa MEDYA ölçüsünde — takas YOK; orientation yalnız düzeni seçer, d016105).
 // =============================================================================
 import { buildRollLabelHtml } from "../src/services/helpers/label-html.helper";
 import type { LabelPayload } from "../src/services/label.service";
@@ -38,10 +39,14 @@ function main() {
   check("pay 0 → @page margin 0mm + içerik 100mm",
     noPad.includes("size: 100mm 150mm") && noPad.includes("margin: 0mm") && noPad.includes("width: 100mm"));
 
-  // 4) LANDSCAPE → sayfa boyutları takas (medya 100×148 → sayfa 148×100)
-  const land = buildRollLabelHtml({ ...base, format: { widthMm: 100, heightMm: 148, marginMm: 3, orientation: "LANDSCAPE" } });
-  check("landscape @page 148mm 100mm (takas)", land.includes("size: 148mm 100mm"));
-  check("landscape içerik = 148 − 6 = 142mm", land.includes("width: 142mm"));
+  // 4) LANDSCAPE → iki-kolon kumaş etiketi düzeni (kumaş etiketi 100×60). Sayfa
+  //    MEDYA ölçüsünde kalır (takas YOK — orientation yalnız düzen dalını seçer);
+  //    içerik = medya genişliği − 2×pay; portrait'ın dikey .qty istifi yerine
+  //    landscape'in iki-kolon .metraj düzeni üretilir.
+  const land = buildRollLabelHtml({ ...base, format: { widthMm: 100, heightMm: 60, marginMm: 3, orientation: "LANDSCAPE" } });
+  check("landscape @page = medya 100mm 60mm (takas YOK)", land.includes("size: 100mm 60mm"));
+  check("landscape içerik = 100 − 2×3 = 94mm", land.includes("width: 94mm"));
+  check("landscape iki-kolon düzen seçildi (.metraj var, portrait .qty yok)", land.includes(".metraj") && !land.includes(".qty"));
 
   // 5) A6 sabit-kodu KALMADI (regresyon)
   check("eski 'size: A6' yok", !def.includes("size: A6") && !def.includes("width: 105mm"));
