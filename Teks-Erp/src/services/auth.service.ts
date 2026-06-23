@@ -94,6 +94,8 @@ export class AuthService {
   static async listMobileUsers(): Promise<
     Array<{ id: string; username: string; fullName: string }>
   > {
+    // Emniyet tavanı: mobil login ekranının kullanıcı seçicisi — gerçekte onlarca
+    // operatör. `take` ile sınırsız okumayı kapatıyoruz (pratikte hiç dolmaz).
     return prisma.user.findMany({
       where: {
         isActive: true,
@@ -105,6 +107,7 @@ export class AuthService {
       },
       select: { id: true, username: true, fullName: true },
       orderBy: { fullName: "asc" },
+      take: 500,
     });
   }
 

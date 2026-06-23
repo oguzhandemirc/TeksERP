@@ -2754,25 +2754,23 @@ export class WorkOrderService {
       }
     });
 
-    // Audit log'lar tx dışında, paralel — her biri ayrı connection alabilir.
+    // Audit log'lar tx dışında, TEK createMany ile (eski N ayrı INSERT yerine).
     // R8 fix: recordId roll.id (UUID), barcode newData'ya meta olarak gidiyor.
-    await Promise.all(
-      attached.map((r) =>
-        AuditService.log({
-          userId,
-          action: "UPDATE",
-          tableName: "ROLL",
-          recordId: r.id,
-          oldData: { status: r.prevStatus },
-          newData: {
-            status: "IN_PRODUCTION",
-            workOrderId,
-            firstStepId,
-            barcode: r.barcode,
-            qtyIn: r.qtyIn,
-          },
-        })
-      )
+    await AuditService.logMany(
+      attached.map((r) => ({
+        userId,
+        action: "UPDATE" as const,
+        tableName: "ROLL",
+        recordId: r.id,
+        oldData: { status: r.prevStatus },
+        newData: {
+          status: "IN_PRODUCTION",
+          workOrderId,
+          firstStepId,
+          barcode: r.barcode,
+          qtyIn: r.qtyIn,
+        },
+      }))
     );
 
     return {
@@ -3957,16 +3955,17 @@ export class WorkOrderService {
     });
 
     // R8 fix: audit recordId = UUID. oldData GERÇEK önceki statü (hardcode değil).
-    for (const r of detached) {
-      await AuditService.log({
+    // TEK createMany (eski sıralı for-loop INSERT yerine).
+    await AuditService.logMany(
+      detached.map((r) => ({
         userId,
-        action: "UPDATE",
+        action: "UPDATE" as const,
         tableName: "ROLL",
         recordId: r.id,
         oldData: { status: r.prevStatus, workOrderId },
         newData: { status: "STOCK", workOrderId: null, barcode: r.barcode },
-      });
-    }
+      }))
+    );
 
     return {
       success: true,

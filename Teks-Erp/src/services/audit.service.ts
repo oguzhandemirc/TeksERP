@@ -86,6 +86,41 @@ export class AuditService {
   }
 
   /**
+   * Birden çok DOMAIN CUD log'unu TEK `createMany` ile yazar — toplu işlemlerden
+   * (WO'ya N top iliştir/çıkar, Tambur'da N child üret) sonra `Promise.all`/`for`
+   * ile N ayrı INSERT atmak yerine. CLAUDE.md perf kuralı #9 (createMany toplu).
+   * Best-effort: hata ana akışı bozmaz, sayaca düşer (/health görür). Tx DIŞINDA.
+   */
+  static async logMany(
+    entries: Array<{
+      userId: string | undefined;
+      action: "CREATE" | "UPDATE" | "DELETE";
+      tableName: string;
+      recordId: string;
+      oldData?: Record<string, unknown> | null;
+      newData?: Record<string, unknown> | null;
+    }>
+  ): Promise<void> {
+    if (entries.length === 0) return;
+    try {
+      await prisma.systemLog.createMany({
+        data: entries.map((e) => ({
+          userId: e.userId ?? null,
+          category: "DOMAIN",
+          action: e.action,
+          tableName: e.tableName,
+          recordId: e.recordId,
+          oldData: (e.oldData ?? Prisma.JsonNull) as JsonValue,
+          newData: (e.newData ?? Prisma.JsonNull) as JsonValue,
+        })),
+      });
+    } catch (error) {
+      recordAuditFailure(error);
+      console.error("[audit]: Failed to write SystemLog batch:", error);
+    }
+  }
+
+  /**
    * Log non-CUD system events (auth, startup, errors). Sistem Kayıtları
    * sayfasının beslendiği kanal.
    *

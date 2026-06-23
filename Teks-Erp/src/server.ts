@@ -95,3 +95,33 @@ function gracefulShutdown(signal: string): void {
 }
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+// L (düşük bulgu, silent-failure): eskiden process-seviyesi hata yakalayıcı yoktu.
+// Yakalanmamış bir promise reddi / senkron istisna, ana akışın dışında (timer,
+// event handler, eksik await) süreci log bırakmadan düşürebiliyordu — "kim/ne
+// patlattı" izi kaybolurdu. İkisini de best-effort SystemLog'a yaz (AuditService
+// zaten yutar + /health auditWriteFailures'a düşer); fark POLİTİKADIR:
+//   - unhandledRejection: süreç hâlâ tanımlı durumda → logla, AYAKTA KAL
+//     (LAN-only tek-process; gereksiz restart vardiyayı keser).
+//   - uncaughtException: süreç tanımsız/bozuk durumda olabilir → logla + temiz
+//     kapan; servis yöneticisi (nssm) otomatik yeniden başlatır.
+process.on("unhandledRejection", (reason) => {
+    console.error("UnhandledRejection:", reason);
+    void AuditService.logEvent({
+        category: "SYSTEM",
+        action: "UNHANDLED_REJECTION",
+        payload: {
+            reason: reason instanceof Error ? reason.message : String(reason),
+            stack: reason instanceof Error ? reason.stack?.split("\n").slice(0, 8) : undefined,
+        },
+    });
+});
+process.on("uncaughtException", (err) => {
+    console.error("UncaughtException:", err);
+    void AuditService.logEvent({
+        category: "SYSTEM",
+        action: "UNCAUGHT_EXCEPTION",
+        payload: { message: err.message, stack: err.stack?.split("\n").slice(0, 8) },
+    });
+    gracefulShutdown("uncaughtException");
+});

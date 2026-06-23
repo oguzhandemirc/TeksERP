@@ -995,16 +995,17 @@ export class TamburService {
       return buildIdempotentResponse();
     }
 
-    // Tx commit etti — child Roll CREATE audit'lerini şimdi emit et.
-    for (const a of childAudits) {
-      await AuditService.log({
+    // Tx commit etti — child Roll CREATE audit'lerini TEK createMany ile emit et
+    // (eski sıralı for-loop INSERT yerine; bir Tambur kesimi N child üretebilir).
+    await AuditService.logMany(
+      childAudits.map((a) => ({
         userId,
-        action: "CREATE",
+        action: "CREATE" as const,
         tableName: "ROLL",
         recordId: a.recordId,
         newData: a.newData,
-      });
-    }
+      }))
+    );
 
     await AuditService.log({
       userId,

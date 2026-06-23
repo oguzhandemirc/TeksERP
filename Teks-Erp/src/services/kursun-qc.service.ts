@@ -177,6 +177,11 @@ export class KursunQcService {
       }>
     >
   > {
+    // Emniyet tavanı: tablet açık-kart paneli bu ucu 5sn'de bir yokluyor; `take`
+    // yokken patolojik durumda tüm açık adımları çekerdi. Öncelik-sıralı kuyruk
+    // olduğundan ilk OPEN_CARDS_CAP zaten en kritikleri. Gerçekte bu kadar eş
+    // zamanlı açık QC adımı görülmez → emniyet ağı; dolarsa sessiz kalma (loglar).
+    const OPEN_CARDS_CAP = 500;
     const steps = await prisma.workOrderStep.findMany({
       where: {
         station: { kind: StationKind.PROCESS_QC },
@@ -209,7 +214,13 @@ export class KursunQcService {
         { priority: "asc" },
         { startedAt: { sort: "asc", nulls: "last" } },
       ],
+      take: OPEN_CARDS_CAP,
     });
+    if (steps.length === OPEN_CARDS_CAP) {
+      console.warn(
+        `[kursun-qc] listOpenCards: ${OPEN_CARDS_CAP} açık-kart tavanına ulaşıldı — liste kırpılmış olabilir.`
+      );
+    }
 
     const data = steps
       .map((s) => {
