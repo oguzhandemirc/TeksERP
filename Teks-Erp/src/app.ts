@@ -125,8 +125,20 @@ try {
 const backupDir = process.env.BACKUP_DIR;
 
 // Son yedeğin (.dump) adını ve zamanını döndürür. Klasör yoksa/erişilemezse null.
+// PERF: /health 5sn'de bir, çok istemciyle yoklanıyor. Bu fonksiyon her çağrıda
+// fs.readdirSync + dosya-başına fs.statSync yapıyordu → 50+ eski .dump dosyasında
+// event loop'u 10-50ms bloklar (eş zamanlı isteklerde "donuk" hissi). Yedekler
+// yavaş değişir (~günlük) → diskCache ile aynı 30sn TTL cache yeterli. null geçerli
+// bir sonuç olduğundan bayatlığı değerle değil ayrı zaman damgasıyla izleriz.
+let backupCache: { name: string; time: string } | null = null;
+let backupCacheComputedAt = 0;
+const BACKUP_CACHE_MS = 30_000;
 function latestBackupInfo(): { name: string; time: string } | null {
   if (!backupDir) return null;
+  const now = Date.now();
+  if (backupCacheComputedAt > 0 && now - backupCacheComputedAt < BACKUP_CACHE_MS) {
+    return backupCache;
+  }
   try {
     let newest: { name: string; mtimeMs: number } | null = null;
     for (const f of fs.readdirSync(backupDir)) {
@@ -134,10 +146,15 @@ function latestBackupInfo(): { name: string; time: string } | null {
       const st = fs.statSync(path.join(backupDir, f));
       if (!newest || st.mtimeMs > newest.mtimeMs) newest = { name: f, mtimeMs: st.mtimeMs };
     }
-    return newest ? { name: newest.name, time: new Date(newest.mtimeMs).toISOString() } : null;
+    backupCache = newest
+      ? { name: newest.name, time: new Date(newest.mtimeMs).toISOString() }
+      : null;
   } catch {
-    return null;
+    // Erişilemezse de cache'le — her 5sn'de tekrar deneyip bloklamasın.
+    backupCache = null;
   }
+  backupCacheComputedAt = now;
+  return backupCache;
 }
 
 // =============================================================================
