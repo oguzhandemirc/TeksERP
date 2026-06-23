@@ -33,6 +33,18 @@ import {
   WorkOrderStatus,
 } from "@prisma/client";
 
+// workOrderId-active partial unique (traveler_cards_wo_active_uniq) çakışması barkod
+// retry'a GİRMEMELİ — koleksiyon kalıcıdır, retry boşa döner. Bu predicate o P2002'yi
+// propagate ettirir (print/reprint 409'a çevirir); barkod/cardNumber çakışması (target
+// o index DEĞİL) eskisi gibi retry'lanır. meta.target null ise (güvenli taraf) retry
+// EDİLMEZ → print'in re-check catch'i yine doğru 409'u verir.
+const retryUnlessActiveCardClash = (
+  err: Prisma.PrismaClientKnownRequestError
+): boolean => {
+  const target = JSON.stringify(err.meta?.target ?? "");
+  return /barcode|cardNumber/i.test(target);
+};
+
 export class TravelerCardService {
   /**
    * Ay bazlı sıra üretici — aynı yıl-ay içinde oluşturulan en yüksek barkodun
@@ -167,7 +179,24 @@ export class TravelerCardService {
       );
     }
 
-    return this.createCardInternal(workOrderId, 1, userId, "PRINT");
+    // Üstteki pre-check SIRALI durumu yakalar; bu try/catch EŞZAMANLI çift-print'i
+    // partial unique (traveler_cards_wo_active_uniq) üzerinden kapatır: iki istek de
+    // pre-check'i geçse de ikincinin create'i P2002 alır → bu sırada ACTIVE kart
+    // oluşmuşsa pre-check ile TUTARLI 409 dön (idempotent-success değil).
+    try {
+      return await this.createCardInternal(workOrderId, 1, userId, "PRINT");
+    } catch (e) {
+      const active = await prisma.travelerCard.findFirst({
+        where: { workOrderId, status: TravelerCardStatus.ACTIVE },
+        select: { cardNumber: true },
+      });
+      if (active) {
+        throw AppError.conflict(
+          `Bu iş emri için zaten aktif bir refakat kartı var: ${active.cardNumber}. Yeniden basım için reprint endpoint'ini kullanın.`
+        );
+      }
+      throw e;
+    }
   }
 
   /**
@@ -200,8 +229,10 @@ export class TravelerCardService {
 
     // Eski kartı REPRINTED'a çek, yeni kartı üret (transaction içinde).
     // Barkod sequence çakışırsa (P2002) tx'i baştan dener.
-    const card = await withBarcodeRetry(() =>
-      prisma.$transaction(async (tx) => {
+    let card: TravelerCard;
+    try {
+      card = await withBarcodeRetry(() =>
+        prisma.$transaction(async (tx) => {
         // Aktif kart + son versiyon TX/RETRY İÇİNDE taze okunur — eskiden tx
         // dışındaydı: P2002 retry'ı bayat activeCard'ı tekrar REPRINTED'a çekip
         // bayat lastVersion+1 ile İKİNCİ bir ACTIVE kart üretebiliyordu.
@@ -256,8 +287,23 @@ export class TravelerCardService {
             snapshot,
           },
         });
-      })
-    );
+        }),
+        undefined,
+        retryUnlessActiveCardClash,
+      );
+    } catch (e) {
+      // Eşzamanlı print/reprint yarışı: flip sonrası başka istek ACTIVE kart
+      // oluşturduysa partial unique P2002 → mevcut 409 mesajıyla tutarlı dön.
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === "P2002"
+      ) {
+        throw AppError.conflict(
+          "Kart bu sırada başka bir işlemle değişti. Listeyi yenileyip tekrar deneyin.",
+        );
+      }
+      throw e;
+    }
 
     // Audit tx DIŞINDA: tx içinde atılırsa P2002 retry'ında başarısız denemenin
     // ya da rollback'in audit'i (AuditService global prisma kullanır, ayrı
@@ -737,7 +783,7 @@ export class TravelerCardService {
           snapshot,
         },
       });
-    });
+    }, undefined, retryUnlessActiveCardClash);
 
     await AuditService.log({
       userId,

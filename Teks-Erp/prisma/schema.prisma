@@ -1381,6 +1381,10 @@ model TravelerCard {
 
   @@index([workOrderId])
   @@index([status])
+  // WO başına EN FAZLA 1 ACTIVE kart invariant'ı. Migration 20260623110000 bu
+  // @@index'i PARTIAL UNIQUE'e (WHERE status='ACTIVE') çevirir (drift-free yöntem).
+  // Eşzamanlı çift-print → ikinci create P2002; print/reprint bunu 409'a çevirir.
+  @@index([workOrderId], map: "traveler_cards_wo_active_uniq")
   @@map("traveler_cards")
 }
 
