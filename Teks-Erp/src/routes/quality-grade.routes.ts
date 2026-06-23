@@ -4,13 +4,38 @@
 // Tambur/QC karar ekranlarında operatöre buton olarak çıkar. Admin yönetir;
 // Roll.qualityGrade alanı buradan seçilen `code` string'inin snapshot'ıdır.
 
-import { Router } from "express";
+import { Router, Request, Response, NextFunction } from "express";
+import { z } from "zod";
 import { BaseController } from "../controllers/base.controller";
 import { BaseService } from "../services/base.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { AppError } from "../utils/app-error";
 
 const MOBILE_QUALITY_READ = ["mobile:kk1", "mobile:kk2-kursun", "mobile:tambur"] as const;
+
+// QualityGrade.targetStatus / returnTargetStatus = RollStatus enum; Tambur çıktısı bu
+// değeri DOĞRUDAN child Roll.status'a uyguluyor (tambur.service resolveCutStatus). Bare
+// BaseController Zod taşımadığından admin herhangi bir RollStatus'u (örn. SHIPPED/DISPATCHED)
+// yazabilir → bozuk Tambur çıktısı. Tambur/iade için ANLAMLI alt kümeyle sınırla.
+const qgWriteSchema = z
+  .object({
+    targetStatus: z.enum(["WAREHOUSE", "A1_STOCK", "STOCK", "SCRAP"]).optional(),
+    returnTargetStatus: z.enum(["WAREHOUSE", "A1_STOCK", "SCRAP"]).nullable().optional(),
+  })
+  .passthrough();
+function validateQgWrite(req: Request, _res: Response, next: NextFunction): void {
+  const r = qgWriteSchema.safeParse(req.body ?? {});
+  if (!r.success) {
+    return next(
+      AppError.badRequest(
+        "Geçersiz kalite durumu: targetStatus yalnız WAREHOUSE/A1_STOCK/STOCK/SCRAP, " +
+          "returnTargetStatus yalnız WAREHOUSE/A1_STOCK/SCRAP olabilir"
+      )
+    );
+  }
+  next();
+}
 
 const service = new BaseService({
   modelName: "qualityGrade",
@@ -94,7 +119,7 @@ router.get("/:id", verifyToken, requireAnyPermission("quality:read", ...MOBILE_Q
  *       201: { description: Oluşturuldu }
  *       409: { description: Kod zaten mevcut }
  */
-router.post("/", verifyToken, requirePermission("quality:write"), controller.create);
+router.post("/", verifyToken, requirePermission("quality:write"), validateQgWrite, controller.create);
 
 /**
  * @openapi
@@ -122,7 +147,7 @@ router.post("/", verifyToken, requirePermission("quality:write"), controller.cre
  *     responses:
  *       200: { description: Güncellendi }
  */
-router.patch("/:id", verifyToken, requirePermission("quality:write"), controller.update);
+router.patch("/:id", verifyToken, requirePermission("quality:write"), validateQgWrite, controller.update);
 
 /**
  * @openapi

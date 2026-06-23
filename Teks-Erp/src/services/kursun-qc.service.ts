@@ -1155,7 +1155,14 @@ export class KursunQcService {
         { priority: "asc" },
         { startedAt: { sort: "asc", nulls: "last" } },
       ],
+      // Emniyet tavanı: kuyruk öncelik-sıralı; ilk QUEUE_CAP zaten en kritikleri.
+      // Gerçekte bu kadar eş zamanlı açık PROCESS_QC adımı görülmez → emniyet ağı
+      // (sınırsız findMany + nested movement payload'ını sınırlar). Dolarsa loglar.
+      take: 500,
     });
+    if (steps.length === 500) {
+      console.warn("[kursun-qc] listQueue: 500 açık-adım tavanına ulaşıldı — liste kırpılmış olabilir.");
+    }
 
     const data: KursunQueueItem[] = steps.map((s) => {
       const oldest = s.movements.reduce<Date | null>((acc, m) => {
