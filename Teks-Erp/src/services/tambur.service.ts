@@ -204,7 +204,16 @@ export class TamburService {
           orderBy: { startMeter: "asc" },
         },
       },
+      // Emniyet tavanı (listOpenCards/kursun-qc paritesi): mobil Tambur panosu bu ucu
+      // periyodik yokluyor; take yokken patolojik durumda tüm IN_PRODUCTION@TAMBUR
+      // rulolar + nested join çekilirdi. Gerçekte bu kadar eş zamanlı Tambur topu
+      // görülmez → emniyet ağı; dolarsa sessiz kalma.
+      orderBy: { updatedAt: "desc" },
+      take: 500,
     });
+    if (rolls.length === 500) {
+      console.warn("[tambur] getPendingRolls: 500 tavanına ulaşıldı — liste kırpılmış olabilir.");
+    }
 
     return { success: true, data: rolls };
   }

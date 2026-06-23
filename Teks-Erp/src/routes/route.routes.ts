@@ -4,12 +4,14 @@
 
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
-import { BaseService } from "../services/base.service";
+import { RouteService } from "../services/route.service";
 import { routeHardRemove } from "../services/helpers/guarded-hard-remove";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
-const service = new BaseService({
+// RouteService: bare BaseService yerine — nested step ref'lerinin isActive + sequence
+// soft-delete giriş guard'ı için (assertRouteRefsActive'in master-data CRUD karşılığı).
+const service = new RouteService({
   modelName: "route",
   tableName: "ROUTE",
   searchFields: ["name"],
