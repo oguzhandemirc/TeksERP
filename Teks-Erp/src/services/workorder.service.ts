@@ -813,17 +813,28 @@ export class WorkOrderService {
     // ── 3) Topları bağla + 4) telafi (zero-attach → WO'yu arşivle) ──────────
     let attached = 0;
     let errors: string[] = [];
+    // Telafi (zero-attach → WO'yu arşivle) başarısız OLURSA artık sessizce
+    // yutulmuyor: telafi hardDelete patlarsa kullanıcıya "oluşturulmadı" denirken
+    // canlı yetim PLANNED WO + ACTIVE refakat kartı kalır — bunu loglayıp iz bırak
+    // (audit best-effort sayacı felsefesi; operatör/log yetim WO'yu görebilsin).
+    const logOrphanCleanupFailure = (cleanupErr: unknown): void => {
+      console.error(
+        `[quickStart] telafi hardDelete başarısız — yetim WO kaldı (${workOrder.id}), manuel iptal gerekebilir:`,
+        cleanupErr,
+      );
+    };
+
     try {
       const attachRes = await this.attachRolls(workOrder.id, barcodes, userId);
       attached = attachRes.data?.attached ?? 0;
       errors = attachRes.data?.errors ?? [];
     } catch (err) {
-      await this.hardDelete(workOrder.id, userId).catch(() => undefined);
+      await this.hardDelete(workOrder.id, userId).catch(logOrphanCleanupFailure);
       throw err;
     }
 
     if (attached === 0) {
-      await this.hardDelete(workOrder.id, userId).catch(() => undefined);
+      await this.hardDelete(workOrder.id, userId).catch(logOrphanCleanupFailure);
       throw AppError.conflict(
         `Hiçbir top bağlanamadı; iş emri oluşturulmadı. ${errors.join("; ")}`.trim(),
       );
@@ -1842,6 +1853,10 @@ export class WorkOrderService {
     if (!color || !color.isActive) {
       throw AppError.badRequest("Yeni renk bulunamadı veya pasif");
     }
+    // NOT: split/redye, create()/update()'in aksine yeni rengi ürünün allowedColors
+    // listesine göre KISITLAMAZ — bu KASITLI (redye düzeltme rengine boyayabilir;
+    // test_wo_branch_redye/split fixture'ları katalog-dışı renk kullanır). Yalnız
+    // renk existence+isActive zorunlu. Kısıtlama istenirse ayrı bir ürün kararıdır.
 
     // batchNumber: verildiyse benzersiz doğrula; yoksa otomatik üret (üretim
     // RETRY KAPSAMINDA tx içinde — create() ile aynı gerekçe: closure dışında
@@ -2416,10 +2431,30 @@ export class WorkOrderService {
         }
       }
 
-      const cancelledWO = await tx.workOrder.update({
-        where: { id },
+      // ATOMİK CLAIM (check-then-act DEĞİL): terminal-durum reddini tx İÇİNDE,
+      // status-koşullu updateMany ile yap. tx-DIŞI ön-kontrol (2371-2376) yalnız
+      // UX; asıl koruma burada. Eşzamanlı son-top finalize (tambur.finalize /
+      // kursun.finishStep) WO'yu COMPLETED yaparsa bu claim count===0 görür →
+      // 409. Aksi halde READ COMMITTED'da bayat IN_PROGRESS okunup COMPLETED
+      // koşulsuzca CANCELLED'e ezilir, bitmiş depo malı iptal WO altında öksüz kalırdı.
+      const cancelClaim = await tx.workOrder.updateMany({
+        where: {
+          id,
+          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
+        },
         data: { status: WorkOrderStatus.CANCELLED },
       });
+      if (cancelClaim.count === 0) {
+        const fresh = await tx.workOrder.findUnique({
+          where: { id },
+          select: { status: true },
+        });
+        throw AppError.conflict(
+          `İş emri bu sırada ${
+            fresh?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
+          }, iptal edilemez. Listeyi yenileyin.`
+        );
+      }
 
       if (stepIds.length > 0) {
         // Yalnız GERÇEKTEN HAM (entrySource ≠ SUBCONTRACTOR_RETURN), halen
@@ -2474,7 +2509,8 @@ export class WorkOrderService {
         },
       });
 
-      return { updated: cancelledWO };
+      const cancelledWO = await tx.workOrder.findUnique({ where: { id } });
+      return { updated: cancelledWO! };
     });
 
     await AuditService.log({
@@ -2530,6 +2566,27 @@ export class WorkOrderService {
     const stepIds = existing.steps.map((s) => s.id);
 
     const archived = await prisma.$transaction(async (tx) => {
+      // ATOMİK CLAIM: tx başında WO satırını write-kilitle + "arşivlenebilir"
+      // (isActive + IN_PROGRESS değil) olduğunu iddia et. tx-DIŞI ön-kontrol
+      // (2520/2526) UX; eşzamanlı bir geçiş WO'yu IN_PROGRESS yaparsa ya da başka
+      // bir istek aynı anda arşivlerse bu claim count===0 → 409 (çift-arşiv / çift
+      // top-geri-çekme önlenir). Asıl isActive=false yazımı aşağıda kalır.
+      const archiveClaim = await tx.workOrder.updateMany({
+        where: { id, isActive: true, status: { not: WorkOrderStatus.IN_PROGRESS } },
+        data: { updatedAt: new Date() },
+      });
+      if (archiveClaim.count === 0) {
+        const fresh = await tx.workOrder.findUnique({
+          where: { id },
+          select: { isActive: true, status: true },
+        });
+        throw AppError.conflict(
+          fresh && !fresh.isActive
+            ? "İş emri bu sırada arşivlendi."
+            : "İş emri bu sırada üretime geçti, arşivlenemez. Önce iptal edin."
+        );
+      }
+
       if (stepIds.length > 0) {
         // Aktif üretimdeki topları STOCK'a geri çek (currentStepId null,
         // status STOCK). producedInStepId KORUNUR — lineage; step kaydı
@@ -2915,8 +2972,14 @@ export class WorkOrderService {
       await this.assertBatchNumberUnique(data.batchNumber.trim(), id);
     }
 
-    const updated = await prisma.workOrder.update({
-      where: { id },
+    // ATOMİK CLAIM (check-then-act DEĞİL): terminal-durum reddini yazmanın WHERE'ine
+    // koy. tx-DIŞI ön-kontrol (2815-2822) UX; eşzamanlı finalize WO'yu COMPLETED
+    // yaparsa bu updateMany count===0 → 409 (terminal WO'ya alan yazımı engellenir).
+    const updateClaim = await prisma.workOrder.updateMany({
+      where: {
+        id,
+        status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
+      },
       data: {
         batchNumber: data.batchNumber?.trim() || undefined,
         width: data.width ?? undefined,
@@ -2938,6 +3001,12 @@ export class WorkOrderService {
         dyehouseNote: data.dyehouseNote === undefined ? undefined : data.dyehouseNote,
       },
     });
+    if (updateClaim.count === 0) {
+      throw AppError.conflict(
+        "İş emri bu sırada tamamlandı veya iptal edildi, düzenlenemez. Sayfayı yenileyin."
+      );
+    }
+    const updated = await prisma.workOrder.findUnique({ where: { id } });
 
     await AuditService.log({
       userId,
@@ -2947,7 +3016,7 @@ export class WorkOrderService {
       newData: data as Record<string, unknown>,
     });
 
-    return { success: true, data: updated, message: "İş emri güncellendi" };
+    return { success: true, data: updated!, message: "İş emri güncellendi" };
   }
 
   /**
@@ -3306,6 +3375,30 @@ export class WorkOrderService {
 
     // ── Transaction: smart merge (steps id-bazlı diff) ───────────────────────
     const updated = await prisma.$transaction(async (tx) => {
+      // ATOMİK CLAIM: tx başında (yıkıcı drop-and-recreate'ten ÖNCE) WO satırını
+      // write-kilitle + COMPLETED/CANCELLED'e geçmediğini iddia et. tx-DIŞI
+      // ön-kontrol (2978-2985) UX; eşzamanlı son-top finalize bu satırı tx süresince
+      // güncelleyemez, önce commit ettiyse count===0 → 409 (terminal WO'nun rotası/
+      // bağları ezilmez). Asıl alan yazımı aşağıdaki tx.workOrder.update'te kalır.
+      const replaceClaim = await tx.workOrder.updateMany({
+        where: {
+          id,
+          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
+        },
+        data: { updatedAt: new Date() },
+      });
+      if (replaceClaim.count === 0) {
+        const fresh = await tx.workOrder.findUnique({
+          where: { id },
+          select: { status: true },
+        });
+        throw AppError.conflict(
+          `İş emri bu sırada ${
+            fresh?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
+          }, düzenlenemez. Sayfayı yenileyin.`
+        );
+      }
+
       // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK (fazla üretim → stok).
       // Yalnız (a) satır varlığı, (b) material committed iken kumaş + en uyumu.
       if (allocations.length > 0) {
