@@ -282,9 +282,13 @@ export class ReturnService {
     if (gradingEnabled && input.qualityGradeId) {
       const qg = await prisma.qualityGrade.findUnique({
         where: { id: input.qualityGradeId },
-        select: { id: true, code: true, returnTargetStatus: true },
+        select: { id: true, code: true, isActive: true, returnTargetStatus: true },
       });
-      if (!qg) throw AppError.badRequest("Kalite derecesi bulunamadı");
+      // Soft-delete giriş guard'ı (createInitialEntry/tambur/resolveQualityGradeIdStrict
+      // ile parite): pasif kalite ile iade rafına atama yapılamaz.
+      if (!qg || !qg.isActive) {
+        throw AppError.badRequest("Kalite derecesi bulunamadı veya pasif");
+      }
       overrideQualityGradeId = qg.id;
       overrideQualityCode = qg.code;
       appliedStatus = qg.returnTargetStatus ?? RollStatus.WAREHOUSE;

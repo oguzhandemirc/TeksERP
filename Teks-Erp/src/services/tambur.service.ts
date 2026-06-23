@@ -1494,7 +1494,15 @@ export class TamburService {
         },
       },
       orderBy: { updatedAt: "desc" },
+      // Emniyet tavanı (kursun-qc.listOpenCards/listQueue ile parite): tablet Tambur
+      // panosu bu ucu 5sn'de bir yokluyor; take yokken patolojik durumda tüm açık
+      // adımları + nested payload çekerdi. Gerçekte bu kadar eş zamanlı açık Tambur
+      // adımı görülmez → emniyet ağı; dolarsa sessiz kalma.
+      take: 500,
     });
+    if (steps.length === 500) {
+      console.warn("[tambur] listOpenCards: 500 açık-adım tavanına ulaşıldı — liste kırpılmış olabilir.");
+    }
 
     const data = steps
       .map((s) => {

@@ -1947,8 +1947,12 @@ export class OrderService extends BaseService {
     // Manuel iz silinir; sonra recomputeOrderStatus sevk sayaçlarına göre
     // status (APPROVED/PARTIAL_SHIPPED) ve shippedQty'yi senkronize eder.
     const updated = await prisma.$transaction(async (tx) => {
-      await tx.order.update({
-        where: { id },
+      // ATOMİK CLAIM (check-then-act DEĞİL — manualComplete/cancelWithActions paritesi):
+      // yalnız HÂLÂ manuel-kapalı sipariş yeniden açılır. tx-dışı manualClosedById
+      // okuması UX; iki paralel reopen yarışında biri count===0 → 409 (çift audit/
+      // koşulsuz APPROVED yazımı engellenir).
+      const claim = await tx.order.updateMany({
+        where: { id, manualClosedById: { not: null } },
         data: {
           manualClosedById: null,
           manualCloseReason: null,
@@ -1956,6 +1960,11 @@ export class OrderService extends BaseService {
           status: OrderStatus.APPROVED,
         },
       });
+      if (claim.count === 0) {
+        throw AppError.conflict(
+          "Sipariş bu sırada durum değiştirdi — yeniden açılamadı, sayfayı yenileyin"
+        );
+      }
       await recomputeOrderStatus(tx, id);
       return tx.order.findUniqueOrThrow({ where: { id } });
     });
