@@ -19,14 +19,20 @@
 
 import bwipjs from "bwip-js";
 import { readLabelCopies, readLabelNativeSendEnabled } from "./system-setting.service";
-import { LabelKind, PrinterLanguage, Prisma } from "@prisma/client";
+import { LabelKind, PrinterLanguage, Prisma, type LabelTemplate } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
-import { resolveName, normalizeOverride, NameSource } from "./helpers/customer-name.helper";
+import {
+  resolveName,
+  normalizeOverride,
+  NameSource,
+  batchLoadAliases,
+  type BatchAliasResult,
+} from "./helpers/customer-name.helper";
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
-import { resolveLabelFormat } from "./helpers/label-format.resolver";
+import { resolveLabelFormat, type ResolvedLabelFormat } from "./helpers/label-format.resolver";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
 import { dispatchNativeSend, type PrinterTransportResult } from "./helpers/printer-transport";
 
@@ -159,42 +165,30 @@ function swatchPayloadToLabelPayload(sw: SwatchLabelPayload): LabelPayload {
   };
 }
 
-export class LabelService {
-  /**
-   * Bir rulonun etiket payload'unu döner. Allocation modülü kaldırıldı —
-   * customer/order alanları sabit null. Sevkiyat modülü yeniden yazıldığında
-   * order context'i parametre olarak alınacak.
-   */
-  async getRollLabel(
-    rollId: string,
-    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }
-  ): Promise<ApiResponse<LabelPayload>> {
-    const roll = await prisma.roll.findUnique({
-      where: { id: rollId },
-      include: {
-        item: { select: { id: true, code: true, name: true } },
-        color: { select: { id: true, code: true, name: true } },
-        producedInStep: {
-          select: {
-            workOrder: {
-              select: {
-                id: true,
-                batchNumber: true,
-                orderLinks: {
-                  select: {
-                    orderLine: {
-                      select: {
-                        id: true,
-                        customerItemName: true,
-                        customerColorName: true,
-                        order: {
-                          select: {
-                            orderNumber: true,
-                            customerId: true,
-                            customer: { select: { name: true } },
-                          },
-                        },
-                      },
+// getRollLabel'in Q1 include ağacı — getBulkRollLabelsHtml prefetch'i ile BİREBİR
+// paylaşılır (drift = yanlış etiket riski; tek const → garanti aynı). Tüm Roll
+// scalar'ları (colorId, lastLabelSnapshot, barcode...) + ilişkiler gelir.
+const ROLL_LABEL_INCLUDE = {
+  item: { select: { id: true, code: true, name: true } },
+  color: { select: { id: true, code: true, name: true } },
+  producedInStep: {
+    select: {
+      workOrder: {
+        select: {
+          id: true,
+          batchNumber: true,
+          orderLinks: {
+            select: {
+              orderLine: {
+                select: {
+                  id: true,
+                  customerItemName: true,
+                  customerColorName: true,
+                  order: {
+                    select: {
+                      orderNumber: true,
+                      customerId: true,
+                      customer: { select: { name: true } },
                     },
                   },
                 },
@@ -203,7 +197,49 @@ export class LabelService {
           },
         },
       },
-    });
+    },
+  },
+} satisfies Prisma.RollInclude;
+
+type RollWithLabelIncludes = Prisma.RollGetPayload<{ include: typeof ROLL_LABEL_INCLUDE }>;
+
+/** Branch ① (orderLineId) lookup'unun select projeksiyonu (getRollLabel:260-267). */
+interface OrderLineLabelCtx {
+  id: string;
+  customerItemName: string | null;
+  customerColorName: string | null;
+  order: { orderNumber: string; customerId: string; customer: { name: string } };
+}
+
+// Toplu etiket basımında (getBulkRollLabelsHtml) TÜM toplar için bir kez çözülen
+// bağlam — getRollLabel/buildRollRenderInput'a opsiyonel `preloaded` olarak geçer
+// (param yoksa = eski per-roll sorgu yolu, geriye uyumlu). N+1 → O(1).
+interface BulkLabelContext {
+  rollById: Map<string, RollWithLabelIncludes>;
+  orderLineById: Map<string, OrderLineLabelCtx>;
+  customerById: Map<string, { id: string; name: string }>;
+  aliasByCustomer: Map<string, BatchAliasResult>;
+  format: ResolvedLabelFormat;
+  templateByKind: Partial<Record<LabelKind, LabelTemplate | null>>;
+  copies: number;
+}
+
+export class LabelService {
+  /**
+   * Bir rulonun etiket payload'unu döner. Allocation modülü kaldırıldı —
+   * customer/order alanları sabit null. Sevkiyat modülü yeniden yazıldığında
+   * order context'i parametre olarak alınacak.
+   */
+  async getRollLabel(
+    rollId: string,
+    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean },
+    // Toplu basım bağlamı (getBulkRollLabelsHtml). Verilirse DB sorguları yerine
+    // önceden çekilmiş Map'lerden okunur; verilmezse (tek-top yolu) eski sorgular.
+    preloaded?: BulkLabelContext
+  ): Promise<ApiResponse<LabelPayload>> {
+    const roll =
+      preloaded?.rollById.get(rollId) ??
+      (await prisma.roll.findUnique({ where: { id: rollId }, include: ROLL_LABEL_INCLUDE }));
     if (!roll) throw AppError.notFound("Top bulunamadı");
     if (!roll.barcode) {
       throw AppError.badRequest(
@@ -255,17 +291,19 @@ export class LabelService {
     if (effOrderLineId) {
       // ① Baskı bağlamı: sipariş kalemi (tambur kesim / relabel / snapshot). Bu bir
       // BAĞ DEĞİL — yalnız bu baskının müşteri/sipariş bağlamı (gevşek model: top fungible).
-      const tgt = await prisma.orderLine.findUnique({
-        where: { id: effOrderLineId },
-        select: {
-          id: true,
-          customerItemName: true,
-          customerColorName: true,
-          order: {
-            select: { orderNumber: true, customerId: true, customer: { select: { name: true } } },
+      const tgt =
+        preloaded?.orderLineById.get(effOrderLineId) ??
+        (await prisma.orderLine.findUnique({
+          where: { id: effOrderLineId },
+          select: {
+            id: true,
+            customerItemName: true,
+            customerColorName: true,
+            order: {
+              select: { orderNumber: true, customerId: true, customer: { select: { name: true } } },
+            },
           },
-        },
-      });
+        }));
       if (tgt) {
         customerId = tgt.order.customerId;
         customerName = tgt.order.customer.name;
@@ -276,10 +314,12 @@ export class LabelService {
       }
     } else if (effCustomerId) {
       // ① Manuel/snapshot müşteri (WO dışı) — sipariş yok; isimler master alias'tan türetilir.
-      const cust = await prisma.customer.findUnique({
-        where: { id: effCustomerId },
-        select: { id: true, name: true },
-      });
+      const cust =
+        preloaded?.customerById.get(effCustomerId) ??
+        (await prisma.customer.findUnique({
+          where: { id: effCustomerId },
+          select: { id: true, name: true },
+        }));
       if (cust) {
         customerId = cust.id;
         customerName = cust.name;
@@ -306,23 +346,33 @@ export class LabelService {
     }
 
     // Master alias'lar — customer × item / customer × color (yoksa null).
+    // preloaded'da batchLoadAliases sonucu Map'ten okunur (aynı sonuç: itemAlias
+    // yoksa undefined→null; colorAlias null/yok → batchLoadAliases zaten düşürür).
     if (customerId) {
-      const itemAlias = await prisma.customerItemAlias.findUnique({
-        where: {
-          customerId_itemId: { customerId, itemId: roll.item.id },
-        },
-        select: { alias: true },
-      });
-      itemMasterAlias = itemAlias?.alias ?? null;
-
-      if (roll.color) {
-        const colorAlias = await prisma.customerColorAlias.findUnique({
+      if (preloaded) {
+        const alias = preloaded.aliasByCustomer.get(customerId);
+        itemMasterAlias = alias?.itemAliasByItemId.get(roll.item.id) ?? null;
+        if (roll.color) {
+          colorMasterAlias = alias?.colorAliasByColorId.get(roll.color.id) ?? null;
+        }
+      } else {
+        const itemAlias = await prisma.customerItemAlias.findUnique({
           where: {
-            customerId_colorId: { customerId, colorId: roll.color.id },
+            customerId_itemId: { customerId, itemId: roll.item.id },
           },
           select: { alias: true },
         });
-        colorMasterAlias = colorAlias?.alias ?? null;
+        itemMasterAlias = itemAlias?.alias ?? null;
+
+        if (roll.color) {
+          const colorAlias = await prisma.customerColorAlias.findUnique({
+            where: {
+              customerId_colorId: { customerId, colorId: roll.color.id },
+            },
+            select: { alias: true },
+          });
+          colorMasterAlias = colorAlias?.alias ?? null;
+        }
       }
     }
 
@@ -479,33 +529,48 @@ export class LabelService {
     rollId: string,
     kindOverride: LabelKind | undefined,
     opts?: RollLabelRenderOpts,
+    preloaded?: BulkLabelContext,
   ): Promise<{ input: LabelRenderInput; kind: LabelKind }> {
-    const payloadResp = await this.getRollLabel(rollId, opts);
+    const payloadResp = await this.getRollLabel(rollId, opts, preloaded);
     const payload = payloadResp.data;
 
-    const roll = await prisma.roll.findUnique({
-      where: { id: rollId },
-      select: { colorId: true },
-    });
-    if (!roll) throw AppError.notFound("Top bulunamadı");
+    // colorId: preloaded'da Aşama-A roll'unda zaten var → ikinci sorgu YOK.
+    // (preloaded'da roll eksikse — beklenmez — güvenli tarafta sorguya düş.)
+    let colorId: string | null;
+    const preRoll = preloaded?.rollById.get(rollId);
+    if (preRoll) {
+      colorId = preRoll.colorId;
+    } else {
+      const r = await prisma.roll.findUnique({
+        where: { id: rollId },
+        select: { colorId: true },
+      });
+      if (!r) throw AppError.notFound("Top bulunamadı");
+      colorId = r.colorId;
+    }
 
     const kind: LabelKind =
-      kindOverride ?? (roll.colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED);
+      kindOverride ?? (colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED);
 
-    const template = await prisma.labelTemplate.findFirst({
-      where: { kind, isDefault: true, isActive: true },
-    });
+    // Template + format bir bulk isteğinde SABİT → preloaded'da bir kez çözülür.
+    const template = preloaded
+      ? (preloaded.templateByKind[kind] ?? null)
+      : await prisma.labelTemplate.findFirst({
+          where: { kind, isDefault: true, isActive: true },
+        });
     const barcodeSvg = payload.barcode
       ? bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" })
       : "";
     const qrSvg = payload.barcode
       ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
       : "";
-    // Saha #6: kopya adedi — istek override > ayar (default 2, üst+alt yapıştırma).
-    const copies = opts?.copies ?? (await readLabelCopies());
+    // Saha #6: kopya adedi — istek override > bulk-sabit > ayar (default 2).
+    const copies = opts?.copies ?? preloaded?.copies ?? (await readLabelCopies());
     // Fiziksel geometri (medya + güvenlik payı) + etkin dil — profileId/machineId'den
     // çözülür; mobil istasyon yazıcısını oto çözer (req.device.machineId), Electron default.
-    const format = await resolveLabelFormat({ profileId: opts?.profileId, machineId: opts?.machineId });
+    const format =
+      preloaded?.format ??
+      (await resolveLabelFormat({ profileId: opts?.profileId, machineId: opts?.machineId }));
     return { input: { payload, template, barcodeSvg, qrSvg, copies, format }, kind };
   }
 
@@ -513,8 +578,9 @@ export class LabelService {
     rollId: string,
     kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
+    preloaded?: BulkLabelContext,
   ): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
-    const { input, kind } = await this.buildRollRenderInput(rollId, kindOverride, opts);
+    const { input, kind } = await this.buildRollRenderInput(rollId, kindOverride, opts, preloaded);
     const html = renderLabel(PrinterLanguage.RASTER_HTML, input).content;
     return { success: true, data: { html, kind } };
   }
@@ -695,11 +761,16 @@ export class LabelService {
     if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
     const copies = opts?.copies ?? (await readLabelCopies());
 
+    // N+1 → O(1): format/template/copies'i bir kez çöz + tüm top + ilişki verisini
+    // toplu prefetch et. Render (aşağıdaki döngü) DEĞİŞMEDEN preloaded bağlamı kullanır;
+    // çıktı per-roll yolla BYTE-IDENTİK (bkz. test_bulk_label_batched.ts).
+    const ctx = await this.buildBulkContext(ids, copies);
+
     const bodyRe = /<body[^>]*>([\s\S]*?)<\/body>/i;
     let head = "";
     const bodies: string[] = [];
     for (const id of ids) {
-      const res = await this.getRollLabelHtml(id, undefined, { copies });
+      const res = await this.getRollLabelHtml(id, undefined, { copies }, ctx);
       const full = res.data.html;
       if (!head) {
         // İlk belgenin <head> dahil <body ...> açılışına kadarki kısmı.
@@ -717,6 +788,96 @@ export class LabelService {
       ? `${head}\n${combinedBody}\n</body></html>`
       : `<!doctype html><html><head><meta charset="utf-8"></head><body>${combinedBody}</body></html>`;
     return { success: true, data: { html, count: bodies.length } };
+  }
+
+  /**
+   * Toplu etiket basımı için bir kez çözülen bağlam (N+1 → O(1)). Sabitler (format,
+   * kind-başına template, copies) + toplu top/orderLine/customer/alias verisi. Müşteri
+   * çözümü için getRollLabel'in KENDİSİ (branch ①②③④ tek-doğru-kaynak) kullanılır —
+   * dal mantığı KOPYALANMAZ (drift = yanlış etiket riski).
+   */
+  private async buildBulkContext(ids: string[], copies: number): Promise<BulkLabelContext> {
+    // §1 Sabitler — seri (pg adapter tek-connection; Promise.all yok).
+    const format = await resolveLabelFormat({});
+    const templateByKind: Partial<Record<LabelKind, LabelTemplate | null>> = {
+      [LabelKind.ROLL_RAW]: await prisma.labelTemplate.findFirst({
+        where: { kind: LabelKind.ROLL_RAW, isDefault: true, isActive: true },
+      }),
+      [LabelKind.ROLL_FINISHED]: await prisma.labelTemplate.findFirst({
+        where: { kind: LabelKind.ROLL_FINISHED, isDefault: true, isActive: true },
+      }),
+    };
+
+    // §2-A: tüm top'ları tek findMany (getRollLabel ile AYNI include const → drift yok).
+    const rolls = await prisma.roll.findMany({ where: { id: { in: ids } }, include: ROLL_LABEL_INCLUDE });
+    const rollById = new Map<string, RollWithLabelIncludes>(rolls.map((r) => [r.id, r]));
+
+    // §2-A1: snapshot'lardan branch ①(orderLineId)/②(customerId) lookup ihtiyaçları.
+    const needOrderLineIds = new Set<string>();
+    const needCustomerIds = new Set<string>();
+    for (const r of rolls) {
+      const snap = (r.lastLabelSnapshot ?? null) as Record<string, unknown> | null;
+      if (!snap) continue;
+      if (typeof snap.orderLineId === "string") needOrderLineIds.add(snap.orderLineId);
+      else if (typeof snap.customerId === "string") needCustomerIds.add(snap.customerId);
+    }
+
+    // §2-A2: branch ①/② lookup'larını batch'le (select getRollLabel ile birebir).
+    const orderLineById = new Map<string, OrderLineLabelCtx>();
+    if (needOrderLineIds.size > 0) {
+      const rows = await prisma.orderLine.findMany({
+        where: { id: { in: [...needOrderLineIds] } },
+        select: {
+          id: true,
+          customerItemName: true,
+          customerColorName: true,
+          order: { select: { orderNumber: true, customerId: true, customer: { select: { name: true } } } },
+        },
+      });
+      for (const o of rows) orderLineById.set(o.id, o);
+    }
+    const customerById = new Map<string, { id: string; name: string }>();
+    if (needCustomerIds.size > 0) {
+      const rows = await prisma.customer.findMany({
+        where: { id: { in: [...needCustomerIds] } },
+        select: { id: true, name: true },
+      });
+      for (const c of rows) customerById.set(c.id, c);
+    }
+
+    // §2 PASS-1: getRollLabel'i alias'sız bağlamla çağırıp her topun customerId'sini
+    // ÇÖZ (branch mantığı tek-doğru-kaynak; replikasyon yok). alias gruplaması müşteri
+    // bazlıdır — yanlış müşterinin alias'ı = fiziksel yanlış etiket olur, bu yüzden
+    // (customerId → itemIds/colorIds) gruplanır.
+    const partial: BulkLabelContext = {
+      rollById,
+      orderLineById,
+      customerById,
+      aliasByCustomer: new Map(),
+      format,
+      templateByKind,
+      copies,
+    };
+    const byCustomer = new Map<string, { itemIds: Set<string>; colorIds: Set<string> }>();
+    for (const id of ids) {
+      const roll = rollById.get(id);
+      if (!roll) continue; // var-olmayan top: ana döngüde getRollLabel fallback 404'ler
+      const cid = (await this.getRollLabel(id, {}, partial)).data.customerId;
+      if (!cid) continue;
+      const g = byCustomer.get(cid) ?? { itemIds: new Set<string>(), colorIds: new Set<string>() };
+      g.itemIds.add(roll.item.id);
+      if (roll.color) g.colorIds.add(roll.color.id);
+      byCustomer.set(cid, g);
+    }
+
+    // §2-B: alias'ları müşteri bazlı batch'le (batchLoadAliases reuse — null color
+    // alias'ı düşürür, inline yolla birebir aynı).
+    const aliasByCustomer = new Map<string, BatchAliasResult>();
+    for (const [cid, g] of byCustomer) {
+      aliasByCustomer.set(cid, await batchLoadAliases(prisma, cid, [...g.itemIds], [...g.colorIds]));
+    }
+
+    return { rollById, orderLineById, customerById, aliasByCustomer, format, templateByKind, copies };
   }
 
   /**
