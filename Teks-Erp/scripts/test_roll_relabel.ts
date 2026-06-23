@@ -67,7 +67,7 @@ async function main() {
     // 1+2) Serbest topu relabel
     await inv.applyManualProperties(
       r1.id,
-      { colorId: colorB.id, propertyIds: prop ? [prop.id] : [], width: 200, qualityGrade: "A" },
+      { colorId: colorB.id, propertyIds: prop ? [prop.id] : [], width: 200, qualityGrade: "A1" },
       undefined,
     );
     const r1After = await prisma.roll.findUnique({
@@ -76,7 +76,7 @@ async function main() {
     });
     check("Renk değişti (A→B)", r1After?.colorId === colorB.id);
     check("En değişti (150→200)", Number(r1After?.width) === 200);
-    check("Kalite değişti (B→A)", r1After?.qualityGrade === "A");
+    check("Kalite değişti (B→A1, katalog doğrulandı + FK senkron)", r1After?.qualityGrade === "A1");
     if (prop) check("Özellik atandı (replace)", r1After?.properties.length === 1 && r1After.properties[0].propertyId === prop.id);
 
     // 5) Renksiz yap

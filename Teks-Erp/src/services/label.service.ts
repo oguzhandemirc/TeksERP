@@ -919,7 +919,9 @@ export class LabelService {
     let labelData: LabelPayload | null = null;
     try {
       labelData = (await this.getRollLabel(rollId, opts)).data;
-    } catch {
+    } catch (e) {
+      // Etiket çözülemezse snapshot'a dokunma — ama SESSİZ kalma.
+      console.error("[label] recordRollLabelPrint snapshot çözümü başarısız:", e);
       labelData = null;
     }
     if (labelData) {

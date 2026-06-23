@@ -4083,10 +4083,23 @@ export class WorkOrderService {
       throw AppError.badRequest("Sadece 'Planlandı' durumundaki iş emirleri kilitlenebilir/başlatılabilir.");
     }
 
-    const updated = await prisma.workOrder.update({
-      where: { id: workOrderId },
+    // ATOMİK CLAIM (check-then-act DEĞİL): PLANNED→IN_PROGRESS geçişini status-koşullu
+    // updateMany ile sahiplen. İki paralel kilitle / kilitle+iptal yarışında yalnız biri
+    // kazanır; üst ön-kontrol (4082) UX, asıl koruma bu claim.
+    const claim = await prisma.workOrder.updateMany({
+      where: { id: workOrderId, status: WorkOrderStatus.PLANNED },
       data: { status: WorkOrderStatus.IN_PROGRESS },
     });
+    if (claim.count === 0) {
+      const fresh = await prisma.workOrder.findUnique({
+        where: { id: workOrderId },
+        select: { status: true },
+      });
+      throw AppError.conflict(
+        `İş emri bu sırada ${fresh?.status} durumuna geçti — kilitlenemedi. Sayfayı yenileyin.`
+      );
+    }
+    const updated = await prisma.workOrder.findUnique({ where: { id: workOrderId } });
 
     await AuditService.log({
       userId,
@@ -4099,7 +4112,7 @@ export class WorkOrderService {
 
     return {
       success: true,
-      data: updated,
+      data: updated!,
       message: "İş emri kilitlendi ve üretime (IN_PROGRESS) alındı.",
     };
   }

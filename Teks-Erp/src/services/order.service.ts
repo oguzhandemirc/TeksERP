@@ -205,8 +205,9 @@ export class OrderService extends BaseService {
               userId
             );
           }
-        } catch {
-          // best-effort: terfi başarısızsa sipariş etkilenmesin.
+        } catch (e) {
+          // best-effort: terfi başarısızsa sipariş etkilenmesin — ama SESSİZ değil.
+          console.error("[order] müşteri-ürün alias terfisi başarısız:", e);
         }
       }
 
@@ -225,8 +226,9 @@ export class OrderService extends BaseService {
               userId
             );
           }
-        } catch {
-          // best-effort: terfi başarısızsa sipariş etkilenmesin.
+        } catch (e) {
+          // best-effort: terfi başarısızsa sipariş etkilenmesin — ama SESSİZ değil.
+          console.error("[order] müşteri-renk alias terfisi başarısız:", e);
         }
       }
     }

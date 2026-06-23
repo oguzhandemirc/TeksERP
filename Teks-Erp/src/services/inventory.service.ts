@@ -1826,7 +1826,14 @@ export class InventoryService {
     if (roll.colorId !== data.colorId) rollData.colorId = data.colorId;
     if (data.width !== undefined) rollData.width = data.width === null ? null : new Prisma.Decimal(data.width);
     if (data.qualityGrade !== undefined && data.qualityGrade.trim()) {
-      rollData.qualityGrade = data.qualityGrade.trim();
+      // Soft-delete giriş guard'ı (createInitialEntry/tambur finalize ile PARİTE):
+      // operatör girdisi kataloğa karşı SIKI doğrulanır (bilinmeyen/pasif kod → 400),
+      // ve canonical FK (qualityGradeId) snapshot ile BİRLİKTE yazılır — yoksa
+      // snapshot↔FK ayrışır (qualityGradeRef raporları bayatlar) + typo'lu kod
+      // FIRE-dışlama filtresinden kaçıp byQuality istatistiklerini bölerdi.
+      const code = data.qualityGrade.trim();
+      rollData.qualityGradeId = await resolveQualityGradeIdStrict(code);
+      rollData.qualityGrade = code;
     }
 
     await prisma.$transaction(async (tx) => {
