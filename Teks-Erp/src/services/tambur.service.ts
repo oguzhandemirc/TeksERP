@@ -1596,11 +1596,18 @@ export class TamburService {
        * Bitmiş depo topu (WAREHOUSE parent) kesiminde YOK SAYILIR — çıktı her zaman WAREHOUSE.
        */
       rawDestination?: "STOCK" | "WAREHOUSE";
+      /** Offline/retry idempotency: client-üretimi child barkod (TEKS-YYYYMMDD-XXXXXXXX).
+       *  Verilirse ağ-retry'ında 2. çağrı child @unique P2002 → mevcut child idempotent
+       *  döner (ikinci kesim/decrement YOK). createInitialEntry.clientBarcode deseni. */
+      clientChildBarcode?: string;
     },
     userId?: string,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> {
     if (!(data.cutLength > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
+    }
+    if (data.clientChildBarcode && !/^TEKS-\d{8}-[0-9A-F]{8}$/.test(data.clientChildBarcode)) {
+      throw AppError.badRequest("Geçersiz clientChildBarcode formatı (TEKS-YYYYMMDD-XXXXXXXX)");
     }
 
     const parent = await prisma.roll.findUnique({
@@ -1655,9 +1662,11 @@ export class TamburService {
         ? await resolveQualityGradeIdStrict(resolvedQualityGrade)
         : parent.qualityGradeId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
-    const childBarcode = generateTamburChildBarcode();
+    const childBarcode = data.clientChildBarcode ?? generateTamburChildBarcode();
 
-    const result = await prisma.$transaction(async (tx) => {
+    let result: { child: Roll; newParentQty: number; updatedParent: Roll };
+    try {
+      result = await prisma.$transaction(async (tx) => {
       const child = await tx.roll.create({
         data: {
           barcode: childBarcode,
@@ -1763,7 +1772,32 @@ export class TamburService {
       const newParentQty = Number(updatedParent.currentQty);
 
       return { child, newParentQty, updatedParent };
-    });
+      });
+    } catch (err) {
+      // Offline/ağ-retry idempotency: aynı clientChildBarcode ile 2. çağrı → child
+      // @unique P2002. tx geri sarıldığından İKİNCİ decrement UYGULANMAZ; ilk çağrının
+      // oluşturduğu child + güncel parent idempotent döner (createInitialEntry deseni).
+      if (
+        data.clientChildBarcode &&
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        const existing = await prisma.roll.findUnique({ where: { barcode: childBarcode } });
+        const freshParent = await prisma.roll.findUnique({ where: { id: rollId } });
+        if (existing && freshParent) {
+          return {
+            success: true,
+            data: {
+              childRoll: existing,
+              parentRoll: freshParent,
+              parentRemainingQty: Number(freshParent.currentQty),
+            },
+            message: "Kesim zaten kaydedilmiş (idempotent retry)",
+          };
+        }
+      }
+      throw err;
+    }
 
     await AuditService.log({
       userId,
@@ -2018,11 +2052,16 @@ export class TamburService {
       notes?: string | null;
       /** Çıktı top kartelalık işaretlensin (depoda kartela sevki için). */
       markedForKartela?: boolean;
+      /** Offline/retry idempotency: client-üretimi child barkod (cutWarehouseRoll ile aynı). */
+      clientChildBarcode?: string;
     },
     userId?: string,
   ): Promise<ApiResponse<{ childRoll: Roll; parentRemainingQty: number }>> {
     if (!(data.lengthMeters > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
+    }
+    if (data.clientChildBarcode && !/^TEKS-\d{8}-[0-9A-F]{8}$/.test(data.clientChildBarcode)) {
+      throw AppError.badRequest("Geçersiz clientChildBarcode formatı (TEKS-YYYYMMDD-XXXXXXXX)");
     }
 
     const parent = await prisma.roll.findUnique({
@@ -2071,7 +2110,7 @@ export class TamburService {
     const childStatus = RollStatus.WAREHOUSE;
     const tamburStepId = parent.currentStep.id;
     const propertyIds = parent.properties.map((p) => p.propertyId);
-    const childBarcode = generateTamburChildBarcode();
+    const childBarcode = data.clientChildBarcode ?? generateTamburChildBarcode();
 
     // Operatör explicit kod verdiyse SIKI doğrula (katalog+aktif); sistem-türetimli
     // ("1.KALITE"/"A1"/"FIRE" sabitleri) lenient kalır.
@@ -2079,7 +2118,9 @@ export class TamburService {
       ? await resolveQualityGradeIdStrict(resolvedQualityGrade)
       : await resolveQualityGradeId(resolvedQualityGrade);
 
-    const result = await prisma.$transaction(async (tx) => {
+    let result: { child: Roll; newParentQty: number };
+    try {
+      result = await prisma.$transaction(async (tx) => {
       // Child Roll oluştur
       const child = await tx.roll.create({
         data: {
@@ -2181,7 +2222,28 @@ export class TamburService {
       const newParentQty = Number(updatedParent.currentQty);
 
       return { child, newParentQty };
-    });
+      });
+    } catch (err) {
+      // Offline/ağ-retry idempotency (cutWarehouseRoll ile aynı): clientChildBarcode
+      // ile 2. çağrı → child @unique P2002, tx geri sarılır (ikinci decrement YOK) →
+      // mevcut child + güncel parent metresi idempotent döner.
+      if (
+        data.clientChildBarcode &&
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        const existing = await prisma.roll.findUnique({ where: { barcode: childBarcode } });
+        const freshParent = await prisma.roll.findUnique({ where: { id: openFabricRollId } });
+        if (existing && freshParent) {
+          return {
+            success: true,
+            data: { childRoll: existing, parentRemainingQty: Number(freshParent.currentQty) },
+            message: "Kesim zaten kaydedilmiş (idempotent retry)",
+          };
+        }
+      }
+      throw err;
+    }
 
     await AuditService.log({
       userId,
