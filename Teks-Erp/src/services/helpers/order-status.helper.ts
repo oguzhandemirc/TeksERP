@@ -58,7 +58,10 @@ export async function touchOrderLinesTx(
  */
 export async function recomputeOrderStatus(
   tx: Prisma.TransactionClient,
-  orderId: string
+  orderId: string,
+  // Çok-sipariş döngüsünde (recomputeOrderStatusForOrders) ayar bir kez okunup
+  // geçilir; verilmezse buradan okunur (tek-sipariş çağrıları için geriye uyumlu).
+  toleranceMeters?: number
 ): Promise<{ changed: boolean; oldStatus: OrderStatus; newStatus: OrderStatus } | null> {
   const order = await tx.order.findUnique({
     where: { id: orderId },
@@ -91,7 +94,9 @@ export async function recomputeOrderStatus(
     new Prisma.Decimal(0)
   );
 
-  const tolerance = new Prisma.Decimal(await readShippingToleranceMeters(tx));
+  const tolerance = new Prisma.Decimal(
+    toleranceMeters ?? (await readShippingToleranceMeters(tx))
+  );
 
   let newStatus: OrderStatus = OrderStatus.APPROVED;
   if (shippedQty.greaterThan(0)) {
@@ -127,7 +132,11 @@ export async function recomputeOrderStatusForOrders(
   orderIds: string[]
 ): Promise<void> {
   const unique = [...new Set(orderIds)];
+  if (unique.length === 0) return;
+  // Sevk-tölerans ayarını BİR KEZ oku (eskiden her sipariş için tekrar DB'den
+  // okunuyordu — loop içi N+1 read); sipariş başına geçir.
+  const toleranceMeters = await readShippingToleranceMeters(tx);
   for (const id of unique) {
-    await recomputeOrderStatus(tx, id);
+    await recomputeOrderStatus(tx, id, toleranceMeters);
   }
 }

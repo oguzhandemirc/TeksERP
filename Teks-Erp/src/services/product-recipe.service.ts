@@ -11,6 +11,18 @@ import { BaseService } from "./base.service";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 
+/** properties[] dizisinden BENZERSİZ propertyId'leri çıkar (dedup). */
+function recipePropertyIds(properties: unknown): string[] {
+  if (!Array.isArray(properties)) return [];
+  return [
+    ...new Set(
+      (properties as Array<{ propertyId?: string }>)
+        .map((p) => p?.propertyId)
+        .filter((p): p is string => typeof p === "string" && p.length > 0)
+    ),
+  ];
+}
+
 export class ProductRecipeService extends BaseService {
   /** Dış referansların varlık+aktiflik (soft-delete giriş guard'ı) + width pozitif
    *  doğrulaması — bare BaseController Zod taşımadığından serviste (createInitialEntry/
@@ -43,6 +55,18 @@ export class ProductRecipeService extends BaseService {
         throw AppError.badRequest("Reçete eni pozitif olmalı");
       }
     }
+    if (Array.isArray(data.properties)) {
+      const propertyIds = recipePropertyIds(data.properties);
+      if (propertyIds.length > 0) {
+        const found = await prisma.fabricProperty.findMany({
+          where: { id: { in: propertyIds }, isActive: true },
+          select: { id: true },
+        });
+        if (found.length !== propertyIds.length) {
+          throw AppError.badRequest("Reçete özelliklerinden bazıları bulunamadı veya pasif");
+        }
+      }
+    }
   }
 
   async create(
@@ -50,8 +74,13 @@ export class ProductRecipeService extends BaseService {
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     await this.validateRefs(data);
-    // properties nested-write'ı BaseService config (nestedCreateFields:["properties"]) halleder.
-    return super.create(data, userId);
+    const next = { ...data };
+    // properties dedup → @@unique([recipeId,propertyId]) ihlali (P2002/409) önlenir.
+    // BaseService config (nestedCreateFields:["properties"]) deduped diziyi {create:[...]} sarar.
+    if (Array.isArray(next.properties)) {
+      next.properties = recipePropertyIds(next.properties).map((propertyId) => ({ propertyId }));
+    }
+    return super.create(next, userId);
   }
 
   async update(
@@ -62,9 +91,8 @@ export class ProductRecipeService extends BaseService {
     await this.validateRefs(data);
     const next = { ...data };
     if (Array.isArray(next.properties)) {
-      const ids = (next.properties as Array<{ propertyId?: string }>)
-        .map((p) => p.propertyId)
-        .filter((p): p is string => typeof p === "string" && p.length > 0);
+      // dedup → @@unique([recipeId,propertyId]) ihlali (P2002/409) önlenir.
+      const ids = recipePropertyIds(next.properties);
       next.properties = {
         deleteMany: {},
         create: ids.map((propertyId) => ({ propertyId })),
