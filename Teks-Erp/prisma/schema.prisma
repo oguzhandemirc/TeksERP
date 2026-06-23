@@ -1275,6 +1275,11 @@ model RollError {
   @@index([defectTypeId])
   // Tambur ekranı: bir topun bekleyen hatalarını listele
   @@index([rollId, isProcessed])
+  // Mükerrer-hata yarışı guard'ı: (rollId,startMeter,defectTypeId) tekil. Migration
+  // 20260623100000 bu @@index'i PARTIAL UNIQUE'e (WHERE defectTypeId IS NOT NULL)
+  // çevirir (drift-free yöntem — şemada index, migration'da unique+partial). Tambur/
+  // KK2 reportError eşzamanlı çift-tıkta P2002 → 409 DUPLICATE_ROLL_ERROR.
+  @@index([rollId, startMeter, defectTypeId], map: "roll_errors_roll_meter_defect_uq")
   // Operatör performans raporu: kim hangi tarihte hata kapadı
   @@index([processedByUserId, processedAt])
   // Dashboard "bugün açılan hata" + kalite raporu tarih aralıkları (H-14):
