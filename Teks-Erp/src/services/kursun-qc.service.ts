@@ -440,22 +440,33 @@ export class KursunQcService {
         },
       });
     } catch (e) {
-      // Eşzamanlı replay yarışı: aynı clientErrorId ile 2. create araya girdiyse
-      // PK üzerinde P2002 → mevcut kaydı idempotent dön.
-      if (
-        data.clientErrorId &&
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === "P2002"
-      ) {
-        const dup = await prisma.rollError.findUnique({
-          where: { id: data.clientErrorId },
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        // (a) Eşzamanlı replay yarışı: aynı clientErrorId ile 2. create araya girdiyse
+        //     PK üzerinde P2002 → mevcut kaydı idempotent dön.
+        if (data.clientErrorId) {
+          const dup = await prisma.rollError.findUnique({
+            where: { id: data.clientErrorId },
+          });
+          if (dup) {
+            return {
+              success: true,
+              data: dup,
+              message: "Hata zaten kayıtlı (idempotent retry)",
+            };
+          }
+        }
+        // (b) İş-anahtarı (rollId,startMeter,defectTypeId) çakışması: EŞZAMANLI çift-tık
+        //     (farklı PK ile) — partial unique roll_errors_roll_meter_defect_uq P2002 →
+        //     409 DUPLICATE_ROLL_ERROR (sıralı findFirst guard'ının eşzamanlı kardeşi).
+        const existing = await prisma.rollError.findFirst({
+          where: { rollId: data.rollId, startMeter: data.startMeter, defectTypeId: defectType.id },
+          select: { id: true },
         });
-        if (dup) {
-          return {
-            success: true,
-            data: dup,
-            message: "Hata zaten kayıtlı (idempotent retry)",
-          };
+        if (existing) {
+          throw AppError.conflict(
+            `Bu metrede (${data.startMeter}) "${defectType.name}" hatası zaten kayıtlı`,
+            { code: "DUPLICATE_ROLL_ERROR", existingErrorId: existing.id }
+          );
         }
       }
       throw e;

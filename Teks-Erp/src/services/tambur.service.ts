@@ -1404,17 +1404,37 @@ export class TamburService {
       );
     }
 
-    const err = await prisma.rollError.create({
-      data: {
-        rollId: data.rollId,
-        startMeter: data.startMeter,
-        defectTypeId: defectType.id,
-        errorType: defectType.name,
-        isProcessed: false,
-        detectedAtStepId: data.stepId,
-        detectedByUserId: userId ?? null,
-      },
-    });
+    // Üstteki findFirst SIRALI çift-tıkı yakalar; bu try/catch EŞZAMANLI yarışı
+    // DB-level partial unique (roll_errors_roll_meter_defect_uq) üzerinden kapatır:
+    // iki paralel istek findFirst'te boş görse de ikincinin create'i P2002 alır → 409.
+    let err: RollError;
+    try {
+      err = await prisma.rollError.create({
+        data: {
+          rollId: data.rollId,
+          startMeter: data.startMeter,
+          defectTypeId: defectType.id,
+          errorType: defectType.name,
+          isProcessed: false,
+          detectedAtStepId: data.stepId,
+          detectedByUserId: userId ?? null,
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        const existing = await prisma.rollError.findFirst({
+          where: { rollId: data.rollId, startMeter: data.startMeter, defectTypeId: defectType.id },
+          select: { id: true },
+        });
+        if (existing) {
+          throw AppError.conflict(
+            `Bu metrede (${data.startMeter}) "${defectType.name}" hatası zaten kayıtlı`,
+            { code: "DUPLICATE_ROLL_ERROR", existingErrorId: existing.id }
+          );
+        }
+      }
+      throw e;
+    }
 
     await AuditService.log({
       userId,
