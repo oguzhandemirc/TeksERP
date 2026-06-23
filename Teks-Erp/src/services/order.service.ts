@@ -1770,6 +1770,29 @@ export class OrderService extends BaseService {
 
     // 2) Tek transaction: convert + unlink + order cancel.
     await prisma.$transaction(async (tx) => {
+      // ATOMİK CLAIM (check-then-act DEĞİL): tx başında siparişi non-terminal
+      // iddia et + write-kilitle. Yıkıcı işlem preview+per-record onayıyla korunuyor;
+      // bu yalnız eşzamanlılık/replay sertleştirmesi (iki paralel iptal, ya da
+      // sipariş bu arada COMPLETED'a geçtiyse → 409). Claim status=CANCELLED'i de set
+      // ettiğinden eski sondaki koşulsuz order.update kaldırıldı.
+      const cancelClaim = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
+        },
+        data: { status: OrderStatus.CANCELLED },
+      });
+      if (cancelClaim.count === 0) {
+        const fresh = await tx.order.findUnique({
+          where: { id: orderId },
+          select: { status: true },
+        });
+        throw AppError.conflict(
+          `Sipariş bu sırada ${
+            fresh?.status === OrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
+          }, tekrar iptal edilemez. Sayfayı yenileyin.`
+        );
+      }
       for (const wo of preview.affectedWorkOrders) {
         const action = actionByWO.get(wo.id)!;
         if (action === "CONVERT_TO_STOCK") {
@@ -1786,10 +1809,6 @@ export class OrderService extends BaseService {
           },
         });
       }
-      await tx.order.update({
-        where: { id: orderId },
-        data: { status: OrderStatus.CANCELLED },
-      });
     });
 
     await AuditService.log({

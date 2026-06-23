@@ -21,6 +21,18 @@ import { normalizeColorName } from "./helpers/name-normalize.helper";
 
 const TABLE_ALIAS = "CUSTOMER_COLOR_ALIAS";
 
+/** Renk kodu (#RRGGBB) format guard — bare BaseController Zod taşımadığından serviste.
+ *  Boş/verilmemiş hex serbest (UI rozeti opsiyonel); verildiyse biçim zorunlu. */
+function assertValidHex(rest: Record<string, unknown>): void {
+  if (
+    typeof rest.hex === "string" &&
+    rest.hex.trim() &&
+    !/^#[0-9A-Fa-f]{6}$/.test(rest.hex.trim())
+  ) {
+    throw AppError.badRequest("Geçersiz renk kodu (beklenen biçim: #RRGGBB)");
+  }
+}
+
 export class ColorService extends BaseService {
   /**
    * Picker scope süzgeci (her ikisi de `property:read` izniyle, müşteri-alias
@@ -65,6 +77,7 @@ export class ColorService extends BaseService {
     if (typeof rest.name === "string") {
       rest.name = normalizeColorName(rest.name);
     }
+    assertValidHex(rest);
 
     const res = await super.create(rest, userId);
     const color = res.data as { id: string } | null;
@@ -93,6 +106,7 @@ export class ColorService extends BaseService {
     if (typeof rest.name === "string") {
       rest.name = normalizeColorName(rest.name);
     }
+    assertValidHex(rest);
 
     // rest boşsa gereksiz audit/no-op update üretme — mevcut kaydı çek.
     const res =

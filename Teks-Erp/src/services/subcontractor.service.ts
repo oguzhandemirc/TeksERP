@@ -2914,7 +2914,12 @@ export class SubcontractorService {
               createdAt: true,
             },
             take: 50,
-          }).catch(() => [])
+          }).catch((e) => {
+            // Önizleme degrade etsin (öneri yine de WO'nun kendi satırlarıyla
+            // dönsün) AMA hata SESSİZ kalmasın — DB/timeout hatası loglanır.
+            console.error("[previewDirectShip] otherOpenLines sorgusu başarısız:", e);
+            return [];
+          })
         : [];
 
     const rawLines = [

@@ -306,14 +306,23 @@ export class TravelerCardService {
       );
     }
 
-    const updated = await prisma.travelerCard.update({
-      where: { id: cardId },
+    // ATOMİK CLAIM (check-then-act DEĞİL): ACTIVE→VOIDED geçişini status-koşullu
+    // updateMany ile sahiplen. Eşzamanlı void/finalize (WO iptali ACTIVE kartları
+    // VOIDED'a çeker) yarışında çift-geçiş/yanlış oldData engellenir. Üstteki
+    // ön-kontrol UX; asıl koruma bu claim.
+    const claim = await prisma.travelerCard.updateMany({
+      where: { id: cardId, status: TravelerCardStatus.ACTIVE },
       data: {
         status: TravelerCardStatus.VOIDED,
         voidedAt: new Date(),
         voidReason: reason,
       },
     });
+    if (claim.count === 0) {
+      throw AppError.conflict("Kart bu sırada iptal edildi veya durumu değişti");
+    }
+    const updated = await prisma.travelerCard.findUnique({ where: { id: cardId } });
+    if (!updated) throw AppError.notFound("Refakat kartı bulunamadı");
 
     await AuditService.log({
       userId,
