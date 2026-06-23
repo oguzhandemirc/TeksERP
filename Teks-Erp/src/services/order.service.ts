@@ -1870,8 +1870,17 @@ export class OrderService extends BaseService {
       throw AppError.badRequest("Onaysız sipariş manuel tamamlanamaz");
     }
 
-    const updated = await prisma.order.update({
-      where: { id },
+    // ATOMİK CLAIM (check-then-act DEĞİL — kardeş cancelWithActions ile parite):
+    // terminal/PENDING reddini yazmanın WHERE'ine koy. Eşzamanlı cancelWithActions
+    // ile yarışta manualComplete bayat non-terminal okuyup CANCELLED siparişi
+    // sessizce COMPLETED'a ezemesin (yıkıcı iptalin geri alınması engellenir).
+    const claim = await prisma.order.updateMany({
+      where: {
+        id,
+        status: {
+          notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED, OrderStatus.PENDING],
+        },
+      },
       data: {
         status: OrderStatus.COMPLETED,
         completedAt: order.completedAt ?? new Date(),
@@ -1879,6 +1888,13 @@ export class OrderService extends BaseService {
         manualCloseReason: reason.trim(),
       },
     });
+    if (claim.count === 0) {
+      const fresh = await prisma.order.findUnique({ where: { id }, select: { status: true } });
+      throw AppError.conflict(
+        `Sipariş bu sırada ${fresh?.status} durumuna geçti — manuel tamamlanamadı. Sayfayı yenileyin.`
+      );
+    }
+    const updated = await prisma.order.findUnique({ where: { id } });
 
     await AuditService.log({
       userId,
@@ -1887,15 +1903,15 @@ export class OrderService extends BaseService {
       recordId: id,
       oldData: { status: order.status },
       newData: {
-        status: updated.status,
+        status: updated!.status,
         manualClosedById: userId,
-        manualCloseReason: updated.manualCloseReason,
+        manualCloseReason: updated!.manualCloseReason,
       },
     });
 
     return {
       success: true,
-      data: updated,
+      data: updated!,
       message: `Sipariş manuel tamamlandı: ${order.orderNumber}`,
     };
   }
