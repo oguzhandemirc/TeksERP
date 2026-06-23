@@ -63,6 +63,8 @@ const cutOpenFabricSchema = z.object({
   qualityGrade: z.string().max(50).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   markedForKartela: z.boolean().optional(),
+  // Offline/retry idempotency: client-üretimi child barkod (TEKS-YYYYMMDD-XXXXXXXX).
+  clientChildBarcode: z.string().regex(/^TEKS-\d{8}-[0-9A-F]{8}$/).optional(),
 });
 
 const finalizeOpenFabricSchema = z.object({
@@ -85,6 +87,8 @@ const cutWarehouseRollSchema = z.object({
   // Ham (renksiz STOCK) kesiminde çıkan parçanın hedefi. Bitmiş depo topu
   // kesiminde yok sayılır.
   rawDestination: z.enum(["STOCK", "WAREHOUSE"]).optional(),
+  // Offline/retry idempotency: client-üretimi child barkod (TEKS-YYYYMMDD-XXXXXXXX).
+  clientChildBarcode: z.string().regex(/^TEKS-\d{8}-[0-9A-F]{8}$/).optional(),
 });
 
 const finalizeWarehouseCutSchema = z.object({

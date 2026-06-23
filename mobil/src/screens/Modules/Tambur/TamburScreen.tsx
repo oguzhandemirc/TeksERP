@@ -68,6 +68,7 @@ import { colors, spacing, radius, shadow } from '../../../theme';
 import Animated from 'react-native-reanimated';
 import { defectTypeService } from '../../../services/defectType.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
+import { generateClientBarcode } from '../../../offline/barcode';
 import type {
   TamburStepSummary,
   TamburRollSummary,
@@ -575,6 +576,8 @@ export default function TamburScreen() {
       // Sadece etiket hedefi (kesim stok olarak girer); backend'e gitmez.
       targetCustomerId?: string | null;
       markedForKartela?: boolean;
+      /** Ağ-retry idempotency: kesim anında üretilir, retry'da aynı kalır. */
+      clientChildBarcode?: string;
     }) =>
       tamburService.cutOpenFabric(data.rollId, {
         lengthMeters: data.lengthMeters,
@@ -582,6 +585,7 @@ export default function TamburScreen() {
         qualityGrade: data.qualityGrade,
         targetOrderLineId: data.targetOrderLineId ?? null,
         markedForKartela: data.markedForKartela ?? false,
+        clientChildBarcode: data.clientChildBarcode,
       }),
     onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -769,6 +773,7 @@ export default function TamburScreen() {
       targetOrderLineId,
       markedForKartela,
       rawDestination,
+      clientChildBarcode,
     }: {
       rollId: string;
       cutLength: number;
@@ -779,6 +784,8 @@ export default function TamburScreen() {
       targetCustomerId?: string | null;
       markedForKartela?: boolean;
       rawDestination?: 'STOCK' | 'WAREHOUSE';
+      /** Ağ-retry idempotency: kesim anında üretilir, retry'da aynı kalır. */
+      clientChildBarcode?: string;
     }) =>
       tamburService.cutWarehouseRoll(rollId, {
         cutLength,
@@ -786,6 +793,7 @@ export default function TamburScreen() {
         targetOrderLineId: targetOrderLineId ?? null,
         markedForKartela: markedForKartela ?? false,
         rawDestination,
+        clientChildBarcode,
       }),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1000,6 +1008,8 @@ export default function TamburScreen() {
         targetOrderLineId: work.voluntaryEntry.targetOrderLineId,
         targetCustomerId: work.voluntaryEntry.targetCustomerId,
         markedForKartela: markAsKartela,
+        // Ağ-retry idempotency: kesim anında üret, retry'da aynı barkod → çift kesim yok.
+        clientChildBarcode: generateClientBarcode(),
       });
     // Aşımda parmak hatası koruması: onay iste (açık kumaşın tamamı tek topa döner).
     if (exceedsRemaining) {
@@ -1171,6 +1181,8 @@ export default function TamburScreen() {
         targetCustomerId: recutTargetCustomerId,
         markedForKartela: markAsKartela,
         rawDestination: isRawStock ? recutRawDestination : undefined,
+        // Ağ-retry idempotency: kesim anında üret, retry'da aynı barkod → çift kesim yok.
+        clientChildBarcode: generateClientBarcode(),
       });
     // Aşımda parmak hatası koruması: onay iste (top tamamen tüketilir).
     if (exceedsRemaining) {
