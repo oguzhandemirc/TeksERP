@@ -14,19 +14,25 @@ const MAX_ATTEMPTS = 5;
 
 export async function withBarcodeRetry<T>(
   fn: () => Promise<T>,
-  maxAttempts: number = MAX_ATTEMPTS
+  maxAttempts: number = MAX_ATTEMPTS,
+  // Opsiyonel: hangi P2002'nin RETRY edileceğini seçer. Verilmezse TÜM P2002 retry
+  // edilir (geriye uyumlu — barkod/kartNumarası sequence çakışması). Bir iş-anahtarı
+  // partial unique'i (ör. WO başına tek-ACTIVE-kart) retry'a girmemeli — koleksiyon
+  // kalıcıdır, retry boşa döner; predicate false dönerse o P2002 propagate olur ve
+  // çağıran (print/reprint) onu anlamlı 409'a çevirir.
+  isRetryable?: (err: Prisma.PrismaClientKnownRequestError) => boolean
 ): Promise<T> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await fn();
     } catch (err) {
-      const isCollision =
+      const isP2002 =
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === "P2002";
-      if (!isCollision) throw err;
-      // P2002 — barkod/kartNumarası sequence çakışması; bir sonraki denemede
-      // findFirst yeniden çalışır ve büyümüş `lastSeq`'i okur. Son denemeye
-      // kadar düşmediyse aşağıda 409 fırlatılır.
+      if (!isP2002) throw err;
+      if (isRetryable && !isRetryable(err)) throw err;
+      // Retry edilebilir P2002 — bir sonraki denemede findFirst büyümüş `lastSeq`'i
+      // okur. Son denemeye kadar düşmediyse aşağıda 409 fırlatılır.
     }
   }
   throw AppError.conflict(
