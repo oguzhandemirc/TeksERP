@@ -174,62 +174,73 @@ export class OrderService extends BaseService {
     if (!customerId || !Array.isArray(lines) || lines.length === 0) return;
 
     // Aynı sipariş içinde aynı ürün/renk birden fazla satırda geçerse tek terfi
-    // yeter (ilk dolu ad master olur, kalanı tek-seferlik sayılır).
-    const seenItems = new Set<string>();
-    const seenColors = new Set<string>();
-
+    // yeter (ilk dolu ad master olur). PERF: satır-bazlı 2N findUnique yerine
+    // benzersiz item/color için TEK varlık-okuması (2 findMany) + yalnız EKSİK
+    // olanları upsert. Davranış birebir: yalnız HİÇ alias-satırı olmayan (assigned
+    // dahil) item/color terfi edilir; mevcut satır korunur, ilk-dolu-ad kazanır.
+    const itemNameById = new Map<string, string>();
+    const colorNameById = new Map<string, string>();
     for (const line of lines) {
       const itemId = typeof line.itemId === "string" ? line.itemId : null;
       const colorId = typeof line.colorId === "string" ? line.colorId : null;
       const itemName =
-        typeof line.customerItemName === "string"
-          ? line.customerItemName.trim()
-          : "";
+        typeof line.customerItemName === "string" ? line.customerItemName.trim() : "";
       const colorName =
-        typeof line.customerColorName === "string"
-          ? line.customerColorName.trim()
-          : "";
-
-      if (itemId && itemName.length > 0 && !seenItems.has(itemId)) {
-        seenItems.add(itemId);
-        try {
-          const existing = await prisma.customerItemAlias.findUnique({
-            where: { customerId_itemId: { customerId, itemId } },
-            select: { id: true },
-          });
-          if (!existing) {
-            await this.aliasService.upsertItemAlias(
-              customerId,
-              itemId,
-              itemName,
-              userId
-            );
-          }
-        } catch (e) {
-          // best-effort: terfi başarısızsa sipariş etkilenmesin — ama SESSİZ değil.
-          console.error("[order] müşteri-ürün alias terfisi başarısız:", e);
-        }
+        typeof line.customerColorName === "string" ? line.customerColorName.trim() : "";
+      if (itemId && itemName.length > 0 && !itemNameById.has(itemId)) {
+        itemNameById.set(itemId, itemName);
       }
+      if (colorId && colorName.length > 0 && !colorNameById.has(colorId)) {
+        colorNameById.set(colorId, colorName);
+      }
+    }
+    if (itemNameById.size === 0 && colorNameById.size === 0) return;
 
-      if (colorId && colorName.length > 0 && !seenColors.has(colorId)) {
-        seenColors.add(colorId);
-        try {
-          const existing = await prisma.customerColorAlias.findUnique({
-            where: { customerId_colorId: { customerId, colorId } },
-            select: { id: true },
-          });
-          if (!existing) {
-            await this.aliasService.upsertColorAlias(
-              customerId,
-              colorId,
-              colorName,
-              userId
-            );
-          }
-        } catch (e) {
-          // best-effort: terfi başarısızsa sipariş etkilenmesin — ama SESSİZ değil.
-          console.error("[order] müşteri-renk alias terfisi başarısız:", e);
-        }
+    const itemIds = [...itemNameById.keys()];
+    const colorIds = [...colorNameById.keys()];
+    let existingItems = new Set<string>();
+    let existingColors = new Set<string>();
+    try {
+      if (itemIds.length > 0) {
+        existingItems = new Set(
+          (
+            await prisma.customerItemAlias.findMany({
+              where: { customerId, itemId: { in: itemIds } },
+              select: { itemId: true },
+            })
+          ).map((r) => r.itemId)
+        );
+      }
+      if (colorIds.length > 0) {
+        existingColors = new Set(
+          (
+            await prisma.customerColorAlias.findMany({
+              where: { customerId, colorId: { in: colorIds } },
+              select: { colorId: true },
+            })
+          ).map((r) => r.colorId)
+        );
+      }
+    } catch (e) {
+      // best-effort: varlık okunamazsa terfi atlanır, sipariş etkilenmez.
+      console.error("[order] müşteri alias varlık-okuması başarısız:", e);
+      return;
+    }
+
+    for (const [itemId, itemName] of itemNameById) {
+      if (existingItems.has(itemId)) continue;
+      try {
+        await this.aliasService.upsertItemAlias(customerId, itemId, itemName, userId);
+      } catch (e) {
+        console.error("[order] müşteri-ürün alias terfisi başarısız:", e);
+      }
+    }
+    for (const [colorId, colorName] of colorNameById) {
+      if (existingColors.has(colorId)) continue;
+      try {
+        await this.aliasService.upsertColorAlias(customerId, colorId, colorName, userId);
+      } catch (e) {
+        console.error("[order] müşteri-renk alias terfisi başarısız:", e);
       }
     }
   }
