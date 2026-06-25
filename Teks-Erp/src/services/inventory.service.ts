@@ -1819,6 +1819,23 @@ export class InventoryService {
       if (props.length !== dedupedProps.length) {
         throw AppError.badRequest("Bazı özellikler bulunamadı veya pasif");
       }
+      // Item allowed-property listesi (boş → serbest) — createInitialEntry PARİTE.
+      // Yeniden-etiketlemede de seçilen özellikler ürünün uygulanabilir listesinde
+      // olmalı; aksi halde create-path'te reddedilen kombinasyon relabel'la sızardı.
+      const allowedPropCount = await prisma.itemAllowedProperty.count({
+        where: { itemId: roll.itemId },
+      });
+      if (allowedPropCount > 0) {
+        const inAllowed = await prisma.itemAllowedProperty.findMany({
+          where: { itemId: roll.itemId, propertyId: { in: dedupedProps } },
+          select: { propertyId: true },
+        });
+        if (inAllowed.length !== dedupedProps.length) {
+          throw AppError.badRequest(
+            "Seçilen özelliklerden biri bu ürüne uygulanabilir listesinde değil",
+          );
+        }
+      }
     }
 
     // Roll skaler güncellemeleri (renk her zaman; en/kalite verildiyse).

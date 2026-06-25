@@ -10,12 +10,12 @@
 
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
-import { BaseService } from "../services/base.service";
+import { PrinterModelService, LabelFormatProfileService } from "../services/printer.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 
 // --- Printer Model (yazıcı katalog: Argox OS 214 plus vb.) ---
-const printerModelService = new BaseService({
+const printerModelService = new PrinterModelService({
   modelName: "printerModel",
   tableName: "PRINTER_MODEL",
   searchFields: ["code", "name", "manufacturer"],
@@ -25,7 +25,7 @@ const printerModelService = new BaseService({
 const printerModelController = new BaseController(printerModelService);
 
 // --- Label Format Profile (fiziksel etiket geometrisi + pay) ---
-const labelFormatProfileService = new BaseService({
+const labelFormatProfileService = new LabelFormatProfileService({
   modelName: "labelFormatProfile",
   tableName: "LABEL_FORMAT_PROFILE",
   searchFields: ["code", "name"],
