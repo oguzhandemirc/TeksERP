@@ -4135,6 +4135,10 @@ export class WorkOrderService {
       return { success: true, data: [] };
     }
 
+    // PERF (#12 select>include): tüketiciler (mobil WorkOrderDetailSheet +
+    // printWorkOrder) yalnız id/barcode/status/currentQty/item.name okuyor; color
+    // savunma amaçlı dar select'le tutulur. item:true / color:true tüm sütunları
+    // çekiyordu (over-fetch).
     const rolls = await prisma.roll.findMany({
       where: {
         OR: [
@@ -4142,7 +4146,15 @@ export class WorkOrderService {
           { currentStepId: { in: stepIds } },
         ],
       },
-      include: { item: true, color: true },
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        currentQty: true,
+        colorId: true,
+        item: { select: { id: true, name: true } },
+        color: { select: { id: true, code: true, name: true, hex: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -4435,42 +4447,5 @@ export class WorkOrderService {
     }
 
     return { success: true, data: manifest };
-  }
-
-  /**
-   * List work orders that are PLANNED and ready for roll attachment.
-   * These are work orders created by planning but not yet started.
-   */
-  async findAvailableForAttach(): Promise<ApiResponse<WorkOrder[]>> {
-    const workOrders = await prisma.workOrder.findMany({
-      where: {
-        status: "PLANNED",
-        isActive: true,
-      },
-      include: {
-        steps: {
-          include: { station: true },
-          orderBy: { stepSequence: "asc" },
-          take: 1,
-        },
-        orderLinks: {
-          include: {
-            orderLine: {
-              include: {
-                order: { include: { customer: true } },
-                item: true,
-                color: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    return {
-      success: true,
-      data: workOrders,
-    };
   }
 }
