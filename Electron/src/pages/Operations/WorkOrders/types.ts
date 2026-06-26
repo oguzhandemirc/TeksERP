@@ -121,11 +121,15 @@ export interface WorkOrder {
     allocatedQty: number;
     orderLine?: {
       quantity: number;
+      /** Denormalize sevk toplamı (m) — kalemin TÜM sevkiyatları (spec havuzu),
+       *  bu WO'ya atfedilmez; bağlam bilgisidir. findById payload'ında gelir. */
+      shippedQty: number;
       width: number | null;
       colorId: string | null;
       order?: {
         id: string;
         orderNumber: string;
+        status: string;
         deadline?: string | null;
         customer?: { id: string; code: string; name: string } | null;
       };
