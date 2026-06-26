@@ -66,7 +66,7 @@ import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildPrefixedCardNumber } from "../utils/barcode";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
-import { nextPrefixedSequence } from "./subcontractor.service";
+import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.service";
 
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
@@ -750,7 +750,15 @@ export class WorkOrderService {
   async quickStart(
     data: WorkOrderCreateInput & { rollBarcodes: string[] },
     userId?: string,
-  ): Promise<ApiResponse<{ workOrder: WorkOrder; attached: number; errors: string[] }>> {
+  ): Promise<
+    ApiResponse<{
+      workOrder: WorkOrder;
+      attached: number;
+      errors: string[];
+      /** İlk adım fason ise otomatik açılan sevk (mobil "sevk edildi" mesajı için). */
+      dispatch?: { id: string; dispatchNo: string };
+    }>
+  > {
     const { rollBarcodes, ...woInput } = data;
     const barcodes = [...new Set(rollBarcodes.map((b) => b.trim()).filter(Boolean))];
     if (barcodes.length === 0) {
@@ -810,13 +818,9 @@ export class WorkOrderService {
     }
     const workOrder = createRes.data;
 
-    // ── 3) Topları bağla + 4) telafi (zero-attach → WO'yu arşivle) ──────────
-    let attached = 0;
-    let errors: string[] = [];
-    // Telafi (zero-attach → WO'yu arşivle) başarısız OLURSA artık sessizce
-    // yutulmuyor: telafi hardDelete patlarsa kullanıcıya "oluşturulmadı" denirken
-    // canlı yetim PLANNED WO + ACTIVE refakat kartı kalır — bunu loglayıp iz bırak
-    // (audit best-effort sayacı felsefesi; operatör/log yetim WO'yu görebilsin).
+    // Telafi (yetim WO temizliği) başarısız OLURSA sessizce yutma: hardDelete
+    // patlarsa kullanıcıya "oluşturulmadı" denirken canlı yetim PLANNED WO +
+    // ACTIVE refakat kartı kalır — logla (operatör/log yetim WO'yu görebilsin).
     const logOrphanCleanupFailure = (cleanupErr: unknown): void => {
       console.error(
         `[quickStart] telafi hardDelete başarısız — yetim WO kaldı (${workOrder.id}), manuel iptal gerekebilir:`,
@@ -824,6 +828,62 @@ export class WorkOrderService {
       );
     };
 
+    // ── 3) Akış ilk adıma göre dallanır ─────────────────────────────────────
+    // İlk adım EXTERNAL (boyahane/fason) ise: topları o adıma DOĞRUDAN fasona sevk
+    // et. dispatch() serbest stoğu autoAttach edip AT_SUBCONTRACTOR'a çeker +
+    // SubcontractorDispatch + RollMovement + irsaliye belgesi oluşturur (Fason Sevk
+    // ekranının yaptığı tested yol). İlk adım INTERNAL ise: mevcut attachRolls akışı.
+    const firstStep = await prisma.workOrderStep.findFirst({
+      where: { workOrderId: workOrder.id },
+      orderBy: { stepSequence: "asc" },
+      select: {
+        id: true,
+        plannedSubcontractorId: true,
+        station: { select: { type: true } },
+      },
+    });
+
+    if (firstStep?.station.type === "EXTERNAL") {
+      // Fason firması zorunlu — dispatch subcontractorId'yi planlı firmaya fallback
+      // ETMEZ; firma yoksa sevk açılamaz (mobil de bunu zorunlu kılar, bu savunma).
+      if (!firstStep.plannedSubcontractorId) {
+        await this.hardDelete(workOrder.id, userId).catch(logOrphanCleanupFailure);
+        throw AppError.badRequest(
+          "İlk adım fason — iş emrini başlatmadan önce fason firması seçilmelidir.",
+        );
+      }
+      const subcontractorService = new SubcontractorService();
+      let dispatch: { id: string; dispatchNo: string };
+      try {
+        const dispatchRes = await subcontractorService.dispatch(
+          {
+            workOrderId: workOrder.id,
+            stepId: firstStep.id,
+            subcontractorId: firstStep.plannedSubcontractorId,
+            rollIds: rolls.map((r) => r.id),
+            dyehouseNote: woInput.dyehouseNote ?? undefined,
+          },
+          userId,
+        );
+        const d = dispatchRes.data as { id: string; dispatchNo: string };
+        dispatch = { id: d.id, dispatchNo: d.dispatchNo };
+      } catch (err) {
+        // Sevk açılamadıysa (yarış/uyumsuzluk) yetim WO bırakma — atomik his.
+        await this.hardDelete(workOrder.id, userId).catch(logOrphanCleanupFailure);
+        throw err;
+      }
+      return {
+        success: true,
+        data: { workOrder, attached: rolls.length, errors: [], dispatch },
+        message:
+          `İş emri ${workOrder.batchNumber} başlatıldı ve fasona sevk edildi ` +
+          `(${dispatch.dispatchNo}, ${rolls.length} top).`,
+      };
+    }
+
+    // ── 3b) İlk adım INTERNAL: topları bağla + telafi (zero-attach → arşivle) ──
+    let attached = 0;
+    let errors: string[] = [];
     try {
       const attachRes = await this.attachRolls(workOrder.id, barcodes, userId);
       attached = attachRes.data?.attached ?? 0;

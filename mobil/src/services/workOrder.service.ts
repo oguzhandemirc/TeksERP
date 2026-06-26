@@ -64,6 +64,8 @@ export interface QuickStartResult {
   workOrder: WorkOrder;
   attached: number;
   errors: string[];
+  /** İlk adım fason ise backend'in otomatik açtığı sevk (yoksa undefined). */
+  dispatch?: { id: string; dispatchNo: string };
 }
 
 /** GET /work-orders/:id/cancel-impact cevabı (iptal önizleme). */

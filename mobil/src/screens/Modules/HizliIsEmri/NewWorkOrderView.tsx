@@ -120,9 +120,13 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
   // Boş → route'un kayıtlı fasonu, o da yoksa favori kullanılır (selectedFirmBySeq).
   const [stepSubcontractors, setStepSubcontractors] = useState<Record<number, string>>({});
 
-  const [result, setResult] = useState<{ batchNumber: string; attached: number; errors: string[]; woId: string } | null>(
-    null,
-  );
+  const [result, setResult] = useState<{
+    batchNumber: string;
+    attached: number;
+    errors: string[];
+    woId: string;
+    dispatchNo?: string;
+  } | null>(null);
 
   const lockedItemId = scanned[0]?.itemId ?? null;
   const lockedItemName = scanned[0]?.itemName ?? null;
@@ -459,6 +463,7 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
         attached: data.attached,
         errors: data.errors,
         woId: data.workOrder.id,
+        dispatchNo: data.dispatch?.dispatchNo,
       });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
       qc.invalidateQueries({ queryKey: ['rolls'] });
@@ -498,6 +503,20 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
       setSubmitError(
         `Seçili rota ${applyMissing} uygulayacak bir fason adımı içermiyor. Uygun bir rota seçin.`,
       );
+      return;
+    }
+
+    // İlk adım fason (EXTERNAL) ise: backend topları otomatik o fasona sevk eder
+    // → fason firması ZORUNLU (dispatch firmaya fallback etmez). selectedFirmBySeq
+    // override ?? rota kaydı ?? kategori favorisi ile çoğu zaman zaten doludur.
+    const firstRouteStep = [...(selectedRoute?.steps ?? [])].sort(
+      (a, b) => a.sequence - b.sequence,
+    )[0];
+    const firstStepIsFason =
+      firstRouteStep?.station?.type === 'EXTERNAL' ||
+      firstRouteStep?.station?.defaultCategory != null;
+    if (firstStepIsFason && !selectedFirmBySeq[firstRouteStep!.sequence]) {
+      setSubmitError('İlk adım fason — devam etmeden önce fason firması seçin.');
       return;
     }
 
@@ -583,6 +602,11 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
           <Text style={styles.successMeta}>{result.attached} top bağlandı</Text>
           {result.errors.length > 0 ? (
             <Text style={styles.successWarn}>{result.errors.length} top bağlanamadı</Text>
+          ) : null}
+          {result.dispatchNo ? (
+            <Text style={[styles.successMeta, { color: colors.success, fontWeight: '600' }]}>
+              Fasona sevk edildi · {result.dispatchNo}
+            </Text>
           ) : null}
           <Button
             mode="contained"

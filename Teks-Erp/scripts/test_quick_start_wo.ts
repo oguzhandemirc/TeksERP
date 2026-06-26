@@ -79,8 +79,10 @@ async function main() {
     where: { isActive: true, id: { not: itemA?.id } },
     select: { id: true },
   });
+  // INTERNAL şart: ilk adım EXTERNAL olursa quickStart artık otomatik fason sevki
+  // dener (firma zorunlu) → bu test attach akışını sınar, dispatch'i değil.
   const station = await prisma.station.findFirst({
-    where: { allowAsWorkOrderStep: true },
+    where: { allowAsWorkOrderStep: true, type: "INTERNAL" },
     select: { id: true, type: true },
   });
   if (!itemA || !station) {
