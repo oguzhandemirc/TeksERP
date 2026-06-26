@@ -533,11 +533,24 @@ export class SubcontractorService {
       }
       // Otomatik attach: serbest stoktaki toplar bu adıma bağlanır.
       // (status STOCK kalır — alt blok aynı transaction içinde AT_SUBCONTRACTOR'a çekecek.)
+      // ATOMİK CLAIM: autoAttachIds tx-DIŞI bayat okumadan geliyor (currentStepId=null
+      // & status=STOCK görülmüştü). Arada başka bir tx topu başka bir işe bağladıysa
+      // (IN_PRODUCTION / currentStepId dolu) bu guardsız updateMany onu çalardı. WHERE'e
+      // serbest-stok koşullarını koyup count'u doğrula → çalınma engellenir.
       if (autoAttachIds.size > 0) {
-        await tx.roll.updateMany({
-          where: { id: { in: Array.from(autoAttachIds) } },
+        const autoAttached = await tx.roll.updateMany({
+          where: {
+            id: { in: Array.from(autoAttachIds) },
+            status: RollStatus.STOCK,
+            currentStepId: null,
+          },
           data: { currentStepId: data.stepId },
         });
+        if (autoAttached.count !== autoAttachIds.size) {
+          throw AppError.conflict(
+            "Serbest stok toplardan biri bu sırada başka bir işe bağlandı. Listeyi yenileyip tekrar deneyin."
+          );
+        }
       }
 
       // Step ACTIVE'e çek. PENDING → ilk sevk; COMPLETED → adıma ek parti
@@ -621,16 +634,23 @@ export class SubcontractorService {
       // ezilirdi. WHERE'e kabul-statülerini koyup etkilenen satır sayısını doğrula
       // (kartela.dispatch ile aynı desen). autoAttach topları bu tx'te STOCK kalır,
       // diğerleri STOCK|IN_PRODUCTION → ikisi de bu küme içinde.
+      // WHERE'e currentStepId=data.stepId de eklenir: step-eşleşme kontrolü artık
+      // tx-İÇİ/atomik. (Eskiden yalnız ön-döngü ~488-493 tx DIŞINDA bakıyordu →
+      // okuma ile claim arasında top başka adıma taşınırsa claim status'le geçip
+      // topu yanlış adımdan çalabilirdi.) Claim anında her dispatchRollId zaten
+      // data.stepId'de: autoAttach toplar yukarıda (claim'den ÖNCE) bu değere
+      // çekildi; zaten-bağlı toplar ön-döngüde doğrulandı. Meşru top dışlanmaz.
       const claimed = await tx.roll.updateMany({
         where: {
           id: { in: dispatchRollIds },
           status: { in: [RollStatus.IN_PRODUCTION, RollStatus.STOCK] },
+          currentStepId: data.stepId,
         },
         data: { status: RollStatus.AT_SUBCONTRACTOR, batchSplitId: dispatch.id },
       });
       if (claimed.count !== dispatchRollIds.length) {
         throw AppError.conflict(
-          "Toplardan biri bu sırada başka bir sevke alınmış. Listeyi yenileyip tekrar deneyin."
+          "Toplardan biri bu sırada başka bir sevke alınmış veya farklı bir adıma taşınmış. Listeyi yenileyip tekrar deneyin."
         );
       }
 

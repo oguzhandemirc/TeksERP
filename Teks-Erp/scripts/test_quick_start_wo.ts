@@ -14,6 +14,7 @@
 import { RollStatus, RollEntrySource, WorkOrderStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { WorkOrderService } from "../src/services/workorder.service";
+import { computeWoMaterial } from "../src/services/helpers/coverage.helper";
 
 const svc = new WorkOrderService();
 
@@ -137,6 +138,15 @@ async function main() {
   // Refakat kartı oluştu mu?
   const cardCount = await prisma.travelerCard.count({ where: { workOrderId: res.data!.workOrder.id } });
   check("Basit: refakat kartı oluştu", cardCount >= 1, `kart=${cardCount}`);
+
+  // "Üretime giren" (committed) attach anında dolu olmalı — ilk adım INTERNAL ise
+  // movement'la, EXTERNAL ise currentStepId=ilk adım (B-set) ile. 3×100 = 300.
+  const woMat = await computeWoMaterial(prisma, [res.data!.workOrder.id]);
+  check(
+    "Basit: committed (üretime giren) attach anında 300",
+    Number(woMat.get(res.data!.workOrder.id)?.committed ?? 0) === 300,
+    `committed=${Number(woMat.get(res.data!.workOrder.id)?.committed ?? 0)}`,
+  );
 
   // ===========================================================================
   // 2. Karışık ürün reddi + orphan WO bırakılmaması

@@ -1068,35 +1068,73 @@ export class WorkOrderService {
       if (r.producedInStepId) producedByStep.set(r.producedInStepId, Number(r._sum.initialQty ?? 0));
     }
 
-    // GİREN — her WO'nun İLK adımına (steps stepSequence asc → steps[0]) RollMovement
-    // ile giren ayrık topların initialQty toplamı; status≠CANCELLED/STOCK. Detay
-    // inputRolls ile AYNI tanım, sayfa başına 2 sorguyla batched.
+    // GİREN — her WO'nun İLK adımına (steps stepSequence asc → steps[0]) girmiş
+    // ayrık topların initialQty toplamı; status≠CANCELLED/STOCK. Detay inputRolls
+    // ile AYNI tanım (A: ilk-adım movement ∪ B: currentStepId=ilk adım, guard:
+    // currentStepId null VEYA bu WO'nun bir adımı). Sayfa başına sabit sorguyla batched.
     const inputByStep = new Map<string, number>();
+    const stepToWoForInput = new Map<string, string>();
+    for (const w of wos) for (const st of w.steps) stepToWoForInput.set(st.id, w.id);
     const firstStepIds = wos
       .map((w) => w.steps[0]?.id)
       .filter((id): id is string => Boolean(id));
     if (firstStepIds.length > 0) {
+      // A: ilk adıma hareketi olan toplar (firstStep → rollId kümesi)
       const moves = await prisma.rollMovement.findMany({
         where: { workOrderStepId: { in: firstStepIds } },
         select: { rollId: true, workOrderStepId: true },
         distinct: ["rollId", "workOrderStepId"],
       });
-      const rollIds = [...new Set(moves.map((m) => m.rollId))];
-      if (rollIds.length > 0) {
+      const rollIdsByStep = new Map<string, Set<string>>();
+      const allRollIds = new Set<string>();
+      const addToStep = (stepId: string, rollId: string) => {
+        allRollIds.add(rollId);
+        let set = rollIdsByStep.get(stepId);
+        if (!set) { set = new Set(); rollIdsByStep.set(stepId, set); }
+        set.add(rollId);
+      };
+      for (const m of moves) {
+        if (!m.workOrderStepId) continue;
+        addToStep(m.workOrderStepId, m.rollId);
+      }
+      // B: currentStepId ilk adımı gösteren toplar (EXTERNAL attach→sevk penceresi)
+      const bRolls = await prisma.roll.findMany({
+        where: {
+          currentStepId: { in: firstStepIds },
+          status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
+        },
+        select: { id: true, currentStepId: true },
+      });
+      for (const r of bRolls) {
+        if (r.currentStepId) addToStep(r.currentStepId, r.id);
+      }
+      if (allRollIds.size > 0) {
         const rolls = await prisma.roll.findMany({
           where: {
-            id: { in: rollIds },
+            id: { in: [...allRollIds] },
             status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
           },
-          select: { id: true, initialQty: true },
+          select: { id: true, initialQty: true, currentStepId: true },
         });
         const qtyByRoll = new Map<string, number>();
-        for (const r of rolls) qtyByRoll.set(r.id, Number(r.initialQty ?? 0));
-        for (const m of moves) {
-          if (!m.workOrderStepId) continue;
-          const qty = qtyByRoll.get(m.rollId);
-          if (qty == null) continue; // CANCELLED/STOCK elendi
-          inputByStep.set(m.workOrderStepId, (inputByStep.get(m.workOrderStepId) ?? 0) + qty);
+        const curStepByRoll = new Map<string, string | null>();
+        for (const r of rolls) {
+          qtyByRoll.set(r.id, Number(r.initialQty ?? 0));
+          curStepByRoll.set(r.id, r.currentStepId);
+        }
+        for (const [stepId, rollSet] of rollIdsByStep) {
+          const woId = stepToWoForInput.get(stepId);
+          if (!woId) continue;
+          let sum = inputByStep.get(stepId) ?? 0;
+          for (const rid of rollSet) {
+            const qty = qtyByRoll.get(rid);
+            if (qty == null) continue; // CANCELLED/STOCK elendi
+            // GUARD: başka WO'nun adımına taşınan top (detach→reattach) sayılmaz.
+            const cs = curStepByRoll.get(rid) ?? null;
+            if (cs !== null && stepToWoForInput.get(cs) !== woId) continue;
+            sum += qty;
+          }
+          inputByStep.set(stepId, sum);
         }
       }
     }
@@ -1400,13 +1438,17 @@ export class WorkOrderService {
         createdAt: r.createdAt,
       }));
 
-      // Üretime giren ham toplar — WO'nun İLK adımına RollMovement ile giren ayrık
-      // topların initialQty toplamı. Movement append-only olduğundan top sonradan
-      // fasona/tambura geçse de (currentStepId/producedInStepId değişse veya null
-      // olsa) sayım kalıcı; EXTERNAL ilk adımda (boyahane, sevkle giriş) de çalışır.
-      // Üretilen çıktı (tambur — son adımda doğar) ve fason açık kumaşı (2.+ adıma
-      // girer) ilk adıma movement atmaz → doğal olarak hariç. STOCK'a geri çekilen
-      // (un-attach / iptal) ve CANCELLED toplar sayılmaz.
+      // Üretime giren ham toplar — WO'nun İLK adımına girmiş ayrık topların
+      // initialQty toplamı. İki kaynağın birleşimi (distinct rollId):
+      //   A) ilk adıma RollMovement'ı olan toplar (append-only kalıcı: top sonradan
+      //      fasona/tambura geçse, consumed olsa da sayılır) — mevcut davranış.
+      //   B) currentStepId = ilk adım olan toplar — EXTERNAL (boyahane/fason) ilk
+      //      adımda attach anında movement YAZILMAZ (sevkte açılır); bu top "eklendi
+      //      ama henüz sevk edilmedi" aralığında yalnız B ile yakalanır.
+      // GUARD (currentStepId null VEYA ∈ bu WO'nun adımları): top detach edilip başka
+      // WO'ya bağlandıysa (currentStepId başka WO'yu gösterir) A'daki bayat movement
+      // bu WO'ya saydırmasın. Born roll (currentStepId=sonraki adım) ve tambur çıktısı
+      // (ilk adıma movement'sız) doğal olarak hariç → çift sayım olmaz.
       const firstStepId = stepIds[0];
       const entryRollRows = await prisma.rollMovement.findMany({
         where: { workOrderStepId: firstStepId },
@@ -1414,20 +1456,21 @@ export class WorkOrderService {
         distinct: ["rollId"],
       });
       const entryRollIds = entryRollRows.map((m) => m.rollId);
-      if (entryRollIds.length > 0) {
-        const inputAgg = await prisma.roll.aggregate({
-          where: {
-            id: { in: entryRollIds },
-            status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
-          },
-          _sum: { initialQty: true },
-          _count: { _all: true },
-        });
-        inputRolls = {
-          count: inputAgg._count._all,
-          totalMeters: inputAgg._sum.initialQty ?? new Prisma.Decimal(0),
-        };
-      }
+      const inputAgg = await prisma.roll.aggregate({
+        where: {
+          AND: [
+            { OR: [{ id: { in: entryRollIds } }, { currentStepId: firstStepId }] },
+            { OR: [{ currentStepId: null }, { currentStepId: { in: stepIds } }] },
+            { status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] } },
+          ],
+        },
+        _sum: { initialQty: true },
+        _count: { _all: true },
+      });
+      inputRolls = {
+        count: inputAgg._count._all,
+        totalMeters: inputAgg._sum.initialQty ?? new Prisma.Decimal(0),
+      };
     }
 
     const stepsWithRollSummary = wo.steps.map((step) => ({
