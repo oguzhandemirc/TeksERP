@@ -129,26 +129,47 @@ export async function computeWoMaterial(
     }
   }
 
-  // committed: ilk adıma RollMovement ile giren ayrık topların initialQty toplamı.
+  // committed: ilk adıma girmiş ayrık topların initialQty toplamı (distinct rollId).
+  // İki kaynak: A) ilk adıma RollMovement'ı olanlar (append-only kalıcı; consumed
+  // olsa da sayılır) — mevcut davranış. B) currentStepId = ilk adım olanlar —
+  // EXTERNAL (boyahane) ilk adımda attach anında movement YAZILMAZ (sevkte açılır),
+  // bu top "eklendi ama sevk edilmedi" aralığında yalnız B ile yakalanır.
+  // GUARD (currentStepId null VEYA bu WO'ya ait): top detach edilip başka WO'ya
+  // bağlandıysa A'daki bayat movement bu WO'ya saydırmasın. Born roll (currentStepId
+  // = sonraki adım) ve tambur çıktısı (ilk adıma movement'sız) doğal olarak hariç.
   const firstStepToWo = new Map<string, string>();
   for (const [woId, s] of firstStepByWo) firstStepToWo.set(s.id, woId);
   const firstStepIds = [...firstStepToWo.keys()];
   if (firstStepIds.length > 0) {
+    const rollIdsByStep = new Map<string, Set<string>>();
+    const allRollIds = new Set<string>();
+    const addToStep = (stepId: string, rollId: string) => {
+      allRollIds.add(rollId);
+      let set = rollIdsByStep.get(stepId);
+      if (!set) {
+        set = new Set();
+        rollIdsByStep.set(stepId, set);
+      }
+      set.add(rollId);
+    };
+    // A: ilk adıma hareketi olan toplar
     const moves = await client.rollMovement.findMany({
       where: { workOrderStepId: { in: firstStepIds } },
       select: { rollId: true, workOrderStepId: true },
     });
-    const rollIdsByStep = new Map<string, Set<string>>();
-    const allRollIds = new Set<string>();
     for (const m of moves) {
-      if (!m.workOrderStepId) continue;
-      allRollIds.add(m.rollId);
-      let set = rollIdsByStep.get(m.workOrderStepId);
-      if (!set) {
-        set = new Set();
-        rollIdsByStep.set(m.workOrderStepId, set);
-      }
-      set.add(m.rollId);
+      if (m.workOrderStepId) addToStep(m.workOrderStepId, m.rollId);
+    }
+    // B: currentStepId ilk adımı gösteren toplar (EXTERNAL attach→sevk penceresi)
+    const bRolls = await client.roll.findMany({
+      where: {
+        currentStepId: { in: firstStepIds },
+        status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
+      },
+      select: { id: true, currentStepId: true },
+    });
+    for (const r of bRolls) {
+      if (r.currentStepId) addToStep(r.currentStepId, r.id);
     }
     if (allRollIds.size > 0) {
       const rolls = await client.roll.findMany({
@@ -156,15 +177,26 @@ export async function computeWoMaterial(
           id: { in: [...allRollIds] },
           status: { notIn: [RollStatus.CANCELLED, RollStatus.STOCK] },
         },
-        select: { id: true, initialQty: true },
+        select: { id: true, initialQty: true, currentStepId: true },
       });
       const qtyByRoll = new Map<string, Prisma.Decimal>();
-      for (const r of rolls) qtyByRoll.set(r.id, new Prisma.Decimal(r.initialQty));
+      const curStepByRoll = new Map<string, string | null>();
+      for (const r of rolls) {
+        qtyByRoll.set(r.id, new Prisma.Decimal(r.initialQty));
+        curStepByRoll.set(r.id, r.currentStepId);
+      }
       for (const [stepId, rollSet] of rollIdsByStep) {
         const woId = firstStepToWo.get(stepId);
         if (!woId) continue;
         let sum = committedByWo.get(woId) ?? D0();
-        for (const rid of rollSet) sum = sum.plus(qtyByRoll.get(rid) ?? 0);
+        for (const rid of rollSet) {
+          const q = qtyByRoll.get(rid);
+          if (q == null) continue; // CANCELLED/STOCK elendi
+          // GUARD: başka WO'nun adımına taşınan top (detach→reattach) sayılmaz.
+          const cs = curStepByRoll.get(rid) ?? null;
+          if (cs !== null && stepToWo.get(cs) !== woId) continue;
+          sum = sum.plus(q);
+        }
         committedByWo.set(woId, sum);
       }
     }
