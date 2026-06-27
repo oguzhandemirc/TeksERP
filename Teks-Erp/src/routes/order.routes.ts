@@ -326,22 +326,30 @@ router.get(
   ),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const itemId = req.query.itemId as string | undefined;
-      if (!itemId) {
-        res.status(400).json({ success: false, message: "itemId gerekli" });
-        return;
-      }
+      // itemId opsiyonel: legacy modda (limit yok) servis zorunlu kılar; cursor
+      // modda (limit var) "sipariş-önce" aramalı liste için boş bırakılabilir.
+      const itemId = (req.query.itemId as string | undefined) || undefined;
       const colorId = (req.query.colorId as string | undefined) || undefined;
       const widthRaw = req.query.width as string | undefined;
       const width =
         widthRaw != null && widthRaw !== "" ? Number(widthRaw) : undefined;
       // Hızlı İş Emri "ne kadar daha üretmeliyim" için üretimdeki düşülmüş net açık ister.
       const withInProduction = req.query.withInProduction === "true";
+      const search = (req.query.search as string | undefined) || undefined;
+      const cursor = (req.query.cursor as string | undefined) || undefined;
+      const limitRaw = req.query.limit as string | undefined;
+      const limit =
+        limitRaw != null && limitRaw !== "" ? parseInt(limitRaw, 10) : undefined;
+      const withTotal = req.query.withTotal === "true";
       const result = await service.findAvailableOrderLines({
         itemId,
         colorId,
         width,
         withInProduction,
+        search,
+        cursor,
+        limit,
+        withTotal,
       });
       res.json(result);
     } catch (e) {
