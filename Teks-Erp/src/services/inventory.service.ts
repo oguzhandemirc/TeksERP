@@ -95,6 +95,34 @@ export interface RollStats {
   byQuality: Record<string, number>;
 }
 
+/** "Üretime Geri Al" için uygun bir Tambur adımı (kurtarma hedefi). */
+export interface RecoveryTarget {
+  workOrderId: string;
+  batchNumber: string;
+  workOrderStatus: WorkOrderStatus;
+  stepId: string;
+  stationName: string;
+  stepStatus: StepStatus;
+}
+
+/** Takılı açık-kumaş orphan için kurtarma önizlemesi (salt-okunur). */
+export interface RecoveryTargetsResult {
+  roll: {
+    id: string;
+    itemId: string;
+    itemName: string;
+    currentQty: number;
+    qualityGrade: string;
+  };
+  /** Top "üretime geri al" için uygun bir orphan mı? */
+  eligible: boolean;
+  /** eligible=false ise neden. */
+  reason?: string;
+  eligibleTargets: RecoveryTarget[];
+  /** Bilgilendirme (örn. uygun açık iş emri yok). */
+  warnings: string[];
+}
+
 export type RollHistoryEventKind =
   | "CREATED"
   | "MOVEMENT_IN"
@@ -2100,6 +2128,269 @@ export class InventoryService {
       success: true,
       data: roll,
       message: `Açık kumaş Roll oluşturuldu (id: ${roll.id}). Kurşun/KK2 sonrası kursun-finish endpoint'i ile metraj + hata girilir.`,
+    };
+  }
+
+  // ===========================================================================
+  // KURTARMA — Ham stokta takılı açık kumaşı Tambur'a geri al ("Üretime Geri Al")
+  // ===========================================================================
+  //
+  // Senaryo: Fason rota SON ADIMKEN dönen açık kumaş, doğum anında nextStep
+  // olmadığı için STOCK + currentStepId=null + barcode=null olarak ham stokta
+  // takılır (subcontractor born-roll, nextStep yok). Bu topun normal üretim
+  // çıkışı yoktur (yalnız tekrar fasona gönderme). Süpervizör topu uygun bir
+  // açık iş emrinin Tambur adımına geri alıp orada keser.
+  //
+  // Yaklaşım: YENİ roll YARATMAZ — orphan'ın kendisini yerinde claim eder
+  // (status STOCK→IN_PRODUCTION, currentStepId/producedInStepId=Tambur step) +
+  // Tambur'a açık RollMovement açar. producedInStepId overwrite muhasebe-nötr:
+  // üretim metrajı yalnız Tambur ÇOCUKLARI (parent.entrySource=SUBCONTRACTOR_RETURN)
+  // üzerinden sayılır; parentRollId=null olan orphan o sayıma hiç girmez.
+
+  /** Bir topun "üretime geri al" için takılı açık-kumaş orphan'ı olup olmadığı. */
+  private isRecoverableOrphan(roll: {
+    status: RollStatus;
+    barcode: string | null;
+    entrySource: RollEntrySource;
+    currentStepId: string | null;
+    shipmentId: string | null;
+    sackId: string | null;
+  }): boolean {
+    return (
+      roll.status === RollStatus.STOCK &&
+      roll.barcode === null &&
+      roll.entrySource === RollEntrySource.SUBCONTRACTOR_RETURN &&
+      roll.currentStepId === null &&
+      roll.shipmentId === null &&
+      roll.sackId === null
+    );
+  }
+
+  /**
+   * Takılı açık-kumaş orphan için uygun "Üretime Geri Al" hedeflerini döner.
+   * Hedef = aynı ürünlü, açık (PLANNED/IN_PROGRESS) iş emirlerinin kapanmamış
+   * Tambur adımları. Salt-okunur önizleme.
+   */
+  async getRecoveryTargets(rollId: string): Promise<ApiResponse<RecoveryTargetsResult>> {
+    const roll = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: {
+        id: true,
+        itemId: true,
+        status: true,
+        barcode: true,
+        entrySource: true,
+        currentStepId: true,
+        shipmentId: true,
+        sackId: true,
+        currentQty: true,
+        qualityGrade: true,
+        item: { select: { name: true } },
+      },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+
+    const rollOut = {
+      id: roll.id,
+      itemId: roll.itemId,
+      itemName: roll.item.name,
+      currentQty: Number(roll.currentQty),
+      qualityGrade: roll.qualityGrade,
+    };
+
+    if (!this.isRecoverableOrphan(roll)) {
+      return {
+        success: true,
+        data: {
+          roll: rollOut,
+          eligible: false,
+          reason:
+            "Bu top 'üretime geri al' için uygun değil — yalnız ham stokta takılı, barkodsuz, fason-dönüşü açık kumaş geri alınabilir.",
+          eligibleTargets: [],
+          warnings: [],
+        },
+      };
+    }
+
+    const steps = await prisma.workOrderStep.findMany({
+      where: {
+        station: { kind: StationKind.TAMBUR },
+        status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
+        workOrder: {
+          status: { in: [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS] },
+          targetItemId: roll.itemId,
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+        station: { select: { name: true } },
+        workOrder: { select: { id: true, batchNumber: true, status: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const warnings: string[] = [];
+    if (steps.length === 0) {
+      warnings.push(
+        "Bu ürüne uygun açık (Tambur'lu) iş emri yok — önce hedef ürünle Tambur'lu bir iş emri açın.",
+      );
+    }
+
+    return {
+      success: true,
+      data: {
+        roll: rollOut,
+        eligible: true,
+        eligibleTargets: steps.map((s) => ({
+          workOrderId: s.workOrder.id,
+          batchNumber: s.workOrder.batchNumber,
+          workOrderStatus: s.workOrder.status,
+          stepId: s.id,
+          stationName: s.station.name,
+          stepStatus: s.status,
+        })),
+        warnings,
+      },
+    };
+  }
+
+  /**
+   * Takılı açık-kumaş orphan'ı seçilen Tambur adımına geri alır (üretime sokar).
+   * Yeni roll yaratmaz; orphan'ı atomik claim ile IN_PRODUCTION'a çeker, Tambur'a
+   * açık RollMovement açar. Sonrasında normal Tambur kesim akışı (`cutOpenFabric`)
+   * sıfır değişiklikle çalışır.
+   */
+  async recoverOpenFabricToProduction(
+    rollId: string,
+    data: { stepId: string; reason: string },
+    userId?: string,
+  ): Promise<ApiResponse<Roll>> {
+    const reason = (data.reason ?? "").trim();
+    if (reason.length < 3) {
+      throw AppError.badRequest("İşlem nedeni (en az 3 karakter) zorunludur");
+    }
+
+    const roll = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: {
+        id: true,
+        itemId: true,
+        status: true,
+        barcode: true,
+        entrySource: true,
+        currentStepId: true,
+        shipmentId: true,
+        sackId: true,
+        currentQty: true,
+        weightKg: true,
+        producedInStepId: true,
+      },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+    if (roll.barcode !== null) {
+      throw AppError.badRequest("Yalnız barkodsuz açık kumaş üretime geri alınabilir");
+    }
+    if (roll.entrySource !== RollEntrySource.SUBCONTRACTOR_RETURN) {
+      throw AppError.badRequest("Bu top fason dönüşü açık kumaş değil");
+    }
+    if (roll.shipmentId !== null || roll.sackId !== null) {
+      throw AppError.conflict("Top bir sevkiyat/çuvalda — önce oradan çıkarın");
+    }
+    if (roll.status !== RollStatus.STOCK || roll.currentStepId !== null) {
+      throw AppError.conflict(`Top üretime geri alınamaz (durum: ${roll.status})`);
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Hedef adımı tx içinde taze oku (TOCTOU — adım/WO bu arada kapanmış olabilir).
+      const step = await tx.workOrderStep.findUnique({
+        where: { id: data.stepId },
+        select: {
+          id: true,
+          status: true,
+          workOrderId: true,
+          station: { select: { kind: true } },
+          workOrder: { select: { status: true, targetItemId: true } },
+        },
+      });
+      if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+      if (step.station.kind !== StationKind.TAMBUR) {
+        throw AppError.badRequest("Açık kumaş yalnız Tambur adımına geri alınabilir");
+      }
+      if (step.status === StepStatus.COMPLETED || step.status === StepStatus.SKIPPED) {
+        throw AppError.conflict(`Hedef adım kapalı (${step.status}) — geri alınamaz`);
+      }
+      if (
+        step.workOrder.status !== WorkOrderStatus.PLANNED &&
+        step.workOrder.status !== WorkOrderStatus.IN_PROGRESS
+      ) {
+        throw AppError.conflict(`Hedef iş emri açık değil (${step.workOrder.status})`);
+      }
+      if (step.workOrder.targetItemId !== roll.itemId) {
+        throw AppError.badRequest("Topun ürünü iş emrinin hedef ürünüyle eşleşmiyor");
+      }
+
+      // Atomik claim — orphan'ı tam beklenen halinde yakala (check-then-act yok).
+      const claim = await tx.roll.updateMany({
+        where: {
+          id: rollId,
+          status: RollStatus.STOCK,
+          currentStepId: null,
+          shipmentId: null,
+          sackId: null,
+          barcode: null,
+          entrySource: RollEntrySource.SUBCONTRACTOR_RETURN,
+        },
+        data: {
+          status: RollStatus.IN_PRODUCTION,
+          currentStepId: step.id,
+          producedInStepId: step.id,
+        },
+      });
+      if (claim.count === 0) {
+        throw AppError.conflict("Top bu sırada başka bir işleme alınmış — sayfayı yenileyin");
+      }
+
+      // Tambur'a açık giriş movement'i (metraj fason kabulde ölçülü → qtyIn=currentQty).
+      await tx.rollMovement.create({
+        data: {
+          rollId,
+          workOrderStepId: step.id,
+          qtyIn: Number(roll.currentQty),
+          weightIn: roll.weightKg !== null ? Number(roll.weightKg) : null,
+          operatorId: userId ?? null,
+          notes: `RECOVER_TO_PRODUCTION:${reason}`,
+        },
+      });
+
+      await recomputeStepStatus(tx, step.id);
+      await ensureWorkOrderInProgress(tx, step.workOrderId);
+
+      return tx.roll.findUniqueOrThrow({ where: { id: rollId } });
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: rollId,
+      oldData: {
+        status: roll.status,
+        currentStepId: roll.currentStepId,
+        producedInStepId: roll.producedInStepId,
+      },
+      newData: {
+        event: "RECOVER_TO_PRODUCTION",
+        workOrderStepId: data.stepId,
+        status: RollStatus.IN_PRODUCTION,
+        reason,
+      },
+    });
+
+    return {
+      success: true,
+      data: updated,
+      message: "Açık kumaş üretime (Tambur) geri alındı — artık Tambur'da kesilebilir",
     };
   }
 

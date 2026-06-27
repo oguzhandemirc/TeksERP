@@ -33,6 +33,13 @@ const openFabricSchema = z.object({
   notes:     z.string().max(1000).optional().nullable(),
 });
 
+// "Üretime Geri Al" — takılı açık kumaşı seçilen Tambur adımına geri alma.
+// Zorunlu sebep (audit trail) — süpervizör manuel müdahalesi.
+const recoverToProductionSchema = z.object({
+  stepId: z.string().uuid("Geçersiz adım ID"),
+  reason: z.string().trim().min(3, "İşlem nedeni (en az 3 karakter) zorunludur").max(500),
+});
+
 // Saha #4: top etiketi değiştir (renk/özellik/en/kalite). Tümü opsiyonel; renk
 // null=renksiz. propertyIds verilirse TAM liste (replace).
 const relabelSchema = z.object({
@@ -79,6 +86,10 @@ export class InventoryController {
     this.hardDelete = this.hardDelete.bind(this);
     this.createOpenFabric = this.createOpenFabric.bind(this);
     this.kursunFinish = this.kursunFinish.bind(this);
+    this.relabel = this.relabel.bind(this);
+    this.prepareForSale = this.prepareForSale.bind(this);
+    this.getRecoveryTargets = this.getRecoveryTargets.bind(this);
+    this.recoverToProduction = this.recoverToProduction.bind(this);
   }
 
   /**
@@ -325,6 +336,37 @@ export class InventoryController {
   async prepareForSale(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.prepareRawForSale(req.params.id as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/rolls/:id/recovery-targets — "Üretime Geri Al" önizlemesi.
+   * Takılı açık kumaş için uygun (aynı ürünlü, açık, Tambur'lu) iş emri adımları.
+   */
+  async getRecoveryTargets(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getRecoveryTargets(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/rolls/:id/recover-to-production — takılı açık kumaşı Tambur'a geri al.
+   * Süpervizör (roll:manual-adjust); zorunlu sebep + audit.
+   */
+  async recoverToProduction(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = recoverToProductionSchema.parse(req.body);
+      const result = await this.service.recoverOpenFabricToProduction(
+        req.params.id as string,
+        body,
+        req.user?.userId,
+      );
       res.status(200).json(result);
     } catch (error) {
       next(error);

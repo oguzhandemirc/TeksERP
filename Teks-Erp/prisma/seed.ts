@@ -55,6 +55,7 @@ async function main() {
     { code: "workorder:write", module: "PRODUCTION", category: "web" },
     { code: "roll:read", module: "PRODUCTION", category: "web" },
     { code: "roll:write", module: "PRODUCTION", category: "web" },
+    { code: "roll:manual-adjust", module: "PRODUCTION", category: "web", description: "Süpervizör — manuel top düzeltme/kurtarma (üretime geri al, nitelik/durum düzeltme)" },
     { code: "station:read", module: "PRODUCTION", category: "web" },
     { code: "station:write", module: "PRODUCTION", category: "web" },
     { code: "item:read", module: "MASTER_DATA", category: "web" },
