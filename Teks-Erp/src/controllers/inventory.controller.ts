@@ -40,6 +40,23 @@ const recoverToProductionSchema = z.object({
   reason: z.string().trim().min(3, "İşlem nedeni (en az 3 karakter) zorunludur").max(500),
 });
 
+// Süpervizör manuel nitelik düzeltme (renk/özellik/en/kalite) — applyManualProperties
+// ile aynı motor ama ZORUNLU sebep (audit event=MANUAL_ATTRIBUTE). itemId/barcode YOK.
+const manualAttributesSchema = z.object({
+  colorId:      z.string().uuid("Geçersiz renk ID").optional().nullable(),
+  propertyIds:  z.array(z.string().uuid("Geçersiz özellik ID")).optional(),
+  width:        z.number().positive("En pozitif olmalı").max(999_999_999).optional().nullable(),
+  qualityGrade: z.string().trim().max(50).optional(),
+  reason:       z.string().trim().min(3, "İşlem nedeni (en az 3 karakter) zorunludur").max(500),
+});
+
+// Süpervizör manuel durum düzeltme — hedefler yalnız STOCK/WAREHOUSE (servis
+// MANUAL_STATUS_TRANSITIONS ile kaynak-durum bazlı ayrıca doğrular).
+const manualStatusSchema = z.object({
+  targetStatus: z.enum(["STOCK", "WAREHOUSE"]),
+  reason:       z.string().trim().min(3, "İşlem nedeni (en az 3 karakter) zorunludur").max(500),
+});
+
 // Saha #4: top etiketi değiştir (renk/özellik/en/kalite). Tümü opsiyonel; renk
 // null=renksiz. propertyIds verilirse TAM liste (replace).
 const relabelSchema = z.object({
@@ -90,6 +107,9 @@ export class InventoryController {
     this.prepareForSale = this.prepareForSale.bind(this);
     this.getRecoveryTargets = this.getRecoveryTargets.bind(this);
     this.recoverToProduction = this.recoverToProduction.bind(this);
+    this.manualAttributes = this.manualAttributes.bind(this);
+    this.statusOverridePreview = this.statusOverridePreview.bind(this);
+    this.manualStatus = this.manualStatus.bind(this);
   }
 
   /**
@@ -363,6 +383,59 @@ export class InventoryController {
     try {
       const body = recoverToProductionSchema.parse(req.body);
       const result = await this.service.recoverOpenFabricToProduction(
+        req.params.id as string,
+        body,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/rolls/:id/manual-attributes — süpervizör manuel nitelik düzeltme
+   * (renk/özellik/en/kalite) + zorunlu sebep. applyManualProperties motorunu kullanır.
+   */
+  async manualAttributes(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = manualAttributesSchema.parse(req.body);
+      const result = await this.service.applyManualProperties(
+        req.params.id as string,
+        {
+          colorId: body.colorId ?? null,
+          propertyIds: body.propertyIds ?? [],
+          width: body.width,
+          qualityGrade: body.qualityGrade,
+          reason: body.reason,
+        },
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/rolls/:id/status-override-preview — manuel durum düzeltme önizlemesi.
+   */
+  async statusOverridePreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getStatusOverridePreview(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/rolls/:id/manual-status — süpervizör manuel durum düzeltme (whitelist).
+   */
+  async manualStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = manualStatusSchema.parse(req.body);
+      const result = await this.service.manualStatusOverride(
         req.params.id as string,
         body,
         req.user?.userId,
