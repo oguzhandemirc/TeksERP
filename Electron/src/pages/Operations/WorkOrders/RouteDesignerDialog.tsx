@@ -275,6 +275,15 @@ export function RouteDesignerDialog({
                   />
                 ))}
               </div>
+              {/* Önleme uyarısı — son adım fason (engellemez). Bu rotadan dönen açık
+                  kumaş depoda takılı kalabilir; Tambur/iç istasyonla bitmesi önerilir. */}
+              {steps.length > 0 && steps[steps.length - 1]?.stationType === "EXTERNAL" && (
+                <div className="rounded-md border border-amber-300 bg-amber-50/60 px-3 py-2 text-xs text-amber-800">
+                  <strong>Son adım fason.</strong> Bu rotadan dönen açık kumaş depoda
+                  takılı kalabilir (normal sevk/kesim çıkışı olmadan). Rotayı Tambur veya
+                  bir iç istasyonla bitirmeniz önerilir.
+                </div>
+              )}
             </div>
 
             <RouteDesignerTemplatePanel
