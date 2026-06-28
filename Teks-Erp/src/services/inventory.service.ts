@@ -2203,6 +2203,8 @@ export class InventoryService {
       select: {
         id: true,
         itemId: true,
+        colorId: true,
+        width: true,
         status: true,
         barcode: true,
         entrySource: true,
@@ -2238,28 +2240,68 @@ export class InventoryService {
       };
     }
 
-    const steps = await prisma.workOrderStep.findMany({
+    const candidates = await prisma.workOrderStep.findMany({
       where: {
         station: { kind: StationKind.TAMBUR },
         status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
         workOrder: {
           status: { in: [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS] },
           targetItemId: roll.itemId,
+          // Renk eşleşmesi (tek WO = tek renk) — çapraz-spec enjeksiyonu engelle (BUG-3).
+          // null===null de eşleşir (ham hedef ↔ renksiz orphan).
+          targetColorId: roll.colorId,
         },
       },
       select: {
         id: true,
         status: true,
         station: { select: { name: true } },
-        workOrder: { select: { id: true, batchNumber: true, status: true } },
+        workOrder: {
+          select: {
+            id: true,
+            batchNumber: true,
+            status: true,
+            width: true,
+            steps: { select: { id: true, status: true } },
+          },
+        },
       },
       orderBy: { createdAt: "asc" },
     });
 
+    // En eşleşmesi (ikisi de doluysa) + Tambur DIŞI tüm adımlar tamamlanmış/atlanmış
+    // olmalı: orphan yalnız Tambur'a movement alır; üst adımlar dangle/COMPLETED→ACTIVE
+    // revert ederse WO tamamlanamaz (BUG-1). Tek-adımlı Tambur WO'su her zaman geçer.
+    const eligibleTargets = candidates
+      .filter((s) => {
+        if (
+          roll.width != null &&
+          s.workOrder.width != null &&
+          Number(s.workOrder.width) !== Number(roll.width)
+        ) {
+          return false;
+        }
+        const otherOpen = s.workOrder.steps.some(
+          (st) =>
+            st.id !== s.id &&
+            st.status !== StepStatus.COMPLETED &&
+            st.status !== StepStatus.SKIPPED,
+        );
+        return !otherOpen;
+      })
+      .map((s) => ({
+        workOrderId: s.workOrder.id,
+        batchNumber: s.workOrder.batchNumber,
+        workOrderStatus: s.workOrder.status,
+        stepId: s.id,
+        stationName: s.station.name,
+        stepStatus: s.status,
+      }));
+
     const warnings: string[] = [];
-    if (steps.length === 0) {
+    if (eligibleTargets.length === 0) {
       warnings.push(
-        "Bu ürüne uygun açık (Tambur'lu) iş emri yok — önce hedef ürünle Tambur'lu bir iş emri açın.",
+        "Bu top için uygun iş emri yok — aynı ürün+renk(+en), Tambur'lu ve Tambur öncesi adımları tamamlanmış (veya yalnız Tambur'lu) açık bir iş emri gerekir.",
       );
     }
 
@@ -2268,14 +2310,7 @@ export class InventoryService {
       data: {
         roll: rollOut,
         eligible: true,
-        eligibleTargets: steps.map((s) => ({
-          workOrderId: s.workOrder.id,
-          batchNumber: s.workOrder.batchNumber,
-          workOrderStatus: s.workOrder.status,
-          stepId: s.id,
-          stationName: s.station.name,
-          stepStatus: s.status,
-        })),
+        eligibleTargets,
         warnings,
       },
     };
@@ -2302,6 +2337,8 @@ export class InventoryService {
       select: {
         id: true,
         itemId: true,
+        colorId: true,
+        width: true,
         status: true,
         barcode: true,
         entrySource: true,
@@ -2336,7 +2373,9 @@ export class InventoryService {
           status: true,
           workOrderId: true,
           station: { select: { kind: true } },
-          workOrder: { select: { status: true, targetItemId: true } },
+          workOrder: {
+            select: { status: true, targetItemId: true, targetColorId: true, width: true },
+          },
         },
       });
       if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
@@ -2354,6 +2393,33 @@ export class InventoryService {
       }
       if (step.workOrder.targetItemId !== roll.itemId) {
         throw AppError.badRequest("Topun ürünü iş emrinin hedef ürünüyle eşleşmiyor");
+      }
+      // Renk eşleşmesi (BUG-3) — çapraz-spec enjeksiyon + producedMeters mis-count engeli.
+      if (step.workOrder.targetColorId !== roll.colorId) {
+        throw AppError.badRequest("Topun rengi iş emrinin hedef rengiyle eşleşmiyor");
+      }
+      // En eşleşmesi (ikisi de doluysa).
+      if (
+        roll.width != null &&
+        step.workOrder.width != null &&
+        Number(step.workOrder.width) !== Number(roll.width)
+      ) {
+        throw AppError.badRequest("Topun eni iş emrinin hedef eniyle eşleşmiyor");
+      }
+      // Tambur DIŞI adımlar tamamlanmamışsa orphan üst adımları dangle bırakır → WO
+      // tamamlanamaz / COMPLETED adım ACTIVE'e revert eder (BUG-1). Tek-adımlı Tambur
+      // WO'su geçer; çok-adımlı WO yalnız üst adımları bitmişse hedef olabilir.
+      const otherOpen = await tx.workOrderStep.count({
+        where: {
+          workOrderId: step.workOrderId,
+          id: { not: step.id },
+          status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
+        },
+      });
+      if (otherOpen > 0) {
+        throw AppError.conflict(
+          "İş emrinin Tambur öncesi adımları tamamlanmamış — açık kumaş yalnız Tambur aşamasındaki (veya tek-adımlı Tambur) iş emrine geri alınabilir",
+        );
       }
 
       // Atomik claim — orphan'ı tam beklenen halinde yakala (check-then-act yok).

@@ -2067,7 +2067,12 @@ export class TamburService {
     const parent = await prisma.roll.findUnique({
       where: { id: openFabricRollId },
       include: {
-        currentStep: { include: { station: { select: { kind: true } } } },
+        currentStep: {
+          include: {
+            station: { select: { kind: true } },
+            workOrder: { select: { status: true } },
+          },
+        },
         properties: { select: { propertyId: true } },
       },
     });
@@ -2081,6 +2086,11 @@ export class TamburService {
       throw AppError.badRequest(
         `Roll Tambur step'inde değil (${parent.currentStep?.station.kind ?? "STEPSIZ"})`,
       );
+    }
+    // Savunma katmanı (BUG-2): iptal edilmiş iş emrinin Tambur adımına eşzamanlı yarışla
+    // sıkışmış açık kumaş kesilmesin — ölü WO'ya çocuk top + bozuk üretim muhasebesi olmaz.
+    if (parent.currentStep.workOrder?.status === WorkOrderStatus.CANCELLED) {
+      throw AppError.conflict("İptal edilmiş iş emrinin açık kumaşı kesilemez");
     }
     if (parent.status !== RollStatus.IN_PRODUCTION) {
       throw AppError.badRequest(

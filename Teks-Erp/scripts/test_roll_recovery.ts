@@ -39,7 +39,7 @@ const sub = new SubcontractorService();
 const tambur = new TamburService();
 const cards = new TravelerCardService();
 
-let ITEM = "", ITEM2 = "", GRADE = "", ADMIN = "", ST_BOYA = "", ST_TAMBUR = "", ST_KURSUN = "", SUB_BOYER = "";
+let ITEM = "", ITEM2 = "", GRADE = "", ADMIN = "", ST_BOYA = "", ST_TAMBUR = "", ST_KURSUN = "", SUB_BOYER = "", COLOR = "";
 const WIDTH = 220;
 const woIds: string[] = [];
 let bc = 0;
@@ -58,6 +58,7 @@ async function resolveFixtures(): Promise<void> {
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1");
   ST_KURSUN = need(await prisma.station.findFirst({ where: { code: "KURSUN_KK2" }, select: { id: true } }), "KURSUN_KK2");
   SUB_BOYER = need(await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } }), "BOYER");
+  COLOR = need(await prisma.color.findFirst({ where: { isActive: true }, select: { id: true } }), "renk");
 }
 
 async function makeStockRoll(qty: number, itemId: string): Promise<{ id: string; barcode: string }> {
@@ -118,21 +119,38 @@ async function main(): Promise<void> {
     console.log("\n=== Orphan üret + kurtarma hedefleri ===");
     const { orphanId, bornQty } = await makeOrphan(ITEM);
 
-    // Hedef WO'ları: B = doğru ürün + Tambur; C = yanlış ürün + Tambur; D = doğru ürün ama KURSUN (Tambur değil)
+    // Hedef WO'ları:
+    //  B = doğru ürün + tek-adım Tambur (uygun)
+    //  C = yanlış ürün + Tambur (item mismatch)
+    //  D = doğru ürün ama KURSUN (Tambur değil)
+    //  E = doğru ürün, çok-adımlı (KURSUN PENDING → TAMBUR) — BUG-1: üst adım açık → UYGUNSUZ
+    //  F = doğru ürün, çok-adımlı ama KURSUN SKIPPED → TAMBUR — üst adım kapalı → UYGUN
+    //  G = doğru ürün + Tambur ama targetColorId dolu (orphan colorId=null) — BUG-3: renk mismatch → UYGUNSUZ
     const woB = await makeWo([{ stationId: ST_TAMBUR, seq: 1 }], ITEM);
     const woC = await makeWo([{ stationId: ST_TAMBUR, seq: 1 }], ITEM2);
     const woD = await makeWo([{ stationId: ST_KURSUN, seq: 1 }], ITEM);
+    const woE = await makeWo([{ stationId: ST_KURSUN, seq: 1 }, { stationId: ST_TAMBUR, seq: 2 }], ITEM);
+    const woF = await makeWo([{ stationId: ST_KURSUN, seq: 1 }, { stationId: ST_TAMBUR, seq: 2 }], ITEM);
+    await prisma.workOrderStep.update({ where: { id: woF.stepIds[0] }, data: { status: "SKIPPED" } });
+    const woG = await makeWo([{ stationId: ST_TAMBUR, seq: 1 }], ITEM);
+    await prisma.workOrder.update({ where: { id: woG.woId }, data: { targetColorId: COLOR } });
     const tamburStepB = woB.stepIds[0];
     const tamburStepC = woC.stepIds[0];
     const kursunStepD = woD.stepIds[0];
+    const tamburStepE = woE.stepIds[1];
+    const tamburStepF = woF.stepIds[1];
+    const tamburStepG = woG.stepIds[0];
 
     const targetsRes = await inv.getRecoveryTargets(orphanId);
     const targets = targetsRes.data;
     check("getRecoveryTargets: eligible=true", targets.eligible === true);
     const targetStepIds = targets.eligibleTargets.map((t) => t.stepId);
-    check("hedeflerde doğru ürün+Tambur WO var (B)", targetStepIds.includes(tamburStepB));
+    check("hedeflerde doğru ürün+tek-adım Tambur var (B)", targetStepIds.includes(tamburStepB));
+    check("hedeflerde üst-adım kapalı çok-adım Tambur var (F)", targetStepIds.includes(tamburStepF));
     check("hedeflerde yanlış ürün WO YOK (C)", !targetStepIds.includes(tamburStepC));
     check("hedeflerde Tambur olmayan adım YOK (D-kursun)", !targetStepIds.includes(kursunStepD));
+    check("BUG-1: üst-adım açık çok-adım Tambur YOK (E)", !targetStepIds.includes(tamburStepE));
+    check("BUG-3: renk uyuşmayan WO YOK (G)", !targetStepIds.includes(tamburStepG));
 
     // Uygun olmayan top (barkodlu stok) → eligible=false
     const plainRoll = await makeStockRoll(50, ITEM);
@@ -146,6 +164,10 @@ async function main(): Promise<void> {
       inv.recoverOpenFabricToProduction(plainRoll.id, { stepId: tamburStepB, reason: "test barkodlu" }, ADMIN));
     await expectThrow("boş sebep → hata", () =>
       inv.recoverOpenFabricToProduction(orphanId, { stepId: tamburStepB, reason: "" }, ADMIN));
+    await expectThrow("BUG-1: üst-adım açık çok-adım Tambur'a geri al → hata", () =>
+      inv.recoverOpenFabricToProduction(orphanId, { stepId: tamburStepE, reason: "çok-adım açık" }, ADMIN));
+    await expectThrow("BUG-3: renk uyuşmayan WO'ya geri al → hata", () =>
+      inv.recoverOpenFabricToProduction(orphanId, { stepId: tamburStepG, reason: "renk mismatch" }, ADMIN));
 
     console.log("\n=== Kurtarma (recover) ===");
     const recRes = await inv.recoverOpenFabricToProduction(orphanId, { stepId: tamburStepB, reason: "Saha: takılı açık kumaş üretime alındı" }, ADMIN);
