@@ -43,13 +43,24 @@ const testNativeSchema = z.object({
  * machineId — mobil isteklerde device.middleware'den (req.device.machineId) OTO;
  * Electron'da yoksa opsiyonel ?machineId= query. Yoksa resolver sistem-default'a düşer.
  */
-function parseFormatOpts(req: Request): { profileId?: string; machineId?: string } {
+function parseFormatOpts(req: Request): {
+  profileId?: string;
+  machineId?: string;
+  peripheralId?: string;
+  deviceId?: string;
+  templateId?: string;
+} {
   const machineId =
     req.device?.machineId ??
     (typeof req.query.machineId === "string" ? req.query.machineId : undefined);
   return {
     profileId: typeof req.query.profileId === "string" ? req.query.profileId : undefined,
     machineId: machineId ?? undefined,
+    // Cihaz kaydı yönlendirmesi: explicit ?peripheralId= veya tablete-bağlı yazıcı
+    // için req.device.id (device.middleware). ?templateId= explicit şablon override.
+    peripheralId: typeof req.query.peripheralId === "string" ? req.query.peripheralId : undefined,
+    deviceId: req.device?.id ?? undefined,
+    templateId: typeof req.query.templateId === "string" ? req.query.templateId : undefined,
   };
 }
 
@@ -88,6 +99,15 @@ export class LabelController {
     } catch (e) { next(e); }
   };
 
+  /** Editör native (PPLA/ZPL) metin-zone önizlemesi — sıralı satırlar (JSON). */
+  getPreviewNativeText = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = previewSchema.parse(req.body);
+      const result = await this.service.getPreviewNativeText(body);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
   getRollLabelHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const kindParam = typeof req.query.kind === "string" ? req.query.kind : undefined;
@@ -122,7 +142,12 @@ export class LabelController {
    */
   getRollLabelPpla = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = await this.service.getRollLabelPpla(req.params.id as string, {
+      const kindParam = typeof req.query.kind === "string" ? req.query.kind : undefined;
+      const kindOverride =
+        kindParam === LabelKind.ROLL_RAW || kindParam === LabelKind.ROLL_FINISHED
+          ? (kindParam as LabelKind)
+          : undefined;
+      const result = await this.service.getRollLabelPpla(req.params.id as string, kindOverride, {
         orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
         customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
         stock: req.query.stock === "1" || req.query.stock === "true",
@@ -144,7 +169,12 @@ export class LabelController {
    */
   getRollLabelNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = await this.service.getRollLabelNative(req.params.id as string, {
+      const kindParam = typeof req.query.kind === "string" ? req.query.kind : undefined;
+      const kindOverride =
+        kindParam === LabelKind.ROLL_RAW || kindParam === LabelKind.ROLL_FINISHED
+          ? (kindParam as LabelKind)
+          : undefined;
+      const result = await this.service.getRollLabelNative(req.params.id as string, kindOverride, {
         orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
         customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
         stock: req.query.stock === "1" || req.query.stock === "true",
@@ -275,6 +305,31 @@ export class LabelController {
         stock?: boolean;
       };
       const result = await this.service.recordPrintEvent(
+        req.params.id as string,
+        req.user?.userId,
+        {
+          orderLineId: body.orderLineId ?? undefined,
+          customerId: body.customerId ?? undefined,
+          stock: body.stock === true,
+        },
+      );
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /**
+   * Etiket NİYETİNİ topa kalıcılaştırır (lastLabelSnapshot) — fiziksel baskıdan
+   * VE LABEL_PRINTED audit'inden BAĞIMSIZ. Mobil LabelPrinter baskı-öncesi çağırır
+   * (yazıcısız/iptal niyet kaybolmasın). `recordPrintEvent` ile aynı opts gövdesi.
+   */
+  seedRollLabelSnapshot = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = (req.body ?? {}) as {
+        orderLineId?: string | null;
+        customerId?: string | null;
+        stock?: boolean;
+      };
+      const result = await this.service.seedRollLabelSnapshot(
         req.params.id as string,
         req.user?.userId,
         {
