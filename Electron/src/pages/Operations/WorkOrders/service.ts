@@ -159,14 +159,19 @@ export const workOrderService = {
     subcontractorId?: string;
     /** Verilirse yalnız bu toplar; yoksa adımdaki bekleyen hepsi. */
     rollIds?: string[];
+    /** Rota-atlama uyarısını bilinçli geç (ROUTE_SKIP override). */
+    allowRouteSkip?: boolean;
     instruction?: string;
     plateNumber?: string;
     driverName?: string;
   }) =>
     apiClient
+      // suppressErrorToast: ROUTE_SKIP'i bileşen kendi uyarı diyaloğuyla yönetir;
+      // interceptor çift-toast atmasın (diğer hatalar bileşende toast'lanır).
       .post<ApiResponse<{ id: string; dispatchNo: string }>>(
         "/api/subcontractor/dispatch/bulk",
         payload,
+        { suppressErrorToast: true },
       )
       .then((r) => r.data),
 

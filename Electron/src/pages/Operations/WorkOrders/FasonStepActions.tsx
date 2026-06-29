@@ -3,11 +3,30 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowRightLeft, FileText, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Callout } from "@/components/ui/callout";
 import { PermissionGate } from "@/components/PermissionGate";
 import { workOrderService } from "./service";
 import { FasonStepRollSelectModal } from "./FasonStepRollSelectModal";
 import { FasonCekiDraftDialog } from "./FasonCekiDraftDialog";
 import type { WorkOrderStepLite } from "./types";
+
+/** Backend ROUTE_SKIP hata detayı (apiClient hata gövdesinden okunur). */
+type RouteSkipError = {
+  response?: {
+    data?: {
+      message?: string;
+      details?: { code?: string; skippedStep?: { stationName?: string } };
+    };
+  };
+  message?: string;
+};
 
 interface Props {
   step: WorkOrderStepLite;
@@ -27,6 +46,9 @@ export function FasonStepActions({ step, steps, workOrderId }: Props) {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [draftOpen, setDraftOpen] = useState(false);
+  // ROUTE_SKIP uyarısı: backend rota-atlama tespit ederse buraya düşer; operatör
+  // onaylarsa aynı toplar allowRouteSkip ile yeniden sevk edilir.
+  const [routeSkip, setRouteSkip] = useState<{ rollIds: string[]; stationName: string } | null>(null);
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
@@ -35,12 +57,27 @@ export function FasonStepActions({ step, steps, workOrderId }: Props) {
   };
 
   const bulkMut = useMutation({
-    mutationFn: (rollIds: string[]) =>
-      workOrderService.bulkDispatchStep({ workOrderId, stepId: step.id, rollIds }),
+    mutationFn: (vars: { rollIds: string[]; allowRouteSkip?: boolean }) =>
+      workOrderService.bulkDispatchStep({
+        workOrderId,
+        stepId: step.id,
+        rollIds: vars.rollIds,
+        allowRouteSkip: vars.allowRouteSkip,
+      }),
     onSuccess: (res) => {
       toast.success(res.message ?? "Fasona sevk edildi.");
       invalidate();
       setBulkOpen(false);
+      setRouteSkip(null);
+    },
+    onError: (err: RouteSkipError, vars) => {
+      const d = err.response?.data?.details;
+      if (d?.code === "ROUTE_SKIP") {
+        setBulkOpen(false);
+        setRouteSkip({ rollIds: vars.rollIds, stationName: d.skippedStep?.stationName ?? "önceki fason" });
+        return;
+      }
+      toast.error(err.response?.data?.message ?? err.message ?? "Sevk başarısız.");
     },
   });
 
@@ -162,7 +199,7 @@ export function FasonStepActions({ step, steps, workOrderId }: Props) {
           destinationName={plannedFirm ?? stationName}
           confirmLabel="Sevk Et"
           isPending={bulkMut.isPending}
-          onConfirm={(ids) => bulkMut.mutate(ids)}
+          onConfirm={(ids) => bulkMut.mutate({ rollIds: ids })}
         />
       )}
 
@@ -189,6 +226,34 @@ export function FasonStepActions({ step, steps, workOrderId }: Props) {
           stationName={stationName}
         />
       )}
+
+      {/* Rota-atlama uyarısı — backend ROUTE_SKIP döndü; bilinçli onayla geç. */}
+      <Dialog open={routeSkip !== null} onOpenChange={(o) => !o && setRouteSkip(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rota Sırası Atlanıyor</DialogTitle>
+          </DialogHeader>
+          <Callout tone="warning">
+            Bu sevk rota sırasını atlıyor — önce{" "}
+            <strong>{routeSkip?.stationName}</strong> fason adımı bekliyor. Mal o adıma
+            uğramadan gönderilecek. Devam edersen audit'e "rota atlama override" yazılır.
+          </Callout>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRouteSkip(null)}>
+              Vazgeç
+            </Button>
+            <Button
+              type="button"
+              disabled={bulkMut.isPending}
+              onClick={() =>
+                routeSkip && bulkMut.mutate({ rollIds: routeSkip.rollIds, allowRouteSkip: true })
+              }
+            >
+              Yine de Sevk Et
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PermissionGate>
   );
 }
