@@ -488,7 +488,7 @@ router.post(
  * /api/rolls/{id}/recovery-targets:
  *   get:
  *     tags: [Inventory]
- *     summary: "Üretime Geri Al" önizlemesi — takılı açık kumaş için uygun Tambur adımları
+ *     summary: "'Üretime Geri Al' önizlemesi — takılı açık kumaş için uygun Tambur adımları"
  *     description: |
  *       Ham stokta takılı açık kumaş (barkodsuz, fason-dönüşü, STOCK, currentStepId=null)
  *       için uygun "üretime geri al" hedeflerini döner: aynı ürünlü, açık
