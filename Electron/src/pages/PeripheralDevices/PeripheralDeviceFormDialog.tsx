@@ -66,6 +66,14 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         address: initial.address ?? "",
         port: initial.port != null ? String(initial.port) : "",
         identifyPattern: initial.identifyPattern ?? "",
+        pollCommand: initial.pollCommand ?? "",
+        terminator: initial.terminator ?? "",
+        decimals: initial.decimals != null ? String(initial.decimals) : "",
+        scale: initial.scale != null ? String(initial.scale) : "",
+        unit: initial.unit ?? "",
+        timeoutMs: initial.timeoutMs != null ? String(initial.timeoutMs) : "",
+        role: initial.role ?? "",
+        simulate: initial.simulate ?? false,
         owner: initial.machineId ? "machine" : initial.deviceId ? "device" : "none",
         machineId: initial.machineId ?? "",
         deviceId: initial.deviceId ?? "",
@@ -92,6 +100,8 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
     >
       {(form) => {
         const owner = form.watch("owner");
+        const kind = form.watch("kind");
+        const isInput = kind === "SCALE" || kind === "METER";
         return (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -132,6 +142,41 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
             <FormField label="Veri Deseni (regex)" hint="Kantar/metraj cihazı için (yazıcıda boş).">
               <Input className="font-mono text-xs" {...form.register("identifyPattern")} placeholder="(\d+(?:\.\d+)?)" />
             </FormField>
+
+            {/* Giriş cihazı (SCALE/METER) okuma protokolü */}
+            {isInput && (
+              <div className="rounded-md border bg-muted/20 p-3">
+                <div className="mb-2 text-xs font-medium text-muted-foreground">
+                  Okuma Protokolü (kantar/metre)
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <FormField label="Sorgu Komutu" hint="İstek-cevap (boş=dinle)">
+                    <Input className="font-mono" {...form.register("pollCommand")} placeholder="R" />
+                  </FormField>
+                  <FormField label="Satır Sonu" hint="boş → CR/LF">
+                    <Input className="font-mono" {...form.register("terminator")} placeholder={"\\r\\n"} />
+                  </FormField>
+                  <FormField label="Rol" hint="2-KAT / 4-KAT / PRIMARY">
+                    <Input {...form.register("role")} placeholder="2-KAT" />
+                  </FormField>
+                  <FormField label="Ondalık" hint="0-4 (boş→1)">
+                    <Input {...form.register("decimals")} placeholder="1" />
+                  </FormField>
+                  <FormField label="Ölçek" hint="cm→m: 0.01">
+                    <Input {...form.register("scale")} placeholder="1" />
+                  </FormField>
+                  <FormField label="Birim">
+                    <Input {...form.register("unit")} placeholder="m / kg" />
+                  </FormField>
+                  <FormField label="Zaman Aşımı (ms)" hint="boş→2500">
+                    <Input {...form.register("timeoutMs")} placeholder="2500" />
+                  </FormField>
+                  <label className="col-span-2 flex items-center gap-2 self-end pb-2 text-sm">
+                    <input type="checkbox" {...form.register("simulate")} /> Simülasyon (sahte değer)
+                  </label>
+                </div>
+              </div>
+            )}
 
             {/* Sahiplik: serbest / makineye-sabit / tablete-bağlı */}
             <div className="grid grid-cols-3 gap-3 rounded-md border bg-muted/20 p-3">

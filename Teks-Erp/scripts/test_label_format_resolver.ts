@@ -1,8 +1,8 @@
 // =============================================================================
 // Test: etiket format çözümü (resolveLabelFormat) öncelik zinciri
 // Çalıştır: npx tsx scripts/test_label_format_resolver.ts
-// Doğrulananlar: explicit profileId > machineId(hw.profile > model.default) >
-// sistem-default > kod-fallback; yazıcı dili modelden; inactive profil atlanır.
+// Doğrulananlar: explicit profileId > machineId(makine-yazıcı PeripheralDevice:
+// profil > model.default) > sistem-default > kod-fallback; dil modelden; inactive atlanır.
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { resolveLabelFormat } from "../src/services/helpers/label-format.resolver";
@@ -36,8 +36,13 @@ async function main() {
   const model = await prisma.printerModel.create({
     data: { code: `RES-MOD-${ts}`, name: "TEST MOD", language: "PPLA", maxWidthMm: 104, dpi: 203, defaultProfileId: p2.id },
   });
-  const hw = await prisma.machineHardware.create({
-    data: { machineId: machine.id, printerModelId: model.id, formatProfileId: p1.id, printerIp: "10.0.0.9" },
+  // Makineye-bağlı yazıcı (MachineHardware emekli → PeripheralDevice tek kaynak).
+  const printer = await prisma.peripheralDevice.create({
+    data: {
+      code: `RES-PRN-${ts}`, name: "TEST RES YAZICI", kind: "LABEL_PRINTER",
+      connectionType: "NETWORK_TCP", machineId: machine.id,
+      printerModelId: model.id, formatProfileId: p1.id, address: "10.0.0.9",
+    },
     select: { id: true },
   });
 
@@ -52,7 +57,7 @@ async function main() {
     check("machineId → dil modelden (PPLA)", r2.language === "PPLA");
 
     // 3) hw.formatProfile null → model.defaultProfile (P2)
-    await prisma.machineHardware.update({ where: { id: hw.id }, data: { formatProfileId: null } });
+    await prisma.peripheralDevice.update({ where: { id: printer.id }, data: { formatProfileId: null } });
     const r3 = await resolveLabelFormat({ machineId: machine.id });
     check("machineId → model.defaultProfile P2", r3.widthMm === 90 && r3.dpi === 300 && r3.source === "machine");
     check("P2 yolunda da dil PPLA", r3.language === "PPLA");
@@ -66,7 +71,7 @@ async function main() {
     check("opts yok → system-default/code-fallback", r5.source === "system-default" || r5.source === "code-fallback");
     check("opts yok → geçerli geometri (width>0, pay≥0)", r5.widthMm > 0 && r5.marginMm >= 0);
   } finally {
-    await prisma.machineHardware.deleteMany({ where: { id: hw.id } });
+    await prisma.peripheralDevice.deleteMany({ where: { id: printer.id } });
     await prisma.printerModel.deleteMany({ where: { id: model.id } });
     await prisma.labelFormatProfile.deleteMany({ where: { id: { in: [p1.id, p2.id, pInactive.id] } } });
     await prisma.machine.deleteMany({ where: { id: machine.id } });

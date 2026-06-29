@@ -1,21 +1,21 @@
 import { PermissionsAndroid, Platform } from 'react-native';
+import type { DeviceTransport, ReadOptions } from './transport.types';
 
 // =============================================================================
-// Bluetooth (Classic / SPP) METRE OKUMA transport — 2-kat / 4-kat makinelerinin
-// RS232 çıkışına lehimli HC-05/06 modülü üzerinden. Tambur "Otomatik" kesim
-// modunda operatör "Kes"e basınca, seçili kata (foldType) ait makineye İSTEK-CEVAP
-// ile sorgu yollanır ve dönen ASCII'den metre değeri ayıklanır.
+// Bluetooth Classic / SPP (RFCOMM) transport — HC-05/06 köprülü cihazlar:
+// etiket yazıcısı (yaz) + metre/kantar (oku). Önceden btPrinter.service ve
+// btMeter.service bu native-modül/izin/bağlanma mantığını AYRI AYRI taşıyordu;
+// burada tek noktaya toplandı (ikisi de bunu sarmalar).
 //
-// Yazıcı tarafıyla (btPrinter.service.ts) aynı `react-native-bluetooth-classic`
-// native modülünü kullanır; orası YAZAR, burası OKUR. Modül yalnız native build'de
-// bağlı (Expo Go / web / jest'te yok) → TEMBEL require + try/catch: modül yoksa
-// `isBtMeterSupported()` false döner ve çağıran taraf simülasyona düşer.
+// `react-native-bluetooth-classic` native modül → yalnız dev/release BUILD'de var
+// (Expo Go / web / jest'te yok). TEMBEL require + try/catch: modül yoksa
+// `isBtSupported()` false döner ve çağıran simülasyon/HTML yoluna düşer.
 // =============================================================================
 
-export interface BtMeterDevice {
-  /** MAC adresi — kalıcı seçim anahtarı. */
+export interface BtBondedDevice {
+  /** MAC adresi — kalıcı seçim/eşleşme anahtarı. */
   address: string;
-  /** Cihaz görünen adı (yoksa adres). */
+  /** Görünen ad (yoksa adres). */
   name: string;
 }
 
@@ -31,7 +31,7 @@ interface BtNativeModule {
   isDeviceConnected(address: string): Promise<boolean>;
   connectToDevice(address: string, options?: Record<string, unknown>): Promise<unknown>;
   writeToDevice(address: string, message: string, encoding?: string): Promise<boolean>;
-  // Okuma alt kümesi (react-native-bluetooth-classic modül-seviye API'si):
+  // Okuma alt kümesi (modül-seviye API):
   availableFromDevice(address: string): Promise<number>;
   readFromDevice(address: string): Promise<string | null>;
   clearFromDevice?(address: string): Promise<boolean>;
@@ -53,7 +53,7 @@ function getModule(): BtNativeModule | null {
 }
 
 /** Bu derlemede Bluetooth Classic native modülü mevcut mu? */
-export function isBtMeterSupported(): boolean {
+export function isBtSupported(): boolean {
   return getModule() !== null;
 }
 
@@ -67,7 +67,7 @@ async function ensureConnectPermission(): Promise<void> {
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
       {
         title: 'Bluetooth izni',
-        message: 'Metre makinesine bağlanmak için Bluetooth izni gerekli.',
+        message: 'Cihaza (yazıcı/metre) bağlanmak için Bluetooth izni gerekli.',
         buttonPositive: 'İzin Ver',
         buttonNegative: 'Vazgeç',
       },
@@ -88,8 +88,19 @@ async function ensureAdapterEnabled(mod: BtNativeModule): Promise<void> {
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/** İzin + adaptör + (gerekirse) bağlanmayı garantile; modülü döner. Modül yoksa fırlatır. */
+async function ensureReady(address: string): Promise<BtNativeModule> {
+  const mod = getModule();
+  if (!mod) throw new Error('Bluetooth modülü bu derlemede yok (native build gerekli).');
+  await ensureConnectPermission();
+  await ensureAdapterEnabled(mod);
+  const connected = await mod.isDeviceConnected(address).catch(() => false);
+  if (!connected) await mod.connectToDevice(address);
+  return mod;
+}
+
 /** Eşleşmiş (bonded) cihazları döner. Modül yoksa boş liste. */
-export async function listBondedMeters(): Promise<BtMeterDevice[]> {
+export async function listBonded(): Promise<BtBondedDevice[]> {
   const mod = getModule();
   if (!mod) return [];
   await ensureConnectPermission();
@@ -97,59 +108,48 @@ export async function listBondedMeters(): Promise<BtMeterDevice[]> {
   return devices.map((d) => ({ address: d.address, name: d.name?.trim() || d.address }));
 }
 
+/** RFCOMM soketi açıp bağlantıyı doğrula (yazma/okuma yapmaz). */
+export async function testConnection(address: string): Promise<void> {
+  await ensureReady(address);
+}
+
 /**
- * Makine cevabından (ASCII) metre değerini ayıkla. İstek-cevap protokolünde cihaz
- * "123.4\r\n" / "M=123.4" / "LEN 0123.45 m" gibi yanıtlar verebilir → metni tarar,
- * SON tam sayısal token'ı alır (etiket öneki varsa değer sonda olur), ',' → '.'.
- * 1 ondalığa yuvarlar (üretim hassasiyeti). Geçerli pozitif sayı yoksa null.
- *
- * Saf fonksiyon — native modülden bağımsız, birim test edilir.
+ * Ham içerik yaz. `latin1` = native komut baytları (STX/CR korunur), `ascii` = sorgu
+ * komutu. Bayat soket halinde bir kez yeniden bağlanıp dener (retry varsayılan açık).
  */
-export function parseMeterReading(raw: string): number | null {
-  if (!raw) return null;
-  const matches = raw.replace(/,/g, '.').match(/-?\d+(?:\.\d+)?/g);
-  if (!matches || matches.length === 0) return null;
-  for (let i = matches.length - 1; i >= 0; i--) {
-    const v = parseFloat(matches[i]);
-    if (Number.isFinite(v) && v > 0) return Math.round(v * 10) / 10;
+export async function writeRaw(
+  address: string,
+  content: string,
+  encoding: 'latin1' | 'ascii' = 'latin1',
+  opts?: { retry?: boolean },
+): Promise<void> {
+  const mod = await ensureReady(address);
+  try {
+    await mod.writeToDevice(address, content, encoding);
+  } catch (e) {
+    if (opts?.retry === false) throw e;
+    // Soket düşmüş olabilir → tek sefer yeniden bağlan + yaz.
+    await mod.connectToDevice(address);
+    await mod.writeToDevice(address, content, encoding);
   }
-  return null;
 }
 
-export interface ReadMeterOptions {
-  /** Makineye yollanacak sorgu komutu (İSTEK-CEVAP). Boşsa yalnız dinlenir. */
+export interface ReadResponseOptions {
   pollCommand?: string;
-  /** Yanıt için bekleme süresi (ms). Varsayılan 2500. */
   timeoutMs?: number;
-}
-
-/** Eşleşmiş cihaza RFCOMM soketi açıp bağlantıyı doğrular (okuma yapmaz). */
-export async function testMeterConnection(address: string): Promise<void> {
-  const mod = getModule();
-  if (!mod) throw new Error('Bluetooth modülü bu derlemede yok (native build gerekli).');
-  await ensureConnectPermission();
-  await ensureAdapterEnabled(mod);
-  const already = await mod.isDeviceConnected(address).catch(() => false);
-  if (!already) await mod.connectToDevice(address);
+  /** Tampon tamamlandı mı (varsayılan: herhangi CR/LF). Parse-bilinçli erken dönüş için. */
+  isComplete?: (buf: string) => boolean;
 }
 
 /**
- * Seçili makineden metre değerini İSTEK-CEVAP ile oku. Bayat tamponu temizler,
- * (varsa) sorgu komutunu yazar, sonra terminatör (\r/\n) görene veya zaman aşımına
- * kadar gelen baytları biriktirip `parseMeterReading` ile sayıya çevirir.
- * Hata/zaman aşımı → throw (çağıran simülasyona düşer).
+ * İstek-cevap oku: bayat tamponu temizle, (varsa) sorgu komutunu yaz, sonra gelen
+ * baytları `isComplete` true olana veya zaman aşımına kadar biriktir; ham metni döner.
+ * Anlamlandırma (sayıya çevirme) çağıranın/codec'in işi.
  */
-export async function readMeter(address: string, opts: ReadMeterOptions = {}): Promise<number> {
-  const mod = getModule();
-  if (!mod) throw new Error('Bluetooth modülü bu derlemede yok (native build gerekli).');
-  await ensureConnectPermission();
-  await ensureAdapterEnabled(mod);
-
-  const connected = await mod.isDeviceConnected(address).catch(() => false);
-  if (!connected) await mod.connectToDevice(address);
-
-  // İstek-cevap: önce bayat tamponu temizle, sonra (varsa) sorgu komutunu yaz.
+export async function readResponse(address: string, opts: ReadResponseOptions = {}): Promise<string> {
+  const mod = await ensureReady(address);
   if (mod.clearFromDevice) await mod.clearFromDevice(address).catch(() => false);
+
   const cmd = opts.pollCommand?.trim();
   if (cmd) {
     // Çoğu RS232 cihazı satır sonu (CR/LF) bekler → kullanıcı eklemediyse biz ekleriz.
@@ -158,6 +158,7 @@ export async function readMeter(address: string, opts: ReadMeterOptions = {}): P
   }
 
   const timeoutMs = opts.timeoutMs ?? 2500;
+  const isComplete = opts.isComplete ?? ((b: string) => /[\r\n]/.test(b));
   const deadline = Date.now() + timeoutMs;
   let buf = '';
   while (Date.now() < deadline) {
@@ -165,16 +166,25 @@ export async function readMeter(address: string, opts: ReadMeterOptions = {}): P
     if (avail && avail > 0) {
       const chunk = await mod.readFromDevice(address).catch(() => null);
       if (chunk) buf += chunk;
-      // Bir satır tamamlandıysa parse etmeyi dene (yarım okumayı sayı sanmamak için).
-      if (/[\r\n]/.test(buf)) {
-        const v = parseMeterReading(buf);
-        if (v != null) return v;
-      }
+      if (isComplete(buf)) return buf;
     }
     await delay(50);
   }
-  // Son şans: terminatör gelmeden de geçerli sayı yakaladıysak onu döndür.
-  const v = parseMeterReading(buf);
-  if (v != null) return v;
-  throw new Error('Makineden geçerli metre yanıtı gelmedi (zaman aşımı).');
+  return buf; // zaman aşımı → biriken neyse onu döndür (çağıran karar verir)
+}
+
+/** Bir adres için DeviceTransport örneği (HAL fabrikası bunu kullanır). */
+export function btClassicTransport(address: string): DeviceTransport {
+  return {
+    test: () => testConnection(address),
+    write: (content, encoding = 'latin1') => writeRaw(address, content, encoding, { retry: true }),
+    read: (o?: ReadOptions) => {
+      const term = o?.terminator;
+      return readResponse(address, {
+        pollCommand: o?.pollCommand,
+        timeoutMs: o?.timeoutMs,
+        isComplete: term ? (b) => b.includes(term) : undefined,
+      });
+    },
+  };
 }

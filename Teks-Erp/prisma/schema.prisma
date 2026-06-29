@@ -254,7 +254,6 @@ model User {
   createdRolls               Roll[]                  @relation("RollCreatedBy")
   manualClosedOrders         Order[]                 @relation("OrderManualClosedBy")
   systemSettingsUpdates      SystemSetting[]
-  createdPairingCodes        PairingCode[]           @relation("PairingCodeCreatedBy")
   preference                 UserPreference?
   receivedReturns            RollReturn[]             @relation("RollReturnReceivedBy")
   cancelledReturns           RollReturn[]             @relation("RollReturnCancelledBy")
@@ -412,9 +411,7 @@ model Machine {
   // Relations
   station        Station          @relation(fields: [stationId], references: [id])
   devices        Device[]
-  hardware       MachineHardware? // saha #cihaz: yazıcı/RS232 donanım config (1:1)
-  peripherals    PeripheralDevice[] // birleşik cihaz kaydı (yazıcı/sinyal — makineye sabit)
-  pairingCodes   PairingCode[]
+  peripherals    PeripheralDevice[] // birleşik cihaz kaydı (yazıcı/kantar/metre/sinyal — makineye sabit)
   rollOperations RollOperation[]
   rollMovements  RollMovement[]
 
@@ -427,7 +424,8 @@ model Machine {
 
 /// Sahada makinenin yanında sabit duran tablet/cihaz.
 /// `deviceId` tablet ilk açılışta üretilen, AsyncStorage'da kalıcı UUID.
-/// `machineId` null ise cihaz henüz eşlenmemiş — pairing ekranı gerekir.
+/// Allowlist modeli: tablet `announce` eder → PENDING → admin onaylar+atar → APPROVED.
+/// `machineId` = atandığı makine (atıf + cihaz çözümü); null = atanmamış.
 /// Cihaz değişmedikçe operatör değişse bile hangi makinede işlendiği bilinir.
 model Device {
   id         String @db.Uuid    @id @default(uuid())
@@ -436,6 +434,8 @@ model Device {
   machineId  String? @db.Uuid
   lastSeenAt DateTime?
   isActive   Boolean   @default(true)
+  /// Allowlist durumu: PENDING (yeni, atama bekliyor) / APPROVED (onaylı + kullanır).
+  status     DeviceStatus @default(PENDING)
 
   // Relations
   machine     Machine?           @relation(fields: [machineId], references: [id])
@@ -445,58 +445,14 @@ model Device {
   updatedAt DateTime @updatedAt
 
   @@index([machineId])
+  @@index([status])
   @@map("devices")
-}
-
-/// Makineye bağlı SAHA DONANIM konfigürasyonu (yazıcı + RS232 ara cihazları).
-/// Tablet pairing'i tutan `Device`'tan AYRI: bu, makinenin yanındaki etiket
-/// yazıcısı + RS232 köprü cihazlarının (kantar/metre okuyucu vb.) ağ/MAC
-/// bilgisi + gelen veriyi çözen regex DESENLERİDİR. AMAÇ: aylar sonra "nerede
-/// ne kullanmışız" dokümantasyonu + cihaz/kodlama değişince koda dokunmadan
-/// seçimle (desen) davranışı değiştirebilme. Faz-1 donanım SİMÜLE; bu tablo
-/// konfigürasyon/dokümantasyon kaydıdır. Makine başına tek kayıt (1:1).
-model MachineHardware {
-  id        String @db.Uuid @id @default(uuid())
-  machineId String @db.Uuid @unique
-
-  // Etiket yazıcısı
-  printerIp  String? @db.VarChar(64) // örn 192.168.1.50
-  printerMac String? @db.VarChar(32) // örn 00:23:09:01:15:01
-
-  // RS232 ara cihazları (MAC) — kq: 1. cihaz, mt: 2. cihaz (2 kanal)
-  kqMac  String? @db.VarChar(32)
-  mtMac  String? @db.VarChar(32)
-  mtMac2 String? @db.VarChar(32)
-
-  // Gelen veriyi çözen regex desenleri (cihaz/kodlama değişince burada güncellenir)
-  kqPattern  String? @db.VarChar(255)
-  mtPattern  String? @db.VarChar(255)
-  mtPattern2 String? @db.VarChar(255)
-
-  notes    String? @db.VarChar(500)
-  isActive Boolean @default(true)
-
-  // Yazıcı modeli + etiket format profili (model değişse de tanımlar kalıcı
-  // katalogda; bu makine sadece REFERANS tutar). formatProfileId boş → model default'u.
-  printerModelId  String?             @db.Uuid
-  printerModel    PrinterModel?       @relation(fields: [printerModelId], references: [id], onDelete: Restrict)
-  formatProfileId String?             @db.Uuid
-  formatProfile   LabelFormatProfile? @relation(fields: [formatProfileId], references: [id], onDelete: Restrict)
-
-  machine Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([printerModelId])
-  @@index([formatProfileId])
-  @@map("machine_hardware")
 }
 
 /// Yazıcı modeli kataloğu — termal yazıcı tanımları (Argox OS 214 plus vb.).
 /// "Format/komut tanımları yazıcı değişse de kaybolmasın" = modeller + profiller
-/// kalıcı tablo; MachineHardware yalnız referans. Faz-1: RASTER_HTML fiziksel
-/// basar, PPLA üretilir (gönderim simüle).
+/// kalıcı tablo; PeripheralDevice yalnız referans tutar. Faz-1: RASTER_HTML
+/// fiziksel basar, PPLA üretilir (gönderim simüle).
 model PrinterModel {
   id           String          @db.Uuid @id @default(uuid())
   code         String          @unique @db.VarChar(48) // "ARGOX_OS214_PLUS"
@@ -511,7 +467,6 @@ model PrinterModel {
   defaultProfileId String?             @db.Uuid
   defaultProfile   LabelFormatProfile? @relation("ModelDefaultProfile", fields: [defaultProfileId], references: [id], onDelete: SetNull)
 
-  hardware    MachineHardware[]
   peripherals PeripheralDevice[]
 
   createdAt DateTime @default(now())
@@ -538,7 +493,6 @@ model LabelFormatProfile {
   orientation LabelOrientation @default(PORTRAIT)
   isActive    Boolean          @default(true)
 
-  hardware         MachineHardware[]
   defaultForModels PrinterModel[]    @relation("ModelDefaultProfile")
   peripherals      PeripheralDevice[]
 
@@ -554,7 +508,7 @@ model LabelFormatProfile {
 /// veya languageOverride), format profilini ve şablon yönlendirmesini taşır →
 /// baskı anında cihaz→{dil,profil,şablon} çözülür. Sahiplik tam-biri: makineye
 /// SABİT (machineId) VEYA tablete-BAĞLI (deviceId, BT yazıcı tabletle gezer).
-/// `MachineHardware` korunur (geri uyum); bu tablo onun yerine GEÇMEZ, üstüne gelir.
+/// Saha donanımının TEK kaynağı — eski `MachineHardware` emekliye ayrıldı.
 model PeripheralDevice {
   id   String @db.Uuid @id @default(uuid())
   code String @unique @db.VarChar(48)
@@ -566,6 +520,16 @@ model PeripheralDevice {
   address         String? @db.VarChar(128) // IP / MAC / COM yolu / BLE UUID
   port            Int? // NETWORK_TCP (null → 9100 kullanımda)
   identifyPattern String? @db.VarChar(255) // SCALE/METER veri çözüm regex'i
+
+  // --- Giriş cihazı (SCALE/METER) okuma protokolü — davranış tamamen VERİ ---
+  pollCommand String?  @db.VarChar(64) // İstek-cevap sorgu komutu (boş = sadece dinle)
+  terminator  String?  @db.VarChar(8) // Yanıt satır sonu (örn "\r\n"); boş → herhangi CR/LF
+  decimals    Int? // Codec yuvarlama hassasiyeti (boş → 1)
+  scale       Decimal? @db.Decimal(10, 4) // Ham → mühendislik çarpanı (cm→m: 0.01); boş → 1
+  unit        String?  @db.VarChar(8) // "m" / "kg"
+  timeoutMs   Int? // Okuma zaman aşımı ms (boş → 2500)
+  role        String?  @db.VarChar(24) // Makine içi ayraç: "2-KAT" / "4-KAT" / "PRIMARY"
+  simulate    Boolean  @default(false) // Per-cihaz simülasyon (gerçek I/O yerine sahte değer)
 
   // Sahiplik — tam biri (serviste enforce edilir).
   machineId String?  @db.Uuid
@@ -615,25 +579,11 @@ model PeripheralTemplateRoute {
   @@map("peripheral_template_routes")
 }
 
-/// Tablet eşleştirmesi için admin tarafından üretilen tek seferlik 6 haneli kod.
-/// `expiresAt` sonrası geçersiz; `usedAt` doldurulduğunda yeniden kullanılamaz.
-model PairingCode {
-  code         String    @id @db.VarChar(50) // 6 haneli (000000-999999)
-  machineId    String @db.Uuid
-  deviceName   String    @db.VarChar(100) // Eşleşmeden önce admin'in girdiği etiket
-  createdById  String? @db.Uuid
-  expiresAt    DateTime
-  usedAt       DateTime?
-  usedDeviceId String?
-
-  machine   Machine @relation(fields: [machineId], references: [id])
-  createdBy User?   @relation("PairingCodeCreatedBy", fields: [createdById], references: [id])
-
-  createdAt DateTime @default(now())
-
-  @@index([machineId])
-  @@index([expiresAt])
-  @@map("pairing_codes")
+/// Tablet allowlist durumu — PairingCode (6-haneli kod) emekliye ayrıldı; cihaz
+/// kimliği artık `Device.status` (announce → PENDING → admin onayı → APPROVED).
+enum DeviceStatus {
+  PENDING
+  APPROVED
 }
 
 model Route {

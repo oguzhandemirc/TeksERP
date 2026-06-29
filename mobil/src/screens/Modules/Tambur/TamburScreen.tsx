@@ -33,8 +33,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenChrome from '../../../components/ScreenChrome';
 import CutActionBar from './CutActionBar';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
-import { useBtMeterStore, meterDeviceFor } from '../../../store/btMeterStore';
-import { isBtMeterSupported, readMeter } from '../../../services/btMeter.service';
+import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
+import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
 import RefreshButton from '../../../components/RefreshButton';
 import RemoteListSheet from '../../../components/RemoteListSheet';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
@@ -254,12 +254,10 @@ export default function TamburScreen() {
   // kapalı). Kapalıyken aşan giriş engellenir; açıkken aşımda onay diyaloğu çıkar
   // (parmak hatası koruması) ve onaylanınca backend kabul eder (parent tamamen tüketilir).
   const overQuantityEnabled = useTamburOverQuantityEnabled();
-  // 2-kat / 4-kat makine metre okuyucuları (HC-06 / BT). Otomatik kesimde foldType'a
-  // göre ilgili makineden okunur; cihaz yoksa veya okuma hatasıysa simülasyona düşülür.
-  const meterDevice2Kat = useBtMeterStore((s) => s.device2Kat);
-  const meterDevice4Kat = useBtMeterStore((s) => s.device4Kat);
-  const meterPollCommand = useBtMeterStore((s) => s.pollCommand);
-  const meterSimulationEnabled = useBtMeterStore((s) => s.simulationEnabled);
+  // 2-kat / 4-kat metre cihazları — tabletin atandığı makineden backend çözer
+  // (admin Cihaz Kaydı'nda tanımlar). foldType→role ile seçilir; cihazın `simulate`
+  // bayrağı açıksa sahte, değilse HAL (BT/HC-06) ile gerçek okuma.
+  const meterPeripherals = useMachinePeripherals('METER');
   // "Kes" (otomatik) → makineden okuma uçuşurken footer'ı kilitle (çift-tık koruması).
   const [measuring, setMeasuring] = useState(false);
   // Aşım onayı bekleyen kesim — onaylanınca onConfirm() çalışır (ilgili mutate).
@@ -1052,36 +1050,43 @@ export default function TamburScreen() {
   // 2-KAT → 2-kat makinesi, 4-KAT → 4-kat makinesi.
   const measureFromMachine = async (remaining: number): Promise<number | null> => {
     const katLabel = work.foldType === '4-KAT' ? '4 Kat' : '2 Kat';
-    // Açık simülasyon modu (test / donanımsız geliştirme).
-    if (meterSimulationEnabled) {
+    const sim = () => {
       const lo = Math.min(5, remaining);
       const hi = Math.min(80, remaining);
       return Math.round((lo + Math.random() * (hi - lo)) * 10) / 10;
-    }
-    // Gerçek mod (varsayılan): makineden oku; başarısızsa null (kesim iptal).
-    if (!isBtMeterSupported()) {
+    };
+    const p = meterPeripheralFor(meterPeripherals, work.foldType);
+    if (!p) {
       Toast.show({
         type: 'error',
-        text1: 'Bluetooth bu derlemede yok',
-        text2: 'Makine okuması için native build gerekir; ya da Ayarlar’dan simülasyonu açın.',
+        text1: `${katLabel} metresi tanımlı değil`,
+        text2: 'Admin → Cihaz Kaydı’ndan bu makineye METER cihazı (role) ekleyin.',
         visibilityTime: 6000,
       });
       return null;
     }
-    const device = meterDeviceFor({ device2Kat: meterDevice2Kat, device4Kat: meterDevice4Kat }, work.foldType);
-    if (!device) {
+    // Cihazın simülasyon bayrağı açıksa (admin) sahte değer (test/donanımsız).
+    if (p.simulate) return sim();
+
+    const io = buildIoFromPeripheral(p);
+    if (!io.supported || !io.transport || !io.codec) {
       Toast.show({
         type: 'error',
-        text1: `${katLabel} makinesi seçili değil`,
-        text2: 'Ayarlar → Metre Makineleri’nden seçin (ya da simülasyonu açın).',
+        text1: `${katLabel} metresi okunamıyor`,
+        text2: 'Bu derlemede/bağlantı türünde desteklenmiyor (native build / connectionType).',
         visibilityTime: 6000,
       });
       return null;
     }
     try {
-      const v = await readMeter(device.address, { pollCommand: meterPollCommand });
-      if (Number.isFinite(v) && v > 0) return Math.round(v * 10) / 10;
-      throw new Error('Geçersiz okuma');
+      const raw = await io.transport.read({
+        pollCommand: p.pollCommand ?? undefined,
+        terminator: p.terminator ?? undefined,
+        timeoutMs: p.timeoutMs ?? undefined,
+      });
+      const v = io.codec.decode(raw);
+      if (v != null && v > 0) return v;
+      throw new Error('Geçerli metre yanıtı gelmedi');
     } catch (e) {
       Toast.show({
         type: 'error',

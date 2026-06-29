@@ -14,8 +14,8 @@
 // (scripts/test_printer_transport.ts). Fiziksel baskı sahada gerçek Argox ile teyit.
 // =============================================================================
 
-import net from "net";
 import { PrinterLanguage } from "@prisma/client";
+import { sendOverTcp, DEFAULT_TCP_PORT, DEFAULT_TIMEOUT_MS } from "./device-transport";
 
 export interface PrinterTransportResult {
   /** Gerçekten yazıcıya yazıldı mı (Faz-2, ayar açık + IP var + bağlantı OK). */
@@ -31,38 +31,7 @@ export interface PrinterTransportResult {
   note: string;
 }
 
-const DEFAULT_PORT = 9100;
-const DEFAULT_TIMEOUT_MS = 5000;
-
-/** Ham native baytları yazıcıya RAW TCP ile yaz. PPLA/ZPL latin1/binary kodlanır. */
-function sendOverTcp(
-  content: string,
-  host: string,
-  port: number,
-  timeoutMs: number,
-): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const buf = Buffer.from(content, "latin1");
-    const socket = new net.Socket();
-    let settled = false;
-    const finish = (err?: Error) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      if (err) reject(err);
-      else resolve(buf.length);
-    };
-    socket.setTimeout(timeoutMs);
-    socket.once("error", (e) => finish(e instanceof Error ? e : new Error(String(e))));
-    socket.once("timeout", () => finish(new Error("Yazıcı bağlantısı zaman aşımı")));
-    socket.connect(port, host, () => {
-      socket.write(buf, () => {
-        // Yazıcının buffer'ı boşaltması için end ile nazik kapanış.
-        socket.end(() => finish());
-      });
-    });
-  });
-}
+const DEFAULT_PORT = DEFAULT_TCP_PORT;
 
 /**
  * Native komut gönderimini yönet — Faz-1 simüle / Faz-2 gerçek.

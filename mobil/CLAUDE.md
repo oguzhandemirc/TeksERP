@@ -45,9 +45,13 @@ src/
 - **HID Tarayıcılar:** Android'de sistem klavyesi olarak çalışır, ek kütüphane gerekmez
 - **Simülasyon:** `src/services/bluetooth.service.ts` içinde mock mod
 
-### COM Port / Kantar
-- **Faz 1'de tamamen simüle edilir.** Gerçek bağlantı ASLA implemente edilmez.
-- Simülasyon: `src/services/hardware.service.ts` → rastgele ağırlık üretir
+### Saha cihazları (HAL — metre/kantar/yazıcı)
+- **Donanım = VERİ.** Cihazlar backend `PeripheralDevice`'ta (admin → Cihaz Kaydı): kind/connectionType/address + protokol (pollCommand/terminator/identifyPattern/decimals/scale/role) + per-cihaz `simulate`. Tablette device-local seçim YOK.
+- **HAL** (`src/services/hal/`): `btClassic.transport` (BT-Classic/HC-06 oku/yaz) + `meter.codec`; `hooks/usePeripheralIO.buildIoFromPeripheral(row)` bir cihaz satırından transport+codec kurar.
+- **Çözümleme:** `hooks/useMachinePeripherals('METER'|'SCALE')` → tabletin atandığı makinenin cihazları (`GET /peripherals/for-device`); `meterPeripheralFor(rows, foldType)` role ile seçer. Örnek: Tambur 2/4-kat metre.
+- **Simülasyon** cihazın `simulate` bayrağıyla (admin, seed'de METER/SCALE için `true`) — gerçek I/O opt-in; donanım yoksa/cihaz yoksa NET HATA (sessiz sahte yok).
+- `src/services/hardware.service.ts` (eski mock readWeight/readMeterage) yalnız KK1'de kaldı — follow-up'ta HAL'e taşınacak. Yeni okuma kodu HAL'i kullanır.
+- **Kural:** Faz-1 simülasyon disiplini sürer ama **simülasyon artık per-cihaz veri bayrağıdır**, kodda gömülü "ASLA" değil.
 
 ## Allowed Packages
 

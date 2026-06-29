@@ -13,7 +13,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { dispatchNativeSend } from "./helpers/printer-transport";
 import { readLabelNativeSendEnabled } from "./system-setting.service";
-import { LabelKind, ConnectionType, PrinterLanguage } from "@prisma/client";
+import { LabelKind, ConnectionType, PrinterLanguage, PeripheralKind } from "@prisma/client";
 import type { ApiResponse } from "../types/api.types";
 
 const PERIPHERAL_TABLE = "PERIPHERAL_DEVICE";
@@ -47,6 +47,19 @@ export class PeripheralDeviceService extends BaseService {
     if (data.port !== undefined && data.port !== null) {
       const p = Number(data.port);
       if (!Number.isInteger(p) || p <= 0 || p > 65535) throw AppError.badRequest("Port 1-65535 arası olmalı");
+    }
+    // Giriş cihazı (SCALE/METER) protokol alanları — additive, hepsi opsiyonel.
+    if (data.decimals !== undefined && data.decimals !== null) {
+      const d = Number(data.decimals);
+      if (!Number.isInteger(d) || d < 0 || d > 4) throw AppError.badRequest("Ondalık 0-4 arası olmalı");
+    }
+    if (data.timeoutMs !== undefined && data.timeoutMs !== null) {
+      const t = Number(data.timeoutMs);
+      if (!Number.isInteger(t) || t < 100 || t > 30000) throw AppError.badRequest("Zaman aşımı 100-30000 ms arası olmalı");
+    }
+    if (data.scale !== undefined && data.scale !== null) {
+      const s = Number(data.scale);
+      if (!Number.isFinite(s) || s <= 0) throw AppError.badRequest("Ölçek (scale) pozitif olmalı");
     }
     if (typeof data.printerModelId === "string" && data.printerModelId) {
       const m = await prisma.printerModel.findFirst({ where: { id: data.printerModelId, isActive: true }, select: { id: true } });
@@ -177,6 +190,22 @@ export class PeripheralDeviceService extends BaseService {
       code = `${base}-${i}`;
     }
     return `${base}-${Date.now()}`;
+  }
+
+  /**
+   * Tablet auto-discovery: bir makineye SABİT, belirli türdeki AKTİF cihazları döner
+   * (protokol alanları dahil). Tablet `req.device.machineId`'sine göre kendi metre/
+   * kantar/yazıcılarını çözer — machineId yoksa boş liste (sim/manuel'e düşer).
+   */
+  async getForDevice(machineId: string | null | undefined, kind: string): Promise<ApiResponse<unknown[]>> {
+    if (!machineId) return { success: true, data: [] };
+    const validKind = Object.values(PeripheralKind).includes(kind as PeripheralKind);
+    if (!validKind) throw AppError.badRequest("Geçersiz cihaz türü (kind)");
+    const rows = await prisma.peripheralDevice.findMany({
+      where: { machineId, kind: kind as PeripheralKind, isActive: true },
+      orderBy: { createdAt: "asc" },
+    });
+    return { success: true, data: rows };
   }
 
   /** Bağlantı testi: NETWORK_TCP → gerçek/simüle gönderim; diğerleri cihaz tarafı. */

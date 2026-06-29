@@ -414,54 +414,32 @@ async function main() {
   });
   console.log("✅ Yazıcı modeli (Argox OS 214 plus, PPLA) + 2 etiket format profili");
 
-  // --- Makine donanımı (saha yazıcı + RS232 ara cihaz config örnekleri) ---
-  // Dokümantasyon + cihaz/kodlama seçimi. Faz-1 donanım SİMÜLE; bu kayıtlar örnek.
+  // --- Saha donanımı: makineye-bağlı yazıcılar (PeripheralDevice, NETWORK_TCP) ---
+  // MachineHardware emekli; saha donanımının TEK kaynağı PeripheralDevice. Faz-1
+  // gönderim simüle. KK1/KK2 yazıcıları burada; Tambur yazıcısı aşağıda (TAMBUR-ARGOX-01).
   const seededMachines = await prisma.machine.findMany({
     where: { code: { in: ["KK1-M1", "KK2-M1", "TAMBUR-M1"] } },
     select: { id: true, code: true },
   });
   const mById = (code: string) => seededMachines.find((m) => m.code === code)?.id;
-  const hwData = [
-    {
-      code: "KK1-M1",
-      printerIp: "192.168.1.50",
-      printerMac: "00:23:09:01:15:01",
-      kqMac: "00:23:09:01:1D:17",
-      mtMac: "00:23:09:01:1D:17",
-      kqPattern: "(\\d+(?:\\.\\d+)?)",
-      mtPattern: "y",
-      notes: "KK1 — kantar + metre okuyucu (örnek config)",
-    },
-    {
-      code: "KK2-M1",
-      printerIp: "192.168.1.51",
-      printerMac: "00:23:09:01:AB:B9",
-      kqMac: "00:23:09:01:37:89",
-      mtMac: "00:23:09:01:37:89",
-      notes: "KK2/Kurşun — yazıcı + tek RS232 köprü",
-    },
-    {
-      code: "TAMBUR-M1",
-      printerIp: "192.168.1.52",
-      printerMac: "00:23:09:01:A6:87",
-      kqMac: "00:23:09:01:19:C7",
-      mtMac: "00:23:09:01:05:5E",
-      mtMac2: "00:23:09:01:1E:1B",
-      notes: "Tambur — 2 kanal metre okuyucu",
-    },
+  const stationPrinters = [
+    { code: "KK1-ARGOX-01", name: "KK1 Argox (ağ)", machineCode: "KK1-M1", address: "192.168.1.50" },
+    { code: "KK2-ARGOX-01", name: "KK2 Argox (ağ)", machineCode: "KK2-M1", address: "192.168.1.51" },
   ];
-  for (const h of hwData) {
-    const machineId = mById(h.code);
+  for (const sp of stationPrinters) {
+    const machineId = mById(sp.machineCode);
     if (!machineId) continue;
-    const { code: _c, ...rest } = h;
-    void _c;
-    await prisma.machineHardware.create({
-      data: { machineId, ...rest, printerModelId: argox.id, formatProfileId: argoxProfile.id },
+    await prisma.peripheralDevice.create({
+      data: {
+        code: sp.code, name: sp.name, kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP",
+        address: sp.address, port: 9100, machineId,
+        printerModelId: argox.id, formatProfileId: argoxProfile.id,
+      },
     });
   }
-  console.log(`✅ ${hwData.length} makine donanım config (örnek yazıcı/RS232 desenleri)`);
+  console.log(`✅ ${stationPrinters.length} istasyon yazıcısı (PeripheralDevice, NETWORK_TCP)`);
 
-  // --- Birleşik cihaz kaydı (PeripheralDevice) — örnek ağ yazıcısı ---
+  // --- Birleşik cihaz kaydı (PeripheralDevice) — Tambur ağ yazıcısı ---
   // Tambur makinesine bağlı Argox ağ yazıcısı (NETWORK_TCP). Baskı anında
   // label.service cihaz→{dil,profil,şablon} çözer. Mobil BT yazıcılar sahada
   // register-bt ile kendiliğinden eklenir.
@@ -490,6 +468,44 @@ async function main() {
       });
     }
     console.log("✅ Örnek cihaz kaydı (Tambur Argox, NETWORK_TCP, PPLA)");
+  }
+
+  // --- Saha giriş cihazları (PeripheralDevice: METER / SCALE) — RS232→HC-06 (BT) ---
+  // Tambur: 2-kat + 4-kat metre okuyucu (foldType→role ile seçilir). KK1: kantar.
+  // Faz-1 simüle (simulate=true); MAC/protokol örnek — sahada Cihaz Kaydı'ndan düzenlenir.
+  const kk1MachineId = mById("KK1-M1");
+  if (tamburMachineId) {
+    await prisma.peripheralDevice.createMany({
+      data: [
+        {
+          code: "TAMBUR-METRE-2KAT", name: "Tambur 2 Kat Metre",
+          kind: "METER", connectionType: "BLUETOOTH_SPP",
+          address: "00:23:09:01:05:5E", role: "2-KAT",
+          terminator: "\r\n", decimals: 1, unit: "m", timeoutMs: 2500, simulate: true,
+          machineId: tamburMachineId,
+        },
+        {
+          code: "TAMBUR-METRE-4KAT", name: "Tambur 4 Kat Metre",
+          kind: "METER", connectionType: "BLUETOOTH_SPP",
+          address: "00:23:09:01:1E:1B", role: "4-KAT",
+          terminator: "\r\n", decimals: 1, unit: "m", timeoutMs: 2500, simulate: true,
+          machineId: tamburMachineId,
+        },
+      ],
+    });
+    console.log("✅ Tambur 2-kat/4-kat metre cihazları (METER, BT-SPP, role)");
+  }
+  if (kk1MachineId) {
+    await prisma.peripheralDevice.create({
+      data: {
+        code: "KK1-KANTAR", name: "KK1 Kantar",
+        kind: "SCALE", connectionType: "BLUETOOTH_SPP",
+        address: "00:23:09:01:1D:17",
+        decimals: 2, unit: "kg", timeoutMs: 2500, simulate: true,
+        machineId: kk1MachineId,
+      },
+    });
+    console.log("✅ KK1 kantar cihazı (SCALE, BT-SPP)");
   }
 
   // --- İstasyon yetenekleri ---

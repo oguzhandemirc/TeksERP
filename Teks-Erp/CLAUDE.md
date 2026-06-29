@@ -48,7 +48,7 @@ JWT_SECRET="..."
 - `controllers/` (19 dosya) — HTTP layer, Zod validate, service çağırır
 - `services/` (33 dosya + `helpers/` + `reports/`) — iş mantığı, transaction, `AuditService.log()`
 - `routes/` (38 dosya + `reports/`) — Swagger JSDoc + `verifyToken` + `requirePermission`
-- `middlewares/` — `auth` (verifyToken), `rbac` (requirePermission), `error` (AppError + Prisma + Zod mapping), `device` (mobil pairing/token), `uuid-param` (UUID path validate)
+- `middlewares/` — `auth` (verifyToken), `rbac` (requirePermission), `error` (AppError + Prisma + Zod mapping), `device` (mobil allowlist/atama: x-device-id → req.device.machineId), `uuid-param` (UUID path validate)
 - `prisma/schema.prisma` — 66 model, 23 enum, `@prisma/adapter-pg`
 
 **Master Data CRUD** için yeni kod yazmadan `BaseController` + `BaseService` kullan (`searchFields` config'i yeterli). Detay: ARCHITECTURE.md §8.1.

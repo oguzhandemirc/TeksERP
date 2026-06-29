@@ -8,12 +8,12 @@ import { useDeviceStore } from '../store/deviceStore';
 import { useBaseUrlStore } from '../store/baseUrlStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { useBtPrinterStore } from '../store/btPrinterStore';
-import { useBtMeterStore } from '../store/btMeterStore';
 import { setUnauthorizedHandler } from '../services/api';
 import { deviceService } from '../services/device.service';
+import { getOrCreateDeviceId } from '../utils/deviceId';
 import { usePermissions } from '../hooks/usePermission';
 import LoginScreen from '../screens/Auth/LoginScreen';
-import PairingScreen from '../screens/Auth/PairingScreen';
+import AwaitingAssignmentScreen from '../screens/Auth/AwaitingAssignmentScreen';
 import NoAccessScreen from '../screens/Common/NoAccessScreen';
 import SettingsScreen from '../screens/Common/SettingsScreen';
 import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
@@ -25,42 +25,65 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function RootNavigator() {
   const { user, isLoading: authLoading, loadStoredAuth, clearAuth } = useAuthStore();
   const {
-    paired,
     isLoading: deviceLoading,
     init: initDevice,
+    setPaired,
+    clearPairing,
   } = useDeviceStore();
   const initBaseUrl = useBaseUrlStore((s) => s.init);
   const baseUrlLoaded = useBaseUrlStore((s) => s.isLoaded);
   const initDeviceSettings = useDeviceSettingsStore((s) => s.init);
   const initBtPrinter = useBtPrinterStore((s) => s.init);
-  const initBtMeter = useBtMeterStore((s) => s.init);
   const { hasAnyMobileScreen } = usePermissions();
 
-  // Cihaz eşleştirmesi zorunlu mu? Public gate (login öncesi okunur). React Query
-  // cache'i AsyncStorage'a persist edilir → son bilinen değer offline'da da geçerli.
-  // Yüklenene kadar / hata halinde false (pasif): boot'u bloklamayız, operatör
-  // doğrudan Login'e ulaşır. Eşleşmiş cihaz zaten `paired` ile Pairing'i atlar.
-  const pairingRequired =
+  // Cihaz onayı/ataması zorunlu mu? Public gate (login öncesi). false (default) →
+  // pasif; tablet onaysız da Login'e geçer (atıf null). Hata/erişimsizlikte false.
+  const assignmentRequired =
     useQuery({
-      queryKey: ['device', 'pairing-required'],
-      queryFn: deviceService.getPairingRequired,
+      queryKey: ['device', 'assignment-required'],
+      queryFn: deviceService.getAssignmentRequired,
       staleTime: 5 * 60 * 1000,
     }).data ?? false;
+
+  // Atama durumu — zorunluyken APPROVED olana kadar poll'lanır.
+  const assignment = useQuery({
+    queryKey: ['device', 'status'],
+    queryFn: deviceService.getStatus,
+    enabled: assignmentRequired,
+    refetchInterval: (q) => (q.state.data?.status === 'APPROVED' ? false : 5000),
+  }).data;
 
   useEffect(() => {
     void initBaseUrl();
     void initDevice();
     void initDeviceSettings();
     void initBtPrinter();
-    void initBtMeter();
     loadStoredAuth();
+    // Tablet kendini bildirir (bilinmiyorsa PENDING kaydı açılır → admin onaylar+atar).
+    void getOrCreateDeviceId().then((deviceId) =>
+      deviceService.announce({ deviceId }).catch(() => undefined),
+    );
     setUnauthorizedHandler(() => {
-      // 401 → sadece kullanıcıyı çıkar, eşleşmeyi koru. Cihaz pasifleştirilirse
-      // login ekranında "Cihaz pasif" hatası görünür; admin aktif yapınca operatör
-      // yeniden login olup devam eder — eşleşme kodu sorulmaz.
+      // 401 → sadece kullanıcıyı çıkar, atamayı koru.
       void clearAuth();
     });
   }, []);
+
+  // SettingsScreen gösterimi için `paired`'ı atama durumundan senkronla.
+  useEffect(() => {
+    if (assignment?.status === 'APPROVED' && assignment.machineId) {
+      void setPaired({
+        id: assignment.machineId,
+        code: assignment.machineCode ?? '',
+        name: assignment.machineName ?? '',
+        stationId: assignment.stationId ?? '',
+        stationName: assignment.stationName ?? '',
+      });
+    } else if (assignment && assignment.status !== 'APPROVED') {
+      void clearPairing();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignment?.status, assignment?.machineId]);
 
   if (authLoading || deviceLoading || !baseUrlLoaded) {
     return (
@@ -80,8 +103,8 @@ export default function RootNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
-        {!paired && pairingRequired ? (
-          <Stack.Screen name="Pairing" component={PairingScreen} />
+        {assignmentRequired && assignment?.status !== 'APPROVED' ? (
+          <Stack.Screen name="Pairing" component={AwaitingAssignmentScreen} />
         ) : !user ? (
           <Stack.Screen name="Login" component={LoginScreen} />
         ) : !hasAnyMobileScreen ? (

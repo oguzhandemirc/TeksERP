@@ -23,6 +23,15 @@ export interface PeripheralDevice {
   address: string | null;
   port: number | null;
   identifyPattern: string | null;
+  // Giriş cihazı (SCALE/METER) okuma protokolü
+  pollCommand: string | null;
+  terminator: string | null;
+  decimals: number | null;
+  scale: number | string | null;
+  unit: string | null;
+  timeoutMs: number | null;
+  role: string | null;
+  simulate: boolean;
   machineId: string | null;
   deviceId: string | null;
   printerModelId: string | null;

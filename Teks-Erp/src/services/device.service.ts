@@ -1,314 +1,178 @@
 // =============================================================================
-// TeksERP - Device Service (Tablet ↔ Makine eşleştirmesi)
+// TeksERP - Device Service (Tablet allowlist + atama)
+// =============================================================================
+// Eski 6-haneli PairingCode akışı KALDIRILDI. Yeni model: tablet boot'ta kendi
+// kalıcı deviceId'sini `announce` eder → bilinmiyorsa PENDING kaydı açılır → admin
+// "Onayla & Ata" ile APPROVED yapıp bir makineye bağlar → tablet otomatik çalışır.
+// İstasyon makineden türetilir. `resolveDevice` yalnız APPROVED+aktif cihaza
+// machineId döner (atıf), aksi null (bugünkü eşleşmemiş davranışı).
 // =============================================================================
 
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 
-const PAIRING_CODE_TTL_MS = 10 * 60 * 1000; // 10 dk
+const DEVICE_INCLUDE = {
+  machine: {
+    select: { id: true, code: true, name: true, station: { select: { id: true, name: true } } },
+  },
+} as const;
 
-function generatePairingCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+type DeviceWithMachine = {
+  status: string;
+  isActive: boolean;
+  machineId: string | null;
+  machine: { id: string; code: string; name: string; station: { id: string; name: string } | null } | null;
+};
+
+function toAssignment(d: DeviceWithMachine) {
+  const station = d.machine?.station ?? null;
+  return {
+    status: d.isActive ? d.status : "INACTIVE",
+    machineId: d.machineId,
+    machineCode: d.machine?.code ?? null,
+    machineName: d.machine?.name ?? null,
+    stationId: station?.id ?? null,
+    stationName: station?.name ?? null,
+  };
 }
 
 export class DeviceService {
-  /**
-   * Admin: tüm cihazları listele.
-   */
+  /** Admin: tüm cihazları listele (PENDING'ler önce). */
   static async list() {
     return prisma.device.findMany({
-      orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
-      include: {
-        machine: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            station: { select: { id: true, name: true } },
-          },
-        },
-      },
+      orderBy: [{ status: "asc" }, { isActive: "desc" }, { createdAt: "desc" }],
+      include: DEVICE_INCLUDE,
     });
   }
 
   /**
-   * Admin: yeni pairing kodu üret. Üretildiği anda valid; 10 dk içinde kullanılmazsa expire.
+   * Mobil (public): tablet boot'ta deviceId'sini bildirir. Bilinmiyorsa PENDING
+   * açılır (admin onaylar). Var olan → lastSeen güncellenir; mevcut atama döner.
    */
-  static async createPairingCode(input: {
-    machineId: string;
-    deviceName: string;
-    createdById?: string;
-  }) {
-    const machine = await prisma.machine.findUnique({
-      where: { id: input.machineId },
-      select: { id: true, isActive: true },
+  static async announce(input: { deviceId: string; name?: string }) {
+    const deviceId = (input.deviceId ?? "").trim();
+    if (!deviceId) throw AppError.badRequest("deviceId zorunlu");
+    const fallbackName = input.name?.trim() || `Tablet ${deviceId.slice(0, 8)}`;
+    const device = await prisma.device.upsert({
+      where: { deviceId },
+      create: { deviceId, name: fallbackName, status: "PENDING", isActive: true, lastSeenAt: new Date() },
+      update: { lastSeenAt: new Date() },
+      include: DEVICE_INCLUDE,
     });
-    if (!machine || !machine.isActive) {
-      throw AppError.notFound("Makine bulunamadı veya pasif");
-    }
-
-    // Çakışma riski düşük (6 hane, max ~birkaç aktif kod), retry ile garanti.
-    for (let i = 0; i < 5; i++) {
-      const code = generatePairingCode();
-      const existing = await prisma.pairingCode.findUnique({ where: { code } });
-      if (existing) continue;
-      const created = await prisma.pairingCode.create({
-        data: {
-          code,
-          machineId: input.machineId,
-          deviceName: input.deviceName,
-          createdById: input.createdById ?? null,
-          expiresAt: new Date(Date.now() + PAIRING_CODE_TTL_MS),
-        },
-      });
-      await AuditService.log({
-        userId: input.createdById,
-        action: "CREATE",
-        tableName: "pairing_codes",
-        recordId: created.code,
-        newData: { machineId: created.machineId, deviceName: created.deviceName },
-      });
-      return created;
-    }
-    throw AppError.internal("Pairing kodu üretilemedi, tekrar deneyin");
+    return toAssignment(device);
   }
 
-  /**
-   * Mobil (public): tablet ilk kurulumda kodu ve kendi deviceId'sini gönderir.
-   * Sonuç: Device kaydı oluşur veya güncellenir, kullanılan kod işaretlenir.
-   */
-  static async pair(input: { deviceId: string; code: string }) {
-    const pairing = await prisma.pairingCode.findUnique({
-      where: { code: input.code },
-      include: {
-        machine: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            isActive: true,
-            station: { select: { id: true, name: true } },
-          },
-        },
-      },
-    });
-
-    if (!pairing) {
-      throw AppError.badRequest("Eşleştirme kodu geçersiz");
-    }
-    if (pairing.usedAt) {
-      throw AppError.badRequest("Eşleştirme kodu zaten kullanılmış");
-    }
-    if (pairing.expiresAt < new Date()) {
-      throw AppError.badRequest("Eşleştirme kodunun süresi dolmuş");
-    }
-    if (!pairing.machine.isActive) {
-      throw AppError.badRequest("Makine pasif durumda");
-    }
-
-    const device = await prisma.$transaction(async (tx) => {
-      // ATOMİK CLAIM: tek-kullanımlık kodu yalnız kullanılmamış + geçerliyken
-      // sahiplen — eşzamanlı iki pair aynı kodu kapatamasın (kod tek cihaza bağlanır).
-      // Pre-tx usedAt kontrolü erken/ucuz reddetme; otoriter claim burada (count===0→409).
-      const claim = await tx.pairingCode.updateMany({
-        where: { code: pairing.code, usedAt: null, expiresAt: { gt: new Date() } },
-        data: { usedAt: new Date() },
-      });
-      if (claim.count === 0) {
-        throw AppError.conflict(
-          "Eşleştirme kodu az önce kullanıldı veya süresi doldu — yeni kod isteyin."
-        );
-      }
-      const upserted = await tx.device.upsert({
-        where: { deviceId: input.deviceId },
-        create: {
-          deviceId: input.deviceId,
-          name: pairing.deviceName,
-          machineId: pairing.machineId,
-          isActive: true,
-          lastSeenAt: new Date(),
-        },
-        update: {
-          name: pairing.deviceName,
-          machineId: pairing.machineId,
-          isActive: true,
-          lastSeenAt: new Date(),
-        },
-      });
-      await tx.pairingCode.update({
-        where: { code: pairing.code },
-        data: { usedDeviceId: upserted.id },
-      });
-      return upserted;
-    });
-
-    await AuditService.log({
-      userId: pairing.createdById ?? undefined,
-      action: "UPDATE",
-      tableName: "devices",
-      recordId: device.id,
-      newData: {
-        deviceId: device.deviceId,
-        machineId: device.machineId,
-        pairedWith: pairing.code,
-      },
-    });
-
-    return {
-      device: {
-        id: device.id,
-        deviceId: device.deviceId,
-        name: device.name,
-      },
-      machine: pairing.machine,
-    };
+  /** Mobil (public): atama durumunu poll'la. Bilinmiyorsa UNKNOWN. */
+  static async getStatus(deviceId: string) {
+    const device = await prisma.device.findUnique({ where: { deviceId }, include: DEVICE_INCLUDE });
+    if (!device) return { status: "UNKNOWN", machineId: null, machineCode: null, machineName: null, stationId: null, stationName: null };
+    return toAssignment(device);
   }
 
-  /**
-   * Admin: cihaz eşleşmesini kaldır (tablet pairing'i tekrar isteyecek).
-   */
-  static async unpair(id: string, userId?: string) {
+  /** Admin: cihazı onayla + (opsiyonel) makineye ata. İstasyon makineden türetilir. */
+  static async approveAndAssign(id: string, input: { machineId?: string | null }, userId?: string) {
     const existing = await prisma.device.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
+    let machineId: string | null = input.machineId ?? null;
+    if (machineId) {
+      const m = await prisma.machine.findFirst({ where: { id: machineId, isActive: true }, select: { id: true } });
+      if (!m) throw AppError.badRequest("Makine bulunamadı veya pasif");
+    }
     const updated = await prisma.device.update({
       where: { id },
-      data: { machineId: null },
+      data: { status: "APPROVED", isActive: true, machineId },
     });
     await AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: "devices",
-      recordId: id,
-      oldData: { machineId: existing.machineId },
-      newData: { machineId: null },
-    });
+      userId, action: "UPDATE", tableName: "devices", recordId: id,
+      oldData: { status: existing.status, machineId: existing.machineId },
+      newData: { status: "APPROVED", machineId },
+    }).catch(() => undefined);
     return updated;
   }
 
-  /**
-   * Admin: pasif cihazı tekrar aktifleştir. machineId sıfır kalır — admin
-   * tabletin tekrar bir makineye eşlenmesini istiyorsa yeni pairing kodu
-   * üretmeli; tablet de o anda pairing ekranında olur (deaktifte 401 yedi).
-   */
+  /** Admin: onayı/atamayı geri al → PENDING (tablet "atama bekleniyor"a düşer). */
+  static async revoke(id: string, userId?: string) {
+    const existing = await prisma.device.findUnique({ where: { id } });
+    if (!existing) throw AppError.notFound("Cihaz bulunamadı");
+    const updated = await prisma.device.update({
+      where: { id }, data: { status: "PENDING", machineId: null },
+    });
+    await AuditService.log({
+      userId, action: "UPDATE", tableName: "devices", recordId: id,
+      oldData: { status: existing.status, machineId: existing.machineId },
+      newData: { status: "PENDING", machineId: null },
+    }).catch(() => undefined);
+    return updated;
+  }
+
+  /** Admin: pasif cihazı tekrar aktifleştir (atama/onay durumu korunur). */
   static async reactivate(id: string, userId?: string) {
     const existing = await prisma.device.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
     if (existing.isActive) throw AppError.badRequest("Cihaz zaten aktif");
-    const updated = await prisma.device.update({
-      where: { id },
-      data: { isActive: true },
-    });
+    const updated = await prisma.device.update({ where: { id }, data: { isActive: true } });
     await AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: "devices",
-      recordId: id,
-      oldData: { isActive: false },
-      newData: { isActive: true },
-    });
+      userId, action: "UPDATE", tableName: "devices", recordId: id,
+      oldData: { isActive: false }, newData: { isActive: true },
+    }).catch(() => undefined);
     return updated;
   }
 
-  /**
-   * Admin: cihazı pasife al (soft delete). Sadece isActive=false; machineId
-   * korunur. Pasif cihaz middleware tarafından 401'lenir; aktifleştirilince
-   * eski makinesine otomatik geri bağlanır. Eşleşmeyi gerçekten koparmak için
-   * ayrı "Eşleşmeyi Kaldır" (unpair) aksiyonu kullanılır.
-   */
+  /** Admin: cihazı pasife al (soft delete; onay/atama korunur, middleware 401'ler). */
   static async deactivate(id: string, userId?: string) {
     const existing = await prisma.device.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
-    const updated = await prisma.device.update({
-      where: { id },
-      data: { isActive: false },
-    });
+    const updated = await prisma.device.update({ where: { id }, data: { isActive: false } });
     await AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: "devices",
-      recordId: id,
-      oldData: { isActive: existing.isActive },
-      newData: { isActive: false },
-    });
+      userId, action: "UPDATE", tableName: "devices", recordId: id,
+      oldData: { isActive: existing.isActive }, newData: { isActive: false },
+    }).catch(() => undefined);
     return updated;
   }
 
-  /**
-   * Admin: cihazı kalıcı olarak sil (hard delete). Sadece eşleşmemiş
-   * (machineId=null) cihazlar silinebilir; aktif eşleşmeli cihaz silinmek
-   * istenirse önce "Eşleşmeyi Kaldır" çağrılmalı. PairingCode.usedDeviceId
-   * FK değil — yalın string olarak audit geçmişinde kalır.
-   */
+  /** Admin: kalıcı sil (yalnız atanmamış — machineId=null). */
   static async hardDelete(id: string, userId?: string) {
     const existing = await prisma.device.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
     if (existing.machineId) {
-      throw AppError.badRequest(
-        "Cihaz şu anda bir makineye eşli. Önce eşleşmeyi kaldırın."
-      );
+      throw AppError.badRequest("Cihaz bir makineye atanmış. Önce atamayı geri alın.");
     }
     await prisma.device.delete({ where: { id } });
     await AuditService.log({
-      userId,
-      action: "DELETE",
-      tableName: "devices",
-      recordId: id,
-      oldData: {
-        deviceId: existing.deviceId,
-        name: existing.name,
-        isActive: existing.isActive,
-      },
-    });
+      userId, action: "DELETE", tableName: "devices", recordId: id,
+      oldData: { deviceId: existing.deviceId, name: existing.name, status: existing.status },
+    }).catch(() => undefined);
     return { id };
   }
 
-  /**
-   * Admin: cihaz adını yeniden adlandır.
-   */
+  /** Admin: cihaz adını yeniden adlandır. */
   static async rename(id: string, name: string, userId?: string) {
     const existing = await prisma.device.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
-    const updated = await prisma.device.update({
-      where: { id },
-      data: { name },
-    });
+    const updated = await prisma.device.update({ where: { id }, data: { name } });
     await AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: "devices",
-      recordId: id,
-      oldData: { name: existing.name },
-      newData: { name },
-    });
+      userId, action: "UPDATE", tableName: "devices", recordId: id,
+      oldData: { name: existing.name }, newData: { name },
+    }).catch(() => undefined);
     return updated;
   }
 
-  // lastSeenAt yazım throttle'ı — resolveDevice her `x-device-id`'li istekte çalışır
-  // (sahada her tarama). Her istekte bir `UPDATE devices SET lastSeenAt` yazmak
-  // küçük-sıcak satırda yazma amplifikasyonu (satır-versiyon churn / ölü tuple /
-  // WAL / autovacuum baskısı) yaratıyordu. lastSeenAt'in saniye hassasiyeti gerekmez
-  // → cihaz başına en fazla THROTTLE_MS'de bir yaz. Map cihaz sayısıyla sınırlı (küçük).
+  // lastSeenAt yazım throttle'ı — resolveDevice her `x-device-id`'li istekte çalışır.
   private static lastSeenWrites = new Map<string, number>();
   private static readonly LAST_SEEN_THROTTLE_MS = 60_000;
 
   /**
-   * Middleware: x-device-id header'ından device + machineId çöz.
-   * lastSeenAt güncellenir (fire-and-forget, cihaz başına throttle'lı).
+   * Middleware: x-device-id → device + machineId çöz. YALNIZ APPROVED + aktif cihaza
+   * atıf döner; PENDING/INACTIVE/bilinmeyen → null (eşleşmemiş davranışı).
+   * lastSeenAt fire-and-forget (cihaz başına throttle'lı).
    */
   static async resolveDevice(deviceId: string) {
     const device = await prisma.device.findUnique({
       where: { deviceId },
-      select: {
-        id: true,
-        deviceId: true,
-        name: true,
-        machineId: true,
-        isActive: true,
-      },
+      select: { id: true, deviceId: true, name: true, machineId: true, isActive: true, status: true },
     });
-    if (!device || !device.isActive) return null;
-    // Fire-and-forget lastSeenAt — son yazımdan THROTTLE_MS geçtiyse yaz, yoksa atla.
+    if (!device || !device.isActive || device.status !== "APPROVED") return null;
     const now = Date.now();
     const lastWrite = DeviceService.lastSeenWrites.get(deviceId) ?? 0;
     if (now - lastWrite > DeviceService.LAST_SEEN_THROTTLE_MS) {

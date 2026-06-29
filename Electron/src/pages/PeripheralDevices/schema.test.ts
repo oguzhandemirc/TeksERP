@@ -54,4 +54,23 @@ describe("buildPeripheralPayload (form → API)", () => {
     expect(finished?.templateId).toBe("t1");
     expect(raw?.templateId).toBeNull();
   });
+
+  it("giriş cihazı protokol alanları: dolu → çevrilir, boş → null/false", () => {
+    const p = buildPeripheralPayload({
+      ...base, decimals: "2", scale: "0.01", timeoutMs: "3000",
+      role: "2-KAT", pollCommand: "R", simulate: true,
+    });
+    expect(p.decimals).toBe(2);
+    expect(p.scale).toBe(0.01);
+    expect(p.timeoutMs).toBe(3000);
+    expect(p.role).toBe("2-KAT");
+    expect(p.pollCommand).toBe("R");
+    expect(p.simulate).toBe(true);
+
+    const e = buildPeripheralPayload({ ...base });
+    expect(e.decimals).toBeNull();
+    expect(e.scale).toBeNull();
+    expect(e.role).toBeNull();
+    expect(e.simulate).toBe(false);
+  });
 });

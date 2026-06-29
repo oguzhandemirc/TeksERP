@@ -37,7 +37,6 @@ const sackIds: string[] = [];
 const templateIds: string[] = [];
 const rollIds: string[] = [];
 const machineIds: string[] = [];
-const codes: string[] = [];
 const deviceLocalIds: string[] = [];
 const userIds: string[] = [];
 
@@ -104,28 +103,18 @@ async function testDeleteErrorAtomic(): Promise<void> {
   check("işlenmemiş kayıt silindi", !gone);
 }
 
-async function testDevicePairAtomic(): Promise<void> {
-  console.log("\n=== 4) device pair atomik claim (eşzamanlı) ===");
-  const station = await prisma.station.findFirst({ where: { isActive: true }, select: { id: true } });
-  if (!station) throw new Error("İstasyon yok (seed)");
-  const machine = await prisma.machine.create({ data: { stationId: station.id, code: `TST-AF-M-${ts}`, name: "TEST AF MAKİNE" }, select: { id: true } });
-  machineIds.push(machine.id);
-  const pc = await DeviceService.createPairingCode({ machineId: machine.id, deviceName: "TEST AF Tablet" });
-  codes.push(pc.code);
-  const d1 = `tst-af-dev-${ts}-1`, d2 = `tst-af-dev-${ts}-2`;
-  deviceLocalIds.push(d1, d2);
-
+async function testDeviceAnnounceIdempotent(): Promise<void> {
+  console.log("\n=== 4) device announce eşzamanlı (idempotent upsert) ===");
+  const dId = `tst-af-dev-${ts}`;
+  deviceLocalIds.push(dId);
   const results = await Promise.allSettled([
-    DeviceService.pair({ deviceId: d1, code: pc.code }),
-    DeviceService.pair({ deviceId: d2, code: pc.code }),
+    DeviceService.announce({ deviceId: dId, name: "TEST AF Tablet" }),
+    DeviceService.announce({ deviceId: dId, name: "TEST AF Tablet" }),
   ]);
   const ok = results.filter((r) => r.status === "fulfilled").length;
-  const rej = results.filter((r) => r.status === "rejected").length;
-  check("tek-kullanımlık kod: 1 başarı + 1 409 (atomik claim)", ok === 1 && rej === 1, `ok=${ok} rej=${rej}`);
-  const used = await prisma.pairingCode.findUnique({ where: { code: pc.code }, select: { usedAt: true, usedDeviceId: true } });
-  check("kod usedAt + tek usedDeviceId işaretlendi", used?.usedAt != null && used?.usedDeviceId != null);
-  const devCount = await prisma.device.count({ where: { deviceId: { in: [d1, d2] } } });
-  check("yalnız kazanan cihaz oluştu (kaybeden upsert'e ulaşmadı)", devCount === 1, `device=${devCount}`);
+  check("eşzamanlı announce: en az 1 başarı", ok >= 1, `ok=${ok}`);
+  const devCount = await prisma.device.count({ where: { deviceId: dId } });
+  check("deviceId unique → tek Device satırı", devCount === 1, `device=${devCount}`);
 }
 
 async function testTokenVersionBump(): Promise<void> {
@@ -151,7 +140,6 @@ async function cleanup(): Promise<void> {
   await prisma.userPermission.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   await prisma.device.deleteMany({ where: { deviceId: { in: deviceLocalIds } } });
-  await prisma.pairingCode.deleteMany({ where: { code: { in: codes } } });
   await prisma.machine.deleteMany({ where: { id: { in: machineIds } } });
   await prisma.rollError.deleteMany({ where: { rollId: { in: rollIds } } });
   await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
@@ -164,7 +152,7 @@ async function main(): Promise<void> {
     await testAmbPartialUnique();
     await testLabelDefaultPartialUnique();
     await testDeleteErrorAtomic();
-    await testDevicePairAtomic();
+    await testDeviceAnnounceIdempotent();
     await testTokenVersionBump();
   } finally {
     await cleanup();
