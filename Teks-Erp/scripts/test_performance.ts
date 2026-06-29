@@ -72,20 +72,22 @@ async function fetchPage(
 async function main(): Promise<void> {
   console.log(`=== Performans SMOKE (${PERF_ROWS} TEST-PERF rol) ===\n`);
 
-  // Seed master-data business-key ile çözülür (hardcoded UUID YOK).
-  const item = await prisma.item.findFirst({
-    where: { isActive: true },
+  // Ürün teste ÖZEL yaratılır (hardcoded UUID YOK). ÖNCEKİ HATA: `findFirst({isActive})`
+  // mevcut bir SEED ürününü seçiyordu; o ürünün ÖNCEDEN var olan rolleri itemId-scope'lu
+  // sayıma sızıyor → §1d dev DB'de 5000'den fazla görüp flaky kalıyordu (CI temiz DB'de
+  // yeşil). Teste özel boş ürün = tam izolasyon; lokal + CI deterministik.
+  const stamp = Date.now();
+  const item = await prisma.item.create({
+    data: { code: `TEST-PERF-ITEM-${stamp}`, name: "TEST PERF ÜRÜN", itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
-  if (!item) throw new Error("Test verisi yetersiz — aktif Item yok (npm run seed).");
   const grade = await prisma.qualityGrade.findUnique({
     where: { code: "1.KALITE" },
     select: { id: true },
   });
 
-  // Benzersiz barcode: TEST-PERF-<index>-<ms zaman damgası>. itemId scope'u
-  // sayesinde DB'deki diğer rollere karışmadan deterministik kontrol.
-  const stamp = Date.now();
+  // Benzersiz barcode: TEST-PERF-<index>-<ms zaman damgası>. itemId scope'u + teste
+  // özel ürün sayesinde DB'deki diğer rollere karışmadan deterministik kontrol.
   const rows = Array.from({ length: PERF_ROWS }, (_, i) => ({
     barcode: `TEST-PERF-${i}-${stamp}`,
     itemId: item.id,
@@ -217,7 +219,9 @@ async function main(): Promise<void> {
     const del = await prisma.roll.deleteMany({
       where: { barcode: { startsWith: `TEST-PERF-` } },
     });
-    console.log(`\nCleanup: ${del.count} TEST-PERF rol silindi.`);
+    // Teste özel ürünü de sil (önce rolleri, sonra ürün — FK guard).
+    await prisma.item.delete({ where: { id: item.id } }).catch(() => {});
+    console.log(`\nCleanup: ${del.count} TEST-PERF rol + test ürünü silindi.`);
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
@@ -227,9 +231,14 @@ async function main(): Promise<void> {
 
 main().catch(async (e) => {
   console.error(e);
-  // Hata yolunda da temizlik dene (best-effort).
+  // Hata yolunda da temizlik dene (best-effort). Önce rolleri, sonra teste özel
+  // ürün(ler)i — kod prefix'iyle (item id scope dışı). Önceki çökmelerden kalan
+  // TEST-PERF-ITEM ürünlerini de toplar.
   await prisma.roll
     .deleteMany({ where: { barcode: { startsWith: `TEST-PERF-` } } })
+    .catch(() => {});
+  await prisma.item
+    .deleteMany({ where: { code: { startsWith: `TEST-PERF-ITEM-` } } })
     .catch(() => {});
   await prisma.$disconnect();
   process.exit(1);

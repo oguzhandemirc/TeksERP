@@ -33,6 +33,8 @@ const DAY_MS = 86_400_000;
 // tüm-zaman" çekimi İMKANSIZ. Aralık verilirse bu yok sayılır (ama MAX_RANGE'i aşamaz).
 const DEFAULT_DAYS = 90;
 const MAX_RANGE_MS = 366 * DAY_MS;
+// ?ids= UUID doğrulaması — geçersiz değer Postgres uuid kolonunda 500 atar; önce ele.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const D0 = () => new Prisma.Decimal(0);
 
@@ -115,7 +117,13 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
   //    DEFAULT_DAYS gün uygulanır ("filtresiz tüm-zaman" çekimi İMKANSIZ); verilirse
   //    MAX_RANGE'i aşamaz. dateField geçersizse dispatchedAt'e düşer.
   const idsRaw = typeof req.query.ids === "string" ? req.query.ids.trim() : "";
-  const idList = idsRaw ? idsRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+  const idList = idsRaw
+    ? idsRaw.split(",").map((s) => s.trim()).filter((s) => UUID_RE.test(s))
+    : [];
+  // ids gönderildi ama hiçbiri geçerli UUID değil → 500 yerine açık 400.
+  if (idsRaw && idList.length === 0) {
+    throw AppError.badRequest("Geçersiz sevkiyat ID(leri).");
+  }
   const isSelection = idList.length > 0;
   const effField =
     params.dateField && (SHIPMENT_DATE_FIELDS as readonly string[]).includes(params.dateField)

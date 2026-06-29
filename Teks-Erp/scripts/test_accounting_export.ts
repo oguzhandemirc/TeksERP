@@ -15,6 +15,7 @@
 import type { Request } from "express";
 import prisma from "../src/lib/prisma";
 import { buildDispatchAccountingExport } from "../src/services/accounting-export.service";
+import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
 let fail = 0;
@@ -201,10 +202,19 @@ async function main() {
     check("selection: range.mode=selection, count=1", sd.range?.mode === "selection" && sd.range?.selectedCount === 1);
     check("selection: iade fromShipmentId'e göre kapsanır", sd.returns.length === 1);
 
-    // Olmayan id → 0 sevk (filtre gerçekten uygulanıyor)
+    // Olmayan (ama geçerli formatlı) id → 0 sevk (filtre gerçekten uygulanıyor)
     const emptyReq = { query: { ids: "00000000-0000-0000-0000-000000000000" } } as unknown as Request;
     const ed = (await buildDispatchAccountingExport(emptyReq)).data as ExportData;
     check("selection: olmayan id → 0 sevk", ed.shipments.length === 0);
+
+    // Geçersiz (UUID olmayan) ids → 500 değil, açık 400
+    let badIdsRejected = false;
+    try {
+      await buildDispatchAccountingExport({ query: { ids: "abc,not-a-uuid" } } as unknown as Request);
+    } catch (e) {
+      badIdsRejected = e instanceof AppError && e.statusCode === 400;
+    }
+    check("selection: geçersiz ids → 400 (500 değil)", badIdsRejected);
   } finally {
     await prisma.rollReturn.delete({ where: { id: ret.id } }).catch(() => {});
     await prisma.roll.deleteMany({ where: { id: { in: [r1.id, r2.id, r3.id, r4.id] } } });
