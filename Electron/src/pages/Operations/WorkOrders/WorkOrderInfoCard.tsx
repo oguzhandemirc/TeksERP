@@ -58,15 +58,6 @@ export function WorkOrderInfoCard({ wo }: { wo: WorkOrder }) {
           </Field>
         </div>
 
-        {wo.dyehouseNote && (
-          <div className="rounded-md border border-warning/30 bg-warning/5 p-2.5">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-warning">
-              Boyahane Notu
-            </div>
-            <div className="mt-0.5 whitespace-pre-wrap text-sm">{wo.dyehouseNote}</div>
-          </div>
-        )}
-
         <div>
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
             Üretim Özellikleri

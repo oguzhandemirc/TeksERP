@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { PackagePlus } from "lucide-react";
+import { Layers, PackagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScanField } from "@/components/scanner/ScanField";
 import { packingService } from "./service";
 import { useScanDrainer } from "./useScanDrainer";
 import { invalidateShipmentData } from "./useShipmentDetail";
+import { AddKartelaDialog } from "./AddKartelaDialog";
 import type { ShipmentSack } from "./types";
 
 interface Props {
@@ -57,6 +58,28 @@ export function ScanInBar({ shipmentId, sacks, activeSackId, onSetActiveSack }: 
     },
   });
 
+  // Kartela seçerek-ekle: aktif çuval yoksa otomatik aç (scan ile aynı kural —
+  // kartela loose kalmaz), sonra dialog'u o çuvalla aç.
+  const [kartelaOpen, setKartelaOpen] = useState(false);
+  const [kartelaSackId, setKartelaSackId] = useState<string | null>(null);
+  const openKartelaMut = useMutation({
+    mutationFn: async (): Promise<string> => {
+      let target = activeSackId;
+      if (!target) {
+        const res = await packingService.addSack(shipmentId);
+        target = res.data.id;
+        onSetActiveSack(target);
+        invalidateShipmentData(qc, shipmentId);
+        toast.success(`Çuval #${res.data.seq} açıldı`);
+      }
+      return target;
+    },
+    onSuccess: (target) => {
+      setKartelaSackId(target);
+      setKartelaOpen(true);
+    },
+  });
+
   const noSacks = sacks.length === 0;
 
   return (
@@ -84,6 +107,15 @@ export function ScanInBar({ shipmentId, sacks, activeSackId, onSetActiveSack }: 
         >
           <PackagePlus className="h-4 w-4" /> Çuval Aç
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1"
+          disabled={openKartelaMut.isPending}
+          onClick={() => openKartelaMut.mutate()}
+        >
+          <Layers className="h-4 w-4" /> Kartela Ekle
+        </Button>
       </div>
       <p className="text-[11px] text-muted-foreground">
         {busy || queueLength > 0
@@ -92,6 +124,12 @@ export function ScanInBar({ shipmentId, sacks, activeSackId, onSetActiveSack }: 
             ? "İlk top okutulunca çuval otomatik açılır; sonrakiler aynı çuvala girer. Elle açmak için 'Çuval Aç'."
             : "Okutulan toplar aktif (çerçeveli) çuvala eklenir. Aktif çuvalı değiştirmek için kartındaki 'Aktif Yap'a basın."}
       </p>
+      <AddKartelaDialog
+        shipmentId={shipmentId}
+        sackId={kartelaSackId}
+        open={kartelaOpen}
+        onOpenChange={setKartelaOpen}
+      />
     </div>
   );
 }

@@ -1,7 +1,9 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type {
+  AddKartelaResult,
   CreatedShipment,
+  KartelaStockGroup,
   LocatedRoll,
   OpenOrder,
   ScanResult,
@@ -70,6 +72,23 @@ export const packingService = {
   removeSwatch: (id: string, swatchId: string): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/remove-swatch`, { swatchId })
+      .then((r) => r.data),
+
+  /** Kartela stoğu (ürün+renk bazında müsait adet) — seçerek-ekle picker'ını besler. */
+  listKartelaStock: (search?: string): Promise<ApiResponse<KartelaStockGroup[]>> =>
+    apiClient
+      .get<ApiResponse<KartelaStockGroup[]>>(
+        `/api/kartela/stock${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+      )
+      .then((r) => r.data),
+
+  /** Seçerek kartela ekle (barkod okutmadan) — ürün+renk+adet → stoktan düşülür. */
+  addKartela: (
+    id: string,
+    body: { itemId: string; colorId: string | null; count: number; sackId?: string | null },
+  ): Promise<ApiResponse<AddKartelaResult>> =>
+    apiClient
+      .post<ApiResponse<AddKartelaResult>>(`/api/shipping/shipments/${id}/add-kartela`, body)
       .then((r) => r.data),
 
   /** Topu çuvaldan çuvala taşı (aynı sevkiyat içi). */

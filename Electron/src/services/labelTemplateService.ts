@@ -115,4 +115,19 @@ export const labelTemplateService = {
         { responseType: "text", transformResponse: [(d) => d] },
       )
       .then((r) => r.data),
+
+  /**
+   * Native (PPLA/ZPL) metin-zone önizlemesi — şablona göre sıralı satırlar.
+   * Termal yazıcı çıktısının yaklaşık hali (sol QR+barkod tarama kolonu hariç).
+   */
+  previewNativeText: (
+    kind: LabelKind,
+    fields: TemplateField[],
+  ): Promise<{ lines: { text: string; size: string; bold: boolean }[] }> =>
+    apiClient
+      .post<ApiResponse<{ lines: { text: string; size: string; bold: boolean }[] }>>(
+        "/api/labels/preview/native-text",
+        { kind, fields },
+      )
+      .then((r) => r.data.data),
 };

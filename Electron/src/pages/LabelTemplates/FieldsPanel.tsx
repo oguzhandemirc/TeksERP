@@ -1,4 +1,19 @@
-import { Trash2 } from "lucide-react";
+import { Trash2, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -14,17 +29,29 @@ interface Props {
 }
 
 /**
- * Şablon alan listesi — sade düz liste. Sürükle-bırak kaldırıldı: backend
- * etiket HTML render'ı hardcoded layout kullanıyor, alan sırasının görsel
- * etkisi yok. Sıralama gerekirse render'ı dinamikleştirip yeniden eklenir.
+ * Şablon alan listesi — sürükle-bırak ile sıralanır. Sıra ARTIK anlamlı: native
+ * renderer'lar (PPLA/PPLB/ZPL) metin satırlarını `order`'a göre dizer; HTML
+ * curated zone düzenini korur (barkod/QR + başlık sabit, kullanıcı kararı).
+ * order, kaydederken dizilim sırasından yeniden numaralanır (edit page).
  */
 export function FieldsPanel({ fields, catalogByKey, onChange }: Props) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
   const updateField = (key: string, patch: Partial<TemplateField>) => {
     onChange(fields.map((f) => (f.key === key ? { ...f, ...patch } : f)));
   };
 
   const removeField = (key: string) => {
     onChange(fields.filter((f) => f.key !== key));
+  };
+
+  const onDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = fields.findIndex((f) => f.key === active.id);
+    const newIndex = fields.findIndex((f) => f.key === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    onChange(arrayMove(fields, oldIndex, newIndex));
   };
 
   return (
@@ -39,17 +66,21 @@ export function FieldsPanel({ fields, catalogByKey, onChange }: Props) {
           Soldaki listeden alan ekleyerek başla.
         </div>
       ) : (
-        <ul className="space-y-1.5">
-          {fields.map((f) => (
-            <FieldRow
-              key={f.key}
-              field={f}
-              meta={catalogByKey.get(f.key)}
-              onUpdate={updateField}
-              onRemove={removeField}
-            />
-          ))}
-        </ul>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={fields.map((f) => f.key)} strategy={verticalListSortingStrategy}>
+            <ul className="space-y-1.5">
+              {fields.map((f) => (
+                <FieldRow
+                  key={f.key}
+                  field={f}
+                  meta={catalogByKey.get(f.key)}
+                  onUpdate={updateField}
+                  onRemove={removeField}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );
@@ -67,9 +98,26 @@ function FieldRow({
   onRemove: (key: string) => void;
 }) {
   const required = meta?.required;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: field.key,
+  });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
 
   return (
-    <li className="flex flex-nowrap items-center gap-2 rounded-md border bg-background px-2 py-2 text-xs">
+    <li
+      ref={setNodeRef}
+      style={style}
+      className="flex flex-nowrap items-center gap-2 rounded-md border bg-background px-2 py-2 text-xs"
+    >
+      <button
+        type="button"
+        className="shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+        title="Sürükle-sırala"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
       <Badge variant="outline" className="font-mono text-[9px]">
         {field.key}
       </Badge>

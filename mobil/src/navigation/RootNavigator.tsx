@@ -7,6 +7,8 @@ import { useAuthStore } from '../store/authStore';
 import { useDeviceStore } from '../store/deviceStore';
 import { useBaseUrlStore } from '../store/baseUrlStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
+import { useBtPrinterStore } from '../store/btPrinterStore';
+import { useBtMeterStore } from '../store/btMeterStore';
 import { setUnauthorizedHandler } from '../services/api';
 import { deviceService } from '../services/device.service';
 import { usePermissions } from '../hooks/usePermission';
@@ -30,6 +32,8 @@ export default function RootNavigator() {
   const initBaseUrl = useBaseUrlStore((s) => s.init);
   const baseUrlLoaded = useBaseUrlStore((s) => s.isLoaded);
   const initDeviceSettings = useDeviceSettingsStore((s) => s.init);
+  const initBtPrinter = useBtPrinterStore((s) => s.init);
+  const initBtMeter = useBtMeterStore((s) => s.init);
   const { hasAnyMobileScreen } = usePermissions();
 
   // Cihaz eşleştirmesi zorunlu mu? Public gate (login öncesi okunur). React Query
@@ -47,6 +51,8 @@ export default function RootNavigator() {
     void initBaseUrl();
     void initDevice();
     void initDeviceSettings();
+    void initBtPrinter();
+    void initBtMeter();
     loadStoredAuth();
     setUnauthorizedHandler(() => {
       // 401 → sadece kullanıcıyı çıkar, eşleşmeyi koru. Cihaz pasifleştirilirse

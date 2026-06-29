@@ -82,7 +82,7 @@ export const DOC_DEFS: DocDef[] = [
       { key: "subcontractorInfo", label: "Fason firma bilgisi" },
       { key: "vehicleInfo", label: "Sevk / araç bilgisi" },
       { key: "requestedColor", label: "İstenen renk kutusu" },
-      { key: "dyehouseNote", label: "Boyahane notu kutusu" },
+      { key: "dyehouseNote", label: "Fason talimatı kutusu" },
       { key: "rollTable", label: "Sevk edilen toplar tablosu" },
     ],
   },

@@ -98,6 +98,26 @@ export const printedDocumentService = {
       )
       .then((r) => r.data),
 
+  /** Baskı-hazır HTML (TEK KAYNAK) — backend render eder; mobil + Electron aynısını
+   *  basar. version verilirse o versiyonun HTML'i. opts.draft → donmuş belge yoksa
+   *  canlı TASLAK önizlemesi (sevk öncesi). text/html döner. */
+  getHtml: (
+    docType: PrintedDocType,
+    sourceId: string,
+    version?: number,
+    opts?: { draft?: boolean },
+  ): Promise<string> =>
+    apiClient
+      .get<string>(`${base}/${docType}/${sourceId}/html`, {
+        params: {
+          ...(version != null ? { version } : {}),
+          ...(opts?.draft ? { draft: 1 } : {}),
+        },
+        responseType: "text",
+        headers: { Accept: "text/html" },
+      })
+      .then((r) => r.data),
+
   /** Gerekçeli revizyon → yeni versiyon (eskisi SUPERSEDED). */
   reissue: <TDoc = Record<string, unknown>>(
     docType: PrintedDocType,

@@ -102,7 +102,7 @@ export const MOCK_FASON: FasonSheetData = {
   ],
   totals: { rollCount: 2, totalQty: 500, totalWeight: 79 },
   requestedColor: { id: "col1", code: "BEJ", name: "Bej", hex: "#d8c9a8" },
-  dyehouseNote: "Yıkama yapma, matlaştır",
+  instruction: "Yıkama yapma, matlaştır",
 };
 
 /** Kartela Çeki Listesi önizleme verisi — donmuş belge `doc` şekli. */
@@ -159,7 +159,6 @@ export const MOCK_TRAVELER_WO: WorkOrder = {
   targetItemId: "i1",
   targetColorId: "col1",
   foldType: "Top",
-  dyehouseNote: "Yıkama yapma, matlaştır",
   steps: [
     {
       id: "step1",
@@ -173,6 +172,7 @@ export const MOCK_TRAVELER_WO: WorkOrder = {
       status: "ACTIVE",
       station: { id: "st2", code: "DYE", name: "Boyahane", type: "EXTERNAL" },
       plannedSubcontractor: { id: "sub1", name: "Yıldız Boyahane" },
+      notes: "Yıkama yapma, matlaştır",
     },
     {
       id: "step3",
@@ -199,11 +199,13 @@ export const MOCK_TRAVELER_WO: WorkOrder = {
       allocatedQty: 680,
       orderLine: {
         quantity: 680,
+        shippedQty: 200,
         width: 150,
         colorId: "col1",
         order: {
           id: "o1",
           orderNumber: "SIP-2026-0107",
+          status: "PARTIAL_SHIPPED",
           customer: { id: "c1", code: "M001", name: "Örnek Tekstil A.Ş." },
         },
         item: { id: "i1", name: "Pamuklu Astar" },

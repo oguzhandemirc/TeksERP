@@ -24,6 +24,8 @@ import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import RollPickerModal from '../../../components/RollPickerModal';
+import { KartelaStockPickerModal } from './KartelaStockPickerModal';
+import type { KartelaStockGroup } from '../../../services/packing.service';
 import { AnimatedEntrance, MarqueeText } from '../../../components/motion';
 import { colors, palette, spacing, radius, shadow, typography } from '../../../theme';
 import {
@@ -36,10 +38,9 @@ import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import {
   useShipmentConfirmationEnabled,
-  useFeatureFlags,
   FLAGS_KEY,
 } from '../../../hooks/useFeatureFlags';
-import { resolveDispatchNoteHtml } from '../Sevkiyat/dispatchNoteHtml';
+import { getShipmentDispatchHtml } from '../../../services/shipmentDispatchPrint';
 import type { MainStackParamList } from '../../../navigation/types';
 
 // =============================================================================
@@ -77,7 +78,6 @@ export default function PaketlemeScreen() {
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'Paketleme'>>();
   const params = route.params ?? {};
-  const flags = useFeatureFlags().data;
 
   const [shipmentId, setShipmentId] = useState<string | null>(params.shipmentId ?? null);
   const [draftOrderIds, setDraftOrderIds] = useState<string[] | null>(params.orderIds ?? null);
@@ -86,6 +86,7 @@ export default function PaketlemeScreen() {
   const [draftDestination, setDraftDestination] = useState<ShipmentDestination>('DOMESTIC');
   const [scanOpen, setScanOpen] = useState<boolean>(!params.shipmentId && !!params.orderIds);
   const [listOpen, setListOpen] = useState(false);
+  const [kartelaOpen, setKartelaOpen] = useState(false);
   // Listeden eklenen toplar — picker'da gizle. Eklenen top backend'de committed
   // olur ama açık picker snapshot'ı anlık güncellenmez → çift-ekleme önlenir.
   // Modal kapanınca sıfırlanır.
@@ -236,6 +237,21 @@ export default function PaketlemeScreen() {
     return p;
   };
 
+  // Seçerek kartela ekle — sevkiyat + aktif çuvalı garanti et, sonra adet stoktan düş.
+  const addKartelaFromStock = async (group: KartelaStockGroup, count: number): Promise<number> => {
+    const id = await ensureShipment();
+    const sackId = await ensureActiveSack(id);
+    const res = await packingService.addKartela(id, {
+      itemId: group.itemId,
+      colorId: group.colorId,
+      count,
+      sackId,
+    });
+    refreshShip(id);
+    void qc.invalidateQueries({ queryKey: ['kartela', 'stock'] });
+    return res.data?.added ?? count;
+  };
+
   const sacks = ship?.sacks ?? [];
   const rolls = ship?.rolls ?? [];
   const summary = ship?.summary ?? { rollCount: 0, swatchCount: 0, totalMeters: 0, sackCount: 0, totalKg: 0 };
@@ -370,7 +386,7 @@ export default function PaketlemeScreen() {
     if (!ship || !shipmentId) return;
     try {
       setPrinting(true);
-      const html = await resolveDispatchNoteHtml({ shipmentId, detail: ship, flags });
+      const html = await getShipmentDispatchHtml(shipmentId);
       await Print.printAsync({
         html,
         margins: { left: 0, top: 0, right: 0, bottom: 0 },
@@ -1004,6 +1020,15 @@ export default function PaketlemeScreen() {
                 Listeden
               </Button>
               <Button
+                mode="contained-tonal"
+                icon="layers"
+                onPress={() => setKartelaOpen(true)}
+                style={styles.listBtn}
+                contentStyle={styles.scanBtnContent}
+              >
+                Kartela
+              </Button>
+              <Button
                 mode="contained"
                 icon="barcode-scan"
                 buttonColor={colors.brand}
@@ -1045,6 +1070,12 @@ export default function PaketlemeScreen() {
         excludeIds={[...pickedIds, ...rolls.map((r) => r.id)]}
         emptyText="Serbest depoda top yok"
         accent={colors.brand}
+      />
+
+      <KartelaStockPickerModal
+        visible={kartelaOpen}
+        onDismiss={() => setKartelaOpen(false)}
+        onAdd={addKartelaFromStock}
       />
 
       {/* Çuval kapat: kod + brüt tartı (ikisi de zorunlu). marginBottom → center

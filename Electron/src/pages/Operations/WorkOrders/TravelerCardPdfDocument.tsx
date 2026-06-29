@@ -156,11 +156,17 @@ export function TravelerCardPdfDocument({ workOrder, card, qrDataUrl, config }: 
         </>
         )}
 
-        {/* Talimatlar / Boyahane notu */}
-        {showNotes && workOrder.dyehouseNote && (
+        {/* Talimatlar — her adımın kendi notu (fason adımları için talimat). */}
+        {showNotes && sortedSteps.some((step) => step.notes?.trim()) && (
           <View style={s.notes}>
-            <Text style={s.label}>TALİMATLAR / BOYAHANE NOTU</Text>
-            <Text style={s.notesText}>{workOrder.dyehouseNote}</Text>
+            <Text style={s.label}>TALİMATLAR</Text>
+            {sortedSteps
+              .filter((step) => step.notes?.trim())
+              .map((step) => (
+                <Text key={step.id} style={s.notesText}>
+                  Adım {step.stepSequence} — {step.station?.name ?? "—"}: {step.notes}
+                </Text>
+              ))}
           </View>
         )}
 

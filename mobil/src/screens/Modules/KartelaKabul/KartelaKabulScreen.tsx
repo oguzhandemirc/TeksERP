@@ -42,6 +42,7 @@ import SyncStatusChip from '../../../components/SyncStatusChip';
 import RefreshButton from '../../../components/RefreshButton';
 import AppModal from '../../../components/AppModal';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
+import { useKartelaMeasurementEnabled } from '../../../hooks/useFeatureFlags';
 import { SkeletonList } from '../../../components/motion';
 import {
   kartelaService,
@@ -217,6 +218,7 @@ export default function KartelaKabulScreen() {
   const qc = useQueryClient();
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const insets = useSafeAreaInsets();
+  const measureEnabled = useKartelaMeasurementEnabled();
   const [selectedDispatchId, setSelectedDispatchId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [rows, setRows] = useState<Record<string, RollEntry>>({});
@@ -696,6 +698,7 @@ export default function KartelaKabulScreen() {
         visible={!!sheetItem}
         item={sheetItem}
         initial={sheetRollId ? rows[sheetRollId] : undefined}
+        showMeasure={measureEnabled}
         onSave={(e) => sheetRollId && saveEntry(sheetRollId, e)}
         onClear={() => sheetRollId && clearEntry(sheetRollId)}
         onDismiss={() => setSheetRollId(null)}
@@ -747,6 +750,7 @@ function KartelaRollSheet({
   visible,
   item,
   initial,
+  showMeasure,
   onSave,
   onClear,
   onDismiss,
@@ -754,6 +758,7 @@ function KartelaRollSheet({
   visible: boolean;
   item: KartelaOutstandingItem | null;
   initial: RollEntry | undefined;
+  showMeasure: boolean;
   onSave: (e: RollEntry) => void;
   onClear: () => void;
   onDismiss: () => void;
@@ -871,38 +876,40 @@ function KartelaRollSheet({
               dense
             />
 
-            {/* Varsayılan ölçü (hepsi için) */}
-            <View style={{ gap: spacing.xs }}>
-              <Text variant="labelLarge" style={styles.cardTitle}>
-                Ölçü — hepsi için
-              </Text>
-              <View style={styles.measureRow}>
-                <TextInput
-                  mode="outlined"
-                  label="Uzunluk (cm)"
-                  value={defCm}
-                  onChangeText={setDefCm}
-                  keyboardType="decimal-pad"
-                  dense
-                  style={styles.measureInput}
-                />
-                <TextInput
-                  mode="outlined"
-                  label="Ağırlık (kg)"
-                  value={defKg}
-                  onChangeText={setDefKg}
-                  keyboardType="decimal-pad"
-                  dense
-                  style={styles.measureInput}
-                />
+            {/* Varsayılan ölçü (hepsi için) — yalnız ölçüm flag'i açıkken */}
+            {showMeasure && (
+              <View style={{ gap: spacing.xs }}>
+                <Text variant="labelLarge" style={styles.cardTitle}>
+                  Ölçü — hepsi için
+                </Text>
+                <View style={styles.measureRow}>
+                  <TextInput
+                    mode="outlined"
+                    label="Uzunluk (cm)"
+                    value={defCm}
+                    onChangeText={setDefCm}
+                    keyboardType="decimal-pad"
+                    dense
+                    style={styles.measureInput}
+                  />
+                  <TextInput
+                    mode="outlined"
+                    label="Ağırlık (kg)"
+                    value={defKg}
+                    onChangeText={setDefKg}
+                    keyboardType="decimal-pad"
+                    dense
+                    style={styles.measureInput}
+                  />
+                </View>
+                <Text style={styles.optionalNote}>
+                  Ölçüler opsiyoneldir (özellikle ağırlık) — boş bırakılabilir.
+                </Text>
               </View>
-              <Text style={styles.optionalNote}>
-                Ölçüler opsiyoneldir (özellikle ağırlık) — boş bırakılabilir.
-              </Text>
-            </View>
+            )}
 
-            {/* İstisnalar — sadece farklı olan kartelalar */}
-            {validCount && (
+            {/* İstisnalar — sadece farklı olan kartelalar (yalnız ölçüm açıkken) */}
+            {showMeasure && validCount && (
               <View style={{ gap: spacing.xs }}>
                 <TouchableRipple onPress={() => setExOpen((v) => !v)} borderless style={styles.exHeader}>
                   <View style={styles.exHeaderInner}>

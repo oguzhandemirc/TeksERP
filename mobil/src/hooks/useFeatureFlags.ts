@@ -24,9 +24,14 @@ export function useReturnGradingEnabled(): boolean {
   return useFeatureFlags().data?.returnGradingEnabled ?? false;
 }
 
-/** Fason Sevk'te operatör boyahane notunu telefondan girebilir mi? Default false (gizli). */
-export function useDyehouseNoteMobileEntry(): boolean {
-  return useFeatureFlags().data?.dyehouseNoteMobileEntry ?? false;
+/** Kartela kabulünde cm/kg ölçü alanları gösterilsin mi? Default false (yalnız adet). */
+export function useKartelaMeasurementEnabled(): boolean {
+  return useFeatureFlags().data?.kartelaMeasurementEnabled ?? false;
+}
+
+/** Fason Sevk'te operatör fason talimatını telefondan girebilir mi? Default false (gizli). */
+export function useFasonNoteMobileEntry(): boolean {
+  return useFeatureFlags().data?.fasonNoteMobileEntry ?? false;
 }
 
 /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu? Default false →

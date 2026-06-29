@@ -23,10 +23,12 @@ const updateSchema = z.object({
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
   returnGradingEnabled: z.boolean().optional(),
+  // Kartela kabulünde cm/kg ölçü alanları + listelerde ölçü gösterimi (false=default, yalnız adet).
+  kartelaMeasurementEnabled: z.boolean().optional(),
   // İş emri parti kodu otomatik mi üretilsin (true) manuel mi girilsin (false=default).
   partyCodeAuto: z.boolean().optional(),
-  // Fason Sevk boyahane notunu sahadaki operatör telefondan girebilsin mi (false=default).
-  dyehouseNoteMobileEntry: z.boolean().optional(),
+  // Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin mi (false=default).
+  fasonNoteMobileEntry: z.boolean().optional(),
   // Mobil cihaz eşleştirmesi zorunlu mu (true=aktif) yoksa pasif mi (false=default).
   devicePairingRequired: z.boolean().optional(),
   // shipping.confirmationEnabled — sevk onay adımı (UI rehberi).

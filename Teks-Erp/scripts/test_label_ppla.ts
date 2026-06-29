@@ -35,7 +35,7 @@ const payload = {
 
 function main() {
   const STX = "\x02";
-  const ppla = buildRollLabelPpla({ payload, format, copies: 2 });
+  const ppla = buildRollLabelPpla({ payload, format, copies: 2, template: null });
 
   check("STX L (format başlangıcı)", ppla.includes(`${STX}L`));
   check("E (bitir/bas)", /\bE\b/.test(ppla) && ppla.trimEnd().endsWith("E"));
@@ -56,6 +56,7 @@ function main() {
     payload: { ...payload, barcode: null, colorName: null, customerName: null, batchNumber: null } as unknown as LabelPayload,
     format,
     copies: 1,
+    template: null,
   });
   check("barkodsuz: Code128 kaydı YOK", !raw.includes("1e"));
   check("barkodsuz: yine frame var", raw.includes(`${STX}L`) && raw.trimEnd().endsWith("E"));
@@ -64,7 +65,7 @@ function main() {
   // Kontrol karakteri sanitize — barkoda STX enjekte → temizlenmeli (sadece 1 STX L'den)
   const dirty = buildRollLabelPpla({
     payload: { ...payload, barcode: `BAD${STX}CODE` } as unknown as LabelPayload,
-    format, copies: 1,
+    format, copies: 1, template: null,
   });
   check("sanitize: veri STX taşımaz", !dirty.includes(`BAD${STX}CODE`) && dirty.includes("BAD CODE"));
 

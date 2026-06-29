@@ -20,7 +20,14 @@ const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
     write: ["shipping:write"],
   },
   SUBCONTRACTOR_DISPATCH: {
-    read: ["workorder:read", "workorder:write", "mobile:fason-sevk", "mobile:fason-kabul"],
+    // mobile:hizli-is-emri — hızlı iş emri sevkinde çeki listesini basabilsin.
+    read: [
+      "workorder:read",
+      "workorder:write",
+      "mobile:fason-sevk",
+      "mobile:fason-kabul",
+      "mobile:hizli-is-emri",
+    ],
     write: ["workorder:write"],
   },
   SUBCONTRACTOR_DIRECT_SHIP: {
@@ -69,6 +76,33 @@ router.get(
   verifyToken,
   requireDocPermission("read"),
   controller.getCurrent
+);
+
+/**
+ * @openapi
+ * /api/printed-documents/{docType}/{sourceId}/html:
+ *   get:
+ *     tags: [PrintedDocuments]
+ *     summary: Baskı-hazır HTML (TEK KAYNAK) — mobil + Electron aynısını basar
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: docType
+ *         required: true
+ *         schema: { type: string, enum: [SHIPMENT_DISPATCH, SUBCONTRACTOR_DISPATCH, SUBCONTRACTOR_DIRECT_SHIP, KARTELA_DISPATCH] }
+ *       - in: path
+ *         name: sourceId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: text/html baskı çıktısı }
+ *       409: { description: Kaynak henüz taslak (donmuş belge yok) }
+ */
+router.get(
+  "/:docType/:sourceId/html",
+  verifyToken,
+  requireDocPermission("read"),
+  controller.getHtml
 );
 
 /**

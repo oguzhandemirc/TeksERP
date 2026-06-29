@@ -152,6 +152,25 @@ enum LabelOrientation {
   LANDSCAPE
 }
 
+/// Çevre cihazı bağlantı tipi — cihaz kaydı + yönlendirme. NETWORK_TCP=ağ yazıcı
+/// (RAW 9100), BLUETOOTH_SPP=seri köprü (HC-05/06), BLE, USB, SERIAL_COM.
+enum ConnectionType {
+  NETWORK_TCP
+  BLUETOOTH_SPP
+  BLE
+  USB
+  SERIAL_COM
+}
+
+/// Çevre cihazı türü. LABEL_PRINTER tam bağlanır; SCALE/METER/SIGNAL_SOURCE
+/// kayıt-only (gerçek BT okuma Faz-2, kayıt modelinde yer tutar).
+enum PeripheralKind {
+  LABEL_PRINTER
+  SCALE
+  METER
+  SIGNAL_SOURCE
+}
+
 /// Tambur kararında bir hata için yapılan aksiyon.
 enum RollErrorAction {
   CUT
@@ -394,6 +413,7 @@ model Machine {
   station        Station          @relation(fields: [stationId], references: [id])
   devices        Device[]
   hardware       MachineHardware? // saha #cihaz: yazıcı/RS232 donanım config (1:1)
+  peripherals    PeripheralDevice[] // birleşik cihaz kaydı (yazıcı/sinyal — makineye sabit)
   pairingCodes   PairingCode[]
   rollOperations RollOperation[]
   rollMovements  RollMovement[]
@@ -418,7 +438,8 @@ model Device {
   isActive   Boolean   @default(true)
 
   // Relations
-  machine Machine? @relation(fields: [machineId], references: [id])
+  machine     Machine?           @relation(fields: [machineId], references: [id])
+  peripherals PeripheralDevice[] // tablete-bağlı cihazlar (BT yazıcı tabletle gezer)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -490,7 +511,8 @@ model PrinterModel {
   defaultProfileId String?             @db.Uuid
   defaultProfile   LabelFormatProfile? @relation("ModelDefaultProfile", fields: [defaultProfileId], references: [id], onDelete: SetNull)
 
-  hardware MachineHardware[]
+  hardware    MachineHardware[]
+  peripherals PeripheralDevice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -518,12 +540,79 @@ model LabelFormatProfile {
 
   hardware         MachineHardware[]
   defaultForModels PrinterModel[]    @relation("ModelDefaultProfile")
+  peripherals      PeripheralDevice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([isActive])
   @@map("label_format_profiles")
+}
+
+/// Birleşik CİHAZ KAYDI — yazıcılar (ağ/Bluetooth/USB/seri) + tekstil makine
+/// sinyal kaynakları (kantar/metraj, kayıt-only). Her cihaz dilini (printerModel
+/// veya languageOverride), format profilini ve şablon yönlendirmesini taşır →
+/// baskı anında cihaz→{dil,profil,şablon} çözülür. Sahiplik tam-biri: makineye
+/// SABİT (machineId) VEYA tablete-BAĞLI (deviceId, BT yazıcı tabletle gezer).
+/// `MachineHardware` korunur (geri uyum); bu tablo onun yerine GEÇMEZ, üstüne gelir.
+model PeripheralDevice {
+  id   String @db.Uuid @id @default(uuid())
+  code String @unique @db.VarChar(48)
+  name String @db.VarChar(100)
+
+  kind           PeripheralKind
+  connectionType ConnectionType
+
+  address         String? @db.VarChar(128) // IP / MAC / COM yolu / BLE UUID
+  port            Int? // NETWORK_TCP (null → 9100 kullanımda)
+  identifyPattern String? @db.VarChar(255) // SCALE/METER veri çözüm regex'i
+
+  // Sahiplik — tam biri (serviste enforce edilir).
+  machineId String?  @db.Uuid
+  machine   Machine? @relation(fields: [machineId], references: [id], onDelete: SetNull)
+  deviceId  String?  @db.Uuid
+  device    Device?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  printerModelId   String?             @db.Uuid
+  printerModel     PrinterModel?       @relation(fields: [printerModelId], references: [id], onDelete: Restrict)
+  formatProfileId  String?             @db.Uuid
+  formatProfile    LabelFormatProfile? @relation(fields: [formatProfileId], references: [id], onDelete: Restrict)
+  languageOverride PrinterLanguage? // model dilini ezer (boş → model/global)
+
+  isActive   Boolean   @default(true)
+  lastSeenAt DateTime?
+  notes      String?   @db.VarChar(500)
+
+  templateRoutes PeripheralTemplateRoute[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([machineId])
+  @@index([deviceId])
+  @@index([printerModelId])
+  @@index([formatProfileId])
+  @@index([connectionType])
+  @@index([isActive])
+  @@map("peripheral_devices")
+}
+
+/// Cihaz başına LabelKind → şablon yönlendirme. JSON yerine indekslenebilir +
+/// FK-bütünlüklü child tablo. (peripheralId, kind) tekil.
+model PeripheralTemplateRoute {
+  id           String           @db.Uuid @id @default(uuid())
+  peripheralId String           @db.Uuid
+  peripheral   PeripheralDevice @relation(fields: [peripheralId], references: [id], onDelete: Cascade)
+  kind         LabelKind
+  templateId   String           @db.Uuid
+  template     LabelTemplate    @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([peripheralId, kind])
+  @@index([templateId])
+  @@map("peripheral_template_routes")
 }
 
 /// Tablet eşleştirmesi için admin tarafından üretilen tek seferlik 6 haneli kod.
@@ -979,6 +1068,9 @@ model OrderLine {
   @@index([orderId])
   @@index([itemId])
   @@index([colorId])
+  // Sipariş-önce aramalı liste (cursor keyset createdAt asc) + ürün-filtreli sayfalama.
+  @@index([createdAt])
+  @@index([itemId, createdAt])
   @@map("order_lines")
 }
 
@@ -1478,10 +1570,11 @@ model SubcontractorDispatch {
   dispatchedAt           DateTime @default(now())
   dispatchedById         String? @db.Uuid
   notes                  String?
-  // Boyahaneye özel talimat — genel "sevk notu"ndan (notes) AYRI. Belgeye
-  // DONDURULMAZ; requestedColor gibi canlı tutulur → sevk sonrası (Electron'dan)
-  // düzenlenebilir, baskı her zaman güncel değeri overlay olarak gösterir.
-  dyehouseNote           String?
+  // Fason talimatı — genel "sevk notu"ndan (notes) AYRI. Default kaynağı sevk
+  // edilen adımın notu (WorkOrderStep.notes); operatör flag açıkken override eder.
+  // Belgeye DONDURULMAZ; requestedColor gibi canlı tutulur → sevk sonrası
+  // (Electron'dan) düzenlenebilir, baskı her zaman güncel değeri overlay gösterir.
+  instruction            String?
   totalQty               Decimal  @default(0) @db.Decimal(12, 3) // Toplam sevk edilen metraj (snapshot)
   // İrsaliye snapshot'ı artık PrintedDocument tablosunda (versiyonlu resmi belge).
 
@@ -2409,6 +2502,8 @@ model LabelTemplate {
   isActive  Boolean   @default(true)
   /// Field listesi — operatör toggle/sırala/bold ile kalıcı düzenler.
   fields    Json
+
+  peripheralRoutes PeripheralTemplateRoute[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

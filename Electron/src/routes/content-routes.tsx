@@ -13,6 +13,7 @@ import { CustomersPage } from "@/pages/Customers/CustomersPage";
 import { StationsPage } from "@/pages/Stations/StationsPage";
 import { MachinesPage } from "@/pages/Machines/MachinesPage";
 import { MachineHardwarePage } from "@/pages/MachineHardware/MachineHardwarePage";
+import { PeripheralDevicesPage } from "@/pages/PeripheralDevices/PeripheralDevicesPage";
 import { PrinterModelsPage } from "@/pages/PrinterModels/PrinterModelsPage";
 import { LabelFormatProfilesPage } from "@/pages/LabelFormatProfiles/LabelFormatProfilesPage";
 import { DefectTypesPage } from "@/pages/DefectTypes/DefectTypesPage";
@@ -139,6 +140,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="station:read">
         <MachineHardwarePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/peripherals",
+    element: (
+      <ProtectedRoute requirePermission="station:read">
+        <PeripheralDevicesPage />
       </ProtectedRoute>
     ),
   },

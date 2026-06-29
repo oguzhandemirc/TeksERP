@@ -5,6 +5,7 @@ import type {
   ScannerStatus,
   ScannerTransport,
   ScannerOpenOpts,
+  PrinterSendOpts,
 } from "@shared/ipc-contract";
 
 const api: ApiBridge = {
@@ -43,6 +44,10 @@ const api: ApiBridge = {
       ipcRenderer.on("scanner:status", listener);
       return () => ipcRenderer.removeListener("scanner:status", listener);
     },
+  },
+  printer: {
+    listSerial: () => ipcRenderer.invoke("printer:list-serial"),
+    send: (opts: PrinterSendOpts) => ipcRenderer.invoke("printer:send", opts),
   },
 };
 

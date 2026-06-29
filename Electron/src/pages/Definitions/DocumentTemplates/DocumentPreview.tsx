@@ -1,5 +1,5 @@
 import { ShipmentFrozenSheet } from "@/pages/Operations/Shipments/ShipmentFrozenSheet";
-import { PrintableSheet } from "@/pages/Operations/WorkOrders/FasonSevkPrintDialog";
+import { PrintableSheet } from "@/pages/Operations/WorkOrders/FasonSevkSheet";
 import { PrintableCeki } from "@/pages/Operations/Kartela/KartelaCekiPrintDialog";
 import type { DocSheetPreview } from "@/components/print/print-helpers";
 import { MOCK_SHIPMENT, MOCK_FASON, MOCK_KARTELA } from "./previewMocks";

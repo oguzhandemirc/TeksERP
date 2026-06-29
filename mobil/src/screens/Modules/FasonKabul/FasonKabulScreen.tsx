@@ -43,6 +43,11 @@ import {
   Icon,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import {
   useQuery,
   useInfiniteQuery,
@@ -60,6 +65,7 @@ import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import RemoteListSheet from '../../../components/RemoteListSheet';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { useDeviceType } from '../../../hooks/useDeviceType';
@@ -70,6 +76,12 @@ import { travelerCardService } from '../../../services/travelerCard.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList } from '../../../components/motion';
+import {
+  NewRollRow,
+  makeNewRollRow,
+  rebuildPrefilledNewRolls,
+} from './newRolls.helper';
+import { parseNewRolls, buildReceivePayload } from './receivePayload.helper';
 import type {
   PendingReturnGroup,
   PendingReturnParty,
@@ -83,7 +95,6 @@ import type {
 } from '../../../types/models';
 
 const RECEIPTS_PAGE_SIZE = 12;
-const SUBMIT_ARM_TIMEOUT_MS = 3000;
 const DRAFT_KEY = 'fason_kabul_draft_v1';
 const DRAFT_TTL_MS = 8 * 60 * 60 * 1000;
 
@@ -99,6 +110,17 @@ interface RollRow {
   checked: boolean;
   notes: string;
   noteOpen: boolean;
+}
+
+// Sevk/parti numarasını gösterirken baştaki gereksiz sıfırları at:
+// "SD-2606-000013" → "SD-2606-13". Depolanan değer sıralama/benzersizlik için
+// 6-hane sıfır-dolgulu KALIR (backend nextPrefixedSequence lexicographic DESC'e
+// dayanır, padding'i bozmak max-bulmayı kırar) — bu yalnızca gösterim.
+function formatPartyNo(no: string | null | undefined): string | null {
+  if (!no) return null;
+  const parts = no.split('-');
+  parts[parts.length - 1] = parts[parts.length - 1].replace(/^0+(?=\d)/, '');
+  return parts.join('-');
 }
 
 // İptal Edilebilirler = receipts whose all bornRolls are safe (still cancellable).
@@ -141,6 +163,31 @@ export default function FasonKabulScreen() {
   const manualBarcodeEntry = useDeviceSettingsStore((s) => s.manualBarcodeEntry);
   const qc = useQueryClient();
 
+  // Footer (İrsaliye No / Kabul Notu) ScrollView'in DIŞINDA → RN'in kendi odak-
+  // kaydırması onu klavyenin üstüne taşımıyor (iç input'lar zaten ScrollView ile
+  // çalışıyor). Bu yüzden YALNIZCA bu iki footer input'u odaklanınca footer'ı klavye
+  // yüksekliği kadar yukarı kaydırıyoruz.
+  // Klavye yüksekliğini RN Keyboard event'lerinden OKUyoruz — reanimated
+  // useAnimatedKeyboard pencerenin decorFitsSystemWindows'unu global değiştirip
+  // iç ScrollView'in çalışan odak-kaydırmasını bozardı; salt-okuma event güvenli.
+  const kbHeight = useSharedValue(0);
+  const footerLift = useSharedValue(0);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (e) => {
+      kbHeight.value = withTiming(e.endCoordinates?.height ?? 0, { duration: 150 });
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      kbHeight.value = withTiming(0, { duration: 150 });
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [kbHeight]);
+  const footerAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -kbHeight.value * footerLift.value }],
+  }));
+
   // ── Form state ──
   const [selectedGroup, setSelectedGroup] = useState<PendingReturnGroup | null>(null);
   /**
@@ -173,21 +220,6 @@ export default function FasonKabulScreen() {
    * gerçek doğrulamanın yapıldığı izlenebilir. Ağırlık alanı yok —
    * fason kabul terazide tartılmıyor, sonraki istasyon ölçer.
    */
-  interface NewRollRow {
-    key: string;
-    qty: string; // string state — TextInput; submit'te number'a çevir
-    notes: string;
-    noteOpen: boolean;
-    prefilled: boolean; // sevkten otomatik gelen, henüz dokunulmamış
-  }
-  let nrCounter = 0;
-  const makeNewRollRow = (qty = '', prefilled = false): NewRollRow => ({
-    key: `nr-${Date.now()}-${nrCounter++}`,
-    qty,
-    notes: '',
-    noteOpen: false,
-    prefilled,
-  });
   const [newRolls, setNewRolls] = useState<NewRollRow[]>([]);
 
   // Kabul iptal modalı
@@ -217,16 +249,12 @@ export default function FasonKabulScreen() {
   // açılan ayrı bir modal'da gösterilir.
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
 
-  // ── Submit two-stage ──
-  const [submitArmed, setSubmitArmed] = useState(false);
-  const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!submitArmed) return;
-    armTimerRef.current = setTimeout(() => setSubmitArmed(false), SUBMIT_ARM_TIMEOUT_MS);
-    return () => {
-      if (armTimerRef.current) clearTimeout(armTimerRef.current);
-    };
-  }, [submitArmed]);
+  // ── Mal kabul onayı ── giden/gelen uyuşmazsa (eksik top ya da metraj farkı)
+  // iki-tık yerine belirgin bir uyarı modalı çıkar.
+  const [mismatchConfirmOpen, setMismatchConfirmOpen] = useState(false);
+  // Footer'daki İrsaliye No / Kabul Notu (ikisi de opsiyonel) varsayılan KAPALI;
+  // operatör isterse açar. Her kart yüklemesinde kapanır (applyParty/resetForm).
+  const [extrasOpen, setExtrasOpen] = useState(false);
 
   // ── Draft yedekleme (Android LMK koruması) ──
   // Telefonda OS uygulamayı arka planda öldürünce form state sıfırlanır.
@@ -412,7 +440,6 @@ export default function FasonKabulScreen() {
     onError: (err) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Kabul başarısız', text2: err.message });
-      setSubmitArmed(false);
     },
   });
 
@@ -492,7 +519,8 @@ export default function FasonKabulScreen() {
     setManifestNo('');
     setNotes('');
     setNewRolls([]);
-    setSubmitArmed(false);
+    setMismatchConfirmOpen(false);
+    setExtrasOpen(false);
     setHighlightedWorkOrderId(null);
     AsyncStorage.removeItem(DRAFT_KEY);
   };
@@ -507,15 +535,12 @@ export default function FasonKabulScreen() {
           : r
       )
     );
-    if (touchesValue) setSubmitArmed(false);
   };
   const addNewRoll = () => {
     setNewRolls((prev) => [...prev, makeNewRollRow()]);
-    setSubmitArmed(false);
   };
   const removeNewRoll = (key: string) => {
     setNewRolls((prev) => prev.filter((r) => r.key !== key));
-    setSubmitArmed(false);
   };
 
   // Eski/kimliksiz payload (parties yok) için: grubun tamamını tek partiye sar.
@@ -554,14 +579,15 @@ export default function FasonKabulScreen() {
     setAppliedProperties(g.workOrder.targetProperties ?? []);
     setNewRolls(
       party.rolls.length > 0
-        ? party.rolls.map((r) =>
-            makeNewRollRow(r.currentQty > 0 ? String(r.currentQty) : '', true)
+        ? rebuildPrefilledNewRolls(
+            [],
+            party.rolls.map((r) => Number(r.currentQty ?? 0)),
           )
         : [makeNewRollRow()]
     );
     setManifestNo('');
     setNotes('');
-    setSubmitArmed(false);
+    setExtrasOpen(false);
   };
 
   // Parti seçim ekranından bir parti seçilince.
@@ -604,7 +630,6 @@ export default function FasonKabulScreen() {
       setAppliedProperties(g.workOrder.targetProperties ?? []);
       setManifestNo('');
       setNotes('');
-      setSubmitArmed(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Toast.show({
         type: 'info',
@@ -704,30 +729,44 @@ export default function FasonKabulScreen() {
   };
 
   const updateRow = (rollId: string, patch: Partial<RollRow>) => {
-    setRows((prev) => prev.map((r) => (r.rollId === rollId ? { ...r, ...patch } : r)));
-    setSubmitArmed(false); // herhangi bir değişiklik silahlamayı sıfırlar
+    // BİRLEŞTİRME: redesign submitArmed'i kaldırdı (onay modalına geçti); bug-fix'in
+    // rebuildPrefilledNewRolls (kısmi kabul) mantığı korunur, setSubmitArmed çağrıları düşer.
+    const nextRows = rows.map((r) => (r.rollId === rollId ? { ...r, ...patch } : r));
+    setRows(nextRows);
+    // Bir top "geldi/gelmedi" işaretlenince ön-dolu açık-kumaş parçalarını
+    // işaretli toplara göre yeniden kur (operatörün elle girdiği satırlar korunur).
+    // Bu olmadan eksik gelen top işaretten çıkınca ön-dolu parça kalıp fazladan
+    // born roll doğuyordu (kısmi kabulde 2 top → KK2'ye 3 top saha bug'ı).
+    if ('checked' in patch) {
+      setNewRolls((curr) =>
+        rebuildPrefilledNewRolls(
+          curr,
+          nextRows.filter((r) => r.checked).map((r) => Number(r.dispatchedQty ?? 0)),
+        ),
+      );
+    }
   };
   const toggleAllRows = () => {
     const someUnchecked = rows.some((r) => !r.checked);
-    setRows((prev) => prev.map((r) => ({ ...r, checked: someUnchecked })));
-    setSubmitArmed(false);
+    const nextRows = rows.map((r) => ({ ...r, checked: someUnchecked }));
+    setRows(nextRows);
+    setNewRolls((curr) =>
+      rebuildPrefilledNewRolls(
+        curr,
+        nextRows.filter((r) => r.checked).map((r) => Number(r.dispatchedQty ?? 0)),
+      ),
+    );
   };
 
   const checkedCount = rows.filter((r) => r.checked).length;
   const missingCount = rows.length - checkedCount;
+  // Tek WO = tek kumaş/en → ilk dolu en değerini referans olarak göster (gelen kumaşın eni).
+  const fabricWidth = rows.find((r) => r.width != null)?.width ?? null;
 
-  const parsedNewRolls = useMemo<ReceiveNewRollInput[]>(() => {
-    const out: ReceiveNewRollInput[] = [];
-    for (const r of newRolls) {
-      const qty = parseFloat(r.qty.replace(',', '.'));
-      if (!Number.isFinite(qty) || qty <= 0) continue;
-      out.push({
-        qty,
-        notes: r.notes.trim() || null,
-      });
-    }
-    return out;
-  }, [newRolls]);
+  const parsedNewRolls = useMemo<ReceiveNewRollInput[]>(
+    () => parseNewRolls(newRolls),
+    [newRolls],
+  );
   const hasValidNewRolls = parsedNewRolls.length > 0;
 
   // Sevk edilen (checked) ile dönen (yeni açık kumaş) metraj farkı —
@@ -756,35 +795,36 @@ export default function FasonKabulScreen() {
   const hasMissing = missingCount > 0;
 
   const buildPayload = (): ReceiveRequest | null => {
-    if (!selectedGroup) return null;
     // Çoklu sevkte seçilen partinin firması; tekli/eski akışta lastDispatch.
-    const subId = selectedParty?.subcontractorId ?? selectedGroup.lastDispatch?.subcontractorId;
-    if (!subId) {
-      Toast.show({
-        type: 'error',
-        text1: 'Fason firma bulunamadı',
-        text2: 'Bu adımın aktif sevki yok.',
-      });
-      return null;
+    // Yan etki (Toast) ekranda kalır — payload üretimi saf buildReceivePayload'da.
+    if (selectedGroup) {
+      const subId = selectedParty?.subcontractorId ?? selectedGroup.lastDispatch?.subcontractorId;
+      if (!subId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Fason firma bulunamadı',
+          text2: 'Bu adımın aktif sevki yok.',
+        });
+        return null;
+      }
     }
-    return {
-      workOrderId: selectedGroup.workOrder.id,
-      stepId: selectedGroup.step.id,
-      subcontractorId: subId,
-      manifestNo: manifestNo.trim() || null,
-      notes: notes.trim() || undefined,
-      // Refactor 9 — "renk veren" kategori için receipt seviyesi renk/özellik
-      ...(appliesColor
-        ? {
-            appliedColorId: appliedColor?.id ?? null,
-            appliedPropertyIds: appliedProperties.map((p) => p.id),
-          }
-        : {}),
-      returns: rows
-        .filter((r) => r.checked)
-        .map((r) => ({ rollId: r.rollId, notes: r.notes.trim() || null })),
-      newRolls: parsedNewRolls,
-    };
+    return buildReceivePayload({
+      selectedGroup,
+      selectedParty,
+      rows,
+      newRolls,
+      manifestNo,
+      notes,
+      appliesColor,
+      appliedColor,
+      appliedProperties,
+    });
+  };
+
+  const doSubmit = () => {
+    const payload = buildPayload();
+    if (!payload) return;
+    receiveMutation.mutate(payload);
   };
 
   const handleSubmitClick = () => {
@@ -802,16 +842,13 @@ export default function FasonKabulScreen() {
       return;
     }
     if (!canSubmit) return;
-    if ((hasMissing || hasQtyMismatch) && !submitArmed) {
-      // Two-stage: ilk tıklama silahlar, ikinci tıklama gönderir.
-      // hasQtyMismatch operatöre fark'ı zorla göstertir.
-      setSubmitArmed(true);
+    if (hasMissing || hasQtyMismatch) {
+      // Giden/gelen uyuşmuyor → iki-tık yerine belirgin uyarı modalı.
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setMismatchConfirmOpen(true);
       return;
     }
-    const payload = buildPayload();
-    if (!payload) return;
-    receiveMutation.mutate(payload);
+    doSubmit();
   };
 
   const allGroups = pendingQuery.data?.data ?? [];
@@ -893,9 +930,8 @@ export default function FasonKabulScreen() {
             sarınca footer + "Dönen Açık Kumaş" Metre input'ları klavyenin üstünde kalır.
             enabled verilmez → telefon + tablette aktif (KK1 deseni; KK1 tablette numpad
             kullandığından orada devre dışı, burada Metre native klavye açar). */}
-        <KeyboardAvoidingView
-          style={[styles.formCol, isPhone && styles.formColPhone]}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        <View
+          style={[styles.formCol, isPhone && !selectedGroup && styles.formColPhone]}
         >
           {!selectedGroup ? (
             <View style={styles.emptyState}>
@@ -915,10 +951,12 @@ export default function FasonKabulScreen() {
                   <Text style={styles.headerBatch} numberOfLines={1}>
                     {selectedGroup.workOrder.batchNumber}
                   </Text>
-                  <Text style={styles.headerSub} numberOfLines={1}>
-                    Adım {selectedGroup.step.stepSequence} ·{' '}
-                    {selectedGroup.step.station.name}
-                  </Text>
+                  <View style={styles.headerFirmRow}>
+                    <Icon source="factory" size={13} color="#94a3b8" />
+                    <Text style={styles.headerFirmName} numberOfLines={1}>
+                      {selectedGroup.lastDispatch?.subcontractor?.name ?? '—'}
+                    </Text>
+                  </View>
                 </View>
                 <IconButton
                   icon="close"
@@ -932,10 +970,9 @@ export default function FasonKabulScreen() {
               <View style={styles.partyHintCard}>
                 <Icon source="call-split" size={20} color="#b45309" />
                 <Text style={styles.partyHintText}>
-                  Bu adımda {partyList.length} ayrı parti (sevk) boyahanede.
-                  Boyahanede birleşmezler — ayrı ayrı dönebilir. Hangi partinin
-                  geldiğini seçin; her parti AYRI kabul edilir, gelmeyen
-                  parti(ler) beklemede kalır.
+                  Bu adımda {partyList.length} ayrı parti boyahanede, ayrı ayrı
+                  dönebilir. Geleni seçin — her parti AYRI kabul edilir, diğerleri
+                  beklemede kalır.
                 </Text>
               </View>
 
@@ -956,7 +993,7 @@ export default function FasonKabulScreen() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.partyCardTitle} numberOfLines={1}>
-                          {party.dispatchNo ?? 'Parti (kimliksiz)'}
+                          {formatPartyNo(party.dispatchNo) ?? 'Parti (kimliksiz)'}
                         </Text>
                         <Text style={styles.partyCardMeta} numberOfLines={1}>
                           {party.rollCount} top · {party.totalQty.toFixed(1)} m
@@ -978,65 +1015,27 @@ export default function FasonKabulScreen() {
             </>
           ) : (
             <>
-              {/* Sticky header band */}
+              {/* Sticky header band — Parti Kodu, altında fason firma adı (adım
+                  YAZMAZ; firma adından hangi işlem olduğu zaten anlaşılır), onun da
+                  altında uygulanacak renk + üretim özellikleri (boyahane kategorisi). */}
               <Surface style={styles.headerBand} elevation={2}>
                 <View style={styles.headerCellMain}>
                   <Text style={styles.headerBatch} numberOfLines={1}>
                     {selectedGroup.workOrder.batchNumber}
                   </Text>
-                  <Text style={styles.headerSub} numberOfLines={1}>
-                    Adım {selectedGroup.step.stepSequence} ·{' '}
-                    {selectedGroup.step.station.name}
-                  </Text>
-                </View>
-                <View style={styles.headerDivider} />
-                <View style={styles.headerCell}>
-                  <Icon source="factory" size={14} color="#475569" />
-                  <Text style={styles.headerCompany} numberOfLines={1}>
-                    {selectedParty?.subcontractor?.name ??
-                      selectedGroup.lastDispatch?.subcontractor?.name ??
-                      '—'}
-                  </Text>
-                </View>
-                <IconButton
-                  icon="close"
-                  size={20}
-                  onPress={resetForm}
-                  accessibilityLabel="Sıfırla"
-                  style={{ margin: 0 }}
-                />
-              </Surface>
-
-              {/* Çoklu parti: aktif parti + diğerlerine dönüş */}
-              {isMultiParty && selectedParty && (
-                <TouchableRipple
-                  onPress={() => {
-                    setSelectedParty(null);
-                    setSubmitArmed(false);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
-                  borderless
-                  style={styles.activePartyBar}
-                >
-                  <View style={styles.activePartyBarInner}>
-                    <Icon source="arrow-left" size={18} color="#1d4ed8" />
-                    <Text style={styles.activePartyBarText} numberOfLines={1}>
-                      Parti: {selectedParty.dispatchNo ?? '—'} ·{' '}
-                      diğer {partyList.length - 1} parti beklemede
+                  <View style={styles.headerFirmRow}>
+                    <Icon source="factory" size={13} color="#94a3b8" />
+                    <Text style={styles.headerFirmName} numberOfLines={1}>
+                      {selectedParty?.subcontractor?.name ??
+                        selectedGroup.lastDispatch?.subcontractor?.name ??
+                        '—'}
                     </Text>
-                    <Text style={styles.activePartyBarChange}>Değiştir</Text>
                   </View>
-                </TouchableRipple>
-              )}
-
-              {/* "Renk veren" kategori (Boyahane vb.) — uygulanacak renk/özellikler */}
-              {appliesColor && (
-                <View style={styles.appliesColorCard}>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.appliesColorRow}
-                  >
+                </View>
+                {/* Renk + üretim özellikleri SAĞDA — ayrı satır yerine parti/firma
+                    kolonunun yanında; header 3 satırdan 2 satıra iner. */}
+                {appliesColor && (
+                  <View style={styles.headerAppliesRow}>
                     {appliedColor ? (
                       <View style={styles.appliesColorChip}>
                         <View
@@ -1061,8 +1060,48 @@ export default function FasonKabulScreen() {
                         </Text>
                       </View>
                     ))}
-                  </ScrollView>
-                </View>
+                  </View>
+                )}
+                <IconButton
+                  icon="close"
+                  size={20}
+                  onPress={resetForm}
+                  accessibilityLabel="Sıfırla"
+                  style={{ margin: 0 }}
+                />
+              </Surface>
+
+              {/* Çoklu parti: aktif parti + diğerlerine dönüş */}
+              {isMultiParty && selectedParty && (
+                <TouchableRipple
+                  onPress={() => {
+                    setSelectedParty(null);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  borderless
+                  style={styles.activePartyBar}
+                >
+                  <View style={styles.activePartyBarInner}>
+                    <Icon source="arrow-left" size={18} color="#1d4ed8" />
+                    <Text style={styles.activePartyBarText} numberOfLines={1}>
+                      {formatPartyNo(selectedParty.dispatchNo) ?? '—'} ·{' '}
+                      diğer {partyList.length - 1} parti beklemede
+                    </Text>
+                    {fabricWidth != null && (
+                      <View style={styles.partyWidthPill}>
+                        <Icon
+                          source="arrow-expand-horizontal"
+                          size={13}
+                          color="#1d4ed8"
+                        />
+                        <Text style={styles.partyWidthPillText}>
+                          En {fabricWidth} cm
+                        </Text>
+                      </View>
+                    )}
+                    <Text style={styles.activePartyBarChange}>Değiştir</Text>
+                  </View>
+                </TouchableRipple>
               )}
 
               {/* Toplar — ScrollView'in büyük kısmı */}
@@ -1158,7 +1197,13 @@ export default function FasonKabulScreen() {
                           </View>
                         </View>
                         <IconButton
-                          icon={row.noteOpen ? 'chevron-up' : 'note-plus-outline'}
+                          icon={
+                            row.noteOpen
+                              ? 'chevron-up'
+                              : row.notes
+                                ? 'pencil'
+                                : 'pencil-plus-outline'
+                          }
                           size={22}
                           iconColor={row.notes ? '#0369a1' : '#64748b'}
                           onPress={() =>
@@ -1254,8 +1299,8 @@ export default function FasonKabulScreen() {
                                 r.noteOpen
                                   ? 'chevron-up'
                                   : r.notes
-                                    ? 'note-text'
-                                    : 'note-plus-outline'
+                                    ? 'pencil'
+                                    : 'pencil-plus-outline'
                               }
                               size={22}
                               iconColor={r.notes ? '#0369a1' : '#64748b'}
@@ -1308,37 +1353,84 @@ export default function FasonKabulScreen() {
                 </View>
               </ScrollView>
 
-              {/* Sticky footer */}
+              {/* Sticky footer — yalnız İrsaliye/Kabul Notu odaklanınca klavyenin
+                  üstüne kayar (footerAnimStyle). */}
+              <Animated.View style={footerAnimStyle}>
               <Surface style={styles.footer} elevation={4}>
-                <View style={styles.footerInputs}>
-                  <TextInput
-                    mode="outlined"
-                    label="İrsaliye No"
-                    value={manifestNo}
-                    onChangeText={setManifestNo}
-                    placeholder="Opsiyonel"
-                    dense
-                    autoCapitalize="characters"
-                    style={[styles.footerInput, { flex: 1 }]}
-                  />
-                  <TextInput
-                    mode="outlined"
-                    label="Kabul Notu"
-                    value={notes}
-                    onChangeText={setNotes}
-                    placeholder="Opsiyonel"
-                    dense
-                    style={[styles.footerInput, { flex: 1.2 }]}
-                  />
-                </View>
+                {/* İrsaliye No / Kabul Notu opsiyonel → varsayılan kapalı. Kapalıyken
+                    dolu ise özet, boşsa "ekle" etiketi; tıklayınca açılır. */}
+                <TouchableRipple
+                  onPress={() => setExtrasOpen((v) => !v)}
+                  style={styles.footerExtrasToggle}
+                  borderless
+                >
+                  <View style={styles.footerExtrasToggleInner}>
+                    <Icon
+                      source={
+                        extrasOpen
+                          ? 'chevron-up'
+                          : manifestNo || notes
+                            ? 'pencil'
+                            : 'plus'
+                      }
+                      size={16}
+                      color="#64748b"
+                    />
+                    <Text style={styles.footerExtrasToggleText} numberOfLines={1}>
+                      {extrasOpen
+                        ? 'İrsaliye No / Kabul Notu'
+                        : manifestNo || notes
+                          ? [
+                              manifestNo ? `İrsaliye: ${manifestNo}` : null,
+                              notes ? `Not: ${notes}` : null,
+                            ]
+                              .filter(Boolean)
+                              .join('  ·  ')
+                          : 'İrsaliye No / Kabul Notu ekle (opsiyonel)'}
+                    </Text>
+                  </View>
+                </TouchableRipple>
+                {extrasOpen && (
+                  <View style={styles.footerInputs}>
+                    <TextInput
+                      mode="outlined"
+                      label="İrsaliye No"
+                      value={manifestNo}
+                      onChangeText={setManifestNo}
+                      placeholder="Opsiyonel"
+                      dense
+                      autoCapitalize="characters"
+                      onFocus={() => {
+                        footerLift.value = withTiming(1, { duration: 160 });
+                      }}
+                      onBlur={() => {
+                        footerLift.value = withTiming(0, { duration: 160 });
+                      }}
+                      style={[styles.footerInput, { flex: 1 }]}
+                    />
+                    <TextInput
+                      mode="outlined"
+                      label="Kabul Notu"
+                      value={notes}
+                      onChangeText={setNotes}
+                      placeholder="Opsiyonel"
+                      dense
+                      onFocus={() => {
+                        footerLift.value = withTiming(1, { duration: 160 });
+                      }}
+                      onBlur={() => {
+                        footerLift.value = withTiming(0, { duration: 160 });
+                      }}
+                      style={[styles.footerInput, { flex: 1.2 }]}
+                    />
+                  </View>
+                )}
                 <Button
                   mode="contained"
                   icon={
-                    submitArmed
-                      ? 'alert-decagram'
-                      : hasMissing || hasQtyMismatch
-                        ? 'alert-circle-outline'
-                        : 'package-check'
+                    hasMissing || hasQtyMismatch
+                      ? 'alert-circle-outline'
+                      : 'package-check'
                   }
                   onPress={handleSubmitClick}
                   disabled={!canSubmit}
@@ -1346,27 +1438,20 @@ export default function FasonKabulScreen() {
                   contentStyle={styles.submitBtnContent}
                   labelStyle={styles.submitBtnLabel}
                   buttonColor={
-                    submitArmed
-                      ? '#dc2626'
-                      : hasMissing || hasQtyMismatch
-                        ? '#d97706'
-                        : '#059669'
+                    hasMissing || hasQtyMismatch ? '#d97706' : '#059669'
                   }
                 >
-                  {submitArmed
-                    ? hasMissing
-                      ? `Eksik kabulü ONAYLA — tekrar bas (${checkedCount}/${rows.length})`
-                      : `Fark'lı kabulü ONAYLA — tekrar bas (${qtyDiff > 0 ? '+' : ''}${qtyDiff.toFixed(1)} m)`
-                    : hasMissing
-                      ? `Mal Kabulü Yap · ${missingCount} EKSİK`
-                      : hasQtyMismatch
-                        ? `Mal Kabulü Yap · FARK ${qtyDiff > 0 ? '+' : ''}${qtyDiff.toFixed(1)} m`
-                        : `Mal Kabulü Yap (${checkedCount} top → ${newRolls.length} parça)`}
+                  {hasMissing
+                    ? `Mal Kabulü Yap · ${missingCount} EKSİK`
+                    : hasQtyMismatch
+                      ? `Mal Kabulü Yap · FARK ${qtyDiff > 0 ? '+' : ''}${qtyDiff.toFixed(1)} m`
+                      : `Mal Kabulü Yap (${checkedCount} top → ${newRolls.length} parça)`}
                 </Button>
               </Surface>
+              </Animated.View>
             </>
           )}
-        </KeyboardAvoidingView>
+        </View>
 
         {/* ════════ SAĞ: bekleyen + geçmiş (tablet) / sadece manuel input (telefon + kamera arızalı) ════════
             Telefon dikey + kamera-only modda kart okuma, liste ve geçmiş aksiyonları
@@ -1470,8 +1555,11 @@ export default function FasonKabulScreen() {
 
         {/* Telefon dikey — ekran altında baş-parmak aksiyon barı.
             30 / 40 / 30: Geçmiş (sol) · Kamera ile Okut (orta, ana eylem) ·
-            Bekleyen (sağ). Kamera ortada vurgulu dolgulu blok. */}
-        {isPhone && (
+            Bekleyen (sağ). Kamera ortada vurgulu dolgulu blok.
+            Yalnız bir iş emri/sevk AÇILMAMIŞKEN (selectedGroup yok) görünür —
+            kabul ekranı açılınca bu üç tuş anlamsızlaşır (yeşil "Mal Kabulü Yap"
+            footer'ı devralır), çıkmak için header'daki ✕ kullanılır. */}
+        {isPhone && !selectedGroup && (
           <View style={styles.bottomBar}>
             {/* Flex oranı dış hücre View'lerinde — TouchableRipple'a doğrudan
                 flex vermek Paper'da güvenilir değil; ripple hücreyi flex:1 ile
@@ -1526,6 +1614,49 @@ export default function FasonKabulScreen() {
           </View>
         )}
       </View>
+
+      {/* Giden/gelen uyuşmazlığı — iki-tık yerine belirgin uyarı modalı. */}
+      <ConfirmDialog
+        visible={mismatchConfirmOpen}
+        kind="destructive"
+        onDismiss={() => setMismatchConfirmOpen(false)}
+        title="Giden / gelen uyuşmuyor"
+        confirmLabel="Yine de Kabul Et"
+        cancelLabel="Vazgeç"
+        onConfirm={() => {
+          setMismatchConfirmOpen(false);
+          doSubmit();
+        }}
+        description={
+          <View style={{ gap: 10 }}>
+            <Text style={styles.mismatchLead}>
+              Sevk edilen ile dönen tutmuyor. Yine de kabul etmek istediğine
+              emin misin?
+            </Text>
+            {hasMissing && (
+              <View style={styles.mismatchRow}>
+                <Icon source="alert-circle-outline" size={18} color="#b45309" />
+                <Text style={styles.mismatchRowText}>
+                  {missingCount} top işaretlenmedi — bu toplar kabul
+                  EDİLMEYECEK, adımda beklemede kalacak. ({checkedCount}/
+                  {rows.length} kabul)
+                </Text>
+              </View>
+            )}
+            {hasQtyMismatch && (
+              <View style={styles.mismatchRow}>
+                <Icon source="arrow-expand-vertical" size={18} color="#b45309" />
+                <Text style={styles.mismatchRowText}>
+                  Metraj farkı: Sevk {sentTotal.toFixed(1)} m · Dönen{' '}
+                  {returnedTotal.toFixed(1)} m ·{' '}
+                  {qtyDiff > 0 ? 'FAZLA +' : 'EKSİK '}
+                  {qtyDiff.toFixed(1)} m
+                </Text>
+              </View>
+            )}
+          </View>
+        }
+      />
 
       {/* Detay modal — kendi AppModal'ı (Portal + swipe). Telefon Geçmiş modalı
           açık olsa bile ayrı Portal'da üstte açılır; aşağı çekerek kapanır ve
@@ -2551,17 +2682,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
     gap: 8,
   },
-  headerCellMain: { flex: 1.5, justifyContent: 'center' },
+  headerCellMain: { flex: 1, justifyContent: 'center' },
   headerBatch: {
     fontFamily: 'monospace',
     fontSize: 14,
     fontWeight: '700',
     color: '#fff',
   },
-  headerSub: { fontSize: 11, color: '#cbd5e1', marginTop: 2 },
-  headerDivider: { width: 1, height: 28, backgroundColor: '#334155' },
-  headerCell: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  headerCompany: { fontSize: 12, color: '#e2e8f0', fontWeight: '600' },
+  // Parti kodunun altında fason firma adı (eski "Adım X · istasyon"ın yerine).
+  headerFirmRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  headerFirmName: { flexShrink: 1, fontSize: 12, color: '#e2e8f0', fontWeight: '600' },
+  // Uygulanacak renk + üretim özellikleri — header'ın SAĞ tarafında, parti/firma
+  // kolonunun yanında (ayrı satır değil). flexShrink + maxWidth ile firma adını ezmez.
+  headerAppliesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    flexShrink: 1,
+    maxWidth: '50%',
+    gap: 6,
+  },
 
   // ── Çoklu parti (çoklu sevk) teyit ekranı ──
   partyHintCard: {
@@ -2620,6 +2761,16 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   activePartyBarText: { flex: 1, fontSize: 12.5, color: '#1e3a8a', fontWeight: '700' },
+  partyWidthPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#dbeafe',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  partyWidthPillText: { fontSize: 11.5, fontWeight: '800', color: '#1d4ed8' },
   activePartyBarChange: { fontSize: 12, color: '#1d4ed8', fontWeight: '800' },
 
   // Mini bilgi şeridi
@@ -2635,22 +2786,7 @@ const styles = StyleSheet.create({
   },
   warningText: { fontSize: 11, color: '#92400e', flex: 1 },
 
-  // Refactor 9 — Boyahane / "renk veren" kategori uygulama bilgisi
-  appliesColorCard: {
-    marginHorizontal: 12,
-    marginTop: 8,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: '#faf5ff',
-    borderWidth: 1,
-    borderColor: '#c4b5fd',
-  },
-  appliesColorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-  },
+  // Boyahane / "renk veren" kategori uygulama bilgisi (header band içindeki şeritte).
   appliesColorChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2844,8 +2980,31 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 8,
   },
+  // Giden/gelen uyuşmazlık modalı (ConfirmDialog description) satırları.
+  mismatchLead: { fontSize: 14, color: '#475569', lineHeight: 20 },
+  mismatchRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderRadius: 8,
+    padding: 8,
+  },
+  mismatchRowText: { flex: 1, fontSize: 13, color: '#92400e', lineHeight: 18 },
   footerInputs: { flexDirection: 'row', gap: 8 },
   footerInput: { backgroundColor: '#fff' },
+  // İrsaliye/Kabul Notu açılır-kapanır tetik satırı (kapalıyken footer kısa kalır).
+  footerExtrasToggle: { borderRadius: 8 },
+  footerExtrasToggleInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  footerExtrasToggleText: { flex: 1, fontSize: 13, color: '#475569', fontWeight: '600' },
   submitBtn: { borderRadius: 10 },
   submitBtnContent: { height: 56 },
   submitBtnLabel: { fontSize: 15, fontWeight: '700' },

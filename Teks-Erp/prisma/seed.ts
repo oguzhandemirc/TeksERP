@@ -461,6 +461,37 @@ async function main() {
   }
   console.log(`✅ ${hwData.length} makine donanım config (örnek yazıcı/RS232 desenleri)`);
 
+  // --- Birleşik cihaz kaydı (PeripheralDevice) — örnek ağ yazıcısı ---
+  // Tambur makinesine bağlı Argox ağ yazıcısı (NETWORK_TCP). Baskı anında
+  // label.service cihaz→{dil,profil,şablon} çözer. Mobil BT yazıcılar sahada
+  // register-bt ile kendiliğinden eklenir.
+  const tamburMachineId = mById("TAMBUR-M1");
+  if (tamburMachineId) {
+    const peripheral = await prisma.peripheralDevice.create({
+      data: {
+        code: "TAMBUR-ARGOX-01",
+        name: "Tambur Argox (ağ)",
+        kind: "LABEL_PRINTER",
+        connectionType: "NETWORK_TCP",
+        address: "192.168.1.52",
+        port: 9100,
+        machineId: tamburMachineId,
+        printerModelId: argox.id,
+        formatProfileId: argoxProfile.id,
+      },
+    });
+    const finishedDefault = await prisma.labelTemplate.findFirst({
+      where: { kind: "ROLL_FINISHED", isDefault: true, isActive: true },
+      select: { id: true },
+    });
+    if (finishedDefault) {
+      await prisma.peripheralTemplateRoute.create({
+        data: { peripheralId: peripheral.id, kind: "ROLL_FINISHED", templateId: finishedDefault.id },
+      });
+    }
+    console.log("✅ Örnek cihaz kaydı (Tambur Argox, NETWORK_TCP, PPLA)");
+  }
+
   // --- İstasyon yetenekleri ---
   // Boyahane: tüm 6 renk + 5 özellik (Kurşun ve Zımparalı hariç — onlar başka istasyonun işi)
   await prisma.stationColor.createMany({

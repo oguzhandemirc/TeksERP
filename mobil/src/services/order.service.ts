@@ -11,6 +11,8 @@ import type { ApiResponse } from '../types/api';
 /** Bir topun özelliğine uyan açık sipariş kalemi (Açık>0). Tambur yeniden-kes "Kime?" picker'ı. */
 export interface AvailableOrderLine {
   lineId: string;
+  /** Kalemin ürünü — sipariş-önce'de WO ürününü kilitler + anchor (tek WO=tek kumaş). */
+  itemId: string;
   orderId: string;
   orderNumber: string;
   customerId: string;
@@ -30,6 +32,18 @@ export interface AvailableOrderLine {
   inProduction?: number;
   /** Net açık = açık − üretimdeki (withInProduction). Yoksa openQty kullan. */
   netOpenQty?: number;
+}
+
+/** Cursor (keyset) sayfa cevabı — "sipariş-önce" aramalı liste infinite scroll. */
+export interface AvailableOrderLinesCursorPage {
+  success: boolean;
+  data: AvailableOrderLine[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+    limit: number;
+    totalEstimate?: number;
+  };
 }
 
 export interface QuickOrderResult {
@@ -54,6 +68,28 @@ export const orderService = {
     if (params.withInProduction) q.set('withInProduction', 'true');
     return apiClient
       .get<ApiResponse<AvailableOrderLine[]>>(`/orders/order-lines/available?${q.toString()}`)
+      .then((r) => r.data);
+  },
+
+  /**
+   * "Sipariş-önce" aramalı liste — itemId opsiyonel (verilmezse tüm açık kalemler).
+   * Cursor (keyset) + arama (sipariş no / müşteri / ürün). Hızlı İş Emri picker'ı.
+   */
+  getAvailableOrderLinesCursor: (params: {
+    itemId?: string | null;
+    search?: string | null;
+    cursor?: string | null;
+    limit?: number;
+    withTotal?: boolean;
+  }): Promise<AvailableOrderLinesCursorPage> => {
+    const q = new URLSearchParams();
+    if (params.itemId) q.set('itemId', params.itemId);
+    if (params.search) q.set('search', params.search);
+    if (params.cursor) q.set('cursor', params.cursor);
+    q.set('limit', String(params.limit ?? 20));
+    if (params.withTotal) q.set('withTotal', 'true');
+    return apiClient
+      .get<AvailableOrderLinesCursorPage>(`/orders/order-lines/available?${q.toString()}`)
       .then((r) => r.data);
   },
 

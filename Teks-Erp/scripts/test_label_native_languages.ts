@@ -32,7 +32,7 @@ const payload = {
 
 async function main() {
   // --- PPLB (EPL2) ---
-  const pplb = buildRollLabelPplb({ payload, format, copies: 2 });
+  const pplb = buildRollLabelPplb({ payload, format, copies: 2, template: null });
   check("PPLB: N (buffer temizle)", /^N/m.test(pplb));
   check("PPLB: q<genişlik> + Q<boy>", /q\d+/.test(pplb) && /Q\d+,\d+/.test(pplb));
   check("PPLB: A metin alanı + ürün", /A\d+,\d+,0,\d+,1,1,N,"PATOS"/.test(pplb));
@@ -41,7 +41,7 @@ async function main() {
   check("PPLB: P2 (kopya)", pplb.includes("P2"));
 
   // --- ZPL ---
-  const zpl = buildRollLabelZpl({ payload, format, copies: 3 });
+  const zpl = buildRollLabelZpl({ payload, format, copies: 3, template: null });
   check("ZPL: ^XA…^XZ frame", zpl.includes("^XA") && zpl.trimEnd().endsWith("^XZ"));
   check("ZPL: ^PW + ^LL", /\^PW\d+/.test(zpl) && /\^LL\d+/.test(zpl));
   check("ZPL: ^FO/^A0N metin + ürün", /\^FO\d+,\d+\^A0N,\d+,\d+\^FDPATOS\^FS/.test(zpl));
@@ -58,18 +58,18 @@ async function main() {
   check("registry ZPL → ^XA", mk("ZPL").content.includes("^XA"));
 
   // --- sanitize: ZPL ^/~ ve PPLB " enjeksiyonu temizlenir ---
-  const dirtyZpl = buildRollLabelZpl({ payload: { ...payload, itemName: "A^B~C" } as unknown as LabelPayload, format, copies: 1 });
+  const dirtyZpl = buildRollLabelZpl({ payload: { ...payload, itemName: "A^B~C" } as unknown as LabelPayload, format, copies: 1, template: null });
   check("ZPL sanitize: ^ ~ veriden ayıklandı", dirtyZpl.includes("A B C") && !dirtyZpl.includes("A^B~C"));
-  const dirtyPplb = buildRollLabelPplb({ payload: { ...payload, itemName: 'A"B' } as unknown as LabelPayload, format, copies: 1 });
+  const dirtyPplb = buildRollLabelPplb({ payload: { ...payload, itemName: 'A"B' } as unknown as LabelPayload, format, copies: 1, template: null });
   check("PPLB sanitize: \" veriden ayıklandı", !dirtyPplb.includes('"A"B"'));
 
   // --- Türkçe → ASCII katlama: latin1 kaybı + komut-baytı enjeksiyonu engellenir ---
   // (Ş latin1'de 0x5E '^' = ZPL öneki; İ→'0'. ASCII'ye katlanınca hem doğru hem güvenli.)
   const tr = { ...payload, itemName: "ÖRNEK İĞNE", colorName: "ŞAHİN MAVİ", customerName: "ÇĞÜ ışık" } as unknown as LabelPayload;
   const isAscii = (s: string) => /^[\x00-\x7f]*$/.test(s) && Buffer.from(s, "latin1").toString("latin1") === s;
-  const trZpl = buildRollLabelZpl({ payload: tr, format, copies: 1 });
-  const trPpla = buildRollLabelPpla({ payload: tr, format, copies: 1 });
-  const trPplb = buildRollLabelPplb({ payload: tr, format, copies: 1 });
+  const trZpl = buildRollLabelZpl({ payload: tr, format, copies: 1, template: null });
+  const trPpla = buildRollLabelPpla({ payload: tr, format, copies: 1, template: null });
+  const trPplb = buildRollLabelPplb({ payload: tr, format, copies: 1, template: null });
   check("Türkçe→ASCII: ZPL saf ASCII (latin1-kayıpsız)", isAscii(trZpl));
   check("Türkçe→ASCII: PPLA saf ASCII", isAscii(trPpla));
   check("Türkçe→ASCII: PPLB saf ASCII", isAscii(trPplb));

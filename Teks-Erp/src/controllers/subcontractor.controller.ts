@@ -15,15 +15,45 @@ const dispatchSchema = z.object({
   plateNumber: z.string().max(32).optional(),
   driverName: z.string().max(128).optional(),
   notes: z.string().max(1000).optional(),
-  /** Boyahaneye özel talimat — genel sevk notundan ayrı (opsiyonel). */
-  dyehouseNote: z.string().max(1000).optional(),
+  /** Fason talimatı — genel sevk notundan ayrı (opsiyonel; boşsa adımın notu). */
+  instruction: z.string().max(1000).optional(),
   /** Operatör WO ürünü vs rulo ürünü uyuşmazlığını bilinçli onayladı. */
   allowItemOverride: z.boolean().optional(),
 });
 
-const updateDyehouseNoteSchema = z.object({
-  // Boş string / null → notu temizle.
-  dyehouseNote: z.string().max(1000).trim().nullish(),
+/** Masaüstü toplu sevk — top okutmadan adımdaki bekleyen tüm topları sevk eder. */
+const bulkDispatchSchema = z.object({
+  workOrderId: z.string().uuid(),
+  stepId: z.string().uuid(),
+  /** Yoksa adımın plannedSubcontractorId'si kullanılır. */
+  subcontractorId: z.string().uuid().optional(),
+  /** Verilirse yalnız bu toplar sevk edilir; yoksa adımdaki bekleyen hepsi. */
+  rollIds: z.array(z.string().uuid()).min(1).optional(),
+  instruction: z.string().max(1000).optional(),
+  plateNumber: z.string().max(32).optional(),
+  driverName: z.string().max(128).optional(),
+});
+
+/** Fasondan fasona doğrudan aktarım (zımpara→boyahane; fabrikaya uğramadan). */
+const transferNextSchema = z.object({
+  workOrderId: z.string().uuid(),
+  stepId: z.string().uuid(),
+  /** Yoksa sonraki adımın plannedSubcontractorId'si kullanılır. */
+  nextSubcontractorId: z.string().uuid().optional(),
+  /** Verilirse yalnız bu (fasonda bekleyen) toplar aktarılır; yoksa hepsi. */
+  rollIds: z.array(z.string().uuid()).min(1).optional(),
+  instruction: z.string().max(1000).optional(),
+});
+
+/** Erken TASLAK fason çeki — bir sonraki fason adımı için (sevkten önce). */
+const cekiDraftSchema = z.object({
+  workOrderId: z.string().uuid(),
+  stepId: z.string().uuid(),
+});
+
+const updateInstructionSchema = z.object({
+  // Boş string / null → talimatı temizle.
+  instruction: z.string().max(1000).trim().nullish(),
 });
 
 const cancelDispatchSchema = z.object({
@@ -94,7 +124,10 @@ export class SubcontractorController {
   constructor() {
     this.service = new SubcontractorService();
     this.dispatch = this.dispatch.bind(this);
-    this.updateDyehouseNote = this.updateDyehouseNote.bind(this);
+    this.bulkDispatch = this.bulkDispatch.bind(this);
+    this.transferToNextFason = this.transferToNextFason.bind(this);
+    this.fasonCekiDraft = this.fasonCekiDraft.bind(this);
+    this.updateInstruction = this.updateInstruction.bind(this);
     this.cancelDispatch = this.cancelDispatch.bind(this);
     this.receive = this.receive.bind(this);
     this.pendingReturns = this.pendingReturns.bind(this);
@@ -122,14 +155,50 @@ export class SubcontractorController {
     }
   }
 
-  /** PATCH /api/subcontractor/dispatches/:id/dyehouse-note */
-  async updateDyehouseNote(req: Request, res: Response, next: NextFunction): Promise<void> {
+  /** POST /api/subcontractor/dispatch/bulk — masaüstü toplu sevk (okutmasız) */
+  async bulkDispatch(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = bulkDispatchSchema.parse(req.body);
+      const result = await this.service.bulkDispatchStep(body, req.user?.userId);
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/subcontractor/transfer-next — fasondan fasona doğrudan aktarım */
+  async transferToNextFason(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = transferNextSchema.parse(req.body);
+      const result = await this.service.transferToNextFason(body, req.user?.userId);
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/subcontractor/fason-ceki-draft?workOrderId=&stepId= — erken TASLAK çeki */
+  async fasonCekiDraft(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { workOrderId, stepId } = cekiDraftSchema.parse({
+        workOrderId: req.query.workOrderId,
+        stepId: req.query.stepId,
+      });
+      const result = await this.service.previewDownstreamFasonCeki(workOrderId, stepId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** PATCH /api/subcontractor/dispatches/:id/instruction */
+  async updateInstruction(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
-      const body = updateDyehouseNoteSchema.parse(req.body);
-      const result = await this.service.updateDyehouseNote(
+      const body = updateInstructionSchema.parse(req.body);
+      const result = await this.service.updateInstruction(
         id,
-        body.dyehouseNote ?? null,
+        body.instruction ?? null,
         req.user?.userId
       );
       res.status(200).json(result);

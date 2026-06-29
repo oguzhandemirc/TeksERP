@@ -10,16 +10,22 @@
 // fiziksel test baskısıyla (Faz-2) ince ayarlanır.
 // =============================================================================
 
-import { cleanCtl, clampCopies, mmToDots, rollTextLines, LEFT_COL_MM, type NativeRenderInput } from "./native-label.shared";
+import { cleanCtl, clampCopies, mmToDots, templateTextLines, LEFT_COL_MM, type NativeRenderInput } from "./native-label.shared";
+import type { FontSize } from "../../config/label-fields";
 
 const CRLF = "\r\n";
+
+// Boyut → EPL2 font (1=küçük…5=çok büyük) + satır adım (mm). md/lg null-şablon
+// yolunun mevcut font 2/4 + d(5)/d(7) değerleriyle birebir örtüşür.
+const pplbFont = (s: FontSize): string => (s === "sm" ? "1" : s === "md" ? "2" : s === "lg" ? "4" : "5");
+const pplbStepMm = (s: FontSize): number => (s === "sm" ? 4 : s === "md" ? 5 : s === "lg" ? 7 : 9);
 
 /** EPL2 veri çift-tırnak içinde → veri içi `"` güvenli karaktere çevrilir. */
 function eplData(s: string): string {
   return cleanCtl(s).replace(/"/g, "'");
 }
 
-export function buildRollLabelPplb({ payload, format, copies }: NativeRenderInput): string {
+export function buildRollLabelPplb({ payload, format, copies, template }: NativeRenderInput): string {
   const dpi = format.dpi || 203;
   const d = (mm: number) => mmToDots(mm, dpi);
   const widthDots = d(format.widthMm);
@@ -34,11 +40,12 @@ export function buildRollLabelPplb({ payload, format, copies }: NativeRenderInpu
   lines.push("D8"); // yoğunluk (density) — fiziksel test baskısıyla ayar
 
   // Sağ kolon metin alanları — A x,y,rot,font,hMul,vMul,N,"veri" (origin sol-üst, y aşağı)
+  // Sıra/görünür/bold/font şablondan (templateTextLines); bold → hMul/vMul 1→2.
   let y = margin;
-  for (const ln of rollTextLines(payload)) {
-    const font = ln.big ? "4" : "2";
-    lines.push(`A${textX},${Math.round(y)},0,${font},1,1,N,"${eplData(ln.text)}"`);
-    y += ln.big ? d(7) : d(5); // 60mm'e sığsın diye sıkı adım
+  for (const ln of templateTextLines(payload, template)) {
+    const mul = ln.bold ? "2" : "1";
+    lines.push(`A${textX},${Math.round(y)},0,${pplbFont(ln.size)},${mul},${mul},N,"${eplData(ln.text)}"`);
+    y += d(pplbStepMm(ln.size)); // 60mm'e sığsın diye sıkı adım
   }
 
   // Sol kolon: QR (üst) + Code128 (alt) + okunur metin
