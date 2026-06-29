@@ -41,7 +41,6 @@ export interface CreatePayload {
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   foldType: string | null;
-  dyehouseNote: string | null;
 }
 
 export interface WorkOrderFormMeta {
@@ -96,6 +95,5 @@ export function buildPayload(
     plannedStartDate: dateOrNull(v.plannedStartDate),
     plannedEndDate: dateOrNull(v.plannedEndDate),
     foldType: trimOrNull(v.foldType),
-    dyehouseNote: trimOrNull(v.dyehouseNote),
   };
 }

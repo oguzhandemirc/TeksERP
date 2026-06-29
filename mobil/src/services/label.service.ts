@@ -21,6 +21,55 @@ export const labelService = {
       .get<ApiResponse<LabelPayload>>(`/labels/rolls/${rollId}`)
       .then((r) => r.data),
 
+  /**
+   * Rulonun Argox PPLA native komut string'i (text/plain) — Bluetooth yazıcıya
+   * ham gönderim için. `/html` ile aynı bağlam (kind + müşteri/stok); profil
+   * istasyona göre oto çözülür (x-device-id → machineId).
+   */
+  getRollPpla: (
+    rollId: string,
+    kind: 'ROLL_RAW' | 'ROLL_FINISHED',
+    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean },
+  ): Promise<string> =>
+    apiClient
+      .get<string>(`/labels/rolls/${rollId}/ppla`, {
+        params: {
+          kind,
+          ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
+          ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
+          ...(ctx?.stock ? { stock: '1' } : {}),
+        },
+        responseType: 'text',
+        transformResponse: [(d) => d],
+      })
+      .then((r) => String(r.data ?? '')),
+
+  /**
+   * Rulonun etiketi SEÇİLİ dilde (cihaz kaydının dili: PPLA/PPLB/ZPL veya
+   * RASTER_HTML). Bluetooth yazıcıya ham gönderim için içerik + dil döner.
+   * Dil X-Label-Language header'ından okunur; cihaz kaydı yoksa global/model.
+   */
+  getRollNative: (
+    rollId: string,
+    kind: 'ROLL_RAW' | 'ROLL_FINISHED',
+    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean },
+  ): Promise<{ content: string; language: string }> =>
+    apiClient
+      .get<string>(`/labels/rolls/${rollId}/native`, {
+        params: {
+          kind,
+          ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
+          ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
+          ...(ctx?.stock ? { stock: '1' } : {}),
+        },
+        responseType: 'text',
+        transformResponse: [(d) => d],
+      })
+      .then((r) => ({
+        content: String(r.data ?? ''),
+        language: String((r.headers?.['x-label-language'] as string | undefined) ?? 'PPLA'),
+      })),
+
   /** Kartelanın etiket payload'u — parentRoll allocation üzerinden cascade. */
   getSwatchLabel: (swatchId: string): Promise<ApiResponse<SwatchLabelPayload>> =>
     apiClient
@@ -63,6 +112,24 @@ export const labelService = {
   ): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>(`/labels/rolls/${rollId}/print`, {
+        ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
+        ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
+        ...(ctx?.stock ? { stock: true } : {}),
+      })
+      .then((r) => r.data),
+
+  /**
+   * Etiket NİYETİNİ (müşteri/stok) topa kalıcılaştır — fiziksel baskıdan BAĞIMSIZ.
+   * LabelPrinter baskı-ÖNCESİ çağırır: yazıcı yok / diyalog iptal olsa bile niyet
+   * kaybolmaz. `recordPrintEvent`'ten farkı: LABEL_PRINTED audit'i YAZMAZ (sadece
+   * snapshot). Gerçek baskı tamamlanınca ayrıca recordPrintEvent atılır.
+   */
+  seedSnapshot: (
+    rollId: string,
+    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }
+  ): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/labels/rolls/${rollId}/seed-snapshot`, {
         ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
         ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
         ...(ctx?.stock ? { stock: true } : {}),

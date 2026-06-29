@@ -4,7 +4,7 @@ import { Text, TouchableRipple, Icon, TextInput, Button } from 'react-native-pap
 
 import AppModal from '../../../components/AppModal';
 import type { ProductionRoute } from '../../../services/route.service';
-import { STATION_TYPE_LABEL, trLabel } from '../../../utils/labels';
+import { STATION_TYPE_LABEL, fasonNoteLabel, trLabel } from '../../../utils/labels';
 import { colors, spacing, radius } from '../../../theme';
 
 // Fason kategorisinin uyguladığı şeyi etikete ekler ("· renk+özellik uygular").
@@ -93,15 +93,27 @@ export default function RouteStepsModal({
                 </View>
 
                 {editable ? (
-                  <TextInput
-                    mode="outlined"
-                    dense
-                    value={notes[s.sequence] ?? ''}
-                    onChangeText={(t) => onChangeNote(s.sequence, t)}
-                    placeholder={s.defaultNotes ? `Varsayılan: ${s.defaultNotes}` : 'İstasyon notu (opsiyonel)'}
-                    multiline
-                    style={styles.noteInput}
-                  />
+                  <View style={styles.noteBlock}>
+                    <Text style={styles.noteLabel}>
+                      {cat ? fasonNoteLabel(s.station?.name) : 'İstasyon notu'}
+                    </Text>
+                    {cat ? <Text style={styles.noteHint}>Çeki listesine basılır</Text> : null}
+                    <TextInput
+                      mode="outlined"
+                      dense
+                      value={notes[s.sequence] ?? ''}
+                      onChangeText={(t) => onChangeNote(s.sequence, t)}
+                      placeholder={
+                        s.defaultNotes
+                          ? `Varsayılan: ${s.defaultNotes}`
+                          : cat
+                            ? `${fasonNoteLabel(s.station?.name)} (opsiyonel)`
+                            : 'İstasyon notu (opsiyonel)'
+                      }
+                      multiline
+                      style={styles.noteInput}
+                    />
+                  </View>
                 ) : s.defaultNotes ? (
                   <Text style={styles.defaultNote}>{s.defaultNotes}</Text>
                 ) : null}
@@ -202,7 +214,10 @@ const styles = StyleSheet.create({
   stationName: { fontSize: 15, fontWeight: '700', color: colors.text },
   stationType: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
   stationCat: { fontSize: 12, color: colors.brand, fontWeight: '700', marginTop: 1 },
-  noteInput: { backgroundColor: colors.surface, minHeight: 48 },
+  noteBlock: { gap: 2 },
+  noteLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
+  noteHint: { fontSize: 11, color: colors.textMuted },
+  noteInput: { backgroundColor: colors.surface, minHeight: 48, marginTop: 2 },
   defaultNote: { fontSize: 13, color: colors.textSecondary, fontStyle: 'italic', paddingLeft: 40 },
   firmBlock: { gap: spacing.xs, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
   firmHeadRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

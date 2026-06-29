@@ -227,6 +227,29 @@ router.get("/shipments/:id/dispatch-report", verifyToken, ACCOUNTING_READ, contr
 
 /**
  * @openapi
+ * /api/shipping/accounting-export:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Muhasebe Excel dökümü — DISPATCHED sevk listesi/detay/icmal/iade (tarih + müşteri filtresi)
+ *     description: >
+ *       Ekran filtresini (filter[customerId], dateField/dateFrom/dateTo, search) listShipments ile
+ *       aynı whitelist üzerinden uygular; status zorla DISPATCHED. Frontend exceljs ile .xlsx üretir.
+ *       Sevkiyat sayısı üst sınırı aşarsa 400 (aralığı daraltın).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: dateField, schema: { type: string, enum: [dispatchedAt, createdAt] } }
+ *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
+ *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: "filter[customerId]", schema: { type: string, format: uuid } }
+ *       - { in: query, name: search, schema: { type: string } }
+ *     responses:
+ *       200: { description: Muhasebe veri seti (shipments + detail + byCustomer + byProduct + returns + totals) }
+ *       400: { description: Sevkiyat sayısı üst sınırı aştı — aralığı daraltın }
+ */
+router.get("/accounting-export", verifyToken, ACCOUNTING_READ, controller.getAccountingExport);
+
+/**
+ * @openapi
  * /api/shipping/shipments/{id}:
  *   get:
  *     tags: [Shipping]
@@ -425,6 +448,8 @@ router.post("/shipments/:id/retarget-preview", verifyToken, READ, controller.ret
 router.post("/shipments/:id/scan", verifyToken, WRITE, controller.scan);
 router.post("/shipments/:id/remove-roll", verifyToken, WRITE, controller.removeRoll);
 router.post("/shipments/:id/remove-swatch", verifyToken, WRITE, controller.removeSwatch);
+// Seçerek kartela ekle (barkod okutmadan, ürün+renk stok grubundan N adet → stoktan düş).
+router.post("/shipments/:id/add-kartela", verifyToken, WRITE, controller.addKartela);
 
 /**
  * @openapi

@@ -41,6 +41,9 @@ interface Props {
   /** "Yeni Etiket" — yönlendir: "Etiket kime?" seçip yeni etiket bas. Verilirse
    *  "Bas"ın yanında ikinci buton görünür. */
   onNewLabel?: () => void;
+  /** "Müşterisiz (Stok)" — müşteri bilgisi OLMADAN tek dokunuşta bas. Verilirse
+   *  "Bas"ın yanında üçüncü buton görünür (parent {stock:true} ile basar). */
+  onPrintStock?: () => void;
 }
 
 function sourceInfo(s: NameSource | null): { short: string; label: string } {
@@ -49,7 +52,7 @@ function sourceInfo(s: NameSource | null): { short: string; label: string } {
   return { short: 'Standart', label: 'Standart ad' };
 }
 
-export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint, onNewLabel }: Props) {
+export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint, onNewLabel, onPrintStock }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   // Telefonda (dar) modal neredeyse tam en; tablette dengeli/orta genişlik.
   const phone = winW < 600;
@@ -101,10 +104,14 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint, o
   });
 
   const printMut = useMutation({
-    mutationFn: () =>
+    mutationFn: (ctx?: { stock?: boolean }) =>
       labelService.recordPrintEvent(
         rollId!,
-        payload?.orderLineId ? { orderLineId: payload.orderLineId } : undefined,
+        ctx?.stock
+          ? { stock: true }
+          : payload?.orderLineId
+            ? { orderLineId: payload.orderLineId }
+            : undefined,
       ),
     onError: (err: Error) => {
       // Audit hatası baskıyı engellemez — sadece log.
@@ -116,7 +123,15 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint, o
     if (!payload) return;
     onPrint?.(payload);
     // Audit izi (async, beklenmiyor)
-    printMut.mutate();
+    printMut.mutate(undefined);
+  };
+
+  // "Müşterisiz (Stok)" — müşteri bilgisi OLMADAN bas. Parent {stock:true} ile
+  // yazıcıyı tetikler; audit snapshot'ı stok işaretler (bozuk müşteri düzelir).
+  const handlePrintStock = () => {
+    if (!payload) return;
+    onPrintStock?.();
+    printMut.mutate({ stock: true });
   };
 
   const openEdit = () => {
@@ -204,6 +219,16 @@ export function LabelPreviewSheet({ visible, rollId, kind, onDismiss, onPrint, o
                   onPress={onNewLabel}
                 >
                   Yeni Etiket
+                </Button>
+              )}
+              {canPrint && onPrintStock && (
+                <Button
+                  mode="outlined"
+                  icon="account-off-outline"
+                  textColor="#0f766e"
+                  onPress={handlePrintStock}
+                >
+                  Müşterisiz (Stok)
                 </Button>
               )}
               {canPrint && (
@@ -422,6 +447,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#fff' },
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
     gap: 10,
     marginTop: 8,

@@ -21,6 +21,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
+import { useKartelaMeasurementEnabled } from "@/hooks/usePricingEnabled";
 import { kartelaService } from "./service";
 import { KartelaCekiPrintDialog } from "./KartelaCekiPrintDialog";
 
@@ -163,6 +164,7 @@ function DispatchDetail({ id }: { id: string }) {
 }
 
 function ReceiptDetail({ id }: { id: string }) {
+  const showMeasure = useKartelaMeasurementEnabled();
   const query = useQuery({
     queryKey: ["kartela", "receipt", id],
     staleTime: 0,
@@ -241,8 +243,8 @@ function ReceiptDetail({ id }: { id: string }) {
                   <TableRow>
                     <TableHead>Kart No</TableHead>
                     <TableHead>Ürün / Renk</TableHead>
-                    <TableHead className="text-right">cm</TableHead>
-                    <TableHead className="text-right">kg</TableHead>
+                    {showMeasure && <TableHead className="text-right">cm</TableHead>}
+                    {showMeasure && <TableHead className="text-right">kg</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -253,12 +255,16 @@ function ReceiptDetail({ id }: { id: string }) {
                         {s.item.name}
                         {s.color ? ` · ${s.color.name}` : ""}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {s.length != null ? DEC.format(s.length) : "—"}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {s.weightKg != null ? DEC.format(s.weightKg) : "—"}
-                      </TableCell>
+                      {showMeasure && (
+                        <TableCell className="text-right tabular-nums">
+                          {s.length != null ? DEC.format(s.length) : "—"}
+                        </TableCell>
+                      )}
+                      {showMeasure && (
+                        <TableCell className="text-right tabular-nums">
+                          {s.weightKg != null ? DEC.format(s.weightKg) : "—"}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

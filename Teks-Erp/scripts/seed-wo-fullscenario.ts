@@ -154,12 +154,11 @@ async function fasonWave(
       targetQuantity: 5000,
       targetItemId: ITEM,
       targetColorId: COLOR,
-      dyehouseNote: "Lacivert, ton tutturulması önemli. Numune onaylı.",
       plannedEndDate: new Date(Date.now() + 14 * 86400000).toISOString(),
       steps: {
         create: [
           { stationId: ST.KK1, stepSequence: 1, status: "ACTIVE" },
-          { stationId: ST.BOYA, stepSequence: 2, status: "ACTIVE", requiredCategoryId: BOYA_CAT, plannedSubcontractorId: SUB },
+          { stationId: ST.BOYA, stepSequence: 2, status: "ACTIVE", requiredCategoryId: BOYA_CAT, plannedSubcontractorId: SUB, notes: "Lacivert, ton tutturulması önemli. Numune onaylı." },
           { stationId: ST.KURSUN, stepSequence: 3, status: "ACTIVE" },
           { stationId: ST.TAMBUR, stepSequence: 4, status: "ACTIVE" },
         ],

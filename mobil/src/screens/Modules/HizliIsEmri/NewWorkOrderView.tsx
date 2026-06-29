@@ -9,6 +9,7 @@ import {
   TextInput,
   Surface,
   ActivityIndicator,
+  Switch,
 } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient, onlineManager } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
@@ -27,6 +28,7 @@ import RouteStepsModal from './RouteStepsModal';
 import { useCardPrinter } from './useCardPrinter';
 import { buildWorkOrderCardData } from './printWorkOrder';
 
+import { printFasonCeki } from '../../../services/fasonCekiPrint';
 import { rollService } from '../../../services/roll.service';
 import { routeService } from '../../../services/route.service';
 import { productRecipeService } from '../../../services/productRecipe.service';
@@ -120,9 +122,16 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
   // Boş → route'un kayıtlı fasonu, o da yoksa favori kullanılır (selectedFirmBySeq).
   const [stepSubcontractors, setStepSubcontractors] = useState<Record<number, string>>({});
 
-  const [result, setResult] = useState<{ batchNumber: string; attached: number; errors: string[]; woId: string } | null>(
-    null,
-  );
+  const [result, setResult] = useState<{
+    batchNumber: string;
+    attached: number;
+    errors: string[];
+    woId: string;
+    dispatch: { id: string; dispatchNo: string } | null;
+  } | null>(null);
+  // "Fasona Gönder" — ilk rota adımı fason ise WO ile birlikte sevki de yap (default açık).
+  const [dispatchFirstStep, setDispatchFirstStep] = useState(true);
+  const [printingCeki, setPrintingCeki] = useState(false);
 
   const lockedItemId = scanned[0]?.itemId ?? null;
   const lockedItemName = scanned[0]?.itemName ?? null;
@@ -260,6 +269,17 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
     }
     return out;
   }, [selectedRoute, stepSubcontractors, favoriteFirmFor]);
+
+  // İlk rota adımı fason (boyahane) mı + firması çözülebiliyor mu? → "Fasona Gönder"
+  // toggle'ı yalnız fason ilk adımda görünür; firma yoksa sevk yapılamaz (uyarı).
+  const firstStepDispatch = useMemo(() => {
+    const steps = selectedRoute?.steps ?? [];
+    if (steps.length === 0) return { isFason: false, firmId: null as string | null };
+    const first = [...steps].sort((a, b) => a.sequence - b.sequence)[0];
+    const isFason = !!first.station?.defaultCategory;
+    const firmId = isFason ? (selectedFirmBySeq[first.sequence] ?? null) : null;
+    return { isFason, firmId };
+  }, [selectedRoute, selectedFirmBySeq]);
 
   // Rota hızlı çipleri: son kullanılan + favoriler (max 4, tekilleştirilmiş).
   const routeChips = useMemo(() => {
@@ -459,6 +479,7 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
         attached: data.attached,
         errors: data.errors,
         woId: data.workOrder.id,
+        dispatch: data.dispatch ?? null,
       });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
       qc.invalidateQueries({ queryKey: ['rolls'] });
@@ -533,12 +554,15 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
       targetQuantity: toPositiveNum(header.targetQuantity),
       targetWeight: toPositiveNum(header.targetWeight),
       foldType: header.foldType,
-      dyehouseNote: header.dyehouseNote.trim() || null,
       // Boş → backend Electron ile aynı algoritmayı (P-YYMMDD-NNN) üretir; doluysa override.
       batchNumber: header.batchNumber.trim() || undefined,
       orderLineIds: orderLineIds.length ? orderLineIds : undefined,
       targetPropertyIds: apply && targetPropertyIds.length ? targetPropertyIds : undefined,
       stepPlanning: stepPlanning.length ? stepPlanning : undefined,
+      // İlk adım fason + firma çözülmüş + toggle açıksa: WO ile birlikte fason sevkini
+      // de yap (çeki listesi dahil). Aksi halde gönderilmez (eski "planla" davranışı).
+      dispatchFirstStep:
+        dispatchFirstStep && firstStepDispatch.isFason && !!firstStepDispatch.firmId,
       // targetItemId verilmiyor → backend okutulan topların ürününden türetir
     };
     mutation.mutate(payload);
@@ -556,6 +580,7 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
     setOrderColorName(null);
     setColorLabel(null);
     setSubmitError(null);
+    setDispatchFirstStep(true);
     setResult(null);
   };
 
@@ -566,6 +591,23 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
       await printCard(data);
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Çıktı alınamadı', text2: e instanceof Error ? e.message : '' });
+    }
+  };
+
+  // Fason çeki listesi — backend'in TEK KAYNAK HTML'ini basar (kullanıcı iptali sessiz).
+  const handlePrintCeki = async () => {
+    if (!result?.dispatch) return;
+    setPrintingCeki(true);
+    try {
+      await printFasonCeki(result.dispatch.id);
+    } catch (e) {
+      Toast.show({
+        type: 'error',
+        text1: 'Çeki listesi alınamadı',
+        text2: e instanceof Error ? e.message : '',
+      });
+    } finally {
+      setPrintingCeki(false);
     }
   };
 
@@ -584,6 +626,11 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
           {result.errors.length > 0 ? (
             <Text style={styles.successWarn}>{result.errors.length} top bağlanamadı</Text>
           ) : null}
+          {result.dispatch ? (
+            <Text style={styles.successDispatch}>
+              Fasona sevk edildi · İrsaliye {result.dispatch.dispatchNo}
+            </Text>
+          ) : null}
           <Button
             mode="contained"
             icon="printer"
@@ -595,6 +642,20 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
           >
             Çıktı Al (Refakat Kartı)
           </Button>
+          {/* Fason çeki listesi — yalnız sevk yapıldıysa; otomatik açılmaz, isteğe bağlı. */}
+          {result.dispatch ? (
+            <Button
+              mode="contained-tonal"
+              icon="file-document-outline"
+              onPress={handlePrintCeki}
+              loading={printingCeki}
+              disabled={printingCeki}
+              style={styles.successBtn}
+              contentStyle={styles.btnContent}
+            >
+              Fason Çeki Listesi
+            </Button>
+          ) : null}
           <Button mode="outlined" icon="plus" onPress={resetAll} style={styles.successBtn} contentStyle={styles.btnContent}>
             Yeni İş Emri
           </Button>
@@ -821,6 +882,26 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
               setOrderColorName(line.colorId ? (line.colorName ?? line.customerColorName ?? null) : null);
             }}
           />
+
+          {/* Fasona Gönder — yalnız ilk rota adımı fason (boyahane) ise görünür.
+              Açıkken WO ile birlikte fason sevki de yapılır + çeki listesi oluşur. */}
+          {firstStepDispatch.isFason ? (
+            <View style={styles.dispatchToggle}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dispatchToggleTitle}>Fasona Gönder</Text>
+                <Text style={styles.dispatchToggleHint}>
+                  {firstStepDispatch.firmId
+                    ? 'İş emri açılınca mal fasona sevk edilir, çeki listesi oluşur. Kapatırsan yalnız planlanır.'
+                    : 'Fason firma seçili değil — sevk yapılamaz, yalnız planlanır.'}
+                </Text>
+              </View>
+              <Switch
+                value={dispatchFirstStep && !!firstStepDispatch.firmId}
+                onValueChange={setDispatchFirstStep}
+                disabled={!firstStepDispatch.firmId}
+              />
+            </View>
+          ) : null}
         </Surface>
 
         <View style={{ height: 200 }} />
@@ -1140,6 +1221,19 @@ const styles = StyleSheet.create({
   successBatch: { fontSize: 24, fontWeight: '800', color: colors.brand, marginTop: 2 },
   successMeta: { fontSize: 14, color: colors.textSecondary },
   successWarn: { fontSize: 13, color: colors.warningDark, fontWeight: '700' },
+  successDispatch: { fontSize: 13, color: colors.brand, fontWeight: '700', marginTop: 2 },
   successBtn: { borderRadius: radius.md, alignSelf: 'stretch', marginTop: spacing.sm },
   btnContent: { height: 50 },
+  // Fasona Gönder toggle satırı (Detaylar kartı).
+  dispatchToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  dispatchToggleTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
+  dispatchToggleHint: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
 });

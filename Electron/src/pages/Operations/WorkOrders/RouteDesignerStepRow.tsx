@@ -11,6 +11,7 @@ import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
 import type { SubcontractorCategory } from "@/pages/SubcontractorCategories/types";
 import type { DesignerStep } from "./RouteDesignerDialog";
+import { fasonNoteLabel } from "./fasonNote";
 
 interface Props {
   step: DesignerStep;
@@ -103,11 +104,19 @@ export function RouteDesignerStepRow({
           )}
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Not (opsiyonel)</label>
+          <label className="text-xs text-muted-foreground">
+            {step.stationType === "EXTERNAL"
+              ? fasonNoteLabel(step.stationName)
+              : "Not (opsiyonel)"}
+          </label>
           <Input
             value={step.notes}
             onChange={(e) => onUpdate({ notes: e.target.value })}
-            placeholder="Adıma özel talimat"
+            placeholder={
+              step.stationType === "EXTERNAL"
+                ? "Çeki listesine basılır"
+                : "Adıma özel talimat"
+            }
           />
         </div>
         {step.stationType === "EXTERNAL" && (

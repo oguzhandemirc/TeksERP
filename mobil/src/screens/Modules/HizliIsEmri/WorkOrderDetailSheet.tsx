@@ -78,7 +78,6 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
         targetQuantity: vals.targetQuantity ? Number(vals.targetQuantity) : null,
         targetWeight: vals.targetWeight ? Number(vals.targetWeight) : null,
         foldType: vals.foldType,
-        dyehouseNote: vals.dyehouseNote.trim() || null,
       }),
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -121,7 +120,6 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       targetWeight: wo.targetWeight != null ? String(wo.targetWeight) : '',
       foldType: wo.foldType ?? null,
       batchNumber: wo.batchNumber,
-      dyehouseNote: wo.dyehouseNote ?? '',
     });
     setMode('edit');
   };
@@ -181,7 +179,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
         // ── DÜZENLE ──────────────────────────────────────────────────────────
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Text style={styles.note}>
-            Renk, en, metraj, kat tipi, parti kodu ve boyahane notu güncellenir. Rota / sipariş bağı değişimi masaüstünden yapılır.
+            Renk, en, metraj, kat tipi ve parti kodu güncellenir. Fason talimatları rota adımlarında, rota / sipariş bağı değişimi masaüstünden yapılır.
           </Text>
           <WorkOrderHeaderFields value={edit} onChange={(p) => setEdit((e) => (e ? { ...e, ...p } : e))} showBatchNumber />
           <View style={styles.actionsCol}>
@@ -268,12 +266,6 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                 </Text>
               </View>
             ))}
-            {wo.dyehouseNote ? (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoKey}>Boyahane</Text>
-                <Text style={styles.infoVal}>{wo.dyehouseNote}</Text>
-              </View>
-            ) : null}
           </View>
 
           {/* Rota */}

@@ -160,15 +160,33 @@ async function main(): Promise<void> {
   // 6b) DISPATCHED sonrası freeze
   const sdoc = (await printedDocumentService.getCurrent(PrintedDocType.SHIPMENT_DISPATCH, shipmentId)).data as any;
   check("sevk sonrası v1 ACTIVE freeze", sdoc != null && sdoc.version === 1 && sdoc.status === "ACTIVE", sdoc?.status);
-  check("irsaliye 1 satır içeriyor", sdoc?.snapshot?.doc?.lines?.length === 1, sdoc?.snapshot?.doc?.lines);
-  check(
-    "satır metrajı = sevk edilen (alloc geri-indirgeme doğru)",
-    Math.round(sdoc?.snapshot?.doc?.lines?.[0]?.qty) === 100,
-    sdoc?.snapshot?.doc?.lines?.[0]?.qty,
-  );
-  check("toplam metraj 100", Math.round(sdoc?.snapshot?.doc?.summary?.totalMeters) === 100, sdoc?.snapshot?.doc?.summary);
-  check("çuval dökümü donmuş", sdoc?.snapshot?.doc?.sacks?.length === 1 && sdoc?.snapshot?.doc?.sacks?.[0]?.manualCode === "Ç-1");
-  check("plaka donmuş", sdoc?.snapshot?.doc?.plateNumber === "06 BBB 22");
+  // TEK KAYNAK: donmuş irsaliye = muhasebe fişi (ornek-fis 3 bölüm: ürün/çuval/çeki)
+  const doc = sdoc?.snapshot?.doc;
+  check("irsaliye ürün listesi (1 grup, 2 top, 100m)",
+    doc?.products?.length === 1 && doc?.products?.[0]?.rollCount === 2 && Math.round(doc?.products?.[0]?.totalMeters) === 100,
+    JSON.stringify(doc?.products));
+  check("toplam metraj 100", Math.round(doc?.totals?.totalMeters) === 100, JSON.stringify(doc?.totals));
+  check("çuval dökümü donmuş (kod Ç-1, 42.5kg, 2 paket)",
+    doc?.sacks?.length === 1 && doc?.sacks?.[0]?.code === "Ç-1" && Math.abs(doc?.sacks?.[0]?.totalKg - 42.5) < 0.001 && doc?.sacks?.[0]?.packageCount === 2,
+    JSON.stringify(doc?.sacks));
+  check("çeki listesi: kg yalnız çuvalın ilk topunda",
+    doc?.cekiRows?.length === 2 && Math.abs(doc?.cekiRows?.[0]?.kg - 42.5) < 0.001 && doc?.cekiRows?.[1]?.kg === 0);
+  check("plaka header'da donmuş", doc?.header?.plateNumber === "06 BBB 22", doc?.header?.plateNumber);
+
+  // Muhasebe fişi (getDispatchReport) ile donmuş irsaliye içeriği BİREBİR (tek kaynak)
+  const report = (await shippingService.getDispatchReport(shipmentId)).data as any;
+  check("fiş == irsaliye (tek kaynak: top/metre/çuval/çeki)",
+    report?.totals?.totalRolls === doc?.totals?.totalRolls &&
+      report?.totals?.totalMeters === doc?.totals?.totalMeters &&
+      report?.products?.length === doc?.products?.length &&
+      report?.cekiRows?.length === doc?.cekiRows?.length &&
+      report?.header?.shipmentNo === doc?.header?.shipmentNo);
+
+  // Tek-kaynak baskı HTML'i üretiliyor (getHtml artık 400 vermiyor)
+  const htmlRes = (await printedDocumentService.getHtml(PrintedDocType.SHIPMENT_DISPATCH, shipmentId)).data as { html: string } | null;
+  check("getHtml SEVK İRSALİYESİ + ÇEKİ LİSTESİ üretti",
+    !!htmlRes?.html && htmlRes.html.includes("SEVK İRSALİYESİ") && htmlRes.html.includes("ÇEKİ LİSTESİ"),
+    htmlRes?.html?.slice(0, 30));
 
   // --- Temizlik ---
   await prisma.printedDocument.deleteMany({

@@ -58,8 +58,8 @@ export const workOrderService = {
       .get<ApiResponse<TravelerCard[]>>(`/api/work-orders/${id}/traveler-cards/history`)
       .then((r) => r.data),
 
-  /** Fason sevk irsaliyesinin CANLI talimat alanları (istenen renk + boyahane
-   *  notu). Donmuş içerik PrintedDocument'ten gelir; bu overlay üzerine biner. */
+  /** Fason sevk irsaliyesinin CANLI talimat alanları (istenen renk + fason
+   *  talimatı). Donmuş içerik PrintedDocument'ten gelir; bu overlay üzerine biner. */
   getDispatchDyeOverlay: (dispatchId: string) =>
     apiClient
       .get<ApiResponse<DispatchDyeOverlay>>(
@@ -67,13 +67,13 @@ export const workOrderService = {
       )
       .then((r) => r.data),
 
-  /** Boyahane notunu güncelle — snapshot dışı canlı kolon; fiş baskısından önce
+  /** Fason talimatını güncelle — snapshot dışı canlı kolon; fiş baskısından önce
    *  talimat eklenebilir/düzeltilebilir. Boş gönderince temizlenir. */
-  updateDispatchDyehouseNote: (dispatchId: string, dyehouseNote: string | null) =>
+  updateDispatchInstruction: (dispatchId: string, instruction: string | null) =>
     apiClient
       .patch<
-        ApiResponse<{ id: string; dispatchNo: string; dyehouseNote: string | null }>
-      >(`/api/subcontractor/dispatches/${dispatchId}/dyehouse-note`, { dyehouseNote })
+        ApiResponse<{ id: string; dispatchNo: string; instruction: string | null }>
+      >(`/api/subcontractor/dispatches/${dispatchId}/instruction`, { instruction })
       .then((r) => r.data),
 
   /** Fason dalları (paralel sevk partileri) — tam sayfa lane görünümü için. */
@@ -149,6 +149,51 @@ export const workOrderService = {
         `/api/subcontractor/dispatches/${dispatchId}/direct-ship`,
         payload,
       )
+      .then((r) => r.data),
+
+  /** Masaüstü toplu fason sevki — adımda bekleyen tüm topları okutmadan planlı/seçilen
+   *  firmaya sevk eder (gerçek irsaliye + stok). subcontractorId yoksa adımın planlısı. */
+  bulkDispatchStep: (payload: {
+    workOrderId: string;
+    stepId: string;
+    subcontractorId?: string;
+    /** Verilirse yalnız bu toplar; yoksa adımdaki bekleyen hepsi. */
+    rollIds?: string[];
+    instruction?: string;
+    plateNumber?: string;
+    driverName?: string;
+  }) =>
+    apiClient
+      .post<ApiResponse<{ id: string; dispatchNo: string }>>(
+        "/api/subcontractor/dispatch/bulk",
+        payload,
+      )
+      .then((r) => r.data),
+
+  /** Fasondan fasona doğrudan aktarım (zımpara→boyahane; içeride kabul + sonraki
+   *  fasona sevk zinciri). Metraj 1:1 taşınır; kesin ölçüm boyahane dönüşünde. */
+  transferToNextFason: (payload: {
+    workOrderId: string;
+    stepId: string;
+    nextSubcontractorId?: string;
+    /** Verilirse yalnız bu (fasonda bekleyen) toplar; yoksa hepsi. */
+    rollIds?: string[];
+    instruction?: string;
+  }) =>
+    apiClient
+      .post<ApiResponse<{ id: string; dispatchNo: string }>>(
+        "/api/subcontractor/transfer-next",
+        payload,
+      )
+      .then((r) => r.data),
+
+  /** Erken TASLAK fason çeki HTML'i — sonraki fason adımı için (sevkten önce,
+   *  durum değiştirmez). Mal direkt fasondan fasona gidecekse çeki erken basılır. */
+  getDraftFasonCeki: (workOrderId: string, stepId: string) =>
+    apiClient
+      .get<ApiResponse<{ html: string }>>("/api/subcontractor/fason-ceki-draft", {
+        params: { workOrderId, stepId },
+      })
       .then((r) => r.data),
 };
 
@@ -362,10 +407,10 @@ export interface DispatchDyeOverlay {
     name: string;
     hex: string | null;
   } | null;
-  /** Boyahaneye özel talimat — sevk notundan ayrı, canlı kolon. */
-  dyehouseNote: string | null;
-  /** WO'daki boyahane notu (default) — sevkin kendi notu boşsa fişte buna düşülür. */
-  woDyehouseNote: string | null;
-  /** Sevk iptal/kabul edildiyse not düzenlenemez (editör disabled). */
-  dyehouseNoteLocked: boolean;
+  /** Fason talimatı — sevk notundan ayrı, canlı kolon (override). */
+  instruction: string | null;
+  /** Sevkin adımının notu (default) — sevkin kendi talimatı boşsa fişte buna düşülür. */
+  stepNote: string | null;
+  /** Sevk iptal/kabul edildiyse talimat düzenlenemez (editör disabled). */
+  instructionLocked: boolean;
 }

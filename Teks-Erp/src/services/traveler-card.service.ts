@@ -666,7 +666,6 @@ export class TravelerCardService {
         foldType: true,
         plannedStartDate: true,
         plannedEndDate: true,
-        dyehouseNote: true,
         routeTemplate: { select: { name: true } },
         targetItem: { select: { code: true, name: true } },
         targetColor: { select: { name: true, hex: true } },
@@ -679,6 +678,7 @@ export class TravelerCardService {
             id: true,
             stepSequence: true,
             isUrgent: true,
+            notes: true,
             station: { select: { name: true, type: true } },
             plannedSubcontractor: { select: { id: true, name: true } },
           },
@@ -713,7 +713,6 @@ export class TravelerCardService {
       foldType: wo.foldType,
       plannedStartDate: wo.plannedStartDate?.toISOString() ?? null,
       plannedEndDate: wo.plannedEndDate?.toISOString() ?? null,
-      dyehouseNote: wo.dyehouseNote,
       routeTemplate: wo.routeTemplate ? { name: wo.routeTemplate.name } : null,
       targetItem: wo.targetItem
         ? { code: wo.targetItem.code, name: wo.targetItem.name }
@@ -729,6 +728,7 @@ export class TravelerCardService {
         id: st.id,
         stepSequence: st.stepSequence,
         isUrgent: st.isUrgent,
+        notes: st.notes,
         station: st.station ? { name: st.station.name, type: st.station.type } : null,
         plannedSubcontractor: st.plannedSubcontractor
           ? { id: st.plannedSubcontractor.id, name: st.plannedSubcontractor.name }

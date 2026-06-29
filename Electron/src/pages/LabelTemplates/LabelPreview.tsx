@@ -28,6 +28,15 @@ export function LabelPreview({ kind, fields }: Props) {
     staleTime: 0,
   });
 
+  // Native (PPLA/ZPL) metin-zone önizlemesi — Bluetooth/termal yazıcı çıktısı.
+  const nativeQuery = useQuery({
+    queryKey: ["label-preview-native", kind, JSON.stringify(fields)],
+    queryFn: () => labelTemplateService.previewNativeText(kind, fields),
+    enabled: visibleCount > 0,
+    staleTime: 0,
+  });
+  const sizeClass: Record<string, string> = { sm: "text-[10px]", md: "text-xs", lg: "text-sm", xl: "text-base" };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -59,6 +68,37 @@ export function LabelPreview({ kind, fields }: Props) {
           />
         )}
       </div>
+
+      {/* Native (PPLA/ZPL) metin-zone önizlemesi — Bluetooth/termal yazıcı */}
+      {visibleCount > 0 && (
+        <div className="rounded-lg border bg-muted/20 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Native (PPLA/ZPL) metin alanı
+            </div>
+            <Badge variant="muted" className="text-[9px]">Termal/BT</Badge>
+          </div>
+          {nativeQuery.isLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : nativeQuery.isError ? (
+            <div className="text-[10px] italic text-destructive">Alınamadı</div>
+          ) : (
+            <div className="space-y-0.5 font-mono">
+              {(nativeQuery.data?.lines ?? []).map((ln, i) => (
+                <div key={i} className={`${sizeClass[ln.size] ?? "text-xs"} ${ln.bold ? "font-bold" : ""}`}>
+                  {ln.text}
+                </div>
+              ))}
+              {(nativeQuery.data?.lines.length ?? 0) === 0 && (
+                <div className="text-[10px] italic text-muted-foreground">Metin satırı yok</div>
+              )}
+            </div>
+          )}
+          <p className="mt-2 text-[10px] text-muted-foreground">
+            Sıra/görünür/ad/bold/boyut bu cihazlarda aynen uygulanır (barkod/QR sol sabit kolonda).
+          </p>
+        </div>
+      )}
 
       <p className="text-[10px] text-muted-foreground">
         Önizleme örnek (mock) veri ile oluşturuldu — mobil etiket ile aynı

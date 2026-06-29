@@ -33,6 +33,8 @@ import {
 } from "./helpers/customer-name.helper";
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
 import { resolveLabelFormat, type ResolvedLabelFormat } from "./helpers/label-format.resolver";
+import { resolveLabelRouting } from "./helpers/label-routing.resolver";
+import { templateTextLines } from "./helpers/native-label.shared";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
 import { dispatchNativeSend, type PrinterTransportResult } from "./helpers/printer-transport";
 
@@ -126,6 +128,12 @@ export interface RollLabelRenderOpts {
   profileId?: string | null;
   /** İstasyon makinesi — yazıcı/profil + dil oto çözülür (mobil: req.device.machineId). */
   machineId?: string | null;
+  /** Cihaz kaydı (PeripheralDevice) — explicit hedef yazıcı (dil/profil/şablon yönlendirmesi). */
+  peripheralId?: string | null;
+  /** Tablet Device id (req.device.id) — tablete-bağlı BT yazıcıyı çözmek için. */
+  deviceId?: string | null;
+  /** Şablon explicit override (cihaz yönlendirmesini ezer). */
+  templateId?: string | null;
 }
 
 /**
@@ -167,37 +175,15 @@ function swatchPayloadToLabelPayload(sw: SwatchLabelPayload): LabelPayload {
 
 // getRollLabel'in Q1 include ağacı — getBulkRollLabelsHtml prefetch'i ile BİREBİR
 // paylaşılır (drift = yanlış etiket riski; tek const → garanti aynı). Tüm Roll
-// scalar'ları (colorId, lastLabelSnapshot, barcode...) + ilişkiler gelir.
+// scalar'ları (colorId, lastLabelSnapshot, barcode...) + item/color + WO parti no
+// gelir. NOT: WO orderLinks KASTEN çekilmez — etiket müşterisi artık WO siparişinden
+// TAHMİN EDİLMEZ (yalnız explicit baskı bağlamı ya da snapshot). Bkz. getRollLabel'deki
+// "EXPLICIT-ONLY" notu.
 const ROLL_LABEL_INCLUDE = {
   item: { select: { id: true, code: true, name: true } },
   color: { select: { id: true, code: true, name: true } },
   producedInStep: {
-    select: {
-      workOrder: {
-        select: {
-          id: true,
-          batchNumber: true,
-          orderLinks: {
-            select: {
-              orderLine: {
-                select: {
-                  id: true,
-                  customerItemName: true,
-                  customerColorName: true,
-                  order: {
-                    select: {
-                      orderNumber: true,
-                      customerId: true,
-                      customer: { select: { name: true } },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    select: { workOrder: { select: { batchNumber: true } } },
   },
 } satisfies Prisma.RollInclude;
 
@@ -247,13 +233,14 @@ export class LabelService {
       );
     }
 
-    // Müşteri context çözümü: WO'ya bağlı OrderLine'ların TÜMÜ aynı müşteriye
-    // gidiyorsa müşteri otomatik çözülür (Patos 300m + Patos 200m → aynı müşteri
-    // OK). Farklı müşteri karışırsa allocation gerekir → null kalır. Sipariş
-    // numarası / orderLineId yalnız tek satırda set edilir; çoklu satırda
-    // hangisi belirsiz olduğu için null. Override (sipariş satırı özel adı)
-    // tüm satırlarda aynıysa kullanılır, farklıysa müşterinin master alias'ına
-    // düşer.
+    // Müşteri context çözümü — EXPLICIT-ONLY (sektör standardı: fiziksel etikete
+    // YALNIZ açıkça belirlenmiş müşteri basılır; dolaylı WO→sipariş ilişkisinden
+    // TAHMİN edilmez). Müşteri yalnız iki yoldan gelir:
+    //   ① opts.orderLineId / opts.customerId  → operatör baskı anında "Kime?" seçti
+    //   ② lastLabelSnapshot                   → daha önce ① ile basılıp donmuş bağlam
+    // Başka hiçbir durumda müşteri yoktur → STOK (müşterisiz, spec-only etiket).
+    // Gerekçe: yanlış müşterili fiziksel etiket = yanlış sevk riski; bilinmiyorsa
+    // boş bas. (Kesim-anı baskısı zaten "Kime? boş = stok" ile böyle davranıyordu.)
     let customerId: string | null = null;
     let customerName: string | null = null;
     let orderNumber: string | null = null;
@@ -265,9 +252,8 @@ export class LabelService {
 
     // Baskı bağlamı çözümü. Çağrı explicit opts verdiyse (Tambur baskı anı veya
     // relabel) onu kullan. Vermediyse (Electron "Etiket" butonu / mobil görüntüleme)
-    // topun ÜSTÜNDEKİ son basılan etiketi (lastLabelSnapshot) yansıt — WO
-    // siparişinden TAHMİN değil. Snapshot hiç yoksa (henüz etiket basılmamış)
-    // eski WO-tek-müşteri tahminine düşülür.
+    // topun ÜSTÜNDEKİ son basılan etiketi (lastLabelSnapshot) yansıt. Snapshot da
+    // yoksa STOK bas — WO siparişinden müşteri TAHMİN ETME.
     const snap = (roll.lastLabelSnapshot ?? null) as Record<string, unknown> | null;
     // Explicit "Stok" baskı (opts.stock): müşteriyi ZORLA null bırak — snapshot'ı
     // VE WO tek-müşteri tahminini ATLA. Operatör "Stok" dediyse topun üstündeki
@@ -276,15 +262,13 @@ export class LabelService {
     const hasExplicit = forceStock || !!(opts?.orderLineId || opts?.customerId);
     let effOrderLineId: string | null = forceStock ? null : (opts?.orderLineId ?? null);
     let effCustomerId: string | null = forceStock ? null : (opts?.customerId ?? null);
-    // Snapshot var ama müşterisiz ("stok" baskı) → WO tahmini YAPMA, müşteri null kalsın.
-    let printedAsStock = forceStock;
     if (!hasExplicit && snap) {
+      // Snapshot'tan SON explicit bağlamı yansıt. Snapshot var ama müşterisiz
+      // ("stok" baskı) → effOrderLineId/effCustomerId null kalır → aşağıda STOK basılır.
       if (typeof snap.orderLineId === "string") {
         effOrderLineId = snap.orderLineId;
       } else if (typeof snap.customerId === "string") {
         effCustomerId = snap.customerId;
-      } else {
-        printedAsStock = true;
       }
     }
 
@@ -324,25 +308,16 @@ export class LabelService {
         customerId = cust.id;
         customerName = cust.name;
       }
-    } else if (printedAsStock) {
-      // Snapshot var ama müşterisiz → top "stok" etiketiyle basılmış. Müşteri null
-      // kalır; WO siparişinden tahmin YAPMA (yoksa hiç basılmamış müşteriyi gösterirdik).
     } else {
-      // ② Geri uyum: hiç etiket basılmamış — WO'ya bağlı satırlardan tek-müşteri tahmini.
-      const links = roll.producedInStep?.workOrder?.orderLinks ?? [];
-      const customerIds = new Set(links.map((l) => l.orderLine.order.customerId));
-      const sameCustomer = links.length > 0 && customerIds.size === 1;
-      if (sameCustomer) {
-        const first = links[0];
-        customerId = first.orderLine.order.customerId;
-        customerName = first.orderLine.order.customer.name;
-        if (links.length === 1) {
-          orderNumber = first.orderLine.order.orderNumber;
-          orderLineId = first.orderLine.id;
-        }
-        itemOverride = allEqual(links.map((l) => l.orderLine.customerItemName));
-        colorOverride = allEqual(links.map((l) => l.orderLine.customerColorName));
-      }
+      // STOK (müşterisiz): ne explicit baskı bağlamı ne de snapshot müşterisi var.
+      // WO siparişinden tek-müşteri TAHMİNİ KASTEN YAPILMAZ — eski "geri uyum"
+      // davranışı kaldırıldı. Gevşek modelde (top→sipariş bağı yok) bir topun hangi
+      // müşteriye etiketleneceği baskı-anı kararıdır; yanlış müşteri basmak (yanlış
+      // sevk riski) müşterisiz basmaktan kötüdür. Kesim-anı baskısı zaten "Kime?
+      // boş = stok" ile müşterisiz davranıyordu — reprint/önizleme/Electron artık
+      // onunla TUTARLI. Müşteri istenen top için operatör "Kime?"den açıkça seçer.
+      customerId = null;
+      customerName = null;
     }
 
     // Master alias'lar — customer × item / customer × color (yoksa null).
@@ -514,6 +489,57 @@ export class LabelService {
   }
 
   /**
+   * Editör native (PPLA/ZPL) metin-zone önizlemesi — şablona göre sıralı satırlar
+   * + boyut/bold. HTML önizlemesinin native karşılığı; admin alanı kapatıp sıralayınca
+   * termal yazıcı çıktısının yaklaşık halini görür. (Sol QR+barkod tarama kolonu hariç.)
+   */
+  async getPreviewNativeText(input: {
+    kind: LabelKind;
+    fields: Array<{ key: string; label: string; order: number; isVisible: boolean; isBold?: boolean; fontSize?: "sm" | "md" | "lg" | "xl" }>;
+  }): Promise<ApiResponse<{ lines: Array<{ text: string; size: string; bold: boolean }> }>> {
+    const payload: LabelPayload = {
+      rollId: "preview",
+      barcode: "TR-2026-05-26-R0123",
+      status: "STOCK",
+      qualityGrade: "1. Kalite",
+      widthCm: 152,
+      lengthMeters: 47.5,
+      weightKg: 14.8,
+      markedForKartela: true,
+      itemCode: "PA-60S",
+      itemName: "Cotton Lining 60s",
+      itemNameDefault: "Pamuk Astar 60s",
+      itemNameSource: "OVERRIDE" as NameSource,
+      colorCode: "BJ",
+      colorName: "Beige",
+      colorNameDefault: "Bej",
+      colorNameSource: "OVERRIDE" as NameSource,
+      customerName: "Demo Tekstil A.S.",
+      customerId: "preview",
+      orderNumber: "SIP-2026-00123",
+      orderLineId: "preview",
+      batchNumber: "PRT-A24",
+      printedAt: new Date().toISOString(),
+      kind: input.kind,
+      cardNumber: "SW-2026-05-0042",
+      lengthCm: 30,
+      parentRollBarcode: "TR-2026-05-26-R0123",
+    };
+    const template = {
+      id: "preview",
+      name: "preview",
+      kind: input.kind,
+      isDefault: false,
+      isActive: true,
+      fields: input.fields,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as unknown as Parameters<typeof templateTextLines>[1];
+    const lines = templateTextLines(payload, template);
+    return { success: true, data: { lines } };
+  }
+
+  /**
    * Rolün etiket HTML'i — tek doğru kaynak. Hem mobil (expo-print) hem Electron
    * (LabelPreview iframe) bu HTML'i tüketir. Kind otomatik tespit edilir:
    * RENKSİZ (colorId == null) = ham kumaş → ROLL_RAW, aksi halde ROLL_FINISHED.
@@ -552,12 +578,26 @@ export class LabelService {
     const kind: LabelKind =
       kindOverride ?? (colorId == null ? LabelKind.ROLL_RAW : LabelKind.ROLL_FINISHED);
 
-    // Template + format bir bulk isteğinde SABİT → preloaded'da bir kez çözülür.
-    const template = preloaded
-      ? (preloaded.templateByKind[kind] ?? null)
-      : await prisma.labelTemplate.findFirst({
-          where: { kind, isDefault: true, isActive: true },
-        });
+    // Bulk → preloaded SABİT template+format (Electron toplu baskı; cihaz bağlamı yok).
+    // Tekil → birleşik yönlendirme: cihaz→{format, template, dil}. Cihaz eşleşmezse
+    // bugünkü davranış (resolveLabelFormat + kind default şablon) — geri uyum.
+    let template: LabelTemplate | null;
+    let format: ResolvedLabelFormat;
+    if (preloaded) {
+      template = preloaded.templateByKind[kind] ?? null;
+      format = preloaded.format;
+    } else {
+      const routing = await resolveLabelRouting({
+        kind,
+        peripheralId: opts?.peripheralId,
+        profileId: opts?.profileId,
+        templateId: opts?.templateId,
+        machineId: opts?.machineId,
+        deviceId: opts?.deviceId,
+      });
+      template = routing.template;
+      format = routing.format;
+    }
     const barcodeSvg = payload.barcode
       ? bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" })
       : "";
@@ -566,11 +606,6 @@ export class LabelService {
       : "";
     // Saha #6: kopya adedi — istek override > bulk-sabit > ayar (default 2).
     const copies = opts?.copies ?? preloaded?.copies ?? (await readLabelCopies());
-    // Fiziksel geometri (medya + güvenlik payı) + etkin dil — profileId/machineId'den
-    // çözülür; mobil istasyon yazıcısını oto çözer (req.device.machineId), Electron default.
-    const format =
-      preloaded?.format ??
-      (await resolveLabelFormat({ profileId: opts?.profileId, machineId: opts?.machineId }));
     return { input: { payload, template, barcodeSvg, qrSvg, copies, format }, kind };
   }
 
@@ -592,9 +627,10 @@ export class LabelService {
    */
   async getRollLabelPpla(
     rollId: string,
+    kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
   ): Promise<ApiResponse<{ ppla: string; profileId: string | null }>> {
-    const { input } = await this.buildRollRenderInput(rollId, undefined, opts);
+    const { input } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     const ppla = renderLabel(PrinterLanguage.PPLA, input).content;
     return { success: true, data: { ppla, profileId: input.format.profileId } };
   }
@@ -606,9 +642,10 @@ export class LabelService {
    */
   async getRollLabelNative(
     rollId: string,
+    kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
   ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind; profileId: string | null }>> {
-    const { input, kind } = await this.buildRollRenderInput(rollId, undefined, opts);
+    const { input, kind } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     const r = renderLabel(input.format.language, input);
     return {
       success: true,
@@ -1017,8 +1054,13 @@ export class LabelService {
     const payloadResp = await this.getSwatchLabel(swatchId);
     const payload = swatchPayloadToLabelPayload(payloadResp.data);
 
-    const template = await prisma.labelTemplate.findFirst({
-      where: { kind: LabelKind.SWATCH, isDefault: true, isActive: true },
+    const routing = await resolveLabelRouting({
+      kind: LabelKind.SWATCH,
+      peripheralId: opts?.peripheralId,
+      profileId: opts?.profileId,
+      templateId: opts?.templateId,
+      machineId: opts?.machineId,
+      deviceId: opts?.deviceId,
     });
     const barcodeSvg = payload.barcode
       ? bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" })
@@ -1027,8 +1069,10 @@ export class LabelService {
       ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
       : "";
     const copies = opts?.copies ?? (await readLabelCopies());
-    const format = await resolveLabelFormat({ profileId: opts?.profileId, machineId: opts?.machineId });
-    return { input: { payload, template, barcodeSvg, qrSvg, copies, format }, kind: LabelKind.SWATCH };
+    return {
+      input: { payload, template: routing.template, barcodeSvg, qrSvg, copies, format: routing.format },
+      kind: LabelKind.SWATCH,
+    };
   }
 
   /** Kartela etiketinin HTML'i — roll `getRollLabelHtml` analoğu (mobil + Electron). */
@@ -1059,8 +1103,48 @@ export class LabelService {
   }
 
   /**
-   * Etiket basıldı — sadece audit izi (gerçek baskı tarayıcıda olur).
+   * Etiket NİYETİNİ topa kalıcılaştırır (`lastLabelSnapshot`) — fiziksel baskıdan
+   * VE audit'ten BAĞIMSIZ "intent persist" primitifi. Kesim sonrası seed,
+   * baskı-öncesi mobil seed ve relabel önizleme bunu kullanır; LABEL_PRINTED
+   * audit'i YAZMAZ. Müşteri çözülürse denormalize yazar (Electron "Son baskı"
+   * afişi `snap.customerName` okur); müşterisiz → `{ stock:true }`. Etiket
+   * çözülemezse (örn. barkodsuz açık kumaş) snapshot'a dokunmaz.
    * label:print yetkisi gerekir (route katmanında).
+   */
+  async seedRollLabelSnapshot(
+    rollId: string,
+    userId?: string,
+    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }
+  ): Promise<ApiResponse<{ seeded: boolean }>> {
+    const roll = await prisma.roll.findUnique({ where: { id: rollId }, select: { id: true } });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+
+    let labelData: LabelPayload | null = null;
+    try {
+      labelData = (await this.getRollLabel(rollId, opts)).data;
+    } catch (e) {
+      // Etiket çözülemezse snapshot'a dokunma — ama SESSİZ kalma.
+      console.error("[label] seedRollLabelSnapshot çözümü başarısız:", e);
+      return { success: true, data: { seeded: false } };
+    }
+
+    let operatorName: string | null = null;
+    if (userId) {
+      const u = await prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
+      operatorName = u?.fullName ?? null;
+    }
+    await prisma.roll.update({
+      where: { id: rollId },
+      data: { lastLabelSnapshot: buildDenormalizedSnapshot(labelData, userId, operatorName) },
+    });
+    return { success: true, data: { seeded: true } };
+  }
+
+  /**
+   * Etiket basıldı: niyeti kalıcılaştır (`seedRollLabelSnapshot`) + FİZİKSEL baskı
+   * audit izi (LABEL_PRINTED). YALNIZ gerçek baskı tamamlandığında çağrılmalı —
+   * yazıcısız/iptal niyet kaydı için `seedRollLabelSnapshot` kullanılır (audit
+   * "basıldı" demesin). label:print yetkisi gerekir (route katmanında).
    */
   async recordPrintEvent(
     rollId: string,
@@ -1073,54 +1157,10 @@ export class LabelService {
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
-    // "Son basılan etiket" snapshot'ı — baskı anında çözülen müşteri/sipariş
-    // bağlamı (getRollLabel ile aynı çözüm; BAĞ DEĞİL, yalnız bilgi). Müşteri
-    // çözülürse denormalize yaz; müşterisiz (stok) baskıda önceki snapshot
-    // temizlenir (üstündeki fiili etiket artık stok). Etiket çözülemezse dokunma.
-    let labelData: LabelPayload | null = null;
-    try {
-      labelData = (await this.getRollLabel(rollId, opts)).data;
-    } catch (e) {
-      // Etiket çözülemezse snapshot'a dokunma — ama SESSİZ kalma.
-      console.error("[label] recordRollLabelPrint snapshot çözümü başarısız:", e);
-      labelData = null;
-    }
-    if (labelData) {
-      let operatorName: string | null = null;
-      if (userId) {
-        const u = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { fullName: true },
-        });
-        operatorName = u?.fullName ?? null;
-      }
-      const snap: Record<string, string | boolean> = {
-        printedAt: new Date().toISOString(),
-      };
-      if (userId) snap.operatorId = userId;
-      if (operatorName) snap.operatorName = operatorName;
+    // Niyet kalıcılaştırma (snapshot) — audit'ten ayrı primitif.
+    await this.seedRollLabelSnapshot(rollId, userId, opts);
 
-      if (labelData.customerId) {
-        snap.customerId = labelData.customerId;
-        if (labelData.customerName) snap.customerName = labelData.customerName;
-        if (labelData.orderNumber) snap.orderNumber = labelData.orderNumber;
-        // orderLineId — Electron etiket görünümü override'ları (müşterideki ürün/
-        // renk adı) sadık biçimde yeniden çözebilsin diye saklanır.
-        if (labelData.orderLineId) snap.orderLineId = labelData.orderLineId;
-        if (labelData.itemName) snap.itemName = labelData.itemName;
-        if (labelData.colorName) snap.colorName = labelData.colorName;
-      } else {
-        // Müşterisiz (stok) baskı → snapshot'ı silmek yerine "stok" işaretle.
-        // Böylece Electron etiket görünümü WO siparişinden müşteri TAHMİN ETMEZ
-        // (kart hâlâ "Stok etiketli" gösterir; customerName yok).
-        snap.stock = true;
-      }
-      await prisma.roll.update({
-        where: { id: rollId },
-        data: { lastLabelSnapshot: snap as Prisma.InputJsonValue },
-      });
-    }
-
+    // Fiziksel baskı izi.
     await AuditService.log({
       userId,
       action: "CREATE",
@@ -1141,16 +1181,48 @@ export class LabelService {
 // Cascade + normalize helpers `helpers/customer-name.helper.ts`'den.
 
 /**
- * Listedeki tüm değerler aynıysa o değeri döner; farklıysa null.
- * Override resolution: WO çoklu satıra bağlı ve hepsi aynı customerItemName /
- * customerColorName taşıyorsa override kullanılır; biri farklıysa master
- * alias'a düşer.
+ * Çözülmüş `LabelPayload`'tan denormalize "son etiket" snapshot'ı kurar —
+ * `seedRollLabelSnapshot`/`recordPrintEvent` paylaşır. Müşteri varsa müşteri/
+ * sipariş + müşterideki ad blokları; yoksa `{ stock:true }`. Electron "Son baskı"
+ * afişi ve liste bu denormalize alanları okur (etiket render'ı snap.orderLineId/
+ * customerId'den TAZE çözer, denormalize adları kullanmaz).
  */
-function allEqual<T extends string | null>(values: T[]): T | null {
-  if (values.length === 0) return null;
-  const first = values[0];
-  for (let i = 1; i < values.length; i++) {
-    if (values[i] !== first) return null;
+function buildDenormalizedSnapshot(
+  labelData: LabelPayload,
+  userId?: string,
+  operatorName?: string | null,
+): Prisma.InputJsonValue {
+  const snap: Record<string, string | boolean> = {
+    printedAt: new Date().toISOString(),
+  };
+  if (userId) snap.operatorId = userId;
+  if (operatorName) snap.operatorName = operatorName;
+
+  if (labelData.customerId) {
+    snap.customerId = labelData.customerId;
+    if (labelData.customerName) snap.customerName = labelData.customerName;
+    if (labelData.orderNumber) snap.orderNumber = labelData.orderNumber;
+    if (labelData.orderLineId) snap.orderLineId = labelData.orderLineId;
+    if (labelData.itemName) snap.itemName = labelData.itemName;
+    if (labelData.colorName) snap.colorName = labelData.colorName;
+  } else {
+    snap.stock = true;
   }
-  return first;
+  return snap as Prisma.InputJsonValue;
+}
+
+/**
+ * MİNİMAL niyet snapshot'ı — kesim anında (in-tx) `lastLabelSnapshot`'a yazılır.
+ * DB okuması/çözüm YOK (tx içi I/O yasak): yalnız `{orderLineId}` / `{customerId}`
+ * / `{stock:true}` literali. `getRollLabel` okuma anında adları tazece çözer.
+ * tambur.service kesim siteleri bunu kullanır.
+ */
+export function buildIntentSnapshot(intent: {
+  orderLineId?: string | null;
+  customerId?: string | null;
+  stock?: boolean;
+}): Prisma.InputJsonValue {
+  if (intent.orderLineId) return { orderLineId: intent.orderLineId };
+  if (intent.customerId) return { customerId: intent.customerId };
+  return { stock: true };
 }
