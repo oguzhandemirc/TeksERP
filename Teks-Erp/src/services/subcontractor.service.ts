@@ -3248,6 +3248,28 @@ export class SubcontractorService {
       if (sr.cancelledAt) reasons.push(`Kaynak kabul ${sr.receiptNo} zaten iptal edilmiş.`);
     }
 
+    // SPLIT GUARD: undo, kaynak kabul(ler)i ATOMİK iptal eder (kabulün TÜM consumed
+    // orijinallerini topluca canlandırır). Bu yalnız kabulün doğan TÜM topları bu
+    // sevkte ise doğru. Born toplar birden çok sevke dağılmışsa (tek receipt → >1
+    // dispatch) veya kısmen ileri taşınmışsa, bu sevki geri almak orijinalleri
+    // canlandırırken DİĞER sevkteki kardeş born topları öksüz bırakır + malzemeyi
+    // çift sayar → reddet.
+    if (isTransferOutput && sourceReceiptIds.length) {
+      const bornIdSet = bornRolls.map((r) => r.id);
+      const strayBorn = await prisma.roll.count({
+        where: {
+          parentReceiptId: { in: sourceReceiptIds },
+          status: { not: RollStatus.CANCELLED },
+          id: { notIn: bornIdSet },
+        },
+      });
+      if (strayBorn > 0) {
+        reasons.push(
+          "Kaynak kabulden doğan toplar birden çok sevke dağılmış (veya kısmen işlenmiş) — bu aktarım tek başına geri alınamaz; önce diğer sevk(ler)i geri alın.",
+        );
+      }
+    }
+
     const sourceStationName = sourceReceipts[0]?.step?.station?.name ?? null;
 
     return {
@@ -3381,6 +3403,25 @@ export class SubcontractorService {
             `Top ${r.id.slice(0, 8)}… bu sırada işlenmiş — aktarım geri alınamaz.`,
           );
         }
+      }
+
+      // SPLIT GUARD (tx-içi taze): kaynak kabul(ler) ATOMİK geri alınır (TÜM consumed
+      // orijinaller canlanır), bu yüzden kabulün doğan TÜM topları bu sevkte olmalı.
+      // Born toplar birden çok sevke dağılmışsa (tek receipt → >1 dispatch) veya kısmen
+      // ileri taşınmışsa, orijinalleri topluca canlandırmak diğer sevkteki kardeş born
+      // topları öksüz bırakır + malzemeyi çift sayar. bornRollIds bu noktada hâlâ
+      // AT_SUBCONTRACTOR (henüz CANCELLED değil) → notIn + status!=CANCELLED canlı strayı yakalar.
+      const strayBorn = await tx.roll.count({
+        where: {
+          parentReceiptId: { in: sourceReceiptIds },
+          status: { not: RollStatus.CANCELLED },
+          id: { notIn: bornRollIds },
+        },
+      });
+      if (strayBorn > 0) {
+        throw AppError.conflict(
+          "Bu sevkin kaynak kabulünden doğan toplar birden çok sevke dağılmış (veya kısmen işlenmiş) — aktarım tek başına geri alınamaz. Önce diğer sevk(ler)i geri alın veya manuel düzeltin.",
+        );
       }
 
       // 2) Boyahane sevkini geri al (soft-cancel + belge void)
