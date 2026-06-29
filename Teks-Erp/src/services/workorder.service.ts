@@ -1801,10 +1801,19 @@ export class WorkOrderService {
       };
     });
 
+    // Öksüz boş dalları gizle: fason→fason aktarımda ara sevkin (zımpara) lane'i
+    // boşalır (orijinaller CONSUMED + born toplar sonraki sevkin lane'ine taşındı)
+    // → status RETURNED ama currentPositions boş. Bu yalnız öksüz lane'de olur;
+    // tekli-fason RETURNED dalı born topun pozisyonunu taşır (boş değil), sevk/scrap
+    // olmuş dal label "—" + count>0 (boş değil), CANCELLED dal status≠RETURNED.
+    const visibleBranches = branches.filter(
+      (b) => !(b.status === "RETURNED" && b.currentPositions.length === 0),
+    );
+
     return {
       success: true,
       data: {
-        branches,
+        branches: visibleBranches,
         splitFrom: wo.splitFrom,
         splitChildren: wo.splitChildren.map((c) => ({
           id: c.id,
