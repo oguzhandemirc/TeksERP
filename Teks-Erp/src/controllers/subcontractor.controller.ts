@@ -19,6 +19,8 @@ const dispatchSchema = z.object({
   instruction: z.string().max(1000).optional(),
   /** Operatör WO ürünü vs rulo ürünü uyuşmazlığını bilinçli onayladı. */
   allowItemOverride: z.boolean().optional(),
+  /** Operatör rota-atlama uyarısını bilinçli onayladı (ROUTE_SKIP geçişi). */
+  allowRouteSkip: z.boolean().optional(),
 });
 
 /** Masaüstü toplu sevk — top okutmadan adımdaki bekleyen tüm topları sevk eder. */
@@ -29,6 +31,7 @@ const bulkDispatchSchema = z.object({
   subcontractorId: z.string().uuid().optional(),
   /** Verilirse yalnız bu toplar sevk edilir; yoksa adımdaki bekleyen hepsi. */
   rollIds: z.array(z.string().uuid()).min(1).optional(),
+  allowRouteSkip: z.boolean().optional(),
   instruction: z.string().max(1000).optional(),
   plateNumber: z.string().max(32).optional(),
   driverName: z.string().max(128).optional(),

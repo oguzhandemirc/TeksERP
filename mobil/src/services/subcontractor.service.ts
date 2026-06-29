@@ -57,6 +57,18 @@ export interface DispatchRequest {
    * mismatch modal'da onayladıktan sonra true gönderir.
    */
   allowItemOverride?: boolean;
+  /**
+   * Rota sırasını atlayan sevki (ör. zımpara atlanıp doğrudan boyahaneye) bilinçli
+   * onayla. Frontend ROUTE_SKIP uyarı modalında onayladıktan sonra true gönderir.
+   */
+  allowRouteSkip?: boolean;
+}
+
+/** Backend `details.code === 'ROUTE_SKIP'` durumunda dönen yapı. */
+export interface RouteSkipDetails {
+  code: 'ROUTE_SKIP';
+  skippedStep: { id: string; stationName: string; stepSequence: number };
+  targetStepSequence: number;
 }
 
 /** Backend `details.code === 'ITEM_MISMATCH'` durumunda dönen yapı. */

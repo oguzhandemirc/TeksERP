@@ -54,6 +54,7 @@ import {
   subcontractorService,
   DispatchRequest,
   type ItemMismatchDetails,
+  type RouteSkipDetails,
 } from '../../../services/subcontractor.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import { useFasonNoteMobileEntry } from '../../../hooks/useFeatureFlags';
@@ -582,6 +583,13 @@ export default function FasonSevkScreen() {
     originalVars: DispatchRequest;
   } | null>(null);
 
+  // Rota-atlama uyarısı — backend "ROUTE_SKIP" döndüğünde set edilir; operatör
+  // onaylayınca allowRouteSkip ile retry. (ITEM_MISMATCH ile aynı warn-then-confirm.)
+  const [routeSkip, setRouteSkip] = useState<{
+    details: RouteSkipDetails;
+    originalVars: DispatchRequest;
+  } | null>(null);
+
   // Okutma-anı kumaş uyuşmazlığı — top eklenirken WO hedef kumaşı (targetItem)
   // ile topun kumaşı farklıysa, listeye eklemeden ÖNCE onay diyaloğu göster.
   // Yalnızca kumaşa (Item) bakar; en / metraj / kalite önemsiz. Operatör onaylarsa
@@ -643,10 +651,18 @@ export default function FasonSevkScreen() {
     },
     onError: (err, vars) => {
       // Backend ITEM_MISMATCH özel durumu — modal göster, retry with override
-      const details = err.details as ItemMismatchDetails | undefined;
+      const details = err.details as
+        | ItemMismatchDetails
+        | RouteSkipDetails
+        | undefined;
       if (details?.code === 'ITEM_MISMATCH') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         setItemMismatch({ details, originalVars: vars });
+        return;
+      }
+      if (details?.code === 'ROUTE_SKIP') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setRouteSkip({ details, originalVars: vars });
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -662,6 +678,17 @@ export default function FasonSevkScreen() {
       allowItemOverride: true,
     };
     setItemMismatch(null);
+    dispatchMutation.mutate(retryVars);
+  };
+
+  // Rota-atlama onaylanırsa aynı payload + allowRouteSkip ile retry
+  const handleRouteSkipOverride = () => {
+    if (!routeSkip) return;
+    const retryVars: DispatchRequest = {
+      ...routeSkip.originalVars,
+      allowRouteSkip: true,
+    };
+    setRouteSkip(null);
     dispatchMutation.mutate(retryVars);
   };
 
@@ -1422,6 +1449,37 @@ export default function FasonSevkScreen() {
         cancelLabel="Vazgeç"
         onDismiss={() => setItemMismatch(null)}
         onConfirm={handleItemMismatchOverride}
+      />
+
+      {/* Rota-atlama uyarısı — hedef fason adımından önce bekleyen bir fason adımı
+          var (ör. zımpara atlanıp doğrudan boyahaneye). Operatör "Yine de Gönder"
+          derse allowRouteSkip ile sevk eder. */}
+      <ConfirmDialog
+        visible={routeSkip !== null}
+        kind="simple"
+        title="Rota Sırası Atlanıyor"
+        description={
+          routeSkip ? (
+            <View>
+              <Text style={{ fontSize: 14, color: '#475569', lineHeight: 20 }}>
+                Bu sevk rota sırasını atlıyor — önce{' '}
+                <Text style={{ fontWeight: '700' }}>
+                  {routeSkip.details.skippedStep.stationName}
+                </Text>{' '}
+                fason adımı bekliyor. Mal o adıma uğramadan gönderilecek.
+              </Text>
+              <Text style={{ marginTop: 12, fontSize: 13, color: '#b45309', fontWeight: '600' }}>
+                Devam edersen audit log'a "rota atlama override" olarak yazılır.
+              </Text>
+            </View>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel="Yine de Gönder"
+        cancelLabel="Vazgeç"
+        onDismiss={() => setRouteSkip(null)}
+        onConfirm={handleRouteSkipOverride}
       />
 
       {/* Okutma-anı kumaş uyuşmazlığı — top eklenirken WO hedef kumaşı ile

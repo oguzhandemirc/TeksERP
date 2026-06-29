@@ -299,6 +299,12 @@ export class SubcontractorService {
        * yazılır, sevk normal işler.
        */
       allowItemOverride?: boolean;
+      /**
+       * Operatör rota sırasını atlayan sevki (ör. zımpara atlanıp doğrudan
+       * boyahaneye) bilinçli onayladı. Frontend ROUTE_SKIP uyarı modalında
+       * onaylayınca true gönderir; audit'e routeSkipOverride yazılır.
+       */
+      allowRouteSkip?: boolean;
     },
     userId?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
@@ -471,6 +477,38 @@ export class SubcontractorService {
           `[dispatch] Item mismatch override by user ${userId ?? "?"}: ` +
             `WO ${data.workOrderId} expects ${wo.targetItemId}, ` +
             `${mismatchedRolls.length} mismatched rolls accepted`,
+        );
+      }
+    }
+
+    // ROTA-ATLAMA UYARISI: hedef fason adımından ÖNCE rotada hâlâ PENDING bir
+    // fason adımı varsa, mal o adımı atlıyor demektir (ör. ham stok zımparayı
+    // atlayıp doğrudan boyahaneye). Sadece PENDING önceki-fason sayılır: ACTIVE =
+    // meşru paralel parti (mal hâlâ orada), COMPLETED/SKIPPED = bitti. allowRouteSkip
+    // ile bilinçli onay verilir (ITEM_MISMATCH ile aynı warn-then-confirm deseni).
+    if (!data.allowRouteSkip) {
+      const earlierPendingExternal = await prisma.workOrderStep.findFirst({
+        where: {
+          workOrderId: data.workOrderId,
+          stepSequence: { lt: step.stepSequence },
+          status: StepStatus.PENDING,
+          station: { is: { type: StationType.EXTERNAL } },
+        },
+        orderBy: { stepSequence: "asc" },
+        select: { id: true, stepSequence: true, station: { select: { name: true } } },
+      });
+      if (earlierPendingExternal) {
+        throw AppError.badRequest(
+          `Bu sevk rota sırasını atlıyor: önce "${earlierPendingExternal.station.name}" fason adımı bekliyor. "Yine de gönder" ile onaylayın.`,
+          {
+            code: "ROUTE_SKIP",
+            skippedStep: {
+              id: earlierPendingExternal.id,
+              stationName: earlierPendingExternal.station.name,
+              stepSequence: earlierPendingExternal.stepSequence,
+            },
+            targetStepSequence: step.stepSequence,
+          },
         );
       }
     }
@@ -718,6 +756,8 @@ export class SubcontractorService {
         plannedSubcontractorId: step.plannedSubcontractorId ?? null,
         rollCount: rolls.length,
         autoAttachedRollCount: autoAttachIds.size,
+        routeSkipOverride: !!data.allowRouteSkip,
+        itemMismatchOverride: !!data.allowItemOverride,
         totalQty,
       },
     });
@@ -748,6 +788,8 @@ export class SubcontractorService {
       /** Verilirse yalnız bu toplar sevk edilir (alt-küme seçimi); yoksa adımdaki
        *  bekleyen TÜM toplar. */
       rollIds?: string[];
+      /** dispatch()'e iletilir — rota-atlama uyarısını bilinçli geçmek için. */
+      allowRouteSkip?: boolean;
       instruction?: string;
       plateNumber?: string;
       driverName?: string;
@@ -805,6 +847,7 @@ export class SubcontractorService {
         stepId: data.stepId,
         subcontractorId,
         rollIds: rolls.map((r) => r.id),
+        allowRouteSkip: data.allowRouteSkip,
         instruction: data.instruction,
         plateNumber: data.plateNumber,
         driverName: data.driverName,
@@ -966,6 +1009,9 @@ export class SubcontractorService {
         stepId: nextStep.id,
         subcontractorId: data.nextSubcontractorId,
         rollIds: bornRolls.map((r) => r.id),
+        // Aktarım born topları meşru olarak sonraki fasona gönderir → rota-atlama
+        // uyarısı yanlış tetiklenmesin (önceki adım zaten COMPLETED ama explicit ver).
+        allowRouteSkip: true,
         instruction: data.instruction,
       },
       userId
