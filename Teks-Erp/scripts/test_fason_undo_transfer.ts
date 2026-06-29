@@ -153,6 +153,43 @@ async function main(): Promise<void> {
   check("Boyahane kabul yapılmış aktarımda undo reddedildi", received !== null, received?.message ?? "");
   void C;
 
+  // ───────── WO3: tek kabulün doğan topları İKİ sevke dağılmış → undo reddedilir ─────────
+  // (adversarial review HIGH bug: split-across-dispatches → orijinalleri topluca
+  //  canlandırmak diğer sevkteki kardeş born topları öksüz bırakır + çift sayar.)
+  const wo3 = await makeWo();
+  const D1 = await rollAtStep(200, wo3.zimparaStep);
+  const D2 = await rollAtStep(200, wo3.zimparaStep);
+  const D3 = await rollAtStep(200, wo3.zimparaStep);
+  const D4 = await rollAtStep(200, wo3.zimparaStep);
+  await sub.bulkDispatchStep({ workOrderId: wo3.woId, stepId: wo3.zimparaStep }, ADMIN);
+  // Tek kabul (R1): 4 orijinal → 4 born @ boyahane
+  await sub.receive({
+    workOrderId: wo3.woId, stepId: wo3.zimparaStep, subcontractorId: SUB_KESTEL,
+    returns: [D1, D2, D3, D4].map((id) => ({ rollId: id })),
+    newRolls: [200, 200, 200, 200].map((q) => ({ qty: q })),
+  }, ADMIN);
+  const born3 = await prisma.roll.findMany({
+    where: { parentReceipt: { workOrderId: wo3.woId }, currentStepId: wo3.boyaStep, status: RollStatus.IN_PRODUCTION },
+    select: { id: true }, orderBy: { id: "asc" },
+  });
+  check("WO3: tek kabulden 4 born top @ boyahane", born3.length === 4, `adet=${born3.length}`);
+  // İki AYRI sevke böl: D_a (ilk 2) + D_b (son 2) — ikisi de aynı R1'den
+  const Da = await sub.bulkDispatchStep({ workOrderId: wo3.woId, stepId: wo3.boyaStep, rollIds: born3.slice(0, 2).map((r) => r.id) }, ADMIN);
+  const Db = await sub.bulkDispatchStep({ workOrderId: wo3.woId, stepId: wo3.boyaStep, rollIds: born3.slice(2, 4).map((r) => r.id) }, ADMIN);
+  const DaId = (Da.data as { id: string }).id;
+  const DbId = (Db.data as { id: string }).id;
+  const splitPrev = (await sub.getUndoTransferPreview(DaId)).data as PreviewShape;
+  check("Split: D_a preview safe=false (dağılmış kabul)", splitPrev.safe === false, splitPrev.blockingReasons.join("; "));
+  let splitErr: AppError | null = null;
+  try { await sub.undoTransfer(DaId, "split senaryosu", ADMIN); } catch (e) { splitErr = e as AppError; }
+  check("Split: D_a undoTransfer reddedildi", splitErr !== null, splitErr?.message ?? "");
+  // D_b'nin born topları hâlâ canlı (öksüz kalmadı) + R1 iptal olmadı + orijinaller hâlâ consumed
+  const dbBorn = await prisma.roll.findMany({ where: { id: { in: born3.slice(2, 4).map((r) => r.id) } }, select: { status: true } });
+  check("Split: D_b born topları hâlâ AT_SUBCONTRACTOR (öksüz değil)", dbBorn.every((r) => r.status === RollStatus.AT_SUBCONTRACTOR), dbBorn.map((r) => r.status).join(","));
+  const d1Status = await prisma.roll.findUnique({ where: { id: D1 }, select: { status: true } });
+  check("Split: orijinaller hâlâ SUBCONTRACTOR_CONSUMED (canlanmadı)", d1Status?.status === RollStatus.SUBCONTRACTOR_CONSUMED, String(d1Status?.status));
+  void DbId;
+
   console.log(`\nSONUÇ: ${pass} geçti, ${fail} başarısız`);
 }
 
