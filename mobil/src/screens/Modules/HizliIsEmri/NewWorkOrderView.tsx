@@ -107,6 +107,15 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
   const [templateDetailOpen, setTemplateDetailOpen] = useState(false);
   const [header, setHeader] = useState<WoHeaderFieldValues>(EMPTY_HEADER_FIELDS);
   const [orderLineIds, setOrderLineIds] = useState<string[]>([]);
+  // Sipariş-önce: seçilen sipariş kaleminden kilitlenen ürün (top okutulmadan da
+  // WO ürününü/anchor'ı belirler). Top-önce'de de set edilir (E4: toplar silinse de
+  // sipariş bağlıyken ürün kilidi kalsın).
+  const [orderDerivedItemId, setOrderDerivedItemId] = useState<string | null>(null);
+  // addRolls useCallback([]) closure'ı güncel order-derived ürünü ref'ten okur.
+  const orderDerivedItemIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    orderDerivedItemIdRef.current = orderDerivedItemId;
+  }, [orderDerivedItemId]);
   const [targetPropertyIds, setTargetPropertyIds] = useState<string[]>([]);
   // İstasyon başına not (route step sequence → not) → stepPlanning.
   const [stepNotes, setStepNotes] = useState<Record<number, string>>({});
@@ -133,7 +142,7 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
   const [dispatchFirstStep, setDispatchFirstStep] = useState(true);
   const [printingCeki, setPrintingCeki] = useState(false);
 
-  const lockedItemId = scanned[0]?.itemId ?? null;
+  const lockedItemId = orderDerivedItemId ?? scanned[0]?.itemId ?? null;
   const lockedItemName = scanned[0]?.itemName ?? null;
   const totalQty = useMemo(() => scanned.reduce((s, r) => s + r.qty, 0), [scanned]);
 
@@ -323,7 +332,8 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
   const addRolls = useCallback((incoming: Roll[]) => {
     const prev = scannedRef.current;
     const have = new Set(prev.map((s) => s.barcode));
-    let lock = prev[0]?.itemId ?? null;
+    // Sipariş-önce: ürün siparişten kilitli → okutulan toplar ona uymak zorunda.
+    let lock = orderDerivedItemIdRef.current ?? prev[0]?.itemId ?? null;
     const additions: ScannedRoll[] = [];
     const rejects: string[] = [];
 
@@ -559,11 +569,13 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
       orderLineIds: orderLineIds.length ? orderLineIds : undefined,
       targetPropertyIds: apply && targetPropertyIds.length ? targetPropertyIds : undefined,
       stepPlanning: stepPlanning.length ? stepPlanning : undefined,
+      // Sipariş-önce: ürün siparişten kilitli → explicit gönder (backend toplarla
+      // eşleştiğini doğrular). Sipariş yoksa verilmez → backend toplardan türetir.
+      targetItemId: orderLineIds.length ? lockedItemId : undefined,
       // İlk adım fason + firma çözülmüş + toggle açıksa: WO ile birlikte fason sevkini
       // de yap (çeki listesi dahil). Aksi halde gönderilmez (eski "planla" davranışı).
       dispatchFirstStep:
         dispatchFirstStep && firstStepDispatch.isFason && !!firstStepDispatch.firmId,
-      // targetItemId verilmiyor → backend okutulan topların ürününden türetir
     };
     mutation.mutate(payload);
   };
@@ -575,6 +587,7 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
     clearTemplate();
     setHeader(EMPTY_HEADER_FIELDS);
     setOrderLineIds([]);
+    setOrderDerivedItemId(null);
     setStepNotes({});
     setStepSubcontractors({});
     setOrderColorName(null);
@@ -868,11 +881,17 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
             value={orderLineIds}
             onChange={(ids) => {
               setOrderLineIds(ids);
-              if (ids.length === 0) setOrderColorName(null);
+              if (ids.length === 0) {
+                setOrderColorName(null);
+                // Sipariş kaldırıldı → ürün kilidi serbest (top varsa scanned'e düşer).
+                setOrderDerivedItemId(null);
+              }
             }}
             open={orderPickerOpen}
             onOpenChange={setOrderPickerOpen}
             onLinePicked={(line) => {
+              // Ürünü siparişten kilitle (sipariş-önce'nin çekirdeği; E4).
+              setOrderDerivedItemId(line.itemId);
               setHeader((h) => ({
                 ...h,
                 targetColorId: line.colorId,
@@ -976,8 +995,8 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
           <View style={styles.bottomBarCellSide}>
             <TouchableRipple
               onPress={() => setOrderPickerOpen(true)}
-              disabled={!lockedItemId}
-              style={[styles.bottomBarBtn, !lockedItemId && styles.bottomBarBtnDisabled]}
+              disabled={mutation.isPending}
+              style={[styles.bottomBarBtn, mutation.isPending && styles.bottomBarBtnDisabled]}
               rippleColor="rgba(79,70,229,0.12)"
               accessibilityLabel="Sipariş bağla"
             >

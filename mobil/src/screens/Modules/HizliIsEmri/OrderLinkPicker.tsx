@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, TouchableRipple, Icon, ActivityIndicator } from 'react-native-paper';
+import { Text, TouchableRipple, Icon, ActivityIndicator, TextInput } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
+import Toast from 'react-native-toast-message';
 import AppModal from '../../../components/AppModal';
 import { orderService, type AvailableOrderLine } from '../../../services/order.service';
 import { colors, spacing, radius } from '../../../theme';
@@ -38,31 +39,63 @@ export default function OrderLinkPicker({
     else setOpenInternal(v);
   };
 
-  const q = useQuery({
+  // Arama (yalnız sipariş-önce/broad mod) — debounce.
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // TOP-ÖNCE (itemId set): okutulan ürünün açık kalemleri — tek sayfa, filtreli.
+  const filtered = useQuery({
     queryKey: ['available-order-lines', itemId],
-    // withInProduction: açık'tan üretimdeki düşülmüş netOpenQty gelsin (WO oluşturma).
     queryFn: () =>
       orderService.getAvailableOrderLines({ itemId: itemId as string, withInProduction: true }),
     enabled: open && !!itemId,
-    // Picker her açıldığında taze çek — colorId gibi yeni alanlar bayat cache'te
-    // kalmasın (renk otomatik dolması buna bağlı).
     staleTime: 0,
   });
 
-  const lines = q.data?.data ?? [];
+  // SİPARİŞ-ÖNCE (itemId yok): tüm açık kalemler — aramalı + infinite scroll (cursor).
+  const broad = useInfiniteQuery({
+    queryKey: ['available-order-lines-cursor', search],
+    queryFn: ({ pageParam }) =>
+      orderService.getAvailableOrderLinesCursor({ search, cursor: pageParam, limit: 20 }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => (last.pagination.hasMore ? last.pagination.nextCursor : undefined),
+    enabled: open && !itemId,
+    placeholderData: keepPreviousData,
+  });
+
+  const lines: AvailableOrderLine[] = itemId
+    ? filtered.data?.data ?? []
+    : broad.data?.pages.flatMap((p) => p.data) ?? [];
+  const loading = itemId ? filtered.isLoading : broad.isLoading;
   const selectedLines = useMemo(
     () => lines.filter((l) => value.includes(l.lineId)),
     [lines, value],
   );
 
   const toggle = (lineId: string) => {
-    const isSelected = value.includes(lineId);
-    onChange(isSelected ? value.filter((id) => id !== lineId) : [...value, lineId]);
-    // Yeni işaretlenen kalemden renk/en'i üst forma taşı (sipariş bağlıyken kilitlenir).
-    if (!isSelected) {
-      const line = lines.find((l) => l.lineId === lineId);
-      if (line) onLinePicked?.(line);
+    if (value.includes(lineId)) {
+      onChange(value.filter((id) => id !== lineId));
+      return;
     }
+    const line = lines.find((l) => l.lineId === lineId);
+    // Anchor: tek WO = tek kumaş. İlk seçili kalemin (veya okutulan topun) ürünü
+    // dışında ürün eklenemez. (Backend de tek-item zorlar; bu erken uyarı.)
+    const anchor = selectedLines[0]?.itemId ?? itemId ?? null;
+    if (line && anchor && line.itemId !== anchor) {
+      Toast.show({
+        type: 'info',
+        text1: 'Aynı ürünün kalemlerini seçin',
+        text2: 'Tek iş emri tek kumaş içindir.',
+      });
+      return;
+    }
+    onChange([...value, lineId]);
+    // Renk/en üst forma taşınır + (sipariş-önce) ürün kilitlenir (onLinePicked).
+    if (line) onLinePicked?.(line);
   };
 
   const renderRow = ({ item }: { item: AvailableOrderLine }) => {
@@ -100,15 +133,14 @@ export default function OrderLinkPicker({
       <Text style={styles.label}>Sipariş Bağla (opsiyonel)</Text>
       <TouchableRipple
         onPress={() => setOpen(true)}
-        disabled={!itemId}
-        style={[styles.trigger, !itemId && styles.triggerDisabled]}
+        style={styles.trigger}
         borderless
         rippleColor="rgba(79,70,229,0.12)"
       >
         <View style={styles.triggerInner}>
           <Icon source="link-variant" size={18} color={colors.brand} />
           <Text style={styles.triggerText}>
-            {value.length > 0 ? `${value.length} sipariş kalemi bağlı` : itemId ? 'Sipariş seç' : 'Önce top okut'}
+            {value.length > 0 ? `${value.length} sipariş kalemi bağlı` : 'Sipariş seç'}
           </Text>
         </View>
       </TouchableRipple>
@@ -135,15 +167,43 @@ export default function OrderLinkPicker({
             <Text style={styles.doneText}>Tamam ({value.length})</Text>
           </TouchableRipple>
         </View>
-        {q.isLoading ? (
+        {!itemId ? (
+          <TextInput
+            mode="outlined"
+            dense
+            placeholder="Sipariş no / müşteri / ürün ara"
+            value={searchInput}
+            onChangeText={setSearchInput}
+            left={<TextInput.Icon icon="magnify" />}
+            style={styles.search}
+          />
+        ) : null}
+        {loading ? (
           <View style={styles.center}>
             <ActivityIndicator color={colors.brand} />
           </View>
         ) : lines.length === 0 ? (
-          <Text style={styles.empty}>Bu ürüne uyan açık sipariş kalemi yok.</Text>
+          <Text style={styles.empty}>
+            {itemId ? 'Bu ürüne uyan açık sipariş kalemi yok.' : 'Açık sipariş kalemi bulunamadı.'}
+          </Text>
         ) : (
           <View style={{ height: 360 }}>
-            <FlashList data={lines} keyExtractor={(l) => l.lineId} renderItem={renderRow} />
+            <FlashList
+              data={lines}
+              keyExtractor={(l) => l.lineId}
+              renderItem={renderRow}
+              onEndReachedThreshold={0.6}
+              onEndReached={() => {
+                if (!itemId && broad.hasNextPage && !broad.isFetchingNextPage) broad.fetchNextPage();
+              }}
+              ListFooterComponent={
+                !itemId && broad.isFetchingNextPage ? (
+                  <View style={styles.footer}>
+                    <ActivityIndicator color={colors.brand} />
+                  </View>
+                ) : null
+              }
+            />
           </View>
         )}
       </AppModal>
@@ -173,6 +233,8 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
   doneBtn: { backgroundColor: colors.brand, borderRadius: radius.full, paddingHorizontal: spacing.lg, paddingVertical: 8 },
   doneText: { color: '#fff', fontWeight: '700' },
+  search: { marginBottom: spacing.sm, backgroundColor: colors.surface },
+  footer: { paddingVertical: spacing.md, alignItems: 'center' },
   center: { padding: spacing.xxl, alignItems: 'center' },
   empty: { textAlign: 'center', color: colors.textMuted, padding: spacing.xl },
   row: { borderRadius: radius.sm },

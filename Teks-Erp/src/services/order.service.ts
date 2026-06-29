@@ -9,8 +9,13 @@
 
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
-import { BaseService, BaseServiceConfig } from "./base.service";
+import { BaseService, BaseServiceConfig, CursorPaginatedResponse } from "./base.service";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
+import {
+  decodeDynamicCursor,
+  dynamicCursorWhere,
+  buildNextDynamicCursor,
+} from "../utils/cursor";
 import { AppError } from "../utils/app-error";
 import { OrderStatus, Prisma, RollStatus, ShipmentStatus, WorkOrderStatus } from "@prisma/client";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -558,24 +563,128 @@ export class OrderService extends BaseService {
    * üretmeliyim" için. Tambur/Etiket bunu GÖNDERMEZ (bitmiş mal ataması; açık aynı kalır).
    */
   async findAvailableOrderLines(params: {
-    itemId: string;
+    itemId?: string | null;
     colorId?: string | null;
     width?: number | null;
     withInProduction?: boolean;
-  }): Promise<ApiResponse<unknown>> {
-    const where: Prisma.OrderLineWhereInput = {
-      itemId: params.itemId,
+    // Cursor mod (sipariş-önce aramalı liste) — yalnız `limit` verilince devreye girer.
+    search?: string | null;
+    cursor?: string | null;
+    limit?: number | null;
+    withTotal?: boolean;
+  }): Promise<ApiResponse<unknown> | CursorPaginatedResponse<unknown>> {
+    // Ortak WHERE — itemId artık OPSİYONEL (cursor modda sipariş-önce için).
+    const baseWhere: Prisma.OrderLineWhereInput = {
       order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
     };
-    if (params.colorId) where.colorId = params.colorId;
-    if (params.width != null) where.width = params.width;
+    if (params.itemId) baseWhere.itemId = params.itemId;
+    if (params.colorId) baseWhere.colorId = params.colorId;
+    if (params.width != null) baseWhere.width = params.width;
+    const term = params.search?.trim();
+    if (term) {
+      baseWhere.OR = [
+        { order: { orderNumber: { contains: term, mode: "insensitive" } } },
+        { order: { customer: { name: { contains: term, mode: "insensitive" } } } },
+        { item: { name: { contains: term, mode: "insensitive" } } },
+        { customerItemName: { contains: term, mode: "insensitive" } },
+      ];
+    }
+
+    // ── CURSOR MOD (limit verildi): itemId opsiyonel, "sipariş-önce" aramalı liste.
+    //    E1: açık>0 SQL'de (keyset-safe; openQty = quantity − shippedQty). withInProduction
+    //    broad modda (itemId yok) hesaplanmaz; openQty doğrudan shippedQty'den türetilir.
+    if (params.limit != null) {
+      const limit = Math.min(Math.max(1, params.limit), 50);
+      const whereOpen: Prisma.OrderLineWhereInput = {
+        ...baseWhere,
+        quantity: { gt: prisma.orderLine.fields.shippedQty },
+      };
+      const cur = decodeDynamicCursor(params.cursor ?? undefined);
+      const where = cur
+        ? { AND: [whereOpen, dynamicCursorWhere(cur, "createdAt", "asc")] }
+        : whereOpen;
+      const rows = await prisma.orderLine.findMany({
+        where,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: limit + 1,
+        select: {
+          id: true,
+          itemId: true,
+          quantity: true,
+          shippedQty: true,
+          width: true,
+          colorId: true,
+          customerItemName: true,
+          customerColorName: true,
+          createdAt: true,
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              deadline: true,
+              customer: { select: { id: true, name: true } },
+              branch: { select: { id: true, name: true } },
+            },
+          },
+          item: { select: { code: true, name: true } },
+          color: { select: { code: true, name: true } },
+        },
+      });
+      const totalEstimate = params.withTotal
+        ? await prisma.orderLine.count({ where: whereOpen })
+        : undefined;
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
+      const last = page[page.length - 1] as Record<string, unknown> | undefined;
+      const nextCursor = hasMore ? buildNextDynamicCursor(last, "createdAt") : null;
+      const data = page.map((l) => {
+        const openQty = new Prisma.Decimal(l.quantity).minus(l.shippedQty);
+        return {
+          lineId: l.id,
+          itemId: l.itemId,
+          orderId: l.order.id,
+          orderNumber: l.order.orderNumber,
+          deadline: l.order.deadline,
+          customerId: l.order.customer.id,
+          customerName: l.order.customer.name,
+          branchName: l.order.branch?.name ?? null,
+          itemCode: l.item.code,
+          itemName: l.item.name,
+          customerItemName: l.customerItemName,
+          colorId: l.colorId,
+          colorCode: l.color?.code ?? null,
+          colorName: l.color?.name ?? null,
+          customerColorName: l.customerColorName,
+          width: l.width,
+          quantity: l.quantity,
+          openQty,
+          inProduction: new Prisma.Decimal(0),
+          netOpenQty: openQty,
+        };
+      });
+      return {
+        success: true,
+        data,
+        pagination: {
+          nextCursor,
+          hasMore,
+          limit,
+          ...(totalEstimate !== undefined ? { totalEstimate } : {}),
+        },
+      };
+    }
+
+    // ── LEGACY MOD (limit yok): itemId ZORUNLU — Tambur/etiket picker'ı. DAVRANIŞ BİREBİR.
+    const itemId = params.itemId;
+    if (!itemId) throw AppError.badRequest("itemId gerekli");
 
     const lines = await prisma.orderLine.findMany({
-      where,
+      where: baseWhere,
       take: 200,
       orderBy: { createdAt: "asc" },
       select: {
         id: true,
+        itemId: true,
         quantity: true,
         width: true,
         colorId: true,
@@ -604,7 +713,7 @@ export class OrderService extends BaseService {
       colorId: string | null,
       width: Prisma.Decimal | number | null,
     ): string =>
-      `${params.itemId}|${colorId ?? ""}|${width == null ? "" : new Prisma.Decimal(width).toString()}`;
+      `${itemId}|${colorId ?? ""}|${width == null ? "" : new Prisma.Decimal(width).toString()}`;
     let inProdBySpec: Map<string, Prisma.Decimal> | null = null;
     if (params.withInProduction) {
       const liveWos = await prisma.workOrder.findMany({
@@ -617,7 +726,7 @@ export class OrderService extends BaseService {
             ],
           },
           isActive: true,
-          targetItemId: params.itemId,
+          targetItemId: itemId,
         },
         select: { id: true, targetColorId: true, width: true },
       });
@@ -647,6 +756,7 @@ export class OrderService extends BaseService {
         const netOpenQty = Prisma.Decimal.max(0, openQty.minus(inProduction));
         return {
           lineId: l.id,
+          itemId: l.itemId,
           orderId: l.order.id,
           orderNumber: l.order.orderNumber,
           deadline: l.order.deadline,

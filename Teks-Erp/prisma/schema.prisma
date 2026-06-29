@@ -1068,6 +1068,9 @@ model OrderLine {
   @@index([orderId])
   @@index([itemId])
   @@index([colorId])
+  // Sipariş-önce aramalı liste (cursor keyset createdAt asc) + ürün-filtreli sayfalama.
+  @@index([createdAt])
+  @@index([itemId, createdAt])
   @@map("order_lines")
 }
 
