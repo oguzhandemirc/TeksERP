@@ -207,8 +207,6 @@ export interface WorkOrder {
   targetProperties?: FabricProperty[];
   /** "2-KAT" / "4-KAT" gibi — Tambur planlaması, opsiyonel. */
   foldType?: string | null;
-  /** Boyahaneye özel talimat (planlamacı girer); fason sevkte salt-okunur gösterilir. */
-  dyehouseNote?: string | null;
   /** Tambur katman sayısı (1-20), opsiyonel. */
   layerCount?: number | null;
   dispatchedTotalQty?: number;
@@ -234,6 +232,7 @@ export interface SubcontractorDispatchListItem {
   plateNumber: string | null;
   driverName: string | null;
   notes: string | null;
+  /** Fason adım talimatı (adımın notes'undan default, sevkte override edilebilir). */
   instruction: string | null;
   stepId: string;
   cancelledAt: string | null;
@@ -253,6 +252,7 @@ export interface SubcontractorDispatch {
   plateNumber: string | null;
   driverName: string | null;
   notes: string | null;
+  /** Fason adım talimatı (adımın notes'undan default, sevkte override edilebilir). */
   instruction: string | null;
   totalQty: number;
   dispatchedAt: string;
@@ -805,6 +805,9 @@ export interface TamburCutRequest {
   notes?: string | null;
   /** Bu kesimin hedef sipariş kalemi (null = stok). Etiket buradan basılır. */
   targetOrderLineId?: string | null;
+  /** Bu kesimin hedef müşterisi (sipariş-dışı; null = stok). Backend child'ın
+   *  lastLabelSnapshot'ına yazar → yazıcı/ekran bağımsız kalıcı niyet. */
+  targetCustomerId?: string | null;
   /** Çıktı top kartelalık işaretlensin (depoda kartela sevki için). */
   markedForKartela?: boolean;
   /** Offline/ağ-retry idempotency: client-üretimi child barkod (TEKS-YYYYMMDD-XXXXXXXX).

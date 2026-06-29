@@ -33,6 +33,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenChrome from '../../../components/ScreenChrome';
 import CutActionBar from './CutActionBar';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
+import { useBtMeterStore, meterDeviceFor } from '../../../store/btMeterStore';
+import { isBtMeterSupported, readMeter } from '../../../services/btMeter.service';
 import RefreshButton from '../../../components/RefreshButton';
 import RemoteListSheet from '../../../components/RemoteListSheet';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
@@ -252,6 +254,14 @@ export default function TamburScreen() {
   // kapalı). Kapalıyken aşan giriş engellenir; açıkken aşımda onay diyaloğu çıkar
   // (parmak hatası koruması) ve onaylanınca backend kabul eder (parent tamamen tüketilir).
   const overQuantityEnabled = useTamburOverQuantityEnabled();
+  // 2-kat / 4-kat makine metre okuyucuları (HC-06 / BT). Otomatik kesimde foldType'a
+  // göre ilgili makineden okunur; cihaz yoksa veya okuma hatasıysa simülasyona düşülür.
+  const meterDevice2Kat = useBtMeterStore((s) => s.device2Kat);
+  const meterDevice4Kat = useBtMeterStore((s) => s.device4Kat);
+  const meterPollCommand = useBtMeterStore((s) => s.pollCommand);
+  const meterSimulationEnabled = useBtMeterStore((s) => s.simulationEnabled);
+  // "Kes" (otomatik) → makineden okuma uçuşurken footer'ı kilitle (çift-tık koruması).
+  const [measuring, setMeasuring] = useState(false);
   // Aşım onayı bekleyen kesim — onaylanınca onConfirm() çalışır (ilgili mutate).
   const [overCutConfirm, setOverCutConfirm] = useState<{
     recorded: number;
@@ -523,6 +533,14 @@ export default function TamburScreen() {
     setActivePrintRoll(roll);
   };
 
+  // "Müşterisiz (Stok)" — müşteri bilgisi OLMADAN bas. labelContext={stock:true}
+  // → backend müşteriyi zorla null bırakır (snapshot/WO atlanır); önizleme/geçmiş
+  // reprint'inde tek dokunuşta müşterisiz etiket.
+  const reprintLabelStock = (roll: Roll) => {
+    setLabelContext({ stock: true });
+    setActivePrintRoll(roll);
+  };
+
   // ── Mutations ──
   const finalizeMutation = useMutation({
     mutationFn: (data: TamburFinalizeRequest) => tamburService.finalize(data),
@@ -573,7 +591,7 @@ export default function TamburScreen() {
       status: 'WAREHOUSE' | 'SCRAP' | 'A1_STOCK';
       qualityGrade: string;
       targetOrderLineId?: string | null;
-      // Sadece etiket hedefi (kesim stok olarak girer); backend'e gitmez.
+      // Müşteri hedefi — backend cut'a gider, child lastLabelSnapshot'a seed edilir.
       targetCustomerId?: string | null;
       markedForKartela?: boolean;
       /** Ağ-retry idempotency: kesim anında üretilir, retry'da aynı kalır. */
@@ -584,6 +602,8 @@ export default function TamburScreen() {
         status: data.status,
         qualityGrade: data.qualityGrade,
         targetOrderLineId: data.targetOrderLineId ?? null,
+        // Niyet backend'e gider → child lastLabelSnapshot'a seed edilir (kalıcı).
+        targetCustomerId: data.targetCustomerId ?? null,
         markedForKartela: data.markedForKartela ?? false,
         clientChildBarcode: data.clientChildBarcode,
       }),
@@ -771,6 +791,7 @@ export default function TamburScreen() {
       cutLength,
       qualityGrade,
       targetOrderLineId,
+      targetCustomerId,
       markedForKartela,
       rawDestination,
       clientChildBarcode,
@@ -779,8 +800,8 @@ export default function TamburScreen() {
       cutLength: number;
       qualityGrade: string;
       targetOrderLineId?: string | null;
-      /** Sipariş-dışı müşteri hedefi — backend cut'a GİTMEZ; onSuccess'te etiket
-       *  baskısının müşterisi olur (label print {customerId}). */
+      /** Sipariş-dışı müşteri hedefi — backend cut'a gider, child'ın
+       *  lastLabelSnapshot'ına seed edilir (yazıcı/ekran bağımsız kalıcı niyet). */
       targetCustomerId?: string | null;
       markedForKartela?: boolean;
       rawDestination?: 'STOCK' | 'WAREHOUSE';
@@ -791,6 +812,7 @@ export default function TamburScreen() {
         cutLength,
         qualityGrade,
         targetOrderLineId: targetOrderLineId ?? null,
+        targetCustomerId: targetCustomerId ?? null,
         markedForKartela: markedForKartela ?? false,
         rawDestination,
         clientChildBarcode,
@@ -1023,17 +1045,66 @@ export default function TamburScreen() {
     runCut();
   };
 
-  // Footer "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen.
-  const handleKes = () => {
-    if (cutMode === 'auto') {
-      if (!selectedRoll) return;
-      // FAZ 1 SİMÜLASYONU — gerçek sayaç yok; kalana clamp'li makul bir uzunluk
-      // üret. Faz 2'de bu satır gerçek makine okumasıyla değişecek.
-      const remaining = selectedRoll.currentQty;
+  // Otomatik kesim ölçümü — seçili kata (foldType) ait makineden HC-06/BT ile metre OKU.
+  // Simülasyon AÇIKsa (Ayarlar; varsayılan KAPALI) makineye hiç bağlanmaz, sahte değer üretir.
+  // KAPALIyken gerçek makineden okunur; donanım yok / cihaz seçilmemiş / okuma hatası →
+  // null döner (hata gösterilir, kesim YAPILMAZ; sessiz sahte değer YOK).
+  // 2-KAT → 2-kat makinesi, 4-KAT → 4-kat makinesi.
+  const measureFromMachine = async (remaining: number): Promise<number | null> => {
+    const katLabel = work.foldType === '4-KAT' ? '4 Kat' : '2 Kat';
+    // Açık simülasyon modu (test / donanımsız geliştirme).
+    if (meterSimulationEnabled) {
       const lo = Math.min(5, remaining);
       const hi = Math.min(80, remaining);
-      const measured = Math.round((lo + Math.random() * (hi - lo)) * 10) / 10;
-      addVoluntaryCut(measured);
+      return Math.round((lo + Math.random() * (hi - lo)) * 10) / 10;
+    }
+    // Gerçek mod (varsayılan): makineden oku; başarısızsa null (kesim iptal).
+    if (!isBtMeterSupported()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Bluetooth bu derlemede yok',
+        text2: 'Makine okuması için native build gerekir; ya da Ayarlar’dan simülasyonu açın.',
+        visibilityTime: 6000,
+      });
+      return null;
+    }
+    const device = meterDeviceFor({ device2Kat: meterDevice2Kat, device4Kat: meterDevice4Kat }, work.foldType);
+    if (!device) {
+      Toast.show({
+        type: 'error',
+        text1: `${katLabel} makinesi seçili değil`,
+        text2: 'Ayarlar → Metre Makineleri’nden seçin (ya da simülasyonu açın).',
+        visibilityTime: 6000,
+      });
+      return null;
+    }
+    try {
+      const v = await readMeter(device.address, { pollCommand: meterPollCommand });
+      if (Number.isFinite(v) && v > 0) return Math.round(v * 10) / 10;
+      throw new Error('Geçersiz okuma');
+    } catch (e) {
+      Toast.show({
+        type: 'error',
+        text1: `${katLabel} makinesi okunamadı`,
+        text2: e instanceof Error ? e.message : 'Makine kapalı/menzil dışı veya komut yanlış olabilir',
+        visibilityTime: 6000,
+      });
+      return null;
+    }
+  };
+
+  // Footer "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen.
+  const handleKes = async () => {
+    if (cutMode === 'auto') {
+      if (!selectedRoll || measuring) return;
+      setMeasuring(true);
+      try {
+        const measured = await measureFromMachine(selectedRoll.currentQty);
+        if (measured == null) return; // okunamadı → hata gösterildi, kesim yapma
+        addVoluntaryCut(measured);
+      } finally {
+        setMeasuring(false);
+      }
     } else {
       addVoluntaryCut();
     }
@@ -1196,15 +1267,19 @@ export default function TamburScreen() {
     runCut();
   };
 
-  // Recut "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen (sim).
-  const handleRecutKes = () => {
+  // Recut "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen (seçili
+  // kata göre HC-06/BT, donanım yoksa simülasyon — measureFromMachine ile ortak).
+  const handleRecutKes = async () => {
     if (recutMode === 'auto') {
-      if (!recutRollMeta) return;
-      const remaining = recutRollMeta.currentQty;
-      const lo = Math.min(5, remaining);
-      const hi = Math.min(80, remaining);
-      const measured = Math.round((lo + Math.random() * (hi - lo)) * 10) / 10;
-      handleRecutSubmit(measured);
+      if (!recutRollMeta || measuring) return;
+      setMeasuring(true);
+      try {
+        const measured = await measureFromMachine(recutRollMeta.currentQty);
+        if (measured == null) return; // okunamadı → hata gösterildi, kesim yapma
+        handleRecutSubmit(measured);
+      } finally {
+        setMeasuring(false);
+      }
     } else {
       handleRecutSubmit();
     }
@@ -1333,6 +1408,53 @@ export default function TamburScreen() {
               ? recutTargetCustomerName
               : work.voluntaryEntry.targetCustomerName
             : 'Listeden Seç'}
+        </Text>
+      </View>
+    </TouchableRipple>
+  );
+
+  // "Stok (müşterisiz)" — açık stok seçeneği. Hiç sipariş/müşteri seçili değilken
+  // AKTİF (dolu) görünür → operatör stok modunda olduğunu net görür. Bir dokunuş
+  // tüm hedefi temizler (müşteri seçimini geri almak için picker'ı yeniden açıp
+  // toggle'lamaya gerek kalmaz).
+  const stokActive = recutRollMeta
+    ? !recutTargetLineId && !recutTargetCustomerId
+    : !work.voluntaryEntry.targetOrderLineId && !work.voluntaryEntry.targetCustomerId;
+  const clearToStock = () => {
+    if (recutRollMeta) {
+      setRecutTargetLineId(null);
+      setRecutTargetCustomerId(null);
+      setRecutTargetCustomerName(undefined);
+    } else {
+      setWork((w) => ({
+        ...w,
+        voluntaryEntry: {
+          ...w.voluntaryEntry,
+          targetOrderLineId: null,
+          targetCustomerId: null,
+          targetCustomerName: undefined,
+        },
+      }));
+    }
+  };
+  const stokChip = (
+    <TouchableRipple
+      borderless
+      onPress={clearToStock}
+      style={[styles.stokPickerChip, stokActive && styles.stokPickerChipActive]}
+      accessibilityLabel="Stok (müşterisiz) — etiket müşteri bilgisi olmadan basılır"
+    >
+      <View style={styles.listOptionPickerInner}>
+        <Icon
+          source={stokActive ? 'check' : 'tag-outline'}
+          size={16}
+          color={stokActive ? '#fff' : '#0f766e'}
+        />
+        <Text
+          style={[styles.stokPickerChipText, stokActive && styles.listOptionTextActive]}
+          numberOfLines={1}
+        >
+          Stok (müşterisiz)
         </Text>
       </View>
     </TouchableRipple>
@@ -1739,7 +1861,8 @@ export default function TamburScreen() {
                   {/* Kime + Kalite yan yana iki sütun; her sütun kendi dikey listesi */}
                   <View style={styles.kimeKaliteRow}>
                     <View style={styles.kimeCol}>
-                      <Text style={styles.cutSubLabel}>Kime? (boş = stok)</Text>
+                      <Text style={styles.cutSubLabel}>Kime?</Text>
+                      {stokChip}
                       {kimeListChip}
                       <ScrollView
                         style={styles.kimeScroll}
@@ -1823,7 +1946,8 @@ export default function TamburScreen() {
                 onKes={handleRecutKes}
                 kesLoading={
                   cutWarehouseRollMutation.isPending ||
-                  finalizeWarehouseCutMutation.isPending
+                  finalizeWarehouseCutMutation.isPending ||
+                  measuring
                 }
                 kesDisabled={
                   !recutQualityGrade ||
@@ -2160,12 +2284,14 @@ export default function TamburScreen() {
                   <View style={styles.kimeKaliteRow}>
                     <View style={styles.kimeCol}>
                       <Text style={styles.cutSubLabel}>
-                        Kime? (boş = stok)
+                        Kime?
                       </Text>
+                      {/* Açık "Stok" seçeneği — hiç seçim yokken aktif görünür. */}
+                      {stokChip}
                       {/* SABİT — scroll'la kaymaz; tüm müşteriler (sipariştekiler önce) */}
                       {kimeListChip}
                       {/* Sipariş kısayolları — kendi içinde scroll; 2. tık seçimi
-                          kaldırır (seçim yok = stok). "Stok" satırı yok. */}
+                          kaldırır (seçim yok = stok). */}
                       <ScrollView
                         style={styles.kimeScroll}
                         nestedScrollEnabled
@@ -2272,7 +2398,8 @@ export default function TamburScreen() {
                 onToggleKartela={() => setMarkAsKartela((v) => !v)}
                 onKes={handleKes}
                 // cutOpenFabric offline-aware değil → isPending'de kilitlenir.
-                kesLoading={cutOpenFabricMutation.isPending}
+                // Otomatik modda makineden okuma uçuşurken de (measuring) kilitli.
+                kesLoading={cutOpenFabricMutation.isPending || measuring}
                 kesDisabled={!work.voluntaryEntry.qualityGrade}
                 kesLabel={
                   cutMode === 'auto'
@@ -2406,6 +2533,12 @@ export default function TamburScreen() {
           setPendingPrintRolls([]);
           queueLabel(roll);
         }}
+        onPrintStock={(roll) => {
+          // "Müşterisiz (Stok)" → doğrudan stok bas. "Kime?" sheet'i açılmaz →
+          // çakışma yok → batch listesi AÇIK kalır, operatör sıradaki parçayı da
+          // tek dokunuşla müşterisiz basabilir.
+          reprintLabelStock(roll);
+        }}
         printingRollId={activePrintRoll?.id ?? null}
       />
 
@@ -2507,6 +2640,10 @@ export default function TamburScreen() {
           // önizleme kapanır (RecentOutputModal içinde), Çıkanlar açık kalır.
           queueLabel(roll);
         }}
+        onPrintStock={(roll) => {
+          // "Müşterisiz (Stok)" → mevcut topu müşterisiz bas (liste açık kalsın).
+          reprintLabelStock(roll);
+        }}
       />
 
       {/* Compact'ta sağdan kayan iş paneli — telefon ekranında sağ kolonun yerine */}
@@ -2605,12 +2742,16 @@ function RollLabelCard({
   index,
   isPrinting,
   onPrint,
+  onPrintStock,
   onPreview,
 }: {
   roll: Roll;
   index: number;
   isPrinting: boolean;
   onPrint: (roll: Roll) => void;
+  /** Verilirse "Bas"ın solunda müşterisiz (stok) hızlı baskı butonu çıkar —
+   *  "Kime?" sormadan, doğrudan müşterisiz basar. */
+  onPrintStock?: (roll: Roll) => void;
   /** Verilirse kart gövdesine dokunmak etiket önizlemesini açar (son basılan
    *  etiketi göster). "Bas" butonu ayrı dokunma hedefi olarak kalır. */
   onPreview?: (roll: Roll) => void;
@@ -2673,6 +2814,19 @@ function RollLabelCard({
       ) : (
         body
       )}
+      {onPrintStock && (
+        <IconButton
+          icon="account-off-outline"
+          mode="contained"
+          size={22}
+          containerColor="#0f766e"
+          iconColor="#fff"
+          onPress={() => onPrintStock(roll)}
+          disabled={isPrinting}
+          accessibilityLabel="Müşterisiz (stok) bas"
+          style={{ margin: 0 }}
+        />
+      )}
       <IconButton
         icon={isPrinting ? 'progress-clock' : 'printer'}
         mode="contained"
@@ -2681,7 +2835,7 @@ function RollLabelCard({
         iconColor="#fff"
         onPress={() => onPrint(roll)}
         disabled={isPrinting}
-        accessibilityLabel="Etiketi bas"
+        accessibilityLabel="Etiketi bas (kime? seç)"
         style={{ margin: 0 }}
       />
     </Surface>
@@ -2697,12 +2851,14 @@ function LabelPrintModal({
   batchNumber,
   onDismiss,
   onPrint,
+  onPrintStock,
   printingRollId,
 }: {
   rolls: Roll[];
   batchNumber?: string | null;
   onDismiss: () => void;
   onPrint: (roll: Roll) => void;
+  onPrintStock?: (roll: Roll) => void;
   printingRollId: string | null;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
@@ -2736,6 +2892,7 @@ function LabelPrintModal({
               index={idx}
               isPrinting={printingRollId === roll.id}
               onPrint={onPrint}
+              onPrintStock={onPrintStock}
             />
           ))}
         </ScrollView>
@@ -3404,6 +3561,7 @@ function RecentOutputModal({
   onDismiss,
   onPrint,
   onNewLabel,
+  onPrintStock,
 }: {
   visible: boolean;
   onDismiss: () => void;
@@ -3411,6 +3569,8 @@ function RecentOutputModal({
   onPrint: (roll: Roll) => void;
   /** "Yeni Etiket" — yönlendir (kime? → yeni etiket). */
   onNewLabel: (roll: Roll) => void;
+  /** "Müşterisiz (Stok)" — müşteri bilgisi olmadan bas. */
+  onPrintStock: (roll: Roll) => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
   const isCompactPortrait = winH > winW;
@@ -3582,6 +3742,11 @@ function RecentOutputModal({
           const r = previewRoll;
           setPreviewRoll(null);
           if (r) onNewLabel(r);
+        }}
+        onPrintStock={() => {
+          const r = previewRoll;
+          setPreviewRoll(null);
+          if (r) onPrintStock(r);
         }}
       />
 
@@ -5160,6 +5325,22 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   kimeListChipText: { fontSize: 13, fontWeight: '700', color: '#4f46e5' },
+  // "Stok (müşterisiz)" — kesim "Kime?" picker'ında açık stok seçeneği (teal;
+  // "Müşterisiz" baskı butonlarıyla aynı renk). Seçim yokken AKTİF (dolu) görünür.
+  stokPickerChip: {
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#0f766e',
+    borderStyle: 'dashed',
+    backgroundColor: '#f0fdfa',
+    marginBottom: 6,
+  },
+  stokPickerChipActive: {
+    backgroundColor: '#0f766e',
+    borderColor: '#0f766e',
+    borderStyle: 'solid',
+  },
+  stokPickerChipText: { fontSize: 13, fontWeight: '700', color: '#0f766e' },
   foldChipSm: {
     flex: 1,
     backgroundColor: '#fff',

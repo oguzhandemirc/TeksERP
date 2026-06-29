@@ -29,18 +29,24 @@ export function RelabelPrintForCustomer({
   const canPrint = hasPermission("label:print");
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // null = müşterisiz (varsayılan/master) render.
+  // Üç durum: müşteri seçili → o müşteri; stock=true → ZORLA stok (müşterisiz);
+  // ikisi de değilse (açılış) → topun mevcut etiketi (snapshot/varsayılan).
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [orderLineId, setOrderLineId] = useState<string | null>(null);
+  const [stock, setStock] = useState(false);
+
+  // stock seçiliyse backend'e ZORLA {stock:true} (snapshot müşterisine DÜŞMESİN);
+  // aksi halde {customerId, orderLineId} (açılışta ikisi de null → mevcut etiket).
+  const ctxOpts = stock ? { stock: true } : { customerId, orderLineId };
 
   const htmlQuery = useQuery({
-    queryKey: ["relabel-html", ctx.id, customerId, orderLineId],
-    queryFn: () => labelService.getRollLabelHtml(ctx.id, { customerId, orderLineId }),
+    queryKey: ["relabel-html", ctx.id, customerId, orderLineId, stock],
+    queryFn: () => labelService.getRollLabelHtml(ctx.id, ctxOpts),
     staleTime: 0,
   });
 
   const printMut = useMutation({
-    mutationFn: () => labelService.printRollLabel(ctx.id, { customerId, orderLineId }),
+    mutationFn: () => labelService.printRollLabel(ctx.id, ctxOpts),
     onSuccess: () => {
       toast.success("Etiket basıldı (audit kaydı oluşturuldu).");
       onPrinted?.(); // backend lastLabelSnapshot=B yazdı → bağlamı tazele
@@ -73,6 +79,7 @@ export function RelabelPrintForCustomer({
                 onClick={() => {
                   setCustomerId(c.customerId);
                   setOrderLineId(c.orderLineId);
+                  setStock(false);
                 }}
                 className={`rounded-full border px-2.5 py-1 text-xs transition ${
                   active
@@ -95,6 +102,7 @@ export function RelabelPrintForCustomer({
             onChange={(id) => {
               setCustomerId(id);
               setOrderLineId(null); // serbest müşteri → sipariş yok; master alias cascade
+              setStock(false);
             }}
             service={customerService}
             queryKey="customers"
@@ -105,15 +113,16 @@ export function RelabelPrintForCustomer({
         <Button
           type="button"
           size="sm"
-          variant="ghost"
-          disabled={customerId === null}
+          variant={stock ? "default" : "ghost"}
+          disabled={stock}
           onClick={() => {
+            setStock(true);
             setCustomerId(null);
             setOrderLineId(null);
           }}
           className="gap-1"
         >
-          <RotateCcw className="h-3.5 w-3.5" /> Müşterisiz
+          <RotateCcw className="h-3.5 w-3.5" /> Stok (müşterisiz)
         </Button>
       </div>
 
@@ -136,7 +145,11 @@ export function RelabelPrintForCustomer({
 
       <div className="flex items-center justify-between gap-2">
         <div className="text-xs text-muted-foreground">
-          {customerId ? "Seçili müşteri için basılacak" : "Müşterisiz (varsayılan ad) basılacak"}
+          {customerId
+            ? "Seçili müşteri için basılacak"
+            : stock
+              ? "Müşterisiz (stok) basılacak"
+              : "Topun mevcut etiketi basılacak"}
         </div>
         {canPrint ? (
           <Button

@@ -104,12 +104,17 @@ router.get(
  *       Faz-1: yalnız ÜRETİLİR (saf string; inceleme/önizleme/gelecek native baskı için);
  *       ham-bayt gönderim simüle (donanım I/O Faz-2). Format profili (medya + güvenlik payı)
  *       `/html` ile aynı resolver'dan: `?profileId=` / `?machineId=` veya istasyon (mobil oto).
+ *       `?kind=ROLL_RAW|ROLL_FINISHED` ile etiket türü zorlanır (verilmezse top renginden
+ *       türetilir — `/html` ile aynı davranış; KK1 ham / Tambur bitmiş paritesi).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: kind
+ *         schema: { type: string, enum: [ROLL_RAW, ROLL_FINISHED] }
  *       - in: query
  *         name: profileId
  *         schema: { type: string, format: uuid }
@@ -288,6 +293,23 @@ router.post(
 
 /**
  * @openapi
+ * /api/labels/preview/native-text:
+ *   post:
+ *     tags: [Labels]
+ *     summary: Editör native (PPLA/ZPL) metin-zone önizlemesi — sıralı satırlar (JSON)
+ *     description: Body { kind, fields } (preview/html ile aynı). { lines:[{text,size,bold}] } döner.
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 200: { description: Native metin satırları } }
+ */
+router.post(
+  "/preview/native-text",
+  verifyToken,
+  requirePermission("label-template:read"),
+  controller.getPreviewNativeText,
+);
+
+/**
+ * @openapi
  * /api/labels/swatches/{id}:
  *   get:
  *     tags: [Labels]
@@ -428,6 +450,34 @@ router.post(
   verifyToken,
   requireAnyPermission("label:print", ...MOBILE_LABEL_PRINTERS),
   controller.recordPrintEvent,
+);
+
+/**
+ * @openapi
+ * /api/labels/rolls/{id}/seed-snapshot:
+ *   post:
+ *     tags: [Labels]
+ *     summary: Etiket niyetini topa kalıcılaştır (baskısız)
+ *     description: |
+ *       Operatörün seçtiği müşteri/stok niyetini `lastLabelSnapshot`'a yazar —
+ *       fiziksel baskıdan ve LABEL_PRINTED audit'inden BAĞIMSIZ. Yazıcı bağlı
+ *       olmasa / diyalog iptal edilse bile niyet kalıcı olsun diye baskı-ÖNCESİ
+ *       çağrılır; LABEL_PRINTED audit'i YAZMAZ (sadece snapshot).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Snapshot yazıldı }
+ *       404: { description: Top bulunamadı }
+ */
+router.post(
+  "/rolls/:id/seed-snapshot",
+  verifyToken,
+  requireAnyPermission("label:print", ...MOBILE_LABEL_PRINTERS),
+  controller.seedRollLabelSnapshot,
 );
 
 /**
