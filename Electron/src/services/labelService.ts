@@ -59,12 +59,16 @@ export interface OrderLineOverridePayload {
 export interface LabelCustomerContext {
   customerId?: string | null;
   orderLineId?: string | null;
+  /** Müşterisiz (stok) baskı — backend müşteriyi ZORLA null bırakır (snapshot/WO
+   *  bağlamı ATLANIR, müşterisiz spec-only etiket çıkar). */
+  stock?: boolean;
 }
 
 function customerContextQuery(opts?: LabelCustomerContext): Record<string, string> {
   const params: Record<string, string> = {};
   if (opts?.customerId) params.customerId = opts.customerId;
   if (opts?.orderLineId) params.orderLineId = opts.orderLineId;
+  if (opts?.stock) params.stock = "1";
   return params;
 }
 
@@ -107,6 +111,7 @@ export const labelService = {
       .post<ApiResponse<{ rollId: string }>>(`/api/labels/rolls/${rollId}/print`, {
         ...(opts?.customerId ? { customerId: opts.customerId } : {}),
         ...(opts?.orderLineId ? { orderLineId: opts.orderLineId } : {}),
+        ...(opts?.stock ? { stock: true } : {}),
       })
       .then((r) => r.data),
 

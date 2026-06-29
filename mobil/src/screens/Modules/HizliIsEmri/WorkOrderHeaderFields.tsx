@@ -15,7 +15,6 @@ export interface WoHeaderFieldValues {
   targetWeight: string;
   foldType: string | null;
   batchNumber: string;
-  dyehouseNote: string;
 }
 
 export const EMPTY_HEADER_FIELDS: WoHeaderFieldValues = {
@@ -27,7 +26,6 @@ export const EMPTY_HEADER_FIELDS: WoHeaderFieldValues = {
   // Varsayılan 2-KAT; operatör değiştirebilir ama boş bırakamaz.
   foldType: '2-KAT',
   batchNumber: '',
-  dyehouseNote: '',
 };
 
 const FOLD_OPTIONS = ['2-KAT', '4-KAT'];
@@ -231,19 +229,6 @@ export default function WorkOrderHeaderFields({
         </>
       ) : null}
 
-      {/* Boyahane notu */}
-      <Text style={styles.label}>Boyahane Notu</Text>
-      <TextInput
-        mode="outlined"
-        dense
-        value={value.dyehouseNote}
-        onChangeText={(t) => onChange({ dyehouseNote: t })}
-        placeholder="Boyahaneye talimat (opsiyonel)"
-        multiline
-        numberOfLines={2}
-        style={[styles.input, styles.noteInput]}
-      />
-
       <PickerModal
         visible={colorPickerOpen}
         title="Hedef Renk Seç"
@@ -286,7 +271,6 @@ const styles = StyleSheet.create({
   toggleInner: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 6, paddingRight: spacing.sm },
   toggleText: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
   input: { backgroundColor: colors.surface },
-  noteInput: { minHeight: 56 },
   chipsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: 2 },
   chip: {
     paddingHorizontal: spacing.lg,

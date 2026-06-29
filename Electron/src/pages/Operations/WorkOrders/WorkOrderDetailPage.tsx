@@ -8,6 +8,8 @@ import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { useTabsStore } from "@/store/tabs";
 import { AnimatedNumber, FadeInUp } from "@/components/motion";
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/lib/format";
+import { summarizeLinkedFulfillment } from "./order-fulfillment";
 import { workOrderService } from "./service";
 import { WorkOrderDetailHeader } from "./WorkOrderDetailHeader";
 import { WorkOrderHealthBand } from "./WorkOrderHealthBand";
@@ -66,8 +68,10 @@ export function WorkOrderDetailPage() {
   );
   const hasOrders = (wo?.orderLinks?.length ?? 0) > 0;
   const hasProduced = (wo?.producedRolls?.count ?? 0) > 0;
-  const orderTotal = useMemo(
-    () => (wo?.orderLinks ?? []).reduce((s, l) => s + Number(l.orderLine?.quantity ?? 0), 0),
+  // Bağlı kalemlerin karşılanma özeti (İPTAL hariç, distinct). Sevk/açık =
+  // kalemin TÜM sevkiyat toplamıdır (spec havuzu), bu WO'ya atfedilmez — bağlam.
+  const fulfill = useMemo(
+    () => summarizeLinkedFulfillment(wo?.orderLinks ?? []),
     [wo?.orderLinks],
   );
 
@@ -125,7 +129,12 @@ export function WorkOrderDetailPage() {
                       sub={(wo.inputRolls?.count ?? 0) > 0 ? `${wo.inputRolls!.count} top` : undefined}
                     />
                     {hasOrders && (
-                      <Kpi label="Sipariş Toplam" value={orderTotal} unit="m" />
+                      <Kpi
+                        label="Sipariş Toplam"
+                        value={fulfill.requested}
+                        unit="m"
+                        sub={`Sevk ${formatNumber(fulfill.shipped, 1)} · Açık ${formatNumber(fulfill.open, 1)} m`}
+                      />
                     )}
                   </div>
                 </section>
@@ -142,7 +151,12 @@ export function WorkOrderDetailPage() {
                   )}
                   <div className="grid gap-3 md:grid-cols-2">
                     {sortedSteps.map((step) => (
-                      <StepWipCard key={step.id} step={step} />
+                      <StepWipCard
+                        key={step.id}
+                        step={step}
+                        steps={sortedSteps}
+                        workOrderId={wo.id}
+                      />
                     ))}
                   </div>
                 </SectionBlock>

@@ -63,6 +63,11 @@ const cutOpenFabricSchema = z.object({
   qualityGrade: z.string().max(50).optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   markedForKartela: z.boolean().optional(),
+  // Etiket NİYETİ (gevşek model: BAĞ değil, baskı-anı müşteri/sipariş bağlamı).
+  // Kesim anında child'ın lastLabelSnapshot'ına yazılır → yazıcı/ekran bağımsız
+  // kalıcı. İkisi de boş = stok (müşterisiz). Var-mı/isActive servis katmanında.
+  targetOrderLineId: z.string().uuid().optional().nullable(),
+  targetCustomerId: z.string().uuid().optional().nullable(),
   // Offline/retry idempotency: client-üretimi child barkod (TEKS-YYYYMMDD-XXXXXXXX).
   clientChildBarcode: z.string().regex(/^TEKS-\d{8}-[0-9A-F]{8}$/).optional(),
 });
@@ -87,6 +92,10 @@ const cutWarehouseRollSchema = z.object({
   // Ham (renksiz STOCK) kesiminde çıkan parçanın hedefi. Bitmiş depo topu
   // kesiminde yok sayılır.
   rawDestination: z.enum(["STOCK", "WAREHOUSE"]).optional(),
+  // Etiket NİYETİ — bkz. cutOpenFabricSchema. WAREHOUSE child'a yazılır; raw→STOCK
+  // child (üretime devam) için stok'a düşülür (servis WAREHOUSE guard'ıyla).
+  targetOrderLineId: z.string().uuid().optional().nullable(),
+  targetCustomerId: z.string().uuid().optional().nullable(),
   // Offline/retry idempotency: client-üretimi child barkod (TEKS-YYYYMMDD-XXXXXXXX).
   clientChildBarcode: z.string().regex(/^TEKS-\d{8}-[0-9A-F]{8}$/).optional(),
 });

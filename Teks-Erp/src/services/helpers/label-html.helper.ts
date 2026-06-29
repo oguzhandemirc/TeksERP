@@ -104,6 +104,21 @@ function buildPortraitRollLabelHtml(
   // alanı bilerek isVisible=false yaptıysa gizlenir.
   const visKartela = isVisibleDefaultOn(fields, "kartelaMark");
 
+  // "Serbest" metin satırları (başlık/scan değil) — şablon `order`'ına göre dizilir
+  // (kullanıcı kararı #4). Default/null şablon = katalog sırası → bugünküyle aynı.
+  const orderOf = (key: string) => fields?.find((f) => f.key === key)?.order ?? 999;
+  const freeRows = [
+    { key: "itemNameDefault", value: itemNameDefault, def: "Ürün (bizdeki ad)" },
+    { key: "colorNameDefault", value: colorNameDefault, def: "Renk (bizdeki ad)" },
+    { key: "colorCode", value: colorCode, def: "Renk Kodu" },
+    { key: "customerName", value: customerName, def: "Müşteri" },
+    { key: "orderNumber", value: orderNumber, def: "Sipariş" },
+  ]
+    .filter((r) => r.value && vis(r.key))
+    .sort((a, b) => orderOf(a.key) - orderOf(b.key))
+    .map((r) => `<div class="meta-row" style="${sty(r.key)}"><span class="k">${lbl(r.key, r.def)}</span><span>${r.value}</span></div>`)
+    .join("\n    ");
+
   const fullHtml = `<!doctype html>
 <html lang="tr">
 <head>
@@ -241,39 +256,12 @@ function buildPortraitRollLabelHtml(
     ${vis("itemName") ? `<div class="item-name" style="${sty("itemName")}">${itemName}</div>` : ""}
 
     ${
-      itemNameDefault && vis("itemNameDefault")
-        ? `<div class="meta-row" style="${sty("itemNameDefault")}"><span class="k">${lbl("itemNameDefault", "Ürün (bizdeki ad)")}</span><span>${itemNameDefault}</span></div>`
-        : ""
-    }
-
-    ${
       colorName && vis("colorName")
         ? `<div class="color-line" style="${sty("colorName")}"><span>${colorName}</span></div>`
         : ""
     }
 
-    ${
-      colorNameDefault && vis("colorNameDefault")
-        ? `<div class="meta-row" style="${sty("colorNameDefault")}"><span class="k">${lbl("colorNameDefault", "Renk (bizdeki ad)")}</span><span>${colorNameDefault}</span></div>`
-        : ""
-    }
-
-    ${
-      colorCode && vis("colorCode")
-        ? `<div class="meta-row" style="${sty("colorCode")}"><span class="k">${lbl("colorCode", "Renk Kodu")}</span><span>${colorCode}</span></div>`
-        : ""
-    }
-
-    ${
-      customerName && vis("customerName")
-        ? `<div class="meta-row" style="${sty("customerName")}"><span class="k">${lbl("customerName", "Müşteri")}</span><span>${customerName}</span></div>`
-        : ""
-    }
-    ${
-      orderNumber && vis("orderNumber")
-        ? `<div class="meta-row" style="${sty("orderNumber")}"><span class="k">${lbl("orderNumber", "Sipariş")}</span><span>${orderNumber}</span></div>`
-        : ""
-    }
+    ${freeRows}
 
     ${vis("lengthMeters") ? `<div class="qty" style="${sty("lengthMeters")}">${qty}<span class="unit"> mt</span></div>` : ""}
 

@@ -3,7 +3,11 @@ import { ShoppingCart } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
+import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBadge";
+import { orderStatusLabels } from "@/types/enums";
 import { formatNumber } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { lineOpen, isEffectivelyZero } from "./order-fulfillment";
 import type { WorkOrder } from "./types";
 
 /**
@@ -53,7 +57,17 @@ export function OrderLinksCard({ wo }: { wo: WorkOrder }) {
                   <span className="truncate text-sm font-medium">{order.customer.name}</span>
                 )}
               </div>
-              {order?.deadline && <DeadlineBadge deadline={order.deadline} />}
+              <div className="flex shrink-0 items-center gap-1.5">
+                {order?.status && (
+                  <StatusBadge
+                    status={order.status}
+                    labels={orderStatusLabels}
+                    tones={orderStatusTones}
+                    className="text-[10px]"
+                  />
+                )}
+                {order?.deadline && <DeadlineBadge deadline={order.deadline} />}
+              </div>
             </div>
             <div className="text-[10px] font-medium uppercase tracking-wide text-info/80">
               Kalemler ({links.length})
@@ -89,17 +103,41 @@ export function OrderLinksCard({ wo }: { wo: WorkOrder }) {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
                       {ol?.width != null && (
                         <Badge variant="outline" className="font-normal">
-                          En: {ol.width} cm
+                          En: {formatNumber(ol.width, 1)} cm
                         </Badge>
                       )}
                       {ol?.quantity != null && (
                         <Badge variant="outline" className="font-normal">
-                          Boy: {formatNumber(ol.quantity, 0)} m
+                          Boy: {formatNumber(ol.quantity, 1)} m
                         </Badge>
                       )}
+                      {/* Sevk/açık = kalemin TÜM sevkiyat toplamı (spec havuzu); bu
+                          WO'ya atfedilmez — bağlam. İPTAL siparişte gösterme (ölü). */}
+                      {ol && order?.status !== "CANCELLED" && (() => {
+                        const open = lineOpen(Number(ol.quantity ?? 0), Number(ol.shippedQty ?? 0));
+                        const done = isEffectivelyZero(open);
+                        return (
+                          <>
+                            <Badge variant="outline" className="font-normal">
+                              Sevk: {formatNumber(ol.shippedQty ?? 0, 1)} m
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "font-normal",
+                                done
+                                  ? "border-success/40 text-success"
+                                  : "border-warning/40 text-warning",
+                              )}
+                            >
+                              Açık: {formatNumber(open, 1)} m
+                            </Badge>
+                          </>
+                        );
+                      })()}
                     </div>
                   </li>
                 );

@@ -34,7 +34,7 @@ const router = Router();
  *               plateNumber:  { type: string }
  *               driverName:   { type: string }
  *               notes:        { type: string, description: "Genel sevk/nakliye notu" }
- *               dyehouseNote: { type: string, description: "Boyahaneye özel talimat (sevk notundan ayrı)" }
+ *               instruction:  { type: string, description: "Fason talimatı (sevk notundan ayrı; boşsa adımın notu)" }
  *     responses:
  *       201: { description: Sevk belgesi oluşturuldu }
  */
@@ -47,14 +47,118 @@ router.post(
 
 /**
  * @openapi
- * /api/subcontractor/dispatches/{id}/dyehouse-note:
+ * /api/subcontractor/dispatch/bulk:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: Masaüstü toplu fason sevki (top okutmadan)
+ *     description: |
+ *       Planlama ekranı için. Bir EXTERNAL adımda BEKLEYEN (status IN_PRODUCTION/STOCK,
+ *       currentStepId=stepId) tüm topları planlanan/seçilen firmaya toplu sevk eder.
+ *       Gerçek dispatch() yoluna delege eder → irsaliye + AT_SUBCONTRACTOR + audit.
+ *       Sadece masaüstü (mobil saha zaten Fason Sevk kullanır).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [workOrderId, stepId]
+ *             properties:
+ *               workOrderId:     { type: string, format: uuid }
+ *               stepId:          { type: string, format: uuid }
+ *               subcontractorId: { type: string, format: uuid, description: "Yoksa adımın plannedSubcontractorId'si" }
+ *               instruction:     { type: string }
+ *               plateNumber:     { type: string }
+ *               driverName:      { type: string }
+ *     responses:
+ *       201: { description: Sevk belgesi oluşturuldu }
+ *       400: { description: Fason adım değil / bekleyen top yok / firma planlanmamış }
+ */
+router.post(
+  "/dispatch/bulk",
+  verifyToken,
+  requireAnyPermission("workorder:write", "subcontractor:write"),
+  controller.bulkDispatch
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/transfer-next:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: Fasondan fasona doğrudan aktarım (zımpara→boyahane, fabrikaya uğramadan)
+ *     description: |
+ *       Mevcut fason adımda fasonda (AT_SUBCONTRACTOR) bekleyen topları, içerideki
+ *       "kabul + bir sonraki fasona sevk" zinciriyle tek tıkla aktarır. Metraj 1:1
+ *       taşınır (kesin ölçüm boyahane dönüşünde). Sonraki adım EXTERNAL değilse
+ *       reddeder (normal Fason Kabul kullanılmalı). Sadece masaüstü.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [workOrderId, stepId]
+ *             properties:
+ *               workOrderId:         { type: string, format: uuid }
+ *               stepId:              { type: string, format: uuid, description: "Mevcut (kaynak) fason adım" }
+ *               nextSubcontractorId: { type: string, format: uuid, description: "Yoksa sonraki adımın plannedSubcontractorId'si" }
+ *               instruction:         { type: string }
+ *     responses:
+ *       201: { description: Aktarıldı (kabul + sonraki fasona sevk) }
+ *       400: { description: Fason adım değil / sonraki adım fason değil / aktarılacak top yok }
+ */
+router.post(
+  "/transfer-next",
+  verifyToken,
+  requireAnyPermission("workorder:write", "subcontractor:write"),
+  controller.transferToNextFason
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/fason-ceki-draft:
+ *   get:
+ *     tags: [Subcontractor]
+ *     summary: Erken TASLAK fason çeki (sevkten önce, durum değiştirmez)
+ *     description: |
+ *       Bir sonraki fason adımı için (boyahane), önceki fasonda (zımpara)
+ *       AT_SUBCONTRACTOR bekleyen topları projekte ederek TASLAK filigranlı çeki
+ *       HTML'i döndürür. Hiçbir kayıt/stok/durum değiştirmez (read-only). Mal
+ *       fabrikaya uğramadan fasondan fasona gidecekse boyahane çekisini erken basmak için.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: workOrderId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: stepId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ html } — TASLAK çeki" }
+ *       400: { description: Fason adım değil / firma planlanmamış / önceki fasonda mal yok }
+ */
+router.get(
+  "/fason-ceki-draft",
+  verifyToken,
+  requireAnyPermission("workorder:read", "subcontractor:read"),
+  controller.fasonCekiDraft
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/instruction:
  *   patch:
  *     tags: [Subcontractor]
- *     summary: Sevkin boyahane notunu güncelle
+ *     summary: Sevkin fason talimatını güncelle
  *     description: |
- *       Boyahane notu (dyehouseNote) snapshot'a dondurulmayan canlı kolondur;
+ *       Fason talimatı (instruction) snapshot'a dondurulmayan canlı kolondur;
  *       sevk fişi yazdırılmadan önce talimat eklenebilir/düzeltilebilir. Boş
- *       gönderilirse not temizlenir. İptal edilmiş sevkte düzenlenemez.
+ *       gönderilirse talimat temizlenir. İptal edilmiş sevkte düzenlenemez.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -68,17 +172,17 @@ router.post(
  *           schema:
  *             type: object
  *             properties:
- *               dyehouseNote: { type: string, nullable: true, maxLength: 1000 }
+ *               instruction: { type: string, nullable: true, maxLength: 1000 }
  *     responses:
- *       200: { description: Boyahane notu güncellendi }
+ *       200: { description: Fason talimatı güncellendi }
  *       404: { description: Sevk bulunamadı }
  *       409: { description: İptal edilmiş sevk }
  */
 router.patch(
-  "/dispatches/:id/dyehouse-note",
+  "/dispatches/:id/instruction",
   verifyToken,
   requireAnyPermission("workorder:write", "mobile:fason-sevk"),
-  controller.updateDyehouseNote
+  controller.updateInstruction
 );
 
 /**
@@ -200,7 +304,7 @@ router.get(
  * /api/subcontractor/dispatches/{id}/dye-overlay:
  *   get:
  *     tags: [Subcontractor]
- *     summary: Fason sevk irsaliyesinin canlı talimat alanları (istenen renk + boyahane notu)
+ *     summary: Fason sevk irsaliyesinin canlı talimat alanları (istenen renk + fason talimatı)
  *     description: Donmuş içerik PrintedDocument'te; burada yalnız kasten canlı tutulan talimat alanları döner.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -209,7 +313,7 @@ router.get(
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: requestedColor + dyehouseNote + woDyehouseNote + dyehouseNoteLocked }
+ *       200: { description: requestedColor + instruction + stepNote + instructionLocked }
  *       404: { description: Sevk belgesi bulunamadı }
  */
 router.get(

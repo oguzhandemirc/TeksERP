@@ -46,9 +46,9 @@ const RENDERERS: Partial<Record<PrinterLanguage, Renderer>> = {
       copies: i.copies,
       format: i.format,
     }),
-  PPLA: (i) => buildRollLabelPpla({ payload: i.payload, format: i.format, copies: i.copies }),
-  PPLB: (i) => buildRollLabelPplb({ payload: i.payload, format: i.format, copies: i.copies }),
-  ZPL: (i) => buildRollLabelZpl({ payload: i.payload, format: i.format, copies: i.copies }),
+  PPLA: (i) => buildRollLabelPpla({ payload: i.payload, format: i.format, copies: i.copies, template: i.template }),
+  PPLB: (i) => buildRollLabelPplb({ payload: i.payload, format: i.format, copies: i.copies, template: i.template }),
+  ZPL: (i) => buildRollLabelZpl({ payload: i.payload, format: i.format, copies: i.copies, template: i.template }),
 };
 
 const CONTENT_TYPES: Record<PrinterLanguage, string> = {

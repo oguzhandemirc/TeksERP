@@ -98,6 +98,7 @@ export class KartelaController {
     this.listReceipts = this.listReceipts.bind(this);
     this.getReceipt = this.getReceipt.bind(this);
     this.outstandingRolls = this.outstandingRolls.bind(this);
+    this.getStock = this.getStock.bind(this);
     this.setRollMarked = this.setRollMarked.bind(this);
   }
 
@@ -210,6 +211,16 @@ export class KartelaController {
         subcontractorId:
           typeof req.query.subcontractorId === "string" ? req.query.subcontractorId : undefined,
       });
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/kartela/stock — müsait kartelaların ürün+renk bazında sayımı (sevk picker) */
+  async getStock(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.getStock({ search: qStr(req.query.search) });
       res.status(200).json(result);
     } catch (err) {
       next(err);

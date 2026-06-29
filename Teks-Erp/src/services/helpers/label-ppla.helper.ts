@@ -20,10 +20,16 @@ import {
   cleanCtl,
   clampCopies,
   mmToDots,
-  rollTextLines,
+  templateTextLines,
   LEFT_COL_MM,
   type NativeRenderInput,
 } from "./native-label.shared";
+import type { FontSize } from "../../config/label-fields";
+
+// Boyut → PPLA font kodu (2=küçük…5=çok büyük) ve satır adım (mm). md/lg null-şablon
+// yolunun mevcut font 3/4 + d(5)/d(7) değerleriyle BİREBİR örtüşür (bayt geri uyum).
+const pplaFont = (s: FontSize): string => (s === "sm" ? "2" : s === "md" ? "3" : s === "lg" ? "4" : "5");
+const pplaStepMm = (s: FontSize): number => (s === "sm" ? 4 : s === "md" ? 5 : s === "lg" ? 7 : 9);
 
 const STX = "\x02";
 const CR = "\r";
@@ -35,7 +41,7 @@ function pad4(n: number): string {
   return String(Math.max(0, Math.min(9999, Math.round(n)))).padStart(4, "0");
 }
 
-export function buildRollLabelPpla({ payload, format, copies }: PplaRenderInput): string {
+export function buildRollLabelPpla({ payload, format, copies, template }: PplaRenderInput): string {
   const dpi = format.dpi || 203;
   const d = (mm: number) => mmToDots(mm, dpi);
   const marginDots = d(format.marginMm);
@@ -50,15 +56,15 @@ export function buildRollLabelPpla({ payload, format, copies }: PplaRenderInput)
   lines.push("H10"); // ısı (heat) — fiziksel test baskısıyla ayarlanır
 
   // DPL metin kaydı: <rot><font><wMul><hMul>"000"<RRRR row><CCCC col><veri>
-  //   rot=1 (0°), font=3 (standart) / 4 (büyük); satır dot ÜSTTEN, sütun SOLDAN.
-  const dplText = (text: string, rowDot: number, colDot: number, font = "3"): string =>
-    `1${font}11000${pad4(rowDot)}${pad4(colDot)}${cleanCtl(text)}`;
+  //   rot=1 (0°), font=2..5; mult=11 normal / 22 bold; satır dot ÜSTTEN, sütun SOLDAN.
+  const dplText = (text: string, rowDot: number, colDot: number, font = "3", mult = "11"): string =>
+    `1${font}${mult}000${pad4(rowDot)}${pad4(colDot)}${cleanCtl(text)}`;
 
-  // --- Sağ kolon: metin satırları (üstten aşağı; paylaşılan kind-bilinçli liste) ---
+  // --- Sağ kolon: şablon-bilinçli metin satırları (üstten aşağı; sıra/görünür/bold şablondan) ---
   let row = marginDots;
-  for (const ln of rollTextLines(payload)) {
-    lines.push(dplText(ln.text, row, colText, ln.big ? "4" : "3"));
-    row += ln.big ? d(7) : d(5); // 60mm'e sığsın diye sıkı adım
+  for (const ln of templateTextLines(payload, template)) {
+    lines.push(dplText(ln.text, row, colText, pplaFont(ln.size), ln.bold ? "22" : "11"));
+    row += d(pplaStepMm(ln.size)); // 60mm'e sığsın diye sıkı adım
   }
 
   // --- Sol kolon: QR (üst) + Code128 (alt) + okunabilir metin ---

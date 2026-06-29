@@ -6,14 +6,24 @@ import { Card, CardContent } from "@/components/ui/card";
 import { safeFormat, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { StepStateBadge } from "./step-state";
+import { FasonStepActions } from "./FasonStepActions";
 import type { WorkOrderStepLite } from "./types";
 
 /**
  * Tam sayfa detayında bir rota adımının "şu an" durumunu gösteren kart.
  * Slide-over'daki satır-içi adım render'ının ferah/grid versiyonu — birden
  * çok dal olunca her adım kendi kartında WIP'i + aktif fason sevkleriyle durur.
+ * `steps` + `workOrderId` verilirse fason adımda masaüstü sevk/aktarım aksiyonları.
  */
-export function StepWipCard({ step }: { step: WorkOrderStepLite }) {
+export function StepWipCard({
+  step,
+  steps,
+  workOrderId,
+}: {
+  step: WorkOrderStepLite;
+  steps?: WorkOrderStepLite[];
+  workOrderId?: string;
+}) {
   const wip = step.currentRolls;
   const hasWip = (wip?.count ?? 0) > 0;
 
@@ -153,6 +163,10 @@ export function StepWipCard({ step }: { step: WorkOrderStepLite }) {
               </div>
             ))}
           </div>
+        )}
+
+        {steps && workOrderId && (
+          <FasonStepActions step={step} steps={steps} workOrderId={workOrderId} />
         )}
       </CardContent>
     </Card>

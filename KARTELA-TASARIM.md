@@ -3,6 +3,37 @@
 > Durum: **TASARIM SABİT** (2026-06-04). Kod yazımı bu dokümana göre fazlı ilerler.
 > İlgili: `SEVKIYAT-LOOSE-TASARIM.md` (çuval/sevkiyat), root `CLAUDE.md` (üretim akışı).
 
+> ## ⚑ 2026-06-28 EK — Kartela ADET-bazlı stok + "seçerek sevk" + ölçüm opsiyonel
+>
+> Sahadan düzeltme: **kartelaya fiziksel ETİKET vurulmuyor; yalnız ADET sayılıyor.**
+> Boyut (cm) / ağırlık (kg) bu firma için önemsiz. Müşteriye sevk: sevkiyatçı
+> göndereceği kartelayı **listeden seçer** (barkod okutma YOK) ve adet **kartela
+> stoğundan düşer.** Aşağıdaki §3.3'teki "cm-uzunluk" ve §4'teki "etiket basılır"
+> ifadeleri bu EK ile güncellenmiştir. Veri modeli **değişmedi** (Swatch korunur,
+> migration yok) — değişen UI + iki yeni uç + bir flag:
+>
+> - **Flag `kartela.measurementEnabled`** (default **KAPALI**; diğer UI flag'leri gibi
+>   backend ENFORCE etmez). KAPALI → kabulde cm/kg girişi + kartela listelerinde
+>   ölçü GÖSTERİMİ gizli (yalnız adet). Başka firmalara AÇIK satılabilir. Kartela-
+>   firmasına gönderilen **topun** gerçek metresi bu flag'den **etkilenmez** (gerçek top).
+> - **Kartela stoğu = ADET, `(ürün, renk)` bazında.** `GET /api/kartela/stock`
+>   (`kartelaService.getStock`): `swatch.groupBy([itemId,colorId]) WHERE shipmentId
+>   IS NULL AND cancelledAt IS NULL` + isim/hex batch çözümü. `colorId null` = "renksiz".
+> - **Seçerek sevk (mevcut sevkiyat akışına entegre):** `POST /api/shipping/shipments/
+>   :id/add-kartela` (`shippingService.addKartelaToShipment`) — ürün+renk+adet → o gruptan
+>   N müsait Swatch satırı **select-then-claim** ile atomik bağlanır (FIFO; `claimed.count
+>   !== count` → 409 + tam rollback), `resetSackWeightsTx`. `scanIntoShipment` gibi
+>   **yalnız PREPARING** (`touchShipmentPreparingTx`); kartela tahsise girmediğinden recommit YOK.
+>   Mevcut barkod-okut swatch dalı KALIR (zararsız; etiket olmadığından pratikte ölü).
+> - **Yeni izin/seed/migration YOK** (stok: `kartela:read|shipping:*|mobile:tarti-paket|sevkiyat`;
+>   add: mevcut `WRITE`). UI: Electron `AddKartelaDialog` (ScanInBar "Kartela Ekle", çuval
+>   yoksa oto-aç) + ölçü gating (SwatchesPanel/swatchColumns→`buildSwatchColumns`/SwatchDetailSheet/
+>   KartelaDetailSheet) + Genel Ayarlar "Kartela" kategorisi; mobil `KartelaStockPickerModal`
+>   (Paketleme "Kartela", online-gerektirir) + KartelaKabul sheet `showMeasure` + DepoScreen null-fix.
+> - Test: `Teks-Erp/scripts/test_kartela_stock_and_ship.ts` (13/13). 3 app tsc temiz + HTTP smoke geçti.
+> - Ertelenen: partial index `swatches(itemId,colorId) WHERE shipmentId IS NULL AND cancelledAt IS NULL`
+>   (hacim düşük; tablo büyürse ekle).
+
 ## 1. Neden değişiyor?
 
 Müşteri geri bildirimi: mevcut kartela mantığı **yanlış**. Bugün sistem kartelayı
@@ -28,7 +59,7 @@ yeni bir işleme girmesiyle** oluşur:
 | Akış | **Ayrı temiz akış** (üretim fasonunu genelleştirme) | Yeni `Kartela*` tabloları; üretim fason koduna dokunulmaz. |
 | Kartela tablosu | **`Swatch` korunur**, doğum yeri taşınır | Tambur değil → `KartelaReceipt`. cm-uzunluk + çuval/sevkiyat entegrasyonu aynen kalır. |
 | Tüketim | **Top komple tükenir** | Parent roll → `KARTELA_CONSUMED`, kısmi düşüm yok. |
-| Ölçüm | **Uzunluk (cm) + ağırlık (kg) opsiyonel** | Kabulde girilir; etiketler kabulden **sonra** basılır. |
+| Ölçüm | **~~Uzunluk (cm) + ağırlık (kg) opsiyonel~~** → flag arkasında, default KAPALI (bkz. ⚑ 2026-06-28 EK) | Kartela esasen **ADET**; ölçü `kartela.measurementEnabled` AÇIKsa girilir/gösterilir. **Etiket basılmaz** (etiketsiz, adet sayılır). |
 | Ölçüm girişi (mobil) | **Hem toplu hem tek-tek** | Dönen tüm kartelalara tek kg/cm uygula **veya** her birine ayrı gir. |
 | Durum | **Yeni enumlar** `AT_KARTELA` + `KARTELA_CONSUMED` | Rapor/rozet netliği ("Fasonda" değil "Kartelada"). |
 | Eşleştirme | **Top-bazlı otomatik** | Kabulde firma seç → `AT_KARTELA` bekleyen toplar listelenir → dispatch bağı her topun üstünden otomatik çözülür. |

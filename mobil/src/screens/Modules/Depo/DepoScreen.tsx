@@ -28,6 +28,7 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
+import { useKartelaMeasurementEnabled } from '../../../hooks/useFeatureFlags';
 import { rollService } from '../../../services/roll.service';
 import { swatchService, type SwatchListItem } from '../../../services/swatch.service';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
@@ -643,6 +644,7 @@ function SwatchListRow({
   swatch: SwatchListItem;
   onPress: () => void;
 }) {
+  const measureEnabled = useKartelaMeasurementEnabled();
   return (
     <Surface style={styles.rollCard} elevation={1}>
       <TouchableRipple borderless onPress={onPress} style={{ borderRadius: 10 }}>
@@ -661,24 +663,26 @@ function SwatchListRow({
               {swatch.color?.name ? ` · ${swatch.color.name}` : ''}
             </Text>
             <View style={styles.rollMeta}>
-              <Text style={styles.rollMetaText}>
-                {Number(swatch.length ?? 0).toFixed(0)} cm
-              </Text>
-              {swatch.width != null && (
+              {/* Ölçüler yalnız flag açıkken ve dolu ise — kartela esasen ADET sayılır.
+                  Her parça TRAILING ayraçlı; barkod her zaman sonda (loose ayraç olmaz). */}
+              {measureEnabled && swatch.length != null && (
                 <>
+                  <Text style={styles.rollMetaText}>{Number(swatch.length).toFixed(0)} cm</Text>
                   <Text style={styles.rollMetaSep}>·</Text>
+                </>
+              )}
+              {measureEnabled && swatch.width != null && (
+                <>
                   <Text style={styles.rollMetaText}>en {Number(swatch.width).toFixed(0)} cm</Text>
-                </>
-              )}
-              {swatch.weightKg != null && (
-                <>
                   <Text style={styles.rollMetaSep}>·</Text>
-                  <Text style={styles.rollMetaText}>
-                    {Number(swatch.weightKg).toFixed(2)} kg
-                  </Text>
                 </>
               )}
-              <Text style={styles.rollMetaSep}>·</Text>
+              {measureEnabled && swatch.weightKg != null && (
+                <>
+                  <Text style={styles.rollMetaText}>{Number(swatch.weightKg).toFixed(2)} kg</Text>
+                  <Text style={styles.rollMetaSep}>·</Text>
+                </>
+              )}
               <Text style={[styles.rollMetaText, { fontFamily: 'monospace' }]} numberOfLines={1}>
                 {swatch.barcode}
               </Text>
@@ -698,13 +702,17 @@ function SwatchDetailModal({
   swatch: SwatchListItem;
   onDismiss: () => void;
 }) {
+  const measureEnabled = useKartelaMeasurementEnabled();
   const summary: SummaryItem[] = [
     { icon: 'barcode', label: 'Barkod', value: swatch.barcode, monospaceValue: true },
-    { icon: 'ruler', label: 'Uzunluk', value: `${Number(swatch.length ?? 0).toFixed(0)} cm` },
-    ...(swatch.width != null
+    // Ölçüler yalnız flag açıkken ve dolu ise (kartela esasen ADET sayılır).
+    ...(measureEnabled && swatch.length != null
+      ? [{ icon: 'ruler', label: 'Uzunluk', value: `${Number(swatch.length).toFixed(0)} cm` } as SummaryItem]
+      : []),
+    ...(measureEnabled && swatch.width != null
       ? [{ icon: 'arrow-expand-horizontal', label: 'En', value: `${Number(swatch.width).toFixed(0)} cm` } as SummaryItem]
       : []),
-    ...(swatch.weightKg != null
+    ...(measureEnabled && swatch.weightKg != null
       ? [{ icon: 'scale-balance', label: 'Ağırlık', value: `${Number(swatch.weightKg).toFixed(2)} kg` } as SummaryItem]
       : []),
     ...(swatch.parentRoll?.barcode

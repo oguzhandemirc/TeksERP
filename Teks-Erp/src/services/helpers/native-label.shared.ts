@@ -5,14 +5,19 @@
 // üretir; her dil renderer'ı kendi sözdiziminde konumlar. 203dpi = 8 dot/mm.
 // =============================================================================
 
-import { LabelKind } from "@prisma/client";
+import { LabelKind, type LabelTemplate } from "@prisma/client";
 import type { LabelPayload } from "../label.service";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
+import type { FontSize, TemplateField } from "../../config/label-fields";
+import { fieldDisplayValue } from "./label-field-values";
 
 export interface NativeRenderInput {
   payload: LabelPayload;
   format: ResolvedLabelFormat;
   copies: number;
+  /** Aktif etiket şablonu — alan görünürlük/sıra/ad/bold/font. null → varsayılan
+   *  (rollTextLines) çıktısı: bayt-stabil geri uyum. */
+  template: LabelTemplate | null;
 }
 
 /** Yatay (100×60) düzende sol tarama kolonu genişliği (QR + barkod) — sağ metin
@@ -81,6 +86,53 @@ export function rollTextLines(p: LabelPayload): RollTextLine[] {
   if (p.customerName) lines.push({ text: `Musteri: ${cleanCtl(p.customerName)}` });
   if (p.batchNumber) lines.push({ text: `Parti: ${cleanCtl(p.batchNumber)}` });
   return lines;
+}
+
+/** Native metin satırı — boyut + bold şablondan gelir; native helper'lar dile
+ *  özgü font koduna eşler. text HAM (sanitize edilmemiş) — helper cleanCtl uygular. */
+export interface NativeTextLine {
+  text: string;
+  size: FontSize;
+  bold: boolean;
+}
+
+/**
+ * Şablon-bilinçli native metin satırları (üç dil paylaşır). template null →
+ * mevcut `rollTextLines` çıktısına delege (büyük→lg/normal→md, bold yok) =
+ * BAYT-AYNI geri uyum. template dolu → görünür + scan-olmayan + değeri olan
+ * alanlar `order`'a göre; headline çıplak değer, row "Etiket: değer"; size/bold
+ * şablon `fontSize`/`isBold`'dan. Sol QR+barkod tarama kolonu burada YOK (sabit).
+ */
+export function templateTextLines(
+  payload: LabelPayload,
+  template: LabelTemplate | null,
+): NativeTextLine[] {
+  if (!template) {
+    return rollTextLines(payload).map((ln) => ({
+      text: ln.text,
+      size: (ln.big ? "lg" : "md") as FontSize,
+      bold: false,
+    }));
+  }
+  const fields = (template.fields as unknown as TemplateField[] | null) ?? null;
+  if (!fields) {
+    return rollTextLines(payload).map((ln) => ({
+      text: ln.text,
+      size: (ln.big ? "lg" : "md") as FontSize,
+      bold: false,
+    }));
+  }
+  return fields
+    .filter((f) => f.isVisible)
+    .map((f) => ({ f, dv: fieldDisplayValue(payload, f.key) }))
+    .filter((x) => x.dv.role !== "scan" && x.dv.present)
+    .sort((a, b) => a.f.order - b.f.order)
+    .map(({ f, dv }) => {
+      const headline = dv.role === "headline";
+      const size: FontSize = f.fontSize ?? (headline ? "lg" : "md");
+      const text = headline ? dv.value : `${f.label}: ${dv.value}`;
+      return { text, size, bold: f.isBold ?? false };
+    });
 }
 
 export function clampCopies(copies: number): number {

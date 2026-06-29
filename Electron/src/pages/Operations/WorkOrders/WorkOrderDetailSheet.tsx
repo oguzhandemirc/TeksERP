@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import type { StepDispatch } from "./types";
+import { fasonNoteLabel } from "./fasonNote";
 import { StatusBadge, workOrderStatusTones } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -26,7 +27,9 @@ import { SectionBlock } from "./WorkOrderSection";
 import { WorkOrderInfoCard } from "./WorkOrderInfoCard";
 import { ProducedRollsCard } from "./ProducedRollsCard";
 import { OrderLinksCard } from "./OrderLinksCard";
+import { summarizeLinkedFulfillment, isEffectivelyZero } from "./order-fulfillment";
 import { StepStateBadge } from "./step-state";
+import { FasonStepActions } from "./FasonStepActions";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import type { WorkOrder } from "./types";
 
@@ -84,14 +87,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
   }, [sortedSteps, summaryStep]);
 
 
-  // Sipariş toplam = bağlı sipariş kalemlerinin talebi (link-only: tahsis yok).
+  // Bağlı kalemlerin karşılanma özeti (İPTAL hariç, distinct). Sevk/açık =
+  // kalemin TÜM sevkiyat toplamıdır (spec havuzu), bu WO'ya atfedilmez — bağlam.
   const hasOrders = (wo?.orderLinks?.length ?? 0) > 0;
-  const orderTotal = useMemo(
-    () =>
-      (wo?.orderLinks ?? []).reduce(
-        (s, l) => s + Number(l.orderLine?.quantity ?? 0),
-        0,
-      ),
+  const fulfill = useMemo(
+    () => summarizeLinkedFulfillment(wo?.orderLinks ?? []),
     [wo?.orderLinks],
   );
   const hasProduced = (wo?.producedRolls?.count ?? 0) > 0;
@@ -203,8 +203,15 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                   <CardContent className="p-3">
                     <div className="text-xs text-muted-foreground">Sipariş Toplam</div>
                     <div className="mt-0.5 text-base font-bold tabular-nums text-info">
-                      {formatNumber(orderTotal, 0)}
+                      {formatNumber(fulfill.requested, 1)}
                       <span className="ml-1 text-xs font-normal text-muted-foreground">m</span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Sevk {formatNumber(fulfill.shipped, 1)} ·{" "}
+                      <span className={cn(isEffectivelyZero(fulfill.open) ? "text-success" : "text-warning")}>
+                        Açık {formatNumber(fulfill.open, 1)}
+                      </span>{" "}
+                      m
                     </div>
                   </CardContent>
                 </Card>
@@ -316,6 +323,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       {step.dispatches && step.dispatches.length > 0 && (
                         <DispatchInfoPopover
                           dispatches={step.dispatches}
+                          stationName={step.station?.name}
                           onPrint={(id) => setPrintDispatchId(id)}
                         />
                       )}
@@ -413,6 +421,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                         )}
                       </div>
                     )}
+                    <FasonStepActions
+                      step={step}
+                      steps={sortedSteps}
+                      workOrderId={wo!.id}
+                    />
                   </li>
                 ))}
                 </ol>
@@ -487,9 +500,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
 
 function DispatchInfoPopover({
   dispatches,
+  stationName,
   onPrint,
 }: {
   dispatches: StepDispatch[];
+  stationName?: string | null;
   onPrint: (id: string) => void;
 }) {
   return (
@@ -557,11 +572,11 @@ function DispatchInfoPopover({
                     <span className="whitespace-pre-wrap">{d.notes}</span>
                   </>
                 )}
-                {(d.dyehouseNote ?? d.woDyehouseNote) && (
+                {(d.instruction ?? d.stepNote) && (
                   <>
-                    <span className="text-muted-foreground">Boyahane Notu</span>
+                    <span className="text-muted-foreground">{fasonNoteLabel(stationName)}</span>
                     <span className="whitespace-pre-wrap font-medium text-orange-700">
-                      {d.dyehouseNote ?? d.woDyehouseNote}
+                      {d.instruction ?? d.stepNote}
                     </span>
                   </>
                 )}

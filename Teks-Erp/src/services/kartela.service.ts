@@ -170,6 +170,18 @@ export interface KartelaReceiveInput {
   returns: KartelaReceiveReturn[];
 }
 
+/** Kartela stoğu: müsait (sevke girmemiş) kartelaların ürün+renk bazında sayımı.
+ *  Sevkiyatta "kartela seç + adet" picker'ını besler. */
+export interface KartelaStockGroup {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  colorId: string | null;
+  colorName: string | null;
+  colorHex: string | null;
+  count: number;
+}
+
 // -----------------------------------------------------------------------------
 // Service
 // -----------------------------------------------------------------------------
@@ -1158,6 +1170,77 @@ export class KartelaService {
       data: { id: rollId, markedForKartela: value },
       message: value ? "Top kartelalık işaretlendi" : "Kartelalık işareti kaldırıldı",
     };
+  }
+
+  // ===========================================================================
+  // STOK — müsait kartelaların ürün+renk bazında sayımı (sevk picker'ı besler)
+  // ===========================================================================
+  /**
+   * Kartela stoğu = sevke girmemiş, iptal edilmemiş Swatch satırları
+   * (`shipmentId IS NULL AND cancelledAt IS NULL`), `(itemId, colorId)` ile
+   * gruplanıp sayılır. groupBy iki kolon + tek _count (tek round-trip); ad/hex
+   * çözümü iki batch findMany (N+1 değil). `colorId null` → "renksiz" ayrı grup.
+   */
+  async getStock(params?: {
+    search?: string;
+  }): Promise<ApiResponse<KartelaStockGroup[]>> {
+    const groups = await prisma.swatch.groupBy({
+      by: ["itemId", "colorId"],
+      where: { shipmentId: null, cancelledAt: null },
+      _count: { _all: true },
+    });
+
+    if (groups.length === 0) return { success: true, data: [] };
+
+    const itemIds = [...new Set(groups.map((g) => g.itemId))];
+    const colorIds = [
+      ...new Set(groups.map((g) => g.colorId).filter((id): id is string => id !== null)),
+    ];
+
+    const items = await prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, code: true, name: true },
+    });
+    const colors = colorIds.length
+      ? await prisma.color.findMany({
+          where: { id: { in: colorIds } },
+          select: { id: true, name: true, hex: true },
+        })
+      : [];
+    const itemMap = new Map(items.map((i) => [i.id, i]));
+    const colorMap = new Map(colors.map((c) => [c.id, c]));
+
+    let data: KartelaStockGroup[] = groups.map((g) => {
+      const item = itemMap.get(g.itemId);
+      const color = g.colorId ? colorMap.get(g.colorId) : null;
+      return {
+        itemId: g.itemId,
+        itemCode: item?.code ?? "",
+        itemName: item?.name ?? "",
+        colorId: g.colorId,
+        colorName: color?.name ?? null,
+        colorHex: color?.hex ?? null,
+        count: g._count._all,
+      };
+    });
+
+    const search = params?.search?.trim().toLocaleLowerCase("tr-TR");
+    if (search) {
+      data = data.filter((d) =>
+        [d.itemName, d.itemCode, d.colorName ?? ""]
+          .join(" ")
+          .toLocaleLowerCase("tr-TR")
+          .includes(search),
+      );
+    }
+
+    data.sort((a, b) => {
+      const byItem = a.itemName.localeCompare(b.itemName, "tr-TR");
+      if (byItem !== 0) return byItem;
+      return (a.colorName ?? "").localeCompare(b.colorName ?? "", "tr-TR");
+    });
+
+    return { success: true, data };
   }
 }
 

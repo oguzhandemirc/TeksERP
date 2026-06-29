@@ -295,6 +295,17 @@ export interface LocatedRoll {
   } | null;
 }
 
+/** Kartela stoğu: ürün+renk bazında müsait (sevke girmemiş) kartela adedi. */
+export interface KartelaStockGroup {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  colorId: string | null;
+  colorName: string | null;
+  colorHex: string | null;
+  count: number;
+}
+
 export const packingService = {
   // ── Sipariş seçim ──
   listOpenOrders: (params?: { customerId?: string; branchId?: string }): Promise<ApiResponse<OpenOrder[]>> => {
@@ -384,6 +395,27 @@ export const packingService = {
 
   removeSwatch: (id: string, swatchId: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/shipping/shipments/${id}/remove-swatch`, { swatchId }).then((r) => r.data),
+
+  // ── Kartela (seçerek ekle — barkod okutmadan, adet stoktan düşer) ──
+  /** Kartela stoğu (ürün+renk bazında müsait adet) — seçerek-ekle picker'ını besler. */
+  listKartelaStock: (search?: string): Promise<ApiResponse<KartelaStockGroup[]>> =>
+    apiClient
+      .get<ApiResponse<KartelaStockGroup[]>>(
+        `/kartela/stock${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+      )
+      .then((r) => r.data),
+
+  /** Seçerek kartela ekle: ürün+renk+adet → o gruptan N müsait kartela sevkiyata/çuvala bağlanır. */
+  addKartela: (
+    id: string,
+    body: { itemId: string; colorId: string | null; count: number; sackId?: string | null },
+  ): Promise<ApiResponse<{ added: number; swatchIds: string[]; sackId: string | null }>> =>
+    apiClient
+      .post<ApiResponse<{ added: number; swatchIds: string[]; sackId: string | null }>>(
+        `/shipping/shipments/${id}/add-kartela`,
+        body,
+      )
+      .then((r) => r.data),
 
   // ── Çuval (aç / tart / içerik) ──
   // Çuval-önce: boş açılır (kg sonra weighSack ile). weightKg verilirse doğrudan tartılı açılır.

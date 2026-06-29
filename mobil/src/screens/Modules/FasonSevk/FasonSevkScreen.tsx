@@ -56,7 +56,7 @@ import {
   type ItemMismatchDetails,
 } from '../../../services/subcontractor.service';
 import { STATION_MUT } from '../../../offline/mutations';
-import { useDyehouseNoteMobileEntry } from '../../../hooks/useFeatureFlags';
+import { useFasonNoteMobileEntry } from '../../../hooks/useFeatureFlags';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList } from '../../../components/motion';
 import type { Roll, WorkOrderStep } from '../../../types/models';
@@ -66,6 +66,7 @@ import {
   WORK_ORDER_STATUS_COLOR,
   STEP_STATUS_LABEL,
   ROLL_STATUS_LABEL,
+  fasonNoteLabel,
   trLabel,
 } from '../../../utils/labels';
 
@@ -136,10 +137,10 @@ export default function FasonSevkScreen() {
   const [plateNumber, setPlateNumber] = useState('');
   const [driverName, setDriverName] = useState('');
   const [notes, setNotes] = useState('');
-  // Boyahaneye özel talimat — sevk notundan ayrı. Operatör girişi yalnızca flag
-  // açıkken (Electron ayarı, default kapalı); kapalıyken not iş emrinden gelir.
-  const [dyehouseNote, setDyehouseNote] = useState('');
-  const dyehouseNoteMobileEntry = useDyehouseNoteMobileEntry();
+  // Fason adım talimatı — sevk notundan ayrı. Operatör girişi yalnızca flag
+  // açıkken (Electron ayarı, default kapalı); kapalıyken talimat adımın notundan gelir.
+  const [instruction, setInstruction] = useState('');
+  const fasonNoteMobileEntry = useFasonNoteMobileEntry();
   // Sevk bilgileri (plaka/sürücü/not) opsiyonel — katlanır bölüm, varsayılan kapalı.
   const [shippingOpen, setShippingOpen] = useState(false);
 
@@ -216,7 +217,7 @@ export default function FasonSevkScreen() {
             if (typeof d.plateNumber === 'string' && d.plateNumber) setPlateNumber(d.plateNumber);
             if (typeof d.driverName === 'string' && d.driverName) setDriverName(d.driverName);
             if (typeof d.notes === 'string' && d.notes) setNotes(d.notes);
-            if (typeof d.dyehouseNote === 'string' && d.dyehouseNote) setDyehouseNote(d.dyehouseNote);
+            if (typeof d.instruction === 'string' && d.instruction) setInstruction(d.instruction);
           } else {
             AsyncStorage.removeItem(DRAFT_KEY);
           }
@@ -242,12 +243,12 @@ export default function FasonSevkScreen() {
         savedAt: Date.now(),
         workOrderId, workOrderLabel, stepId,
         subcontractorId, subcontractorLabel, plannedSubId,
-        scannedRolls, plateNumber, driverName, notes, dyehouseNote,
+        scannedRolls, plateNumber, driverName, notes, instruction,
       }));
     }, 600);
     return () => clearTimeout(t);
   }, [workOrderId, workOrderLabel, stepId, subcontractorId, subcontractorLabel,
-      plannedSubId, scannedRolls, plateNumber, driverName, notes, dyehouseNote]);
+      plannedSubId, scannedRolls, plateNumber, driverName, notes, instruction]);
 
   // ── WO picker server-side state ──
   const WO_PAGE_SIZE = 30;
@@ -631,7 +632,7 @@ export default function FasonSevkScreen() {
       setPlateNumber('');
       setDriverName('');
       setNotes('');
-      setDyehouseNote('');
+      setInstruction('');
       setDetailsCollapsed(true);
       AsyncStorage.removeItem(DRAFT_KEY);
       // Listeleri tazele (yeni dispatch, WO statüsü). ['rolls'] de invalide edilir:
@@ -803,7 +804,7 @@ export default function FasonSevkScreen() {
       plateNumber: plateNumber.trim() || undefined,
       driverName: driverName.trim() || undefined,
       notes: notes.trim() || undefined,
-      dyehouseNote: dyehouseNote.trim() || undefined,
+      instruction: instruction.trim() || undefined,
       allowItemOverride: hasItemMismatch || undefined,
     });
   };
@@ -821,7 +822,7 @@ export default function FasonSevkScreen() {
     setPlateNumber('');
     setDriverName('');
     setNotes('');
-    setDyehouseNote('');
+    setInstruction('');
     AsyncStorage.removeItem(DRAFT_KEY);
     snapTo(SHEET_COLLAPSED_H);
   };
@@ -1167,19 +1168,21 @@ export default function FasonSevkScreen() {
             </Surface>
           )}
 
-          {/* ④ Boyahane Notu (opsiyonel) — yalnızca Electron ayarından açıldıysa
-              görünür (default kapalı). Kapalıyken not iş emrinden gelir. Boş
-              bırakılırsa yine iş emrindeki boyahane notu kullanılır. Sevk fişinde
+          {/* ④ Fason Talimatı (opsiyonel) — yalnızca Electron ayarından açıldıysa
+              görünür (default kapalı). Kapalıyken talimat adımın notundan gelir. Boş
+              bırakılırsa yine adımın notu kullanılır. Sevk fişinde / çeki listesinde
               "İstenen Renk"in yanında görünür; sonradan Electron'dan düzenlenebilir. */}
-          {workOrderId && dyehouseNoteMobileEntry && (
+          {workOrderId && fasonNoteMobileEntry && (
             <Surface style={styles.card} elevation={1}>
               <View style={styles.sectionBody}>
-                <Text style={styles.sectionTitle}>Boyahane Notu (opsiyonel)</Text>
+                <Text style={styles.sectionTitle}>
+                  {fasonNoteLabel(selectedStep?.station?.name)} (opsiyonel)
+                </Text>
                 <TextInput
                   mode="outlined"
-                  value={dyehouseNote}
-                  onChangeText={setDyehouseNote}
-                  placeholder="Boş bırakılırsa iş emrindeki not kullanılır..."
+                  value={instruction}
+                  onChangeText={setInstruction}
+                  placeholder="Boş bırakılırsa adımdaki talimat kullanılır..."
                   multiline
                   numberOfLines={3}
                   style={[styles.input, styles.labelSpaced]}
@@ -1188,13 +1191,15 @@ export default function FasonSevkScreen() {
             </Surface>
           )}
 
-          {/* Flag kapalıyken: bu partiyle gidecek boyahane notu (iş emrinden)
+          {/* Flag kapalıyken: bu partiyle gidecek fason talimatı (adımdan)
               salt-okunur görünür — operatör hangi talimatla gönderdiğini bilsin. */}
-          {workOrderId && !dyehouseNoteMobileEntry && selectedWo?.dyehouseNote ? (
+          {workOrderId && !fasonNoteMobileEntry && selectedStep?.notes ? (
             <Surface style={styles.card} elevation={1}>
               <View style={styles.sectionBody}>
-                <Text style={styles.sectionTitle}>Boyahane Notu (iş emrinden)</Text>
-                <Text style={styles.dyehouseNoteText}>{selectedWo.dyehouseNote}</Text>
+                <Text style={styles.sectionTitle}>
+                  {fasonNoteLabel(selectedStep?.station?.name)} (adımdan)
+                </Text>
+                <Text style={styles.instructionText}>{selectedStep.notes}</Text>
               </View>
             </Surface>
           ) : null}
@@ -1956,7 +1961,7 @@ const styles = StyleSheet.create({
   sectionToggleInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionSub: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
   sectionBody: { marginTop: 4 },
-  dyehouseNoteText: { fontSize: 14, color: '#0f172a', marginTop: 4, lineHeight: 20 },
+  instructionText: { fontSize: 14, color: '#0f172a', marginTop: 4, lineHeight: 20 },
   col: { flex: 1 },
   input: { backgroundColor: '#fff' },
   addBtn: { borderRadius: 8 },

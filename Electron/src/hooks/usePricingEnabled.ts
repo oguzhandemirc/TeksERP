@@ -37,14 +37,19 @@ export function useReturnGradingEnabled(): boolean {
   return q.data?.data?.returnGradingEnabled ?? false;
 }
 
+export function useKartelaMeasurementEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.kartelaMeasurementEnabled ?? false;
+}
+
 export function usePartyCodeAuto(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.partyCodeAuto ?? false;
 }
 
-export function useDyehouseNoteMobileEntry(): boolean {
+export function useFasonNoteMobileEntry(): boolean {
   const q = useFeatureFlags();
-  return q.data?.data?.dyehouseNoteMobileEntry ?? false;
+  return q.data?.data?.fasonNoteMobileEntry ?? false;
 }
 
 export function useDevicePairingRequired(): boolean {

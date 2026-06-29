@@ -43,7 +43,6 @@ export function formValuesFromWorkOrder(wo: WorkOrder): WorkOrderFormValues {
     plannedStartDate: dateToInput(wo.plannedStartDate),
     plannedEndDate: dateToInput(wo.plannedEndDate),
     foldType: wo.foldType ?? "",
-    dyehouseNote: wo.dyehouseNote ?? "",
   };
 }
 

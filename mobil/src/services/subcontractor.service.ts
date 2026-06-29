@@ -49,8 +49,9 @@ export interface DispatchRequest {
   plateNumber?: string;
   driverName?: string;
   notes?: string;
-  /** Boyahaneye özel talimat — genel sevk notundan ayrı. */
-  dyehouseNote?: string;
+  /** Fason adım talimatı — genel sevk notundan ayrı. Boş gönderilirse backend
+   *  adımın notes'unu default kullanır. */
+  instruction?: string;
   /**
    * WO ürünü ile rulo ürünü uyuşmazlığını bilinçli onayla. Frontend
    * mismatch modal'da onayladıktan sonra true gönderir.

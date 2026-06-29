@@ -3,6 +3,7 @@ import { registerAppInfoIpc } from "./app-info.ipc.js";
 import { registerWindowIpc } from "./window.ipc.js";
 import { registerSystemIpc } from "./system.ipc.js";
 import { registerScannerIpc } from "./scanner.ipc.js";
+import { registerPrinterIpc } from "./printer.ipc.js";
 
 export function registerIpcHandlers(): void {
   registerSecureStoreIpc();
@@ -10,4 +11,5 @@ export function registerIpcHandlers(): void {
   registerWindowIpc();
   registerSystemIpc();
   registerScannerIpc();
+  registerPrinterIpc();
 }
