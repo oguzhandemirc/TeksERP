@@ -28,11 +28,16 @@ const ROLL_DATE_FIELDS = ["createdAt"] as const;
 // (AT_SUBCONTRACTOR/SHIPPED/TAMBUR_CONSUMED/SUBCONTRACTOR_CONSUMED/KARTELA/
 // IN_PRODUCTION) burada YOK — onlar kendi servisleriyle yönetilir. IN_PRODUCTION'a
 // alma "Üretime Geri Al" (recoverOpenFabricToProduction); iptal softDelete; fire Tambur.
-const MANUAL_STATUS_TRANSITIONS: Partial<Record<RollStatus, RollStatus[]>> = {
-  [RollStatus.WAREHOUSE]: [RollStatus.STOCK],
-  [RollStatus.STOCK]: [RollStatus.WAREHOUSE],
-  [RollStatus.PRODUCED]: [RollStatus.WAREHOUSE],
-};
+// NOT: enum ÜYESİ ({[RollStatus.WAREHOUSE]: ...}) yerine string literal kullanılır —
+// modül-yükleme sırasında @prisma/client (client_1) henüz init olmadan bu top-level
+// sabit değerlendirildiğinde "Cannot access 'client_1' before initialization" TDZ
+// crash'i oluyordu (tam-server döngülü import yük sırasında). RollStatus değerleri
+// runtime'da bu string'lerin aynısı; tip `as` ile korunur, çalışma anı dereference yok.
+const MANUAL_STATUS_TRANSITIONS = {
+  WAREHOUSE: ["STOCK"],
+  STOCK: ["WAREHOUSE"],
+  PRODUCED: ["WAREHOUSE"],
+} as Partial<Record<RollStatus, RollStatus[]>>;
 // Rolls listesinde sıralanabilir kolonlar (UI SortableHeader'larıyla eşleşir) +
 // createdAt/id kararlı tie-break. Whitelist dışı sortBy → createdAt'e düşer
 // (bilinmeyen kolon 500'ünü ve indekssiz keyfi sortu engeller).
