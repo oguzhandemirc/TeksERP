@@ -3,50 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { safeFormat } from "@/lib/format";
 import type { Swatch } from "./swatchService";
 
-export const swatchColumns: ColumnDef<Swatch>[] = [
-  {
-    accessorKey: "barcode",
-    header: "Barkod",
-    cell: ({ row }) => (
-      <span className="font-mono text-xs">{row.original.barcode}</span>
-    ),
-  },
-  {
-    accessorKey: "cardNumber",
-    header: "Kart No",
-    cell: ({ row }) => (
-      <Badge variant="outline" className="text-[10px]">
-        {row.original.cardNumber}
-      </Badge>
-    ),
-  },
-  {
-    id: "item",
-    header: "Ürün",
-    cell: ({ row }) => (
-      <span className="text-xs font-medium">
-        {row.original.item?.name ?? "—"}
-      </span>
-    ),
-  },
-  {
-    id: "color",
-    header: "Renk",
-    cell: ({ row }) =>
-      row.original.color ? (
-        <span className="inline-flex items-center gap-1 text-xs">
-          {row.original.color.hex && (
-            <span
-              className="h-2.5 w-2.5 rounded-full border border-black/10"
-              style={{ backgroundColor: row.original.color.hex }}
-            />
-          )}
-          {row.original.color.name}
-        </span>
-      ) : (
-        <span className="text-muted-foreground text-xs">—</span>
-      ),
-  },
+const measureColumns: ColumnDef<Swatch>[] = [
   {
     accessorKey: "length",
     header: "Boy",
@@ -71,17 +28,72 @@ export const swatchColumns: ColumnDef<Swatch>[] = [
         <span className="text-muted-foreground">—</span>
       ),
   },
-  {
-    accessorKey: "createdAt",
-    header: "Tarih",
-    cell: ({ row }) => {
-      const d = row.original.createdAt;
-      return (
-        <span className="text-xs tabular-nums leading-tight">
-          {safeFormat(d, "dd.MM.yyyy")}
-          <span className="ml-1 text-muted-foreground">{safeFormat(d, "HH:mm")}</span>
-        </span>
-      );
-    },
-  },
 ];
+
+/**
+ * Kartela (swatch) liste sütunları. `showMeasure` false (varsayılan firma) iken
+ * Boy/En sütunları gizlenir — kartela yalnız ADET sayılır.
+ */
+export function buildSwatchColumns(
+  opts: { showMeasure: boolean } = { showMeasure: false },
+): ColumnDef<Swatch>[] {
+  return [
+    {
+      accessorKey: "barcode",
+      header: "Barkod",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.barcode}</span>
+      ),
+    },
+    {
+      accessorKey: "cardNumber",
+      header: "Kart No",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="text-[10px]">
+          {row.original.cardNumber}
+        </Badge>
+      ),
+    },
+    {
+      id: "item",
+      header: "Ürün",
+      cell: ({ row }) => (
+        <span className="text-xs font-medium">
+          {row.original.item?.name ?? "—"}
+        </span>
+      ),
+    },
+    {
+      id: "color",
+      header: "Renk",
+      cell: ({ row }) =>
+        row.original.color ? (
+          <span className="inline-flex items-center gap-1 text-xs">
+            {row.original.color.hex && (
+              <span
+                className="h-2.5 w-2.5 rounded-full border border-black/10"
+                style={{ backgroundColor: row.original.color.hex }}
+              />
+            )}
+            {row.original.color.name}
+          </span>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        ),
+    },
+    ...(opts.showMeasure ? measureColumns : []),
+    {
+      accessorKey: "createdAt",
+      header: "Tarih",
+      cell: ({ row }) => {
+        const d = row.original.createdAt;
+        return (
+          <span className="text-xs tabular-nums leading-tight">
+            {safeFormat(d, "dd.MM.yyyy")}
+            <span className="ml-1 text-muted-foreground">{safeFormat(d, "HH:mm")}</span>
+          </span>
+        );
+      },
+    },
+  ];
+}

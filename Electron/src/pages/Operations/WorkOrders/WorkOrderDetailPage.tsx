@@ -142,7 +142,12 @@ export function WorkOrderDetailPage() {
                   )}
                   <div className="grid gap-3 md:grid-cols-2">
                     {sortedSteps.map((step) => (
-                      <StepWipCard key={step.id} step={step} />
+                      <StepWipCard
+                        key={step.id}
+                        step={step}
+                        steps={sortedSteps}
+                        workOrderId={wo.id}
+                      />
                     ))}
                   </div>
                 </SectionBlock>

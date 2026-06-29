@@ -25,7 +25,6 @@ export interface WorkOrderPayload {
   targetItemId?: string | null;
   targetColorId?: string | null;
   foldType?: string | null;
-  dyehouseNote?: string | null;
   steps?: WorkOrderStepInput[];
   /**
    * routeTemplateId ile birlikte: şablondan klonlanan adımların not/fason planlamasını
@@ -52,18 +51,22 @@ export interface WorkOrderUpdatePayload {
   targetItemId?: string | null;
   targetColorId?: string | null;
   foldType?: string | null;
-  dyehouseNote?: string | null;
 }
 
 /** POST /work-orders/quick-start gövdesi. */
 export interface QuickStartRequest extends WorkOrderPayload {
   rollBarcodes: string[];
+  /** İlk rota adımı fason (boyahane) ise: WO açıldıktan sonra o adıma planlanan
+   *  firmaya otomatik fason sevki de yapılır (çeki listesi dahil). "Fasona Gönder". */
+  dispatchFirstStep?: boolean;
 }
 
 export interface QuickStartResult {
   workOrder: WorkOrder;
   attached: number;
   errors: string[];
+  /** Otomatik fason sevki yapıldıysa oluşan sevk (çeki listesi basımı için). */
+  dispatch?: { id: string; dispatchNo: string } | null;
 }
 
 /** GET /work-orders/:id/cancel-impact cevabı (iptal önizleme). */

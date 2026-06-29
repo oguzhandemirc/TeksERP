@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import type { StepDispatch } from "./types";
+import { fasonNoteLabel } from "./fasonNote";
 import { StatusBadge, workOrderStatusTones } from "@/components/operations/StatusBadge";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -27,6 +28,7 @@ import { WorkOrderInfoCard } from "./WorkOrderInfoCard";
 import { ProducedRollsCard } from "./ProducedRollsCard";
 import { OrderLinksCard } from "./OrderLinksCard";
 import { StepStateBadge } from "./step-state";
+import { FasonStepActions } from "./FasonStepActions";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import type { WorkOrder } from "./types";
 
@@ -316,6 +318,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       {step.dispatches && step.dispatches.length > 0 && (
                         <DispatchInfoPopover
                           dispatches={step.dispatches}
+                          stationName={step.station?.name}
                           onPrint={(id) => setPrintDispatchId(id)}
                         />
                       )}
@@ -413,6 +416,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                         )}
                       </div>
                     )}
+                    <FasonStepActions
+                      step={step}
+                      steps={sortedSteps}
+                      workOrderId={wo!.id}
+                    />
                   </li>
                 ))}
                 </ol>
@@ -487,9 +495,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
 
 function DispatchInfoPopover({
   dispatches,
+  stationName,
   onPrint,
 }: {
   dispatches: StepDispatch[];
+  stationName?: string | null;
   onPrint: (id: string) => void;
 }) {
   return (
@@ -557,11 +567,11 @@ function DispatchInfoPopover({
                     <span className="whitespace-pre-wrap">{d.notes}</span>
                   </>
                 )}
-                {(d.dyehouseNote ?? d.woDyehouseNote) && (
+                {(d.instruction ?? d.stepNote) && (
                   <>
-                    <span className="text-muted-foreground">Boyahane Notu</span>
+                    <span className="text-muted-foreground">{fasonNoteLabel(stationName)}</span>
                     <span className="whitespace-pre-wrap font-medium text-orange-700">
-                      {d.dyehouseNote ?? d.woDyehouseNote}
+                      {d.instruction ?? d.stepNote}
                     </span>
                   </>
                 )}

@@ -55,10 +55,12 @@ export interface FeatureFlags {
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   returnGradingEnabled: boolean;
+  /** Kartela kabulünde cm/kg ölçü alanları + listelerde ölçü gösterimi (false=default, yalnız adet). */
+  kartelaMeasurementEnabled: boolean;
   /** İş emri parti kodu otomatik mi üretilsin (true) manuel mi girilsin (false=default). */
   partyCodeAuto: boolean;
-  /** Fason Sevk boyahane notunu sahadaki operatör telefondan girebilsin mi (false=default). */
-  dyehouseNoteMobileEntry: boolean;
+  /** Fason Sevk talimatını sahadaki operatör telefondan girebilsin mi (false=default). */
+  fasonNoteMobileEntry: boolean;
   /** Mobil cihaz eşleştirmesi zorunlu mu (true=aktif) yoksa pasif mi (false=default).
    *  Pasifken eşleşmemiş tabletler de sisteme girer (makine atfı NULL kalır). ENFORCE edilir. */
   devicePairingRequired: boolean;

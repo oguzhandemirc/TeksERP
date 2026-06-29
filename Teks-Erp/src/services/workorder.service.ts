@@ -66,7 +66,7 @@ import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildPrefixedCardNumber } from "../utils/barcode";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
-import { nextPrefixedSequence } from "./subcontractor.service";
+import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.service";
 
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
@@ -122,8 +122,6 @@ export interface WorkOrderCreateInput {
   /** Tambur planlama bilgisi — "2-KAT" / "4-KAT" gibi. Tambur'a bilgi olarak
    *  iletilir; operatör finalize sırasında override edebilir. */
   foldType?:          string | null;
-  /** Boyahaneye özel talimat — fason sevkinde dispatch'e default kopyalanır. */
-  dyehouseNote?:      string | null;
   /**
    * Üretim çıktısı rulolarda olacak özellikler. "Renk veren" fason adımının
    * Fason Kabul'ünde Roll.properties'e bindirilir. Item.allowedProperties
@@ -651,7 +649,6 @@ export class WorkOrderService {
           targetItemId:      resolvedTargetItemId,
           targetColorId:     resolvedTargetColorId,
           foldType:          data.foldType          ?? null,
-          dyehouseNote:      data.dyehouseNote       ?? null,
           steps: {
             create: finalSteps.map((step, index) => ({
               stationId:              step.stationId,
@@ -748,10 +745,17 @@ export class WorkOrderService {
    * iki metodu tek tx'e zorlayan riskli refactor'a tercih edildi.
    */
   async quickStart(
-    data: WorkOrderCreateInput & { rollBarcodes: string[] },
+    data: WorkOrderCreateInput & { rollBarcodes: string[]; dispatchFirstStep?: boolean },
     userId?: string,
-  ): Promise<ApiResponse<{ workOrder: WorkOrder; attached: number; errors: string[] }>> {
-    const { rollBarcodes, ...woInput } = data;
+  ): Promise<
+    ApiResponse<{
+      workOrder: WorkOrder;
+      attached: number;
+      errors: string[];
+      dispatch: { id: string; dispatchNo: string } | null;
+    }>
+  > {
+    const { rollBarcodes, dispatchFirstStep, ...woInput } = data;
     const barcodes = [...new Set(rollBarcodes.map((b) => b.trim()).filter(Boolean))];
     if (barcodes.length === 0) {
       throw AppError.badRequest("En az bir top barkodu okutmalısınız.");
@@ -840,12 +844,76 @@ export class WorkOrderService {
       );
     }
 
+    // ── 5) Opsiyonel: ilk adım fason (EXTERNAL) ise otomatik fason sevki ──────
+    // Hızlı iş emrinin amacı "iş emri aç + malı fasona gönder"i tek seferde yapmak.
+    // dispatch() ayrı bir tx — patlarsa WO oluşmuş (PLANNED, toplar ilk adımda) kalır,
+    // operatör manuel Fason Sevk'le tamamlar (kurtarılabilir kısmi başarı).
+    let dispatch: { id: string; dispatchNo: string } | null = null;
+    let dispatchWarning: string | null = null;
+    if (dispatchFirstStep) {
+      const firstStep = await prisma.workOrderStep.findFirst({
+        where: { workOrderId: workOrder.id },
+        orderBy: { stepSequence: "asc" },
+        select: {
+          id: true,
+          plannedSubcontractorId: true,
+          station: { select: { type: true } },
+        },
+      });
+      if (firstStep && firstStep.station.type === "EXTERNAL") {
+        if (!firstStep.plannedSubcontractorId) {
+          dispatchWarning =
+            "Fason firma planlanmadığı için otomatik sevk yapılamadı — Fason Sevk ekranından gönderin.";
+        } else {
+          const dispatchRollIds = (
+            await prisma.roll.findMany({
+              where: {
+                currentStepId: firstStep.id,
+                status: RollStatus.IN_PRODUCTION,
+              },
+              select: { id: true },
+            })
+          ).map((r) => r.id);
+          if (dispatchRollIds.length === 0) {
+            dispatchWarning =
+              "İlk adıma bağlı top bulunamadığı için otomatik sevk yapılamadı.";
+          } else {
+            try {
+              // dyehouseNote verilmez → dispatch() WO.dyehouseNote'u default alır.
+              const dispRes = await new SubcontractorService().dispatch(
+                {
+                  workOrderId: workOrder.id,
+                  stepId: firstStep.id,
+                  subcontractorId: firstStep.plannedSubcontractorId,
+                  rollIds: dispatchRollIds,
+                },
+                userId,
+              );
+              const d = dispRes.data as
+                | { id?: string; dispatchNo?: string }
+                | undefined;
+              if (d?.id && d?.dispatchNo) {
+                dispatch = { id: d.id, dispatchNo: d.dispatchNo };
+              }
+            } catch (err) {
+              dispatchWarning =
+                "İş emri oluştu ama otomatik fason sevki yapılamadı: " +
+                (err instanceof Error ? err.message : "bilinmeyen hata") +
+                " — Fason Sevk ekranından gönderebilirsiniz.";
+            }
+          }
+        }
+      }
+    }
+
     return {
       success: true,
-      data: { workOrder, attached, errors },
+      data: { workOrder, attached, errors, dispatch },
       message:
         `İş emri ${workOrder.batchNumber} başlatıldı — ${attached} top bağlandı` +
-        (errors.length ? `, ${errors.length} top bağlanamadı.` : "."),
+        (errors.length ? `, ${errors.length} top bağlanamadı.` : ".") +
+        (dispatch ? ` Fasona sevk edildi: ${dispatch.dispatchNo}.` : "") +
+        (dispatchWarning ? ` ${dispatchWarning}` : ""),
     };
   }
 
@@ -1022,7 +1090,15 @@ export class WorkOrderService {
     T extends { id: string; steps: { id: string; stepSequence: number }[] },
   >(
     wos: T[]
-  ): Promise<(T & { producedMeters: number; inputMeters: number; orderedMeters: number })[]> {
+  ): Promise<
+    (T & {
+      producedMeters: number;
+      inputMeters: number;
+      orderedMeters: number;
+      /** Şu an mal tutulan fason istasyon adları (genelde tek) — liste rozeti. */
+      currentFasonStations: string[];
+    })[]
+  > {
     // SİPARİŞ TOPLAMI — WO'ya bağlı sipariş satırlarının talep metrajı (quantity)
     // toplamı; üretim çıktısını/girişini sipariş talebiyle kıyaslamak için. STOK
     // üretiminde bağ yok → 0 (frontend "—" gösterir). Pivot PK (workOrderId,...)
@@ -1049,7 +1125,32 @@ export class WorkOrderService {
         producedMeters: 0,
         inputMeters: 0,
         orderedMeters: orderedByWo.get(w.id) ?? 0,
+        currentFasonStations: [],
       }));
+    }
+
+    // ŞU AN FASONDA — bu sayfadaki WO'lardan hangisi şu an bir fasonda mal tutuyor
+    // (AT_SUBCONTRACTOR top'un currentStepId'si o EXTERNAL adım). WO başına distinct
+    // istasyon adı (liste rozeti). Tek batched sorgu — currentStepId partial-indexli.
+    const fasonStationsByWo = new Map<string, Set<string>>();
+    const atSubRows = await prisma.roll.findMany({
+      where: { currentStepId: { in: stepIds }, status: RollStatus.AT_SUBCONTRACTOR },
+      select: {
+        currentStep: {
+          select: { workOrderId: true, station: { select: { name: true } } },
+        },
+      },
+    });
+    for (const r of atSubRows) {
+      const woId = r.currentStep?.workOrderId;
+      const name = r.currentStep?.station?.name;
+      if (!woId || !name) continue;
+      let set = fasonStationsByWo.get(woId);
+      if (!set) {
+        set = new Set();
+        fasonStationsByWo.set(woId, set);
+      }
+      set.add(name);
     }
 
     // ÇIKAN — üretim çıktısı; detay producedRolls.warehouse ile AYNI tanım
@@ -1144,6 +1245,7 @@ export class WorkOrderService {
       producedMeters: w.steps.reduce((sum, st) => sum + (producedByStep.get(st.id) ?? 0), 0),
       inputMeters: inputByStep.get(w.steps[0]?.id ?? "") ?? 0,
       orderedMeters: orderedByWo.get(w.id) ?? 0,
+      currentFasonStations: [...(fasonStationsByWo.get(w.id) ?? [])],
     }));
   }
 
@@ -1196,6 +1298,8 @@ export class WorkOrderService {
     // currentStepId = şu an o adımda fiziksel olarak bekleyen rulolar (ham/boyalı/açık kumaş).
     // producedInStepId + depo/sevk statüsü = WO'nun ürettiği nihai çıktı.
     const stepIds = wo.steps.map((s) => s.id);
+    // Sevkin kendi talimatı boşsa düşülecek default: o adımın notu (per-step).
+    const stepNotesById = new Map(wo.steps.map((s) => [s.id, s.notes]));
     // Meter alanları Prisma.Decimal — JS float drift'i önlemek için. Response
     // serializer (json-replacer) Decimal → number'a otomatik çevirir, frontend
     // her zaman number görür.
@@ -1210,6 +1314,14 @@ export class WorkOrderService {
         dyedMeters: Prisma.Decimal;
         openFabricCount: number;
         openFabricMeters: Prisma.Decimal;
+        // Durum kırılımı (masaüstü fason sevk aksiyonu gating'i için): adımda
+        // fiziksel BEKLEYEN (sevke hazır) vs FASONDA (dışarıda) top ayrımı.
+        // EXTERNAL adımda AT_SUBCONTRACTOR top da currentStepId=step taşır →
+        // "count" ikisini birleştirir; bu iki alan ayırır.
+        waitingCount: number;
+        waitingMeters: Prisma.Decimal;
+        atSubcontractorCount: number;
+        atSubcontractorMeters: Prisma.Decimal;
       }
     >();
     /** Üretim çıktısının kategori bazlı kırılımı.
@@ -1257,6 +1369,8 @@ export class WorkOrderService {
       Array<{
         id: string;
         barcode: string | null;
+        /** Anlık durum — UI: AT_SUBCONTRACTOR (fasonda) vs bekliyor ayrımı için. */
+        status: RollStatus;
         currentQty: number;
         width: number | null;
         qualityGrade: string;
@@ -1276,9 +1390,9 @@ export class WorkOrderService {
         plateNumber: string | null;
         driverName: string | null;
         notes: string | null;
-        dyehouseNote: string | null;
-        /** WO'daki boyahane notu (default) — sevkin kendi notu boşsa frontend buna düşer. */
-        woDyehouseNote: string | null;
+        instruction: string | null;
+        /** Sevk edilen adımın notu (default) — sevkin kendi talimatı boşsa frontend buna düşer. */
+        stepNote: string | null;
         subcontractor: { id: string; name: string };
         dispatchedBy: { id: string; fullName: string | null; username: string } | null;
       }>
@@ -1291,6 +1405,7 @@ export class WorkOrderService {
           id: true,
           barcode: true,
           currentStepId: true,
+          status: true,
           colorId: true,
           parentReceiptId: true,
           currentQty: true,
@@ -1312,9 +1427,22 @@ export class WorkOrderService {
           dyedMeters: new Prisma.Decimal(0),
           openFabricCount: 0,
           openFabricMeters: new Prisma.Decimal(0),
+          waitingCount: 0,
+          waitingMeters: new Prisma.Decimal(0),
+          atSubcontractorCount: 0,
+          atSubcontractorMeters: new Prisma.Decimal(0),
         };
         s.count += 1;
         s.totalMeters = s.totalMeters.plus(r.currentQty);
+        // Durum kırılımı: AT_SUBCONTRACTOR = fasonda dışarıda; gerisi (IN_PRODUCTION/
+        // STOCK) = bu adımda bekliyor, sevke hazır.
+        if (r.status === RollStatus.AT_SUBCONTRACTOR) {
+          s.atSubcontractorCount += 1;
+          s.atSubcontractorMeters = s.atSubcontractorMeters.plus(r.currentQty);
+        } else {
+          s.waitingCount += 1;
+          s.waitingMeters = s.waitingMeters.plus(r.currentQty);
+        }
         let kind: "raw" | "dyed" | "open";
         if (r.parentReceiptId) {
           s.openFabricCount += 1;
@@ -1335,6 +1463,7 @@ export class WorkOrderService {
         list.push({
           id: r.id,
           barcode: r.barcode,
+          status: r.status,
           currentQty: Number(r.currentQty),
           width: r.width != null ? Number(r.width) : null,
           qualityGrade: r.qualityGrade,
@@ -1356,7 +1485,7 @@ export class WorkOrderService {
           plateNumber: true,
           driverName: true,
           notes: true,
-          dyehouseNote: true,
+          instruction: true,
           subcontractor: { select: { id: true, name: true } },
           dispatchedBy: { select: { id: true, fullName: true, username: true } },
         },
@@ -1372,9 +1501,9 @@ export class WorkOrderService {
           plateNumber: d.plateNumber,
           driverName: d.driverName,
           notes: d.notes,
-          dyehouseNote: d.dyehouseNote,
-          // Tüm sevkler aynı WO'ya ait — boş not durumunda WO notuna düşülür (option B).
-          woDyehouseNote: wo.dyehouseNote,
+          instruction: d.instruction,
+          // Sevkin kendi talimatı boşsa, sevk edilen adımın notuna düşülür.
+          stepNote: stepNotesById.get(d.stepId) ?? null,
           subcontractor: d.subcontractor,
           dispatchedBy: d.dispatchedBy,
         });
@@ -1485,6 +1614,10 @@ export class WorkOrderService {
           dyedMeters: new Prisma.Decimal(0),
           openFabricCount: 0,
           openFabricMeters: new Prisma.Decimal(0),
+          waitingCount: 0,
+          waitingMeters: new Prisma.Decimal(0),
+          atSubcontractorCount: 0,
+          atSubcontractorMeters: new Prisma.Decimal(0),
         },
       currentRollList: stepRolls.get(step.id) ?? [],
       dispatches: stepDispatches.get(step.id) ?? [],
@@ -1702,7 +1835,7 @@ export class WorkOrderService {
       where: { id: workOrderId },
       select: {
         id: true, batchNumber: true, type: true, width: true, foldType: true,
-        parameters: true, dyehouseNote: true, routeTemplateId: true,
+        parameters: true, routeTemplateId: true,
         targetItemId: true, targetColorId: true, status: true,
         targetItem: { select: { id: true, name: true } },
         targetColor: { select: { id: true, name: true, hex: true } },
@@ -1976,7 +2109,6 @@ export class WorkOrderService {
           targetItemId: sourceWo.targetItemId,
           targetColorId: data.newColorId,
           foldType: sourceWo.foldType,
-          dyehouseNote: sourceWo.dyehouseNote,
           // Soy bağı: eski refakat kartı okutulunca kabul bu WO'yu da bulur;
           // kaynak WO'nun Dallar panelinde "ayrıldı →" izi buradan okunur.
           splitFromId: sourceWo.id,
@@ -2148,7 +2280,7 @@ export class WorkOrderService {
           where: { id: data.batchSplitId },
           select: {
             subcontractorId: true, plannedSubcontractorId: true,
-            dispatchedById: true, dyehouseNote: true, cancelledAt: true,
+            dispatchedById: true, instruction: true, cancelledAt: true,
           },
         });
         if (!src || src.cancelledAt) {
@@ -2163,7 +2295,7 @@ export class WorkOrderService {
             subcontractorId: src.subcontractorId,
             plannedSubcontractorId: src.plannedSubcontractorId,
             dispatchedById: src.dispatchedById,
-            dyehouseNote: src.dyehouseNote,
+            instruction: src.instruction,
             totalQty: movedTotalQty,
           },
         });
@@ -2906,7 +3038,6 @@ export class WorkOrderService {
       targetItemId?: string | null;
       targetColorId?: string | null;
       foldType?: string | null;
-      dyehouseNote?: string | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
@@ -3041,7 +3172,6 @@ export class WorkOrderService {
         targetItemId: data.targetItemId === undefined ? undefined : data.targetItemId,
         targetColorId: data.targetColorId === undefined ? undefined : data.targetColorId,
         foldType: data.foldType === undefined ? undefined : data.foldType,
-        dyehouseNote: data.dyehouseNote === undefined ? undefined : data.dyehouseNote,
       },
     });
     if (updateClaim.count === 0) {
@@ -3617,7 +3747,6 @@ export class WorkOrderService {
           targetItemId: resolvedTargetItemId,
           targetColorId: resolvedTargetColorId,
           foldType: data.foldType ?? null,
-          dyehouseNote: data.dyehouseNote ?? null,
           ...(allocations.length > 0
             ? {
                 orderLinks: {

@@ -28,6 +28,27 @@ jest.mock("@react-native-community/netinfo", () => ({
   },
 }));
 
+// react-native-bluetooth-classic — native köprü testte yok. virtual:true ile
+// modül kurulu olmasa da mock kurulur; BT etiket yolu testlerde no-op kalır.
+jest.mock(
+  "react-native-bluetooth-classic",
+  () => ({
+    __esModule: true,
+    default: {
+      isBluetoothEnabled: jest.fn(async () => true),
+      requestBluetoothEnabled: jest.fn(async () => true),
+      getBondedDevices: jest.fn(async () => []),
+      isDeviceConnected: jest.fn(async () => false),
+      connectToDevice: jest.fn(async () => ({})),
+      writeToDevice: jest.fn(async () => true),
+      availableFromDevice: jest.fn(async () => 0),
+      readFromDevice: jest.fn(async () => null),
+      clearFromDevice: jest.fn(async () => true),
+    },
+  }),
+  { virtual: true },
+);
+
 // Reanimated test ortamında uyarı basmasın — mock'u yükle (varsa).
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports

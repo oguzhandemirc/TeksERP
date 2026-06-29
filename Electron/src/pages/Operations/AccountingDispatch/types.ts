@@ -39,3 +39,82 @@ export interface DispatchReport {
   }>;
   totals: { totalRolls: number; totalMeters: number; totalKg: number; sackCount: number };
 }
+
+/**
+ * Muhasebe Excel dökümü veri seti — GET /api/shipping/accounting-export.
+ * Miktar-odaklı (fiyat YOK). Tarihler ISO string; sayılar düz number.
+ */
+export interface AccountingExportData {
+  range: {
+    from: string | null;
+    to: string | null;
+    field: string | null;
+    /** "period" (tarih aralığı) | "selection" (işaretli sevkler). */
+    mode?: "period" | "selection";
+    selectedCount?: number;
+  };
+  shipments: Array<{
+    shipmentNo: string;
+    dispatchedAt: string;
+    customerCode: string;
+    customerName: string;
+    taxNumber: string;
+    branchName: string;
+    destination: "DOMESTIC" | "EXPORT";
+    procedureCode: string;
+    plateNumber: string;
+    driverName: string;
+    carrier: string;
+    sackCount: number;
+    rollCount: number;
+    totalMeters: number;
+    totalKg: number;
+  }>;
+  detail: Array<{
+    shipmentNo: string;
+    dispatchedAt: string;
+    customerName: string;
+    orderNos: string;
+    itemName: string;
+    colorName: string;
+    width: number | null;
+    rollCount: number;
+    meters: number;
+  }>;
+  byCustomer: Array<{
+    customerCode: string;
+    customerName: string;
+    taxNumber: string;
+    shipmentCount: number;
+    sackCount: number;
+    rollCount: number;
+    totalMeters: number;
+    totalKg: number;
+  }>;
+  byProduct: Array<{
+    itemName: string;
+    colorName: string;
+    width: number | null;
+    rollCount: number;
+    totalMeters: number;
+  }>;
+  returns: Array<{
+    returnedAt: string;
+    customerName: string;
+    fromShipmentNo: string;
+    barcode: string;
+    itemName: string;
+    colorName: string;
+    width: number | null;
+    meters: number;
+    reason: string;
+  }>;
+  totals: {
+    shipmentCount: number;
+    sackCount: number;
+    rollCount: number;
+    totalMeters: number;
+    totalKg: number;
+    returnMeters: number;
+  };
+}

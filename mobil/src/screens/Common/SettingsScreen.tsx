@@ -24,6 +24,8 @@ import {
 import { useDeviceSettingsStore } from '../../store/deviceSettingsStore';
 import { useDeviceStore } from '../../store/deviceStore';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import BtPrinterSettingsCard from '../../components/BtPrinterSettingsCard';
+import BtMeterSettingsCard from '../../components/BtMeterSettingsCard';
 import type { RootStackParamList } from '../../navigation/types';
 
 const COLORS = {
@@ -321,6 +323,12 @@ export default function SettingsScreen() {
             </View>
           </TouchableRipple>
         </View>
+
+        {/* ── Bluetooth etiket yazıcısı (Argox PPLA) ── */}
+        <BtPrinterSettingsCard />
+
+        {/* ── Bluetooth metre makineleri (2/4 kat, HC-06) ── */}
+        <BtMeterSettingsCard />
 
         {/* ── Cihaz eşleştirme (durum + alt ekran) ── */}
         <TouchableRipple

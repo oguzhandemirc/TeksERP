@@ -29,6 +29,7 @@ function parseParams(req: Request): { docType: PrintedDocType; sourceId: string 
 export class PrintedDocumentController {
   constructor() {
     this.getCurrent = this.getCurrent.bind(this);
+    this.getHtml = this.getHtml.bind(this);
     this.listVersions = this.listVersions.bind(this);
     this.getVersion = this.getVersion.bind(this);
     this.reissue = this.reissue.bind(this);
@@ -40,6 +41,36 @@ export class PrintedDocumentController {
       const { docType, sourceId } = parseParams(req);
       const result = await printedDocumentService.getCurrent(docType, sourceId);
       res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /api/printed-documents/:docType/:sourceId/html
+   * Baskı-hazır HTML (TEK KAYNAK) — mobil expo-print + Electron printHtmlString
+   * aynı HTML'i basar. Kaynak henüz taslaksa 409.
+   */
+  async getHtml(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { docType, sourceId } = parseParams(req);
+      const version =
+        req.query.version != null
+          ? versionSchema.parse(req.query.version)
+          : undefined;
+      // ?draft=1 → donmuş belge yoksa canlı TASLAK önizlemesi (sevk öncesi baskı).
+      const allowDraft = req.query.draft === "1" || req.query.draft === "true";
+      const result = await printedDocumentService.getHtml(docType, sourceId, version, {
+        allowDraft,
+      });
+      const data = result.data as { html: string } | null;
+      if (!data) {
+        res
+          .status(409)
+          .json({ success: false, message: "Belge henüz hazır değil (taslak)." });
+        return;
+      }
+      res.type("html").send(data.html);
     } catch (err) {
       next(err);
     }

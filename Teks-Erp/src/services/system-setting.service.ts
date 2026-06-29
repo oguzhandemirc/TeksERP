@@ -44,6 +44,11 @@ export const SETTING_KEYS = {
   /** İade kabulünde personel topun kalitesini değiştirebilsin mi. Default false
    *  (kapalıyken kalite butonu gizlenir + backend gönderilen override'ı yok sayar). */
   RETURN_GRADING_ENABLED: "return.gradingEnabled",
+  /** Kartela kabulünde uzunluk(cm)/ağırlık(kg) alanları gösterilsin mi. Default false
+   *  (bu firma kartelayı yalnız ADET sayar; kapalıyken kabul ekranında ve kartela
+   *  listelerinde cm/kg gizlenir). Başka firmalara açık satılabilir. Backend ENFORCE
+   *  etmez — salt UI rehberi; gizlenince zaten null gelir. */
+  KARTELA_MEASUREMENT_ENABLED: "kartela.measurementEnabled",
   /** İş emri "Parti Kodu" (batchNumber) otomatik mi üretilsin manuel mi girilsin.
    *  Default false (manuel). Açıkken form otomatik P-YYMMDD-NNN önerir, override edilebilir. */
   WORKORDER_PARTY_CODE_AUTO: "workorder.partyCodeAuto",
@@ -51,9 +56,9 @@ export const SETTING_KEYS = {
   ORDER_DEFAULT_DEADLINE_DAYS: "order.defaultDeadlineDays",
   /** İş emri oluştururken plannedEndDate verilmediyse plannedStartDate + N gün. Default 7. */
   WORKORDER_DEFAULT_PLAN_DURATION_DAYS: "workorder.defaultPlanDurationDays",
-  /** Sahadaki operatör Fason Sevk'te boyahane notunu telefondan girebilsin mi.
-   *  Default false (kapalı) → not yalnızca iş emrinden gelir; mobil alan gizli. */
-  DYEHOUSE_NOTE_MOBILE_ENTRY: "dyehouse.noteMobileEntry",
+  /** Sahadaki operatör Fason Sevk'te fason talimatını telefondan girebilsin mi.
+   *  Default false (kapalı) → talimat yalnızca adım notundan gelir; mobil alan gizli. */
+  FASON_NOTE_MOBILE_ENTRY: "fason.noteMobileEntry",
   /** Mobil cihaz eşleştirmesi ZORUNLU mu. Default false (pasif) → eşleşmemiş
    *  tabletler de giriş yapıp çalışabilir (makine atfı NULL kalır). True iken
    *  eşleşmemiş/pasif cihaz device.middleware'de 401 ile kesilir. ENFORCE edilir. */
@@ -208,8 +213,11 @@ export interface FeatureFlags {
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   returnGradingEnabled: boolean;
+  /** Kartela kabulünde cm/kg ölçü alanları + kartela listelerinde ölçü gösterimi
+   *  açık mı (default false — yalnız ADET). */
+  kartelaMeasurementEnabled: boolean;
   partyCodeAuto: boolean;
-  dyehouseNoteMobileEntry: boolean;
+  fasonNoteMobileEntry: boolean;
   /** Cihaz eşleştirme zorunlu mu (true=aktif) yoksa pasif mi (false=default).
    *  Diğerlerinden farklı olarak ENFORCE edilir (device.middleware). */
   devicePairingRequired: boolean;
@@ -375,8 +383,9 @@ export class SystemSettingService {
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       returnGradingEnabled: await readReturnGradingEnabled(cacheClient),
+      kartelaMeasurementEnabled: await readKartelaMeasurementEnabled(cacheClient),
       partyCodeAuto: await readPartyCodeAuto(cacheClient),
-      dyehouseNoteMobileEntry: await readDyehouseNoteMobileEntry(cacheClient),
+      fasonNoteMobileEntry: await readFasonNoteMobileEntry(cacheClient),
       devicePairingRequired: await readDevicePairingRequired(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
@@ -456,6 +465,18 @@ export class SystemSettingService {
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "kartelaMeasurementEnabled")) {
+      if (typeof input.kartelaMeasurementEnabled !== "boolean") {
+        throw AppError.badRequest("kartelaMeasurementEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KARTELA_MEASUREMENT_ENABLED,
+        input.kartelaMeasurementEnabled,
+        "Kartela kabulünde uzunluk(cm)/ağırlık(kg) alanlarını göster",
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "partyCodeAuto")) {
       if (typeof input.partyCodeAuto !== "boolean") {
         throw AppError.badRequest("partyCodeAuto boolean olmalı");
@@ -468,14 +489,14 @@ export class SystemSettingService {
       );
     }
 
-    if (Object.prototype.hasOwnProperty.call(input, "dyehouseNoteMobileEntry")) {
-      if (typeof input.dyehouseNoteMobileEntry !== "boolean") {
-        throw AppError.badRequest("dyehouseNoteMobileEntry boolean olmalı");
+    if (Object.prototype.hasOwnProperty.call(input, "fasonNoteMobileEntry")) {
+      if (typeof input.fasonNoteMobileEntry !== "boolean") {
+        throw AppError.badRequest("fasonNoteMobileEntry boolean olmalı");
       }
       await this.set(
-        SETTING_KEYS.DYEHOUSE_NOTE_MOBILE_ENTRY,
-        input.dyehouseNoteMobileEntry,
-        "Fason Sevk'te boyahane notunu sahadaki operatör telefondan girebilsin",
+        SETTING_KEYS.FASON_NOTE_MOBILE_ENTRY,
+        input.fasonNoteMobileEntry,
+        "Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin",
         userId
       );
     }
@@ -798,17 +819,33 @@ export async function readReturnGradingEnabled(
 }
 
 /**
- * Fason Sevk'te boyahane notunu sahadaki operatör telefondan girebilsin mi?
- * Default false (kapalı). Kapalıyken mobil Fason Sevk ekranında boyahane notu
- * alanı gizli; not yalnızca iş emrinden (WorkOrder.dyehouseNote) gelir. Sadece
- * UI rehberi — backend ENFORCE ETMEZ.
+ * Kartela kabulünde cm/kg ölçü alanlarının + kartela listelerinde ölçü
+ * gösteriminin açık olup olmadığı. Default false (yalnız ADET). Diğer UI
+ * flag'leri gibi backend ENFORCE etmez; frontend gizler.
  */
-export async function readDyehouseNoteMobileEntry(
+export async function readKartelaMeasurementEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.DYEHOUSE_NOTE_MOBILE_ENTRY },
+    where: { key: SETTING_KEYS.KARTELA_MEASUREMENT_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin mi?
+ * Default false (kapalı). Kapalıyken mobil Fason Sevk ekranında fason talimatı
+ * alanı gizli; talimat yalnızca sevk edilen adımın notundan gelir. Sadece
+ * UI rehberi — backend ENFORCE ETMEZ.
+ */
+export async function readFasonNoteMobileEntry(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FASON_NOTE_MOBILE_ENTRY },
     select: { value: true },
   });
   return asBoolean(setting?.value);

@@ -83,12 +83,39 @@ export interface ScannerDeviceApi {
   onStatus: (cb: (status: ScannerStatus) => void) => () => void;
 }
 
+// --- Native yazıcı transport (Faz-2: seri/COM + ağ TCP 9100) ---
+export interface PrinterSendOpts {
+  transport: "tcp" | "serial";
+  /** TCP: IP/host; serial: COM yolu. */
+  target: string;
+  /** TCP portu (default 9100). */
+  port?: number;
+  /** serial baud (default 9600). */
+  baudRate?: number;
+  /** Gönderilecek native komut (PPLA/PPLB/ZPL). latin1 bayt-bire-bir yazılır. */
+  content: string;
+}
+export interface PrinterSendResult {
+  ok: boolean;
+  bytes: number;
+  /** Native modül mevcut mu (serialport derlenmemişse false; uygulama çökmez). */
+  available: boolean;
+  error: string | null;
+}
+export interface PrinterTransportApi {
+  /** Seri (COM) cihaz listesi — modül durumu + cihazlar (BT-COM dahil). */
+  listSerial: () => Promise<ScannerListResult>;
+  /** Native komutu seri/TCP yazıcıya gönder. Modül yoksa available:false. */
+  send: (opts: PrinterSendOpts) => Promise<PrinterSendResult>;
+}
+
 export interface ApiBridge {
   secureStore: SecureStoreApi;
   appInfo: AppInfoApi;
   window: WindowApi;
   system: SystemApi;
   scanner: ScannerDeviceApi;
+  printer: PrinterTransportApi;
 }
 
 declare global {

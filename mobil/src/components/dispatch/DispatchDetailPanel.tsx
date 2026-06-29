@@ -4,6 +4,7 @@ import { Text, Icon } from 'react-native-paper';
 import dayjs from 'dayjs';
 
 import type { SubcontractorDispatch } from '../../types/models';
+import { fasonNoteLabel } from '../../utils/labels';
 
 /**
  * Bir sevkin tüm detayları — toplar, plaka/sürücü, planlanan vs sevk firması,
@@ -130,10 +131,12 @@ export default function DispatchDetailPanel({
           </View>
         )}
 
-        {dispatch.dyehouseNote && (
-          <View style={styles.dyehouseNoteBox}>
-            <Text style={styles.dyehouseNoteLabel}>BOYAHANE NOTU</Text>
-            <Text style={styles.dyehouseNoteText}>{dispatch.dyehouseNote}</Text>
+        {dispatch.instruction && (
+          <View style={styles.instructionBox}>
+            <Text style={styles.instructionLabel}>
+              {fasonNoteLabel(dispatch.step?.station?.name).toLocaleUpperCase('tr-TR')}
+            </Text>
+            <Text style={styles.instructionText}>{dispatch.instruction}</Text>
           </View>
         )}
       </View>
@@ -270,7 +273,7 @@ const styles = StyleSheet.create({
     borderLeftColor: '#cbd5e1',
   },
   notesText: { fontSize: 12, color: '#475569', fontStyle: 'italic' },
-  dyehouseNoteBox: {
+  instructionBox: {
     backgroundColor: '#fff7ed',
     borderRadius: 6,
     paddingHorizontal: 8,
@@ -279,8 +282,8 @@ const styles = StyleSheet.create({
     borderLeftColor: '#ea580c',
     gap: 2,
   },
-  dyehouseNoteLabel: { fontSize: 10, color: '#9a3412', fontWeight: '700' },
-  dyehouseNoteText: { fontSize: 12, color: '#7c2d12' },
+  instructionLabel: { fontSize: 10, color: '#9a3412', fontWeight: '700' },
+  instructionText: { fontSize: 12, color: '#7c2d12' },
   rollItem: {
     backgroundColor: '#fff',
     borderRadius: 6,

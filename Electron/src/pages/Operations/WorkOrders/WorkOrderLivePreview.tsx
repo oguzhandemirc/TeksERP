@@ -1,7 +1,6 @@
 import { useWatch, type Control } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import {
-  AlertTriangle,
   CalendarClock,
   ClipboardList,
   Fingerprint,
@@ -62,7 +61,6 @@ export function WorkOrderLivePreview({
   const foldType = useWatch({ control, name: "foldType" });
   const plannedStartDate = useWatch({ control, name: "plannedStartDate" });
   const plannedEndDate = useWatch({ control, name: "plannedEndDate" });
-  const dyehouseNote = useWatch({ control, name: "dyehouseNote" });
 
   const firstLine = pickedLines[0] ?? null;
 
@@ -273,16 +271,6 @@ export function WorkOrderLivePreview({
           </Row>
           {foldType?.trim() && <Row label="Kat Tipi">{foldType}</Row>}
         </Section>
-
-        {/* Boyahane notu */}
-        {dyehouseNote?.trim() && (
-          <div className="rounded-md border border-warning/30 bg-warning/5 p-2.5">
-            <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-warning">
-              <AlertTriangle className="h-3 w-3" /> Boyahane Notu
-            </div>
-            <div className="mt-0.5 whitespace-pre-wrap text-xs">{dyehouseNote}</div>
-          </div>
-        )}
 
         {/* Bağlı sipariş özeti */}
         <Section title="Bağlı Sipariş" icon={Link2} tone="blue">

@@ -64,11 +64,6 @@ export const workOrderFormSchema = z.object({
     .max(32, "Katlama tipi en fazla 32 karakter olabilir")
     .optional()
     .or(z.literal("")),
-  dyehouseNote: z
-    .string()
-    .max(1000, "Boyahane notu en fazla 1000 karakter olabilir")
-    .optional()
-    .or(z.literal("")),
 });
 
 export type WorkOrderFormValues = z.infer<typeof workOrderFormSchema>;
@@ -89,5 +84,4 @@ export const workOrderFormDefaults: WorkOrderFormValues = {
   // Kat tipi her iş emrinde belirli olmalı (kumaş 2 veya 4 kat sarılır). Yeni
   // kayıtta varsayılan 2-KAT; operatör değiştirebilir ama boş bırakamaz.
   foldType: "2-KAT",
-  dyehouseNote: "",
 };

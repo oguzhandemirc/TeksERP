@@ -267,13 +267,12 @@ async function seedProductionWO(): Promise<string> {
     data: {
       batchNumber: `WO-${STAMP}-FULL`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS",
       width: WIDTH, targetQuantity: 5000, targetItemId: ITEM, targetColorId: COLOR,
-      dyehouseNote: "Lacivert — ton tutturulması önemli. Numune onaylı.",
       plannedEndDate: new Date(Date.now() + 14 * 86400000),
       targetProperties: { create: [{ propertyId: M.propKursunlu }] },
       steps: {
         create: [
           { stationId: M.kk1, stepSequence: 1, status: "ACTIVE" },
-          { stationId: M.boya, stepSequence: 2, status: "ACTIVE", requiredCategoryId: M.boyaCatId, plannedSubcontractorId: M.boyerId },
+          { stationId: M.boya, stepSequence: 2, status: "ACTIVE", requiredCategoryId: M.boyaCatId, plannedSubcontractorId: M.boyerId, notes: "Lacivert — ton tutturulması önemli. Numune onaylı." },
           { stationId: M.kursun, stepSequence: 3, status: "ACTIVE" },
           { stationId: M.tambur, stepSequence: 4, status: "ACTIVE" },
         ],
@@ -351,14 +350,13 @@ async function seedOrderLinkedWO(ardaPatosLineId: string): Promise<void> {
     data: {
       batchNumber: `WO-${STAMP}-ORD`, type: "ORDER_PRODUCTION", status: "IN_PROGRESS",
       width: WIDTH, targetQuantity: 1500, targetItemId: ITEM, targetColorId: COLOR,
-      dyehouseNote: "Arda siparişi — Kurşunlu istendi.",
       plannedEndDate: new Date(Date.now() + 18 * 86400000),
       targetProperties: { create: [{ propertyId: M.propKursunlu }] },
       orderLinks: { create: [{ orderLineId: ardaPatosLineId, allocatedQty: 1500 }] },
       steps: {
         create: [
           { stationId: M.kk1, stepSequence: 1, status: "ACTIVE" },
-          { stationId: M.boya, stepSequence: 2, status: "ACTIVE", requiredCategoryId: M.boyaCatId, plannedSubcontractorId: M.boyerId },
+          { stationId: M.boya, stepSequence: 2, status: "ACTIVE", requiredCategoryId: M.boyaCatId, plannedSubcontractorId: M.boyerId, notes: "Arda siparişi — Kurşunlu istendi." },
           { stationId: M.kursun, stepSequence: 3, status: "ACTIVE" },
           { stationId: M.tambur, stepSequence: 4, status: "ACTIVE" },
         ],

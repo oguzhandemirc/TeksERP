@@ -135,6 +135,15 @@ export const definitionTiles: DefinitionTile[] = [
     permission: "station:read",
   },
   {
+    key: "peripherals",
+    title: "Cihaz Kaydı",
+    description: "Yazıcı + kantar/metraj cihazları (ağ/Bluetooth/USB/seri) — dil/profil/şablon yönlendirme",
+    icon: Printer,
+    to: "/definitions/peripherals",
+    group: "production",
+    permission: "station:read",
+  },
+  {
     key: "printer-models",
     title: "Yazıcı Modelleri",
     description: "Termal yazıcı kataloğu (Argox vb.) — DPI, max genişlik, dil (HTML/PPLA)",

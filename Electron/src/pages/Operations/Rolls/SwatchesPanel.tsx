@@ -7,8 +7,9 @@ import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { useDataTable } from "@/hooks/useDataTable";
 import { itemService } from "@/pages/Items/service";
 import { parseUrlToQueryParams } from "@/lib/query-builder";
+import { useKartelaMeasurementEnabled } from "@/hooks/usePricingEnabled";
 import { swatchService, type Swatch, type SwatchStats } from "./swatchService";
-import { swatchColumns } from "./swatchColumns";
+import { buildSwatchColumns } from "./swatchColumns";
 import { SwatchDetailSheet } from "./SwatchDetailSheet";
 
 const NUM_FMT = new Intl.NumberFormat("tr-TR");
@@ -27,9 +28,11 @@ const FILTERS: FilterDef[] = [
 function SwatchesStats({
   data,
   isLoading,
+  showMeasure,
 }: {
   data: SwatchStats | undefined;
   isLoading: boolean;
+  showMeasure: boolean;
 }) {
   if (isLoading && !data) {
     return <span className="text-xs text-muted-foreground">Yükleniyor…</span>;
@@ -38,8 +41,12 @@ function SwatchesStats({
   return (
     <div className="flex items-center gap-3 text-xs">
       <Stat label="Kartela" value={NUM_FMT.format(data.count)} unit="adet" />
-      <Divider />
-      <Stat label="Uzunluk" value={DEC_FMT.format(data.totalLength)} unit="cm" />
+      {showMeasure && (
+        <>
+          <Divider />
+          <Stat label="Uzunluk" value={DEC_FMT.format(data.totalLength)} unit="cm" />
+        </>
+      )}
     </div>
   );
 }
@@ -61,11 +68,13 @@ function Divider() {
 export function SwatchesPanel() {
   const [searchParams] = useSearchParams();
   const [selected, setSelected] = useState<Swatch | null>(null);
+  const showMeasure = useKartelaMeasurementEnabled();
 
+  const columns = useMemo(() => buildSwatchColumns({ showMeasure }), [showMeasure]);
   const { table, query, search, setSearch, pagination } = useDataTable<Swatch>({
     queryKey: "swatches",
     fetchFn: swatchService.listCursor,
-    columns: swatchColumns,
+    columns,
     defaultPageSize: 100,
   });
 
@@ -94,6 +103,7 @@ export function SwatchesPanel() {
           <SwatchesStats
             data={statsQuery.data?.data}
             isLoading={statsQuery.isLoading}
+            showMeasure={showMeasure}
           />
         }
       />

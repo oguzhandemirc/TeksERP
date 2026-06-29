@@ -16,6 +16,7 @@ import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/se
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import type { SubcontractorCategory } from "@/pages/SubcontractorCategories/types";
 import type { RouteStep } from "@/pages/Routes/types";
+import { fasonNoteLabel } from "./fasonNote";
 
 export interface FasonStepPlan {
   sequence: number;
@@ -179,11 +180,13 @@ function FasonStepCard({ plan, index, onUpdate }: CardProps) {
           />
         </div>
         <div className="space-y-1 sm:col-span-2">
-          <label className="text-xs text-muted-foreground">Not</label>
+          <label className="text-xs text-muted-foreground">
+            {fasonNoteLabel(plan.stationName)}
+          </label>
           <Input
             value={plan.notes}
             onChange={(e) => onUpdate({ notes: e.target.value })}
-            placeholder="Adıma özel talimat (opsiyonel)"
+            placeholder="Çeki listesine basılır (opsiyonel)"
           />
         </div>
       </div>

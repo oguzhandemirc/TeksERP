@@ -102,12 +102,26 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     accessorKey: "status",
     header: "Durum",
-    cell: ({ row }) => (
-      <StatusBadge
-        status={row.original.status}
-        labels={workOrderStatusLabels}
-        tones={workOrderStatusTones}
-      />
-    ),
+    cell: ({ row }) => {
+      const fason = row.original.currentFasonStations ?? [];
+      return (
+        <div className="flex flex-col items-start gap-1">
+          <StatusBadge
+            status={row.original.status}
+            labels={workOrderStatusLabels}
+            tones={workOrderStatusTones}
+          />
+          {fason.length > 0 && (
+            <Badge
+              variant="outline"
+              className="border-amber-500/40 text-[10px] text-amber-700 dark:text-amber-400"
+              title="Şu an mal bu fason istasyon(lar)ında"
+            >
+              Fasonda: {fason.join(", ")}
+            </Badge>
+          )}
+        </div>
+      );
+    },
   },
 ];

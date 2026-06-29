@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { printDocumentArea } from "@/lib/print";
+import { printHtmlString } from "@/lib/print";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
@@ -20,9 +20,7 @@ import {
   type PrintedDocument,
 } from "@/services/printedDocumentService";
 import { workOrderService, type FasonDispatchDoc, type DispatchDyeOverlay } from "./service";
-import { PrintableSheet, type FasonSheetData } from "./FasonSevkSheet";
-
-export { PrintableSheet } from "./FasonSevkSheet";
+import { fasonNoteLabel } from "./fasonNote";
 
 interface Props {
   dispatchId: string | null;
@@ -32,18 +30,22 @@ interface Props {
 
 const DOC_TYPE = "SUBCONTRACTOR_DISPATCH" as const;
 
+/**
+ * Fason Sevk İrsaliyesi (çeki) — ÖNİZLEME = PDF = MOBİL (tek kaynak). Hem ekran
+ * önizlemesi hem baskı backend `renderFasonCekiHtml` çıktısını (iframe srcDoc /
+ * printHtmlString) kullanır → eski React şablonu (FasonSevkSheet) ile sapma yok.
+ * İstenen renk + fason talimatı belgeye DONAR; canlı düzeltme InstructionEditor +
+ * "Revize Et" (reissue) ile yeni versiyon dondurur.
+ */
 export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) {
-  const printRef = useRef<HTMLDivElement>(null); // Y3: izole iframe baskısının kök alanı
   const { hasPermission } = useRoleAccess();
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
 
-  // Donmuş içerik (sevk anında dondu). Reissue ile yeni versiyon basılabilir.
+  // Donmuş içerik meta'sı (versiyon çubuğu + ACTIVE/VOIDED/SUPERSEDED ayrımı).
   const docQuery = useQuery({
     queryKey: ["printed-doc", DOC_TYPE, dispatchId],
     queryFn: () => printedDocumentService.getCurrent<FasonDispatchDoc>(DOC_TYPE, dispatchId!),
     enabled: open && Boolean(dispatchId),
-    // K-A2 fix: belge durumu (ACTIVE/VOIDED/SUPERSEDED) başka istemciden değişir —
-    // 5dk cache, iptal edilmiş belgeyi İPTAL filigransız bastırabiliyordu.
     staleTime: 0,
   });
   const currentDoc = docQuery.data?.data ?? null;
@@ -57,7 +59,8 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
     staleTime: 30_000,
   });
 
-  // CANLI talimat overlay'i — istenen renk + boyahane notu (donmuş içeriğin dışında).
+  // CANLI talimat overlay'i — yalnız DÜZENLEME yüzeyi (editör) için; belge içeriği
+  // artık donmuş HTML'den gelir (talimat sevkte donar).
   const overlayQuery = useQuery({
     queryKey: ["dispatch-overlay", dispatchId],
     queryFn: () => workOrderService.getDispatchDyeOverlay(dispatchId!),
@@ -69,23 +72,19 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
   const shown: PrintedDocument<FasonDispatchDoc> | null =
     selectedVersion != null ? (versionQuery.data?.data ?? null) : currentDoc;
   const viewingOld = selectedVersion != null && selectedVersion !== currentDoc?.version;
+  const shownVersion = shown?.version ?? null;
+
+  // ÖNİZLEME + BASKI tek kaynak: donmuş versiyonun backend HTML'i (KUMAŞ İRSALİYESİ).
+  const htmlQuery = useQuery({
+    queryKey: ["printed-doc-html", DOC_TYPE, dispatchId, shownVersion],
+    queryFn: () => printedDocumentService.getHtml(DOC_TYPE, dispatchId!, shownVersion ?? undefined),
+    enabled: open && Boolean(dispatchId) && shownVersion != null,
+    staleTime: 0,
+  });
+  const html = htmlQuery.data ?? null;
 
   const loading =
-    docQuery.isLoading ||
-    overlayQuery.isLoading ||
-    (selectedVersion != null && versionQuery.isLoading);
-
-  // Efektif boyahane notu: sevkin kendi notu (override) → yoksa WO notu (default).
-  const effectiveDyehouseNote = overlay
-    ? (overlay.dyehouseNote ?? overlay.woDyehouseNote)
-    : null;
-  const sheetData: FasonSheetData | null = shown
-    ? {
-        ...shown.snapshot.doc,
-        requestedColor: overlay?.requestedColor ?? null,
-        dyehouseNote: effectiveDyehouseNote,
-      }
-    : null;
+    docQuery.isLoading || (selectedVersion != null && versionQuery.isLoading);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -93,44 +92,23 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
         <DialogHeader>
           <DialogTitle>Fason Sevk İrsaliyesi</DialogTitle>
           <DialogDescription>
-            Sevk anında dondurulan resmi belge. İstenen renk + boyahane notu canlıdır;
-            içerik düzeltmesi için "Revize Et".
+            Sevk anında dondurulan resmi belge — önizleme baskıyla birebir aynı. İçerik
+            (renk/talimat) düzeltmesi için "Revize Et".
           </DialogDescription>
         </DialogHeader>
 
-        <div ref={printRef} className="flex-1 overflow-auto rounded-md border bg-muted/30 p-4">
-          {loading && (
-            <div className="space-y-2">
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-64 w-full" />
-            </div>
-          )}
-          {!loading && !shown && (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              Sevk bilgisi bulunamadı.
-            </div>
-          )}
-          {/* O4 fix: canlı overlay (istenen renk + boyahane notu) alınamadıysa
-              fiş RENKSİZ/NOTSUZ basılırdı — boyahaneye yanlış talimat. Baskıyı
-              blokla, yeniden dene sun. */}
-          {!loading && shown && overlayQuery.isError && (
-            <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-              <div className="font-medium text-destructive">
-                Renk/boyahane notu yüklenemedi — fiş eksik talimatla BASILMAZ.
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="mt-2"
-                onClick={() => void overlayQuery.refetch()}
-              >
-                Yeniden Dene
-              </Button>
-            </div>
-          )}
-          {!loading && shown && dispatchId && (
-            <>
+        {loading ? (
+          <div className="flex-1 space-y-2 rounded-md border bg-muted/30 p-4">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        ) : !shown || !dispatchId ? (
+          <div className="flex flex-1 items-center justify-center rounded-md border bg-muted/30 text-sm text-muted-foreground">
+            Sevk bilgisi bulunamadı.
+          </div>
+        ) : (
+          <>
+            <div className="shrink-0 space-y-2">
               <DocVersionBar
                 docType={DOC_TYPE}
                 sourceId={dispatchId}
@@ -139,30 +117,38 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
                 onSelectVersion={setSelectedVersion}
                 canReissue={hasPermission("workorder:write")}
               />
-              {/* Boyahane notu editörü — yalnız güncel ACTIVE belgede, kilitli değilse. */}
+              {/* Fason talimatı editörü — yalnız güncel ACTIVE belgede, kilitli değilse.
+                  Kaydet + Revize Et ile yeni versiyon donar; iframe o versiyonu gösterir. */}
               {!viewingOld && shown.status === "ACTIVE" && overlay && (
-                <DyehouseNoteEditor
+                <InstructionEditor
                   dispatchId={dispatchId}
-                  value={overlay.dyehouseNote}
-                  woValue={overlay.woDyehouseNote}
-                  locked={overlay.dyehouseNoteLocked}
+                  value={overlay.instruction}
+                  stepNote={overlay.stepNote}
+                  locked={overlay.instructionLocked}
+                  stationName={shown.snapshot.doc.step.station.name}
                 />
               )}
-              {sheetData && !overlayQuery.isError && (
-                <PrintableSheet
-                  snap={sheetData}
-                  companyName={shown.snapshot.company.name}
-                  letterhead={shown.snapshot.company.letterhead}
-                  docConfigOverride={shown.snapshot.docConfigOverride}
-                  voided={shown.status === "VOIDED"}
-                superseded={shown.status === "SUPERSEDED"}
-                docNo={shown.documentNo}
-                docVersion={shown.version}
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">
+              {htmlQuery.isLoading ? (
+                <div className="p-4">
+                  <Skeleton className="h-64 w-full" />
+                </div>
+              ) : html ? (
+                <iframe
+                  title="Fason Çeki Önizleme"
+                  srcDoc={html}
+                  className="h-full w-full border-0 bg-white"
                 />
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Belge yüklenemedi.
+                </div>
               )}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -171,8 +157,8 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
           <Button
             type="button"
             className="gap-1"
-            disabled={!sheetData || overlayQuery.isError}
-            onClick={() => printDocumentArea(printRef.current)}
+            disabled={!html}
+            onClick={() => html && printHtmlString(html)}
           >
             <Printer className="h-4 w-4" /> Yazdır
           </Button>
@@ -183,24 +169,27 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange }: Props) 
 }
 
 /**
- * Boyahane notu düzenleyici — `.print-area` DIŞINDA durur, baskıya girmez.
+ * Fason talimatı düzenleyici — `.print-area` DIŞINDA durur, baskıya girmez.
  * Kaydedince overlay query'sini invalidate eder; aşağıdaki fişte not güncel
  * görünür. Bu alan sevkin KENDİ notunu (override) düzenler; boş bırakılırsa
- * fişte iş emrindeki boyahane notu (`woValue`) basılır.
+ * fişte sevkin adımının notu (`stepNote`) basılır.
  */
-function DyehouseNoteEditor({
+function InstructionEditor({
   dispatchId,
   value,
-  woValue,
+  stepNote,
   locked,
+  stationName,
 }: {
   dispatchId: string;
   value: string | null;
-  woValue: string | null;
+  stepNote: string | null;
   locked: boolean;
+  stationName: string;
 }) {
   const qc = useQueryClient();
   const [draft, setDraft] = useState(value ?? "");
+  const title = fasonNoteLabel(stationName);
 
   useEffect(() => {
     setDraft(value ?? "");
@@ -208,10 +197,10 @@ function DyehouseNoteEditor({
 
   const mutation = useMutation({
     mutationFn: (note: string | null) =>
-      workOrderService.updateDispatchDyehouseNote(dispatchId, note),
+      workOrderService.updateDispatchInstruction(dispatchId, note),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dispatch-overlay", dispatchId] });
-      toast.success("Boyahane notu kaydedildi");
+      toast.success(`${title} kaydedildi`);
     },
   });
 
@@ -222,10 +211,10 @@ function DyehouseNoteEditor({
     <div className="mb-3 rounded-md border bg-background p-3">
       <div className="mb-1 flex items-center justify-between">
         <label
-          htmlFor="dyehouse-note"
+          htmlFor="fason-instruction"
           className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
         >
-          Boyahane Notu
+          {title}
         </label>
         <Button
           type="button"
@@ -240,23 +229,23 @@ function DyehouseNoteEditor({
         </Button>
       </div>
       <textarea
-        id="dyehouse-note"
+        id="fason-instruction"
         rows={2}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         maxLength={1000}
         disabled={locked}
-        placeholder="Boyahaneye talimat (örn. yıkama yapma, matlaştır)…"
+        placeholder="Fasona talimat (örn. yıkama yapma, matlaştır)…"
         className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
       />
       {locked ? (
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Sevk kabul/iptal edilmiş — boyahane notu kilitli, değiştirilemez.
+          Sevk kabul/iptal edilmiş — talimat kilitli, değiştirilemez.
         </p>
-      ) : !trimmed && woValue?.trim() ? (
+      ) : !trimmed && stepNote?.trim() ? (
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Boş bırakılırsa iş emrindeki boyahane notu basılır:{" "}
-          <span className="font-medium text-orange-700">«{woValue.trim()}»</span>
+          Boş bırakılırsa adım talimatı basılır:{" "}
+          <span className="font-medium text-orange-700">«{stepNote.trim()}»</span>
         </p>
       ) : (
         <p className="mt-1 text-[11px] text-muted-foreground">
