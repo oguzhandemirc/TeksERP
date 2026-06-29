@@ -22,6 +22,17 @@ import {
 } from "../utils/query-parser";
 
 const ROLL_DATE_FIELDS = ["createdAt"] as const;
+
+// Manuel durum düzeltme — DENY-BY-DEFAULT whitelist. Yalnız güvenli, tersine
+// çevrilebilir, istasyon/sevk-dışı geçişler. EXCLUSIVE akış durumları
+// (AT_SUBCONTRACTOR/SHIPPED/TAMBUR_CONSUMED/SUBCONTRACTOR_CONSUMED/KARTELA/
+// IN_PRODUCTION) burada YOK — onlar kendi servisleriyle yönetilir. IN_PRODUCTION'a
+// alma "Üretime Geri Al" (recoverOpenFabricToProduction); iptal softDelete; fire Tambur.
+const MANUAL_STATUS_TRANSITIONS: Partial<Record<RollStatus, RollStatus[]>> = {
+  [RollStatus.WAREHOUSE]: [RollStatus.STOCK],
+  [RollStatus.STOCK]: [RollStatus.WAREHOUSE],
+  [RollStatus.PRODUCED]: [RollStatus.WAREHOUSE],
+};
 // Rolls listesinde sıralanabilir kolonlar (UI SortableHeader'larıyla eşleşir) +
 // createdAt/id kararlı tie-break. Whitelist dışı sortBy → createdAt'e düşer
 // (bilinmeyen kolon 500'ünü ve indekssiz keyfi sortu engeller).
@@ -121,6 +132,18 @@ export interface RecoveryTargetsResult {
   eligibleTargets: RecoveryTarget[];
   /** Bilgilendirme (örn. uygun açık iş emri yok). */
   warnings: string[];
+}
+
+/** Manuel durum düzeltme önizlemesi (salt-okunur). */
+export interface StatusOverridePreview {
+  rollId: string;
+  barcode: string | null;
+  itemName: string;
+  currentStatus: RollStatus;
+  /** İzinli (whitelist) hedef durumlar — engel varsa boş. */
+  allowedTargets: RollStatus[];
+  /** Geçişi engelleyen nedenler (sevkiyat/çuval/istasyon/fason). */
+  blockReasons: string[];
 }
 
 export type RollHistoryEventKind =
@@ -1781,7 +1804,7 @@ export class InventoryService {
    */
   async applyManualProperties(
     rollId: string,
-    data: { colorId: string | null; propertyIds: string[]; width?: number | null; qualityGrade?: string },
+    data: { colorId: string | null; propertyIds: string[]; width?: number | null; qualityGrade?: string; reason?: string },
     userId?: string,
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const roll = await prisma.roll.findUnique({
@@ -1930,7 +1953,10 @@ export class InventoryService {
             propertyIds: dedupedProps,
             width: data.width,
             qualityGrade: data.qualityGrade,
-            event: "RELABEL",
+            reason: data.reason ?? null,
+            // Saha akışı (Yeniden Etiketle) sebep göndermez → RELABEL; süpervizör
+            // "Manuel Düzelt" zorunlu sebep gönderir → MANUAL_ATTRIBUTE.
+            event: data.reason ? "MANUAL_ATTRIBUTE" : "RELABEL",
           } as Prisma.InputJsonValue,
         },
       });
@@ -2177,6 +2203,8 @@ export class InventoryService {
       select: {
         id: true,
         itemId: true,
+        colorId: true,
+        width: true,
         status: true,
         barcode: true,
         entrySource: true,
@@ -2212,28 +2240,68 @@ export class InventoryService {
       };
     }
 
-    const steps = await prisma.workOrderStep.findMany({
+    const candidates = await prisma.workOrderStep.findMany({
       where: {
         station: { kind: StationKind.TAMBUR },
         status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
         workOrder: {
           status: { in: [WorkOrderStatus.PLANNED, WorkOrderStatus.IN_PROGRESS] },
           targetItemId: roll.itemId,
+          // Renk eşleşmesi (tek WO = tek renk) — çapraz-spec enjeksiyonu engelle (BUG-3).
+          // null===null de eşleşir (ham hedef ↔ renksiz orphan).
+          targetColorId: roll.colorId,
         },
       },
       select: {
         id: true,
         status: true,
         station: { select: { name: true } },
-        workOrder: { select: { id: true, batchNumber: true, status: true } },
+        workOrder: {
+          select: {
+            id: true,
+            batchNumber: true,
+            status: true,
+            width: true,
+            steps: { select: { id: true, status: true } },
+          },
+        },
       },
       orderBy: { createdAt: "asc" },
     });
 
+    // En eşleşmesi (ikisi de doluysa) + Tambur DIŞI tüm adımlar tamamlanmış/atlanmış
+    // olmalı: orphan yalnız Tambur'a movement alır; üst adımlar dangle/COMPLETED→ACTIVE
+    // revert ederse WO tamamlanamaz (BUG-1). Tek-adımlı Tambur WO'su her zaman geçer.
+    const eligibleTargets = candidates
+      .filter((s) => {
+        if (
+          roll.width != null &&
+          s.workOrder.width != null &&
+          Number(s.workOrder.width) !== Number(roll.width)
+        ) {
+          return false;
+        }
+        const otherOpen = s.workOrder.steps.some(
+          (st) =>
+            st.id !== s.id &&
+            st.status !== StepStatus.COMPLETED &&
+            st.status !== StepStatus.SKIPPED,
+        );
+        return !otherOpen;
+      })
+      .map((s) => ({
+        workOrderId: s.workOrder.id,
+        batchNumber: s.workOrder.batchNumber,
+        workOrderStatus: s.workOrder.status,
+        stepId: s.id,
+        stationName: s.station.name,
+        stepStatus: s.status,
+      }));
+
     const warnings: string[] = [];
-    if (steps.length === 0) {
+    if (eligibleTargets.length === 0) {
       warnings.push(
-        "Bu ürüne uygun açık (Tambur'lu) iş emri yok — önce hedef ürünle Tambur'lu bir iş emri açın.",
+        "Bu top için uygun iş emri yok — aynı ürün+renk(+en), Tambur'lu ve Tambur öncesi adımları tamamlanmış (veya yalnız Tambur'lu) açık bir iş emri gerekir.",
       );
     }
 
@@ -2242,14 +2310,7 @@ export class InventoryService {
       data: {
         roll: rollOut,
         eligible: true,
-        eligibleTargets: steps.map((s) => ({
-          workOrderId: s.workOrder.id,
-          batchNumber: s.workOrder.batchNumber,
-          workOrderStatus: s.workOrder.status,
-          stepId: s.id,
-          stationName: s.station.name,
-          stepStatus: s.status,
-        })),
+        eligibleTargets,
         warnings,
       },
     };
@@ -2276,6 +2337,8 @@ export class InventoryService {
       select: {
         id: true,
         itemId: true,
+        colorId: true,
+        width: true,
         status: true,
         barcode: true,
         entrySource: true,
@@ -2310,7 +2373,9 @@ export class InventoryService {
           status: true,
           workOrderId: true,
           station: { select: { kind: true } },
-          workOrder: { select: { status: true, targetItemId: true } },
+          workOrder: {
+            select: { status: true, targetItemId: true, targetColorId: true, width: true },
+          },
         },
       });
       if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
@@ -2328,6 +2393,33 @@ export class InventoryService {
       }
       if (step.workOrder.targetItemId !== roll.itemId) {
         throw AppError.badRequest("Topun ürünü iş emrinin hedef ürünüyle eşleşmiyor");
+      }
+      // Renk eşleşmesi (BUG-3) — çapraz-spec enjeksiyon + producedMeters mis-count engeli.
+      if (step.workOrder.targetColorId !== roll.colorId) {
+        throw AppError.badRequest("Topun rengi iş emrinin hedef rengiyle eşleşmiyor");
+      }
+      // En eşleşmesi (ikisi de doluysa).
+      if (
+        roll.width != null &&
+        step.workOrder.width != null &&
+        Number(step.workOrder.width) !== Number(roll.width)
+      ) {
+        throw AppError.badRequest("Topun eni iş emrinin hedef eniyle eşleşmiyor");
+      }
+      // Tambur DIŞI adımlar tamamlanmamışsa orphan üst adımları dangle bırakır → WO
+      // tamamlanamaz / COMPLETED adım ACTIVE'e revert eder (BUG-1). Tek-adımlı Tambur
+      // WO'su geçer; çok-adımlı WO yalnız üst adımları bitmişse hedef olabilir.
+      const otherOpen = await tx.workOrderStep.count({
+        where: {
+          workOrderId: step.workOrderId,
+          id: { not: step.id },
+          status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
+        },
+      });
+      if (otherOpen > 0) {
+        throw AppError.conflict(
+          "İş emrinin Tambur öncesi adımları tamamlanmamış — açık kumaş yalnız Tambur aşamasındaki (veya tek-adımlı Tambur) iş emrine geri alınabilir",
+        );
       }
 
       // Atomik claim — orphan'ı tam beklenen halinde yakala (check-then-act yok).
@@ -2391,6 +2483,138 @@ export class InventoryService {
       success: true,
       data: updated,
       message: "Açık kumaş üretime (Tambur) geri alındı — artık Tambur'da kesilebilir",
+    };
+  }
+
+  // ===========================================================================
+  // MANUEL DURUM DÜZELTME — kısıtlı whitelist (süpervizör)
+  // ===========================================================================
+  //
+  // Yalnız güvenli geçişler (MANUAL_STATUS_TRANSITIONS): WAREHOUSE↔STOCK,
+  // PRODUCED→WAREHOUSE. Invariant guard'ları softDelete deseniyle birebir:
+  // sevkiyat/çuval/istasyon/açık-fason bağı varsa reddedilir. Atomik claim +
+  // zorunlu sebep + audit.
+
+  /** Bir topun invariant engellerini (sevk/çuval/istasyon/fason) hesaplar. */
+  private async computeStatusBlockReasons(roll: {
+    shipmentId: string | null;
+    sackId: string | null;
+    currentStepId: string | null;
+  }, rollId: string): Promise<string[]> {
+    const blockReasons: string[] = [];
+    if (roll.shipmentId) blockReasons.push("Top bir sevkiyata bağlı — önce sevkten çıkarın");
+    if (roll.sackId) blockReasons.push("Top bir çuvalın içinde — önce çuvaldan çıkarın");
+    if (roll.currentStepId) blockReasons.push("Top bir istasyonda aktif — durum manuel değiştirilemez");
+    const openMv = await prisma.rollMovement.count({ where: { rollId, exitedAt: null } });
+    if (openMv > 0) blockReasons.push("Topun açık bir istasyon hareketi var");
+    const openDispatch = await prisma.subcontractorDispatchItem.findFirst({
+      where: { rollId, dispatch: { cancelledAt: null } },
+      select: { id: true },
+    });
+    if (openDispatch) blockReasons.push("Top açık bir fason sevkine bağlı");
+    return blockReasons;
+  }
+
+  /** Manuel durum düzeltme önizlemesi — izinli hedefler + engel nedenleri. */
+  async getStatusOverridePreview(rollId: string): Promise<ApiResponse<StatusOverridePreview>> {
+    const roll = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        shipmentId: true,
+        sackId: true,
+        currentStepId: true,
+        item: { select: { name: true } },
+      },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+
+    const blockReasons = await this.computeStatusBlockReasons(roll, rollId);
+    const allowedTargets =
+      blockReasons.length === 0 ? MANUAL_STATUS_TRANSITIONS[roll.status] ?? [] : [];
+
+    return {
+      success: true,
+      data: {
+        rollId: roll.id,
+        barcode: roll.barcode,
+        itemName: roll.item.name,
+        currentStatus: roll.status,
+        allowedTargets,
+        blockReasons,
+      },
+    };
+  }
+
+  /** Topun durumunu manuel düzeltir (whitelist + invariant guard + atomik claim). */
+  async manualStatusOverride(
+    rollId: string,
+    data: { targetStatus: RollStatus; reason: string },
+    userId?: string,
+  ): Promise<ApiResponse<Roll>> {
+    const reason = (data.reason ?? "").trim();
+    if (reason.length < 3) {
+      throw AppError.badRequest("İşlem nedeni (en az 3 karakter) zorunludur");
+    }
+
+    const roll = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: {
+        id: true,
+        status: true,
+        shipmentId: true,
+        sackId: true,
+        currentStepId: true,
+      },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+
+    const allowed = MANUAL_STATUS_TRANSITIONS[roll.status] ?? [];
+    if (!allowed.includes(data.targetStatus)) {
+      throw AppError.badRequest(
+        `Bu durum geçişi manuel olarak yapılamaz (${roll.status} → ${data.targetStatus})`,
+      );
+    }
+
+    // Invariant hard-block (softDelete deseni) — sevk/çuval/istasyon/fason bağı varsa red.
+    const blockReasons = await this.computeStatusBlockReasons(roll, rollId);
+    if (blockReasons.length > 0) {
+      throw AppError.conflict(blockReasons[0] ?? "Top durumu manuel değiştirilemez");
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Atomik claim — gözlenen durum + serbestlik (shipment/sack/step null) pinli.
+      const claim = await tx.roll.updateMany({
+        where: {
+          id: rollId,
+          status: roll.status,
+          shipmentId: null,
+          sackId: null,
+          currentStepId: null,
+        },
+        data: { status: data.targetStatus },
+      });
+      if (claim.count === 0) {
+        throw AppError.conflict("Top bu sırada başka bir işleme girdi — sayfayı yenileyin");
+      }
+      return tx.roll.findUniqueOrThrow({ where: { id: rollId } });
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: rollId,
+      oldData: { status: roll.status },
+      newData: { event: "MANUAL_STATUS_OVERRIDE", from: roll.status, to: data.targetStatus, reason },
+    });
+
+    return {
+      success: true,
+      data: updated,
+      message: `Top durumu güncellendi: ${roll.status} → ${data.targetStatus}`,
     };
   }
 

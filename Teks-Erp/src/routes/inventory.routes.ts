@@ -553,6 +553,106 @@ router.post(
 
 /**
  * @openapi
+ * /api/rolls/{id}/manual-attributes:
+ *   patch:
+ *     tags: [Inventory]
+ *     summary: Süpervizör manuel nitelik düzeltme (renk/özellik/en/kalite) + zorunlu sebep
+ *     description: |
+ *       applyManualProperties motoru + ZORUNLU sebep (audit event=MANUAL_ATTRIBUTE).
+ *       Barkodsuz açık kumaşta da çalışır (roll.id ile). itemId/barcode KAPSAM DIŞI.
+ *       Commit'li sevkiyatta 409 (önce hazırlığa geri al).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               colorId:      { type: string, format: uuid, nullable: true }
+ *               propertyIds:  { type: array, items: { type: string, format: uuid } }
+ *               width:        { type: number, nullable: true }
+ *               qualityGrade: { type: string }
+ *               reason:       { type: string, minLength: 3 }
+ *     responses:
+ *       200: { description: Nitelikler güncellendi }
+ *       409: { description: Commit'li sevkiyatta — önce hazırlığa geri al }
+ */
+router.patch(
+  "/:id/manual-attributes",
+  verifyToken,
+  requirePermission("roll:manual-adjust"),
+  controller.manualAttributes,
+);
+
+/**
+ * @openapi
+ * /api/rolls/{id}/status-override-preview:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Manuel durum düzeltme önizlemesi (izinli hedefler + engel nedenleri)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "StatusOverridePreview (currentStatus + allowedTargets + blockReasons)" }
+ *       404: { description: Top bulunamadı }
+ */
+router.get(
+  "/:id/status-override-preview",
+  verifyToken,
+  requirePermission("roll:manual-adjust"),
+  controller.statusOverridePreview,
+);
+
+/**
+ * @openapi
+ * /api/rolls/{id}/manual-status:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Süpervizör manuel durum düzeltme (whitelist — WAREHOUSE↔STOCK, PRODUCED→WAREHOUSE)
+ *     description: |
+ *       Deny-by-default whitelist + invariant guard (sevk/çuval/istasyon/fason bağı
+ *       varsa red) + atomik claim + zorunlu sebep (audit event=MANUAL_STATUS_OVERRIDE).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [targetStatus, reason]
+ *             properties:
+ *               targetStatus: { type: string, enum: [STOCK, WAREHOUSE] }
+ *               reason:       { type: string, minLength: 3 }
+ *     responses:
+ *       200: { description: Durum güncellendi }
+ *       400: { description: Geçiş whitelist dışı }
+ *       409: { description: Sevk/çuval/istasyon/fason bağı var veya yarış }
+ */
+router.post(
+  "/:id/manual-status",
+  verifyToken,
+  requirePermission("roll:manual-adjust"),
+  controller.manualStatus,
+);
+
+/**
+ * @openapi
  * /api/rolls/open-fabric:
  *   post:
  *     tags: [Inventory]
