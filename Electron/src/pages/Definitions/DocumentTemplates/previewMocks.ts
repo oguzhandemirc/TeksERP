@@ -199,11 +199,13 @@ export const MOCK_TRAVELER_WO: WorkOrder = {
       allocatedQty: 680,
       orderLine: {
         quantity: 680,
+        shippedQty: 200,
         width: 150,
         colorId: "col1",
         order: {
           id: "o1",
           orderNumber: "SIP-2026-0107",
+          status: "PARTIAL_SHIPPED",
           customer: { id: "c1", code: "M001", name: "Örnek Tekstil A.Ş." },
         },
         item: { id: "i1", name: "Pamuklu Astar" },
