@@ -448,7 +448,41 @@ router.post("/shipments/:id/retarget-preview", verifyToken, READ, controller.ret
 router.post("/shipments/:id/scan", verifyToken, WRITE, controller.scan);
 router.post("/shipments/:id/remove-roll", verifyToken, WRITE, controller.removeRoll);
 router.post("/shipments/:id/remove-swatch", verifyToken, WRITE, controller.removeSwatch);
-// Seçerek kartela ekle (barkod okutmadan, ürün+renk stok grubundan N adet → stoktan düş).
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/add-kartela:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Seçerek kartela ekle — ürün+renk stok grubundan N adet (barkod okutmadan)
+ *     description: >
+ *       Kartelaların fiziksel etiketi yoktur; barkod okutmak yerine ürün+renk
+ *       stok grubu (bkz. GET /api/kartela/stock) ve adet seçilir. O gruptan N
+ *       müsait kartela atomik claim ile bu sevkiyata (verilirse aktif çuvala)
+ *       bağlanır ve stoktan düşer. Yalnız PREPARING sevkiyatta çalışır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemId, count]
+ *             properties:
+ *               itemId:  { type: string, format: uuid }
+ *               colorId: { type: string, format: uuid, nullable: true, description: "null → renksiz grubu" }
+ *               count:   { type: integer, minimum: 1, maximum: 10000 }
+ *               sackId:  { type: string, format: uuid, nullable: true, description: "Aktif çuval — verilirse içerik bu çuvala yazılır" }
+ *     responses:
+ *       200: { description: "Eklendi (added + swatchIds + sackId döner)" }
+ *       404: { description: Sevkiyat bulunamadı }
+ *       409: { description: "Yeterli kartela stoğu yok / sevkiyat PREPARING değil / kısmi claim çakışması" }
+ */
 router.post("/shipments/:id/add-kartela", verifyToken, WRITE, controller.addKartela);
 
 /**
