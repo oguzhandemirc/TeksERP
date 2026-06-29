@@ -102,6 +102,11 @@ export function RouteEditor({
     ? steps.findIndex((s) => s.clientId === selected.clientId)
     : -1;
 
+  // Önleme (uyarı): rotanın SON adımı fason (EXTERNAL) ise, oradan dönen açık kumaş
+  // depoda takılı kalabilir (normal sevk/kesim çıkışı olmaz). Engellemez — kaydedilebilir.
+  const lastStepIsFason =
+    steps.length > 0 && steps[steps.length - 1]?.stationType === "EXTERNAL";
+
   // --- Seçili adımın chip'ini, altındaki detay paneline bağlayan ok'un x konumu ---
   const flowRef = useRef<HTMLDivElement>(null);
   const chipRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -246,6 +251,15 @@ export function RouteEditor({
       </div>
 
       {error && <Callout tone="danger">{error}</Callout>}
+
+      {/* Önleme uyarısı — son adım fason (engellemez) */}
+      {lastStepIsFason && (
+        <Callout tone="warning">
+          <strong>Son adım fason.</strong> Bu rotadan dönen açık kumaş depoda takılı
+          kalabilir (normal sevk/kesim çıkışı olmadan). Rotayı Tambur veya bir iç
+          istasyonla bitirmeniz önerilir.
+        </Callout>
+      )}
 
       {/* Karşılanma uyarısı */}
       {(uncoveredPropIds.length > 0 || colorUncovered) && (
