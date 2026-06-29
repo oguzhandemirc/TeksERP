@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Plus,
   Unlink,
   Power,
   PowerOff,
   MoreHorizontal,
   Trash2,
-  KeyRound,
+  CheckCircle2,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,193 +30,88 @@ import {
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { RefreshButton } from "@/components/RefreshButton";
-import { PermissionGate } from "@/components/PermissionGate";
 import { safeFormat } from "@/lib/format";
 import { deviceService } from "./service";
 import type { DeviceListItem } from "./types";
-import { PairingCodeDialog } from "./PairingCodeDialog";
-import { useFeatureFlags } from "@/hooks/usePricingEnabled";
-import { useTabTarget } from "@/components/layout/tabs/use-tab-target";
+import { ApproveAssignDialog } from "./ApproveAssignDialog";
 
 const QUERY_KEY = "admin-devices";
 
-/**
- * Cihaz eşleştirme kapalıyken (devicePairingRequired=false) bu ekran anlamsız.
- * Açma/kapama yalnız Genel Ayarlar'da yapılır → kullanıcıyı oraya yönlendir.
- */
-function DevicePairingDisabledNotice() {
-  const goSettings = useTabTarget("/system/settings");
-  return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="Cihazlar"
-        description="Sahadaki tabletler ve eşleşmeli oldukları makineler."
-      />
-      <div className="flex flex-1 items-center justify-center p-6">
-        <Card className="max-w-md">
-          <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
-            <div className="rounded-full bg-muted p-3">
-              <Unlink className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <div className="text-base font-semibold">Cihaz eşleştirme kapalı</div>
-            <p className="text-sm text-muted-foreground">
-              Cihaz eşleştirme şu an pasif. Bu ekranı kullanmak için önce Genel
-              Ayarlar'dan eşleştirmeyi açın.
-            </p>
-            <Button className="mt-1" {...goSettings}>
-              Genel Ayarlar'a Git
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-interface PairingDefaults {
-  machineId?: string;
-  deviceName?: string;
-}
-
 export function DevicesPage() {
   const qc = useQueryClient();
-  const flagsQ = useFeatureFlags();
-  const pairingRequired = flagsQ.data?.data?.devicePairingRequired ?? false;
-  const [pairingOpen, setPairingOpen] = useState(false);
-  const [pairingDefaults, setPairingDefaults] = useState<PairingDefaults | undefined>(
-    undefined
-  );
+  const [assignTarget, setAssignTarget] = useState<DeviceListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeviceListItem | null>(null);
 
-  const query = useQuery({
-    queryKey: [QUERY_KEY],
-    queryFn: deviceService.list,
-  });
+  const query = useQuery({ queryKey: [QUERY_KEY], queryFn: deviceService.list });
+  const invalidate = () => void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
 
-  const unpair = useMutation({
-    mutationFn: deviceService.unpair,
-    onSuccess: () => {
-      toast.success("Cihaz eşleşmesi kaldırıldı");
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-    },
+  const revoke = useMutation({
+    mutationFn: deviceService.revoke,
+    onSuccess: () => { toast.success("Atama geri alındı (cihaz onay bekliyor)"); invalidate(); },
   });
-
   const deactivate = useMutation({
     mutationFn: deviceService.deactivate,
-    onSuccess: () => {
-      toast.success("Cihaz pasife alındı");
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-    },
+    onSuccess: () => { toast.success("Cihaz pasife alındı"); invalidate(); },
   });
-
   const reactivate = useMutation({
     mutationFn: deviceService.reactivate,
-    onSuccess: (res) => {
-      toast.success(
-        res.data.machineId
-          ? "Cihaz aktifleştirildi — eski eşleşmesiyle çalışmaya devam edebilir"
-          : "Cihaz aktifleştirildi — yeni eşleştirme kodu gerekir"
-      );
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-    },
+    onSuccess: () => { toast.success("Cihaz aktifleştirildi"); invalidate(); },
   });
-
   const hardDelete = useMutation({
     mutationFn: deviceService.hardDelete,
-    onSuccess: () => {
-      toast.success("Cihaz kalıcı olarak silindi");
-      setDeleteTarget(null);
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-    },
+    onSuccess: () => { toast.success("Cihaz kalıcı olarak silindi"); setDeleteTarget(null); invalidate(); },
   });
-
-  const openPairing = (defaults?: PairingDefaults) => {
-    setPairingDefaults(defaults);
-    setPairingOpen(true);
-  };
 
   const devices = query.data?.data ?? [];
 
-  // Cihaz eşleştirme kapalıysa ekran anlamsız → uyar + Genel Ayarlar'a yönlendir.
-  // (Flag yüklenirken normal akış; cached olduğu için pratikte anlık.)
-  if (!flagsQ.isLoading && !pairingRequired) {
-    return <DevicePairingDisabledNotice />;
-  }
-
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Cihazlar"
-        description="Sahadaki tabletler ve eşleşmeli oldukları makineler."
-        actions={
-          <div className="flex gap-2">
-            <RefreshButton queryKey={QUERY_KEY} />
-            <PermissionGate permission="admin:settings">
-              <Button onClick={() => openPairing()} className="gap-1.5">
-                <Plus className="h-4 w-4" />
-                Yeni Eşleştirme Kodu
-              </Button>
-            </PermissionGate>
-          </div>
-        }
+        description="Sahadaki tabletler — kendilerini bildirir, yönetici onaylar + makineye atar."
+        actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
       <div className="flex-1 overflow-auto p-6">
         {query.isLoading ? (
           <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full" />
-            ))}
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
           </div>
         ) : devices.length === 0 ? (
-          <EmptyState onCreate={() => openPairing()} />
+          <EmptyState />
         ) : (
           <div className="space-y-2">
             {devices.map((d) => (
               <DeviceRow
                 key={d.id}
                 device={d}
-                onGenerateCode={() => openPairing({ deviceName: d.name })}
-                onUnpair={() => unpair.mutate(d.id)}
+                onAssign={() => setAssignTarget(d)}
+                onRevoke={() => revoke.mutate(d.id)}
                 onDeactivate={() => deactivate.mutate(d.id)}
                 onReactivate={() => reactivate.mutate(d.id)}
                 onDelete={() => setDeleteTarget(d)}
-                isPending={
-                  unpair.isPending ||
-                  deactivate.isPending ||
-                  reactivate.isPending ||
-                  hardDelete.isPending
-                }
+                isPending={revoke.isPending || deactivate.isPending || reactivate.isPending || hardDelete.isPending}
               />
             ))}
           </div>
         )}
       </div>
 
-      <PairingCodeDialog
-        open={pairingOpen}
-        onOpenChange={setPairingOpen}
-        onCreated={() => void qc.invalidateQueries({ queryKey: [QUERY_KEY] })}
-        defaults={pairingDefaults}
+      <ApproveAssignDialog
+        device={assignTarget}
+        onOpenChange={(open) => { if (!open) setAssignTarget(null); }}
+        onDone={() => { setAssignTarget(null); invalidate(); }}
       />
 
       <ConfirmDialog
         open={!!deleteTarget}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         title="Cihazı kalıcı olarak sil"
-        description={
-          deleteTarget
-            ? `"${deleteTarget.name}" cihazı listeden tamamen kaldırılacak. Aynı tablet tekrar eşleşirse yeni kayıt oluşturulur. Bu işlem geri alınamaz.`
-            : undefined
-        }
+        description={deleteTarget ? `"${deleteTarget.name}" cihazı listeden tamamen kaldırılacak. Aynı tablet tekrar açılırsa yeni kayıt oluşur. Bu işlem geri alınamaz.` : undefined}
         confirmLabel="Kalıcı olarak sil"
         destructive
         isPending={hardDelete.isPending}
-        onConfirm={() => {
-          if (deleteTarget) hardDelete.mutate(deleteTarget.id);
-        }}
+        onConfirm={() => { if (deleteTarget) hardDelete.mutate(deleteTarget.id); }}
       />
     </div>
   );
@@ -232,17 +126,11 @@ interface DeviceAction {
 }
 
 function DeviceRow({
-  device,
-  onGenerateCode,
-  onUnpair,
-  onDeactivate,
-  onReactivate,
-  onDelete,
-  isPending,
+  device, onAssign, onRevoke, onDeactivate, onReactivate, onDelete, isPending,
 }: {
   device: DeviceListItem;
-  onGenerateCode: () => void;
-  onUnpair: () => void;
+  onAssign: () => void;
+  onRevoke: () => void;
   onDeactivate: () => void;
   onReactivate: () => void;
   onDelete: () => void;
@@ -250,21 +138,17 @@ function DeviceRow({
 }) {
   const { hasPermission } = useRoleAccess();
   const canManage = hasPermission("admin:settings");
-  const paired = !!device.machine;
-  const lastSeen = device.lastSeenAt
-    ? safeFormat(device.lastSeenAt, "dd.MM.yyyy HH:mm")
-    : "—";
-  const canGenerateCode = device.isActive && !paired;
-  const canDelete = !paired;
+  const approved = device.status === "APPROVED";
+  const assigned = !!device.machine;
+  const lastSeen = device.lastSeenAt ? safeFormat(device.lastSeenAt, "dd.MM.yyyy HH:mm") : "—";
 
-  // Tek aksiyon listesi → hem "…" dropdown'ı hem sağ-tık menüsü aynı kaynaktan.
   const actions: DeviceAction[] = [
-    canGenerateCode && { key: "gen", label: "Yeni Kod Üret", icon: KeyRound, onClick: onGenerateCode },
-    paired && { key: "unpair", label: "Eşleşmeyi Kaldır", icon: Unlink, onClick: onUnpair },
+    { key: "assign", label: approved ? "Yeniden Ata" : "Onayla & Ata", icon: CheckCircle2, onClick: onAssign },
+    approved && { key: "revoke", label: "Atamayı Geri Al", icon: Unlink, onClick: onRevoke },
     device.isActive
       ? { key: "deactivate", label: "Pasife Al", icon: PowerOff, onClick: onDeactivate, danger: true }
       : { key: "reactivate", label: "Aktifleştir", icon: Power, onClick: onReactivate },
-    canDelete && { key: "delete", label: "Kalıcı Olarak Sil", icon: Trash2, onClick: onDelete, danger: true },
+    !assigned && { key: "delete", label: "Kalıcı Olarak Sil", icon: Trash2, onClick: onDelete, danger: true },
   ].filter(Boolean) as DeviceAction[];
 
   const card = (
@@ -273,26 +157,22 @@ function DeviceRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-medium truncate">{device.name}</span>
-            {device.isActive ? (
-              paired ? (
-                <Badge>Eşleşmeli</Badge>
-              ) : (
-                <Badge variant="muted">Eşleşmemiş</Badge>
-              )
-            ) : (
+            {!device.isActive ? (
               <Badge variant="muted">Pasif</Badge>
+            ) : approved ? (
+              <Badge>Onaylı</Badge>
+            ) : (
+              <Badge variant="muted">Onay bekliyor</Badge>
             )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {paired && device.machine ? (
+            {assigned && device.machine ? (
               <span>
-                <span className="font-medium text-foreground">
-                  {device.machine.code} — {device.machine.name}
-                </span>{" "}
-                · {device.machine.station.name}
+                <span className="font-medium text-foreground">{device.machine.code} — {device.machine.name}</span>
+                {" "}· {device.machine.station.name}
               </span>
             ) : (
-              <span className="italic">Henüz makineye eşlenmemiş</span>
+              <span className="italic">Henüz makineye atanmamış</span>
             )}
             <span>Son aktivite: {lastSeen}</span>
             <span className="font-mono">{device.deviceId.slice(0, 12)}…</span>
@@ -307,11 +187,7 @@ function DeviceRow({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {actions.map((a) => (
-                <DropdownMenuItem
-                  key={a.key}
-                  onClick={a.onClick}
-                  className={a.danger ? "text-destructive" : undefined}
-                >
+                <DropdownMenuItem key={a.key} onClick={a.onClick} className={a.danger ? "text-destructive" : undefined}>
                   <a.icon className="mr-2 h-4 w-4" />
                   {a.label}
                 </DropdownMenuItem>
@@ -323,19 +199,13 @@ function DeviceRow({
     </Card>
   );
 
-  // Sağ-tık menüsü: aynı aksiyonlar. Yetkisiz kullanıcıda kart düz kalır.
   if (!canManage) return card;
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{card}</ContextMenuTrigger>
       <ContextMenuContent>
         {actions.map((a) => (
-          <ContextMenuItem
-            key={a.key}
-            onSelect={a.onClick}
-            disabled={isPending}
-            className={a.danger ? "text-destructive focus:text-destructive" : undefined}
-          >
+          <ContextMenuItem key={a.key} onSelect={a.onClick} disabled={isPending} className={a.danger ? "text-destructive focus:text-destructive" : undefined}>
             <a.icon /> {a.label}
           </ContextMenuItem>
         ))}
@@ -344,20 +214,14 @@ function DeviceRow({
   );
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState() {
   return (
     <div className="mx-auto max-w-md py-16 text-center">
       <div className="mb-2 text-lg font-medium">Henüz cihaz yok</div>
-      <p className="mb-4 text-sm text-muted-foreground">
-        Tablet ilk eşleşmede otomatik kayıt olur. Yeni bir tabletin makineye bağlanması için
-        eşleştirme kodu üretin ve tabletteki "Cihaz Eşleştir" ekranına girin.
+      <p className="text-sm text-muted-foreground">
+        Tablet ilk açıldığında kendini otomatik bildirir ve burada "Onay bekliyor" olarak listelenir.
+        Onaylayıp bir makineye atayınca tablet çalışmaya başlar.
       </p>
-      <PermissionGate permission="admin:settings">
-        <Button onClick={onCreate} className="gap-1.5">
-          <Plus className="h-4 w-4" />
-          İlk Eşleştirme Kodunu Üret
-        </Button>
-      </PermissionGate>
     </div>
   );
 }

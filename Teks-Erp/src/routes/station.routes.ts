@@ -34,19 +34,8 @@ const machineService = new BaseService({
 
 const machineController = new BaseController(machineService);
 
-// --- Machine Hardware (saha donanım config: yazıcı + RS232 ara cihaz desenleri) ---
-const machineHardwareService = new BaseService({
-  modelName: "machineHardware",
-  tableName: "MACHINE_HARDWARE",
-  searchFields: ["printerIp", "printerMac", "kqMac", "mtMac"],
-  defaultInclude: {
-    machine: { select: { id: true, code: true, name: true, stationId: true } },
-    printerModel: { select: { id: true, code: true, name: true } },
-    formatProfile: { select: { id: true, code: true, name: true } },
-  },
-  uniqueField: "machineId",
-});
-const machineHardwareController = new BaseController(machineHardwareService);
+// NOT: MachineHardware emekliye ayrıldı — saha donanımı (yazıcı + RS232 metre/kantar)
+// artık tek normalize tabloda: PeripheralDevice (/api/peripherals).
 
 const router = Router();
 
@@ -341,34 +330,5 @@ machineRouter.delete("/:id", verifyToken, requirePermission("station:write"), ma
  */
 machineRouter.delete("/:id/permanent", verifyToken, requirePermission("station:write"), machineController.hardRemove);
 
-// =============================================================================
-// MACHINE HARDWARE ENDPOINTS (/api/machine-hardware) — saha donanım config
-// =============================================================================
-const machineHardwareRouter = Router();
-
-/**
- * @openapi
- * /api/machine-hardware:
- *   get:
- *     tags: [Machines]
- *     summary: Makine donanım config listesi (yazıcı + RS232 ara cihaz desenleri)
- *     description: Sahadaki yazıcı/MAC + regex parse desenleri — dokümantasyon + cihaz/kodlama seçimi.
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200: { description: Donanım config listesi }
- *   post:
- *     tags: [Machines]
- *     summary: Yeni makine donanım config kaydı
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       201: { description: Oluşturuldu }
- */
-machineHardwareRouter.get("/", verifyToken, requirePermission("station:read"), machineHardwareController.findAll);
-machineHardwareRouter.get("/:id", verifyToken, requirePermission("station:read"), machineHardwareController.findById);
-machineHardwareRouter.post("/", verifyToken, requirePermission("station:write"), machineHardwareController.create);
-machineHardwareRouter.patch("/:id", verifyToken, requirePermission("station:write"), machineHardwareController.update);
-machineHardwareRouter.delete("/:id", verifyToken, requirePermission("station:write"), machineHardwareController.remove);
-machineHardwareRouter.delete("/:id/permanent", verifyToken, requirePermission("station:write"), machineHardwareController.hardRemove);
-
-export { machineRouter, machineHardwareRouter };
+export { machineRouter };
 export default router;

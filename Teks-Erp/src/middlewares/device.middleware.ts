@@ -12,9 +12,9 @@
 // - Eşli cihaz yine req.device set edilir (makine atfı korunur).
 // - Eşleşmemiş/kayıtsız cihaz da BLOKLANMAZ → next() (req.device boş, makine atfı NULL).
 //
-// İstisna: /api/devices/pair ve /api/devices/pairing-required endpoint'leri bu
-// kontrolden muaftır — pasif cihaz tekrar eşleşebilmeli ve mobil login öncesi
-// eşleştirmenin zorunlu olup olmadığını öğrenebilmeli.
+// İstisna: announce/status/pairing-required endpoint'leri bu kontrolden muaftır —
+// onaysız (PENDING) cihaz kendini bildirebilmeli, durumunu poll'layabilmeli ve mobil
+// login öncesi atamanın zorunlu olup olmadığını öğrenebilmeli.
 // =============================================================================
 
 import { Request, Response, NextFunction } from "express";
@@ -24,7 +24,8 @@ import { touchDevice } from "../lib/presence";
 import "../types/express-augment";
 
 const EXEMPT_PATHS = new Set([
-  "/api/devices/pair",
+  "/api/devices/announce",
+  "/api/devices/status",
   "/api/devices/pairing-required",
 ]);
 

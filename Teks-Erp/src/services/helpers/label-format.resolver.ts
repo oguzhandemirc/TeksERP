@@ -3,8 +3,8 @@
 // =============================================================================
 // Öncelik zinciri:
 //   1. explicit profileId (query/body)
-//   2. machineId → MachineHardware.formatProfile → printerModel.defaultProfile
-//      (yazıcı dili = printerModel.language)
+//   2. machineId → makineye-bağlı LABEL_PRINTER PeripheralDevice.formatProfile →
+//      printerModel.defaultProfile (yazıcı dili = printerModel.language)
 //   3. sistem default profili (code="DEFAULT", yoksa en eski aktif)
 //   4. KOD FALLBACK (DB boş) → DEFAULT_LABEL_FORMAT + RASTER_HTML
 //
@@ -35,6 +35,19 @@ interface ProfileRow {
   dpi: number;
   orientation: "PORTRAIT" | "LANDSCAPE";
   isActive: boolean;
+}
+
+/**
+ * Makineye-SABİT aktif LABEL_PRINTER cihazını (model+default profil+format profili)
+ * döner. Hem format hem routing resolver'ın "istasyon yazıcısı" kaynağı —
+ * `MachineHardware` emekliye ayrıldı, yazıcı tek kaynağı PeripheralDevice.
+ */
+export async function loadMachinePrinter(machineId: string) {
+  return prisma.peripheralDevice.findFirst({
+    where: { machineId, kind: "LABEL_PRINTER", isActive: true },
+    include: { formatProfile: true, printerModel: { include: { defaultProfile: true } } },
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 function fromProfile(
@@ -73,17 +86,14 @@ export async function resolveLabelFormat(opts?: {
     }
   }
 
-  // 2. machineId → donanım → (geometri yoksa profil) + yazıcı dili
+  // 2. machineId → makineye-bağlı yazıcı cihazı → (geometri yoksa profil) + yazıcı dili
   if (opts?.machineId) {
-    const hw = await prisma.machineHardware.findUnique({
-      where: { machineId: opts.machineId },
-      include: { formatProfile: true, printerModel: { include: { defaultProfile: true } } },
-    });
-    if (hw?.printerModel) modelLanguage = hw.printerModel.language;
+    const printer = await loadMachinePrinter(opts.machineId);
+    if (printer?.printerModel) modelLanguage = printer.printerModel.language;
     if (!profile) {
       const p =
-        (hw?.formatProfile?.isActive ? hw.formatProfile : null) ??
-        (hw?.printerModel?.defaultProfile?.isActive ? hw.printerModel.defaultProfile : null);
+        (printer?.formatProfile?.isActive ? printer.formatProfile : null) ??
+        (printer?.printerModel?.defaultProfile?.isActive ? printer.printerModel.defaultProfile : null);
       if (p) {
         profile = p;
         source = "machine";

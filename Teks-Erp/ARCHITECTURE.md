@@ -93,7 +93,7 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 | Grup | Modeller | Adet |
 |---|---|---|
 | RBAC | User, Permission, UserPermission, PermissionTemplate, PermissionTemplateItem | 5 |
-| Station & Device | Station, Machine, Device, PairingCode | 4 |
+| Station & Device | Station, Machine, Device (allowlist: status PENDING/APPROVED) | 3 |
 | Routing | Route, RouteStep | 2 |
 | Item & Properties | Item, FabricProperty, Color, ItemAllowedProperty, ItemAllowedColor | 5 |
 | Sales | Customer, CustomerBranch | 2 |

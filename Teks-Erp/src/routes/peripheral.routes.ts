@@ -41,6 +41,29 @@ export const peripheralRouter = Router();
  *   post: { tags: [Peripherals], summary: Cihaz kaydı oluştur, security: [{ bearerAuth: [] }], responses: { 201: { description: Oluşturuldu } } }
  */
 peripheralRouter.get("/", verifyToken, requireAnyPermission("station:read", ...MOBILE_LABEL_PRINTERS), controller.findAll);
+
+/**
+ * @openapi
+ * /api/peripherals/for-device:
+ *   get:
+ *     tags: [Peripherals]
+ *     summary: Tablet — kendi makinesine sabit, türe göre AKTİF cihazları çöz (protokol dahil)
+ *     description: machineId req.device'tan gelir (query DEĞİL). kind=METER/SCALE/LABEL_PRINTER/SIGNAL_SOURCE. Eşleşme yoksa boş liste.
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 200: { description: Cihaz listesi } }
+ */
+peripheralRouter.get(
+  "/for-device",
+  verifyToken,
+  requireAnyPermission("station:read", ...MOBILE_LABEL_PRINTERS),
+  async (req, res, next) => {
+    try {
+      const kind = typeof req.query.kind === "string" ? req.query.kind : "";
+      const result = await service.getForDevice(req.device?.machineId ?? null, kind);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  },
+);
 peripheralRouter.get("/:id", verifyToken, requirePermission("station:read"), controller.findById);
 peripheralRouter.post("/", verifyToken, requirePermission("station:write"), controller.create);
 peripheralRouter.patch("/:id", verifyToken, requirePermission("station:write"), controller.update);

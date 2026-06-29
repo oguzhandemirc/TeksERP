@@ -1,8 +1,8 @@
 // =============================================================================
-// TeksERP - Device Routes
+// TeksERP - Device Routes (allowlist + atama)
 // =============================================================================
-// PUBLIC: POST /api/devices/pair (tablet ilk kurulum, JWT yok)
-// ADMIN : /api/admin/devices/* (admin:settings yetkisi)
+// PUBLIC: POST /api/devices/announce, GET /api/devices/status, /pairing-required
+// ADMIN : /api/admin/devices/* (admin:settings)
 // =============================================================================
 
 import { Router } from "express";
@@ -10,150 +10,92 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { DeviceController } from "../controllers/device.controller";
 
-// PUBLIC pair endpoint
+// PUBLIC (JWT yok)
 export const devicePublicRouter = Router();
+
 /**
  * @openapi
- * /api/devices/pair:
+ * /api/devices/announce:
  *   post:
  *     tags: [Devices]
- *     summary: Tablet pairing (PUBLIC — JWT yok)
- *     description: Tablet ilk açılışta admin tarafından üretilen 6 haneli kodu ve kendi deviceId'sini gönderir.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [deviceId, code]
- *             properties:
- *               deviceId: { type: string, description: Tablet local UUID }
- *               code: { type: string, description: 6 haneli kod }
+ *     summary: Tablet kendini bildirir (PUBLIC — JWT yok)
+ *     description: Tablet boot'ta deviceId'sini gönderir. Bilinmiyorsa PENDING açılır (admin onaylar+atar).
  *     responses:
- *       200: { description: Eşleşme başarılı — makine bilgisi döner }
- *       400: { description: Kod geçersiz/süresi dolmuş/kullanılmış }
+ *       200: { description: Atama durumu (status/machine) }
  */
-devicePublicRouter.post("/pair", DeviceController.pair);
+devicePublicRouter.post("/announce", DeviceController.announce);
+
+/**
+ * @openapi
+ * /api/devices/status:
+ *   get:
+ *     tags: [Devices]
+ *     summary: Atama durumunu sorgula (PUBLIC — x-device-id header)
+ *     responses:
+ *       200: { description: "{ status, machineId, machineName, stationName }" }
+ */
+devicePublicRouter.get("/status", DeviceController.status);
 
 /**
  * @openapi
  * /api/devices/pairing-required:
  *   get:
  *     tags: [Devices]
- *     summary: Cihaz eşleştirmesi zorunlu mu (PUBLIC — JWT yok)
- *     description: |
- *       Mobil uygulama login öncesi okur. false (default) ise eşleştirme pasif —
- *       tablet Pairing ekranını atlayıp doğrudan Login'e geçer ve eşleşmeden çalışır.
+ *     summary: Cihaz at/onay zorunlu mu (PUBLIC — JWT yok)
+ *     description: false (default) ise pasif — tablet onaysız da çalışır (atıf null).
  *     responses:
  *       200: { description: "{ required: boolean }" }
  */
-devicePublicRouter.get("/pairing-required", DeviceController.pairingRequired);
+devicePublicRouter.get("/pairing-required", DeviceController.assignmentRequired);
 
-// ADMIN endpoints
+// ADMIN
 export const deviceAdminRouter = Router();
 
 /**
  * @openapi
  * /api/admin/devices:
- *   get:
- *     tags: [Admin]
- *     summary: Tüm kayıtlı cihazlar (eşleşmeli + eşleşmemiş)
- *     security: [{ bearerAuth: [] }]
+ *   get: { tags: [Admin], summary: Tüm cihazlar (PENDING'ler önce), security: [{ bearerAuth: [] }] }
  */
-deviceAdminRouter.get(
-  "/",
-  verifyToken,
-  requirePermission("admin:settings"),
-  DeviceController.list
-);
+deviceAdminRouter.get("/", verifyToken, requirePermission("admin:settings"), DeviceController.list);
 
 /**
  * @openapi
- * /api/admin/devices/pairing-codes:
- *   post:
- *     tags: [Admin]
- *     summary: Yeni eşleştirme kodu üret
- *     description: 10 dk geçerli 6 haneli kod döner. Tablet kurulum ekranında girilir.
- *     security: [{ bearerAuth: [] }]
+ * /api/admin/devices/{id}/approve:
+ *   post: { tags: [Admin], summary: Cihazı onayla + makineye ata (body machineId?), security: [{ bearerAuth: [] }] }
  */
-deviceAdminRouter.post(
-  "/pairing-codes",
-  verifyToken,
-  requirePermission("admin:settings"),
-  DeviceController.createPairingCode
-);
+deviceAdminRouter.post("/:id/approve", verifyToken, requirePermission("admin:settings"), DeviceController.approve);
+
+/**
+ * @openapi
+ * /api/admin/devices/{id}/revoke:
+ *   post: { tags: [Admin], summary: Onayı/atamayı geri al (→ PENDING), security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.post("/:id/revoke", verifyToken, requirePermission("admin:settings"), DeviceController.revoke);
 
 /**
  * @openapi
  * /api/admin/devices/{id}:
- *   patch:
- *     tags: [Admin]
- *     summary: Cihaz adını güncelle
- *     security: [{ bearerAuth: [] }]
+ *   patch: { tags: [Admin], summary: Cihaz adını güncelle, security: [{ bearerAuth: [] }] }
  */
-deviceAdminRouter.patch(
-  "/:id",
-  verifyToken,
-  requirePermission("admin:settings"),
-  DeviceController.rename
-);
-
-/**
- * @openapi
- * /api/admin/devices/{id}/unpair:
- *   post:
- *     tags: [Admin]
- *     summary: Eşleşmeyi kaldır (tablet yeniden eşleşme ister)
- *     security: [{ bearerAuth: [] }]
- */
-deviceAdminRouter.post(
-  "/:id/unpair",
-  verifyToken,
-  requirePermission("admin:settings"),
-  DeviceController.unpair
-);
+deviceAdminRouter.patch("/:id", verifyToken, requirePermission("admin:settings"), DeviceController.rename);
 
 /**
  * @openapi
  * /api/admin/devices/{id}:
- *   delete:
- *     tags: [Admin]
- *     summary: Cihazı pasife al (soft delete)
- *     security: [{ bearerAuth: [] }]
+ *   delete: { tags: [Admin], summary: Cihazı pasife al (soft), security: [{ bearerAuth: [] }] }
  */
-deviceAdminRouter.delete(
-  "/:id",
-  verifyToken,
-  requirePermission("admin:settings"),
-  DeviceController.deactivate
-);
+deviceAdminRouter.delete("/:id", verifyToken, requirePermission("admin:settings"), DeviceController.deactivate);
 
 /**
  * @openapi
  * /api/admin/devices/{id}/reactivate:
- *   post:
- *     tags: [Admin]
- *     summary: Pasif cihazı tekrar aktifleştir (eşleşme kurulmaz — yeni pairing kodu gerekir)
- *     security: [{ bearerAuth: [] }]
+ *   post: { tags: [Admin], summary: Pasif cihazı tekrar aktifleştir, security: [{ bearerAuth: [] }] }
  */
-deviceAdminRouter.post(
-  "/:id/reactivate",
-  verifyToken,
-  requirePermission("admin:settings"),
-  DeviceController.reactivate
-);
+deviceAdminRouter.post("/:id/reactivate", verifyToken, requirePermission("admin:settings"), DeviceController.reactivate);
 
 /**
  * @openapi
  * /api/admin/devices/{id}/permanent:
- *   delete:
- *     tags: [Admin]
- *     summary: Cihazı kalıcı olarak sil (yalnız eşleşmemiş cihazlar)
- *     security: [{ bearerAuth: [] }]
+ *   delete: { tags: [Admin], summary: Kalıcı sil (yalnız atanmamış), security: [{ bearerAuth: [] }] }
  */
-deviceAdminRouter.delete(
-  "/:id/permanent",
-  verifyToken,
-  requirePermission("admin:settings"),
-  DeviceController.hardDelete
-);
+deviceAdminRouter.delete("/:id/permanent", verifyToken, requirePermission("admin:settings"), DeviceController.hardDelete);

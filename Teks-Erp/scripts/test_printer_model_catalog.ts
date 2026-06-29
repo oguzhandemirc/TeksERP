@@ -1,7 +1,7 @@
 // =============================================================================
 // Test: yazıcı modeli kataloğu + format profili ilişkileri + FK Restrict guard
 // Çalıştır: npx tsx scripts/test_printer_model_catalog.ts
-// Doğrulananlar: model↔defaultProfile, machineHardware↔model/profile include;
+// Doğrulananlar: model↔defaultProfile, PeripheralDevice↔model/profile include;
 // kullanılan profil/model fiziksel silinemez (onDelete Restrict); soft-delete.
 // =============================================================================
 import prisma from "../src/lib/prisma";
@@ -27,8 +27,11 @@ async function main() {
   const model = await prisma.printerModel.create({
     data: { code: `CAT-MOD-${ts}`, name: "CAT Argox", manufacturer: "Argox", language: "PPLA", dpi: 203, maxWidthMm: 104, defaultProfileId: profile.id },
   });
-  const hw = await prisma.machineHardware.create({
-    data: { machineId: machine.id, printerModelId: model.id, formatProfileId: profile.id }, select: { id: true },
+  const printer = await prisma.peripheralDevice.create({
+    data: {
+      code: `CAT-PRN-${ts}`, name: "CAT Yazıcı", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP",
+      machineId: machine.id, printerModelId: model.id, formatProfileId: profile.id,
+    }, select: { id: true },
   });
 
   try {
@@ -38,10 +41,10 @@ async function main() {
     check("model.language=PPLA, dpi=203, maxWidth=104", m?.language === "PPLA" && m?.dpi === 203 && m?.maxWidthMm === 104);
     check("profil Decimal alanları (width=100, margin=3)", Number(m?.defaultProfile?.widthMm) === 100 && Number(m?.defaultProfile?.marginMm) === 3);
 
-    // 2) machineHardware → model + profile include
-    const hwRow = await prisma.machineHardware.findUnique({ where: { id: hw.id }, include: { printerModel: true, formatProfile: true } });
-    check("hw.printerModel çözülür", hwRow?.printerModel?.id === model.id);
-    check("hw.formatProfile çözülür", hwRow?.formatProfile?.id === profile.id);
+    // 2) PeripheralDevice → model + profile include
+    const hwRow = await prisma.peripheralDevice.findUnique({ where: { id: printer.id }, include: { printerModel: true, formatProfile: true } });
+    check("cihaz.printerModel çözülür", hwRow?.printerModel?.id === model.id);
+    check("cihaz.formatProfile çözülür", hwRow?.formatProfile?.id === profile.id);
 
     // 3) FK Restrict — kullanılan profil fiziksel silinemez
     let profileBlocked = false;
@@ -60,7 +63,7 @@ async function main() {
     const soft = await prisma.printerModel.findUnique({ where: { id: model.id } });
     check("soft-delete: isActive=false, kayıt durur", soft?.isActive === false);
   } finally {
-    await prisma.machineHardware.deleteMany({ where: { id: hw.id } });
+    await prisma.peripheralDevice.deleteMany({ where: { id: printer.id } });
     await prisma.printerModel.deleteMany({ where: { id: model.id } });
     await prisma.labelFormatProfile.deleteMany({ where: { id: profile.id } });
     await prisma.machine.deleteMany({ where: { id: machine.id } });

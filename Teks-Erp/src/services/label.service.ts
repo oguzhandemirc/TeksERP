@@ -32,7 +32,7 @@ import {
   type BatchAliasResult,
 } from "./helpers/customer-name.helper";
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
-import { resolveLabelFormat, type ResolvedLabelFormat } from "./helpers/label-format.resolver";
+import { resolveLabelFormat, loadMachinePrinter, type ResolvedLabelFormat } from "./helpers/label-format.resolver";
 import { resolveLabelRouting } from "./helpers/label-routing.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
@@ -679,7 +679,8 @@ export class LabelService {
   /**
    * FAZ-2 PRODUCTION: rolün etiketini seçili native dilde üretip İSTASYONUN yazıcısına
    * RAW TCP (9100) ile gönderir — `label.nativeSendEnabled` AÇIKKEN. Kapalıyken simüle
-   * eder (Faz-1, hiç socket yok). Hedef IP istasyon makinesinden (MachineHardware.printerIp).
+   * eder (Faz-1, hiç socket yok). Hedef IP istasyonun makineye-bağlı yazıcı cihazından
+   * (PeripheralDevice.address) — MachineHardware emekliye ayrıldı.
    */
   async printRollNative(
     rollId: string,
@@ -690,14 +691,13 @@ export class LabelService {
     const rendered = renderLabel(input.format.language, input);
     const enabled = await readLabelNativeSendEnabled();
     let printerIp: string | null = null;
+    let printerPort: number | undefined = opts?.port;
     if (opts?.machineId) {
-      const hw = await prisma.machineHardware.findUnique({
-        where: { machineId: opts.machineId },
-        select: { printerIp: true },
-      });
-      printerIp = hw?.printerIp ?? null;
+      const printer = await loadMachinePrinter(opts.machineId);
+      printerIp = printer?.address ?? null;
+      if (printerPort == null && printer?.port != null) printerPort = printer.port;
     }
-    const result = await this.dispatchOrGuard(rendered, { enabled, printerIp, port: opts?.port });
+    const result = await this.dispatchOrGuard(rendered, { enabled, printerIp, port: printerPort });
     // İz (best-effort, tx dışı).
     await AuditService.log({
       userId,

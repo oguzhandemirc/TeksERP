@@ -18,7 +18,6 @@ import {
   Undo2,
   FileText,
   Printer,
-  Cpu,
   Ruler,
   type LucideIcon,
 } from "lucide-react";
@@ -122,15 +121,6 @@ export const definitionTiles: DefinitionTile[] = [
     description: "İstasyonlardaki makine envanteri",
     icon: Cog,
     to: "/definitions/machines",
-    group: "production",
-    permission: "station:read",
-  },
-  {
-    key: "machine-hardware",
-    title: "Makine Donanımı",
-    description: "Sahadaki yazıcı + RS232 ara cihaz MAC/IP + veri çözen regex desenleri",
-    icon: Cpu,
-    to: "/definitions/machine-hardware",
     group: "production",
     permission: "station:read",
   },

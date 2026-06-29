@@ -62,7 +62,14 @@ export const peripheralColumns: ColumnDef<PeripheralDevice>[] = [
   {
     id: "kind",
     header: "Tür",
-    cell: ({ row }) => <Badge variant="muted">{peripheralKindLabels[row.original.kind]}</Badge>,
+    cell: ({ row }) => (
+      <div className="min-w-0">
+        <Badge variant="muted">{peripheralKindLabels[row.original.kind]}</Badge>
+        {row.original.role ? (
+          <div className="mt-0.5 text-[10px] text-muted-foreground">{row.original.role}</div>
+        ) : null}
+      </div>
+    ),
   },
   {
     id: "connection",

@@ -12,7 +12,6 @@ import { ItemsPage } from "@/pages/Items/ItemsPage";
 import { CustomersPage } from "@/pages/Customers/CustomersPage";
 import { StationsPage } from "@/pages/Stations/StationsPage";
 import { MachinesPage } from "@/pages/Machines/MachinesPage";
-import { MachineHardwarePage } from "@/pages/MachineHardware/MachineHardwarePage";
 import { PeripheralDevicesPage } from "@/pages/PeripheralDevices/PeripheralDevicesPage";
 import { PrinterModelsPage } from "@/pages/PrinterModels/PrinterModelsPage";
 import { LabelFormatProfilesPage } from "@/pages/LabelFormatProfiles/LabelFormatProfilesPage";
@@ -132,14 +131,6 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="station:read">
         <MachinesPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "definitions/machine-hardware",
-    element: (
-      <ProtectedRoute requirePermission="station:read">
-        <MachineHardwarePage />
       </ProtectedRoute>
     ),
   },
