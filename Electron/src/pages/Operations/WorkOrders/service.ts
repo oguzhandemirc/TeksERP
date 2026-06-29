@@ -151,6 +151,23 @@ export const workOrderService = {
       )
       .then((r) => r.data),
 
+  /** Fason→fason aktarımı geri alma önizlemesi (salt-okunur). */
+  getUndoTransferPreview: (dispatchId: string) =>
+    apiClient
+      .get<ApiResponse<UndoTransferPreview>>(
+        `/api/subcontractor/dispatches/${dispatchId}/undo-transfer-preview`,
+      )
+      .then((r) => r.data),
+
+  /** Fason→fason aktarımı geri al — boyahane sevki + kaynak kabul iptal; mal kaynak fasona döner. */
+  undoTransfer: (dispatchId: string, reason: string) =>
+    apiClient
+      .post<ApiResponse<{ id: string; dispatchNo: string }>>(
+        `/api/subcontractor/dispatches/${dispatchId}/undo-transfer`,
+        { reason },
+      )
+      .then((r) => r.data),
+
   /** Masaüstü toplu fason sevki — adımda bekleyen tüm topları okutmadan planlı/seçilen
    *  firmaya sevk eder (gerçek irsaliye + stok). subcontractorId yoksa adımın planlısı. */
   bulkDispatchStep: (payload: {
@@ -239,6 +256,45 @@ export interface DirectShipPreview {
   }[];
 }
 
+/** Fason→fason aktarımı geri alma önizleme verisi (backend getUndoTransferPreview). */
+export interface UndoTransferPreview {
+  dispatchId: string;
+  dispatchNo: string;
+  /** Tüm guard'lar geçtiyse true; false ise blockingReasons doludur. */
+  safe: boolean;
+  blockingReasons: string[];
+  subcontractorName: string;
+  workOrder: { id: string; batchNumber: string; status: string };
+  /** Aktarımın gönderildiği fason (geri alınacak sevkin adımı). */
+  targetStationName: string;
+  /** Malın geri döneceği kaynak fason adımı. */
+  sourceStationName: string | null;
+  /** İptal edilecek (CANCELLED'a çekilecek) born toplar. */
+  bornRolls: {
+    id: string;
+    barcode: string | null;
+    currentQty: number;
+    status: string;
+    itemCode: string;
+    itemName: string;
+    colorName: string | null;
+  }[];
+  /** Geri alınacak kaynak kabul(ler) + dönecek orijinal toplar. */
+  sourceReceipts: {
+    id: string;
+    receiptNo: string;
+    stationName: string | null;
+    originalRolls: {
+      id: string;
+      barcode: string | null;
+      currentQty: number;
+      status: string;
+      itemCode: string;
+      itemName: string;
+    }[];
+  }[];
+}
+
 /** Bir fason dalının (sevk partisi) doğan toplarının şu anki konum dağılımı. */
 export interface WorkOrderBranchPosition {
   /** İstasyon adı, ya da konumsuz toplar için statü etiketi (Depo / Tambur...). */
@@ -262,6 +318,8 @@ export interface WorkOrderBranch {
   /** OPEN = fasonda · PARTIAL = kısmi dönüş · RETURNED = döndü · CANCELLED = iptal ·
    *  DIRECT_SHIPPED = fasondan doğrudan sevk (mal dönmeden müşteriye gitti). */
   status: "OPEN" | "PARTIAL" | "RETURNED" | "CANCELLED" | "DIRECT_SHIPPED";
+  /** Bu dal bir fason→fason aktarımın çıktısı mı (tüm topları born) → "Aktarımı Geri Al". */
+  isTransferOutput: boolean;
   /** Doğrudan sevk işareti (DIRECT_SHIPPED dalları için). */
   directShippedAt?: string | null;
   directShipReason?: string | null;

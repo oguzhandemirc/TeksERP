@@ -1695,6 +1695,10 @@ export class WorkOrderService {
         items: {
           select: {
             id: true,
+            // Born topların aktarım çıktısı olup olmadığını anlamak için
+            // (parentReceiptId dolu = fason→fason aktarımın doğan topu) → UI'da
+            // "Aktarımı Geri Al" aksiyonu yalnız aktarım çıktısı dallarda görünür.
+            roll: { select: { parentReceiptId: true } },
             receiptItems: {
               select: {
                 receipt: {
@@ -1784,6 +1788,10 @@ export class WorkOrderService {
       else status = "PARTIAL";
 
       const positions = positionsByLot.get(d.id);
+      // Aktarım çıktısı: sevkin TÜM topları born (parentReceiptId dolu) ise bu dal
+      // bir fason→fason aktarımdan doğmuştur → "Aktarımı Geri Al" uygun.
+      const isTransferOutput =
+        itemCount > 0 && d.items.every((it) => it.roll?.parentReceiptId != null);
       return {
         dispatchId: d.id,
         dispatchNo: d.dispatchNo,
@@ -1794,6 +1802,7 @@ export class WorkOrderService {
         rollCount: itemCount,
         receivedItemCount,
         status,
+        isTransferOutput,
         directShippedAt: d.directShippedAt,
         directShipReason: d.directShipReason,
         receipts: [...receiptMap.values()],

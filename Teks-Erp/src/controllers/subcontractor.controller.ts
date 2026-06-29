@@ -145,6 +145,8 @@ export class SubcontractorController {
     this.getCancelPreview = this.getCancelPreview.bind(this);
     this.getDirectShipPreview = this.getDirectShipPreview.bind(this);
     this.directShip = this.directShip.bind(this);
+    this.getUndoTransferPreview = this.getUndoTransferPreview.bind(this);
+    this.undoTransfer = this.undoTransfer.bind(this);
   }
 
   /** POST /api/subcontractor/dispatch */
@@ -420,6 +422,29 @@ export class SubcontractorController {
         },
         req.user?.userId,
       );
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/subcontractor/dispatches/:id/undo-transfer-preview */
+  async getUndoTransferPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const result = await this.service.getUndoTransferPreview(id);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/subcontractor/dispatches/:id/undo-transfer */
+  async undoTransfer(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const body = cancelDispatchSchema.parse(req.body);
+      const result = await this.service.undoTransfer(id, body.reason, req.user?.userId);
       res.status(200).json(result);
     } catch (err) {
       next(err);

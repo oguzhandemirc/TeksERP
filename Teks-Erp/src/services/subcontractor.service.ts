@@ -3119,6 +3119,438 @@ export class SubcontractorService {
   }
 
   // ===========================================================================
+  // UNDO TRANSFER — "Aktarımı Geri Al" (fason→fason yanlış aktarımı geri sar)
+  // ===========================================================================
+  //
+  // Senaryo: planlamacı malı yanlışlıkla sonraki fasona aktardı (zımpara→boyahane,
+  // "Sonraki Fasona Aktar"). Boyahane henüz kabul/işlem YAPMADIYSA tek tıkla geri
+  // alınabilmeli — mal kaynak fasona (zımpara) AT_SUBCONTRACTOR olarak geri döner.
+  //
+  // NEDEN ADANMIŞ TX (cancel()+cancelReceipt() zinciri DEĞİL): aktarım çıktısı born
+  // toplar boyahanede AT_SUBCONTRACTOR + kendi boyahane SUBCONTRACTOR_SENT op'una
+  // sahip. Naif cancelReceipt() bunu computeBornRollBlockingReasons'da "üzerinde
+  // işlem yapılmış" / "başka sevkte" sayıp reddeder; cancel() de born topun
+  // movement'ını "geçmiş" damgalar. Bu yüzden undo'ya özel, born topun KENDİ
+  // boyahane sevkini meşru kabul eden tek atomik tx yazıyoruz.
+  //
+  // Şablon: dispatch.cancel() (boyahane sevki) ∪ receipt.cancelReceipt() (kaynak
+  // kabul) — ikisi tek tx'te, undo-farkında guard'la.
+
+  /** Salt-okunur önizleme — geri alınacak born toplar + kaynak kabuller + güvenlik. */
+  async getUndoTransferPreview(dispatchId: string): Promise<ApiResponse<unknown>> {
+    const dispatch = await prisma.subcontractorDispatch.findUnique({
+      where: { id: dispatchId },
+      include: {
+        subcontractor: { select: { id: true, name: true } },
+        step: {
+          select: {
+            id: true,
+            stepSequence: true,
+            station: { select: { name: true } },
+            workOrder: { select: { id: true, batchNumber: true, status: true } },
+          },
+        },
+        items: {
+          select: {
+            roll: {
+              select: {
+                id: true,
+                barcode: true,
+                currentQty: true,
+                status: true,
+                currentStepId: true,
+                parentReceiptId: true,
+                operations: { select: { id: true, workOrderStepId: true, operationType: true } },
+                movements: { select: { exitedAt: true } },
+                children: { select: { id: true }, take: 1 },
+                dispatchItems: {
+                  where: { dispatch: { is: { cancelledAt: null, id: { not: dispatchId } } } },
+                  select: { id: true },
+                  take: 1,
+                },
+                item: { select: { code: true, name: true } },
+                color: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+
+    const targetStep = dispatch.step; // sonraki fason (ör. boyahane)
+    const bornRolls = dispatch.items.map((it) => it.roll);
+
+    const reasons: string[] = [];
+    if (dispatch.cancelledAt) reasons.push("Bu sevk zaten iptal edilmiş.");
+    if (dispatch.directShippedAt) reasons.push("Bu sevk doğrudan sevk edilmiş — geri alınamaz.");
+
+    // Aktarım çıktısı mı? Tüm sevk topları born (parentReceiptId dolu) olmalı.
+    const isTransferOutput =
+      bornRolls.length > 0 && bornRolls.every((r) => r.parentReceiptId != null);
+    if (!isTransferOutput) {
+      reasons.push(
+        "Bu sevk bir fason→fason aktarım çıktısı değil (doğrudan stok sevki). Bunun yerine 'Sevki İptal Et' kullanın.",
+      );
+    }
+
+    // Born topların downstream güvenliği: TEK meşru op = bu adımdaki kendi
+    // SUBCONTRACTOR_SENT'i; başka her şey "işlenmiş" demektir.
+    if (isTransferOutput) {
+      for (const r of bornRolls) {
+        const tag = r.barcode ?? r.id.slice(0, 8) + "…";
+        if (r.status !== RollStatus.AT_SUBCONTRACTOR || r.currentStepId !== targetStep.id) {
+          reasons.push(`Top ${tag} artık ${targetStep.station.name}'de beklemiyor (durum: ${r.status}).`);
+          continue;
+        }
+        const extraOps = r.operations.filter(
+          (o) =>
+            !(o.workOrderStepId === targetStep.id &&
+              o.operationType === RollOperationType.SUBCONTRACTOR_SENT),
+        );
+        if (extraOps.length > 0) reasons.push(`Top ${tag} üzerinde işlem yapılmış.`);
+        if (r.movements.some((m) => m.exitedAt !== null)) reasons.push(`Top ${tag} sonraki istasyona geçmiş.`);
+        if (r.children.length > 0) reasons.push(`Top ${tag} Tambur'da bölünmüş.`);
+        if (r.dispatchItems.length > 0) reasons.push(`Top ${tag} başka bir sevkte.`);
+      }
+    }
+
+    // Kaynak kabul(ler) = born topların distinct parentReceiptId'si (paralel
+    // partilerde farklı firmalardan birden çok olabilir).
+    const sourceReceiptIds = [
+      ...new Set(bornRolls.map((r) => r.parentReceiptId).filter((x): x is string => !!x)),
+    ];
+    const sourceReceipts = sourceReceiptIds.length
+      ? await prisma.subcontractorReceipt.findMany({
+          where: { id: { in: sourceReceiptIds } },
+          select: {
+            id: true,
+            receiptNo: true,
+            cancelledAt: true,
+            step: { select: { id: true, stepSequence: true, station: { select: { name: true } } } },
+            items: {
+              select: {
+                newRoll: {
+                  select: {
+                    id: true,
+                    barcode: true,
+                    currentQty: true,
+                    status: true,
+                    item: { select: { code: true, name: true } },
+                  },
+                },
+              },
+            },
+          },
+        })
+      : [];
+    for (const sr of sourceReceipts) {
+      if (sr.cancelledAt) reasons.push(`Kaynak kabul ${sr.receiptNo} zaten iptal edilmiş.`);
+    }
+
+    const sourceStationName = sourceReceipts[0]?.step?.station?.name ?? null;
+
+    return {
+      success: true,
+      data: {
+        dispatchId,
+        dispatchNo: dispatch.dispatchNo,
+        safe: reasons.length === 0,
+        blockingReasons: reasons,
+        subcontractorName: dispatch.subcontractor.name,
+        workOrder: targetStep.workOrder,
+        targetStationName: targetStep.station.name,
+        sourceStationName,
+        bornRolls: bornRolls.map((r) => ({
+          id: r.id,
+          barcode: r.barcode,
+          currentQty: Number(r.currentQty),
+          status: r.status,
+          itemCode: r.item?.code ?? "",
+          itemName: r.item?.name ?? "",
+          colorName: r.color?.name ?? null,
+        })),
+        sourceReceipts: sourceReceipts.map((sr) => ({
+          id: sr.id,
+          receiptNo: sr.receiptNo,
+          stationName: sr.step?.station?.name ?? null,
+          originalRolls: sr.items.map((it) => ({
+            id: it.newRoll.id,
+            barcode: it.newRoll.barcode,
+            currentQty: Number(it.newRoll.currentQty),
+            status: it.newRoll.status,
+            itemCode: it.newRoll.item?.code ?? "",
+            itemName: it.newRoll.item?.name ?? "",
+          })),
+        })),
+      },
+    };
+  }
+
+  /**
+   * "Aktarımı Geri Al" — adanmış atomik tx: boyahane sevkini iptal et + born
+   * topları CANCELLED'a çek + kaynak kabul(ler)i iptal et → orijinaller
+   * AT_SUBCONTRACTOR olarak kaynak fasona (batchSplitId korunur) geri döner.
+   */
+  async undoTransfer(
+    dispatchId: string,
+    reason: string,
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; dispatchNo: string }>> {
+    const trimmedReason = reason?.trim();
+    if (!trimmedReason || trimmedReason.length < 3) {
+      throw AppError.badRequest("Geri alma sebebi en az 3 karakter olmalı");
+    }
+
+    const dispatch = await prisma.subcontractorDispatch.findUnique({
+      where: { id: dispatchId },
+      include: {
+        step: { select: { id: true, stationId: true, workOrderId: true } },
+        items: {
+          select: { roll: { select: { id: true, parentReceiptId: true } } },
+        },
+      },
+    });
+    if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+    if (dispatch.cancelledAt) throw AppError.conflict("Bu sevk zaten iptal edilmiş");
+    if (dispatch.directShippedAt) {
+      throw AppError.conflict("Doğrudan sevk edilmiş sevk geri alınamaz");
+    }
+
+    const targetStep = dispatch.step; // boyahane
+    const bornRolls = dispatch.items.map((it) => it.roll);
+    const bornRollIds = bornRolls.map((r) => r.id);
+    if (bornRollIds.length === 0) throw AppError.badRequest("Bu sevkte top yok");
+
+    if (!bornRolls.every((r) => r.parentReceiptId != null)) {
+      throw AppError.badRequest(
+        "Bu sevk bir fason→fason aktarım çıktısı değil. Bunun yerine 'Sevki İptal Et' kullanın.",
+      );
+    }
+    const sourceReceiptIds = [
+      ...new Set(bornRolls.map((r) => r.parentReceiptId).filter((x): x is string => !!x)),
+    ];
+    const workOrderId = targetStep.workOrderId;
+
+    await prisma.$transaction(async (tx) => {
+      // WO satırını kilitle — adım recompute'u eşzamanlı dispatch/receive ile serileşsin.
+      await touchWorkOrderTx(tx, workOrderId);
+
+      // 1) Born topların TAZE güvenlik kontrolü (downstream yok + hâlâ boyahanede +
+      //    bu sevkin lane'inde). Preview ile tx arasında boyahane operatörü kabul/
+      //    işlem yapmış olabilir.
+      const freshBorn = await tx.roll.findMany({
+        where: { id: { in: bornRollIds } },
+        select: {
+          id: true,
+          status: true,
+          currentStepId: true,
+          batchSplitId: true,
+          operations: { select: { id: true, workOrderStepId: true, operationType: true } },
+          movements: { select: { exitedAt: true } },
+          children: { select: { id: true }, take: 1 },
+          dispatchItems: {
+            where: { dispatch: { is: { cancelledAt: null, id: { not: dispatchId } } } },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      });
+      for (const r of freshBorn) {
+        if (
+          r.status !== RollStatus.AT_SUBCONTRACTOR ||
+          r.currentStepId !== targetStep.id ||
+          r.batchSplitId !== dispatchId
+        ) {
+          throw AppError.conflict(
+            `Top ${r.id.slice(0, 8)}… artık aktarım geri almaya uygun değil (durum değişmiş). Listeyi yenileyin.`,
+          );
+        }
+        const extraOps = r.operations.filter(
+          (o) =>
+            !(o.workOrderStepId === targetStep.id &&
+              o.operationType === RollOperationType.SUBCONTRACTOR_SENT),
+        );
+        if (
+          extraOps.length > 0 ||
+          r.movements.some((m) => m.exitedAt !== null) ||
+          r.children.length > 0 ||
+          r.dispatchItems.length > 0
+        ) {
+          throw AppError.conflict(
+            `Top ${r.id.slice(0, 8)}… bu sırada işlenmiş — aktarım geri alınamaz.`,
+          );
+        }
+      }
+
+      // 2) Boyahane sevkini geri al (soft-cancel + belge void)
+      const cancelClaim = await tx.subcontractorDispatch.updateMany({
+        where: { id: dispatchId, cancelledAt: null },
+        data: {
+          cancelledAt: new Date(),
+          cancelledById: userId ?? null,
+          cancelReason: `AKTARIM GERİ ALMA: ${trimmedReason}`,
+        },
+      });
+      if (cancelClaim.count === 0) {
+        throw AppError.conflict("Bu sevk az önce başka bir kullanıcı tarafından iptal edilmiş.");
+      }
+      await printedDocumentService.voidForSource(
+        tx,
+        PrintedDocType.SUBCONTRACTOR_DISPATCH,
+        dispatchId,
+        trimmedReason,
+      );
+
+      // Born topların boyahane izini sil (op + movement + inherit property), sonra
+      // CANCELLED'a çek (atomik claim).
+      await tx.rollOperation.deleteMany({
+        where: {
+          rollId: { in: bornRollIds },
+          workOrderStepId: targetStep.id,
+          operationType: RollOperationType.SUBCONTRACTOR_SENT,
+        },
+      });
+      await tx.rollMovement.deleteMany({
+        where: { rollId: { in: bornRollIds }, workOrderStepId: targetStep.id },
+      });
+      await tx.rollProperty.deleteMany({ where: { rollId: { in: bornRollIds } } });
+      const cancelledBorn = await tx.roll.updateMany({
+        where: {
+          id: { in: bornRollIds },
+          status: RollStatus.AT_SUBCONTRACTOR,
+          currentStepId: targetStep.id,
+          batchSplitId: dispatchId,
+        },
+        data: { status: RollStatus.CANCELLED, currentStepId: null },
+      });
+      if (cancelledBorn.count !== bornRollIds.length) {
+        throw AppError.conflict(
+          "Born toplardan biri bu sırada değişmiş — aktarım geri alınamadı. Listeyi yenileyin.",
+        );
+      }
+
+      // 3) Kaynak kabul(ler)i geri al — orijinaller AT_SUBCONTRACTOR'a, kaynak
+      //    fason adımına döner (batchSplitId DOKUNULMAZ → zımpara lane'i kendiliğinden
+      //    geri gelir; receive consume'da değişmemişti).
+      const sourceStepIds = new Set<string>();
+      for (const receiptId of sourceReceiptIds) {
+        const receipt = await tx.subcontractorReceipt.findUnique({
+          where: { id: receiptId },
+          select: {
+            id: true,
+            receiptNo: true,
+            stepId: true,
+            cancelledAt: true,
+            step: { select: { stationId: true } },
+            items: { select: { newRollId: true } },
+          },
+        });
+        if (!receipt) throw AppError.conflict("Kaynak kabul belgesi bulunamadı.");
+        if (receipt.cancelledAt) {
+          throw AppError.conflict(`Kaynak kabul ${receipt.receiptNo} zaten iptal edilmiş.`);
+        }
+        const origRollIds = receipt.items.map((it) => it.newRollId);
+        sourceStepIds.add(receipt.stepId);
+
+        const rClaim = await tx.subcontractorReceipt.updateMany({
+          where: { id: receiptId, cancelledAt: null },
+          data: {
+            cancelledAt: new Date(),
+            cancelledById: userId ?? null,
+            cancelReason: `AKTARIM GERİ ALMA: ${trimmedReason}`,
+          },
+        });
+        if (rClaim.count === 0) {
+          throw AppError.conflict(`Kaynak kabul ${receipt.receiptNo} az önce iptal edilmiş.`);
+        }
+
+        // Kapatılmış dönüş movement'larını geri aç (RETURNED_VIA_RECEIPT notuyla).
+        await tx.rollMovement.updateMany({
+          where: {
+            workOrderStepId: receipt.stepId,
+            rollId: { in: origRollIds },
+            notes: `RETURNED_VIA_RECEIPT:${receipt.receiptNo}`,
+          },
+          data: {
+            qtyOut: null,
+            weightOut: null,
+            exitedAt: null,
+            notes: `REOPENED_FROM_RECEIPT:${receipt.receiptNo}`,
+          },
+        });
+
+        const revertedOrig = await tx.roll.updateMany({
+          where: { id: { in: origRollIds }, status: RollStatus.SUBCONTRACTOR_CONSUMED },
+          data: { status: RollStatus.AT_SUBCONTRACTOR, currentStepId: receipt.stepId },
+        });
+        if (revertedOrig.count !== origRollIds.length) {
+          throw AppError.conflict(
+            "Kaynak orijinal toplardan biri bu sırada değişmiş — geri alınamadı. Listeyi yenileyin.",
+          );
+        }
+
+        await tx.rollOperation.deleteMany({
+          where: {
+            rollId: { in: origRollIds },
+            workOrderStepId: receipt.stepId,
+            operationType: RollOperationType.SUBCONTRACTOR_RETURNED,
+          },
+        });
+        await tx.subcontractorReceiptProperty.deleteMany({ where: { receiptId } });
+
+        await logTravelerScan(
+          tx,
+          workOrderId,
+          receipt.step.stationId,
+          receipt.stepId,
+          ScanType.INFO,
+          userId,
+          `Aktarım geri alma — kaynak kabul iptal: ${receipt.receiptNo}`,
+        );
+      }
+
+      // 4) Adım statülerini yeniden hesapla: kaynak fason → ACTIVE (orijinaller
+      //    geri döndü), boyahane → PENDING (born toplar gitti).
+      for (const sId of sourceStepIds) {
+        await recomputeStepStatus(tx, sId);
+      }
+      await recomputeStepStatus(tx, targetStep.id);
+
+      // 5) Refakat kartı INFO (boyahane adımında geri-alma bildirimi)
+      await logTravelerScan(
+        tx,
+        workOrderId,
+        targetStep.stationId,
+        targetStep.id,
+        ScanType.INFO,
+        userId,
+        `Aktarım geri alındı: ${dispatch.dispatchNo} — ${trimmedReason}`,
+      );
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SUBCONTRACTOR_DISPATCH",
+      recordId: dispatchId,
+      newData: {
+        undoTransfer: true,
+        dispatchNo: dispatch.dispatchNo,
+        cancelledReceiptIds: sourceReceiptIds,
+        cancelledBornCount: bornRollIds.length,
+        reason: trimmedReason,
+      },
+    });
+
+    return {
+      success: true,
+      data: { id: dispatchId, dispatchNo: dispatch.dispatchNo },
+      message: `Aktarım geri alındı: ${dispatch.dispatchNo} — mal kaynak fasona geri döndü.`,
+    };
+  }
+
+  // ===========================================================================
   // RECEIPT PRINT SNAPSHOT
   // ===========================================================================
   async getReceiptPrintSnapshot(id: string): Promise<ApiResponse<unknown>> {
