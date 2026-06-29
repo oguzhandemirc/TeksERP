@@ -19,7 +19,11 @@ const updateNamesSchema = z.object({
 });
 
 const previewSchema = z.object({
-  kind: z.enum([LabelKind.ROLL_RAW, LabelKind.ROLL_FINISHED, LabelKind.SWATCH]),
+  // TDZ guard: enum ÜYESİ (LabelKind.ROLL_RAW) top-level deref → tam-server döngülü
+  // import yük sırasında "Cannot access 'client_1' before initialization" boot crash
+  // riski (bkz. inventory.service.ts MANUAL_STATUS_TRANSITIONS fix). String literal +
+  // tip cast: runtime'da düz string dizisi (deref yok), çıktı tipi LabelKind korunur.
+  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH"] as unknown as [LabelKind, ...LabelKind[]]),
   fields: z.array(z.object({
     key: z.string().min(1),
     label: z.string().min(1),
