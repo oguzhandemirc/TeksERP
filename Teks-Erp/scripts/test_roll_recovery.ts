@@ -51,7 +51,12 @@ async function resolveFixtures(): Promise<void> {
     return v.id;
   };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
-  ITEM2 = need(await prisma.item.findFirst({ where: { code: { not: "PATOS" }, isActive: true }, select: { id: true } }), "ikinci Item");
+  // İkinci ürün seed'de GARANTİ DEĞİL (taze seed yalnız PATOS) → testin kendi TEST-
+  // ürününü yaratır. woC "yanlış ürün → uygunsuz" senaryosu için PATOS'tan farklı OLMALI.
+  ITEM2 = (await prisma.item.create({
+    data: { code: `TST-REC-ITEM2-${Date.now()}`, name: "TEST İkinci Kumaş", itemType: "FABRIC", unit: "MT" },
+    select: { id: true },
+  })).id;
   GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade 1.KALITE");
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
@@ -252,6 +257,8 @@ async function cleanup(): Promise<void> {
   await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
   await prisma.workOrderStep.deleteMany({ where: { id: { in: stepIdSet } } });
   await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
+  // Testin yarattığı TEST- ürünü (ITEM2) — WO'lar silindikten sonra güvenli.
+  if (ITEM2) await prisma.item.deleteMany({ where: { id: ITEM2 } });
 }
 
 main().catch(async (e) => {
