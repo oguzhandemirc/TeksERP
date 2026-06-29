@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ArrowUpRight, Split, Truck } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Split, Truck, Undo2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,6 +15,7 @@ import {
 } from "./service";
 import { SplitBranchModal } from "./SplitBranchModal";
 import { DirectShipModal } from "./DirectShipModal";
+import { UndoTransferModal } from "./UndoTransferModal";
 
 const STATUS_META: Record<
   WorkOrderBranch["status"],
@@ -49,6 +50,10 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
     dispatchId: string;
     dispatchNo: string;
   } | null>(null);
+  const [undoTarget, setUndoTarget] = useState<{
+    dispatchId: string;
+    dispatchNo: string;
+  } | null>(null);
 
   const branches = q.data?.data?.branches ?? [];
   const splitFrom = q.data?.data?.splitFrom ?? null;
@@ -74,6 +79,9 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
           onDirectShip={() =>
             setDirectShipTarget({ dispatchId: b.dispatchId, dispatchNo: b.dispatchNo })
           }
+          onUndoTransfer={() =>
+            setUndoTarget({ dispatchId: b.dispatchId, dispatchNo: b.dispatchNo })
+          }
         />
       ))}
       {splitChildren.map((c) => (
@@ -92,6 +100,13 @@ export function BranchLanes({ workOrderId }: { workOrderId: string }) {
         workOrderId={workOrderId}
         dispatchId={directShipTarget?.dispatchId ?? ""}
         dispatchNo={directShipTarget?.dispatchNo ?? ""}
+      />
+      <UndoTransferModal
+        open={Boolean(undoTarget)}
+        onOpenChange={(o) => !o && setUndoTarget(null)}
+        workOrderId={workOrderId}
+        dispatchId={undoTarget?.dispatchId ?? ""}
+        dispatchNo={undoTarget?.dispatchNo ?? ""}
       />
     </div>
   );
@@ -153,10 +168,12 @@ function BranchLaneRow({
   branch,
   onSplit,
   onDirectShip,
+  onUndoTransfer,
 }: {
   branch: WorkOrderBranch;
   onSplit: () => void;
   onDirectShip: () => void;
+  onUndoTransfer: () => void;
 }) {
   const meta = STATUS_META[branch.status];
 
@@ -207,6 +224,21 @@ function BranchLaneRow({
               >
                 <Truck className="h-3.5 w-3.5" />
                 Doğrudan Sevk
+              </Button>
+            </PermissionGate>
+          )}
+          {/* Aktarımı geri al: yalnız fason→fason aktarım çıktısı + henüz fasonda
+              bekleyen (OPEN) dalda — yanlışlıkla sonraki fasona aktarıldıysa kaynağa geri sar. */}
+          {branch.status === "OPEN" && branch.isTransferOutput && (
+            <PermissionGate permission="workorder:write">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={onUndoTransfer}
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+                Aktarımı Geri Al
               </Button>
             </PermissionGate>
           )}

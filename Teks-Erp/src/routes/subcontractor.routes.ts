@@ -425,6 +425,63 @@ router.post(
   controller.directShip
 );
 
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/undo-transfer-preview:
+ *   get:
+ *     tags: [Subcontractor]
+ *     summary: Fason→fason aktarımı geri alma önizlemesi (salt-okunur — born toplar + kaynak kabuller + güvenlik)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Önizleme }
+ *       404: { description: Sevk bulunamadı }
+ */
+router.get(
+  "/dispatches/:id/undo-transfer-preview",
+  verifyToken,
+  requireAnyPermission("workorder:write", "subcontractor:write"),
+  controller.getUndoTransferPreview
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/undo-transfer:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: Fason→fason aktarımı geri al (boyahane sevki + kaynak kabul iptal → mal kaynak fasona döner)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string, minLength: 3, maxLength: 500 }
+ *     responses:
+ *       200: { description: Aktarım geri alındı }
+ *       400: { description: Aktarım çıktısı değil / geçersiz istek }
+ *       404: { description: Sevk bulunamadı }
+ *       409: { description: Toplar işlenmiş veya değişmiş — geri alınamaz }
+ */
+router.post(
+  "/dispatches/:id/undo-transfer",
+  verifyToken,
+  requireAnyPermission("workorder:write", "subcontractor:write"),
+  controller.undoTransfer
+);
+
 router.get(
   "/receipts",
   verifyToken,
