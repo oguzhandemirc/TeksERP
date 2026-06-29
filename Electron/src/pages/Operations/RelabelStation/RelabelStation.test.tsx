@@ -150,6 +150,20 @@ describe("RelabelPrintForCustomer — müşteri için yeniden bas", () => {
     );
   });
 
+  it("Stok (müşterisiz) → html + bas { stock:true } (snapshot'a düşmez)", async () => {
+    renderWithProviders(<RelabelPrintForCustomer ctx={baseCtx} />);
+    await userEvent.click(screen.getByRole("button", { name: /Stok \(müşterisiz\)/ }));
+    await waitFor(() =>
+      expect(getRollLabelHtml).toHaveBeenCalledWith("roll-1", { stock: true }),
+    );
+    const basBtn = await screen.findByRole("button", { name: "Bas" });
+    await waitFor(() => expect(basBtn).not.toBeDisabled());
+    await userEvent.click(basBtn);
+    await waitFor(() =>
+      expect(printRollLabel).toHaveBeenCalledWith("roll-1", { stock: true }),
+    );
+  });
+
   it("barkodsuz top → Bas disabled + uyarı", async () => {
     const raw: RelabelContext = { ...baseCtx, barcode: null, candidateCustomers: [] };
     renderWithProviders(<RelabelPrintForCustomer ctx={raw} />);

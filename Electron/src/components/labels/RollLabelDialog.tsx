@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Printer, Pencil, X } from "lucide-react";
+import { Printer, Pencil, X, UserX } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,30 @@ import { labelService } from "@/services/labelService";
 interface Props {
   rollId: string | null;
   onOpenChange: (open: boolean) => void;
+}
+
+/**
+ * Bir etiket HTML string'ini görünmez geçici iframe'e basıp yazıcıya gönderir —
+ * görünür önizlemeyi bozmadan "Müşterisiz (Stok)" tek-dokunuş baskısı için.
+ * print() dialog kapanana kadar bloklar; ardından iframe temizlenir.
+ */
+function printHtmlString(html: string): Promise<void> {
+  return new Promise((resolve) => {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("sandbox", "allow-same-origin allow-modals");
+    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+    frame.srcdoc = html;
+    frame.onload = () => {
+      try {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+      } finally {
+        window.setTimeout(() => frame.remove(), 300);
+        resolve();
+      }
+    };
+    document.body.appendChild(frame);
+  });
 }
 
 export function RollLabelDialog({ rollId, onOpenChange }: Props) {
@@ -57,6 +81,24 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
     iframeRef.current?.contentWindow?.print();
     printMut.mutate();
   };
+
+  // "Müşterisiz (Stok)" — müşteri bilgisi OLMADAN (stok) etiketi tek dokunuşta bas.
+  // Görünür önizlemeyi değiştirmeden stok HTML'ini ayrı çeker + basar; backend
+  // snapshot'ı stok işaretler (varsa bozuk müşteri snapshot'ı düzelir). Sonra
+  // önizleme tazelenir → müşterisiz hâli yansır.
+  const printStockMut = useMutation({
+    mutationFn: async () => {
+      const html = await labelService.getRollLabelHtml(rollId!, { stock: true });
+      await printHtmlString(html);
+      await labelService.printRollLabel(rollId!, { stock: true });
+    },
+    onSuccess: () => {
+      toast.success("Müşterisiz (stok) etiketi basıldı.");
+      void qc.invalidateQueries({ queryKey: ["label-roll", rollId] });
+      void qc.invalidateQueries({ queryKey: ["label-roll-html", rollId] });
+    },
+    onError: (e: Error) => toast.error(`Basılamadı: ${e.message}`),
+  });
 
   const payload = payloadQuery.data?.data;
   const canEdit = Boolean(payload?.orderLineId) && hasPermission("label:edit");
@@ -116,6 +158,19 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
                     className="gap-1"
                   >
                     <Pencil className="h-3.5 w-3.5" /> Düzenle
+                  </Button>
+                )}
+                {canPrint && payload && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    title="Müşteri bilgisi olmadan (stok) etiketi bas"
+                    disabled={!hasBarcode || htmlQuery.isLoading || printStockMut.isPending}
+                    onClick={() => printStockMut.mutate()}
+                    className="gap-1"
+                  >
+                    <UserX className="h-3.5 w-3.5" /> Müşterisiz (Stok)
                   </Button>
                 )}
                 {canPrint && payload && (

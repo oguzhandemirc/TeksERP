@@ -46,11 +46,42 @@ import {
 } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 import { assertWoAtStepKind, recomputeStepStatus } from "./helpers/roll-step.helper";
+import { buildIntentSnapshot } from "./label.service";
 
 /** Generate a barcode for a split-off roll */
 function generateSplitBarcode(originalBarcode: string): string {
   const suffix = uuidv4().replace(/-/g, "").substring(0, 6).toUpperCase();
   return `${originalBarcode}-KS-${suffix}`;
+}
+
+/**
+ * Kesim etiket NİYETİNİ çözer (pre-tx): hedef sipariş kalemi / müşteri var-mı +
+ * (müşteri) isActive doğrular; hiçbiri yoksa stok. Dönüş `buildIntentSnapshot`'a
+ * verilip child'ın `lastLabelSnapshot`'ına yazılır (gevşek model: BAĞ değil,
+ * baskı-anı bağlamı). DB okuması tx DIŞINDA yapılır (tx içi I/O yasak).
+ */
+async function resolveCutLabelIntent(data: {
+  targetOrderLineId?: string | null;
+  targetCustomerId?: string | null;
+}): Promise<{ orderLineId?: string; customerId?: string; stock?: boolean }> {
+  if (data.targetOrderLineId) {
+    const ol = await prisma.orderLine.findUnique({
+      where: { id: data.targetOrderLineId },
+      select: { id: true },
+    });
+    if (!ol) throw AppError.badRequest("Hedef sipariş kalemi bulunamadı");
+    return { orderLineId: ol.id };
+  }
+  if (data.targetCustomerId) {
+    const cust = await prisma.customer.findUnique({
+      where: { id: data.targetCustomerId },
+      select: { id: true, isActive: true },
+    });
+    if (!cust) throw AppError.badRequest("Hedef müşteri bulunamadı");
+    if (!cust.isActive) throw AppError.badRequest("Hedef müşteri pasif — etikete atanamaz");
+    return { customerId: cust.id };
+  }
+  return { stock: true };
 }
 
 /**
@@ -828,6 +859,9 @@ export class TamburService {
             // fire/scrap işaretlenmez (zaten sevke uygun değil).
             markedForKartela:
               (data.markedForKartela ?? false) && seg.status === RollStatus.WAREHOUSE,
+            // finalize toplu kesim — per-segment müşteri niyeti yok → stok etiketi.
+            // (Müşteri istenirse baskı anında seed edilir.)
+            lastLabelSnapshot: { stock: true },
           },
           include: {
             item: true,
@@ -1596,6 +1630,10 @@ export class TamburService {
        * Bitmiş depo topu (WAREHOUSE parent) kesiminde YOK SAYILIR — çıktı her zaman WAREHOUSE.
        */
       rawDestination?: "STOCK" | "WAREHOUSE";
+      /** Etiket niyeti — WAREHOUSE child'ın `lastLabelSnapshot`'ına yazılır;
+       *  raw→STOCK (üretime devam) child stok'a düşer. İkisi de boş = stok. */
+      targetOrderLineId?: string | null;
+      targetCustomerId?: string | null;
       /** Offline/retry idempotency: client-üretimi child barkod (TEKS-YYYYMMDD-XXXXXXXX).
        *  Verilirse ağ-retry'ında 2. çağrı child @unique P2002 → mevcut child idempotent
        *  döner (ikinci kesim/decrement YOK). createInitialEntry.clientBarcode deseni. */
@@ -1663,6 +1701,12 @@ export class TamburService {
         : parent.qualityGradeId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
     const childBarcode = data.clientChildBarcode ?? generateTamburChildBarcode();
+    // Etiket niyeti (pre-tx çözüm) — yalnız WAREHOUSE child anlamlı; raw→STOCK
+    // (üretime devam) child stok etiketle doğar.
+    const cutIntentSnapshot =
+      childStatus === RollStatus.WAREHOUSE
+        ? buildIntentSnapshot(await resolveCutLabelIntent(data))
+        : buildIntentSnapshot({ stock: true });
 
     let result: { child: Roll; newParentQty: number; updatedParent: Roll };
     try {
@@ -1689,6 +1733,8 @@ export class TamburService {
           // dönen (üretime devam) parçada işaretlenmez.
           markedForKartela:
             (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
+          // Etiket niyeti kesim anında kalıcı (yazıcı/ekran bağımsız).
+          lastLabelSnapshot: cutIntentSnapshot,
         },
       });
 
@@ -1939,6 +1985,8 @@ export class TamburService {
             batchSplitId: parent.batchSplitId,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
+            // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
+            lastLabelSnapshot: { stock: true },
             },
         });
         if (propertyIds.length > 0) {
@@ -2052,6 +2100,10 @@ export class TamburService {
       notes?: string | null;
       /** Çıktı top kartelalık işaretlensin (depoda kartela sevki için). */
       markedForKartela?: boolean;
+      /** Etiket niyeti — açık kumaş child her zaman WAREHOUSE → lastLabelSnapshot.
+       *  İkisi de boş = stok (müşterisiz). */
+      targetOrderLineId?: string | null;
+      targetCustomerId?: string | null;
       /** Offline/retry idempotency: client-üretimi child barkod (cutWarehouseRoll ile aynı). */
       clientChildBarcode?: string;
     },
@@ -2111,6 +2163,8 @@ export class TamburService {
     const tamburStepId = parent.currentStep.id;
     const propertyIds = parent.properties.map((p) => p.propertyId);
     const childBarcode = data.clientChildBarcode ?? generateTamburChildBarcode();
+    // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
+    const cutIntentSnapshot = buildIntentSnapshot(await resolveCutLabelIntent(data));
 
     // Operatör explicit kod verdiyse SIKI doğrula (katalog+aktif); sistem-türetimli
     // ("1.KALITE"/"A1"/"FIRE" sabitleri) lenient kalır.
@@ -2143,6 +2197,8 @@ export class TamburService {
           // Sadece depoya giden (WAREHOUSE) çıktı kartelalık işaretlenir.
           markedForKartela:
             (data.markedForKartela ?? false) && childStatus === RollStatus.WAREHOUSE,
+          // Etiket niyeti kesim anında kalıcı (yazıcı/ekran bağımsız).
+          lastLabelSnapshot: cutIntentSnapshot,
           // currentStepId: child Tambur'dan çıktı (depo değil bir step) — null.
         },
       });
@@ -2432,6 +2488,8 @@ export class TamburService {
             batchSplitId: parent.batchSplitId,
             entrySource: RollEntrySource.TAMBUR_SPLIT,
             createdById: userId ?? null,
+            // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
+            lastLabelSnapshot: { stock: true },
             },
         });
         if (propertyIds.length > 0) {

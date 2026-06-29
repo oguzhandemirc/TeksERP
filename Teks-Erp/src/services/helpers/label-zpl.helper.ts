@@ -10,14 +10,20 @@
 // test baskısıyla (Faz-2) ince ayarlanır.
 // =============================================================================
 
-import { cleanCtl, clampCopies, mmToDots, rollTextLines, LEFT_COL_MM, type NativeRenderInput } from "./native-label.shared";
+import { cleanCtl, clampCopies, mmToDots, templateTextLines, LEFT_COL_MM, type NativeRenderInput } from "./native-label.shared";
+import type { FontSize } from "../../config/label-fields";
+
+// Boyut → ZPL glif yüksekliği (mm) + satır adım (mm). md/lg null-şablon yolunun
+// mevcut d(4)/d(5) yükseklik + d(5)/d(7) adım değerleriyle birebir örtüşür.
+const zplHMm = (s: FontSize): number => (s === "sm" ? 3 : s === "md" ? 4 : s === "lg" ? 5 : 7);
+const zplStepMm = (s: FontSize): number => (s === "sm" ? 4 : s === "md" ? 5 : s === "lg" ? 7 : 9);
 
 /** ZPL ^FD verisi ^FS'e dek sürer; kontrol önekleri `^` ve `~` veriden ayıklanır. */
 function zplData(s: string): string {
   return cleanCtl(s).replace(/[\^~]/g, " ");
 }
 
-export function buildRollLabelZpl({ payload, format, copies }: NativeRenderInput): string {
+export function buildRollLabelZpl({ payload, format, copies, template }: NativeRenderInput): string {
   const dpi = format.dpi || 203;
   const d = (mm: number) => mmToDots(mm, dpi);
   const widthDots = d(format.widthMm);
@@ -32,11 +38,13 @@ export function buildRollLabelZpl({ payload, format, copies }: NativeRenderInput
   lines.push(`^LL${heightDots}`); // etiket boyu (dot)
 
   // Sağ kolon metin alanları — ^FO x,y ^A0N,h,w ^FD veri ^FS (origin sol-üst)
+  // Sıra/görünür/boyut/bold şablondan (templateTextLines); bold → genişlik ×1.2.
   let y = margin;
-  for (const ln of rollTextLines(payload)) {
-    const h = ln.big ? d(5) : d(4);
-    lines.push(`^FO${textX},${Math.round(y)}^A0N,${h},${h}^FD${zplData(ln.text)}^FS`);
-    y += ln.big ? d(7) : d(5); // 60mm'e sığsın diye sıkı adım
+  for (const ln of templateTextLines(payload, template)) {
+    const h = d(zplHMm(ln.size));
+    const w = ln.bold ? Math.round(h * 1.2) : h;
+    lines.push(`^FO${textX},${Math.round(y)}^A0N,${h},${w}^FD${zplData(ln.text)}^FS`);
+    y += d(zplStepMm(ln.size)); // 60mm'e sığsın diye sıkı adım
   }
 
   // Sol kolon: QR (üst) + Code128 (alt)

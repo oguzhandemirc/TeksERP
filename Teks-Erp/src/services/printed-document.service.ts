@@ -69,6 +69,16 @@ interface BuilderEntry {
   /** Eski kayıt için geriye dönük üretim (örn. legacy printSnapshot kolonunu
    *  taşı). Verilmezse `fresh` kullanılır. */
   lazyInit?: PrintedDocBuilder;
+  /** Kaynak henüz donmamışken (TASLAK) canlı veriden içerik üretir — getHtml
+   *  `allowDraft` yolu bunu transient (kaydedilmeyen) snapshot'a sarar ve
+   *  renderHtml'i `draft:true` ile çağırır. Verilmezse taslak → 409. */
+  buildPreview?: PrintedDocBuilder;
+  /** Donmuş snapshot'tan baskı-hazır HTML üretir — TEK KAYNAK format (mobil +
+   *  Electron aynı HTML'i basar). Verilmezse o belge tipi için `getHtml` 400 verir. */
+  renderHtml?: (
+    snapshot: PrintedDocSnapshot,
+    meta: { status?: PrintedDocStatus; voidReason?: string | null; draft?: boolean },
+  ) => string;
 }
 
 const builders = new Map<PrintedDocType, BuilderEntry>();
@@ -185,6 +195,77 @@ export class PrintedDocumentService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Baskı-hazır HTML — güncel belgeyi alır, docType'a kayıtlı renderHtml ile
+   * tek-kaynak HTML üretir. data:null → kaynak TASLAK (henüz donmuş belge yok).
+   * allowDraft + builder'da buildPreview varsa, donmuş belge yoksa canlı veriden
+   * TASLAK filigranlı HTML üretilir (kaydedilmez) — sevk öncesi önizleme.
+   */
+  async getHtml(
+    docType: PrintedDocType,
+    sourceId: string,
+    version?: number,
+    opts?: { allowDraft?: boolean },
+  ): Promise<ApiResponse<{ html: string } | null>> {
+    const entry = requireBuilder(docType);
+    if (!entry.renderHtml) {
+      throw AppError.badRequest(
+        `Bu belge tipi için HTML çıktısı tanımlı değil: ${docType}`,
+      );
+    }
+
+    // version verilirse o versiyonun HTML'i (Electron versiyon çubuğu); yoksa güncel.
+    const res =
+      version != null
+        ? await this.getVersion(docType, sourceId, version)
+        : await this.getCurrent(docType, sourceId);
+    const rec = res.data as {
+      snapshot: unknown;
+      status: PrintedDocStatus;
+      voidReason: string | null;
+    } | null;
+
+    if (rec) {
+      const html = entry.renderHtml(rec.snapshot as PrintedDocSnapshot, {
+        status: rec.status,
+        voidReason: rec.voidReason,
+      });
+      return { success: true, data: { html } };
+    }
+
+    // Donmuş belge yok → istenmişse canlı TASLAK önizlemesi (kaydedilmez).
+    if (opts?.allowDraft && version == null && entry.buildPreview) {
+      const built = await entry.buildPreview(prisma, sourceId);
+      if (built) {
+        const snapshot = await buildSnapshotEnvelope(prisma, docType, built.doc);
+        const html = entry.renderHtml(snapshot, { draft: true });
+        return { success: true, data: { html } };
+      }
+    }
+    return { success: true, data: null };
+  }
+
+  /**
+   * TASLAK HTML — kaynağı (dispatch vb.) OLMAYAN, çağıranın hazır kurduğu bir
+   * `doc` payload'ından, donmadan, baskı-hazır TASLAK HTML üretir. Snapshot zarfı
+   * (firma/antet/docConfig) + kayıtlı `renderHtml` (tek-kaynak format) yeniden
+   * kullanılır → TASLAK filigranıyla döner. Hiçbir şey persist edilmez.
+   * (Erken fason çeki taslağı gibi, dispatch henüz yokken çeki önizlemesi için.)
+   */
+  async renderDraftHtml(
+    docType: PrintedDocType,
+    doc: Record<string, unknown>,
+  ): Promise<string> {
+    const entry = requireBuilder(docType);
+    if (!entry.renderHtml) {
+      throw AppError.badRequest(
+        `Bu belge tipi için HTML çıktısı tanımlı değil: ${docType}`,
+      );
+    }
+    const snapshot = await buildSnapshotEnvelope(prisma, docType, doc);
+    return entry.renderHtml(snapshot, { draft: true });
   }
 
   /**

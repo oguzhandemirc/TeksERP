@@ -130,8 +130,8 @@ export function TravelerCardConfigSection({
           </div>
           <div className="py-3">
             <FlagToggle
-              title="Talimatlar / Boyahane notu"
-              desc="İş emrindeki boyahane notu kutusu kartta basılsın mı."
+              title="Talimatlar / Fason notu"
+              desc="Adım talimatları (fason adımlarının notu) kutusu kartta basılsın mı."
               checked={draft.showNotes}
               disabled={mut.isPending}
               onChange={(v) => setDraft((d) => ({ ...d, showNotes: v }))}

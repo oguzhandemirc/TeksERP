@@ -38,6 +38,7 @@ import {
   type PrintedDocDb,
 } from "./printed-document.service";
 import { buildPrefixedCardNumber } from "../utils/barcode";
+import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
 import { buildPagination } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
@@ -289,8 +290,8 @@ export class SubcontractorService {
       plateNumber?: string;
       driverName?: string;
       notes?: string;
-      /** Boyahaneye özel talimat — genel sevk notundan (notes) ayrı. */
-      dyehouseNote?: string;
+      /** Fason talimatı — genel sevk notundan (notes) ayrı. Boşsa adımın notu kullanılır. */
+      instruction?: string;
       /**
        * Operatör WO ürünü ile uyuşmayan top sevkini bilinçli olarak onayladı.
        * Frontend mismatch modal'ında onayladıktan sonra true gönderir.
@@ -592,9 +593,9 @@ export class SubcontractorService {
           notes: data.notes ?? null,
           // Belgeye DONDURULMAZ — canlı kolon; sevk sonrası düzenlenebilir,
           // baskı her zaman güncel değeri overlay olarak gösterir (talimat alanı).
-          // Operatör notu (flag açıkken) öncelikli; boşsa iş emrindeki boyahane
-          // notu (WorkOrder.dyehouseNote) default kopyalanır.
-          dyehouseNote: (data.dyehouseNote?.trim() || wo.dyehouseNote) ?? null,
+          // Operatör notu (flag açıkken) öncelikli; boşsa sevk edilen adımın notu
+          // (WorkOrderStep.notes) default kopyalanır → o adımın çeki listesine basılır.
+          instruction: (data.instruction?.trim() || step.notes) ?? null,
           totalQty,
           items: {
             create: rolls.map((r) => ({
@@ -726,6 +727,389 @@ export class SubcontractorService {
       data: result,
       message: `Fason sevki oluşturuldu: ${result.dispatchNo} (${rolls.length} top, ${totalQty.toFixed(1)}m)`,
     };
+  }
+
+  // ===========================================================================
+  // BULK DISPATCH — Masaüstü "adımı toplu fasona sevk et" (top okutmadan)
+  // ===========================================================================
+  //
+  // Planlama ekranı için: bir EXTERNAL adımda BEKLEYEN (currentStepId=stepId,
+  // status IN_PRODUCTION|STOCK) tüm topları planlanan/seçilen firmaya tek tıkla
+  // sevk eder. Top-top okutma yok — saha mobil dispatch()'in masaüstü muadili.
+  // GERÇEK dispatch()'e delege eder: irsaliye (PrintedDocument) + AT_SUBCONTRACTOR
+  // + atomik claim + audit hepsi oradan gelir (tek kaynak; mobil sevkle aynı yol).
+  // (workorder.service quickStart `dispatchFirstStep`'in genelleştirilmiş hali.)
+  async bulkDispatchStep(
+    data: {
+      workOrderId: string;
+      stepId: string;
+      /** Yoksa adımın plannedSubcontractorId'si kullanılır. */
+      subcontractorId?: string;
+      /** Verilirse yalnız bu toplar sevk edilir (alt-küme seçimi); yoksa adımdaki
+       *  bekleyen TÜM toplar. */
+      rollIds?: string[];
+      instruction?: string;
+      plateNumber?: string;
+      driverName?: string;
+    },
+    userId?: string
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    const step = await prisma.workOrderStep.findUnique({
+      where: { id: data.stepId },
+      include: { station: { select: { type: true, name: true } } },
+    });
+    if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+    if (step.workOrderId !== data.workOrderId) {
+      throw AppError.badRequest("Adım bu iş emrine ait değil");
+    }
+    if (step.station.type !== StationType.EXTERNAL) {
+      throw AppError.badRequest(
+        "Toplu sevk yalnızca fason (EXTERNAL) adımlar için yapılabilir."
+      );
+    }
+    if (step.status === StepStatus.SKIPPED) {
+      throw AppError.conflict("Adım atlanmış (SKIPPED). Sevk yapılamaz.");
+    }
+    const subcontractorId = data.subcontractorId ?? step.plannedSubcontractorId;
+    if (!subcontractorId) {
+      throw AppError.badRequest(
+        "Fason firma planlanmamış — önce bu adıma firma atayın veya sevk ederken firma seçin."
+      );
+    }
+
+    // Bu adımda fiziksel BEKLEYEN toplar (fasonda OLMAYAN). Konum-tabanlı toplama;
+    // dispatch()'in atomik claim'i (status IN_PRODUCTION|STOCK + currentStepId=stepId)
+    // yarış güvenliğini zaten sağlar (PR #42). AT_SUBCONTRACTOR toplar dışlanır.
+    // rollIds verildiyse yalnız o alt-küme (UI'da operatör seçti).
+    const hasSubset = !!data.rollIds && data.rollIds.length > 0;
+    const rolls = await prisma.roll.findMany({
+      where: {
+        currentStepId: data.stepId,
+        status: { in: [RollStatus.IN_PRODUCTION, RollStatus.STOCK] },
+        ...(hasSubset ? { id: { in: data.rollIds } } : {}),
+      },
+      select: { id: true },
+    });
+    if (rolls.length === 0) {
+      throw AppError.badRequest("Bu adımda sevk edilecek bekleyen top yok.");
+    }
+    if (hasSubset && rolls.length !== data.rollIds!.length) {
+      throw AppError.badRequest(
+        "Seçilen toplardan bazıları artık sevke uygun değil — listeyi yenileyin."
+      );
+    }
+
+    return this.dispatch(
+      {
+        workOrderId: data.workOrderId,
+        stepId: data.stepId,
+        subcontractorId,
+        rollIds: rolls.map((r) => r.id),
+        instruction: data.instruction,
+        plateNumber: data.plateNumber,
+        driverName: data.driverName,
+      },
+      userId
+    );
+  }
+
+  // ===========================================================================
+  // TRANSFER TO NEXT FASON — Fasondan fasona doğrudan aktarım (zımpara→boyahane)
+  // ===========================================================================
+  //
+  // Mal fabrikaya UĞRAMADAN bir fasondan diğerine gidiyor. Tek tıkla içerideki
+  // "önceki fasondan kabul + sonraki fasona sevk" zincirini yapar:
+  //   1) receive(mevcut adım) → orijinaller SUBCONTRACTOR_CONSUMED, born açık-kumaş
+  //      toplar bir SONRAKİ adıma IN_PRODUCTION doğar (metraj 1:1 taşınır —
+  //      zımparada kesim/çekme yok; kesin ölçüm boyahane DÖNÜŞÜNDE damgalanır).
+  //   2) bulkDispatchStep(sonraki adım) → born toplar boyahaneye sevk edilir.
+  // Her iki çağrı AYRI tx (dispatchFirstStep kısmi-başarı emsali): 2. patlarsa
+  // toplar boyahane adımında bekler, planlamacı "Sevk Et" ile tamamlar.
+  async transferToNextFason(
+    data: {
+      workOrderId: string;
+      stepId: string; // mevcut (kaynak) fason adım
+      /** Yoksa sonraki adımın plannedSubcontractorId'si kullanılır. */
+      nextSubcontractorId?: string;
+      /** Verilirse yalnız bu (AT_SUBCONTRACTOR) toplar aktarılır; yoksa hepsi. */
+      rollIds?: string[];
+      instruction?: string;
+    },
+    userId?: string
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    const step = await prisma.workOrderStep.findUnique({
+      where: { id: data.stepId },
+      include: {
+        station: { select: { type: true, name: true } },
+        workOrder: {
+          include: {
+            steps: {
+              orderBy: { stepSequence: "asc" },
+              include: { station: { select: { type: true, name: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+    if (step.workOrderId !== data.workOrderId) {
+      throw AppError.badRequest("Adım bu iş emrine ait değil");
+    }
+    if (step.station.type !== StationType.EXTERNAL) {
+      throw AppError.badRequest("Bu adım fason (EXTERNAL) değil.");
+    }
+
+    const allSteps = step.workOrder.steps;
+    const currentIndex = allSteps.findIndex((s) => s.id === step.id);
+    const nextStep =
+      currentIndex >= 0 && currentIndex < allSteps.length - 1
+        ? allSteps[currentIndex + 1]
+        : null;
+    if (!nextStep) {
+      throw AppError.badRequest(
+        "Bu fason son adım — sonraki fason yok. Mal kabulü için Fason Kabul ekranını kullanın."
+      );
+    }
+    if (nextStep.station.type !== StationType.EXTERNAL) {
+      throw AppError.badRequest(
+        "Sonraki adım fason değil — normal Fason Kabul ekranını kullanın."
+      );
+    }
+
+    // Bu adımda fasonda (AT_SUBCONTRACTOR) olan toplar + hangi sevke (firma) ait.
+    // AT_SUBCONTRACTOR topun batchSplitId'si = kaynak dispatch.id; makbuzun
+    // stamp'leyeceği firma fiziksel malı tutan firma olmalı (rapor doğruluğu).
+    const hasSubset = !!data.rollIds && data.rollIds.length > 0;
+    const atSubRolls = await prisma.roll.findMany({
+      where: {
+        currentStepId: data.stepId,
+        status: RollStatus.AT_SUBCONTRACTOR,
+        ...(hasSubset ? { id: { in: data.rollIds } } : {}),
+      },
+      select: { id: true, currentQty: true, batchSplitId: true },
+    });
+    if (atSubRolls.length === 0) {
+      throw AppError.badRequest("Bu fasonda aktarılacak (fasonda bekleyen) top yok.");
+    }
+    if (hasSubset && atSubRolls.length !== data.rollIds!.length) {
+      throw AppError.badRequest(
+        "Seçilen toplardan bazıları artık aktarıma uygun değil — listeyi yenileyin."
+      );
+    }
+
+    const dispatchIds = [
+      ...new Set(
+        atSubRolls
+          .map((r) => r.batchSplitId)
+          .filter((x): x is string => !!x)
+      ),
+    ];
+    const dispatches = await prisma.subcontractorDispatch.findMany({
+      where: { id: { in: dispatchIds } },
+      select: { id: true, subcontractorId: true },
+    });
+    const dispatchFirm = new Map(dispatches.map((d) => [d.id, d.subcontractorId]));
+
+    // Paralel partilerde toplar farklı firmalardan gelebilir → firma başına ayrı
+    // kabul (receive tek subcontractorId stamp'liyor; per-roll eşleşme
+    // sourceDispatchItemId ile zaten doğru, ama makbuz başlığı doğru firmayı taşımalı).
+    const byFirm = new Map<string, typeof atSubRolls>();
+    for (const r of atSubRolls) {
+      const firmId = r.batchSplitId ? dispatchFirm.get(r.batchSplitId) : undefined;
+      if (!firmId) {
+        throw AppError.conflict(
+          "Fasonda bekleyen topun kaynak sevki bulunamadı. Listeyi yenileyip tekrar deneyin."
+        );
+      }
+      const list = byFirm.get(firmId) ?? [];
+      list.push(r);
+      byFirm.set(firmId, list);
+    }
+
+    // 1) Her firma grubu için kabul — born açık-kumaş toplar SONRAKİ adıma doğar
+    //    (metraj 1:1: zımparada çekme yok; kesin ölçüm boyahane dönüşünde).
+    //    Her receive'in makbuz id'sini topla → DOĞAN topları KESİN belirlemek için.
+    const receiptIds: string[] = [];
+    for (const [firmId, firmRolls] of byFirm) {
+      const recv = await this.receive(
+        {
+          workOrderId: data.workOrderId,
+          stepId: data.stepId,
+          subcontractorId: firmId,
+          returns: firmRolls.map((r) => ({ rollId: r.id })),
+          newRolls: firmRolls.map((r) => ({ qty: Number(r.currentQty) })),
+        },
+        userId
+      );
+      const rId = (recv.data as { id?: string } | undefined)?.id;
+      if (rId) receiptIds.push(rId);
+    }
+
+    // 2) Bu kabullerden DOĞAN topları kesin bul: born toplar Roll.parentReceiptId ile
+    //    makbuza bağlı (ReceiptItem.newRollId DEĞİL — o tüketilen orijinaldir).
+    //    "tüm bekleyeni süpür" yerine TAM bu born topları sevk et → kısmi aktarımda
+    //    ve boyahanede duran ilgisiz IN_PRODUCTION topları korur.
+    const bornRolls = await prisma.roll.findMany({
+      where: {
+        parentReceiptId: { in: receiptIds },
+        currentStepId: nextStep.id,
+        status: RollStatus.IN_PRODUCTION,
+      },
+      select: { id: true },
+    });
+
+    // Firma planlanmamışsa burada 400 atar; toplar boyahane adımında bekler
+    // (kurtarılabilir kısmi başarı) — planlamacı firma atayıp "Sevk Et" der.
+    const dispatchResult = await this.bulkDispatchStep(
+      {
+        workOrderId: data.workOrderId,
+        stepId: nextStep.id,
+        subcontractorId: data.nextSubcontractorId,
+        rollIds: bornRolls.map((r) => r.id),
+        instruction: data.instruction,
+      },
+      userId
+    );
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "WORK_ORDER",
+      recordId: data.workOrderId,
+      newData: {
+        fasonTransfer: {
+          fromStepId: data.stepId,
+          fromStation: step.station.name,
+          toStepId: nextStep.id,
+          toStation: nextStep.station.name,
+          rollCount: atSubRolls.length,
+        },
+      },
+    });
+
+    return {
+      success: true,
+      data: dispatchResult.data,
+      message:
+        `${atSubRolls.length} top ${step.station.name} → ${nextStep.station.name} aktarıldı. ` +
+        (dispatchResult.message ?? ""),
+    };
+  }
+
+  // ===========================================================================
+  // ERKEN TASLAK ÇEKİ — sevkten ÖNCE bir sonraki fason adımının çekisini üret
+  // ===========================================================================
+  //
+  // Mal zımpara→boyahane fabrikaya UĞRAMADAN gidebildiği için, planlamacı zımparaya
+  // sevk yapar yapmaz boyahane çekisini de basıp mal ile göndermek istiyor. Ama
+  // gerçek boyahane sevki (=durum değişikliği: zımpara COMPLETED, born toplar) henüz
+  // yapılmamalı. Bu metod HİÇBİR kayıt değiştirmez — sadece bir sonraki fason adımı
+  // için, önceki fasonda (AT_SUBCONTRACTOR) bekleyen TOPLARI projekte ederek
+  // TASLAK filigranlı çeki HTML'i döndürür (tek-kaynak renderFasonCekiHtml).
+  async previewDownstreamFasonCeki(
+    workOrderId: string,
+    stepId: string
+  ): Promise<ApiResponse<{ html: string }>> {
+    const step = await prisma.workOrderStep.findUnique({
+      where: { id: stepId },
+      include: {
+        station: { select: { name: true, code: true, type: true } },
+        plannedSubcontractor: { select: { id: true, name: true, code: true } },
+        workOrder: {
+          select: {
+            id: true,
+            batchNumber: true,
+            type: true,
+            parameters: true,
+            targetColor: { select: { name: true } },
+            steps: {
+              orderBy: { stepSequence: "asc" },
+              select: { id: true, stationId: true },
+            },
+          },
+        },
+      },
+    });
+    if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+    if (step.workOrderId !== workOrderId) {
+      throw AppError.badRequest("Adım bu iş emrine ait değil");
+    }
+    if (step.station.type !== StationType.EXTERNAL) {
+      throw AppError.badRequest("Çeki taslağı yalnızca fason (EXTERNAL) adımlar için.");
+    }
+    if (!step.plannedSubcontractor) {
+      throw AppError.badRequest("Bu fason adımına firma planlanmamış — önce firma atayın.");
+    }
+
+    // Önceki adım = sıradaki bir önceki adım; orada fasonda (AT_SUBCONTRACTOR)
+    // bekleyen toplar bu adımın projeksiyon mallarıdır (zımpara→boyahane 1:1).
+    const orderedSteps = step.workOrder.steps;
+    const idx = orderedSteps.findIndex((s) => s.id === stepId);
+    const prevStep = idx > 0 ? orderedSteps[idx - 1] : null;
+    if (!prevStep) {
+      throw AppError.badRequest("Bu adımın öncesinde fason adımı yok — taslak çeki üretilemez.");
+    }
+    const projected = await prisma.roll.findMany({
+      where: { currentStepId: prevStep.id, status: RollStatus.AT_SUBCONTRACTOR },
+      include: {
+        item: { select: { code: true, name: true } },
+        color: { select: { code: true, name: true } },
+      },
+      orderBy: [{ barcode: "asc" }, { createdAt: "asc" }],
+    });
+    if (projected.length === 0) {
+      throw AppError.badRequest(
+        "Önceki fason adımında bekleyen mal yok — önce oraya sevk yapın."
+      );
+    }
+
+    const rolls = projected.map((r) => ({
+      id: r.id,
+      barcode: r.barcode,
+      itemCode: r.item?.code ?? "",
+      itemName: r.item?.name ?? "",
+      colorCode: r.color?.code ?? null,
+      colorName: r.color?.name ?? null,
+      dispatchedQty: Number(r.currentQty),
+      dispatchedWeight: r.weightKg != null ? Number(r.weightKg) : null,
+      qualityGrade: r.qualityGrade,
+      width: r.width != null ? Number(r.width) : null,
+    }));
+    const totalQty = rolls.reduce((s, r) => s + r.dispatchedQty, 0);
+
+    const doc = assembleFasonCekiDoc({
+      dispatchNo: "(TASLAK)",
+      dispatchedAt: new Date().toISOString(),
+      driverName: null,
+      plateNumber: null,
+      notes: null,
+      instruction: step.notes ?? null,
+      workOrder: {
+        id: step.workOrder.id,
+        batchNumber: step.workOrder.batchNumber,
+        parameters: (step.workOrder.parameters as Record<string, unknown> | null) ?? null,
+        type: step.workOrder.type,
+      },
+      subcontractor: {
+        id: step.plannedSubcontractor.id,
+        name: step.plannedSubcontractor.name,
+        code: step.plannedSubcontractor.code ?? null,
+      },
+      requestedColor: step.workOrder.targetColor?.name ?? null,
+      step: {
+        id: step.id,
+        stepSequence: step.stepSequence,
+        station: { name: step.station.name, code: step.station.code },
+      },
+      rolls,
+      totalQty,
+    });
+
+    const html = await printedDocumentService.renderDraftHtml(
+      PrintedDocType.SUBCONTRACTOR_DISPATCH,
+      doc
+    );
+    return { success: true, data: { html } };
   }
 
   // ===========================================================================
@@ -1917,7 +2301,7 @@ export class SubcontractorService {
       plateNumber: true,
       driverName: true,
       notes: true,
-      dyehouseNote: true,
+      instruction: true,
       stepId: true,
       cancelledAt: true,
       cancelReason: true,
@@ -2244,17 +2628,18 @@ export class SubcontractorService {
   // ===========================================================================
   // Donmuş içerik (toplar/totaller/fasoncu/adım) artık PrintedDocument'te. Burada
   // yalnız KASTEN canlı tutulan talimat alanları döner: istenen renk (WO hedef
-  // rengi — fason sonrası değişebilir; boyahaneye hangi renge boyanacağını söyler)
-  // + boyahane notu (sevk sonrası düzenlenebilir; kabul/iptalde kilitlenir).
+  // rengi — fason sonrası değişebilir; fasoncuya hangi renge boyanacağını söyler)
+  // + fason talimatı (sevk sonrası düzenlenebilir; kabul/iptalde kilitlenir). Talimat
+  // boşsa default kaynağı sevk edilen adımın notu (stepNote) → çeki listesine basılır.
   async getDispatchDyeOverlay(id: string): Promise<ApiResponse<unknown>> {
     const dispatch = await prisma.subcontractorDispatch.findUnique({
       where: { id },
       select: {
         cancelledAt: true,
-        dyehouseNote: true,
+        instruction: true,
+        step: { select: { notes: true } },
         workOrder: {
           select: {
-            dyehouseNote: true,
             targetColor: { select: { id: true, code: true, name: true, hex: true } },
           },
         },
@@ -2262,10 +2647,10 @@ export class SubcontractorService {
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
 
-    // P4: Boyahane notu düzenleme kilidi — iptal edilmiş ya da (kabul edilmiş =
-    // mal döndü) sevkin notu artık değiştirilemez. Frontend editörü buna göre
-    // disabled eder; backend updateDyehouseNote de aynı guard'ı uygular.
-    const dyehouseNoteLocked =
+    // P4: Fason talimatı düzenleme kilidi — iptal edilmiş ya da (kabul edilmiş =
+    // mal döndü) sevkin talimatı artık değiştirilemez. Frontend editörü buna göre
+    // disabled eder; backend updateInstruction de aynı guard'ı uygular.
+    const instructionLocked =
       dispatch.cancelledAt != null ||
       (await prisma.subcontractorReceiptItem.count({
         where: {
@@ -2285,31 +2670,31 @@ export class SubcontractorService {
               hex: dispatch.workOrder.targetColor.hex,
             }
           : null,
-        dyehouseNote: dispatch.dyehouseNote,
-        woDyehouseNote: dispatch.workOrder.dyehouseNote,
-        dyehouseNoteLocked,
+        instruction: dispatch.instruction,
+        stepNote: dispatch.step.notes,
+        instructionLocked,
       },
     };
   }
 
   // ===========================================================================
-  // UPDATE DYEHOUSE NOTE — Boyahane notunu sevk sonrası düzenle (Electron)
+  // UPDATE INSTRUCTION — Fason talimatını sevk sonrası düzenle (Electron)
   // ===========================================================================
-  // Sevk notu (notes) snapshot'a dondurulduğu için değişmez; boyahane notu ise
+  // Sevk notu (notes) snapshot'a dondurulduğu için değişmez; fason talimatı ise
   // canlı kolon — planlamacı sevk fişini açıp talimatı sonradan ekleyebilir/
   // düzeltebilir. İptal edilmiş sevkte düzenlemeye izin verilmez.
-  async updateDyehouseNote(
+  async updateInstruction(
     id: string,
-    dyehouseNote: string | null,
+    instruction: string | null,
     userId?: string
-  ): Promise<ApiResponse<{ id: string; dispatchNo: string; dyehouseNote: string | null }>> {
+  ): Promise<ApiResponse<{ id: string; dispatchNo: string; instruction: string | null }>> {
     const dispatch = await prisma.subcontractorDispatch.findUnique({
       where: { id },
       select: {
         id: true,
         cancelledAt: true,
-        dyehouseNote: true,
-        // P4: bu sevkin (iptal edilmemiş) bir kabulü var mı? Varsa boyahane
+        instruction: true,
+        // P4: bu sevkin (iptal edilmemiş) bir kabulü var mı? Varsa fason firma
         // malı zaten işledi — talimatı değiştirmek anlamsız/yanıltıcı, kilitle.
         items: {
           select: {
@@ -2324,21 +2709,21 @@ export class SubcontractorService {
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
     if (dispatch.cancelledAt) {
-      throw AppError.conflict("İptal edilmiş sevkin boyahane notu düzenlenemez");
+      throw AppError.conflict("İptal edilmiş sevkin fason talimatı düzenlenemez");
     }
     if (dispatch.items.some((it) => it.receiptItems.length > 0)) {
       throw AppError.conflict(
-        "Mal kabul edilmiş — boyahane notu artık düzenlenemez.",
+        "Mal kabul edilmiş — fason talimatı artık düzenlenemez.",
       );
     }
 
-    // Boş/whitespace → null (notu temizle).
-    const next = dyehouseNote && dyehouseNote.trim() ? dyehouseNote.trim() : null;
+    // Boş/whitespace → null (talimatı temizle).
+    const next = instruction && instruction.trim() ? instruction.trim() : null;
 
     const updated = await prisma.subcontractorDispatch.update({
       where: { id },
-      data: { dyehouseNote: next },
-      select: { id: true, dispatchNo: true, dyehouseNote: true },
+      data: { instruction: next },
+      select: { id: true, dispatchNo: true, instruction: true },
     });
 
     await AuditService.log({
@@ -2346,8 +2731,8 @@ export class SubcontractorService {
       action: "UPDATE",
       tableName: "SUBCONTRACTOR_DISPATCH",
       recordId: id,
-      oldData: { dyehouseNote: dispatch.dyehouseNote },
-      newData: { dyehouseNote: next },
+      oldData: { instruction: dispatch.instruction },
+      newData: { instruction: next },
     });
 
     return { success: true, data: updated };
@@ -3392,8 +3777,54 @@ export class SubcontractorService {
 // =============================================================================
 // Tek üretici iki yolda: freeze (sevk create tx'i) + reissue (gerekçeli revizyon).
 // getCurrent belgesi olmayan eski kayıtta bunu lazy-init olarak da kullanır.
-// İstenen renk + boyahane notu KASTEN belgede YOK — canlı overlay alanlarıdır
-// (boyahaneye talimat; kabul/iptalde kilitlenir), getDispatchDyeOverlay döner.
+// İstenen renk + fason talimatı KASTEN belgede YOK — canlı overlay alanlarıdır
+// (fasoncuya talimat; kabul/iptalde kilitlenir), getDispatchDyeOverlay döner.
+/** Çeki listesi `doc` payload'ını yapısal parçalardan kurar — hem gerçek sevk
+ *  belgesi (buildFasonDispatchDoc) hem erken TASLAK çeki (previewDownstreamFasonCeki)
+ *  aynı şekli üretsin diye tek yer. `sequence` ve `totalWeight` burada hesaplanır. */
+function assembleFasonCekiDoc(args: {
+  dispatchNo: string;
+  dispatchedAt: string;
+  driverName: string | null;
+  plateNumber: string | null;
+  notes: string | null;
+  instruction: string | null;
+  workOrder: { id: string; batchNumber: string; parameters: Record<string, unknown> | null; type: string };
+  subcontractor: { id: string; name: string; code: string | null };
+  requestedColor: string | null;
+  step: { id: string; stepSequence: number; station: { name: string; code: string } };
+  rolls: Array<{
+    id: string;
+    barcode: string | null;
+    itemCode: string;
+    itemName: string;
+    colorCode: string | null;
+    colorName: string | null;
+    dispatchedQty: number;
+    dispatchedWeight: number | null;
+    qualityGrade: string;
+    width: number | null;
+  }>;
+  totalQty: number;
+}): Record<string, unknown> {
+  const rolls = args.rolls.map((r, idx) => ({ sequence: idx + 1, ...r }));
+  const totalWeight = rolls.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
+  return {
+    dispatchNo: args.dispatchNo,
+    dispatchedAt: args.dispatchedAt,
+    driverName: args.driverName,
+    plateNumber: args.plateNumber,
+    notes: args.notes,
+    instruction: args.instruction,
+    workOrder: args.workOrder,
+    subcontractor: args.subcontractor,
+    requestedColor: args.requestedColor,
+    step: args.step,
+    rolls,
+    totals: { rollCount: rolls.length, totalQty: args.totalQty, totalWeight },
+  };
+}
+
 async function buildFasonDispatchDoc(
   db: PrintedDocDb,
   dispatchId: string
@@ -3402,7 +3833,17 @@ async function buildFasonDispatchDoc(
     where: { id: dispatchId },
     include: {
       subcontractor: { select: { id: true, name: true, code: true } },
-      workOrder: { select: { id: true, batchNumber: true, parameters: true, type: true } },
+      workOrder: {
+        select: {
+          id: true,
+          batchNumber: true,
+          parameters: true,
+          type: true,
+          // İstenen renk = boyamanın hedef rengi. Sevkte toplar HAM (renksiz) gider;
+          // çeki listesi boyahaneye "şu renge boya" der → WO.targetColor gösterilir.
+          targetColor: { select: { name: true } },
+        },
+      },
       step: { include: { station: { select: { name: true, code: true } } } },
       items: {
         include: {
@@ -3432,19 +3873,20 @@ async function buildFasonDispatchDoc(
     qualityGrade: item.roll.qualityGrade,
     width: item.roll.width != null ? Number(item.roll.width) : null,
   }));
-  const totalWeight = rolls.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
-
   return {
     documentNo: dispatch.dispatchNo,
     voidInfo: dispatch.cancelledAt
       ? { reason: dispatch.cancelReason, at: dispatch.cancelledAt }
       : null,
-    doc: {
+    doc: assembleFasonCekiDoc({
       dispatchNo: dispatch.dispatchNo,
       dispatchedAt: dispatch.dispatchedAt.toISOString(),
       driverName: dispatch.driverName,
       plateNumber: dispatch.plateNumber,
       notes: dispatch.notes,
+      // Fason talimatı çekiye DONAR: sevkin kendi talimatı, yoksa adımın notu.
+      // (overlay precedence'ı ile aynı; "Revize Et" yeni talimatla yeniden dondurur.)
+      instruction: dispatch.instruction ?? dispatch.step.notes ?? null,
       workOrder: {
         id: dispatch.workOrder.id,
         batchNumber: dispatch.workOrder.batchNumber,
@@ -3456,26 +3898,22 @@ async function buildFasonDispatchDoc(
         name: dispatch.subcontractor.name,
         code: dispatch.subcontractor.code ?? null,
       },
+      requestedColor: dispatch.workOrder.targetColor?.name ?? null,
       step: {
         id: dispatch.step.id,
         stepSequence: dispatch.step.stepSequence,
-        station: {
-          name: dispatch.step.station.name,
-          code: dispatch.step.station.code,
-        },
+        station: { name: dispatch.step.station.name, code: dispatch.step.station.code },
       },
       rolls,
-      totals: {
-        rollCount: rolls.length,
-        totalQty: Number(dispatch.totalQty),
-        totalWeight,
-      },
-    },
+      totalQty: Number(dispatch.totalQty),
+    }),
   };
 }
 
 registerPrintedDocBuilder(PrintedDocType.SUBCONTRACTOR_DISPATCH, {
   fresh: buildFasonDispatchDoc,
+  // Tek-kaynak "KUMAŞ İRSALİYESİ" HTML — mobil + Electron aynısını basar.
+  renderHtml: renderFasonCekiHtml,
 });
 
 // =============================================================================

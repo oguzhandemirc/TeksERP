@@ -113,6 +113,28 @@ router.get(
 
 /**
  * @openapi
+ * /api/kartela/stock:
+ *   get:
+ *     tags: [Kartela]
+ *     summary: Kartela stoğu — müsait kartelaların ürün+renk bazında sayımı (sevk picker)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/stock",
+  verifyToken,
+  // Sevkiyatçının kartela izni olmayabilir → shipping + mobil paket izinleri de stok listesini görebilir.
+  requireAnyPermission(
+    "kartela:read",
+    "shipping:read",
+    "shipping:write",
+    "mobile:tarti-paket",
+    "mobile:sevkiyat"
+  ),
+  controller.getStock
+);
+
+/**
+ * @openapi
  * /api/kartela/receive:
  *   post:
  *     tags: [Kartela]

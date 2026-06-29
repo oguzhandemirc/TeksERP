@@ -93,3 +93,11 @@ export const trLabel = (map: Record<string, string>, key: string | undefined | n
   if (!key) return '—';
   return map[key] ?? key;
 };
+
+/**
+ * Fason adımı not etiketi — istasyon adına duyarlı (örn. "Boyahane Talimatı").
+ * İstasyon adı yoksa genel "Fason Talimatı" döner. Fason adımın `notes` alanı
+ * o adımın fason talimatıdır; sevkin çeki listesine basılır.
+ */
+export const fasonNoteLabel = (stationName?: string | null): string =>
+  stationName ? `${stationName} Talimatı` : 'Fason Talimatı';

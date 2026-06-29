@@ -13,6 +13,7 @@ import {
   type DocSheetPreview,
 } from "@/components/print/print-helpers";
 import { safeFormat } from "@/lib/format";
+import { fasonNoteLabel } from "./fasonNote";
 import type { FasonDispatchDoc } from "./service";
 
 const NUM_FMT = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
@@ -20,13 +21,13 @@ const NUM_FMT = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
 /** Donmuş içerik (FasonDispatchDoc) + CANLI talimat overlay'i (renk + boya notu). */
 export interface FasonSheetData extends FasonDispatchDoc {
   requestedColor: { id: string; code: string; name: string; hex: string | null } | null;
-  /** Efektif boyahane notu (sevkin kendi notu → yoksa WO notu). */
-  dyehouseNote: string | null;
+  /** Efektif fason talimatı (sevkin kendi notu → yoksa adım notu). */
+  instruction: string | null;
 }
 
 // =============================================================================
 // Donmuş fason sevk irsaliyesi sheet'i. Donmuş içerik snapshot'tan; istenen renk
-// + boyahane notu CANLI overlay (talimat alanları). `preview` verilirse config/künye
+// + fason talimatı CANLI overlay (talimat alanları). `preview` verilirse config/künye
 // taslak ayardan gelir (Belge Şablonları önizlemesi).
 // =============================================================================
 export function PrintableSheet({
@@ -60,7 +61,8 @@ export function PrintableSheet({
       );
   const company = preview ? preview.companyName : (companyName ?? DEFAULT_COMPANY_NAME);
   const lh = preview ? preview.letterhead : (letterhead ?? DEFAULT_COMPANY_LETTERHEAD);
-  const dyehouseNote = snap.dyehouseNote;
+  const instruction = snap.instruction;
+  const instructionTitle = fasonNoteLabel(snap.step.station.name);
 
   return (
     <div className="print-area relative mx-auto max-w-[210mm] bg-white p-6 text-[12px] text-black">
@@ -136,12 +138,12 @@ export function PrintableSheet({
         </div>
       )}
 
-      {cfg.sections.dyehouseNote && dyehouseNote && (
+      {cfg.sections.dyehouseNote && instruction && (
         <div className="mt-3 rounded border-2 border-black px-3 py-2">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-700">
-            Boyahane Notu
+            {instructionTitle}
           </div>
-          <div className="mt-0.5 whitespace-pre-wrap text-[12px] font-medium">{dyehouseNote}</div>
+          <div className="mt-0.5 whitespace-pre-wrap text-[12px] font-medium">{instruction}</div>
         </div>
       )}
 

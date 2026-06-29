@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { safeFormat, formatNumber } from "@/lib/format";
+import { fasonNoteLabel } from "./fasonNote";
 import type { StepDispatch, WorkOrderStepLite } from "./types";
 
 interface DispatchEntry extends StepDispatch {
@@ -109,11 +110,11 @@ export function WorkOrderDocumentsDialog({
                             </span>
                           </span>
                         </div>
-                        {(d.dyehouseNote ?? d.woDyehouseNote) && (
+                        {(d.instruction ?? d.stepNote) && (
                           <div className="text-[11px] text-muted-foreground">
-                            Boyahane Notu:{" "}
+                            {fasonNoteLabel(d.stationName)}:{" "}
                             <span className="whitespace-pre-wrap font-medium text-orange-700">
-                              {d.dyehouseNote ?? d.woDyehouseNote}
+                              {d.instruction ?? d.stepNote}
                             </span>
                           </div>
                         )}

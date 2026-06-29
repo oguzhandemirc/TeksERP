@@ -23,8 +23,10 @@ export interface FeatureFlags {
   rawWidthEnabled: boolean;
   /** İade kabulünde personel kaliteyi değiştirebilsin mi (default false). */
   returnGradingEnabled: boolean;
-  /** Fason Sevk'te boyahane notunu operatör telefondan girebilsin mi (default false). */
-  dyehouseNoteMobileEntry: boolean;
+  /** Kartela kabulünde cm/kg ölçü alanları gösterilsin mi (default false → yalnız adet). */
+  kartelaMeasurementEnabled: boolean;
+  /** Fason Sevk'te fason talimatını operatör telefondan girebilsin mi (default false). */
+  fasonNoteMobileEntry: boolean;
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). Kapalıyken
    *  ① Sevkiyat ekranında "Hemen Sevk Et" kısayolu görünür; açıkken çıkış yalnız ② "Sevk Çıkışı"
    *  ekranından onaylanır. Ara depoda bekleme + sonradan çıkış flag'den bağımsız her zaman var. */
@@ -46,7 +48,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   targetQuantityEnabled: false,
   rawWidthEnabled: false,
   returnGradingEnabled: false,
-  dyehouseNoteMobileEntry: false,
+  kartelaMeasurementEnabled: false,
+  fasonNoteMobileEntry: false,
   shipmentConfirmationEnabled: false,
   // Default AÇIK (backend ile aynı) — yüklenene/offline'da da aşıma izin var.
   tamburOverQuantityEnabled: true,

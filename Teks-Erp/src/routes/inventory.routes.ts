@@ -485,6 +485,74 @@ router.post(
 
 /**
  * @openapi
+ * /api/rolls/{id}/recovery-targets:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: "Üretime Geri Al" önizlemesi — takılı açık kumaş için uygun Tambur adımları
+ *     description: |
+ *       Ham stokta takılı açık kumaş (barkodsuz, fason-dönüşü, STOCK, currentStepId=null)
+ *       için uygun "üretime geri al" hedeflerini döner: aynı ürünlü, açık
+ *       (PLANNED/IN_PROGRESS) iş emirlerinin kapanmamış Tambur adımları. Salt-okunur.
+ *       Top uygun değilse `eligible:false` + `reason`.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "RecoveryTargetsResult (roll + eligible + eligibleTargets + warnings)" }
+ *       404: { description: Top bulunamadı }
+ */
+router.get(
+  "/:id/recovery-targets",
+  verifyToken,
+  requirePermission("roll:manual-adjust"),
+  controller.getRecoveryTargets,
+);
+
+/**
+ * @openapi
+ * /api/rolls/{id}/recover-to-production:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Takılı açık kumaşı seçilen Tambur adımına geri al (üretime sok)
+ *     description: |
+ *       Süpervizör aksiyonu (roll:manual-adjust). Orphan açık kumaşı YENİ roll
+ *       yaratmadan yerinde claim eder (STOCK→IN_PRODUCTION, currentStepId/
+ *       producedInStepId=Tambur step) + Tambur'a açık RollMovement açar; sonrasında
+ *       normal Tambur kesim akışı çalışır. Zorunlu sebep (audit).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [stepId, reason]
+ *             properties:
+ *               stepId: { type: string, format: uuid, description: Hedef Tambur adımı }
+ *               reason: { type: string, minLength: 3, description: İşlem nedeni (audit) }
+ *     responses:
+ *       200: { description: Açık kumaş üretime geri alındı }
+ *       400: { description: Top uygun değil / adım Tambur değil / ürün eşleşmiyor }
+ *       404: { description: Top veya adım bulunamadı }
+ *       409: { description: Top başka işleme alınmış / adım veya iş emri kapalı }
+ */
+router.post(
+  "/:id/recover-to-production",
+  verifyToken,
+  requirePermission("roll:manual-adjust"),
+  controller.recoverToProduction,
+);
+
+/**
+ * @openapi
  * /api/rolls/open-fabric:
  *   post:
  *     tags: [Inventory]

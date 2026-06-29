@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { ShippingService } from "../services/shipping.service";
 import { sackSearchService } from "../services/sack-search.service";
+import { buildDispatchAccountingExport } from "../services/accounting-export.service";
 import "../types/express-augment";
 
 // Çuval/Top Arama (saha #1+#23) sorgu şeması — tümü opsiyonel, kombinlenebilir.
@@ -47,6 +48,13 @@ const scanSchema = z.object({
 
 const removeRollSchema = z.object({ rollId: z.string().uuid("Geçersiz top ID") });
 const removeSwatchSchema = z.object({ swatchId: z.string().uuid("Geçersiz kartela ID") });
+// Seçerek kartela ekle — ürün+renk stok grubundan N adet (barkod okutmadan).
+const addKartelaSchema = z.object({
+  itemId: z.string().uuid("Geçersiz ürün ID"),
+  colorId: z.string().uuid("Geçersiz renk ID").nullable().optional(),
+  count: z.number().int().positive("Adet pozitif tam sayı olmalı").max(10000),
+  sackId: z.string().uuid("Geçersiz çuval ID").nullable().optional(),
+});
 // Dolu çuval silme kısa yolu — true ise içerik depoya döndürülüp çuval silinir.
 const removeSackSchema = z.object({ withContents: z.boolean().optional() });
 const moveSackSchema = z.object({ sackId: z.string().uuid("Geçersiz çuval ID") });
@@ -146,6 +154,17 @@ export class ShippingController {
     }
   };
 
+  // Muhasebe Excel dökümü — ekran filtresine (tarih + müşteri) göre DISPATCHED
+  // veri seti (sevk listesi / detay / icmal / iade). Frontend exceljs ile basar.
+  getAccountingExport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await buildDispatchAccountingExport(req);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
   // ---- ÇUVAL/TOP ARAMA (saha #1+#23) — salt-okunur -------------------------
   searchSacks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -228,6 +247,25 @@ export class ShippingController {
       const body = removeSwatchSchema.parse(req.body);
       const result = await this.service.removeSwatchFromShipment(
         { shipmentId: req.params.id as string, swatchId: body.swatchId },
+        req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  addKartela = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = addKartelaSchema.parse(req.body);
+      const result = await this.service.addKartelaToShipment(
+        {
+          shipmentId: req.params.id as string,
+          itemId: body.itemId,
+          colorId: body.colorId ?? null,
+          count: body.count,
+          sackId: body.sackId ?? null,
+        },
         req.user?.userId
       );
       res.status(200).json(result);

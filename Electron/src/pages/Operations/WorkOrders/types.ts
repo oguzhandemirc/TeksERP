@@ -16,12 +16,23 @@ export interface StepRollSummary {
   dyedMeters: number;
   openFabricCount: number;
   openFabricMeters: number;
+  /** Bu adımda fiziksel BEKLEYEN (sevke hazır) top sayısı/metrajı — fason aksiyonu
+   *  gating'i: > 0 ise "{istasyon}'a Sevk Et". EXTERNAL adımda AT_SUBCONTRACTOR
+   *  toplar da currentStepId taşıdığı için `count`'tan ayrılır. */
+  waitingCount: number;
+  waitingMeters: number;
+  /** Bu adımda FASONDA (dışarıda) top sayısı/metrajı — > 0 ve sonraki adım fason
+   *  ise "Sonraki Fasona Aktar" aksiyonu açılır. */
+  atSubcontractorCount: number;
+  atSubcontractorMeters: number;
 }
 
 /** findById response'unda step başına bekleyen rulolar listesi (detay paneli için). */
 export interface StepRollItem {
   id: string;
   barcode: string | null;
+  /** Anlık durum — AT_SUBCONTRACTOR (fasonda) vs bekliyor ayrımı (seçim modalı). */
+  status: RollStatus;
   currentQty: number;
   width: number | null;
   qualityGrade: string;
@@ -39,9 +50,10 @@ export interface StepDispatch {
   plateNumber: string | null;
   driverName: string | null;
   notes: string | null;
-  dyehouseNote: string | null;
-  /** WO'daki boyahane notu (default) — sevkin kendi notu boşsa buna düşülür. */
-  woDyehouseNote: string | null;
+  /** Fason talimatı — sevkin kendi notu (override); boşsa adım notuna düşülür. */
+  instruction: string | null;
+  /** Sevkin adımının notu (default) — sevkin kendi talimatı boşsa buna düşülür. */
+  stepNote: string | null;
   subcontractor: { id: string; name: string };
   dispatchedBy: { id: string; fullName: string | null; username: string } | null;
 }
@@ -101,6 +113,9 @@ export interface WorkOrder {
   /** Liste response'unda — bağlı sipariş satırlarının toplam talep metrajı (m).
    *  Stok üretiminde / siparişe bağlı değilken 0. Çıkan/giren ile sipariş kıyası için. */
   orderedMeters?: number;
+  /** Liste response'unda — şu an mal tutulan fason istasyon adları (genelde tek;
+   *  AT_SUBCONTRACTOR toplar). Boş = şu an fasonda mal yok. "Şu an: Boyahane" rozeti. */
+  currentFasonStations?: string[];
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   routeTemplateId: string | null;
@@ -108,8 +123,6 @@ export interface WorkOrder {
   targetColorId: string | null;
   /** Tambur planlama bilgisi — operatöre default olarak gelir. */
   foldType: string | null;
-  /** Boyahaneye özel talimat — fason sevkinde kullanılır. */
-  dyehouseNote: string | null;
   steps: WorkOrderStepLite[];
   routeTemplate?: { id: string; code: string | null; name: string } | null;
   targetItem?: WorkOrderTargetItem | null;

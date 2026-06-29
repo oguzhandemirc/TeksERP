@@ -132,7 +132,7 @@ async function testTerminalRejection(): Promise<void> {
 
   let updErr: unknown;
   try {
-    await wos.update(done, { dyehouseNote: "x" }, ADMIN);
+    await wos.update(done, { foldType: "2-KAT" }, ADMIN);
   } catch (e) {
     updErr = e;
   }

@@ -225,3 +225,20 @@ export interface ScanResult {
   sackId?: string | null;
   currentQty?: number;
 }
+
+/** Kartela stoğu: ürün+renk bazında müsait (sevke girmemiş) kartela adedi. */
+export interface KartelaStockGroup {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  colorId: string | null;
+  colorName: string | null;
+  colorHex: string | null;
+  count: number;
+}
+
+export interface AddKartelaResult {
+  added: number;
+  swatchIds: string[];
+  sackId: string | null;
+}

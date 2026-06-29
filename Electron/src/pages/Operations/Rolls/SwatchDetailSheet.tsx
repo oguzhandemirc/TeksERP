@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useKartelaMeasurementEnabled } from "@/hooks/usePricingEnabled";
 import type { Swatch } from "./swatchService";
 
 interface Props {
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export function SwatchDetailSheet({ swatch, open, onOpenChange }: Props) {
+  const showMeasure = useKartelaMeasurementEnabled();
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-2xl overflow-auto">
@@ -44,29 +46,31 @@ export function SwatchDetailSheet({ swatch, open, onOpenChange }: Props) {
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <Card>
-                <CardContent className="p-3">
-                  <div className="text-xs text-muted-foreground">Boy</div>
-                  <div className="mt-0.5">
-                    <span className="text-2xl font-semibold tabular-nums">
-                      {swatch.length != null
-                        ? swatch.length.toLocaleString("tr-TR", { maximumFractionDigits: 2 })
-                        : "—"}
-                    </span>
-                    <span className="ml-1 text-xs text-muted-foreground">cm</span>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-3">
-                  <div className="text-xs text-muted-foreground">En</div>
-                  <div className="mt-0.5 font-medium tabular-nums">
-                    {swatch.width != null ? `${swatch.width} cm` : "—"}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {showMeasure && (
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <Card>
+                  <CardContent className="p-3">
+                    <div className="text-xs text-muted-foreground">Boy</div>
+                    <div className="mt-0.5">
+                      <span className="text-2xl font-semibold tabular-nums">
+                        {swatch.length != null
+                          ? swatch.length.toLocaleString("tr-TR", { maximumFractionDigits: 2 })
+                          : "—"}
+                      </span>
+                      <span className="ml-1 text-xs text-muted-foreground">cm</span>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3">
+                    <div className="text-xs text-muted-foreground">En</div>
+                    <div className="mt-0.5 font-medium tabular-nums">
+                      {swatch.width != null ? `${swatch.width} cm` : "—"}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             <Card>
               <CardContent className="space-y-2 p-3 text-sm">

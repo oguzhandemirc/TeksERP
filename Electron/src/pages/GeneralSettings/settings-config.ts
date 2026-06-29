@@ -9,6 +9,7 @@ import {
   Clock,
   Tags,
   ScanLine,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import type { FeatureFlags } from "@/services/featureFlagService";
@@ -111,7 +112,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     label: "Üretim — Saha",
     icon: Factory,
     description: "Sahadaki mobil istasyon ekranlarının davranışı.",
-    keywords: "KK1 ham en genişlik cm boyahane notu fason sevk mobil operatör saha kalite tambur metraj aşım fazla ölçüm açık kumaş top",
+    keywords: "KK1 ham en genişlik cm fason talimat boyahane notu sevk mobil operatör saha kalite tambur metraj aşım fazla ölçüm açık kumaş top",
     kind: "flags",
     flags: [
       {
@@ -120,9 +121,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Kapalıyken mobil KK1 ekranında en alanı gizlenir; operatör isterse 'en gir' ile yine girebilir. Ham kumaşın eni önemsiz — bitmiş topun eni iş emrinden gelir. Ürün Dengesi ham stoğu en'e bakmadan sayar.",
       },
       {
-        key: "dyehouseNoteMobileEntry",
-        title: "Fason sevkte boyahane notunu operatör telefondan girebilsin",
-        desc: "Kapalıyken (varsayılan) sahadaki operatör mobil Fason Sevk ekranında boyahane notu giremez; not yalnızca iş emrindeki 'Boyahane Notu' alanından gelir. Açıkken operatör sevk sırasında telefondan not girebilir/değiştirebilir (boş bırakırsa iş emrindeki not kullanılır).",
+        key: "fasonNoteMobileEntry",
+        title: "Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin",
+        desc: "Kapalıyken (varsayılan) sahadaki operatör mobil Fason Sevk ekranında talimat giremez; talimat yalnızca iş emrindeki fason adımının notundan gelir. Açıkken operatör sevk sırasında telefondan talimat girebilir/değiştirebilir (boş bırakırsa adım notu kullanılır).",
       },
       {
         key: "tamburOverQuantityEnabled",
@@ -148,6 +149,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "returnGradingEnabled",
         title: "İade kabulünde personel kaliteyi değiştirebilsin",
         desc: "Kapalıyken mobil İade ekranında 'kalite belirt' kontrolü gizlenir; top çıktığı kaliteyle döner. Açıkken teslim alan personel topun kalitesini düzeltebilir (etiket değişir; iade yine Hazır Depo'ya iner). Kapalıyken backend gönderilen kalite override'ını yok sayar.",
+      },
+    ],
+  },
+  {
+    id: "kartela",
+    label: "Kartela",
+    icon: Layers,
+    description: "Kartela (örnek kart) kabul ve stok davranışı.",
+    keywords: "kartela örnek kart swatch ölçü uzunluk cm ağırlık kg boy en adet stok",
+    kind: "flags",
+    flags: [
+      {
+        key: "kartelaMeasurementEnabled",
+        title: "Kartela kabulünde uzunluk (cm) / ağırlık (kg) alanlarını göster",
+        desc: "Kapalıyken (varsayılan) kartelalar yalnızca ADET sayılır; kabul ekranında ve kartela listelerinde cm/kg (Boy/En/Uzunluk) alanları gizlenir. Açıkken kabulde ölçü girilebilir ve listelerde görünür. Kartela firmasına gönderilen topun gerçek metresi bu ayardan ETKİLENMEZ.",
       },
     ],
   },

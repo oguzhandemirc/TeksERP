@@ -170,6 +170,7 @@ Yenisi için onay al. Mevcutlar:
 | Charts | `recharts` |
 | Drag & Drop | `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities` |
 | QR / Renk | `qrcode.react`, `react-colorful` |
+| Export | `exceljs` (renderer .xlsx üretimi — `src/lib/xlsx-export.ts`) |
 
 ## Test Kullanıcıları
 

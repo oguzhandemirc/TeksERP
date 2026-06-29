@@ -10,8 +10,7 @@ import {
   SHIPMENT_STATUS_TR,
   type ShipmentStatus,
 } from '../../../services/packing.service';
-import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
-import { resolveDispatchNoteHtml } from './dispatchNoteHtml';
+import { getShipmentDispatchHtml } from '../../../services/shipmentDispatchPrint';
 
 const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-TR');
 
@@ -33,7 +32,6 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
     queryFn: () => packingService.getShipment(shipmentId),
     staleTime: 10_000,
   });
-  const flags = useFeatureFlags().data;
   const d = q.data?.data ?? null;
 
   if (q.isLoading || !d) return <ActivityIndicator style={{ marginTop: 24 }} />;
@@ -41,7 +39,7 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
   const printNote = async (): Promise<void> => {
     try {
       setPrinting(true);
-      const html = await resolveDispatchNoteHtml({ shipmentId, detail: d, flags });
+      const html = await getShipmentDispatchHtml(shipmentId);
       await Print.printAsync({
         html,
         margins: { left: 0, top: 0, right: 0, bottom: 0 },
