@@ -3,14 +3,15 @@
 // =============================================================================
 // x-device-id header'ı varsa Device kaydını çözer ve req.device'a yazar.
 //
-// Davranış (cihaz eşleştirme ZORUNLU iken — device.pairingRequired = true):
-// - Header YOK            → next() (web/Electron istekleri, etkilenmez)
-// - Header VAR + aktif/eşli → req.device set edilir, next()
-// - Header VAR + pasif/yok/eşsiz → 401 DEVICE_INACTIVE (tablet pairing'e geri düşer)
+// Davranış (atama ZORUNLU iken — device.pairingRequired = true):
+// - Header YOK               → next() (web/Electron istekleri, etkilenmez)
+// - Header VAR + ONAYLI       → req.device set edilir, next() (MAKİNEYE ATANMAMIŞ OLSA DA —
+//                              yönetici/atamasız cihaz da çalışır; donanım deviceId-join'den)
+// - Header VAR + PENDING/pasif/yok → 401 DEVICE_INACTIVE (tablet onay bekler)
 //
-// Davranış (eşleştirme PASİF iken — device.pairingRequired = false, DEFAULT):
-// - Eşli cihaz yine req.device set edilir (makine atfı korunur).
-// - Eşleşmemiş/kayıtsız cihaz da BLOKLANMAZ → next() (req.device boş, makine atfı NULL).
+// Davranış (atama PASİF iken — device.pairingRequired = false, DEFAULT):
+// - Onaylı cihaz req.device set edilir (makine atfı korunur).
+// - Onaysız/kayıtsız cihaz da BLOKLANMAZ → next() (req.device boş, makine atfı NULL).
 //
 // İstisna: announce/status/pairing-required endpoint'leri bu kontrolden muaftır —
 // onaysız (PENDING) cihaz kendini bildirebilmeli, durumunu poll'layabilmeli ve mobil
@@ -60,21 +61,9 @@ export const resolveDevice = async (
       }
       return next();
     }
-    if (!device.machineId) {
-      // Cihaz aktif ama bir makineye eşli değil (admin "Eşleşmeyi Kaldır" çekti
-      // veya Pasife Al → Aktifleştir döngüsü machineId'yi sıfırladı). Eşleştirme
-      // zorunluysa yeniden eşleştirme kodu girilmeli; pasifse cihaz yine geçer.
-      if (await readDevicePairingRequired()) {
-        res.status(401).json({
-          success: false,
-          message:
-            "Cihaz bir makineye eşli değil. Yöneticiden yeni eşleştirme kodu isteyin.",
-          code: "DEVICE_INACTIVE",
-        });
-        return;
-      }
-      return next();
-    }
+    // Onaylı + aktif cihaz GEÇER — makineye atanmamış olsa bile. Yönetici/atamasız
+    // cihaz da çalışır; donanım artık deviceId-join'den çözülür (makineden değil).
+    // machineId yalnızca üretim atfı (RollOperation vb.); null olması erişimi engellemez.
     req.device = {
       id: device.id,
       deviceId: device.deviceId,
