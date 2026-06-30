@@ -10,7 +10,7 @@ import { TemplatesPage } from "@/pages/Access/Templates/TemplatesPage";
 import { PermissionsCatalogPage } from "@/pages/Access/Permissions/PermissionsCatalogPage";
 import { ItemsPage } from "@/pages/Items/ItemsPage";
 import { CustomersPage } from "@/pages/Customers/CustomersPage";
-import { StationsPage } from "@/pages/Stations/StationsPage";
+import { ProductionStationsPage } from "@/pages/Stations/ProductionStationsPage";
 import { MachinesPage } from "@/pages/Machines/MachinesPage";
 import { PeripheralDevicesPage } from "@/pages/PeripheralDevices/PeripheralDevicesPage";
 import { PrinterModelsPage } from "@/pages/PrinterModels/PrinterModelsPage";
@@ -122,7 +122,7 @@ export const contentRoutes: RouteObject[] = [
     path: "definitions/stations",
     element: (
       <ProtectedRoute requirePermission="station:read">
-        <StationsPage />
+        <ProductionStationsPage />
       </ProtectedRoute>
     ),
   },

@@ -14,16 +14,18 @@ interface Props {
   initial?: Machine | null;
   onSubmit: (values: MachineFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
+  /** Kart-içi "Makine ekle" için ön-seçili istasyon (yeni kayıtta). */
+  defaultStationId?: string;
 }
 
-export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting, defaultStationId }: Props) {
   const defaults: MachineFormValues = initial
     ? {
         stationId: initial.stationId,
         name: initial.name,
         isActive: initial.isActive,
       }
-    : machineFormDefaults;
+    : { ...machineFormDefaults, stationId: defaultStationId ?? machineFormDefaults.stationId };
 
   return (
     <EntityFormDialog<MachineFormValues>
