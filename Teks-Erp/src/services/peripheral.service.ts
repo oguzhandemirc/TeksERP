@@ -173,6 +173,12 @@ export class PeripheralDeviceService extends BaseService {
         },
       });
     }
+    // Cihaz↔donanım join (M:N) — getForDevice artık join'den çözer.
+    await prisma.devicePeripheral.upsert({
+      where: { deviceId_peripheralId: { deviceId, peripheralId: record.id } },
+      create: { deviceId, peripheralId: record.id },
+      update: {},
+    });
     await AuditService.log({
       userId, action: existing ? "UPDATE" : "CREATE", tableName: PERIPHERAL_TABLE, recordId: record.id,
       newData: { deviceId, address, connectionType: "BLUETOOTH_SPP" },
@@ -208,8 +214,9 @@ export class PeripheralDeviceService extends BaseService {
     // donanım yoksa cihazın makinesindeki (machineId) donanıma düşer — eski makine-atamalı
     // kurulum bozulmasın. machineId yoksa boş liste (sim/manuel'e düşer).
     if (owner.deviceId) {
+      // Cihaza atanan donanım = join (DevicePeripheral) — paylaşımlı (M:N).
       const direct = await prisma.peripheralDevice.findMany({
-        where: { ...base, deviceId: owner.deviceId },
+        where: { ...base, deviceLinks: { some: { deviceId: owner.deviceId } } },
         orderBy: { createdAt: "asc" },
       });
       if (direct.length > 0) return { success: true, data: direct };

@@ -92,9 +92,9 @@ export class DeviceService {
   }
 
   /**
-   * Admin: cihaza donanım ata (yeni model — tablet → donanım doğrudan). Seçili
-   * peripheral'ların deviceId'sini bu cihaza bağlar (machineId'yi temizler), bu
-   * cihazın listede OLMAYAN eski donanımını çözer (deviceId=null). Boş liste = tümünü çöz.
+   * Admin: cihaza donanım ata (M:N paylaşım — join DevicePeripheral). Cihazın join
+   * satırlarını seçilen donanımla DEĞİŞTİRİR. Aynı donanım (ör. ağ yazıcısı) başka
+   * cihazlarda da kalabilir — diğer cihazlara DOKUNULMAZ. Boş liste = tümünü kaldır.
    */
   static async assignHardware(id: string, peripheralIds: string[], userId?: string) {
     const device = await prisma.device.findUnique({ where: { id }, select: { id: true } });
@@ -107,14 +107,9 @@ export class DeviceService {
       if (found.length !== ids.length) throw AppError.badRequest("Bir veya daha fazla donanım bulunamadı veya pasif");
     }
     await prisma.$transaction([
-      // Bu cihazdan kaldırılan (artık seçili olmayan) donanımı çöz.
-      prisma.peripheralDevice.updateMany({
-        where: { deviceId: id, ...(ids.length ? { id: { notIn: ids } } : {}) },
-        data: { deviceId: null },
-      }),
-      // Seçilenleri bu cihaza bağla (exactly-one: machineId'yi de temizle).
+      prisma.devicePeripheral.deleteMany({ where: { deviceId: id } }),
       ...(ids.length
-        ? [prisma.peripheralDevice.updateMany({ where: { id: { in: ids } }, data: { deviceId: id, machineId: null } })]
+        ? [prisma.devicePeripheral.createMany({ data: ids.map((peripheralId) => ({ deviceId: id, peripheralId })) })]
         : []),
     ]);
     await AuditService.log({

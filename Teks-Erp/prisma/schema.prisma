@@ -438,8 +438,9 @@ model Device {
   status     DeviceStatus @default(PENDING)
 
   // Relations
-  machine     Machine?           @relation(fields: [machineId], references: [id])
-  peripherals PeripheralDevice[] // tablete-bağlı cihazlar (BT yazıcı tabletle gezer)
+  machine       Machine?           @relation(fields: [machineId], references: [id])
+  peripherals   PeripheralDevice[] // (eski) tablete-bağlı tekil sahiplik (registerBt geçişte)
+  hardwareLinks DevicePeripheral[] // YENİ: cihazın kullandığı donanım (çok-çok, paylaşılabilir)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -548,6 +549,7 @@ model PeripheralDevice {
   notes      String?   @db.VarChar(500)
 
   templateRoutes PeripheralTemplateRoute[]
+  deviceLinks    DevicePeripheral[] // YENİ: bu donanımı kullanan cihaz(lar) (çok-çok)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -559,6 +561,23 @@ model PeripheralDevice {
   @@index([connectionType])
   @@index([isActive])
   @@map("peripheral_devices")
+}
+
+/// Cihaz ↔ donanım atama (ÇOK-ÇOK). Bir cihaz birçok donanım kullanır; bir donanım
+/// (ör. ağ yazıcısı) birçok cihaza atanabilir — PAYLAŞIM. Admin manuel yönetir.
+/// (BT okuyucu/kantar fiziksel olarak tek host'a bağlanır; model paylaşıma izin verir,
+/// doğru atama yöneticinin sorumluluğudur.)
+model DevicePeripheral {
+  id           String           @db.Uuid @id @default(uuid())
+  deviceId     String           @db.Uuid
+  device       Device           @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  peripheralId String           @db.Uuid
+  peripheral   PeripheralDevice @relation(fields: [peripheralId], references: [id], onDelete: Cascade)
+  createdAt    DateTime         @default(now())
+
+  @@unique([deviceId, peripheralId])
+  @@index([peripheralId])
+  @@map("device_peripherals")
 }
 
 /// Cihaz başına LabelKind → şablon yönlendirme. JSON yerine indekslenebilir +

@@ -101,16 +101,31 @@ async function main() {
   });
   await DeviceService.assignHardware(testDev.id, [testPeri.id]);
   const direct = (await svc.getForDevice({ deviceId: testDev.id }, "METER")).data as Array<{ code: string }>;
-  check("getForDevice({deviceId}) → cihaza atanan donanım", direct.length === 1 && direct[0]?.code === "TEST-DEV-METRE", `${direct.length}`);
+  check("getForDevice({deviceId}) → cihaza atanan donanım (join)", direct.length === 1 && direct[0]?.code === "TEST-DEV-METRE", `${direct.length}`);
   const pri = (await svc.getForDevice({ deviceId: testDev.id, machineId: tambur.id }, "METER")).data as Array<{ code: string }>;
   check("deviceId-öncelik (machineId fallback değil)", pri.length === 1 && pri[0]?.code === "TEST-DEV-METRE");
+
+  // PAYLAŞIM (M:N): aynı donanım 2. cihaza da atanır → ikisinde de çözülür.
+  const testDev2 = await prisma.device.upsert({
+    where: { deviceId: "TEST-DEV-FORDEVICE-2" },
+    update: { isActive: true, status: "APPROVED" },
+    create: { deviceId: "TEST-DEV-FORDEVICE-2", name: "TEST Cihaz 2", status: "APPROVED", isActive: true },
+    select: { id: true },
+  });
+  await DeviceService.assignHardware(testDev2.id, [testPeri.id]);
+  const d1 = (await svc.getForDevice({ deviceId: testDev.id }, "METER")).data as unknown[];
+  const d2 = (await svc.getForDevice({ deviceId: testDev2.id }, "METER")).data as unknown[];
+  check("PAYLAŞIM: aynı donanım iki cihazda da çözülür", d1.length === 1 && d2.length === 1, `dev1=${d1.length} dev2=${d2.length}`);
+  // testDev'den kaldır → testDev2'de HÂLÂ var (paylaşım, diğerine dokunulmaz)
   await DeviceService.assignHardware(testDev.id, []);
-  const cleared = (await svc.getForDevice({ deviceId: testDev.id }, "METER")).data as unknown[];
-  check("assignHardware([]) → donanım çözüldü (deviceId=null)", cleared.length === 0, `${cleared.length}`);
+  const d1c = (await svc.getForDevice({ deviceId: testDev.id }, "METER")).data as unknown[];
+  const d2c = (await svc.getForDevice({ deviceId: testDev2.id }, "METER")).data as unknown[];
+  check("kaldırınca diğer cihazda kalır (paylaşım korunur)", d1c.length === 0 && d2c.length === 1, `dev1=${d1c.length} dev2=${d2c.length}`);
 
   // cleanup (TEST- kayıtları)
+  await prisma.devicePeripheral.deleteMany({ where: { peripheral: { code: "TEST-DEV-METRE" } } });
   await prisma.peripheralDevice.deleteMany({ where: { code: "TEST-DEV-METRE" } });
-  await prisma.device.deleteMany({ where: { deviceId: "TEST-DEV-FORDEVICE" } });
+  await prisma.device.deleteMany({ where: { deviceId: { in: ["TEST-DEV-FORDEVICE", "TEST-DEV-FORDEVICE-2"] } } });
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
