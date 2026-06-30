@@ -12,7 +12,7 @@
 // Electron: device yok → sistem default (adım 3).
 // =============================================================================
 
-import { PrinterLanguage } from "@prisma/client";
+import { PrinterLanguage, type LabelKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { readPrinterLanguage } from "../system-setting.service";
 import { DEFAULT_LABEL_FORMAT, type LabelFormatGeometry } from "./label-html.helper";
@@ -70,6 +70,9 @@ function fromProfile(
 export async function resolveLabelFormat(opts?: {
   profileId?: string | null;
   machineId?: string | null;
+  /** TOP etiketinde (ROLL_RAW/ROLL_FINISHED) sistem-varsayılan = isRollDefault profili;
+   * diğer türlerde (SWATCH) code="DEFAULT". Verilmezse eski davranış (code="DEFAULT"). */
+  kind?: LabelKind | null;
 }): Promise<ResolvedLabelFormat> {
   // Yazıcı dili: bir istasyon yazıcı MODELİ çözülürse onunki (örn Argox=PPLA),
   // yoksa global ayar `label.printerLanguage` (default PPLA). Model dili önceliklidir.
@@ -101,9 +104,14 @@ export async function resolveLabelFormat(opts?: {
     }
   }
 
-  // 3. sistem default profili (code="DEFAULT" tercihli, yoksa en eski aktif)
+  // 3. sistem default profili. TOP etiketinde önce isRollDefault'lu profil; sonra
+  //    code="DEFAULT" (kartela/diğerleri burayı kullanır); yoksa en eski aktif.
   if (!profile) {
+    const isRoll = opts?.kind === "ROLL_RAW" || opts?.kind === "ROLL_FINISHED";
     const sys =
+      (isRoll
+        ? await prisma.labelFormatProfile.findFirst({ where: { isRollDefault: true, isActive: true } })
+        : null) ??
       (await prisma.labelFormatProfile.findFirst({ where: { code: "DEFAULT", isActive: true } })) ??
       (await prisma.labelFormatProfile.findFirst({
         where: { isActive: true },

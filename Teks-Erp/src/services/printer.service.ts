@@ -8,9 +8,13 @@
 // Yalnız GÖNDERİLEN alanlar denetlenir (PATCH kısmi gönderebilir).
 // =============================================================================
 
+import { PrinterLanguage } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { BaseService } from "./base.service";
 import { AppError } from "../utils/app-error";
+import { AuditService } from "./audit.service";
+import { LabelService } from "./label.service";
+import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
 import type { ApiResponse } from "../types/api.types";
 
 /** Gönderildiyse pozitif tamsayı/ondalık doğrula (>0). undefined → atla. */
@@ -69,5 +73,62 @@ export class LabelFormatProfileService extends BaseService {
   async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
     this.validateRefs(data);
     return super.update(id, data, userId);
+  }
+
+  /**
+   * Bu profili TOP (rulo) etiketlerinin sistem-varsayılanı yap — atomik: diğer tüm
+   * isRollDefault'lar düşürülür, bu true olur. Kartela (SWATCH) etkilenmez.
+   */
+  async setRollDefault(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const existing = await prisma.labelFormatProfile.findUnique({ where: { id } });
+    if (!existing) throw AppError.notFound("Boyut profili bulunamadı");
+    if (!existing.isActive) throw AppError.badRequest("Pasif profil varsayılan yapılamaz");
+    if (existing.isRollDefault) {
+      return { success: true, data: existing, message: "Zaten top varsayılanı" };
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.labelFormatProfile.updateMany({
+        where: { isRollDefault: true },
+        data: { isRollDefault: false },
+      });
+      return tx.labelFormatProfile.update({ where: { id }, data: { isRollDefault: true } });
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "label_format_profiles",
+      recordId: id,
+      oldData: { isRollDefault: false },
+      newData: { isRollDefault: true, event: "SET_ROLL_DEFAULT" },
+    });
+
+    return { success: true, data: updated, message: `${updated.name} artık top varsayılanı` };
+  }
+
+  /**
+   * Test baskısı için ÖRNEK (mock) top etiketinin native komutu (PPLA/PPLB/ZPL) —
+   * verilen profilin geometrisinde. Yerel yazıcıya (bu PC) doğrudan göndermek için
+   * istemci bu baytları çekip `window.api.printer.send` ile basar. SADECE ÜRETİR.
+   */
+  async getSampleNative(
+    id: string,
+    language?: PrinterLanguage,
+  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage }>> {
+    const profile = await prisma.labelFormatProfile.findUnique({ where: { id } });
+    if (!profile) throw AppError.notFound("Boyut profili bulunamadı");
+    // buildSampleRenderInput private — örnek payload + geometriyi tek yerde üretir;
+    // dirty label.service'i DÜZENLEMEDEN runtime'da çağırıyoruz (salt okuma kullanım).
+    const ls = new LabelService();
+    const input = await (
+      ls as unknown as { buildSampleRenderInput(p?: string | null): Promise<LabelRenderInput> }
+    ).buildSampleRenderInput(id);
+    const lang = language ?? input.format.language;
+    const rendered = renderLabel(lang, input);
+    if (rendered.language === PrinterLanguage.RASTER_HTML) {
+      throw AppError.badRequest("Seçili dil native değil (HTML). PPLA/PPLB/ZPL seçin.");
+    }
+    return { success: true, data: { content: rendered.content, language: rendered.language } };
   }
 }

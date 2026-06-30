@@ -73,6 +73,7 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
   const format = await resolveLabelFormat({
     profileId: opts.profileId ?? peripheralProfileId ?? null,
     machineId: opts.machineId ?? null,
+    kind,
   });
 
   // --- 3. Dil: cihaz override > cihaz modeli > format.language (machineHardware model/global) ---

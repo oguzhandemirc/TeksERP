@@ -495,6 +495,10 @@ model LabelFormatProfile {
   dpi         Int              @default(203)
   orientation LabelOrientation @default(PORTRAIT)
   isActive    Boolean          @default(true)
+  /// TOP (rulo) etiketlerinin sistem-varsayılan boyutu. Aynı anda EN FAZLA bir profil
+  /// true (partial unique index). Kartela (SWATCH) bundan etkilenmez — o code="DEFAULT"
+  /// kullanır; böylece top ile kartela boyutu bağımsız ayarlanır.
+  isRollDefault Boolean @default(false)
 
   defaultForModels PrinterModel[]    @relation("ModelDefaultProfile")
   peripherals      PeripheralDevice[]

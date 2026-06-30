@@ -9,10 +9,12 @@
 // =============================================================================
 
 import { Router } from "express";
+import { PrinterLanguage } from "@prisma/client";
 import { BaseController } from "../controllers/base.controller";
 import { PrinterModelService, LabelFormatProfileService } from "../services/printer.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
+import "../types/express-augment";
 
 // --- Printer Model (yazıcı katalog: Argox OS 214 plus vb.) ---
 const printerModelService = new PrinterModelService({
@@ -66,3 +68,40 @@ labelFormatProfileRouter.post("/", verifyToken, requirePermission("station:write
 labelFormatProfileRouter.patch("/:id", verifyToken, requirePermission("station:write"), labelFormatProfileController.update);
 labelFormatProfileRouter.delete("/:id", verifyToken, requirePermission("station:write"), labelFormatProfileController.remove);
 labelFormatProfileRouter.delete("/:id/permanent", verifyToken, requirePermission("station:write"), labelFormatProfileController.hardRemove);
+
+/**
+ * @openapi
+ * /api/label-format-profiles/{id}/set-roll-default:
+ *   post: { tags: [Printers], summary: Bu profili TOP etiketi varsayılanı yap (atomik; kartela etkilenmez), security: [{ bearerAuth: [] }], responses: { 200: { description: OK } } }
+ */
+labelFormatProfileRouter.post(
+  "/:id/set-roll-default",
+  verifyToken,
+  requirePermission("station:write"),
+  async (req, res, next) => {
+    try {
+      const result = await labelFormatProfileService.setRollDefault(req.params.id as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  },
+);
+
+/**
+ * @openapi
+ * /api/label-format-profiles/{id}/sample-native:
+ *   get: { tags: [Printers], summary: Örnek etiketin native komutu (yerel test baskısı için; text/plain), security: [{ bearerAuth: [] }], responses: { 200: { description: PPLA/PPLB/ZPL string } } }
+ */
+labelFormatProfileRouter.get(
+  "/:id/sample-native",
+  verifyToken,
+  requirePermission("station:read"),
+  async (req, res, next) => {
+    try {
+      const raw = typeof req.query.language === "string" ? req.query.language : undefined;
+      const language =
+        raw === "PPLA" || raw === "PPLB" || raw === "ZPL" ? (raw as PrinterLanguage) : undefined;
+      const result = await labelFormatProfileService.getSampleNative(req.params.id as string, language);
+      res.status(200).type("text/plain; charset=utf-8").send(result.data.content);
+    } catch (e) { next(e); }
+  },
+);
