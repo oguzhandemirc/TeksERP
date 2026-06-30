@@ -56,9 +56,10 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     simulate: v.simulate,
     machineId: v.owner === "machine" ? nn(v.machineId) : null,
     deviceId: v.owner === "device" ? nn(v.deviceId) : null,
-    printerModelId: nn(v.printerModelId),
-    formatProfileId: nn(v.formatProfileId),
-    languageOverride: nn(v.languageOverride),
+    // Yazıcı alanları yalnız LABEL_PRINTER'da anlamlı; metre/kantar'da temizle.
+    printerModelId: v.kind === "LABEL_PRINTER" ? nn(v.printerModelId) : null,
+    formatProfileId: v.kind === "LABEL_PRINTER" ? nn(v.formatProfileId) : null,
+    languageOverride: v.kind === "LABEL_PRINTER" ? nn(v.languageOverride) : null,
     notes: nn(v.notes),
     isActive: v.isActive,
     templateRoutes: [

@@ -126,8 +126,8 @@ export const definitionTiles: DefinitionTile[] = [
   },
   {
     key: "peripherals",
-    title: "Cihaz Kaydı",
-    description: "Yazıcı + kantar/metraj cihazları (ağ/Bluetooth/USB/seri) — dil/profil/şablon yönlendirme",
+    title: "Donanım",
+    description: "Yazıcı + kantar/metraj cihazları (ağ/Bluetooth/USB/seri) — tür, dil/komut, adres",
     icon: Printer,
     to: "/definitions/peripherals",
     group: "production",

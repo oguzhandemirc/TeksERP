@@ -102,6 +102,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         const owner = form.watch("owner");
         const kind = form.watch("kind");
         const isInput = kind === "SCALE" || kind === "METER";
+        const isPrinter = kind === "LABEL_PRINTER";
         return (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -219,7 +220,9 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
               )}
             </div>
 
-            {/* Yazıcı dili/profili */}
+            {/* Yazıcı dili/profili + şablon — YALNIZ yazıcıda (metre/kantar'da gizli) */}
+            {isPrinter && (
+              <>
             <div className="grid grid-cols-3 gap-3 rounded-md border bg-muted/20 p-3">
               <FormField label="Yazıcı Modeli" hint="Dil buradan (Argox=PPLA).">
                 <Controller
@@ -287,6 +290,8 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                 ))}
               </div>
             </div>
+              </>
+            )}
 
             <FormField label="Not">
               <Input {...form.register("notes")} placeholder="örn. seri hatta HC-06 lehimli" />
