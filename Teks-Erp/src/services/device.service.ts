@@ -16,6 +16,9 @@ const DEVICE_INCLUDE = {
   machine: {
     select: { id: true, code: true, name: true, station: { select: { id: true, name: true } } },
   },
+  hardwareLinks: {
+    select: { peripheral: { select: { id: true, code: true, name: true, kind: true } } },
+  },
 } as const;
 
 type DeviceWithMachine = {

@@ -40,12 +40,9 @@ export function ApproveAssignDialog({ device, onOpenChange, onDone }: Props) {
 
   useEffect(() => {
     setMachineId(device?.machineId ?? null);
-    // Bu cihaza halihazırda atanmış donanımı ön-işaretle.
-    const assigned = (peripherals?.data ?? [])
-      .filter((p) => p.deviceId && p.deviceId === device?.id)
-      .map((p) => p.id);
-    setSelectedIds(assigned);
-  }, [device, peripherals]);
+    // Bu cihaza halihazırda atanmış donanımı (M:N join) ön-işaretle.
+    setSelectedIds((device?.hardwareLinks ?? []).map((h) => h.peripheral.id));
+  }, [device]);
 
   const mutation = useMutation({
     mutationFn: async (id: string) => {

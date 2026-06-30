@@ -16,4 +16,8 @@ export interface DeviceListItem {
     name: string;
     station: { id: string; name: string };
   } | null;
+  /** Cihaza atanan donanım (M:N join). Paylaşımlı olabilir. */
+  hardwareLinks?: {
+    peripheral: { id: string; code: string; name: string; kind: string };
+  }[];
 }

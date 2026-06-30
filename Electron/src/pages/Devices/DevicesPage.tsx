@@ -174,6 +174,12 @@ function DeviceRow({
             ) : (
               <span className="italic">Henüz makineye atanmamış</span>
             )}
+            {(device.hardwareLinks?.length ?? 0) > 0 && (
+              <span>
+                <span className="text-foreground">Donanım:</span>{" "}
+                {device.hardwareLinks!.map((h) => h.peripheral.name).join(", ")}
+              </span>
+            )}
             <span>Son aktivite: {lastSeen}</span>
             <span className="font-mono">{device.deviceId.slice(0, 12)}…</span>
           </div>
