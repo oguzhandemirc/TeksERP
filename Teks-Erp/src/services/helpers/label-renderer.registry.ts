@@ -15,6 +15,7 @@ import { buildRollLabelHtml } from "./label-html.helper";
 import { buildRollLabelPpla } from "./label-ppla.helper";
 import { buildRollLabelPplb } from "./label-pplb.helper";
 import { buildRollLabelZpl } from "./label-zpl.helper";
+import { applyRawCode, readTemplateRawCode } from "./label-rawcode";
 
 export interface LabelRenderInput {
   payload: LabelPayload;
@@ -61,6 +62,16 @@ const CONTENT_TYPES: Record<PrinterLanguage, string> = {
 /** Yazıcı diline göre etiketi render et. Driver yoksa RASTER_HTML'e düşer (failsafe). */
 export function renderLabel(language: PrinterLanguage, input: LabelRenderInput): RenderedLabel {
   const effective = RENDERERS[language] ? language : PrinterLanguage.RASTER_HTML;
+  // Uzman override: şablonda bu dil için raw-code varsa otomatik üretim yerine onu
+  // kullan ({{key}} yer-tutucuları payload'dan doldurulur). Yoksa generator çalışır.
+  const raw = readTemplateRawCode(input.template?.rawCode, effective);
+  if (raw) {
+    return {
+      language: effective,
+      content: applyRawCode(raw, input.payload, { barcodeSvg: input.barcodeSvg, qrSvg: input.qrSvg }),
+      contentType: CONTENT_TYPES[effective],
+    };
+  }
   return {
     language: effective,
     content: RENDERERS[effective]!(input),

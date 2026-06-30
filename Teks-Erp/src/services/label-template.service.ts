@@ -56,6 +56,9 @@ function rethrowDefaultConflict(e: unknown): never {
   throw e;
 }
 
+/** Uzman raw-code override (dil→kod). Boş string'ler temizlenir = o dilde otomatik. */
+export type RawCodeMap = Partial<Record<"PPLA" | "PPLB" | "ZPL" | "RASTER_HTML", string>>;
+
 export interface LabelTemplateInput {
   name: string;
   kind: LabelKind;
@@ -63,6 +66,7 @@ export interface LabelTemplateInput {
   isActive?: boolean;
   /** Boş geçilirse catalog'dan default field listesi üretilir. */
   fields?: TemplateField[];
+  rawCode?: RawCodeMap;
 }
 
 export interface LabelTemplateUpdateInput {
@@ -70,6 +74,16 @@ export interface LabelTemplateUpdateInput {
   isDefault?: boolean;
   isActive?: boolean;
   fields?: TemplateField[];
+  rawCode?: RawCodeMap;
+}
+
+/** Boş/whitespace dil değerlerini at → { } = tüm diller otomatik üretim. */
+function normalizeRawCode(rc: RawCodeMap): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rc)) {
+    if (typeof v === "string" && v.trim()) out[k] = v;
+  }
+  return out;
 }
 
 export class LabelTemplateService {
@@ -143,6 +157,7 @@ export class LabelTemplateService {
           isDefault: input.isDefault ?? false,
           isActive: input.isActive ?? true,
           fields: fields as unknown as Prisma.InputJsonValue,
+          ...(input.rawCode ? { rawCode: normalizeRawCode(input.rawCode) as Prisma.InputJsonValue } : {}),
         },
       });
     }).catch(rethrowDefaultConflict);
@@ -180,6 +195,7 @@ export class LabelTemplateService {
     if (input.isActive !== undefined) data.isActive = input.isActive;
     if (input.fields) data.fields = input.fields as unknown as Prisma.InputJsonValue;
     if (input.isDefault !== undefined) data.isDefault = input.isDefault;
+    if (input.rawCode !== undefined) data.rawCode = normalizeRawCode(input.rawCode) as Prisma.InputJsonValue;
 
     const updated = await prisma.$transaction(async (tx) => {
       // isDefault=true'ya çekiliyorsa kind içindeki diğer default'ları düşür.

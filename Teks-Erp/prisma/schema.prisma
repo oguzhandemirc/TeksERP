@@ -2473,6 +2473,10 @@ model LabelTemplate {
   isActive  Boolean   @default(true)
   /// Field listesi — operatör toggle/sırala/bold ile kalıcı düzenler.
   fields    Json
+  /// Uzman raw-code override (dil→kod): { PPLA?, PPLB?, ZPL?, RASTER_HTML? }. Bir dil
+  /// için doluysa otomatik üretim yerine BU kod basılır ({{key}} yer-tutucuları payload
+  /// değeriyle doldurulur). Boş/yok → mevcut otomatik üretim.
+  rawCode   Json?
 
   peripheralRoutes PeripheralTemplateRoute[]
 

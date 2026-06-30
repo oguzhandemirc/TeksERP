@@ -67,6 +67,17 @@ router.get("/catalog/:kind", verifyToken, requirePermission("label-template:read
 
 /**
  * @openapi
+ * /api/label-templates/preview-raw:
+ *   post:
+ *     tags: [Label Templates]
+ *     summary: Uzman raw-code önizlemesi (sahte veri + verilen kod → ham çıktı)
+ *     description: Body { kind, language, code }. {{key}} yer-tutucuları örnek payload'la doldurulur.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post("/preview-raw", verifyToken, requirePermission("label-template:read"), controller.previewRaw);
+
+/**
+ * @openapi
  * /api/label-templates/{id}:
  *   get:
  *     tags: [Label Templates]

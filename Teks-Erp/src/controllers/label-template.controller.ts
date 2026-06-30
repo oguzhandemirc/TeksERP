@@ -4,8 +4,9 @@
 
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { LabelKind } from "@prisma/client";
+import { LabelKind, PrinterLanguage } from "@prisma/client";
 import { LabelTemplateService } from "../services/label-template.service";
+import { buildRawCodePreview } from "../services/helpers/label-rawcode";
 import "../types/express-augment";
 
 const fieldSchema = z.object({
@@ -17,12 +18,23 @@ const fieldSchema = z.object({
   fontSize:  z.enum(["sm", "md", "lg", "xl"]).optional(),
 });
 
+// Uzman raw-code override (dil→kod). Boş/yok → o dilde otomatik üretim.
+const rawCodeSchema = z
+  .object({
+    PPLA:        z.string().max(20000).optional(),
+    PPLB:        z.string().max(20000).optional(),
+    ZPL:         z.string().max(20000).optional(),
+    RASTER_HTML: z.string().max(20000).optional(),
+  })
+  .partial();
+
 const createSchema = z.object({
   name:      z.string().min(1).max(200),
   kind:      z.nativeEnum(LabelKind),
   isDefault: z.boolean().optional(),
   isActive:  z.boolean().optional(),
   fields:    z.array(fieldSchema).optional(),
+  rawCode:   rawCodeSchema.optional(),
 });
 
 const updateSchema = z.object({
@@ -30,6 +42,13 @@ const updateSchema = z.object({
   isDefault: z.boolean().optional(),
   isActive:  z.boolean().optional(),
   fields:    z.array(fieldSchema).optional(),
+  rawCode:   rawCodeSchema.optional(),
+});
+
+const previewRawSchema = z.object({
+  kind:     z.nativeEnum(LabelKind),
+  language: z.nativeEnum(PrinterLanguage),
+  code:     z.string().max(20000),
 });
 
 export class LabelTemplateController {
@@ -79,6 +98,15 @@ export class LabelTemplateController {
       const body = updateSchema.parse(req.body);
       const result = await this.service.update(req.params.id as string, body, req.user?.userId);
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** Uzman raw-code önizlemesi — sahte veri + verilen kodu ikame edip ham çıktıyı döner. */
+  previewRaw = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { kind, language, code } = previewRawSchema.parse(req.body);
+      const { content, contentType } = buildRawCodePreview(kind, language, code);
+      res.status(200).type(contentType).send(content);
     } catch (e) { next(e); }
   };
 
