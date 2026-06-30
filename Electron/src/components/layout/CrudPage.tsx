@@ -28,6 +28,9 @@ interface Props<T extends { id: string }> {
   filterBar?: ReactNode;
   /** Kayıt yokken "Yeni" butonunu glow animasyonuyla vurgula. */
   glowWhenEmpty?: boolean;
+  /** Üst PageHeader'ı gizle (bir sekmeye gömülürken çift başlığı önler) —
+   * Yenile/Yeni butonları araç çubuğuna taşınır. */
+  hideHeader?: boolean;
   renderForm: (params: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -49,6 +52,7 @@ export function CrudPage<T extends { id: string }>({
   extraFilters,
   filterBar,
   glowWhenEmpty,
+  hideHeader,
   renderForm,
 }: Props<T>) {
   const [formOpen, setFormOpen] = useState(false);
@@ -141,29 +145,29 @@ export function CrudPage<T extends { id: string }>({
 
   const isEmpty = glowWhenEmpty && query.isSuccess && !search && !showInactive && pagination.total === 0;
 
+  const headerActions = (
+    <>
+      <RefreshButton queryKey={queryKey} />
+      <PermissionGate permission={writePermission}>
+        <Button
+          size="sm"
+          className={isEmpty ? "animate-pulse" : undefined}
+          onClick={() => {
+            setEditing(null);
+            setFormOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4" /> Yeni
+        </Button>
+      </PermissionGate>
+    </>
+  );
+
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
-        title={title}
-        description={description}
-        actions={
-          <>
-            <RefreshButton queryKey={queryKey} />
-            <PermissionGate permission={writePermission}>
-              <Button
-                size="sm"
-                className={isEmpty ? "animate-pulse" : undefined}
-                onClick={() => {
-                  setEditing(null);
-                  setFormOpen(true);
-                }}
-              >
-                <Plus className="h-4 w-4" /> Yeni
-              </Button>
-            </PermissionGate>
-          </>
-        }
-      />
+      {!hideHeader && (
+        <PageHeader title={title} description={description} actions={headerActions} />
+      )}
 
       <DataTableToolbar
         search={search}
@@ -173,6 +177,7 @@ export function CrudPage<T extends { id: string }>({
         exportName={title}
         actions={
           <>
+            {hideHeader && headerActions}
             {filterBar}
             <label className="flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border bg-background px-3 text-xs">
               <Checkbox

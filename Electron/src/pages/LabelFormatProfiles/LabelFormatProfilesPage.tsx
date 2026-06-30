@@ -10,11 +10,12 @@ import type { LabelFormatProfile } from "./types";
  * güvenlik payı). Yazıcı modeli/makine bunlara referans tutar; etiket birkaç mm
  * küçük çıksa bile pay sayesinde kırpılmaz. Test baskısı sonrası buradan ayarlanır.
  */
-export function LabelFormatProfilesPage() {
+export function LabelFormatProfilesPage({ hideHeader }: { hideHeader?: boolean } = {}) {
   return (
     <CrudPage<LabelFormatProfile>
       title="Etiket Format Profilleri"
       description="Top etiketinin fiziksel boyutu (mm) + güvenlik payı + DPI/yön. Yazıcıya/etikete göre ayarlanır."
+      hideHeader={hideHeader}
       entityName="Format Profili"
       queryKey="label-format-profiles"
       service={labelFormatProfileService}

@@ -21,7 +21,7 @@ import { NewTemplateDialog } from "./NewTemplateDialog";
 
 const QUERY_KEY = "label-templates";
 
-export function LabelTemplatesPage() {
+export function LabelTemplatesPage({ hideHeader }: { hideHeader?: boolean } = {}) {
   const navigate = useNavigate();
   const [activeKind, setActiveKind] = useState<LabelKind>(LabelKind.ROLL_FINISHED);
   const [newOpen, setNewOpen] = useState(false);
@@ -30,25 +30,32 @@ export function LabelTemplatesPage() {
   const handleEdit = (id: string) =>
     navigate(`/definitions/label-templates/${id}`);
 
+  const actions = (
+    <>
+      <RefreshButton queryKey={QUERY_KEY} />
+      <PermissionGate permission="label-template:write">
+        <Button size="sm" onClick={() => setNewOpen(true)} className="gap-1">
+          <Plus className="h-4 w-4" /> Yeni Şablon
+        </Button>
+      </PermissionGate>
+    </>
+  );
+
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
-        title="Etiket Standartları"
-        description="Top, kartela ve sevkiyat etiketlerinin alan listesi, sırası ve görünümü."
-        actions={
-          <>
-            <RefreshButton queryKey={QUERY_KEY} />
-            <PermissionGate permission="label-template:write">
-              <Button size="sm" onClick={() => setNewOpen(true)} className="gap-1">
-                <Plus className="h-4 w-4" /> Yeni Şablon
-              </Button>
-            </PermissionGate>
-          </>
-        }
-      />
+      {!hideHeader && (
+        <PageHeader
+          title="Etiket Standartları"
+          description="Top, kartela ve sevkiyat etiketlerinin alan listesi, sırası ve görünümü."
+          actions={actions}
+        />
+      )}
 
       <div className="flex-1 overflow-auto p-4">
         <Tabs value={activeKind} onValueChange={(v) => setActiveKind(v as LabelKind)}>
+          {hideHeader && (
+            <div className="mb-3 flex items-center justify-end gap-2">{actions}</div>
+          )}
           <TabsList>
             {(Object.keys(labelKindLabels) as LabelKind[]).map((k) => (
               <TabsTrigger key={k} value={k}>

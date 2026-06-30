@@ -127,10 +127,10 @@ export const definitionTiles: DefinitionTile[] = [
   {
     key: "labels",
     title: "Etiketler",
-    description: "Etiket boyutları (mm) + düzenleri (alan yerleşimi). Yazıcı dili artık Donanım'da.",
+    description: "Etiket boyutları (mm) + düzenleri (alan yerleşimi / uzman yazıcı kodu).",
     icon: Tags,
     to: "/definitions/labels",
-    group: "production",
+    group: "cikti",
     permission: "station:read",
   },
   {
@@ -175,7 +175,7 @@ export const definitionTiles: DefinitionTile[] = [
     description: "İrsaliye/çeki içeriği: bölüm aç-kapa, başlık, künye, imza, alt not (canlı önizleme)",
     icon: FileText,
     to: "/definitions/document-templates",
-    group: "system",
+    group: "cikti",
     permission: "admin:settings",
   },
   {
@@ -184,7 +184,7 @@ export const definitionTiles: DefinitionTile[] = [
     description: "Refakat kartında basılan firma adı/künyesi ve görünecek bölümler",
     icon: Printer,
     to: "/definitions/traveler-card",
-    group: "system",
+    group: "cikti",
     permission: "admin:settings",
   },
   {
