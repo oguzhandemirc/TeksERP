@@ -91,6 +91,38 @@ export class DeviceService {
     return updated;
   }
 
+  /**
+   * Admin: cihaza donanım ata (yeni model — tablet → donanım doğrudan). Seçili
+   * peripheral'ların deviceId'sini bu cihaza bağlar (machineId'yi temizler), bu
+   * cihazın listede OLMAYAN eski donanımını çözer (deviceId=null). Boş liste = tümünü çöz.
+   */
+  static async assignHardware(id: string, peripheralIds: string[], userId?: string) {
+    const device = await prisma.device.findUnique({ where: { id }, select: { id: true } });
+    if (!device) throw AppError.notFound("Cihaz bulunamadı");
+    const ids = Array.from(new Set((peripheralIds ?? []).filter((p): p is string => typeof p === "string" && !!p)));
+    if (ids.length > 0) {
+      const found = await prisma.peripheralDevice.findMany({
+        where: { id: { in: ids }, isActive: true }, select: { id: true },
+      });
+      if (found.length !== ids.length) throw AppError.badRequest("Bir veya daha fazla donanım bulunamadı veya pasif");
+    }
+    await prisma.$transaction([
+      // Bu cihazdan kaldırılan (artık seçili olmayan) donanımı çöz.
+      prisma.peripheralDevice.updateMany({
+        where: { deviceId: id, ...(ids.length ? { id: { notIn: ids } } : {}) },
+        data: { deviceId: null },
+      }),
+      // Seçilenleri bu cihaza bağla (exactly-one: machineId'yi de temizle).
+      ...(ids.length
+        ? [prisma.peripheralDevice.updateMany({ where: { id: { in: ids } }, data: { deviceId: id, machineId: null } })]
+        : []),
+    ]);
+    await AuditService.log({
+      userId, action: "UPDATE", tableName: "devices", recordId: id, newData: { assignedHardware: ids },
+    }).catch(() => undefined);
+    return { success: true, assigned: ids.length };
+  }
+
   /** Admin: onayı/atamayı geri al → PENDING (tablet "atama bekleniyor"a düşer). */
   static async revoke(id: string, userId?: string) {
     const existing = await prisma.device.findUnique({ where: { id } });

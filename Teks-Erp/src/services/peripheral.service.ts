@@ -197,15 +197,31 @@ export class PeripheralDeviceService extends BaseService {
    * (protokol alanları dahil). Tablet `req.device.machineId`'sine göre kendi metre/
    * kantar/yazıcılarını çözer — machineId yoksa boş liste (sim/manuel'e düşer).
    */
-  async getForDevice(machineId: string | null | undefined, kind: string): Promise<ApiResponse<unknown[]>> {
-    if (!machineId) return { success: true, data: [] };
+  async getForDevice(
+    owner: { deviceId?: string | null; machineId?: string | null },
+    kind: string,
+  ): Promise<ApiResponse<unknown[]>> {
     const validKind = Object.values(PeripheralKind).includes(kind as PeripheralKind);
     if (!validKind) throw AppError.badRequest("Geçersiz cihaz türü (kind)");
-    const rows = await prisma.peripheralDevice.findMany({
-      where: { machineId, kind: kind as PeripheralKind, isActive: true },
-      orderBy: { createdAt: "asc" },
-    });
-    return { success: true, data: rows };
+    const base = { kind: kind as PeripheralKind, isActive: true };
+    // Yeni model: donanım DOĞRUDAN cihaza (deviceId) atanır. Geriye-uyum: deviceId-owned
+    // donanım yoksa cihazın makinesindeki (machineId) donanıma düşer — eski makine-atamalı
+    // kurulum bozulmasın. machineId yoksa boş liste (sim/manuel'e düşer).
+    if (owner.deviceId) {
+      const direct = await prisma.peripheralDevice.findMany({
+        where: { ...base, deviceId: owner.deviceId },
+        orderBy: { createdAt: "asc" },
+      });
+      if (direct.length > 0) return { success: true, data: direct };
+    }
+    if (owner.machineId) {
+      const byMachine = await prisma.peripheralDevice.findMany({
+        where: { ...base, machineId: owner.machineId },
+        orderBy: { createdAt: "asc" },
+      });
+      return { success: true, data: byMachine };
+    }
+    return { success: true, data: [] };
   }
 
   /** Bağlantı testi: NETWORK_TCP → gerçek/simüle gönderim; diğerleri cihaz tarafı. */

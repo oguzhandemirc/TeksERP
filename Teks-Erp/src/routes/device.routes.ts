@@ -67,6 +67,13 @@ deviceAdminRouter.post("/:id/approve", verifyToken, requirePermission("admin:set
 
 /**
  * @openapi
+ * /api/admin/devices/{id}/assign-hardware:
+ *   post: { tags: [Admin], summary: Cihaza donanım ata (body peripheralIds[]), security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.post("/:id/assign-hardware", verifyToken, requirePermission("admin:settings"), DeviceController.assignHardware);
+
+/**
+ * @openapi
  * /api/admin/devices/{id}/revoke:
  *   post: { tags: [Admin], summary: Onayı/atamayı geri al (→ PENDING), security: [{ bearerAuth: [] }] }
  */

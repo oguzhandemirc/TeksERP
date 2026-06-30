@@ -7,6 +7,7 @@
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { PeripheralDeviceService } from "../src/services/peripheral.service";
+import { DeviceService } from "../src/services/device.service";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -46,13 +47,13 @@ async function main() {
     },
   });
 
-  // getForDevice: makine + tür → aktif cihazlar (protokol dahil)
-  const meters = (await svc.getForDevice(tambur.id, "METER")).data as Array<{ role: string | null; terminator: string | null }>;
+  // getForDevice: makine + tür → aktif cihazlar (protokol dahil) [geriye-uyum: machineId fallback]
+  const meters = (await svc.getForDevice({ machineId: tambur.id }, "METER")).data as Array<{ role: string | null; terminator: string | null }>;
   check("getForDevice(TAMBUR,METER) → 2 satır", meters.length === 2, `${meters.length}`);
   check("2-KAT + 4-KAT rolleri var", meters.some((m) => m.role === "2-KAT") && meters.some((m) => m.role === "4-KAT"));
   check("protokol alanı taşınıyor (terminator)", meters.every((m) => m.terminator === "\r\n"));
 
-  const scales = (await svc.getForDevice(kk1.id, "SCALE")).data as unknown[];
+  const scales = (await svc.getForDevice({ machineId: kk1.id }, "SCALE")).data as unknown[];
   check("getForDevice(KK1,SCALE) → 1 satır", scales.length === 1, `${scales.length}`);
 
   // Sevkiyat kantarı (SERIAL_COM) — yeni sevkiyat makinesi (reseed sonrası var).
@@ -68,19 +69,48 @@ async function main() {
       update: { ...sevkData, isActive: true }, // varsa BT-SPP'ye yakınsa (eski SERIAL_COM'u çevirir)
       create: { code: "SEVK-KANTAR", name: "Sevkiyat Kantarı", ...sevkData },
     });
-    const sevkScales = (await svc.getForDevice(sevk.id, "SCALE")).data as Array<{ connectionType: string; unit: string | null; pollCommand: string | null; simulate: boolean }>;
+    const sevkScales = (await svc.getForDevice({ machineId: sevk.id }, "SCALE")).data as Array<{ connectionType: string; unit: string | null; pollCommand: string | null; simulate: boolean }>;
     check("getForDevice(SEVK,SCALE) → ≥1 satır", sevkScales.length >= 1, `${sevkScales.length}`);
     check("SEVK kantarı BT-SPP + kg + komut + simulate", sevkScales.some((s) => s.connectionType === "BLUETOOTH_SPP" && s.unit === "kg" && s.pollCommand === "P" && s.simulate === true));
   } else {
     console.log("ℹ️ SEVK-M1 yok (reseed gerekli) — sevkiyat kantarı senaryosu atlandı");
   }
 
-  const none = (await svc.getForDevice(null, "METER")).data as unknown[];
-  check("getForDevice(null) → boş liste (eşleşme yok)", none.length === 0);
+  const none = (await svc.getForDevice({}, "METER")).data as unknown[];
+  check("getForDevice({}) → boş liste (eşleşme yok)", none.length === 0);
 
   let threw = false;
-  try { await svc.getForDevice(tambur.id, "BADKIND"); } catch { threw = true; }
+  try { await svc.getForDevice({ machineId: tambur.id }, "BADKIND"); } catch { threw = true; }
   check("getForDevice(geçersiz kind) → hata", threw);
+
+  // --- YENİ MODEL: donanım DOĞRUDAN cihaza (deviceId) atanır (assignHardware) ---
+  const testDev = await prisma.device.upsert({
+    where: { deviceId: "TEST-DEV-FORDEVICE" },
+    update: { isActive: true, status: "APPROVED" },
+    create: { deviceId: "TEST-DEV-FORDEVICE", name: "TEST Cihaz", status: "APPROVED", isActive: true },
+    select: { id: true },
+  });
+  const testPeri = await prisma.peripheralDevice.upsert({
+    where: { code: "TEST-DEV-METRE" },
+    update: { isActive: true, deviceId: null, machineId: null },
+    create: {
+      code: "TEST-DEV-METRE", name: "TEST Cihaz Metre", kind: "METER", connectionType: "BLUETOOTH_SPP",
+      address: "00:00:00:00:00:99", role: "PRIMARY", terminator: "\r\n", decimals: 1, unit: "m", simulate: true,
+    },
+    select: { id: true },
+  });
+  await DeviceService.assignHardware(testDev.id, [testPeri.id]);
+  const direct = (await svc.getForDevice({ deviceId: testDev.id }, "METER")).data as Array<{ code: string }>;
+  check("getForDevice({deviceId}) → cihaza atanan donanım", direct.length === 1 && direct[0]?.code === "TEST-DEV-METRE", `${direct.length}`);
+  const pri = (await svc.getForDevice({ deviceId: testDev.id, machineId: tambur.id }, "METER")).data as Array<{ code: string }>;
+  check("deviceId-öncelik (machineId fallback değil)", pri.length === 1 && pri[0]?.code === "TEST-DEV-METRE");
+  await DeviceService.assignHardware(testDev.id, []);
+  const cleared = (await svc.getForDevice({ deviceId: testDev.id }, "METER")).data as unknown[];
+  check("assignHardware([]) → donanım çözüldü (deviceId=null)", cleared.length === 0, `${cleared.length}`);
+
+  // cleanup (TEST- kayıtları)
+  await prisma.peripheralDevice.deleteMany({ where: { code: "TEST-DEV-METRE" } });
+  await prisma.device.deleteMany({ where: { deviceId: "TEST-DEV-FORDEVICE" } });
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();

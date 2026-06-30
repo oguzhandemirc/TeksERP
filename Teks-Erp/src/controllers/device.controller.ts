@@ -17,6 +17,10 @@ const approveSchema = z.object({
   machineId: z.string().uuid("Geçersiz makine ID").optional().nullable(),
 });
 
+const assignHardwareSchema = z.object({
+  peripheralIds: z.array(z.string().uuid("Geçersiz donanım ID")).default([]),
+});
+
 const renameSchema = z.object({
   name: z.string().min(1).max(80),
 });
@@ -78,6 +82,18 @@ export class DeviceController {
       const id = req.params.id as string;
       const body = approveSchema.parse(req.body ?? {});
       const data = await DeviceService.approveAndAssign(id, { machineId: body.machineId ?? null }, req.user?.userId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/admin/devices/:id/assign-hardware — cihaza donanım (yazıcı/okuyucu) ata. */
+  static async assignHardware(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const { peripheralIds } = assignHardwareSchema.parse(req.body ?? {});
+      const data = await DeviceService.assignHardware(id, peripheralIds, req.user?.userId);
       res.status(200).json({ success: true, data });
     } catch (error) {
       next(error);

@@ -60,7 +60,10 @@ peripheralRouter.get(
   async (req, res, next) => {
     try {
       const kind = typeof req.query.kind === "string" ? req.query.kind : "";
-      const result = await service.getForDevice(req.device?.machineId ?? null, kind);
+      const result = await service.getForDevice(
+        { deviceId: req.device?.id ?? null, machineId: req.device?.machineId ?? null },
+        kind,
+      );
       res.status(200).json(result);
     } catch (e) { next(e); }
   },
