@@ -13,6 +13,8 @@ export interface LabelFormatProfile {
   dpi: number;
   orientation: "PORTRAIT" | "LANDSCAPE";
   isActive: boolean;
+  /** TOP (rulo) etiketlerinin sistem-varsayılan boyutu. Kartela bundan etkilenmez. */
+  isRollDefault: boolean;
   createdAt: string;
   updatedAt: string;
 }
