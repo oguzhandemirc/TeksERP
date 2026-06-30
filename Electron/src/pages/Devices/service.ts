@@ -14,6 +14,12 @@ export const deviceService = {
       .post<ApiResponse<DeviceListItem>>(`${BASE}/${id}/approve`, { machineId })
       .then((r) => r.data),
 
+  /** Cihaza donanım (yazıcı/okuyucu) ata — peripheralIds = bu cihazın kullandığı donanım. */
+  assignHardware: (id: string, peripheralIds: string[]): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`${BASE}/${id}/assign-hardware`, { peripheralIds })
+      .then((r) => r.data),
+
   /** Onayı/atamayı geri al (→ PENDING). */
   revoke: (id: string): Promise<ApiResponse<DeviceListItem>> =>
     apiClient.post<ApiResponse<DeviceListItem>>(`${BASE}/${id}/revoke`).then((r) => r.data),
