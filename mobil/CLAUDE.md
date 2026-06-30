@@ -48,9 +48,9 @@ src/
 ### Saha cihazları (HAL — metre/kantar/yazıcı)
 - **Donanım = VERİ.** Cihazlar backend `PeripheralDevice`'ta (admin → Cihaz Kaydı): kind/connectionType/address + protokol (pollCommand/terminator/identifyPattern/decimals/scale/role) + per-cihaz `simulate`. Tablette device-local seçim YOK.
 - **HAL** (`src/services/hal/`): `btClassic.transport` (BT-Classic/HC-06 oku/yaz) + `meter.codec`; `hooks/usePeripheralIO.buildIoFromPeripheral(row)` bir cihaz satırından transport+codec kurar.
-- **Çözümleme:** `hooks/useMachinePeripherals('METER'|'SCALE')` → tabletin atandığı makinenin cihazları (`GET /peripherals/for-device`); `meterPeripheralFor(rows, foldType)` role ile seçer. Örnek: Tambur 2/4-kat metre.
-- **Simülasyon** cihazın `simulate` bayrağıyla (admin, seed'de METER/SCALE için `true`) — gerçek I/O opt-in; donanım yoksa/cihaz yoksa NET HATA (sessiz sahte yok).
-- `src/services/hardware.service.ts` (eski mock readWeight/readMeterage) yalnız KK1'de kaldı — follow-up'ta HAL'e taşınacak. Yeni okuma kodu HAL'i kullanır.
+- **Çözümleme:** `hooks/useMachinePeripherals('METER'|'SCALE')` → tabletin/telefonun atandığı makinenin cihazları (`GET /peripherals/for-device`); `meterPeripheralFor(rows, foldType)` role ile (2/4-KAT) seçer, `primaryMeterFor(rows)`/`primaryScaleFor(rows)` tek-cihaz istasyonları için (role PRIMARY ?? rolesiz ?? ilk). Örnek: Tambur 2/4-kat metre (METER), KK1 metraj (METER), Sevkiyat çuval tartısı (SCALE — PaketlemeScreen "Tart", HC-06 BT-SPP istek-cevap).
+- **Simülasyon** cihazın `simulate` bayrağıyla (admin, seed'de METER cihazları için `true`) — gerçek I/O opt-in; donanım yoksa/cihaz yoksa NET HATA (sessiz sahte yok).
+- Tüm istasyonlar (Tambur, KK1) okuma için HAL'i kullanır; eski `hardware.service.ts` mock'u KALDIRILDI.
 - **Kural:** Faz-1 simülasyon disiplini sürer ama **simülasyon artık per-cihaz veri bayrağıdır**, kodda gömülü "ASLA" değil.
 
 ## Allowed Packages

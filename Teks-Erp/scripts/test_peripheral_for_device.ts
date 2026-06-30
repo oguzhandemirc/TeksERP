@@ -1,7 +1,7 @@
 // =============================================================================
 // Test: PeripheralDevice giriş-cihazı protokol alanları + getForDevice çözümleme.
 // Çalıştır: npx tsx scripts/test_peripheral_for_device.ts
-// 2 METER (2-kat/4-kat) + 1 SCALE satırını UPSERT eder (kalıcı config — silmez) ve
+// 2 METER (2-kat/4-kat) + KK1 SCALE + sevkiyat SERIAL_COM SCALE satırını UPSERT eder ve
 // tablet auto-discovery'i (getForDevice) doğrular. Seed'in giriş-cihazı bloğunun
 // canlı eşdeğeri; reset gerekmeden DB'ye config'i koyar.
 // =============================================================================
@@ -54,6 +54,26 @@ async function main() {
 
   const scales = (await svc.getForDevice(kk1.id, "SCALE")).data as unknown[];
   check("getForDevice(KK1,SCALE) → 1 satır", scales.length === 1, `${scales.length}`);
+
+  // Sevkiyat kantarı (SERIAL_COM) — yeni sevkiyat makinesi (reseed sonrası var).
+  const sevk = await prisma.machine.findFirst({ where: { code: "SEVK-M1" }, select: { id: true } });
+  if (sevk) {
+    const sevkData = {
+      kind: "SCALE" as const, connectionType: "BLUETOOTH_SPP" as const,
+      address: "00:23:09:01:2A:3C", role: "PRIMARY", pollCommand: "P",
+      terminator: "\r\n", decimals: 2, unit: "kg", timeoutMs: 2500, simulate: true, machineId: sevk.id,
+    };
+    await prisma.peripheralDevice.upsert({
+      where: { code: "SEVK-KANTAR" },
+      update: { ...sevkData, isActive: true }, // varsa BT-SPP'ye yakınsa (eski SERIAL_COM'u çevirir)
+      create: { code: "SEVK-KANTAR", name: "Sevkiyat Kantarı", ...sevkData },
+    });
+    const sevkScales = (await svc.getForDevice(sevk.id, "SCALE")).data as Array<{ connectionType: string; unit: string | null; pollCommand: string | null; simulate: boolean }>;
+    check("getForDevice(SEVK,SCALE) → ≥1 satır", sevkScales.length >= 1, `${sevkScales.length}`);
+    check("SEVK kantarı BT-SPP + kg + komut + simulate", sevkScales.some((s) => s.connectionType === "BLUETOOTH_SPP" && s.unit === "kg" && s.pollCommand === "P" && s.simulate === true));
+  } else {
+    console.log("ℹ️ SEVK-M1 yok (reseed gerekli) — sevkiyat kantarı senaryosu atlandı");
+  }
 
   const none = (await svc.getForDevice(null, "METER")).data as unknown[];
   check("getForDevice(null) → boş liste (eşleşme yok)", none.length === 0);

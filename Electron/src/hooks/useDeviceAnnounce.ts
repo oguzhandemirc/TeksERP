@@ -1,0 +1,31 @@
+import { useEffect } from "react";
+import apiClient from "@/services/apiClient";
+import { getOrCreateDeviceId } from "@/lib/deviceId";
+
+/**
+ * Açılışta bu PC'yi backend Device allowlist'ine bildirir (announce). Cihaz
+ * PENDING olarak görünür; admin "Cihazlar" sayfasından sevkiyat makinesine atar.
+ *
+ * Electron GATE'lenmez (admin konsolu) — yalnız kendini tanıtır ki atanabilsin;
+ * atanınca `x-device-id` → makine çözülür ve sevkiyat kantarı bulunur.
+ * Best-effort: başarısızlık uygulamayı etkilemez.
+ */
+export function useDeviceAnnounce(): void {
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const deviceId = await getOrCreateDeviceId();
+        if (cancelled || !deviceId) return;
+        const platform = window.api?.appInfo?.platform?.() ?? "";
+        const name = platform ? `Masaüstü (${platform})` : "Masaüstü";
+        await apiClient.post("/api/devices/announce", { deviceId, name });
+      } catch {
+        /* announce best-effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+}

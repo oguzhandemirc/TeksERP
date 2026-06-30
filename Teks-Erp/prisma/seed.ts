@@ -371,7 +371,16 @@ async function main() {
       department: "TERBIYE", defaultCategoryId: catByCode.get("ZIMPARA")!.id,
     },
   });
-  console.log("✅ 5 istasyon (KK1 entry-only, Kurşun+KK2, Tambur, Boya, Zımpara)");
+  // Sevkiyat/paketleme noktası: sabit PC (Electron) + kantar burada durur. Üretim
+  // istasyonu değil (StationKind.OTHER + department SEVKIYAT) — çuval tartısı için
+  // bir Machine altına PeripheralDevice (SCALE) bağlanır. Çok-istasyon → aynı pattern.
+  const sevk = await prisma.station.create({
+    data: {
+      code: "SEVK_1", name: "Sevkiyat / Paketleme", type: "INTERNAL", kind: "OTHER",
+      department: "SEVKIYAT", allowAsWorkOrderStep: false,
+    },
+  });
+  console.log("✅ 6 istasyon (KK1 entry-only, Kurşun+KK2, Tambur, Boya, Zımpara, Sevkiyat)");
 
   // --- Makineler (içerideki istasyonlar için; tablet/makine bu Machine altına pair'lenir) ---
   await prisma.machine.createMany({
@@ -379,9 +388,10 @@ async function main() {
       { stationId: kk1.id,    code: "KK1-M1",    name: "KK1 Tablet 1" },
       { stationId: kursun.id, code: "KK2-M1",    name: "KK2 Makine 1" },
       { stationId: tambur.id, code: "TAMBUR-M1", name: "Tambur Makine 1" },
+      { stationId: sevk.id,   code: "SEVK-M1",   name: "Sevkiyat PC 1" },
     ],
   });
-  console.log("✅ 3 makine (KK1-M1, KK2-M1, TAMBUR-M1)");
+  console.log("✅ 4 makine (KK1-M1, KK2-M1, TAMBUR-M1, SEVK-M1)");
 
   // --- Yazıcı modeli kataloğu + etiket format profilleri ---
   // "Yazıcı değişse de format/komut tanımları kaybolmasın" → kalıcı katalog.
@@ -418,7 +428,7 @@ async function main() {
   // MachineHardware emekli; saha donanımının TEK kaynağı PeripheralDevice. Faz-1
   // gönderim simüle. KK1/KK2 yazıcıları burada; Tambur yazıcısı aşağıda (TAMBUR-ARGOX-01).
   const seededMachines = await prisma.machine.findMany({
-    where: { code: { in: ["KK1-M1", "KK2-M1", "TAMBUR-M1"] } },
+    where: { code: { in: ["KK1-M1", "KK2-M1", "TAMBUR-M1", "SEVK-M1"] } },
     select: { id: true, code: true },
   });
   const mById = (code: string) => seededMachines.find((m) => m.code === code)?.id;
@@ -470,8 +480,9 @@ async function main() {
     console.log("✅ Örnek cihaz kaydı (Tambur Argox, NETWORK_TCP, PPLA)");
   }
 
-  // --- Saha giriş cihazları (PeripheralDevice: METER / SCALE) — RS232→HC-06 (BT) ---
-  // Tambur: 2-kat + 4-kat metre okuyucu (foldType→role ile seçilir). KK1: kantar.
+  // --- Saha giriş cihazları (PeripheralDevice: METER) — RS232→HC-06 (BT) ---
+  // Tambur: 2-kat + 4-kat metre okuyucu (foldType→role ile seçilir). KK1: tek
+  // metre (role PRIMARY) — ham mal girişinde metraj otomatik okunur (kg manuel).
   // Faz-1 simüle (simulate=true); MAC/protokol örnek — sahada Cihaz Kaydı'ndan düzenlenir.
   const kk1MachineId = mById("KK1-M1");
   if (tamburMachineId) {
@@ -498,14 +509,35 @@ async function main() {
   if (kk1MachineId) {
     await prisma.peripheralDevice.create({
       data: {
-        code: "KK1-KANTAR", name: "KK1 Kantar",
-        kind: "SCALE", connectionType: "BLUETOOTH_SPP",
-        address: "00:23:09:01:1D:17",
-        decimals: 2, unit: "kg", timeoutMs: 2500, simulate: true,
+        code: "KK1-METRE", name: "KK1 Metre",
+        kind: "METER", connectionType: "BLUETOOTH_SPP",
+        address: "00:23:09:01:1D:17", role: "PRIMARY",
+        terminator: "\r\n", decimals: 1, unit: "m", timeoutMs: 2500, simulate: true,
         machineId: kk1MachineId,
       },
     });
-    console.log("✅ KK1 kantar cihazı (SCALE, BT-SPP)");
+    console.log("✅ KK1 metre cihazı (METER, BT-SPP, role PRIMARY)");
+  }
+
+  // --- Sevkiyat kantarı (PeripheralDevice: SCALE) — HC-06 → Android telefon (BT-SPP) ---
+  // Çuval brüt tartısı buradan okunur (mobil PaketlemeScreen "Tart"). Telefon
+  // kantara doğrudan Bluetooth Classic (BT-SPP) ile bağlanır. address = HC-06 MAC;
+  // pollCommand = istek-cevap komutu (kantar komut bekliyor; tam komut + format
+  // sahada Cihaz Kaydı'ndan girilir). Faz-1 simüle (simulate=true).
+  // NOT: İleride sabit PC + COM kantar istenirse aynı makineye SERIAL_COM bir SCALE
+  // satırı eklenir (Electron "Tart" onu okur) — kod değişmez.
+  const sevkMachineId = mById("SEVK-M1");
+  if (sevkMachineId) {
+    await prisma.peripheralDevice.create({
+      data: {
+        code: "SEVK-KANTAR", name: "Sevkiyat Kantarı",
+        kind: "SCALE", connectionType: "BLUETOOTH_SPP",
+        address: "00:23:09:01:2A:3C", role: "PRIMARY",
+        pollCommand: "P", terminator: "\r\n", decimals: 2, unit: "kg", timeoutMs: 2500, simulate: true,
+        machineId: sevkMachineId,
+      },
+    });
+    console.log("✅ Sevkiyat kantarı (SCALE, BT-SPP, role PRIMARY)");
   }
 
   // --- İstasyon yetenekleri ---

@@ -11,6 +11,7 @@ import { useServerHeartbeat } from "@/hooks/useServerClock";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import { useScannerWedge } from "@/hooks/useScannerWedge";
 import { useDeviceScanner } from "@/hooks/useDeviceScanner";
+import { useDeviceAnnounce } from "@/hooks/useDeviceAnnounce";
 import { useScannerStore } from "@/store/scanner";
 import { usePreferences } from "@/providers/PreferencesProvider";
 
@@ -45,6 +46,9 @@ export function AppShell() {
   });
   // Faz-2: seri/HID cihaz okuyucu (opt-in) — aynı pushScan boru hattını besler.
   useDeviceScanner();
+  // Bu PC'yi backend'e tanıt (announce) → admin makineye atayabilsin (sevkiyat
+  // kantarı vb.). Gate yok; best-effort.
+  useDeviceAnnounce();
 
   useGlobalShortcuts({
     onOpenCommand: () => setPaletteOpen(true),

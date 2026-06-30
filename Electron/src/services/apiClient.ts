@@ -1,6 +1,7 @@
 import axios from "axios";
 import { toast } from "sonner";
 import { tokenStore } from "@/lib/secure-token";
+import { getOrCreateDeviceId } from "@/lib/deviceId";
 import { useAuthStore } from "@/store/auth";
 import { useServerStatusStore } from "@/store/serverStatus";
 
@@ -27,6 +28,14 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(async (config) => {
   const token = await tokenStore.get();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Bu PC'yi backend'e tanıt: Device → Machine çözümü (sevkiyat kantarı vb.).
+  // Atanmamışsa backend normal çalışır (atıf null) — header zararsız.
+  try {
+    const deviceId = await getOrCreateDeviceId();
+    if (deviceId) config.headers["x-device-id"] = deviceId;
+  } catch {
+    /* header yoksa backend etkilenmez */
+  }
   return config;
 });
 

@@ -109,6 +109,35 @@ export interface PrinterTransportApi {
   send: (opts: PrinterSendOpts) => Promise<PrinterSendResult>;
 }
 
+// --- Kantar (SCALE) seri okuma: yaz-sonra-oku round-trip (HC-06 → COM portu) ---
+// Sevkiyat PC'sinde çuval brüt tartısı. Mobil HAL `readResponse` deseninin
+// Electron/seri eşdeğeri: pollCommand yaz → terminator'a kadar oku → ham döndür
+// (renderer `weight-codec` ile çözer).
+export interface ScaleReadOpts {
+  /** COM yolu (örn "COM3"). */
+  path: string;
+  /** serial baud (default 9600). */
+  baudRate?: number;
+  /** İstek-cevap kantar komutu (boş = sürekli-yayın; ilk taze satır okunur). */
+  pollCommand?: string;
+  /** Yanıt satır sonu (örn "\r\n"); boş → herhangi CR/LF. */
+  terminator?: string;
+  /** Okuma zaman aşımı ms (default 2500). */
+  timeoutMs?: number;
+}
+export interface ScaleReadResult {
+  ok: boolean;
+  /** Native modül (serialport) yüklü mü? Derlenmemişse false (uygulama çökmez). */
+  available: boolean;
+  /** Ham yanıt (renderer codec ile çözer). */
+  raw?: string;
+  error: string | null;
+}
+export interface ScaleApi {
+  /** Kantardan tek okuma (yaz-sonra-oku). Modül yoksa available:false. */
+  read: (opts: ScaleReadOpts) => Promise<ScaleReadResult>;
+}
+
 export interface ApiBridge {
   secureStore: SecureStoreApi;
   appInfo: AppInfoApi;
@@ -116,6 +145,7 @@ export interface ApiBridge {
   system: SystemApi;
   scanner: ScannerDeviceApi;
   printer: PrinterTransportApi;
+  scale: ScaleApi;
 }
 
 declare global {

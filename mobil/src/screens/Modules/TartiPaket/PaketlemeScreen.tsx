@@ -37,6 +37,11 @@ import {
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import {
+  useMachinePeripherals,
+  primaryScaleFor,
+} from '../../../hooks/useMachinePeripherals';
+import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
+import {
   useShipmentConfirmationEnabled,
   FLAGS_KEY,
 } from '../../../hooks/useFeatureFlags';
@@ -55,7 +60,6 @@ const dualName = (ourName: string, custName?: string | null) =>
   custName && custName.trim() && custName !== ourName ? `${ourName} (${custName})` : ourName;
 
 const kgText = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
-const randKg = () => (Math.round((10 + Math.random() * 90) * 10) / 10).toString();
 // Metraj — GERÇEK değeri göster (44,5 → "44,5"). Math.round kullanma: 44,5 → 45
 // yuvarlıyordu (yanlış miktar görünüyordu). tr-TR ondalık = virgül, gereksiz sıfır yok.
 const mText = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
@@ -109,6 +113,67 @@ export default function PaketlemeScreen() {
   const [weighTarget, setWeighTarget] = useState<{ id: string; seq: number } | null>(null);
   const [weighKg, setWeighKg] = useState('');
   const [weighCode, setWeighCode] = useState('');
+  // Kantar (HAL): bu telefonun atandığı makinenin SCALE cihaz(lar)ı. "Tart"
+  // tuşu kantara HC-06 BT-SPP ile bağlanıp brüt kg okur (KK1 metresiyle aynı desen).
+  const scalePeripherals = useMachinePeripherals('SCALE');
+  const [weighing, setWeighing] = useState(false);
+
+  // "Tart": kantardan brüt kg oku. Cihaz yoksa/okunamazsa NET Türkçe hata + null
+  // (sessiz sahte YOK). simulate açıksa sahte kg (test/donanımsız). İstek-cevap
+  // kantar pollCommand ile sorgulanır (readResponse yazıp yanıtı okur).
+  const weighFromMachine = async (): Promise<number | null> => {
+    const simWeigh = () => Math.round((10 + Math.random() * 90) * 10) / 10;
+    const p = primaryScaleFor(scalePeripherals);
+    if (!p) {
+      Toast.show({
+        type: 'error',
+        text1: 'Kantar tanımlı değil',
+        text2: 'Admin → Cihaz Kaydı’ndan bu makineye SCALE ekleyin (veya kg’yi elle girin).',
+        visibilityTime: 6000,
+      });
+      return null;
+    }
+    if (p.simulate) return simWeigh();
+    const io = buildIoFromPeripheral(p);
+    if (!io.supported || !io.transport || !io.codec) {
+      Toast.show({
+        type: 'error',
+        text1: 'Kantar okunamıyor',
+        text2: 'Bu derlemede/bağlantı türünde desteklenmiyor (native build / connectionType).',
+        visibilityTime: 6000,
+      });
+      return null;
+    }
+    try {
+      const raw = await io.transport.read({
+        pollCommand: p.pollCommand ?? undefined,
+        terminator: p.terminator ?? undefined,
+        timeoutMs: p.timeoutMs ?? undefined,
+      });
+      const v = io.codec.decode(raw);
+      if (v != null && v > 0) return v;
+      throw new Error('Geçerli tartı gelmedi');
+    } catch (e) {
+      Toast.show({
+        type: 'error',
+        text1: 'Kantar okunamadı',
+        text2: e instanceof Error ? e.message : 'Kantar kapalı/menzil dışı veya komut yanlış olabilir',
+        visibilityTime: 6000,
+      });
+      return null;
+    }
+  };
+
+  const handleWeigh = async () => {
+    if (weighing) return;
+    setWeighing(true);
+    try {
+      const v = await weighFromMachine();
+      if (v != null) setWeighKg(String(v));
+    } finally {
+      setWeighing(false);
+    }
+  };
   const [moveTarget, setMoveTarget] = useState<{ rollId: string; fromSackId: string | null; label: string } | null>(null);
   // Dolu çuval silme onayı — içindeki toplar (depoya dönecekler) somut listelenir.
   const [removeSackTarget, setRemoveSackTarget] = useState<ShipmentSack | null>(null);
@@ -1106,7 +1171,13 @@ export default function PaketlemeScreen() {
             value={weighKg}
             onChangeText={setWeighKg}
             style={{ marginTop: spacing.sm }}
-            right={<TextInput.Icon icon="scale" onPress={() => setWeighKg(randKg())} />}
+            right={
+              <TextInput.Icon
+                icon={weighing ? 'progress-clock' : 'scale'}
+                onPress={handleWeigh}
+                disabled={weighing}
+              />
+            }
           />
           <View style={styles.actions}>
             <Button onPress={() => setWeighTarget(null)} style={styles.actionBtn}>

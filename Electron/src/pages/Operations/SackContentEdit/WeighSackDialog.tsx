@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useMachineScale } from "@/hooks/useMachineScale";
+import { readWeightFromScale } from "@/lib/scale-read";
 import { packingService } from "./service";
 import { invalidateShipmentData } from "./useShipmentDetail";
 import type { ShipmentSack } from "./types";
@@ -38,6 +40,20 @@ export function WeighSackDialog({ shipmentId, sack, onOpenChange }: Props) {
   const open = !!sack;
   const [kg, setKg] = useState("");
   const [code, setCode] = useState("");
+  const { scale } = useMachineScale();
+  const [weighing, setWeighing] = useState(false);
+
+  // Kantardan oku ("Tart"): simulate ise sahte, değilse seri IPC → parse → kg.
+  const handleWeigh = async () => {
+    if (weighing) return;
+    setWeighing(true);
+    try {
+      const v = await readWeightFromScale(scale);
+      if (v != null) setKg(String(v));
+    } finally {
+      setWeighing(false);
+    }
+  };
 
   useEffect(() => {
     if (sack) {
@@ -79,13 +95,25 @@ export function WeighSackDialog({ shipmentId, sack, onOpenChange }: Props) {
         <div className="space-y-3">
           <label className="block text-sm">
             <span className="mb-1 block text-muted-foreground">Brüt Tartı (kg)</span>
-            <Input
-              value={kg}
-              onChange={(e) => setKg(e.target.value)}
-              inputMode="decimal"
-              placeholder="örn. 24,5"
-              autoFocus
-            />
+            <div className="flex gap-2">
+              <Input
+                value={kg}
+                onChange={(e) => setKg(e.target.value)}
+                inputMode="decimal"
+                placeholder="örn. 24,5"
+                autoFocus
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleWeigh}
+                disabled={weighing}
+                title="Kantardan oku"
+              >
+                <Scale className="h-4 w-4" /> {weighing ? "..." : "Tart"}
+              </Button>
+            </div>
             {kgInvalid && <span className="mt-1 block text-xs text-destructive">Geçerli bir kg girin.</span>}
           </label>
           <label className="block text-sm">

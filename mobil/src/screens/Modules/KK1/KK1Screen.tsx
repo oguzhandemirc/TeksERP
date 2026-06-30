@@ -62,7 +62,11 @@ import {
   InitialEntryRequest,
   type RollCancelPreview,
 } from '../../../services/roll.service';
-import { hardwareService } from '../../../services/hardware.service';
+import {
+  useMachinePeripherals,
+  primaryMeterFor,
+} from '../../../hooks/useMachinePeripherals';
+import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { STATION_MUT } from '../../../offline/mutations';
 import { generateClientBarcode } from '../../../offline/barcode';
@@ -174,6 +178,9 @@ export default function KK1Screen() {
   // Ham kumaşın eni önemsiz → en girişi feature flag'e bağlı (default kapalı).
   // Kapalıyken alan tamamen gizlidir (elle açma yok); yalnızca flag açıkken görünür.
   const rawWidthEnabled = useRawWidthEnabled();
+  // Otomatik metraj okuması için bu makineye atanmış METER cihaz(lar)ı (HAL).
+  // Tablet hangi makineye atanmışsa onun cihazları gelir (backend for-device).
+  const meterPeripherals = useMachinePeripherals('METER');
   // Telefon dikey: son kayıtlar tetiği header'a taşınır, body'deki buton gizlenir.
   const { width: winW, height: winH } = useWindowDimensions();
   const portraitPhone = compact && winH > winW;
@@ -574,6 +581,54 @@ export default function KK1Screen() {
     requestAnimationFrame(() => manualQtyRef.current?.focus());
   }, []);
 
+  // Otomatik modda metrajı makineden oku (HAL). Cihaz yoksa/okunamazsa NET
+  // Türkçe hata gösterir ve null döner — sessiz sahte değer YOK (Tambur deseni).
+  // Yalnız cihazın simulate bayrağı açıkken sahte değer üretir (test/donanımsız).
+  const measureFromMachine = async (): Promise<number | null> => {
+    const simMeterage = () => Math.round((100 + Math.random() * 400) * 10) / 10;
+    const p = primaryMeterFor(meterPeripherals);
+    if (!p) {
+      Toast.show({
+        type: 'error',
+        text1: 'Metre cihazı tanımlı değil',
+        text2: 'Admin → Cihaz Kaydı’ndan bu makineye METER cihazı ekleyin (veya Manuel moda geçin).',
+        visibilityTime: 6000,
+      });
+      return null;
+    }
+    // Cihazın simülasyon bayrağı açıksa (admin) sahte değer.
+    if (p.simulate) return simMeterage();
+
+    const io = buildIoFromPeripheral(p);
+    if (!io.supported || !io.transport || !io.codec) {
+      Toast.show({
+        type: 'error',
+        text1: 'Metre okunamıyor',
+        text2: 'Bu derlemede/bağlantı türünde desteklenmiyor (native build / connectionType).',
+        visibilityTime: 6000,
+      });
+      return null;
+    }
+    try {
+      const raw = await io.transport.read({
+        pollCommand: p.pollCommand ?? undefined,
+        terminator: p.terminator ?? undefined,
+        timeoutMs: p.timeoutMs ?? undefined,
+      });
+      const v = io.codec.decode(raw);
+      if (v != null && v > 0) return v;
+      throw new Error('Geçerli metre yanıtı gelmedi');
+    } catch (e) {
+      Toast.show({
+        type: 'error',
+        text1: 'Metre makinesi okunamadı',
+        text2: e instanceof Error ? e.message : 'Makine kapalı/menzil dışı veya komut yanlış olabilir',
+        visibilityTime: 6000,
+      });
+      return null;
+    }
+  };
+
   const handleSubmit = async () => {
     if (pulling) return; // makineden okuma sürerken çift tetikleme yok
     if (!form.itemId) {
@@ -609,16 +664,12 @@ export default function KK1Screen() {
       blurAll();
       setPulling(true);
       try {
-        // Otomatik modda yalnız METRAJ makineden okunur. kg sadece manuel modda
-        // (opsiyonel) girilir — bu yüzden weightKg burada set EDİLMEZ (undefined).
-        qty = await hardwareService.readMeterage();
-      } catch {
-        Toast.show({
-          type: 'error',
-          text1: 'Makineden okunamadı',
-          text2: 'Manuel moda geçip elle girebilirsiniz.',
-        });
-        return;
+        // Otomatik modda yalnız METRAJ makineden okunur (HAL). kg sadece manuel
+        // modda (opsiyonel) girilir — weightKg burada set EDİLMEZ (undefined).
+        // Hata mesajları measureFromMachine içinde (cihaz/bağlantı/komut bazında).
+        const measured = await measureFromMachine();
+        if (measured == null) return;
+        qty = measured;
       } finally {
         setPulling(false);
       }

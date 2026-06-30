@@ -6,6 +6,7 @@ import type {
   ScannerTransport,
   ScannerOpenOpts,
   PrinterSendOpts,
+  ScaleReadOpts,
 } from "@shared/ipc-contract";
 
 const api: ApiBridge = {
@@ -48,6 +49,9 @@ const api: ApiBridge = {
   printer: {
     listSerial: () => ipcRenderer.invoke("printer:list-serial"),
     send: (opts: PrinterSendOpts) => ipcRenderer.invoke("printer:send", opts),
+  },
+  scale: {
+    read: (opts: ScaleReadOpts) => ipcRenderer.invoke("scale:read", opts),
   },
 };
 

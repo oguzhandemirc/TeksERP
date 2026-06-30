@@ -55,7 +55,8 @@ peripheralRouter.get("/", verifyToken, requireAnyPermission("station:read", ...M
 peripheralRouter.get(
   "/for-device",
   verifyToken,
-  requireAnyPermission("station:read", ...MOBILE_LABEL_PRINTERS),
+  // Sevkiyat PC'si (Electron) kantarını çözmek için shipping izniyle de erişir.
+  requireAnyPermission("station:read", "shipping:read", "shipping:write", ...MOBILE_LABEL_PRINTERS, "mobile:sevkiyat"),
   async (req, res, next) => {
     try {
       const kind = typeof req.query.kind === "string" ? req.query.kind : "";
