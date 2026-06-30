@@ -49,6 +49,13 @@ const markSchema = z.object({
   value: z.boolean(),
 });
 
+const reduceStockSchema = z.object({
+  itemId: z.string().uuid(),
+  colorId: z.string().uuid().nullable(),
+  count: z.number().int().positive("Adet pozitif tam sayı olmalı").max(1000),
+  reason: z.string().trim().min(3, "Gerekçe en az 3 karakter").max(500),
+});
+
 const qStr = (v: unknown): string | undefined =>
   typeof v === "string" && v.length > 0 ? v : undefined;
 
@@ -99,6 +106,7 @@ export class KartelaController {
     this.getReceipt = this.getReceipt.bind(this);
     this.outstandingRolls = this.outstandingRolls.bind(this);
     this.getStock = this.getStock.bind(this);
+    this.reduceStock = this.reduceStock.bind(this);
     this.setRollMarked = this.setRollMarked.bind(this);
   }
 
@@ -221,6 +229,17 @@ export class KartelaController {
   async getStock(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await this.service.getStock({ search: qStr(req.query.search) });
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/kartela/stock/reduce — bir ürün+renk grubundan N kartelayı elle stoktan düş */
+  async reduceStock(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = reduceStockSchema.parse(req.body);
+      const result = await this.service.reduceStock(body, req.user?.userId);
       res.status(200).json(result);
     } catch (err) {
       next(err);

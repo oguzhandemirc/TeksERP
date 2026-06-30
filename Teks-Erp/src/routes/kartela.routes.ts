@@ -122,15 +122,45 @@ router.get(
 router.get(
   "/stock",
   verifyToken,
-  // Sevkiyatçının kartela izni olmayabilir → shipping + mobil paket izinleri de stok listesini görebilir.
+  // Sevkiyatçının kartela izni olmayabilir → shipping + mobil paket/depo izinleri de
+  // stok listesini görebilir (mobil Depo "Kartela" sekmesi bu ucu kullanır).
   requireAnyPermission(
     "kartela:read",
     "shipping:read",
     "shipping:write",
     "mobile:tarti-paket",
-    "mobile:sevkiyat"
+    "mobile:sevkiyat",
+    "mobile:depo"
   ),
   controller.getStock
+);
+
+/**
+ * @openapi
+ * /api/kartela/stock/reduce:
+ *   post:
+ *     tags: [Kartela]
+ *     summary: Stok düş — bir ürün+renk grubundan N kartelayı elle iptal et (kayıp/hasar/sayım)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemId, count, reason]
+ *             properties:
+ *               itemId:  { type: string, format: uuid }
+ *               colorId: { type: string, format: uuid, nullable: true }
+ *               count:   { type: integer, minimum: 1 }
+ *               reason:  { type: string }
+ */
+router.post(
+  "/stock/reduce",
+  verifyToken,
+  // Depo personeli (mobil Depo ekranı) ve kartela yetkilisi elle düşebilir.
+  requireAnyPermission("kartela:write", "mobile:depo"),
+  controller.reduceStock
 );
 
 /**

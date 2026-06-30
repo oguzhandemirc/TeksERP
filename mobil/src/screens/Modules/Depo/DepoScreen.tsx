@@ -30,8 +30,13 @@ import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { useKartelaMeasurementEnabled } from '../../../hooks/useFeatureFlags';
 import { rollService } from '../../../services/roll.service';
-import { swatchService, type SwatchListItem } from '../../../services/swatch.service';
+import {
+  swatchService,
+  type SwatchListItem,
+  type KartelaStockGroup,
+} from '../../../services/swatch.service';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
+import { KartelaStockReduceModal } from './KartelaStockReduceModal';
 
 const PAGE_SIZE = 50;
 
@@ -101,6 +106,7 @@ export default function DepoScreen() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [detailRoll, setDetailRoll] = useState<RollListItem | null>(null);
   const [detailSwatch, setDetailSwatch] = useState<SwatchListItem | null>(null);
+  const [reduceGroup, setReduceGroup] = useState<KartelaStockGroup | null>(null);
   const handleRollDetailDismiss = useCallback(() => setDetailRoll(null), []);
   const handleSwatchDetailDismiss = useCallback(() => setDetailSwatch(null), []);
 
@@ -183,26 +189,12 @@ export default function DepoScreen() {
     (scopeQuery.data?.data?.atDoor.count ?? 0) +
     (scopeQuery.data?.data?.preparing?.count ?? 0);
 
-  // Search artık backend'de — queryKey'de yer alır, değişince ilk sayfaya döner.
-  const swatchesQuery = useInfiniteQuery({
-    queryKey: ['swatches', 'depo', effectiveSearch] as const,
-    queryFn: ({ pageParam }) =>
-      swatchService.listCursor({
-        limit: PAGE_SIZE,
-        cursor: pageParam,
-        search: effectiveSearch || undefined,
-      }),
-    initialPageParam: null as string | null,
-    getNextPageParam: (last) =>
-      last.pagination.hasMore ? last.pagination.nextCursor : null,
-    enabled: isSwatchMode,
-    staleTime: 30 * 1000,
-  });
-
-  const swatchStatsQuery = useQuery({
-    queryKey: ['swatches', 'depo', 'stats', effectiveSearch] as const,
-    queryFn: () =>
-      swatchService.getStats({ search: effectiveSearch || undefined }),
+  // Kartela = ADET bazlı: ürün+renk grubu → müsait adet ("depoda kaç tane var").
+  // Sahada etiketsiz/okutulmadığından tek-tek liste yerine gruplu stok gösterilir.
+  // Düşük kardinalite (ürün×renk kombinasyonu) → cursor/infinite gerekmez.
+  const kartelaStockQuery = useQuery({
+    queryKey: ['kartela', 'stock', effectiveSearch] as const,
+    queryFn: () => swatchService.getStock(effectiveSearch || undefined),
     enabled: isSwatchMode,
     staleTime: 30 * 1000,
   });
@@ -212,10 +204,13 @@ export default function DepoScreen() {
       (rollsQuery.data?.pages.flatMap((p) => p.data) ?? []) as RollListItem[],
     [rollsQuery.data]
   );
-  const swatches = useMemo(
-    () =>
-      (swatchesQuery.data?.pages.flatMap((p) => p.data) ?? []) as SwatchListItem[],
-    [swatchesQuery.data]
+  const kartelaGroups = useMemo(
+    () => kartelaStockQuery.data?.data ?? [],
+    [kartelaStockQuery.data]
+  );
+  const kartelaTotal = useMemo(
+    () => kartelaGroups.reduce((sum, g) => sum + g.count, 0),
+    [kartelaGroups]
   );
 
   // Stats artık API'den — tüm DB üzerinden hesaplanır, sayfaya bağlı değil.
@@ -227,12 +222,6 @@ export default function DepoScreen() {
     stock: rs?.byStatus?.STOCK ?? 0,
     a1Quality: rs?.byQuality?.A1 ?? 0,
     fireQuality: rs?.byQuality?.FIRE ?? 0,
-  };
-
-  const ss = swatchStatsQuery.data?.data;
-  const swatchStats = {
-    count: ss?.count ?? 0,
-    totalLength: ss?.totalLength ?? 0,
   };
 
   // Scanner kapanma animasyonu BİTMEDEN detail modal açılırsa RNModal overlay'i
@@ -298,10 +287,11 @@ export default function DepoScreen() {
     else setDetailSwatch(pending.data);
   }, []);
 
-  const activeQuery = isSwatchMode ? swatchesQuery : rollsQuery;
-  const activeStatsQuery = isSwatchMode ? swatchStatsQuery : rollStatsQuery;
+  const listLoading = isSwatchMode ? kartelaStockQuery.isLoading : rollsQuery.isLoading;
   const refresh = useManualRefresh(
-    [() => activeQuery.refetch(), () => activeStatsQuery.refetch()],
+    isSwatchMode
+      ? [() => kartelaStockQuery.refetch()]
+      : [() => rollsQuery.refetch(), () => rollStatsQuery.refetch()],
     isSwatchMode ? 'Kartela envanteri güncellendi' : 'Depo güncellendi',
   );
 
@@ -309,13 +299,9 @@ export default function DepoScreen() {
     if (isSwatchMode) {
       return (
         <>
-          <StatBox label="Toplam Kartela" value={swatchStats.count} color="#7c3aed" />
+          <StatBox label="Toplam Kartela" value={kartelaTotal} color="#7c3aed" />
           <View style={styles.statDivider} />
-          <StatBox
-            label="Toplam Uzunluk"
-            value={`${swatchStats.totalLength.toFixed(0)} cm`}
-            color="#0f172a"
-          />
+          <StatBox label="Çeşit" value={kartelaGroups.length} color="#0f172a" />
         </>
       );
     }
@@ -404,7 +390,7 @@ export default function DepoScreen() {
                     ? 'Kartela ara'
                     : 'Kumaş ara'
                   : isSwatchMode
-                    ? 'Kart no / kumaş / renk ara...'
+                    ? 'Kumaş / renk ara...'
                     : 'Kumaş adı/kodu ara...'
               }
               style={[styles.input, styles.inputRow]}
@@ -450,40 +436,24 @@ export default function DepoScreen() {
 
         {/* Liste */}
         <View style={{ flex: 1 }}>
-          {activeQuery.isLoading ? (
+          {listLoading ? (
             <SkeletonList count={8} />
           ) : isSwatchMode ? (
-            swatches.length === 0 ? (
+            kartelaGroups.length === 0 ? (
               <View style={styles.empty}>
                 <Icon source="card-text-outline" size={56} color="#cbd5e1" />
-                <Text style={styles.emptyText}>Kartela bulunamadı</Text>
+                <Text style={styles.emptyText}>Kartela stoğu yok</Text>
                 <Text style={styles.emptyHint}>
-                  {search ? `'${search}' için sonuç yok` : 'Henüz kartela üretilmemiş'}
+                  {search ? `'${search}' için sonuç yok` : 'Depoda kartela bulunmuyor'}
                 </Text>
               </View>
             ) : (
               <FlashList
-                data={swatches}
-                keyExtractor={(s) => s.id}
+                data={kartelaGroups}
+                keyExtractor={(g) => `${g.itemId}__${g.colorId ?? 'none'}`}
                 contentContainerStyle={styles.listContent}
-                onEndReached={() => {
-                  if (
-                    swatchesQuery.hasNextPage &&
-                    !swatchesQuery.isFetchingNextPage
-                  ) {
-                    swatchesQuery.fetchNextPage();
-                  }
-                }}
-                onEndReachedThreshold={0.4}
-                ListFooterComponent={
-                  swatchesQuery.isFetchingNextPage ? (
-                    <View style={styles.footerLoader}>
-                      <ActivityIndicator size="small" color="#475569" />
-                    </View>
-                  ) : null
-                }
                 renderItem={({ item }) => (
-                  <SwatchListRow swatch={item} onPress={() => setDetailSwatch(item)} />
+                  <KartelaGroupRow group={item} onPress={() => setReduceGroup(item)} />
                 )}
               />
             )
@@ -537,6 +507,16 @@ export default function DepoScreen() {
       {detailSwatch && (
         <SwatchDetailModal swatch={detailSwatch} onDismiss={handleSwatchDetailDismiss} />
       )}
+
+      {/* Kartela stoğunu elle düşürme — kayıp/hasar/sayım düzeltmesi */}
+      <KartelaStockReduceModal
+        visible={!!reduceGroup}
+        group={reduceGroup}
+        onDismiss={() => setReduceGroup(null)}
+        onReduced={() => {
+          void kartelaStockQuery.refetch();
+        }}
+      />
     </ScreenChrome>
   );
 }
@@ -637,56 +617,34 @@ function RollListRow({
   );
 }
 
-function SwatchListRow({
-  swatch,
+// Kartela stok satırı — ADET bazlı (ürün+renk → kaç adet). Dokununca elle
+// düşürme sheet'i açılır (tek-tek kartela detayına inilmez — fungible adet).
+function KartelaGroupRow({
+  group,
   onPress,
 }: {
-  swatch: SwatchListItem;
+  group: KartelaStockGroup;
   onPress: () => void;
 }) {
-  const measureEnabled = useKartelaMeasurementEnabled();
   return (
     <Surface style={styles.rollCard} elevation={1}>
       <TouchableRipple borderless onPress={onPress} style={{ borderRadius: 10 }}>
         <View style={styles.rollInner}>
-          <View style={{ flex: 1 }}>
-            <View style={styles.rollHeader}>
-              <Text style={styles.rollBarcode} numberOfLines={1}>
-                {swatch.cardNumber}
-              </Text>
-              <View style={[styles.statusPill, styles.statusPillSwatch]}>
-                <Text style={styles.statusPillText}>Kartela</Text>
-              </View>
-            </View>
-            <Text style={styles.rollItem} numberOfLines={1}>
-              {swatch.item?.name ?? '—'}
-              {swatch.color?.name ? ` · ${swatch.color.name}` : ''}
+          {group.colorHex ? (
+            <View style={[styles.rollSwatch, { backgroundColor: group.colorHex }]} />
+          ) : null}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.kartelaItem} numberOfLines={1}>
+              {group.itemName}
             </Text>
-            <View style={styles.rollMeta}>
-              {/* Ölçüler yalnız flag açıkken ve dolu ise — kartela esasen ADET sayılır.
-                  Her parça TRAILING ayraçlı; barkod her zaman sonda (loose ayraç olmaz). */}
-              {measureEnabled && swatch.length != null && (
-                <>
-                  <Text style={styles.rollMetaText}>{Number(swatch.length).toFixed(0)} cm</Text>
-                  <Text style={styles.rollMetaSep}>·</Text>
-                </>
-              )}
-              {measureEnabled && swatch.width != null && (
-                <>
-                  <Text style={styles.rollMetaText}>en {Number(swatch.width).toFixed(0)} cm</Text>
-                  <Text style={styles.rollMetaSep}>·</Text>
-                </>
-              )}
-              {measureEnabled && swatch.weightKg != null && (
-                <>
-                  <Text style={styles.rollMetaText}>{Number(swatch.weightKg).toFixed(2)} kg</Text>
-                  <Text style={styles.rollMetaSep}>·</Text>
-                </>
-              )}
-              <Text style={[styles.rollMetaText, { fontFamily: 'monospace' }]} numberOfLines={1}>
-                {swatch.barcode}
-              </Text>
-            </View>
+            <Text style={styles.kartelaColor} numberOfLines={1}>
+              {group.colorName ?? 'Renksiz'}
+              {group.itemCode ? ` · ${group.itemCode}` : ''}
+            </Text>
+          </View>
+          <View style={styles.kartelaCountBox}>
+            <Text style={styles.kartelaCountValue}>{group.count}</Text>
+            <Text style={styles.kartelaCountUnit}>adet</Text>
           </View>
           <Icon source="chevron-right" size={22} color="#94a3b8" />
         </View>
@@ -1021,6 +979,18 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5e1',
   },
   rollMetaSep: { fontSize: 11, color: '#cbd5e1' },
+
+  // Kartela stok satırı (ADET bazlı)
+  kartelaItem: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  kartelaColor: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  kartelaCountBox: { alignItems: 'flex-end', minWidth: 52, paddingRight: 2 },
+  kartelaCountValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#7c3aed',
+    fontVariant: ['tabular-nums'],
+  },
+  kartelaCountUnit: { fontSize: 10, color: '#94a3b8' },
 });
 
 // RollDetailModal'a özel event card stilleri — DetailSheet children içinde

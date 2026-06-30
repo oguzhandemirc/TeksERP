@@ -5,7 +5,8 @@
 // =============================================================================
 // Akış: TEST item + 2 renk → WAREHOUSE toplar → kartelaService.dispatch →
 // receive({count}) ile N swatch doğur → getStock gruplama → addKartelaToShipment
-// happy/insufficient/PREPARING-guard → removeSwatch ile stoğa dönüş.
+// happy/insufficient/PREPARING-guard → removeSwatch ile stoğa dönüş →
+// reduceStock (FIFO soft-cancel) happy/yetersiz/shipped-çalmaz/gerekçe-guard.
 // Ölçümsüz (adet) akış; izole TEST item sayesinde grup sayıları kesin.
 // =============================================================================
 
@@ -184,6 +185,75 @@ async function run(): Promise<void> {
   );
   check("renksiz grup claim: added === 1", addNull.data.added === 1);
   check("renksiz stok düştü", (await stockCount(ITEM, null)) === nullBefore - 1);
+
+  console.log("\n=== reduceStock: elle stok düşürme (FIFO soft-cancel) ===");
+  // colorB grubu (NB) henüz dokunulmadı → kesin sayım.
+  const bBefore = await stockCount(ITEM, COLOR_B); // NB
+  // FIFO: en eski (createdAt asc) kartela iptal edilmeli.
+  const bAsc = await prisma.swatch.findMany({
+    where: { itemId: ITEM, colorId: COLOR_B, shipmentId: null, cancelledAt: null },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const oldestId = need(bAsc[0], "colorB en eski swatch").id;
+  const RED = 2;
+  const redRes = await kartelaService.reduceStock(
+    { itemId: ITEM, colorId: COLOR_B, count: RED, reason: "test zayiat" },
+    ADMIN,
+  );
+  check("reduceStock: reduced === RED", redRes.data.reduced === RED, `${redRes.data.reduced}`);
+  check("reduceStock: stok NB-RED", (await stockCount(ITEM, COLOR_B)) === bBefore - RED, `${await stockCount(ITEM, COLOR_B)} vs ${bBefore - RED}`);
+  const oldest = await prisma.swatch.findUnique({
+    where: { id: oldestId },
+    select: { cancelledAt: true, cancelReason: true },
+  });
+  check("FIFO: en eski kartela iptal (cancelledAt set)", oldest?.cancelledAt != null);
+  check("iptal edilen kartelada cancelReason set", oldest?.cancelReason === "test zayiat");
+
+  console.log("\n=== reduceStock: yetersiz stok → 409 + rollback ===");
+  const bRem = await stockCount(ITEM, COLOR_B); // NB-RED
+  let redConflict = false;
+  try {
+    await kartelaService.reduceStock(
+      { itemId: ITEM, colorId: COLOR_B, count: bRem + 1, reason: "fazla" },
+      ADMIN,
+    );
+  } catch (e) {
+    redConflict = is409(e);
+  }
+  check("reduceStock yetersiz → 409", redConflict);
+  check("reduceStock rollback: stok değişmedi", (await stockCount(ITEM, COLOR_B)) === bRem, `${await stockCount(ITEM, COLOR_B)} vs ${bRem}`);
+
+  console.log("\n=== reduceStock: sevkiyattaki kartelaya dokunmaz ===");
+  // colorA'da K kartela sevkiyata girdi (removeSwatch sonrası K-1 hâlâ shipmentId dolu).
+  // Müsait stoktan fazlası istenince 409 → shipped olanları ASLA çalmaz.
+  const aAvail = await stockCount(ITEM, COLOR_A);
+  let noSteal = false;
+  try {
+    await kartelaService.reduceStock(
+      { itemId: ITEM, colorId: COLOR_A, count: aAvail + 1, reason: "çalma testi" },
+      ADMIN,
+    );
+  } catch (e) {
+    noSteal = is409(e);
+  }
+  check("müsaitten fazlası → 409 (shipped çalınmaz)", noSteal);
+  const stillShipped = await prisma.swatch.count({
+    where: { itemId: ITEM, colorId: COLOR_A, shipmentId: { not: null }, cancelledAt: null },
+  });
+  check("sevkiyattaki kartelalar hâlâ aktif", stillShipped >= 1, `${stillShipped}`);
+
+  console.log("\n=== reduceStock: gerekçe guard (kısa reason → 400) ===");
+  let reasonGuard = false;
+  try {
+    await kartelaService.reduceStock(
+      { itemId: ITEM, colorId: COLOR_B, count: 1, reason: "x" },
+      ADMIN,
+    );
+  } catch (e) {
+    reasonGuard = e instanceof AppError && e.statusCode === 400;
+  }
+  check("kısa gerekçe → 400", reasonGuard);
 }
 
 async function cleanup(): Promise<void> {

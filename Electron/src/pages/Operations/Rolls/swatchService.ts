@@ -51,6 +51,17 @@ export interface SwatchListParams {
   limit?: number;
 }
 
+/** Kartela stoğu: müsait (sevke girmemiş, iptalsiz) kartelaların ürün+renk bazında adedi. */
+export interface KartelaStockGroup {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  colorId: string | null;
+  colorName: string | null;
+  colorHex: string | null;
+  count: number;
+}
+
 /**
  * Backend `/api/swatches` `filter[]` syntax'ı bilmez — direkt `?itemId=` bekler.
  * `useDataTable` ise URL filtre'lerini `filters.itemId` formatında verir.
@@ -107,6 +118,26 @@ export const swatchService = {
     const qs = sp.toString();
     return apiClient
       .get<ApiResponse<SwatchStats>>(`/api/swatches/stats${qs ? `?${qs}` : ""}`)
+      .then((r) => r.data);
+  },
+
+  /** Kartela stoğu — ürün+renk bazında müsait adet ("depoda kaç tane var"). */
+  getStock(search?: string): Promise<ApiResponse<KartelaStockGroup[]>> {
+    const qs = search ? `?search=${encodeURIComponent(search)}` : "";
+    return apiClient
+      .get<ApiResponse<KartelaStockGroup[]>>(`/api/kartela/stock${qs}`)
+      .then((r) => r.data);
+  },
+
+  /** Bir ürün+renk grubundan N kartelayı elle stoktan düş (gerekçeli soft-cancel). */
+  reduceStock(body: {
+    itemId: string;
+    colorId: string | null;
+    count: number;
+    reason: string;
+  }): Promise<ApiResponse<{ reduced: number }>> {
+    return apiClient
+      .post<ApiResponse<{ reduced: number }>>(`/api/kartela/stock/reduce`, body)
       .then((r) => r.data);
   },
 };

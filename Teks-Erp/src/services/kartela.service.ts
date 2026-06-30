@@ -1242,6 +1242,80 @@ export class KartelaService {
 
     return { success: true, data };
   }
+
+  // ===========================================================================
+  // STOK DÜŞ — kayıp/hasar/numune/sayım düzeltmesi için müsait kartelaları elle iptal
+  // ===========================================================================
+  /**
+   * Bir (ürün, renk) grubundan N müsait kartelayı elle stoktan düşer (soft-cancel).
+   * Kabul (+) / sevkiyat (−) dışındaki tek manuel ayar yolu. Swatch soft-delete'i
+   * (`cancelledAt`/`cancelReason`) kullanır → `getStock` filtresinden otomatik düşer.
+   * Kaynak top (`KARTELA_CONSUMED`) DOKUNULMAZ — bu bir stok zayiat/düzeltme yazımı,
+   * kabul iptali değil. `addKartelaToShipment` ile aynı FIFO select-then-claim kalıbı.
+   */
+  async reduceStock(
+    data: { itemId: string; colorId: string | null; count: number; reason: string },
+    userId?: string
+  ): Promise<ApiResponse<{ reduced: number }>> {
+    if (!Number.isInteger(data.count) || data.count < 1) {
+      throw AppError.badRequest("Adet pozitif tam sayı olmalı");
+    }
+    const reason = data.reason?.trim();
+    if (!reason || reason.length < 3) {
+      throw AppError.badRequest("Gerekçe en az 3 karakter olmalı");
+    }
+
+    const ids = await prisma.$transaction(async (tx) => {
+      // updateMany LIMIT desteklemediğinden select-then-claim: N adayı FIFO seç,
+      // sonra yalnız hâlâ müsait olanları (TOCTOU guard) tek updateMany ile iptal et.
+      const candidates = await tx.swatch.findMany({
+        where: {
+          itemId: data.itemId,
+          colorId: data.colorId, // null → colorId IS NULL ("renksiz" grubu)
+          shipmentId: null,
+          cancelledAt: null,
+        },
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
+        take: data.count,
+      });
+      if (candidates.length < data.count) {
+        throw AppError.conflict(
+          `Yeterli kartela stoğu yok — istenen ${data.count}, mevcut ${candidates.length}. Listeyi yenileyin.`
+        );
+      }
+      const claimIds = candidates.map((c) => c.id);
+      const claimed = await tx.swatch.updateMany({
+        where: { id: { in: claimIds }, shipmentId: null, cancelledAt: null },
+        data: { cancelledAt: new Date(), cancelReason: reason },
+      });
+      if (claimed.count !== data.count) {
+        // Kısmi claim: aralarından biri az önce sevkiyata girdi/iptal oldu → tüm tx rollback.
+        throw AppError.conflict("Kartelalardan biri az önce değişti — tekrar deneyin.");
+      }
+      return claimIds;
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SWATCH",
+      recordId: ids[0],
+      newData: {
+        kind: "KARTELA_STOCK_REDUCE",
+        itemId: data.itemId,
+        colorId: data.colorId,
+        count: data.count,
+        reason,
+      },
+    });
+
+    return {
+      success: true,
+      data: { reduced: ids.length },
+      message: `${ids.length} kartela stoktan düşüldü`,
+    };
+  }
 }
 
 export const kartelaService = new KartelaService();

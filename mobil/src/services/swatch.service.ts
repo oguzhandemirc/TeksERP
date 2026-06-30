@@ -1,5 +1,8 @@
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
+import type { KartelaStockGroup } from './packing.service';
+
+export type { KartelaStockGroup };
 
 export interface SwatchStats {
   count: number;
@@ -114,4 +117,23 @@ export const swatchService = {
       .get<ApiResponse<SwatchStats>>(`/swatches/stats${qs ? `?${qs}` : ''}`)
       .then((r) => r.data);
   },
+
+  /** Kartela stoğu — ürün+renk bazında müsait adet ("depoda kaç tane var"). */
+  getStock: (search?: string): Promise<ApiResponse<KartelaStockGroup[]>> =>
+    apiClient
+      .get<ApiResponse<KartelaStockGroup[]>>(
+        `/kartela/stock${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+      )
+      .then((r) => r.data),
+
+  /** Bir ürün+renk grubundan N kartelayı elle stoktan düş (gerekçeli soft-cancel). */
+  reduceStock: (body: {
+    itemId: string;
+    colorId: string | null;
+    count: number;
+    reason: string;
+  }): Promise<ApiResponse<{ reduced: number }>> =>
+    apiClient
+      .post<ApiResponse<{ reduced: number }>>(`/kartela/stock/reduce`, body)
+      .then((r) => r.data),
 };

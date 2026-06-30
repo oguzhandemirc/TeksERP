@@ -22,7 +22,7 @@ const TABS: { key: Tab; label: string; Icon: typeof Send }[] = [
   { key: "dispatches", label: "Sevkler", Icon: Send },
   { key: "receipts", label: "Kabuller", Icon: PackageCheck },
   { key: "rolls", label: "Kartelada Toplar", Icon: Package },
-  { key: "swatches", label: "Üretilen Kartelalar", Icon: Palette },
+  { key: "swatches", label: "Kartela Stoğu", Icon: Palette },
 ];
 
 function KartelaTabBar({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
@@ -72,7 +72,7 @@ export function KartelaPage() {
         ? "kartela-receipts"
         : tab === "rolls"
           ? "rolls:KARTELA_SENT"
-          : "swatches";
+          : "kartela";
 
   return (
     <div className="flex h-full flex-col">

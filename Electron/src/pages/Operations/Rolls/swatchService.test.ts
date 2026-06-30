@@ -1,0 +1,49 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import apiClient from "@/services/apiClient";
+import { swatchService } from "./swatchService";
+
+// apiClient'i mock'la — kartela stok uçlarının URL/body sözleşmesini doğrula.
+vi.mock("@/services/apiClient", () => ({
+  default: { get: vi.fn(), post: vi.fn() },
+}));
+
+const mockGet = apiClient.get as unknown as ReturnType<typeof vi.fn>;
+const mockPost = apiClient.post as unknown as ReturnType<typeof vi.fn>;
+
+describe("swatchService — kartela ADET stok", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGet.mockResolvedValue({ data: { success: true, data: [] } });
+    mockPost.mockResolvedValue({ data: { success: true, data: { reduced: 0 } } });
+  });
+
+  it("getStock() aramasız → /api/kartela/stock (querysiz)", async () => {
+    await swatchService.getStock();
+    expect(mockGet).toHaveBeenCalledWith("/api/kartela/stock");
+  });
+
+  it("getStock(search) → arama encode'lu query", async () => {
+    await swatchService.getStock("patos mavi");
+    expect(mockGet).toHaveBeenCalledWith("/api/kartela/stock?search=patos%20mavi");
+  });
+
+  it("getStock ApiResponse.data'yı döndürür (.then(r => r.data))", async () => {
+    mockGet.mockResolvedValue({
+      data: { success: true, data: [{ itemId: "i1", count: 5 }] },
+    });
+    const res = await swatchService.getStock();
+    expect(res.data).toEqual([{ itemId: "i1", count: 5 }]);
+  });
+
+  it("reduceStock → POST /api/kartela/stock/reduce, body aynen geçer", async () => {
+    const body = { itemId: "i1", colorId: "c1", count: 3, reason: "kayıp" };
+    await swatchService.reduceStock(body);
+    expect(mockPost).toHaveBeenCalledWith("/api/kartela/stock/reduce", body);
+  });
+
+  it("reduceStock renksiz grup (colorId null) gönderebilir", async () => {
+    const body = { itemId: "i1", colorId: null, count: 1, reason: "hasar" };
+    await swatchService.reduceStock(body);
+    expect(mockPost).toHaveBeenCalledWith("/api/kartela/stock/reduce", body);
+  });
+});
