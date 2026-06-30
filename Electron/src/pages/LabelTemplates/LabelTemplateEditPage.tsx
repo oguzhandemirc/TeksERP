@@ -8,15 +8,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   labelKindLabels,
   labelTemplateService,
   type CatalogField,
+  type RawCodeMap,
   type TemplateField,
 } from "@/services/labelTemplateService";
 import { CatalogPanel } from "./CatalogPanel";
 import { FieldsPanel } from "./FieldsPanel";
 import { LabelPreview } from "./LabelPreview";
+import { RawCodePanel } from "./RawCodePanel";
 
 const LIST_PATH = "/definitions/label-templates";
 
@@ -40,6 +43,7 @@ export function LabelTemplateEditPage() {
 
   const [name, setName] = useState("");
   const [fields, setFields] = useState<TemplateField[]>([]);
+  const [rawCode, setRawCode] = useState<RawCodeMap>({});
 
   useEffect(() => {
     if (template) {
@@ -49,6 +53,7 @@ export function LabelTemplateEditPage() {
           .sort((a, b) => a.order - b.order)
           .map((f, i) => ({ ...f, order: i + 1 })),
       );
+      setRawCode(template.rawCode ?? {});
     }
   }, [template]);
 
@@ -66,6 +71,7 @@ export function LabelTemplateEditPage() {
       labelTemplateService.update(id!, {
         name: name.trim(),
         fields: fields.map((f, i) => ({ ...f, order: i + 1 })),
+        rawCode,
       }),
     onSuccess: () => {
       toast.success("Şablon kaydedildi.");
@@ -88,20 +94,13 @@ export function LabelTemplateEditPage() {
   };
 
   const loading = templateQ.isLoading || catalogQ.isLoading;
-  const orderedFields = useMemo(
-    () => fields.map((f, i) => ({ ...f, order: i + 1 })),
-    [fields],
-  );
+  const orderedFields = useMemo(() => fields.map((f, i) => ({ ...f, order: i + 1 })), [fields]);
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title={template ? `Şablon: ${template.name}` : "Şablon Düzenle"}
-        description={
-          template
-            ? `${labelKindLabels[template.kind]} — alanları, sırayı ve görünümü düzenle. Sağdaki önizleme örnek verilerle anlık güncellenir.`
-            : "Yükleniyor…"
-        }
+        description={template ? `${labelKindLabels[template.kind]} — "Alanlar" sekmesinde tasarla ya da "Kod (uzman)" sekmesinde kendi yazıcı kodunu yaz.` : "Yükleniyor…"}
         actions={
           <>
             <Button
@@ -157,20 +156,40 @@ export function LabelTemplateEditPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[200px_minmax(0,500px)_minmax(0,1fr)]">
-              <CatalogPanel available={availableCatalog} onAdd={addField} />
-              <FieldsPanel
-                fields={orderedFields}
-                catalogByKey={catalogByKey}
-                onChange={setFields}
-              />
-              <div className="lg:sticky lg:top-4 lg:self-start">
-                <LabelPreview
+            <Tabs defaultValue="fields">
+              <TabsList>
+                <TabsTrigger value="fields">Alanlar</TabsTrigger>
+                <TabsTrigger value="code">
+                  Kod (uzman)
+                  {Object.values(rawCode).some((v) => (v ?? "").trim()) && (
+                    <span className="ml-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  )}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="fields" className="mt-4">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[200px_minmax(0,500px)_minmax(0,1fr)]">
+                  <CatalogPanel available={availableCatalog} onAdd={addField} />
+                  <FieldsPanel
+                    fields={orderedFields}
+                    catalogByKey={catalogByKey}
+                    onChange={setFields}
+                  />
+                  <div className="lg:sticky lg:top-4 lg:self-start">
+                    <LabelPreview kind={template.kind} fields={orderedFields} />
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="code" className="mt-4">
+                <RawCodePanel
                   kind={template.kind}
-                  fields={orderedFields}
+                  catalog={catalog}
+                  rawCode={rawCode}
+                  onChange={setRawCode}
                 />
-              </div>
-            </div>
+              </TabsContent>
+            </Tabs>
           </div>
         )}
       </div>

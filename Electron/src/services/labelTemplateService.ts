@@ -16,6 +16,23 @@ export const labelKindLabels: Record<LabelKind, string> = {
 
 export type FieldType = "text" | "number" | "date" | "qr" | "barcode" | "table";
 
+// Uzman raw-code: yazıcı dili → kod. Anahtarlar backend PrinterLanguage ile birebir.
+export const RawCodeLang = {
+  PPLA: "PPLA",
+  PPLB: "PPLB",
+  ZPL: "ZPL",
+  RASTER_HTML: "RASTER_HTML",
+} as const;
+export type RawCodeLang = (typeof RawCodeLang)[keyof typeof RawCodeLang];
+export type RawCodeMap = Partial<Record<RawCodeLang, string>>;
+
+export const rawCodeLangLabels: Record<RawCodeLang, string> = {
+  PPLA: "PPLA (Argox/Datamax)",
+  PPLB: "PPLB (Eltron/EPL)",
+  ZPL: "ZPL (Zebra)",
+  RASTER_HTML: "HTML (raster)",
+};
+
 export interface TemplateField {
   key: string;
   label: string;
@@ -32,6 +49,8 @@ export interface LabelTemplate {
   isDefault: boolean;
   isActive: boolean;
   fields: TemplateField[];
+  /** Uzman raw-code override (dil→kod). Boş/yok → o dilde otomatik üretim. */
+  rawCode?: RawCodeMap | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -83,6 +102,7 @@ export const labelTemplateService = {
       fields: TemplateField[];
       isDefault: boolean;
       isActive: boolean;
+      rawCode: RawCodeMap;
     }>,
   ): Promise<ApiResponse<LabelTemplate>> =>
     apiClient
@@ -130,4 +150,21 @@ export const labelTemplateService = {
         { kind, fields },
       )
       .then((r) => r.data.data),
+
+  /**
+   * Uzman raw-code önizlemesi — verilen kodu sahte payload ile ikame edip ham
+   * çıktıyı döner (native diller düz metin, RASTER_HTML tam HTML). Boş kod → boş.
+   */
+  previewRaw: (
+    kind: LabelKind,
+    language: RawCodeLang,
+    code: string,
+  ): Promise<string> =>
+    apiClient
+      .post<string>(
+        "/api/label-templates/preview-raw",
+        { kind, language, code },
+        { responseType: "text", transformResponse: [(d) => d] },
+      )
+      .then((r) => r.data),
 };
