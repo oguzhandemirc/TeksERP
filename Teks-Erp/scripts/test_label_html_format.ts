@@ -39,12 +39,12 @@ function main() {
   check("pay 0 → @page margin 0mm + içerik 100mm",
     noPad.includes("size: 100mm 150mm") && noPad.includes("margin: 0mm") && noPad.includes("width: 100mm"));
 
-  // 4) LANDSCAPE → iki-kolon kumaş etiketi düzeni (kumaş etiketi 100×60). Sayfa
+  // 4) LANDSCAPE → iki-kolon kumaş etiketi düzeni (kumaş etiketi 100×58). Sayfa
   //    MEDYA ölçüsünde kalır (takas YOK — orientation yalnız düzen dalını seçer);
   //    içerik = medya genişliği − 2×pay; portrait'ın dikey .qty istifi yerine
   //    landscape'in iki-kolon .metraj düzeni üretilir.
-  const land = buildRollLabelHtml({ ...base, format: { widthMm: 100, heightMm: 60, marginMm: 3, orientation: "LANDSCAPE" } });
-  check("landscape @page = medya 100mm 60mm (takas YOK)", land.includes("size: 100mm 60mm"));
+  const land = buildRollLabelHtml({ ...base, format: { widthMm: 100, heightMm: 58, marginMm: 3, orientation: "LANDSCAPE" } });
+  check("landscape @page = medya 100mm 58mm (takas YOK)", land.includes("size: 100mm 58mm"));
   check("landscape içerik = 100 − 2×3 = 94mm", land.includes("width: 94mm"));
   check("landscape iki-kolon düzen seçildi (.metraj var, portrait .qty yok)", land.includes(".metraj") && !land.includes(".qty"));
 
