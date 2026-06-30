@@ -40,6 +40,13 @@ function toAssignment(d: DeviceWithMachine) {
   };
 }
 
+const DEVICE_KINDS = new Set(["TABLET", "PHONE", "DESKTOP"]);
+/** Geçerli cihaz türüne normalize et (geçersiz/boş → TABLET). */
+function normalizeDeviceKind(k?: string | null): string {
+  const v = (k ?? "").toUpperCase();
+  return DEVICE_KINDS.has(v) ? v : "TABLET";
+}
+
 export class DeviceService {
   /** Admin: tüm cihazları listele (PENDING'ler önce). */
   static async list() {
@@ -53,14 +60,17 @@ export class DeviceService {
    * Mobil (public): tablet boot'ta deviceId'sini bildirir. Bilinmiyorsa PENDING
    * açılır (admin onaylar). Var olan → lastSeen güncellenir; mevcut atama döner.
    */
-  static async announce(input: { deviceId: string; name?: string }) {
+  static async announce(input: { deviceId: string; name?: string; kind?: string }) {
     const deviceId = (input.deviceId ?? "").trim();
     if (!deviceId) throw AppError.badRequest("deviceId zorunlu");
-    const fallbackName = input.name?.trim() || `Tablet ${deviceId.slice(0, 8)}`;
+    const kind = normalizeDeviceKind(input.kind);
+    const kindLabel = kind === "PHONE" ? "Telefon" : kind === "DESKTOP" ? "Masaüstü" : "Tablet";
+    const fallbackName = input.name?.trim() || `${kindLabel} ${deviceId.slice(0, 8)}`;
     const device = await prisma.device.upsert({
       where: { deviceId },
-      create: { deviceId, name: fallbackName, status: "PENDING", isActive: true, lastSeenAt: new Date() },
-      update: { lastSeenAt: new Date() },
+      create: { deviceId, name: fallbackName, kind, status: "PENDING", isActive: true, lastSeenAt: new Date() },
+      // Var olan cihazda türü yalnız client açıkça gönderdiyse güncelle (admin override'ı ezme).
+      update: { lastSeenAt: new Date(), ...(input.kind ? { kind } : {}) },
       include: DEVICE_INCLUDE,
     });
     return toAssignment(device);
@@ -74,7 +84,7 @@ export class DeviceService {
   }
 
   /** Admin: cihazı onayla + (opsiyonel) makineye ata. İstasyon makineden türetilir. */
-  static async approveAndAssign(id: string, input: { machineId?: string | null }, userId?: string) {
+  static async approveAndAssign(id: string, input: { machineId?: string | null; kind?: string }, userId?: string) {
     const existing = await prisma.device.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
     let machineId: string | null = input.machineId ?? null;
@@ -84,7 +94,7 @@ export class DeviceService {
     }
     const updated = await prisma.device.update({
       where: { id },
-      data: { status: "APPROVED", isActive: true, machineId },
+      data: { status: "APPROVED", isActive: true, machineId, ...(input.kind ? { kind: normalizeDeviceKind(input.kind) } : {}) },
     });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "devices", recordId: id,

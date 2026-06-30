@@ -436,6 +436,8 @@ model Device {
   isActive   Boolean   @default(true)
   /// Allowlist durumu: PENDING (yeni, atama bekliyor) / APPROVED (onaylı + kullanır).
   status     DeviceStatus @default(PENDING)
+  /// Cihaz türü: TABLET / PHONE / DESKTOP (yönetici PC'si). Sadece görsel/etiket.
+  kind       String       @default("TABLET") @db.VarChar(16)
 
   // Relations
   machine       Machine?           @relation(fields: [machineId], references: [id])

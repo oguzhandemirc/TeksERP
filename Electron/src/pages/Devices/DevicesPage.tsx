@@ -157,6 +157,9 @@ function DeviceRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-medium truncate">{device.name}</span>
+            <Badge variant="outline">
+              {device.kind === "PHONE" ? "Telefon" : device.kind === "DESKTOP" ? "PC" : "Tablet"}
+            </Badge>
             {!device.isActive ? (
               <Badge variant="muted">Pasif</Badge>
             ) : approved ? (

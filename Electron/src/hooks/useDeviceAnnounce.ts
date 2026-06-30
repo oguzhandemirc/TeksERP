@@ -19,7 +19,8 @@ export function useDeviceAnnounce(): void {
         if (cancelled || !deviceId) return;
         const platform = window.api?.appInfo?.platform?.() ?? "";
         const name = platform ? `Masaüstü (${platform})` : "Masaüstü";
-        await apiClient.post("/api/devices/announce", { deviceId, name });
+        // Electron PC → tür DESKTOP (tablet/telefon değil).
+        await apiClient.post("/api/devices/announce", { deviceId, name, kind: "DESKTOP" });
       } catch {
         /* announce best-effort */
       }

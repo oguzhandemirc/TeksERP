@@ -29,6 +29,7 @@ interface Props {
 export function ApproveAssignDialog({ device, onOpenChange, onDone }: Props) {
   const [machineId, setMachineId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [kind, setKind] = useState<string>("TABLET");
 
   // Donanım listesi (Donanım sayfasındaki tüm cihazlar). Bu cihaza hangi
   // yazıcı/okuyucu atanacağını buradan seçeriz (tablet → donanım doğrudan).
@@ -40,13 +41,14 @@ export function ApproveAssignDialog({ device, onOpenChange, onDone }: Props) {
 
   useEffect(() => {
     setMachineId(device?.machineId ?? null);
+    setKind(device?.kind ?? "TABLET");
     // Bu cihaza halihazırda atanmış donanımı (M:N join) ön-işaretle.
     setSelectedIds((device?.hardwareLinks ?? []).map((h) => h.peripheral.id));
   }, [device]);
 
   const mutation = useMutation({
     mutationFn: async (id: string) => {
-      await deviceService.approve(id, machineId);
+      await deviceService.approve(id, machineId, kind);
       await deviceService.assignHardware(id, selectedIds);
     },
     onSuccess: () => {
@@ -72,6 +74,18 @@ export function ApproveAssignDialog({ device, onOpenChange, onDone }: Props) {
         </DialogHeader>
 
         <div className="space-y-4">
+          <FormField label="Tür" hint="Cihaz tipi — listede ikon/etiket">
+            <select
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
+            >
+              <option value="TABLET">Tablet</option>
+              <option value="PHONE">Telefon</option>
+              <option value="DESKTOP">PC / Yönetici</option>
+            </select>
+          </FormField>
+
           <FormField label="Donanım" hint="Bu cihazın kullandığı yazıcı/metre/kantar">
             <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2">
               {rows.length === 0 && (

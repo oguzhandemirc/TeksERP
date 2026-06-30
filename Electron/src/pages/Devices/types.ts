@@ -1,9 +1,11 @@
 export type DeviceStatus = "PENDING" | "APPROVED";
+export type DeviceKind = "TABLET" | "PHONE" | "DESKTOP";
 
 export interface DeviceListItem {
   id: string;
   deviceId: string;
   name: string;
+  kind: DeviceKind;
   machineId: string | null;
   status: DeviceStatus;
   lastSeenAt: string | null;

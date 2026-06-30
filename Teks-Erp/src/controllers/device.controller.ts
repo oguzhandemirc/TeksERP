@@ -8,13 +8,17 @@ import { DeviceService } from "../services/device.service";
 import { readDevicePairingRequired } from "../services/system-setting.service";
 import "../types/express-augment";
 
+const deviceKindSchema = z.enum(["TABLET", "PHONE", "DESKTOP"]).optional();
+
 const announceSchema = z.object({
   deviceId: z.string().min(8, "Geçersiz cihaz kimliği").max(80),
   name: z.string().max(80).optional(),
+  kind: deviceKindSchema,
 });
 
 const approveSchema = z.object({
   machineId: z.string().uuid("Geçersiz makine ID").optional().nullable(),
+  kind: deviceKindSchema,
 });
 
 const assignHardwareSchema = z.object({
@@ -81,7 +85,7 @@ export class DeviceController {
     try {
       const id = req.params.id as string;
       const body = approveSchema.parse(req.body ?? {});
-      const data = await DeviceService.approveAndAssign(id, { machineId: body.machineId ?? null }, req.user?.userId);
+      const data = await DeviceService.approveAndAssign(id, { machineId: body.machineId ?? null, kind: body.kind }, req.user?.userId);
       res.status(200).json({ success: true, data });
     } catch (error) {
       next(error);
