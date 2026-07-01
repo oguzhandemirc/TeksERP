@@ -18,6 +18,7 @@ import type { LabelPayload } from "./label.service";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
+import { mmToDots } from "./helpers/native-label.shared";
 import type { ApiResponse } from "../types/api.types";
 
 const SAMPLE_BC = "TEKS-ORNEK-0001";
@@ -199,7 +200,7 @@ export class LabelFormatProfileService extends BaseService {
     // Native → gerçek komutları çiz (birebir). Çizilemezse (çizici yok / geçersiz
     // raw-code) HAM KOMUTU göster — yanıltıcı farklı düzen yerine "basılan tam bu".
     const native = renderLabel(language, input).content;
-    const svg = renderNativePreviewSvg(language, native);
+    const svg = renderNativePreviewSvg(language, native, mmToDots(input.format.widthMm, input.format.dpi));
     if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg) } };
     return { success: true, data: { mode: "text", language, content: native } };
   }

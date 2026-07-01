@@ -40,6 +40,7 @@ import { resolveLabelFormat } from "./helpers/label-format.resolver";
 import { mockPayload } from "./helpers/label-rawcode";
 import { fieldDisplayValue } from "./helpers/label-field-values";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
+import { mmToDots } from "./helpers/native-label.shared";
 
 const TABLE = "LABEL_TEMPLATE";
 
@@ -349,7 +350,7 @@ export class LabelTemplateService {
       return { success: true, data: { mode: "html", language, content: renderLabel(language, input).content } };
     }
     const native = renderLabel(language, input).content;
-    const svg = renderNativePreviewSvg(language, native);
+    const svg = renderNativePreviewSvg(language, native, mmToDots(format.widthMm, format.dpi));
     if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg) } };
     return { success: true, data: { mode: "text", language, content: native } };
   }
