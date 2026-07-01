@@ -64,6 +64,9 @@ const relabelSchema = z.object({
   propertyIds:  z.array(z.string().uuid("Geçersiz özellik ID")).optional(),
   width:        z.number().positive("En pozitif olmalı").max(999_999_999).optional().nullable(),
   qualityGrade: z.string().trim().max(50).optional(),
+  // Metraj (currentQty) düzeltmesi — yanlış girilen ölçüm. Aynı guard'lara tabi
+  // (hurda/iptal + commit'li sevkiyat reddi). Kısmen tüketilmiş topta servis reddeder.
+  currentQty:   z.number().positive("Metraj pozitif olmalı").max(999_999).optional(),
 });
 
 // Yeni model: KK2 ölçüm yapmaz; totalMeters opsiyonel — verilmezse roll'un
@@ -340,6 +343,7 @@ export class InventoryController {
           propertyIds: body.propertyIds ?? [],
           width: body.width,
           qualityGrade: body.qualityGrade,
+          currentQty: body.currentQty,
         },
         req.user?.userId
       );

@@ -1812,7 +1812,7 @@ export class InventoryService {
    */
   async applyManualProperties(
     rollId: string,
-    data: { colorId: string | null; propertyIds: string[]; width?: number | null; qualityGrade?: string; reason?: string },
+    data: { colorId: string | null; propertyIds: string[]; width?: number | null; qualityGrade?: string; currentQty?: number; reason?: string },
     userId?: string,
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const roll = await prisma.roll.findUnique({
@@ -1825,6 +1825,8 @@ export class InventoryService {
         status: true,
         width: true,
         qualityGrade: true,
+        initialQty: true,
+        currentQty: true,
         shipmentId: true,
         shipment: { select: { status: true } },
       },
@@ -1843,6 +1845,18 @@ export class InventoryService {
     }
     if (data.width !== undefined && data.width !== null && !(data.width > 0)) {
       throw AppError.badRequest("Geçerli bir en (cm) girilmeli");
+    }
+    // Metraj düzeltmesi — kısmen tüketilmiş topta reddet (currentQty < initialQty →
+    // geçmişi sessizce silmemek için); yalnız bütün toplarda (initialQty == currentQty)
+    // düzeltmeye izin ver, initialQty ile birlikte güncelle.
+    const rollWhole = roll.initialQty.equals(roll.currentQty);
+    if (data.currentQty !== undefined) {
+      if (!(data.currentQty > 0)) throw AppError.badRequest("Geçerli bir metraj (mt) girilmeli");
+      if (!rollWhole) {
+        throw AppError.conflict(
+          "Bu top kısmen tüketilmiş (kesim/tüketim geçmişi var) — metrajı buradan düzeltilemez.",
+        );
+      }
     }
 
     // Catalog doğrulamaları (varsa)
@@ -1901,6 +1915,13 @@ export class InventoryService {
     const rollData: Prisma.RollUncheckedUpdateManyInput = {};
     if (roll.colorId !== data.colorId) rollData.colorId = data.colorId;
     if (data.width !== undefined) rollData.width = data.width === null ? null : new Prisma.Decimal(data.width);
+    // Metraj: bütün topta initialQty + currentQty birlikte güncellenir (ölçüm düzeltmesi);
+    // değer aynıysa no-op. rollWhole guard yukarıda garantiledi.
+    if (data.currentQty !== undefined && !roll.currentQty.equals(new Prisma.Decimal(data.currentQty))) {
+      const m = new Prisma.Decimal(data.currentQty);
+      rollData.currentQty = m;
+      rollData.initialQty = m;
+    }
     if (data.qualityGrade !== undefined && data.qualityGrade.trim()) {
       // Soft-delete giriş guard'ı (createInitialEntry/tambur finalize ile PARİTE):
       // operatör girdisi kataloğa karşı SIKI doğrulanır (bilinmeyen/pasif kod → 400),
@@ -1955,12 +1976,14 @@ export class InventoryService {
             colorId: roll.colorId,
             width: roll.width != null ? Number(roll.width) : null,
             qualityGrade: roll.qualityGrade,
+            currentQty: Number(roll.currentQty),
           } as Prisma.InputJsonValue,
           newData: {
             colorId: data.colorId,
             propertyIds: dedupedProps,
             width: data.width,
             qualityGrade: data.qualityGrade,
+            currentQty: data.currentQty ?? null,
             reason: data.reason ?? null,
             // Saha akışı (Yeniden Etiketle) sebep göndermez → RELABEL; süpervizör
             // "Manuel Düzelt" zorunlu sebep gönderir → MANUAL_ATTRIBUTE.
@@ -1978,6 +2001,7 @@ export class InventoryService {
         propertyIds: dedupedProps,
         width: data.width,
         qualityGrade: data.qualityGrade,
+        currentQty: data.currentQty,
       },
       message: `Top etiketi güncellendi`,
     };

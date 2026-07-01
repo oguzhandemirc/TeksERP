@@ -60,4 +60,6 @@ export interface RelabelSpecPayload {
   propertyIds: string[];
   width: number | null;
   qualityGrade?: string;
+  /** Metraj (mt) düzeltmesi — yalnız değiştiyse gönderilir; bütün topta izinli. */
+  currentQty?: number;
 }

@@ -35,6 +35,7 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
   const [colorId, setColorId] = useState<string | null>(ctx.colorId);
   const [qualityGrade, setQualityGrade] = useState<string>(ctx.qualityGrade);
   const [width, setWidth] = useState<string>(ctx.width != null ? String(ctx.width) : "");
+  const [metraj, setMetraj] = useState<string>(ctx.currentQty != null ? String(ctx.currentQty) : "");
   const [propertyIds, setPropertyIds] = useState<string[]>(ctx.propertyIds);
   const [marked, setMarked] = useState<boolean>(ctx.markedForKartela);
   // Kaydettikten sonra "fiziksel etiketi de yenile" hatırlatması (bir alan tekrar değişince gizlenir).
@@ -56,6 +57,10 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
         propertyIds,
         width: width.trim() === "" ? null : Number(width),
         qualityGrade: qualityGrade || undefined,
+        // Metraj YALNIZ değiştiyse gönder — değişmediyse göndermeyip backend'in
+        // "kısmen tüketilmiş" guard'ını (renk-only kayıtlarda) gereksiz tetikleme.
+        currentQty:
+          metraj.trim() !== "" && Number(metraj) !== ctx.currentQty ? Number(metraj) : undefined,
       });
       if (canKartela && marked !== ctx.markedForKartela) {
         await relabelService.setMarkedForKartela(ctx.id, marked);
@@ -84,7 +89,7 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">Veri Düzelt</h3>
         <span className="text-xs text-muted-foreground">
-          renk · kalite · en · özellik{canKartela ? " · kartelalık" : ""}
+          renk · metraj · kalite · en · özellik{canKartela ? " · kartelalık" : ""}
         </span>
       </div>
 
@@ -102,15 +107,28 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
         </div>
       )}
 
-      <FormField label="Renk">
-        <ColorPickerModal
-          value={colorId}
-          onChange={edit(setColorId)}
-          allowNone
-          label="Renk seç"
-          disabled={disabled}
-        />
-      </FormField>
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="Renk">
+          <ColorPickerModal
+            value={colorId}
+            onChange={edit(setColorId)}
+            allowNone
+            label="Renk seç"
+            disabled={disabled}
+          />
+        </FormField>
+        <FormField label="Metraj (mt)" htmlFor="relabel-metraj">
+          <Input
+            id="relabel-metraj"
+            type="number"
+            step="0.1"
+            min="0"
+            value={metraj}
+            disabled={disabled}
+            onChange={(e) => edit(setMetraj)(e.target.value)}
+          />
+        </FormField>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Kalite Sınıfı">

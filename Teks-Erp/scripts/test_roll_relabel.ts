@@ -7,6 +7,8 @@
 //   3. PREPARING sevkiyattaki top relabel edilebilir
 //   4. READY (commit'li) sevkiyattaki top relabel REDDEDİLİR (409)
 //   5. Renksiz (color null) yapılabilir
+//   6. Metraj (currentQty) düzeltmesi — bütün topta initialQty ile birlikte güncellenir
+//   7. Kısmen tüketilmiş topta metraj düzeltme reddedilir (renk-only geçer)
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
@@ -117,7 +119,32 @@ async function main() {
       rejected = (e as { statusCode?: number }).statusCode === 409;
     }
     check("READY (commit'li) sevkiyattaki top relabel 409", rejected);
-    void r3;
+
+    // 6) Metraj (currentQty) düzeltmesi — bütün topta initialQty ile BİRLİKTE güncellenir
+    await inv.applyManualProperties(r3.id, { colorId: colorA.id, propertyIds: [], currentQty: 250 }, undefined);
+    const r3After = await prisma.roll.findUnique({
+      where: { id: r3.id },
+      select: { currentQty: true, initialQty: true },
+    });
+    check(
+      "Metraj değişti (100→250) + initialQty senkron",
+      Number(r3After?.currentQty) === 250 && Number(r3After?.initialQty) === 250,
+    );
+
+    // 7) Kısmen tüketilmiş top (currentQty < initialQty) → metraj düzeltme REDDEDİLİR (409)
+    await prisma.roll.update({ where: { id: r3.id }, data: { currentQty: 200, initialQty: 250 } });
+    let metrajRejected = false;
+    try {
+      await inv.applyManualProperties(r3.id, { colorId: colorA.id, propertyIds: [], currentQty: 300 }, undefined);
+    } catch (e) {
+      metrajRejected = (e as { statusCode?: number }).statusCode === 409;
+    }
+    check("Kısmen tüketilmiş topta metraj düzeltme 409", metrajRejected);
+
+    // 7b) Metraj GÖNDERİLMEZSE (renk-only) kısmi topta bile relabel geçer (guard sadece metraja)
+    await inv.applyManualProperties(r3.id, { colorId: colorB.id, propertyIds: [] }, undefined);
+    const r3ColorOnly = await prisma.roll.findUnique({ where: { id: r3.id }, select: { colorId: true } });
+    check("Kısmi topta metrajsız (renk-only) relabel geçer", r3ColorOnly?.colorId === colorB.id);
   } finally {
     for (const id of shipmentIds) {
       await prisma.shipmentAllocation.deleteMany({ where: { shipmentId: id } });
