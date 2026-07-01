@@ -195,6 +195,24 @@ export class LabelController {
     } catch (e) { next(e); }
   };
 
+  /** WYSIWYG önizleme — gerçek topu aktif dilde ({ mode, language, content, kind }). */
+  getRollPreview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const kindParam = typeof req.query.kind === "string" ? req.query.kind : undefined;
+      const kindOverride =
+        kindParam === LabelKind.ROLL_RAW || kindParam === LabelKind.ROLL_FINISHED
+          ? (kindParam as LabelKind)
+          : undefined;
+      const result = await this.service.getRollPreview(req.params.id as string, kindOverride, {
+        orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
+        customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
+        stock: req.query.stock === "1" || req.query.stock === "true",
+        ...parseFormatOpts(req),
+      });
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
   /**
    * FAZ-2 PRODUCTION: rolün etiketini istasyon yazıcısına native gönder
    * (label.nativeSendEnabled açıkken gerçek, kapalıyken simüle). JSON sonuç döner.
@@ -239,6 +257,18 @@ export class LabelController {
       const result = await this.service.getBulkRollLabelsHtml(body.rollIds, { copies: body.copies });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(200).send(result.data.html);
+    } catch (e) { next(e); }
+  };
+
+  /** N farklı topun native (PPLA) komutlarını TEK akışta — diyalogsuz toplu seri/BT baskı. */
+  getBulkRollLabelsNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = bulkLabelsSchema.parse(req.body);
+      const result = await this.service.getBulkRollLabelsNative(body.rollIds, { copies: body.copies });
+      res.setHeader("Content-Type", result.data.contentType);
+      res.setHeader("X-Label-Language", result.data.language);
+      res.setHeader("X-Label-Count", String(result.data.count));
+      res.status(200).send(result.data.content);
     } catch (e) { next(e); }
   };
 

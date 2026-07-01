@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { labelService } from "@/services/labelService";
+import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 
 interface Props {
   rollId: string | null;
@@ -59,16 +60,20 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
     enabled: open,
   });
 
-  // Etiket HTML'i — backend LabelTemplate config'iyle render edilir; mobil
-  // basımı ve LabelTemplates önizlemesiyle birebir aynı çıktı.
-  const htmlQuery = useQuery({
-    queryKey: ["label-roll-html", rollId],
-    queryFn: () => labelService.getRollLabelHtml(rollId!),
+  // WYSIWYG önizleme — AKTİF DİLDE (native PPLB → görsel SVG, baskıyla birebir).
+  // Baskı yolu (native printRoll / iframe.print) ayrı; önizleme artık gerçek çıktı.
+  const previewQuery = useQuery({
+    queryKey: ["label-roll-preview", rollId],
+    queryFn: () => labelService.getRollPreview(rollId!),
     enabled: open,
     staleTime: 0,
   });
+  const preview = previewQuery.data;
 
   const [editOpen, setEditOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  // Bu PC'ye yapılandırılmış seri/COM Argox varsa diyalogsuz baskı; yoksa iframe.print().
+  const { directEnabled, printRoll } = useLabelPrinter();
 
   const printMut = useMutation({
     mutationFn: () => labelService.printRollLabel(rollId!),
@@ -77,7 +82,23 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
     },
   });
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    if (directEnabled) {
+      if (sending) return; // çift-tık koruması — seri/BT gönderim ~1sn sürebilir.
+      setSending(true);
+      try {
+        // Diyalogsuz: native PPLA → seri/COM. Hata olursa diyaloğa DÜŞME (görünür hata).
+        const r = await printRoll(rollId!);
+        if (r.ok) {
+          printMut.mutate(); // audit + "Etiket basıldı" toast'ı printMut.onSuccess'ten.
+        } else {
+          toast.error(r.error ?? "Yazıcıya gönderilemedi");
+        }
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
     iframeRef.current?.contentWindow?.print();
     printMut.mutate();
   };
@@ -88,14 +109,19 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
   // önizleme tazelenir → müşterisiz hâli yansır.
   const printStockMut = useMutation({
     mutationFn: async () => {
-      const html = await labelService.getRollLabelHtml(rollId!, { stock: true });
-      await printHtmlString(html);
+      if (directEnabled) {
+        const r = await printRoll(rollId!, { stock: true });
+        if (!r.ok) throw new Error(r.error ?? "Yazıcıya gönderilemedi");
+      } else {
+        const html = await labelService.getRollLabelHtml(rollId!, { stock: true });
+        await printHtmlString(html);
+      }
       await labelService.printRollLabel(rollId!, { stock: true });
     },
     onSuccess: () => {
       toast.success("Müşterisiz (stok) etiketi basıldı.");
       void qc.invalidateQueries({ queryKey: ["label-roll", rollId] });
-      void qc.invalidateQueries({ queryKey: ["label-roll-html", rollId] });
+      void qc.invalidateQueries({ queryKey: ["label-roll-preview", rollId] });
     },
     onError: (e: Error) => toast.error(`Basılamadı: ${e.message}`),
   });
@@ -124,17 +150,27 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
               </div>
             }
           >
-            {htmlQuery.isLoading ? (
-              <Skeleton className="h-[640px] w-full" />
-            ) : htmlQuery.isError ? (
-              <div className="rounded-md border border-dashed p-6 text-center text-sm text-destructive">
-                Etiket alınamadı: {(htmlQuery.error as Error).message}
+            {preview && (
+              <div className="text-[11px] text-muted-foreground">
+                Aktif dil: <strong>{preview.language}</strong> ·{" "}
+                {preview.mode === "text" ? "ham komut (görsel yok)" : "önizleme = baskı"}
               </div>
+            )}
+            {previewQuery.isLoading ? (
+              <Skeleton className="h-[640px] w-full" />
+            ) : previewQuery.isError ? (
+              <div className="rounded-md border border-dashed p-6 text-center text-sm text-destructive">
+                Etiket alınamadı: {(previewQuery.error as Error).message}
+              </div>
+            ) : preview?.mode === "text" ? (
+              <pre className="h-[640px] w-full overflow-auto whitespace-pre-wrap break-all rounded border bg-muted/20 p-3 font-mono text-[11px] leading-relaxed">
+                {preview.content}
+              </pre>
             ) : (
               <iframe
                 ref={iframeRef}
                 title="Top etiketi"
-                srcDoc={htmlQuery.data ?? ""}
+                srcDoc={preview?.content ?? ""}
                 sandbox="allow-same-origin allow-modals"
                 className="h-[640px] w-full rounded border bg-white"
               />
@@ -166,7 +202,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
                     size="sm"
                     variant="outline"
                     title="Müşteri bilgisi olmadan (stok) etiketi bas"
-                    disabled={!hasBarcode || htmlQuery.isLoading || printStockMut.isPending}
+                    disabled={!hasBarcode || previewQuery.isLoading || printStockMut.isPending}
                     onClick={() => printStockMut.mutate()}
                     className="gap-1"
                   >
@@ -177,7 +213,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
                   <Button
                     type="button"
                     size="sm"
-                    disabled={!hasBarcode || htmlQuery.isLoading || printMut.isPending}
+                    disabled={!hasBarcode || previewQuery.isLoading || printMut.isPending || sending}
                     onClick={handlePrint}
                     className="gap-1"
                   >
@@ -208,7 +244,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
           masterColorName={payload.colorName}
           onSaved={() => {
             void qc.invalidateQueries({ queryKey: ["label-roll", rollId] });
-            void qc.invalidateQueries({ queryKey: ["label-roll-html", rollId] });
+            void qc.invalidateQueries({ queryKey: ["label-roll-preview", rollId] });
           }}
         />
       )}

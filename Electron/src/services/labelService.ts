@@ -92,6 +92,21 @@ export const labelService = {
       })
       .then((r) => r.data),
 
+  /**
+   * WYSIWYG önizleme — gerçek topu AKTİF DİLDE. Native dil → svg (baskıyla birebir);
+   * HTML dili → html; çizilemeyen native → text (ham komut). Baskı diyalogları iframe'ler.
+   */
+  getRollPreview: (
+    rollId: string,
+    opts?: LabelCustomerContext,
+  ): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; kind: string }> =>
+    apiClient
+      .get<ApiResponse<{ mode: "svg" | "html" | "text"; language: string; content: string; kind: string }>>(
+        `/api/labels/rolls/${rollId}/preview`,
+        { params: customerContextQuery(opts) },
+      )
+      .then((r) => r.data.data),
+
   updateOrderLineOverride: (
     orderLineId: string,
     body: OrderLineOverridePayload,
@@ -114,6 +129,42 @@ export const labelService = {
         ...(opts?.stock ? { stock: true } : {}),
       })
       .then((r) => r.data),
+
+  /**
+   * Rolün SEÇİLİ yazıcı dilinde native komutu (PPLA/PPLB/ZPL) — diyalogsuz seri/COM
+   * baskı için. text/plain gövde + dil `X-Label-Language` header'ında. RASTER_HTML
+   * dönerse yazıcı native değildir (ham gönderilemez). `opts` ile müşteri bağlamı.
+   */
+  getRollNative: (
+    rollId: string,
+    opts?: LabelCustomerContext,
+  ): Promise<{ content: string; language: PrinterLanguage }> =>
+    apiClient
+      .get<string>(`/api/labels/rolls/${rollId}/native`, {
+        params: customerContextQuery(opts),
+        responseType: "text",
+        transformResponse: [(d) => d],
+      })
+      .then((r) => ({
+        content: String(r.data ?? ""),
+        language: String(r.headers["x-label-language"] ?? "") as PrinterLanguage,
+      })),
+
+  /** Toplu native (PPLA) tek-job — N farklı top tek seri/COM gönderiminde (diyalogsuz). */
+  getBulkRollLabelsNative: (
+    rollIds: string[],
+    copies?: number,
+  ): Promise<{ content: string; language: PrinterLanguage }> =>
+    apiClient
+      .post<string>(
+        `/api/labels/rolls/bulk-native`,
+        { rollIds, ...(copies ? { copies } : {}) },
+        { responseType: "text", transformResponse: [(d) => d] },
+      )
+      .then((r) => ({
+        content: String(r.data ?? ""),
+        language: String(r.headers["x-label-language"] ?? "") as PrinterLanguage,
+      })),
 
   /** Saha #7: toplu etiket HTML'i — seçili topların hepsi tek belgede (her top kendi sayfası). */
   getBulkRollLabelsHtml: (rollIds: string[], copies?: number): Promise<string> =>

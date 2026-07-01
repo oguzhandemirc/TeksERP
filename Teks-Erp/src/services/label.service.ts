@@ -36,6 +36,8 @@ import { resolveLabelFormat, loadMachinePrinter, type ResolvedLabelFormat } from
 import { resolveLabelRouting } from "./helpers/label-routing.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
+import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
+import { mmToDots } from "./helpers/native-label.shared";
 import { dispatchNativeSend, type PrinterTransportResult } from "./helpers/printer-transport";
 
 const TABLE_ORDER_LINE = "ORDER_LINE";
@@ -653,6 +655,27 @@ export class LabelService {
     };
   }
 
+  /**
+   * WYSIWYG önizleme — gerçek topu AKTİF DİLDE render eder. Native dil için komutları
+   * görsele çevirir (mode="svg", baskıyla birebir); HTML dili → html; çizilemeyen native
+   * → ham komut (mode="text"). Baskı diyalogları (RollLabelDialog/Relabel/toplu) bunu iframe'ler.
+   */
+  async getRollPreview(
+    rollId: string,
+    kindOverride?: LabelKind,
+    opts?: RollLabelRenderOpts,
+  ): Promise<ApiResponse<{ mode: "svg" | "html" | "text"; language: PrinterLanguage; content: string; kind: LabelKind }>> {
+    const { input, kind } = await this.buildRollRenderInput(rollId, kindOverride, opts);
+    const language = input.format.language;
+    if (language === PrinterLanguage.RASTER_HTML) {
+      return { success: true, data: { mode: "html", language, content: renderLabel(language, input).content, kind } };
+    }
+    const native = renderLabel(language, input).content;
+    const svg = renderNativePreviewSvg(language, native, mmToDots(input.format.widthMm, input.format.dpi));
+    if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), kind } };
+    return { success: true, data: { mode: "text", language, content: native, kind } };
+  }
+
   /** HTML dilinde doğrudan gönderim yok (OS sürücü); aksi halde transport'a delege. */
   private async dispatchOrGuard(
     rendered: { content: string; language: PrinterLanguage },
@@ -825,6 +848,36 @@ export class LabelService {
       ? `${head}\n${combinedBody}\n</body></html>`
       : `<!doctype html><html><head><meta charset="utf-8"></head><body>${combinedBody}</body></html>`;
     return { success: true, data: { html, count: bodies.length } };
+  }
+
+  /**
+   * TOPLU NATIVE — N FARKLI topun native (PPLA/ZPL) bloklarını TEK komut akışına
+   * birleştirir (her blok kendi Q<kopya> + bitiş komutuyla). Diyalogsuz tek seri/COM
+   * (Electron) veya BT (mobil) gönderiminde N etiket basılır → per-top ayrı bağlantı
+   * yok. `buildBulkContext` ile N+1→O(1); render per-roll yolla byte-identik. Tüm
+   * toplar bulk format dilinde — RASTER_HTML ise istemci reddeder (native değil).
+   */
+  async getBulkRollLabelsNative(
+    rollIds: string[],
+    opts?: { copies?: number },
+  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; count: number }>> {
+    const ids = [...new Set(rollIds)];
+    if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
+    const copies = opts?.copies ?? (await readLabelCopies());
+    const ctx = await this.buildBulkContext(ids, copies);
+    const language = ctx.format.language;
+    let contentType = "text/plain; charset=utf-8";
+    const blocks: string[] = [];
+    for (const id of ids) {
+      const { input } = await this.buildRollRenderInput(id, undefined, { copies }, ctx);
+      const r = renderLabel(language, input);
+      contentType = r.contentType;
+      if (r.content) blocks.push(r.content);
+    }
+    return {
+      success: true,
+      data: { content: blocks.join(""), language, contentType, count: blocks.length },
+    };
   }
 
   /**

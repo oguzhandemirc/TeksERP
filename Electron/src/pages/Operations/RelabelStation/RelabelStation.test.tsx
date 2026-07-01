@@ -23,15 +23,23 @@ vi.mock("./service", () => ({
   },
 }));
 
-const getRollLabelHtml = vi.fn((..._a: unknown[]) => Promise.resolve("<html><body>ETIKET</body></html>"));
+const getRollPreview = vi.fn((..._a: unknown[]) =>
+  Promise.resolve({ mode: "html", language: "RASTER_HTML", content: "<html><body>ETIKET</body></html>", kind: "ROLL_FINISHED" }),
+);
 const printRollLabel = vi.fn((..._a: unknown[]) =>
   Promise.resolve({ success: true, data: { rollId: "roll-1" } }),
 );
 vi.mock("@/services/labelService", () => ({
   labelService: {
-    getRollLabelHtml: (...a: unknown[]) => getRollLabelHtml(...a),
+    getRollPreview: (...a: unknown[]) => getRollPreview(...a),
+    getRollLabelHtml: (..._a: unknown[]) => Promise.resolve("<html><body>ETIKET</body></html>"),
     printRollLabel: (...a: unknown[]) => printRollLabel(...a),
   },
+}));
+
+// Yerel yazıcı yok → iframe.print yedeği (usePreferences provider'ı test'te yok).
+vi.mock("@/hooks/useLabelPrinter", () => ({
+  useLabelPrinter: () => ({ directEnabled: false, printRoll: vi.fn(), printRollsBulk: vi.fn() }),
 }));
 
 // loadAllForPicker GERÇEK şekli: PaginatedResponse ({ success, data, pagination }).
@@ -97,7 +105,7 @@ const baseCtx: RelabelContext = {
 
 beforeEach(() => {
   applySpec.mockClear();
-  getRollLabelHtml.mockClear();
+  getRollPreview.mockClear();
   printRollLabel.mockClear();
 });
 
@@ -131,11 +139,11 @@ describe("RelabelPrintForCustomer — müşteri için yeniden bas", () => {
   it("açılışta müşterisiz render; aday çipi → customerId+orderLineId ile html", async () => {
     renderWithProviders(<RelabelPrintForCustomer ctx={baseCtx} />);
     await waitFor(() =>
-      expect(getRollLabelHtml).toHaveBeenCalledWith("roll-1", { customerId: null, orderLineId: null }),
+      expect(getRollPreview).toHaveBeenCalledWith("roll-1", { customerId: null, orderLineId: null }),
     );
     await userEvent.click(screen.getByText("BETA"));
     await waitFor(() =>
-      expect(getRollLabelHtml).toHaveBeenCalledWith("roll-1", { customerId: "cB", orderLineId: "ol-1" }),
+      expect(getRollPreview).toHaveBeenCalledWith("roll-1", { customerId: "cB", orderLineId: "ol-1" }),
     );
   });
 
@@ -154,7 +162,7 @@ describe("RelabelPrintForCustomer — müşteri için yeniden bas", () => {
     renderWithProviders(<RelabelPrintForCustomer ctx={baseCtx} />);
     await userEvent.click(screen.getByRole("button", { name: /Stok \(müşterisiz\)/ }));
     await waitFor(() =>
-      expect(getRollLabelHtml).toHaveBeenCalledWith("roll-1", { stock: true }),
+      expect(getRollPreview).toHaveBeenCalledWith("roll-1", { stock: true }),
     );
     const basBtn = await screen.findByRole("button", { name: "Bas" });
     await waitFor(() => expect(basBtn).not.toBeDisabled());

@@ -9,6 +9,7 @@ import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { labelService } from "@/services/labelService";
+import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import type { RelabelContext } from "./types";
 
 /**
@@ -28,6 +29,9 @@ export function RelabelPrintForCustomer({
   const { hasPermission } = useRoleAccess();
   const canPrint = hasPermission("label:print");
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // Bu PC'ye yapılandırılmış seri/COM Argox varsa diyalogsuz baskı; yoksa iframe.print().
+  const { directEnabled, printRoll } = useLabelPrinter();
+  const [sending, setSending] = useState(false);
 
   // Üç durum: müşteri seçili → o müşteri; stock=true → ZORLA stok (müşterisiz);
   // ikisi de değilse (açılış) → topun mevcut etiketi (snapshot/varsayılan).
@@ -39,11 +43,13 @@ export function RelabelPrintForCustomer({
   // aksi halde {customerId, orderLineId} (açılışta ikisi de null → mevcut etiket).
   const ctxOpts = stock ? { stock: true } : { customerId, orderLineId };
 
-  const htmlQuery = useQuery({
-    queryKey: ["relabel-html", ctx.id, customerId, orderLineId, stock],
-    queryFn: () => labelService.getRollLabelHtml(ctx.id, ctxOpts),
+  // WYSIWYG önizleme — AKTİF DİLDE (native → görsel SVG, baskıyla birebir).
+  const previewQuery = useQuery({
+    queryKey: ["relabel-preview", ctx.id, customerId, orderLineId, stock],
+    queryFn: () => labelService.getRollPreview(ctx.id, ctxOpts),
     staleTime: 0,
   });
+  const preview = previewQuery.data;
 
   const printMut = useMutation({
     mutationFn: () => labelService.printRollLabel(ctx.id, ctxOpts),
@@ -53,7 +59,24 @@ export function RelabelPrintForCustomer({
     },
   });
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    if (directEnabled) {
+      if (sending) return; // çift-tık koruması — seri/BT gönderim ~1sn sürebilir.
+      setSending(true);
+      try {
+        // Diyalogsuz: native PPLA → seri/COM. Hata olursa diyaloğa DÜŞME (görünür hata).
+        const r = await printRoll(ctx.id, ctxOpts);
+        if (r.ok) {
+          printMut.mutate(); // audit + "Etiket basıldı" toast'ı printMut.onSuccess'ten.
+        } else {
+          toast.error(r.error ?? "Yazıcıya gönderilemedi");
+        }
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+    // Yapılandırılmış seri yazıcı yok → eski OS yazdırma diyaloğu yedeği.
     iframeRef.current?.contentWindow?.print();
     printMut.mutate();
   };
@@ -126,18 +149,28 @@ export function RelabelPrintForCustomer({
         </Button>
       </div>
 
-      {/* Canlı önizleme — seçilen müşteriyle */}
-      {htmlQuery.isLoading ? (
-        <Skeleton className="h-[520px] w-full" />
-      ) : htmlQuery.isError ? (
-        <div className="rounded-md border border-dashed p-6 text-center text-sm text-destructive">
-          Etiket alınamadı: {(htmlQuery.error as Error).message}
+      {/* Canlı önizleme — seçilen müşteriyle, AKTİF DİLDE (baskıyla birebir) */}
+      {preview && (
+        <div className="text-[11px] text-muted-foreground">
+          Aktif dil: <strong>{preview.language}</strong> ·{" "}
+          {preview.mode === "text" ? "ham komut (görsel yok)" : "önizleme = baskı"}
         </div>
+      )}
+      {previewQuery.isLoading ? (
+        <Skeleton className="h-[520px] w-full" />
+      ) : previewQuery.isError ? (
+        <div className="rounded-md border border-dashed p-6 text-center text-sm text-destructive">
+          Etiket alınamadı: {(previewQuery.error as Error).message}
+        </div>
+      ) : preview?.mode === "text" ? (
+        <pre className="h-[520px] w-full overflow-auto whitespace-pre-wrap break-all rounded border bg-muted/20 p-3 font-mono text-[11px] leading-relaxed">
+          {preview.content}
+        </pre>
       ) : (
         <iframe
           ref={iframeRef}
           title="Yeniden etiket önizleme"
-          srcDoc={htmlQuery.data ?? ""}
+          srcDoc={preview?.content ?? ""}
           sandbox="allow-same-origin allow-modals"
           className="h-[520px] w-full rounded border bg-white"
         />
@@ -155,7 +188,7 @@ export function RelabelPrintForCustomer({
           <Button
             type="button"
             size="sm"
-            disabled={!hasBarcode || htmlQuery.isLoading || printMut.isPending}
+            disabled={!hasBarcode || previewQuery.isLoading || printMut.isPending || sending}
             onClick={handlePrint}
             className="gap-1"
           >

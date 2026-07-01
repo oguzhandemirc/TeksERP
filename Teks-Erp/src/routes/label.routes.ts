@@ -163,6 +163,26 @@ router.get(
 
 /**
  * @openapi
+ * /api/labels/rolls/{id}/preview:
+ *   get:
+ *     tags: [Labels]
+ *     summary: WYSIWYG önizleme — gerçek topu AKTİF DİLDE ({ mode, language, content, kind })
+ *     description: |
+ *       Baskı diyaloglarının önizlemesi. Native dil → komutlar görsele çevrilir
+ *       (mode="svg", baskıyla birebir); HTML dili → mode="html"; çizilemeyen → mode="text".
+ *       `?kind` / `?customerId` / `?orderLineId` / `?stock` / `?profileId` / `?machineId`
+ *       (getRollLabelHtml/native ile aynı opts).
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/rolls/:id/preview",
+  verifyToken,
+  requireAnyPermission("label:read", ...MOBILE_LABEL_PRINTERS),
+  controller.getRollPreview,
+);
+
+/**
+ * @openapi
  * /api/labels/rolls/{id}/print-native:
  *   post:
  *     tags: [Labels]
@@ -256,6 +276,37 @@ router.post(
   verifyToken,
   requireAnyPermission("label:read", ...MOBILE_LABEL_PRINTERS),
   controller.getBulkRollLabelsHtml,
+);
+
+/**
+ * @openapi
+ * /api/labels/rolls/bulk-native:
+ *   post:
+ *     tags: [Labels]
+ *     summary: N farklı topun native (PPLA) komutları TEK akışta — diyalogsuz toplu baskı
+ *     description: |
+ *       `/bulk-html`'in native analoğu. Her topun PPLA bloğu ardışık birleştirilir;
+ *       tek seri/COM (Electron) veya BT (mobil) gönderiminde N etiket basılır. Dil
+ *       `X-Label-Language` header'ında (RASTER_HTML → istemci reddeder, native değil).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollIds]
+ *             properties:
+ *               rollIds: { type: array, items: { type: string, format: uuid } }
+ *               copies: { type: integer }
+ *     responses:
+ *       200: { description: Birleşik native komut akışı (text/plain) }
+ */
+router.post(
+  "/rolls/bulk-native",
+  verifyToken,
+  requireAnyPermission("label:read", ...MOBILE_LABEL_PRINTERS),
+  controller.getBulkRollLabelsNative,
 );
 
 /**
