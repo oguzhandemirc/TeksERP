@@ -21,8 +21,6 @@ import { FieldsPanel } from "./FieldsPanel";
 import { LabelPreview } from "./LabelPreview";
 import { RawCodePanel } from "./RawCodePanel";
 
-const LIST_PATH = "/definitions/label-templates";
-
 export function LabelTemplateEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -34,6 +32,11 @@ export function LabelTemplateEditPage() {
     enabled: Boolean(id),
   });
   const template = templateQ.data?.data;
+  // Kaydet/geri → geldiği sarmalanmış "Etiketler → Düzenler" listesine + aynı türe dön
+  // (standalone /label-templates yerine — Boyutlar/Düzenler sekmeleri kaybolmasın).
+  const backPath = template
+    ? `/definitions/labels?tab=templates&kind=${template.kind}`
+    : "/definitions/labels?tab=templates";
 
   const catalogQ = useQuery({
     queryKey: ["label-template-catalog", template?.kind],
@@ -77,7 +80,7 @@ export function LabelTemplateEditPage() {
       toast.success("Şablon kaydedildi.");
       void qc.invalidateQueries({ queryKey: ["label-templates"] });
       void qc.invalidateQueries({ queryKey: ["label-template", id] });
-      navigate(LIST_PATH);
+      navigate(backPath);
     },
   });
 
@@ -107,7 +110,7 @@ export function LabelTemplateEditPage() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => navigate(LIST_PATH)}
+              onClick={() => navigate(backPath)}
               className="gap-1"
             >
               <ArrowLeft className="h-4 w-4" /> Listeye Dön

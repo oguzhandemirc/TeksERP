@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Star, StarOff, Trash2, Pencil } from "lucide-react";
@@ -23,10 +23,21 @@ const QUERY_KEY = "label-templates";
 
 export function LabelTemplatesPage({ hideHeader }: { hideHeader?: boolean } = {}) {
   const navigate = useNavigate();
-  const [activeKind, setActiveKind] = useState<LabelKind>(LabelKind.ROLL_FINISHED);
+  const [sp, setSp] = useSearchParams();
+  // Aktif tür URL'de (?kind=) — düzenle→geri dönünce hatırlanır (yoksa Bitmiş).
+  const kindParam = sp.get("kind");
+  const activeKind: LabelKind = (Object.keys(labelKindLabels) as LabelKind[]).includes(kindParam as LabelKind)
+    ? (kindParam as LabelKind)
+    : LabelKind.ROLL_FINISHED;
+  const setActiveKind = (k: LabelKind) => {
+    const n = new URLSearchParams(sp);
+    n.set("kind", k);
+    setSp(n, { replace: true });
+  };
   const [newOpen, setNewOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Düzenleme sayfası, aynı tür+sekmeye dönebilmek için türü URL'den okur.
   const handleEdit = (id: string) =>
     navigate(`/definitions/label-templates/${id}`);
 

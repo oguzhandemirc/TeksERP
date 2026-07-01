@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LabelFormatProfilesPage } from "@/pages/LabelFormatProfiles/LabelFormatProfilesPage";
@@ -11,13 +12,22 @@ import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
  * Alt sayfalar `hideHeader` ile kendi PageHeader'larını basmaz → tek başlık kalır.
  */
 export function EtiketlerPage() {
+  // Aktif sekme URL'de (?tab=) — düzenle→kaydet sonrası doğru sekmeye (Düzenler) dönülür.
+  const [sp, setSp] = useSearchParams();
+  const tab = sp.get("tab") === "templates" ? "templates" : "formats";
+  const setTab = (v: string) => {
+    const n = new URLSearchParams(sp);
+    n.set("tab", v);
+    setSp(n, { replace: true });
+  };
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Etiketler"
         description="Etiket boyutları (mm) ve düzenleri (alan yerleşimi / uzman yazıcı kodu)."
       />
-      <Tabs defaultValue="formats" className="flex min-h-0 flex-1 flex-col">
+      <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
         <TabsList className="mx-4 mt-4 w-fit">
           <TabsTrigger value="formats">Boyutlar</TabsTrigger>
           <TabsTrigger value="templates">Düzenler</TabsTrigger>
