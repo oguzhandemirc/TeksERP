@@ -98,7 +98,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 className="gap-1"
                 onClick={() => setRelabelBarcode(roll.barcode)}
               >
-                <Tags className="h-3.5 w-3.5" /> Düzenle/Yeniden Etiketle
+                <Tags className="h-3.5 w-3.5" /> Yeniden Etiketle/Düzenle
               </Button>
             )}
             {canManualAdjust && isStuckOpenFabric && (
