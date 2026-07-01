@@ -129,14 +129,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
               />
             )}
 
-            <DialogFooter className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs text-muted-foreground">
-                Yetkiler:{" "}
-                <span className="font-medium">
-                  {canEdit ? "Düzenleme ✓" : "Düzenleme ✗"} ·{" "}
-                  {canPrint ? "Basım ✓" : "Basım ✗"}
-                </span>
-              </div>
+            <DialogFooter className="flex flex-wrap items-center justify-end gap-2">
               <div className="flex gap-2">
                 {canEdit && (
                   <Button
@@ -160,7 +153,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
                     <Printer className="h-3.5 w-3.5" /> Bas
                   </Button>
                 )}
-                <Button type="button" size="sm" variant="ghost" onClick={() => onOpenChange(false)}>
+                <Button type="button" size="sm" variant="outline" onClick={() => onOpenChange(false)}>
                   Kapat
                 </Button>
               </div>
