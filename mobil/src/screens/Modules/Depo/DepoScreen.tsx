@@ -243,7 +243,7 @@ export default function DepoScreen() {
     // Sekme = listeleme bağlamı; barkod okutma = nokta sorgu, sekmeden bağımsız.
     // Prefix sabit: SW- → Kartela, TEKS- → Top. Operatör Tümü sekmesindeyken
     // kartela barkodu okutursa da kartela detayı açılır.
-    const isSwatchBarcode = /^SW-/i.test(barcode);
+    const isSwatchBarcode = /^SW/i.test(barcode);
     try {
       if (isSwatchBarcode) {
         const res = await swatchService.getByBarcode(barcode);

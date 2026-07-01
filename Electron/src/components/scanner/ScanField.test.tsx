@@ -58,9 +58,9 @@ describe("ScanField", () => {
     const onScan = vi.fn();
     renderWithProviders(<Harness onScan={onScan} expectPrefix="SWATCH" validateChecksum />);
     // SW- formatında ama yanlış checksum (-9)
-    await userEvent.type(screen.getByPlaceholderText("okut"), "SW-2604-5A3Z9B-9");
+    await userEvent.type(screen.getByPlaceholderText("okut"), "SW26045A3Z9B9");
     expect(screen.getByText(/checksum tutmuyor/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Getir" }));
-    expect(onScan).toHaveBeenCalledWith("SW-2604-5A3Z9B-9");
+    expect(onScan).toHaveBeenCalledWith("SW26045A3Z9B9");
   });
 });

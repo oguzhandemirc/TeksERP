@@ -106,26 +106,29 @@ export function buildPrefixedBarcode(
   const seq = encodeCrockford(monthlySequence, 6);
   const body = `${prefix}${yymm}${seq}`;
   const check = computeChecksum(body);
-  return `${prefix}-${yymm}-${seq}-${check}`;
+  return `${body}${check}`; // AYRAÇSIZ (SW tarama barkodu) — wedge klavye -→* fix
 }
 
 /**
- * Human-readable kart/belge numarası: PREFIX-YYMM-NNNNNN
+ * Kart/belge numarası: PREFIX{sep}YYMM{sep}NNNNNN.
+ * separator "-" (varsayılan) = insan-okur (SW kartela no); "" = ayraçsız taranan
+ * belge no (SD/SR/KD/KR — belge no'nun kendisi okutuluyor, wedge -→* fix).
  */
 export function buildPrefixedCardNumber(
   prefix: string,
   date: Date,
   monthlySequence: number,
-  digits = 6
+  digits = 6,
+  separator = "-",
 ): string {
   const yy = String(date.getFullYear()).slice(2);
   const mm = String(date.getMonth() + 1).padStart(2, "0");
-  return `${prefix}-${yy}${mm}-${String(monthlySequence).padStart(digits, "0")}`;
+  return `${prefix}${separator}${yy}${mm}${separator}${String(monthlySequence).padStart(digits, "0")}`;
 }
 
-/** Generic verify: prefix ile checksum doğrulaması */
+/** Generic verify: prefix ile checksum doğrulaması (ayraçsız PREFIXYYMMXXXXXXC) */
 export function verifyPrefixedBarcode(prefix: string, barcode: string): boolean {
-  const re = new RegExp(`^${prefix}-(\\d{4})-([0-9A-Z]{6})-([0-9A-Z])$`);
+  const re = new RegExp(`^${prefix}(\\d{4})([0-9A-Z]{6})([0-9A-Z])$`);
   const m = re.exec(barcode.toUpperCase());
   if (!m) return false;
   const [, yymm, seq, check] = m;

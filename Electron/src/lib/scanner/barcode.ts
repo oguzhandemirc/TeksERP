@@ -34,9 +34,9 @@ export function verifyBarcode(barcode: string): boolean {
   return computeChecksum(`RK${yymm}${seq}`) === check;
 }
 
-/** Generic prefix checksum doğrulaması: PREFIX-YYMM-XXXXXX-C (SW/SD/SR/KD/KR). */
+/** Generic prefix checksum doğrulaması: PREFIXYYMMXXXXXXC (ayraçsız, SW). */
 export function verifyPrefixedBarcode(prefix: string, barcode: string): boolean {
-  const re = new RegExp(`^${prefix}-(\\d{4})-([0-9A-Z]{6})-([0-9A-Z])$`);
+  const re = new RegExp(`^${prefix}(\\d{4})([0-9A-Z]{6})([0-9A-Z])$`);
   const m = re.exec(barcode.toUpperCase());
   if (!m) return false;
   const [, yymm, seq, check] = m;

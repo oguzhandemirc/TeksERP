@@ -27,6 +27,7 @@ import {
   type BuiltDocContent,
   type PrintedDocDb,
 } from "./printed-document.service";
+import { renderKartelaCekiHtml } from "./document-render/kartela-ceki.html";
 import { buildPrefixedCardNumber, buildPrefixedBarcode } from "../utils/barcode";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildPagination } from "../utils/query-parser";
@@ -75,9 +76,9 @@ type ListResult = {
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 function decodeSequenceFromBarcode(barcode: string): number | null {
-  const parts = barcode.split("-");
-  if (parts.length < 4) return null;
-  const seqStr = parts[2];
+  // Ayraçsız PFXYYMMXXXXXXC (13 char) → XXXXXX (Crockford) = pozisyon 6..12
+  if (barcode.length < 13) return null;
+  const seqStr = barcode.slice(6, 12);
   let n = 0;
   for (const ch of seqStr.toUpperCase()) {
     const v = CROCKFORD.indexOf(ch);
@@ -96,7 +97,7 @@ async function nextKartelaDocSequence(
 ): Promise<number> {
   const yy = String(date.getFullYear()).slice(2);
   const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const docPrefix = `${prefix}-${yy}${mm}-`;
+  const docPrefix = `${prefix}${yy}${mm}`; // ayraçsız: PFXYYMM ile başlar
 
   let lastNo: string | null = null;
   if (kind === "dispatch") {
@@ -116,7 +117,7 @@ async function nextKartelaDocSequence(
   }
 
   if (!lastNo) return 1;
-  const n = parseInt(lastNo.split("-")[2] ?? "", 10);
+  const n = parseInt(lastNo.slice(6), 10); // ayraçsız PFXYYMMNNNNNN → NNNNNN = 6..
   return (Number.isFinite(n) ? n : 0) + 1;
 }
 
@@ -127,7 +128,7 @@ async function nextSwatchSequence(
 ): Promise<number> {
   const yy = String(date.getFullYear()).slice(2);
   const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const barcodePrefix = `SW-${yy}${mm}-`;
+  const barcodePrefix = `SW${yy}${mm}`; // ayraçsız: SWYYMM ile başlar
   const last = await tx.swatch.findFirst({
     where: { barcode: { startsWith: barcodePrefix } },
     orderBy: { barcode: "desc" },
@@ -270,7 +271,7 @@ export class KartelaService {
       prisma.$transaction(async (tx) => {
         const now = new Date();
         const seq = await nextKartelaDocSequence(tx, "dispatch", "KD", now);
-        const dispatchNo = buildPrefixedCardNumber("KD", now, seq);
+        const dispatchNo = buildPrefixedCardNumber("KD", now, seq, 6, "");
 
         const dispatch = await tx.kartelaDispatch.create({
           data: {
@@ -566,7 +567,7 @@ export class KartelaService {
       prisma.$transaction(async (tx) => {
         const now = new Date();
         const seq = await nextKartelaDocSequence(tx, "receipt", "KR", now);
-        const receiptNo = buildPrefixedCardNumber("KR", now, seq);
+        const receiptNo = buildPrefixedCardNumber("KR", now, seq, 6, "");
 
         const receipt = await tx.kartelaReceipt.create({
           data: {
@@ -1391,4 +1392,6 @@ async function buildKartelaDispatchDoc(
 
 registerPrintedDocBuilder(PrintedDocType.KARTELA_DISPATCH, {
   fresh: buildKartelaDispatchDoc,
+  // Tek-kaynak HTML — Electron iframe/printHtmlString aynı çıktıyı basar.
+  renderHtml: renderKartelaCekiHtml,
 });

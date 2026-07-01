@@ -39,6 +39,7 @@ import {
 } from "./printed-document.service";
 import { buildPrefixedCardNumber } from "../utils/barcode";
 import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
+import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
 import { buildPagination } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
@@ -64,9 +65,9 @@ import { allocate, specMatch, type RollSpec, type LineForAlloc } from "./shippin
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 function decodeSequenceFromBarcode(barcode: string): number | null {
-  const parts = barcode.split("-");
-  if (parts.length < 4) return null;
-  const seqStr = parts[2];
+  // Ayraçsız PFXYYMMXXXXXXC (13 char) → XXXXXX (Crockford) = pozisyon 6..12
+  if (barcode.length < 13) return null;
+  const seqStr = barcode.slice(6, 12);
   let n = 0;
   for (const ch of seqStr.toUpperCase()) {
     const v = CROCKFORD.indexOf(ch);
@@ -86,7 +87,7 @@ export async function nextPrefixedSequence(
 ): Promise<number> {
   const yy = String(date.getFullYear()).slice(2);
   const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const barcodePrefix = `${prefix}-${yy}${mm}-`;
+  const barcodePrefix = `${prefix}${yy}${mm}`; // ayraçsız: PFXYYMM ile başlar
 
   let lastBarcode: string | null = null;
   if (table === "subcontractorDispatch") {
@@ -121,11 +122,10 @@ export async function nextPrefixedSequence(
 
   if (!lastBarcode) return 1;
 
-  // Dispatch/Receipt numaraları 3 parçalı, sade ondalık: SD-YYMM-NNNNNN / SR-YYMM-NNNNNN
-  // Swatch/Roll barkodları 4 parçalı, Crockford + checksum: PFX-YYMM-XXXXXX-C
+  // Dispatch/Receipt no ayraçsız ondalık: SDYYMMNNNNNN → NNNNNN = pozisyon 6..
+  // Swatch/Roll barkodları ayraçsız Crockford+checksum: PFXYYMMXXXXXXC (decode 6..12)
   if (table === "subcontractorDispatch" || table === "subcontractorReceipt") {
-    const parts = lastBarcode.split("-");
-    const n = parseInt(parts[2] ?? "", 10);
+    const n = parseInt(lastBarcode.slice(6), 10);
     return (Number.isFinite(n) ? n : 0) + 1;
   }
 
@@ -614,7 +614,7 @@ export class SubcontractorService {
       // Dispatch numarası
       const now = new Date();
       const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "SD", now);
-      const dispatchNo = buildPrefixedCardNumber("SD", now, seq);
+      const dispatchNo = buildPrefixedCardNumber("SD", now, seq, 6, "");
 
       const dispatch = await tx.subcontractorDispatch.create({
         data: {
@@ -1662,7 +1662,7 @@ export class SubcontractorService {
       await touchWorkOrderTx(tx, data.workOrderId);
       const now = new Date();
       const seq = await nextPrefixedSequence(tx, "subcontractorReceipt", "SR", now);
-      const receiptNo = buildPrefixedCardNumber("SR", now, seq);
+      const receiptNo = buildPrefixedCardNumber("SR", now, seq, 6, "");
 
       const receipt = await tx.subcontractorReceipt.create({
         data: {
@@ -4544,4 +4544,6 @@ async function buildFasonDirectShipDoc(
 
 registerPrintedDocBuilder(PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP, {
   fresh: buildFasonDirectShipDoc,
+  // Tek-kaynak "DOĞRUDAN SEVK İRSALİYESİ" HTML — getHtml her cihazda aynı çıktıyı verir.
+  renderHtml: renderFasonDirectShipHtml,
 });

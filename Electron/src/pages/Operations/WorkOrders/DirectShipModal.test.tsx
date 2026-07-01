@@ -20,7 +20,7 @@ function previewData(over: Partial<Record<string, unknown>> = {}) {
     success: true,
     data: {
       dispatchId: "d1",
-      dispatchNo: "SD-2606-000001",
+      dispatchNo: "SD2606000001",
       cancelled: false,
       alreadyDirectShipped: false,
       subcontractor: { id: "s1", name: "BOYER" },
@@ -43,7 +43,7 @@ function previewData(over: Partial<Record<string, unknown>> = {}) {
 
 const render = () =>
   renderWithProviders(
-    <DirectShipModal open onOpenChange={() => {}} workOrderId="wo1" dispatchId="d1" dispatchNo="SD-2606-000001" />,
+    <DirectShipModal open onOpenChange={() => {}} workOrderId="wo1" dispatchId="d1" dispatchNo="SD2606000001" />,
   );
 
 const rollChecks = () => within(screen.getByTestId("ship-rolls")).getAllByRole("checkbox");
@@ -51,7 +51,7 @@ const rollChecks = () => within(screen.getByTestId("ship-rolls")).getAllByRole("
 describe("DirectShipModal (fasondan doğrudan sevk UI)", () => {
   beforeEach(() => {
     getDirectShipPreview.mockReset().mockResolvedValue(previewData());
-    directShip.mockReset().mockResolvedValue({ success: true, data: { dispatchNo: "SD-2606-000001", consumedRollCount: 2 } });
+    directShip.mockReset().mockResolvedValue({ success: true, data: { dispatchNo: "SD2606000001", consumedRollCount: 2 } });
   });
 
   it("önizlemeyi render eder: toplar (checkbox) + iş emrini tamamla toggle", async () => {

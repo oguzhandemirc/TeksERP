@@ -34,7 +34,7 @@ describe("verifyBarcode (RK) + verifyPrefixedBarcode", () => {
     expect(verifyBarcode("TEKS20260615AB12CD34")).toBe(false);
   });
   it("SW prefix checksum doğrular", () => {
-    expect(verifyPrefixedBarcode("SW", "SW-2604-5A3Z9B-1")).toBe(true);
-    expect(verifyPrefixedBarcode("SW", "SW-2604-5A3Z9B-9")).toBe(false);
+    expect(verifyPrefixedBarcode("SW", "SW26045A3Z9B1")).toBe(true);
+    expect(verifyPrefixedBarcode("SW", "SW26045A3Z9B9")).toBe(false);
   });
 });

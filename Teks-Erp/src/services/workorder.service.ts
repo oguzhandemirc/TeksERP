@@ -2307,7 +2307,7 @@ export class WorkOrderService {
         const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "SD", now);
         const newDispatch = await tx.subcontractorDispatch.create({
           data: {
-            dispatchNo: buildPrefixedCardNumber("SD", now, seq),
+            dispatchNo: buildPrefixedCardNumber("SD", now, seq, 6, ""),
             workOrderId: newWo.id,
             stepId: newReEntryStepId,
             subcontractorId: src.subcontractorId,

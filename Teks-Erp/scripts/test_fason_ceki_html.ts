@@ -52,7 +52,7 @@ function makeSnap(over: {
     company: { name: "Adnan Şahin Tekstil", letterhead: { addressLine: "", phone: "", taxInfo: "" }, ...over.company },
     docConfigOverride: over.docConfigOverride ?? null,
     doc: {
-      dispatchNo: "SD-2606-000013",
+      dispatchNo: "SD2606000013",
       dispatchedAt: "2026-06-19T10:00:00.000Z",
       driverName: null,
       plateNumber: null,
@@ -81,7 +81,7 @@ function testBasic(): void {
   check("başlık KUMAŞ İRSALİYESİ", html.includes("KUMAŞ İRSALİYESİ"));
   check("gönderen firma (antet)", html.includes("Adnan Şahin Tekstil"));
   check("SAYIN = fason firma", html.includes("Boyer Boyacılık"));
-  check("İrsaliye No = dispatchNo", html.includes("SD-2606-000013"));
+  check("İrsaliye No = dispatchNo", html.includes("SD2606000013"));
   check("Tarih DD.MM.YYYY", html.includes("19.06.2026"), "fmtDate");
   check("grid başlıkları Top/Metre/Cm", html.includes(">Top<") && html.includes(">Metre<") && html.includes(">Cm<"));
   check("metreler 115/100/83", html.includes(">115<") && html.includes(">100<") && html.includes(">83<"));
