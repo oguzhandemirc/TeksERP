@@ -82,6 +82,11 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 tones={rollStatusTones}
               />
             )}
+            {roll?.markedForKartela && (
+              <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300">
+                Kartelalık
+              </Badge>
+            )}
           </SheetTitle>
           <SheetDescription>{roll?.item?.name}</SheetDescription>
         </SheetHeader>
