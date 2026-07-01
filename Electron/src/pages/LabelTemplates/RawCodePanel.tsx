@@ -21,6 +21,54 @@ interface Props {
 
 const LANGS: RawCodeLang[] = ["PPLA", "PPLB", "ZPL", "RASTER_HTML"];
 
+// Çalışan başlangıç şablonları (100×50 mm, 203 dpi) — kullanıcı bunu düzenler. PPLA
+// (DPL, STX gerektirir) elle yazım için fazla kırılgan → şablon yok.
+const STARTERS: Partial<Record<RawCodeLang, string>> = {
+  PPLB: `N
+q799
+Q400,16
+D10
+A24,24,0,4,1,1,N,"{{itemName}}"
+A24,70,0,2,1,1,N,"Kod: {{itemCode}}  Kalite: {{qualityGrade}}"
+A24,104,0,5,1,1,N,"{{lengthMeters}}"
+A24,160,0,2,1,1,N,"Agirlik: {{weightKg}}"
+b600,24,Q,m2,s5,"{{barcode}}"
+B24,300,0,1,2,4,56,B,"{{barcode}}"
+P1`,
+  ZPL: `^XA
+^PW799
+^LL400
+^FO24,24^A0N,44,44^FD{{itemName}}^FS
+^FO24,84^A0N,26,26^FDKod: {{itemCode}}  Kalite: {{qualityGrade}}^FS
+^FO24,120^A0N,56,56^FD{{lengthMeters}}^FS
+^FO24,190^A0N,26,26^FDAgirlik: {{weightKg}}^FS
+^FO600,24^BQN,2,6^FDLA,{{barcode}}^FS
+^FO24,300^BY2^BCN,60,Y,N,N^FD{{barcode}}^FS
+^XZ`,
+  RASTER_HTML: `<div style="width:94mm;height:44mm;font-family:sans-serif;padding:3mm">
+  <div style="font-size:20pt;font-weight:700">{{itemName}}</div>
+  <div style="font-size:10pt">Kod: {{itemCode}} · Kalite: {{qualityGrade}}</div>
+  <div style="font-size:22pt;font-weight:700">{{lengthMeters}}</div>
+  <div style="font-size:10pt">Agirlik: {{weightKg}}</div>
+  {{barcodeSvg}}
+</div>`,
+};
+
+// "Yazıcıya gider ama basmaz" tuzağı: kod veri içeriyor ama komut yapısı eksik.
+function codeIssue(lang: RawCodeLang, code: string): string | null {
+  const c = code.trim();
+  if (!c) return null;
+  if (lang === "PPLB") {
+    if (!/(^|\n)\s*q\d/i.test(c) || !/(^|\n)\s*P\d/.test(c)) {
+      return "Bu bir EPL2 etiketi değil — en az `q<genişlik>`, `Q<yükseklik>` ve sonda `P1` (bas) gerekir. Sadece {{alan}} yazmak veri gönderir ama yazıcı BASMAZ. 'Başlangıç şablonu ekle'yi dene.";
+    }
+  }
+  if (lang === "ZPL" && (!c.includes("^XA") || !c.includes("^XZ"))) {
+    return "ZPL `^XA` ile başlayıp `^XZ` ile bitmeli; alanlar `^FO..^FD..^FS`. 'Başlangıç şablonu ekle'yi dene.";
+  }
+  return null;
+}
+
 /**
  * Uzman raw-code editörü — bir etiket düzeni için yazıcı dilinde KENDİ kodunu
  * yaz. Doluysa baskıda o kod kullanılır; boş bırakılırsa "Alanlar" sekmesindeki
@@ -52,6 +100,14 @@ export function RawCodePanel({ kind, catalog, rawCode, onChange }: Props) {
   };
 
   const setCode = (v: string) => onChange({ ...rawCode, [lang]: v });
+
+  const starter = STARTERS[lang];
+  const issue = codeIssue(lang, code);
+  const applyStarter = () => {
+    if (!starter) return;
+    if (code.trim() && !window.confirm("Mevcut kod başlangıç şablonuyla değiştirilsin mi?")) return;
+    setCode(starter);
+  };
 
   // Değişken çipleri: katalog anahtarları + HTML'de gömülü SVG'ler.
   const chips = useMemo(() => {
@@ -132,16 +188,28 @@ export function RawCodePanel({ kind, catalog, rawCode, onChange }: Props) {
             placeholder={`${rawCodeLangLabels[lang]} kodunu buraya yaz… (boş = otomatik üretim)`}
             className="h-[420px] w-full resize-none rounded-md border bg-background p-2 font-mono text-xs leading-relaxed outline-none focus:ring-1 focus:ring-ring"
           />
-          {code.trim().length > 0 && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 text-[11px] text-destructive"
-              onClick={() => setCode("")}
-            >
-              Bu dilin kodunu temizle (otomatiğe dön)
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {starter && (
+              <Button type="button" size="sm" variant="outline" className="h-7 text-[11px]" onClick={applyStarter}>
+                Başlangıç şablonu ekle
+              </Button>
+            )}
+            {code.trim().length > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 text-[11px] text-destructive"
+                onClick={() => setCode("")}
+              >
+                Bu dilin kodunu temizle (otomatiğe dön)
+              </Button>
+            )}
+          </div>
+          {issue && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+              ⚠️ {issue}
+            </div>
           )}
         </div>
 
