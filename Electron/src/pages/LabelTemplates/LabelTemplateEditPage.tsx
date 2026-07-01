@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Save, Printer } from "lucide-react";
+import { Save, Printer, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -192,15 +192,26 @@ export function LabelTemplateEditPage() {
             </div>
 
             <Tabs defaultValue="fields">
-              <TabsList>
-                <TabsTrigger value="fields">Alanlar</TabsTrigger>
-                <TabsTrigger value="code">
-                  Kod (uzman)
-                  {Object.values(rawCode).some((v) => (v ?? "").trim()) && (
-                    <span className="ml-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  )}
-                </TabsTrigger>
-              </TabsList>
+              <div className="flex items-center justify-between gap-2">
+                <TabsList>
+                  <TabsTrigger value="fields">Alanlar</TabsTrigger>
+                  <TabsTrigger value="code">
+                    Kod (uzman)
+                    {Object.values(rawCode).some((v) => (v ?? "").trim()) && (
+                      <span className="ml-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setRestoreConfirmOpen(true)}
+                  className="h-8 shrink-0 gap-1.5"
+                  title="Alanları ve yerleşimi önerilen varsayılana döndür (sağ metraj bandı açık)"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Varsayılana Dön
+                </Button>
+              </div>
 
               <TabsContent value="fields" className="mt-4">
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[200px_minmax(0,500px)_minmax(0,1fr)]">
@@ -218,7 +229,6 @@ export function LabelTemplateEditPage() {
                       onLineStepMm={setLineStepMm}
                       onQrScale={setQrScale}
                       onLengthBanner={setLengthBanner}
-                      onRestoreDefaults={() => setRestoreConfirmOpen(true)}
                     />
                     <LabelPreview
                       kind={template.kind}

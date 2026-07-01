@@ -1,5 +1,3 @@
-import { RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 interface Props {
@@ -9,7 +7,6 @@ interface Props {
   onLineStepMm: (v: number | null) => void;
   onQrScale: (v: number | null) => void;
   onLengthBanner: (v: boolean) => void;
-  onRestoreDefaults: () => void;
 }
 
 /** Şablon-başına yerleşim ayarları — satır aralığı (mm) + QR boyutu. Boş = varsayılan.
@@ -21,7 +18,6 @@ export function LabelLayoutControls({
   onLineStepMm,
   onQrScale,
   onLengthBanner,
-  onRestoreDefaults,
 }: Props) {
   const num = (s: string): number | null => {
     const t = s.trim();
@@ -32,15 +28,6 @@ export function LabelLayoutControls({
 
   return (
     <div className="space-y-2 rounded-md border bg-card p-3">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={onRestoreDefaults}
-        className="w-full gap-2 border-primary/50 font-semibold text-primary hover:bg-primary/10"
-        title="Alanları ve yerleşimi önerilen varsayılana döndür (sağ metraj bandı açık)"
-      >
-        <RotateCcw className="h-4 w-4" /> Varsayılana Dön
-      </Button>
       <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         Yerleşim
       </div>
