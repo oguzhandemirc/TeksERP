@@ -103,7 +103,7 @@ check("v2: qrScale büyüdükçe textX sağa kayar (QR'ı geçer)", tX(8) > tX(3
 const bannerTpl = { kind: "ROLL_RAW", rawCode: null, qrScale: null, lineStepMm: null, lengthBanner: true } as unknown as LabelTemplate;
 const withBanner = buildRollLabelPplb({ ...base, template: bannerTpl });
 const noBanner = buildRollLabelPplb({ ...base, template: null });
-check("bant: döndürülmüş ters değer (A rot1 R, sadece metraj)", /A\d+,\d+,1,\d,\d,\d,R,"320"/.test(withBanner));
+check("bant: döndürülmüş ters değer (A rot1 R, metraj + siyah dolgu boşluğu)", /A\d+,\d+,1,\d,\d,\d,R," *320 *"/.test(withBanner));
 check("bant: LO KULLANILMAZ (LO+R = beyaz-kutu XOR bug'ı)", !/LO\d+/.test(withBanner));
 check("bant kapalı (null) → döndürülmüş ters yok", !/A\d+,\d+,1,\d,\d,\d,R,/.test(noBanner));
 // İçerik banda girmez: alt barkod (B x=left) bandın (A x=right) SOLUNDA

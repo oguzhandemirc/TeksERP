@@ -107,9 +107,16 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
   if (bannerOn) {
     const val = eplData(String(payload.lengthMeters)); // yalnız değer
     const f = EPL_FONT.xl; // font4 (14×24) — büyük, okunur
-    const textLen = val.length * f.w * BANNER_MUL; // döndürülünce dikey uzunluk
-    const ty = top + Math.round((bottomEdge - top - textLen) / 2);
-    lines.push(`A${right},${ty},1,${f.code},${BANNER_MUL},${BANNER_MUL},R,"${val}"`);
+    const charLen = f.w * BANNER_MUL; // bir karakterin döndürülmüş dikey uzunluğu
+    const bannerH = bottomEdge - top;
+    // Siyah arka planı uzat: değeri boşlukla doldur — ters (R) modda boşluk da SİYAH.
+    // Hedef ~ bandın %60'ı, taşmayacak şekilde simetrik. Boşluklar eplData'dan SONRA
+    // (cleanCtl trim'ler) → komut verisine literal girer, yazıcıda siyah hücre olur.
+    const targetChars = Math.max(val.length, Math.floor((bannerH * 0.6) / charLen));
+    const padEach = Math.floor((targetChars - val.length) / 2);
+    const padded = " ".repeat(padEach) + val + " ".repeat(padEach);
+    const ty = top + Math.round((bannerH - padded.length * charLen) / 2);
+    lines.push(`A${right},${ty},1,${f.code},${BANNER_MUL},${BANNER_MUL},R,"${padded}"`);
   }
 
   lines.push(`P${clampCopies(copies)}`); // kopya adedi → bas
