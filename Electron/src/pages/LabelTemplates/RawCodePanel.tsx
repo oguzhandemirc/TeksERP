@@ -114,6 +114,13 @@ export function RawCodePanel({ kind, catalog, rawCode, onChange }: Props) {
         kullanılır; boş bırakırsan o dilde "Alanlar" sekmesindeki otomatik üretim devreye girer.
         Kod içinde <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/40">{"{{anahtar}}"}</code>{" "}
         yer-tutucuları baskıda gerçek değerle değişir.
+        <div className="mt-1.5 border-t border-amber-300/60 pt-1.5 dark:border-amber-900/40">
+          ⚠️ <strong>Boyut &amp; pay bu koda GÖMÜLÜdür.</strong> Etiket boyutu (
+          <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/40">q</code>/
+          <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/40">Q</code>) ve tüm
+          konumlar kodun içinde sabittir → <strong>Boyutlar / Format profili değişikliği bu koda
+          YANSIMAZ.</strong> Boyutu koddan elle değiştir ya da "Varsayılan kodu getir" ile yeniden üret.
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
