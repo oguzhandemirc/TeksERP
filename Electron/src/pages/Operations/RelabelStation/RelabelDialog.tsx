@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { relabelService } from "./service";
 import { RelabelSpecForm } from "./RelabelSpecForm";
 import { RelabelPrintForCustomer } from "./RelabelPrintForCustomer";
-import { LastLabelBanner, RollContextHeader } from "./RollContextHeader";
+import { RollContextHeader } from "./RollContextHeader";
 
 interface Props {
   /** Açılacak topun barkodu — null/boş = kapalı. Açık kumaş (barkodsuz) için kullanılmaz. */
@@ -57,7 +57,6 @@ export function RelabelDialog({ barcode, onOpenChange }: Props) {
         ) : ctx ? (
           <div className="space-y-4">
             <RollContextHeader ctx={ctx} onClear={() => onOpenChange(false)} showClear={false} />
-            <LastLabelBanner snap={ctx.lastLabelSnapshot} />
             <div className="grid gap-4">
               <RelabelSpecForm key={ctx.id} ctx={ctx} onSaved={refresh} />
               <RelabelPrintForCustomer key={ctx.id} ctx={ctx} onPrinted={refresh} />

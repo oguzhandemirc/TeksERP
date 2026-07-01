@@ -90,9 +90,11 @@ export function PropertyChipsField({ itemId, value, onChange, emptyHint, disable
               variant={isOn ? "default" : "outline"}
               className={cn(
                 "gap-1 px-2 py-1 text-xs transition-colors",
+                // Seçim rengi YEŞİL — aksiyon butonlarından (primary) ayırt edilsin.
+                isOn && "border-transparent bg-emerald-600 text-white",
                 disabled
                   ? "cursor-not-allowed opacity-60"
-                  : cn("cursor-pointer", isOn ? "hover:bg-primary/85" : "hover:bg-accent"),
+                  : cn("cursor-pointer", isOn ? "hover:bg-emerald-600/85" : "hover:bg-accent"),
               )}
               onClick={disabled ? undefined : () => toggle(p.id)}
             >

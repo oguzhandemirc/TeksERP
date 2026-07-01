@@ -44,11 +44,10 @@ export function RollContextHeader({
           <div className="text-sm font-medium">
             {ctx.item.code} — {ctx.item.name}
           </div>
+          {/* Renk/Kalite/En aşağıdaki formda düzenlenebilir → burada tekrar etme.
+              Yalnız salt-okunur miktarları göster (metraj/ağırlık). */}
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-            <span>Renk: {ctx.color ? ctx.color.name : "— (renksiz)"}</span>
-            <span>Kalite: {ctx.qualityGradeRef?.name ?? ctx.qualityGrade}</span>
             <span>Metraj: {ctx.currentQty} mt</span>
-            {ctx.width != null && <span>En: {ctx.width} cm</span>}
             {ctx.weightKg != null && <span>Ağırlık: {ctx.weightKg} kg</span>}
           </div>
           {(ctx.shipment || ctx.sack) && (

@@ -183,7 +183,7 @@ describe("RelabelPrintForCustomer — müşteri için yeniden bas", () => {
 });
 
 describe("RollContextHeader + LastLabelBanner", () => {
-  it("künye: ürün + konum (sevkiyat/çuval) + renksiz", () => {
+  it("künye: ürün + salt-okunur metraj + konum (sevkiyat/çuval)", () => {
     const ctx: RelabelContext = {
       ...baseCtx,
       color: null,
@@ -193,9 +193,10 @@ describe("RollContextHeader + LastLabelBanner", () => {
     };
     renderWithProviders(<RollContextHeader ctx={ctx} onClear={() => {}} />);
     expect(screen.getByText(/PATOS/)).toBeInTheDocument();
+    // Renk/kalite/en artık formda düzenlenir → künyede tekrar edilmez; salt-okunur metraj kalır.
+    expect(screen.getByText(/Metraj: 100 mt/)).toBeInTheDocument();
     expect(screen.getByText(/SVK-3/)).toBeInTheDocument();
     expect(screen.getByText(/Çuval #3/)).toBeInTheDocument();
-    expect(screen.getByText(/renksiz/)).toBeInTheDocument();
   });
 
   it("son baskı (A) künyesi gösterilir", () => {

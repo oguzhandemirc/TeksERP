@@ -37,6 +37,8 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
   const [width, setWidth] = useState<string>(ctx.width != null ? String(ctx.width) : "");
   const [propertyIds, setPropertyIds] = useState<string[]>(ctx.propertyIds);
   const [marked, setMarked] = useState<boolean>(ctx.markedForKartela);
+  // Kaydettikten sonra "fiziksel etiketi de yenile" hatırlatması (bir alan tekrar değişince gizlenir).
+  const [savedHint, setSavedHint] = useState(false);
 
   const gradesQ = useQuery({
     queryKey: ["quality-grades", "picker"],
@@ -61,12 +63,21 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
     },
     onSuccess: () => {
       toast.success("Kaydedildi.");
+      setSavedHint(true);
       void qc.invalidateQueries({ queryKey: ["rolls"] });
       onSaved();
     },
   });
 
   const disabled = !canEdit || ctx.specLocked;
+
+  // Alan setter'larını sararak: kullanıcı yeniden düzenlemeye başlarsa hatırlatma kaybolur.
+  const edit =
+    <T,>(setter: (v: T) => void) =>
+    (v: T) => {
+      setSavedHint(false);
+      setter(v);
+    };
 
   return (
     <div className="space-y-3 rounded-lg border p-4">
@@ -94,7 +105,7 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
       <FormField label="Renk">
         <ColorPickerModal
           value={colorId}
-          onChange={setColorId}
+          onChange={edit(setColorId)}
           allowNone
           label="Renk seç"
           disabled={disabled}
@@ -103,7 +114,7 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
 
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Kalite Sınıfı">
-          <Select value={qualityGrade} onValueChange={setQualityGrade} disabled={disabled}>
+          <Select value={qualityGrade} onValueChange={edit(setQualityGrade)} disabled={disabled}>
             <SelectTrigger>
               <SelectValue placeholder="Kalite seç..." />
             </SelectTrigger>
@@ -124,7 +135,7 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
             min="0"
             value={width}
             disabled={disabled}
-            onChange={(e) => setWidth(e.target.value)}
+            onChange={(e) => edit(setWidth)(e.target.value)}
           />
         </FormField>
       </div>
@@ -133,7 +144,7 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
         <PropertyChipsField
           itemId={ctx.itemId}
           value={propertyIds}
-          onChange={setPropertyIds}
+          onChange={edit(setPropertyIds)}
           disabled={disabled}
         />
       </FormField>
@@ -145,16 +156,21 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
             className="mt-0.5"
             checked={marked}
             disabled={disabled}
-            onChange={(e) => setMarked(e.target.checked)}
+            onChange={(e) => edit(setMarked)(e.target.checked)}
           />
           <span className="text-sm">
-            <span className="font-medium">Kartelalık</span> — bu topu kartela (numune) için işaretle
+            <span className="font-medium">Kartelalık</span> — topu kartela (numune) için işaretle
             <span className="block text-xs text-muted-foreground">
-              İşaretli toplar kartela sevk/kabul akışında görünür. Bitmiş top da işaretlenebilir.
-              "Kaydet" ile birlikte kaydedilir.
+              Kartela sevk/kabul akışında görünür. Bitmiş top da işaretlenebilir.
             </span>
           </span>
         </label>
+      )}
+
+      {savedHint && (
+        <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
+          ✓ Kaydedildi. Fiziksel etiketi de yenilemek için aşağıdaki <strong>"Bas"</strong>ı kullan.
+        </div>
       )}
 
       <div className="flex justify-end pt-1">

@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Printer, RotateCcw } from "lucide-react";
+import { Printer, Package } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
@@ -91,14 +92,10 @@ export function RelabelPrintForCustomer({
 
   return (
     <div className="space-y-3 rounded-lg border p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Müşteri İçin Yeniden Bas</h3>
-        <span className="text-xs text-muted-foreground">A → B</span>
-      </div>
+      <h3 className="text-sm font-semibold">Müşteri İçin Yeniden Bas</h3>
       <p className="text-xs text-muted-foreground">
-        Bu bir <strong>baskı</strong> eylemidir — müşteri seçip "Bas"a basınca yeni etiket basılır
-        (kaydı tutulur). Yalnız seçip basmazsan hiçbir şey kaydolmaz; topun kendi verisi değişmez.
-        Topun verisini kalıcı değiştirmek için yukarıdaki <strong>"Veri Düzelt → Kaydet"</strong>i kullan.
+        Müşteri seç → <strong>Bas</strong>: o müşteri için yeni etiket basılır. Topun verisini
+        değiştirmez (onun için yukarıdaki <strong>Veri Düzelt</strong>).
       </p>
 
       {/* "B" önerileri — topu üreten WO'nun bağlı siparişlerinden */}
@@ -117,7 +114,7 @@ export function RelabelPrintForCustomer({
                 }}
                 className={`rounded-full border px-2.5 py-1 text-xs transition ${
                   active
-                    ? "border-indigo-500 bg-indigo-50 font-medium text-indigo-700"
+                    ? "border-transparent bg-emerald-600 font-medium text-white"
                     : "border-input hover:bg-accent"
                 }`}
                 title={`${c.orderNumber} · ${c.customerCode}`}
@@ -148,15 +145,14 @@ export function RelabelPrintForCustomer({
           type="button"
           size="sm"
           variant={stock ? "default" : "outline"}
-          disabled={stock}
           onClick={() => {
             setStock(true);
             setCustomerId(null);
             setOrderLineId(null);
           }}
-          className="gap-1"
+          className={cn("gap-1", stock && "bg-emerald-600 text-white hover:bg-emerald-600/90")}
         >
-          <RotateCcw className="h-3.5 w-3.5" /> Stok (müşterisiz)
+          <Package className="h-3.5 w-3.5" /> Stok (müşterisiz)
         </Button>
       </div>
 
