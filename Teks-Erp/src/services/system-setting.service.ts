@@ -164,6 +164,14 @@ export interface TravelerCardSpecFields {
   endDate: TravelerCardSpecField;
 }
 
+/** Bağlı siparişler tablosu sütunları — her biri tek tek (göster/boyut/kalınlık). */
+export interface TravelerCardOrderFields {
+  orderNumber: TravelerCardSpecField;
+  customer: TravelerCardSpecField;
+  item: TravelerCardSpecField;
+  quantity: TravelerCardSpecField;
+}
+
 /** Ham değeri (boolean eski şekil | nesne | undefined) tam spec alanına çözer. */
 export function coerceSpecField(v: unknown): TravelerCardSpecField {
   if (v === false) return { show: false, size: "md", weight: "normal" };
@@ -202,6 +210,10 @@ export interface TravelerCardConfig {
   showProperties: boolean;
   /** Spec grid alanları (Renk/En/Hedef Metraj/... tek tek). */
   specFields: TravelerCardSpecFields;
+  /** Spec grid'de satır başına sütun sayısı (1–4, default 3). */
+  specColumns: number;
+  /** Bağlı siparişler tablosu sütunları (Sipariş No/Müşteri/Ürün/Miktar tek tek). */
+  orderFields: TravelerCardOrderFields;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -227,6 +239,13 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
     startDate: { show: true, size: "md", weight: "normal" },
     endDate: { show: true, size: "md", weight: "normal" },
   },
+  specColumns: 3,
+  orderFields: {
+    orderNumber: { show: true, size: "md", weight: "normal" },
+    customer: { show: true, size: "md", weight: "normal" },
+    item: { show: true, size: "md", weight: "normal" },
+    quantity: { show: true, size: "md", weight: "normal" },
+  },
   footerNote: "",
 };
 
@@ -240,6 +259,7 @@ export function normalizeTravelerCardConfig(o: Record<string, unknown>): Travele
   };
   const m = (o.margins && typeof o.margins === "object" ? o.margins : {}) as Record<string, unknown>;
   const sf = (o.specFields && typeof o.specFields === "object" ? o.specFields : {}) as Record<string, unknown>;
+  const of = (o.orderFields && typeof o.orderFields === "object" ? o.orderFields : {}) as Record<string, unknown>;
   return {
     companyName:
       typeof o.companyName === "string" && o.companyName.trim()
@@ -271,6 +291,16 @@ export function normalizeTravelerCardConfig(o: Record<string, unknown>): Travele
       foldType: coerceSpecField(sf.foldType),
       startDate: coerceSpecField(sf.startDate),
       endDate: coerceSpecField(sf.endDate),
+    },
+    specColumns: (() => {
+      const n = typeof o.specColumns === "number" ? o.specColumns : Number(o.specColumns);
+      return Number.isFinite(n) ? Math.min(4, Math.max(1, Math.round(n))) : 3;
+    })(),
+    orderFields: {
+      orderNumber: coerceSpecField(of.orderNumber),
+      customer: coerceSpecField(of.customer),
+      item: coerceSpecField(of.item),
+      quantity: coerceSpecField(of.quantity),
     },
     footerNote: typeof o.footerNote === "string" ? o.footerNote.trim().slice(0, 500) : "",
   };

@@ -97,6 +97,20 @@ const updateSchema = z.object({
           startDate: DEF_SPEC_FIELD,
           endDate: DEF_SPEC_FIELD,
         }),
+      specColumns: z.number().int().min(1).max(4).default(3),
+      orderFields: z
+        .object({
+          orderNumber: specFieldSchema,
+          customer: specFieldSchema,
+          item: specFieldSchema,
+          quantity: specFieldSchema,
+        })
+        .default({
+          orderNumber: DEF_SPEC_FIELD,
+          customer: DEF_SPEC_FIELD,
+          item: DEF_SPEC_FIELD,
+          quantity: DEF_SPEC_FIELD,
+        }),
       footerNote: z.string().trim().max(500).default(""),
     })
     .optional(),

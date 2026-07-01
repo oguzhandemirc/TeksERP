@@ -101,10 +101,20 @@ function fmtDateTime(iso: string): string {
   return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/** Spec alan boyutu → px (c-val temel boyutu; global fontScale bunları da çarpar). */
-const SPEC_SIZE_PX: Record<string, number> = { sm: 9, md: 11, lg: 14 };
-/** Spec alan kalınlığı → font-weight (global fontWeight bunları da kaydırır). */
-const SPEC_WEIGHT_N: Record<string, number> = { light: 400, normal: 600, bold: 800 };
+// Boyut/kalınlık YALNIZ default'tan (md/normal) farklıysa inline override edilir —
+// md/normal = CSS default'a dokunulmaz (eski kartların/sütunların karışık stili korunur).
+// Global fontScale/fontWeight hem CSS default'u hem override'ı regex ile ölçekler/kaydırır.
+const SPEC_OVR_SIZE: Record<string, number> = { sm: 9, lg: 14 }; // md → CSS 11px
+const ORDER_OVR_SIZE: Record<string, number> = { sm: 7, lg: 11 }; // md → CSS 8.5px
+const OVR_WEIGHT: Record<string, number> = { light: 400, bold: 800 }; // normal → CSS default
+
+/** Alanın (boyut/kalınlık) inline override stilini üret — default'ta boş string. */
+function ovrStyle(f: { size: string; weight: string }, sizeMap: Record<string, number>): string {
+  const p: string[] = [];
+  if (sizeMap[f.size] != null) p.push(`font-size:${sizeMap[f.size]}px`);
+  if (OVR_WEIGHT[f.weight] != null) p.push(`font-weight:${OVR_WEIGHT[f.weight]}`);
+  return p.length ? ` style="${p.join(";")}"` : "";
+}
 
 /** Ham spec alan değerini (boolean eski şekil | nesne | undefined) çöz. */
 function coerceSpecCell(v: unknown): { show: boolean; size: string; weight: string } {
@@ -146,6 +156,10 @@ export function renderTravelerCardHtml(
   const weightDelta = cfg.fontWeight === "light" ? -100 : cfg.fontWeight === "bold" ? 100 : 0;
   // Spec grid alanları (eski snapshot → boolean; coerceSpecCell hepsini {show,size,weight}'e çözer).
   const sf = (cfg.specFields ?? {}) as Record<string, unknown>;
+  const of = (cfg.orderFields ?? {}) as Record<string, unknown>;
+  // Spec grid satır başına sütun (1–4, default 3) → hücre genişliği %.
+  const specCols = Math.min(4, Math.max(1, Math.round(Number(cfg.specColumns)) || 3));
+  const cellWidthPct = (100 / specCols).toFixed(4);
 
   const steps = [...(snapshot.steps ?? [])].sort((a, b) => a.stepSequence - b.stepSequence);
   const orderLinks = snapshot.orderLinks ?? [];
@@ -180,10 +194,10 @@ export function renderTravelerCardHtml(
       </div>`
     : "";
 
-  // Spec grid (3 sütun) — yalnız AÇIK alanlar; her alanın kendi boyut/kalınlığı (inline).
+  // Spec grid — yalnız AÇIK alanlar; boyut/kalınlık default'tan farklıysa inline override.
   const cell = (label: string, value: string, f: { size: string; weight: string }, hi = false) =>
     `<div class="cell${hi ? " hi" : ""}"><div class="c-lbl">${esc(label)}</div>` +
-    `<div class="c-val" style="font-size:${SPEC_SIZE_PX[f.size] ?? 11}px;font-weight:${SPEC_WEIGHT_N[f.weight] ?? 600}">${value}</div></div>`;
+    `<div class="c-val"${ovrStyle(f, SPEC_OVR_SIZE)}>${value}</div></div>`;
   const gridCells: string[] = [];
   const add = (v: unknown, label: string, value: string, hi = false) => {
     const f = coerceSpecCell(v);
@@ -250,29 +264,35 @@ export function renderTravelerCardHtml(
           .join("")}</div>`
       : "";
 
-  const ordersBlock = showOrders
-    ? orderLinks.length
-      ? `<div class="sec-t">BAĞLI SİPARİŞLER (${esc(orderLinks.length)})</div>
+  // Bağlı siparişler — sütun başına göster/boyut/kalınlık (yalnız AÇIK sütunlar).
+  type OL = SnapOrderLink["orderLine"];
+  const orderCols: { c: { show: boolean; size: string; weight: string }; cls: string; head: string; val: (ol: OL) => string }[] = [
+    { c: coerceSpecCell(of.orderNumber), cls: "o-num", head: "Sipariş No", val: (ol) => esc(ol?.order?.orderNumber ?? "—") },
+    { c: coerceSpecCell(of.customer), cls: "o-cus", head: "Müşteri", val: (ol) => esc(ol?.order?.customer?.name ?? "—") },
+    { c: coerceSpecCell(of.item), cls: "o-item", head: "Ürün", val: (ol) => esc(ol?.item?.name ?? "—") },
+    { c: coerceSpecCell(of.quantity), cls: "o-qty", head: "Miktar", val: (ol) => `${esc(fmtNum(ol?.quantity))} m` },
+  ];
+  const shownOrderCols = orderCols.filter((col) => col.c.show);
+  const ordersBlock = !showOrders
+    ? ""
+    : orderLinks.length === 0
+      ? `<div class="empty">Stoğa üretim — bağlı sipariş yok</div>`
+      : shownOrderCols.length === 0
+        ? ""
+        : `<div class="sec-t">BAĞLI SİPARİŞLER (${esc(orderLinks.length)})</div>
          <table class="ord">
-          <thead>
-            <tr><th class="o-num">Sipariş No</th><th class="o-cus">Müşteri</th><th class="o-item">Ürün</th><th class="o-qty">Miktar</th></tr>
-          </thead>
+          <thead><tr>${shownOrderCols.map((col) => `<th class="${col.cls}">${esc(col.head)}</th>`).join("")}</tr></thead>
           <tbody>
             ${orderLinks
-              .map((l) => {
-                const ol = l.orderLine;
-                return `<tr>
-                  <td class="o-num">${esc(ol?.order?.orderNumber ?? "—")}</td>
-                  <td class="o-cus">${esc(ol?.order?.customer?.name ?? "—")}</td>
-                  <td class="o-item">${esc(ol?.item?.name ?? "—")}</td>
-                  <td class="o-qty">${esc(fmtNum(ol?.quantity))} m</td>
-                </tr>`;
-              })
+              .map(
+                (l) =>
+                  `<tr>${shownOrderCols
+                    .map((col) => `<td class="${col.cls}"${ovrStyle(col.c, ORDER_OVR_SIZE)}>${col.val(l.orderLine)}</td>`)
+                    .join("")}</tr>`,
+              )
               .join("")}
           </tbody>
-        </table>`
-      : `<div class="empty">Stoğa üretim — bağlı sipariş yok</div>`
-    : "";
+        </table>`;
 
   const footerBlock = footerNote
     ? `<div class="foot-note">${esc(footerNote)}</div>`
@@ -326,10 +346,10 @@ export function renderTravelerCardHtml(
   /* Değişken hücre sayısı (alanlar tek tek kapatılabilir) → container tam çerçeve +
      her hücre sağ/alt iç çizgi. nth-child border-kaldırma YOK (7 hücre varsayımı bozulurdu). */
   .grid { display: flex; flex-wrap: wrap; border: 0.8px solid #000; margin-bottom: 6px; }
-  .cell { width: 33.333%; padding: 4px 6px; border-right: 0.5px solid #999; border-bottom: 0.5px solid #999; }
+  .cell { width: ${cellWidthPct}%; padding: 4px 6px; border-right: 0.5px solid #999; border-bottom: 0.5px solid #999; }
   .cell.hi { background: #eee; }
   .c-lbl { font-size: 6.5px; font-weight: 700; color: #555; letter-spacing: 0.4px; text-transform: uppercase; }
-  .c-val { margin-top: 1.5px; }  /* boyut/kalınlık artık hücre-başına inline (config specFields) */
+  .c-val { font-size: 11px; font-weight: 600; margin-top: 1.5px; }  /* md/normal default; sm/lg + ince/kalın hücre-başına inline */
 
   .props { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 8px; }
   .p-lbl { font-size: 7px; font-weight: 700; color: #555; letter-spacing: 0.5px; text-transform: uppercase; }

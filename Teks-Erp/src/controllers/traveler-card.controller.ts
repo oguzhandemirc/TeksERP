@@ -32,6 +32,8 @@ const travelerCardConfigSchema = z
     showProperties: z.boolean().optional(),
     // Boyut/kalınlık nesnesi (veya eski boolean) — normalizeTravelerCardConfig çözer.
     specFields: z.record(z.string(), z.unknown()).optional(),
+    specColumns: z.number().optional(),
+    orderFields: z.record(z.string(), z.unknown()).optional(),
     footerNote: z.string().optional(),
   })
   .partial();

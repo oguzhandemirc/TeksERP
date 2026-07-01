@@ -33,6 +33,13 @@ export interface TravelerCardSpecFields {
   startDate: TravelerCardSpecField;
   endDate: TravelerCardSpecField;
 }
+/** Bağlı siparişler tablosu sütunları — her biri tek tek. */
+export interface TravelerCardOrderFields {
+  orderNumber: TravelerCardSpecField;
+  customer: TravelerCardSpecField;
+  item: TravelerCardSpecField;
+  quantity: TravelerCardSpecField;
+}
 
 /** Refakat kartı marka/içerik ayarı — kart basımında snapshot'a dondurulur. */
 export interface TravelerCardConfig {
@@ -56,6 +63,10 @@ export interface TravelerCardConfig {
   showProperties: boolean;
   /** Spec grid alan görünürlükleri (Renk/En/Hedef Metraj/...). */
   specFields: TravelerCardSpecFields;
+  /** Spec grid'de satır başına sütun sayısı (1–4). */
+  specColumns: number;
+  /** Bağlı siparişler tablosu sütunları (Sipariş No/Müşteri/Ürün/Miktar). */
+  orderFields: TravelerCardOrderFields;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -80,6 +91,13 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
     foldType: { show: true, size: "md", weight: "normal" },
     startDate: { show: true, size: "md", weight: "normal" },
     endDate: { show: true, size: "md", weight: "normal" },
+  },
+  specColumns: 3,
+  orderFields: {
+    orderNumber: { show: true, size: "md", weight: "normal" },
+    customer: { show: true, size: "md", weight: "normal" },
+    item: { show: true, size: "md", weight: "normal" },
+    quantity: { show: true, size: "md", weight: "normal" },
   },
   footerNote: "",
 };

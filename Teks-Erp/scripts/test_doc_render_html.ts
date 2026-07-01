@@ -276,8 +276,11 @@ function testTraveler(): void {
   check("fontWeight=bold → 800→900 + body 400→500", bold.includes("font-weight: 900") && bold.includes("font-weight: 500"));
   const light = renderTravelerCardHtml(travelerSnap({ config: { fontWeight: "light" } }), travelerMeta());
   check("fontWeight=light → 800→700 + body 400→300", light.includes("font-weight: 700") && light.includes("font-weight: 300"));
-  // per-field spec kutusu boyut/kalınlık (inline stil = boşluksuz, CSS kurallarından ayrı)
-  check("default spec cell → md/normal inline (11px/600)", html.includes("font-size:11px;font-weight:600"));
+  // per-field spec kutusu boyut/kalınlık — md/normal = CSS default (inline YOK); sm/lg/ince/kalın = inline.
+  check(
+    "default spec cell → CSS md/normal, inline YOK",
+    html.includes("font-size: 11px; font-weight: 600") && !html.includes("font-size:11px;font-weight:600"),
+  );
   const bigBold = renderTravelerCardHtml(
     travelerSnap({ config: { specFields: { targetQuantity: { show: true, size: "lg", weight: "bold" } } } }),
     travelerMeta(),
@@ -288,6 +291,21 @@ function testTraveler(): void {
     travelerMeta(),
   );
   check("specField sm+light → inline 9px/400", smallLight.includes("font-size:9px;font-weight:400"));
+  // spec grid satır başına sütun sayısı
+  check("default specColumns=3 → hücre %33.3333", html.includes("width: 33.3333%"));
+  const cols2 = renderTravelerCardHtml(travelerSnap({ config: { specColumns: 2 } }), travelerMeta());
+  check("specColumns=2 → hücre %50", cols2.includes("width: 50.0000%"));
+  // bağlı sipariş sütunları — göster/boyut/kalınlık (per-column)
+  const hideCust = renderTravelerCardHtml(
+    travelerSnap({ config: { orderFields: { customer: { show: false, size: "md", weight: "normal" } } } }),
+    travelerMeta(),
+  );
+  check("orderFields customer.show=false → Müşteri sütunu gizli", !hideCust.includes("Müşteri"));
+  const ordStyled = renderTravelerCardHtml(
+    travelerSnap({ config: { orderFields: { quantity: { show: true, size: "sm", weight: "bold" } } } }),
+    travelerMeta(),
+  );
+  check("orderFields quantity sm+bold → inline 7px/800", ordStyled.includes("font-size:7px;font-weight:800"));
   // watermarks
   check("draft → TASLAK", renderTravelerCardHtml(travelerSnap(), travelerMeta({ draft: true })).includes("TASLAK"));
   check("VOIDED → İPTAL", renderTravelerCardHtml(travelerSnap(), travelerMeta({ status: "VOIDED" })).includes("İPTAL"));
