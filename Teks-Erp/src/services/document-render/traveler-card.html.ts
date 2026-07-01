@@ -121,6 +121,12 @@ export function renderTravelerCardHtml(
   // Ekran önizlemesi için fiziksel sayfa ölçüsü (mm). @page yalnız BASKI'da geçerli →
   // iframe önizlemesinde boyut/pay görünmez; @media screen'de sheet'e uygulanır.
   const pageDim = pageSize === "A5" ? { w: 148, h: 210 } : { w: 210, h: 297 };
+  // Yazı boyutu ölçeği (tüm font-size'lar çarpılır) + kalınlık kaydırması (tüm font-weight'ler).
+  const fontScale =
+    typeof cfg.fontScale === "number" && cfg.fontScale > 0
+      ? Math.min(1.4, Math.max(0.7, cfg.fontScale))
+      : 1;
+  const weightDelta = cfg.fontWeight === "light" ? -100 : cfg.fontWeight === "bold" ? 100 : 0;
   // Spec grid alan görünürlükleri (eski snapshot → hepsi açık).
   const sf = cfg.specFields ?? ({} as Partial<NonNullable<TravelerCardConfig["specFields"]>>);
 
@@ -255,11 +261,11 @@ export function renderTravelerCardHtml(
     ? `<div class="foot-note">${esc(footerNote)}</div>`
     : "";
 
-  return `<!doctype html><html lang="tr"><head><meta charset="utf-8">
+  const doc = `<!doctype html><html lang="tr"><head><meta charset="utf-8">
 <style>
   * { box-sizing: border-box; }
   @page { size: ${pageSize}; margin: ${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm; }
-  body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; color: #000; font-size: 9.5px; }
+  body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; color: #000; font-size: 9.5px; font-weight: 400; }
   .sheet { position: relative; width: 100%; }
   /* Ekran önizlemesi: @page (yalnız baskı) ekranda boyut/pay göstermez → sayfayı
      fiziksel ölçüsünde çiz + payları padding yap. Baskıda bu blok yok sayılır (@page geçerli). */
@@ -378,4 +384,21 @@ export function renderTravelerCardHtml(
     ${footerBlock}
   </div>
 </body></html>`;
+
+  // Global yazı ölçeği + kalınlık: yalnız font-size (px) çarpılır, font-weight kaydırılır.
+  // Layout (padding/margin/genişlik mm/px) DOKUNULMAZ → oran korunur, sadece yazı değişir.
+  let out = doc;
+  if (fontScale !== 1) {
+    out = out.replace(
+      /font-size:\s*([\d.]+)px/g,
+      (_m, n: string) => `font-size: ${Number((Number(n) * fontScale).toFixed(2))}px`,
+    );
+  }
+  if (weightDelta !== 0) {
+    out = out.replace(
+      /font-weight:\s*(\d{3})/g,
+      (_m, w: string) => `font-weight: ${Math.min(900, Math.max(200, Number(w) + weightDelta))}`,
+    );
+  }
+  return out;
 }

@@ -140,6 +140,9 @@ export interface TravelerCardMargins {
   left: number;
 }
 
+/** Yazı kalınlığı — tüm font-weight'leri kaydırır (ince −100, kalın +100). */
+export type TravelerCardFontWeight = "light" | "normal" | "bold";
+
 /** Spec grid alan görünürlükleri — her biri tek tek aç/kapa (default açık). */
 export interface TravelerCardSpecFields {
   color: boolean;
@@ -163,6 +166,10 @@ export interface TravelerCardConfig {
   pageSize: TravelerCardPageSize;
   /** Kenar boşlukları (mm) — hangi kenardan ne kadar pay. */
   margins: TravelerCardMargins;
+  /** Yazı boyutu ölçeği — tüm yazılar bununla çarpılır (0.7–1.4, default 1). */
+  fontScale: number;
+  /** Yazı kalınlığı — ince/normal/kalın. */
+  fontWeight: TravelerCardFontWeight;
   /** Operasyon imza grid'i basılsın mı. */
   showOperationGrid: boolean;
   /** Talimatlar/Boyahane notu kutusu basılsın mı. */
@@ -183,6 +190,8 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   phone: "",
   pageSize: "A4",
   margins: { top: 8, right: 8, bottom: 8, left: 8 },
+  fontScale: 1,
+  fontWeight: "normal",
   showOperationGrid: true,
   showNotes: true,
   showOrders: true,
@@ -223,6 +232,11 @@ export function normalizeTravelerCardConfig(o: Record<string, unknown>): Travele
       bottom: mm(m.bottom, D.margins.bottom),
       left: mm(m.left, D.margins.left),
     },
+    fontScale: (() => {
+      const n = typeof o.fontScale === "number" ? o.fontScale : Number(o.fontScale);
+      return Number.isFinite(n) ? Math.min(1.4, Math.max(0.7, n)) : 1;
+    })(),
+    fontWeight: o.fontWeight === "light" || o.fontWeight === "bold" ? o.fontWeight : "normal",
     showOperationGrid: o.showOperationGrid !== false,
     showNotes: o.showNotes !== false,
     showOrders: o.showOrders !== false,

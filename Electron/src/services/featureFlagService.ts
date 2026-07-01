@@ -9,6 +9,7 @@ import {
 export type { CompanyLetterhead, DocumentsConfig } from "./documentConfig";
 
 export type TravelerCardPageSize = "A4" | "A5";
+export type TravelerCardFontWeight = "light" | "normal" | "bold";
 export interface TravelerCardMargins {
   top: number;
   right: number;
@@ -37,6 +38,10 @@ export interface TravelerCardConfig {
   pageSize: TravelerCardPageSize;
   /** Kenar boşlukları (mm) — hangi kenardan ne kadar pay. */
   margins: TravelerCardMargins;
+  /** Yazı boyutu ölçeği — tüm yazılar bununla çarpılır (0.7–1.4). */
+  fontScale: number;
+  /** Yazı kalınlığı — ince/normal/kalın. */
+  fontWeight: TravelerCardFontWeight;
   showOperationGrid: boolean;
   showNotes: boolean;
   showOrders: boolean;
@@ -54,6 +59,8 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   phone: "",
   pageSize: "A4",
   margins: { top: 8, right: 8, bottom: 8, left: 8 },
+  fontScale: 1,
+  fontWeight: "normal",
   showOperationGrid: true,
   showNotes: true,
   showOrders: true,

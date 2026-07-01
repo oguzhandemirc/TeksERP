@@ -263,6 +263,19 @@ function testTraveler(): void {
     !hideFields.includes(">En</div>") && !hideFields.includes("Hedef Metraj"),
   );
   check("diğer spec alanları hâlâ görünür (Renk/Kat Tipi)", hideFields.includes("Renk") && hideFields.includes("Kat Tipi"));
+  // yazı boyutu ölçeği (tüm font-size çarpılır) — default 9.5px, ×1.3 → 12.35px
+  check("default → font-size ölçeklenmemiş (9.5px)", html.includes("9.5px"));
+  const scaled = renderTravelerCardHtml(travelerSnap({ config: { fontScale: 1.3 } }), travelerMeta());
+  check(
+    "fontScale=1.3 → font-size çarpıldı (9.5→12.35px, orijinal yok)",
+    scaled.includes("12.35px") && !scaled.includes("font-size: 9.5px"),
+  );
+  // yazı kalınlığı — default 800 var; bold +100 → 900 (+ body 400→500); light −100 → 700/300
+  check("default → font-weight kaydırılmamış (800)", html.includes("font-weight: 800"));
+  const bold = renderTravelerCardHtml(travelerSnap({ config: { fontWeight: "bold" } }), travelerMeta());
+  check("fontWeight=bold → 800→900 + body 400→500", bold.includes("font-weight: 900") && bold.includes("font-weight: 500"));
+  const light = renderTravelerCardHtml(travelerSnap({ config: { fontWeight: "light" } }), travelerMeta());
+  check("fontWeight=light → 800→700 + body 400→300", light.includes("font-weight: 700") && light.includes("font-weight: 300"));
   // watermarks
   check("draft → TASLAK", renderTravelerCardHtml(travelerSnap(), travelerMeta({ draft: true })).includes("TASLAK"));
   check("VOIDED → İPTAL", renderTravelerCardHtml(travelerSnap(), travelerMeta({ status: "VOIDED" })).includes("İPTAL"));

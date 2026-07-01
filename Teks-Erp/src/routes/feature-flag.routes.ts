@@ -62,6 +62,8 @@ const updateSchema = z.object({
           left: z.number().min(0).max(40),
         })
         .default({ top: 8, right: 8, bottom: 8, left: 8 }),
+      fontScale: z.number().min(0.7).max(1.4).default(1),
+      fontWeight: z.enum(["light", "normal", "bold"]).default("normal"),
       showOperationGrid: z.boolean(),
       showNotes: z.boolean(),
       showOrders: z.boolean(),

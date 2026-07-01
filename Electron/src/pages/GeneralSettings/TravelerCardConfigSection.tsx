@@ -12,9 +12,22 @@ import {
   DEFAULT_TRAVELER_CARD_CONFIG,
   type TravelerCardConfig,
   type TravelerCardPageSize,
+  type TravelerCardFontWeight,
   type TravelerCardSpecFields,
 } from "@/services/featureFlagService";
 import { FlagToggle } from "./SettingRow";
+
+const FONT_SCALES: { value: number; label: string }[] = [
+  { value: 0.85, label: "Küçük" },
+  { value: 1, label: "Normal" },
+  { value: 1.15, label: "Büyük" },
+  { value: 1.3, label: "En Büyük" },
+];
+const FONT_WEIGHTS: { value: TravelerCardFontWeight; label: string }[] = [
+  { value: "light", label: "İnce" },
+  { value: "normal", label: "Normal" },
+  { value: "bold", label: "Kalın" },
+];
 
 const PAGE_SIZES: TravelerCardPageSize[] = ["A4", "A5"];
 const MARGIN_SIDES: { key: keyof TravelerCardConfig["margins"]; label: string }[] = [
@@ -177,6 +190,55 @@ export function TravelerCardConfigSection({
                   />
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-sm font-medium">Yazı</div>
+          <p className="text-xs text-muted-foreground">
+            Kartın tüm yazılarının boyutu ve kalınlığı (oranlar korunur, sadece yazı değişir).
+          </p>
+          <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-3">
+            <div>
+              <div className="text-[11px] text-muted-foreground">Boyut</div>
+              <div className="mt-1 inline-flex overflow-hidden rounded-md border">
+                {FONT_SCALES.map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => setDraft((d) => ({ ...d, fontScale: s.value }))}
+                    className={cn(
+                      "px-3 py-1.5 text-sm transition-colors",
+                      Math.abs(draft.fontScale - s.value) < 0.001
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-accent",
+                    )}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] text-muted-foreground">Kalınlık</div>
+              <div className="mt-1 inline-flex overflow-hidden rounded-md border">
+                {FONT_WEIGHTS.map((w) => (
+                  <button
+                    key={w.value}
+                    type="button"
+                    onClick={() => setDraft((d) => ({ ...d, fontWeight: w.value }))}
+                    className={cn(
+                      "px-3 py-1.5 text-sm transition-colors",
+                      draft.fontWeight === w.value
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-accent",
+                    )}
+                  >
+                    {w.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

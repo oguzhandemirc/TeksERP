@@ -24,6 +24,8 @@ const travelerCardConfigSchema = z
       })
       .partial()
       .optional(),
+    fontScale: z.number().optional(),
+    fontWeight: z.enum(["light", "normal", "bold"]).optional(),
     showOperationGrid: z.boolean().optional(),
     showNotes: z.boolean().optional(),
     showOrders: z.boolean().optional(),
