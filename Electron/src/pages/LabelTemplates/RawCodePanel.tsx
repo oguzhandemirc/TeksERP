@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import {
   RawCodeLang,
   labelTemplateService,
@@ -70,16 +71,22 @@ export function RawCodePanel({ kind, catalog, rawCode, onChange }: Props) {
 
   const issue = codeIssue(lang, code);
   const [loadingDefault, setLoadingDefault] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   // "Varsayılan kodu getir" — otomatik üretilen kodu {{}} yer-tutuculu şablon olarak
   // editöre yükler (kullanıcı görüp üstünde düzenler; garantili basar).
-  const fetchDefault = async () => {
-    if (code.trim() && !window.confirm("Mevcut kod, varsayılan (otomatik) kodla değiştirilsin mi?")) return;
+  const doFetchDefault = async () => {
+    setConfirmOpen(false);
     setLoadingDefault(true);
     try {
       setCode(await labelTemplateService.defaultCode(kind, lang));
     } finally {
       setLoadingDefault(false);
     }
+  };
+  // Mevcut kod varsa üzerine yazmadan önce onay iste (bizim modal); yoksa direkt getir.
+  const onFetchDefault = () => {
+    if (code.trim()) setConfirmOpen(true);
+    else void doFetchDefault();
   };
 
   // Değişken çipleri: katalog anahtarları + HTML'de gömülü SVG'ler.
@@ -172,10 +179,9 @@ export function RawCodePanel({ kind, catalog, rawCode, onChange }: Props) {
             <Button
               type="button"
               size="sm"
-              variant="outline"
-              className="h-7 text-[11px]"
+              className="h-7 gap-1 text-[11px]"
               disabled={loadingDefault}
-              onClick={() => void fetchDefault()}
+              onClick={onFetchDefault}
             >
               {loadingDefault ? "Getiriliyor…" : "Varsayılan kodu getir"}
             </Button>
@@ -230,6 +236,17 @@ export function RawCodePanel({ kind, catalog, rawCode, onChange }: Props) {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Varsayılan kodu getir?"
+        description={`Mevcut ${rawCodeLangLabels[lang]} kodun, otomatik üretilen varsayılan kodla değiştirilecek. Kaydetmediğin sürece geri alınabilir.`}
+        confirmLabel="Değiştir"
+        cancelLabel="Vazgeç"
+        destructive
+        onConfirm={doFetchDefault}
+      />
     </div>
   );
 }
