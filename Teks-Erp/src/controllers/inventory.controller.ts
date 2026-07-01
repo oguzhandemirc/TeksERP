@@ -23,7 +23,7 @@ const initialEntrySchema = z.object({
   // idempotency anchor — aynı barkodla 2. çağrı cached Roll döner).
   clientBarcode: z
     .string()
-    .regex(/^TEKS-\d{8}-[0-9A-F]{8}$/, "Geçersiz barkod formatı")
+    .regex(/^TEKS\d{8}[0-9A-F]{8}$/, "Geçersiz barkod formatı")
     .optional(),
 });
 

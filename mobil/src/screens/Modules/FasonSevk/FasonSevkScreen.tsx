@@ -72,9 +72,9 @@ import {
 } from '../../../utils/labels';
 
 // Barkod tipi sezgisi — yanlış alana okutmayı backend 404'üne güvenmeden anında,
-// net mesajla yakalar. Refakat kartı "RK-", top (rulo) "TEKS-" ile başlar; ikisi
+// net mesajla yakalar. Refakat kartı "RK-", top (rulo) "TEKS" ile başlar; ikisi
 // asla çakışmaz. Yalnızca KESİN ters tipi reddederiz; gerisini backend doğrular.
-const looksLikeRollBarcode = (code: string) => /^TEKS-/i.test(code.trim());
+const looksLikeRollBarcode = (code: string) => /^TEKS/i.test(code.trim());
 const looksLikeCardBarcode = (code: string) => /^RK-/i.test(code.trim());
 
 // Android LMK: OS uzun süre arka planda bırakılan uygulamayı öldürür.

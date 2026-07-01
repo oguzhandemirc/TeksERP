@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Eye, Code2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { LabelKind, TemplateField } from "@/services/labelTemplateService";
@@ -18,6 +21,7 @@ interface Props {
  */
 export function LabelPreview({ kind, fields }: Props) {
   const visibleCount = fields.filter((f) => f.isVisible).length;
+  const [view, setView] = useState<"visual" | "code">("visual");
 
   const previewQ = useQuery({
     queryKey: ["label-preview-active", kind, JSON.stringify(fields)],
@@ -31,8 +35,35 @@ export function LabelPreview({ kind, fields }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-1">
-        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Canlı Önizleme
+        <div className="inline-flex rounded-md border p-0.5" role="tablist" aria-label="Önizleme görünümü">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "visual"}
+            onClick={() => setView("visual")}
+            className={cn(
+              "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+              view === "visual"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Eye className="h-3 w-3" /> Görsel önizleme
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "code"}
+            onClick={() => setView("code")}
+            className={cn(
+              "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+              view === "code"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Code2 className="h-3 w-3" /> Kodu görüntüle
+          </button>
         </div>
         <div className="flex items-center gap-1">
           {langLabel && (
@@ -58,6 +89,10 @@ export function LabelPreview({ kind, fields }: Props) {
           <div className="py-8 text-center text-xs italic text-destructive">
             Önizleme alınamadı: {(previewQ.error as Error).message}
           </div>
+        ) : view === "code" ? (
+          <pre className="h-[640px] overflow-auto whitespace-pre-wrap break-all rounded bg-muted/20 p-2 font-mono text-[11px] leading-relaxed">
+            {p?.native ?? ""}
+          </pre>
         ) : p?.mode === "text" ? (
           <pre className="h-[640px] overflow-auto whitespace-pre-wrap break-all rounded bg-muted/20 p-2 font-mono text-[11px] leading-relaxed">
             {p.content}

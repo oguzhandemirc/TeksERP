@@ -21,7 +21,7 @@ import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-previ
 import { mmToDots } from "./helpers/native-label.shared";
 import type { ApiResponse } from "../types/api.types";
 
-const SAMPLE_BC = "TEKS-ORNEK-0001";
+const SAMPLE_BC = "TEKSORNEK0001";
 
 /** Tür-duyarlı ÖRNEK payload — Ham (renksiz) / Bitmiş (renkli) / Kartela (En×Boy+Kart No). */
 function samplePayload(kind: LabelKind): LabelPayload {

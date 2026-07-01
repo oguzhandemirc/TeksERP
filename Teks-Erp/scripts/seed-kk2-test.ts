@@ -24,7 +24,7 @@ function barcode(prefix: string): string {
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   bc++;
   const rand = Math.floor(Math.random() * 0xffff).toString(16).toUpperCase().padStart(4, "0");
-  return `TEKS-${ymd}-${prefix}${bc}${rand}`;
+  return `TEKS${ymd}${prefix}${bc}${rand}`;
 }
 
 async function makeCard(opts: {

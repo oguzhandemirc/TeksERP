@@ -51,7 +51,7 @@ async function main() {
   const sample = await svc.getSampleNative(roll50.id, PrinterLanguage.PPLB, LabelKind.SWATCH);
   check("getSampleNative dil=PPLB", sample.data.language === "PPLB");
   check("getSampleNative profil geometrisi → Q400 (100×50)", sample.data.content.includes("Q400"), sample.data.content.split("\n").slice(0, 3).join(" "));
-  check("getSampleNative örnek barkod içerir", sample.data.content.includes("TEKS-ORNEK-0001"));
+  check("getSampleNative örnek barkod içerir", sample.data.content.includes("TEKSORNEK0001"));
 
   const restored = await resolveLabelFormat({ kind: "ROLL_FINISHED" });
   check("restore → TOP tekrar 100×50", restored.heightMm === 50);

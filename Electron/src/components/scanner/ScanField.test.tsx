@@ -34,8 +34,8 @@ describe("ScanField", () => {
     const onScan = vi.fn();
     renderWithProviders(<Harness onScan={onScan} expectPrefix="ROLL" />);
     const input = screen.getByPlaceholderText("okut");
-    await userEvent.type(input, "TEKS-20260615-AB12CD34{Enter}");
-    expect(onScan).toHaveBeenCalledWith("TEKS-20260615-AB12CD34");
+    await userEvent.type(input, "TEKS20260615AB12CD34{Enter}");
+    expect(onScan).toHaveBeenCalledWith("TEKS20260615AB12CD34");
   });
 
   it("submit butonu da onScan tetikler", async () => {

@@ -422,7 +422,7 @@ export class LabelService {
     // "Bizdeki ad" alanlarının ayrı işlediğini önizlemede net görsün.
     const mockPayload: LabelPayload = {
       rollId: "preview",
-      barcode: "TR-2026-05-26-R0123",
+      barcode: "TR20260526R0123",
       status: "STOCK",
       qualityGrade: "1. Kalite",
       widthCm: 152,
@@ -449,7 +449,7 @@ export class LabelService {
       kind: input.kind,
       cardNumber: "SW-2026-05-0042",
       lengthCm: 30,
-      parentRollBarcode: "TR-2026-05-26-R0123",
+      parentRollBarcode: "TR20260526R0123",
     };
     const mockTemplate = {
       id: "preview",
@@ -501,7 +501,7 @@ export class LabelService {
   }): Promise<ApiResponse<{ lines: Array<{ text: string; size: string; bold: boolean }> }>> {
     const payload: LabelPayload = {
       rollId: "preview",
-      barcode: "TR-2026-05-26-R0123",
+      barcode: "TR20260526R0123",
       status: "STOCK",
       qualityGrade: "1. Kalite",
       widthCm: 152,
@@ -525,7 +525,7 @@ export class LabelService {
       kind: input.kind,
       cardNumber: "SW-2026-05-0042",
       lengthCm: 30,
-      parentRollBarcode: "TR-2026-05-26-R0123",
+      parentRollBarcode: "TR20260526R0123",
     };
     const template = {
       id: "preview",
@@ -773,7 +773,7 @@ export class LabelService {
 
   /** Örnek (mock) top etiketi render girdisi — Test Et için. profileId geometriyi belirler. */
   private async buildSampleRenderInput(profileId?: string | null): Promise<LabelRenderInput> {
-    const sampleBarcode = "TEKS-ORNEK-0001";
+    const sampleBarcode = "TEKSORNEK0001";
     const payload: LabelPayload = {
       rollId: "ornek-id",
       barcode: sampleBarcode,

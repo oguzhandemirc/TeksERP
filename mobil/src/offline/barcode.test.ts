@@ -1,8 +1,8 @@
 import { generateClientBarcode, generateClientUuid } from "./barcode";
 
 describe("generateClientBarcode", () => {
-  it("TEKS-YYYYMMDD-XXXXXXXX (8 hex) formatı", () => {
-    expect(generateClientBarcode()).toMatch(/^TEKS-\d{8}-[0-9A-F]{8}$/);
+  it("TEKSYYYYMMDDXXXXXXXX (8 hex, ayraçsız) formatı", () => {
+    expect(generateClientBarcode()).toMatch(/^TEKS\d{8}[0-9A-F]{8}$/);
   });
   it("ardışık çağrılar farklı (collision yok)", () => {
     const s = new Set(Array.from({ length: 50 }, () => generateClientBarcode()));

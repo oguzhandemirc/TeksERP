@@ -287,7 +287,10 @@ function operationLabel(type: RollOperationType): string {
 }
 
 /**
- * Generate a unique barcode string: TEKS-YYYYMMDD-XXXX
+ * Generate a unique barcode string: TEKSYYYYMMDDXXXXXXXX (ayraçsız).
+ * Tire YOK — el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu
+ * (QR kamera doğru okuyordu, 1D wedge bozuyordu); ayraçsız salt harf-rakam her
+ * klavye düzeninde sorunsuz okunur.
  */
 function generateBarcode(): string {
   const now = new Date();
@@ -296,7 +299,7 @@ function generateBarcode(): string {
     (now.getMonth() + 1).toString().padStart(2, "0") +
     now.getDate().toString().padStart(2, "0");
   const randomPart = uuidv4().replace(/-/g, "").substring(0, 8).toUpperCase();
-  return `TEKS-${datePart}-${randomPart}`;
+  return `TEKS${datePart}${randomPart}`;
 }
 
 export class InventoryService {
@@ -317,7 +320,7 @@ export class InventoryService {
       propertyIds?: string[];
       /**
        * Opsiyonel client-üretimi barkod. Offline KK1 girişi için mobil tarafta
-       * üretilir (generateBarcode ile aynı format: TEKS-YYYYMMDD-XXXXXXXX).
+       * üretilir (generateBarcode ile aynı format: TEKSYYYYMMDDXXXXXXXX).
        * Verilmezse backend üretir (default davranış). Verilirse retry/dedup
        * doğal anchor olarak Roll.barcode @unique kullanılır — aynı barkodla
        * 2. çağrı cached Roll döner.
@@ -389,10 +392,10 @@ export class InventoryService {
     }
 
     // Barkod: client verdiyse onu kullan (offline retry idempotency), yoksa üret.
-    // Client format validasyonu: TEKS-YYYYMMDD-XXXXXXXX (uppercase hex 8 char).
-    if (data.clientBarcode && !/^TEKS-\d{8}-[0-9A-F]{8}$/.test(data.clientBarcode)) {
+    // Client format validasyonu: TEKSYYYYMMDDXXXXXXXX (uppercase hex 8 char, ayraçsız).
+    if (data.clientBarcode && !/^TEKS\d{8}[0-9A-F]{8}$/.test(data.clientBarcode)) {
       throw AppError.badRequest(
-        "Geçersiz client-üretimi barkod formatı (beklenen: TEKS-YYYYMMDD-XXXXXXXX)",
+        "Geçersiz client-üretimi barkod formatı (beklenen: TEKSYYYYMMDDXXXXXXXX)",
       );
     }
     const barcode = data.clientBarcode ?? generateBarcode();

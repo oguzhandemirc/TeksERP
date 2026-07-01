@@ -21,11 +21,13 @@ function check(label: string, ok: boolean, extra = "") {
 }
 
 const format: ResolvedLabelFormat = {
-  widthMm: 100, heightMm: 148, marginMm: 3, orientation: "PORTRAIT",
+  widthMm: 100, heightMm: 148, marginMm: 3,
+  marginTopMm: 3, marginRightMm: 3, marginBottomMm: 3, marginLeftMm: 3, gapMm: 3,
+  orientation: "PORTRAIT",
   dpi: 203, language: "PPLA", profileId: "p1", source: "machine",
 };
 const payload = {
-  barcode: "TEKS-20260615-XY99", qualityGrade: "1.KALITE", widthCm: 150,
+  barcode: "TEKS20260615XY99", qualityGrade: "1.KALITE", widthCm: 150,
   lengthMeters: 320, weightKg: 40, itemName: "PATOS", colorName: "MAVI",
   customerName: "ACME", batchNumber: "P-1",
 } as unknown as LabelPayload;
@@ -36,7 +38,7 @@ async function main() {
   check("PPLB: N (buffer temizle)", /^N/m.test(pplb));
   check("PPLB: q<genişlik> + Q<boy>", /q\d+/.test(pplb) && /Q\d+,\d+/.test(pplb));
   check("PPLB: A metin alanı + ürün", /A\d+,\d+,0,\d+,1,1,N,"PATOS"/.test(pplb));
-  check("PPLB: B Code128 + barkod", /B\d+,\d+,0,1,/.test(pplb) && pplb.includes("TEKS-20260615-XY99"));
+  check("PPLB: B Code128 + barkod", /B\d+,\d+,0,1,/.test(pplb) && pplb.includes("TEKS20260615XY99"));
   check("PPLB: b QR", /b\d+,\d+,Q,/.test(pplb));
   check("PPLB: P2 (kopya)", pplb.includes("P2"));
 
@@ -45,7 +47,7 @@ async function main() {
   check("ZPL: ^XA…^XZ frame", zpl.includes("^XA") && zpl.trimEnd().endsWith("^XZ"));
   check("ZPL: ^PW + ^LL", /\^PW\d+/.test(zpl) && /\^LL\d+/.test(zpl));
   check("ZPL: ^FO/^A0N metin + ürün", /\^FO\d+,\d+\^A0N,\d+,\d+\^FDPATOS\^FS/.test(zpl));
-  check("ZPL: ^BCN Code128 + barkod", zpl.includes("^BCN") && zpl.includes("TEKS-20260615-XY99"));
+  check("ZPL: ^BCN Code128 + barkod", zpl.includes("^BCN") && zpl.includes("TEKS20260615XY99"));
   check("ZPL: ^BQN QR", zpl.includes("^BQN"));
   check("ZPL: ^PQ3 (kopya)", zpl.includes("^PQ3"));
 

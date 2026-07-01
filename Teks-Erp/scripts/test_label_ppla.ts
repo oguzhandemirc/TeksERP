@@ -21,7 +21,7 @@ const format: ResolvedLabelFormat = {
 };
 
 const payload = {
-  barcode: "TEKS-20260615-AB12CD34",
+  barcode: "TEKS20260615AB12CD34",
   status: "WAREHOUSE",
   qualityGrade: "1.KALITE",
   widthCm: 150,
@@ -46,7 +46,7 @@ function main() {
   check("ağırlık gömülü", ppla.includes("Agirlik: 42.5 kg"));
   check("müşteri gömülü", ppla.includes("Musteri: ACME TEKSTIL"));
   check("parti gömülü", ppla.includes("Parti: P-260615-001"));
-  check("barkod değeri gömülü", ppla.includes("TEKS-20260615-AB12CD34"));
+  check("barkod değeri gömülü", ppla.includes("TEKS20260615AB12CD34"));
   check("Code128 kaydı (1e..)", /1e\d{2}\d{4}\d{4}\d{4}TEKS/.test(ppla));
   check("QR kaydı (1W1c..)", ppla.includes("1W1c"));
   check("etiket boyu komutu (STX M)", ppla.includes(`${STX}M`));

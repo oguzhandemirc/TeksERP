@@ -26,7 +26,9 @@ function check(label: string, ok: boolean, extra = "") {
 }
 
 const format: ResolvedLabelFormat = {
-  widthMm: 100, heightMm: 148, marginMm: 3, orientation: "PORTRAIT",
+  widthMm: 100, heightMm: 148, marginMm: 3,
+  marginTopMm: 3, marginRightMm: 3, marginBottomMm: 3, marginLeftMm: 3, gapMm: 3,
+  orientation: "PORTRAIT",
   dpi: 203, language: "PPLA", profileId: "p1", source: "machine",
 };
 
@@ -64,11 +66,12 @@ function main() {
   check("ZPL: sıra (Musteri < Kalite)", zpl.indexOf("ACME") < zpl.indexOf("1.KALITE"));
 
   // 3. Bold — itemName (headline=lg → font4) bold mult 22 (PPLA), mul 2 (PPLB)
-  check("PPLA: bold itemName → font4 mult22", /1422000\d{8}PATOS/.test(ppla));
-  check("PPLB: bold itemName → font4 mul2", /0,4,2,2,N,"PATOS"/.test(pplb));
+  //    Faz-1: label doluysa headline alanlar da "Etiket: değer" basar → "Urun: PATOS".
+  check("PPLA: bold itemName → font4 mult22", /1422000\d{8}Urun: PATOS/.test(ppla));
+  check("PPLB: bold itemName → font4 mul2", /0,4,2,2,N,"Urun: PATOS"/.test(pplb));
 
-  // 4. Font — lengthMeters xl → PPLA font 5 (mult 11, bold değil)
-  check("PPLA: xl metraj → font5", /1511000\d{8}320 m/.test(ppla));
+  // 4. Font — lengthMeters xl → PPLA font 5 (mult 11, bold değil); label "Metraj"
+  check("PPLA: xl metraj → font5", /1511000\d{8}Metraj: 320 m/.test(ppla));
 
   // 5. Custom etiket — row alanı "Etiket: değer" (Musteri: ACME)
   check("PPLA: custom label row", ppla.includes("Musteri: ACME"));

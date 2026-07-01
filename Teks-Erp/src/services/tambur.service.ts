@@ -86,7 +86,8 @@ async function resolveCutLabelIntent(data: {
 
 /**
  * Generate a barcode for a Tambur-born physical roll (open fabric child).
- * Open fabric'ın parent barkodu olmadığı için TEKS-YYYYMMDD-XXXX formatı kullanılır.
+ * Open fabric'ın parent barkodu olmadığı için TEKSYYYYMMDDXXXXXXXX formatı kullanılır
+ * (ayraçsız — el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu).
  */
 function generateTamburChildBarcode(): string {
   const now = new Date();
@@ -95,7 +96,7 @@ function generateTamburChildBarcode(): string {
     (now.getMonth() + 1).toString().padStart(2, "0") +
     now.getDate().toString().padStart(2, "0");
   const randomPart = uuidv4().replace(/-/g, "").substring(0, 8).toUpperCase();
-  return `TEKS-${datePart}-${randomPart}`;
+  return `TEKS${datePart}${randomPart}`;
 }
 
 interface ErrorDecision {
@@ -1644,8 +1645,8 @@ export class TamburService {
     if (!(data.cutLength > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
     }
-    if (data.clientChildBarcode && !/^TEKS-\d{8}-[0-9A-F]{8}$/.test(data.clientChildBarcode)) {
-      throw AppError.badRequest("Geçersiz clientChildBarcode formatı (TEKS-YYYYMMDD-XXXXXXXX)");
+    if (data.clientChildBarcode && !/^TEKS\d{8}[0-9A-F]{8}$/.test(data.clientChildBarcode)) {
+      throw AppError.badRequest("Geçersiz clientChildBarcode formatı (TEKSYYYYMMDDXXXXXXXX)");
     }
 
     const parent = await prisma.roll.findUnique({
@@ -2112,8 +2113,8 @@ export class TamburService {
     if (!(data.lengthMeters > 0)) {
       throw AppError.badRequest("Kesim metresi pozitif olmalı");
     }
-    if (data.clientChildBarcode && !/^TEKS-\d{8}-[0-9A-F]{8}$/.test(data.clientChildBarcode)) {
-      throw AppError.badRequest("Geçersiz clientChildBarcode formatı (TEKS-YYYYMMDD-XXXXXXXX)");
+    if (data.clientChildBarcode && !/^TEKS\d{8}[0-9A-F]{8}$/.test(data.clientChildBarcode)) {
+      throw AppError.badRequest("Geçersiz clientChildBarcode formatı (TEKSYYYYMMDDXXXXXXXX)");
     }
 
     const parent = await prisma.roll.findUnique({

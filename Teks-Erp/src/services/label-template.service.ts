@@ -338,7 +338,15 @@ export class LabelTemplateService {
   async getFieldsPreview(
     kind: LabelKind,
     fields: TemplateField[],
-  ): Promise<ApiResponse<{ mode: "svg" | "html" | "text"; language: PrinterLanguage; content: string }>> {
+  ): Promise<
+    ApiResponse<{
+      mode: "svg" | "html" | "text";
+      language: PrinterLanguage;
+      content: string;
+      /** Ham yazıcı kodu — "Kod" görünümü için (alan değişimi → koda etkisi görünür). */
+      native: string;
+    }>
+  > {
     const payload = mockPayload(kind);
     const template = { kind, fields, rawCode: null } as unknown as LabelTemplate;
     const format = await resolveLabelFormat({ kind });
@@ -347,12 +355,13 @@ export class LabelTemplateService {
     const input = { payload, template, barcodeSvg, qrSvg, copies: 1, format };
     const language = format.language;
     if (language === PrinterLanguage.RASTER_HTML) {
-      return { success: true, data: { mode: "html", language, content: renderLabel(language, input).content } };
+      const html = renderLabel(language, input).content;
+      return { success: true, data: { mode: "html", language, content: html, native: html } };
     }
     const native = renderLabel(language, input).content;
     const svg = renderNativePreviewSvg(language, native, mmToDots(format.widthMm, format.dpi));
-    if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg) } };
-    return { success: true, data: { mode: "text", language, content: native } };
+    if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), native } };
+    return { success: true, data: { mode: "text", language, content: native, native } };
   }
 }
 

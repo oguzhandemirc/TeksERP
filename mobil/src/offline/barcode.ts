@@ -1,5 +1,6 @@
 // Client-side TEKS barkod üretici (offline KK1 girişi için).
-// Backend'in generateBarcode() ile aynı format: TEKS-YYYYMMDD-XXXXXXXX
+// Backend'in generateBarcode() ile aynı format: TEKSYYYYMMDDXXXXXXXX (ayraçsız —
+// el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu).
 // (8 hex char). UUID benzeri rastgelelik — collision riski pratikte sıfır
 // (günlük 4 milyar permutasyon).
 //
@@ -16,7 +17,7 @@ export function generateClientBarcode(): string {
   const randomPart = Array.from({ length: 8 }, () =>
     Math.floor(Math.random() * 16).toString(16).toUpperCase(),
   ).join('');
-  return `TEKS-${datePart}-${randomPart}`;
+  return `TEKS${datePart}${randomPart}`;
 }
 
 // Client-üretimi UUID v4 — offline kayıtların (örn. RollError/leke) backend id'si.

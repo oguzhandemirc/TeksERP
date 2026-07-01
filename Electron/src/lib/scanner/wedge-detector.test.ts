@@ -34,15 +34,15 @@ function typeString(
 describe("wedge-detector — burst tespiti", () => {
   it("hızlı tuşlar + Enter → scan emit eder", () => {
     const det = createWedgeDetector();
-    const { result } = typeString(det, "TEKS-20260615-AB12CD34", 20);
+    const { result } = typeString(det, "TEKS20260615AB12CD34", 20);
     expect(result).not.toBeNull();
-    expect(result!.code).toBe("TEKS-20260615-AB12CD34");
-    expect(result!.charCount).toBe(22);
+    expect(result!.code).toBe("TEKS20260615AB12CD34");
+    expect(result!.charCount).toBe(20);
   });
 
   it("yavaş (insan) yazım + Enter → null", () => {
     const det = createWedgeDetector();
-    const { result } = typeString(det, "TEKS-20260615-AB12CD34", 150);
+    const { result } = typeString(det, "TEKS20260615AB12CD34", 150);
     expect(result).toBeNull();
   });
 
@@ -116,9 +116,9 @@ describe("wedge-detector — burst tespiti", () => {
 
   it("Tab terminator (config) ile çalışır", () => {
     const det = createWedgeDetector({ ...DEFAULT_WEDGE_CONFIG, terminator: "Tab" });
-    const { result } = typeString(det, "TEKS-20260615-AB12CD34", 20, 1000, "Tab");
+    const { result } = typeString(det, "TEKS20260615AB12CD34", 20, 1000, "Tab");
     expect(result).not.toBeNull();
-    expect(result!.code).toBe("TEKS-20260615-AB12CD34");
+    expect(result!.code).toBe("TEKS20260615AB12CD34");
   });
 
   it("reset sonrası temiz başlar", () => {

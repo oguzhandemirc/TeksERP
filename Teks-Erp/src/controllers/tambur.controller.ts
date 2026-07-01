@@ -68,8 +68,8 @@ const cutOpenFabricSchema = z.object({
   // kalıcı. İkisi de boş = stok (müşterisiz). Var-mı/isActive servis katmanında.
   targetOrderLineId: z.string().uuid().optional().nullable(),
   targetCustomerId: z.string().uuid().optional().nullable(),
-  // Offline/retry idempotency: client-üretimi child barkod (TEKS-YYYYMMDD-XXXXXXXX).
-  clientChildBarcode: z.string().regex(/^TEKS-\d{8}-[0-9A-F]{8}$/).optional(),
+  // Offline/retry idempotency: client-üretimi child barkod (TEKSYYYYMMDDXXXXXXXX).
+  clientChildBarcode: z.string().regex(/^TEKS\d{8}[0-9A-F]{8}$/).optional(),
 });
 
 const finalizeOpenFabricSchema = z.object({
@@ -96,8 +96,8 @@ const cutWarehouseRollSchema = z.object({
   // child (üretime devam) için stok'a düşülür (servis WAREHOUSE guard'ıyla).
   targetOrderLineId: z.string().uuid().optional().nullable(),
   targetCustomerId: z.string().uuid().optional().nullable(),
-  // Offline/retry idempotency: client-üretimi child barkod (TEKS-YYYYMMDD-XXXXXXXX).
-  clientChildBarcode: z.string().regex(/^TEKS-\d{8}-[0-9A-F]{8}$/).optional(),
+  // Offline/retry idempotency: client-üretimi child barkod (TEKSYYYYMMDDXXXXXXXX).
+  clientChildBarcode: z.string().regex(/^TEKS\d{8}[0-9A-F]{8}$/).optional(),
 });
 
 const finalizeWarehouseCutSchema = z.object({

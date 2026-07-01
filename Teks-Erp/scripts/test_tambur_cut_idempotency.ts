@@ -40,7 +40,7 @@ let ITEM = "",
 const woIds: string[] = [];
 const parentIds: string[] = [];
 let seq = 0;
-const bc = () => `TEKS-20260623-${(10000000 + seq++).toString(16).toUpperCase().padStart(8, "0").slice(-8)}`;
+const bc = () => `TEKS20260623${(10000000 + seq++).toString(16).toUpperCase().padStart(8, "0").slice(-8)}`;
 
 async function resolveFixtures(): Promise<void> {
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS").id;

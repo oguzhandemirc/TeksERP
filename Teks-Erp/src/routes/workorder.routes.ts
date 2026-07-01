@@ -344,7 +344,7 @@ router.post("/", verifyToken, requirePermission("workorder:write"), controller.c
  *               rollBarcodes:
  *                 type: array
  *                 items: { type: string }
- *                 example: ["TEKS-20260607-A1B2C3D4", "TEKS-20260607-E5F6G7H8"]
+ *                 example: ["TEKS20260607A1B2C3D4", "TEKS20260607E5F6G7H8"]
  *               routeTemplateId: { type: string, format: uuid }
  *               targetItemId:    { type: string, format: uuid }
  *               targetColorId:   { type: string, format: uuid, nullable: true }

@@ -31,7 +31,7 @@ describe("verifyBarcode (RK) + verifyPrefixedBarcode", () => {
   });
   it("bozuk format reddedilir", () => {
     expect(verifyBarcode("RK-2604-9F2K3P")).toBe(false);
-    expect(verifyBarcode("TEKS-20260615-AB12CD34")).toBe(false);
+    expect(verifyBarcode("TEKS20260615AB12CD34")).toBe(false);
   });
   it("SW prefix checksum doğrular", () => {
     expect(verifyPrefixedBarcode("SW", "SW-2604-5A3Z9B-1")).toBe(true);

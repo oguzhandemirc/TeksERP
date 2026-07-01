@@ -176,15 +176,19 @@ export const labelTemplateService = {
       })
       .then((r) => r.data.data.code),
 
-  /** "Alanlar" canlı önizlemesi — verilen alanları AKTİF DİLDE (WYSIWYG). */
+  /** "Alanlar" canlı önizlemesi — verilen alanları AKTİF DİLDE (WYSIWYG) + ham kod. */
   fieldsPreview: (
     kind: LabelKind,
     fields: TemplateField[],
-  ): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string }> =>
+  ): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string }> =>
     apiClient
-      .post<ApiResponse<{ mode: "svg" | "html" | "text"; language: string; content: string }>>(
-        "/api/label-templates/preview",
-        { kind, fields },
-      )
+      .post<
+        ApiResponse<{
+          mode: "svg" | "html" | "text";
+          language: string;
+          content: string;
+          native: string;
+        }>
+      >("/api/label-templates/preview", { kind, fields })
       .then((r) => r.data.data),
 };
