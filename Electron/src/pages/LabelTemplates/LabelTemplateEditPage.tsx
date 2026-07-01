@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Save } from "lucide-react";
+import { Save, Printer } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import { FieldsPanel } from "./FieldsPanel";
 import { LabelLayoutControls } from "./LabelLayoutControls";
 import { LabelPreview } from "./LabelPreview";
 import { RawCodePanel } from "./RawCodePanel";
+import { TemplateTestPrintDialog } from "./TemplateTestPrintDialog";
 
 export function LabelTemplateEditPage() {
   const { id } = useParams<{ id: string }>();
@@ -51,6 +52,7 @@ export function LabelTemplateEditPage() {
   const [lineStepMm, setLineStepMm] = useState<number | null>(null);
   const [qrScale, setQrScale] = useState<number | null>(null);
   const [lengthBanner, setLengthBanner] = useState(false);
+  const [testPrintOpen, setTestPrintOpen] = useState(false);
 
   useEffect(() => {
     if (template) {
@@ -136,16 +138,29 @@ export function LabelTemplateEditPage() {
         description={template ? `${labelKindLabels[template.kind]} — "Alanlar" sekmesinde tasarla ya da "Kod (uzman)" sekmesinde kendi yazıcı kodunu yaz.` : "Yükleniyor…"}
         onBack={() => navigate(backPath)}
         actions={
-          <Button
-            type="button"
-            size="sm"
-            disabled={saveMut.isPending || !name.trim() || loading}
-            onClick={() => saveMut.mutate()}
-            className="gap-1"
-          >
-            <Save className="h-4 w-4" />
-            {saveMut.isPending ? "Kaydediliyor..." : "Kaydet"}
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || orderedFields.filter((f) => f.isVisible).length === 0}
+              onClick={() => setTestPrintOpen(true)}
+              className="gap-1"
+              title="Şu anki tasarımı örnek veriyle yazıcıya bas (kaydetmeden)"
+            >
+              <Printer className="h-4 w-4" /> Test Baskısı
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={saveMut.isPending || !name.trim() || loading}
+              onClick={() => saveMut.mutate()}
+              className="gap-1"
+            >
+              <Save className="h-4 w-4" />
+              {saveMut.isPending ? "Kaydediliyor..." : "Kaydet"}
+            </Button>
+          </>
         }
       />
 
@@ -231,6 +246,18 @@ export function LabelTemplateEditPage() {
           </div>
         )}
       </div>
+
+      {template && (
+        <TemplateTestPrintDialog
+          open={testPrintOpen}
+          onOpenChange={setTestPrintOpen}
+          kind={template.kind}
+          fields={orderedFields}
+          lineStepMm={lineStepMm}
+          qrScale={qrScale}
+          lengthBanner={lengthBanner}
+        />
+      )}
     </div>
   );
 }
