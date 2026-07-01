@@ -17,7 +17,17 @@ import { AuditService } from "./audit.service";
 import type { LabelPayload } from "./label.service";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
+import { renderNativePreviewSvg } from "./helpers/native-preview";
 import type { ApiResponse } from "../types/api.types";
+
+/** Görsel SVG'yi ekranda ortalayıp sığdıran HTML kabuk (iframe içeriği). */
+function wrapSvgPreview(svg: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8"/><style>
+html{background:#eef2f7}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:12px}
+svg{background:#fff;box-shadow:0 2px 12px rgba(15,23,42,0.18);max-width:100%;height:auto}
+</style></head><body>${svg}</body></html>`;
+}
 
 const SAMPLE_BC = "TEKS-ORNEK-0001";
 
@@ -175,5 +185,31 @@ export class LabelFormatProfileService extends BaseService {
     if (!profile) throw AppError.notFound("Boyut profili bulunamadı");
     const input = await this.buildSampleInput(id, kind);
     return { success: true, data: { html: renderLabel(PrinterLanguage.RASTER_HTML, input).content } };
+  }
+
+  /**
+   * WYSIWYG önizleme — AKTİF DİLDE. Native dil (PPLB) için gerçek komutları görsele
+   * çevirir (mode="svg", baskıyla birebir); çizicisi olmayan dil ya da HTML için
+   * HTML motoruna düşer (mode="html", yaklaşık). Frontend content'i iframe'ler +
+   * language ile rozet gösterir.
+   */
+  async getSamplePreview(
+    id: string,
+    kind: LabelKind = LabelKind.ROLL_RAW,
+  ): Promise<ApiResponse<{ mode: "svg" | "html" | "text"; language: PrinterLanguage; content: string }>> {
+    const profile = await prisma.labelFormatProfile.findUnique({ where: { id } });
+    if (!profile) throw AppError.notFound("Boyut profili bulunamadı");
+    const input = await this.buildSampleInput(id, kind);
+    const language = input.format.language;
+    // HTML dili → görsel HTML zaten baskının kendisi (birebir).
+    if (language === PrinterLanguage.RASTER_HTML) {
+      return { success: true, data: { mode: "html", language, content: renderLabel(language, input).content } };
+    }
+    // Native → gerçek komutları çiz (birebir). Çizilemezse (çizici yok / geçersiz
+    // raw-code) HAM KOMUTU göster — yanıltıcı farklı düzen yerine "basılan tam bu".
+    const native = renderLabel(language, input).content;
+    const svg = renderNativePreviewSvg(language, native);
+    if (svg) return { success: true, data: { mode: "svg", language, content: wrapSvgPreview(svg) } };
+    return { success: true, data: { mode: "text", language, content: native } };
   }
 }

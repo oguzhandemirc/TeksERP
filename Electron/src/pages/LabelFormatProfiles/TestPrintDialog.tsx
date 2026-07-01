@@ -58,12 +58,14 @@ export function TestPrintDialog({ profileId, profileName, onOpenChange }: Props)
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const htmlQ = useQuery({
-    queryKey: ["format-profile-sample", profileId, kind],
-    queryFn: () => labelFormatProfileService.sampleHtml(profileId!, kind),
+  const previewQ = useQuery({
+    queryKey: ["format-profile-preview", profileId, kind],
+    queryFn: () => labelFormatProfileService.samplePreview(profileId!, kind),
     enabled: open,
     staleTime: 0,
   });
+  const preview = previewQ.data;
+  const exact = preview?.mode === "svg" || preview?.mode === "html";
 
   // Ortak gönderim: seçilen türün örnek native'ini çek + yazıcıya (yerel/ağ) gönder.
   const doSend = async (transport: "cups" | "serial" | "tcp", target: string, baudRate?: number) => {
@@ -102,32 +104,51 @@ export function TestPrintDialog({ profileId, profileName, onOpenChange }: Props)
           </DialogDescription>
         </DialogHeader>
 
-        <div className="w-56">
-          <label className="text-xs text-muted-foreground">Etiket türü</label>
-          <Select value={kind} onValueChange={(v) => setKind(v as Kind)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {KINDS.map((k) => (
-                <SelectItem key={k.value} value={k.value}>
-                  {k.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div className="w-56">
+            <label className="text-xs text-muted-foreground">Etiket türü</label>
+            <Select value={kind} onValueChange={(v) => setKind(v as Kind)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {KINDS.map((k) => (
+                  <SelectItem key={k.value} value={k.value}>
+                    {k.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {preview && (
+            <div
+              className={`rounded-md border px-2 py-1 text-[11px] ${
+                exact
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                  : "border-amber-300 bg-amber-50 text-amber-800"
+              }`}
+              title={exact ? "Önizleme, yazıcıya giden çıktının aynısıdır" : "Bu dil/kod görsel çizilemedi; ham komut gösteriliyor"}
+            >
+              Aktif dil: <strong>{preview.language}</strong> ·{" "}
+              {preview.mode === "text" ? "ham komut (görsel yok)" : "önizleme = baskı"}
+            </div>
+          )}
         </div>
 
-        {htmlQ.isLoading ? (
+        {previewQ.isLoading ? (
           <Skeleton className="h-[420px] w-full" />
-        ) : htmlQ.isError ? (
+        ) : previewQ.isError ? (
           <div className="rounded-md border border-dashed p-6 text-center text-sm text-destructive">
-            Örnek etiket alınamadı: {(htmlQ.error as Error).message}
+            Önizleme alınamadı: {(previewQ.error as Error).message}
           </div>
+        ) : preview?.mode === "text" ? (
+          <pre className="h-[420px] w-full overflow-auto whitespace-pre-wrap break-all rounded border bg-muted/20 p-3 font-mono text-[11px] leading-relaxed">
+            {preview.content}
+          </pre>
         ) : (
           <iframe
             title="Örnek etiket"
-            srcDoc={htmlQ.data ?? ""}
+            srcDoc={preview?.content ?? ""}
             sandbox="allow-same-origin allow-modals"
             className="h-[420px] w-full rounded border bg-white"
           />

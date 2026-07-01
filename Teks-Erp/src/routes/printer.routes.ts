@@ -128,3 +128,20 @@ labelFormatProfileRouter.get(
     } catch (e) { next(e); }
   },
 );
+
+/**
+ * @openapi
+ * /api/label-format-profiles/{id}/sample-preview:
+ *   get: { tags: [Printers], summary: WYSIWYG önizleme — aktif dilde (PPLB→SVG birebir, diğerleri HTML), security: [{ bearerAuth: [] }], responses: { 200: { description: "{ mode, language, content }" } } }
+ */
+labelFormatProfileRouter.get(
+  "/:id/sample-preview",
+  verifyToken,
+  requirePermission("station:read"),
+  async (req, res, next) => {
+    try {
+      const result = await labelFormatProfileService.getSamplePreview(req.params.id as string, parseKind(req.query.kind));
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  },
+);

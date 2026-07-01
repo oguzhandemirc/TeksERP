@@ -6,6 +6,7 @@ import {
   labelKindLabels,
   labelTemplateService,
 } from "@/services/labelTemplateService";
+import { featureFlagService, PRINTER_LANGUAGE_LABELS } from "@/services/featureFlagService";
 
 interface Props {
   kind: LabelKind;
@@ -37,15 +38,29 @@ export function LabelPreview({ kind, fields }: Props) {
   });
   const sizeClass: Record<string, string> = { sm: "text-[10px]", md: "text-xs", lg: "text-sm", xl: "text-base" };
 
+  const flagsQ = useQuery({
+    queryKey: ["feature-flags", "printerLanguage"],
+    queryFn: () => featureFlagService.get(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const activeLang = flagsQ.data?.data?.printerLanguage;
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-1">
         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Canlı Önizleme
         </div>
-        <Badge variant="muted" className="text-[10px]">
-          {labelKindLabels[kind]}
-        </Badge>
+        <div className="flex items-center gap-1">
+          {activeLang && (
+            <Badge variant="outline" className="text-[10px]" title="Bu tasarım baskıda bu dile derlenir">
+              Aktif dil: {PRINTER_LANGUAGE_LABELS[activeLang] ?? activeLang}
+            </Badge>
+          )}
+          <Badge variant="muted" className="text-[10px]">
+            {labelKindLabels[kind]}
+          </Badge>
+        </div>
       </div>
 
       <div className="rounded-lg border-2 border-dashed bg-background p-2 shadow-sm">

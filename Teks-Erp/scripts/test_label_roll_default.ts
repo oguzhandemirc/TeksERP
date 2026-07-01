@@ -4,7 +4,7 @@
 // LabelFormatProfileService.setRollDefault atomik + getSampleNative.
 // Çalıştır: npx tsx scripts/test_label_roll_default.ts
 // =============================================================================
-import { PrinterLanguage } from "@prisma/client";
+import { PrinterLanguage, LabelKind } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { resolveLabelFormat } from "../src/services/helpers/label-format.resolver";
 import { LabelFormatProfileService } from "../src/services/printer.service";
@@ -44,11 +44,13 @@ async function main() {
   check("aynı anda EN FAZLA bir top varsayılanı", trues === 1, `${trues} adet`);
   check("KARTELA hâlâ 100×58 (etkilenmedi)", (await resolveLabelFormat({ kind: "SWATCH" })).heightMm === 58);
 
-  // 5) getSampleNative → PPLB + 100×50 geometri (restore sonrası)
+  // 5) getSampleNative → explicit profileId geometriyi verir (100×50 → Q400), kind
+  //    yalnız şablonu/payload'u seçer. NOT: ROLL şablonu rawCode taşıyabilir (auto'yu
+  //    ezer) → geometri kontrolü için rawCode'suz SWATCH şablonu kullan.
   await svc.setRollDefault(roll50.id); // geri al
-  const sample = await svc.getSampleNative(roll50.id, PrinterLanguage.PPLB);
+  const sample = await svc.getSampleNative(roll50.id, PrinterLanguage.PPLB, LabelKind.SWATCH);
   check("getSampleNative dil=PPLB", sample.data.language === "PPLB");
-  check("getSampleNative 100×50 (Q400)", sample.data.content.includes("Q400"), sample.data.content.split("\n").slice(0, 3).join(" "));
+  check("getSampleNative profil geometrisi → Q400 (100×50)", sample.data.content.includes("Q400"), sample.data.content.split("\n").slice(0, 3).join(" "));
   check("getSampleNative örnek barkod içerir", sample.data.content.includes("TEKS-ORNEK-0001"));
 
   const restored = await resolveLabelFormat({ kind: "ROLL_FINISHED" });

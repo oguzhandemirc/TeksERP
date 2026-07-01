@@ -1,8 +1,16 @@
 import { createCrudService } from "@/services/crudService";
 import apiClient from "@/services/apiClient";
+import type { ApiResponse } from "@/types/api";
 import type { LabelFormatProfile } from "./types";
 
 const BASE = "/api/label-format-profiles";
+
+export interface SamplePreview {
+  /** svg/html = görsel (iframe); text = ham komut (monospace). */
+  mode: "svg" | "html" | "text";
+  language: string;
+  content: string;
+}
 
 export const labelFormatProfileService = {
   ...createCrudService<LabelFormatProfile>(BASE),
@@ -30,4 +38,10 @@ export const labelFormatProfileService = {
         transformResponse: [(d) => d],
       })
       .then((r) => r.data),
+
+  /** WYSIWYG önizleme — aktif dilde (PPLB→svg birebir, HTML dili→html, çizilemeyen→text). */
+  samplePreview: (id: string, kind: string): Promise<SamplePreview> =>
+    apiClient
+      .get<ApiResponse<SamplePreview>>(`${BASE}/${id}/sample-preview`, { params: { kind } })
+      .then((r) => r.data.data),
 };
