@@ -68,7 +68,7 @@ deviceAdminRouter.post("/:id/approve", verifyToken, requirePermission("admin:set
 /**
  * @openapi
  * /api/admin/devices/{id}/assign-hardware:
- *   post: { tags: [Admin], summary: Cihaza donanım ata (body peripheralIds[]), security: [{ bearerAuth: [] }] }
+ *   post: { tags: [Admin], summary: "Cihaza donanım ata (body peripheralIds[])", security: [{ bearerAuth: [] }] }
  */
 deviceAdminRouter.post("/:id/assign-hardware", verifyToken, requirePermission("admin:settings"), DeviceController.assignHardware);
 

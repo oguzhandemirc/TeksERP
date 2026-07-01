@@ -92,8 +92,8 @@ router.get("/default-code", verifyToken, requirePermission("label-template:read"
  * /api/label-templates/preview:
  *   post:
  *     tags: [Label Templates]
- *     summary: "Alanlar" canlı önizlemesi — verilen alanları AKTİF DİLDE render (WYSIWYG)
- *     description: Body { kind, fields }. PPLB→svg (birebir), HTML→html, çizilemeyen→text.
+ *     summary: '"Alanlar" canlı önizlemesi — verilen alanları AKTİF DİLDE render (WYSIWYG)'
+ *     description: 'Body { kind, fields, lineStepMm?, qrScale? }. PPLB→svg (birebir), HTML→html, çizilemeyen→text.'
  *     security: [{ bearerAuth: [] }]
  */
 router.post("/preview", verifyToken, requirePermission("label-template:read"), controller.fieldsPreview);
