@@ -2493,6 +2493,8 @@ model LabelTemplate {
   lineStepMm Decimal? @db.Decimal(4, 1)
   /// QR modül büyütme (dots/modül; PPLB `s`, ZPL/PPLA mag) — boşsa varsayılan (5).
   qrScale    Int?
+  /// Sağ kenarda dikey metraj bandı (siyah zemin/beyaz değer, döndürülmüş) — opsiyonel.
+  lengthBanner Boolean?
 
   peripheralRoutes PeripheralTemplateRoute[]
 

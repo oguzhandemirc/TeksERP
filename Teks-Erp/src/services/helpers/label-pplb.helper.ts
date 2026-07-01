@@ -50,6 +50,18 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
   const gap = d(gapMm);
 
   const bc = payload.barcode ? eplData(payload.barcode) : "";
+
+  // Ekstra: sağ kenar dikey metraj bandı (opsiyonel). Aktifse sağ şerit rezerve edilir
+  // → içerik (QR/metin/barkod) banda girmez. SWATCH'ta metraj yok → kapalı.
+  const bannerOn =
+    template?.lengthBanner === true &&
+    payload.lengthMeters != null &&
+    String(payload.lengthMeters).trim() !== "" &&
+    payload.kind !== "SWATCH";
+  const bannerW = bannerOn ? d(11) : 0;
+  const bannerX = right - bannerW;
+  const contentRight = bannerOn ? bannerX - d(2) : right;
+
   const lines: string[] = [];
 
   lines.push("N"); // görüntü buffer'ını temizle
@@ -65,7 +77,7 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
   // --- Sol üst: QR. Ayak izi = (modül+sessiz)×qrScale, içerik genişliğinin ≤%45'i ---
   let textX = left;
   if (bc) {
-    const qrPx = Math.min(qrFootprintDots(bc.length, qrScale), Math.round((right - left) * 0.45));
+    const qrPx = Math.min(qrFootprintDots(bc.length, qrScale), Math.round((contentRight - left) * 0.45));
     lines.push(`b${left},${top},Q,m2,s${qrScale},"${bc}"`);
     textX = left + qrPx + d(2); // metin QR'ı net geçer → yatay çakışma yok
   }
@@ -84,6 +96,21 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
   // --- Alt barkod (okunur satır yazıcı tarafından çizilir: human=B) ---
   if (bc) {
     lines.push(`B${left},${bcTop},0,1,2,3,${bcBars},B,"${bc}"`);
+  }
+
+  // --- Ekstra: sağ dikey metraj bandı — siyah şerit (LO) + beyaz döndürülmüş değer (A rot1,R) ---
+  if (bannerOn) {
+    const val = eplData(String(payload.lengthMeters)); // yalnız değer
+    const f = EPL_FONT.xl; // font4 (14×24) — büyük, okunur
+    const mul = 3;
+    const gh = f.h * mul; // döndürülünce yatay genişlik (72 < banner 88)
+    const textLen = val.length * f.w * mul; // döndürülünce dikey uzunluk
+    const bannerH = bottomEdge - top;
+    lines.push(`LO${bannerX},${top},${bannerW},${bannerH}`); // siyah şerit
+    // rotation 1 (90° CW): metin (x,y)'den aşağı uzar, glif sola taşar → banda ortala
+    const tx = bannerX + Math.round(bannerW / 2 + gh / 2);
+    const ty = top + Math.round((bannerH - textLen) / 2);
+    lines.push(`A${tx},${ty},1,${f.code},${mul},${mul},R,"${val}"`);
   }
 
   lines.push(`P${clampCopies(copies)}`); // kopya adedi → bas

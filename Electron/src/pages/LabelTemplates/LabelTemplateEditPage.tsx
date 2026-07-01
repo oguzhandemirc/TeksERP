@@ -50,6 +50,7 @@ export function LabelTemplateEditPage() {
   const [rawCode, setRawCode] = useState<RawCodeMap>({});
   const [lineStepMm, setLineStepMm] = useState<number | null>(null);
   const [qrScale, setQrScale] = useState<number | null>(null);
+  const [lengthBanner, setLengthBanner] = useState(false);
 
   useEffect(() => {
     if (template) {
@@ -62,6 +63,7 @@ export function LabelTemplateEditPage() {
       setRawCode(template.rawCode ?? {});
       setLineStepMm(template.lineStepMm ?? null);
       setQrScale(template.qrScale ?? null);
+      setLengthBanner(template.lengthBanner ?? false);
     }
   }, [template]);
 
@@ -82,6 +84,7 @@ export function LabelTemplateEditPage() {
         rawCode,
         lineStepMm,
         qrScale,
+        lengthBanner,
       }),
     onSuccess: () => {
       toast.success("Şablon kaydedildi.");
@@ -179,14 +182,17 @@ export function LabelTemplateEditPage() {
                     <LabelLayoutControls
                       lineStepMm={lineStepMm}
                       qrScale={qrScale}
+                      lengthBanner={lengthBanner}
                       onLineStepMm={setLineStepMm}
                       onQrScale={setQrScale}
+                      onLengthBanner={setLengthBanner}
                     />
                     <LabelPreview
                       kind={template.kind}
                       fields={orderedFields}
                       lineStepMm={lineStepMm}
                       qrScale={qrScale}
+                      lengthBanner={lengthBanner}
                     />
                   </div>
                 </div>

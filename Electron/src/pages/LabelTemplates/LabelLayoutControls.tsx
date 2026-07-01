@@ -3,13 +3,22 @@ import { Input } from "@/components/ui/input";
 interface Props {
   lineStepMm: number | null;
   qrScale: number | null;
+  lengthBanner: boolean;
   onLineStepMm: (v: number | null) => void;
   onQrScale: (v: number | null) => void;
+  onLengthBanner: (v: boolean) => void;
 }
 
 /** Şablon-başına yerleşim ayarları — satır aralığı (mm) + QR boyutu. Boş = varsayılan.
  *  Değişiklik canlı önizlemeye anında yansır (LabelPreview'a prop olarak geçer). */
-export function LabelLayoutControls({ lineStepMm, qrScale, onLineStepMm, onQrScale }: Props) {
+export function LabelLayoutControls({
+  lineStepMm,
+  qrScale,
+  lengthBanner,
+  onLineStepMm,
+  onQrScale,
+  onLengthBanner,
+}: Props) {
   const num = (s: string): number | null => {
     const t = s.trim();
     if (!t) return null;
@@ -50,6 +59,22 @@ export function LabelLayoutControls({ lineStepMm, qrScale, onLineStepMm, onQrSca
           />
         </label>
       </div>
+      <label className="flex cursor-pointer items-start gap-2 rounded border p-2">
+        <input
+          type="checkbox"
+          checked={lengthBanner}
+          onChange={(e) => onLengthBanner(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span className="text-[11px] leading-relaxed">
+          <span className="font-medium">Sağ dikey metraj bandı</span>
+          <span className="block text-[10px] text-muted-foreground">
+            En sağa siyah zemin + beyaz metraj değeri (döndürülmüş — kafayı yana çevirip
+            okunur). Yalnız değer. İçerik banda girmez.
+          </span>
+        </span>
+      </label>
+
       <p className="text-[10px] leading-relaxed text-muted-foreground">
         Boş = varsayılan. Satır aralığı = satırlar arası <strong>ek boşluk</strong> (yazı
         yüksekliğine eklenir → yazılar asla üst üste binmez); QR boyutu = modül büyütmesi

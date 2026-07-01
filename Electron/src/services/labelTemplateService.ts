@@ -54,6 +54,8 @@ export interface LabelTemplate {
   /** Yerleşim (şablon-başına, opsiyonel). Boş → font-türevli/varsayılan. */
   lineStepMm?: number | null;
   qrScale?: number | null;
+  /** Sağ kenar dikey metraj bandı (siyah zemin/beyaz değer). */
+  lengthBanner?: boolean | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +110,7 @@ export const labelTemplateService = {
       rawCode: RawCodeMap;
       lineStepMm: number | null;
       qrScale: number | null;
+      lengthBanner: boolean | null;
     }>,
   ): Promise<ApiResponse<LabelTemplate>> =>
     apiClient
@@ -186,7 +189,7 @@ export const labelTemplateService = {
   fieldsPreview: (
     kind: LabelKind,
     fields: TemplateField[],
-    layout?: { lineStepMm?: number | null; qrScale?: number | null },
+    layout?: { lineStepMm?: number | null; qrScale?: number | null; lengthBanner?: boolean | null },
   ): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string }> =>
     apiClient
       .post<

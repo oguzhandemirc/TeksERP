@@ -80,10 +80,12 @@ export function renderPplbToSvg(pplb: string): string | null {
     if ((m = ln.match(/^q(\d+)/))) { W = +m[1]; continue; }
     if ((m = ln.match(/^Q(\d+)/))) { H = +m[1]; continue; }
     // Metin: A x,y,rot,font,hMul,vMul,rev(N/R),"veri"
-    if ((m = ln.match(/^A(\d+),(\d+),\d+,(\d+),(\d+),(\d+),([NR]),"(.*)"$/))) {
-      const [, x, y, font, hMul, vMul, rev, text] = m;
+    if ((m = ln.match(/^A(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),([NR]),"(.*)"$/))) {
+      const [, x, y, rot, font, hMul, vMul, rev, text] = m;
       const fd = EPL_FONT_BY_CODE[font] ?? EPL_FONT_BY_CODE["2"];
-      els.push(svgTextCell(+x, +y, fd.w * (+hMul || 1), fd.h * (+vMul || 1), text, rev === "R"));
+      const cell = svgTextCell(+x, +y, fd.w * (+hMul || 1), fd.h * (+vMul || 1), text, rev === "R");
+      // EPL2 rotation 1/2/3 = 90/180/270° CW; SVG rotate CW (y-aşağı) ile eşleşir.
+      els.push(+rot ? `<g transform="rotate(${+rot * 90} ${x} ${y})">${cell}</g>` : cell);
       continue;
     }
     // QR: b x,y,Q,m<n>,s<mag>,"veri"

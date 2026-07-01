@@ -14,6 +14,7 @@ interface Props {
   /** Yerleşim — kaydetmeden canlı yansısın diye önizlemeye geçilir. */
   lineStepMm?: number | null;
   qrScale?: number | null;
+  lengthBanner?: boolean | null;
 }
 
 /**
@@ -22,13 +23,13 @@ interface Props {
  * olmayan native → ham komut metni. Test ekranı + Kod editörüyle tutarlı: hepsi
  * baskıya giden çıktının aynısını gösterir.
  */
-export function LabelPreview({ kind, fields, lineStepMm, qrScale }: Props) {
+export function LabelPreview({ kind, fields, lineStepMm, qrScale, lengthBanner }: Props) {
   const visibleCount = fields.filter((f) => f.isVisible).length;
   const [view, setView] = useState<"visual" | "code">("visual");
 
   const previewQ = useQuery({
-    queryKey: ["label-preview-active", kind, JSON.stringify(fields), lineStepMm ?? null, qrScale ?? null],
-    queryFn: () => labelTemplateService.fieldsPreview(kind, fields, { lineStepMm, qrScale }),
+    queryKey: ["label-preview-active", kind, JSON.stringify(fields), lineStepMm ?? null, qrScale ?? null, lengthBanner ?? null],
+    queryFn: () => labelTemplateService.fieldsPreview(kind, fields, { lineStepMm, qrScale, lengthBanner }),
     enabled: visibleCount > 0,
     staleTime: 0,
   });

@@ -29,8 +29,9 @@ const rawCodeSchema = z
   .partial();
 
 // Şablon-başına yerleşim ayarları — null = temizle (varsayılana dön).
-const lineStepMmSchema = z.number().min(1).max(30).nullable().optional();
+const lineStepMmSchema = z.number().min(0).max(20).nullable().optional();
 const qrScaleSchema = z.number().int().min(2).max(15).nullable().optional();
+const lengthBannerSchema = z.boolean().nullable().optional();
 
 const createSchema = z.object({
   name:       z.string().min(1).max(200),
@@ -41,6 +42,7 @@ const createSchema = z.object({
   rawCode:    rawCodeSchema.optional(),
   lineStepMm: lineStepMmSchema,
   qrScale:    qrScaleSchema,
+  lengthBanner: lengthBannerSchema,
 });
 
 const updateSchema = z.object({
@@ -51,6 +53,7 @@ const updateSchema = z.object({
   rawCode:    rawCodeSchema.optional(),
   lineStepMm: lineStepMmSchema,
   qrScale:    qrScaleSchema,
+  lengthBanner: lengthBannerSchema,
 });
 
 const previewRawSchema = z.object({
@@ -121,15 +124,16 @@ export class LabelTemplateController {
   /** "Alanlar" sekmesi canlı önizlemesi — verilen alanları AKTİF DİLDE render eder. */
   fieldsPreview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { kind, fields, lineStepMm, qrScale } = z
+      const { kind, fields, lineStepMm, qrScale, lengthBanner } = z
         .object({
           kind: z.nativeEnum(LabelKind),
           fields: z.array(fieldSchema),
           lineStepMm: lineStepMmSchema,
           qrScale: qrScaleSchema,
+          lengthBanner: lengthBannerSchema,
         })
         .parse(req.body);
-      const result = await this.service.getFieldsPreview(kind, fields, { lineStepMm, qrScale });
+      const result = await this.service.getFieldsPreview(kind, fields, { lineStepMm, qrScale, lengthBanner });
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

@@ -78,6 +78,7 @@ export interface LabelTemplateInput {
   /** Yerleşim (şablon-başına, opsiyonel; null = varsayılana dön). */
   lineStepMm?: number | null;
   qrScale?: number | null;
+  lengthBanner?: boolean | null;
 }
 
 export interface LabelTemplateUpdateInput {
@@ -88,6 +89,7 @@ export interface LabelTemplateUpdateInput {
   rawCode?: RawCodeMap;
   lineStepMm?: number | null;
   qrScale?: number | null;
+  lengthBanner?: boolean | null;
 }
 
 /** Boş/whitespace dil değerlerini at → { } = tüm diller otomatik üretim. */
@@ -173,6 +175,7 @@ export class LabelTemplateService {
           ...(input.rawCode ? { rawCode: normalizeRawCode(input.rawCode) as Prisma.InputJsonValue } : {}),
           lineStepMm: input.lineStepMm ?? null,
           qrScale: input.qrScale ?? null,
+          lengthBanner: input.lengthBanner ?? null,
         },
       });
     }).catch(rethrowDefaultConflict);
@@ -213,6 +216,7 @@ export class LabelTemplateService {
     if (input.rawCode !== undefined) data.rawCode = normalizeRawCode(input.rawCode) as Prisma.InputJsonValue;
     if (input.lineStepMm !== undefined) data.lineStepMm = input.lineStepMm;
     if (input.qrScale !== undefined) data.qrScale = input.qrScale;
+    if (input.lengthBanner !== undefined) data.lengthBanner = input.lengthBanner;
 
     const updated = await prisma.$transaction(async (tx) => {
       // isDefault=true'ya çekiliyorsa kind içindeki diğer default'ları düşür.
@@ -347,7 +351,7 @@ export class LabelTemplateService {
   async getFieldsPreview(
     kind: LabelKind,
     fields: TemplateField[],
-    layout?: { lineStepMm?: number | null; qrScale?: number | null },
+    layout?: { lineStepMm?: number | null; qrScale?: number | null; lengthBanner?: boolean | null },
   ): Promise<
     ApiResponse<{
       mode: "svg" | "html" | "text";
@@ -358,13 +362,14 @@ export class LabelTemplateService {
     }>
   > {
     const payload = mockPayload(kind);
-    // Yerleşim (satır aralığı + QR boyutu) canlı önizlemeye yansısın → template'e göm.
+    // Yerleşim (satır aralığı + QR + metraj bandı) canlı önizlemeye yansısın → template'e göm.
     const template = {
       kind,
       fields,
       rawCode: null,
       lineStepMm: layout?.lineStepMm ?? null,
       qrScale: layout?.qrScale ?? null,
+      lengthBanner: layout?.lengthBanner ?? null,
     } as unknown as LabelTemplate;
     const format = await resolveLabelFormat({ kind });
     const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
