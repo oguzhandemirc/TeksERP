@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,28 +104,18 @@ export function LabelTemplateEditPage() {
       <PageHeader
         title={template ? `Şablon: ${template.name}` : "Şablon Düzenle"}
         description={template ? `${labelKindLabels[template.kind]} — "Alanlar" sekmesinde tasarla ya da "Kod (uzman)" sekmesinde kendi yazıcı kodunu yaz.` : "Yükleniyor…"}
+        onBack={() => navigate(backPath)}
         actions={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => navigate(backPath)}
-              className="gap-1"
-            >
-              <ArrowLeft className="h-4 w-4" /> Listeye Dön
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={saveMut.isPending || !name.trim() || loading}
-              onClick={() => saveMut.mutate()}
-              className="gap-1"
-            >
-              <Save className="h-4 w-4" />
-              {saveMut.isPending ? "Kaydediliyor..." : "Kaydet"}
-            </Button>
-          </>
+          <Button
+            type="button"
+            size="sm"
+            disabled={saveMut.isPending || !name.trim() || loading}
+            onClick={() => saveMut.mutate()}
+            className="gap-1"
+          >
+            <Save className="h-4 w-4" />
+            {saveMut.isPending ? "Kaydediliyor..." : "Kaydet"}
+          </Button>
         }
       />
 

@@ -11,15 +11,19 @@ interface Props {
   description?: string;
   actions?: ReactNode;
   className?: string;
+  /** Sol geri-oku ikonu için açık hedef (breadcrumb parent yoksa da göster; ör. detay
+   *  sayfaları). Verilmezse otomatik breadcrumb-parent (varsa navigate(-1)) kullanılır. */
+  onBack?: () => void;
 }
 
-export function PageHeader({ title, description, actions, className }: Props) {
+export function PageHeader({ title, description, actions, className, onBack }: Props) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const entry = findCommandEntry(pathname);
   const parent = findBreadcrumbParent(pathname);
   const { isFavorite, toggleFavorite } = useFavorites();
   const fav = isFavorite(pathname);
+  const showBack = Boolean(onBack || parent);
 
   return (
     <div
@@ -29,11 +33,11 @@ export function PageHeader({ title, description, actions, className }: Props) {
       )}
     >
       <div className="flex min-w-0 items-stretch gap-3">
-        {parent && (
+        {showBack && (
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate(-1)}
+            onClick={() => (onBack ? onBack() : navigate(-1))}
             aria-label="Geri"
             title="Geri"
             className="h-8 w-8 shrink-0 self-center rounded-full text-muted-foreground hover:text-foreground"
