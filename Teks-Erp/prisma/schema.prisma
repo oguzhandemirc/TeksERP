@@ -490,8 +490,14 @@ model LabelFormatProfile {
   name        String           @db.VarChar(100)
   widthMm     Decimal          @db.Decimal(6, 2)
   heightMm    Decimal          @db.Decimal(6, 2)
-  marginMm    Decimal          @default(3) @db.Decimal(5, 2) // güvenlik payı
-  gapMm       Decimal          @default(2) @db.Decimal(5, 2) // etiketler arası (gelecek native)
+  marginMm    Decimal          @default(3) @db.Decimal(5, 2) // genel/eski tek pay (per-side boşsa buna düşer)
+  /// Kenar-başına pay (mm). Boş → marginMm'e düşer (geri uyumlu). PPLB üreticisi
+  /// bunları kullanır: sol=x başlangıcı, üst=y başlangıcı, alt=alt barkod, sağ=içerik sınırı.
+  marginTopMm    Decimal? @db.Decimal(5, 2)
+  marginRightMm  Decimal? @db.Decimal(5, 2)
+  marginBottomMm Decimal? @db.Decimal(5, 2)
+  marginLeftMm   Decimal? @db.Decimal(5, 2)
+  gapMm       Decimal          @default(2) @db.Decimal(5, 2) // etiketler arası boşluk (gap sensörü)
   dpi         Int              @default(203)
   orientation LabelOrientation @default(PORTRAIT)
   isActive    Boolean          @default(true)

@@ -22,6 +22,13 @@ export interface LabelFormatGeometry {
   widthMm: number;
   heightMm: number;
   marginMm: number;
+  /** Kenar-başına pay (mm); verilmezse marginMm kullanılır. Şimdilik PPLB üreticisi. */
+  marginTopMm?: number;
+  marginRightMm?: number;
+  marginBottomMm?: number;
+  marginLeftMm?: number;
+  /** Etiketler arası boşluk (mm) — PPLB Q komutunun gap değeri. */
+  gapMm?: number;
   orientation?: "PORTRAIT" | "LANDSCAPE";
 }
 
@@ -32,6 +39,11 @@ export const DEFAULT_LABEL_FORMAT: Required<LabelFormatGeometry> = {
   widthMm: 100,
   heightMm: 148,
   marginMm: 3,
+  marginTopMm: 3,
+  marginRightMm: 3,
+  marginBottomMm: 3,
+  marginLeftMm: 3,
+  gapMm: 2,
   orientation: "PORTRAIT",
 };
 

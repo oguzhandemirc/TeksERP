@@ -32,9 +32,9 @@ async function main() {
   const swFmt = await resolveLabelFormat({ kind: "SWATCH" });
   check("KARTELA (SWATCH) → 100×58 (bağımsız)", swFmt.widthMm === 100 && swFmt.heightMm === 58, `${swFmt.widthMm}×${swFmt.heightMm}`);
 
-  // 3) kind verilmezse eski davranış (code="DEFAULT" = 100×58)
+  // 3) kind verilmezse (bulk/önizleme) → TOP varsayılanı (SWATCH hariç her şey rulo).
   const noKind = await resolveLabelFormat({});
-  check("kind yok → code=DEFAULT (100×58)", noKind.heightMm === 58);
+  check("kind yok (bulk) → TOP varsayılanı 100×50", noKind.heightMm === 50);
 
   // 4) setRollDefault atomik: 100×58'i top varsayılanı yap → TOP artık 100×58, tek true
   await svc.setRollDefault(def58.id);

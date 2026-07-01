@@ -15,10 +15,10 @@ import type { FontSize } from "../../config/label-fields";
 
 const CRLF = "\r\n";
 
-// Boyut → EPL2 font (1=küçük…5=çok büyük) + satır adım (mm). md/lg null-şablon
-// yolunun mevcut font 2/4 + d(5)/d(7) değerleriyle birebir örtüşür.
+// Boyut → EPL2 font (1=küçük…5=çok büyük) + satır adım (mm). Adımlar 100×50 gibi
+// kısa etikette QR + metin + alt barkodun sığması için sıkı tutulur.
 const pplbFont = (s: FontSize): string => (s === "sm" ? "1" : s === "md" ? "2" : s === "lg" ? "4" : "5");
-const pplbStepMm = (s: FontSize): number => (s === "sm" ? 4 : s === "md" ? 5 : s === "lg" ? 7 : 9);
+const pplbStepMm = (s: FontSize): number => (s === "sm" ? 3 : s === "md" ? 4 : s === "lg" ? 5 : 6.5);
 
 /** EPL2 veri çift-tırnak içinde → veri içi `"` güvenli karaktere çevrilir. */
 function eplData(s: string): string {
@@ -30,31 +30,41 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
   const d = (mm: number) => mmToDots(mm, dpi);
   const widthDots = d(format.widthMm);
   const heightDots = d(format.heightMm);
-  const margin = d(format.marginMm);
-  const textX = margin + d(LEFT_COL_MM); // sağ metin kolonu (sol = QR/barkod)
+  // Kenar-başına pay: sol=x başlangıcı, üst=y başlangıcı, alt=alt barkod, sağ=içerik sınırı.
+  const left = d(format.marginLeftMm);
+  const top = d(format.marginTopMm);
+  const bottom = d(format.marginBottomMm);
+  // Sol = BÜYÜK QR kolonu, sağ = metin. textX QR'ı net geçer (LEFT_COL_MM paylaşılır).
+  const textX = left + d(LEFT_COL_MM);
   const lines: string[] = [];
 
   lines.push("N"); // görüntü buffer'ını temizle
   lines.push(`q${widthDots}`); // etiket genişliği (dot)
-  lines.push(`Q${heightDots},${d(2)}`); // etiket boyu + aralar arası boşluk (gap)
+  lines.push(`Q${heightDots},${d(format.gapMm)}`); // etiket boyu + etiketler arası boşluk (gap)
   lines.push("D8"); // yoğunluk (density) — fiziksel test baskısıyla ayar
 
-  // Sağ kolon metin alanları — A x,y,rot,font,hMul,vMul,N,"veri" (origin sol-üst, y aşağı)
+  const bc = payload.barcode ? eplData(payload.barcode) : "";
+
+  // Sol üst: BÜYÜK QR (s5). Sol/üst pay uygulanır.
+  if (bc) lines.push(`b${left},${top},Q,m2,s5,"${bc}"`);
+
+  // Alt tam-genişlik Code128 için ayrılan blok — metin BUNUN ÜSTÜNDE kalır → çakışma yok.
+  const bcHeight = d(7);
+  const bcBlockTop = heightDots - bcHeight - d(6) - bottom;
+
+  // Sağ kolon metin — A x,y,rot,font,hMul,vMul,N,"veri" (origin sol-üst, y aşağı).
   // Sıra/görünür/bold/font şablondan (templateTextLines); bold → hMul/vMul 1→2.
-  let y = margin;
+  let y = top;
   for (const ln of templateTextLines(payload, template)) {
     const mul = ln.bold ? "2" : "1";
     lines.push(`A${textX},${Math.round(y)},0,${pplbFont(ln.size)},${mul},${mul},N,"${eplData(ln.text)}"`);
-    y += d(pplbStepMm(ln.size)); // 60mm'e sığsın diye sıkı adım
+    y += d(pplbStepMm(ln.size));
   }
 
-  // Sol kolon: QR (üst) + Code128 (alt) + okunur metin
-  if (payload.barcode) {
-    const bc = eplData(payload.barcode);
-    // b x,y,Q(QR),m2,s3,"veri" — sol üst
-    lines.push(`b${margin},${margin},Q,m2,s3,"${bc}"`);
-    // B x,y,rot,type(1=Code128),narrow,wide,height,human(B),"veri" — QR'ın altı
-    lines.push(`B${margin},${margin + d(28)},0,1,2,3,${d(10)},B,"${bc}"`);
+  // Alt: tam genişlik Code128 + okunur metin (metin uzasa bile altına itilir).
+  if (bc) {
+    const bcY = Math.max(Math.round(y) + d(1), bcBlockTop);
+    lines.push(`B${left},${bcY},0,1,2,3,${bcHeight},B,"${bc}"`);
   }
 
   lines.push(`P${clampCopies(copies)}`); // kopya adedi → bas

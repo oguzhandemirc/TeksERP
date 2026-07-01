@@ -32,6 +32,11 @@ interface ProfileRow {
   widthMm: unknown;
   heightMm: unknown;
   marginMm: unknown;
+  marginTopMm?: unknown;
+  marginRightMm?: unknown;
+  marginBottomMm?: unknown;
+  marginLeftMm?: unknown;
+  gapMm?: unknown;
   dpi: number;
   orientation: "PORTRAIT" | "LANDSCAPE";
   isActive: boolean;
@@ -55,10 +60,17 @@ function fromProfile(
   language: PrinterLanguage,
   source: FormatResolveSource,
 ): ResolvedLabelFormat {
+  const base = Number(p.marginMm);
+  const side = (v: unknown) => (v != null && Number.isFinite(Number(v)) ? Number(v) : base);
   return {
     widthMm: Number(p.widthMm),
     heightMm: Number(p.heightMm),
-    marginMm: Number(p.marginMm),
+    marginMm: base,
+    marginTopMm: side(p.marginTopMm),
+    marginRightMm: side(p.marginRightMm),
+    marginBottomMm: side(p.marginBottomMm),
+    marginLeftMm: side(p.marginLeftMm),
+    gapMm: p.gapMm != null && Number.isFinite(Number(p.gapMm)) ? Number(p.gapMm) : 2,
     orientation: p.orientation,
     dpi: p.dpi,
     language,
@@ -107,7 +119,10 @@ export async function resolveLabelFormat(opts?: {
   // 3. sistem default profili. TOP etiketinde önce isRollDefault'lu profil; sonra
   //    code="DEFAULT" (kartela/diğerleri burayı kullanır); yoksa en eski aktif.
   if (!profile) {
-    const isRoll = opts?.kind === "ROLL_RAW" || opts?.kind === "ROLL_FINISHED";
+    // SWATCH (kartela) HARİÇ her şey — kind verilmeyen bulk/önizleme dahil — TOP
+    // varsayılanını (isRollDefault) kullanır. Sistem top-merkezli; kartela özel durum.
+    // Böylece bulk (kind'sız) ile tekil (kind=ROLL) yolu aynı boyutu çözer.
+    const isRoll = opts?.kind !== "SWATCH";
     const sys =
       (isRoll
         ? await prisma.labelFormatProfile.findFirst({ where: { isRollDefault: true, isActive: true } })

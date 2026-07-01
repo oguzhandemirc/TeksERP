@@ -62,6 +62,10 @@ export class LabelFormatProfileService extends BaseService {
     assertPositive(data, "heightMm", "Etiket yüksekliği (mm)");
     assertPositive(data, "dpi", "DPI");
     assertNonNegative(data, "marginMm", "Güvenlik payı (mm)");
+    assertNonNegative(data, "marginTopMm", "Üst pay (mm)");
+    assertNonNegative(data, "marginRightMm", "Sağ pay (mm)");
+    assertNonNegative(data, "marginBottomMm", "Alt pay (mm)");
+    assertNonNegative(data, "marginLeftMm", "Sol pay (mm)");
     assertNonNegative(data, "gapMm", "Etiket arası boşluk (mm)");
   }
 
