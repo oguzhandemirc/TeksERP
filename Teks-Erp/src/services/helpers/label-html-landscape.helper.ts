@@ -52,6 +52,12 @@ export function buildLandscapeRollLabelHtml({
   const pageH = fmt.heightMm;
   const contentWidthMm = Math.max(0, pageW - fmt.marginMm * 2);
   const contentHeightMm = Math.max(0, pageH - fmt.marginMm * 2);
+  // Ekran önizlemesi: küçük mm-etiketi büyük iframe'in köşesinde kaybolmasın diye
+  // ekrana sığacak şekilde ölçekle (yalnız @media screen; baskıyı @page yönetir).
+  const pxPerMm = 96 / 25.4;
+  const fitScale = Math.max(1, Math.min(4,
+    Math.min(520 / ((contentWidthMm || 1) * pxPerMm), 360 / ((contentHeightMm || 1) * pxPerMm)),
+  ));
 
   const fields: TemplateField[] | null = template
     ? (template.fields as unknown as TemplateField[])
@@ -120,6 +126,12 @@ export function buildLandscapeRollLabelHtml({
   @page { size: ${pageW}mm ${pageH}mm; margin: ${fmt.marginMm}mm; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #0f172a; }
+  /* Ekran önizlemesi — etiketi gri zeminde ortala + sığacak kadar büyüt (baskıyı etkilemez). */
+  @media screen {
+    html { background: #eef2f7; }
+    body { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 12px; }
+    .label { zoom: ${fitScale.toFixed(3)}; background: #fff; box-shadow: 0 2px 12px rgba(15,23,42,0.18); }
+  }
   .label {
     width: ${contentWidthMm}mm;
     height: ${contentHeightMm}mm;
