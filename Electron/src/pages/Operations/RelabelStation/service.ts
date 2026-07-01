@@ -16,4 +16,10 @@ export const relabelService = {
     apiClient
       .patch<ApiResponse<unknown>>(`/api/rolls/${rollId}/label`, body)
       .then((r) => r.data),
+
+  /** Kartelalık (kartela için) işaretini set/kaldır — mevcut /kartela/rolls/:id/mark ucu. */
+  setMarkedForKartela: (rollId: string, value: boolean): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/api/kartela/rolls/${rollId}/mark`, { value })
+      .then((r) => r.data),
 };

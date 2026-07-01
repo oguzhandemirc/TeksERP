@@ -1,6 +1,8 @@
 import { MapPin, PackageX, Printer, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { rollStatusLabels, type RollStatus } from "@/types/enums";
+import { shipmentStatusLabels, type ShipmentStatus } from "@/pages/Operations/Shipments/types";
 import type { RelabelContext, RelabelLastLabelSnapshot } from "./types";
 
 export function EmptyState() {
@@ -25,7 +27,7 @@ export function RollContextHeader({ ctx, onClear }: { ctx: RelabelContext; onCle
             <span className="font-mono text-sm font-semibold">
               {ctx.barcode ?? "— (barkodsuz açık kumaş)"}
             </span>
-            <Badge variant="outline">{ctx.status}</Badge>
+            <Badge variant="outline">{rollStatusLabels[ctx.status as RollStatus] ?? ctx.status}</Badge>
             {ctx.markedForKartela && (
               <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">Kartelalık</Badge>
             )}
@@ -45,7 +47,8 @@ export function RollContextHeader({ ctx, onClear }: { ctx: RelabelContext; onCle
               <MapPin className="h-3 w-3 shrink-0" />
               {ctx.shipment && (
                 <span>
-                  Sevkiyat {ctx.shipment.shipmentNo} ({ctx.shipment.status})
+                  Sevkiyat {ctx.shipment.shipmentNo} (
+                  {shipmentStatusLabels[ctx.shipment.status as ShipmentStatus] ?? ctx.shipment.status})
                 </span>
               )}
               {ctx.sack && (

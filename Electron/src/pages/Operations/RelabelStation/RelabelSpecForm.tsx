@@ -17,6 +17,7 @@ import { PropertyChipsField } from "@/components/forms/PropertyChipsField";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { shipmentStatusLabels, type ShipmentStatus } from "@/pages/Operations/Shipments/types";
 import { relabelService } from "./service";
 import type { RelabelContext } from "./types";
 
@@ -29,11 +30,24 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
   const qc = useQueryClient();
   const { hasAnyPermission } = useRoleAccess();
   const canEdit = hasAnyPermission(["roll:write", "label:edit"]);
+  const canKartela = hasAnyPermission(["kartela:write"]);
 
   const [colorId, setColorId] = useState<string | null>(ctx.colorId);
   const [qualityGrade, setQualityGrade] = useState<string>(ctx.qualityGrade);
   const [width, setWidth] = useState<string>(ctx.width != null ? String(ctx.width) : "");
   const [propertyIds, setPropertyIds] = useState<string[]>(ctx.propertyIds);
+  const [marked, setMarked] = useState<boolean>(ctx.markedForKartela);
+
+  // Kartelalık işareti — spec'ten bağımsız (ayrı uç); değişince anında kaydeder + tazeler.
+  const markMut = useMutation({
+    mutationFn: (value: boolean) => relabelService.setMarkedForKartela(ctx.id, value),
+    onSuccess: (_d, value) => {
+      setMarked(value);
+      toast.success(value ? "Kartelalık olarak işaretlendi." : "Kartelalık işareti kaldırıldı.");
+      void qc.invalidateQueries({ queryKey: ["rolls"] });
+      onSaved();
+    },
+  });
 
   const gradesQ = useQuery({
     queryKey: ["quality-grades", "picker"],
@@ -69,7 +83,8 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
       {ctx.specLocked && (
         <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <Lock className="h-3.5 w-3.5 shrink-0" />
-          Bu top commit'li bir sevkiyatta ({ctx.shipment?.shipmentNo} · {ctx.shipment?.status}).
+          Bu top commit'li bir sevkiyatta ({ctx.shipment?.shipmentNo} ·{" "}
+          {ctx.shipment ? (shipmentStatusLabels[ctx.shipment.status as ShipmentStatus] ?? ctx.shipment.status) : ""}).
           Spec düzenlemek için önce sevkiyatı hazırlığa geri alın.
         </div>
       )}
@@ -125,6 +140,25 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
           disabled={disabled}
         />
       </FormField>
+
+      {canKartela && (
+        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-purple-200 bg-purple-50/60 p-2.5 dark:border-purple-900/50 dark:bg-purple-950/20">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={marked}
+            disabled={markMut.isPending}
+            onChange={(e) => markMut.mutate(e.target.checked)}
+          />
+          <span className="text-sm">
+            <span className="font-medium">Kartelalık</span> — bu topu kartela (numune) için işaretle
+            <span className="block text-xs text-muted-foreground">
+              İşaretli toplar kartela sevk/kabul akışında görünür. Bitmiş top da işaretlenebilir.
+              {markMut.isPending ? " (kaydediliyor…)" : ""}
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="flex justify-end pt-1">
         <Button size="sm" disabled={disabled || mut.isPending} onClick={() => mut.mutate()} className="gap-1">
