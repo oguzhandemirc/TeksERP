@@ -138,7 +138,7 @@ export function LabelTemplateEditPage() {
       <PageHeader
         title={template ? `Şablon: ${template.name}` : "Şablon Düzenle"}
         description={template ? `${labelKindLabels[template.kind]} — "Alanlar" sekmesinde tasarla ya da "Kod (uzman)" sekmesinde kendi yazıcı kodunu yaz.` : "Yükleniyor…"}
-        onBack={() => navigate(backPath)}
+        onBack={() => (window.history.length > 1 ? navigate(-1) : navigate(backPath))}
         actions={
           <>
             <Button
