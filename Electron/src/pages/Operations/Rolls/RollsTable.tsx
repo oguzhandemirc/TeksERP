@@ -215,7 +215,7 @@ export function RollsTable({ tab }: Props) {
       <DataTableToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Barkod ara..."
+        hideSearch // Arama sayfa üstündeki birleşik "okut/ara" input'undan sürülüyor (URL search).
         table={table}
         exportName="Toplar"
         actions={

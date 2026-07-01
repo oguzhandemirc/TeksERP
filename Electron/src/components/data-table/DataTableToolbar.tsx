@@ -13,6 +13,8 @@ interface Props<T> {
   /** Verilirse "Sütunlar & CSV" araç menüsü gösterilir. */
   table?: Table<T>;
   exportName?: string;
+  /** Arama kutusunu gizle — arama dışarıdan (ör. sayfa üstündeki birleşik input) sürülüyor. */
+  hideSearch?: boolean;
 }
 
 export function DataTableToolbar<T>({
@@ -22,18 +24,21 @@ export function DataTableToolbar<T>({
   actions,
   table,
   exportName,
+  hideSearch = false,
 }: Props<T>) {
   return (
     <div className="flex items-center gap-2 px-3 py-2 border-b">
-      <div className="relative w-64">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder={placeholder}
-          className="h-8 pl-8 text-sm"
-        />
-      </div>
+      {!hideSearch && (
+        <div className="relative w-64">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={placeholder}
+            className="h-8 pl-8 text-sm"
+          />
+        </div>
+      )}
       <div className="ml-auto flex items-center gap-2">
         {table ? <DataTableTools table={table} exportName={exportName} /> : null}
         <SavedViewsMenu />

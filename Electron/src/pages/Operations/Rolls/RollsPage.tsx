@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ReorderableTabBar } from "@/components/layout/ReorderableTabBar";
 import { ScanField } from "@/components/scanner/ScanField";
+import { classifyBarcode, BARCODE_FORMATS } from "@/lib/scanner/barcode-kind";
 import { useTabOrder } from "@/hooks/useTabOrder";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { RollsTable } from "./RollsTable";
@@ -61,17 +62,36 @@ export function RollsPage() {
     isRollTabKey(urlTab) ? urlTab : "RAW_STOCK",
   );
   const [manualOpen, setManualOpen] = useState(false);
-  const [scanBarcode, setScanBarcode] = useState("");
+  // Birleşik "okut/ara" input'u: yazınca listeyi süzer (URL search), okut/Enter'da
+  // (ROLL barkodu ise) detay panelini açar. Açılışta URL'deki search ile senkron.
+  const [scanBarcode, setScanBarcode] = useState(() => searchParams.get("search") ?? "");
   const [scanRoll, setScanRoll] = useState<Roll | null>(null);
   const { ordered, reorder } = useTabOrder("rolls", REORDERABLE_KEYS);
 
-  // Barkod okut → topu getir → detay panelini aç (404 toast'ı interceptor'dan).
+  // Yazma → URL `search` (debounce). RollsTable/stats urlParams.search okur → liste süzülür.
+  useEffect(() => {
+    const h = setTimeout(() => {
+      const next = new URLSearchParams(searchParams);
+      const v = scanBarcode.trim();
+      if (v) next.set("search", v);
+      else next.delete("search");
+      setSearchParams(next, { replace: true });
+    }, 300);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanBarcode]);
+
+  // Barkod okut/Enter → topu getir → detay panelini aç (404 toast'ı interceptor'dan).
   const scanLookup = useMutation({
     mutationFn: (code: string) => rollService.getByBarcode(code),
     onSuccess: (res) => setScanRoll(res.data ?? null),
   });
   const openByBarcode = (code: string) => {
-    setScanBarcode(code);
+    setScanBarcode(code); // input + liste süzme senkron (özellikle useScanSeed dış girişinde)
+    // Yalnız TAM-FORMAT top barkodunda detay ara. Gevşek /^TEKS/ değil tam regex —
+    // "TEKSTİL BEYAZ" gibi ürün adı yanlışlıkla barkod sayılıp 404 toast'ı vermesin.
+    // (Okutulan barkod hep tam-format; kısmi/ürün-adı yalnız listeyi süzer.)
+    if (!BARCODE_FORMATS.ROLL.test(classifyBarcode(code).code)) return;
     scanLookup.mutate(code);
   };
   useScanSeed("scanBarcode", openByBarcode);
@@ -116,12 +136,11 @@ export function RollsPage() {
       <ManualEntryDialog open={manualOpen} onOpenChange={setManualOpen} />
       <ScanField
         className="border-b px-4 py-2"
-        widthClassName="max-w-xs"
+        widthClassName="max-w-md"
         value={scanBarcode}
         onChange={setScanBarcode}
         onScan={openByBarcode}
-        placeholder="Top barkodu okut → detayı aç"
-        expectPrefix="ROLL"
+        placeholder="Barkod okut/yaz → detay açar · ürün adı-kodu yazarak listeyi süz"
         submitLabel="Aç"
         busy={scanLookup.isPending}
         busyLabel="…"
