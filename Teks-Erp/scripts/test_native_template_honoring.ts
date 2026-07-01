@@ -65,23 +65,23 @@ function main() {
   check("PPLA: sıra (Musteri < Kalite)", ppla.indexOf("ACME") > -1 && ppla.indexOf("ACME") < ppla.indexOf("1.KALITE"));
   check("ZPL: sıra (Musteri < Kalite)", zpl.indexOf("ACME") < zpl.indexOf("1.KALITE"));
 
-  // 3. Bold — itemName headline=lg. PPLA lg=font4, PPLB v2 lg=font3 (EPL_FONT); bold mul2.
+  // 3. Bold — itemName headline=lg. v2: PPLA+PPLB ikisi de EPL_FONT lg=font3; bold mul2.
   //    Faz-1: label doluysa headline alanlar da "Etiket: değer" basar → "Urun: PATOS".
-  check("PPLA: bold itemName → font4 mult22", /1422000\d{8}Urun: PATOS/.test(ppla));
+  check("PPLA: bold itemName → font3 mult22 (v2)", /1322000\d{8}Urun: PATOS/.test(ppla));
   check("PPLB: bold itemName → font3 mul2 (v2)", /0,3,2,2,N,"Urun: PATOS"/.test(pplb));
 
-  // 4. Font — lengthMeters xl → PPLA font 5 (mult 11, bold değil); label "Metraj"
-  check("PPLA: xl metraj → font5", /1511000\d{8}Metraj: 320 m/.test(ppla));
+  // 4. Font — lengthMeters xl → v2 EPL_FONT xl=font4 (mult 11, bold değil); label "Metraj"
+  check("PPLA: xl metraj → font4 (v2)", /1411000\d{8}Metraj: 320 m/.test(ppla));
 
   // 5. Custom etiket — row alanı "Etiket: değer" (Musteri: ACME)
   check("PPLA: custom label row", ppla.includes("Musteri: ACME"));
   check("ZPL: custom label row", zpl.includes("Musteri: ACME"));
 
-  // 6. REGRESYON: template=null → eski davranış (itemName font4/mult11, "Renk: MAVI" görünür)
+  // 6. REGRESYON: template=null → varsayılan liste (itemName big→lg→font3/mult11, "Renk: MAVI")
   const pplaNull = buildRollLabelPpla({ payload, format, copies: 1, template: null });
-  check("REGRESYON PPLA null: itemName font4 mult11", /1411000\d{8}PATOS/.test(pplaNull));
+  check("REGRESYON PPLA null: itemName font3 mult11 (v2 lg)", /1311000\d{8}PATOS/.test(pplaNull));
   check("REGRESYON PPLA null: 'Renk: MAVI' görünür (eski liste)", pplaNull.includes("Renk: MAVI"));
-  check("REGRESYON PPLA null: bold (22) YOK", !/14220/.test(pplaNull));
+  check("REGRESYON PPLA null: bold (22) YOK", !/1[1-9]22000/.test(pplaNull));
   const zplNull = buildRollLabelZpl({ payload, format, copies: 1, template: null });
   check("REGRESYON ZPL null: 'Renk: MAVI' görünür", zplNull.includes("Renk: MAVI"));
 

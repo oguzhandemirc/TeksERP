@@ -1,22 +1,24 @@
 // =============================================================================
-// Top etiketi — ZPL (Zebra) native komut üreteci
+// Top etiketi — ZPL (Zebra) native komut üreteci — v2 yerleşim
 // =============================================================================
-// `buildRollLabelPpla`'nın ZPL karşılığı (Zebra yazıcılar + ZPL emülasyonu).
-// FAZ-1: yalnız ÜRETİLİR (saf string); ham gönderim simüle (printer-transport,
-// Faz-2). Konumlar format profilinden (mm → dot), güvenlik payı = sol/üst
-// başlangıç. Origin sol-üst, y aşağı artar.
-//
-// NOT: font/barkod parametreleri ZPL II kılavuzuna göre; kesin yerleşim fiziksel
-// test baskısıyla (Faz-2) ince ayarlanır.
+// PPLB v2 ile AYNI robust yapı (paylaşılan EPL_FONT/qrFootprintDots): otomatik
+// satır adımı (fontYük×çarpan + boşluk → çakışmaz), QR ayak izi (metin sağa kayar),
+// alt tam-genişlik Code128, sağ dikey metraj bandı (^GB siyah kutu + ^FR beyaz
+// döndürülmüş değer). Origin sol-üst, y aşağı. 203dpi.
 // =============================================================================
 
-import { cleanCtl, clampCopies, mmToDots, templateTextLines, resolveQrScale, resolveLineStepMm, LEFT_COL_MM, type NativeRenderInput } from "./native-label.shared";
-import type { FontSize } from "../../config/label-fields";
-
-// Boyut → ZPL glif yüksekliği (mm) + satır adım (mm). md/lg null-şablon yolunun
-// mevcut d(4)/d(5) yükseklik + d(5)/d(7) adım değerleriyle birebir örtüşür.
-const zplHMm = (s: FontSize): number => (s === "sm" ? 3 : s === "md" ? 4 : s === "lg" ? 5 : 7);
-const zplStepMm = (s: FontSize): number => (s === "sm" ? 4 : s === "md" ? 5 : s === "lg" ? 7 : 9);
+import {
+  cleanCtl,
+  clampCopies,
+  mmToDots,
+  templateTextLines,
+  resolveQrScale,
+  resolveLineStepMm,
+  EPL_FONT,
+  LINE_GAP_MM,
+  qrFootprintDots,
+  type NativeRenderInput,
+} from "./native-label.shared";
 
 /** ZPL ^FD verisi ^FS'e dek sürer; kontrol önekleri `^` ve `~` veriden ayıklanır. */
 function zplData(s: string): string {
@@ -28,38 +30,82 @@ export function buildRollLabelZpl({ payload, format, copies, template }: NativeR
   const d = (mm: number) => mmToDots(mm, dpi);
   const widthDots = d(format.widthMm);
   const heightDots = d(format.heightMm);
-  const margin = d(format.marginMm);
-  const textX = margin + d(LEFT_COL_MM); // sağ metin kolonu (sol = QR/barkod)
-  // Şablon-başına yerleşim (boş → varsayılan). ZPL BQ mag 1–10 aralığında.
-  const qrMag = Math.min(10, resolveQrScale(template?.qrScale, 3)); // null → mevcut tuned 3
-  const lineStepMm = resolveLineStepMm(template?.lineStepMm != null ? Number(template.lineStepMm) : null);
+  const left = d(format.marginLeftMm);
+  const top = d(format.marginTopMm);
+  const right = widthDots - d(format.marginRightMm);
+  const bottomEdge = heightDots - d(format.marginBottomMm);
+
+  const qrMag = Math.min(10, resolveQrScale(template?.qrScale)); // ZPL BQ mag 1–10
+  const gap = d(resolveLineStepMm(template?.lineStepMm != null ? Number(template.lineStepMm) : null) ?? LINE_GAP_MM);
+
+  const bc = payload.barcode ? zplData(payload.barcode) : "";
+
+  // Sağ dikey metraj bandı (PPLB ile aynı) — ters TEK değil, ZPL'de ^GB+^FR net çalışır.
+  const bannerOn =
+    template?.lengthBanner === true &&
+    payload.lengthMeters != null &&
+    String(payload.lengthMeters).trim() !== "" &&
+    payload.kind !== "SWATCH";
+  const BANNER_MUL = 3;
+  const bannerW = bannerOn ? EPL_FONT.xl.h * BANNER_MUL : 0;
+  const contentRight = bannerOn ? right - bannerW - d(2) : right;
+
   const lines: string[] = [];
+  lines.push("^XA");
+  lines.push("^CI28"); // UTF-8
+  lines.push(`^PW${widthDots}`);
+  lines.push(`^LL${heightDots}`);
 
-  lines.push("^XA"); // etiket başlangıcı
-  lines.push("^CI28"); // UTF-8 kodlama
-  lines.push(`^PW${widthDots}`); // baskı genişliği (dot)
-  lines.push(`^LL${heightDots}`); // etiket boyu (dot)
+  // Alt bant: tam-genişlik Code128 + okunur satır
+  const bcBars = bc ? d(9) : 0;
+  const bcHuman = bc ? d(3.5) : 0;
+  const bcTop = bottomEdge - bcBars - bcHuman;
 
-  // Sağ kolon metin alanları — ^FO x,y ^A0N,h,w ^FD veri ^FS (origin sol-üst)
-  // Sıra/görünür/boyut/bold şablondan (templateTextLines); bold → genişlik ×1.2.
-  let y = margin;
+  // QR sol-üst; ayak izi qrMag ile → metin kolonu sağa kayar (çakışmaz)
+  let textX = left;
+  if (bc) {
+    const qrPx = Math.min(qrFootprintDots(bc.length, qrMag), Math.round((contentRight - left) * 0.45));
+    lines.push(`^FO${left},${top}^BQN,2,${qrMag}^FDQA,${bc}^FS`);
+    textX = left + qrPx + d(2);
+  }
+
+  // Sağ kolon metin — OTOMATİK adım (fontYük×çarpan + boşluk) → çakışma yok
+  let y = top;
   for (const ln of templateTextLines(payload, template)) {
-    const h = d(zplHMm(ln.size));
-    const w = ln.bold ? Math.round(h * 1.2) : h;
+    const f = EPL_FONT[ln.size] ?? EPL_FONT.md;
+    const mul = ln.bold ? 2 : 1;
+    const h = f.h * mul;
+    const w = f.w * mul;
+    if (y + h > bcTop - d(1)) break;
     lines.push(`^FO${textX},${Math.round(y)}^A0N,${h},${w}^FD${zplData(ln.text)}^FS`);
-    y += d(lineStepMm ?? zplStepMm(ln.size)); // şablon adımı ?? font-türevli sıkı adım
+    y += h + gap;
   }
 
-  // Sol kolon: QR (üst) + Code128 (alt)
-  if (payload.barcode) {
-    const bc = zplData(payload.barcode);
-    // QR: ^BQN,2,<mag> ^FD QA,veri — sol üst (mag şablondan)
-    lines.push(`^FO${margin},${margin}^BQN,2,${qrMag}^FDQA,${bc}^FS`);
-    // Code128: ^BCN,height,printInterpretation(Y),N,N — QR'ın altı
-    lines.push(`^FO${margin},${margin + d(28)}^BCN,${d(10)},Y,N,N^FD${bc}^FS`);
+  // Alt barkod
+  if (bc) {
+    lines.push(`^FO${left},${bcTop}^BCN,${bcBars},Y,N,N^FD${bc}^FS`);
   }
 
-  lines.push(`^PQ${clampCopies(copies)}`); // kopya adedi
-  lines.push("^XZ"); // etiket sonu + bas
+  // Sağ dikey metraj bandı — solid siyah kutu (^GB) + döndürülmüş ters (^A0R+^FR) beyaz değer
+  if (bannerOn) {
+    const val = zplData(String(payload.lengthMeters));
+    const charLen = EPL_FONT.xl.w * BANNER_MUL;
+    const bannerH = bottomEdge - top;
+    // Siyah arka planı uzat: boşluk dolgusu (^FR ile beyaz metin, siyah boşluk hücresi)
+    const targetChars = Math.max(val.length, Math.floor((bannerH * 0.6) / charLen));
+    const padEach = Math.floor((targetChars - val.length) / 2);
+    const padded = " ".repeat(padEach) + val + " ".repeat(padEach);
+    const bx = right - bannerW;
+    const gh = EPL_FONT.xl.h * BANNER_MUL;
+    const gw = EPL_FONT.xl.w * BANNER_MUL;
+    const textLen = padded.length * charLen;
+    lines.push(`^FO${bx},${top}^GB${bannerW},${bannerH},${bannerW},B^FS`); // solid siyah (t=w → dolu)
+    // ^A0R (90° CW) döndürülmüş, ^FR ters (kutu üzerinde beyaz). Dikeyde ortalı.
+    const ty = top + Math.round((bannerH - textLen) / 2);
+    lines.push(`^FO${bx},${ty}^A0R,${gh},${gw}^FR^FD${padded}^FS`);
+  }
+
+  lines.push(`^PQ${clampCopies(copies)}`);
+  lines.push("^XZ");
   return lines.join("\n") + "\n";
 }

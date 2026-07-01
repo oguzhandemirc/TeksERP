@@ -16,7 +16,9 @@ function check(label: string, ok: boolean, extra = "") {
 }
 
 const format: ResolvedLabelFormat = {
-  widthMm: 100, heightMm: 148, marginMm: 3, orientation: "PORTRAIT",
+  widthMm: 100, heightMm: 148, marginMm: 3,
+  marginTopMm: 3, marginRightMm: 3, marginBottomMm: 3, marginLeftMm: 3, gapMm: 3,
+  orientation: "PORTRAIT",
   dpi: 203, language: "PPLA", profileId: "p1", source: "machine",
 };
 

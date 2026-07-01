@@ -1,19 +1,13 @@
 // =============================================================================
-// Top etiketi — Argox PPLA (Datamax DPL dialect) native komut üreteci
+// Top etiketi — Argox PPLA (Datamax DPL dialect) native komut üreteci — v2 yerleşim
 // =============================================================================
-// `buildRollLabelHtml`'in native analoğu. Aynı mantıksal alanları (ürün/renk/
-// kalite/metraj/en/ağırlık/müşteri/parti + Code128 + QR) PPLA komut string'i
-// olarak üretir. Konumlar format profilinden hesaplanır (mm → dot; 203dpi=8dot/mm);
-// güvenlik payı (marginMm) iç koordinat başlangıcı olur.
+// PPLB/ZPL v2 ile AYNI robust yapı (paylaşılan EPL_FONT/qrFootprintDots): OTOMATİK
+// satır adımı (fontYük×çarpan + boşluk → çakışmaz), QR ayak izi (metin sağa kayar),
+// alt tam-genişlik Code128. Origin sol-üst, satır=y col=x (4 hane dot). 203dpi.
 //
-// FAZ-1 SINIRI: bu fonksiyon yalnız KOMUT ÜRETİR (saf string — HTML üretmek gibi,
-// izinli). Komutların yazıcıya ham-bayt GÖNDERİMİ donanım I/O'dur → `printer-transport`
-// içinde SİMÜLE (Faz-2'de gerçek socket/USB). "Yazıcı değişse de kodlar kaybolmasın"
-// = bu üreteç versiyonlu kodda, model→dil eşlemesi DB'de.
-//
-// NOT: Alan/font/barkod tip kodları Argox OS-214 plus PPLA programlama kılavuzuna
-// göredir; kesin değerler fiziksel test baskısıyla (Faz-2) ince ayarlanır. Yapı +
-// veri tamdır; üretim/önizleme/inceleme bugün çalışır.
+// NOT: DPL'de ZPL `^FR` gibi güvenilir bir "reverse" (beyaz-üstü-siyah) YOK →
+// sağ dikey metraj bandı PPLA'da HENÜZ YOK (PPLB+ZPL'de var). DPL reverse fiziksel
+// test edilince eklenecek.
 // =============================================================================
 
 import {
@@ -23,15 +17,11 @@ import {
   templateTextLines,
   resolveQrScale,
   resolveLineStepMm,
-  LEFT_COL_MM,
+  EPL_FONT,
+  LINE_GAP_MM,
+  qrFootprintDots,
   type NativeRenderInput,
 } from "./native-label.shared";
-import type { FontSize } from "../../config/label-fields";
-
-// Boyut → PPLA font kodu (2=küçük…5=çok büyük) ve satır adım (mm). md/lg null-şablon
-// yolunun mevcut font 3/4 + d(5)/d(7) değerleriyle BİREBİR örtüşür (bayt geri uyum).
-const pplaFont = (s: FontSize): string => (s === "sm" ? "2" : s === "md" ? "3" : s === "lg" ? "4" : "5");
-const pplaStepMm = (s: FontSize): number => (s === "sm" ? 4 : s === "md" ? 5 : s === "lg" ? 7 : 9);
 
 const STX = "\x02";
 const CR = "\r";
@@ -46,47 +36,60 @@ function pad4(n: number): string {
 export function buildRollLabelPpla({ payload, format, copies, template }: PplaRenderInput): string {
   const dpi = format.dpi || 203;
   const d = (mm: number) => mmToDots(mm, dpi);
-  const marginDots = d(format.marginMm);
-  const colText = marginDots + d(LEFT_COL_MM); // sağ metin kolonu (sol = QR/barkod)
-  // Şablon-başına yerleşim (boş → varsayılan). DPL QR modül boyutu 2-haneli.
-  const qrMod = String(resolveQrScale(template?.qrScale, 6)).padStart(2, "0"); // null → mevcut tuned 6
-  const lineStepMm = resolveLineStepMm(template?.lineStepMm != null ? Number(template.lineStepMm) : null);
-  const lines: string[] = [];
+  const widthDots = d(format.widthMm);
+  const heightDots = d(format.heightMm);
+  const left = d(format.marginLeftMm);
+  const top = d(format.marginTopMm);
+  const right = widthDots - d(format.marginRightMm);
+  const bottomEdge = heightDots - d(format.marginBottomMm);
 
-  // --- Başlık: birim, etiket boyu, ısı/yoğunluk ---
+  const qrScale = resolveQrScale(template?.qrScale);
+  const qrMod = String(qrScale).padStart(2, "0"); // DPL QR modül boyutu 2-hane
+  const gap = d(resolveLineStepMm(template?.lineStepMm != null ? Number(template.lineStepMm) : null) ?? LINE_GAP_MM);
+  const bc = payload.barcode ? cleanCtl(payload.barcode) : "";
+
+  const lines: string[] = [];
   lines.push(`${STX}n`); // ölçü birimi = nokta (dot)
-  lines.push(`${STX}M${pad4(d(format.heightMm))}`); // maksimum etiket boyu
+  lines.push(`${STX}M${pad4(heightDots)}`); // maksimum etiket boyu
   lines.push(`${STX}L`); // etiket format moduna gir
   lines.push("D11"); // yoğunluk/çözünürlük modülü (203dpi)
   lines.push("H10"); // ısı (heat) — fiziksel test baskısıyla ayarlanır
 
-  // DPL metin kaydı: <rot><font><wMul><hMul>"000"<RRRR row><CCCC col><veri>
-  //   rot=1 (0°), font=2..5; mult=11 normal / 22 bold; satır dot ÜSTTEN, sütun SOLDAN.
-  const dplText = (text: string, rowDot: number, colDot: number, font = "3", mult = "11"): string =>
+  // DPL metin kaydı: <rot=1><font><wMul><hMul>"000"<RRRR row><CCCC col><veri>
+  const dplText = (text: string, rowDot: number, colDot: number, font: string, mult: string): string =>
     `1${font}${mult}000${pad4(rowDot)}${pad4(colDot)}${cleanCtl(text)}`;
 
-  // --- Sağ kolon: şablon-bilinçli metin satırları (üstten aşağı; sıra/görünür/bold şablondan) ---
-  let row = marginDots;
+  // --- Alt bant: tam-genişlik Code128 + okunur satır (sabit, en altta) ---
+  const bcBars = bc ? d(9) : 0;
+  const bcHuman = bc ? d(4) : 0;
+  const bcTop = bottomEdge - bcBars - bcHuman;
+
+  // --- Sol üst: QR; ayak izi qrScale ile → metin kolonu sağa kayar (çakışmaz) ---
+  let colText = left;
+  if (bc) {
+    const qrPx = Math.min(qrFootprintDots(bc.length, qrScale), Math.round((right - left) * 0.45));
+    lines.push(`1W1c${qrMod}${qrMod}${pad4(top)}${pad4(left)}${bc}`);
+    colText = left + qrPx + d(2);
+  }
+
+  // --- Sağ kolon metin — OTOMATİK adım (fontYük×çarpan + boşluk) → çakışma yok ---
+  let row = top;
   for (const ln of templateTextLines(payload, template)) {
-    lines.push(dplText(ln.text, row, colText, pplaFont(ln.size), ln.bold ? "22" : "11"));
-    row += d(lineStepMm ?? pplaStepMm(ln.size)); // şablon adımı ?? font-türevli sıkı adım
+    const f = EPL_FONT[ln.size] ?? EPL_FONT.md;
+    const mul = ln.bold ? 2 : 1;
+    const cellH = f.h * mul;
+    if (row + cellH > bcTop - d(1)) break;
+    lines.push(dplText(ln.text, row, colText, f.code, ln.bold ? "22" : "11"));
+    row += cellH + gap;
   }
 
-  // --- Sol kolon: QR (üst) + Code128 (alt) + okunabilir metin ---
-  if (payload.barcode) {
-    const bc = cleanCtl(payload.barcode);
-    // QR — DPL 2D kaydı ("W1c"...) sol üst köşe; modül boyutu şablondan (qrMod).
-    lines.push(`1W1c${qrMod}${qrMod}${pad4(marginDots)}${pad4(marginDots)}${bc}`);
-    // Code128 (QR'ın altı): <rot>"e"<narrow><wide><HHHH height><RRRR><CCCC><veri>
-    const bcRow = marginDots + d(28);
-    lines.push(`1e22${pad4(d(10))}${pad4(bcRow)}${pad4(marginDots)}${bc}`);
-    // okunabilir barkod metni (barkodun altı)
-    lines.push(dplText(bc, bcRow + d(11), marginDots));
+  // --- Alt Code128 + okunur metin ---
+  if (bc) {
+    lines.push(`1e22${pad4(bcBars)}${pad4(bcTop)}${pad4(left)}${bc}`); // <rot>e<narrow><wide><h4><row4><col4><veri>
+    lines.push(dplText(bc, bcTop + bcBars + d(1), left, "1", "11")); // okunur satır (küçük font)
   }
 
-  // --- Kopya + bitir/bas ---
-  lines.push(`Q${pad4(clampCopies(copies))}`); // kopya adedi (1-5)
+  lines.push(`Q${pad4(clampCopies(copies))}`); // kopya adedi
   lines.push("E"); // formatı bitir + bas
-
   return lines.join(CR) + CR;
 }

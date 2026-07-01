@@ -145,6 +145,9 @@ export function renderPplaToSvg(ppla: string, widthDots: number): string | null 
   return wrapSvg(W, H, els);
 }
 
+/** ZPL rotasyon harfi (N/R/I/B) → derece (CW). */
+const ZPL_ROT: Record<string, number> = { N: 0, R: 90, I: 180, B: 270 };
+
 /** ZPL komutlarını görsel SVG'ye çevir. Alanlar satır-içi de olabilir → global regex. */
 export function renderZplToSvg(zpl: string): string | null {
   let m = zpl.match(/\^PW(\d+)/);
@@ -152,9 +155,21 @@ export function renderZplToSvg(zpl: string): string | null {
   m = zpl.match(/\^LL(\d+)/);
   const H = m ? +m[1] : 0;
   const els: string[] = [];
-  // Metin: ^FO x,y^A0N,h,w^FD veri^FS (h=yükseklik, w=genişlik dot)
-  for (const t of zpl.matchAll(/\^FO(\d+),(\d+)\^A0N,(\d+),(\d+)\^FD([\s\S]*?)\^FS/g)) {
-    els.push(svgTextCell(+t[1], +t[2], +t[4] || +t[3] * 0.6, +t[3], t[5]));
+  // Kutu ÖNCE (zemin) — ^GB w,h,t: t ≥ min(w,h) → dolu siyah (metraj bandı), yoksa çerçeve.
+  for (const g of zpl.matchAll(/\^FO(\d+),(\d+)\^GB(\d+),(\d+),(\d+)[^^]*\^FS/g)) {
+    const [, x, y, w, h, t] = g;
+    els.push(
+      +t >= Math.min(+w, +h)
+        ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#000"/>`
+        : `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#000" stroke-width="${t}"/>`,
+    );
+  }
+  // Metin: ^FO x,y^A0<rot>,h,w[^FR]^FD veri^FS (rot=N/R/I/B; ^FR = ters/beyaz)
+  for (const t of zpl.matchAll(/\^FO(\d+),(\d+)\^A0([NRIB]),(\d+),(\d+)(\^FR)?\^FD([\s\S]*?)\^FS/g)) {
+    const [, x, y, rot, h, w, fr, data] = t;
+    const cell = svgTextCell(+x, +y, +w || +h * 0.6, +h, data, Boolean(fr));
+    const deg = ZPL_ROT[rot] ?? 0;
+    els.push(deg ? `<g transform="rotate(${deg} ${x} ${y})">${cell}</g>` : cell);
   }
   // QR: ^FO x,y^BQN,model,mag^FDQA,veri^FS ("QA," öneki sıyrılır)
   for (const q of zpl.matchAll(/\^FO(\d+),(\d+)\^BQN,\d+,(\d+)\^FD(?:QA,)?([\s\S]*?)\^FS/g)) {
@@ -163,10 +178,6 @@ export function renderZplToSvg(zpl: string): string | null {
   // Code128: ^FO x,y^BCN,h,Y,...^FD veri^FS  (Y = okunur satır yazıcıda çizilir → biz de)
   for (const b of zpl.matchAll(/\^FO(\d+),(\d+)\^BCN,(\d+),([^,^]*),[^^]*\^FD([\s\S]*?)\^FS/g)) {
     els.push(svgBarcode(+b[1], +b[2], +b[3], b[5], b[4] === "Y"));
-  }
-  // Kutu/çizgi: ^FO x,y^GB w,h,t^FS (üretici emit etmez; uzman kodu için)
-  for (const g of zpl.matchAll(/\^FO(\d+),(\d+)\^GB(\d+),(\d+),(\d+)[^^]*\^FS/g)) {
-    els.push(`<rect x="${g[1]}" y="${g[2]}" width="${g[3]}" height="${g[4]}" fill="none" stroke="#000" stroke-width="${g[5]}"/>`);
   }
   return wrapSvg(W, H, els);
 }

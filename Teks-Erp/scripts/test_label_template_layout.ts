@@ -47,8 +47,8 @@ const pplbNull = buildRollLabelPplb({ ...base, template: null });
 const zplNull = buildRollLabelZpl({ ...base, template: null });
 const pplaNull = buildRollLabelPpla({ ...base, template: null });
 check("PPLB null → varsayılan QR s5", /b\d+,\d+,Q,m2,s5,/.test(pplbNull));
-check("ZPL null → varsayılan QR mag 3", pplbNull && zplNull.includes("^BQN,2,3^FD"));
-check("PPLA null → varsayılan QR modül 06", pplaNull.includes("1W1c0606"));
+check("ZPL null → varsayılan QR mag 5 (v2 birleşik)", zplNull.includes("^BQN,2,5^FD"));
+check("PPLA null → varsayılan QR modül 05 (v2 birleşik)", pplaNull.includes("1W1c0505"));
 
 // --- 2. qrScale set → her dilde yansır ---
 const q = { qrScale: 8, lineStepMm: null };
@@ -113,6 +113,21 @@ check("bant: alt barkod bandın SOLUNDA (çakışma yok)", Boolean(bannerAx && b
 // SWATCH'ta metraj yok → bant çıkmaz
 const swBanner = buildRollLabelPplb({ payload: { ...payload, kind: "SWATCH" } as unknown as LabelPayload, format, copies: 1, template: bannerTpl });
 check("bant: SWATCH'ta (metraj yok) bant çıkmaz", !/A\d+,\d+,1,\d,\d,\d,R,/.test(swBanner));
+
+// --- 9. v2 ÇOK DİLLİ: ZPL metraj bandı (^GB siyah kutu + ^A0R^FR beyaz değer) ---
+const zplBan = buildRollLabelZpl({ ...base, template: bannerTpl });
+check("ZPL bant: ^GB solid siyah kutu", /\^GB\d+,\d+,\d+,B\^FS/.test(zplBan));
+check("ZPL bant: ^A0R döndürülmüş + ^FR ters değer (metraj)", /\^A0R,\d+,\d+\^FR\^FD *320 */.test(zplBan));
+check("ZPL bant kapalı (null) → ^FR yok", !buildRollLabelZpl({ ...base, template: null }).includes("^FR"));
+// v2 auto-step ÜÇÜNDE de çakışmasız (PPLA/ZPL xl+bold)
+const zplXl = buildRollLabelZpl({ ...base, template: xlTpl });
+const zRows = [...zplXl.matchAll(/\^FO\d+,(\d+)\^A0N,(\d+),/g)].map((m) => ({ y: +m[1], h: +m[2] }));
+let zOverlap = false;
+for (let i = 0; i < zRows.length - 1; i++) if (zRows[i].y + zRows[i].h > zRows[i + 1].y) zOverlap = true;
+check("ZPL v2: xl+bold → dikey çakışma YOK (otomatik adım)", zRows.length >= 2 && !zOverlap);
+const pplaXl = buildRollLabelPpla({ ...base, template: xlTpl });
+const pRows = [...pplaXl.matchAll(/^1[1-9]\d\d000(\d{4})(\d{4})/gm)].map((m) => +m[1]);
+check("PPLA v2: satırlar artan (auto-step, çakışmasız)", pRows.length >= 2 && pRows.every((v, i) => i === 0 || v > pRows[i - 1]));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);
