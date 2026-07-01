@@ -98,6 +98,7 @@ function FieldRow({
   onRemove: (key: string) => void;
 }) {
   const required = meta?.required;
+  const isScan = meta?.type === "barcode" || meta?.type === "qr";
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: field.key,
   });
@@ -141,29 +142,42 @@ function FieldRow({
           </span>
         )}
       </label>
-      <label className="flex items-center gap-1 text-[10px]">
-        <input
-          type="checkbox"
-          checked={field.isBold ?? false}
-          onChange={(e) => onUpdate(field.key, { isBold: e.target.checked })}
-        />
-        Kalın
-      </label>
-      <select
-        value={field.fontSize ?? "md"}
-        onChange={(e) =>
-          onUpdate(field.key, {
-            fontSize: e.target.value as TemplateField["fontSize"],
-          })
-        }
-        className="h-7 rounded border bg-background px-1 text-[10px]"
-        title="Yazı boyutu"
-      >
-        <option value="sm">sm</option>
-        <option value="md">md</option>
-        <option value="lg">lg</option>
-        <option value="xl">xl</option>
-      </select>
+      {isScan ? (
+        // Barkod/QR = grafik, metin değil → font boyutu/kalın işe yaramaz. QR boyutu
+        // "Yerleşim → QR boyutu"ndan; barkod boyutu sabit (alt bant).
+        <span
+          className="whitespace-nowrap text-[9px] italic text-muted-foreground"
+          title="Barkod/QR grafiktir — font boyutu/kalın etkisizdir. QR boyutu: Yerleşim → QR boyutu. Barkod boyutu sabit."
+        >
+          grafik · boyut Yerleşim'den
+        </span>
+      ) : (
+        <>
+          <label className="flex items-center gap-1 text-[10px]">
+            <input
+              type="checkbox"
+              checked={field.isBold ?? false}
+              onChange={(e) => onUpdate(field.key, { isBold: e.target.checked })}
+            />
+            Kalın
+          </label>
+          <select
+            value={field.fontSize ?? "md"}
+            onChange={(e) =>
+              onUpdate(field.key, {
+                fontSize: e.target.value as TemplateField["fontSize"],
+              })
+            }
+            className="h-7 rounded border bg-background px-1 text-[10px]"
+            title="Yazı boyutu"
+          >
+            <option value="sm">sm</option>
+            <option value="md">md</option>
+            <option value="lg">lg</option>
+            <option value="xl">xl</option>
+          </select>
+        </>
+      )}
       {!required && (
         <Button
           type="button"

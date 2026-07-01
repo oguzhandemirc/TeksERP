@@ -99,20 +99,20 @@ check("v2 WYSIWYG: önizleme QR boyutu = ayak izi (bwip viewBox değil)", qrImgW
 const tX = (s: number) => Number((buildRollLabelPplb({ ...base, template: tpl({ qrScale: s }) }).match(/A(\d+),/) || [])[1]);
 check("v2: qrScale büyüdükçe textX sağa kayar (QR'ı geçer)", tX(8) > tX(3));
 
-// --- 8. Sağ dikey metraj bandı (ekstra) — LO siyah şerit + döndürülmüş ters (beyaz) değer ---
+// --- 8. Sağ dikey metraj bandı (ekstra) — ters (R) döndürülmüş değer TEK BAŞINA (LO yok) ---
 const bannerTpl = { kind: "ROLL_RAW", rawCode: null, qrScale: null, lineStepMm: null, lengthBanner: true } as unknown as LabelTemplate;
 const withBanner = buildRollLabelPplb({ ...base, template: bannerTpl });
 const noBanner = buildRollLabelPplb({ ...base, template: null });
-check("bant: LO siyah şerit basılır", /LO\d+,\d+,\d+,\d+/.test(withBanner));
 check("bant: döndürülmüş ters değer (A rot1 R, sadece metraj)", /A\d+,\d+,1,\d,\d,\d,R,"320"/.test(withBanner));
-check("bant kapalı (null) → LO yok", !/LO\d+/.test(noBanner));
-// İçerik banda girmez: LO x = sağ şerit; barkod B x + QR b x bunun solunda
-const bannerXm = withBanner.match(/LO(\d+),/);
+check("bant: LO KULLANILMAZ (LO+R = beyaz-kutu XOR bug'ı)", !/LO\d+/.test(withBanner));
+check("bant kapalı (null) → döndürülmüş ters yok", !/A\d+,\d+,1,\d,\d,\d,R,/.test(noBanner));
+// İçerik banda girmez: alt barkod (B x=left) bandın (A x=right) SOLUNDA
+const bannerAx = withBanner.match(/A(\d+),\d+,1,\d,\d,\d,R,/);
 const bcXm = withBanner.match(/\nB(\d+),/) ?? withBanner.match(/^B(\d+),/m);
-check("bant: alt barkod bandın SOLUNDA (çakışma yok)", Boolean(bannerXm && bcXm) && Number(bcXm![1]) < Number(bannerXm![1]));
+check("bant: alt barkod bandın SOLUNDA (çakışma yok)", Boolean(bannerAx && bcXm) && Number(bcXm![1]) < Number(bannerAx![1]));
 // SWATCH'ta metraj yok → bant çıkmaz
 const swBanner = buildRollLabelPplb({ payload: { ...payload, kind: "SWATCH" } as unknown as LabelPayload, format, copies: 1, template: bannerTpl });
-check("bant: SWATCH'ta (metraj yok) LO çıkmaz", !/LO\d+/.test(swBanner));
+check("bant: SWATCH'ta (metraj yok) bant çıkmaz", !/A\d+,\d+,1,\d,\d,\d,R,/.test(swBanner));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

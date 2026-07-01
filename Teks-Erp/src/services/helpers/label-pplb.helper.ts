@@ -58,9 +58,12 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
     payload.lengthMeters != null &&
     String(payload.lengthMeters).trim() !== "" &&
     payload.kind !== "SWATCH";
-  const bannerW = bannerOn ? d(11) : 0;
-  const bannerX = right - bannerW;
-  const contentRight = bannerOn ? bannerX - d(2) : right;
+  // Ters metin (R) TEK BAŞINA kullanılır → kendi siyah kutusu + beyaz glif (LO YOK;
+  // LO+R Argox'ta XOR'lanıp beyaz kutuya dönüyordu). Kutu genişliği = döndürülmüş
+  // glif yüksekliği (font4 × 3). Sağ şerit rezerve edilir → içerik banda girmez.
+  const BANNER_MUL = 3;
+  const bannerW = bannerOn ? EPL_FONT.xl.h * BANNER_MUL : 0;
+  const contentRight = bannerOn ? right - bannerW - d(2) : right;
 
   const lines: string[] = [];
 
@@ -98,19 +101,15 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
     lines.push(`B${left},${bcTop},0,1,2,3,${bcBars},B,"${bc}"`);
   }
 
-  // --- Ekstra: sağ dikey metraj bandı — siyah şerit (LO) + beyaz döndürülmüş değer (A rot1,R) ---
+  // --- Ekstra: sağ dikey metraj bandı — ters (R) döndürülmüş değer TEK BAŞINA ---
+  // Reverse kendi siyah kutusunu + beyaz glifi çizer (LO YOK). Sağ kenara yaslanır,
+  // dikeyde ortalanır. rotation 1 (90° CW): (x,y) anchor sağ; blok sola+aşağı uzar.
   if (bannerOn) {
     const val = eplData(String(payload.lengthMeters)); // yalnız değer
     const f = EPL_FONT.xl; // font4 (14×24) — büyük, okunur
-    const mul = 3;
-    const gh = f.h * mul; // döndürülünce yatay genişlik (72 < banner 88)
-    const textLen = val.length * f.w * mul; // döndürülünce dikey uzunluk
-    const bannerH = bottomEdge - top;
-    lines.push(`LO${bannerX},${top},${bannerW},${bannerH}`); // siyah şerit
-    // rotation 1 (90° CW): metin (x,y)'den aşağı uzar, glif sola taşar → banda ortala
-    const tx = bannerX + Math.round(bannerW / 2 + gh / 2);
-    const ty = top + Math.round((bannerH - textLen) / 2);
-    lines.push(`A${tx},${ty},1,${f.code},${mul},${mul},R,"${val}"`);
+    const textLen = val.length * f.w * BANNER_MUL; // döndürülünce dikey uzunluk
+    const ty = top + Math.round((bottomEdge - top - textLen) / 2);
+    lines.push(`A${right},${ty},1,${f.code},${BANNER_MUL},${BANNER_MUL},R,"${val}"`);
   }
 
   lines.push(`P${clampCopies(copies)}`); // kopya adedi → bas
