@@ -93,10 +93,11 @@ export function LabelTemplateEditPage() {
         lengthBanner,
       }),
     onSuccess: () => {
+      // Kaydet sayfada KALIR (geri çıkmaz) — kullanıcı arka arkaya düzenleyip test
+      // basabilsin. Sayfadan çıkmak için sol geri-oku kullanılır.
       toast.success("Şablon kaydedildi.");
       void qc.invalidateQueries({ queryKey: ["label-templates"] });
       void qc.invalidateQueries({ queryKey: ["label-template", id] });
-      navigate(backPath);
     },
   });
 
