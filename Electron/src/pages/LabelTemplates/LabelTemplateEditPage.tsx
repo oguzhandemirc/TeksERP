@@ -12,7 +12,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   labelKindLabels,
   labelTemplateService,
+  rawCodeLangLabels,
   type CatalogField,
+  type RawCodeLang,
   type RawCodeMap,
   type TemplateField,
 } from "@/services/labelTemplateService";
@@ -127,6 +129,8 @@ export function LabelTemplateEditPage() {
 
   const loading = templateQ.isLoading || catalogQ.isLoading;
   const orderedFields = useMemo(() => fields.map((f, i) => ({ ...f, order: i + 1 })), [fields]);
+  // Uzman kod yazılan diller → o dilde baskıda ALANLAR yerine kod kullanılır (uyarı).
+  const rawCodeLangs = (Object.keys(rawCode) as RawCodeLang[]).filter((k) => (rawCode[k] ?? "").trim());
 
   return (
     <div className="flex h-full flex-col">
@@ -214,6 +218,15 @@ export function LabelTemplateEditPage() {
               </div>
 
               <TabsContent value="fields" className="mt-4">
+                {rawCodeLangs.length > 0 && (
+                  <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                    ⚠️ <strong>Kod (uzman)</strong> sekmesinde{" "}
+                    <strong>{rawCodeLangs.map((l) => rawCodeLangLabels[l]).join(", ")}</strong> için
+                    özel kod yazdın. Bu dil(ler)de baskıda aşağıdaki <strong>alanlar KULLANILMAZ</strong> —
+                    onun yerine yazdığın kod basılır. Alanların tekrar çalışması için o dildeki kodu
+                    "Kod (uzman)" sekmesinden sil.
+                  </div>
+                )}
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[200px_minmax(0,500px)_minmax(0,1fr)]">
                   <CatalogPanel available={availableCatalog} onAdd={addField} />
                   <FieldsPanel
