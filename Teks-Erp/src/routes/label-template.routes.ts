@@ -78,6 +78,17 @@ router.post("/preview-raw", verifyToken, requirePermission("label-template:read"
 
 /**
  * @openapi
+ * /api/label-templates/default-code:
+ *   get:
+ *     tags: [Label Templates]
+ *     summary: Bu tür+dil için otomatik üretilen kod ({{}} yer-tutuculu, düzenlenebilir)
+ *     description: ?kind=&language= — "Varsayılan kodu getir" düğmesi bunu editöre yükler.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/default-code", verifyToken, requirePermission("label-template:read"), controller.defaultCode);
+
+/**
+ * @openapi
  * /api/label-templates/{id}:
  *   get:
  *     tags: [Label Templates]

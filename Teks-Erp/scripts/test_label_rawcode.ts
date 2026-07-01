@@ -39,7 +39,9 @@ const fmt = { widthMm: 100, heightMm: 58, marginMm: 3, gapMm: 2, dpi: 203, orien
 const base: LabelRenderInput = { payload, template: null, barcodeSvg: "<svg/>", qrSvg: "<svg/>", copies: 1, format: fmt };
 
 const withOverride = renderLabel(PrinterLanguage.ZPL, { ...base, template: { rawCode: { ZPL: "^XA{{barcode}}^XZ" } } as unknown as LabelRenderInput["template"] });
-check("override → kendi ZPL kodu basılır", withOverride.content === "^XABC-123^XZ", withOverride.content);
+// Native raw-code CRLF'e normalize edilir + sona CRLF eklenir (yazıcı basar) → trim ile karşılaştır.
+check("override → kendi ZPL kodu basılır", withOverride.content.trim() === "^XABC-123^XZ", JSON.stringify(withOverride.content));
+check("native override sonda CRLF ile biter", withOverride.content.endsWith("\r\n"));
 check("override dil = ZPL", withOverride.language === "ZPL");
 
 const noOverride = renderLabel(PrinterLanguage.ZPL, { ...base, template: { rawCode: null } as unknown as LabelRenderInput["template"] });

@@ -68,9 +68,13 @@ export function renderLabel(language: PrinterLanguage, input: LabelRenderInput):
   if (raw) {
     let content = applyRawCode(raw, input.payload, { barcodeSvg: input.barcodeSvg, qrSvg: input.qrSvg });
     // Native yazıcılar (PPLA/PPLB/ZPL) komut satırlarını CR/LF ile ayırır — otomatik
-    // üretici CRLF verir. Kullanıcı LF yapıştırsa da CRLF'e normalize et; yoksa bazı
-    // Argox EPL2 modunda "veri yazıcıya gider ama BASMAZ" olur.
-    if (effective !== PrinterLanguage.RASTER_HTML) content = content.replace(/\r?\n/g, "\r\n");
+    // üretici CRLF verir + SON komutu da CRLF ile sonlandırır. Kullanıcı LF yapıştırsa
+    // ya da sonda satır sonu bırakmasa da normalize et; yoksa son komut (P1=bas)
+    // sonlanmaz → "veri yazıcıya gider ama BASMAZ" olur.
+    if (effective !== PrinterLanguage.RASTER_HTML) {
+      content = content.replace(/\r?\n/g, "\r\n");
+      if (!content.endsWith("\r\n")) content += "\r\n";
+    }
     return { language: effective, content, contentType: CONTENT_TYPES[effective] };
   }
   return {

@@ -110,6 +110,17 @@ export class LabelTemplateController {
     } catch (e) { next(e); }
   };
 
+  /** Bu tür+dil için otomatik üretilen kodu {{}} yer-tutuculu şablon olarak döner. */
+  defaultCode = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { kind, language } = z
+        .object({ kind: z.nativeEnum(LabelKind), language: z.nativeEnum(PrinterLanguage) })
+        .parse({ kind: req.query.kind, language: req.query.language });
+      const result = await this.service.getDefaultCode(kind, language);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
   setDefault = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await this.service.setDefault(req.params.id as string, req.user?.userId);

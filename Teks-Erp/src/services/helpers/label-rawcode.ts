@@ -65,7 +65,7 @@ export function buildRawCodePreview(
   return { content: filled, contentType: PREVIEW_CONTENT_TYPE[language] };
 }
 
-function mockPayload(kind: LabelKind): LabelPayload {
+export function mockPayload(kind: LabelKind): LabelPayload {
   return {
     rollId: "preview", barcode: "TR-2026-05-26-R0123", status: "STOCK", qualityGrade: "1. Kalite",
     widthCm: 152, lengthMeters: 47.5, weightKg: 14.8, markedForKartela: true,

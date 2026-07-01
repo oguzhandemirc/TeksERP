@@ -19,9 +19,11 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
+import bwipjs from "bwip-js";
 import {
   LabelTemplate,
   LabelKind,
+  PrinterLanguage,
   Prisma,
 } from "@prisma/client";
 import {
@@ -33,6 +35,10 @@ import {
   getAllowedKeys,
   getRequiredKeys,
 } from "../config/label-fields";
+import { renderLabel } from "./helpers/label-renderer.registry";
+import { resolveLabelFormat } from "./helpers/label-format.resolver";
+import { mockPayload } from "./helpers/label-rawcode";
+import { fieldDisplayValue } from "./helpers/label-field-values";
 
 const TABLE = "LABEL_TEMPLATE";
 
@@ -296,6 +302,30 @@ export class LabelTemplateService {
     });
 
     return { success: true, data: { deactivated: true }, message: "Template pasifleştirildi" };
+  }
+
+  /**
+   * Bu tür + dil için OTOMATİK ÜRETİLEN kodu, düzenlenebilir {{}} yer-tutuculu şablon
+   * olarak döner ("Varsayılan kodu getir"). Auto çıktısındaki görünen alan değerlerini
+   * ({{key}}) yer-tutucusuna geri çevirir → uzman bunu kopyalayıp/düzenleyip kaydeder.
+   */
+  async getDefaultCode(kind: LabelKind, language: PrinterLanguage): Promise<ApiResponse<{ code: string }>> {
+    const payload = mockPayload(kind);
+    const tpl = await prisma.labelTemplate.findFirst({ where: { kind, isDefault: true, isActive: true } });
+    // rawCode'u sıyır → otomatik üretim (şablonun alanlarıyla); değerler fieldDisplayValue
+    // formatında çıkar → aşağıdaki geri-çevirme birebir eşleşir.
+    const template = tpl ? ({ ...tpl, rawCode: null } as LabelTemplate) : null;
+    const format = await resolveLabelFormat({ kind });
+    const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
+    const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });
+    let code = renderLabel(language, { payload, template, barcodeSvg, qrSvg, copies: 1, format }).content;
+    // Görünen değer → {{key}} (uzun değer önce ki alt-dize çakışması olmasın).
+    const pairs = [...getAllowedKeys(kind)]
+      .map((k) => [k, fieldDisplayValue(payload, k).value] as const)
+      .filter(([, v]) => v && v.trim().length > 1)
+      .sort((a, b) => b[1].length - a[1].length);
+    for (const [k, v] of pairs) code = code.split(v).join(`{{${k}}}`);
+    return { success: true, data: { code } };
   }
 }
 

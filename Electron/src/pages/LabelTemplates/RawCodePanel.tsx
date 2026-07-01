@@ -21,39 +21,6 @@ interface Props {
 
 const LANGS: RawCodeLang[] = ["PPLA", "PPLB", "ZPL", "RASTER_HTML"];
 
-// Çalışan başlangıç şablonları (100×50 mm, 203 dpi) — kullanıcı bunu düzenler. PPLA
-// (DPL, STX gerektirir) elle yazım için fazla kırılgan → şablon yok.
-const STARTERS: Partial<Record<RawCodeLang, string>> = {
-  PPLB: `N
-q799
-Q400,16
-D10
-A24,24,0,4,1,1,N,"{{itemName}}"
-A24,70,0,2,1,1,N,"Kod: {{itemCode}}  Kalite: {{qualityGrade}}"
-A24,104,0,5,1,1,N,"{{lengthMeters}}"
-A24,160,0,2,1,1,N,"Agirlik: {{weightKg}}"
-b600,24,Q,m2,s5,"{{barcode}}"
-B24,300,0,1,2,4,56,B,"{{barcode}}"
-P1`,
-  ZPL: `^XA
-^PW799
-^LL400
-^FO24,24^A0N,44,44^FD{{itemName}}^FS
-^FO24,84^A0N,26,26^FDKod: {{itemCode}}  Kalite: {{qualityGrade}}^FS
-^FO24,120^A0N,56,56^FD{{lengthMeters}}^FS
-^FO24,190^A0N,26,26^FDAgirlik: {{weightKg}}^FS
-^FO600,24^BQN,2,6^FDLA,{{barcode}}^FS
-^FO24,300^BY2^BCN,60,Y,N,N^FD{{barcode}}^FS
-^XZ`,
-  RASTER_HTML: `<div style="width:94mm;height:44mm;font-family:sans-serif;padding:3mm">
-  <div style="font-size:20pt;font-weight:700">{{itemName}}</div>
-  <div style="font-size:10pt">Kod: {{itemCode}} · Kalite: {{qualityGrade}}</div>
-  <div style="font-size:22pt;font-weight:700">{{lengthMeters}}</div>
-  <div style="font-size:10pt">Agirlik: {{weightKg}}</div>
-  {{barcodeSvg}}
-</div>`,
-};
-
 // "Yazıcıya gider ama basmaz" tuzağı: kod veri içeriyor ama komut yapısı eksik.
 function codeIssue(lang: RawCodeLang, code: string): string | null {
   const c = code.trim();
@@ -101,12 +68,18 @@ export function RawCodePanel({ kind, catalog, rawCode, onChange }: Props) {
 
   const setCode = (v: string) => onChange({ ...rawCode, [lang]: v });
 
-  const starter = STARTERS[lang];
   const issue = codeIssue(lang, code);
-  const applyStarter = () => {
-    if (!starter) return;
-    if (code.trim() && !window.confirm("Mevcut kod başlangıç şablonuyla değiştirilsin mi?")) return;
-    setCode(starter);
+  const [loadingDefault, setLoadingDefault] = useState(false);
+  // "Varsayılan kodu getir" — otomatik üretilen kodu {{}} yer-tutuculu şablon olarak
+  // editöre yükler (kullanıcı görüp üstünde düzenler; garantili basar).
+  const fetchDefault = async () => {
+    if (code.trim() && !window.confirm("Mevcut kod, varsayılan (otomatik) kodla değiştirilsin mi?")) return;
+    setLoadingDefault(true);
+    try {
+      setCode(await labelTemplateService.defaultCode(kind, lang));
+    } finally {
+      setLoadingDefault(false);
+    }
   };
 
   // Değişken çipleri: katalog anahtarları + HTML'de gömülü SVG'ler.
@@ -189,11 +162,16 @@ export function RawCodePanel({ kind, catalog, rawCode, onChange }: Props) {
             className="h-[420px] w-full resize-none rounded-md border bg-background p-2 font-mono text-xs leading-relaxed outline-none focus:ring-1 focus:ring-ring"
           />
           <div className="flex flex-wrap items-center gap-2">
-            {starter && (
-              <Button type="button" size="sm" variant="outline" className="h-7 text-[11px]" onClick={applyStarter}>
-                Başlangıç şablonu ekle
-              </Button>
-            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px]"
+              disabled={loadingDefault}
+              onClick={() => void fetchDefault()}
+            >
+              {loadingDefault ? "Getiriliyor…" : "Varsayılan kodu getir"}
+            </Button>
             {code.trim().length > 0 && (
               <Button
                 type="button"
@@ -202,7 +180,7 @@ export function RawCodePanel({ kind, catalog, rawCode, onChange }: Props) {
                 className="h-7 text-[11px] text-destructive"
                 onClick={() => setCode("")}
               >
-                Bu dilin kodunu temizle (otomatiğe dön)
+                Varsayılana dön (kodu sil)
               </Button>
             )}
           </div>

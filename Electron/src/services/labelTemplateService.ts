@@ -167,4 +167,12 @@ export const labelTemplateService = {
         { responseType: "text", transformResponse: [(d) => d] },
       )
       .then((r) => r.data),
+
+  /** Bu tür+dil için otomatik üretilen kodu {{}} yer-tutuculu (düzenlenebilir) döner. */
+  defaultCode: (kind: LabelKind, language: RawCodeLang): Promise<string> =>
+    apiClient
+      .get<ApiResponse<{ code: string }>>("/api/label-templates/default-code", {
+        params: { kind, language },
+      })
+      .then((r) => r.data.data.code),
 };
