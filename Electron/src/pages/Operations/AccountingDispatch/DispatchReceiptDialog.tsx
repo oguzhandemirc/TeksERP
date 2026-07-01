@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FileSpreadsheet, Printer, Tags, X } from "lucide-react";
+import { FileSpreadsheet, Printer, Tags } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -92,7 +92,7 @@ export function DispatchReceiptDialog({ receiptFor, onClose }: Props) {
     <>
     <Dialog open={Boolean(receiptFor)} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex h-[90vh] max-w-4xl flex-col">
-        <DialogHeader className="flex shrink-0 flex-row items-center justify-between">
+        <DialogHeader className="flex shrink-0 flex-row items-center justify-between pr-8">
           <DialogTitle>Sevk Fişi — {receiptFor?.shipmentNo}</DialogTitle>
           <div className="flex items-center gap-2">
             <Button
@@ -121,9 +121,8 @@ export function DispatchReceiptDialog({ receiptFor, onClose }: Props) {
             >
               <Printer className="h-4 w-4" /> Yazdır
             </Button>
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </Button>
+            {/* Kapatma: DialogContent'in yerleşik (sağ üst) X'i kullanılır — burada
+                ikinci bir X BASILMAZ (çift çıkış butonu olmasın). */}
           </div>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/20">
