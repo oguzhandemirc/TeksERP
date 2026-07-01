@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { Send, Printer, Usb } from "lucide-react";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { labelFormatProfileService } from "./service";
@@ -21,11 +20,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { labelService, type NativeSendResult } from "@/services/labelService";
 import { PRINTER_LANGUAGE_LABELS, type PrinterLanguage } from "@/services/featureFlagService";
 
-// Native gönderim dilleri (HTML hariç — HTML önizleme zaten iframe'de, doğrudan gönderim yok).
 const LANGS: PrinterLanguage[] = ["PPLA", "PPLB", "ZPL"];
+
+// Etiket türü — o türün gerçek standart şablonuyla + tür-uygun örnek veriyle basılır.
+const KINDS = [
+  { value: "ROLL_RAW", label: "Ham Top (renksiz)" },
+  { value: "ROLL_FINISHED", label: "Bitmiş Top (renkli)" },
+  { value: "SWATCH", label: "Kartela" },
+] as const;
+type Kind = (typeof KINDS)[number]["value"];
 
 interface Props {
   /** Test edilecek (kayıtlı) profil id'si — null = kapalı. */
@@ -35,9 +40,9 @@ interface Props {
 }
 
 /**
- * Test Baskısı — profil geometrisinde örnek etiket önizleme (boyut/pay doğrulama)
- * + opsiyonel "gerçek yazıcıya gönder". Doğrudan gönderim Genel Ayarlar'dan kapalıysa
- * simüle eder. Kayıtlı profili test eder (önce düzenlemeyi kaydet).
+ * Test Baskısı — profil geometrisinde SEÇİLEN TÜRÜN (Ham/Bitmiş/Kartela) gerçek
+ * standart etiketini önizler + yerel (Bu PC) veya ağ (IP) yazıcıya bastırır. Örnek
+ * veriyle çalışır; gerçek top gerekmez. Kayıtlı profili test eder (önce kaydet).
  */
 export function TestPrintDialog({ profileId, profileName, onOpenChange }: Props) {
   const open = Boolean(profileId);
@@ -46,67 +51,45 @@ export function TestPrintDialog({ profileId, profileName, onOpenChange }: Props)
   const printerApi = typeof window !== "undefined" ? window.api?.printer : undefined;
   const localReady = Boolean(lpCfg?.enabled && lpCfg?.path && printerApi);
 
+  const [kind, setKind] = useState<Kind>("ROLL_RAW");
   const [mode, setMode] = useState<"local" | "ip">("local");
   const [printerIp, setPrinterIp] = useState("");
   const [lang, setLang] = useState<PrinterLanguage>("PPLB");
-  const [result, setResult] = useState<NativeSendResult | null>(null);
-  const [localResult, setLocalResult] = useState<{ ok: boolean; text: string } | null>(null);
-  const [localSending, setLocalSending] = useState(false);
-
-  // "Bu PC" testi: örnek native'i çek + yerel yazıcıya (CUPS/seri) doğrudan gönder.
-  const localTest = async () => {
-    if (!printerApi || !lpCfg?.path || !profileId) return;
-    setLocalSending(true);
-    setLocalResult(null);
-    try {
-      const native = await labelFormatProfileService.sampleNative(profileId, lang);
-      const res = await printerApi.send({
-        transport: lpCfg.transport ?? "serial",
-        target: lpCfg.path,
-        baudRate: lpCfg.baudRate,
-        content: native,
-      });
-      setLocalResult(
-        res.ok
-          ? { ok: true, text: `Gönderildi → ${lpCfg.path} (${res.bytes} bayt)` }
-          : {
-              ok: false,
-              text: res.available ? `Hata: ${res.error ?? "bilinmeyen"}` : "Yerel yazıcı sürücüsü hazır değil.",
-            },
-      );
-    } catch (e) {
-      setLocalResult({ ok: false, text: (e as Error).message });
-    } finally {
-      setLocalSending(false);
-    }
-  };
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   const htmlQ = useQuery({
-    queryKey: ["format-profile-sample", profileId],
-    queryFn: () => labelService.getFormatProfileSampleHtml(profileId!),
+    queryKey: ["format-profile-sample", profileId, kind],
+    queryFn: () => labelFormatProfileService.sampleHtml(profileId!, kind),
     enabled: open,
     staleTime: 0,
   });
 
-  const sendMut = useMutation({
-    mutationFn: () =>
-      labelService.testNativeSend({ profileId: profileId!, printerIp: printerIp.trim(), language: lang }),
-    onSuccess: (res) => {
-      setResult(res.data);
-      if (res.data.delivered) toast.success("Yazıcıya gönderildi.");
-      else if (res.data.simulated) toast.message("Simüle edildi (doğrudan gönderim kapalı).");
-      else toast.error(res.data.error ?? "Gönderilemedi.");
-    },
-  });
+  // Ortak gönderim: seçilen türün örnek native'ini çek + yazıcıya (yerel/ağ) gönder.
+  const doSend = async (transport: "cups" | "serial" | "tcp", target: string, baudRate?: number) => {
+    if (!printerApi || !profileId || !target) return;
+    setSending(true);
+    setResult(null);
+    try {
+      const native = await labelFormatProfileService.sampleNative(profileId, lang, kind);
+      const res = await printerApi.send({ transport, target, baudRate, content: native });
+      setResult(
+        res.ok
+          ? { ok: true, text: `Gönderildi → ${target} (${res.bytes} bayt)` }
+          : { ok: false, text: res.available ? (res.error ?? "bilinmeyen hata") : "Yazıcı sürücüsü/hedef hazır değil." },
+      );
+    } catch (e) {
+      setResult({ ok: false, text: (e as Error).message });
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        if (!o) {
-          setResult(null);
-          setLocalResult(null);
-        }
+        if (!o) setResult(null);
         onOpenChange(o);
       }}
     >
@@ -114,10 +97,26 @@ export function TestPrintDialog({ profileId, profileName, onOpenChange }: Props)
         <DialogHeader>
           <DialogTitle>Test Baskısı{profileName ? ` — ${profileName}` : ""}</DialogTitle>
           <DialogDescription>
-            Profil geometrisinde örnek etiket. Boyut/payın doğru olup olmadığını kontrol et;
-            istersen gerçek yazıcıya da gönder.
+            Seçtiğin türün (Ham/Bitmiş/Kartela) gerçek standart etiketi, bu profilin
+            boyutunda. Önce önizle, sonra istersen yazıcıya bas.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="w-56">
+          <label className="text-xs text-muted-foreground">Etiket türü</label>
+          <Select value={kind} onValueChange={(v) => setKind(v as Kind)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {KINDS.map((k) => (
+                <SelectItem key={k.value} value={k.value}>
+                  {k.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {htmlQ.isLoading ? (
           <Skeleton className="h-[420px] w-full" />
@@ -183,8 +182,13 @@ export function TestPrintDialog({ profileId, profileName, onOpenChange }: Props)
                     Yerel yazıcı: <span className="font-mono">{lpCfg?.path}</span> (
                     {lpCfg?.transport ?? "serial"}). Genel Ayarlar → Etiket Yazıcısı'ndan değişir.
                   </p>
-                  <Button type="button" disabled={localSending} onClick={() => void localTest()} className="gap-1">
-                    <Printer className="h-3.5 w-3.5" /> {localSending ? "Gönderiliyor…" : "Bu PC'deki yazıcıya bas"}
+                  <Button
+                    type="button"
+                    disabled={sending}
+                    onClick={() => void doSend(lpCfg?.transport ?? "serial", lpCfg!.path!, lpCfg?.baudRate)}
+                    className="gap-1"
+                  >
+                    <Printer className="h-3.5 w-3.5" /> {sending ? "Gönderiliyor…" : "Bu PC'deki yazıcıya bas"}
                   </Button>
                 </>
               ) : (
@@ -192,64 +196,45 @@ export function TestPrintDialog({ profileId, profileName, onOpenChange }: Props)
                   Bu PC'de yazıcı ayarlı değil. Genel Ayarlar → Etiket Yazıcısı'ndan aç + kuyruğu/portu seç.
                 </p>
               )}
-              {localResult && (
-                <div
-                  className={`rounded-md border px-3 py-2 text-xs ${
-                    localResult.ok
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                      : "border-amber-300 bg-amber-50 text-amber-800"
-                  }`}
-                >
-                  {localResult.ok ? `✓ ${localResult.text}` : `Gönderilemedi: ${localResult.text}`}
-                </div>
-              )}
             </div>
           ) : (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-end gap-2">
-                <div className="min-w-[12rem] flex-1">
-                  <label className="text-xs text-muted-foreground" htmlFor="test-printer-ip">
-                    Yazıcı IP
-                  </label>
-                  <Input
-                    id="test-printer-ip"
-                    value={printerIp}
-                    onChange={(e) => setPrinterIp(e.target.value)}
-                    placeholder="192.168.1.50"
-                    className="font-mono"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  disabled={!printerIp.trim() || sendMut.isPending}
-                  onClick={() => sendMut.mutate()}
-                  className="gap-1"
-                >
-                  <Send className="h-3.5 w-3.5" /> {sendMut.isPending ? "Gönderiliyor…" : "Gönder"}
-                </Button>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-[12rem] flex-1">
+                <label className="text-xs text-muted-foreground" htmlFor="test-printer-ip">
+                  Yazıcı IP (ağ / 9100)
+                </label>
+                <Input
+                  id="test-printer-ip"
+                  value={printerIp}
+                  onChange={(e) => setPrinterIp(e.target.value)}
+                  placeholder="192.168.1.50"
+                  className="font-mono"
+                />
               </div>
-              {result && (
-                <div
-                  className={`rounded-md border px-3 py-2 text-xs ${
-                    result.delivered
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                      : result.simulated
-                        ? "border-sky-300 bg-sky-50 text-sky-800"
-                        : "border-amber-300 bg-amber-50 text-amber-800"
-                  }`}
-                >
-                  {result.delivered
-                    ? `✓ Gönderildi — ${result.bytes} bayt → ${result.target}`
-                    : result.simulated
-                      ? `Simüle edildi (doğrudan gönderim KAPALI — Genel Ayarlar'dan açın). Hedef: ${result.target}`
-                      : `Gönderilemedi: ${result.error ?? result.note}`}
-                </div>
-              )}
+              <Button
+                type="button"
+                disabled={!printerIp.trim() || sending || !printerApi}
+                onClick={() => void doSend("tcp", printerIp.trim())}
+                className="gap-1"
+              >
+                <Send className="h-3.5 w-3.5" /> {sending ? "Gönderiliyor…" : "Gönder"}
+              </Button>
+            </div>
+          )}
+
+          {result && (
+            <div
+              className={`rounded-md border px-3 py-2 text-xs ${
+                result.ok
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                  : "border-amber-300 bg-amber-50 text-amber-800"
+              }`}
+            >
+              {result.ok ? `✓ ${result.text}` : `Gönderilemedi: ${result.text}`}
             </div>
           )}
           <p className="text-[10px] text-muted-foreground">
-            "Bu PC" = yerel yazıcıya doğrudan (USB/CUPS/seri). "Ağ (IP)" = backend'den ağ yazıcısına
-            (9100); doğrudan gönderim kapalıysa simüle (Faz-1).
+            "Bu PC" = yerel yazıcıya doğrudan (USB/CUPS/seri). "Ağ (IP)" = ağ yazıcısına (RAW 9100).
           </p>
         </div>
       </DialogContent>

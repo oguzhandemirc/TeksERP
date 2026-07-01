@@ -9,7 +9,7 @@
 // =============================================================================
 
 import { Router } from "express";
-import { PrinterLanguage } from "@prisma/client";
+import { PrinterLanguage, LabelKind } from "@prisma/client";
 import { BaseController } from "../controllers/base.controller";
 import { PrinterModelService, LabelFormatProfileService } from "../services/printer.service";
 import { verifyToken } from "../middlewares/auth.middleware";
@@ -86,10 +86,14 @@ labelFormatProfileRouter.post(
   },
 );
 
+/** ?kind = ROLL_RAW (ham) | ROLL_FINISHED (bitmiş) | SWATCH (kartela); default ham. */
+const parseKind = (v: unknown): LabelKind =>
+  v === "ROLL_FINISHED" || v === "SWATCH" ? (v as LabelKind) : LabelKind.ROLL_RAW;
+
 /**
  * @openapi
  * /api/label-format-profiles/{id}/sample-native:
- *   get: { tags: [Printers], summary: Örnek etiketin native komutu (yerel test baskısı için; text/plain), security: [{ bearerAuth: [] }], responses: { 200: { description: PPLA/PPLB/ZPL string } } }
+ *   get: { tags: [Printers], summary: Örnek etiketin native komutu (?kind=ham/bitmiş/kartela; text/plain), security: [{ bearerAuth: [] }], responses: { 200: { description: PPLA/PPLB/ZPL string } } }
  */
 labelFormatProfileRouter.get(
   "/:id/sample-native",
@@ -100,8 +104,27 @@ labelFormatProfileRouter.get(
       const raw = typeof req.query.language === "string" ? req.query.language : undefined;
       const language =
         raw === "PPLA" || raw === "PPLB" || raw === "ZPL" ? (raw as PrinterLanguage) : undefined;
-      const result = await labelFormatProfileService.getSampleNative(req.params.id as string, language);
+      const result = await labelFormatProfileService.getSampleNative(
+        req.params.id as string, language, parseKind(req.query.kind),
+      );
       res.status(200).type("text/plain; charset=utf-8").send(result.data.content);
+    } catch (e) { next(e); }
+  },
+);
+
+/**
+ * @openapi
+ * /api/label-format-profiles/{id}/sample-html:
+ *   get: { tags: [Printers], summary: Örnek etiket önizleme HTML'i (?kind=ham/bitmiş/kartela), security: [{ bearerAuth: [] }], responses: { 200: { description: HTML } } }
+ */
+labelFormatProfileRouter.get(
+  "/:id/sample-html",
+  verifyToken,
+  requirePermission("station:read"),
+  async (req, res, next) => {
+    try {
+      const result = await labelFormatProfileService.getSampleHtml(req.params.id as string, parseKind(req.query.kind));
+      res.status(200).type("text/html; charset=utf-8").send(result.data.html);
     } catch (e) { next(e); }
   },
 );
