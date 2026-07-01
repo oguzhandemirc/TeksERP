@@ -118,6 +118,9 @@ export function renderTravelerCardHtml(
   // Sayfa boyutu + kenar payları (eski snapshot'larda alan yok → A4 / 8mm default).
   const pageSize = cfg.pageSize === "A5" ? "A5" : "A4";
   const mg = cfg.margins ?? { top: 8, right: 8, bottom: 8, left: 8 };
+  // Ekran önizlemesi için fiziksel sayfa ölçüsü (mm). @page yalnız BASKI'da geçerli →
+  // iframe önizlemesinde boyut/pay görünmez; @media screen'de sheet'e uygulanır.
+  const pageDim = pageSize === "A5" ? { w: 148, h: 210 } : { w: 210, h: 297 };
   // Spec grid alan görünürlükleri (eski snapshot → hepsi açık).
   const sf = cfg.specFields ?? ({} as Partial<NonNullable<TravelerCardConfig["specFields"]>>);
 
@@ -258,6 +261,14 @@ export function renderTravelerCardHtml(
   @page { size: ${pageSize}; margin: ${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm; }
   body { margin: 0; font-family: Arial, "Helvetica Neue", sans-serif; color: #000; font-size: 9.5px; }
   .sheet { position: relative; width: 100%; }
+  /* Ekran önizlemesi: @page (yalnız baskı) ekranda boyut/pay göstermez → sayfayı
+     fiziksel ölçüsünde çiz + payları padding yap. Baskıda bu blok yok sayılır (@page geçerli). */
+  @media screen {
+    body { background: #94a3b8; padding: 14px 0; }
+    .sheet { width: ${pageDim.w}mm; min-height: ${pageDim.h}mm; margin: 0 auto;
+             padding: ${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm;
+             background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.28); }
+  }
   .wm { position: fixed; top: 42%; left: 0; right: 0; text-align: center;
         font-size: 70px; font-weight: 800; color: rgba(220,38,38,0.16);
         transform: rotate(-22deg); letter-spacing: 8px; z-index: 0; }

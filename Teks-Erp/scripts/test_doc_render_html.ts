@@ -237,15 +237,21 @@ function testTraveler(): void {
   check("showOrders=false → BAĞLI SİPARİŞLER gizli", !noOrders.includes("BAĞLI SİPARİŞLER"));
   const cfgCompany = renderTravelerCardHtml(travelerSnap({ config: { companyName: "Test Tekstil", addressLine: "Adres X", phone: "555" } }), travelerMeta());
   check("config.companyName + adres", cfgCompany.includes("Test Tekstil") && cfgCompany.includes("Adres X"));
-  // sayfa boyutu + kenar payı (config yoksa A4 / 8mm default)
-  check("default → A4 + 8mm margin", html.includes("size: A4") && html.includes("margin: 8mm 8mm 8mm 8mm"));
+  // sayfa boyutu + kenar payı (config yoksa A4 / 8mm default). @page BASKI, .sheet ekran.
+  check(
+    "default → A4 (@page + ekran sheet 210mm) + 8mm margin",
+    html.includes("size: A4") && html.includes("margin: 8mm 8mm 8mm 8mm") && html.includes("width: 210mm"),
+  );
   const a5 = renderTravelerCardHtml(travelerSnap({ config: { pageSize: "A5" } }), travelerMeta());
-  check("config.pageSize=A5 → size: A5", a5.includes("size: A5"));
+  check("config.pageSize=A5 → size: A5 + ekran sheet 148mm", a5.includes("size: A5") && a5.includes("width: 148mm"));
   const customMargin = renderTravelerCardHtml(
     travelerSnap({ config: { margins: { top: 12, right: 4, bottom: 6, left: 10 } } }),
     travelerMeta(),
   );
-  check("config.margins → @page margin", customMargin.includes("margin: 12mm 4mm 6mm 10mm"));
+  check(
+    "config.margins → @page margin + ekran sheet padding",
+    customMargin.includes("margin: 12mm 4mm 6mm 10mm") && customMargin.includes("padding: 12mm 4mm 6mm 10mm"),
+  );
   // spec alanları tek tek gizleme (kullanıcı örneği: en + hedef metraj gizle)
   check("default → En + Hedef Metraj görünür", html.includes(">En</div>") && html.includes("Hedef Metraj"));
   const hideFields = renderTravelerCardHtml(
