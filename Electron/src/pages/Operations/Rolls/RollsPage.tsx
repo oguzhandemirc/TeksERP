@@ -15,7 +15,9 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PermissionGate } from "@/components/PermissionGate";
+import { usePreferences } from "@/providers/PreferencesProvider";
 import { ReorderableTabBar } from "@/components/layout/ReorderableTabBar";
 import { ScanField } from "@/components/scanner/ScanField";
 import { classifyBarcode, BARCODE_FORMATS } from "@/lib/scanner/barcode-kind";
@@ -68,6 +70,13 @@ export function RollsPage() {
   const [scanRoll, setScanRoll] = useState<Roll | null>(null);
   const { ordered, reorder } = useTabOrder("rolls", REORDERABLE_KEYS);
 
+  // Okutunca detay panelini otomatik aç mı? — iş istasyonu tercihi (default açık).
+  // Kapalıyken okutma yalnız listeyi süzer; detay "Aç" butonu / satır tıklamasıyla açılır.
+  const { prefs, setPreference } = usePreferences();
+  const openOnScan = prefs.rolls?.openDetailOnScan ?? true;
+  const setOpenOnScan = (v: boolean) =>
+    setPreference({ rolls: { ...prefs.rolls, openDetailOnScan: v } });
+
   // Yazma → URL `search` (debounce). RollsTable/stats urlParams.search okur → liste süzülür.
   useEffect(() => {
     const h = setTimeout(() => {
@@ -81,20 +90,29 @@ export function RollsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanBarcode]);
 
-  // Barkod okut/Enter → topu getir → detay panelini aç (404 toast'ı interceptor'dan).
+  // Barkod → topu getir → detay panelini aç (404 toast'ı interceptor'dan).
   const scanLookup = useMutation({
     mutationFn: (code: string) => rollService.getByBarcode(code),
     onSuccess: (res) => setScanRoll(res.data ?? null),
   });
-  const openByBarcode = (code: string) => {
-    setScanBarcode(code); // input + liste süzme senkron (özellikle useScanSeed dış girişinde)
-    // Yalnız TAM-FORMAT top barkodunda detay ara. Gevşek /^TEKS/ değil tam regex —
-    // "TEKSTİL BEYAZ" gibi ürün adı yanlışlıkla barkod sayılıp 404 toast'ı vermesin.
-    // (Okutulan barkod hep tam-format; kısmi/ürün-adı yalnız listeyi süzer.)
+  // Detayı aç (açık niyet: "Aç" butonu / useScanSeed navigasyonu / okutma+toggle-açık).
+  // Yalnız TAM-FORMAT top barkodunda dener — gevşek /^TEKS/ değil tam regex ki
+  // "TEKSTİL BEYAZ" gibi ürün adı yanlışlıkla barkod sayılıp 404 toast'ı vermesin.
+  const openDetail = (code: string) => {
     if (!BARCODE_FORMATS.ROLL.test(classifyBarcode(code).code)) return;
     scanLookup.mutate(code);
   };
-  useScanSeed("scanBarcode", openByBarcode);
+  // Okut/Enter → her zaman listeyi süz; detay yalnız toggle AÇIK ise açılır.
+  const handleScan = (code: string) => {
+    setScanBarcode(code); // input + liste süzme senkron
+    if (openOnScan) openDetail(code);
+  };
+  // Başka sayfadan "bu topu aç" niyetiyle gelindi → toggle'dan bağımsız aç.
+  useScanSeed("scanBarcode", (code: string) => {
+    setScanBarcode(code);
+    openDetail(code);
+  });
+  const canOpen = BARCODE_FORMATS.ROLL.test(classifyBarcode(scanBarcode).code);
   const orderedTabs = ordered.flatMap((k) => {
     const t = TABS.find((x) => x.key === k);
     return t ? [t] : [];
@@ -134,17 +152,32 @@ export function RollsPage() {
         }
       />
       <ManualEntryDialog open={manualOpen} onOpenChange={setManualOpen} />
-      <ScanField
-        className="border-b px-4 py-2"
-        widthClassName="max-w-md"
-        value={scanBarcode}
-        onChange={setScanBarcode}
-        onScan={openByBarcode}
-        placeholder="Barkod okut/yaz → detay açar · ürün adı-kodu yazarak listeyi süz"
-        submitLabel="Aç"
-        busy={scanLookup.isPending}
-        busyLabel="…"
-      />
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2">
+        <ScanField
+          className="min-w-0 flex-1"
+          widthClassName="max-w-md"
+          value={scanBarcode}
+          onChange={setScanBarcode}
+          onScan={handleScan}
+          placeholder="Barkod okut/yaz → detay · ürün adı-kodu yazarak listeyi süz"
+        />
+        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
+          <Checkbox
+            checked={openOnScan}
+            onCheckedChange={(v) => setOpenOnScan(v === true)}
+          />
+          Okutunca paneli aç
+        </label>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => openDetail(scanBarcode.trim())}
+          disabled={!canOpen || scanLookup.isPending}
+          title={canOpen ? "Bu barkodun detayını aç" : "Tam bir top barkodu okut/yaz"}
+        >
+          {scanLookup.isPending ? "…" : "Aç"}
+        </Button>
+      </div>
       <RollDetailSheet
         roll={scanRoll}
         open={Boolean(scanRoll)}

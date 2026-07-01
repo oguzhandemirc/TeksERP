@@ -33,6 +33,12 @@ export interface AppPreferences {
   tabOrder?: Record<string, string[]>;
   /** Hub kart sırası — hub anahtarı (örn "operations") → kart key listesi. */
   hubOrder?: Record<string, string[]>;
+  /** Toplar ekranı tercihleri. */
+  rolls?: {
+    /** Barkod okutunca detay panelini otomatik aç (default açık). Kapalıyken okutma
+     *  yalnız listeyi süzer; detay "Aç" butonu veya satıra tıklayarak açılır. */
+    openDetailOnScan?: boolean;
+  };
   /** Dashboard widget düzeni — gizli widget'lar + grup/öğe sırası. */
   dashboard?: {
     hidden?: string[];
@@ -63,6 +69,22 @@ export interface AppPreferences {
       productId?: number;
       frameTerminator?: ScanTerminatorPref;
     };
+  };
+  /**
+   * Etiket yazıcısı (Argox) — bu iş istasyonuna özel YEREL tercih (org-geneli
+   * değil). Açıkken etiket baskısı OS yazdırma diyaloğu yerine seçili seri/COM
+   * porta ham PPLA gönderir (BT-SPP sanal COM veya USB-CDC) → "her seferinde
+   * yazdırma ekranı çıkması" sorunu kalkar. Gönderim Electron ana-süreçte
+   * (window.api.printer.send). Kapalı/seçilmemişse iframe.print() diyaloğuna düşer.
+   */
+  labelPrinter?: {
+    enabled?: boolean;
+    /** "serial" = seri/COM (fabrika, Windows); "cups" = macOS/Linux CUPS kuyruğu
+     * (bu Mac'te USB Argox printer-class → seri düğüm açmaz, tek yol budur). */
+    transport?: "serial" | "cups";
+    /** serial: COM yolu (COM5 / /dev/tty.*); cups: CUPS kuyruk adı (lp -d). */
+    path?: string;
+    baudRate?: number;
   };
 }
 
