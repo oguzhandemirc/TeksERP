@@ -37,6 +37,31 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     ),
   },
   {
+    id: "product",
+    header: "Kumaş / Renk",
+    cell: ({ row }) => {
+      const wo = row.original;
+      if (!wo.targetItem && !wo.targetColor)
+        return <span className="text-muted-foreground">—</span>;
+      return (
+        <div className="flex items-center gap-1.5 text-xs">
+          <span className="max-w-[10rem] truncate font-medium" title={wo.targetItem?.name}>
+            {wo.targetItem?.name ?? "—"}
+          </span>
+          {wo.targetColor && (
+            <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
+              <span
+                className="h-2.5 w-2.5 rounded-full border"
+                style={{ background: wo.targetColor.hex ?? "#fff" }}
+              />
+              {wo.targetColor.name}
+            </span>
+          )}
+        </div>
+      );
+    },
+  },
+  {
     id: "progress",
     header: "İlerleme",
     cell: ({ row }) => {

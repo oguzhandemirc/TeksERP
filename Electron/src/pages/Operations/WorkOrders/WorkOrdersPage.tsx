@@ -10,6 +10,8 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import { itemService } from "@/pages/Items/service";
+import { colorService } from "@/pages/Colors/service";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { useTabsStore } from "@/store/tabs";
 import { workOrderColumns } from "./columns";
@@ -42,6 +44,9 @@ const FILTERS: FilterDef[] = [
       { value: "STOCK_PRODUCTION", label: "Stok" },
     ],
   },
+  // Üretilen kumaş (targetItem) + renk (targetColor) — backend where'e doğrudan geçer.
+  { kind: "lookup", key: "targetItemId", label: "Kumaş", service: itemService, queryKey: "items" },
+  { kind: "lookup", key: "targetColorId", label: "Renk", service: colorService, queryKey: "colors" },
   {
     kind: "dateRange",
     label: "Tarih",

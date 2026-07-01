@@ -983,6 +983,9 @@ export class WorkOrderService {
       routeTemplateId: true,
       targetItemId: true,
       targetColorId: true,
+      // Üretilen kumaş + renk — liste sütunu + (targetItemId/targetColorId) filtre eşleşmesi.
+      targetItem: { select: { id: true, code: true, name: true } },
+      targetColor: { select: { id: true, code: true, name: true, hex: true } },
       createdAt: true,
       updatedAt: true,
       steps: {
