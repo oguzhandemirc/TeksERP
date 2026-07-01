@@ -68,8 +68,8 @@ export interface TravelerCardConfig {
   specColumns: number;
   /** Bağlı siparişler tablosu sütunları (Sipariş No/Müşteri/Ürün/Renk/Miktar). */
   orderFields: TravelerCardOrderFields;
-  /** Bağlı siparişler tablosunda miktar toplamı satırı basılsın mı. */
-  showOrderTotal: boolean;
+  /** Miktar toplamı satırı — göster/boyut/kalınlık (show=false → basılmaz). */
+  orderTotal: TravelerCardSpecField;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -103,7 +103,7 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
     color: { show: true, size: "md", weight: "normal" },
     quantity: { show: true, size: "md", weight: "normal" },
   },
-  showOrderTotal: true,
+  orderTotal: { show: true, size: "md", weight: "bold" },
   footerNote: "",
 };
 

@@ -34,6 +34,8 @@ const travelerCardConfigSchema = z
     specFields: z.record(z.string(), z.unknown()).optional(),
     specColumns: z.number().optional(),
     orderFields: z.record(z.string(), z.unknown()).optional(),
+    // Toplam: yeni orderTotal nesnesi (veya eski showOrderTotal boolean) — normalize çözer.
+    orderTotal: z.record(z.string(), z.unknown()).optional(),
     showOrderTotal: z.boolean().optional(),
     footerNote: z.string().optional(),
   })

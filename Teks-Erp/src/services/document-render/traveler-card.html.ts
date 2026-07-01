@@ -117,6 +117,13 @@ function ovrStyle(f: { size: string; weight: string }, sizeMap: Record<string, n
   return p.length ? ` style="${p.join(";")}"` : "";
 }
 
+// Toplam satırı tek + tam denetimli → HER ZAMAN inline (md dahil). sm/md/lg + ince/normal/kalın.
+const ORDER_FULL_SIZE: Record<string, number> = { sm: 7, md: 8.5, lg: 11 };
+const FULL_WEIGHT: Record<string, number> = { light: 400, normal: 600, bold: 800 };
+function fullStyle(f: { size: string; weight: string }, sizeMap: Record<string, number>): string {
+  return ` style="font-size:${sizeMap[f.size] ?? sizeMap.md}px;font-weight:${FULL_WEIGHT[f.weight] ?? 600}"`;
+}
+
 /** Ham spec alan değerini (boolean eski şekil | nesne | undefined) çöz. */
 function coerceSpecCell(v: unknown): { show: boolean; size: string; weight: string } {
   if (v === false) return { show: false, size: "md", weight: "normal" };
@@ -276,17 +283,21 @@ export function renderTravelerCardHtml(
   ];
   const shownOrderCols = orderCols.filter((col) => col.c.show);
   const qtyShown = shownOrderCols.some((col) => col.cls === "o-qty");
-  // Miktar toplamı (alt satır) — showOrderTotal açık + Miktar sütunu görünürse.
-  const showTotal = cfg.showOrderTotal !== false && qtyShown;
+  // Miktar toplamı satırı — orderTotal (yeni) > showOrderTotal (eski boolean); default KALIN.
+  const totalF = coerceSpecCell(
+    cfg.orderTotal ?? { show: (cfg as Record<string, unknown>).showOrderTotal !== false, size: "md", weight: "bold" },
+  );
+  const showTotal = totalF.show && qtyShown;
   const orderTotal = orderLinks.reduce((s, l) => s + (l.orderLine?.quantity ?? 0), 0);
+  const totalStyle = fullStyle(totalF, ORDER_FULL_SIZE);
   // Miktar en sağdaki görünür sütun (orderCols sırası) → etiket öncekileri colspan'ler.
   const totalRow =
     showTotal && shownOrderCols.length > 0
       ? `<tfoot><tr class="ord-total">${
           shownOrderCols.length > 1
-            ? `<td class="ord-total-lbl" colspan="${shownOrderCols.length - 1}">TOPLAM</td>`
+            ? `<td class="ord-total-lbl"${totalStyle} colspan="${shownOrderCols.length - 1}">TOPLAM</td>`
             : ""
-        }<td class="o-qty">${esc(fmtNum(orderTotal))} m</td></tr></tfoot>`
+        }<td class="o-qty"${totalStyle}>${esc(fmtNum(orderTotal))} m</td></tr></tfoot>`
       : "";
   const ordersBlock = !showOrders
     ? ""
@@ -396,7 +407,7 @@ export function renderTravelerCardHtml(
   .o-color { width: 66px; }
   .o-qty { width: 58px; text-align: right; font-weight: 700; }
   .ord td.o-qty { text-align: right; }
-  .ord tfoot td { border-top: 0.8px solid #000; border-bottom: none; padding-top: 3px; font-weight: 800; }
+  .ord tfoot td { border-top: 0.8px solid #000; border-bottom: none; padding-top: 3px; }  /* boyut/kalınlık inline (config orderTotal) */
   .ord-total-lbl { text-align: right; padding-right: 8px; letter-spacing: 0.5px; }
 
   .empty { border: 0.5px dashed #bbb; text-align: center; padding: 10px; font-size: 10px; color: #555; }

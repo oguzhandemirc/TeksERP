@@ -215,8 +215,8 @@ export interface TravelerCardConfig {
   specColumns: number;
   /** Bağlı siparişler tablosu sütunları (Sipariş No/Müşteri/Ürün/Renk/Miktar tek tek). */
   orderFields: TravelerCardOrderFields;
-  /** Bağlı siparişler tablosunun altında miktar toplamı satırı basılsın mı. */
-  showOrderTotal: boolean;
+  /** Miktar toplamı satırı — göster/boyut/kalınlık (show=false → basılmaz). */
+  orderTotal: TravelerCardSpecField;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -250,7 +250,7 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
     color: { show: true, size: "md", weight: "normal" },
     quantity: { show: true, size: "md", weight: "normal" },
   },
-  showOrderTotal: true,
+  orderTotal: { show: true, size: "md", weight: "bold" },
   footerNote: "",
 };
 
@@ -308,7 +308,8 @@ export function normalizeTravelerCardConfig(o: Record<string, unknown>): Travele
       color: coerceSpecField(of.color),
       quantity: coerceSpecField(of.quantity),
     },
-    showOrderTotal: o.showOrderTotal !== false,
+    // Toplam: yeni orderTotal nesnesi > eski showOrderTotal boolean; varsayılan KALIN.
+    orderTotal: coerceSpecField(o.orderTotal ?? { show: o.showOrderTotal !== false, size: "md", weight: "bold" }),
     footerNote: typeof o.footerNote === "string" ? o.footerNote.trim().slice(0, 500) : "",
   };
 }

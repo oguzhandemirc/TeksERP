@@ -18,13 +18,12 @@ const router = Router();
 
 // Tek spec alanı — göster + boyut + kalınlık (default'larla tam nesne üretir).
 const DEF_SPEC_FIELD = { show: true, size: "md" as const, weight: "normal" as const };
-const specFieldSchema = z
-  .object({
-    show: z.boolean().default(true),
-    size: z.enum(["sm", "md", "lg"]).default("md"),
-    weight: z.enum(["light", "normal", "bold"]).default("normal"),
-  })
-  .default(DEF_SPEC_FIELD);
+const specFieldObj = z.object({
+  show: z.boolean().default(true),
+  size: z.enum(["sm", "md", "lg"]).default("md"),
+  weight: z.enum(["light", "normal", "bold"]).default("normal"),
+});
+const specFieldSchema = specFieldObj.default(DEF_SPEC_FIELD);
 
 const updateSchema = z.object({
   // ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli).
@@ -113,7 +112,7 @@ const updateSchema = z.object({
           color: DEF_SPEC_FIELD,
           quantity: DEF_SPEC_FIELD,
         }),
-      showOrderTotal: z.boolean().default(true),
+      orderTotal: specFieldObj.default({ show: true, size: "md", weight: "bold" }),
       footerNote: z.string().trim().max(500).default(""),
     })
     .optional(),

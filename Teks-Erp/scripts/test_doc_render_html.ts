@@ -310,8 +310,19 @@ function testTraveler(): void {
   // sipariş rengi sütunu + miktar toplamı
   check("Renk sütunu + değerler (Bej/Lacivert)", html.includes(">Renk</th>") && html.includes("Bej") && html.includes("Lacivert"));
   check("miktar toplamı satırı (TOPLAM + 1.000 m)", html.includes("TOPLAM") && html.includes("1.000 m"));
-  const noTotal = renderTravelerCardHtml(travelerSnap({ config: { showOrderTotal: false } }), travelerMeta());
-  check("showOrderTotal=false → TOPLAM yok", !noTotal.includes("TOPLAM"));
+  check("toplam default KALIN (inline 8.5px/800)", html.includes("font-size:8.5px;font-weight:800"));
+  const totalStyled = renderTravelerCardHtml(
+    travelerSnap({ config: { orderTotal: { show: true, size: "lg", weight: "light" } } }),
+    travelerMeta(),
+  );
+  check("orderTotal lg+ince → inline 11px/400", totalStyled.includes("font-size:11px;font-weight:400"));
+  const noTotal = renderTravelerCardHtml(
+    travelerSnap({ config: { orderTotal: { show: false, size: "md", weight: "normal" } } }),
+    travelerMeta(),
+  );
+  check("orderTotal show=false → TOPLAM yok", !noTotal.includes("TOPLAM"));
+  const legacyNoTotal = renderTravelerCardHtml(travelerSnap({ config: { showOrderTotal: false } }), travelerMeta());
+  check("geri-uyum: eski showOrderTotal=false → TOPLAM yok", !legacyNoTotal.includes("TOPLAM"));
   const noColorCol = renderTravelerCardHtml(
     travelerSnap({ config: { orderFields: { color: { show: false, size: "md", weight: "normal" } } } }),
     travelerMeta(),

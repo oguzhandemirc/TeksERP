@@ -181,6 +181,7 @@ export function TravelerCardConfigSection({
     ...(rawCfg ?? {}),
     specFields,
     orderFields,
+    orderTotal: coerceSpecField(rawCfg?.orderTotal ?? DEFAULT_TRAVELER_CARD_CONFIG.orderTotal),
     specColumns: Math.min(4, Math.max(1, Math.round(rawCfg?.specColumns ?? 3) || 3)),
   };
 
@@ -195,6 +196,8 @@ export function TravelerCardConfigSection({
       ...d,
       orderFields: { ...d.orderFields, [key]: { ...d.orderFields[key], ...patch } },
     }));
+  const updateTotal = (patch: Partial<TravelerCardSpecField>) =>
+    setDraft((d) => ({ ...d, orderTotal: { ...d.orderTotal, ...patch } }));
   const currentKey = JSON.stringify(current);
   useEffect(() => {
     setDraft(current);
@@ -460,14 +463,44 @@ export function TravelerCardConfigSection({
               onChange={updateOrder}
             />
           </div>
-          <label className="mt-2 flex cursor-pointer select-none items-center gap-2 text-sm">
-            <Checkbox
-              checked={draft.showOrderTotal}
-              disabled={mut.isPending}
-              onCheckedChange={(v) => setDraft((d) => ({ ...d, showOrderTotal: v === true }))}
-            />
-            Alt toplam satırı (siparişlerin miktar toplamı)
-          </label>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <label className="flex cursor-pointer select-none items-center gap-2 text-sm">
+              <Checkbox
+                checked={draft.orderTotal.show}
+                disabled={mut.isPending}
+                onCheckedChange={(v) => updateTotal({ show: v === true })}
+              />
+              Alt toplam satırı (miktar toplamı)
+            </label>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              Boyut
+              <select
+                value={draft.orderTotal.size}
+                disabled={mut.isPending || !draft.orderTotal.show}
+                onChange={(e) => updateTotal({ size: e.target.value as TravelerCardFieldSize })}
+                className={SELECT_CLS}
+              >
+                {SIZE_OPTS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              Kalınlık
+              <select
+                value={draft.orderTotal.weight}
+                disabled={mut.isPending || !draft.orderTotal.show}
+                onChange={(e) => updateTotal({ weight: e.target.value as TravelerCardFontWeight })}
+                className={SELECT_CLS}
+              >
+                {WEIGHT_OPTS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         <div>
