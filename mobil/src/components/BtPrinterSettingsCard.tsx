@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Text, Button, Icon, TouchableRipple } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import { useBtPrinterStore } from '../store/btPrinterStore';
+import { useBtPrinterStore, BT_PRINTER_LANGS } from '../store/btPrinterStore';
 import {
   isBtPrinterSupported,
   listBondedPrinters,
@@ -32,6 +32,8 @@ const C = {
 export default function BtPrinterSettingsCard() {
   const printer = useBtPrinterStore((s) => s.printer);
   const setPrinter = useBtPrinterStore((s) => s.setPrinter);
+  const language = useBtPrinterStore((s) => s.language);
+  const setLanguage = useBtPrinterStore((s) => s.setLanguage);
 
   const [devices, setDevices] = useState<BtPrinter[]>([]);
   const [scanning, setScanning] = useState(false);
@@ -131,6 +133,28 @@ export default function BtPrinterSettingsCard() {
       ) : (
         <Text style={styles.noneText}>Yazıcı seçilmedi</Text>
       )}
+
+      <View style={styles.langSection}>
+        <Text style={styles.langLabel}>Yazıcı dili</Text>
+        <View style={styles.langRow}>
+          {BT_PRINTER_LANGS.map((l) => {
+            const active = language === l;
+            return (
+              <TouchableRipple
+                key={l}
+                onPress={() => void setLanguage(l)}
+                rippleColor="rgba(99,102,241,0.2)"
+                style={[styles.langChip, active && styles.langChipActive]}
+              >
+                <Text style={[styles.langChipText, active && styles.langChipTextActive]}>{l}</Text>
+              </TouchableRipple>
+            );
+          })}
+        </View>
+        <Text style={styles.langHint}>
+          Yazıcının konuştuğu dil (Argox OS-214 plus "PPLB" → PPLB). Baskı bu dilde gönderilir.
+        </Text>
+      </View>
 
       {listOpen && (
         <View style={styles.list}>
@@ -246,6 +270,23 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
   noneText: { color: C.subtext, fontSize: 14, paddingVertical: 4 },
+
+  langSection: { marginTop: 14 },
+  langLabel: { color: C.text, fontSize: 14, fontWeight: '700', marginBottom: 8 },
+  langRow: { flexDirection: 'row', gap: 8 },
+  langChip: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: C.bgDarker,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  langChipActive: { borderColor: C.accentLight, backgroundColor: 'rgba(99,102,241,0.15)' },
+  langChipText: { color: C.subtext, fontSize: 15, fontWeight: '700' },
+  langChipTextActive: { color: C.accentLight },
+  langHint: { color: C.subtext, fontSize: 12, marginTop: 8, lineHeight: 17 },
 
   list: { marginTop: 12, gap: 6 },
   deviceRow: { borderRadius: 10, backgroundColor: C.bgDarker },

@@ -23,7 +23,7 @@ const KEY = 'bt_label_printer';
 describe('btPrinterStore', () => {
   beforeEach(async () => {
     await storage.deleteItem(KEY);
-    useBtPrinterStore.setState({ printer: null, isLoaded: false });
+    useBtPrinterStore.setState({ printer: null, language: 'PPLB', isLoaded: false });
   });
 
   it('init: kayıt yoksa printer null + isLoaded true', async () => {
@@ -60,5 +60,27 @@ describe('btPrinterStore', () => {
     await storage.setItem(KEY, JSON.stringify({ address: 'DD:EE:FF' }));
     await useBtPrinterStore.getState().init();
     expect(useBtPrinterStore.getState().printer).toEqual({ address: 'DD:EE:FF', name: 'DD:EE:FF' });
+  });
+
+  it('setPrinter → seçili dille (default PPLB) kalıcı', async () => {
+    await useBtPrinterStore.getState().setPrinter({ address: 'AA:BB:CC', name: 'Argox' });
+    const raw = JSON.parse((await storage.getItem(KEY)) as string);
+    expect(raw.language).toBe('PPLB');
+  });
+
+  it('setLanguage (yazıcı seçiliyken) → dil kalıcı + init geri okur', async () => {
+    await useBtPrinterStore.getState().setPrinter({ address: 'AA:BB:CC', name: 'Argox' });
+    await useBtPrinterStore.getState().setLanguage('ZPL');
+    expect(useBtPrinterStore.getState().language).toBe('ZPL');
+    useBtPrinterStore.setState({ printer: null, language: 'PPLB', isLoaded: false });
+    await useBtPrinterStore.getState().init();
+    expect(useBtPrinterStore.getState().language).toBe('ZPL');
+    expect(useBtPrinterStore.getState().printer).toEqual({ address: 'AA:BB:CC', name: 'Argox' });
+  });
+
+  it('init: geçersiz dil → PPLB varsayılan', async () => {
+    await storage.setItem(KEY, JSON.stringify({ address: 'AA:BB:CC', name: 'X', language: 'FOO' }));
+    await useBtPrinterStore.getState().init();
+    expect(useBtPrinterStore.getState().language).toBe('PPLB');
   });
 });
