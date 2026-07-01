@@ -192,7 +192,8 @@ function travelerSnap(over: Record<string, unknown> = {}): TravelerSnap {
       { id: "s2", stepSequence: 2, isUrgent: false, notes: "Yıkama yapma", station: { name: "Boyahane", type: "EXTERNAL" }, plannedSubcontractor: { id: "sub1", name: "Yıldız Boyahane" } },
     ],
     orderLinks: [
-      { orderLineId: "ol1", orderLine: { quantity: 680, order: { orderNumber: "SIP-2026-0107", customer: { name: "Örnek Tekstil A.Ş." } }, item: { name: "Pamuklu Astar" } } },
+      { orderLineId: "ol1", orderLine: { quantity: 680, order: { orderNumber: "SIP-2026-0107", customer: { name: "Örnek Tekstil A.Ş." } }, item: { name: "Pamuklu Astar" }, color: { name: "Bej" } } },
+      { orderLineId: "ol2", orderLine: { quantity: 320, order: { orderNumber: "SIP-2026-0108", customer: { name: "Deneme Konf." } }, item: { name: "Pamuklu Astar" }, color: { name: "Lacivert" } } },
     ],
     ...over,
   } as unknown as TravelerSnap;
@@ -306,6 +307,16 @@ function testTraveler(): void {
     travelerMeta(),
   );
   check("orderFields quantity sm+bold → inline 7px/800", ordStyled.includes("font-size:7px;font-weight:800"));
+  // sipariş rengi sütunu + miktar toplamı
+  check("Renk sütunu + değerler (Bej/Lacivert)", html.includes(">Renk</th>") && html.includes("Bej") && html.includes("Lacivert"));
+  check("miktar toplamı satırı (TOPLAM + 1.000 m)", html.includes("TOPLAM") && html.includes("1.000 m"));
+  const noTotal = renderTravelerCardHtml(travelerSnap({ config: { showOrderTotal: false } }), travelerMeta());
+  check("showOrderTotal=false → TOPLAM yok", !noTotal.includes("TOPLAM"));
+  const noColorCol = renderTravelerCardHtml(
+    travelerSnap({ config: { orderFields: { color: { show: false, size: "md", weight: "normal" } } } }),
+    travelerMeta(),
+  );
+  check("orderFields color.show=false → Renk sütunu gizli", !noColorCol.includes(">Renk</th>"));
   // watermarks
   check("draft → TASLAK", renderTravelerCardHtml(travelerSnap(), travelerMeta({ draft: true })).includes("TASLAK"));
   check("VOIDED → İPTAL", renderTravelerCardHtml(travelerSnap(), travelerMeta({ status: "VOIDED" })).includes("İPTAL"));

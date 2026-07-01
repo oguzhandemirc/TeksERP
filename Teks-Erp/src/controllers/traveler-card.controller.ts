@@ -34,6 +34,7 @@ const travelerCardConfigSchema = z
     specFields: z.record(z.string(), z.unknown()).optional(),
     specColumns: z.number().optional(),
     orderFields: z.record(z.string(), z.unknown()).optional(),
+    showOrderTotal: z.boolean().optional(),
     footerNote: z.string().optional(),
   })
   .partial();

@@ -38,6 +38,7 @@ export interface TravelerCardOrderFields {
   orderNumber: TravelerCardSpecField;
   customer: TravelerCardSpecField;
   item: TravelerCardSpecField;
+  color: TravelerCardSpecField;
   quantity: TravelerCardSpecField;
 }
 
@@ -65,8 +66,10 @@ export interface TravelerCardConfig {
   specFields: TravelerCardSpecFields;
   /** Spec grid'de satır başına sütun sayısı (1–4). */
   specColumns: number;
-  /** Bağlı siparişler tablosu sütunları (Sipariş No/Müşteri/Ürün/Miktar). */
+  /** Bağlı siparişler tablosu sütunları (Sipariş No/Müşteri/Ürün/Renk/Miktar). */
   orderFields: TravelerCardOrderFields;
+  /** Bağlı siparişler tablosunda miktar toplamı satırı basılsın mı. */
+  showOrderTotal: boolean;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -97,8 +100,10 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
     orderNumber: { show: true, size: "md", weight: "normal" },
     customer: { show: true, size: "md", weight: "normal" },
     item: { show: true, size: "md", weight: "normal" },
+    color: { show: true, size: "md", weight: "normal" },
     quantity: { show: true, size: "md", weight: "normal" },
   },
+  showOrderTotal: true,
   footerNote: "",
 };
 

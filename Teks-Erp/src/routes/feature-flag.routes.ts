@@ -103,14 +103,17 @@ const updateSchema = z.object({
           orderNumber: specFieldSchema,
           customer: specFieldSchema,
           item: specFieldSchema,
+          color: specFieldSchema,
           quantity: specFieldSchema,
         })
         .default({
           orderNumber: DEF_SPEC_FIELD,
           customer: DEF_SPEC_FIELD,
           item: DEF_SPEC_FIELD,
+          color: DEF_SPEC_FIELD,
           quantity: DEF_SPEC_FIELD,
         }),
+      showOrderTotal: z.boolean().default(true),
       footerNote: z.string().trim().max(500).default(""),
     })
     .optional(),

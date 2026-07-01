@@ -77,6 +77,7 @@ const ORDER_FIELDS: { key: keyof TravelerCardOrderFields; label: string }[] = [
   { key: "orderNumber", label: "Sipariş No" },
   { key: "customer", label: "Müşteri" },
   { key: "item", label: "Ürün" },
+  { key: "color", label: "Renk" },
   { key: "quantity", label: "Miktar" },
 ];
 const SPEC_COLUMN_OPTS = [1, 2, 3, 4];
@@ -459,6 +460,14 @@ export function TravelerCardConfigSection({
               onChange={updateOrder}
             />
           </div>
+          <label className="mt-2 flex cursor-pointer select-none items-center gap-2 text-sm">
+            <Checkbox
+              checked={draft.showOrderTotal}
+              disabled={mut.isPending}
+              onCheckedChange={(v) => setDraft((d) => ({ ...d, showOrderTotal: v === true }))}
+            />
+            Alt toplam satırı (siparişlerin miktar toplamı)
+          </label>
         </div>
 
         <div>

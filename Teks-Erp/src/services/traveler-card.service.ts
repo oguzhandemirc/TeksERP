@@ -79,6 +79,16 @@ const SAMPLE_TRAVELER_SNAPSHOT: Omit<TravelerCardSnapshot, "config"> = {
         quantity: 680,
         order: { orderNumber: "SIP-2026-0107", customer: { name: "Örnek Tekstil A.Ş." } },
         item: { name: "Pamuklu Astar" },
+        color: { name: "Bej" },
+      },
+    },
+    {
+      orderLineId: "ol2",
+      orderLine: {
+        quantity: 320,
+        order: { orderNumber: "SIP-2026-0108", customer: { name: "Deneme Konfeksiyon" } },
+        item: { name: "Pamuklu Astar" },
+        color: { name: "Lacivert" },
       },
     },
   ],
@@ -803,6 +813,7 @@ export class TravelerCardService {
                   select: { orderNumber: true, customer: { select: { name: true } } },
                 },
                 item: { select: { name: true } },
+                color: { select: { name: true } },
               },
             },
           },
@@ -858,6 +869,7 @@ export class TravelerCardService {
                   }
                 : null,
               item: l.orderLine.item ? { name: l.orderLine.item.name } : null,
+              color: l.orderLine.color ? { name: l.orderLine.color.name } : null,
             }
           : null,
       })),

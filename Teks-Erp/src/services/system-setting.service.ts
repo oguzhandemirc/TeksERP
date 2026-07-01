@@ -169,6 +169,7 @@ export interface TravelerCardOrderFields {
   orderNumber: TravelerCardSpecField;
   customer: TravelerCardSpecField;
   item: TravelerCardSpecField;
+  color: TravelerCardSpecField;
   quantity: TravelerCardSpecField;
 }
 
@@ -212,8 +213,10 @@ export interface TravelerCardConfig {
   specFields: TravelerCardSpecFields;
   /** Spec grid'de satır başına sütun sayısı (1–4, default 3). */
   specColumns: number;
-  /** Bağlı siparişler tablosu sütunları (Sipariş No/Müşteri/Ürün/Miktar tek tek). */
+  /** Bağlı siparişler tablosu sütunları (Sipariş No/Müşteri/Ürün/Renk/Miktar tek tek). */
   orderFields: TravelerCardOrderFields;
+  /** Bağlı siparişler tablosunun altında miktar toplamı satırı basılsın mı. */
+  showOrderTotal: boolean;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -244,8 +247,10 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
     orderNumber: { show: true, size: "md", weight: "normal" },
     customer: { show: true, size: "md", weight: "normal" },
     item: { show: true, size: "md", weight: "normal" },
+    color: { show: true, size: "md", weight: "normal" },
     quantity: { show: true, size: "md", weight: "normal" },
   },
+  showOrderTotal: true,
   footerNote: "",
 };
 
@@ -300,8 +305,10 @@ export function normalizeTravelerCardConfig(o: Record<string, unknown>): Travele
       orderNumber: coerceSpecField(of.orderNumber),
       customer: coerceSpecField(of.customer),
       item: coerceSpecField(of.item),
+      color: coerceSpecField(of.color),
       quantity: coerceSpecField(of.quantity),
     },
+    showOrderTotal: o.showOrderTotal !== false,
     footerNote: typeof o.footerNote === "string" ? o.footerNote.trim().slice(0, 500) : "",
   };
 }

@@ -29,6 +29,7 @@ interface SnapOrderLink {
     quantity: number | null;
     order: { orderNumber: string; customer: { name: string } | null } | null;
     item: { name: string } | null;
+    color: { name: string } | null;
   } | null;
 }
 
@@ -270,9 +271,23 @@ export function renderTravelerCardHtml(
     { c: coerceSpecCell(of.orderNumber), cls: "o-num", head: "Sipariş No", val: (ol) => esc(ol?.order?.orderNumber ?? "—") },
     { c: coerceSpecCell(of.customer), cls: "o-cus", head: "Müşteri", val: (ol) => esc(ol?.order?.customer?.name ?? "—") },
     { c: coerceSpecCell(of.item), cls: "o-item", head: "Ürün", val: (ol) => esc(ol?.item?.name ?? "—") },
+    { c: coerceSpecCell(of.color), cls: "o-color", head: "Renk", val: (ol) => esc(ol?.color?.name ?? "—") },
     { c: coerceSpecCell(of.quantity), cls: "o-qty", head: "Miktar", val: (ol) => `${esc(fmtNum(ol?.quantity))} m` },
   ];
   const shownOrderCols = orderCols.filter((col) => col.c.show);
+  const qtyShown = shownOrderCols.some((col) => col.cls === "o-qty");
+  // Miktar toplamı (alt satır) — showOrderTotal açık + Miktar sütunu görünürse.
+  const showTotal = cfg.showOrderTotal !== false && qtyShown;
+  const orderTotal = orderLinks.reduce((s, l) => s + (l.orderLine?.quantity ?? 0), 0);
+  // Miktar en sağdaki görünür sütun (orderCols sırası) → etiket öncekileri colspan'ler.
+  const totalRow =
+    showTotal && shownOrderCols.length > 0
+      ? `<tfoot><tr class="ord-total">${
+          shownOrderCols.length > 1
+            ? `<td class="ord-total-lbl" colspan="${shownOrderCols.length - 1}">TOPLAM</td>`
+            : ""
+        }<td class="o-qty">${esc(fmtNum(orderTotal))} m</td></tr></tfoot>`
+      : "";
   const ordersBlock = !showOrders
     ? ""
     : orderLinks.length === 0
@@ -291,7 +306,7 @@ export function renderTravelerCardHtml(
                     .join("")}</tr>`,
               )
               .join("")}
-          </tbody>
+          </tbody>${totalRow}
         </table>`;
 
   const footerBlock = footerNote
@@ -375,11 +390,14 @@ export function renderTravelerCardHtml(
 
   .ord th { border-bottom: 0.8px solid #000; font-size: 8.5px; text-align: left; padding: 2px 0; }
   .ord td { border-bottom: 0.3px solid #bbb; font-size: 8.5px; padding: 2.5px 0; }
-  .o-num { width: 90px; font-weight: 700; }
-  .o-cus { width: 170px; font-weight: 600; }
+  .o-num { width: 88px; font-weight: 700; }
+  .o-cus { width: 150px; font-weight: 600; }
   .o-item { color: #333; }
-  .o-qty { width: 60px; text-align: right; font-weight: 700; }
+  .o-color { width: 66px; }
+  .o-qty { width: 58px; text-align: right; font-weight: 700; }
   .ord td.o-qty { text-align: right; }
+  .ord tfoot td { border-top: 0.8px solid #000; border-bottom: none; padding-top: 3px; font-weight: 800; }
+  .ord-total-lbl { text-align: right; padding-right: 8px; letter-spacing: 0.5px; }
 
   .empty { border: 0.5px dashed #bbb; text-align: center; padding: 10px; font-size: 10px; color: #555; }
   .foot-note { border: 0.5px solid #999; border-radius: 3px; padding: 6px; margin-top: 8px; font-size: 9px; color: #555; }
