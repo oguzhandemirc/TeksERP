@@ -6,7 +6,7 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { CopyMenuItem } from "@/components/data-table/row-menu-items";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
-import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import { FilterBar, StandaloneDateRangeFilter, type FilterDef } from "@/components/data-table/FilterBar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useDataTable } from "@/hooks/useDataTable";
 import { itemService } from "@/pages/Items/service";
@@ -83,8 +83,10 @@ const FILTERS: FilterDef[] = [
   },
   { kind: "numberRange", key: "width", label: "En", unit: "cm" },
   { kind: "numberRange", key: "qty", label: "Boy", unit: "mt" },
-  { kind: "dateRange", label: "Tarih", defaultField: "createdAt" },
 ];
+
+// Tarih filtresi FilterBar'da DEĞİL, araç çubuğunda (Sütunlar/Görünümler satırı, sola dayalı).
+const DATE_FILTER = { kind: "dateRange", label: "Tarih", defaultField: "createdAt" } as const;
 
 // Sadece "Bitmiş Depo" sekmesinde anlamlı: WAREHOUSE topu serbest mi yoksa bir
 // çuvala/sevkiyata rezerve mi? (backend filter[shipmentScope]=free|committed)
@@ -218,6 +220,7 @@ export function RollsTable({ tab }: Props) {
         hideSearch // Arama sayfa üstündeki birleşik "okut/ara" input'undan sürülüyor (URL search).
         table={table}
         exportName="Toplar"
+        leading={<StandaloneDateRangeFilter def={DATE_FILTER} />}
         actions={
           <RollsStats
             data={statsQuery.data?.data}

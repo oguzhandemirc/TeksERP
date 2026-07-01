@@ -15,6 +15,8 @@ interface Props<T> {
   exportName?: string;
   /** Arama kutusunu gizle — arama dışarıdan (ör. sayfa üstündeki birleşik input) sürülüyor. */
   hideSearch?: boolean;
+  /** Sola dayalı ek içerik (araç menüsünden ÖNCE) — ör. tarih aralığı filtresi. */
+  leading?: ReactNode;
 }
 
 export function DataTableToolbar<T>({
@@ -25,9 +27,10 @@ export function DataTableToolbar<T>({
   table,
   exportName,
   hideSearch = false,
+  leading,
 }: Props<T>) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 border-b">
+    <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
       {!hideSearch && (
         <div className="relative w-64">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -39,6 +42,7 @@ export function DataTableToolbar<T>({
           />
         </div>
       )}
+      {leading}
       <div className="ml-auto flex items-center gap-2">
         {table ? <DataTableTools table={table} exportName={exportName} /> : null}
         <SavedViewsMenu />

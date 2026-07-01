@@ -199,6 +199,22 @@ export function FilterBar({ filters, defaultDateRangeDays = 0, leading }: Props)
   );
 }
 
+/** Tarih aralığı filtresini FilterBar DIŞINDA (örn. tablo araç çubuğunda) tek başına
+ *  render eder — kendi useSearchParams'ını yönetir (FilterBar ile aynı URL state). */
+export function StandaloneDateRangeFilter({
+  def,
+}: {
+  def: Extract<FilterDef, { kind: "dateRange" }>;
+}) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const update = (mutator: (sp: URLSearchParams) => void) => {
+    const next = new URLSearchParams(searchParams);
+    mutator(next);
+    setSearchParams(next, { replace: true });
+  };
+  return <DateRangeFilter def={def} sp={searchParams} update={update} />;
+}
+
 interface SubProps<D> {
   def: D;
   sp: URLSearchParams;
