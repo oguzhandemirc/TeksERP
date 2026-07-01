@@ -53,10 +53,38 @@ const updateSchema = z.object({
       companyName: z.string().trim().max(120),
       addressLine: z.string().trim().max(200).default(""),
       phone: z.string().trim().max(60).default(""),
+      pageSize: z.enum(["A4", "A5"]).default("A4"),
+      margins: z
+        .object({
+          top: z.number().min(0).max(40),
+          right: z.number().min(0).max(40),
+          bottom: z.number().min(0).max(40),
+          left: z.number().min(0).max(40),
+        })
+        .default({ top: 8, right: 8, bottom: 8, left: 8 }),
       showOperationGrid: z.boolean(),
       showNotes: z.boolean(),
       showOrders: z.boolean(),
       showProperties: z.boolean().default(true),
+      specFields: z
+        .object({
+          color: z.boolean(),
+          width: z.boolean(),
+          targetQuantity: z.boolean(),
+          targetWeight: z.boolean(),
+          foldType: z.boolean(),
+          startDate: z.boolean(),
+          endDate: z.boolean(),
+        })
+        .default({
+          color: true,
+          width: true,
+          targetQuantity: true,
+          targetWeight: true,
+          foldType: true,
+          startDate: true,
+          endDate: true,
+        }),
       footerNote: z.string().trim().max(500).default(""),
     })
     .optional(),

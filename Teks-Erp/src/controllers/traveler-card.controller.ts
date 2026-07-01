@@ -5,7 +5,46 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { TravelerCardService } from "../services/traveler-card.service";
+import { normalizeTravelerCardConfig } from "../services/system-setting.service";
 import "../types/express-augment";
+
+/** Refakat kartı önizlemesi — admin'in düzenlediği taslak içerik ayarı. */
+const travelerCardConfigSchema = z
+  .object({
+    companyName: z.string().optional(),
+    addressLine: z.string().optional(),
+    phone: z.string().optional(),
+    pageSize: z.enum(["A4", "A5"]).optional(),
+    margins: z
+      .object({
+        top: z.number(),
+        right: z.number(),
+        bottom: z.number(),
+        left: z.number(),
+      })
+      .partial()
+      .optional(),
+    showOperationGrid: z.boolean().optional(),
+    showNotes: z.boolean().optional(),
+    showOrders: z.boolean().optional(),
+    showProperties: z.boolean().optional(),
+    specFields: z
+      .object({
+        color: z.boolean(),
+        width: z.boolean(),
+        targetQuantity: z.boolean(),
+        targetWeight: z.boolean(),
+        foldType: z.boolean(),
+        startDate: z.boolean(),
+        endDate: z.boolean(),
+      })
+      .partial()
+      .optional(),
+    footerNote: z.string().optional(),
+  })
+  .partial();
+
+const sampleHtmlSchema = z.object({ config: travelerCardConfigSchema.optional() });
 
 const reprintSchema = z.object({
   reason: z.string().trim().min(3, "Gerekçe en az 3 karakter olmalı").max(500),
@@ -34,6 +73,8 @@ export class TravelerCardController {
     this.scan         = this.scan.bind(this);
     this.findByBarcode = this.findByBarcode.bind(this);
     this.getHistory   = this.getHistory.bind(this);
+    this.getCardHtml  = this.getCardHtml.bind(this);
+    this.getSampleHtml = this.getSampleHtml.bind(this);
     this.list         = this.list.bind(this);
   }
 
@@ -117,6 +158,32 @@ export class TravelerCardController {
     try {
       const result = await this.service.getHistory(req.params.id as string);
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/traveler-cards/:id/html — tek-kaynak refakat kartı HTML'i (text/html) */
+  async getCardHtml(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const html = await this.service.getCardHtml(req.params.id as string);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.status(200).send(html);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/traveler-cards/sample-html — Belge Şablonu önizlemesi (örnek veri + taslak config) */
+  async getSampleHtml(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { config } = sampleHtmlSchema.parse(req.body ?? {});
+      // normalize → eksik/kısmi alanlar (margins/specFields) güvenli default'a çözülür.
+      const html = await this.service.renderSampleHtml(
+        normalizeTravelerCardConfig((config ?? {}) as Record<string, unknown>),
+      );
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.status(200).send(html);
     } catch (error) {
       next(error);
     }

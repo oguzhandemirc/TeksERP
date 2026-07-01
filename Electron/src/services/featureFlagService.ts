@@ -8,6 +8,24 @@ import {
 
 export type { CompanyLetterhead, DocumentsConfig } from "./documentConfig";
 
+export type TravelerCardPageSize = "A4" | "A5";
+export interface TravelerCardMargins {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+/** Spec grid alanları — her biri tek tek aç/kapa. */
+export interface TravelerCardSpecFields {
+  color: boolean;
+  width: boolean;
+  targetQuantity: boolean;
+  targetWeight: boolean;
+  foldType: boolean;
+  startDate: boolean;
+  endDate: boolean;
+}
+
 /** Refakat kartı marka/içerik ayarı — kart basımında snapshot'a dondurulur. */
 export interface TravelerCardConfig {
   companyName: string;
@@ -15,11 +33,17 @@ export interface TravelerCardConfig {
   addressLine: string;
   /** Firma adının altına basılan telefon (boş → basılmaz). */
   phone: string;
+  /** Sayfa boyutu — A4 (standart) veya A5. */
+  pageSize: TravelerCardPageSize;
+  /** Kenar boşlukları (mm) — hangi kenardan ne kadar pay. */
+  margins: TravelerCardMargins;
   showOperationGrid: boolean;
   showNotes: boolean;
   showOrders: boolean;
   /** Özellikler (ÖZELLİKLER) satırı basılsın mı. */
   showProperties: boolean;
+  /** Spec grid alan görünürlükleri (Renk/En/Hedef Metraj/...). */
+  specFields: TravelerCardSpecFields;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -28,10 +52,21 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   companyName: "Adnan Şahin Tekstil",
   addressLine: "",
   phone: "",
+  pageSize: "A4",
+  margins: { top: 8, right: 8, bottom: 8, left: 8 },
   showOperationGrid: true,
   showNotes: true,
   showOrders: true,
   showProperties: true,
+  specFields: {
+    color: true,
+    width: true,
+    targetQuantity: true,
+    targetWeight: true,
+    foldType: true,
+    startDate: true,
+    endDate: true,
+  },
   footerNote: "",
 };
 

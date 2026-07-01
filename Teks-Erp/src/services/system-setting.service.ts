@@ -129,6 +129,28 @@ const MAX_IDLE_TIMEOUT_MINUTES = 1440;
 /** Firma adı verilmediğinde gösterilen varsayılan. */
 export const DEFAULT_COMPANY_NAME = "Adnan Şahin Tekstil";
 
+/** Refakat kartı sayfa boyutu. */
+export type TravelerCardPageSize = "A4" | "A5";
+
+/** Refakat kartı kenar boşlukları (mm) — pay bırakmak için (ciltleme/delik zımbası). */
+export interface TravelerCardMargins {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+/** Spec grid alan görünürlükleri — her biri tek tek aç/kapa (default açık). */
+export interface TravelerCardSpecFields {
+  color: boolean;
+  width: boolean;
+  targetQuantity: boolean;
+  targetWeight: boolean;
+  foldType: boolean;
+  startDate: boolean;
+  endDate: boolean;
+}
+
 /** Refakat kartı marka/içerik ayarı. Snapshot'a dondurulur. */
 export interface TravelerCardConfig {
   /** Kart başlığındaki firma adı. */
@@ -137,6 +159,10 @@ export interface TravelerCardConfig {
   addressLine: string;
   /** Firma adının altında basılan telefon (boş → basılmaz). */
   phone: string;
+  /** Sayfa boyutu — A4 (standart) veya A5. */
+  pageSize: TravelerCardPageSize;
+  /** Kenar boşlukları (mm) — hangi kenardan ne kadar pay. */
+  margins: TravelerCardMargins;
   /** Operasyon imza grid'i basılsın mı. */
   showOperationGrid: boolean;
   /** Talimatlar/Boyahane notu kutusu basılsın mı. */
@@ -145,6 +171,8 @@ export interface TravelerCardConfig {
   showOrders: boolean;
   /** Özellikler (ÖZELLİKLER) satırı basılsın mı. */
   showProperties: boolean;
+  /** Spec grid alanları (Renk/En/Hedef Metraj/... tek tek). */
+  specFields: TravelerCardSpecFields;
   /** Kart altına basılan serbest not (boş → basılmaz). */
   footerNote: string;
 }
@@ -153,12 +181,64 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   companyName: "Adnan Şahin Tekstil",
   addressLine: "",
   phone: "",
+  pageSize: "A4",
+  margins: { top: 8, right: 8, bottom: 8, left: 8 },
   showOperationGrid: true,
   showNotes: true,
   showOrders: true,
   showProperties: true,
+  specFields: {
+    color: true,
+    width: true,
+    targetQuantity: true,
+    targetWeight: true,
+    foldType: true,
+    startDate: true,
+    endDate: true,
+  },
   footerNote: "",
 };
+
+/** Ham objeyi (kaydet girişi / saklanan değer) tam + güvenli TravelerCardConfig'e çözer.
+ *  Kaydet ve oku yolları paylaşır → drift yok. Eksik alan → default açık/değer. */
+export function normalizeTravelerCardConfig(o: Record<string, unknown>): TravelerCardConfig {
+  const D = DEFAULT_TRAVELER_CARD_CONFIG;
+  const mm = (v: unknown, def: number): number => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? Math.min(40, Math.max(0, Math.round(n))) : def;
+  };
+  const m = (o.margins && typeof o.margins === "object" ? o.margins : {}) as Record<string, unknown>;
+  const sf = (o.specFields && typeof o.specFields === "object" ? o.specFields : {}) as Record<string, unknown>;
+  return {
+    companyName:
+      typeof o.companyName === "string" && o.companyName.trim()
+        ? o.companyName.trim().slice(0, 120)
+        : D.companyName,
+    addressLine: typeof o.addressLine === "string" ? o.addressLine.trim().slice(0, 200) : "",
+    phone: typeof o.phone === "string" ? o.phone.trim().slice(0, 60) : "",
+    pageSize: o.pageSize === "A5" ? "A5" : "A4",
+    margins: {
+      top: mm(m.top, D.margins.top),
+      right: mm(m.right, D.margins.right),
+      bottom: mm(m.bottom, D.margins.bottom),
+      left: mm(m.left, D.margins.left),
+    },
+    showOperationGrid: o.showOperationGrid !== false,
+    showNotes: o.showNotes !== false,
+    showOrders: o.showOrders !== false,
+    showProperties: o.showProperties !== false,
+    specFields: {
+      color: sf.color !== false,
+      width: sf.width !== false,
+      targetQuantity: sf.targetQuantity !== false,
+      targetWeight: sf.targetWeight !== false,
+      foldType: sf.foldType !== false,
+      startDate: sf.startDate !== false,
+      endDate: sf.endDate !== false,
+    },
+    footerNote: typeof o.footerNote === "string" ? o.footerNote.trim().slice(0, 500) : "",
+  };
+}
 
 /** Belge künyesi — irsaliye/çeki başına basılan ek firma bilgisi (firma adı ayrı). */
 export interface CompanyLetterhead {
@@ -543,25 +623,11 @@ export class SystemSettingService {
       if (!c || typeof c !== "object") {
         throw AppError.badRequest("travelerCardConfig nesne olmalı");
       }
-      const merged: TravelerCardConfig = {
-        companyName:
-          typeof c.companyName === "string" && c.companyName.trim()
-            ? c.companyName.trim().slice(0, 120)
-            : DEFAULT_TRAVELER_CARD_CONFIG.companyName,
-        addressLine:
-          typeof c.addressLine === "string" ? c.addressLine.trim().slice(0, 200) : "",
-        phone: typeof c.phone === "string" ? c.phone.trim().slice(0, 60) : "",
-        showOperationGrid: c.showOperationGrid !== false,
-        showNotes: c.showNotes !== false,
-        showOrders: c.showOrders !== false,
-        showProperties: c.showProperties !== false,
-        footerNote:
-          typeof c.footerNote === "string" ? c.footerNote.trim().slice(0, 500) : "",
-      };
+      const merged = normalizeTravelerCardConfig(c as unknown as Record<string, unknown>);
       await this.set(
         SETTING_KEYS.TRAVELER_CARD_CONFIG,
         merged as unknown as Prisma.InputJsonValue,
-        "Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri)",
+        "Refakat kartı marka/içerik ayarı (firma adı + boyut/pay + bölüm/alan görünürlükleri)",
         userId
       );
     }
@@ -925,20 +991,7 @@ export async function readTravelerCardConfig(
   if (!v || typeof v !== "object" || Array.isArray(v)) {
     return DEFAULT_TRAVELER_CARD_CONFIG;
   }
-  const o = v as Record<string, unknown>;
-  return {
-    companyName:
-      typeof o.companyName === "string" && o.companyName.trim()
-        ? o.companyName
-        : DEFAULT_TRAVELER_CARD_CONFIG.companyName,
-    addressLine: typeof o.addressLine === "string" ? o.addressLine : "",
-    phone: typeof o.phone === "string" ? o.phone : "",
-    showOperationGrid: o.showOperationGrid !== false,
-    showNotes: o.showNotes !== false,
-    showOrders: o.showOrders !== false,
-    showProperties: o.showProperties !== false,
-    footerNote: typeof o.footerNote === "string" ? o.footerNote : "",
-  };
+  return normalizeTravelerCardConfig(v as Record<string, unknown>);
 }
 
 /**

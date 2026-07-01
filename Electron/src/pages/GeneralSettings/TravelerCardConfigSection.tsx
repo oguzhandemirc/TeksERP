@@ -3,14 +3,36 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 import { PermissionGate } from "@/components/PermissionGate";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import {
   featureFlagService,
   DEFAULT_TRAVELER_CARD_CONFIG,
   type TravelerCardConfig,
+  type TravelerCardPageSize,
+  type TravelerCardSpecFields,
 } from "@/services/featureFlagService";
 import { FlagToggle } from "./SettingRow";
+
+const PAGE_SIZES: TravelerCardPageSize[] = ["A4", "A5"];
+const MARGIN_SIDES: { key: keyof TravelerCardConfig["margins"]; label: string }[] = [
+  { key: "top", label: "Üst" },
+  { key: "right", label: "Sağ" },
+  { key: "bottom", label: "Alt" },
+  { key: "left", label: "Sol" },
+];
+const SPEC_FIELDS: { key: keyof TravelerCardSpecFields; label: string }[] = [
+  { key: "color", label: "Renk" },
+  { key: "width", label: "En" },
+  { key: "targetQuantity", label: "Hedef Metraj" },
+  { key: "targetWeight", label: "Hedef Ağırlık" },
+  { key: "foldType", label: "Kat Tipi" },
+  { key: "startDate", label: "Başlangıç" },
+  { key: "endDate", label: "Bitiş" },
+];
+const clampMm = (v: string): number => Math.min(40, Math.max(0, Math.round(Number(v) || 0)));
 
 /**
  * Refakat kartı marka/içerik ayarı paneli. Firma adı + künye + hangi bölümlerin
@@ -25,22 +47,19 @@ export function TravelerCardConfigSection({
 } = {}) {
   const qc = useQueryClient();
   const flagsQ = useFeatureFlags();
-  const current = flagsQ.data?.data?.travelerCardConfig ?? DEFAULT_TRAVELER_CARD_CONFIG;
+  // Eksik/bayat-cache üst-düzey alanlara karşı default'la birleştir (margins/specFields hep dolu).
+  const current: TravelerCardConfig = {
+    ...DEFAULT_TRAVELER_CARD_CONFIG,
+    ...(flagsQ.data?.data?.travelerCardConfig ?? {}),
+  };
 
   const [draft, setDraft] = useState<TravelerCardConfig>(current);
+  const currentKey = JSON.stringify(current);
   useEffect(() => {
     setDraft(current);
     // Sunucudan gelen değer değişince formu eşitle.
-  }, [
-    current.companyName,
-    current.addressLine,
-    current.phone,
-    current.showOperationGrid,
-    current.showNotes,
-    current.showOrders,
-    current.showProperties,
-    current.footerNote,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentKey]);
 
   // Taslağı önizlemeye bildir — PDF render pahalı olduğu için 300ms debounce.
   useEffect(() => {
@@ -118,6 +137,50 @@ export function TravelerCardConfigSection({
           </div>
         </div>
 
+        <div>
+          <div className="text-sm font-medium">Sayfa Boyutu & Kenar Payı</div>
+          <p className="text-xs text-muted-foreground">
+            Kart boyutu (A4 standart) ve hangi kenardan ne kadar pay (mm) bırakılacağı —
+            ciltleme/delik zımbası için boşluk.
+          </p>
+          <div className="mt-2 flex flex-wrap items-end gap-4">
+            <div className="inline-flex overflow-hidden rounded-md border">
+              {PAGE_SIZES.map((sz) => (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => setDraft((d) => ({ ...d, pageSize: sz }))}
+                  className={cn(
+                    "px-4 py-1.5 text-sm font-medium transition-colors",
+                    draft.pageSize === sz
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-accent",
+                  )}
+                >
+                  {sz}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {MARGIN_SIDES.map(({ key, label }) => (
+                <div key={key}>
+                  <label className="text-[11px] text-muted-foreground">{label} (mm)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={40}
+                    value={draft.margins[key]}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, margins: { ...d.margins, [key]: clampMm(e.target.value) } }))
+                    }
+                    className="mt-1 flex h-8 w-16 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="divide-y divide-border rounded-md border px-3">
           <div className="py-3">
             <FlagToggle
@@ -154,6 +217,30 @@ export function TravelerCardConfigSection({
               disabled={mut.isPending}
               onChange={(v) => setDraft((d) => ({ ...d, showProperties: v }))}
             />
+          </div>
+        </div>
+
+        <div>
+          <div className="text-sm font-medium">Kart Alanları (Spec Kutusu)</div>
+          <p className="text-xs text-muted-foreground">
+            Renk/en/hedef metraj… kutusunda hangi alanlar basılsın. Kapatılan alan karttan gizlenir.
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+            {SPEC_FIELDS.map(({ key, label }) => (
+              <label
+                key={key}
+                className="flex cursor-pointer select-none items-center gap-2 text-sm"
+              >
+                <Checkbox
+                  checked={draft.specFields[key] !== false}
+                  disabled={mut.isPending}
+                  onCheckedChange={(v) =>
+                    setDraft((d) => ({ ...d, specFields: { ...d.specFields, [key]: v === true } }))
+                  }
+                />
+                {label}
+              </label>
+            ))}
           </div>
         </div>
 

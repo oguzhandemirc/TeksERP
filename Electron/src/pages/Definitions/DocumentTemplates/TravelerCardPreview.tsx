@@ -1,57 +1,46 @@
-import { useCallback, useState } from "react";
-import { QRCodeCanvas } from "qrcode.react";
-import { PDFViewer } from "@react-pdf/renderer";
+import { useMemo } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { workOrderService } from "@/pages/Operations/WorkOrders/service";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
-import { TravelerCardPdfDocument } from "@/pages/Operations/WorkOrders/TravelerCardPdfDocument";
-import { MOCK_TRAVELER_WO, MOCK_TRAVELER_CARD } from "./previewMocks";
 
 /**
- * Refakat Kartı canlı önizlemesi. Kart react-pdf belgesi olduğundan TravelerCard
- * PrintDialog deseni: gizli QRCodeCanvas → toDataURL (RAF) → <PDFViewer>. Taslak
- * config prop'u PDF'e geçer; ayar değişince viewer yeniden render eder. Örnek veri.
+ * Refakat Kartı canlı önizlemesi — ÖNİZLEME = GERÇEK BASKI (tek kaynak). Gerçek
+ * backend renderTravelerCardHtml'i örnek veriyle + DÜZENLENEN taslak config ile
+ * çağırır (`sample-html`), iframe'de gösterir. Eskiden @react-pdf belgesiydi
+ * (baskıyla ayrışırdı); artık mobil + masaüstü baskının birebir aynısı.
  */
 export function TravelerCardPreview({ config }: { config: TravelerCardConfig }) {
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const debouncedCfg = useDebouncedValue(config, 300);
+  const cfgKey = useMemo(() => JSON.stringify(debouncedCfg), [debouncedCfg]);
 
-  // QR canvas → PNG dataURL (react-pdf Image PNG bekler). RAF: çizim flush olsun.
-  const handleCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
-    if (!canvas) {
-      setQrDataUrl(null);
-      return;
-    }
-    requestAnimationFrame(() => setQrDataUrl(canvas.toDataURL("image/png")));
-  }, []);
+  const htmlQuery = useQuery({
+    queryKey: ["traveler-sample-html", cfgKey],
+    queryFn: () => workOrderService.getTravelerCardSampleHtml(debouncedCfg),
+    placeholderData: keepPreviousData,
+    staleTime: 0,
+  });
+  const html = htmlQuery.data ?? null;
 
   return (
     <div className="rounded-md border bg-muted/30">
       <div className="border-b px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        Önizleme — örnek veri (A4)
+        Önizleme — örnek veri (gerçek baskı çıktısı, {config.pageSize})
       </div>
-
-      {/* Gizli yüksek çözünürlüklü QR — PDF'te scale edilir. */}
-      <div style={{ position: "absolute", left: -10000, top: 0 }}>
-        <QRCodeCanvas
-          ref={handleCanvas}
-          value={MOCK_TRAVELER_CARD.barcode}
-          size={512}
-          level="M"
-          marginSize={0}
-        />
-      </div>
-
       <div className="h-[70vh]">
-        {qrDataUrl ? (
-          <PDFViewer width="100%" height="100%" showToolbar style={{ border: 0 }}>
-            <TravelerCardPdfDocument
-              workOrder={MOCK_TRAVELER_WO}
-              card={MOCK_TRAVELER_CARD}
-              qrDataUrl={qrDataUrl}
-              config={config}
-            />
-          </PDFViewer>
-        ) : (
+        {htmlQuery.isLoading && !html ? (
           <Skeleton className="h-full w-full" />
+        ) : html ? (
+          <iframe
+            title="Refakat Kartı Önizleme"
+            srcDoc={html}
+            className="h-full w-full border-0 bg-white"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            Önizleme yüklenemedi.
+          </div>
         )}
       </div>
     </div>
