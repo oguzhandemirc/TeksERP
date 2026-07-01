@@ -130,7 +130,10 @@ export function templateTextLines(
     .map(({ f, dv }) => {
       const headline = dv.role === "headline";
       const size: FontSize = f.fontSize ?? (headline ? "lg" : "md");
-      const text = headline ? dv.value : `${f.label}: ${dv.value}`;
+      // Alan etiketi (label) doluysa "Etiket: değer", boşsa yalnız değer — kullanıcı
+      // FieldsPanel'den başlığı yazar/siler. (Eskiden headline alanlar label'ı düşürüyordu.)
+      const label = f.label?.trim();
+      const text = label ? `${label}: ${dv.value}` : dv.value;
       return { text, size, bold: f.isBold ?? false };
     });
 }

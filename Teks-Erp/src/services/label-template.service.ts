@@ -389,8 +389,9 @@ function validateFields(kind: LabelKind, fields: TemplateField[]): void {
     }
     seen.add(f.key);
 
-    if (typeof f.label !== "string" || f.label.trim().length === 0) {
-      throw AppError.badRequest(`'${f.key}' için label zorunlu`);
+    // label boş olabilir (çıktıda yalnız değer görünür) — yalnız string tipi şart.
+    if (typeof f.label !== "string") {
+      throw AppError.badRequest(`'${f.key}' için label metin olmalı`);
     }
     if (typeof f.order !== "number" || !Number.isInteger(f.order) || f.order < 1) {
       throw AppError.badRequest(`'${f.key}' için order pozitif tamsayı olmalı`);

@@ -11,7 +11,7 @@ import "../types/express-augment";
 
 const fieldSchema = z.object({
   key:       z.string().min(1).max(100),
-  label:     z.string().min(1).max(200),
+  label:     z.string().max(200), // boş bırakılabilir → çıktıda yalnız değer görünür
   order:     z.number().int().positive(),
   isVisible: z.boolean(),
   isBold:    z.boolean().optional(),
