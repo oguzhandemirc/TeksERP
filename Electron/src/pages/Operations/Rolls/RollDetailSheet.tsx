@@ -73,26 +73,11 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-2xl overflow-auto">
         <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <span className="font-mono">{roll?.barcode}</span>
-            {roll && (
-              <StatusBadge
-                status={roll.status}
-                labels={rollStatusLabels}
-                tones={rollStatusTones}
-              />
-            )}
-          </SheetTitle>
-          <SheetDescription>{roll?.item?.name}</SheetDescription>
+          <SheetTitle>Top Detayı</SheetTitle>
+          <SheetDescription className="sr-only">
+            Top {roll?.barcode ?? ""} · {roll?.item?.name ?? ""} detayı
+          </SheetDescription>
         </SheetHeader>
-
-        {roll?.markedForKartela && (
-          <div className="mt-2">
-            <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300">
-              Kartelalık
-            </Badge>
-          </div>
-        )}
 
         {roll && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -184,23 +169,43 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                   <div className="rounded bg-white p-2">
                     <QRCodeSVG value={roll.barcode} size={112} level="M" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Top Barkodu
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Top Barkodu
+                      </div>
+                      <div className="mt-1 break-all font-mono text-sm font-semibold">
+                        {roll.barcode}
+                      </div>
                     </div>
-                    <div className="mt-1 break-all font-mono text-sm font-semibold">
-                      {roll.barcode}
+                    <div className="flex flex-col items-start gap-1">
+                      <StatusBadge status={roll.status} labels={rollStatusLabels} tones={rollStatusTones} />
+                      {roll.markedForKartela && (
+                        <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300">
+                          Kartelalık
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </CardContent>
               </Card>
             ) : (
               <Card>
-                <CardContent className="p-3 text-xs text-muted-foreground">
-                  <Badge variant="outline" className="mr-2 text-[10px]">
-                    Açık Kumaş
-                  </Badge>
-                  Bu rulonun fiziksel barkodu yok — boyahane dönüşü açık kumaş, Kurşun/KK2'de işlenirken üretiliyor.
+                <CardContent className="space-y-2 p-3 text-xs text-muted-foreground">
+                  <div className="flex flex-col items-start gap-1">
+                    <StatusBadge status={roll.status} labels={rollStatusLabels} tones={rollStatusTones} />
+                    {roll.markedForKartela && (
+                      <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300">
+                        Kartelalık
+                      </Badge>
+                    )}
+                  </div>
+                  <div>
+                    <Badge variant="outline" className="mr-2 text-[10px]">
+                      Açık Kumaş
+                    </Badge>
+                    Bu rulonun fiziksel barkodu yok — boyahane dönüşü açık kumaş, Kurşun/KK2'de işlenirken üretiliyor.
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -248,9 +253,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
               <CardContent className="space-y-2 p-3 text-sm">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                   <div className="text-xs text-muted-foreground">Ürün</div>
-                  <div>
-                    <span className="font-mono text-xs">{roll.item?.code}</span> · {roll.item?.name}
-                  </div>
+                  <div>{roll.item?.name}</div>
                   <div className="text-xs text-muted-foreground">Giriş Kaynağı</div>
                   <div>
                     <Badge variant="muted" className="text-[10px]">
