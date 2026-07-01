@@ -10,7 +10,7 @@
 // fiziksel test baskısıyla (Faz-2) ince ayarlanır.
 // =============================================================================
 
-import { cleanCtl, clampCopies, mmToDots, templateTextLines, LEFT_COL_MM, type NativeRenderInput } from "./native-label.shared";
+import { cleanCtl, clampCopies, mmToDots, templateTextLines, resolveQrScale, resolveLineStepMm, LEFT_COL_MM, type NativeRenderInput } from "./native-label.shared";
 import type { FontSize } from "../../config/label-fields";
 
 const CRLF = "\r\n";
@@ -36,6 +36,9 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
   const bottom = d(format.marginBottomMm);
   // Sol = BÜYÜK QR kolonu, sağ = metin. textX QR'ı net geçer (LEFT_COL_MM paylaşılır).
   const textX = left + d(LEFT_COL_MM);
+  // Şablon-başına yerleşim (boş → varsayılan): QR büyütme + sabit satır adımı (mm).
+  const qrScale = resolveQrScale(template?.qrScale);
+  const lineStepMm = resolveLineStepMm(template?.lineStepMm != null ? Number(template.lineStepMm) : null);
   const lines: string[] = [];
 
   lines.push("N"); // görüntü buffer'ını temizle
@@ -45,8 +48,8 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
 
   const bc = payload.barcode ? eplData(payload.barcode) : "";
 
-  // Sol üst: BÜYÜK QR (s5). Sol/üst pay uygulanır.
-  if (bc) lines.push(`b${left},${top},Q,m2,s5,"${bc}"`);
+  // Sol üst: BÜYÜK QR (s<qrScale>, şablondan ayarlanır). Sol/üst pay uygulanır.
+  if (bc) lines.push(`b${left},${top},Q,m2,s${qrScale},"${bc}"`);
 
   // Alt tam-genişlik Code128 için ayrılan blok — metin BUNUN ÜSTÜNDE kalır → çakışma yok.
   const bcHeight = d(7);
@@ -58,7 +61,7 @@ export function buildRollLabelPplb({ payload, format, copies, template }: Native
   for (const ln of templateTextLines(payload, template)) {
     const mul = ln.bold ? "2" : "1";
     lines.push(`A${textX},${Math.round(y)},0,${pplbFont(ln.size)},${mul},${mul},N,"${eplData(ln.text)}"`);
-    y += d(pplbStepMm(ln.size));
+    y += d(lineStepMm ?? pplbStepMm(ln.size));
   }
 
   // Alt: tam genişlik Code128 + okunur metin (metin uzasa bile altına itilir).

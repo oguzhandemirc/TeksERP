@@ -18,6 +18,7 @@ import {
 } from "@/services/labelTemplateService";
 import { CatalogPanel } from "./CatalogPanel";
 import { FieldsPanel } from "./FieldsPanel";
+import { LabelLayoutControls } from "./LabelLayoutControls";
 import { LabelPreview } from "./LabelPreview";
 import { RawCodePanel } from "./RawCodePanel";
 
@@ -47,6 +48,8 @@ export function LabelTemplateEditPage() {
   const [name, setName] = useState("");
   const [fields, setFields] = useState<TemplateField[]>([]);
   const [rawCode, setRawCode] = useState<RawCodeMap>({});
+  const [lineStepMm, setLineStepMm] = useState<number | null>(null);
+  const [qrScale, setQrScale] = useState<number | null>(null);
 
   useEffect(() => {
     if (template) {
@@ -57,6 +60,8 @@ export function LabelTemplateEditPage() {
           .map((f, i) => ({ ...f, order: i + 1 })),
       );
       setRawCode(template.rawCode ?? {});
+      setLineStepMm(template.lineStepMm ?? null);
+      setQrScale(template.qrScale ?? null);
     }
   }, [template]);
 
@@ -75,6 +80,8 @@ export function LabelTemplateEditPage() {
         name: name.trim(),
         fields: fields.map((f, i) => ({ ...f, order: i + 1 })),
         rawCode,
+        lineStepMm,
+        qrScale,
       }),
     onSuccess: () => {
       toast.success("Şablon kaydedildi.");
@@ -168,8 +175,19 @@ export function LabelTemplateEditPage() {
                     catalogByKey={catalogByKey}
                     onChange={setFields}
                   />
-                  <div className="lg:sticky lg:top-4 lg:self-start">
-                    <LabelPreview kind={template.kind} fields={orderedFields} />
+                  <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
+                    <LabelLayoutControls
+                      lineStepMm={lineStepMm}
+                      qrScale={qrScale}
+                      onLineStepMm={setLineStepMm}
+                      onQrScale={setQrScale}
+                    />
+                    <LabelPreview
+                      kind={template.kind}
+                      fields={orderedFields}
+                      lineStepMm={lineStepMm}
+                      qrScale={qrScale}
+                    />
                   </div>
                 </div>
               </TabsContent>

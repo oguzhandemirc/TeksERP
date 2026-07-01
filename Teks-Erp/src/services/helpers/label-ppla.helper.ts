@@ -21,6 +21,8 @@ import {
   clampCopies,
   mmToDots,
   templateTextLines,
+  resolveQrScale,
+  resolveLineStepMm,
   LEFT_COL_MM,
   type NativeRenderInput,
 } from "./native-label.shared";
@@ -46,6 +48,9 @@ export function buildRollLabelPpla({ payload, format, copies, template }: PplaRe
   const d = (mm: number) => mmToDots(mm, dpi);
   const marginDots = d(format.marginMm);
   const colText = marginDots + d(LEFT_COL_MM); // sağ metin kolonu (sol = QR/barkod)
+  // Şablon-başına yerleşim (boş → varsayılan). DPL QR modül boyutu 2-haneli.
+  const qrMod = String(resolveQrScale(template?.qrScale, 6)).padStart(2, "0"); // null → mevcut tuned 6
+  const lineStepMm = resolveLineStepMm(template?.lineStepMm != null ? Number(template.lineStepMm) : null);
   const lines: string[] = [];
 
   // --- Başlık: birim, etiket boyu, ısı/yoğunluk ---
@@ -64,14 +69,14 @@ export function buildRollLabelPpla({ payload, format, copies, template }: PplaRe
   let row = marginDots;
   for (const ln of templateTextLines(payload, template)) {
     lines.push(dplText(ln.text, row, colText, pplaFont(ln.size), ln.bold ? "22" : "11"));
-    row += d(pplaStepMm(ln.size)); // 60mm'e sığsın diye sıkı adım
+    row += d(lineStepMm ?? pplaStepMm(ln.size)); // şablon adımı ?? font-türevli sıkı adım
   }
 
   // --- Sol kolon: QR (üst) + Code128 (alt) + okunabilir metin ---
   if (payload.barcode) {
     const bc = cleanCtl(payload.barcode);
-    // QR — DPL 2D kaydı ("W1c"...) sol üst köşe
-    lines.push(`1W1c0606${pad4(marginDots)}${pad4(marginDots)}${bc}`);
+    // QR — DPL 2D kaydı ("W1c"...) sol üst köşe; modül boyutu şablondan (qrMod).
+    lines.push(`1W1c${qrMod}${qrMod}${pad4(marginDots)}${pad4(marginDots)}${bc}`);
     // Code128 (QR'ın altı): <rot>"e"<narrow><wide><HHHH height><RRRR><CCCC><veri>
     const bcRow = marginDots + d(28);
     lines.push(`1e22${pad4(d(10))}${pad4(bcRow)}${pad4(marginDots)}${bc}`);

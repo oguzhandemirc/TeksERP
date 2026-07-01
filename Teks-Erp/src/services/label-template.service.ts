@@ -75,6 +75,9 @@ export interface LabelTemplateInput {
   /** Boş geçilirse catalog'dan default field listesi üretilir. */
   fields?: TemplateField[];
   rawCode?: RawCodeMap;
+  /** Yerleşim (şablon-başına, opsiyonel; null = varsayılana dön). */
+  lineStepMm?: number | null;
+  qrScale?: number | null;
 }
 
 export interface LabelTemplateUpdateInput {
@@ -83,6 +86,8 @@ export interface LabelTemplateUpdateInput {
   isActive?: boolean;
   fields?: TemplateField[];
   rawCode?: RawCodeMap;
+  lineStepMm?: number | null;
+  qrScale?: number | null;
 }
 
 /** Boş/whitespace dil değerlerini at → { } = tüm diller otomatik üretim. */
@@ -166,6 +171,8 @@ export class LabelTemplateService {
           isActive: input.isActive ?? true,
           fields: fields as unknown as Prisma.InputJsonValue,
           ...(input.rawCode ? { rawCode: normalizeRawCode(input.rawCode) as Prisma.InputJsonValue } : {}),
+          lineStepMm: input.lineStepMm ?? null,
+          qrScale: input.qrScale ?? null,
         },
       });
     }).catch(rethrowDefaultConflict);
@@ -204,6 +211,8 @@ export class LabelTemplateService {
     if (input.fields) data.fields = input.fields as unknown as Prisma.InputJsonValue;
     if (input.isDefault !== undefined) data.isDefault = input.isDefault;
     if (input.rawCode !== undefined) data.rawCode = normalizeRawCode(input.rawCode) as Prisma.InputJsonValue;
+    if (input.lineStepMm !== undefined) data.lineStepMm = input.lineStepMm;
+    if (input.qrScale !== undefined) data.qrScale = input.qrScale;
 
     const updated = await prisma.$transaction(async (tx) => {
       // isDefault=true'ya çekiliyorsa kind içindeki diğer default'ları düşür.
@@ -338,6 +347,7 @@ export class LabelTemplateService {
   async getFieldsPreview(
     kind: LabelKind,
     fields: TemplateField[],
+    layout?: { lineStepMm?: number | null; qrScale?: number | null },
   ): Promise<
     ApiResponse<{
       mode: "svg" | "html" | "text";
@@ -348,7 +358,14 @@ export class LabelTemplateService {
     }>
   > {
     const payload = mockPayload(kind);
-    const template = { kind, fields, rawCode: null } as unknown as LabelTemplate;
+    // Yerleşim (satır aralığı + QR boyutu) canlı önizlemeye yansısın → template'e göm.
+    const template = {
+      kind,
+      fields,
+      rawCode: null,
+      lineStepMm: layout?.lineStepMm ?? null,
+      qrScale: layout?.qrScale ?? null,
+    } as unknown as LabelTemplate;
     const format = await resolveLabelFormat({ kind });
     const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
     const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });

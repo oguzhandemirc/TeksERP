@@ -11,6 +11,9 @@ import { PRINTER_LANGUAGE_LABELS, type PrinterLanguage } from "@/services/featur
 interface Props {
   kind: LabelKind;
   fields: TemplateField[];
+  /** Yerleşim — kaydetmeden canlı yansısın diye önizlemeye geçilir. */
+  lineStepMm?: number | null;
+  qrScale?: number | null;
 }
 
 /**
@@ -19,13 +22,13 @@ interface Props {
  * olmayan native → ham komut metni. Test ekranı + Kod editörüyle tutarlı: hepsi
  * baskıya giden çıktının aynısını gösterir.
  */
-export function LabelPreview({ kind, fields }: Props) {
+export function LabelPreview({ kind, fields, lineStepMm, qrScale }: Props) {
   const visibleCount = fields.filter((f) => f.isVisible).length;
   const [view, setView] = useState<"visual" | "code">("visual");
 
   const previewQ = useQuery({
-    queryKey: ["label-preview-active", kind, JSON.stringify(fields)],
-    queryFn: () => labelTemplateService.fieldsPreview(kind, fields),
+    queryKey: ["label-preview-active", kind, JSON.stringify(fields), lineStepMm ?? null, qrScale ?? null],
+    queryFn: () => labelTemplateService.fieldsPreview(kind, fields, { lineStepMm, qrScale }),
     enabled: visibleCount > 0,
     staleTime: 0,
   });

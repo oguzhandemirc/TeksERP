@@ -51,6 +51,9 @@ export interface LabelTemplate {
   fields: TemplateField[];
   /** Uzman raw-code override (dil→kod). Boş/yok → o dilde otomatik üretim. */
   rawCode?: RawCodeMap | null;
+  /** Yerleşim (şablon-başına, opsiyonel). Boş → font-türevli/varsayılan. */
+  lineStepMm?: number | null;
+  qrScale?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -103,6 +106,8 @@ export const labelTemplateService = {
       isDefault: boolean;
       isActive: boolean;
       rawCode: RawCodeMap;
+      lineStepMm: number | null;
+      qrScale: number | null;
     }>,
   ): Promise<ApiResponse<LabelTemplate>> =>
     apiClient
@@ -176,10 +181,12 @@ export const labelTemplateService = {
       })
       .then((r) => r.data.data.code),
 
-  /** "Alanlar" canlı önizlemesi — verilen alanları AKTİF DİLDE (WYSIWYG) + ham kod. */
+  /** "Alanlar" canlı önizlemesi — verilen alanları AKTİF DİLDE (WYSIWYG) + ham kod.
+   *  layout (satır aralığı + QR boyutu) verilirse önizleme onu yansıtır (kaydetmeden). */
   fieldsPreview: (
     kind: LabelKind,
     fields: TemplateField[],
+    layout?: { lineStepMm?: number | null; qrScale?: number | null },
   ): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string }> =>
     apiClient
       .post<
@@ -189,6 +196,6 @@ export const labelTemplateService = {
           content: string;
           native: string;
         }>
-      >("/api/label-templates/preview", { kind, fields })
+      >("/api/label-templates/preview", { kind, fields, ...layout })
       .then((r) => r.data.data),
 };

@@ -28,6 +28,21 @@ export function mmToDots(mm: number, dpi: number): number {
   return Math.round((mm * dpi) / 25.4);
 }
 
+/** Şablon-başına QR modül büyütme (dots/modül; PPLB `s`, ZPL/PPLA mag). Boş →
+ *  dile-özel varsayılan (byte-compat için her dil kendi tuned değerini geçer).
+ *  Dolu → makul aralığa kısılır (2–15) — çok küçük okunmaz, çok büyük sığmaz. */
+export function resolveQrScale(qrScale?: number | null, defaultScale = 5): number {
+  if (qrScale == null || !Number.isFinite(qrScale)) return defaultScale;
+  return Math.max(2, Math.min(15, Math.round(qrScale)));
+}
+
+/** Şablon-başına satırlar arası mesafe (mm). Boş/geçersiz → null (font boyutundan
+ *  türetilen varsayılan adım kullanılır). Dolu → 1–30 mm aralığına kısılır. */
+export function resolveLineStepMm(lineStepMm?: number | null): number | null {
+  if (lineStepMm == null || !Number.isFinite(lineStepMm)) return null;
+  return Math.max(1, Math.min(30, lineStepMm));
+}
+
 // Türkçe → ASCII eşlemesi (İ/Ş/Ğ/ç vb.). Native gönderimde KRİTİK: ham 9100 baytları
 // latin1; latin1-dışı karakter (İ=U+0130) kayıplı çevrilir VE daha kötüsü latin1'de
 // komut-baytına denk gelir (Ş=U+015E→0x5E '^' ZPL öneki, Ğ=U+011E→0x1E kontrol) →

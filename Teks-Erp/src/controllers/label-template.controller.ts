@@ -28,21 +28,29 @@ const rawCodeSchema = z
   })
   .partial();
 
+// Şablon-başına yerleşim ayarları — null = temizle (varsayılana dön).
+const lineStepMmSchema = z.number().min(1).max(30).nullable().optional();
+const qrScaleSchema = z.number().int().min(2).max(15).nullable().optional();
+
 const createSchema = z.object({
-  name:      z.string().min(1).max(200),
-  kind:      z.nativeEnum(LabelKind),
-  isDefault: z.boolean().optional(),
-  isActive:  z.boolean().optional(),
-  fields:    z.array(fieldSchema).optional(),
-  rawCode:   rawCodeSchema.optional(),
+  name:       z.string().min(1).max(200),
+  kind:       z.nativeEnum(LabelKind),
+  isDefault:  z.boolean().optional(),
+  isActive:   z.boolean().optional(),
+  fields:     z.array(fieldSchema).optional(),
+  rawCode:    rawCodeSchema.optional(),
+  lineStepMm: lineStepMmSchema,
+  qrScale:    qrScaleSchema,
 });
 
 const updateSchema = z.object({
-  name:      z.string().min(1).max(200).optional(),
-  isDefault: z.boolean().optional(),
-  isActive:  z.boolean().optional(),
-  fields:    z.array(fieldSchema).optional(),
-  rawCode:   rawCodeSchema.optional(),
+  name:       z.string().min(1).max(200).optional(),
+  isDefault:  z.boolean().optional(),
+  isActive:   z.boolean().optional(),
+  fields:     z.array(fieldSchema).optional(),
+  rawCode:    rawCodeSchema.optional(),
+  lineStepMm: lineStepMmSchema,
+  qrScale:    qrScaleSchema,
 });
 
 const previewRawSchema = z.object({
@@ -113,10 +121,15 @@ export class LabelTemplateController {
   /** "Alanlar" sekmesi canlı önizlemesi — verilen alanları AKTİF DİLDE render eder. */
   fieldsPreview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { kind, fields } = z
-        .object({ kind: z.nativeEnum(LabelKind), fields: z.array(fieldSchema) })
+      const { kind, fields, lineStepMm, qrScale } = z
+        .object({
+          kind: z.nativeEnum(LabelKind),
+          fields: z.array(fieldSchema),
+          lineStepMm: lineStepMmSchema,
+          qrScale: qrScaleSchema,
+        })
         .parse(req.body);
-      const result = await this.service.getFieldsPreview(kind, fields);
+      const result = await this.service.getFieldsPreview(kind, fields, { lineStepMm, qrScale });
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

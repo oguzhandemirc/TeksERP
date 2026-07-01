@@ -10,7 +10,7 @@
 // test baskısıyla (Faz-2) ince ayarlanır.
 // =============================================================================
 
-import { cleanCtl, clampCopies, mmToDots, templateTextLines, LEFT_COL_MM, type NativeRenderInput } from "./native-label.shared";
+import { cleanCtl, clampCopies, mmToDots, templateTextLines, resolveQrScale, resolveLineStepMm, LEFT_COL_MM, type NativeRenderInput } from "./native-label.shared";
 import type { FontSize } from "../../config/label-fields";
 
 // Boyut → ZPL glif yüksekliği (mm) + satır adım (mm). md/lg null-şablon yolunun
@@ -30,6 +30,9 @@ export function buildRollLabelZpl({ payload, format, copies, template }: NativeR
   const heightDots = d(format.heightMm);
   const margin = d(format.marginMm);
   const textX = margin + d(LEFT_COL_MM); // sağ metin kolonu (sol = QR/barkod)
+  // Şablon-başına yerleşim (boş → varsayılan). ZPL BQ mag 1–10 aralığında.
+  const qrMag = Math.min(10, resolveQrScale(template?.qrScale, 3)); // null → mevcut tuned 3
+  const lineStepMm = resolveLineStepMm(template?.lineStepMm != null ? Number(template.lineStepMm) : null);
   const lines: string[] = [];
 
   lines.push("^XA"); // etiket başlangıcı
@@ -44,14 +47,14 @@ export function buildRollLabelZpl({ payload, format, copies, template }: NativeR
     const h = d(zplHMm(ln.size));
     const w = ln.bold ? Math.round(h * 1.2) : h;
     lines.push(`^FO${textX},${Math.round(y)}^A0N,${h},${w}^FD${zplData(ln.text)}^FS`);
-    y += d(zplStepMm(ln.size)); // 60mm'e sığsın diye sıkı adım
+    y += d(lineStepMm ?? zplStepMm(ln.size)); // şablon adımı ?? font-türevli sıkı adım
   }
 
   // Sol kolon: QR (üst) + Code128 (alt)
   if (payload.barcode) {
     const bc = zplData(payload.barcode);
-    // QR: ^BQN,2,mag ^FD QA,veri — sol üst
-    lines.push(`^FO${margin},${margin}^BQN,2,3^FDQA,${bc}^FS`);
+    // QR: ^BQN,2,<mag> ^FD QA,veri — sol üst (mag şablondan)
+    lines.push(`^FO${margin},${margin}^BQN,2,${qrMag}^FDQA,${bc}^FS`);
     // Code128: ^BCN,height,printInterpretation(Y),N,N — QR'ın altı
     lines.push(`^FO${margin},${margin + d(28)}^BCN,${d(10)},Y,N,N^FD${bc}^FS`);
   }

@@ -2488,6 +2488,12 @@ model LabelTemplate {
   /// değeriyle doldurulur). Boş/yok → mevcut otomatik üretim.
   rawCode   Json?
 
+  /// Yerleşim ayarları (şablon başına, opsiyonel). Boş → mevcut/varsayılan davranış.
+  /// Satırlar arası mesafe (mm) — boşsa font boyutundan türetilir (native step).
+  lineStepMm Decimal? @db.Decimal(4, 1)
+  /// QR modül büyütme (dots/modül; PPLB `s`, ZPL/PPLA mag) — boşsa varsayılan (5).
+  qrScale    Int?
+
   peripheralRoutes PeripheralTemplateRoute[]
 
   createdAt DateTime @default(now())
