@@ -105,7 +105,9 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     cell: ({ row }) => {
       const fason = row.original.currentFasonStations ?? [];
       return (
-        <div className="flex flex-col items-start gap-1">
+        // Yan yana (2. satıra taşıp satır yüksekliğini bozmasın); amber rozet + tooltip
+        // zaten "fasonda" olduğunu belli ediyor → "Fasonda:" öneki gereksiz.
+        <div className="flex flex-wrap items-center gap-1.5">
           <StatusBadge
             status={row.original.status}
             labels={workOrderStatusLabels}
@@ -117,7 +119,7 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
               className="border-amber-500/40 text-[10px] text-amber-700 dark:text-amber-400"
               title="Şu an mal bu fason istasyon(lar)ında"
             >
-              Fasonda: {fason.join(", ")}
+              {fason.join(", ")}
             </Badge>
           )}
         </div>

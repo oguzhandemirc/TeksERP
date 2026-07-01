@@ -141,16 +141,23 @@ export function RelabelPrintForCustomer({
             nullable
           />
         </div>
+        {/* Stok = "müşteri yok" — kendi rengi (amber). Seçiliyken dolu, değilken amber-tint
+            (beyaz değil → müşteri seçiliyken de belli). Emerald=müşteri seçimi, primary=Bas. */}
         <Button
           type="button"
           size="sm"
-          variant={stock ? "default" : "outline"}
+          variant="outline"
           onClick={() => {
             setStock(true);
             setCustomerId(null);
             setOrderLineId(null);
           }}
-          className={cn("gap-1", stock && "bg-emerald-600 text-white hover:bg-emerald-600/90")}
+          className={cn(
+            "gap-1 border-amber-400",
+            stock
+              ? "bg-amber-500 text-white hover:bg-amber-500/90"
+              : "bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-950/50",
+          )}
         >
           <Package className="h-3.5 w-3.5" /> Stok (müşterisiz)
         </Button>
