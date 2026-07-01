@@ -228,14 +228,16 @@ export function RawCodePanel({ kind, catalog, rawCode, onChange }: Props) {
               <div className="py-8 text-center text-xs italic text-destructive">
                 Önizleme alınamadı: {(previewQ.error as Error).message}
               </div>
-            ) : lang === "RASTER_HTML" ? (
+            ) : (previewQ.data ?? "").trimStart().startsWith("<") ? (
+              // HTML dili ya da native→SVG görsel (baskıyla birebir) → iframe.
               <iframe
-                title="Raw-code HTML önizleme"
+                title="Raw-code önizleme"
                 srcDoc={previewQ.data ?? ""}
                 sandbox=""
                 className="h-[400px] w-full rounded border bg-white"
               />
             ) : (
+              // Görselleştirilemeyen native (geçersiz kod / çizici yok) → ham komut.
               <pre className="h-[400px] overflow-auto whitespace-pre-wrap break-all rounded bg-background p-2 font-mono text-[11px] leading-relaxed">
                 {previewQ.data}
               </pre>

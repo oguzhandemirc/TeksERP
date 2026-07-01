@@ -66,11 +66,12 @@ export function renderLabel(language: PrinterLanguage, input: LabelRenderInput):
   // kullan ({{key}} yer-tutucuları payload'dan doldurulur). Yoksa generator çalışır.
   const raw = readTemplateRawCode(input.template?.rawCode, effective);
   if (raw) {
-    return {
-      language: effective,
-      content: applyRawCode(raw, input.payload, { barcodeSvg: input.barcodeSvg, qrSvg: input.qrSvg }),
-      contentType: CONTENT_TYPES[effective],
-    };
+    let content = applyRawCode(raw, input.payload, { barcodeSvg: input.barcodeSvg, qrSvg: input.qrSvg });
+    // Native yazıcılar (PPLA/PPLB/ZPL) komut satırlarını CR/LF ile ayırır — otomatik
+    // üretici CRLF verir. Kullanıcı LF yapıştırsa da CRLF'e normalize et; yoksa bazı
+    // Argox EPL2 modunda "veri yazıcıya gider ama BASMAZ" olur.
+    if (effective !== PrinterLanguage.RASTER_HTML) content = content.replace(/\r?\n/g, "\r\n");
+    return { language: effective, content, contentType: CONTENT_TYPES[effective] };
   }
   return {
     language: effective,

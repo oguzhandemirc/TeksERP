@@ -100,3 +100,12 @@ export function renderNativePreviewSvg(language: PrinterLanguage, native: string
   // TODO: PPLA (DPL) + ZPL çizicileri sonra.
   return null;
 }
+
+/** Görsel SVG'yi ekranda ortalayıp sığdıran HTML kabuk (iframe içeriği). */
+export function svgToPreviewHtml(svg: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8"/><style>
+html{background:#eef2f7}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:12px}
+svg{background:#fff;box-shadow:0 2px 12px rgba(15,23,42,0.18);max-width:100%;height:auto}
+</style></head><body>${svg}</body></html>`;
+}

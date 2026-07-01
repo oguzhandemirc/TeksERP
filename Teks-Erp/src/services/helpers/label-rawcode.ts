@@ -10,6 +10,7 @@ import bwipjs from "bwip-js";
 import { PrinterLanguage, type LabelKind } from "@prisma/client";
 import type { LabelPayload } from "../label.service";
 import { fieldDisplayValue } from "./label-field-values";
+import { renderNativePreviewSvg, svgToPreviewHtml } from "./native-preview";
 
 const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
@@ -54,7 +55,14 @@ export function buildRawCodePreview(
           qrSvg: bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" }),
         }
       : undefined;
-  return { content: applyRawCode(code, payload, opts), contentType: PREVIEW_CONTENT_TYPE[language] };
+  const filled = applyRawCode(code, payload, opts);
+  // Native dil (PPLB) → gerçek komutları görsele çevir (editör önizlemesi = baskı).
+  // Çizilemezse (geçersiz kod / çizici yok) ham metni göster.
+  if (language !== PrinterLanguage.RASTER_HTML) {
+    const svg = renderNativePreviewSvg(language, filled.replace(/\r?\n/g, "\r\n"));
+    if (svg) return { content: svgToPreviewHtml(svg), contentType: "text/html; charset=utf-8" };
+  }
+  return { content: filled, contentType: PREVIEW_CONTENT_TYPE[language] };
 }
 
 function mockPayload(kind: LabelKind): LabelPayload {

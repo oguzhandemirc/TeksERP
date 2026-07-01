@@ -17,17 +17,8 @@ import { AuditService } from "./audit.service";
 import type { LabelPayload } from "./label.service";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
-import { renderNativePreviewSvg } from "./helpers/native-preview";
+import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
 import type { ApiResponse } from "../types/api.types";
-
-/** Görsel SVG'yi ekranda ortalayıp sığdıran HTML kabuk (iframe içeriği). */
-function wrapSvgPreview(svg: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"/><style>
-html{background:#eef2f7}
-body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:12px}
-svg{background:#fff;box-shadow:0 2px 12px rgba(15,23,42,0.18);max-width:100%;height:auto}
-</style></head><body>${svg}</body></html>`;
-}
 
 const SAMPLE_BC = "TEKS-ORNEK-0001";
 
@@ -209,7 +200,7 @@ export class LabelFormatProfileService extends BaseService {
     // raw-code) HAM KOMUTU göster — yanıltıcı farklı düzen yerine "basılan tam bu".
     const native = renderLabel(language, input).content;
     const svg = renderNativePreviewSvg(language, native);
-    if (svg) return { success: true, data: { mode: "svg", language, content: wrapSvgPreview(svg) } };
+    if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg) } };
     return { success: true, data: { mode: "text", language, content: native } };
   }
 }
