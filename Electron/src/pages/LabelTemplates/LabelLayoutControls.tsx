@@ -1,3 +1,5 @@
+import { RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 interface Props {
@@ -30,18 +32,17 @@ export function LabelLayoutControls({
 
   return (
     <div className="space-y-2 rounded-md border bg-card p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Yerleşim
-        </div>
-        <button
-          type="button"
-          onClick={onRestoreDefaults}
-          className="rounded border px-2 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/5"
-          title="Alanları ve yerleşimi önerilen varsayılana döndür (metraj bandı açık)"
-        >
-          ↺ Varsayılana dön
-        </button>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onRestoreDefaults}
+        className="w-full gap-2 border-primary/50 font-semibold text-primary hover:bg-primary/10"
+        title="Alanları ve yerleşimi önerilen varsayılana döndür (sağ metraj bandı açık)"
+      >
+        <RotateCcw className="h-4 w-4" /> Varsayılana Dön
+      </Button>
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Yerleşim
       </div>
       <div className="grid grid-cols-2 gap-2">
         <label className="space-y-1">

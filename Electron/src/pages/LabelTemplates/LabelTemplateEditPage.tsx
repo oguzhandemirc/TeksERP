@@ -22,6 +22,7 @@ import { LabelLayoutControls } from "./LabelLayoutControls";
 import { LabelPreview } from "./LabelPreview";
 import { RawCodePanel } from "./RawCodePanel";
 import { TemplateTestPrintDialog } from "./TemplateTestPrintDialog";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 
 export function LabelTemplateEditPage() {
   const { id } = useParams<{ id: string }>();
@@ -53,6 +54,7 @@ export function LabelTemplateEditPage() {
   const [qrScale, setQrScale] = useState<number | null>(null);
   const [lengthBanner, setLengthBanner] = useState(false);
   const [testPrintOpen, setTestPrintOpen] = useState(false);
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (template) {
@@ -108,20 +110,15 @@ export function LabelTemplateEditPage() {
     ]);
   };
 
-  const restoreDefaults = async () => {
+  const doRestoreDefaults = async () => {
     if (!template) return;
-    if (
-      !window.confirm(
-        "Alanlar ve yerleşim önerilen VARSAYILANA dönecek (sağ dikey metraj bandı açık, dengeli satır aralığı + QR). Kaydetmeden geri alınabilir. Devam?",
-      )
-    )
-      return;
     try {
       const def = await labelTemplateService.getDefaults(template.kind);
       setFields(def.fields.map((f, i) => ({ ...f, order: i + 1 })));
       setLineStepMm(def.lineStepMm);
       setQrScale(def.qrScale);
       setLengthBanner(def.lengthBanner);
+      setRestoreConfirmOpen(false);
       toast.success("Önerilen varsayılan uygulandı — kaydetmeyi unutma.");
     } catch {
       toast.error("Varsayılan alınamadı.");
@@ -221,7 +218,7 @@ export function LabelTemplateEditPage() {
                       onLineStepMm={setLineStepMm}
                       onQrScale={setQrScale}
                       onLengthBanner={setLengthBanner}
-                      onRestoreDefaults={restoreDefaults}
+                      onRestoreDefaults={() => setRestoreConfirmOpen(true)}
                     />
                     <LabelPreview
                       kind={template.kind}
@@ -258,6 +255,17 @@ export function LabelTemplateEditPage() {
           lengthBanner={lengthBanner}
         />
       )}
+
+      <ConfirmDialog
+        open={restoreConfirmOpen}
+        onOpenChange={setRestoreConfirmOpen}
+        title="Varsayılana dön?"
+        description="Alanlar ve yerleşim önerilen varsayılana dönecek (sağ dikey metraj bandı açık, dengeli satır aralığı + QR boyutu). Kaydetmediğin sürece geri alınabilir."
+        confirmLabel="Varsayılana dön"
+        cancelLabel="Vazgeç"
+        destructive
+        onConfirm={doRestoreDefaults}
+      />
     </div>
   );
 }
