@@ -89,6 +89,17 @@ router.get("/default-code", verifyToken, requirePermission("label-template:read"
 
 /**
  * @openapi
+ * /api/label-templates/preview:
+ *   post:
+ *     tags: [Label Templates]
+ *     summary: "Alanlar" canlı önizlemesi — verilen alanları AKTİF DİLDE render (WYSIWYG)
+ *     description: Body { kind, fields }. PPLB→svg (birebir), HTML→html, çizilemeyen→text.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post("/preview", verifyToken, requirePermission("label-template:read"), controller.fieldsPreview);
+
+/**
+ * @openapi
  * /api/label-templates/{id}:
  *   get:
  *     tags: [Label Templates]

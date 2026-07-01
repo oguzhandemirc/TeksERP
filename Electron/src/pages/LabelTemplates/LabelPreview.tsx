@@ -2,11 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { LabelKind, TemplateField } from "@/services/labelTemplateService";
-import {
-  labelKindLabels,
-  labelTemplateService,
-} from "@/services/labelTemplateService";
-import { featureFlagService, PRINTER_LANGUAGE_LABELS } from "@/services/featureFlagService";
+import { labelKindLabels, labelTemplateService } from "@/services/labelTemplateService";
+import { PRINTER_LANGUAGE_LABELS, type PrinterLanguage } from "@/services/featureFlagService";
 
 interface Props {
   kind: LabelKind;
@@ -14,36 +11,22 @@ interface Props {
 }
 
 /**
- * Şablon önizleme — backend `/api/labels/preview/html` endpoint'inden tam
- * HTML çeker ve iframe içinde gösterir. Mobil etiketle birebir aynı render →
- * "Electron'da ile mobildeki etiket farklı" sorunu yapısal olarak çözüldü.
+ * Şablon canlı önizleme — AKTİF YAZICI DİLİNDE (WYSIWYG). PPLB gibi native dilde
+ * gerçek komutları görsele çevirir (baskıyla birebir); HTML dilinde HTML; çizici
+ * olmayan native → ham komut metni. Test ekranı + Kod editörüyle tutarlı: hepsi
+ * baskıya giden çıktının aynısını gösterir.
  */
 export function LabelPreview({ kind, fields }: Props) {
   const visibleCount = fields.filter((f) => f.isVisible).length;
 
-  const query = useQuery({
-    // fields değiştikçe key değişir, otomatik refetch.
-    queryKey: ["label-preview", kind, JSON.stringify(fields)],
-    queryFn: () => labelTemplateService.previewHtml(kind, fields),
+  const previewQ = useQuery({
+    queryKey: ["label-preview-active", kind, JSON.stringify(fields)],
+    queryFn: () => labelTemplateService.fieldsPreview(kind, fields),
     enabled: visibleCount > 0,
     staleTime: 0,
   });
-
-  // Native (PPLA/ZPL) metin-zone önizlemesi — Bluetooth/termal yazıcı çıktısı.
-  const nativeQuery = useQuery({
-    queryKey: ["label-preview-native", kind, JSON.stringify(fields)],
-    queryFn: () => labelTemplateService.previewNativeText(kind, fields),
-    enabled: visibleCount > 0,
-    staleTime: 0,
-  });
-  const sizeClass: Record<string, string> = { sm: "text-[10px]", md: "text-xs", lg: "text-sm", xl: "text-base" };
-
-  const flagsQ = useQuery({
-    queryKey: ["feature-flags", "printerLanguage"],
-    queryFn: () => featureFlagService.get(),
-    staleTime: 5 * 60 * 1000,
-  });
-  const activeLang = flagsQ.data?.data?.printerLanguage;
+  const p = previewQ.data;
+  const langLabel = p ? (PRINTER_LANGUAGE_LABELS[p.language as PrinterLanguage] ?? p.language) : null;
 
   return (
     <div className="space-y-3">
@@ -52,9 +35,10 @@ export function LabelPreview({ kind, fields }: Props) {
           Canlı Önizleme
         </div>
         <div className="flex items-center gap-1">
-          {activeLang && (
-            <Badge variant="outline" className="text-[10px]" title="Bu tasarım baskıda bu dile derlenir">
-              Aktif dil: {PRINTER_LANGUAGE_LABELS[activeLang] ?? activeLang}
+          {langLabel && (
+            <Badge variant="outline" className="text-[10px]" title="Baskıya giden çıktının aynısı">
+              Aktif dil: {langLabel}
+              {p?.mode === "text" ? " · ham komut" : " · önizleme = baskı"}
             </Badge>
           )}
           <Badge variant="muted" className="text-[10px]">
@@ -68,56 +52,29 @@ export function LabelPreview({ kind, fields }: Props) {
           <div className="py-8 text-center text-xs italic text-muted-foreground">
             Görünür alan yok. Soldan alan ekle ya da "Görünür" kutusunu işaretle.
           </div>
-        ) : query.isLoading ? (
+        ) : previewQ.isLoading ? (
           <Skeleton className="h-72 w-full" />
-        ) : query.isError ? (
+        ) : previewQ.isError ? (
           <div className="py-8 text-center text-xs italic text-destructive">
-            Önizleme alınamadı: {(query.error as Error).message}
+            Önizleme alınamadı: {(previewQ.error as Error).message}
           </div>
+        ) : p?.mode === "text" ? (
+          <pre className="h-[640px] overflow-auto whitespace-pre-wrap break-all rounded bg-muted/20 p-2 font-mono text-[11px] leading-relaxed">
+            {p.content}
+          </pre>
         ) : (
           <iframe
             title="Etiket önizleme"
-            srcDoc={query.data ?? ""}
-            sandbox=""
+            srcDoc={p?.content ?? ""}
+            sandbox="allow-same-origin allow-modals"
             className="h-[640px] w-full rounded border bg-white"
           />
         )}
       </div>
 
-      {/* Native (PPLA/ZPL) metin-zone önizlemesi — Bluetooth/termal yazıcı */}
-      {visibleCount > 0 && (
-        <div className="rounded-lg border bg-muted/20 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Native (PPLA/ZPL) metin alanı
-            </div>
-            <Badge variant="muted" className="text-[9px]">Termal/BT</Badge>
-          </div>
-          {nativeQuery.isLoading ? (
-            <Skeleton className="h-24 w-full" />
-          ) : nativeQuery.isError ? (
-            <div className="text-[10px] italic text-destructive">Alınamadı</div>
-          ) : (
-            <div className="space-y-0.5 font-mono">
-              {(nativeQuery.data?.lines ?? []).map((ln, i) => (
-                <div key={i} className={`${sizeClass[ln.size] ?? "text-xs"} ${ln.bold ? "font-bold" : ""}`}>
-                  {ln.text}
-                </div>
-              ))}
-              {(nativeQuery.data?.lines.length ?? 0) === 0 && (
-                <div className="text-[10px] italic text-muted-foreground">Metin satırı yok</div>
-              )}
-            </div>
-          )}
-          <p className="mt-2 text-[10px] text-muted-foreground">
-            Sıra/görünür/ad/bold/boyut bu cihazlarda aynen uygulanır (barkod/QR sol sabit kolonda).
-          </p>
-        </div>
-      )}
-
       <p className="text-[10px] text-muted-foreground">
-        Önizleme örnek (mock) veri ile oluşturuldu — mobil etiket ile aynı
-        render mantığı kullanılır. Kaydedilmemiş değişiklikler anlık yansır.
+        Önizleme örnek (mock) veriyle, <strong>aktif yazıcı dilinde</strong> oluşturuldu —
+        yazıcıya giden çıktının aynısı. Kaydedilmemiş değişiklikler anlık yansır.
       </p>
     </div>
   );

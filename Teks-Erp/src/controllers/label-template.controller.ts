@@ -110,6 +110,17 @@ export class LabelTemplateController {
     } catch (e) { next(e); }
   };
 
+  /** "Alanlar" sekmesi canlı önizlemesi — verilen alanları AKTİF DİLDE render eder. */
+  fieldsPreview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { kind, fields } = z
+        .object({ kind: z.nativeEnum(LabelKind), fields: z.array(fieldSchema) })
+        .parse(req.body);
+      const result = await this.service.getFieldsPreview(kind, fields);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
   /** Bu tür+dil için otomatik üretilen kodu {{}} yer-tutuculu şablon olarak döner. */
   defaultCode = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

@@ -39,6 +39,7 @@ import { renderLabel } from "./helpers/label-renderer.registry";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
 import { mockPayload } from "./helpers/label-rawcode";
 import { fieldDisplayValue } from "./helpers/label-field-values";
+import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
 
 const TABLE = "LABEL_TEMPLATE";
 
@@ -326,6 +327,31 @@ export class LabelTemplateService {
       .sort((a, b) => b[1].length - a[1].length);
     for (const [k, v] of pairs) code = code.split(v).join(`{{${k}}}`);
     return { success: true, data: { code } };
+  }
+
+  /**
+   * "Alanlar" sekmesi canlı önizlemesi — AKTİF DİLDE (WYSIWYG). Verilen (kaydedilmemiş)
+   * alanlarla + sistem varsayılan geometrisiyle render eder. Native dil (PPLB) → görsel
+   * SVG (baskıyla birebir); HTML dili → HTML; çizilemeyen native → ham komut metni.
+   */
+  async getFieldsPreview(
+    kind: LabelKind,
+    fields: TemplateField[],
+  ): Promise<ApiResponse<{ mode: "svg" | "html" | "text"; language: PrinterLanguage; content: string }>> {
+    const payload = mockPayload(kind);
+    const template = { kind, fields, rawCode: null } as unknown as LabelTemplate;
+    const format = await resolveLabelFormat({ kind });
+    const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
+    const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });
+    const input = { payload, template, barcodeSvg, qrSvg, copies: 1, format };
+    const language = format.language;
+    if (language === PrinterLanguage.RASTER_HTML) {
+      return { success: true, data: { mode: "html", language, content: renderLabel(language, input).content } };
+    }
+    const native = renderLabel(language, input).content;
+    const svg = renderNativePreviewSvg(language, native);
+    if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg) } };
+    return { success: true, data: { mode: "text", language, content: native } };
   }
 }
 
