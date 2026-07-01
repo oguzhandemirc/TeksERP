@@ -96,6 +96,18 @@ export class LabelTemplateController {
     } catch (e) { next(e); }
   };
 
+  /** "Varsayılana dön" — bu tür için önerilen alanlar + yerleşim (metraj bandı dahil). */
+  defaults = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const kindRaw = req.params.kind as string;
+      if (!Object.values(LabelKind).includes(kindRaw as LabelKind)) {
+        res.status(400).json({ success: false, message: "Geçersiz LabelKind" });
+        return;
+      }
+      res.status(200).json(this.service.getTemplateDefaults(kindRaw as LabelKind));
+    } catch (e) { next(e); }
+  };
+
   create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = createSchema.parse(req.body);

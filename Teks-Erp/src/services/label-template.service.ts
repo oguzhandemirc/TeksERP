@@ -343,6 +343,27 @@ export class LabelTemplateService {
     return { success: true, data: { code } };
   }
 
+  /** Bu tür için önerilen VARSAYILAN tasarım — "Varsayılana dön" butonu bunu uygular.
+   *  Alanlar: katalog default'u. Yerleşim: dengeli satır aralığı + QR + metraj bandı
+   *  (ROLL türlerinde açık, SWATCH'ta kapalı — metraj yok). */
+  getTemplateDefaults(kind: LabelKind): ApiResponse<{
+    fields: TemplateField[];
+    lineStepMm: number;
+    qrScale: number;
+    lengthBanner: boolean;
+  }> {
+    if (!FIELD_CATALOG[kind]) throw AppError.badRequest("Bilinmeyen LabelKind");
+    return {
+      success: true,
+      data: {
+        fields: buildDefaultFields(kind),
+        lineStepMm: 1.5, // satırlar arası dengeli ek boşluk (mm)
+        qrScale: 5, // okunur QR (~20mm ayak izi)
+        lengthBanner: kind !== LabelKind.SWATCH, // sağ dikey metraj bandı — top'ta açık
+      },
+    };
+  }
+
   /**
    * "Alanlar" sekmesi canlı önizlemesi — AKTİF DİLDE (WYSIWYG). Verilen (kaydedilmemiş)
    * alanlarla + sistem varsayılan geometrisiyle render eder. Native dil (PPLB) → görsel

@@ -7,6 +7,7 @@ interface Props {
   onLineStepMm: (v: number | null) => void;
   onQrScale: (v: number | null) => void;
   onLengthBanner: (v: boolean) => void;
+  onRestoreDefaults: () => void;
 }
 
 /** Şablon-başına yerleşim ayarları — satır aralığı (mm) + QR boyutu. Boş = varsayılan.
@@ -18,6 +19,7 @@ export function LabelLayoutControls({
   onLineStepMm,
   onQrScale,
   onLengthBanner,
+  onRestoreDefaults,
 }: Props) {
   const num = (s: string): number | null => {
     const t = s.trim();
@@ -28,8 +30,18 @@ export function LabelLayoutControls({
 
   return (
     <div className="space-y-2 rounded-md border bg-card p-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Yerleşim
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Yerleşim
+        </div>
+        <button
+          type="button"
+          onClick={onRestoreDefaults}
+          className="rounded border px-2 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/5"
+          title="Alanları ve yerleşimi önerilen varsayılana döndür (metraj bandı açık)"
+        >
+          ↺ Varsayılana dön
+        </button>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <label className="space-y-1">

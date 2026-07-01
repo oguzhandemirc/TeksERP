@@ -106,6 +106,26 @@ export function LabelTemplateEditPage() {
     ]);
   };
 
+  const restoreDefaults = async () => {
+    if (!template) return;
+    if (
+      !window.confirm(
+        "Alanlar ve yerleşim önerilen VARSAYILANA dönecek (sağ dikey metraj bandı açık, dengeli satır aralığı + QR). Kaydetmeden geri alınabilir. Devam?",
+      )
+    )
+      return;
+    try {
+      const def = await labelTemplateService.getDefaults(template.kind);
+      setFields(def.fields.map((f, i) => ({ ...f, order: i + 1 })));
+      setLineStepMm(def.lineStepMm);
+      setQrScale(def.qrScale);
+      setLengthBanner(def.lengthBanner);
+      toast.success("Önerilen varsayılan uygulandı — kaydetmeyi unutma.");
+    } catch {
+      toast.error("Varsayılan alınamadı.");
+    }
+  };
+
   const loading = templateQ.isLoading || catalogQ.isLoading;
   const orderedFields = useMemo(() => fields.map((f, i) => ({ ...f, order: i + 1 })), [fields]);
 
@@ -186,6 +206,7 @@ export function LabelTemplateEditPage() {
                       onLineStepMm={setLineStepMm}
                       onQrScale={setQrScale}
                       onLengthBanner={setLengthBanner}
+                      onRestoreDefaults={restoreDefaults}
                     />
                     <LabelPreview
                       kind={template.kind}

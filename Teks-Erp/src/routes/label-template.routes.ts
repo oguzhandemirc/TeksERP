@@ -67,6 +67,18 @@ router.get("/catalog/:kind", verifyToken, requirePermission("label-template:read
 
 /**
  * @openapi
+ * /api/label-templates/defaults/{kind}:
+ *   get:
+ *     tags: [Label Templates]
+ *     summary: '"Varsayılana dön" — önerilen alanlar + yerleşim (metraj bandı dahil)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ name: kind, in: path, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: OK }, 400: { description: Geçersiz kind } }
+ */
+router.get("/defaults/:kind", verifyToken, requirePermission("label-template:read"), controller.defaults);
+
+/**
+ * @openapi
  * /api/label-templates/preview-raw:
  *   post:
  *     tags: [Label Templates]

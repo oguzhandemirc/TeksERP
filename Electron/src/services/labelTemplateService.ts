@@ -90,6 +90,16 @@ export const labelTemplateService = {
       .get<ApiResponse<CatalogResponse>>(`/api/label-templates/catalog/${kind}`)
       .then((r) => r.data),
 
+  /** "Varsayılana dön" — bu tür için önerilen alanlar + yerleşim (metraj bandı dahil). */
+  getDefaults: (
+    kind: LabelKind,
+  ): Promise<{ fields: TemplateField[]; lineStepMm: number; qrScale: number; lengthBanner: boolean }> =>
+    apiClient
+      .get<
+        ApiResponse<{ fields: TemplateField[]; lineStepMm: number; qrScale: number; lengthBanner: boolean }>
+      >(`/api/label-templates/defaults/${kind}`)
+      .then((r) => r.data.data),
+
   create: (body: {
     name: string;
     kind: LabelKind;
