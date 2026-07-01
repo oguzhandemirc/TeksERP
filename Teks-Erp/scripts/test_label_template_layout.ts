@@ -6,6 +6,8 @@
 import { buildRollLabelPpla } from "../src/services/helpers/label-ppla.helper";
 import { buildRollLabelPplb } from "../src/services/helpers/label-pplb.helper";
 import { buildRollLabelZpl } from "../src/services/helpers/label-zpl.helper";
+import { renderPplbToSvg } from "../src/services/helpers/native-preview";
+import { qrFootprintDots } from "../src/services/helpers/native-label.shared";
 import type { ResolvedLabelFormat } from "../src/services/helpers/label-format.resolver";
 import type { LabelPayload } from "../src/services/label.service";
 import type { LabelTemplate } from "@prisma/client";
@@ -59,14 +61,43 @@ check("PPLB qrScale 99 → 15'e kısılır (s15)", /,s15,/.test(buildRollLabelPp
 check("PPLB qrScale 1 → 2'ye kısılır (s2)", /,s2,/.test(buildRollLabelPplb({ ...base, template: tpl({ qrScale: 1 }) })));
 check("ZPL qrScale 99 → mag 10'a kısılır (BQ üst sınır)", buildRollLabelZpl({ ...base, template: tpl({ qrScale: 99 }) }).includes("^BQN,2,10^FD"));
 
-// --- 4. lineStepMm set → satır adımı DEĞİŞİR (iki A satırının y farkı = 6mm dot) ---
+// --- 4. lineStepMm = satırlar arası EK boşluk (v2). Adım = fontYük×çarpan + boşluk
+//        → asla çakışmaz. İlk satır lengthMeters=headline→lg→font3 (EPL_FONT.lg.h=20). ---
 const stepBig = buildRollLabelPplb({ ...base, template: tpl({ lineStepMm: 12 }) });
 const rowsBig = [...stepBig.matchAll(/A\d+,(\d+),0,/g)].map((m) => Number(m[1]));
 const stepDef = buildRollLabelPplb({ ...base, template: null });
 const rowsDef = [...stepDef.matchAll(/A\d+,(\d+),0,/g)].map((m) => Number(m[1]));
 const dot12 = Math.round((12 * 203) / 25.4); // 12mm → dot
-check("PPLB lineStepMm 12 → satır farkı ~12mm dot", rowsBig.length >= 2 && Math.abs(rowsBig[1] - rowsBig[0] - dot12) <= 1, `fark=${rowsBig[1] - rowsBig[0]} beklenen≈${dot12}`);
-check("PPLB null → font-türevli adım (12mm'den küçük)", rowsDef.length >= 2 && rowsDef[1] - rowsDef[0] < dot12);
+const lgH = 20; // EPL_FONT.lg.h — ilk satır font yüksekliği
+check("PPLB lineStepMm 12 (ek boşluk) → adım = fontYük(20)+12mm", rowsBig.length >= 2 && rowsBig[1] - rowsBig[0] === lgH + dot12, `fark=${rowsBig[1] - rowsBig[0]} beklenen=${lgH + dot12}`);
+check("PPLB null → adım daha küçük (varsayılan boşluk < 12mm ek)", rowsDef.length >= 2 && rowsDef[1] - rowsDef[0] < rowsBig[1] - rowsBig[0]);
+
+// --- 5. v2 ROBUSTLUK: tüm alanlar xl+bold → dikey ÇAKIŞMA YOK (otomatik adım) ---
+const xlTpl = {
+  kind: "ROLL_RAW", rawCode: null, qrScale: null, lineStepMm: null,
+  fields: [
+    { key: "itemName", label: "", order: 1, isVisible: true, fontSize: "xl", isBold: true },
+    { key: "lengthMeters", label: "Uzunluk", order: 2, isVisible: true, fontSize: "xl", isBold: true },
+    { key: "weightKg", label: "Agirlik", order: 3, isVisible: true, fontSize: "xl", isBold: true },
+    { key: "customerName", label: "Musteri", order: 4, isVisible: true, fontSize: "lg", isBold: true },
+  ],
+} as unknown as LabelTemplate;
+const extreme = buildRollLabelPplb({ ...base, template: xlTpl });
+const FH: Record<string, number> = { "1": 12, "2": 16, "3": 20, "4": 24, "5": 48 };
+const rows = [...extreme.matchAll(/A\d+,(\d+),0,(\d),(\d),(\d),N/g)].map((m) => ({ y: +m[1], h: FH[m[2]] * +m[4] }));
+let overlap = false;
+for (let i = 0; i < rows.length - 1; i++) if (rows[i].y + rows[i].h > rows[i + 1].y) overlap = true;
+check("v2: tüm alanlar xl+bold → dikey çakışma YOK", rows.length >= 2 && !overlap);
+
+// --- 6. WYSIWYG: önizleme QR görsel boyutu = generator ayak izi (aynı model) ---
+const previewSvg = renderPplbToSvg(buildRollLabelPplb({ ...base, template: tpl({ qrScale: 6 }) })) ?? "";
+const qrImgW = Number((previewSvg.match(/<image[^>]*width="(\d+)"/) || [])[1]);
+const expectFootprint = qrFootprintDots(payload.barcode.length, 6);
+check("v2 WYSIWYG: önizleme QR boyutu = ayak izi (bwip viewBox değil)", qrImgW === expectFootprint, `önizleme=${qrImgW} ayakizi=${expectFootprint}`);
+
+// --- 7. QR büyütünce metin kolonu sağa kayar (çakışma önlenir) ---
+const tX = (s: number) => Number((buildRollLabelPplb({ ...base, template: tpl({ qrScale: s }) }).match(/A(\d+),/) || [])[1]);
+check("v2: qrScale büyüdükçe textX sağa kayar (QR'ı geçer)", tX(8) > tX(3));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

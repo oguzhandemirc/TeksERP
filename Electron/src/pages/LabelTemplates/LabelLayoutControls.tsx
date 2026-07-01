@@ -51,8 +51,9 @@ export function LabelLayoutControls({ lineStepMm, qrScale, onLineStepMm, onQrSca
         </label>
       </div>
       <p className="text-[10px] leading-relaxed text-muted-foreground">
-        Boş = varsayılan. Satır aralığı boşsa yazı boyutundan türetilir; QR boyutu modül
-        büyütmesidir (yüksek = daha büyük kare kod). Değişiklik önizlemeye anında yansır.
+        Boş = varsayılan. Satır aralığı = satırlar arası <strong>ek boşluk</strong> (yazı
+        yüksekliğine eklenir → yazılar asla üst üste binmez); QR boyutu = modül büyütmesi
+        (yüksek = daha büyük kare kod, metin sağa kayar). Değişiklik önizlemeye anında yansır.
       </p>
     </div>
   );

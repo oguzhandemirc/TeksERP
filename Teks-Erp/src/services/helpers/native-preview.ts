@@ -9,9 +9,14 @@
 
 import bwipjs from "bwip-js";
 import { PrinterLanguage } from "@prisma/client";
+import { qrFootprintDots } from "./native-label.shared";
 
-// Bit-eşlem font kodu (1..5) → yaklaşık karakter yüksekliği (dot). Çarpanla ölçeklenir.
-const FONT_H: Record<string, number> = { "1": 12, "2": 16, "3": 20, "4": 25, "5": 47 };
+// EPL2 bitmap font kodu → {w,h} dot (çarpan öncesi). Generator EPL_FONT ile AYNI değerler
+// (native-label.shared) — önizleme metni yazıcı hücresiyle birebir (textLength ile).
+const EPL_FONT_BY_CODE: Record<string, { w: number; h: number }> = {
+  "1": { w: 8, h: 12 }, "2": { w: 10, h: 16 }, "3": { w: 12, h: 20 },
+  "4": { w: 14, h: 24 }, "5": { w: 32, h: 48 },
+};
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -35,10 +40,21 @@ function svgText(x: number, y: number, fs: number, data: string, o?: { rev?: boo
   const anchor = o?.anchor ? ` text-anchor="${o.anchor}"` : "";
   return `<text x="${x}" y="${y}" font-family="'Courier New',monospace" font-size="${fs.toFixed(1)}" font-weight="700" dominant-baseline="hanging"${anchor} fill="${o?.rev ? "#fff" : "#000"}">${esc(data)}</text>`;
 }
+/** Font-hücresi doğru metin — genişlik textLength ile yazıcı hücresine (glyphW×char) sabitlenir,
+ *  yükseklik = glyphH. Böylece önizleme metin genişliği/yüksekliği baskıyla BİREBİR. */
+function svgTextCell(x: number, y: number, glyphW: number, glyphH: number, data: string, rev = false): string {
+  const tl = Math.max(1, data.length * glyphW);
+  const bg = rev ? `<rect x="${x}" y="${y}" width="${tl.toFixed(0)}" height="${glyphH.toFixed(0)}" fill="#000"/>` : "";
+  return (
+    bg +
+    `<text x="${x}" y="${y}" font-family="'Courier New',monospace" font-size="${glyphH.toFixed(1)}" font-weight="600" textLength="${tl.toFixed(0)}" lengthAdjust="spacingAndGlyphs" dominant-baseline="hanging" fill="${rev ? "#fff" : "#000"}">${esc(data)}</text>`
+  );
+}
 function svgQr(x: number, y: number, mag: number, data: string): string {
   const img = bwipImg({ bcid: "qrcode", text: data, scale: 1, backgroundcolor: "ffffff" });
   if (!img) return "";
-  const size = img.w * (mag || 1);
+  // Boyut = yazıcı modeli (modül+sessiz)×mag — bwip viewBox DEĞİL (o ~1.7× şişikti).
+  const size = qrFootprintDots(data.length, mag);
   return `<image href="${img.uri}" x="${x}" y="${y}" width="${size.toFixed(0)}" height="${size.toFixed(0)}"/>`;
 }
 function svgBarcode(x: number, y: number, heightDots: number, data: string, human: boolean): string {
@@ -66,12 +82,8 @@ export function renderPplbToSvg(pplb: string): string | null {
     // Metin: A x,y,rot,font,hMul,vMul,rev(N/R),"veri"
     if ((m = ln.match(/^A(\d+),(\d+),\d+,(\d+),(\d+),(\d+),([NR]),"(.*)"$/))) {
       const [, x, y, font, hMul, vMul, rev, text] = m;
-      const fs = (FONT_H[font] ?? 16) * (+vMul || 1);
-      if (rev === "R") {
-        const tw = esc(text).length * fs * 0.62 * ((+hMul || 1) / (+vMul || 1));
-        els.push(`<rect x="${+x - 2}" y="${+y - 2}" width="${(tw + 6).toFixed(0)}" height="${fs + 4}" fill="#000"/>`);
-      }
-      els.push(svgText(+x + 2, +y, fs, text, { rev: rev === "R" }));
+      const fd = EPL_FONT_BY_CODE[font] ?? EPL_FONT_BY_CODE["2"];
+      els.push(svgTextCell(+x, +y, fd.w * (+hMul || 1), fd.h * (+vMul || 1), text, rev === "R"));
       continue;
     }
     // QR: b x,y,Q,m<n>,s<mag>,"veri"
@@ -122,8 +134,8 @@ export function renderPplaToSvg(ppla: string, widthDots: number): string | null 
     }
     // Metin: 1<font><wMul><hMul>000<row4><col4><veri>
     if ((m = ln.match(/^1([1-9])(\d)(\d)000(\d{4})(\d{4})(.*)$/))) {
-      const fs = (FONT_H[m[1]] ?? 20) * (+m[3] || 1);
-      els.push(svgText(+m[5], +m[4], fs, m[6]));
+      const fd = EPL_FONT_BY_CODE[m[1]] ?? EPL_FONT_BY_CODE["3"];
+      els.push(svgTextCell(+m[5], +m[4], fd.w * (+m[2] || 1), fd.h * (+m[3] || 1), m[6]));
       continue;
     }
     // <STX>n, <STX>L, D11, H10, Q####, E — çizim üretmez, atla.
@@ -138,9 +150,9 @@ export function renderZplToSvg(zpl: string): string | null {
   m = zpl.match(/\^LL(\d+)/);
   const H = m ? +m[1] : 0;
   const els: string[] = [];
-  // Metin: ^FO x,y^A0N,h,w^FD veri^FS
+  // Metin: ^FO x,y^A0N,h,w^FD veri^FS (h=yükseklik, w=genişlik dot)
   for (const t of zpl.matchAll(/\^FO(\d+),(\d+)\^A0N,(\d+),(\d+)\^FD([\s\S]*?)\^FS/g)) {
-    els.push(svgText(+t[1], +t[2], +t[3], t[5]));
+    els.push(svgTextCell(+t[1], +t[2], +t[4] || +t[3] * 0.6, +t[3], t[5]));
   }
   // QR: ^FO x,y^BQN,model,mag^FDQA,veri^FS ("QA," öneki sıyrılır)
   for (const q of zpl.matchAll(/\^FO(\d+),(\d+)\^BQN,\d+,(\d+)\^FD(?:QA,)?([\s\S]*?)\^FS/g)) {

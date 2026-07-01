@@ -65,10 +65,10 @@ function main() {
   check("PPLA: sıra (Musteri < Kalite)", ppla.indexOf("ACME") > -1 && ppla.indexOf("ACME") < ppla.indexOf("1.KALITE"));
   check("ZPL: sıra (Musteri < Kalite)", zpl.indexOf("ACME") < zpl.indexOf("1.KALITE"));
 
-  // 3. Bold — itemName (headline=lg → font4) bold mult 22 (PPLA), mul 2 (PPLB)
+  // 3. Bold — itemName headline=lg. PPLA lg=font4, PPLB v2 lg=font3 (EPL_FONT); bold mul2.
   //    Faz-1: label doluysa headline alanlar da "Etiket: değer" basar → "Urun: PATOS".
   check("PPLA: bold itemName → font4 mult22", /1422000\d{8}Urun: PATOS/.test(ppla));
-  check("PPLB: bold itemName → font4 mul2", /0,4,2,2,N,"Urun: PATOS"/.test(pplb));
+  check("PPLB: bold itemName → font3 mul2 (v2)", /0,3,2,2,N,"Urun: PATOS"/.test(pplb));
 
   // 4. Font — lengthMeters xl → PPLA font 5 (mult 11, bold değil); label "Metraj"
   check("PPLA: xl metraj → font5", /1511000\d{8}Metraj: 320 m/.test(ppla));

@@ -36,11 +36,50 @@ export function resolveQrScale(qrScale?: number | null, defaultScale = 5): numbe
   return Math.max(2, Math.min(15, Math.round(qrScale)));
 }
 
-/** Şablon-başına satırlar arası mesafe (mm). Boş/geçersiz → null (font boyutundan
- *  türetilen varsayılan adım kullanılır). Dolu → 1–30 mm aralığına kısılır. */
+/** Şablon-başına satırlar arası EK boşluk (mm). Boş → varsayılan; dolu → 0–20 clamp.
+ *  NOT: v2 tasarımda bu "toplam adım" DEĞİL, satırlar arası ek boşluktur — gerçek
+ *  adım = fontYüksekliği×çarpan + boşluk (asla çakışmaz). */
 export function resolveLineStepMm(lineStepMm?: number | null): number | null {
   if (lineStepMm == null || !Number.isFinite(lineStepMm)) return null;
-  return Math.max(1, Math.min(30, lineStepMm));
+  return Math.max(0, Math.min(20, lineStepMm));
+}
+
+// =============================================================================
+// v2 yerleşim geometrisi — "gördüğün = basılan" için tek kaynak (generator + önizleme)
+// =============================================================================
+
+/** EPL2/PPLB dahili bitmap font boyutları (203dpi, dot) — W×H, çarpan ÖNCESİ.
+ *  Font 5 (32×48) KASTEN kullanılmaz (etikete sığmaz/çakışır); xl = font4 + bold ile
+ *  büyütülür. lg=headline. Önizleme bu tabloyu birebir kullanır → metin genişliği
+ *  yazıcıyla eşleşir (eski FONT_H-only tahmin sapması giderildi). */
+export const EPL_FONT: Record<FontSize, { code: string; w: number; h: number }> = {
+  sm: { code: "1", w: 8, h: 12 },
+  md: { code: "2", w: 10, h: 16 },
+  lg: { code: "3", w: 12, h: 20 },
+  xl: { code: "4", w: 14, h: 24 },
+};
+
+/** Satırlar arası varsayılan ek boşluk (mm) — otomatik adımda font yüksekliğine eklenir. */
+export const LINE_GAP_MM = 1.2;
+
+/** QR sembol modül sayısı (kenar), veri uzunluğundan tahmin — alnum/byte mod, ECC M.
+ *  Yazıcının seçtiği sürümle birebir olmayabilir ama konumlama+önizleme için yeterli
+ *  (generator textX ile önizleme QR boyutu AYNI fonksiyondan → tutarlı). */
+export function qrSymbolModules(dataLen: number): number {
+  if (dataLen <= 16) return 21;
+  if (dataLen <= 30) return 25;
+  if (dataLen <= 50) return 29;
+  if (dataLen <= 70) return 33;
+  return 37;
+}
+
+/** QR spec sessiz-bölge (her kenar modül). */
+export const QR_QUIET_MODULES = 4;
+
+/** QR toplam ayak izi (dot) = (sembol + 2×sessiz) × büyütme. Yazıcı `s<mag>` modeli:
+ *  her modül `mag` dot. Generator (textX) ve önizleme (görsel boyut) BUNU paylaşır. */
+export function qrFootprintDots(dataLen: number, mag: number): number {
+  return (qrSymbolModules(dataLen) + 2 * QR_QUIET_MODULES) * Math.max(1, mag);
 }
 
 // Türkçe → ASCII eşlemesi (İ/Ş/Ğ/ç vb.). Native gönderimde KRİTİK: ham 9100 baytları
