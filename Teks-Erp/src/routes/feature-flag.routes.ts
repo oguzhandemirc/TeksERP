@@ -16,6 +16,16 @@ import { requirePermission } from "../middlewares/rbac.middleware";
 
 const router = Router();
 
+// Tek spec alanı — göster + boyut + kalınlık (default'larla tam nesne üretir).
+const DEF_SPEC_FIELD = { show: true, size: "md" as const, weight: "normal" as const };
+const specFieldSchema = z
+  .object({
+    show: z.boolean().default(true),
+    size: z.enum(["sm", "md", "lg"]).default("md"),
+    weight: z.enum(["light", "normal", "bold"]).default("normal"),
+  })
+  .default(DEF_SPEC_FIELD);
+
 const updateSchema = z.object({
   // ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli).
   companyName: z.string().trim().max(120).optional(),
@@ -70,22 +80,22 @@ const updateSchema = z.object({
       showProperties: z.boolean().default(true),
       specFields: z
         .object({
-          color: z.boolean(),
-          width: z.boolean(),
-          targetQuantity: z.boolean(),
-          targetWeight: z.boolean(),
-          foldType: z.boolean(),
-          startDate: z.boolean(),
-          endDate: z.boolean(),
+          color: specFieldSchema,
+          width: specFieldSchema,
+          targetQuantity: specFieldSchema,
+          targetWeight: specFieldSchema,
+          foldType: specFieldSchema,
+          startDate: specFieldSchema,
+          endDate: specFieldSchema,
         })
         .default({
-          color: true,
-          width: true,
-          targetQuantity: true,
-          targetWeight: true,
-          foldType: true,
-          startDate: true,
-          endDate: true,
+          color: DEF_SPEC_FIELD,
+          width: DEF_SPEC_FIELD,
+          targetQuantity: DEF_SPEC_FIELD,
+          targetWeight: DEF_SPEC_FIELD,
+          foldType: DEF_SPEC_FIELD,
+          startDate: DEF_SPEC_FIELD,
+          endDate: DEF_SPEC_FIELD,
         }),
       footerNote: z.string().trim().max(500).default(""),
     })

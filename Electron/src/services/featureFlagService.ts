@@ -16,15 +16,22 @@ export interface TravelerCardMargins {
   bottom: number;
   left: number;
 }
-/** Spec grid alanları — her biri tek tek aç/kapa. */
+export type TravelerCardFieldSize = "sm" | "md" | "lg";
+/** Tek spec alanı — göster + boyut + kalınlık (alan-başına bağımsız). */
+export interface TravelerCardSpecField {
+  show: boolean;
+  size: TravelerCardFieldSize;
+  weight: TravelerCardFontWeight;
+}
+/** Spec grid alanları — her biri tek tek (göster/boyut/kalınlık). */
 export interface TravelerCardSpecFields {
-  color: boolean;
-  width: boolean;
-  targetQuantity: boolean;
-  targetWeight: boolean;
-  foldType: boolean;
-  startDate: boolean;
-  endDate: boolean;
+  color: TravelerCardSpecField;
+  width: TravelerCardSpecField;
+  targetQuantity: TravelerCardSpecField;
+  targetWeight: TravelerCardSpecField;
+  foldType: TravelerCardSpecField;
+  startDate: TravelerCardSpecField;
+  endDate: TravelerCardSpecField;
 }
 
 /** Refakat kartı marka/içerik ayarı — kart basımında snapshot'a dondurulur. */
@@ -66,13 +73,13 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   showOrders: true,
   showProperties: true,
   specFields: {
-    color: true,
-    width: true,
-    targetQuantity: true,
-    targetWeight: true,
-    foldType: true,
-    startDate: true,
-    endDate: true,
+    color: { show: true, size: "md", weight: "normal" },
+    width: { show: true, size: "md", weight: "normal" },
+    targetQuantity: { show: true, size: "md", weight: "normal" },
+    targetWeight: { show: true, size: "md", weight: "normal" },
+    foldType: { show: true, size: "md", weight: "normal" },
+    startDate: { show: true, size: "md", weight: "normal" },
+    endDate: { show: true, size: "md", weight: "normal" },
   },
   footerNote: "",
 };

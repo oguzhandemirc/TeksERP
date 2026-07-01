@@ -30,18 +30,8 @@ const travelerCardConfigSchema = z
     showNotes: z.boolean().optional(),
     showOrders: z.boolean().optional(),
     showProperties: z.boolean().optional(),
-    specFields: z
-      .object({
-        color: z.boolean(),
-        width: z.boolean(),
-        targetQuantity: z.boolean(),
-        targetWeight: z.boolean(),
-        foldType: z.boolean(),
-        startDate: z.boolean(),
-        endDate: z.boolean(),
-      })
-      .partial()
-      .optional(),
+    // Boyut/kalınlık nesnesi (veya eski boolean) — normalizeTravelerCardConfig çözer.
+    specFields: z.record(z.string(), z.unknown()).optional(),
     footerNote: z.string().optional(),
   })
   .partial();

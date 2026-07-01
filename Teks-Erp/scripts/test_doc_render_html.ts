@@ -276,6 +276,18 @@ function testTraveler(): void {
   check("fontWeight=bold → 800→900 + body 400→500", bold.includes("font-weight: 900") && bold.includes("font-weight: 500"));
   const light = renderTravelerCardHtml(travelerSnap({ config: { fontWeight: "light" } }), travelerMeta());
   check("fontWeight=light → 800→700 + body 400→300", light.includes("font-weight: 700") && light.includes("font-weight: 300"));
+  // per-field spec kutusu boyut/kalınlık (inline stil = boşluksuz, CSS kurallarından ayrı)
+  check("default spec cell → md/normal inline (11px/600)", html.includes("font-size:11px;font-weight:600"));
+  const bigBold = renderTravelerCardHtml(
+    travelerSnap({ config: { specFields: { targetQuantity: { show: true, size: "lg", weight: "bold" } } } }),
+    travelerMeta(),
+  );
+  check("specField lg+bold → inline 14px/800", bigBold.includes("font-size:14px;font-weight:800"));
+  const smallLight = renderTravelerCardHtml(
+    travelerSnap({ config: { specFields: { color: { show: true, size: "sm", weight: "light" } } } }),
+    travelerMeta(),
+  );
+  check("specField sm+light → inline 9px/400", smallLight.includes("font-size:9px;font-weight:400"));
   // watermarks
   check("draft → TASLAK", renderTravelerCardHtml(travelerSnap(), travelerMeta({ draft: true })).includes("TASLAK"));
   check("VOIDED → İPTAL", renderTravelerCardHtml(travelerSnap(), travelerMeta({ status: "VOIDED" })).includes("İPTAL"));

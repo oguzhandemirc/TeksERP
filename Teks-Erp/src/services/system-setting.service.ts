@@ -143,15 +143,37 @@ export interface TravelerCardMargins {
 /** Yazı kalınlığı — tüm font-weight'leri kaydırır (ince −100, kalın +100). */
 export type TravelerCardFontWeight = "light" | "normal" | "bold";
 
-/** Spec grid alan görünürlükleri — her biri tek tek aç/kapa (default açık). */
+/** Alan boyutu — sm/md/lg. */
+export type TravelerCardFieldSize = "sm" | "md" | "lg";
+
+/** Tek spec alanı — göster + boyut + kalınlık (alan-başına bağımsız müdahale). */
+export interface TravelerCardSpecField {
+  show: boolean;
+  size: TravelerCardFieldSize;
+  weight: TravelerCardFontWeight;
+}
+
+/** Spec grid alanları — her biri tek tek (göster/boyut/kalınlık). */
 export interface TravelerCardSpecFields {
-  color: boolean;
-  width: boolean;
-  targetQuantity: boolean;
-  targetWeight: boolean;
-  foldType: boolean;
-  startDate: boolean;
-  endDate: boolean;
+  color: TravelerCardSpecField;
+  width: TravelerCardSpecField;
+  targetQuantity: TravelerCardSpecField;
+  targetWeight: TravelerCardSpecField;
+  foldType: TravelerCardSpecField;
+  startDate: TravelerCardSpecField;
+  endDate: TravelerCardSpecField;
+}
+
+/** Ham değeri (boolean eski şekil | nesne | undefined) tam spec alanına çözer. */
+export function coerceSpecField(v: unknown): TravelerCardSpecField {
+  if (v === false) return { show: false, size: "md", weight: "normal" };
+  if (v == null || v === true) return { show: true, size: "md", weight: "normal" };
+  const f = v as Record<string, unknown>;
+  return {
+    show: f.show !== false,
+    size: f.size === "sm" || f.size === "lg" ? f.size : "md",
+    weight: f.weight === "light" || f.weight === "bold" ? f.weight : "normal",
+  };
 }
 
 /** Refakat kartı marka/içerik ayarı. Snapshot'a dondurulur. */
@@ -197,13 +219,13 @@ export const DEFAULT_TRAVELER_CARD_CONFIG: TravelerCardConfig = {
   showOrders: true,
   showProperties: true,
   specFields: {
-    color: true,
-    width: true,
-    targetQuantity: true,
-    targetWeight: true,
-    foldType: true,
-    startDate: true,
-    endDate: true,
+    color: { show: true, size: "md", weight: "normal" },
+    width: { show: true, size: "md", weight: "normal" },
+    targetQuantity: { show: true, size: "md", weight: "normal" },
+    targetWeight: { show: true, size: "md", weight: "normal" },
+    foldType: { show: true, size: "md", weight: "normal" },
+    startDate: { show: true, size: "md", weight: "normal" },
+    endDate: { show: true, size: "md", weight: "normal" },
   },
   footerNote: "",
 };
@@ -242,13 +264,13 @@ export function normalizeTravelerCardConfig(o: Record<string, unknown>): Travele
     showOrders: o.showOrders !== false,
     showProperties: o.showProperties !== false,
     specFields: {
-      color: sf.color !== false,
-      width: sf.width !== false,
-      targetQuantity: sf.targetQuantity !== false,
-      targetWeight: sf.targetWeight !== false,
-      foldType: sf.foldType !== false,
-      startDate: sf.startDate !== false,
-      endDate: sf.endDate !== false,
+      color: coerceSpecField(sf.color),
+      width: coerceSpecField(sf.width),
+      targetQuantity: coerceSpecField(sf.targetQuantity),
+      targetWeight: coerceSpecField(sf.targetWeight),
+      foldType: coerceSpecField(sf.foldType),
+      startDate: coerceSpecField(sf.startDate),
+      endDate: coerceSpecField(sf.endDate),
     },
     footerNote: typeof o.footerNote === "string" ? o.footerNote.trim().slice(0, 500) : "",
   };

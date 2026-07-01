@@ -13,9 +13,36 @@ import {
   type TravelerCardConfig,
   type TravelerCardPageSize,
   type TravelerCardFontWeight,
+  type TravelerCardFieldSize,
+  type TravelerCardSpecField,
   type TravelerCardSpecFields,
 } from "@/services/featureFlagService";
 import { FlagToggle } from "./SettingRow";
+
+const SIZE_OPTS: { value: TravelerCardFieldSize; label: string }[] = [
+  { value: "sm", label: "Küçük (sm)" },
+  { value: "md", label: "Orta (md)" },
+  { value: "lg", label: "Büyük (lg)" },
+];
+const WEIGHT_OPTS: { value: TravelerCardFontWeight; label: string }[] = [
+  { value: "light", label: "İnce" },
+  { value: "normal", label: "Normal" },
+  { value: "bold", label: "Kalın" },
+];
+const SELECT_CLS =
+  "h-7 rounded-md border border-input bg-background px-1.5 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50";
+
+/** Ham spec değeri (boolean eski şekil | nesne | undefined) → tam alan (bayat-cache güvenli). */
+function coerceSpecField(v: unknown): TravelerCardSpecField {
+  if (v === false) return { show: false, size: "md", weight: "normal" };
+  if (v == null || v === true) return { show: true, size: "md", weight: "normal" };
+  const f = v as Partial<TravelerCardSpecField>;
+  return {
+    show: f.show !== false,
+    size: f.size === "sm" || f.size === "lg" ? f.size : "md",
+    weight: f.weight === "light" || f.weight === "bold" ? f.weight : "normal",
+  };
+}
 
 const FONT_SCALES: { value: number; label: string }[] = [
   { value: 0.85, label: "Küçük" },
@@ -60,13 +87,24 @@ export function TravelerCardConfigSection({
 } = {}) {
   const qc = useQueryClient();
   const flagsQ = useFeatureFlags();
-  // Eksik/bayat-cache üst-düzey alanlara karşı default'la birleştir (margins/specFields hep dolu).
+  // Eksik/bayat-cache üst-düzey alanlara karşı default'la birleştir; specFields her alanı
+  // coerce et (eski boolean şekli de → {show,size,weight}).
+  const rawCfg = flagsQ.data?.data?.travelerCardConfig;
+  const specFields = Object.fromEntries(
+    SPEC_FIELDS.map(({ key }) => [key, coerceSpecField(rawCfg?.specFields?.[key])]),
+  ) as unknown as TravelerCardSpecFields;
   const current: TravelerCardConfig = {
     ...DEFAULT_TRAVELER_CARD_CONFIG,
-    ...(flagsQ.data?.data?.travelerCardConfig ?? {}),
+    ...(rawCfg ?? {}),
+    specFields,
   };
 
   const [draft, setDraft] = useState<TravelerCardConfig>(current);
+  const updateSpec = (key: keyof TravelerCardSpecFields, patch: Partial<TravelerCardSpecField>) =>
+    setDraft((d) => ({
+      ...d,
+      specFields: { ...d.specFields, [key]: { ...d.specFields[key], ...patch } },
+    }));
   const currentKey = JSON.stringify(current);
   useEffect(() => {
     setDraft(current);
@@ -285,24 +323,56 @@ export function TravelerCardConfigSection({
         <div>
           <div className="text-sm font-medium">Kart Alanları (Spec Kutusu)</div>
           <p className="text-xs text-muted-foreground">
-            Renk/en/hedef metraj… kutusunda hangi alanlar basılsın. Kapatılan alan karttan gizlenir.
+            Her alan tek tek: göster/gizle, boyut (sm/md/lg) ve kalınlık (ince/normal/kalın).
+            Genel "Yazı" ayarı bunların üstüne biner.
           </p>
-          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-            {SPEC_FIELDS.map(({ key, label }) => (
-              <label
-                key={key}
-                className="flex cursor-pointer select-none items-center gap-2 text-sm"
-              >
-                <Checkbox
-                  checked={draft.specFields[key] !== false}
-                  disabled={mut.isPending}
-                  onCheckedChange={(v) =>
-                    setDraft((d) => ({ ...d, specFields: { ...d.specFields, [key]: v === true } }))
-                  }
-                />
-                {label}
-              </label>
-            ))}
+          <div className="mt-2 overflow-hidden rounded-md border">
+            <div className="grid grid-cols-[1fr_auto_7rem_6rem] items-center gap-x-3 border-b bg-muted/40 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <span>Alan</span>
+              <span>Göster</span>
+              <span>Boyut</span>
+              <span>Kalınlık</span>
+            </div>
+            {SPEC_FIELDS.map(({ key, label }) => {
+              const f = draft.specFields[key];
+              return (
+                <div
+                  key={key}
+                  className="grid grid-cols-[1fr_auto_7rem_6rem] items-center gap-x-3 border-b px-3 py-1.5 last:border-b-0"
+                >
+                  <span className="text-sm">{label}</span>
+                  <Checkbox
+                    checked={f.show}
+                    disabled={mut.isPending}
+                    onCheckedChange={(v) => updateSpec(key, { show: v === true })}
+                  />
+                  <select
+                    value={f.size}
+                    disabled={mut.isPending || !f.show}
+                    onChange={(e) => updateSpec(key, { size: e.target.value as TravelerCardFieldSize })}
+                    className={SELECT_CLS}
+                  >
+                    {SIZE_OPTS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={f.weight}
+                    disabled={mut.isPending || !f.show}
+                    onChange={(e) => updateSpec(key, { weight: e.target.value as TravelerCardFontWeight })}
+                    className={SELECT_CLS}
+                  >
+                    {WEIGHT_OPTS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
           </div>
         </div>
 

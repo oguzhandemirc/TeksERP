@@ -101,6 +101,23 @@ function fmtDateTime(iso: string): string {
   return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/** Spec alan boyutu → px (c-val temel boyutu; global fontScale bunları da çarpar). */
+const SPEC_SIZE_PX: Record<string, number> = { sm: 9, md: 11, lg: 14 };
+/** Spec alan kalınlığı → font-weight (global fontWeight bunları da kaydırır). */
+const SPEC_WEIGHT_N: Record<string, number> = { light: 400, normal: 600, bold: 800 };
+
+/** Ham spec alan değerini (boolean eski şekil | nesne | undefined) çöz. */
+function coerceSpecCell(v: unknown): { show: boolean; size: string; weight: string } {
+  if (v === false) return { show: false, size: "md", weight: "normal" };
+  if (v == null || v === true) return { show: true, size: "md", weight: "normal" };
+  const f = v as Record<string, unknown>;
+  return {
+    show: f.show !== false,
+    size: f.size === "sm" || f.size === "lg" ? (f.size as string) : "md",
+    weight: f.weight === "light" || f.weight === "bold" ? (f.weight as string) : "normal",
+  };
+}
+
 export function renderTravelerCardHtml(
   snapshot: TravelerCardSnapshot,
   meta: TravelerCardMeta,
@@ -127,8 +144,8 @@ export function renderTravelerCardHtml(
       ? Math.min(1.4, Math.max(0.7, cfg.fontScale))
       : 1;
   const weightDelta = cfg.fontWeight === "light" ? -100 : cfg.fontWeight === "bold" ? 100 : 0;
-  // Spec grid alan görünürlükleri (eski snapshot → hepsi açık).
-  const sf = cfg.specFields ?? ({} as Partial<NonNullable<TravelerCardConfig["specFields"]>>);
+  // Spec grid alanları (eski snapshot → boolean; coerceSpecCell hepsini {show,size,weight}'e çözer).
+  const sf = (cfg.specFields ?? {}) as Record<string, unknown>;
 
   const steps = [...(snapshot.steps ?? [])].sort((a, b) => a.stepSequence - b.stepSequence);
   const orderLinks = snapshot.orderLinks ?? [];
@@ -163,22 +180,22 @@ export function renderTravelerCardHtml(
       </div>`
     : "";
 
-  // Spec grid (3 sütun) — yalnız AÇIK alanlar basılır (config specFields).
-  const cell = (label: string, value: string, hi = false) =>
-    `<div class="cell${hi ? " hi" : ""}"><div class="c-lbl">${esc(label)}</div><div class="c-val">${value}</div></div>`;
+  // Spec grid (3 sütun) — yalnız AÇIK alanlar; her alanın kendi boyut/kalınlığı (inline).
+  const cell = (label: string, value: string, f: { size: string; weight: string }, hi = false) =>
+    `<div class="cell${hi ? " hi" : ""}"><div class="c-lbl">${esc(label)}</div>` +
+    `<div class="c-val" style="font-size:${SPEC_SIZE_PX[f.size] ?? 11}px;font-weight:${SPEC_WEIGHT_N[f.weight] ?? 600}">${value}</div></div>`;
   const gridCells: string[] = [];
-  if (sf.color !== false) gridCells.push(cell("Renk", esc(snapshot.targetColor?.name ?? "—")));
-  if (sf.width !== false)
-    gridCells.push(cell("En", snapshot.width != null ? `${esc(snapshot.width)} cm` : "—"));
-  if (sf.targetQuantity !== false)
-    gridCells.push(cell("Hedef Metraj", `${esc(fmtNum(snapshot.targetQuantity))} m`, true));
-  if (sf.targetWeight !== false)
-    gridCells.push(
-      cell("Hedef Ağırlık", snapshot.targetWeight != null ? `${esc(fmtNum(snapshot.targetWeight))} kg` : "—"),
-    );
-  if (sf.foldType !== false) gridCells.push(cell("Kat Tipi", esc(snapshot.foldType ?? "—")));
-  if (sf.startDate !== false) gridCells.push(cell("Başlangıç", esc(fmtDate(snapshot.plannedStartDate))));
-  if (sf.endDate !== false) gridCells.push(cell("Bitiş", esc(fmtDate(snapshot.plannedEndDate))));
+  const add = (v: unknown, label: string, value: string, hi = false) => {
+    const f = coerceSpecCell(v);
+    if (f.show) gridCells.push(cell(label, value, f, hi));
+  };
+  add(sf.color, "Renk", esc(snapshot.targetColor?.name ?? "—"));
+  add(sf.width, "En", snapshot.width != null ? `${esc(snapshot.width)} cm` : "—");
+  add(sf.targetQuantity, "Hedef Metraj", `${esc(fmtNum(snapshot.targetQuantity))} m`, true);
+  add(sf.targetWeight, "Hedef Ağırlık", snapshot.targetWeight != null ? `${esc(fmtNum(snapshot.targetWeight))} kg` : "—");
+  add(sf.foldType, "Kat Tipi", esc(snapshot.foldType ?? "—"));
+  add(sf.startDate, "Başlangıç", esc(fmtDate(snapshot.plannedStartDate)));
+  add(sf.endDate, "Bitiş", esc(fmtDate(snapshot.plannedEndDate)));
   const grid = gridCells.length ? `<div class="grid">${gridCells.join("")}</div>` : "";
 
   const propsBlock =
@@ -312,7 +329,7 @@ export function renderTravelerCardHtml(
   .cell { width: 33.333%; padding: 4px 6px; border-right: 0.5px solid #999; border-bottom: 0.5px solid #999; }
   .cell.hi { background: #eee; }
   .c-lbl { font-size: 6.5px; font-weight: 700; color: #555; letter-spacing: 0.4px; text-transform: uppercase; }
-  .c-val { font-size: 11px; font-weight: 600; margin-top: 1.5px; }
+  .c-val { margin-top: 1.5px; }  /* boyut/kalınlık artık hücre-başına inline (config specFields) */
 
   .props { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 8px; }
   .p-lbl { font-size: 7px; font-weight: 700; color: #555; letter-spacing: 0.5px; text-transform: uppercase; }
