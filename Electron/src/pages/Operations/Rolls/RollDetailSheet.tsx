@@ -88,7 +88,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 className="gap-1"
                 onClick={() => setLabelRollId(roll.id)}
               >
-                <Tag className="h-3.5 w-3.5" /> Etiket
+                <Tag className="h-3.5 w-3.5" /> Etiket Bas/Önizle
               </Button>
             </PermissionGate>
             {canRelabel && roll.barcode && (
