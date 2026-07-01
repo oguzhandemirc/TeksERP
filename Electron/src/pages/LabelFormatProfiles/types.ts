@@ -8,7 +8,13 @@ export interface LabelFormatProfile {
   name: string;
   widthMm: string | number;
   heightMm: string | number;
+  /** Eski tek pay (per-side boşsa buna düşülür). */
   marginMm: string | number;
+  /** Kenar-başına pay (mm); null → marginMm'e düşer. */
+  marginTopMm?: string | number | null;
+  marginRightMm?: string | number | null;
+  marginBottomMm?: string | number | null;
+  marginLeftMm?: string | number | null;
   gapMm: string | number;
   dpi: number;
   orientation: "PORTRAIT" | "LANDSCAPE";

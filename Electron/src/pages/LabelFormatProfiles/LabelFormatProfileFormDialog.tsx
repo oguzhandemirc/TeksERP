@@ -30,13 +30,18 @@ interface Props {
 
 export function LabelFormatProfileFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
   const [testId, setTestId] = useState<string | null>(null);
+  const side = (v: string | number | null | undefined, fb: number) =>
+    v != null && Number.isFinite(Number(v)) ? Number(v) : fb;
   const defaults: LabelFormatProfileFormValues = initial
     ? {
         code: initial.code,
         name: initial.name,
         widthMm: Number(initial.widthMm),
         heightMm: Number(initial.heightMm),
-        marginMm: Number(initial.marginMm),
+        marginTopMm: side(initial.marginTopMm, Number(initial.marginMm)),
+        marginRightMm: side(initial.marginRightMm, Number(initial.marginMm)),
+        marginBottomMm: side(initial.marginBottomMm, Number(initial.marginMm)),
+        marginLeftMm: side(initial.marginLeftMm, Number(initial.marginMm)),
         gapMm: Number(initial.gapMm),
         dpi: initial.dpi,
         orientation: initial.orientation,
@@ -75,17 +80,34 @@ export function LabelFormatProfileFormDialog({ open, onOpenChange, initial, onSu
 
           <div className="rounded-md border bg-muted/20 p-3">
             <div className="mb-2 text-xs font-medium text-muted-foreground">
-              Medya = fiziksel etiket · Pay = her kenardan güvenlik boşluğu (içerik = medya − 2×pay)
+              Medya = fiziksel etiket ölçüsü (mm)
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <FormField label="Genişlik (mm)" error={form.formState.errors.widthMm} required>
                 <Input type="number" step="0.5" min="1" {...form.register("widthMm", { valueAsNumber: true })} />
               </FormField>
               <FormField label="Yükseklik (mm)" error={form.formState.errors.heightMm} required>
                 <Input type="number" step="0.5" min="1" {...form.register("heightMm", { valueAsNumber: true })} />
               </FormField>
-              <FormField label="Pay (mm)" error={form.formState.errors.marginMm} required>
-                <Input type="number" step="0.5" min="0" {...form.register("marginMm", { valueAsNumber: true })} />
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-muted/20 p-3">
+            <div className="mb-2 text-xs font-medium text-muted-foreground">
+              Paylar — her kenardan içerik boşluğu (mm). Sol = içeriğin başlangıcı, Alt = alt barkod yeri.
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              <FormField label="Üst" error={form.formState.errors.marginTopMm} required>
+                <Input type="number" step="0.5" min="0" {...form.register("marginTopMm", { valueAsNumber: true })} />
+              </FormField>
+              <FormField label="Sağ" error={form.formState.errors.marginRightMm} required>
+                <Input type="number" step="0.5" min="0" {...form.register("marginRightMm", { valueAsNumber: true })} />
+              </FormField>
+              <FormField label="Alt" error={form.formState.errors.marginBottomMm} required>
+                <Input type="number" step="0.5" min="0" {...form.register("marginBottomMm", { valueAsNumber: true })} />
+              </FormField>
+              <FormField label="Sol" error={form.formState.errors.marginLeftMm} required>
+                <Input type="number" step="0.5" min="0" {...form.register("marginLeftMm", { valueAsNumber: true })} />
               </FormField>
             </div>
           </div>
