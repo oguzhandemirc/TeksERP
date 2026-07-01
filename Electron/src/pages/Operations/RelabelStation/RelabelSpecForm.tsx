@@ -38,17 +38,6 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
   const [propertyIds, setPropertyIds] = useState<string[]>(ctx.propertyIds);
   const [marked, setMarked] = useState<boolean>(ctx.markedForKartela);
 
-  // Kartelalık işareti — spec'ten bağımsız (ayrı uç); değişince anında kaydeder + tazeler.
-  const markMut = useMutation({
-    mutationFn: (value: boolean) => relabelService.setMarkedForKartela(ctx.id, value),
-    onSuccess: (_d, value) => {
-      setMarked(value);
-      toast.success(value ? "Kartelalık olarak işaretlendi." : "Kartelalık işareti kaldırıldı.");
-      void qc.invalidateQueries({ queryKey: ["rolls"] });
-      onSaved();
-    },
-  });
-
   const gradesQ = useQuery({
     queryKey: ["quality-grades", "picker"],
     queryFn: () => loadAllForPicker(qualityGradeService, { sortBy: "sortOrder" }),
@@ -56,16 +45,22 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
   });
   const grades = useMemo(() => gradesQ.data?.data ?? [], [gradesQ.data?.data]);
 
+  // Tek "Kaydet" tüm veri düzeltmelerini kaydeder: spec (renk/kalite/en/özellik) + kartelalık.
+  // (Kartelalık ayrı uç → yalnız değiştiyse ikinci çağrı.) Müşteri baskısı AYRI (bir baskı eylemi).
   const mut = useMutation({
-    mutationFn: () =>
-      relabelService.applySpec(ctx.id, {
+    mutationFn: async () => {
+      await relabelService.applySpec(ctx.id, {
         colorId,
         propertyIds,
         width: width.trim() === "" ? null : Number(width),
         qualityGrade: qualityGrade || undefined,
-      }),
+      });
+      if (canKartela && marked !== ctx.markedForKartela) {
+        await relabelService.setMarkedForKartela(ctx.id, marked);
+      }
+    },
     onSuccess: () => {
-      toast.success("Top spec'i güncellendi.");
+      toast.success("Kaydedildi.");
       void qc.invalidateQueries({ queryKey: ["rolls"] });
       onSaved();
     },
@@ -76,8 +71,10 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
   return (
     <div className="space-y-3 rounded-lg border p-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Spec Düzelt</h3>
-        <span className="text-xs text-muted-foreground">renk · kalite · en · özellik</span>
+        <h3 className="text-sm font-semibold">Veri Düzelt</h3>
+        <span className="text-xs text-muted-foreground">
+          renk · kalite · en · özellik{canKartela ? " · kartelalık" : ""}
+        </span>
       </div>
 
       {ctx.specLocked && (
@@ -147,14 +144,14 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
             type="checkbox"
             className="mt-0.5"
             checked={marked}
-            disabled={markMut.isPending}
-            onChange={(e) => markMut.mutate(e.target.checked)}
+            disabled={disabled}
+            onChange={(e) => setMarked(e.target.checked)}
           />
           <span className="text-sm">
             <span className="font-medium">Kartelalık</span> — bu topu kartela (numune) için işaretle
             <span className="block text-xs text-muted-foreground">
               İşaretli toplar kartela sevk/kabul akışında görünür. Bitmiş top da işaretlenebilir.
-              {markMut.isPending ? " (kaydediliyor…)" : ""}
+              "Kaydet" ile birlikte kaydedilir.
             </span>
           </span>
         </label>
@@ -163,7 +160,7 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
       <div className="flex justify-end pt-1">
         <Button size="sm" disabled={disabled || mut.isPending} onClick={() => mut.mutate()} className="gap-1">
           <Save className="h-3.5 w-3.5" />
-          {mut.isPending ? "Kaydediliyor..." : "Spec'i Kaydet"}
+          {mut.isPending ? "Kaydediliyor..." : "Kaydet"}
         </Button>
       </div>
     </div>

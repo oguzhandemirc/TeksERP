@@ -89,6 +89,11 @@ export function RelabelPrintForCustomer({
         <h3 className="text-sm font-semibold">Müşteri İçin Yeniden Bas</h3>
         <span className="text-xs text-muted-foreground">A → B</span>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Bu bir <strong>baskı</strong> eylemidir — müşteri seçip "Bas"a basınca yeni etiket basılır
+        (kaydı tutulur). Yalnız seçip basmazsan hiçbir şey kaydolmaz; topun kendi verisi değişmez.
+        Topun verisini kalıcı değiştirmek için yukarıdaki <strong>"Veri Düzelt → Kaydet"</strong>i kullan.
+      </p>
 
       {/* "B" önerileri — topu üreten WO'nun bağlı siparişlerinden */}
       {ctx.candidateCustomers.length > 0 && (

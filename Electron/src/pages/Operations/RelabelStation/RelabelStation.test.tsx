@@ -112,7 +112,7 @@ beforeEach(() => {
 describe("RelabelSpecForm — spec düzeltme", () => {
   it("seed değerlerle submit → applySpec tam payload (colorId/propertyIds/width/qualityGrade)", async () => {
     renderWithProviders(<RelabelSpecForm ctx={baseCtx} onSaved={() => {}} />);
-    await userEvent.click(screen.getByRole("button", { name: /Spec'i Kaydet/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
     await waitFor(() =>
       expect(applySpec).toHaveBeenCalledWith("roll-1", {
         colorId: "color-1",
@@ -131,7 +131,7 @@ describe("RelabelSpecForm — spec düzeltme", () => {
     };
     renderWithProviders(<RelabelSpecForm ctx={locked} onSaved={() => {}} />);
     expect(screen.getByText(/SVK-7/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Spec'i Kaydet/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Kaydet" })).toBeDisabled();
   });
 });
 
