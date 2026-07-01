@@ -24,13 +24,13 @@ describe("computeChecksum — backend paritesi", () => {
 
 describe("verifyBarcode (RK) + verifyPrefixedBarcode", () => {
   it("doğru checksum'lı kart kabul edilir", () => {
-    expect(verifyBarcode("RK-2604-9F2K3P-6")).toBe(true);
+    expect(verifyBarcode("RK26049F2K3P6")).toBe(true);
   });
   it("yanlış checksum reddedilir", () => {
-    expect(verifyBarcode("RK-2604-9F2K3P-7")).toBe(false);
+    expect(verifyBarcode("RK26049F2K3P7")).toBe(false);
   });
   it("bozuk format reddedilir", () => {
-    expect(verifyBarcode("RK-2604-9F2K3P")).toBe(false);
+    expect(verifyBarcode("RK26049F2K3P")).toBe(false);
     expect(verifyBarcode("TEKS20260615AB12CD34")).toBe(false);
   });
   it("SW prefix checksum doğrular", () => {

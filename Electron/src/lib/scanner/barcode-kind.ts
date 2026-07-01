@@ -4,7 +4,7 @@
 // Sistem-üretimi kodlar farklı prefix taşır (backend `utils/barcode.ts` +
 // shipping/kartela servisleri ile doğrulandı):
 //   TEKSYYYYMMDDXXXXXXXX    → Roll (top) — ayraçsız (wedge-tarayıcı `-`→`*` fix)
-//   RK-YYMM-XXXXXX-C        → TravelerCard (refakat kartı)
+//   RKYYMMXXXXXXC           → TravelerCard (refakat kartı) — ayraçsız (wedge fix)
 //   SW-YYMM-XXXXXX-C        → Swatch (kartela)
 //   CV-YYMMDD-NNN           → Sack (çuval, sackNo)         ← 6 haneli tarih!
 //   SD/SR/KD/KR-...         → fason/kartela sevk/kabul belgesi
@@ -27,7 +27,7 @@ export type BarcodeKind =
 /** Tam-format regex'leri (checksum dahil) — opsiyonel istemci doğrulaması için. */
 export const BARCODE_FORMATS = {
   ROLL: /^TEKS\d{8}[0-9A-F]{8}$/,
-  TRAVELER_CARD: /^RK-\d{4}-[0-9A-Z]{6}-[0-9A-Z]$/,
+  TRAVELER_CARD: /^RK\d{4}[0-9A-Z]{6}[0-9A-Z]$/,
   SWATCH: /^SW-\d{4}-[0-9A-Z]{6}-[0-9A-Z]$/,
   SACK: /^CV-\d{6}-\d{3}$/,
 } as const;
@@ -35,7 +35,7 @@ export const BARCODE_FORMATS = {
 // Prefix-çapalı sınıflandırma — sıra önemli değil (prefix'ler ayrık).
 const PREFIX_RULES: Array<{ re: RegExp; kind: BarcodeKind }> = [
   { re: /^TEKS/, kind: "ROLL" },
-  { re: /^RK-/, kind: "TRAVELER_CARD" },
+  { re: /^RK/, kind: "TRAVELER_CARD" },
   { re: /^SW-/, kind: "SWATCH" },
   { re: /^CV-/, kind: "SACK" },
   { re: /^(SD|SR|KD|KR)-/, kind: "DISPATCH_DOC" },

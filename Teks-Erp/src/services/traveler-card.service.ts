@@ -16,7 +16,12 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { buildBarcode, buildCardNumber, verifyBarcode } from "../utils/barcode";
-import { readTravelerCardConfig } from "./system-setting.service";
+import { readTravelerCardConfig, type TravelerCardConfig } from "./system-setting.service";
+import bwipjs from "bwip-js";
+import {
+  renderTravelerCardHtml,
+  type TravelerCardSnapshot,
+} from "./document-render/traveler-card.html";
 import { parseQueryParams, buildPagination, resolveSortBy } from "../utils/query-parser";
 
 // Refakat kartı listesinde sıralanabilir kolonlar. createdAt BİLEREK yok →
@@ -45,6 +50,40 @@ const retryUnlessActiveCardClash = (
   return /barcode|cardNumber/i.test(target);
 };
 
+// Belge Şablonu (Refakat Kartı Ayarları) canlı önizlemesi için örnek içerik.
+// Gerçek kart verisi DEĞİL; renderSampleHtml taslak config ile birleştirir.
+const SAMPLE_TRAVELER_BARCODE = "RK26069F2K3P7"; // ayraçsız (checksum 7 aynı — tire-bağımsız)
+const SAMPLE_TRAVELER_SNAPSHOT: Omit<TravelerCardSnapshot, "config"> = {
+  batchNumber: "P-260607-014",
+  type: "ORDER_PRODUCTION",
+  width: 150,
+  targetQuantity: 680,
+  targetWeight: 110,
+  foldType: "Top",
+  plannedStartDate: "2026-06-07T00:00:00.000Z",
+  plannedEndDate: "2026-06-14T00:00:00.000Z",
+  routeTemplate: { name: "Standart Boyama Rotası" },
+  targetItem: { code: "KMS-001", name: "Pamuklu Astar" },
+  targetColor: { name: "Bej", hex: "#d8c9a8" },
+  targetProperties: [{ propertyId: "p1", property: { name: "Su İticilik" } }],
+  steps: [
+    { id: "step1", stepSequence: 1, isUrgent: false, notes: null, station: { name: "Ham Kalite (KK1)", type: "INTERNAL" }, plannedSubcontractor: null },
+    { id: "step2", stepSequence: 2, isUrgent: false, notes: "Yıkama yapma, matlaştır", station: { name: "Boyahane", type: "EXTERNAL" }, plannedSubcontractor: { id: "sub1", name: "Yıldız Boyahane" } },
+    { id: "step3", stepSequence: 3, isUrgent: false, notes: null, station: { name: "Kurşun + KK2", type: "INTERNAL" }, plannedSubcontractor: null },
+    { id: "step4", stepSequence: 4, isUrgent: false, notes: null, station: { name: "Tambur", type: "INTERNAL" }, plannedSubcontractor: null },
+  ],
+  orderLinks: [
+    {
+      orderLineId: "ol1",
+      orderLine: {
+        quantity: 680,
+        order: { orderNumber: "SIP-2026-0107", customer: { name: "Örnek Tekstil A.Ş." } },
+        item: { name: "Pamuklu Astar" },
+      },
+    },
+  ],
+};
+
 export class TravelerCardService {
   /**
    * Ay bazlı sıra üretici — aynı yıl-ay içinde oluşturulan en yüksek barkodun
@@ -58,7 +97,7 @@ export class TravelerCardService {
   private async nextMonthlySequence(date: Date): Promise<number> {
     const yy = String(date.getFullYear()).slice(2);
     const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const prefix = `RK-${yy}${mm}-`;
+    const prefix = `RK${yy}${mm}`; // ayraçsız barkod: RKYYMM ile başlar
 
     const candidates = await prisma.travelerCard.findMany({
       where: { barcode: { startsWith: prefix } },
@@ -71,10 +110,10 @@ export class TravelerCardService {
 
     const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
     for (const c of candidates) {
-      // barcode = RK-YYMM-XXXXXX-C → XXXXXX segmenti
-      const parts = c.barcode.split("-");
-      if (parts.length < 4) continue;
-      const seqStr = parts[2].toUpperCase();
+      // barcode = RKYYMMXXXXXXC (ayraçsız, 13 char) → XXXXXX = pozisyon 6..12
+      const b = c.barcode.toUpperCase();
+      if (b.length < 13) continue;
+      const seqStr = b.slice(6, 12);
       let n = 0;
       let valid = true;
       for (const ch of seqStr) {
@@ -561,8 +600,8 @@ export class TravelerCardService {
   /**
    * Kartı barkod **veya** insan-okur kart numarası ile bulur.
    *
-   * - Tam barkod (checksum'lı): `RK-YYMM-XXXXXX-C` — kamera/yazıcı çıktısı
-   * - Kart numarası (insan-okur): `RK-YYMM-NNN` — elle yazılırken kısa hali
+   * - Tam barkod (checksum'lı): `RKYYMMXXXXXXC` — ayraçsız, kamera/yazıcı çıktısı
+   * - Kart numarası (insan-okur): `RK-YYMM-NNN` — tireli, elle yazılırken kısa hali
    *
    * Mobile/admin tarafı her iki formatta da bu endpoint'i çağırabilir.
    */
@@ -571,12 +610,12 @@ export class TravelerCardService {
   ): Promise<ApiResponse<(TravelerCard & { hasOpenDispatch: boolean }) | null>> {
     const normalized = input.trim().toUpperCase();
 
-    const isFullBarcode = /^RK-\d{4}-[0-9A-Z]{6}-[0-9A-Z]$/.test(normalized);
+    const isFullBarcode = /^RK\d{4}[0-9A-Z]{6}[0-9A-Z]$/.test(normalized);
     const isCardNumber = /^RK-\d{4}-\d{1,6}$/.test(normalized);
 
     if (!isFullBarcode && !isCardNumber) {
       throw AppError.badRequest(
-        "Geçersiz format. Beklenen: RK-YYMM-XXXXXX-C (barkod) veya RK-YYMM-NNN (kart no)",
+        "Geçersiz format. Beklenen: RKYYMMXXXXXXC (barkod) veya RK-YYMM-NNN (kart no)",
       );
     }
     if (isFullBarcode && !verifyBarcode(normalized)) {
@@ -644,6 +683,77 @@ export class TravelerCardService {
     });
 
     return { success: true, data: cards };
+  }
+
+  /**
+   * Refakat kartının resmi HTML çıktısı — TEK KAYNAK. Electron (printHtmlString /
+   * iframe) ve mobil (expo-print) aynı backend HTML'ini basar → format her cihazda
+   * aynı. İçerik kartın DONMUŞ snapshot'ından üretilir (WO sonradan değişse de
+   * sabit). Snapshot yoksa (eski kart) WO'dan canlı kurulur. QR sunucuda gömülür.
+   */
+  async getCardHtml(cardId: string): Promise<string> {
+    const card = await prisma.travelerCard.findUnique({
+      where: { id: cardId },
+      select: {
+        cardNumber: true,
+        barcode: true,
+        version: true,
+        printedAt: true,
+        status: true,
+        voidReason: true,
+        snapshot: true,
+        workOrderId: true,
+      },
+    });
+    if (!card) {
+      throw new AppError("Refakat kartı bulunamadı", 404);
+    }
+
+    // Snapshot kartla birlikte donar; eski/eksik kayıtta WO'dan canlı kur.
+    const snapshot =
+      (card.snapshot as unknown as TravelerCardSnapshot | null) ??
+      ((await this.buildSnapshot(prisma, card.workOrderId)) as unknown as TravelerCardSnapshot);
+
+    let qrSvg: string | null = null;
+    try {
+      qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: card.barcode, scale: 3, backgroundcolor: "FFFFFF" });
+    } catch {
+      // QR üretilemezse (teorik) barkod metni yedek olarak basılır.
+      qrSvg = null;
+    }
+
+    return renderTravelerCardHtml(snapshot, {
+      cardNumber: card.cardNumber,
+      barcode: card.barcode,
+      version: card.version,
+      printedAt: card.printedAt.toISOString(),
+      status: card.status,
+      voidReason: card.voidReason,
+      qrSvg,
+    });
+  }
+
+  /**
+   * ÖRNEK HTML — "Refakat Kartı Ayarları" panelindeki canlı önizleme. Sabit örnek
+   * içerik + admin'in DÜZENLEDİĞİ taslak config ile gerçek renderTravelerCardHtml
+   * çağrılır → önizleme baskıyla birebir aynı. TASLAK filigranlı; persist edilmez.
+   */
+  async renderSampleHtml(config: TravelerCardConfig): Promise<string> {
+    const snapshot: TravelerCardSnapshot = { ...SAMPLE_TRAVELER_SNAPSHOT, config };
+    let qrSvg: string | null = null;
+    try {
+      qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: SAMPLE_TRAVELER_BARCODE, scale: 3, backgroundcolor: "FFFFFF" });
+    } catch {
+      qrSvg = null;
+    }
+    return renderTravelerCardHtml(snapshot, {
+      cardNumber: "RK-2606-014",
+      barcode: SAMPLE_TRAVELER_BARCODE,
+      version: 1,
+      printedAt: "2026-06-07T10:30:00.000Z",
+      qrSvg,
+      draft: true,
+    });
   }
 
   /**

@@ -5,8 +5,8 @@ describe("classifyBarcode — prefix → tür", () => {
   it("TEKS- → ROLL", () => {
     expect(classifyBarcode("TEKS20260615AB12CD34").kind).toBe("ROLL");
   });
-  it("RK- → TRAVELER_CARD", () => {
-    expect(classifyBarcode("RK-2604-9F2K3P-7").kind).toBe("TRAVELER_CARD");
+  it("RK → TRAVELER_CARD", () => {
+    expect(classifyBarcode("RK26049F2K3P7").kind).toBe("TRAVELER_CARD");
   });
   it("SW- → SWATCH", () => {
     expect(classifyBarcode("SW-2604-5A3Z9B-2").kind).toBe("SWATCH");
@@ -35,13 +35,13 @@ describe("classifyBarcode — prefix → tür", () => {
 describe("BARCODE_FORMATS — tam format regex'leri", () => {
   it("geçerli kodlar eşleşir", () => {
     expect(BARCODE_FORMATS.ROLL.test("TEKS20260615AB12CD34")).toBe(true);
-    expect(BARCODE_FORMATS.TRAVELER_CARD.test("RK-2604-9F2K3P-7")).toBe(true);
+    expect(BARCODE_FORMATS.TRAVELER_CARD.test("RK26049F2K3P7")).toBe(true);
     expect(BARCODE_FORMATS.SWATCH.test("SW-2604-5A3Z9B-2")).toBe(true);
     expect(BARCODE_FORMATS.SACK.test("CV-260615-001")).toBe(true);
   });
   it("bozuk kodlar eşleşmez", () => {
     expect(BARCODE_FORMATS.ROLL.test("TEKS-2026-AB")).toBe(false);
     expect(BARCODE_FORMATS.SACK.test("CV-20260615-001")).toBe(false); // 8 haneli tarih yanlış
-    expect(BARCODE_FORMATS.TRAVELER_CARD.test("RK-2604-9F2K3P")).toBe(false); // checksum yok
+    expect(BARCODE_FORMATS.TRAVELER_CARD.test("RK26049F2K3P")).toBe(false); // checksum yok
   });
 });

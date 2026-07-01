@@ -26,9 +26,9 @@ export function computeChecksum(input: string): string {
   return CROCKFORD_ALPHABET[sum]!;
 }
 
-/** Refakat kartı checksum doğrulaması. Format: RK-YYMM-XXXXXX-C */
+/** Refakat kartı checksum doğrulaması. Format: RKYYMMXXXXXXC (ayraçsız) */
 export function verifyBarcode(barcode: string): boolean {
-  const match = /^RK-(\d{4})-([0-9A-Z]{6})-([0-9A-Z])$/.exec(barcode.toUpperCase());
+  const match = /^RK(\d{4})([0-9A-Z]{6})([0-9A-Z])$/.exec(barcode.toUpperCase());
   if (!match) return false;
   const [, yymm, seq, check] = match;
   return computeChecksum(`RK${yymm}${seq}`) === check;

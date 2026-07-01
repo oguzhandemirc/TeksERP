@@ -9,7 +9,10 @@
 import { Router } from "express";
 import { TravelerCardController } from "../controllers/traveler-card.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import {
+  requirePermission,
+  requireAnyPermission,
+} from "../middlewares/rbac.middleware";
 
 const controller = new TravelerCardController();
 
@@ -99,6 +102,28 @@ const travelerCardRouter = Router();
 
 /**
  * @openapi
+ * /api/traveler-cards/sample-html:
+ *   post:
+ *     tags: [TravelerCards]
+ *     summary: Refakat Kartı Ayarları canlı önizlemesi (örnek veri + taslak config)
+ *     description: |
+ *       "Refakat Kartı Ayarları" panelinde admin içerik ayarını düzenlerken gördüğü
+ *       önizleme. Gerçek renderTravelerCardHtml örnek veriyle + gönderilen taslak
+ *       config ile çağrılır (TASLAK filigranlı) → önizleme baskıyla birebir aynı.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: text/html önizleme çıktısı }
+ */
+// :id'den ÖNCE — "sample-html" segmenti :id param'ına yakalanmasın.
+travelerCardRouter.post(
+  "/sample-html",
+  verifyToken,
+  requirePermission("admin:settings"),
+  controller.getSampleHtml
+);
+
+/**
+ * @openapi
  * /api/traveler-cards:
  *   get:
  *     tags: [TravelerCards]
@@ -148,7 +173,7 @@ travelerCardRouter.get(
  *             type: object
  *             required: [barcode, stationId, scanType]
  *             properties:
- *               barcode:   { type: string, example: "RK-2604-9F2K3P-7" }
+ *               barcode:   { type: string, example: "RK26049F2K3P7" }
  *               stationId: { type: string, format: uuid }
  *               scanType:  { type: string, enum: [ARRIVAL, DEPARTURE, INFO] }
  *               notes:     { type: string }
@@ -186,6 +211,39 @@ travelerCardRouter.get(
   verifyToken,
   requireAnyPermission("workorder:read", "mobile:fason-kabul", "mobile:fason-sevk"),
   controller.findByBarcode
+);
+
+/**
+ * @openapi
+ * /api/traveler-cards/{id}/html:
+ *   get:
+ *     tags: [TravelerCards]
+ *     summary: Refakat kartı resmi HTML çıktısı (tek-kaynak)
+ *     description: |
+ *       Kartın donmuş snapshot'ından üretilen baskıya hazır HTML (text/html).
+ *       Electron printHtmlString/iframe ve mobil expo-print aynı çıktıyı basar.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: HTML belge, content: { text/html: {} } }
+ *       404: { description: Kart bulunamadı }
+ */
+travelerCardRouter.get(
+  "/:id/html",
+  verifyToken,
+  // Saha (Hızlı İş Emri / istasyon) + masaüstü kartı basabilmeli.
+  requireAnyPermission(
+    "workorder:read",
+    "workorder:write",
+    "mobile:kk1",
+    "mobile:fason-sevk",
+    "mobile:hizli-is-emri",
+  ),
+  controller.getCardHtml
 );
 
 /**

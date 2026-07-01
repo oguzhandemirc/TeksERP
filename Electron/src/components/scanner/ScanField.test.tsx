@@ -49,7 +49,7 @@ describe("ScanField", () => {
   it("yanlış tür (expectPrefix ROLL'a refakat kartı) → onScan engellenir + uyarı", async () => {
     const onScan = vi.fn();
     renderWithProviders(<Harness onScan={onScan} expectPrefix="ROLL" />);
-    await userEvent.type(screen.getByPlaceholderText("okut"), "RK-2604-9F2K3P-6{Enter}");
+    await userEvent.type(screen.getByPlaceholderText("okut"), "RK26049F2K3P6{Enter}");
     expect(onScan).not.toHaveBeenCalled();
     expect(screen.getByText(/buraya top barkodu okut/i)).toBeInTheDocument();
   });

@@ -2,11 +2,12 @@
 // TeksERP - Traveler Card Barcode Utilities
 // =============================================================================
 // Format:
-//   cardNumber (insan okur): RK-YYMM-NNN          (örn: RK-2604-012)
-//   barcode    (tarama):     RK-YYMM-XXXXXX-C     (örn: RK-2604-9F2K3P-7)
+//   cardNumber (insan okur): RK-YYMM-NNN          (örn: RK-2604-012) — tireli, taranmaz
+//   barcode    (tarama):     RKYYMMXXXXXXC        (örn: RK26069F2K3P7) — AYRAÇSIZ
 //
 // XXXXXX — ay bazlı 6 karakterlik base32 (Crockford alphabet, I/L/O/U yok).
-// C      — 1 karakterlik checksum, polinomik hash mod 31.
+// C      — 1 karakterlik checksum, polinomik hash mod 31 (tire-bağımsız).
+// Barkod ayraçsız: el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu.
 //
 // Aynı ay içinde 32^6 = ~1.07 milyar farklı barkod üretilebilir.
 // =============================================================================
@@ -49,10 +50,10 @@ export function computeChecksum(input: string): string {
 
 /**
  * Verilen barkodun checksum'ını doğrular.
- * Format: RK-YYMM-XXXXXX-C
+ * Format: RKYYMMXXXXXXC (ayraçsız)
  */
 export function verifyBarcode(barcode: string): boolean {
-  const match = /^RK-(\d{4})-([0-9A-Z]{6})-([0-9A-Z])$/.exec(barcode.toUpperCase());
+  const match = /^RK(\d{4})([0-9A-Z]{6})([0-9A-Z])$/.exec(barcode.toUpperCase());
   if (!match) return false;
   const [, yymm, seq, check] = match;
   const expected = computeChecksum(`RK${yymm}${seq}`);
@@ -60,7 +61,7 @@ export function verifyBarcode(barcode: string): boolean {
 }
 
 /**
- * Tam barkod üretir: RK-YYMM-XXXXXX-C
+ * Tam barkod üretir: RKYYMMXXXXXXC (ayraçsız)
  * `monthlySequence` çağıran tarafından unique üretilmeli (DB aracılığıyla).
  */
 export function buildBarcode(date: Date, monthlySequence: number): string {
@@ -70,7 +71,7 @@ export function buildBarcode(date: Date, monthlySequence: number): string {
   const seq = encodeCrockford(monthlySequence, 6);
   const body = `RK${yymm}${seq}`;
   const check = computeChecksum(body);
-  return `RK-${yymm}-${seq}-${check}`;
+  return `${body}${check}`;
 }
 
 /**
