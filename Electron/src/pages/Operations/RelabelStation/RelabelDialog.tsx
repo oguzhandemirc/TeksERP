@@ -56,7 +56,7 @@ export function RelabelDialog({ barcode, onOpenChange }: Props) {
           </div>
         ) : ctx ? (
           <div className="space-y-4">
-            <RollContextHeader ctx={ctx} onClear={() => onOpenChange(false)} />
+            <RollContextHeader ctx={ctx} onClear={() => onOpenChange(false)} showClear={false} />
             <LastLabelBanner snap={ctx.lastLabelSnapshot} />
             <div className="grid gap-4">
               <RelabelSpecForm key={ctx.id} ctx={ctx} onSaved={refresh} />

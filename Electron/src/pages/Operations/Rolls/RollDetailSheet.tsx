@@ -82,14 +82,17 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 tones={rollStatusTones}
               />
             )}
-            {roll?.markedForKartela && (
-              <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300">
-                Kartelalık
-              </Badge>
-            )}
           </SheetTitle>
           <SheetDescription>{roll?.item?.name}</SheetDescription>
         </SheetHeader>
+
+        {roll?.markedForKartela && (
+          <div className="mt-2">
+            <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300">
+              Kartelalık
+            </Badge>
+          </div>
+        )}
 
         {roll && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -97,7 +100,6 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
                 className="gap-1"
                 onClick={() => setLabelRollId(roll.id)}
               >
@@ -108,7 +110,6 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
                 className="gap-1"
                 onClick={() => setRelabelBarcode(roll.barcode)}
               >

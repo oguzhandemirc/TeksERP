@@ -17,8 +17,17 @@ export function EmptyState() {
   );
 }
 
-/** Okutulan topun künyesi + konum/guard satırı. */
-export function RollContextHeader({ ctx, onClear }: { ctx: RelabelContext; onClear: () => void }) {
+/** Okutulan topun künyesi + konum/guard satırı. showClear=false → "Temizle" gizlenir
+ *  (modalda gereksiz; Dialog'un kendi kapatma tuşu var). */
+export function RollContextHeader({
+  ctx,
+  onClear,
+  showClear = true,
+}: {
+  ctx: RelabelContext;
+  onClear: () => void;
+  showClear?: boolean;
+}) {
   return (
     <div className="rounded-lg border bg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -60,9 +69,11 @@ export function RollContextHeader({ ctx, onClear }: { ctx: RelabelContext; onCle
             </div>
           )}
         </div>
-        <Button size="sm" variant="ghost" onClick={onClear} className="gap-1">
-          <PackageX className="h-3.5 w-3.5" /> Temizle
-        </Button>
+        {showClear && (
+          <Button size="sm" variant="ghost" onClick={onClear} className="gap-1">
+            <PackageX className="h-3.5 w-3.5" /> Temizle
+          </Button>
+        )}
       </div>
     </div>
   );
