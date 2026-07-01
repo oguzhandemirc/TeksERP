@@ -34,10 +34,16 @@ export function RelabelPrintForCustomer({
   const [sending, setSending] = useState(false);
 
   // Üç durum: müşteri seçili → o müşteri; stock=true → ZORLA stok (müşterisiz);
-  // ikisi de değilse (açılış) → topun mevcut etiketi (snapshot/varsayılan).
-  const [customerId, setCustomerId] = useState<string | null>(null);
-  const [orderLineId, setOrderLineId] = useState<string | null>(null);
-  const [stock, setStock] = useState(false);
+  // ikisi de değilse → topun mevcut etiketi. AÇILIŞ: son basılan seçim (lastLabelSnapshot)
+  // ön-seçili gelir (en son hangi müşteri/stok seçildiyse). key={ctx.id} → taze topta yeniden seed.
+  const lastSnap = ctx.lastLabelSnapshot;
+  const [customerId, setCustomerId] = useState<string | null>(
+    lastSnap && !lastSnap.stock ? (lastSnap.customerId ?? null) : null,
+  );
+  const [orderLineId, setOrderLineId] = useState<string | null>(
+    lastSnap && !lastSnap.stock ? (lastSnap.orderLineId ?? null) : null,
+  );
+  const [stock, setStock] = useState<boolean>(lastSnap?.stock ?? false);
 
   // stock seçiliyse backend'e ZORLA {stock:true} (snapshot müşterisine DÜŞMESİN);
   // aksi halde {customerId, orderLineId} (açılışta ikisi de null → mevcut etiket).
@@ -141,7 +147,7 @@ export function RelabelPrintForCustomer({
         <Button
           type="button"
           size="sm"
-          variant={stock ? "default" : "ghost"}
+          variant={stock ? "default" : "outline"}
           disabled={stock}
           onClick={() => {
             setStock(true);

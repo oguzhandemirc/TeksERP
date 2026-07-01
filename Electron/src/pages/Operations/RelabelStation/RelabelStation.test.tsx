@@ -136,10 +136,11 @@ describe("RelabelSpecForm — spec düzeltme", () => {
 });
 
 describe("RelabelPrintForCustomer — müşteri için yeniden bas", () => {
-  it("açılışta müşterisiz render; aday çipi → customerId+orderLineId ile html", async () => {
+  it("açılışta SON müşteri (snapshot) ön-seçili; aday çipi → customerId+orderLineId ile html", async () => {
     renderWithProviders(<RelabelPrintForCustomer ctx={baseCtx} />);
+    // lastLabelSnapshot.customerId="cA" → açılışta o ön-seçili gelir (en son basılan müşteri).
     await waitFor(() =>
-      expect(getRollPreview).toHaveBeenCalledWith("roll-1", { customerId: null, orderLineId: null }),
+      expect(getRollPreview).toHaveBeenCalledWith("roll-1", { customerId: "cA", orderLineId: null }),
     );
     await userEvent.click(screen.getByText("BETA"));
     await waitFor(() =>
