@@ -1,4 +1,4 @@
-import { MapPin, PackageX, Printer, Tag } from "lucide-react";
+import { AlertTriangle, MapPin, PackageX, Printer, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
@@ -39,6 +39,14 @@ export function RollContextHeader({
             <Badge variant="outline">{rollStatusLabels[ctx.status as RollStatus] ?? ctx.status}</Badge>
             {ctx.markedForKartela && (
               <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">Kartelalık</Badge>
+            )}
+            {ctx.labelDirty && (
+              <Badge
+                className="gap-1 bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+                title="Veri/metraj düzeltildi; topun üstündeki fiziksel etiket eski — yeniden basılmalı."
+              >
+                <AlertTriangle className="h-3 w-3" /> Etiket güncel değil
+              </Badge>
             )}
           </div>
           <div className="text-sm font-medium">

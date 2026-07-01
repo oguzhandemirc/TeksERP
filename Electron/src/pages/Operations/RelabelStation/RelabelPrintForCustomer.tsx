@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Printer, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,7 @@ export function RelabelPrintForCustomer({
 }) {
   const { hasPermission } = useRoleAccess();
   const canPrint = hasPermission("label:print");
+  const qc = useQueryClient();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // Bu PC'ye yapılandırılmış seri/COM Argox varsa diyalogsuz baskı; yoksa iframe.print().
   const { directEnabled, printRoll } = useLabelPrinter();
@@ -62,6 +63,9 @@ export function RelabelPrintForCustomer({
     mutationFn: () => labelService.printRollLabel(ctx.id, ctxOpts),
     onSuccess: () => {
       toast.success("Etiket basıldı (audit kaydı oluşturuldu).");
+      // Baskı labelDirty'yi temizledi → liste + detay sheet rozeti de tazelensin.
+      void qc.invalidateQueries({ queryKey: ["rolls"] });
+      void qc.invalidateQueries({ queryKey: ["roll-detail"] });
       onPrinted?.(); // backend lastLabelSnapshot=B yazdı → bağlamı tazele
     },
   });

@@ -834,6 +834,12 @@ model Roll {
   // sorgusunda dönse de perf etkisi yok, asıl detay (findRollById) kullanır.
   lastLabelSnapshot Json?
 
+  // Etiket bayat mı? Veri/metraj/renk/kalite/en/özellik "Yeniden Etiketle/Düzelt" ile
+  // değiştirilince true → topun ÜSTÜNDEKİ fiziksel etiket artık veriyle uyuşmuyor
+  // (yeniden basılmalı). Etiket basılınca (recordPrintEvent) false'a döner. Küçük bayrak;
+  // filtre/index yok — detay/context/liste select'inde döner, "yeniden bas" uyarısını besler.
+  labelDirty Boolean @default(false)
+
   // Relations
   item                 Item                        @relation(fields: [itemId], references: [id])
   color                Color?                      @relation(fields: [colorId], references: [id])

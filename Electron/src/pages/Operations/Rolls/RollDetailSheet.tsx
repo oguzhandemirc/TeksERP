@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Tag, Tags, Undo2, Palette, PackageOpen, RotateCcw, Pencil, ArrowRightLeft } from "lucide-react";
+import { History, Tag, Tags, Undo2, Palette, PackageOpen, RotateCcw, Pencil, ArrowRightLeft, AlertTriangle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -178,11 +178,19 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                         {roll.barcode}
                       </div>
                     </div>
-                    <div className="flex flex-col items-start gap-1">
+                    <div className="flex flex-wrap items-start gap-1">
                       <StatusBadge status={roll.status} labels={rollStatusLabels} tones={rollStatusTones} />
                       {roll.markedForKartela && (
                         <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300">
                           Kartelalık
+                        </Badge>
+                      )}
+                      {roll.labelDirty && (
+                        <Badge
+                          className="gap-1 bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+                          title="Veri/metraj düzeltildi; topun üstündeki fiziksel etiket eski — yeniden basılmalı."
+                        >
+                          <AlertTriangle className="h-3 w-3" /> Etiket güncel değil
                         </Badge>
                       )}
                     </div>

@@ -55,6 +55,9 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
     mutationFn: () => labelService.printRollLabel(rollId!),
     onSuccess: () => {
       toast.success("Etiket basıldı (audit kaydı oluşturuldu).");
+      // Baskı labelDirty'yi temizledi → liste + detay sheet "Etiket güncel değil" rozeti tazelensin.
+      void qc.invalidateQueries({ queryKey: ["rolls"] });
+      void qc.invalidateQueries({ queryKey: ["roll-detail"] });
     },
   });
 

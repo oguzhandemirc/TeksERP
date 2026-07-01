@@ -92,6 +92,7 @@ const baseCtx: RelabelContext = {
   currentQty: 100,
   weightKg: 30,
   markedForKartela: false,
+  labelDirty: false,
   properties: [{ id: "p1", code: "YNM", name: "Yanmaz", color: null }],
   propertyIds: ["p1"],
   lastLabelSnapshot: { customerId: "cA", customerName: "ACME", orderNumber: "ORD-1", printedAt: "2026-06-14T10:00:00Z" },
@@ -197,6 +198,15 @@ describe("RollContextHeader + LastLabelBanner", () => {
     expect(screen.getByText(/Metraj: 100 mt/)).toBeInTheDocument();
     expect(screen.getByText(/SVK-3/)).toBeInTheDocument();
     expect(screen.getByText(/Çuval #3/)).toBeInTheDocument();
+  });
+
+  it("labelDirty=true → 'Etiket güncel değil' uyarısı; false → yok", () => {
+    const { rerender } = renderWithProviders(
+      <RollContextHeader ctx={{ ...baseCtx, labelDirty: true }} onClear={() => {}} />,
+    );
+    expect(screen.getByText(/Etiket güncel değil/)).toBeInTheDocument();
+    rerender(<RollContextHeader ctx={{ ...baseCtx, labelDirty: false }} onClear={() => {}} />);
+    expect(screen.queryByText(/Etiket güncel değil/)).not.toBeInTheDocument();
   });
 
   it("son baskı (A) künyesi gösterilir", () => {

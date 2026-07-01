@@ -220,6 +220,8 @@ export interface RelabelContext {
   currentQty: number;
   weightKg: number | null;
   markedForKartela: boolean;
+  /** Etiket bayat mı — veri/metraj düzeltilmiş ama fiziksel etiket yeniden basılmamış → true. */
+  labelDirty: boolean;
   /** Topta hâlihazırda damgalı özellikler — relabel formu TAM liste olarak replace eder. */
   properties: { id: string; code: string; name: string; color: string | null }[];
   propertyIds: string[];
@@ -1072,6 +1074,7 @@ export class InventoryService {
         weightKg: true,
         markedForKartela: true,
         lastLabelSnapshot: true,
+        labelDirty: true,
         properties: {
           select: {
             propertyId: true,
@@ -1153,6 +1156,7 @@ export class InventoryService {
         weightKg: roll.weightKg != null ? Number(roll.weightKg) : null,
         markedForKartela: roll.markedForKartela,
         lastLabelSnapshot: roll.lastLabelSnapshot,
+        labelDirty: roll.labelDirty,
         properties: roll.properties.map((p) => p.property),
         propertyIds: roll.properties.map((p) => p.propertyId),
         shipment: roll.shipment,
@@ -1829,6 +1833,7 @@ export class InventoryService {
         currentQty: true,
         shipmentId: true,
         shipment: { select: { status: true } },
+        properties: { select: { propertyId: true } },
       },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
@@ -1931,6 +1936,26 @@ export class InventoryService {
       const code = data.qualityGrade.trim();
       rollData.qualityGradeId = await resolveQualityGradeIdStrict(code);
       rollData.qualityGrade = code;
+    }
+
+    // Etiket bayat: etiket-görünür bir alan (renk/en/metraj/kalite/özellik) GERÇEKTEN
+    // değiştiyse topun fiziksel etiketi artık uyuşmuyor → labelDirty=true (baskıda temizlenir).
+    // NOT: kalite/en blokları değer aynı olsa da yazılabildiğinden (FK self-heal / unconditional),
+    // "değişti mi"yi Object.keys(rollData) yerine alan-alan karşılaştır → no-op kayıtta dirty olmaz.
+    const existingPropIds = new Set(roll.properties.map((p) => p.propertyId));
+    const propsChanged =
+      dedupedProps.length !== existingPropIds.size || dedupedProps.some((id) => !existingPropIds.has(id));
+    const oldWidth = roll.width == null ? null : Number(roll.width);
+    const widthChanged = data.width !== undefined && data.width !== oldWidth;
+    const colorChanged = roll.colorId !== data.colorId;
+    const metrajChanged =
+      data.currentQty !== undefined && !roll.currentQty.equals(new Prisma.Decimal(data.currentQty));
+    const qualityChanged =
+      data.qualityGrade !== undefined &&
+      data.qualityGrade.trim() !== "" &&
+      data.qualityGrade.trim() !== roll.qualityGrade;
+    if (colorChanged || widthChanged || metrajChanged || qualityChanged || propsChanged) {
+      rollData.labelDirty = true;
     }
 
     await prisma.$transaction(async (tx) => {

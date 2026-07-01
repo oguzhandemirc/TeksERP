@@ -9,10 +9,12 @@
 //   5. Renksiz (color null) yapılabilir
 //   6. Metraj (currentQty) düzeltmesi — bütün topta initialQty ile birlikte güncellenir
 //   7. Kısmen tüketilmiş topta metraj düzeltme reddedilir (renk-only geçer)
+//   8-10. Etiket bayat: relabel→labelDirty=true, baskı→false, no-op→temiz kalır
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
 import { ShippingService } from "../src/services/shipping.service";
+import { LabelService } from "../src/services/label.service";
 
 let pass = 0;
 let fail = 0;
@@ -145,6 +147,34 @@ async function main() {
     await inv.applyManualProperties(r3.id, { colorId: colorB.id, propertyIds: [] }, undefined);
     const r3ColorOnly = await prisma.roll.findUnique({ where: { id: r3.id }, select: { colorId: true } });
     check("Kısmi topta metrajsız (renk-only) relabel geçer", r3ColorOnly?.colorId === colorB.id);
+
+    // 8) Etiket bayat bayrağı — relabel edilen top labelDirty=true olur
+    const r1Dirty = await prisma.roll.findUnique({ where: { id: r1.id }, select: { labelDirty: true } });
+    check("Relabel sonrası labelDirty=true", r1Dirty?.labelDirty === true);
+
+    // 9) Etiket basılınca (recordPrintEvent) labelDirty=false'a döner
+    const label = new LabelService();
+    await label.recordPrintEvent(r1.id, undefined, { stock: true });
+    const r1Clean = await prisma.roll.findUnique({ where: { id: r1.id }, select: { labelDirty: true } });
+    check("Baskı sonrası labelDirty=false", r1Clean?.labelDirty === false);
+
+    // 10) No-op relabel (aynı değerler) → labelDirty set edilmez (temiz kalır)
+    const r1Cur = await prisma.roll.findUnique({
+      where: { id: r1.id },
+      select: { colorId: true, width: true, qualityGrade: true, properties: { select: { propertyId: true } } },
+    });
+    await inv.applyManualProperties(
+      r1.id,
+      {
+        colorId: r1Cur!.colorId,
+        propertyIds: r1Cur!.properties.map((p) => p.propertyId),
+        width: r1Cur!.width != null ? Number(r1Cur!.width) : null,
+        qualityGrade: r1Cur!.qualityGrade,
+      },
+      undefined,
+    );
+    const r1Noop = await prisma.roll.findUnique({ where: { id: r1.id }, select: { labelDirty: true } });
+    check("No-op relabel labelDirty set etmez (temiz kalır)", r1Noop?.labelDirty === false);
   } finally {
     for (const id of shipmentIds) {
       await prisma.shipmentAllocation.deleteMany({ where: { shipmentId: id } });

@@ -45,6 +45,8 @@ export interface RelabelContext {
   currentQty: number;
   weightKg: number | null;
   markedForKartela: boolean;
+  /** Etiket bayat mı — veri/metraj düzeltildi ama fiziksel etiket yeniden basılmadı. */
+  labelDirty: boolean;
   properties: RelabelChip[];
   propertyIds: string[];
   lastLabelSnapshot: RelabelLastLabelSnapshot | null;

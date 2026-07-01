@@ -1213,6 +1213,10 @@ export class LabelService {
     // Niyet kalıcılaştırma (snapshot) — audit'ten ayrı primitif.
     await this.seedRollLabelSnapshot(rollId, userId, opts);
 
+    // Etiket bayat bayrağını temizle — fiziksel etiket az önce basıldı → veriyle uyumlu.
+    // Yalnız bayat iken yaz (gereksiz update yok).
+    await prisma.roll.updateMany({ where: { id: rollId, labelDirty: true }, data: { labelDirty: false } });
+
     // Fiziksel baskı izi.
     await AuditService.log({
       userId,

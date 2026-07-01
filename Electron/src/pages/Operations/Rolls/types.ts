@@ -33,6 +33,8 @@ export interface Roll {
   /** Tambur'da kartela için işaretlendi mi — depoda kartelaya gidecek topları
    *  ayırt etmek için rozet/filtre. Sevki engellemez. */
   markedForKartela?: boolean;
+  /** Etiket bayat mı — veri/metraj düzeltildi ama fiziksel etiket yeniden basılmadı. */
+  labelDirty?: boolean;
   entrySource: string;
   parentRollId: string | null;
   /** Açık kumaş Roll'lar için fason kabul referansı. */

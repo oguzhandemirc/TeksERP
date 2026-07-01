@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { AlertTriangle } from "lucide-react";
 import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
@@ -201,11 +202,22 @@ export const rollColumns: ColumnDef<Roll>[] = [
     header: () => <SortableHeader field="status" label="Durum" />,
     meta: { label: "Durum", exportValue: (r) => rollStatusLabels[r.status] ?? r.status },
     cell: ({ row }) => (
-      <StatusBadge
-        status={row.original.status}
-        labels={rollStatusLabels}
-        tones={rollStatusTones}
-      />
+      <div className="flex items-center gap-1.5">
+        <StatusBadge
+          status={row.original.status}
+          labels={rollStatusLabels}
+          tones={rollStatusTones}
+        />
+        {row.original.labelDirty && (
+          // Etiket bayat: veri/metraj düzeltildi, fiziksel etiket yeniden basılmadı.
+          <span title="Etiket güncel değil — veri düzeltildi, yeniden basılmalı." className="inline-flex">
+            <AlertTriangle
+              className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+              aria-label="Etiket güncel değil"
+            />
+          </span>
+        )}
+      </div>
     ),
   },
   {

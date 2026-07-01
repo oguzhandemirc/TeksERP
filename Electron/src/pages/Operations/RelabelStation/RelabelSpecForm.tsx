@@ -69,7 +69,9 @@ export function RelabelSpecForm({ ctx, onSaved }: { ctx: RelabelContext; onSaved
     onSuccess: () => {
       toast.success("Kaydedildi.");
       setSavedHint(true);
+      // Liste + detay sheet'in "Etiket güncel değil" rozeti tazelensin (labelDirty değişti).
       void qc.invalidateQueries({ queryKey: ["rolls"] });
+      void qc.invalidateQueries({ queryKey: ["roll-detail"] });
       onSaved();
     },
   });
