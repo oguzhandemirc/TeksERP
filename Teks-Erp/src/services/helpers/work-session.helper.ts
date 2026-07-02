@@ -8,6 +8,7 @@
 // =============================================================================
 
 import prisma from "../../lib/prisma";
+import { AppError } from "../../utils/app-error";
 import { readWorkSessionIdleTimeoutMinutes } from "../system-setting.service";
 import type { WorkSessionEndReason } from "@prisma/client";
 
@@ -52,6 +53,39 @@ export async function resolveActiveSession(deviceRowId: string): Promise<ActiveW
     return null;
   }
   return session;
+}
+
+/** Üretim atfı damga bağlamı — controller'ların tek geçidi (getStampContext). */
+export interface StampContext {
+  sessionId: string;
+  machineId: string | null;
+  stationId: string;
+}
+
+/**
+ * İstekteki cihazın aktif oturumundan damga bağlamını çözer (üretim atfı:
+ * RollOperation/RollMovement.machineId, Roll.createdMachineId). Kurallar:
+ * - req.device yok (web/Electron) → null; işlem oturumsuz devam eder (machineId=null).
+ * - Aktif oturum yok/idle düştü → null; `enforceForMobile` açıksa (Faz 3'te açılır)
+ *   409 WORK_SESSION_REQUIRED — mobil interceptor yer onayı ekranını yeniden açar.
+ * - Tx DIŞINDA çağrılmalı (tx süresi kısa kuralı) — indexed tek sorgu + tembel idle.
+ */
+export async function getStampContext(
+  req: { device?: { id: string } },
+  opts?: { enforceForMobile?: boolean },
+): Promise<StampContext | null> {
+  if (!req.device) return null;
+  const session = await resolveActiveSession(req.device.id);
+  if (!session) {
+    if (opts?.enforceForMobile) {
+      throw AppError.conflict(
+        "Bu cihazda aktif çalışma oturumu yok — önce makine/istasyon onayı verin",
+        { code: "WORK_SESSION_REQUIRED" },
+      );
+    }
+    return null;
+  }
+  return { sessionId: session.id, machineId: session.machineId, stationId: session.stationId };
 }
 
 /**

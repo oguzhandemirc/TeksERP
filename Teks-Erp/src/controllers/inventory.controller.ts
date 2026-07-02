@@ -8,6 +8,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { InventoryService } from "../services/inventory.service";
+import { getStampContext } from "../services/helpers/work-session.helper";
 import "../types/express-augment";
 
 // Zod validation schemas
@@ -137,7 +138,14 @@ export class InventoryController {
     try {
       const id = req.params.id as string;
       const body = kursunFinishSchema.parse(req.body);
-      const result = await this.service.kursunFinish(id, body, req.user?.userId);
+      // Makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
+      const stamp = await getStampContext(req);
+      const result = await this.service.kursunFinish(
+        id,
+        body,
+        req.user?.userId,
+        stamp?.machineId ?? req.device?.machineId ?? null,
+      );
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -168,7 +176,13 @@ export class InventoryController {
   async createInitialEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = initialEntrySchema.parse(req.body);
-      const result = await this.service.createInitialEntry(body, req.user?.userId);
+      // KK1 makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
+      const stamp = await getStampContext(req);
+      const result = await this.service.createInitialEntry(
+        body,
+        req.user?.userId,
+        stamp?.machineId ?? req.device?.machineId ?? null,
+      );
       res.status(201).json(result);
     } catch (error) {
       next(error);

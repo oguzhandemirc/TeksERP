@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { TamburService } from "../services/tambur.service";
+import { getStampContext } from "../services/helpers/work-session.helper";
 import "../types/express-augment";
 
 // Tambur finalize — yeni model (cumulative length-based):
@@ -171,7 +172,14 @@ export class TamburController {
     try {
       const id = req.params.id as string;
       const body = finalizeOpenFabricSchema.parse(req.body);
-      const result = await this.service.finalizeOpenFabric(id, body, req.user?.userId);
+      // Makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
+      const stamp = await getStampContext(req);
+      const result = await this.service.finalizeOpenFabric(
+        id,
+        body,
+        req.user?.userId,
+        stamp?.machineId ?? req.device?.machineId ?? null,
+      );
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -300,7 +308,13 @@ export class TamburController {
   async finalize(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = finalizeSchema.parse(req.body);
-      const result = await this.service.finalize(body, req.user?.userId);
+      // Makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
+      const stamp = await getStampContext(req);
+      const result = await this.service.finalize(
+        body,
+        req.user?.userId,
+        stamp?.machineId ?? req.device?.machineId ?? null,
+      );
       res.status(200).json(result);
     } catch (error) {
       next(error);

@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { LabelKind } from "@prisma/client";
 import { LabelService } from "../services/label.service";
+import { getStampContext } from "../services/helpers/work-session.helper";
 import "../types/express-augment";
 
 const bulkLabelsSchema = z.object({
@@ -44,17 +45,20 @@ const testNativeSchema = z.object({
 
 /**
  * Fiziksel format çözümü girdisi: explicit ?profileId= veya makine bağlamı.
- * machineId — mobil isteklerde device.middleware'den (req.device.machineId) OTO;
- * Electron'da yoksa opsiyonel ?machineId= query. Yoksa resolver sistem-default'a düşer.
+ * machineId önceliği: AKTİF ÇALIŞMA OTURUMU (mobil baskı oturumun makinesinin
+ * yazıcısına gider) → GEÇİŞ fallback'i cihazın statik ataması (req.device.machineId,
+ * Faz 6'da sökülür) → opsiyonel ?machineId= query (Electron). Yoksa sistem-default.
  */
-function parseFormatOpts(req: Request): {
+async function resolveFormatOpts(req: Request): Promise<{
   profileId?: string;
   machineId?: string;
   peripheralId?: string;
   deviceId?: string;
   templateId?: string;
-} {
+}> {
+  const stamp = await getStampContext(req);
   const machineId =
+    stamp?.machineId ??
     req.device?.machineId ??
     (typeof req.query.machineId === "string" ? req.query.machineId : undefined);
   return {
@@ -131,7 +135,7 @@ export class LabelController {
             typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
               ? parseInt(req.query.copies, 10)
               : undefined,
-          ...parseFormatOpts(req),
+          ...(await resolveFormatOpts(req)),
         },
       );
       res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -159,7 +163,7 @@ export class LabelController {
           typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
             ? parseInt(req.query.copies, 10)
             : undefined,
-        ...parseFormatOpts(req),
+        ...(await resolveFormatOpts(req)),
       });
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.status(200).send(result.data.ppla);
@@ -186,7 +190,7 @@ export class LabelController {
           typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
             ? parseInt(req.query.copies, 10)
             : undefined,
-        ...parseFormatOpts(req),
+        ...(await resolveFormatOpts(req)),
       });
       res.setHeader("Content-Type", result.data.contentType);
       res.setHeader("X-Label-Language", result.data.language);
@@ -207,7 +211,7 @@ export class LabelController {
         orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
         customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
         stock: req.query.stock === "1" || req.query.stock === "true",
-        ...parseFormatOpts(req),
+        ...(await resolveFormatOpts(req)),
       });
       res.status(200).json(result);
     } catch (e) { next(e); }
@@ -223,7 +227,7 @@ export class LabelController {
         orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
         customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
         stock: req.query.stock === "1" || req.query.stock === "true",
-        ...parseFormatOpts(req),
+        ...(await resolveFormatOpts(req)),
       });
       res.status(200).json(result);
     } catch (e) { next(e); }
@@ -291,7 +295,7 @@ export class LabelController {
           typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
             ? parseInt(req.query.copies, 10)
             : undefined,
-        ...parseFormatOpts(req),
+        ...(await resolveFormatOpts(req)),
       });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("X-Label-Kind", result.data.kind);
@@ -310,7 +314,7 @@ export class LabelController {
           typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
             ? parseInt(req.query.copies, 10)
             : undefined,
-        ...parseFormatOpts(req),
+        ...(await resolveFormatOpts(req)),
       });
       res.setHeader("Content-Type", result.data.contentType);
       res.setHeader("X-Label-Language", result.data.language);

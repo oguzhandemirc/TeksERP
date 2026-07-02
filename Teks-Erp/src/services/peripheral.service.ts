@@ -262,6 +262,38 @@ export class PeripheralDeviceService extends BaseService {
     return { success: true, data: [] };
   }
 
+  /**
+   * OTURUM-KAPSAMLI donanım çözümü (for-device'ın halefi — Faz 6'da onun yerini alır).
+   * Aktif çalışma oturumunun YERİ tek kaynak: makine-oturumu → o makineye sabit
+   * donanım; makinesiz istasyon-oturumu (SHIPPING) → istasyona sabit donanım.
+   * Oturum yok → BOŞ liste (fail-closed: tablet backend'in vermediği hiçbir
+   * cihaza bağlanmaz; istemci sim/manuel'e düşmez, yer onayı ister).
+   */
+  async getForSession(
+    session: { machineId: string | null; stationId: string | null } | null,
+    kind: string,
+  ): Promise<ApiResponse<unknown[]>> {
+    const validKind = Object.values(PeripheralKind).includes(kind as PeripheralKind);
+    if (!validKind) throw AppError.badRequest("Geçersiz cihaz türü (kind)");
+    if (!session) return { success: true, data: [] };
+    const base = { kind: kind as PeripheralKind, isActive: true };
+    if (session.machineId) {
+      const byMachine = await prisma.peripheralDevice.findMany({
+        where: { ...base, machineId: session.machineId },
+        orderBy: { createdAt: "asc" },
+      });
+      return { success: true, data: byMachine };
+    }
+    if (session.stationId) {
+      const byStation = await prisma.peripheralDevice.findMany({
+        where: { ...base, stationId: session.stationId },
+        orderBy: { createdAt: "asc" },
+      });
+      return { success: true, data: byStation };
+    }
+    return { success: true, data: [] };
+  }
+
   /** Bağlantı testi: NETWORK_TCP → gerçek/simüle gönderim; diğerleri cihaz tarafı. */
   async test(id: string, userId?: string): Promise<ApiResponse<unknown>> {
     const p = await prisma.peripheralDevice.findUnique({ where: { id } });

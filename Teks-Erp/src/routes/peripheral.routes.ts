@@ -12,6 +12,8 @@
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { PeripheralDeviceService } from "../services/peripheral.service";
+import { MOBILE_SESSION_PERMS } from "../services/work-session.service";
+import { getStampContext } from "../services/helpers/work-session.helper";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
@@ -65,6 +67,32 @@ peripheralRouter.get(
         { deviceId: req.device?.id ?? null, machineId: req.device?.machineId ?? null },
         kind,
       );
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  },
+);
+/**
+ * @openapi
+ * /api/peripherals/for-session:
+ *   get:
+ *     tags: [Peripherals]
+ *     summary: Aktif çalışma oturumunun YERİNE sabit cihazları çöz (for-device halefi)
+ *     description: |
+ *       Yer, cihazın aktif WorkSession'ından çözülür (x-device-id → oturum):
+ *       makine-oturumu → makineye sabit; makinesiz istasyon-oturumu (SHIPPING) →
+ *       istasyona sabit. Oturum yoksa BOŞ liste (fail-closed). kind=METER/SCALE/LABEL_PRINTER/SIGNAL_SOURCE.
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 200: { description: Cihaz listesi } }
+ */
+peripheralRouter.get(
+  "/for-session",
+  verifyToken,
+  requireAnyPermission("station:read", "shipping:read", "shipping:write", ...MOBILE_SESSION_PERMS),
+  async (req, res, next) => {
+    try {
+      const kind = typeof req.query.kind === "string" ? req.query.kind : "";
+      const stamp = await getStampContext(req);
+      const result = await service.getForSession(stamp, kind);
       res.status(200).json(result);
     } catch (e) { next(e); }
   },

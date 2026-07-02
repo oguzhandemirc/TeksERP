@@ -329,7 +329,10 @@ export class InventoryService {
        */
       clientBarcode?: string;
     },
-    userId?: string
+    userId?: string,
+    /** KK1 makine atfı — aktif çalışma oturumundan (controller çözer). KK1 girişi
+     *  RollOperation üretmediği için atıf Roll.createdMachineId üstünde kapanır. */
+    machineId?: string | null
   ): Promise<ApiResponse<Roll>> {
     // Ürün var VE aktif olmalı. Soft-delete (isActive=false) edilmiş ürünle
     // giriş yapılamaz — picker pasifleri gizler ama önceden seçili/persist
@@ -437,6 +440,7 @@ export class InventoryService {
             width: data.width ?? null,
             entrySource,
             createdById: userId ?? null,
+            createdMachineId: machineId ?? null,
           },
           include: {
             item: true,
@@ -2710,6 +2714,9 @@ export class InventoryService {
       notes?: string | null;
     },
     userId?: string,
+    /** PROCESS_QC makine atfı — aktif çalışma oturumundan (controller çözer).
+     *  QC2/KURSUN op'larına + kapanan movement'a damgalanır. */
+    machineId?: string | null,
   ): Promise<ApiResponse<{ rollId: string; totalMeters: number; nextStepId: string | null }>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
@@ -2862,6 +2869,7 @@ export class InventoryService {
           workOrderStepId: stepId,
           operationType: RollOperationType.QC2_COMPLETED,
           operatorId: userId ?? null,
+          machineId: machineId ?? null,
           metadata: {
             totalMeters: totalMeters,
             errorCount: errors.length,
@@ -2875,6 +2883,7 @@ export class InventoryService {
           workOrderStepId: stepId,
           operationType: RollOperationType.KURSUN_APPLIED,
           operatorId: userId ?? null,
+          machineId: machineId ?? null,
           metadata: { totalMeters: totalMeters } as Prisma.InputJsonValue,
         });
       }
@@ -2896,6 +2905,9 @@ export class InventoryService {
         data: {
           qtyOut: totalMeters,
           exitedAt: new Date(),
+          // İşin YAPILDIĞI makine kapanışta damgalanır (açılışta makine belirsiz —
+          // movement bir SONRAKİ istasyon için açılır, oradaki makine henüz bilinmez).
+          ...(machineId ? { machineId } : {}),
         },
       });
       if (closedMove.count === 0) {

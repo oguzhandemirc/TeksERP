@@ -476,7 +476,10 @@ export class TamburService {
        *  kartela sevki için kolay bulunsun. Sevki engellemez. */
       markedForKartela?: boolean;
     },
-    userId?: string
+    userId?: string,
+    /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer).
+     *  TAMBUR_PROCESSED op'una + kapanan movement'a damgalanır. */
+    machineId?: string | null
   ): Promise<
     ApiResponse<{
       originalRoll: Roll;
@@ -643,7 +646,8 @@ export class TamburService {
         rollId: data.rollId,
         operationType: { in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED] },
       },
-      select: { workOrderStepId: true, operationType: true, operatorId: true, metadata: true },
+      // machineId: parent'ın işlendiği makine kopyada KORUNUR (yeni damga uygulanmaz).
+      select: { workOrderStepId: true, operationType: true, operatorId: true, metadata: true, machineId: true },
     });
 
     // Cut'lardaki + parent qualityGrade'lerini topla → katalog target status'larını çek.
@@ -891,6 +895,7 @@ export class TamburService {
               workOrderStepId: op.workOrderStepId,
               operationType: op.operationType,
               operatorId: op.operatorId,
+              machineId: op.machineId,
               metadata: op.metadata ?? undefined,
               inheritedFromParentRollId: roll.id,
             })),
@@ -951,6 +956,8 @@ export class TamburService {
             qtyOut: totalQty,
             weightOut: roll.weightKg,
             notes: `TAMBUR_CONSUMED`,
+            // İşin YAPILDIĞI makine kapanışta damgalanır (oturumdan).
+            ...(machineId ? { machineId } : {}),
           },
         });
       }
@@ -987,6 +994,7 @@ export class TamburService {
             workOrderStepId: oldStepId,
             operationType: RollOperationType.TAMBUR_PROCESSED,
             operatorId: userId ?? null,
+            machineId: machineId ?? null,
             createdAt: now,
             metadata: {
               // Planlanan (WO.foldType) — Tambur ekranına bilgi olarak gelir.
@@ -1763,11 +1771,13 @@ export class TamburService {
             in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
           },
         },
+        // machineId: parent'ın işlendiği makine kopyada KORUNUR (yeni damga uygulanmaz).
         select: {
           workOrderStepId: true,
           operationType: true,
           operatorId: true,
           metadata: true,
+          machineId: true,
         },
       });
       if (inheritedOps.length > 0) {
@@ -1777,6 +1787,7 @@ export class TamburService {
             workOrderStepId: op.workOrderStepId,
             operationType: op.operationType,
             operatorId: op.operatorId,
+            machineId: op.machineId,
             metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
             inheritedFromParentRollId: parent.id,
           })),
@@ -2008,11 +2019,13 @@ export class TamburService {
               in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
             },
           },
+          // machineId: parent'ın işlendiği makine kopyada KORUNUR (yeni damga uygulanmaz).
           select: {
             workOrderStepId: true,
             operationType: true,
             operatorId: true,
             metadata: true,
+            machineId: true,
           },
         });
         if (inheritedOps.length > 0) {
@@ -2022,6 +2035,7 @@ export class TamburService {
               workOrderStepId: op.workOrderStepId,
               operationType: op.operationType,
               operatorId: op.operatorId,
+              machineId: op.machineId,
               metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
               inheritedFromParentRollId: parent.id,
             })),
@@ -2241,11 +2255,13 @@ export class TamburService {
             in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
           },
         },
+        // machineId: parent'ın işlendiği makine kopyada KORUNUR (yeni damga uygulanmaz).
         select: {
           workOrderStepId: true,
           operationType: true,
           operatorId: true,
           metadata: true,
+          machineId: true,
         },
       });
       if (inheritedOps.length > 0) {
@@ -2255,6 +2271,7 @@ export class TamburService {
             workOrderStepId: op.workOrderStepId,
             operationType: op.operationType,
             operatorId: op.operatorId,
+            machineId: op.machineId,
             metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
             inheritedFromParentRollId: parent.id,
           })),
@@ -2366,6 +2383,8 @@ export class TamburService {
       foldType?: string | null;
     },
     userId?: string,
+    /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer). */
+    machineId?: string | null,
   ): Promise<ApiResponse<{ rollId: string; remainingChildId: string | null; remainingQty: number }>> {
     const parent = await prisma.roll.findUnique({
       where: { id: openFabricRollId },
@@ -2542,6 +2561,8 @@ export class TamburService {
           qtyOut: parent.initialQty,
           exitedAt: new Date(),
           notes: movementNote,
+          // İşin YAPILDIĞI makine kapanışta damgalanır (oturumdan).
+          ...(machineId ? { machineId } : {}),
         },
       });
 
@@ -2559,6 +2580,7 @@ export class TamburService {
           workOrderStepId: tamburStepId,
           operationType: RollOperationType.TAMBUR_PROCESSED,
           operatorId: userId ?? null,
+          machineId: machineId ?? null,
           metadata: {
             finalizedAt: new Date().toISOString(),
             remainingAction: action,

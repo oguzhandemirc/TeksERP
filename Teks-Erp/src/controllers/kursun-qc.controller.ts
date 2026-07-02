@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { KursunQcService } from "../services/kursun-qc.service";
+import { getStampContext } from "../services/helpers/work-session.helper";
 import "../types/express-augment";
 
 const completeQc2Schema = z.object({
@@ -104,10 +105,13 @@ export class KursunQcController {
   async completeQc2(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = completeQc2Schema.parse(req.body);
+      // Makine atfı önce aktif çalışma oturumundan; oturum yoksa GEÇİŞ fallback'i
+      // cihazın statik ataması (Faz 6'da sökülür — mobil oturum akışı gelince).
+      const stamp = await getStampContext(req);
       const result = await this.service.completeQc2(
         { rollId: body.rollId, stepId: body.stepId, notes: body.notes ?? null },
         req.user?.userId,
-        req.device?.machineId ?? null
+        stamp?.machineId ?? req.device?.machineId ?? null
       );
       res.status(201).json(result);
     } catch (err) {
