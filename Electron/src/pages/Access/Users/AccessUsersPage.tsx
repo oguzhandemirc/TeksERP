@@ -27,6 +27,8 @@ interface UserPayload {
   fullName?: string;
   password?: string;
   isActive?: boolean;
+  /** Yeni kullanıcıya üretim istasyon izinlerini (KK1/KK2/Tambur) otomatik ver. */
+  grantOperatorDefaults?: boolean;
 }
 
 const userMutations = {
@@ -95,8 +97,12 @@ export function AccessUsersPage() {
       isActive: values.isActive,
     };
     if (values.password) payload.password = values.password;
-    if (editing) await updateMut.mutateAsync({ id: editing.id, data: payload });
-    else await createMut.mutateAsync(payload);
+    if (editing) {
+      await updateMut.mutateAsync({ id: editing.id, data: payload });
+    } else {
+      // Yalnız oluşturmada gönder — varsayılan üretim izinleri (KK1/KK2/Tambur).
+      await createMut.mutateAsync({ ...payload, grantOperatorDefaults: values.grantOperatorDefaults });
+    }
     setFormOpen(false);
     setEditing(null);
   };

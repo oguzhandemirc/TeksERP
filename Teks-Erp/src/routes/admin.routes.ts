@@ -77,6 +77,9 @@ const createUserSchema = z.object({
   fullName: z.string().min(1, "Ad-soyad gerekli").max(120),
   password: z.string().min(6, "Şifre en az 6 karakter"),
   isActive: z.boolean().optional(),
+  // Varsayılan üretim istasyon izinlerini (KK1/KK2/Tambur) ver — default true (saha
+  // operatörü). Web/admin kullanıcısı açarken false gönderilir (temiz başlar).
+  grantOperatorDefaults: z.boolean().optional(),
 });
 
 const updateUserSchema = z.object({

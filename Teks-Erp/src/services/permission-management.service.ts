@@ -11,6 +11,18 @@ import bcrypt from "bcryptjs";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 
+/**
+ * Yeni kullanıcının varsayılan olarak aldığı üretim istasyon izinleri (opt-out'lu).
+ * Tabletler yalnız bu üç istasyonda olduğundan yeni operatör KK1↔KK2↔Tambur arası
+ * serbest rotasyon yapabilir; depo/sevkiyat/fason gibi yetkiler bilinçli eklenir.
+ * (Beyin fırtınası kararı — "kayıt olan istasyon yetkilerini alsın".)
+ */
+export const DEFAULT_OPERATOR_PERMISSION_CODES = [
+  "mobile:kk1",
+  "mobile:kk2-kursun",
+  "mobile:tambur",
+] as const;
+
 type GrantInput = {
   permissionId: string;
   validFrom?: Date | null;
@@ -247,7 +259,16 @@ export class PermissionManagementService {
   // handler'ı içinde inline'dı (Routes→Services katman atlama). Tek sahip burası.
   // ---------------------------------------------------------------------------
   static async createUser(
-    input: { username: string; fullName: string; password: string; isActive?: boolean },
+    input: {
+      username: string;
+      fullName: string;
+      password: string;
+      isActive?: boolean;
+      /** Varsayılan üretim istasyon izinlerini (KK1/KK2/Tambur) ver. Default TRUE —
+       *  saha operatörü tabletle çalışabilsin diye. Yalnız web/admin kullanıcısı
+       *  açarken false geçilir (temiz başlar). */
+      grantOperatorDefaults?: boolean;
+    },
     actorUserId: string | undefined
   ) {
     const exists = await prisma.user.findUnique({
@@ -256,6 +277,16 @@ export class PermissionManagementService {
     });
     if (exists) throw AppError.conflict("Bu kullanıcı adı zaten kullanılıyor");
 
+    // Varsayılan üretim izinlerinin permission ID'leri (verilecekse) — kullanıcı
+    // create'iyle aynı tx'te bağlanır ki "yarım kullanıcı" (izinsiz) kalmasın.
+    const grantDefaults = input.grantOperatorDefaults ?? true;
+    const defaultPerms = grantDefaults
+      ? await prisma.permission.findMany({
+          where: { code: { in: [...DEFAULT_OPERATOR_PERMISSION_CODES] } },
+          select: { id: true, code: true },
+        })
+      : [];
+
     const passwordHash = await bcrypt.hash(input.password, 10);
     const user = await prisma.user.create({
       data: {
@@ -263,6 +294,16 @@ export class PermissionManagementService {
         fullName: input.fullName,
         passwordHash,
         isActive: input.isActive ?? true,
+        ...(defaultPerms.length
+          ? {
+              permissions: {
+                create: defaultPerms.map((p) => ({
+                  permissionId: p.id,
+                  grantedById: actorUserId ?? null,
+                })),
+              },
+            }
+          : {}),
       },
       select: USER_SELECT,
     });
@@ -272,7 +313,12 @@ export class PermissionManagementService {
       action: "CREATE",
       tableName: "users",
       recordId: user.id,
-      newData: { username: user.username, fullName: user.fullName, isActive: user.isActive },
+      newData: {
+        username: user.username,
+        fullName: user.fullName,
+        isActive: user.isActive,
+        defaultPermissions: defaultPerms.map((p) => p.code),
+      },
     });
 
     return user;

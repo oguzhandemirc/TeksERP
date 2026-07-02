@@ -123,6 +123,13 @@ async function main() {
       description: "Tüm web + mobil + admin yetkileri",
       codes: permissionData.map((p) => p.code),
     },
+    {
+      // Yeni kullanıcının varsayılan aldığı üretim paketi (KK1↔KK2↔Tambur rotasyonu).
+      // createUser bunu otomatik verir; şablon admin'in sonradan tek tıkla uygulaması için.
+      name: "Mobil — Üretim Operatörü",
+      description: "KK1 + Kurşun/KK2 + Tambur (varsayılan istasyon rotasyonu)",
+      codes: ["mobile:kk1", "mobile:kk2-kursun", "mobile:tambur"],
+    },
     { name: "Mobil — KK1 Operatörü",         description: "Ham kumaş kabul ekranı",         codes: ["mobile:kk1"] },
     { name: "Mobil — KK2/Kurşun Operatörü",  description: "Kurşun + QC2 ekranı",            codes: ["mobile:kk2-kursun"] },
     { name: "Mobil — Tambur Operatörü",      description: "Tambur karar / kesim ekranı",    codes: ["mobile:tambur"] },
