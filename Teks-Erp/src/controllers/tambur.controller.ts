@@ -173,7 +173,7 @@ export class TamburController {
       const id = req.params.id as string;
       const body = finalizeOpenFabricSchema.parse(req.body);
       // Makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
-      const stamp = await getStampContext(req);
+      const stamp = await getStampContext(req, { enforceForMobile: true });
       const result = await this.service.finalizeOpenFabric(
         id,
         body,
@@ -309,7 +309,7 @@ export class TamburController {
     try {
       const body = finalizeSchema.parse(req.body);
       // Makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
-      const stamp = await getStampContext(req);
+      const stamp = await getStampContext(req, { enforceForMobile: true });
       const result = await this.service.finalize(
         body,
         req.user?.userId,

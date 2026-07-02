@@ -1,17 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
 import { peripheralService, type DevicePeripheral } from '../services/peripheral.service';
+import { useSessionStore } from '../store/sessionStore';
 
 // =============================================================================
-// Tablet kendi makinesine SABİT cihazları (METER/SCALE) backend'den çözer
-// (req.device.machineId üzerinden). Eşleşme/atama yoksa boş liste → çağıran net
-// hata gösterir. Cihaz seçimi artık device-local DEĞİL — admin Cihaz Kaydı'nda.
+// AKTİF ÇALIŞMA OTURUMUNUN YERİNE sabit cihazlar (METER/SCALE) backend'den
+// çözülür (for-session): makine-oturumu → makine donanımı, makinesiz istasyon-
+// oturumu (SHIPPING) → istasyon donanımı. Oturum yoksa hiç sorulmaz (fail-closed;
+// SessionGate zaten yer onayı ister). queryKey oturum id'siyle anahtarlı —
+// operatör makine değiştirince donanım kendiliğinden tazelenir.
+// Cihaz seçimi device-local DEĞİL — admin Makine/Donanım kaydında.
 // =============================================================================
 
 export function useMachinePeripherals(kind: 'METER' | 'SCALE'): DevicePeripheral[] {
+  const sessionId = useSessionStore((s) => s.active?.id ?? null);
   const q = useQuery({
-    queryKey: ['peripherals', 'for-device', kind],
-    queryFn: () => peripheralService.getForDevice(kind),
+    queryKey: ['peripherals', 'for-session', kind, sessionId],
+    queryFn: () => peripheralService.getForSession(kind),
     staleTime: 5 * 60 * 1000,
+    enabled: sessionId != null,
   });
   return q.data ?? [];
 }

@@ -218,7 +218,7 @@ export class DeviceService {
   static async resolveDevice(deviceId: string) {
     const device = await prisma.device.findUnique({
       where: { deviceId },
-      select: { id: true, deviceId: true, name: true, machineId: true, isActive: true, status: true },
+      select: { id: true, deviceId: true, name: true, machineId: true, kind: true, isActive: true, status: true },
     });
     if (!device || !device.isActive || device.status !== "APPROVED") return null;
     const now = Date.now();

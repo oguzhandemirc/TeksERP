@@ -22,6 +22,9 @@ declare module "express-serve-static-core" {
       deviceId: string;
       name: string;
       machineId: string | null;
+      /** TABLET / PHONE / DESKTOP — çalışma oturumu zorunluluğu yalnız saha
+       *  cihazlarına (TABLET/PHONE) uygulanır; DESKTOP (Electron) muaf. */
+      kind: string;
     };
   }
 }

@@ -69,6 +69,7 @@ export const resolveDevice = async (
       deviceId: device.deviceId,
       name: device.name,
       machineId: device.machineId,
+      kind: device.kind,
     };
     touchDevice(device.deviceId); // anlık "bağlı cihaz" izleme (bellekte)
   } catch {

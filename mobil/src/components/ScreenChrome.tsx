@@ -5,7 +5,9 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
+import { useSessionStore } from '../store/sessionStore';
 import { usePermissions } from '../hooks/usePermission';
+import PlaceChip from './session/PlaceChip';
 import type { MainStackParamList, RootStackParamList } from '../navigation/types';
 
 interface Props {
@@ -46,7 +48,13 @@ export default function ScreenChrome({
   };
   const doLogout = () => {
     setMenuVisible(false);
-    void clearAuth();
+    void (async () => {
+      // Önce çalışma oturumunu kapat (LOGOUT — ayak izi temiz biter; token henüz
+      // geçerliyken). Offline'da best-effort: yerel state yine sıfırlanır.
+      await useSessionStore.getState().closeSession();
+      useSessionStore.getState().reset();
+      await clearAuth();
+    })();
   };
 
   return (
@@ -72,6 +80,10 @@ export default function ScreenChrome({
             </Text>
           )}
         </View>
+
+        {/* Yer çipi — yalnız oturumlu ekranlarda görünür (route'a göre kendisi karar
+            verir); dokununca yer değiştirme modalı (PlaceConfirmView) açılır. */}
+        <PlaceChip />
 
         {/* Ekran-spesifik tetikleyici — profilden önce, profil en sağda kalsın */}
         {headerExtras}

@@ -81,7 +81,11 @@ async function main() {
     check("getStampContext (web, req.device yok) → null", (await getStampContext({})) === null);
     check("getStampContext (oturumsuz cihaz) → null", (await getStampContext(reqOf(device))) === null);
     await expectErr("enforceForMobile → WORK_SESSION_REQUIRED", "aktif çalışma oturumu yok", () =>
-      getStampContext(reqOf(device), { enforceForMobile: true }));
+      getStampContext({ device: { id: device.id, kind: "TABLET" } }, { enforceForMobile: true }));
+    check(
+      "DESKTOP (Electron) enforce'tan MUAF → null",
+      (await getStampContext({ device: { id: device.id, kind: "DESKTOP" } }, { enforceForMobile: true })) === null,
+    );
 
     await WorkSessionService.open({ userId: admin.id, deviceRowId: device.id, machineId: kk1Machine.id });
     const stamp1 = await getStampContext(reqOf(device));

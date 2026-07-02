@@ -1,7 +1,15 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { MainStackParamList } from './types';
 import { usePermissions } from '../hooks/usePermission';
+import { useSessionStore } from '../store/sessionStore';
+import { withWorkSession } from '../components/session/SessionGate';
+import {
+  SCREEN_BY_STATION_KIND,
+  isSessionScreen,
+  isSessionStationKind,
+} from '../constants/stationScreens';
 import ModuleSelectScreen from '../screens/Common/ModuleSelectScreen';
 import type { MobileScreenKey } from '../types/permissions';
 
@@ -24,13 +32,56 @@ const SCREEN_LOADERS: Record<MobileScreenKey, () => React.ComponentType<any>> = 
   HizliIsEmri: () => require('../screens/Modules/HizliIsEmri/HizliIsEmriScreen').default,
 };
 
+// Oturumlu ekranlar (KK1/KursunQc/Tambur/TartiPaket) SessionGate ile sarılır —
+// yer onayı olmadan ekran render edilmez (fail-closed). Sarılmış bileşen modül
+// kapsamında BİR KEZ üretilir (her render'da yeni tip → remount olmasın).
+const GATED_COMPONENTS: Partial<Record<MobileScreenKey, React.ComponentType<any>>> = {};
+function componentLoaderFor(key: MobileScreenKey): () => React.ComponentType<any> {
+  if (!isSessionScreen(key)) return SCREEN_LOADERS[key];
+  return () => {
+    if (!GATED_COMPONENTS[key]) {
+      GATED_COMPONENTS[key] = withWorkSession(key, SCREEN_LOADERS[key]);
+    }
+    return GATED_COMPONENTS[key]!;
+  };
+}
+
 export default function MainNavigator() {
   const { allowedScreens, hasMultipleMobileScreens } = usePermissions();
+  const hasSessionScreens = allowedScreens.some((s) => isSessionScreen(s.key));
+  const sessionLoaded = useSessionStore((s) => s.isLoaded);
+  const active = useSessionStore((s) => s.active);
+  const lastPlace = useSessionStore((s) => s.lastPlace);
 
-  // Tek ekran yetkisi varsa direkt o ekrana git, ModuleSelect'i atla
-  const initialRouteName: keyof MainStackParamList = hasMultipleMobileScreens
+  // Oturum durumu login SONRASI yüklenir (auth'suz çağrı 401 üretirdi). Gezici
+  // kullanıcı (oturumlu ekranı yok) hiç sorgulamaz — yer sorusu görmez.
+  useEffect(() => {
+    if (hasSessionScreens && !useSessionStore.getState().isLoaded) {
+      void useSessionStore.getState().init();
+    }
+  }, [hasSessionScreens]);
+
+  if (hasSessionScreens && !sessionLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
+        <ActivityIndicator size="large" color="#4f46e5" />
+      </View>
+    );
+  }
+
+  // Tek ekran yetkisi varsa direkt o ekrana git, ModuleSelect'i atla.
+  let initialRouteName: keyof MainStackParamList = hasMultipleMobileScreens
     ? 'ModuleSelect'
     : (allowedScreens[0]?.key ?? 'ModuleSelect');
+
+  // Login-sonrası kısayol: aktif oturum ya da cihazın SON yeri izinli bir oturumlu
+  // ekrana işaret ediyorsa doğrudan o ekran açılır — gate tek dokunuş onayı gösterir
+  // (yer = ekran; operatör ModuleSelect'te ekran aramaz).
+  const hintKind = active?.station.kind ?? lastPlace?.station.kind;
+  if (isSessionStationKind(hintKind)) {
+    const target = SCREEN_BY_STATION_KIND[hintKind];
+    if (allowedScreens.some((s) => s.key === target)) initialRouteName = target;
+  }
 
   return (
     <Stack.Navigator
@@ -52,7 +103,7 @@ export default function MainNavigator() {
         />
       )}
       {allowedScreens.map((s) => (
-        <Stack.Screen key={s.key} name={s.key} getComponent={SCREEN_LOADERS[s.key]} />
+        <Stack.Screen key={s.key} name={s.key} getComponent={componentLoaderFor(s.key)} />
       ))}
       {/* Alt sayfalar — Tartı/Paket & Sevkiyat'tan push edilir (modül değil, yetki-bağımsız). */}
       <Stack.Screen

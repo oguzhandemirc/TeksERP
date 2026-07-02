@@ -7,8 +7,8 @@ import { useAuthStore } from '../store/authStore';
 import { useDeviceStore } from '../store/deviceStore';
 import { useBaseUrlStore } from '../store/baseUrlStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
-import { useBtPrinterStore } from '../store/btPrinterStore';
-import { setUnauthorizedHandler } from '../services/api';
+import { useSessionStore } from '../store/sessionStore';
+import { setUnauthorizedHandler, setWorkSessionRequiredHandler } from '../services/api';
 import { deviceService } from '../services/device.service';
 import { getOrCreateDeviceId } from '../utils/deviceId';
 import { usePermissions } from '../hooks/usePermission';
@@ -33,7 +33,6 @@ export default function RootNavigator() {
   const initBaseUrl = useBaseUrlStore((s) => s.init);
   const baseUrlLoaded = useBaseUrlStore((s) => s.isLoaded);
   const initDeviceSettings = useDeviceSettingsStore((s) => s.init);
-  const initBtPrinter = useBtPrinterStore((s) => s.init);
   const { hasAnyMobileScreen } = usePermissions();
 
   // Cihaz onayı/ataması zorunlu mu? Public gate (login öncesi). false (default) →
@@ -57,15 +56,22 @@ export default function RootNavigator() {
     void initBaseUrl();
     void initDevice();
     void initDeviceSettings();
-    void initBtPrinter();
     loadStoredAuth();
     // Tablet kendini bildirir (bilinmiyorsa PENDING kaydı açılır → admin onaylar+atar).
     void getOrCreateDeviceId().then((deviceId) =>
       deviceService.announce({ deviceId }).catch(() => undefined),
     );
     setUnauthorizedHandler(() => {
-      // 401 → sadece kullanıcıyı çıkar, atamayı koru.
+      // 401 → sadece kullanıcıyı çıkar, atamayı koru. Çalışma oturumu state'i de
+      // sıfırlanır — yeni giriş taze GET current ile yükler (sunucudaki açık oturum
+      // yeni girişte NEW_LOGIN ile devrolur, kaybolmaz).
+      useSessionStore.getState().reset();
       void clearAuth();
+    });
+    // 409 WORK_SESSION_REQUIRED (idle/devralındı/panelden kapatıldı) → yerel oturumu
+    // düşür; SessionGate yer onayını yeniden ister (login'e ATMAZ).
+    setWorkSessionRequiredHandler(() => {
+      useSessionStore.getState().clearActive();
     });
   }, []);
 

@@ -107,7 +107,7 @@ export class KursunQcController {
       const body = completeQc2Schema.parse(req.body);
       // Makine atfı önce aktif çalışma oturumundan; oturum yoksa GEÇİŞ fallback'i
       // cihazın statik ataması (Faz 6'da sökülür — mobil oturum akışı gelince).
-      const stamp = await getStampContext(req);
+      const stamp = await getStampContext(req, { enforceForMobile: true });
       const result = await this.service.completeQc2(
         { rollId: body.rollId, stepId: body.stepId, notes: body.notes ?? null },
         req.user?.userId,

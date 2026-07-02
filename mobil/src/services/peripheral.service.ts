@@ -41,13 +41,26 @@ export const peripheralService = {
       .post<ApiResponse<unknown>>('/peripherals/register-bt', input)
       .then((r) => r.data),
 
-  /** Tablet auto-discovery: kendi makinesinin türe göre aktif cihazları. */
+  /** Tablet auto-discovery: kendi makinesinin türe göre aktif cihazları.
+   *  @deprecated for-session'a geçildi (Faz 3) — Faz 6'da backend ucuyla birlikte kalkar. */
   getForDevice: (
     kind: 'METER' | 'SCALE' | 'LABEL_PRINTER' | 'SIGNAL_SOURCE',
   ): Promise<DevicePeripheral[]> =>
     apiClient
       .get<ApiResponse<DevicePeripheral[]>>(
         `/peripherals/for-device?kind=${encodeURIComponent(kind)}`,
+      )
+      .then((r) => r.data?.data ?? []),
+
+  /** OTURUM-KAPSAMLI çözüm: aktif çalışma oturumunun YERİNE (makine/istasyon) sabit
+   *  cihazlar. Oturum yoksa backend BOŞ liste döner (fail-closed — sim/manuel'e
+   *  düşülmez, SessionGate zaten yer onayı ister). */
+  getForSession: (
+    kind: 'METER' | 'SCALE' | 'LABEL_PRINTER' | 'SIGNAL_SOURCE',
+  ): Promise<DevicePeripheral[]> =>
+    apiClient
+      .get<ApiResponse<DevicePeripheral[]>>(
+        `/peripherals/for-session?kind=${encodeURIComponent(kind)}`,
       )
       .then((r) => r.data?.data ?? []),
 };

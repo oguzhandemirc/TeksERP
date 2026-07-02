@@ -19,6 +19,16 @@ export const setUnauthorizedHandler = (fn: () => void) => {
   onUnauthorized = fn;
 };
 
+// 409 WORK_SESSION_REQUIRED → çalışma oturumu düştü (idle / devralındı / panelden
+// kapatıldı). Handler yerel oturumu temizler → SessionGate yeniden yer onayı ister;
+// operatör onaylayıp işlemi tekrarlar. (Import döngüsü olmasın diye kayıt deseni —
+// sessionStore bu dosyayı dolaylı import ediyor.)
+let onWorkSessionRequired: (() => void) | null = null;
+let lastSessionToastAt = 0;
+export const setWorkSessionRequiredHandler = (fn: () => void) => {
+  onWorkSessionRequired = fn;
+};
+
 apiClient.interceptors.request.use(async (config) => {
   // baseURL'i her istekte store'dan oku — kullanıcı Settings'ten değiştirdiğinde
   // restart gerekmeden anında geçer.
@@ -59,6 +69,26 @@ apiClient.interceptors.response.use(
         });
       }
       onUnauthorized();
+    }
+
+    // Çalışma oturumu düştü (idle / başka cihaz devraldı / panelden kapatıldı) —
+    // kullanıcı OTURUMU değil YER onayını kaybetti: login'e atmayız, gate yer sorar.
+    if (
+      status === 409 &&
+      error.response?.data?.details?.code === 'WORK_SESSION_REQUIRED' &&
+      onWorkSessionRequired
+    ) {
+      const now = Date.now();
+      if (now - lastSessionToastAt > 5000) {
+        lastSessionToastAt = now;
+        Toast.show({
+          type: 'info',
+          text1: 'Çalışma oturumu kapandı',
+          text2: 'Makine/istasyon onayını yenileyin — işlem kaydedilmedi, onaydan sonra tekrarlayın.',
+          visibilityTime: 6000,
+        });
+      }
+      onWorkSessionRequired();
     }
 
     // K-A3 fix: backend mesajı yoksa ham axios İngilizcesi ('Network Error',

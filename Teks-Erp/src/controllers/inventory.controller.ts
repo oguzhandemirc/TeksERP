@@ -139,7 +139,7 @@ export class InventoryController {
       const id = req.params.id as string;
       const body = kursunFinishSchema.parse(req.body);
       // Makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
-      const stamp = await getStampContext(req);
+      const stamp = await getStampContext(req, { enforceForMobile: true });
       const result = await this.service.kursunFinish(
         id,
         body,
@@ -177,7 +177,7 @@ export class InventoryController {
     try {
       const body = initialEntrySchema.parse(req.body);
       // KK1 makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
-      const stamp = await getStampContext(req);
+      const stamp = await getStampContext(req, { enforceForMobile: true });
       const result = await this.service.createInitialEntry(
         body,
         req.user?.userId,

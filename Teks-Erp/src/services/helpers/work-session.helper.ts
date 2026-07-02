@@ -65,19 +65,21 @@ export interface StampContext {
 /**
  * İstekteki cihazın aktif oturumundan damga bağlamını çözer (üretim atfı:
  * RollOperation/RollMovement.machineId, Roll.createdMachineId). Kurallar:
- * - req.device yok (web/Electron) → null; işlem oturumsuz devam eder (machineId=null).
- * - Aktif oturum yok/idle düştü → null; `enforceForMobile` açıksa (Faz 3'te açılır)
- *   409 WORK_SESSION_REQUIRED — mobil interceptor yer onayı ekranını yeniden açar.
+ * - req.device yok (web) → null; işlem oturumsuz devam eder (machineId=null).
+ * - Aktif oturum yok/idle düştü → null; `enforceForMobile` açıksa 409
+ *   WORK_SESSION_REQUIRED — mobil interceptor yer onayı ekranını yeniden açar.
+ *   DESKTOP (Electron) cihazlar zorunluluktan MUAF — panel akışları oturumsuz
+ *   çalışır (Electron da x-device-id gönderir; kind ayrımı bu yüzden şart).
  * - Tx DIŞINDA çağrılmalı (tx süresi kısa kuralı) — indexed tek sorgu + tembel idle.
  */
 export async function getStampContext(
-  req: { device?: { id: string } },
+  req: { device?: { id: string; kind?: string } },
   opts?: { enforceForMobile?: boolean },
 ): Promise<StampContext | null> {
   if (!req.device) return null;
   const session = await resolveActiveSession(req.device.id);
   if (!session) {
-    if (opts?.enforceForMobile) {
+    if (opts?.enforceForMobile && req.device.kind !== "DESKTOP") {
       throw AppError.conflict(
         "Bu cihazda aktif çalışma oturumu yok — önce makine/istasyon onayı verin",
         { code: "WORK_SESSION_REQUIRED" },

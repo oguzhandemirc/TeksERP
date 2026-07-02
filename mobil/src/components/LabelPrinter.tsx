@@ -4,7 +4,8 @@ import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { labelService } from '../services/label.service';
 import { apiClient } from '../services/api';
-import { useBtPrinterStore } from '../store/btPrinterStore';
+import { peripheralService } from '../services/peripheral.service';
+import { useSessionStore } from '../store/sessionStore';
 import { isBtPrinterSupported, printRaw, ensurePrinterPaired } from '../services/btPrinter.service';
 import type { Roll } from '../types/models';
 
@@ -80,20 +81,33 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
         console.warn('Etiket snapshot kaydı başarısız', (e as Error).message);
       });
 
-      // BT yazıcı seçili + bu derlemede destekleniyorsa PPLA→Bluetooth; yoksa
-      // HTML→expo-print (OS yazıcı diyaloğu / PDF). Seçimi fire anında okuruz
-      // (effect deps'i şişirmemek için getState).
-      const btPrinter = useBtPrinterStore.getState().printer;
-      const viaBt = btPrinter != null && isBtPrinterSupported();
-      // BT yazıcı seçili + bu derlemede destekleniyorsa operatör DİYALOGSUZ baskı
-      // bekliyor (KK1 peş peşe top akışı — "arada yazdırma ekranı çıkmasın"). Bu
-      // modda HTML/expo-print diyaloğuna ASLA düşme: başarısızlık sessizce yazdırma
-      // ekranı açmak yerine GÖRÜNÜR hata olsun. expo-print yalnız BT yazıcı YOKKEN
-      // (donanımsız/legacy kurulum) devreye girer.
+      // Yazıcı OPERATÖR SEÇİMİ DEĞİL — aktif çalışma oturumunun YERİNE bağlı
+      // BT yazıcı backend'den çözülür (for-session; fail-closed: oturum yoksa /
+      // yerde SPP yazıcı tanımlı değilse BT yolu hiç denenmez). Oturumlu ekranlar
+      // (KK1/Tambur) gate sayesinde her zaman oturumludur; gezici ekranlar (Depo)
+      // doğal olarak HTML/expo-print'e düşer. NETWORK_TCP yazıcılar bu yoldan
+      // BASILMAZ (backend print-native ayrı akış) — yalnız BLUETOOTH_SPP device-direct.
+      let btPrinterAddr: string | null = null;
+      if (isBtPrinterSupported() && useSessionStore.getState().active != null) {
+        try {
+          const printers = await peripheralService.getForSession('LABEL_PRINTER');
+          const spp = printers.find(
+            (p) => p.connectionType === 'BLUETOOTH_SPP' && !!p.address && !p.simulate,
+          );
+          btPrinterAddr = spp?.address ?? null;
+        } catch {
+          btPrinterAddr = null; // çözüm hatası → HTML yoluna düş (aşağıda)
+        }
+      }
+      const viaBt = btPrinterAddr != null;
+      // Yerde BT yazıcı tanımlıysa operatör DİYALOGSUZ baskı bekliyor (KK1 peş
+      // peşe top akışı — "arada yazdırma ekranı çıkmasın"). Bu modda HTML/expo-print
+      // diyaloğuna ASLA düşme: başarısızlık sessizce yazdırma ekranı açmak yerine
+      // GÖRÜNÜR hata olsun. expo-print yalnız BT yazıcı YOKKEN devreye girer.
       const directOnly = viaBt;
       let usedBt = false;
       try {
-        if (viaBt && btPrinter) {
+        if (viaBt && btPrinterAddr) {
           // Cihazın diline göre native (PPLA/PPLB/ZPL) — kayıttaki yazıcı belirler
           // (backend resolveLabelRouting; cihaz kaydı yoksa global/model). kind:
           // KK1 ham / Tambur bitmiş paritesi.
@@ -108,8 +122,8 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
           }
           // İlk baskıda otomatik eşleştir (bond yoksa) — Bluetooth ayarlarına girmeden.
           // Zaten eşleşikse no-op; değilse Android PIN'i bir kez sorar, sonra basar.
-          await ensurePrinterPaired(btPrinter.address);
-          await printRaw(btPrinter.address, native.content);
+          await ensurePrinterPaired(btPrinterAddr);
+          await printRaw(btPrinterAddr, native.content);
           usedBt = true;
         }
         if (!usedBt && !directOnly) {
