@@ -26,6 +26,9 @@ interface Props<T extends { id: string }> {
   extraFilters?: Record<string, string>;
   /** Toolbar yanında render edilecek ek UI (filtre dropdown'ları vb.). */
   filterBar?: ReactNode;
+  /** Sayfa başlığındaki aksiyonların SOLUNA (Yenile'den önce) eklenecek ek buton(lar) —
+   * başka sayfaya götüren bağlantılar gibi tablo-dışı eylemler için. */
+  headerExtra?: ReactNode;
   /** Kayıt yokken "Yeni" butonunu glow animasyonuyla vurgula. */
   glowWhenEmpty?: boolean;
   /** Üst PageHeader'ı gizle (bir sekmeye gömülürken çift başlığı önler) —
@@ -51,6 +54,7 @@ export function CrudPage<T extends { id: string }>({
   writePermission,
   extraFilters,
   filterBar,
+  headerExtra,
   glowWhenEmpty,
   hideHeader,
   renderForm,
@@ -147,6 +151,7 @@ export function CrudPage<T extends { id: string }>({
 
   const headerActions = (
     <>
+      {headerExtra}
       <RefreshButton queryKey={queryKey} />
       <PermissionGate permission={writePermission}>
         <Button

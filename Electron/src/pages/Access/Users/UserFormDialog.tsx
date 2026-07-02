@@ -14,7 +14,6 @@ export const userFormSchema = z.object({
     .regex(/^[a-zA-Z0-9._-]+$/, "Yalnız İngilizce harf, rakam, . _ - (boşluk/Türkçe karakter yok)"),
   fullName: z.string().min(1, "Ad-soyad gerekli").max(120),
   password: z.string().min(6, "En az 6 karakter").optional().or(z.literal("")),
-  isActive: z.boolean(),
   // Yeni kullanıcıya üretim istasyon izinlerini (KK1/KK2/Tambur) otomatik ver.
   grantOperatorDefaults: z.boolean(),
 });
@@ -32,8 +31,8 @@ interface Props {
 export function UserFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
   const isEdit = Boolean(initial);
   const defaults: UserFormValues = initial
-    ? { username: initial.username, fullName: initial.fullName, password: "", isActive: initial.isActive, grantOperatorDefaults: false }
-    : { username: "", fullName: "", password: "", isActive: true, grantOperatorDefaults: true };
+    ? { username: initial.username, fullName: initial.fullName, password: "", grantOperatorDefaults: false }
+    : { username: "", fullName: "", password: "", grantOperatorDefaults: true };
 
   return (
     <EntityFormDialog<UserFormValues>
@@ -81,9 +80,6 @@ export function UserFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
               <Input id="password" type="password" autoComplete="new-password" {...form.register("password")} />
             </FormField>
           )}
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" {...form.register("isActive")} /> Aktif
-          </label>
           {!isEdit && (
             <label className="flex items-start gap-2 rounded-md border bg-muted/20 p-2.5 text-sm">
               <input type="checkbox" className="mt-0.5" {...form.register("grantOperatorDefaults")} />

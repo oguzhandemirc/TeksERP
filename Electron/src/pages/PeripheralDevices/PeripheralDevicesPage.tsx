@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Printer } from "lucide-react";
+import { Printer, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { peripheralColumns } from "./columns";
@@ -26,16 +26,19 @@ export function PeripheralDevicesPage() {
       columns={peripheralColumns}
       writePermission="station:write"
       searchPlaceholder="Ad / kod / adres ara..."
-      filterBar={
+      headerExtra={
         // Yazıcı Modelleri kataloğunun tek görünür girişi — Tanımlar hub'ı 4-kart
-        // sade modelinde kalsın diye ayrı kart yerine buradan ulaşılır.
+        // sade modelinde kalsın diye ayrı kart yerine buradan ulaşılır. Renk + ok:
+        // tablo eylemi değil, başka sayfaya bağlantı.
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
           onClick={() => navigate("/definitions/printer-models")}
         >
-          <Printer className="mr-1 h-4 w-4" /> Yazıcı Modelleri
+          <Printer className="h-4 w-4" /> Yazıcı Modelleri
+          <ArrowUpRight className="h-3.5 w-3.5" />
         </Button>
       }
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (

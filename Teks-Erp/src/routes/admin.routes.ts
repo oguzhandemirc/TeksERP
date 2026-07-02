@@ -93,7 +93,8 @@ const createUserSchema = z.object({
 
 const updateUserSchema = z.object({
   fullName: z.string().min(1).max(120).optional(),
-  isActive: z.boolean().optional(),
+  // isActive ARTIK burada YOK — aktiflik yalnız deactivate/reactivate/delete
+  // uçlarından yönetilir (guard'lar + oturum düşürme orada).
 });
 
 /**

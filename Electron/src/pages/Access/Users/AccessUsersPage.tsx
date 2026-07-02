@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, ShieldCheck, Trash2, Power, PowerOff } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Trash2, Power, PowerOff, Eye, EyeOff } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -28,7 +28,6 @@ interface UserPayload {
   username?: string;
   fullName?: string;
   password?: string;
-  isActive?: boolean;
   /** Yeni kullanıcıya üretim istasyon izinlerini (KK1/KK2/Tambur) otomatik ver. */
   grantOperatorDefaults?: boolean;
   /** Mobil kimlik (hızlı PIN + QR kart) otomatik üret (oluşturma-sonrası modal gösterir). */
@@ -59,6 +58,8 @@ export function AccessUsersPage() {
   const [permissionsFor, setPermissionsFor] = useState<AdminUserListItem | null>(null);
   const [detailTab, setDetailTab] = useState<"permissions" | "quick-pin">("permissions");
   const [deletingUser, setDeletingUser] = useState<AdminUserListItem | null>(null);
+  // Pasifleri (isActive=false) listede göster/gizle — varsayılan gizli (temiz liste).
+  const [showInactive, setShowInactive] = useState(false);
   // Yeni kullanıcı oluşturulunca açılan "kimlik kartı" (etkin yöntemlerin kimlikleri).
   const [newCreds, setNewCreds] = useState<{ user: AdminUserListItem; password?: string } | null>(null);
   const enabledMethods = useEnabledLoginMethods();
@@ -70,16 +71,22 @@ export function AccessUsersPage() {
     staleTime: 0,
   });
 
-  // Backend silinmişleri (deletedAt) zaten gizler; pasif (isActive=false) kayıtlar
-  // GÖRÜNÜR (aktifleştirilebilsin). Aktifler önce (backend sıralar).
+  // Backend silinmişleri (deletedAt) zaten gizler. Pasifler yalnız "Pasifleri göster"
+  // açıkken görünür (aktifleştirilebilsin); varsayılan yalnız aktifler.
   const filtered = useMemo(() => {
-    const list = query.data?.data ?? [];
+    let list = query.data?.data ?? [];
+    if (!showInactive) list = list.filter((u) => u.isActive);
     if (!search) return list;
     const q = search.toLowerCase();
     return list.filter(
       (u) => u.username.toLowerCase().includes(q) || u.fullName.toLowerCase().includes(q),
     );
-  }, [query.data, search]);
+  }, [query.data, search, showInactive]);
+
+  const inactiveCount = useMemo(
+    () => (query.data?.data ?? []).filter((u) => !u.isActive).length,
+    [query.data],
+  );
 
   const invalidate = () => qc.invalidateQueries({ queryKey: [QUERY_KEY] });
 
@@ -135,10 +142,11 @@ export function AccessUsersPage() {
   });
 
   const onSubmit = async (values: UserFormValues) => {
+    // isActive ARTIK formdan yönetilmez — aktiflik yalnız Pasife Al / Aktifleştir
+    // butonlarından (guard'lı uçlar). Yeni kullanıcı zaten aktif doğar.
     const payload: UserPayload = {
       username: values.username,
       fullName: values.fullName,
-      isActive: values.isActive,
     };
     if (values.password) payload.password = values.password;
     if (editing) {
@@ -186,6 +194,19 @@ export function AccessUsersPage() {
           placeholder="Kullanıcı adı veya ad soyad ara..."
           className="h-8 w-64 text-sm"
         />
+        <Button
+          variant={showInactive ? "secondary" : "ghost"}
+          size="sm"
+          className="h-8 gap-1"
+          onClick={() => setShowInactive((v) => !v)}
+          title="Pasife alınmış kullanıcıları göster/gizle"
+        >
+          {showInactive ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          Pasifleri göster
+          {inactiveCount > 0 && (
+            <Badge variant="muted" className="ml-1">{inactiveCount}</Badge>
+          )}
+        </Button>
       </div>
 
       <div className="flex-1 overflow-auto">
@@ -219,7 +240,7 @@ export function AccessUsersPage() {
               </TableRow>
             ) : (
               filtered.map((user) => (
-                <TableRow key={user.id}>
+                <TableRow key={user.id} className={user.isActive ? undefined : "opacity-60"}>
                   <TableCell className="font-mono text-xs">{user.username}</TableCell>
                   <TableCell>{user.fullName}</TableCell>
                   <TableCell>

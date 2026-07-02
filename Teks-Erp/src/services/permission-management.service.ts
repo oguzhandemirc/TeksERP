@@ -351,27 +351,22 @@ export class PermissionManagementService {
 
   static async updateUser(
     id: string,
-    input: { fullName?: string; isActive?: boolean },
+    input: { fullName?: string },
     actorUserId: string | undefined
   ) {
     const existing = await prisma.user.findUnique({
       where: { id },
-      select: USER_SELECT,
+      select: { ...USER_SELECT, deletedAt: true },
     });
     if (!existing) throw AppError.notFound("Kullanıcı bulunamadı");
-
-    // M-32: self-deactivation guard'ı SERVİSTE (tek kaynak) — eskiden yalnız
-    // DELETE route'undaydı; Electron edit formu PATCH isActive:false ile bu
-    // yoldan geçiyor ve tek admin:users kullanıcısı kendini kilitleyebiliyordu
-    // (kurtarma DB müdahalesi).
-    if (input.isActive === false) {
-      this.assertNotSelfDeactivation(id, actorUserId);
-      await this.assertNotLastActiveAdmin(id);
-    }
+    // Aktiflik ARTIK burada değişmez — yalnız deactivate/reactivate/delete uçlarından
+    // (guard'lar + oturum düşürme + silme-koruması orada). Düzenleme salt fullName.
+    // Silinmiş kayıt düzenlenemez (yalnız geçmiş için durur).
+    if (existing.deletedAt) throw AppError.badRequest("Silinmiş kullanıcı düzenlenemez");
 
     const user = await prisma.user.update({
       where: { id },
-      data: input,
+      data: { ...(input.fullName !== undefined ? { fullName: input.fullName } : {}) },
       select: USER_SELECT,
     });
 
