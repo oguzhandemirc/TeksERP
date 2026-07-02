@@ -34,11 +34,13 @@ const COLORS = {
 
 const PIN_LENGTH = 6;
 
-/** Giriş yöntemi etiket/ikonları — yöntem değiştirici butonları. */
-const METHOD_META: Record<LoginMethod, { label: string; icon: string }> = {
-  list: { label: 'Kullanıcı + Şifre', icon: 'account-key' },
-  pin: { label: 'Hızlı PIN', icon: 'dialpad' },
-  card: { label: 'QR Personel Kartı', icon: 'card-account-details-outline' },
+/** Giriş yöntemi etiket/ikon/renkleri — yöntem değiştirici butonları. Renkler
+ *  BİLEREK birbirinden uzak tonlar: fabrikada uzaktan/eldivenle tek bakışta
+ *  ayırt edilebilsin (indigo=şifre, teal=hızlı PIN, amber=QR kart). */
+const METHOD_META: Record<LoginMethod, { label: string; icon: string; color: string }> = {
+  list: { label: 'Kullanıcı + Şifre', icon: 'account-key', color: '#4f46e5' },
+  pin: { label: 'Hızlı PIN', icon: 'dialpad', color: '#0d9488' },
+  card: { label: 'QR Personel Kartı', icon: 'qrcode-scan', color: '#d97706' },
 };
 
 type Cell = { key: string; type: 'digit' | 'backspace' | 'empty' };
@@ -484,13 +486,16 @@ export default function LoginScreen() {
   );
 
   // Yöntem değiştirici — "Diğer giriş yöntemlerini dene" → diğer ETKİN yöntemler
-  // seçenek olarak çıkar (kullanıcı isteği: öncelikli yöntem açılışta, kalanlar tuşla).
+  // tam-genişlik, ayrı renkli butonlar olarak ALT ALTA çıkar (fabrikada tek
+  // bakışta ayırt edilsin). QR kart seçilirse KAMERA DOĞRUDAN açılır — araya
+  // "Kartı Okut" sayfası girmez (kullanıcı isteği).
   const otherMethods = enabledMethods.filter((m) => m !== activeMethod);
   const switchMethod = (m: LoginMethod) => {
     setPickedMethod(m);
     setMethodPickerOpen(false);
     setPin('');
     setError('');
+    if (m === 'card') setCardScannerOpen(true);
   };
   const methodSwitcher =
     otherMethods.length === 0 ? null : (
@@ -504,16 +509,16 @@ export default function LoginScreen() {
             <Text style={styles.pinFallbackText}>Diğer giriş yöntemlerini dene</Text>
           </TouchableRipple>
         ) : (
-          <View style={styles.methodRow}>
+          <View style={styles.methodColumn}>
             {otherMethods.map((m) => (
               <TouchableRipple
                 key={m}
                 onPress={() => switchMethod(m)}
-                rippleColor="rgba(99,102,241,0.25)"
-                style={styles.methodBtn}
+                rippleColor="rgba(255,255,255,0.25)"
+                style={[styles.methodBtn, { backgroundColor: METHOD_META[m].color }]}
               >
                 <View style={styles.methodBtnInner}>
-                  <Icon source={METHOD_META[m].icon} size={22} color="#c7d2fe" />
+                  <Icon source={METHOD_META[m].icon} size={26} color="#fff" />
                   <Text style={styles.methodBtnText}>{METHOD_META[m].label}</Text>
                 </View>
               </TouchableRipple>
@@ -927,24 +932,23 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     textDecorationLine: 'underline',
   },
-  // Yöntem değiştirici ("Diğer giriş yöntemlerini dene" → seçenek butonları)
-  methodSwitchWrap: { alignSelf: 'stretch', alignItems: 'center', marginTop: 6 },
-  methodRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
+  // Yöntem değiştirici ("Diğer giriş yöntemlerini dene" → seçenek butonları).
+  // Butonlar tam genişlik + ALT ALTA + ayrı renkler — saha ayırt edilebilirliği.
+  methodSwitchWrap: { alignSelf: 'stretch', alignItems: 'center', marginTop: 22 },
+  methodColumn: { alignSelf: 'stretch', gap: 12 },
   methodBtn: {
-    borderRadius: 12,
-    backgroundColor: COLORS.bgDarker,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    alignSelf: 'stretch',
+    borderRadius: 14,
   },
   methodBtnInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    minHeight: 52,
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 18,
+    minHeight: 62,
   },
-  methodBtnText: { color: '#c7d2fe', fontSize: 15, fontWeight: '700' },
+  methodBtnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
   quickPinHint: { color: COLORS.subtext, fontSize: 14, lineHeight: 20, marginTop: 6, marginBottom: 12 },
 
   topBar: {
