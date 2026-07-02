@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Controller } from "react-hook-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
@@ -48,10 +48,19 @@ function routeTemplateId(initial: PeripheralDevice | null | undefined, kind: Rou
 }
 
 export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
-  // Hızlı profil ekleme — profil yoksa formu terk etmeden oluştur + otomatik seç.
+  // Hızlı profil ekleme/düzenleme — formu terk etmeden oluştur (otomatik seç) veya
+  // seçili profili düzenle. Edit için profil nesnesi listeden çözülür.
   const qc = useQueryClient();
-  const [newProfileOpen, setNewProfileOpen] = useState(false);
-  const [creatingProfile, setCreatingProfile] = useState(false);
+  const [profileDialog, setProfileDialog] = useState<
+    { mode: "create" } | { mode: "edit"; profile: LabelFormatProfile } | null
+  >(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const profilesQuery = useQuery({
+    queryKey: ["label-format-profiles", "device-form"],
+    queryFn: () => loadAllForPicker(labelFormatProfileService),
+    enabled: open,
+  });
+  const profiles = profilesQuery.data?.data ?? [];
 
   // Şablon yönlendirme select'leri için tüm şablonlar (kind'a göre gruplanır).
   const templatesQuery = useQuery({
@@ -330,13 +339,30 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                       )}
                     />
                   </div>
+                  {(() => {
+                    const selId = form.watch("formatProfileId");
+                    const sel = profiles.find((pr) => pr.id === selId) ?? null;
+                    return (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 shrink-0"
+                        title={sel ? `"${sel.code}" profilini düzenle` : "Önce bir profil seçin"}
+                        disabled={!sel}
+                        onClick={() => sel && setProfileDialog({ mode: "edit", profile: sel })}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    );
+                  })()}
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
                     className="h-9 w-9 shrink-0"
                     title="Yeni format profili ekle"
-                    onClick={() => setNewProfileOpen(true)}
+                    onClick={() => setProfileDialog({ mode: "create" })}
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -344,27 +370,31 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
               </FormField>
             </div>
 
-            {/* Hızlı profil ekleme — iç dialog portal'a taşınır ama React ağacında bu
-                formun içinde: submit'i dış cihaz formuna SIZDIRMA (stopPropagation). */}
+            {/* Hızlı profil ekle/düzenle — iç dialog portal'a taşınır ama React ağacında
+                bu formun içinde: submit'i dış cihaz formuna SIZDIRMA (stopPropagation). */}
             <div onSubmit={(e) => e.stopPropagation()}>
               <LabelFormatProfileFormDialog
-                open={newProfileOpen}
-                onOpenChange={setNewProfileOpen}
-                initial={null}
-                isSubmitting={creatingProfile}
+                open={Boolean(profileDialog)}
+                onOpenChange={(o) => !o && setProfileDialog(null)}
+                initial={profileDialog?.mode === "edit" ? profileDialog.profile : null}
+                isSubmitting={savingProfile}
                 onSubmit={async (values) => {
-                  setCreatingProfile(true);
+                  setSavingProfile(true);
                   try {
-                    const res = await labelFormatProfileService.create(
-                      buildLabelFormatProfilePayload(values) as Partial<LabelFormatProfile>,
-                    );
-                    const id = (res.data as LabelFormatProfile | null)?.id;
+                    const payload = buildLabelFormatProfilePayload(values) as Partial<LabelFormatProfile>;
+                    if (profileDialog?.mode === "edit") {
+                      await labelFormatProfileService.update(profileDialog.profile.id, payload);
+                      toast.success("Format profili güncellendi.");
+                    } else {
+                      const res = await labelFormatProfileService.create(payload);
+                      const id = (res.data as LabelFormatProfile | null)?.id;
+                      if (id) form.setValue("formatProfileId", id, { shouldDirty: true });
+                      toast.success("Format profili eklendi ve bu yazıcı için seçildi.");
+                    }
                     await qc.invalidateQueries({ queryKey: ["label-format-profiles"] });
-                    if (id) form.setValue("formatProfileId", id, { shouldDirty: true });
-                    setNewProfileOpen(false);
-                    toast.success("Format profili eklendi ve bu yazıcı için seçildi.");
+                    setProfileDialog(null);
                   } finally {
-                    setCreatingProfile(false);
+                    setSavingProfile(false);
                   }
                 }}
               />
