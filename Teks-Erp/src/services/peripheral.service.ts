@@ -3,7 +3,7 @@
 // =============================================================================
 // BaseService + validateRefs (label-format-profile.service deseni). Bare BaseController Zod
 // taşımaz → FK/sahiplik/port hijyeni serviste. Ayrıca per-kind şablon yönlendirme
-// (setTemplateRoute), mobil BT yazıcı kaydı (registerBt) ve bağlantı testi (test).
+// (setTemplateRoute) ve bağlantı testi (test). (register-bt ucu 2026-07'de kaldırıldı.)
 // İzin: donanım ailesiyle tutarlı `station:read/write`.
 // =============================================================================
 
@@ -176,67 +176,6 @@ export class PeripheralDeviceService extends BaseService {
       newData: { kind, templateId: templateId ?? null },
     }).catch(() => undefined);
     return { success: true, data: { peripheralId, kind, templateId: templateId ?? null } };
-  }
-
-  /** Mobil: tablete-bağlı BT yazıcıyı merkezî kayda al (idempotent: deviceId+address). */
-  async registerBt(
-    input: { deviceId: string; address: string; name?: string; languageOverride?: PrinterLanguage | null },
-    userId?: string,
-  ): Promise<ApiResponse<unknown>> {
-    const deviceId = input.deviceId;
-    const address = (input.address ?? "").trim();
-    if (!deviceId || !address) throw AppError.badRequest("deviceId ve address zorunlu");
-    const dv = await prisma.device.findFirst({ where: { id: deviceId, isActive: true }, select: { id: true } });
-    if (!dv) throw AppError.badRequest("Cihaz (tablet) bulunamadı veya pasif");
-
-    const name = (input.name?.trim() || address).slice(0, 100);
-    const existing = await prisma.peripheralDevice.findFirst({
-      where: { deviceId, address, connectionType: ConnectionType.BLUETOOTH_SPP },
-      select: { id: true },
-    });
-
-    let record;
-    if (existing) {
-      record = await prisma.peripheralDevice.update({
-        where: { id: existing.id },
-        data: {
-          name, isActive: true, lastSeenAt: new Date(),
-          ...(input.languageOverride !== undefined ? { languageOverride: input.languageOverride } : {}),
-        },
-      });
-    } else {
-      const code = await this.uniqueBtCode(address);
-      record = await prisma.peripheralDevice.create({
-        data: {
-          code, name, kind: "LABEL_PRINTER", connectionType: ConnectionType.BLUETOOTH_SPP,
-          address, deviceId, lastSeenAt: new Date(),
-          ...(input.languageOverride ? { languageOverride: input.languageOverride } : {}),
-        },
-      });
-    }
-    // Cihaz↔donanım join (M:N) — getForDevice artık join'den çözer.
-    await prisma.devicePeripheral.upsert({
-      where: { deviceId_peripheralId: { deviceId, peripheralId: record.id } },
-      create: { deviceId, peripheralId: record.id },
-      update: {},
-    });
-    await AuditService.log({
-      userId, action: existing ? "UPDATE" : "CREATE", tableName: PERIPHERAL_TABLE, recordId: record.id,
-      newData: { deviceId, address, connectionType: "BLUETOOTH_SPP" },
-    }).catch(() => undefined);
-    return { success: true, data: record };
-  }
-
-  /** code çakışmasını önleyen BT yazıcı kodu (BT-<MAC son8> + sayaç). */
-  private async uniqueBtCode(address: string): Promise<string> {
-    const base = `BT-${address.replace(/[^A-Za-z0-9]/g, "").slice(-8).toUpperCase() || "PRN"}`;
-    let code = base;
-    for (let i = 1; i < 50; i++) {
-      const exists = await prisma.peripheralDevice.findUnique({ where: { code }, select: { id: true } });
-      if (!exists) return code;
-      code = `${base}-${i}`;
-    }
-    return `${base}-${Date.now()}`;
   }
 
   /**

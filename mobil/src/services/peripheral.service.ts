@@ -2,13 +2,12 @@ import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 
 // =============================================================================
-// Cihaz kaydı (PeripheralDevice) — mobil. Tablete-bağlı Bluetooth yazıcıyı
-// backend merkezî kaydına ekler; deviceId backend'de x-device-id'den çözülür.
-// LAN-only; başarısızlık sessiz (yerel seçim zaten çalışır).
-//
-// Ayrıca tablet auto-discovery: kendi makinesine SABİT giriş cihazlarını (METER/
-// SCALE) protokol alanlarıyla çözer — Tambur/KK1 HAL ile okur (admin Cihaz Kaydı'nda
-// yapılandırır; MAC/komut/regex backend'de, tabletler tek tek ayarlanmaz).
+// Cihaz kaydı (PeripheralDevice) — mobil. Tablet auto-discovery: kendi yerine
+// (makine/istasyon) SABİT cihazları (METER/SCALE/LABEL_PRINTER) protokol
+// alanlarıyla çözer — Tambur/KK1 HAL ile okur (admin Cihaz Kaydı'nda yapılandırır;
+// MAC/komut/regex backend'de, tabletler tek tek ayarlanmaz).
+// (register-bt ucu ve registerBtPrinter 2026-07'de kaldırıldı — yazıcılar yalnız
+// panel → Tanımlar → Cihaz Kaydı'ndan tanımlanır.)
 // =============================================================================
 
 /** for-device çözümünden dönen cihaz satırı (HAL okuması için protokol dahil). */
@@ -31,16 +30,6 @@ export interface DevicePeripheral {
 }
 
 export const peripheralService = {
-  /** Tablete-bağlı BT yazıcıyı kayda al (idempotent: deviceId+address). */
-  registerBtPrinter: (input: {
-    address: string;
-    name?: string;
-    languageOverride?: string | null;
-  }): Promise<ApiResponse<unknown>> =>
-    apiClient
-      .post<ApiResponse<unknown>>('/peripherals/register-bt', input)
-      .then((r) => r.data),
-
   /** Tablet auto-discovery: kendi makinesinin türe göre aktif cihazları.
    *  @deprecated for-session'a geçildi (Faz 3) — Faz 6'da backend ucuyla birlikte kalkar. */
   getForDevice: (

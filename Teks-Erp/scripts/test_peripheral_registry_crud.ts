@@ -1,5 +1,5 @@
 // =============================================================================
-// Test: PeripheralDeviceService — CRUD + sahiplik guard + şablon route + BT kayıt
+// Test: PeripheralDeviceService — CRUD + sahiplik guard + şablon route + dil zorunluluğu
 // Çalıştır: npx tsx scripts/test_peripheral_registry_crud.ts
 // Test verisi üretir, sonunda temizler.
 // =============================================================================
@@ -81,17 +81,7 @@ async function main() {
   routeCount = await prisma.peripheralTemplateRoute.count({ where: { peripheralId: rec.id, kind: LabelKind.ROLL_FINISHED } });
   check("setTemplateRoute: null → kaldırıldı", routeCount === 0);
 
-  // 6. registerBt idempotent (deviceId+address)
-  const bt1 = await svc.registerBt({ deviceId, address: "11:22:33:44", name: "Argox BT" });
-  const bt1rec = bt1.data as { id: string };
-  const bt2 = await svc.registerBt({ deviceId, address: "11:22:33:44", name: "Argox BT (yeniden)" });
-  const bt2rec = bt2.data as { id: string };
-  createdPeripheralIds.push(bt1rec.id);
-  const btCount = await prisma.peripheralDevice.count({ where: { deviceId, address: "11:22:33:44" } });
-  check("registerBt: idempotent (aynı id)", bt1rec.id === bt2rec.id);
-  check("registerBt: tek kayıt (count=1)", btCount === 1);
-
-  // 7. Soft delete
+  // 6. Soft delete
   await svc.softDelete(rec.id);
   const afterDelete = await prisma.peripheralDevice.findUnique({ where: { id: rec.id }, select: { isActive: true } });
   check("remove: soft delete (isActive=false)", afterDelete?.isActive === false);

@@ -140,29 +140,3 @@ peripheralRouter.post("/:id/test", verifyToken, requirePermission("station:write
     res.status(200).json(result);
   } catch (e) { next(e); }
 });
-
-/**
- * @openapi
- * /api/peripherals/register-bt:
- *   post:
- *     tags: [Peripherals]
- *     summary: Mobil — tablete-bağlı Bluetooth yazıcıyı merkezî kayda al (idempotent)
- *     description: deviceId req.device'tan çözülür. Body { address, name?, languageOverride? }.
- *     security: [{ bearerAuth: [] }]
- *     responses: { 200: { description: Kaydedildi } }
- */
-peripheralRouter.post("/register-bt", verifyToken, requireAnyPermission("station:write", ...MOBILE_LABEL_PRINTERS), async (req, res, next) => {
-  try {
-    const deviceId = req.device?.id;
-    if (!deviceId) {
-      res.status(400).json({ success: false, message: "Eşleşmiş cihaz (tablet) gerekli — önce eşleştirin" });
-      return;
-    }
-    const body = (req.body ?? {}) as { address?: string; name?: string; languageOverride?: string | null };
-    const result = await service.registerBt(
-      { deviceId, address: body.address ?? "", name: body.name, languageOverride: body.languageOverride as never },
-      req.user?.userId,
-    );
-    res.status(200).json(result);
-  } catch (e) { next(e); }
-});
