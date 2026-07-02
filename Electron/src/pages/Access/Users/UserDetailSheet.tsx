@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PermissionsTab } from "./PermissionsTab";
 import { ApplyTemplateTab } from "./ApplyTemplateTab";
 import { ResetPasswordTab } from "./ResetPasswordTab";
+import { CardTokenTab } from "./CardTokenTab";
 import type { AdminUserListItem } from "@/services/adminUserService";
 
 interface Props {
@@ -30,6 +31,7 @@ export function UserDetailSheet({ user, open, onOpenChange }: Props) {
               <TabsTrigger value="permissions">Yetkiler</TabsTrigger>
               <TabsTrigger value="template">Şablon Uygula</TabsTrigger>
               <TabsTrigger value="password">Şifre Sıfırla</TabsTrigger>
+              <TabsTrigger value="card">Personel Kartı</TabsTrigger>
             </TabsList>
             <TabsContent value="permissions">
               <PermissionsTab userId={user.id} />
@@ -39,6 +41,9 @@ export function UserDetailSheet({ user, open, onOpenChange }: Props) {
             </TabsContent>
             <TabsContent value="password">
               <ResetPasswordTab userId={user.id} username={user.username} />
+            </TabsContent>
+            <TabsContent value="card">
+              <CardTokenTab userId={user.id} username={user.username} fullName={user.fullName} />
             </TabsContent>
           </Tabs>
         )}

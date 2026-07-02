@@ -29,22 +29,26 @@ export function SessionSettingsSection() {
   const currentIdle = flagsQ.data?.data?.idleTimeoutMinutes ?? 0;
   const currentWorkIdle =
     flagsQ.data?.data?.workSessionIdleTimeoutMinutes ?? DEFAULT_WORK_SESSION_IDLE;
+  const currentLoginMode = flagsQ.data?.data?.loginMode ?? "pin";
 
   // String tutulur — input'ta geçici boş değere izin vermek için (kaydederken parse edilir).
   const [session, setSession] = useState(String(currentSession));
   const [idle, setIdle] = useState(String(currentIdle));
   const [workIdle, setWorkIdle] = useState(String(currentWorkIdle));
+  const [loginMode, setLoginMode] = useState<"pin" | "card">(currentLoginMode);
   useEffect(() => {
     setSession(String(currentSession));
     setIdle(String(currentIdle));
     setWorkIdle(String(currentWorkIdle));
-  }, [currentSession, currentIdle, currentWorkIdle]);
+    setLoginMode(currentLoginMode);
+  }, [currentSession, currentIdle, currentWorkIdle, currentLoginMode]);
 
   const mut = useMutation({
     mutationFn: (payload: {
       sessionDurationHours: number;
       idleTimeoutMinutes: number;
       workSessionIdleTimeoutMinutes: number;
+      loginMode: "pin" | "card";
     }) => featureFlagService.update(payload),
     onSuccess: () => {
       toast.success("Oturum ayarları kaydedildi.");
@@ -63,7 +67,10 @@ export function SessionSettingsSection() {
   const workIdleValid =
     Number.isInteger(workIdleNum) && workIdleNum >= 0 && workIdleNum <= MAX_IDLE_MINUTES;
   const dirty =
-    sessionNum !== currentSession || idleNum !== currentIdle || workIdleNum !== currentWorkIdle;
+    sessionNum !== currentSession ||
+    idleNum !== currentIdle ||
+    workIdleNum !== currentWorkIdle ||
+    loginMode !== currentLoginMode;
 
   return (
     <PermissionGate
@@ -78,6 +85,10 @@ export function SessionSettingsSection() {
           <ReadOnlyLine
             label="Çalışma oturumu zaman aşımı (saha)"
             value={currentWorkIdle > 0 ? `${currentWorkIdle} dakika` : "Kapalı"}
+          />
+          <ReadOnlyLine
+            label="Mobil giriş yöntemi"
+            value={currentLoginMode === "card" ? "QR personel kartı" : "PIN"}
           />
           <p className="pt-2 text-xs text-muted-foreground">
             Bu ayarları değiştirmek için <code>admin:settings</code> yetkisi gerekir.
@@ -128,6 +139,26 @@ export function SessionSettingsSection() {
           />
         </div>
 
+        <div className="border-t pt-4">
+          <label htmlFor="login-mode" className="text-sm font-medium">
+            Mobil giriş yöntemi
+          </label>
+          <p className="text-xs text-muted-foreground">
+            "QR personel kartı" seçilirse sahadaki giriş ekranı kart okutmayı ister (kullanıcı
+            seçme + PIN gerekmez; PIN "kartım yanımda değil" yedeği olarak kalır). Kartlar
+            Yetkilendirme → Kullanıcılar → Personel Kartı sekmesinden basılır.
+          </p>
+          <select
+            id="login-mode"
+            className="mt-2 flex h-9 w-64 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+            value={loginMode}
+            onChange={(e) => setLoginMode(e.target.value as "pin" | "card")}
+          >
+            <option value="pin">PIN (varsayılan)</option>
+            <option value="card">QR personel kartı (PIN yedek)</option>
+          </select>
+        </div>
+
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
@@ -137,6 +168,7 @@ export function SessionSettingsSection() {
                 sessionDurationHours: sessionNum,
                 idleTimeoutMinutes: idleNum,
                 workSessionIdleTimeoutMinutes: workIdleNum,
+                loginMode,
               })
             }
           >

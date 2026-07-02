@@ -5,9 +5,15 @@
 import prisma from "../lib/prisma";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { randomBytes } from "crypto";
 import { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
-import { readSessionDurationHours } from "./system-setting.service";
+import { AuditService } from "./audit.service";
+import { readSessionDurationHours, readAuthLoginMode } from "./system-setting.service";
+
+/** Personel kartı QR içeriği: TEKSU:<userId>:<32-hex token>. Makine QR'ı ham
+ *  makine kodu (MAK-...) taşıdığından prefix çakışması yok. */
+const CARD_CODE_RE = /^TEKSU:([0-9a-fA-F-]{36}):([0-9a-fA-F]{32})$/;
 
 function loadJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -51,6 +57,68 @@ export class AuthService {
       throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
     }
 
+    return this.issueToken({ id: user.id, username: user.username, tokenVersion: user.tokenVersion });
+  }
+
+  /**
+   * QR personel kartıyla giriş — YALNIZ auth.loginMode="card" iken (kapalıyken
+   * kart altyapısı saldırı yüzeyi açmaz; PIN girişi her modda çalışır — fallback).
+   * Kart içeriği "TEKSU:<userId>:<token>"; token users.cardToken'daki 32-hex sır.
+   * Kart kaybolursa admin ROTASYON yapar (yeni token) → eski kart anında ölür.
+   */
+  static async loginWithCard(
+    cardCode: string
+  ): Promise<{ token: string; user: JwtPayload }> {
+    const mode = await readAuthLoginMode();
+    if (mode !== "card") {
+      throw AppError.forbidden(
+        "Kartla giriş kapalı — Genel Ayarlar'dan giriş yöntemi 'Kart' yapılabilir"
+      );
+    }
+    const m = CARD_CODE_RE.exec((cardCode ?? "").trim());
+    if (!m) throw AppError.unauthorized("Geçersiz personel kartı");
+    const user = await prisma.user.findFirst({
+      where: { id: m[1], cardToken: m[2].toLowerCase(), isActive: true },
+      select: { id: true, username: true, tokenVersion: true },
+    });
+    if (!user) {
+      throw AppError.unauthorized("Kart geçersiz veya iptal edilmiş — yöneticiden yeni kart isteyin");
+    }
+    return this.issueToken(user);
+  }
+
+  /**
+   * Admin: personel kartı sırrını üret/YENİLE (rotasyon). Yeni 32-hex token yazılır;
+   * dönen cardCode QR olarak basılır. Eski kart anında geçersiz. Açık JWT oturumları
+   * ETKİLENMEZ (tokenVersion bump yok — yalnız kart kimliği değişir).
+   */
+  static async rotateCardToken(
+    userId: string,
+    actorUserId?: string
+  ): Promise<{ cardCode: string; rotated: boolean }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, isActive: true, cardToken: true },
+    });
+    if (!user || !user.isActive) throw AppError.notFound("Kullanıcı bulunamadı veya pasif");
+    const token = randomBytes(16).toString("hex"); // 32-hex
+    await prisma.user.update({ where: { id: userId }, data: { cardToken: token } });
+    await AuditService.log({
+      userId: actorUserId,
+      action: "UPDATE",
+      tableName: "USER_CARD_TOKEN",
+      recordId: userId,
+      newData: { username: user.username, rotated: user.cardToken != null },
+    }).catch(() => undefined);
+    return { cardCode: `TEKSU:${user.id}:${token}`, rotated: user.cardToken != null };
+  }
+
+  /** JWT üretimi — login ve loginWithCard'ın ortak çıkışı. */
+  private static async issueToken(user: {
+    id: string;
+    username: string;
+    tokenVersion: number;
+  }): Promise<{ token: string; user: JwtPayload }> {
     const permissions = await this.getEffectivePermissions(user.id);
 
     const payload: JwtPayload = {

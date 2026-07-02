@@ -11,6 +11,8 @@ const router = Router();
 
 // Public (device-gated — global resolveDevice middleware + handler check)
 router.post("/login", AuthController.login);
+router.post("/login-card", AuthController.loginCard); // QR personel kartı (auth.loginMode="card")
+router.get("/login-mode", AuthController.loginMode); // login ekranı auth'suz okur
 router.get("/mobile-users", AuthController.mobileUsers);
 
 // Protected

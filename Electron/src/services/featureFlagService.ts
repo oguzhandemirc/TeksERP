@@ -155,6 +155,9 @@ export interface FeatureFlags {
    *  = 10 saat; 0 = kapalı). Backend TEMBEL enforce: süre dolan oturum okuma anında IDLE
    *  kapanır; operatör bir sonraki işlemde yeniden yer onayı verir. */
   workSessionIdleTimeoutMinutes: number;
+  /** Mobil giriş yöntemi: "pin" (default — kullanıcı listesi + 6 haneli PIN) | "card"
+   *  (QR personel kartı okut; PIN her zaman fallback). Backend ENFORCE eder. */
+  loginMode: "pin" | "card";
   /** Saha #6: top etiketi kopya adedi (default 2 — topun üstüne + altına). 1-5. */
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). */

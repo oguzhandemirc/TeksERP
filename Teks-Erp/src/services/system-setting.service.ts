@@ -102,6 +102,10 @@ export const SETTING_KEYS = {
    *  timer YOK — aktif oturum okunurken lastActivityAt bu süreden eskiyse IDLE ile
    *  kapatılır (work-session.helper). auth.idleTimeoutMinutes'ten (ekran kilidi) AYRI. */
   WORK_SESSION_IDLE_TIMEOUT_MINUTES: "workSession.idleTimeoutMinutes",
+  /** Mobil giriş yöntemi: "pin" (default — kullanıcı listesi + 6 haneli PIN) veya
+   *  "card" (QR personel kartı okut; PIN her zaman fallback olarak kalır).
+   *  Backend ENFORCE eder: /auth/login-card yalnız "card" modunda çalışır. */
+  AUTH_LOGIN_MODE: "auth.loginMode",
   /** Saha #6: top etiketi kaç kopya basılır (default 2 — topun bir üstüne bir
    *  altına yapıştırılıyor). /labels/rolls/:id/html bu kadar sayfa döner;
    *  çağıran ?copies= ile tek baskı için override edebilir. 1-5 arası. */
@@ -135,6 +139,9 @@ const MAX_IDLE_TIMEOUT_MINUTES = 1440;
 export const DEFAULT_WORK_SESSION_IDLE_MINUTES = 600;
 /** Çalışma oturumu idle tavanı — dakika (24 saat). */
 const MAX_WORK_SESSION_IDLE_MINUTES = 1440;
+/** Mobil giriş yöntemi türü + varsayılanı. */
+export type AuthLoginMode = "pin" | "card";
+export const DEFAULT_AUTH_LOGIN_MODE: AuthLoginMode = "pin";
 
 /** Firma adı verilmediğinde gösterilen varsayılan. */
 export const DEFAULT_COMPANY_NAME = "Adnan Şahin Tekstil";
@@ -405,6 +412,9 @@ export interface FeatureFlags {
   /** Çalışma oturumu (kim hangi makinede) idle zaman aşımı — dakika (default 600 =
    *  10 saat; 0 = kapalı). Backend TEMBEL enforce eder (okuma anında IDLE kapatma). */
   workSessionIdleTimeoutMinutes: number;
+  /** Mobil giriş yöntemi: "pin" (default) | "card" (QR personel kartı; PIN fallback).
+   *  Backend ENFORCE eder — /auth/login-card yalnız "card" modunda çalışır. */
+  loginMode: AuthLoginMode;
   /** Saha #6: top etiketi kopya adedi (default 2 — üst+alt yapıştırma). 1-5. */
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). Frontend okur. */
@@ -562,6 +572,7 @@ export class SystemSettingService {
       sessionDurationHours: await readSessionDurationHours(cacheClient),
       idleTimeoutMinutes: await readIdleTimeoutMinutes(cacheClient),
       workSessionIdleTimeoutMinutes: await readWorkSessionIdleTimeoutMinutes(cacheClient),
+      loginMode: await readAuthLoginMode(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
       rollNameTemplate: await readRollNameTemplate(cacheClient),
       printerLanguage: await readPrinterLanguage(cacheClient),
@@ -820,6 +831,19 @@ export class SystemSettingService {
         SETTING_KEYS.WORK_SESSION_IDLE_TIMEOUT_MINUTES,
         Math.floor(v),
         "Çalışma oturumu (kim hangi makinede) hareketsizlik zaman aşımı, dakika — tembel IDLE kapatma (0 = kapalı)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "loginMode")) {
+      const v = input.loginMode;
+      if (v !== "pin" && v !== "card") {
+        throw AppError.badRequest('Giriş yöntemi "pin" veya "card" olmalı');
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_LOGIN_MODE,
+        v,
+        'Mobil giriş yöntemi: "pin" (kullanıcı + PIN) veya "card" (QR personel kartı; PIN fallback)',
         userId
       );
     }
@@ -1301,6 +1325,23 @@ export async function readWorkSessionIdleTimeoutMinutes(
   const parsed = asNumber(setting.value);
   if (parsed === null || parsed < 0) return DEFAULT_WORK_SESSION_IDLE_MINUTES;
   return Math.min(Math.floor(parsed), MAX_WORK_SESSION_IDLE_MINUTES);
+}
+
+/**
+ * Mobil giriş yöntemini okur: "pin" (default) | "card". Backend ENFORCE eder —
+ * /auth/login-card yalnız "card" modunda çalışır (kapalıyken kart altyapısı
+ * saldırı yüzeyi açmaz); PIN girişi her iki modda da çalışır (fallback).
+ */
+export async function readAuthLoginMode(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<AuthLoginMode> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_LOGIN_MODE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return v === "card" ? "card" : DEFAULT_AUTH_LOGIN_MODE;
 }
 
 /**

@@ -181,7 +181,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     icon: Clock,
     description: "Oturum süresi (token ömrü) ve hareketsizlik zaman aşımı.",
     keywords:
-      "oturum süre süresi token jwt giriş çıkış logout otomatik hareketsizlik idle zaman aşımı timeout güvenlik session ömür dakika saat çalışma oturumu makine yer onayı saha work session",
+      "oturum süre süresi token jwt giriş çıkış logout otomatik hareketsizlik idle zaman aşımı timeout güvenlik session ömür dakika saat çalışma oturumu makine yer onayı saha work session kart personel kartı qr login pin giriş yöntemi",
     kind: "session",
   },
   {

@@ -229,6 +229,11 @@ model User {
   // JWT iptal sayacı: yetki grant/revoke/set + şifre sıfırlamada artar. verifyToken
   // her istekte token'daki sürümle karşılaştırır → eski oturum anında düşer.
   tokenVersion Int     @default(1)
+  /// QR personel kartı sırrı (32-hex, düz saklanır — fiziksel kart taşıyıcı sır;
+  /// bcrypt login sıcak yolunda gereksiz). Kart içeriği "TEKSU:<userId>:<cardToken>".
+  /// Kart kaybolursa admin ROTASYON yapar → eski kart anında ölür. NULL = kart yok.
+  /// Kartla giriş yalnız auth.loginMode="card" iken çalışır (default "pin").
+  cardToken String? @unique @db.VarChar(64)
 
   // Relations
   permissions                UserPermission[]        @relation("UserPermissionUser")

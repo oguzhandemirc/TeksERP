@@ -50,6 +50,8 @@ const updateSchema = z.object({
   idleTimeoutMinutes: z.number().int().min(0).max(1440).optional(),
   // workSession.idleTimeoutMinutes — çalışma oturumu idle zaman aşımı, dakika (default 600, 0=kapalı). Backend TEMBEL ENFORCE.
   workSessionIdleTimeoutMinutes: z.number().int().min(0).max(1440).optional(),
+  // auth.loginMode — mobil giriş yöntemi: pin (default) | card (QR personel kartı). Backend ENFORCE.
+  loginMode: z.enum(["pin", "card"]).optional(),
   // Saha #6: top etiketi kopya adedi (1–5). (Servis ayrıca doğrular.)
   labelCopies: z.number().int().min(1).max(5).optional(),
   // Saha #20: top adı format şablonu (maks 100; servis token doğrular).

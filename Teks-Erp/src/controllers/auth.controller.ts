@@ -6,13 +6,17 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
-import { readDevicePairingRequired } from "../services/system-setting.service";
+import { readDevicePairingRequired, readAuthLoginMode } from "../services/system-setting.service";
 import "../types/express-augment";
 
 // Zod schemas for validation
 const loginSchema = z.object({
   username: z.string().min(1, "Kullanıcı adı gerekli"),
   password: z.string().min(1, "Şifre gerekli"),
+});
+
+const loginCardSchema = z.object({
+  cardCode: z.string().min(1, "Kart kodu gerekli").max(120),
 });
 
 // K6 (2026-06-12): register endpoint'i + şeması kaldırıldı — kullanıcı
@@ -87,6 +91,75 @@ export class AuthController {
         ipAddress,
         payload: { reason: error instanceof Error ? error.message : "unknown" },
       });
+      next(error);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/auth/login-card:
+   *   post:
+   *     tags: [Auth]
+   *     summary: QR personel kartıyla giriş (auth.loginMode="card" iken)
+   *     description: Body { cardCode } — "TEKSU:<userId>:<token>". Mod "pin" ise 403.
+   *     responses:
+   *       200: { description: Başarılı giriş }
+   *       401: { description: Kart geçersiz/iptal }
+   *       403: { description: Kartla giriş kapalı }
+   */
+  static async loginCard(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const body = (() => {
+      try {
+        return loginCardSchema.parse(req.body);
+      } catch (error) {
+        next(error);
+        return null;
+      }
+    })();
+    if (!body) return;
+
+    const ipAddress = req.ip ?? null;
+    try {
+      const result = await AuthService.loginWithCard(body.cardCode);
+      void AuditService.logEvent({
+        category: "AUTH",
+        action: "LOGIN_SUCCESS",
+        userId: result.user.userId,
+        recordId: result.user.username,
+        ipAddress,
+        payload: { method: "card" },
+      });
+      res.status(200).json({
+        success: true,
+        data: { token: result.token, user: result.user },
+        message: "Giriş başarılı",
+      });
+    } catch (error) {
+      void AuditService.logEvent({
+        category: "AUTH",
+        action: "LOGIN_FAILED",
+        recordId: "card",
+        ipAddress,
+        payload: { method: "card", reason: error instanceof Error ? error.message : "unknown" },
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/auth/login-mode:
+   *   get:
+   *     tags: [Auth]
+   *     summary: Mobil giriş yöntemi (public — login ekranı auth'suz okur)
+   *     responses:
+   *       200: { description: "{ mode: pin | card }" }
+   */
+  static async loginMode(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const mode = await readAuthLoginMode();
+      res.status(200).json({ success: true, data: { mode } });
+    } catch (error) {
       next(error);
     }
   }

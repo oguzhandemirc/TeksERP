@@ -15,6 +15,17 @@ export const adminUserService = {
   list: (): Promise<ApiResponse<AdminUserListItem[]>> =>
     apiClient.get<ApiResponse<AdminUserListItem[]>>("/api/admin/users").then((r) => r.data),
 
+  /** Personel kartı sırrını üret/YENİLE (rotasyon) — dönen cardCode QR olarak basılır.
+   *  Eski kart anında geçersiz; açık oturumlar etkilenmez. */
+  rotateCardToken: (
+    userId: string,
+  ): Promise<ApiResponse<{ cardCode: string; rotated: boolean }>> =>
+    apiClient
+      .post<ApiResponse<{ cardCode: string; rotated: boolean }>>(
+        `/api/admin/users/${userId}/card-token`,
+      )
+      .then((r) => r.data),
+
   getPermissions: (userId: string): Promise<ApiResponse<UserPermissionGrant[]>> =>
     apiClient
       .get<ApiResponse<UserPermissionGrant[]>>(`/api/admin/users/${userId}/permissions`)

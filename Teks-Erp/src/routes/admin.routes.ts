@@ -6,6 +6,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { AuditService } from "../services/audit.service";
+import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
 import { systemSettingService } from "../services/system-setting.service";
 import { SystemLogService } from "../services/system-log.service";
@@ -310,6 +311,32 @@ router.post(
         req.user?.userId
       );
       res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/card-token:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Personel kartı sırrını üret/YENİLE (rotasyon) — QR kart basımı için
+ *     description: Yeni 32-hex token yazılır; dönen cardCode ("TEKSU:...") QR olarak basılır. Eski kart anında geçersiz; açık oturumlar etkilenmez.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/users/:id/card-token",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await AuthService.rotateCardToken(
+        req.params.id as string,
+        req.user?.userId
+      );
+      res.status(200).json({ success: true, data: result });
     } catch (error) {
       next(error);
     }

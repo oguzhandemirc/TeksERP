@@ -140,6 +140,8 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 
 `MOBILE_SESSION_PERMS = mobile:kk1 | mobile:kk2-kursun | mobile:tambur | mobile:tarti-paket` (work-session.service.ts — tek kaynak).
 
+**QR personel kartıyla giriş (opsiyonel, Faz 5):** `auth.loginMode` ayarı `"pin"` (default) | `"card"`. Kart içeriği `TEKSU:<userId>:<32-hex cardToken>` (`users.cardToken`, düz saklanır — fiziksel kart taşıyıcı sır; iptal = rotasyon). Uçlar: `POST /api/auth/login-card` (public; mod "pin" ise 403 — kapalıyken saldırı yüzeyi yok), `GET /api/auth/login-mode` (public — login ekranı auth'suz okur), `POST /api/admin/users/:id/card-token` (admin:users; üret/rotasyon — eski kart ANINDA ölür, açık JWT oturumları etkilenmez). PIN girişi her modda çalışır (fallback). Kart basımı: Electron → Yetkilendirme → Kullanıcılar → Personel Kartı sekmesi.
+
 ### Resmi belge defteri — `PrintedDocument` (versiyonlu irsaliye snapshot'ları)
 
 > 2026-06-09. Üç sevk/irsaliye belgesi — **Sevk İrsaliyesi** (`Shipment`), **Fason Sevk İrsaliyesi** (`SubcontractorDispatch`), **Kartela Çeki Listesi** (`KartelaDispatch`) — artık donmuş, versiyonlu resmi belge. Eski `SubcontractorDispatch.printSnapshot` / `KartelaDispatch.printSnapshot` kolonları kaldırıldı (migration `20260609225307`).

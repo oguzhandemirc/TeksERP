@@ -9,6 +9,7 @@ import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
 import { authService } from '../../services/auth.service';
+import { BarcodeScannerModal } from '../../components/BarcodeScannerModal';
 import PickerModal, { type PickerOption } from '../../components/PickerModal';
 import { useDeviceType, useIsPortrait } from '../../hooks/useDeviceType';
 import type { MobileUser } from '../../types/auth';
@@ -60,6 +61,17 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
+
+  // Giriş yöntemi (auth.loginMode ayarı — public uç): "card" ise QR personel
+  // kartı birincil akıştır; PIN her zaman fallback (kart unutuldu/bozuldu).
+  const loginModeQ = useQuery({
+    queryKey: ['auth', 'login-mode'],
+    queryFn: authService.getLoginMode,
+    staleTime: 5 * 60 * 1000,
+  });
+  const [showPinLogin, setShowPinLogin] = useState(false);
+  const [cardScannerOpen, setCardScannerOpen] = useState(false);
+  const cardMode = loginModeQ.data === 'card' && !showPinLogin;
 
   const usersQuery = useQuery({
     queryKey: ['auth', 'mobile-users'],
@@ -120,6 +132,28 @@ export default function LoginScreen() {
         setError(msg);
         setPin('');
         Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg });
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [setAuth],
+  );
+
+  // QR personel kartıyla giriş — okutma başarılıysa PIN'siz doğrudan token alınır.
+  const submitCard = useCallback(
+    async (cardCode: string) => {
+      setSubmitting(true);
+      setError('');
+      try {
+        const res = await authService.loginWithCard(cardCode.trim());
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Toast.show({ type: 'success', text1: 'Hoş geldin', text2: res.data.user.username });
+        await setAuth(res.data.user, res.data.token);
+      } catch (e) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        const msg = e instanceof Error ? e.message : 'Kart okunamadı.';
+        setError(msg);
+        Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg, visibilityTime: 6000 });
       } finally {
         setSubmitting(false);
       }
@@ -366,6 +400,53 @@ export default function LoginScreen() {
     </View>
   );
 
+  // Kart modu — QR personel kartı birincil giriş (PIN fallback butonuyla).
+  const cardSection = (
+    <View style={styles.cardPanel}>
+      <Icon source="card-account-details-outline" size={72} color={COLORS.accentLight} />
+      <Text style={styles.cardTitle}>Personel Kartını Okut</Text>
+      <Text style={styles.cardHint}>
+        Kartındaki QR'ı kameraya göster — kullanıcı seçme ve PIN gerekmez.
+      </Text>
+      <TouchableRipple
+        onPress={() => {
+          setError('');
+          setCardScannerOpen(true);
+        }}
+        disabled={submitting}
+        rippleColor="rgba(255,255,255,0.2)"
+        style={styles.cardScanBtn}
+      >
+        <View style={styles.cardScanBtnInner}>
+          {submitting ? (
+            <ActivityIndicator size={22} color="#fff" />
+          ) : (
+            <Icon source="qrcode-scan" size={24} color="#fff" />
+          )}
+          <Text style={styles.cardScanBtnText}>
+            {submitting ? 'Giriş yapılıyor…' : 'Kartı Okut'}
+          </Text>
+        </View>
+      </TouchableRipple>
+      {!!error && (
+        <View style={styles.statusRow}>
+          <Icon source="alert-circle" size={18} color={COLORS.error} />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
+      <TouchableRipple
+        onPress={() => {
+          setError('');
+          setShowPinLogin(true);
+        }}
+        rippleColor="rgba(99,102,241,0.2)"
+        style={styles.pinFallbackBtn}
+      >
+        <Text style={styles.pinFallbackText}>Kartım yanımda değil — PIN ile giriş</Text>
+      </TouchableRipple>
+    </View>
+  );
+
   return (
     <SafeAreaView
       edges={['top', 'left', 'right']}
@@ -373,23 +454,56 @@ export default function LoginScreen() {
     >
       <TopBar compact={isCompact} />
 
-      {isCompact ? (
+      {cardMode ? (
+        <ScrollView contentContainerStyle={styles.cardWrap} keyboardShouldPersistTaps="handled">
+          {cardSection}
+        </ScrollView>
+      ) : isCompact ? (
         <ScrollView
           contentContainerStyle={styles.compactContent}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.compactSection}>{userSection}</View>
           <View style={styles.compactSection}>{pinSectionCompact}</View>
+          {loginModeQ.data === 'card' && (
+            <TouchableRipple
+              onPress={() => setShowPinLogin(false)}
+              rippleColor="rgba(99,102,241,0.2)"
+              style={styles.pinFallbackBtn}
+            >
+              <Text style={styles.pinFallbackText}>← Kart ile girişe dön</Text>
+            </TouchableRipple>
+          )}
         </ScrollView>
       ) : (
         <View style={styles.main}>
           <View style={styles.leftPanel}>
             {userSection}
             {pinSection}
+            {loginModeQ.data === 'card' && (
+              <TouchableRipple
+                onPress={() => setShowPinLogin(false)}
+                rippleColor="rgba(99,102,241,0.2)"
+                style={styles.pinFallbackBtn}
+              >
+                <Text style={styles.pinFallbackText}>← Kart ile girişe dön</Text>
+              </TouchableRipple>
+            )}
           </View>
           <View style={styles.rightPanel}>{numpad}</View>
         </View>
       )}
+
+      <BarcodeScannerModal
+        visible={cardScannerOpen}
+        onDismiss={() => setCardScannerOpen(false)}
+        onScan={(code) => {
+          setCardScannerOpen(false);
+          void submitCard(code);
+        }}
+        title="Personel kartını okut"
+        notice="Kartındaki QR kodu kameraya göster"
+      />
 
       <PickerModal
         visible={pickerVisible}
@@ -570,6 +684,45 @@ function SelectPrompt({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
+
+  // Kart modu (QR personel kartı)
+  cardWrap: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  cardPanel: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 440,
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: COLORS.bgSoft,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 28,
+  },
+  cardTitle: { color: COLORS.text, fontSize: 24, fontWeight: '800', textAlign: 'center' },
+  cardHint: { color: COLORS.subtext, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  cardScanBtn: {
+    marginTop: 8,
+    alignSelf: 'stretch',
+    borderRadius: 14,
+    backgroundColor: COLORS.accent,
+  },
+  cardScanBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    minHeight: 60,
+  },
+  cardScanBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  pinFallbackBtn: { marginTop: 10, borderRadius: 10, alignSelf: 'center' },
+  pinFallbackText: {
+    color: COLORS.subtext,
+    fontSize: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    textDecorationLine: 'underline',
+  },
 
   topBar: {
     flexDirection: 'row',
