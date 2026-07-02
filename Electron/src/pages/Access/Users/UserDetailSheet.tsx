@@ -26,7 +26,7 @@ export function UserDetailSheet({ user, open, onOpenChange, initialTab = "permis
           <SheetDescription>
             <span className="font-mono">{user?.username}</span>
             {" · "}
-            {user?._count.permissions ?? 0} yetki
+            {user?._count?.permissions ?? 0} yetki
           </SheetDescription>
         </SheetHeader>
 
