@@ -36,6 +36,25 @@ describe("buildPeripheralPayload (form → API)", () => {
     expect(p.deviceId).toBeNull();
   });
 
+  it("owner=station → yalnız stationId dolu (makinesiz istasyon — SHIPPING kantarı)", () => {
+    const p = buildPeripheralPayload({
+      ...base, owner: "station", machineId: "m1", stationId: "s1", deviceId: "d1",
+    });
+    expect(p.stationId).toBe("s1");
+    expect(p.machineId).toBeNull();
+    expect(p.deviceId).toBeNull();
+  });
+
+  it("owner=machine/none → stationId null (tam-biri)", () => {
+    expect(buildPeripheralPayload({ ...base, owner: "machine", machineId: "m1", stationId: "s1" }).stationId).toBeNull();
+    expect(buildPeripheralPayload({ ...base, owner: "none", stationId: "s1" }).stationId).toBeNull();
+  });
+
+  it("schema station owner'ı kabul eder", () => {
+    const r = peripheralFormSchema.safeParse({ ...base, owner: "station", stationId: "s1" });
+    expect(r.success).toBe(true);
+  });
+
   it("port string → number, boş → null", () => {
     expect(buildPeripheralPayload({ ...base, port: "9100" }).port).toBe(9100);
     expect(buildPeripheralPayload({ ...base, port: "" }).port).toBeNull();

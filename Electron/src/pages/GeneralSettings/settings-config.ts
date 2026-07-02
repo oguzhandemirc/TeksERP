@@ -171,8 +171,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "devices",
     label: "Cihazlar",
     icon: TabletSmartphone,
-    description: "Sahadaki tabletlerin eşleştirme zorunluluğu.",
-    keywords: "cihaz eşleştirme tablet pairing makine atfı zorunlu kod",
+    description: "Cihaz onay zorunluluğu + bu bilgisayarın sevkiyat kantarı (COM).",
+    keywords: "cihaz eşleştirme tablet pairing onay zorunlu kantar tartı com seri scale",
     kind: "device",
   },
   {
@@ -181,7 +181,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     icon: Clock,
     description: "Oturum süresi (token ömrü) ve hareketsizlik zaman aşımı.",
     keywords:
-      "oturum süre süresi token jwt giriş çıkış logout otomatik hareketsizlik idle zaman aşımı timeout güvenlik session ömür dakika saat",
+      "oturum süre süresi token jwt giriş çıkış logout otomatik hareketsizlik idle zaman aşımı timeout güvenlik session ömür dakika saat çalışma oturumu makine yer onayı saha work session",
     kind: "session",
   },
   {

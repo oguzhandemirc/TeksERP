@@ -47,7 +47,7 @@ export function DevicesPage() {
 
   const revoke = useMutation({
     mutationFn: deviceService.revoke,
-    onSuccess: () => { toast.success("Atama geri alındı (cihaz onay bekliyor)"); invalidate(); },
+    onSuccess: () => { toast.success("Onay geri alındı (cihaz onay bekliyor)"); invalidate(); },
   });
   const deactivate = useMutation({
     mutationFn: deviceService.deactivate,
@@ -68,7 +68,7 @@ export function DevicesPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Cihazlar"
-        description="Sahadaki tabletler — kendilerini bildirir, yönetici onaylar + makineye atar."
+        description="Sahadaki tablet/telefonlar — kendilerini bildirir, yönetici onaylar. Çalışacağı yeri cihaz oturum açarken seçer (yer onayı / makine QR'ı)."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
@@ -139,16 +139,15 @@ function DeviceRow({
   const { hasPermission } = useRoleAccess();
   const canManage = hasPermission("admin:settings");
   const approved = device.status === "APPROVED";
-  const assigned = !!device.machine;
   const lastSeen = device.lastSeenAt ? safeFormat(device.lastSeenAt, "dd.MM.yyyy HH:mm") : "—";
 
   const actions: DeviceAction[] = [
-    { key: "assign", label: approved ? "Yeniden Ata" : "Onayla & Ata", icon: CheckCircle2, onClick: onAssign },
-    approved && { key: "revoke", label: "Atamayı Geri Al", icon: Unlink, onClick: onRevoke },
+    { key: "assign", label: approved ? "Türü Değiştir" : "Onayla", icon: CheckCircle2, onClick: onAssign },
+    approved && { key: "revoke", label: "Onayı Geri Al", icon: Unlink, onClick: onRevoke },
     device.isActive
       ? { key: "deactivate", label: "Pasife Al", icon: PowerOff, onClick: onDeactivate, danger: true }
       : { key: "reactivate", label: "Aktifleştir", icon: Power, onClick: onReactivate },
-    !assigned && { key: "delete", label: "Kalıcı Olarak Sil", icon: Trash2, onClick: onDelete, danger: true },
+    { key: "delete", label: "Kalıcı Olarak Sil", icon: Trash2, onClick: onDelete, danger: true },
   ].filter(Boolean) as DeviceAction[];
 
   const card = (
@@ -169,20 +168,8 @@ function DeviceRow({
             )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {assigned && device.machine ? (
-              <span>
-                <span className="font-medium text-foreground">{device.machine.code} — {device.machine.name}</span>
-                {" "}· {device.machine.station.name}
-              </span>
-            ) : (
-              <span className="italic">Henüz makineye atanmamış</span>
-            )}
-            {(device.hardwareLinks?.length ?? 0) > 0 && (
-              <span>
-                <span className="text-foreground">Donanım:</span>{" "}
-                {device.hardwareLinks!.map((h) => h.peripheral.name).join(", ")}
-              </span>
-            )}
+            {/* Makine/donanım ataması KALKTI — yer artık çalışma oturumundan
+                (Sistem → Çalışma Oturumları panelinde canlı izlenir). */}
             <span>Son aktivite: {lastSeen}</span>
             <span className="font-mono">{device.deviceId.slice(0, 12)}…</span>
           </div>

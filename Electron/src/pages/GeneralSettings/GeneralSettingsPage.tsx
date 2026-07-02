@@ -12,6 +12,7 @@ import { CompanySettingsSection } from "./CompanySettingsSection";
 import { SessionSettingsSection } from "./SessionSettingsSection";
 import { LabelSettingsSection } from "./LabelSettingsSection";
 import { ScannerSettingsSection } from "./ScannerSettingsSection";
+import { ScaleDeviceSettings } from "./ScaleDeviceSettings";
 
 /**
  * Genel Ayarlar — sol dikey kategori menüsü + sağ içerik. Ayarlar domaine bölünür
@@ -84,7 +85,12 @@ export function GeneralSettingsPage() {
                     {cat.kind === "flags" && cat.flags && (
                       <FeatureFlagSection flags={cat.flags} />
                     )}
-                    {cat.kind === "device" && <DevicePairingSection />}
+                    {cat.kind === "device" && (
+                      <div className="space-y-6">
+                        <DevicePairingSection />
+                        <ScaleDeviceSettings />
+                      </div>
+                    )}
                     {cat.kind === "api" && <ApiEndpointSection />}
                     {cat.kind === "company" && <CompanySettingsSection />}
                     {cat.kind === "session" && <SessionSettingsSection />}

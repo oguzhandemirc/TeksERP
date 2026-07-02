@@ -86,6 +86,27 @@ export interface AppPreferences {
     path?: string;
     baudRate?: number;
   };
+  /**
+   * Sevkiyat kantarı (seri/COM) — bu bilgisayara özel YEREL tercih. Çalışma
+   * oturumu modeliyle PC kantarı backend cihaz kaydından çözülmez: kantar bu
+   * PC'ye USB/seri bağlıdır, okuma window.api.scale.read (ana süreç) ile.
+   * path boşsa geçiş döneminde backend for-device fallback'i denenir (Faz 6'da kalkar).
+   */
+  scaleDevice?: {
+    /** COM yolu (COM3 / /dev/tty.*). Boş = tanımsız. */
+    path?: string;
+    baudRate?: number;
+    /** İstek-cevap komutu (boş = sürekli-yayın; ilk taze satır okunur). */
+    pollCommand?: string;
+    terminator?: string;
+    timeoutMs?: number;
+    /** Ondalık hassasiyeti (weight-codec; default 2). */
+    decimals?: number;
+    /** Ham → kg çarpanı (default 1). */
+    factor?: number;
+    /** Sahte kg üret (donanımsız test). */
+    simulate?: boolean;
+  };
 }
 
 export const DEFAULT_PREFERENCES: AppPreferences = {

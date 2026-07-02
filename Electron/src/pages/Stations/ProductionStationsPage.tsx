@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Pencil, HardDrive, Palette } from "lucide-react";
+import { Plus, Pencil, HardDrive, Palette, QrCode } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +20,7 @@ import { StationFormDialog } from "@/pages/Stations/StationFormDialog";
 
 import { machineService } from "@/pages/Machines/service";
 import type { Machine } from "@/pages/Machines/types";
+import { MachineQrPrintDialog } from "@/pages/Machines/MachineQrPrintDialog";
 import type { MachineFormValues } from "@/pages/Machines/schema";
 import { MachineFormDialog } from "@/pages/Machines/MachineFormDialog";
 
@@ -61,6 +62,7 @@ export function ProductionStationsPage() {
   const [stationDlg, setStationDlg] = useState<{ open: boolean; initial: Station | null }>({ open: false, initial: null });
   const [machineDlg, setMachineDlg] = useState<{ open: boolean; initial: Machine | null; stationId?: string }>({ open: false, initial: null });
   const [capStation, setCapStation] = useState<StationCapabilitySummary | null>(null);
+  const [qrMachine, setQrMachine] = useState<Machine | null>(null);
 
   const stations = (stationsQ.data?.data ?? []).filter((s) => PRODUCTION_KINDS.includes(s.kind));
   const machines = machinesQ.data?.data ?? [];
@@ -132,16 +134,26 @@ export function ProductionStationsPage() {
                   <span className="text-muted-foreground">Makineler:</span>
                   {sMachines.length === 0 && <span className="text-muted-foreground">—</span>}
                   {sMachines.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      disabled={!canWrite}
-                      className="rounded border px-2 py-0.5 text-xs hover:bg-accent disabled:cursor-default disabled:hover:bg-transparent"
-                      onClick={() => canWrite && setMachineDlg({ open: true, initial: m })}
-                      title={canWrite ? "Düzenle" : undefined}
-                    >
-                      {m.name}
-                    </button>
+                    <span key={m.id} className="inline-flex items-center overflow-hidden rounded border">
+                      <button
+                        type="button"
+                        disabled={!canWrite}
+                        className="px-2 py-0.5 text-xs hover:bg-accent disabled:cursor-default disabled:hover:bg-transparent"
+                        onClick={() => canWrite && setMachineDlg({ open: true, initial: m })}
+                        title={canWrite ? "Düzenle" : undefined}
+                      >
+                        {m.name}
+                      </button>
+                      {/* Oturum QR'ı — operatör bu etiketi okutarak makineye oturum açar */}
+                      <button
+                        type="button"
+                        className="border-l px-1.5 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                        onClick={() => setQrMachine(m)}
+                        title="Makine QR etiketi (oturum açma)"
+                      >
+                        <QrCode className="h-3 w-3" />
+                      </button>
+                    </span>
                   ))}
                   {canWrite && (
                     <Button
@@ -199,6 +211,7 @@ export function ProductionStationsPage() {
         open={!!capStation}
         onOpenChange={(o) => !o && setCapStation(null)}
       />
+      <MachineQrPrintDialog machine={qrMachine} onOpenChange={(o) => !o && setQrMachine(null)} />
     </div>
   );
 }

@@ -10,31 +10,42 @@ import { featureFlagService } from "@/services/featureFlagService";
 const DEFAULT_SESSION_HOURS = 8;
 const MAX_SESSION_HOURS = 720; // 30 gün
 const MAX_IDLE_MINUTES = 1440; // 24 saat
+const DEFAULT_WORK_SESSION_IDLE = 600; // 10 saat
 
 /**
- * Oturum & Güvenlik paneli — iki ayrı sayısal ayar:
+ * Oturum & Güvenlik paneli — üç ayrı sayısal ayar:
  *  1) Oturum (JWT) ömrü, saat: giriş sonrası token kaç saat geçerli (backend ENFORCE).
  *  2) Hareketsizlik zaman aşımı, dakika: panel bu kadar dakika işlem görmezse otomatik
  *     çıkış (0 = kapalı; frontend ENFORCE — useIdleLogout).
- * İkisi de admin:settings yetkisi ister.
+ *  3) Çalışma oturumu (saha — kim hangi makinede) idle zaman aşımı, dakika: süre dolan
+ *     oturum okuma anında IDLE kapanır, operatör yeniden yer onayı verir (backend TEMBEL
+ *     enforce; timer yok).
+ * Üçü de admin:settings yetkisi ister.
  */
 export function SessionSettingsSection() {
   const qc = useQueryClient();
   const flagsQ = useFeatureFlags();
   const currentSession = flagsQ.data?.data?.sessionDurationHours ?? DEFAULT_SESSION_HOURS;
   const currentIdle = flagsQ.data?.data?.idleTimeoutMinutes ?? 0;
+  const currentWorkIdle =
+    flagsQ.data?.data?.workSessionIdleTimeoutMinutes ?? DEFAULT_WORK_SESSION_IDLE;
 
   // String tutulur — input'ta geçici boş değere izin vermek için (kaydederken parse edilir).
   const [session, setSession] = useState(String(currentSession));
   const [idle, setIdle] = useState(String(currentIdle));
+  const [workIdle, setWorkIdle] = useState(String(currentWorkIdle));
   useEffect(() => {
     setSession(String(currentSession));
     setIdle(String(currentIdle));
-  }, [currentSession, currentIdle]);
+    setWorkIdle(String(currentWorkIdle));
+  }, [currentSession, currentIdle, currentWorkIdle]);
 
   const mut = useMutation({
-    mutationFn: (payload: { sessionDurationHours: number; idleTimeoutMinutes: number }) =>
-      featureFlagService.update(payload),
+    mutationFn: (payload: {
+      sessionDurationHours: number;
+      idleTimeoutMinutes: number;
+      workSessionIdleTimeoutMinutes: number;
+    }) => featureFlagService.update(payload),
     onSuccess: () => {
       toast.success("Oturum ayarları kaydedildi.");
       void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
@@ -45,10 +56,14 @@ export function SessionSettingsSection() {
 
   const sessionNum = Number(session);
   const idleNum = Number(idle);
+  const workIdleNum = Number(workIdle);
   const sessionValid =
     Number.isInteger(sessionNum) && sessionNum >= 1 && sessionNum <= MAX_SESSION_HOURS;
   const idleValid = Number.isInteger(idleNum) && idleNum >= 0 && idleNum <= MAX_IDLE_MINUTES;
-  const dirty = sessionNum !== currentSession || idleNum !== currentIdle;
+  const workIdleValid =
+    Number.isInteger(workIdleNum) && workIdleNum >= 0 && workIdleNum <= MAX_IDLE_MINUTES;
+  const dirty =
+    sessionNum !== currentSession || idleNum !== currentIdle || workIdleNum !== currentWorkIdle;
 
   return (
     <PermissionGate
@@ -59,6 +74,10 @@ export function SessionSettingsSection() {
           <ReadOnlyLine
             label="Hareketsizlik zaman aşımı"
             value={currentIdle > 0 ? `${currentIdle} dakika` : "Kapalı"}
+          />
+          <ReadOnlyLine
+            label="Çalışma oturumu zaman aşımı (saha)"
+            value={currentWorkIdle > 0 ? `${currentWorkIdle} dakika` : "Kapalı"}
           />
           <p className="pt-2 text-xs text-muted-foreground">
             Bu ayarları değiştirmek için <code>admin:settings</code> yetkisi gerekir.
@@ -96,14 +115,28 @@ export function SessionSettingsSection() {
           )}
         </div>
 
+        <div className="border-t pt-4">
+          <NumberField
+            id="work-session-idle-minutes"
+            label="Çalışma oturumu zaman aşımı — saha (dakika)"
+            desc="Sahadaki 'kim hangi makinede' oturumu bu kadar dakika hareketsiz kalırsa kapanır; operatör bir sonraki işlemde yeniden yer onayı verir. Varsayılan 600 (10 saat): vardiya boyunca molalarda düşmez, gece açık unutulan tablet sabaha temiz oturumla başlar. 0 = kapalı."
+            value={workIdle}
+            min={0}
+            max={MAX_IDLE_MINUTES}
+            onChange={setWorkIdle}
+            error={!workIdleValid ? `0–${MAX_IDLE_MINUTES} arası bir dakika girin (0 = kapalı).` : undefined}
+          />
+        </div>
+
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
-            disabled={!dirty || !sessionValid || !idleValid || mut.isPending}
+            disabled={!dirty || !sessionValid || !idleValid || !workIdleValid || mut.isPending}
             onClick={() =>
               mut.mutate({
                 sessionDurationHours: sessionNum,
                 idleTimeoutMinutes: idleNum,
+                workSessionIdleTimeoutMinutes: workIdleNum,
               })
             }
           >
@@ -111,7 +144,8 @@ export function SessionSettingsSection() {
           </Button>
           <span className="text-xs text-muted-foreground">
             Oturum süresi backend tarafından (token ömrü) uygulanır; hareketsizlik zaman
-            aşımı bu paneli açan her bilgisayarda geçerlidir.
+            aşımı bu paneli açan her bilgisayarda geçerlidir. Çalışma oturumu zaman aşımı
+            sahadaki tüm cihazlar için backend tarafından uygulanır.
           </span>
         </div>
       </div>

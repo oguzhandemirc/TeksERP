@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -11,12 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/forms/FormField";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
-import { machineService } from "@/pages/Machines/service";
-import type { Machine } from "@/pages/Machines/types";
-import { peripheralService } from "@/pages/PeripheralDevices/service";
-import { peripheralKindLabels } from "@/pages/PeripheralDevices/types";
-import { loadAllForPicker } from "@/lib/picker-loader";
 import { deviceService } from "./service";
 import type { DeviceListItem } from "./types";
 
@@ -26,55 +20,46 @@ interface Props {
   onDone: () => void;
 }
 
+/**
+ * Cihaz onayı — SADECE kimlik: onay + tür. Çalışma oturumu modeliyle makine ve
+ * donanım ataması bu diyalogdan KALKTI: tablet makinesine oturum açarak bağlanır
+ * (yer onayı / makine QR'ı), donanım makineye/istasyona Donanım sayfasından
+ * bağlanır. Tür akışı belirler: TABLET/PHONE = sahada oturum ister (yer onayı),
+ * DESKTOP = panel (oturum zorunluluğundan muaf).
+ */
 export function ApproveAssignDialog({ device, onOpenChange, onDone }: Props) {
-  const [machineId, setMachineId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [kind, setKind] = useState<string>("TABLET");
 
-  // Donanım listesi (Donanım sayfasındaki tüm cihazlar). Bu cihaza hangi
-  // yazıcı/okuyucu atanacağını buradan seçeriz (tablet → donanım doğrudan).
-  const { data: peripherals } = useQuery({
-    queryKey: ["peripherals", "picker"],
-    queryFn: () => loadAllForPicker(peripheralService),
-    enabled: !!device,
-  });
-
   useEffect(() => {
-    setMachineId(device?.machineId ?? null);
     setKind(device?.kind ?? "TABLET");
-    // Bu cihaza halihazırda atanmış donanımı (M:N join) ön-işaretle.
-    setSelectedIds((device?.hardwareLinks ?? []).map((h) => h.peripheral.id));
   }, [device]);
 
   const mutation = useMutation({
-    mutationFn: async (id: string) => {
-      await deviceService.approve(id, machineId, kind);
-      await deviceService.assignHardware(id, selectedIds);
-    },
+    mutationFn: (id: string) => deviceService.approve(id, null, kind),
     onSuccess: () => {
-      toast.success("Cihaz onaylandı + donanım atandı");
+      toast.success("Cihaz onaylandı");
       onDone();
     },
   });
-
-  const toggle = (id: string, on: boolean) =>
-    setSelectedIds((s) => (on ? [...new Set([...s, id])] : s.filter((x) => x !== id)));
-
-  const rows = (peripherals?.data ?? []).filter((p) => p.isActive);
 
   return (
     <Dialog open={!!device} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Cihazı Onayla & Donanım Ata</DialogTitle>
+          <DialogTitle>Cihazı Onayla</DialogTitle>
           <DialogDescription>
-            "{device?.name}" cihazını onayla ve kullandığı donanımı (yazıcı/okuyucu) seç.
-            Makine = üretim atfı (bu tablet hangi makinede); boş bırakılabilir.
+            "{device?.name}" cihazı sisteme kabul edilecek. Makine/donanım ataması
+            gerekmez — saha cihazı (tablet/telefon) çalışacağı yeri oturum açarken
+            seçer (yer onayı / makine QR'ı); donanım makineye ya da istasyona
+            "Donanım" sayfasından bağlanır.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <FormField label="Tür" hint="Cihaz tipi — listede ikon/etiket">
+          <FormField
+            label="Tür"
+            hint="TABLET/PHONE = sahada yer onayıyla çalışır; DESKTOP = yönetim paneli (oturum istemez)"
+          >
             <select
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={kind}
@@ -84,42 +69,6 @@ export function ApproveAssignDialog({ device, onOpenChange, onDone }: Props) {
               <option value="PHONE">Telefon</option>
               <option value="DESKTOP">PC / Yönetici</option>
             </select>
-          </FormField>
-
-          <FormField label="Donanım" hint="Bu cihazın kullandığı yazıcı/metre/kantar">
-            <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2">
-              {rows.length === 0 && (
-                <div className="text-xs text-muted-foreground">
-                  Donanım yok — "Donanım" sayfasından ekleyin.
-                </div>
-              )}
-              {rows.map((p) => (
-                <label key={p.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(p.id)}
-                    onChange={(e) => toggle(p.id, e.target.checked)}
-                  />
-                  <span>
-                    <span className="text-muted-foreground">[{peripheralKindLabels[p.kind]}]</span>{" "}
-                    {p.code} — {p.name}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </FormField>
-
-          <FormField label="Makine (üretim atfı)" hint="Boş → atfsız onayla">
-            <ReferenceSelect<Machine>
-              value={machineId}
-              onChange={(v) => setMachineId(v ?? null)}
-              service={machineService}
-              queryKey="machines"
-              getLabel={(m) => `${m.code} — ${m.name}`}
-              placeholder="Makine seç..."
-              nullable
-              noneLabel="— (atfsız onayla)"
-            />
           </FormField>
 
           <DialogFooter>
@@ -132,7 +81,7 @@ export function ApproveAssignDialog({ device, onOpenChange, onDone }: Props) {
               İptal
             </Button>
             <Button onClick={() => device && mutation.mutate(device.id)} disabled={mutation.isPending}>
-              {mutation.isPending ? "Kaydediliyor..." : "Onayla & Ata"}
+              {mutation.isPending ? "Kaydediliyor..." : "Onayla"}
             </Button>
           </DialogFooter>
         </div>

@@ -87,8 +87,10 @@ export const peripheralColumns: ColumnDef<PeripheralDevice>[] = [
     cell: ({ row }) =>
       row.original.machine ? (
         <span className="text-xs">{row.original.machine.code} (makine)</span>
+      ) : row.original.station ? (
+        <span className="text-xs">{row.original.station.code} (istasyon)</span>
       ) : row.original.device ? (
-        <span className="text-xs">{row.original.device.name} (tablet)</span>
+        <span className="text-xs">{row.original.device.name} (tablet — eski)</span>
       ) : (
         <span className="text-muted-foreground">— (serbest)</span>
       ),

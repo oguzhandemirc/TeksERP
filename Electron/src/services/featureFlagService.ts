@@ -151,6 +151,10 @@ export interface FeatureFlags {
   /** Hareketsizlik zaman aşımı — dakika (default 0 = kapalı). >0 iken panel bu kadar
    *  dakika hiç işlem (fare/klavye) görmezse otomatik çıkış yapar. Frontend ENFORCE eder. */
   idleTimeoutMinutes: number;
+  /** Çalışma oturumu (saha — kim hangi makinede) idle zaman aşımı — dakika (default 600
+   *  = 10 saat; 0 = kapalı). Backend TEMBEL enforce: süre dolan oturum okuma anında IDLE
+   *  kapanır; operatör bir sonraki işlemde yeniden yer onayı verir. */
+  workSessionIdleTimeoutMinutes: number;
   /** Saha #6: top etiketi kopya adedi (default 2 — topun üstüne + altına). 1-5. */
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). */

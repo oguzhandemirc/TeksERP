@@ -33,6 +33,8 @@ export interface PeripheralDevice {
   role: string | null;
   simulate: boolean;
   machineId: string | null;
+  /** MAKİNESİZ istasyona sabit donanım (SHIPPING kantarı vb.) — çalışma oturumu modeli. */
+  stationId: string | null;
   deviceId: string | null;
   printerModelId: string | null;
   formatProfileId: string | null;
@@ -41,6 +43,7 @@ export interface PeripheralDevice {
   lastSeenAt: string | null;
   notes: string | null;
   machine?: { id: string; code: string; name: string } | null;
+  station?: { id: string; code: string; name: string; kind: string } | null;
   device?: { id: string; name: string } | null;
   printerModel?: { id: string; code: string; name: string; language: PrinterLanguage } | null;
   formatProfile?: { id: string; code: string; name: string } | null;

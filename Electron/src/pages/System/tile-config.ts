@@ -1,4 +1,4 @@
-import { Activity, Archive, Cpu, DatabaseBackup, FileCode2, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { Activity, Archive, Cpu, DatabaseBackup, FileCode2, MapPin, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 
 export type SystemTileGroup = "activity" | "archive" | "config";
 
@@ -51,6 +51,15 @@ export const systemTiles: SystemTile[] = [
     description: "Kimlik doğrulama ve sistem olayları (login, başlatma, hata)",
     icon: FileCode2,
     to: "/system/logs",
+    group: "activity",
+    adminOnly: true,
+  },
+  {
+    key: "work-sessions",
+    title: "Çalışma Oturumları",
+    description: "Kim hangi makinede — canlı görünüm + geçmiş (saha ayak izi)",
+    icon: MapPin,
+    to: "/system/work-sessions",
     group: "activity",
     adminOnly: true,
   },

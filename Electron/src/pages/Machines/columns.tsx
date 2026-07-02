@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
+import { MachineQrCell } from "./MachineQrPrintDialog";
 import type { Machine } from "./types";
 
 export const machineColumns: ColumnDef<Machine>[] = [
@@ -23,5 +24,10 @@ export const machineColumns: ColumnDef<Machine>[] = [
     accessorKey: "isActive",
     header: () => <SortableHeader field="isActive" label="Durum" />,
     cell: ({ row }) => (row.original.isActive ? <Badge>Aktif</Badge> : <Badge variant="muted">Pasif</Badge>),
+  },
+  {
+    id: "qr",
+    header: "QR",
+    cell: ({ row }) => <MachineQrCell machine={row.original} />,
   },
 ];

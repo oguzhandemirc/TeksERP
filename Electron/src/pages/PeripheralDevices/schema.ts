@@ -18,8 +18,11 @@ export const peripheralFormSchema = z.object({
   timeoutMs: z.string().trim().optional().default(""),
   role: z.string().trim().max(24).optional().default(""),
   simulate: z.boolean().optional().default(false),
-  owner: z.enum(["none", "machine", "device"]),
+  // "device" (tablete bağlı) YENİ seçimlerde sunulmaz — yalnız eski kayıtların
+  // round-trip'i için parse edilir (çalışma oturumu modeli: donanım YERE bağlanır).
+  owner: z.enum(["none", "machine", "station", "device"]),
   machineId: z.string().optional().default(""),
+  stationId: z.string().optional().default(""),
   deviceId: z.string().optional().default(""),
   printerModelId: z.string().optional().default(""),
   formatProfileId: z.string().optional().default(""),
@@ -55,6 +58,8 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     role: nn(v.role),
     simulate: v.simulate,
     machineId: v.owner === "machine" ? nn(v.machineId) : null,
+    // Yalnız MAKİNESİZ istasyon (backend enforce eder — SHIPPING kantarı gibi).
+    stationId: v.owner === "station" ? nn(v.stationId) : null,
     deviceId: v.owner === "device" ? nn(v.deviceId) : null,
     // Yazıcı alanları yalnız LABEL_PRINTER'da anlamlı; metre/kantar'da temizle.
     printerModelId: v.kind === "LABEL_PRINTER" ? nn(v.printerModelId) : null,
@@ -88,6 +93,7 @@ export const peripheralFormDefaults: PeripheralFormValues = {
   simulate: false,
   owner: "none",
   machineId: "",
+  stationId: "",
   deviceId: "",
   printerModelId: "",
   formatProfileId: "",

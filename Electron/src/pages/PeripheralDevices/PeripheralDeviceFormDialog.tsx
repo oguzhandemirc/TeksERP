@@ -6,6 +6,8 @@ import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { Input } from "@/components/ui/input";
 import { machineService } from "@/pages/Machines/service";
 import type { Machine } from "@/pages/Machines/types";
+import { stationService } from "@/pages/Stations/service";
+import { loadAllForPicker } from "@/lib/picker-loader";
 import { printerModelService } from "@/pages/PrinterModels/service";
 import type { PrinterModel } from "@/pages/PrinterModels/types";
 import { labelFormatProfileService } from "@/pages/LabelFormatProfiles/service";
@@ -57,6 +59,18 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
   });
   const devices = devicesQuery.data?.data ?? [];
 
+  // MAKİNESİZ istasyonlar (SHIPPING gibi) — istasyona-sabit donanım yalnız bunlara
+  // bağlanabilir (backend enforce; liste baştan filtreli sunulur).
+  const stationsQuery = useQuery({
+    queryKey: ["stations", "picker", "machineless"],
+    queryFn: () => loadAllForPicker(stationService),
+    enabled: open,
+  });
+  const machinelessStations = (stationsQuery.data?.data ?? []).filter((st) => {
+    const machines = (st as unknown as { machines?: Array<{ isActive?: boolean }> }).machines ?? [];
+    return st.isActive && machines.filter((m) => m.isActive !== false).length === 0;
+  });
+
   const defaults: PeripheralFormValues = initial
     ? {
         code: initial.code,
@@ -74,8 +88,15 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         timeoutMs: initial.timeoutMs != null ? String(initial.timeoutMs) : "",
         role: initial.role ?? "",
         simulate: initial.simulate ?? false,
-        owner: initial.machineId ? "machine" : initial.deviceId ? "device" : "none",
+        owner: initial.machineId
+          ? "machine"
+          : initial.stationId
+            ? "station"
+            : initial.deviceId
+              ? "device"
+              : "none",
         machineId: initial.machineId ?? "",
+        stationId: initial.stationId ?? "",
         deviceId: initial.deviceId ?? "",
         printerModelId: initial.printerModelId ?? "",
         formatProfileId: initial.formatProfileId ?? "",
@@ -179,13 +200,19 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
               </div>
             )}
 
-            {/* Sahiplik: serbest / makineye-sabit / tablete-bağlı */}
+            {/* Sahiplik: serbest / makineye-sabit / makinesiz-istasyona-sabit.
+                Çalışma oturumu modeli: donanım YERE bağlanır (makine, o yoksa
+                makinesiz istasyon); tablete-bağlı seçenek yalnız ESKİ kayıtların
+                round-trip'i için görünür (yeni seçim sunulmaz, Faz 6'da kalkar). */}
             <div className="grid grid-cols-3 gap-3 rounded-md border bg-muted/20 p-3">
               <FormField label="Sahip">
                 <select className={SELECT_CLS} {...form.register("owner")}>
                   <option value="none">— (serbest)</option>
                   <option value="machine">Makineye sabit</option>
-                  <option value="device">Tablete bağlı</option>
+                  <option value="station">Makinesiz istasyona sabit</option>
+                  {defaults.owner === "device" && (
+                    <option value="device">Tablete bağlı (eski)</option>
+                  )}
                 </select>
               </FormField>
               {owner === "machine" && (
@@ -204,6 +231,22 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                       />
                     )}
                   />
+                </FormField>
+              )}
+              {owner === "station" && (
+                <FormField
+                  label="İstasyon"
+                  hint="Yalnız makinesiz istasyonlar (örn. Sevkiyat)"
+                  className="col-span-2"
+                >
+                  <select className={SELECT_CLS} {...form.register("stationId")}>
+                    <option value="">İstasyon seç...</option>
+                    {machinelessStations.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.code} — {st.name}
+                      </option>
+                    ))}
+                  </select>
                 </FormField>
               )}
               {owner === "device" && (
