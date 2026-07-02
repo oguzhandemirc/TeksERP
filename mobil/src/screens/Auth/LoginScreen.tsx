@@ -73,10 +73,14 @@ export default function LoginScreen() {
   // yöntemle açılır; diğer etkin yöntemler "Diğer giriş yöntemlerini dene"
   // butonuyla seçenek olarak çıkar. list=kullanıcı+şifre, pin=salt hızlı-PIN
   // (kullanıcı seçme yok — PIN benzersiz), card=QR personel kartı.
+  // SAHA BUG'ı: 5 dk staleTime + ekran hep açık → panelden yöntem değişikliği
+  // tablete çok geç yansıyordu. Login ekranı zaten boşta bekleyen bir ekran:
+  // açıkken 10 sn'de bir tazele (public uç, minik yanıt; ekran kapanınca durur).
   const methodsQ = useQuery({
     queryKey: ['auth', 'login-methods'],
     queryFn: authService.getLoginMethods,
-    staleTime: 5 * 60 * 1000,
+    refetchInterval: 10_000,
+    refetchOnMount: 'always',
   });
   const enabledMethods = methodsQ.data?.enabled ?? ['list'];
   const [pickedMethod, setPickedMethod] = useState<LoginMethod | null>(null);
@@ -161,6 +165,21 @@ export default function LoginScreen() {
     [setAuth],
   );
 
+  // Yöntem 403'ü (panelden kapatılmış) → yerel seçimi bırak + ayarı ANINDA tazele;
+  // ekran öncelikli (etkin) yönteme kendiliğinden döner.
+  const refetchMethods = methodsQ.refetch;
+  const handleMethodDisabled = useCallback(
+    (e: unknown): boolean => {
+      const status = (e as { status?: number })?.status;
+      if (status !== 403) return false;
+      setPickedMethod(null);
+      setMethodPickerOpen(false);
+      void refetchMethods();
+      return true;
+    },
+    [refetchMethods],
+  );
+
   // SALT hızlı-PIN girişi — kullanıcı seçme yok; PIN benzersiz olduğundan kimliği
   // tek başına belirler (backend findUnique).
   const submitQuickPin = useCallback(
@@ -177,12 +196,13 @@ export default function LoginScreen() {
         const msg = e instanceof Error ? e.message : 'PIN tanınmadı.';
         setError(msg);
         setPin('');
+        handleMethodDisabled(e);
         Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg, visibilityTime: 6000 });
       } finally {
         setSubmitting(false);
       }
     },
-    [setAuth],
+    [setAuth, handleMethodDisabled],
   );
 
   // QR personel kartıyla giriş — okutma başarılıysa PIN'siz doğrudan token alınır.
@@ -199,12 +219,13 @@ export default function LoginScreen() {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         const msg = e instanceof Error ? e.message : 'Kart okunamadı.';
         setError(msg);
+        handleMethodDisabled(e);
         Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg, visibilityTime: 6000 });
       } finally {
         setSubmitting(false);
       }
     },
-    [setAuth],
+    [setAuth, handleMethodDisabled],
   );
 
   // 6 hane dolunca yönteme göre gönder: 'pin' = salt hızlı-PIN (kullanıcı yok);
