@@ -504,15 +504,23 @@ export default function LoginScreen() {
     otherMethods.length === 0 ? null : (
       <View style={styles.methodSwitchWrap}>
         {!methodPickerOpen ? (
+          // Kapalı hal — GERÇEK buton gibi görünmeli (altı çizili metin değil):
+          // çerçeveli, tam genişlik, dokunma hedefi büyük.
           <TouchableRipple
             onPress={() => setMethodPickerOpen(true)}
-            rippleColor="rgba(99,102,241,0.2)"
-            style={styles.pinFallbackBtn}
+            rippleColor="rgba(255,255,255,0.15)"
+            style={styles.methodTriggerBtn}
           >
-            <Text style={styles.pinFallbackText}>Diğer giriş yöntemlerini dene</Text>
+            <View style={styles.methodTriggerInner}>
+              <Icon source="swap-horizontal" size={22} color="#c7d2fe" />
+              <Text style={styles.methodTriggerText}>Diğer giriş yöntemlerini dene</Text>
+              <Icon source="chevron-down" size={22} color={COLORS.subtext} />
+            </View>
           </TouchableRipple>
         ) : (
+          // Açık hal — tetik metni BAŞLIK olarak kalır, seçenekler altında.
           <View style={styles.methodColumn}>
+            <Text style={styles.methodHeader}>DİĞER GİRİŞ YÖNTEMLERİ</Text>
             {otherMethods.map((m) => (
               <TouchableRipple
                 key={m}
@@ -927,17 +935,35 @@ const styles = StyleSheet.create({
     minHeight: 60,
   },
   cardScanBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  pinFallbackBtn: { marginTop: 10, borderRadius: 10, alignSelf: 'center' },
-  pinFallbackText: {
-    color: COLORS.subtext,
-    fontSize: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    textDecorationLine: 'underline',
-  },
   // Yöntem değiştirici ("Diğer giriş yöntemlerini dene" → seçenek butonları).
   // Butonlar tam genişlik + ALT ALTA + ayrı renkler — saha ayırt edilebilirliği.
   methodSwitchWrap: { alignSelf: 'stretch', alignItems: 'center', marginTop: 22 },
+  // Kapalı hal tetiği — buton gibi: çerçeveli, tam genişlik, büyük dokunma hedefi.
+  methodTriggerBtn: {
+    alignSelf: 'stretch',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.bgSoft,
+  },
+  methodTriggerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 18,
+    minHeight: 56,
+  },
+  methodTriggerText: { color: '#c7d2fe', fontSize: 16, fontWeight: '700' },
+  // Açık hal başlığı — tetik metni başlık olarak kalır.
+  methodHeader: {
+    color: COLORS.subtext,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
   methodColumn: { alignSelf: 'stretch', gap: 12 },
   methodBtn: {
     alignSelf: 'stretch',
