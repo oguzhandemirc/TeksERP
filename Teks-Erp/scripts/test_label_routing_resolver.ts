@@ -1,13 +1,14 @@
 // =============================================================================
 // Test: birleşik etiket yönlendirme çözücü (resolveLabelRouting)
 // Çalıştır: npx tsx scripts/test_label_routing_resolver.ts
-// Öncelik matrisi: dil (override>model>global), şablon (explicit>route>default),
+// Öncelik matrisi: dil (override>global), şablon (explicit>route>default),
 // format (explicit>cihaz profili>zincir), cihaz seçimi (explicit>device>machine).
 // Test verisi üretir, sonunda temizler.
 // =============================================================================
 import { ConnectionType, LabelKind, PrinterLanguage } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { resolveLabelRouting } from "../src/services/helpers/label-routing.resolver";
+import { readPrinterLanguage } from "../src/services/system-setting.service";
 
 let pass = 0;
 let fail = 0;
@@ -17,16 +18,14 @@ function check(label: string, ok: boolean, extra = "") {
 }
 
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-const ids: { peripherals: string[]; templates: string[]; profiles: string[]; models: string[]; devices: string[]; machines: string[]; stations: string[] } =
-  { peripherals: [], templates: [], profiles: [], models: [], devices: [], machines: [], stations: [] };
+const ids: { peripherals: string[]; templates: string[]; profiles: string[]; devices: string[]; machines: string[]; stations: string[] } =
+  { peripherals: [], templates: [], profiles: [], devices: [], machines: [], stations: [] };
 
 async function main() {
   // --- Fixtures ---
   const fp = await prisma.labelFormatProfile.create({ data: { code: `TEST-FP-${stamp}`, name: "FP", widthMm: 100, heightMm: 148 }, select: { id: true } });
   const fp2 = await prisma.labelFormatProfile.create({ data: { code: `TEST-FP2-${stamp}`, name: "FP2", widthMm: 100, heightMm: 60, orientation: "LANDSCAPE" }, select: { id: true } });
   ids.profiles.push(fp.id, fp2.id);
-  const pm = await prisma.printerModel.create({ data: { code: `TEST-PM-${stamp}`, name: "PM", language: PrinterLanguage.PPLB, defaultProfileId: fp.id }, select: { id: true } });
-  ids.models.push(pm.id);
   const tplRoute = await prisma.labelTemplate.create({ data: { name: `TEST-ROUTE-${stamp}`, kind: LabelKind.ROLL_FINISHED, isDefault: false, fields: [] }, select: { id: true } });
   const tplExplicit = await prisma.labelTemplate.create({ data: { name: `TEST-EXPL-${stamp}`, kind: LabelKind.ROLL_FINISHED, isDefault: false, fields: [] }, select: { id: true } });
   ids.templates.push(tplRoute.id, tplExplicit.id);
@@ -42,7 +41,7 @@ async function main() {
   const peripheral = await prisma.peripheralDevice.create({
     data: {
       code: `TEST-PRN-${stamp}`, name: "BT Yazıcı", kind: "LABEL_PRINTER", connectionType: ConnectionType.BLUETOOTH_SPP,
-      address: "AA:BB:CC", deviceId: device.id, printerModelId: pm.id, formatProfileId: fp.id, languageOverride: PrinterLanguage.ZPL,
+      address: "AA:BB:CC", deviceId: device.id, formatProfileId: fp.id, languageOverride: PrinterLanguage.ZPL,
     },
     select: { id: true },
   });
@@ -56,10 +55,11 @@ async function main() {
   check("şablon = route şablonu", r1.template?.id === tplRoute.id);
   check("format = cihaz profili (FP)", r1.format.profileId === fp.id);
 
-  // --- 2. languageOverride kaldır → dil = model dili (PPLB) ---
+  // --- 2. languageOverride kaldır → dil = GLOBAL ayar (canlı DB'de değişken → dinamik oku) ---
   await prisma.peripheralDevice.update({ where: { id: peripheral.id }, data: { languageOverride: null } });
+  const globalLang = await readPrinterLanguage();
   const r2 = await resolveLabelRouting({ kind: LabelKind.ROLL_FINISHED, deviceId: device.id });
-  check("override yok → dil = model dili (PPLB)", r2.language === "PPLB", r2.language);
+  check("override yok → dil = GLOBAL ayar", r2.language === globalLang, `${r2.language} == ${globalLang}`);
 
   // --- 3. explicit templateId route'u ezer ---
   const r3 = await resolveLabelRouting({ kind: LabelKind.ROLL_FINISHED, deviceId: device.id, templateId: tplExplicit.id });
@@ -76,7 +76,7 @@ async function main() {
 
   // --- 6. makineye-bağlı cihaz (machineId yolu) ---
   const p2 = await prisma.peripheralDevice.create({
-    data: { code: `TEST-PRN2-${stamp}`, name: "Ağ Yazıcı", kind: "LABEL_PRINTER", connectionType: ConnectionType.NETWORK_TCP, address: "192.168.1.50", machineId: machine.id, printerModelId: pm.id },
+    data: { code: `TEST-PRN2-${stamp}`, name: "Ağ Yazıcı", kind: "LABEL_PRINTER", connectionType: ConnectionType.NETWORK_TCP, address: "192.168.1.50", machineId: machine.id, languageOverride: PrinterLanguage.PPLA },
     select: { id: true },
   });
   ids.peripherals.push(p2.id);
@@ -90,7 +90,6 @@ async function main() {
 async function cleanup() {
   await prisma.peripheralDevice.deleteMany({ where: { id: { in: ids.peripherals } } }); // route'lar cascade
   await prisma.labelTemplate.deleteMany({ where: { id: { in: ids.templates } } });
-  await prisma.printerModel.deleteMany({ where: { id: { in: ids.models } } });
   await prisma.labelFormatProfile.deleteMany({ where: { id: { in: ids.profiles } } });
   await prisma.device.deleteMany({ where: { id: { in: ids.devices } } });
   await prisma.machine.deleteMany({ where: { id: { in: ids.machines } } });

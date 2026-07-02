@@ -27,7 +27,7 @@
 ```
 Teks-Erp/
 ├── prisma/
-│   ├── schema.prisma          # 66 model, 23 enum
+│   ├── schema.prisma          # 65 model, 23 enum
 │   ├── seed.ts                # Tek dosya: 54 permission + 14 template + 7 kullanıcı + 3 kalite + master demo
 │   └── migrations/            # 2026-05-25 baseline reset + 44 migration (son: 20260612103000)
 │
@@ -86,7 +86,7 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 
 ## 4. Schema — 66 Model + 23 Enum
 
-> **Güncellik notu (2026-06-12):** Aşağıdaki model/enum tabloları sevkiyat yeniden-yazımı ÖNCESİNDEN kalma — gerçek envanter 66 model / 23 enum. Tabloda eksik olanlar: `Sack`, `Shipment`, `ShipmentOrder`, `ShipmentAllocation`, `PrintedDocument`, `RollReturn`, `ReturnReason`, `KartelaDispatch(+Item)`, `KartelaReceipt(+Item)`, `ProductRecipe(+Property)`, `UserPreference`; enum'larda `ShipmentStatus`, `PrintedDocType/Status`, `RollErrorAction`, `DefectSeverity` vb. Kesin liste için `prisma/schema.prisma`'ya bak.
+> **Güncellik notu (2026-06-12):** Aşağıdaki model/enum tabloları sevkiyat yeniden-yazımı ÖNCESİNDEN kalma — gerçek envanter 65 model / 23 enum. Tabloda eksik olanlar: `Sack`, `Shipment`, `ShipmentOrder`, `ShipmentAllocation`, `PrintedDocument`, `RollReturn`, `ReturnReason`, `KartelaDispatch(+Item)`, `KartelaReceipt(+Item)`, `ProductRecipe(+Property)`, `UserPreference`; enum'larda `ShipmentStatus`, `PrintedDocType/Status`, `RollErrorAction`, `DefectSeverity` vb. Kesin liste için `prisma/schema.prisma`'ya bak.
 
 ### Modeller (gruplandırılmış)
 
@@ -309,7 +309,7 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 
 ### Seed Sonrası Yetki Dağılımı
 
-`seed.ts` **yalnız `admin`'e tüm 54 permission'ı atar** (`prisma/seed.ts` §4). Diğer test kullanıcıları (`mehmet.planlama`, `ali.operator`, `ayse.kalite`, `fatma.satis`, `ali.kursun`, `ahmet.depo`) yetkisiz başlar — admin web UI'sından (`POST /api/admin/users/:id/permissions`) tek tek atanır.
+`seed.ts` **yalnız `admin`'i (tüm 54 permission) seed'ler** (`prisma/seed.ts` §3-4). Ek test kullanıcıları 2026-07-03'te KALDIRILDI (her reseed'de tek tek silmek gerekiyordu). Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; 0-izinli RBAC senaryosu gereken HTTP testleri (`test_http_api`, `test_direct_ship_api`) kendi geçici kullanıcısını üretip temizler.
 
 ### Yeni Endpoint Yazarken
 
@@ -933,19 +933,11 @@ npx tsc --noEmit             # Type-check (build'siz)
 
 ## 13. Test Kullanıcıları (Seed)
 
-| Username | Şifre | Hedef Rol | Seed Sonrası Yetkiler |
-|---|---|---|---|
-| `admin` | `123123` | Admin | ✅ TÜM 54 permission (seed §4) |
-| `mehmet.planlama` | `test123` | Planlama Şefi | ⚠️ Boş — admin UI'dan atayın |
-| `ali.operator` | `test123` | Üretim Operatörü | ⚠️ Boş — admin UI'dan atayın |
-| `ayse.kalite` | `test123` | Kalite Kontrol | ⚠️ Boş — admin UI'dan atayın |
-| `fatma.satis` | `test123` | Satış | ⚠️ Boş — admin UI'dan atayın |
-| `ali.kursun` | `test123` | Mobil — Kurşun/KK2 | ⚠️ Boş — admin UI'dan atayın |
-| `ahmet.depo` | `test123` | Mobil — Depo/Tambur | ⚠️ Boş — admin UI'dan atayın |
+| Username | Şifre | Yetkiler |
+|---|---|---|
+| `admin` | `123123` | ✅ TÜM 54 permission (seed §4) |
 
-> **Tasarım kararı:** `prisma/seed.ts` yalnız `admin`'e seed'de yetki veriyor. Diğer test kullanıcıları "boş başlar, admin atar" prensibiyle yaratılıyor — production'da rol atamaları runtime yapılır, dev'de de aynı yol izlenir.
->
-> "Hedef Rol" kolonu, kullanıcının ileride hangi yetki setine sahip olması beklendiğini gösterir — seed'de değil, admin UI'sındaki atamada karşılık bulur.
+> **2026-07-03:** Seed'de YALNIZ `admin` var. Eski ek test kullanıcıları (mehmet.planlama, ali.operator, ...) KALDIRILDI — her reseed'de tek tek silinmeleri gerekiyordu. Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; yeni kullanıcı varsayılan olarak üretim istasyon izinlerini (KK1/KK2/Tambur) + mobil kimlik (hızlı PIN + QR kart) alır (opt-out'lu). 0-izinli RBAC testleri kendi geçici kullanıcısını üretip temizler.
 
 ### Seed Sonrası Yüklü Master Data
 

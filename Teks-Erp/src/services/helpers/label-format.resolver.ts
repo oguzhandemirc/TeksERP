@@ -3,10 +3,12 @@
 // =============================================================================
 // Öncelik zinciri:
 //   1. explicit profileId (query/body)
-//   2. machineId → makineye-bağlı LABEL_PRINTER PeripheralDevice.formatProfile →
-//      printerModel.defaultProfile (yazıcı dili = printerModel.language)
-//   3. sistem default profili (code="DEFAULT", yoksa en eski aktif)
+//   2. machineId → makineye-bağlı LABEL_PRINTER PeripheralDevice.formatProfile
+//   3. sistem default profili (top: isRollDefault; sonra code="DEFAULT"; yoksa en eski aktif)
 //   4. KOD FALLBACK (DB boş) → DEFAULT_LABEL_FORMAT + RASTER_HTML
+//
+// Dil bu katmanda HER ZAMAN global ayardır (`label.printerLanguage`); cihaz-özel
+// `languageOverride` bir üst katmanda (label-routing.resolver) biner.
 //
 // Mobil: `req.device.machineId` (device.middleware) → istasyon yazıcısı OTO çözülür.
 // Electron: device yok → sistem default (adım 3).
@@ -43,14 +45,14 @@ interface ProfileRow {
 }
 
 /**
- * Makineye-SABİT aktif LABEL_PRINTER cihazını (model+default profil+format profili)
- * döner. Hem format hem routing resolver'ın "istasyon yazıcısı" kaynağı —
- * `MachineHardware` emekliye ayrıldı, yazıcı tek kaynağı PeripheralDevice.
+ * Makineye-SABİT aktif LABEL_PRINTER cihazını (format profiliyle) döner. Hem format
+ * hem baskı-hedefi (adres/port) kaynağı — `MachineHardware` emekliye ayrıldı, yazıcı
+ * tek kaynağı PeripheralDevice.
  */
 export async function loadMachinePrinter(machineId: string) {
   return prisma.peripheralDevice.findFirst({
     where: { machineId, kind: "LABEL_PRINTER", isActive: true },
-    include: { formatProfile: true, printerModel: { include: { defaultProfile: true } } },
+    include: { formatProfile: true },
     orderBy: { createdAt: "desc" },
   });
 }
@@ -86,9 +88,6 @@ export async function resolveLabelFormat(opts?: {
    * diğer türlerde (SWATCH) code="DEFAULT". Verilmezse eski davranış (code="DEFAULT"). */
   kind?: LabelKind | null;
 }): Promise<ResolvedLabelFormat> {
-  // Yazıcı dili: bir istasyon yazıcı MODELİ çözülürse onunki (örn Argox=PPLA),
-  // yoksa global ayar `label.printerLanguage` (default PPLA). Model dili önceliklidir.
-  let modelLanguage: PrinterLanguage | null = null;
   let profile: ProfileRow | null = null;
   let source: FormatResolveSource = "code-fallback";
 
@@ -101,18 +100,14 @@ export async function resolveLabelFormat(opts?: {
     }
   }
 
-  // 2. machineId → makineye-bağlı yazıcı cihazı → (geometri yoksa profil) + yazıcı dili
-  if (opts?.machineId) {
+  // 2. machineId → makineye-bağlı yazıcı cihazının kendi format profili.
+  //    (Explicit profil çözüldüyse makine sorgusu tamamen atlanır.)
+  if (opts?.machineId && !profile) {
     const printer = await loadMachinePrinter(opts.machineId);
-    if (printer?.printerModel) modelLanguage = printer.printerModel.language;
-    if (!profile) {
-      const p =
-        (printer?.formatProfile?.isActive ? printer.formatProfile : null) ??
-        (printer?.printerModel?.defaultProfile?.isActive ? printer.printerModel.defaultProfile : null);
-      if (p) {
-        profile = p;
-        source = "machine";
-      }
+    const p = printer?.formatProfile?.isActive ? printer.formatProfile : null;
+    if (p) {
+      profile = p;
+      source = "machine";
     }
   }
 
@@ -138,9 +133,9 @@ export async function resolveLabelFormat(opts?: {
     }
   }
 
-  // Etkin dil — model dili (varsa) ?? global ayar (default PPLA). `??` model yolunda
-  // ayar okumasını kısa-devre yapar (mobil baskıda ekstra sorgu yok).
-  const language = modelLanguage ?? (await readPrinterLanguage());
+  // Etkin dil — bu katmanda HER ZAMAN global ayar (`label.printerLanguage`, default
+  // PPLA). Cihaz-özel `languageOverride` bir üst katmanda (label-routing.resolver) biner.
+  const language = await readPrinterLanguage();
 
   // 4. KOD FALLBACK — DB'de hiç profil yok
   if (!profile) {

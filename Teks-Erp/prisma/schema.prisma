@@ -500,8 +500,7 @@ model LabelFormatProfile {
   /// kullanır; böylece top ile kartela boyutu bağımsız ayarlanır.
   isRollDefault Boolean @default(false)
 
-  defaultForModels PrinterModel[]    @relation("ModelDefaultProfile")
-  peripherals      PeripheralDevice[]
+  peripherals PeripheralDevice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -511,8 +510,9 @@ model LabelFormatProfile {
 }
 
 /// Birleşik CİHAZ KAYDI — yazıcılar (ağ/Bluetooth/USB/seri) + tekstil makine
-/// sinyal kaynakları (kantar/metraj, kayıt-only). Her cihaz dilini (printerModel
-/// veya languageOverride), format profilini ve şablon yönlendirmesini taşır →
+/// sinyal kaynakları (kantar/metraj, kayıt-only). Her cihaz dilini (languageOverride;
+/// boş → global `label.printerLanguage`), format profilini (boş → sistem-default
+/// profil) ve şablon yönlendirmesini taşır →
 /// baskı anında cihaz→{dil,profil,şablon} çözülür. Sahiplik tam-biri: makineye
 /// SABİT (machineId) VEYA tablete-BAĞLI (deviceId, BT yazıcı tabletle gezer).
 /// Saha donanımının TEK kaynağı — eski `MachineHardware` emekliye ayrıldı.
@@ -549,11 +549,9 @@ model PeripheralDevice {
   stationId String?  @db.Uuid
   station   Station? @relation(fields: [stationId], references: [id], onDelete: SetNull)
 
-  printerModelId   String?             @db.Uuid
-  printerModel     PrinterModel?       @relation(fields: [printerModelId], references: [id], onDelete: Restrict)
   formatProfileId  String?             @db.Uuid
   formatProfile    LabelFormatProfile? @relation(fields: [formatProfileId], references: [id], onDelete: Restrict)
-  languageOverride PrinterLanguage? // model dilini ezer (boş → model/global)
+  languageOverride PrinterLanguage? // cihaz dili (boş → global ayar label.printerLanguage)
 
   isActive   Boolean   @default(true)
   lastSeenAt DateTime?
@@ -568,7 +566,6 @@ model PeripheralDevice {
   @@index([machineId])
   @@index([deviceId])
   @@index([stationId])
-  @@index([printerModelId])
   @@index([formatProfileId])
   @@index([connectionType])
   @@index([isActive])

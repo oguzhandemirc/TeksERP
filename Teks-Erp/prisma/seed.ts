@@ -12,7 +12,7 @@
 // Yüklenenler:
 //   1. 54 permission (web + mobil + admin)
 //   2. 14 permission template (Admin Tam Yetki + mobil/masaüstü roller)
-//   3. 7 kullanıcı (admin + 6 test — admin dışı yetkisiz başlar)
+//   3. 1 kullanıcı (yalnız admin — ek test kullanıcıları kaldırıldı 2026-07-03)
 //   4. Admin'e tüm yetkiler atanır
 //   5. 3 kalite sınıfı (1.KALITE / A1 / FIRE)
 //   6. Master demo (test ortamı için): 4 müşteri, 6 renk, 6 kumaş özelliği,
@@ -175,6 +175,10 @@ async function main() {
   // ===========================================================================
   // 3. USERS
   // ===========================================================================
+  // Yalnız admin seed'lenir. Ek test kullanıcıları KALDIRILDI (kullanıcı isteği:
+  // her reseed'de tek tek silmek zorunda kalıyordu). Yeni kullanıcılar admin
+  // panelinden açılır; HTTP testleri (test_http_api / test_direct_ship_api) kendi
+  // geçici 0-izinli kullanıcılarını üretip temizler.
   const adminUser = await prisma.user.create({
     data: {
       username: "admin",
@@ -182,22 +186,7 @@ async function main() {
       fullName: "Sistem Yöneticisi",
     },
   });
-
-  const testUsers = await Promise.all(
-    [
-      { username: "mehmet.planlama", fullName: "Mehmet Yılmaz" },
-      { username: "ali.operator",    fullName: "Ali Demir" },
-      { username: "ayse.kalite",     fullName: "Ayşe Kaya" },
-      { username: "fatma.satis",     fullName: "Fatma Özdemir" },
-      { username: "ali.kursun",      fullName: "Ali (Mobil — Kurşun/KK2)" },
-      { username: "ahmet.depo",      fullName: "Ahmet (Mobil — Depo/Tambur)" },
-    ].map(async (u) =>
-      prisma.user.create({
-        data: { ...u, passwordHash: await hashPassword("test123") },
-      })
-    )
-  );
-  console.log(`✅ ${1 + testUsers.length} kullanıcı (admin + ${testUsers.length} test)`);
+  console.log("✅ 1 kullanıcı (admin)");
 
   // ===========================================================================
   // 4. USER PERMISSIONS — sadece admin'e tüm yetkiler
@@ -420,16 +409,7 @@ async function main() {
       widthMm: 100, heightMm: 58, marginMm: 3, gapMm: 2, dpi: 203, orientation: "LANDSCAPE",
     },
   });
-  const argox = await prisma.printerModel.create({
-    data: {
-      code: "ARGOX_OS214_PLUS",
-      name: "Argox OS 214 plus",
-      manufacturer: "Argox",
-      dpi: 203, maxWidthMm: 104, language: "PPLA",
-      defaultProfileId: argoxProfile.id,
-    },
-  });
-  console.log("✅ Yazıcı modeli (Argox OS 214 plus, PPLA) + 2 etiket format profili");
+  console.log("✅ 2 etiket format profili");
 
   // --- Saha donanımı: makineye-bağlı yazıcılar (PeripheralDevice, NETWORK_TCP) ---
   // MachineHardware emekli; saha donanımının TEK kaynağı PeripheralDevice. Faz-1
@@ -450,7 +430,7 @@ async function main() {
       data: {
         code: sp.code, name: sp.name, kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP",
         address: sp.address, port: 9100, machineId,
-        printerModelId: argox.id, formatProfileId: argoxProfile.id,
+        languageOverride: "PPLA", formatProfileId: argoxProfile.id,
       },
     });
   }
@@ -471,7 +451,7 @@ async function main() {
         address: "192.168.1.52",
         port: 9100,
         machineId: tamburMachineId,
-        printerModelId: argox.id,
+        languageOverride: "PPLA",
         formatProfileId: argoxProfile.id,
       },
     });
@@ -688,9 +668,8 @@ async function main() {
   console.log("✅ 3 label template (ROLL_RAW + ROLL_FINISHED + SWATCH default)");
 
   console.log("\n🎉 Seed tamamlandı.\n");
-  console.log("Kullanıcılar:");
-  console.log("  admin / 123123          → Tam yetki");
-  console.log("  Diğerleri / test123     → Yetkisiz (admin UI'dan atayın)\n");
+  console.log("Kullanıcı:");
+  console.log("  admin / 123123          → Tam yetki (tek seed kullanıcısı)\n");
 }
 
 main()

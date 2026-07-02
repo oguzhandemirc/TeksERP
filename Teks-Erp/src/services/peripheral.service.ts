@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP - Peripheral Device (birleşik cihaz kaydı) Service
 // =============================================================================
-// BaseService + validateRefs (printer.service deseni). Bare BaseController Zod
+// BaseService + validateRefs (label-format-profile.service deseni). Bare BaseController Zod
 // taşımaz → FK/sahiplik/port hijyeni serviste. Ayrıca per-kind şablon yönlendirme
 // (setTemplateRoute), mobil BT yazıcı kaydı (registerBt) ve bağlantı testi (test).
 // İzin: donanım ailesiyle tutarlı `station:read/write`.
@@ -78,10 +78,6 @@ export class PeripheralDeviceService extends BaseService {
       const s = Number(data.scale);
       if (!Number.isFinite(s) || s <= 0) throw AppError.badRequest("Ölçek (scale) pozitif olmalı");
     }
-    if (typeof data.printerModelId === "string" && data.printerModelId) {
-      const m = await prisma.printerModel.findFirst({ where: { id: data.printerModelId, isActive: true }, select: { id: true } });
-      if (!m) throw AppError.badRequest("Yazıcı modeli bulunamadı veya pasif");
-    }
     if (typeof data.formatProfileId === "string" && data.formatProfileId) {
       const f = await prisma.labelFormatProfile.findFirst({ where: { id: data.formatProfileId, isActive: true }, select: { id: true } });
       if (!f) throw AppError.badRequest("Etiket format profili bulunamadı veya pasif");
@@ -111,7 +107,13 @@ export class PeripheralDeviceService extends BaseService {
   }
 
   async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    delete data.printerModelId; // eski istemci toleransı — PrinterModel alanı 2026-07'de kaldırıldı
     const routes = takeRoutes(data); // data'dan çıkar (Prisma create relation şekli farklı)
+    // Yazıcı dili cihazın kendi üstünde — dilsiz yazıcı kaydı globalden sürpriz
+    // etkilenir, en baştan reddet (DB nullable kalır: eski satırlar için).
+    if (data.kind === PeripheralKind.LABEL_PRINTER && !data.languageOverride) {
+      throw AppError.badRequest("Yazıcı için dil seçimi zorunlu");
+    }
     await this.validateRefs(data);
     const res = await super.create(data, userId);
     const id = (res.data as { id?: string } | null)?.id;
@@ -120,7 +122,15 @@ export class PeripheralDeviceService extends BaseService {
   }
 
   async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    delete data.printerModelId; // eski istemci toleransı — PrinterModel alanı 2026-07'de kaldırıldı
     const routes = takeRoutes(data);
+    // PATCH kısmiliğini bozmadan: yalnız dil EXPLICIT temizlenmek istenirse reddet.
+    if (Object.prototype.hasOwnProperty.call(data, "languageOverride") && !data.languageOverride) {
+      const existing = await prisma.peripheralDevice.findUnique({ where: { id }, select: { kind: true } });
+      if (existing?.kind === PeripheralKind.LABEL_PRINTER) {
+        throw AppError.badRequest("Yazıcı için dil seçimi zorunlu — dil boşaltılamaz");
+      }
+    }
     await this.validateRefs(data, id);
     const res = await super.update(id, data, userId);
     if (routes) await this.applyRoutes(id, routes, userId);

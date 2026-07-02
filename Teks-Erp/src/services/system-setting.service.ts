@@ -1426,8 +1426,9 @@ export async function readRollNameTemplate(
 
 /**
  * Varsayılan etiket yazıcı dili — native render (PPLA/PPLB/ZPL) veya HTML.
- * Default PPLA. Yazıcı modeli kendi dilini belirtirse o istasyonda model önceliklidir;
- * bu ayar model bağlamı yoksa (Electron/fallback) ve genel varsayılan olarak okunur.
+ * Default PPLA. Cihaz kaydında `languageOverride` doluysa o cihaz kendi dilinde
+ * basar; bu ayar cihaz bağlamı olmayan baskı/önizlemelerin ve dili boş eski
+ * kayıtların son çaresidir.
  */
 export const PRINTER_LANGUAGES: PrinterLanguage[] = ["RASTER_HTML", "PPLA", "PPLB", "ZPL"];
 export const DEFAULT_PRINTER_LANGUAGE: PrinterLanguage = "PPLA";

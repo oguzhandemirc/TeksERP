@@ -66,6 +66,7 @@ async function main() {
   };
 
   let createdCustomerId: string | null = null;
+  let lowUserId: string | null = null;
 
   try {
     // ---- 1) AUTH: login başarılı ----
@@ -108,9 +109,23 @@ async function main() {
     check("GET /api/items geçerli token → 200", goodTok.status === 200, `status=${goodTok.status}`);
     check("200 gövdesi success:true + data dizi", goodTok.body.success === true && Array.isArray(goodTok.body.data));
 
-    // ---- 7) RBAC: yetkisiz kullanıcı (mehmet.planlama, 0 izin) login ----
+    // ---- 7) RBAC: GEÇİCİ 0-izinli kullanıcı yarat (grantOperatorDefaults=false) + login.
+    // (Seed test kullanıcıları kaldırıldı — test kendi fixture'ını üretir/temizler.)
+    const lowUsername = `httprbac${Date.now()}`;
+    const lowCreate = await call("POST", "/api/admin/users", {
+      token: adminToken,
+      body: {
+        username: lowUsername,
+        fullName: "HTTP RBAC Test",
+        password: "test123456",
+        grantOperatorDefaults: false,
+        generateMobileCredentials: false,
+      },
+    });
+    lowUserId = (((lowCreate.body.data ?? {}) as Record<string, unknown>).id as string) ?? null;
+    check("0-izinli kullanıcı oluşturuldu (201)", lowCreate.status === 201, `status=${lowCreate.status}`);
     const lowLogin = await call("POST", "/api/auth/login", {
-      body: { username: "mehmet.planlama", password: "test123" },
+      body: { username: lowUsername, password: "test123456" },
     });
     const lowToken = ((lowLogin.body.data ?? {}) as Record<string, unknown>).token as string | undefined;
     check("yetkisiz kullanıcı login → 200 (aktif)", lowLogin.status === 200, `status=${lowLogin.status}`);
@@ -152,6 +167,10 @@ async function main() {
   } finally {
     if (createdCustomerId) {
       await prisma.customer.delete({ where: { id: createdCustomerId } }).catch(() => {});
+    }
+    if (lowUserId) {
+      await prisma.userPermission.deleteMany({ where: { userId: lowUserId } }).catch(() => {});
+      await prisma.user.delete({ where: { id: lowUserId } }).catch(() => {});
     }
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await prisma.$disconnect();

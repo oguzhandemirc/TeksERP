@@ -23,7 +23,7 @@ const svc = new PeripheralDeviceService({
 });
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 const createdPeripheralIds: string[] = [];
-let stationId = "", machineId = "", deviceId = "", pmId = "", pmInactiveId = "", tplId = "";
+let stationId = "", machineId = "", deviceId = "", fpInactiveId = "", tplId = "";
 
 async function main() {
   const station = await prisma.station.create({ data: { code: `TEST-ST-${stamp}`, name: "ST", type: "INTERNAL", kind: "TAMBUR" }, select: { id: true } });
@@ -32,17 +32,15 @@ async function main() {
   machineId = machine.id;
   const device = await prisma.device.create({ data: { deviceId: `TEST-DV-${stamp}`, name: "Tablet" }, select: { id: true } });
   deviceId = device.id;
-  const pm = await prisma.printerModel.create({ data: { code: `TEST-PM-${stamp}`, name: "PM", language: PrinterLanguage.PPLA }, select: { id: true } });
-  pmId = pm.id;
-  const pmInactive = await prisma.printerModel.create({ data: { code: `TEST-PMX-${stamp}`, name: "PMX", isActive: false }, select: { id: true } });
-  pmInactiveId = pmInactive.id;
+  const fpInactive = await prisma.labelFormatProfile.create({ data: { code: `TEST-FPX-${stamp}`, name: "FPX", widthMm: 100, heightMm: 58, isActive: false }, select: { id: true } });
+  fpInactiveId = fpInactive.id;
   const tpl = await prisma.labelTemplate.create({ data: { name: `TEST-TPL-${stamp}`, kind: LabelKind.ROLL_FINISHED, isDefault: false, fields: [] }, select: { id: true } });
   tplId = tpl.id;
 
-  // 1. Geçerli oluşturma
+  // 1. Geçerli oluşturma (yazıcıda dil ZORUNLU — cihazın kendi üstünde)
   const created = await svc.create({
     code: `TEST-PRN-${stamp}`, name: "Ağ Yazıcı", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP",
-    address: "192.168.1.50", port: 9100, machineId, printerModelId: pmId,
+    address: "192.168.1.50", port: 9100, machineId, languageOverride: PrinterLanguage.PPLA,
   });
   const rec = created.data as { id: string; isActive: boolean };
   createdPeripheralIds.push(rec.id);
@@ -50,18 +48,27 @@ async function main() {
 
   // 2. Sahiplik guard — makine + tablet ikisi birden
   await expectThrow("create: machineId+deviceId birlikte reddedilir", () =>
-    svc.create({ code: `TEST-PRNX-${stamp}`, name: "X", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", machineId, deviceId }),
+    svc.create({ code: `TEST-PRNX-${stamp}`, name: "X", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", machineId, deviceId, languageOverride: PrinterLanguage.PPLA }),
   );
 
-  // 3. Pasif printerModel reddedilir
-  await expectThrow("create: pasif printerModel reddedilir", () =>
-    svc.create({ code: `TEST-PRNY-${stamp}`, name: "Y", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", printerModelId: pmInactiveId }),
+  // 3. Pasif formatProfile reddedilir
+  await expectThrow("create: pasif formatProfile reddedilir", () =>
+    svc.create({ code: `TEST-PRNY-${stamp}`, name: "Y", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", formatProfileId: fpInactiveId, languageOverride: PrinterLanguage.PPLA }),
   );
 
   // 4. Geçersiz port reddedilir
   await expectThrow("create: geçersiz port reddedilir", () =>
-    svc.create({ code: `TEST-PRNZ-${stamp}`, name: "Z", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", port: 99999 }),
+    svc.create({ code: `TEST-PRNZ-${stamp}`, name: "Z", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP", port: 99999, languageOverride: PrinterLanguage.PPLA }),
   );
+
+  // 4b. YENİ kural: yazıcı dilsiz oluşturulamaz; dil sonradan da boşaltılamaz
+  await expectThrow("create: LABEL_PRINTER dilsiz reddedilir", () =>
+    svc.create({ code: `TEST-PRNQ-${stamp}`, name: "Q", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP" }),
+  );
+  await expectThrow("update: yazıcıda dil boşaltılamaz", async () => {
+    const r = created.data as { id: string };
+    await svc.update(r.id, { languageOverride: null });
+  });
 
   // 5. setTemplateRoute create + upsert + remove
   await svc.setTemplateRoute(rec.id, LabelKind.ROLL_FINISHED, tplId);
@@ -96,7 +103,7 @@ async function main() {
 async function cleanup() {
   await prisma.peripheralDevice.deleteMany({ where: { OR: [{ id: { in: createdPeripheralIds } }, { code: { startsWith: `TEST-PRN-${stamp}` } }, { deviceId }] } });
   if (tplId) await prisma.labelTemplate.deleteMany({ where: { id: tplId } });
-  if (pmId || pmInactiveId) await prisma.printerModel.deleteMany({ where: { id: { in: [pmId, pmInactiveId].filter(Boolean) } } });
+  if (fpInactiveId) await prisma.labelFormatProfile.deleteMany({ where: { id: fpInactiveId } });
   if (deviceId) await prisma.device.deleteMany({ where: { id: deviceId } });
   if (machineId) await prisma.machine.deleteMany({ where: { id: machineId } });
   if (stationId) await prisma.station.deleteMany({ where: { id: stationId } });

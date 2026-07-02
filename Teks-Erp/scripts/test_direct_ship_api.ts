@@ -10,9 +10,13 @@ import app from "../src/app";
 import prisma from "../src/lib/prisma";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
+import { AuthService } from "../src/services/auth.service";
 import { RollStatus } from "@prisma/client";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_BOYA = "", SUB_BOYER = "", CUSTOMER = "";
+// Geçici 0-izinli kullanıcı (seed test kullanıcıları kaldırıldı — test kendi üretir/temizler).
+let NOPERM_USER_ID = "";
+const NOPERM_USERNAME = `dsapinoperm${Date.now()}`;
 const sub = new SubcontractorService();
 const cards = new TravelerCardService();
 let pass = 0, fail = 0;
@@ -33,6 +37,12 @@ async function resolveFixtures(): Promise<void> {
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   SUB_BOYER = need(await prisma.subcontractor.findFirst({ where: { code: "BOYER" }, select: { id: true } }), "BOYER");
   CUSTOMER = need(await prisma.customer.findFirst({ where: { code: "MUS-001" }, select: { id: true } }), "MUS-001");
+  // İzinsiz (0-permission) test kullanıcısı — RBAC 403 senaryosu için.
+  const nop = await prisma.user.create({
+    data: { username: NOPERM_USERNAME, fullName: "DS API NoPerm", passwordHash: await AuthService.hashPassword("test123456") },
+    select: { id: true },
+  });
+  NOPERM_USER_ID = nop.id;
 }
 
 async function makeDispatch(): Promise<string> {
@@ -76,9 +86,9 @@ async function main(): Promise<void> {
 
   try {
     const adminTok = await login("admin", "123123");
-    const noPermTok = await login("fatma.satis", "test123");
+    const noPermTok = await login(NOPERM_USERNAME, "test123456");
     check("admin login → token", adminTok != null);
-    check("fatma.satis (izinsiz) login → token", noPermTok != null);
+    check("izinsiz kullanıcı login → token", noPermTok != null);
     if (!adminTok) throw new Error("admin login başarısız — testler koşamaz");
 
     // --- RBAC ---
@@ -140,6 +150,10 @@ async function main(): Promise<void> {
 }
 
 async function cleanup(): Promise<void> {
+  if (NOPERM_USER_ID) {
+    await prisma.userPermission.deleteMany({ where: { userId: NOPERM_USER_ID } }).catch(() => {});
+    await prisma.user.delete({ where: { id: NOPERM_USER_ID } }).catch(() => {});
+  }
   if (woIds.length === 0) return;
   try {
     const rolls = await prisma.roll.findMany({ where: { OR: [{ currentStepId: { in: stepIds } }, { producedInStepId: { in: stepIds } }, { barcode: { startsWith: "TST-API-" } }] }, select: { id: true } });

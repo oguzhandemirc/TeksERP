@@ -3,9 +3,9 @@
 // =============================================================================
 // 4 dil de hazır: RASTER_HTML (HTML hattı, fiziksel baskı bugün OS-sürücüyle), PPLA
 // (Argox/Datamax-DPL), PPLB (Eltron/EPL2), ZPL (Zebra) — komut ÜRETİMİ gerçek;
-// ham gönderim Faz-2 (printer-transport simüle). Dil seçimi: global ayar
-// `label.printerLanguage` (default PPLA) + istasyon yazıcı modeli (PrinterModel.language)
-// override. Bilinmeyen/eksik driver → RASTER_HTML failsafe.
+// ham gönderim Faz-2 (printer-transport simüle). Dil seçimi: cihaz kaydı
+// `languageOverride` > global ayar `label.printerLanguage` (default PPLA).
+// Bilinmeyen/eksik driver → RASTER_HTML failsafe.
 // =============================================================================
 
 import { PrinterLanguage, type LabelTemplate } from "@prisma/client";

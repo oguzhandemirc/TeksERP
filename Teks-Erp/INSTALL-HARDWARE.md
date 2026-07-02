@@ -15,16 +15,16 @@ Eski `MachineHardware` emekliye ayrıldı. Tüm çevre cihazları tek normalize 
 | `connectionType` | `NETWORK_TCP` / `BLUETOOTH_SPP` / `BLE` / `USB` / `SERIAL_COM` |
 | `address`, `port` | IP / MAC / COM yolu / BLE UUID (+ TCP portu) |
 | sahiplik | `machineId` (makineye SABİT) **veya** `deviceId` (tablete BAĞLI — BT yazıcı tabletle gezer) |
-| **yazıcı** | `printerModelId` (dil: PPLA/PPLB/ZPL/RASTER_HTML) + `formatProfileId` (geometri) + `languageOverride` + per-kind şablon yönlendirme |
+| **yazıcı** | `languageOverride` (dil: PPLA/PPLB/ZPL/RASTER_HTML — yazıcıda ZORUNLU) + `formatProfileId` (geometri; boş → sistem-default profil) + per-kind şablon yönlendirme |
 | **giriş cihazı** (SCALE/METER) | `pollCommand` (istek-cevap) + `terminator` + `identifyPattern`/`decimals`/`scale`/`unit` (codec) + `timeoutMs` + `role` (2-KAT/4-KAT/PRIMARY) + `simulate` |
 
 Yönetim ekranı: **Electron → Tanımlar → Cihaz Kaydı** (`/api/peripherals`).
 
 ## Marka / protokol değişimi = sıfır kod
 
-- **Yazıcı markası değişti** (Argox→Zebra): `PeripheralDevice.printerModelId`'yi yeni
-  modele çevir (veya `languageOverride`). Dört dil (PPLA/PPLB/ZPL/RASTER_HTML) gerçek
-  generator'larıyla hazır (`helpers/label-renderer.registry.ts`). Render otomatik o dile gider.
+- **Yazıcı markası değişti** (Argox→Zebra): cihazın `languageOverride`'ını yeni dile
+  çevir. Dört dil (PPLA/PPLB/ZPL/RASTER_HTML) gerçek generator'larıyla hazır
+  (`helpers/label-renderer.registry.ts`). Render otomatik o dile gider.
 - **Etiket boyutu/geometri**: yeni `LabelFormatProfile` (Tanımlar → Etiket Format Profilleri).
 - **Metre/kantar markası/protokolü**: `pollCommand` / `identifyPattern` (parse regex) /
   `scale` (cm→m: 0.01) / `terminator` / `role`'ü güncelle.

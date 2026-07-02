@@ -1,11 +1,12 @@
 // =============================================================================
-// TeksERP - Printer Model & Label Format Profile Services
+// TeksERP - Label Format Profile Service
 // =============================================================================
 // BaseService + create/update override ile validateRefs (product-recipe.service
-// deseni). Bare BaseController Zod taşımadığından sayısal/FK hijyeni serviste
-// yapılır: set-once master-data'da sıfır/negatif geometri veya pasif default-profil
-// referansı tutarsız etiket üretir → en düşük değerde reddet.
-// Yalnız GÖNDERİLEN alanlar denetlenir (PATCH kısmi gönderebilir).
+// deseni). Bare BaseController Zod taşımadığından sayısal hijyen serviste yapılır:
+// set-once master-data'da sıfır/negatif geometri tutarsız etiket üretir → en düşük
+// değerde reddet. Yalnız GÖNDERİLEN alanlar denetlenir (PATCH kısmi gönderebilir).
+// (PrinterModel kataloğu 2026-07'de kaldırıldı — yazıcı dili/profili tamamen
+// PeripheralDevice üzerinde.)
 // =============================================================================
 
 import { PrinterLanguage, LabelKind } from "@prisma/client";
@@ -55,31 +56,6 @@ function assertNonNegative(data: Record<string, unknown>, key: string, label: st
   if (data[key] === undefined || data[key] === null) return;
   const n = Number(data[key]);
   if (!Number.isFinite(n) || n < 0) throw AppError.badRequest(`${label} negatif olamaz`);
-}
-
-export class PrinterModelService extends BaseService {
-  private async validateRefs(data: Record<string, unknown>): Promise<void> {
-    assertPositive(data, "dpi", "DPI");
-    assertPositive(data, "maxWidthMm", "Maksimum baskı genişliği (mm)");
-    // defaultProfileId verildiyse (null = temizle, atla) var + aktif olmalı.
-    if (typeof data.defaultProfileId === "string" && data.defaultProfileId) {
-      const profile = await prisma.labelFormatProfile.findFirst({
-        where: { id: data.defaultProfileId, isActive: true },
-        select: { id: true },
-      });
-      if (!profile) throw AppError.badRequest("Varsayılan etiket format profili bulunamadı veya pasif");
-    }
-  }
-
-  async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
-    await this.validateRefs(data);
-    return super.create(data, userId);
-  }
-
-  async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
-    await this.validateRefs(data);
-    return super.update(id, data, userId);
-  }
 }
 
 export class LabelFormatProfileService extends BaseService {

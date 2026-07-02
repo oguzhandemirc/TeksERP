@@ -4,13 +4,13 @@
 // =============================================================================
 // 1) relabel (applyManualProperties) allowed-property guard — createInitialEntry
 //    PARİTE: item'ın allowed listesi doluysa liste-dışı özellik → 400.
-// 2) PrinterModelService validateRefs — dpi/maxWidthMm > 0, pasif/yok defaultProfileId → 400.
-// 3) LabelFormatProfileService validateRefs — widthMm/heightMm/dpi > 0, margin/gap >= 0 → 400.
+// 2) LabelFormatProfileService validateRefs — widthMm/heightMm/dpi > 0, margin/gap >= 0 → 400.
+// (PrinterModelService bölümü 2026-07'de katalogla birlikte kaldırıldı.)
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
-import { PrinterModelService, LabelFormatProfileService } from "../src/services/printer.service";
+import { LabelFormatProfileService } from "../src/services/label-format-profile.service";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0,
@@ -31,12 +31,10 @@ function need<T>(v: T | null | undefined, what: string): T {
 const is400 = (e: unknown) => e instanceof AppError && e.statusCode === 400;
 
 const inv = new InventoryService();
-const printerModels = new PrinterModelService({ modelName: "printerModel", tableName: "PRINTER_MODEL", uniqueField: "code" });
 const labelProfiles = new LabelFormatProfileService({ modelName: "labelFormatProfile", tableName: "LABEL_FORMAT_PROFILE", uniqueField: "code" });
 
 const stamp = Date.now().toString().slice(-7);
 const profileIds: string[] = [];
-const printerModelIds: string[] = [];
 let ITEM = "",
   ROLL = "",
   PROP_A = "",
@@ -89,31 +87,8 @@ async function main(): Promise<void> {
     const after = await prisma.roll.findUnique({ where: { id: ROLL }, select: { properties: { select: { propertyId: true } } } });
     check("izinli özellik → uygulandı", after?.properties.length === 1 && after.properties[0].propertyId === PROP_A);
 
-    console.log("\n=== 2) PrinterModelService guard ===");
-    let dpi0: unknown, mw0: unknown, badProfile: unknown;
-    try {
-      await printerModels.create({ code: `TST-MDG-PM-DPI-${stamp}`, name: "x", dpi: 0 }, undefined);
-    } catch (e) {
-      dpi0 = e;
-    }
-    check("dpi:0 → 400", is400(dpi0));
-    try {
-      await printerModels.create({ code: `TST-MDG-PM-MW-${stamp}`, name: "x", maxWidthMm: 0 }, undefined);
-    } catch (e) {
-      mw0 = e;
-    }
-    check("maxWidthMm:0 → 400", is400(mw0));
-    try {
-      await printerModels.create(
-        { code: `TST-MDG-PM-BP-${stamp}`, name: "x", defaultProfileId: "00000000-0000-0000-0000-000000000000" },
-        undefined
-      );
-    } catch (e) {
-      badProfile = e;
-    }
-    check("yok defaultProfileId → 400", is400(badProfile));
-
-    // Geçerli profil + geçerli printer-model (pozitif + defaultProfile pozitif yolu)
+    console.log("\n=== 2) LabelFormatProfileService guard ===");
+    // Geçerli profil (pozitif yol)
     const okProfileRes = await labelProfiles.create(
       { code: `TST-MDG-LP-OK-${stamp}`, name: "ok", widthMm: 100, heightMm: 148, dpi: 203, marginMm: 3, gapMm: 2 },
       undefined
@@ -122,15 +97,6 @@ async function main(): Promise<void> {
     if (okProfileId) profileIds.push(okProfileId);
     check("geçerli label-format-profile → ok", okProfileRes.success === true && !!okProfileId);
 
-    const okPmRes = await printerModels.create(
-      { code: `TST-MDG-PM-OK-${stamp}`, name: "ok", dpi: 203, maxWidthMm: 104, defaultProfileId: okProfileId },
-      undefined
-    );
-    const okPmId = (okPmRes.data as { id?: string } | null)?.id;
-    if (okPmId) printerModelIds.push(okPmId);
-    check("geçerli printer-model (+aktif defaultProfile) → ok", okPmRes.success === true && !!okPmId);
-
-    console.log("\n=== 3) LabelFormatProfileService guard ===");
     let w0: unknown, marginNeg: unknown;
     try {
       await labelProfiles.create({ code: `TST-MDG-LP-W-${stamp}`, name: "x", widthMm: 0, heightMm: 148 }, undefined);
@@ -145,8 +111,6 @@ async function main(): Promise<void> {
     }
     check("marginMm:-1 → 400", is400(marginNeg));
   } finally {
-    await prisma.printerModel.deleteMany({ where: { id: { in: printerModelIds } } });
-    await prisma.printerModel.deleteMany({ where: { code: { startsWith: "TST-MDG-PM-" } } });
     await prisma.labelFormatProfile.deleteMany({ where: { code: { startsWith: "TST-MDG-LP-" } } });
     await prisma.rollProperty.deleteMany({ where: { rollId: ROLL } });
     await prisma.roll.deleteMany({ where: { id: ROLL } });

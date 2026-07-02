@@ -2,7 +2,7 @@
 
 Express 5 + Prisma 7 + PostgreSQL. See root `CLAUDE.md` for domain facts.
 
-> **Deep reference:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) — full schema (66 models, 23 enums), API endpoint map, pattern examples, business rules, performance playbook. Read it when starting non-trivial work. (Not: §4-§6 envanter tabloları sevkiyat/kartela/iade modüllerinden eski — başlık sayıları güncel, tablo gövdeleri eksik olabilir.)
+> **Deep reference:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) — full schema (65 models, 23 enums), API endpoint map, pattern examples, business rules, performance playbook. Read it when starting non-trivial work. (Not: §4-§6 envanter tabloları sevkiyat/kartela/iade modüllerinden eski — başlık sayıları güncel, tablo gövdeleri eksik olabilir.)
 
 ## Commands
 
@@ -49,7 +49,7 @@ JWT_SECRET="..."
 - `services/` (33 dosya + `helpers/` + `reports/`) — iş mantığı, transaction, `AuditService.log()`
 - `routes/` (38 dosya + `reports/`) — Swagger JSDoc + `verifyToken` + `requirePermission`
 - `middlewares/` — `auth` (verifyToken), `rbac` (requirePermission), `error` (AppError + Prisma + Zod mapping), `device` (mobil allowlist/atama: x-device-id → req.device.machineId), `uuid-param` (UUID path validate)
-- `prisma/schema.prisma` — 66 model, 23 enum, `@prisma/adapter-pg`
+- `prisma/schema.prisma` — 65 model, 23 enum, `@prisma/adapter-pg`
 
 **Master Data CRUD** için yeni kod yazmadan `BaseController` + `BaseService` kullan (`searchFields` config'i yeterli). Detay: ARCHITECTURE.md §8.1.
 
