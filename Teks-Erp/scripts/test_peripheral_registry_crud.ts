@@ -99,7 +99,35 @@ async function main() {
   routeCount = await prisma.peripheralTemplateRoute.count({ where: { peripheralId: rec.id, kind: LabelKind.ROLL_FINISHED } });
   check("setTemplateRoute: null → kaldırıldı", routeCount === 0);
 
-  // 6. Soft delete
+  // 6. KALICI silme (users.deletedAt kalıbı) — pasife almadan AYRI
+  const victim = await svc.create({
+    code: `TEST-PRND-${stamp}`, name: "Silinecek", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP",
+    languageOverride: PrinterLanguage.PPLA,
+  });
+  const victimRec = victim.data as { id: string };
+  createdPeripheralIds.push(victimRec.id);
+  await svc.hardDelete(victimRec.id);
+  const afterHard = await prisma.peripheralDevice.findUnique({ where: { id: victimRec.id } });
+  check("hardDelete: satır DB'de durur (veri bütünlüğü)", !!afterHard);
+  check("hardDelete: deletedAt damgalı + pasif", !!afterHard?.deletedAt && afterHard.isActive === false);
+  check("hardDelete: kod DEL- önekiyle serbest", (afterHard?.code ?? "").startsWith("DEL-"));
+  await expectThrow("silinmiş cihaz düzenlenemez/geri getirilemez", () =>
+    svc.update(victimRec.id, { isActive: true }),
+  );
+  const again = await svc.hardDelete(victimRec.id);
+  check("hardDelete: idempotent", again.success === true);
+  const recreated = await svc.create({
+    code: `TEST-PRND-${stamp}`, name: "Aynı kod yeniden", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP",
+    languageOverride: PrinterLanguage.PPLB,
+  });
+  const recreatedRec = recreated.data as { id: string };
+  createdPeripheralIds.push(recreatedRec.id);
+  check("hardDelete: aynı kod yeniden kullanılabilir", !!recreatedRec.id);
+  const listed = await svc.findAll({ query: {} } as never) as { data: Array<{ id: string }> };
+  check("liste: silinmiş GİZLİ, yeniden-açılan görünür",
+    !listed.data.some((r) => r.id === victimRec.id) && listed.data.some((r) => r.id === recreatedRec.id));
+
+  // 7. Soft delete
   await svc.softDelete(rec.id);
   const afterDelete = await prisma.peripheralDevice.findUnique({ where: { id: rec.id }, select: { isActive: true } });
   check("remove: soft delete (isActive=false)", afterDelete?.isActive === false);

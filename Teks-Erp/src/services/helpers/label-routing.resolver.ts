@@ -44,9 +44,11 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
   const { kind } = opts;
 
   // --- 1. Cihaz seçimi: explicit > tablet-owned > machine-attached (hepsi LABEL_PRINTER, aktif) ---
+  // Explicit seçimde pasif cihaz bilerek kabul edilir (kullanıcı elle seçmiş);
+  // KALICI silinmiş (deletedAt dolu) ise asla çözülmez.
   let peripheral = opts.peripheralId
-    ? await prisma.peripheralDevice.findUnique({
-        where: { id: opts.peripheralId },
+    ? await prisma.peripheralDevice.findFirst({
+        where: { id: opts.peripheralId, deletedAt: null },
         include: PERIPHERAL_INCLUDE(kind),
       })
     : null;

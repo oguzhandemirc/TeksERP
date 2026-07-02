@@ -114,7 +114,6 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         templateFinishedId: routeTemplateId(initial, "ROLL_FINISHED"),
         templateSwatchId: routeTemplateId(initial, "SWATCH"),
         notes: initial.notes ?? "",
-        isActive: initial.isActive,
       }
     : peripheralFormDefaults;
 
@@ -394,13 +393,11 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
               </>
             )}
 
+            {/* Aktiflik formdan YÖNETİLMEZ — yalnız listedeki Pasife Al / Aktifleştir /
+                Kalıcı Sil aksiyonlarından (users kalıbı). */}
             <FormField label="Not">
               <Input {...form.register("notes")} placeholder="örn. seri hatta HC-06 lehimli" />
             </FormField>
-
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" {...form.register("isActive")} /> Aktif
-            </label>
           </>
         );
       }}

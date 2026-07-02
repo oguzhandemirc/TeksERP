@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Plus, Pencil, Trash2, RotateCcw } from "lucide-react";
+import { Plus, Pencil, Trash2, RotateCcw, PowerOff } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -34,6 +34,10 @@ interface Props<T extends { id: string }> {
   /** Üst PageHeader'ı gizle (bir sekmeye gömülürken çift başlığı önler) —
    * Yenile/Yeni butonları araç çubuğuna taşınır. */
   hideHeader?: boolean;
+  /** KALICI SİLME ayrımı (users kalıbı): verilirse pasife-al ikonu PowerOff olur ve
+   * ayrıca Trash2 = kalıcı sil (DELETE /:id/permanent) eklenir. Backend'i deletedAt
+   * damgalı modellerde kayıt gizlenir ama veri bütünlüğü için DB'de durur. */
+  permanentDelete?: { description: (row: T) => string };
   renderForm: (params: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -58,10 +62,12 @@ export function CrudPage<T extends { id: string }>({
   glowWhenEmpty,
   hideHeader,
   renderForm,
+  permanentDelete,
 }: Props<T>) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<T | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [hardRemoving, setHardRemoving] = useState<T | null>(null);
   const [showInactive, setShowInactive] = useState(false);
 
   const forceFilters = useMemo<Record<string, string>>(
@@ -72,7 +78,7 @@ export function CrudPage<T extends { id: string }>({
     [showInactive, extraFilters],
   );
 
-  const { createMutation, updateMutation, removeMutation, restoreMutation } = useCrudMutations<T>({
+  const { createMutation, updateMutation, removeMutation, restoreMutation, hardRemoveMutation } = useCrudMutations<T>({
     service,
     queryKey,
     entityName,
@@ -110,12 +116,13 @@ export function CrudPage<T extends { id: string }>({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 text-destructive"
+                    title={permanentDelete ? "Pasife Al (geri alınabilir)" : undefined}
                     onClick={(e) => {
                       e.stopPropagation();
                       setRemovingId(row.original.id);
                     }}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    {permanentDelete ? <PowerOff className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
                   </Button>
                 ) : (
                   <Button
@@ -130,6 +137,20 @@ export function CrudPage<T extends { id: string }>({
                     }}
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+                {permanentDelete && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-destructive"
+                    title="Kalıcı Sil (GERİ ALINAMAZ)"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setHardRemoving(row.original);
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 )}
               </PermissionGate>
@@ -216,9 +237,13 @@ export function CrudPage<T extends { id: string }>({
       <ConfirmDialog
         open={Boolean(removingId)}
         onOpenChange={(open) => !open && setRemovingId(null)}
-        title={`${entityName} sil`}
-        description="Bu işlem kaydı pasife alır. Devam etmek istiyor musun?"
-        confirmLabel="Sil"
+        title={permanentDelete ? `${entityName} pasife al` : `${entityName} sil`}
+        description={
+          permanentDelete
+            ? "Kayıt pasife alınır — listede 'Pasifleri göster' ile görünür ve istediğinde geri aktifleştirilebilir."
+            : "Bu işlem kaydı pasife alır. Devam etmek istiyor musun?"
+        }
+        confirmLabel={permanentDelete ? "Pasife Al" : "Sil"}
         destructive
         isPending={removeMutation.isPending}
         onConfirm={async () => {
@@ -227,6 +252,23 @@ export function CrudPage<T extends { id: string }>({
           setRemovingId(null);
         }}
       />
+
+      {permanentDelete && (
+        <ConfirmDialog
+          open={Boolean(hardRemoving)}
+          onOpenChange={(open) => !open && setHardRemoving(null)}
+          title={`${entityName} KALICI sil`}
+          description={hardRemoving ? permanentDelete.description(hardRemoving) : ""}
+          confirmLabel="Kalıcı Sil"
+          destructive
+          isPending={hardRemoveMutation.isPending}
+          onConfirm={async () => {
+            if (!hardRemoving) return;
+            await hardRemoveMutation.mutateAsync(hardRemoving.id);
+            setHardRemoving(null);
+          }}
+        />
+      )}
     </div>
   );
 }

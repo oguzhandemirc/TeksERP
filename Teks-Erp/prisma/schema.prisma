@@ -554,6 +554,10 @@ model PeripheralDevice {
   languageOverride PrinterLanguage? // cihaz dili (boş → global ayar label.printerLanguage)
 
   isActive   Boolean   @default(true)
+  /// KALICI silinme damgası (users.deletedAt kalıbı) — NULL=normal (isActive ile
+  /// aktif/pasif); dolu=silinmiş: hiçbir listede görünmez, düzenlenemez/geri
+  /// getirilemez; satır yalnız veri bütünlüğü için durur (kod DEL- önekiyle serbest).
+  deletedAt  DateTime? @db.Timestamptz
   lastSeenAt DateTime?
   notes      String?   @db.VarChar(500)
 

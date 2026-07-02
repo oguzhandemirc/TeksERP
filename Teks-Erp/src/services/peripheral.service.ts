@@ -36,6 +36,11 @@ function takeRoutes(data: Record<string, unknown>): Array<{ kind: LabelKind; tem
 }
 
 export class PeripheralDeviceService extends BaseService {
+  /** KALICI silinenler (deletedAt dolu) hiçbir listede görünmez — pasifler görünür. */
+  protected extraWhere(): Record<string, unknown> {
+    return { deletedAt: null };
+  }
+
   private async validateRefs(data: Record<string, unknown>, existingId?: string): Promise<void> {
     // Sahiplik: makineye-sabit VEYA makinesiz-istasyona-sabit VEYA tablete-bağlı —
     // en fazla BİRİ (boş serbest). Update'te mevcut kayıtla BİRLEŞTİRİLMİŞ sahiplik
@@ -108,6 +113,7 @@ export class PeripheralDeviceService extends BaseService {
 
   async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
     delete data.printerModelId; // eski istemci toleransı — PrinterModel alanı 2026-07'de kaldırıldı
+    delete data.deletedAt; // silinme damgası YALNIZ hardDelete'ten yazılır (PATCH ile un-delete kapalı)
     const routes = takeRoutes(data); // data'dan çıkar (Prisma create relation şekli farklı)
     // Yazıcı dili cihazın kendi üstünde — dilsiz yazıcı kaydı globalden sürpriz
     // etkilenir, en baştan reddet (DB nullable kalır: eski satırlar için).
@@ -123,17 +129,23 @@ export class PeripheralDeviceService extends BaseService {
 
   async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
     delete data.printerModelId; // eski istemci toleransı — PrinterModel alanı 2026-07'de kaldırıldı
+    delete data.deletedAt; // silinme damgası YALNIZ hardDelete'ten yazılır (PATCH ile un-delete kapalı)
     const routes = takeRoutes(data);
+    const existing = await prisma.peripheralDevice.findUnique({
+      where: { id },
+      select: { kind: true, languageOverride: true, deletedAt: true },
+    });
+    // KALICI silinmiş kayıt düzenlenemez/aktifleştirilemez (restore = PATCH isActive:true
+    // buraya düşer) — satır yalnız veri bütünlüğü için durur.
+    if (existing?.deletedAt) {
+      throw AppError.badRequest("Silinmiş cihaz düzenlenemez veya geri getirilemez");
+    }
     // Dil kuralı HEDEF türe göre (PATCH kısmiliği korunur): tür yazıcı KALIYORSA/
     // OLUYORSA etkin dil boş olamaz; yazıcılıktan çıkan cihazda (örn. → SCALE)
     // dilin temizlenmesi meşrudur.
     const touchesLang = Object.prototype.hasOwnProperty.call(data, "languageOverride");
     const touchesKind = Object.prototype.hasOwnProperty.call(data, "kind");
     if (touchesLang || touchesKind) {
-      const existing = await prisma.peripheralDevice.findUnique({
-        where: { id },
-        select: { kind: true, languageOverride: true },
-      });
       const targetKind = touchesKind && data.kind ? data.kind : existing?.kind;
       const effectiveLang = touchesLang ? data.languageOverride : existing?.languageOverride;
       if (targetKind === PeripheralKind.LABEL_PRINTER && !effectiveLang) {
@@ -144,6 +156,32 @@ export class PeripheralDeviceService extends BaseService {
     const res = await super.update(id, data, userId);
     if (routes) await this.applyRoutes(id, routes, userId);
     return res;
+  }
+
+  /**
+   * KALICI silme — fiziksel DELETE DEĞİL (users.deletedAt kalıbı): satır veri
+   * bütünlüğü için durur, deletedAt damgalanır, hiçbir listede görünmez ve geri
+   * getirilemez. Kod DEL- önekiyle serbest bırakılır (aynı kodla yeni cihaz
+   * açılabilir); yer sahipliği sökülür (for-session/for-device asla çözmesin).
+   */
+  async hardDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const old = await prisma.peripheralDevice.findUnique({ where: { id } });
+    if (!old) return { success: false, data: null, message: "Kayıt bulunamadı" };
+    if (old.deletedAt) return { success: true, data: old, message: "Kayıt zaten silinmiş" }; // idempotent
+    const freedCode = `DEL-${Date.now().toString(36).toUpperCase()}-${old.code}`.slice(0, 48);
+    const updated = await prisma.peripheralDevice.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(), isActive: false, code: freedCode,
+        machineId: null, stationId: null, deviceId: null,
+      },
+    });
+    await AuditService.log({
+      userId, action: "DELETE", tableName: PERIPHERAL_TABLE, recordId: id,
+      oldData: old as unknown as Record<string, unknown>,
+      newData: { deletedAt: updated.deletedAt, freedCode },
+    }).catch(() => undefined);
+    return { success: true, data: updated, message: "Cihaz kalıcı olarak silindi (kayıt veri bütünlüğü için saklanır)" };
   }
 
   /** Form'dan gelen templateRoutes[] → setTemplateRoute (boş templateId → kaldır). */

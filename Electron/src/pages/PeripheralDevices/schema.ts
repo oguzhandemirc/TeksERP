@@ -30,7 +30,8 @@ export const peripheralFormSchema = z.object({
   templateFinishedId: z.string().optional().default(""),
   templateSwatchId: z.string().optional().default(""),
   notes: z.string().trim().max(500).optional().default(""),
-  isActive: z.boolean(),
+  // isActive formdan YÖNETİLMEZ — aktiflik yalnız Pasife Al / Aktifleştir /
+  // Kalıcı Sil aksiyonlarından (users kalıbı, f76f855 ile aynı gerekçe).
 }).superRefine((v, ctx) => {
   // Yazıcının dili kendi kartında ZORUNLU — boş bırakılırsa globalden sürpriz
   // etkilenir (backend de enforce eder; buradaki kural anlık form hatası için).
@@ -70,7 +71,6 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     formatProfileId: v.kind === "LABEL_PRINTER" ? nn(v.formatProfileId) : null,
     languageOverride: v.kind === "LABEL_PRINTER" ? nn(v.languageOverride) : null,
     notes: nn(v.notes),
-    isActive: v.isActive,
     templateRoutes: [
       { kind: "ROLL_RAW", templateId: nn(v.templateRawId) },
       { kind: "ROLL_FINISHED", templateId: nn(v.templateFinishedId) },
@@ -105,5 +105,4 @@ export const peripheralFormDefaults: PeripheralFormValues = {
   templateFinishedId: "",
   templateSwatchId: "",
   notes: "",
-  isActive: true,
 };
