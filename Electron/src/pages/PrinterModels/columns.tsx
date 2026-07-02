@@ -2,11 +2,14 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import type { PrinterModel, PrinterLanguage } from "./types";
 
+// Diller markaya özel değil — endüstri dilleri/emülasyonlar: PPLA=Datamax kökenli
+// (Argox kullanır), PPLB=Eltron/EPL2 lehçesi, ZPL=Zebra kökenli (Bixolon BPL-Z gibi
+// emülasyonlar da anlar). Parantez içi köken bilgisidir, uyumluluk sınırı değil.
 export const PRINTER_LANGUAGE_LABELS: Record<PrinterLanguage, string> = {
   RASTER_HTML: "HTML (OS sürücü)",
-  PPLA: "Argox PPLA",
-  PPLB: "PPLB",
-  ZPL: "Zebra ZPL",
+  PPLA: "PPLA (Argox/Datamax)",
+  PPLB: "PPLB (Eltron/EPL)",
+  ZPL: "ZPL (Zebra uyumlu)",
 };
 
 export const printerModelColumns: ColumnDef<PrinterModel>[] = [

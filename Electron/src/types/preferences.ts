@@ -85,6 +85,10 @@ export interface AppPreferences {
     /** serial: COM yolu (COM5 / /dev/tty.*); cups: CUPS kuyruk adı (lp -d). */
     path?: string;
     baudRate?: number;
+    /** Cihaz Kaydı'ndaki LABEL_PRINTER id'si — seçiliyse native istekler peripheralId
+     * taşır; dil/profil/şablon O CİHAZDAN çözülür → global "Etiket yazıcı dili"ne
+     * dokunmadan istasyon-özel dil (ör. bu PC Bixolon=ZPL, Argox istasyonları=PPLA). */
+    peripheralId?: string;
   };
   /**
    * Sevkiyat kantarı (seri/COM) — bu bilgisayara özel YEREL tercih. Çalışma

@@ -186,11 +186,10 @@ export function LabelSettingsSection() {
             Etiket yazıcı dili
           </label>
           <p className="text-xs text-muted-foreground">
-            Top etiketinin native komut formatı. <strong>Argox OS 214 plus → PPLA.</strong>{" "}
-            Bir istasyonun yazıcı modeli (Tanımlar → Yazıcı Modelleri) kendi dilini
-            belirtirse o öncelikli; bu seçim model belirtilmeyen baskılar için genel
-            varsayılandır. (Fiziksel baskı şimdilik HTML + OS sürücüyle; native gönderim
-            sonraki fazda devreye girer.)
+            Top etiketinin native komut formatı. <strong>Argox OS 214 plus → PPLA, Bixolon
+            XD3-40 → ZPL.</strong> Cihaz Kaydı yazıcısı (Genel Ayarlar → Etiket yazıcısı
+            bölümü veya makineye bağlı cihaz) ya da yazıcı modeli kendi dilini belirtirse
+            o öncelikli; bu seçim cihaz/model belirtilmeyen baskılar için genel varsayılandır.
           </p>
           <Select
             value={currentLang}

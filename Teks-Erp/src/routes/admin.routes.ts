@@ -73,7 +73,14 @@ router.get(
 );
 
 const createUserSchema = z.object({
-  username: z.string().min(3, "En az 3 karakter").max(40),
+  // Kullanıcı adı: yalnız ASCII harf/rakam/nokta/alt-çizgi/tire — Türkçe karakter
+  // ve BOŞLUK yok (mobil login + benzersizlik + URL güvenliği). Küçük harfe normalize.
+  username: z
+    .string()
+    .trim()
+    .min(3, "En az 3 karakter")
+    .max(40)
+    .regex(/^[a-zA-Z0-9._-]+$/, "Yalnız İngilizce harf, rakam, nokta, alt çizgi ve tire kullanılabilir (boşluk/Türkçe karakter yok)"),
   fullName: z.string().min(1, "Ad-soyad gerekli").max(120),
   password: z.string().min(6, "Şifre en az 6 karakter"),
   isActive: z.boolean().optional(),

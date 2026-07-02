@@ -12,6 +12,10 @@ import "../types/express-augment";
 const bulkLabelsSchema = z.object({
   rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top").max(2000),
   copies: z.number().int().min(1).max(5).optional(),
+  // Cihaz Kaydı yönlendirmesi — dil/profil/şablon bu cihazdan çözülür
+  // (tekli /native'in ?peripheralId= analoğu; iş istasyonu global dile dokunmadan
+  // kendi yazıcısının dilinde basar).
+  peripheralId: z.string().uuid("Geçersiz cihaz ID").optional(),
 });
 
 const updateNamesSchema = z.object({
@@ -268,7 +272,12 @@ export class LabelController {
   getBulkRollLabelsNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = bulkLabelsSchema.parse(req.body);
-      const result = await this.service.getBulkRollLabelsNative(body.rollIds, { copies: body.copies });
+      const result = await this.service.getBulkRollLabelsNative(body.rollIds, {
+        copies: body.copies,
+        // Tekli /native ile aynı yönlendirme: explicit cihaz > tablete-bağlı yazıcı.
+        peripheralId: body.peripheralId,
+        deviceId: req.device?.id ?? undefined,
+      });
       res.setHeader("Content-Type", result.data.contentType);
       res.setHeader("X-Label-Language", result.data.language);
       res.setHeader("X-Label-Count", String(result.data.count));

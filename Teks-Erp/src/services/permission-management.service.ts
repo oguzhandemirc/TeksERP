@@ -7,6 +7,7 @@
 
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
+import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -423,16 +424,26 @@ export class PermissionManagementService {
   static async deactivateUser(id: string, actorUserId: string | undefined) {
     const existing = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, isActive: true },
+      select: { id: true, isActive: true, username: true },
     });
     if (!existing) throw AppError.notFound("Kullanıcı bulunamadı");
 
     this.assertNotSelfDeactivation(id, actorUserId);
     await this.assertNotLastActiveAdmin(id);
 
+    // Username'i SERBEST BIRAK: pasif kayıt fiziksel durur (soft-delete) ama username
+    // @unique olduğundan aynı isimle yeni kullanıcı açılamazdı. Rastgele ön-ek ile
+    // yeniden adlandırıp orijinal ismi boşa çıkarıyoruz (aynı isim tekrar açılabilir).
+    // Ayrıca hızlı PIN'i de bırak (benzersiz havuzu tıkamasın); kart tokenı da temizle.
+    // Bir kez pasifleştirilmiş kayda tekrar dokunma (idempotent) — "del_" ön-eki varsa koru.
+    const alreadyFreed = /^del_[0-9a-f]{6}_/.test(existing.username);
+    const freedUsername = alreadyFreed
+      ? existing.username
+      : `del_${randomBytes(3).toString("hex")}_${existing.username}`.slice(0, 50);
+
     const user = await prisma.user.update({
       where: { id },
-      data: { isActive: false },
+      data: { isActive: false, username: freedUsername, quickPin: null, cardToken: null },
       select: USER_SELECT,
     });
 
@@ -441,8 +452,8 @@ export class PermissionManagementService {
       action: "DELETE",
       tableName: "users",
       recordId: id,
-      oldData: { isActive: existing.isActive },
-      newData: { isActive: false },
+      oldData: { isActive: existing.isActive, username: existing.username },
+      newData: { isActive: false, username: freedUsername },
     });
 
     return user;

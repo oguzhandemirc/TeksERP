@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
-import { CheckCircle2, KeySquare, Settings2 } from "lucide-react";
+import { CheckCircle2, KeySquare, Printer, Settings2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -114,17 +114,17 @@ export function NewUserCredentialsDialog({ user, password, onOpenChange, onManag
         </div>
 
         <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-          <Button type="button" variant="outline" onClick={onManage}>
+          <Button type="button" variant="secondary" onClick={onManage}>
             <Settings2 className="h-4 w-4" /> PIN / kartı yönet
           </Button>
           <div className="flex gap-2">
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               onClick={() => printDocumentArea(areaRef.current)}
               disabled={loadingCred}
             >
-              Yazdır
+              <Printer className="h-4 w-4" /> Yazdır
             </Button>
             <Button type="button" onClick={() => onOpenChange(false)}>
               Tamam

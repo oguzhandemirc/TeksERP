@@ -138,10 +138,12 @@ export const labelService = {
   getRollNative: (
     rollId: string,
     opts?: LabelCustomerContext,
+    peripheralId?: string,
   ): Promise<{ content: string; language: PrinterLanguage }> =>
     apiClient
       .get<string>(`/api/labels/rolls/${rollId}/native`, {
-        params: customerContextQuery(opts),
+        // peripheralId: Cihaz Kaydı yönlendirmesi — dil/şablon global yerine bu cihazdan.
+        params: { ...customerContextQuery(opts), ...(peripheralId ? { peripheralId } : {}) },
         responseType: "text",
         transformResponse: [(d) => d],
       })
@@ -154,11 +156,12 @@ export const labelService = {
   getBulkRollLabelsNative: (
     rollIds: string[],
     copies?: number,
+    peripheralId?: string,
   ): Promise<{ content: string; language: PrinterLanguage }> =>
     apiClient
       .post<string>(
         `/api/labels/rolls/bulk-native`,
-        { rollIds, ...(copies ? { copies } : {}) },
+        { rollIds, ...(copies ? { copies } : {}), ...(peripheralId ? { peripheralId } : {}) },
         { responseType: "text", transformResponse: [(d) => d] },
       )
       .then((r) => ({

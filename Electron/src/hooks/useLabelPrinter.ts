@@ -36,7 +36,7 @@ export function useLabelPrinter() {
       return {
         ok: false,
         error: native.language === "RASTER_HTML" || !native.language
-          ? "Yazıcı PPLA dilinde değil — Cihaz Kaydı'ndan dili PPLA yapın."
+          ? "Etiket dili native değil — Genel Ayarlar'dan etiket dilini veya bu bilgisayarın Cihaz Kaydı yazıcısını kontrol edin."
           : `Desteklenmeyen yazıcı dili: ${native.language}`,
       };
     }
@@ -57,13 +57,17 @@ export function useLabelPrinter() {
     return { ok: res.ok, error: res.error ?? undefined };
   }
 
+  // Cihaz Kaydı yönlendirmesi: seçiliyse dil/profil/şablon global yerine bu
+  // cihazdan çözülür — istasyon-özel dil (Bixolon=ZPL) global ayarı bozmaz.
+  const peripheralId = cfg?.peripheralId || undefined;
+
   /** Tek top — diyalogsuz seri/COM baskı. */
   const printRoll = (rollId: string, opts?: LabelCustomerContext) =>
-    send(() => labelService.getRollNative(rollId, opts));
+    send(() => labelService.getRollNative(rollId, opts, peripheralId));
 
   /** N farklı top tek-job — diyalogsuz toplu seri/COM baskı. */
   const printRollsBulk = (rollIds: string[], copies?: number) =>
-    send(() => labelService.getBulkRollLabelsNative(rollIds, copies));
+    send(() => labelService.getBulkRollLabelsNative(rollIds, copies, peripheralId));
 
   return { directEnabled, printRoll, printRollsBulk };
 }

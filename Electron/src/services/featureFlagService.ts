@@ -118,9 +118,9 @@ export type PrinterLanguage = "RASTER_HTML" | "PPLA" | "PPLB" | "ZPL";
 export const DEFAULT_PRINTER_LANGUAGE: PrinterLanguage = "PPLA";
 export const PRINTER_LANGUAGE_LABELS: Record<PrinterLanguage, string> = {
   RASTER_HTML: "HTML (OS yazıcı sürücüsü)",
-  PPLA: "Argox PPLA",
-  PPLB: "PPLB (EPL2)",
-  ZPL: "Zebra ZPL",
+  PPLA: "PPLA (Argox/Datamax)",
+  PPLB: "PPLB (Eltron/EPL)",
+  ZPL: "ZPL (Zebra uyumlu)",
 };
 
 export interface FeatureFlags {

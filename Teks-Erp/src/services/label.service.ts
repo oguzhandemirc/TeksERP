@@ -859,12 +859,15 @@ export class LabelService {
    */
   async getBulkRollLabelsNative(
     rollIds: string[],
-    opts?: { copies?: number },
+    opts?: { copies?: number; peripheralId?: string; deviceId?: string },
   ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; count: number }>> {
     const ids = [...new Set(rollIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
     const copies = opts?.copies ?? (await readLabelCopies());
-    const ctx = await this.buildBulkContext(ids, copies);
+    const ctx = await this.buildBulkContext(ids, copies, {
+      peripheralId: opts?.peripheralId,
+      deviceId: opts?.deviceId,
+    });
     const language = ctx.format.language;
     let contentType = "text/plain; charset=utf-8";
     const blocks: string[] = [];
@@ -886,16 +889,28 @@ export class LabelService {
    * çözümü için getRollLabel'in KENDİSİ (branch ①②③④ tek-doğru-kaynak) kullanılır —
    * dal mantığı KOPYALANMAZ (drift = yanlış etiket riski).
    */
-  private async buildBulkContext(ids: string[], copies: number): Promise<BulkLabelContext> {
-    // §1 Sabitler — seri (pg adapter tek-connection; Promise.all yok).
-    const format = await resolveLabelFormat({});
+  private async buildBulkContext(
+    ids: string[],
+    copies: number,
+    routing?: { peripheralId?: string; deviceId?: string },
+  ): Promise<BulkLabelContext> {
+    // §1 Sabitler — seri (pg adapter tek-connection; Promise.all yok). Format + şablonlar
+    // tekli /native ile AYNI zincirden (resolveLabelRouting): explicit cihaz > tablete-bağlı
+    // yazıcı > global. Cihaz eşleşmezse resolver bugünkü davranışa düşer (BAYT-stabil).
+    const rawRouting = await resolveLabelRouting({
+      kind: LabelKind.ROLL_RAW,
+      peripheralId: routing?.peripheralId ?? null,
+      deviceId: routing?.deviceId ?? null,
+    });
+    const finishedRouting = await resolveLabelRouting({
+      kind: LabelKind.ROLL_FINISHED,
+      peripheralId: routing?.peripheralId ?? null,
+      deviceId: routing?.deviceId ?? null,
+    });
+    const format = finishedRouting.format;
     const templateByKind: Partial<Record<LabelKind, LabelTemplate | null>> = {
-      [LabelKind.ROLL_RAW]: await prisma.labelTemplate.findFirst({
-        where: { kind: LabelKind.ROLL_RAW, isDefault: true, isActive: true },
-      }),
-      [LabelKind.ROLL_FINISHED]: await prisma.labelTemplate.findFirst({
-        where: { kind: LabelKind.ROLL_FINISHED, isDefault: true, isActive: true },
-      }),
+      [LabelKind.ROLL_RAW]: rawRouting.template,
+      [LabelKind.ROLL_FINISHED]: finishedRouting.template,
     };
 
     // §2-A: tüm top'ları tek findMany (getRollLabel ile AYNI include const → drift yok).

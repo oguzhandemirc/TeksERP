@@ -5,7 +5,7 @@ import {
   Factory,
   Truck,
   TabletSmartphone,
-  Server,
+  Monitor,
   Clock,
   Tags,
   ScanLine,
@@ -29,15 +29,15 @@ export interface FlagDef {
 
 /**
  * Kategori içeriğinin nasıl render edileceği:
- * - `flags`  → config'teki flag listesini generic toggle olarak çizer
- * - `device`  → cihaz eşleştirme (enforce edilen, uyarılı) özel section
- * - `api`     → sunucu adresi (bu bilgisayara özel) özel section
- * - `session` → oturum süresi + hareketsizlik zaman aşımı (sayısal) özel section
+ * - `flags`       → config'teki flag listesini generic toggle olarak çizer
+ * - `device`      → mobil cihaz eşleştirme/onay (org düzeyi) özel section
+ * - `workstation` → BU BİLGİSAYARA özel yerel ayarlar: etiket yazıcısı + kantar + sunucu adresi
+ * - `session`     → oturum süresi + hareketsizlik zaman aşımı (sayısal) özel section
  */
 export type CategoryKind =
   | "flags"
   | "device"
-  | "api"
+  | "workstation"
   | "company"
   | "session"
   | "label"

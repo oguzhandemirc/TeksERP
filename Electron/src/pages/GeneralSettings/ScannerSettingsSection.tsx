@@ -16,7 +16,6 @@ import {
 } from "@/lib/scanner/wedge-detector";
 import { classifyBarcode } from "@/lib/scanner/barcode-kind";
 import { ScannerDeviceSettings } from "./ScannerDeviceSettings";
-import { LabelPrinterDeviceSettings } from "./LabelPrinterDeviceSettings";
 
 type Terminator = "Enter" | "Tab" | "both";
 
@@ -140,12 +139,6 @@ export function ScannerSettingsSection() {
       <div className="border-t pt-4">
         <p className="mb-2 text-sm font-medium">Cihaz okuyucu (seri / HID — Faz-2)</p>
         <ScannerDeviceSettings />
-      </div>
-
-      {/* Etiket yazıcısı — diyalogsuz seri/COM baskı (Argox; bu bilgisayara özel) */}
-      <div className="border-t pt-4">
-        <p className="mb-2 text-sm font-medium">Etiket yazıcısı (seri / COM)</p>
-        <LabelPrinterDeviceSettings />
       </div>
     </div>
   );

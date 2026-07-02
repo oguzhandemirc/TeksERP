@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Usb, AlertTriangle, Printer } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePreferences } from "@/providers/PreferencesProvider";
+import { loadAllForPicker } from "@/lib/picker-loader";
+import { peripheralService } from "@/pages/PeripheralDevices/service";
 import type { ScannerDeviceInfo } from "@shared/ipc-contract";
 
 /**
@@ -34,6 +37,16 @@ export function LabelPrinterDeviceSettings() {
   const [scanning, setScanning] = useState(false);
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [testing, setTesting] = useState(false);
+
+  // Cihaz Kaydı'ndaki etiket yazıcıları — dil/profil/şablon yönlendirmesi için.
+  const peripheralsQuery = useQuery({
+    queryKey: ["peripherals", "label-printer-picker"],
+    queryFn: () =>
+      loadAllForPicker(peripheralService, {
+        filters: { kind: "LABEL_PRINTER", isActive: "true" },
+      }),
+  });
+  const labelPrinters = peripheralsQuery.data?.data ?? [];
 
   if (!printer) {
     return (
@@ -87,12 +100,12 @@ export function LabelPrinterDeviceSettings() {
           onChange={(e) => setCfg({ enabled: e.target.checked })}
         />
         <span>
-          <span className="font-medium">Diyalogsuz doğrudan baskı (Argox)</span>
+          <span className="font-medium">Diyalogsuz doğrudan baskı</span>
           <span className="mt-0.5 block text-xs text-muted-foreground">
             Açıkken top/yeniden-etiket baskısı OS yazdırma diyaloğu yerine yazıcıya
-            doğrudan native komut (PPLA/PPLB) gönderir. Yazıcı dili
-            (Tanımlar → Genel Ayarlar → Etiket dili) gerçek yazıcıyla uyumlu olmalı.
-            Kapalıyken eski davranış (yazdırma ekranı) sürer.
+            doğrudan native komut (PPLA/PPLB/ZPL) gönderir. Dil, aşağıda Cihaz Kaydı
+            yazıcısı seçiliyse ondan, değilse global &quot;Etiket yazıcı dili&quot;nden çözülür —
+            gerçek yazıcıyla uyumlu olmalı. Kapalıyken eski davranış (yazdırma ekranı) sürer.
           </span>
         </span>
       </label>
@@ -108,7 +121,7 @@ export function LabelPrinterDeviceSettings() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="serial">Seri / COM (fabrika · Windows sanal COM / USB-CDC)</SelectItem>
-            <SelectItem value="cups">macOS / Linux — CUPS kuyruğu (USB Argox)</SelectItem>
+            <SelectItem value="cups">macOS / Linux — CUPS kuyruğu (USB yazıcı)</SelectItem>
           </SelectContent>
         </Select>
       </label>
@@ -167,6 +180,35 @@ export function LabelPrinterDeviceSettings() {
       {available && devices.length === 0 && !scanning && (
         <p className="text-xs text-muted-foreground">Port bulunamadı.</p>
       )}
+
+      {/* Cihaz Kaydı yönlendirmesi — dil/şablon global ayar yerine seçili cihazdan
+          çözülür (backend ?peripheralId=). Böylece bu bilgisayar farklı dilde basarken
+          (ör. Bixolon=ZPL) global "Etiket yazıcı dili" ve diğer istasyonlar bozulmaz. */}
+      <label className="block text-xs">
+        <span className="block text-muted-foreground">
+          Cihaz Kaydı yazıcısı (dil / şablon yönlendirme)
+        </span>
+        <Select
+          value={cfg.peripheralId ?? "none"}
+          onValueChange={(v) => setCfg({ peripheralId: v === "none" ? undefined : v })}
+        >
+          <SelectTrigger className="mt-1 w-full max-w-md">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Yok — genel &quot;Etiket yazıcı dili&quot; kullanılır</SelectItem>
+            {labelPrinters.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name} — {p.languageOverride ?? p.printerModel?.language ?? "dil: genel"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="mt-0.5 block text-muted-foreground">
+          Seçiliyse etiket dili ve şablonu bu cihazın kaydından (Tanımlar → Donanım)
+          çözülür; global dil ayarına dokunmadan bu bilgisayar kendi dilinde basar.
+        </span>
+      </label>
 
       <div className="flex items-center gap-3">
         <Button

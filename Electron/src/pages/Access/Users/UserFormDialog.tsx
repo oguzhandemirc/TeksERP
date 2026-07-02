@@ -5,7 +5,13 @@ import { Input } from "@/components/ui/input";
 import type { AdminUserListItem } from "@/services/adminUserService";
 
 export const userFormSchema = z.object({
-  username: z.string().min(3, "En az 3 karakter").max(40),
+  // Yalnız İngilizce harf/rakam/nokta/alt-çizgi/tire — Türkçe karakter ve BOŞLUK yok.
+  username: z
+    .string()
+    .trim()
+    .min(3, "En az 3 karakter")
+    .max(40)
+    .regex(/^[a-zA-Z0-9._-]+$/, "Yalnız İngilizce harf, rakam, . _ - (boşluk/Türkçe karakter yok)"),
   fullName: z.string().min(1, "Ad-soyad gerekli").max(120),
   password: z.string().min(6, "En az 6 karakter").optional().or(z.literal("")),
   isActive: z.boolean(),
@@ -41,8 +47,31 @@ export function UserFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
     >
       {(form) => (
         <>
-          <FormField label="Kullanıcı Adı" htmlFor="username" error={form.formState.errors.username} required>
-            <Input id="username" autoFocus disabled={isEdit} {...form.register("username")} />
+          <FormField
+            label="Kullanıcı Adı"
+            htmlFor="username"
+            error={form.formState.errors.username}
+            hint="Yalnız İngilizce harf, rakam ve . _ - — boşluk ve Türkçe karakter olamaz."
+            required
+          >
+            <Input
+              id="username"
+              autoFocus
+              disabled={isEdit}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              {...form.register("username", {
+                // Yazarken anında filtrele: geçersiz karakterler (boşluk/Türkçe/vb.) hiç girilmesin.
+                onChange: (e) => {
+                  const cleaned = e.target.value.replace(/[^a-zA-Z0-9._-]/g, "");
+                  if (cleaned !== e.target.value) {
+                    e.target.value = cleaned;
+                    form.setValue("username", cleaned, { shouldValidate: true });
+                  }
+                },
+              })}
+            />
           </FormField>
           <FormField label="Ad Soyad" htmlFor="fullName" error={form.formState.errors.fullName} required>
             <Input id="fullName" {...form.register("fullName")} />
