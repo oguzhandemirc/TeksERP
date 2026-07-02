@@ -36,13 +36,30 @@ function takeRoutes(data: Record<string, unknown>): Array<{ kind: LabelKind; tem
 }
 
 export class PeripheralDeviceService extends BaseService {
-  private async validateRefs(data: Record<string, unknown>): Promise<void> {
-    // Sahiplik: makineye-sabit VEYA tablete-bağlı — ikisi birden OLAMAZ (boş serbest).
-    if (
-      typeof data.machineId === "string" && data.machineId &&
-      typeof data.deviceId === "string" && data.deviceId
-    ) {
-      throw AppError.badRequest("Cihaz ya makineye ya da tablete bağlanır — ikisi birden olamaz");
+  private async validateRefs(data: Record<string, unknown>, existingId?: string): Promise<void> {
+    // Sahiplik: makineye-sabit VEYA makinesiz-istasyona-sabit VEYA tablete-bağlı —
+    // en fazla BİRİ (boş serbest). Update'te mevcut kayıtla BİRLEŞTİRİLMİŞ sahiplik
+    // kontrol edilir: tek alan gönderip (diğerini temizlemeden) çift sahiplik
+    // oluşturma deliği kapalı — istemci diğer sahiplik alanını null göndermeli.
+    const OWNER_FIELDS = ["machineId", "stationId", "deviceId"] as const;
+    const effective: Record<string, string | null> = { machineId: null, stationId: null, deviceId: null };
+    const existing = existingId
+      ? await prisma.peripheralDevice.findUnique({
+          where: { id: existingId },
+          select: { machineId: true, stationId: true, deviceId: true },
+        })
+      : null;
+    for (const f of OWNER_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(data, f)) {
+        effective[f] = typeof data[f] === "string" && data[f] ? (data[f] as string) : null;
+      } else if (existing) {
+        effective[f] = existing[f];
+      }
+    }
+    if (OWNER_FIELDS.filter((f) => effective[f]).length > 1) {
+      throw AppError.badRequest(
+        "Donanım makineye, makinesiz istasyona VEYA tablete bağlanır — yalnız biri (diğer sahiplik alanını temizleyin)",
+      );
     }
     if (data.port !== undefined && data.port !== null) {
       const p = Number(data.port);
@@ -77,6 +94,20 @@ export class PeripheralDeviceService extends BaseService {
       const dv = await prisma.device.findFirst({ where: { id: data.deviceId, isActive: true }, select: { id: true } });
       if (!dv) throw AppError.badRequest("Cihaz (tablet) bulunamadı veya pasif");
     }
+    if (typeof data.stationId === "string" && data.stationId) {
+      const st = await prisma.station.findFirst({ where: { id: data.stationId, isActive: true }, select: { id: true } });
+      if (!st) throw AppError.badRequest("İstasyon bulunamadı veya pasif");
+      // Yan yana özdeş HC-06 belirsizliğinin tek çözümü makine bağı — makinesi olan
+      // istasyonda donanım istasyona DEĞİL makineye bağlanmalı.
+      const machineCount = await prisma.machine.count({
+        where: { stationId: data.stationId, isActive: true },
+      });
+      if (machineCount > 0) {
+        throw AppError.badRequest(
+          "Makinesi olan istasyona doğrudan donanım bağlanamaz — donanımı makineye bağlayın",
+        );
+      }
+    }
   }
 
   async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
@@ -90,7 +121,7 @@ export class PeripheralDeviceService extends BaseService {
 
   async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
     const routes = takeRoutes(data);
-    await this.validateRefs(data);
+    await this.validateRefs(data, id);
     const res = await super.update(id, data, userId);
     if (routes) await this.applyRoutes(id, routes, userId);
     return res;

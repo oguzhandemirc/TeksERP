@@ -371,27 +371,27 @@ async function main() {
       department: "TERBIYE", defaultCategoryId: catByCode.get("ZIMPARA")!.id,
     },
   });
-  // Sevkiyat/paketleme noktası: sabit PC (Electron) + kantar burada durur. Üretim
-  // istasyonu değil (StationKind.OTHER + department SEVKIYAT) — çuval tartısı için
-  // bir Machine altına PeripheralDevice (SCALE) bağlanır. Çok-istasyon → aynı pattern.
+  // Sevkiyat/paketleme noktası: üretim dışı MAKİNESİZ istasyon (StationKind.SHIPPING).
+  // Donanım (çuval kantarı) doğrudan İSTASYONA bağlanır (PeripheralDevice.stationId);
+  // telefonlar burada makinesiz istasyon-oturumu açar (birden çok tartı telefonu serbest).
   const sevk = await prisma.station.create({
     data: {
-      code: "SEVK_1", name: "Sevkiyat / Paketleme", type: "INTERNAL", kind: "OTHER",
+      code: "SEVK_1", name: "Sevkiyat / Paketleme", type: "INTERNAL", kind: "SHIPPING",
       department: "SEVKIYAT", allowAsWorkOrderStep: false,
     },
   });
   console.log("✅ 6 istasyon (KK1 entry-only, Kurşun+KK2, Tambur, Boya, Zımpara, Sevkiyat)");
 
-  // --- Makineler (içerideki istasyonlar için; tablet/makine bu Machine altına pair'lenir) ---
+  // --- Makineler (içerideki üretim istasyonları; tablet oturumla bu makinelere bağlanır) ---
+  // Sevkiyat MAKİNESİZ (SHIPPING) — makine kaydı yok; kantar istasyona bağlı (aşağıda).
   await prisma.machine.createMany({
     data: [
       { stationId: kk1.id,    code: "KK1-M1",    name: "KK1 Tablet 1" },
       { stationId: kursun.id, code: "KK2-M1",    name: "KK2 Makine 1" },
       { stationId: tambur.id, code: "TAMBUR-M1", name: "Tambur Makine 1" },
-      { stationId: sevk.id,   code: "SEVK-M1",   name: "Sevkiyat PC 1" },
     ],
   });
-  console.log("✅ 4 makine (KK1-M1, KK2-M1, TAMBUR-M1, SEVK-M1)");
+  console.log("✅ 3 makine (KK1-M1, KK2-M1, TAMBUR-M1)");
 
   // --- Yazıcı modeli kataloğu + etiket format profilleri ---
   // "Yazıcı değişse de format/komut tanımları kaybolmasın" → kalıcı katalog.
@@ -428,7 +428,7 @@ async function main() {
   // MachineHardware emekli; saha donanımının TEK kaynağı PeripheralDevice. Faz-1
   // gönderim simüle. KK1/KK2 yazıcıları burada; Tambur yazıcısı aşağıda (TAMBUR-ARGOX-01).
   const seededMachines = await prisma.machine.findMany({
-    where: { code: { in: ["KK1-M1", "KK2-M1", "TAMBUR-M1", "SEVK-M1"] } },
+    where: { code: { in: ["KK1-M1", "KK2-M1", "TAMBUR-M1"] } },
     select: { id: true, code: true },
   });
   const mById = (code: string) => seededMachines.find((m) => m.code === code)?.id;
@@ -520,25 +520,21 @@ async function main() {
   }
 
   // --- Sevkiyat kantarı (PeripheralDevice: SCALE) — HC-06 → Android telefon (BT-SPP) ---
-  // Çuval brüt tartısı buradan okunur (mobil PaketlemeScreen "Tart"). Telefon
-  // kantara doğrudan Bluetooth Classic (BT-SPP) ile bağlanır. address = HC-06 MAC;
-  // pollCommand = istek-cevap komutu (kantar komut bekliyor; tam komut + format
-  // sahada Cihaz Kaydı'ndan girilir). Faz-1 simüle (simulate=true).
-  // NOT: İleride sabit PC + COM kantar istenirse aynı makineye SERIAL_COM bir SCALE
-  // satırı eklenir (Electron "Tart" onu okur) — kod değişmez.
-  const sevkMachineId = mById("SEVK-M1");
-  if (sevkMachineId) {
-    await prisma.peripheralDevice.create({
-      data: {
-        code: "SEVK-KANTAR", name: "Sevkiyat Kantarı",
-        kind: "SCALE", connectionType: "BLUETOOTH_SPP",
-        address: "00:23:09:01:2A:3C", role: "PRIMARY",
-        pollCommand: "P", terminator: "\r\n", decimals: 2, unit: "kg", timeoutMs: 2500, simulate: true,
-        machineId: sevkMachineId,
-      },
-    });
-    console.log("✅ Sevkiyat kantarı (SCALE, BT-SPP, role PRIMARY)");
-  }
+  // Çuval brüt tartısı buradan okunur (mobil PaketlemeScreen "Tart"). Telefon kantara
+  // doğrudan Bluetooth Classic (BT-SPP) ile bağlanır. Sevkiyat MAKİNESİZ istasyon
+  // (SHIPPING) — kantar doğrudan İSTASYONA bağlı (stationId), oturum-kapsamlı çözülür.
+  // address = HC-06 MAC; pollCommand = istek-cevap komutu (tam komut + format sahada
+  // Cihaz Kaydı'ndan girilir). Faz-1 simüle (simulate=true).
+  await prisma.peripheralDevice.create({
+    data: {
+      code: "SEVK-KANTAR", name: "Sevkiyat Kantarı",
+      kind: "SCALE", connectionType: "BLUETOOTH_SPP",
+      address: "00:23:09:01:2A:3C", role: "PRIMARY",
+      pollCommand: "P", terminator: "\r\n", decimals: 2, unit: "kg", timeoutMs: 2500, simulate: true,
+      stationId: sevk.id,
+    },
+  });
+  console.log("✅ Sevkiyat kantarı (SCALE, BT-SPP, istasyona bağlı — SEVK_1)");
 
   // --- İstasyon yetenekleri ---
   // Boyahane: tüm 6 renk + 5 özellik (Kurşun ve Zımparalı hariç — onlar başka istasyonun işi)

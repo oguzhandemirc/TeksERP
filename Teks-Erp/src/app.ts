@@ -59,6 +59,7 @@ import adminRoutes from "./routes/admin.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import reportsRoutes from "./routes/reports.routes";
 import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
+import workSessionRoutes from "./routes/work-session.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
 import { getPresence } from "./lib/presence";
 
@@ -404,6 +405,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/devices", devicePublicRouter);
 app.use("/api/admin/devices", deviceAdminRouter);
+app.use("/api/work-sessions", workSessionRoutes);
 
 // =============================================================================
 // JSON 404 — tanımsız /api/* route'lar için

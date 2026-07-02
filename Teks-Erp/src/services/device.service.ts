@@ -171,12 +171,20 @@ export class DeviceService {
     return updated;
   }
 
-  /** Admin: kalıcı sil (yalnız atanmamış — machineId=null). */
+  /** Admin: kalıcı sil (yalnız atanmamış — machineId=null — ve oturum geçmişi olmayan). */
   static async hardDelete(id: string, userId?: string) {
     const existing = await prisma.device.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
     if (existing.machineId) {
       throw AppError.badRequest("Cihaz bir makineye atanmış. Önce atamayı geri alın.");
+    }
+    // Ayak izi tarihçesi korunur — oturum geçmişi olan cihaz kalıcı silinemez (FK Restrict'in
+    // ham P2003'ü yerine anlaşılır Türkçe mesaj). Çözüm: pasife al (soft delete).
+    const sessionCount = await prisma.workSession.count({ where: { deviceId: id } });
+    if (sessionCount > 0) {
+      throw AppError.badRequest(
+        "Cihazın çalışma oturumu geçmişi var — kalıcı silinemez, pasife alın.",
+      );
     }
     await prisma.device.delete({ where: { id } });
     await AuditService.log({
@@ -219,6 +227,14 @@ export class DeviceService {
       DeviceService.lastSeenWrites.set(deviceId, now);
       void prisma.device
         .update({ where: { deviceId }, data: { lastSeenAt: new Date() } })
+        .catch(() => undefined);
+      // Çalışma oturumu canlılığı — aynı throttle'a piggyback (okuma yok, timer yok).
+      // Tembel IDLE kapatma (work-session.helper) bu alanın eskiliğine bakar.
+      void prisma.workSession
+        .updateMany({
+          where: { deviceId: device.id, endedAt: null },
+          data: { lastActivityAt: new Date() },
+        })
         .catch(() => undefined);
     }
     return device;

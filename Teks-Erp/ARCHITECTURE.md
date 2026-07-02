@@ -111,6 +111,32 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 
 > `Manifest` modeli şemada hâlâ tanımlı ama sevkiyat modülü yeniden yazılırken kullanımı askıda; yeni sevkiyat tasarımıyla birlikte revize edilebilir. `CurrentAccount` ve `MachineLog` modelleri 2026-05-25 cleanup'ında silindi (finans modülü ve loom monitoring için kullanılmıyordu).
 
+### Çalışma Oturumu — `WorkSession` (kim hangi makinede; ayak izi) — 2026-07-02
+
+> Tablet/telefonların makine bağı statik admin atamasından **oturum** seviyesine indi.
+> Model: `userId + deviceId(FK devices.id) + machineId? + stationId(NOT NULL) + startedAt/endedAt/endReason/lastActivityAt`.
+> `endReason`: `LOGOUT | NEW_LOGIN | TAKEOVER | IDLE | ADMIN`.
+
+- **İnvariantlar (DB seddi):** bir makinede tek aktif oturum + bir cihazda tek aktif oturum — iki ŞEMA-DIŞI partial unique (`work_sessions_active_machine_uq`, `work_sessions_active_device_uq`, migration `20260702121000`); eşzamanlı open yarışının kaybedeni P2002 → 409.
+- **stationId denormalize ve DONUK:** makineli açılışta server makineden türetir (makine sonradan istasyon değiştirse geçmiş bozulmaz). Makinesiz istasyon oturumu (SHIPPING) `machineId=null`.
+- **Devralma warn-then-confirm:** makine doluysa `409 MACHINE_OCCUPIED` (+ occupiedBy detayı); `confirmTakeover:true` ile tekrar → eski oturum `TAKEOVER` ile kapanır.
+- **Idle TEMBEL enforce (timer/cron YOK):** `workSession.idleTimeoutMinutes` ayarı (default 600 dk, 0=kapalı); `resolveActiveSession`/`sweepIdleSessions` (helpers/work-session.helper.ts) okuma anında süresi dolan oturumu `IDLE` ile kapatır. `lastActivityAt` device.middleware'in lastSeenAt throttle'ına piggyback (60sn, fire-and-forget).
+- **Donanım bağlama tek eksen (hedef):** `PeripheralDevice` ya makineye (`machineId`) ya **makinesiz** istasyona (`stationId`, yeni) bağlanır — makineli istasyona doğrudan bağlama serviste reddedilir. `StationKind.SHIPPING` (yeni) = sevkiyat/tartı: üretim dışı, makinesiz; seed'de `SEVK_1` bu türde ve `SEVK-KANTAR` istasyona bağlı. Cihaza-bağlı (`deviceId`/`DevicePeripheral`) eksen Faz 6'da emekli olacak.
+- **Oturum açmak ONAYLI cihaz ister** (`req.device` zorunlu — allowlist fiilen anlamlanır). Oturum açılabilir türler: `RAW_QC / PROCESS_QC / TAMBUR / SHIPPING` (`SESSIONABLE_STATION_KINDS`, work-session.service.ts).
+
+| Method | Endpoint | İzin | İş |
+|---|---|---|---|
+| POST | `/api/work-sessions` | MOBILE_SESSION_PERMS | Aç (machineId XOR stationId; `confirmTakeover`) |
+| POST | `/api/work-sessions/close` | MOBILE_SESSION_PERMS | LOGOUT (idempotent) |
+| GET | `/api/work-sessions/current` | MOBILE_SESSION_PERMS | `{ active, lastPlace }` (server-side yer hafızası) |
+| GET | `/api/work-sessions/places` | MOBILE_SESSION_PERMS | İstasyon-gruplu aktif makine listesi |
+| GET | `/api/machines/resolve?code=` | station:read + MOBILE_SESSION_PERMS | QR → makine (ham machine.code, exact match) |
+| GET | `/api/work-sessions/active` | admin:settings | Canlı panel (okumada tembel idle süpürmesi) |
+| GET | `/api/work-sessions` | admin:settings | Geçmiş (kullanıcı/makine/istasyon/tarih filtreli) |
+| POST | `/api/work-sessions/:id/force-close` | admin:settings | ADMIN ile zorla kapat |
+
+`MOBILE_SESSION_PERMS = mobile:kk1 | mobile:kk2-kursun | mobile:tambur | mobile:tarti-paket` (work-session.service.ts — tek kaynak).
+
 ### Resmi belge defteri — `PrintedDocument` (versiyonlu irsaliye snapshot'ları)
 
 > 2026-06-09. Üç sevk/irsaliye belgesi — **Sevk İrsaliyesi** (`Shipment`), **Fason Sevk İrsaliyesi** (`SubcontractorDispatch`), **Kartela Çeki Listesi** (`KartelaDispatch`) — artık donmuş, versiyonlu resmi belge. Eski `SubcontractorDispatch.printSnapshot` / `KartelaDispatch.printSnapshot` kolonları kaldırıldı (migration `20260609225307`).

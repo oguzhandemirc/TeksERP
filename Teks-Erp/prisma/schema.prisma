@@ -32,6 +32,7 @@ enum StationKind {
   PROCESS_QC // Kurşun + Kalite Kontrol 2 (tek fiziksel istasyon)
   TAMBUR // Final karar noktası
   SUBCONTRACTOR // Fason / boyahane (dış işlem)
+  SHIPPING // Sevkiyat/tartı — üretim dışı, MAKİNESİZ istasyon (istasyona-bağlı donanım + istasyon-oturumu)
   OTHER // Diğer / özel istasyon
 }
 
@@ -257,6 +258,7 @@ model User {
   preference                 UserPreference?
   receivedReturns            RollReturn[]             @relation("RollReturnReceivedBy")
   cancelledReturns           RollReturn[]             @relation("RollReturnCancelledBy")
+  workSessions               WorkSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -391,6 +393,8 @@ model Station {
   cardScans            TravelerCardScan[]
   colorCapabilities    StationColor[]
   propertyCapabilities StationProperty[]
+  peripherals          PeripheralDevice[] // MAKİNESİZ istasyona sabit donanım (SHIPPING kantarı vb.)
+  workSessions         WorkSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -414,6 +418,8 @@ model Machine {
   peripherals    PeripheralDevice[] // birleşik cihaz kaydı (yazıcı/kantar/metre/sinyal — makineye sabit)
   rollOperations RollOperation[]
   rollMovements  RollMovement[]
+  workSessions   WorkSession[]
+  rollsCreated   Roll[]           @relation("RollCreatedMachine") // KK1 girişi makine atfı
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -443,6 +449,7 @@ model Device {
   machine       Machine?           @relation(fields: [machineId], references: [id])
   peripherals   PeripheralDevice[] // (eski) tablete-bağlı tekil sahiplik (registerBt geçişte)
   hardwareLinks DevicePeripheral[] // YENİ: cihazın kullandığı donanım (çok-çok, paylaşılabilir)
+  workSessions  WorkSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -549,6 +556,11 @@ model PeripheralDevice {
   machine   Machine? @relation(fields: [machineId], references: [id], onDelete: SetNull)
   deviceId  String?  @db.Uuid
   device    Device?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  /// MAKİNESİZ istasyona sabit donanım (örn. sevkiyat çuval kantarı). Yalnız makinesi
+  /// olmayan istasyona bağlanabilir (serviste enforce) — makineli istasyonda donanım
+  /// MAKİNEYE bağlanmalı (yan yana özdeş HC-06 belirsizliğinin tek çözümü makine bağı).
+  stationId String?  @db.Uuid
+  station   Station? @relation(fields: [stationId], references: [id], onDelete: SetNull)
 
   printerModelId   String?             @db.Uuid
   printerModel     PrinterModel?       @relation(fields: [printerModelId], references: [id], onDelete: Restrict)
@@ -568,6 +580,7 @@ model PeripheralDevice {
 
   @@index([machineId])
   @@index([deviceId])
+  @@index([stationId])
   @@index([printerModelId])
   @@index([formatProfileId])
   @@index([connectionType])
@@ -615,6 +628,62 @@ model PeripheralTemplateRoute {
 enum DeviceStatus {
   PENDING
   APPROVED
+}
+
+/// Çalışma oturumunun kapanış nedeni. Açık oturumda (endedAt null) NULL kalır;
+/// kapatan HER yol set eder (servis tek geçit).
+enum WorkSessionEndReason {
+  LOGOUT // Kullanıcı çıkışı / mobil "oturumu kapat"
+  NEW_LOGIN // Aynı cihazda yeni oturum açıldı (vardiya değişimi)
+  TAKEOVER // Başka cihaz aynı makineyi devraldı
+  IDLE // Hareketsizlik zaman aşımı (tembel kapatma — workSession.idleTimeoutMinutes)
+  ADMIN // Panelden zorla kapatıldı
+}
+
+/// ÇALIŞMA OTURUMU (ayak izi): KİM (userId) HANGİ CİHAZLA (deviceId) NEREDE
+/// (machineId/stationId) NE ZAMAN (startedAt–endedAt) çalıştı. Donanım çözümü
+/// (for-session) ve üretim atfı (RollOperation.machineId vb.) AKTİF oturumdan okunur.
+/// stationId HER ZAMAN dolu: makineli oturumda server makineden türetip DONDURUR
+/// (makine sonradan istasyon değiştirse geçmiş bozulmaz — denormalize bilinçli);
+/// makinesiz istasyon oturumunda (SHIPPING) machineId null kalır.
+model WorkSession {
+  id     String @db.Uuid @id @default(uuid())
+  userId String @db.Uuid
+  /// FK devices.id (PK, UUID) — tabletin local kimliği (devices.deviceId) DEĞİL.
+  deviceId  String  @db.Uuid
+  machineId String? @db.Uuid
+  stationId String  @db.Uuid
+
+  startedAt DateTime              @default(now())
+  endedAt   DateTime?
+  endReason WorkSessionEndReason?
+  /// Son aktivite — device.middleware'in lastSeenAt throttle'ına piggyback (60sn'de
+  /// bir fire-and-forget). Tembel idle kapatma (resolveActiveSession) bunun eskiliğine bakar.
+  lastActivityAt DateTime @default(now())
+
+  // Ayak izi tarihçesi korunur — hiçbir taraf silinirken oturum geçmişi kaybolmaz/boşalmaz.
+  user    User     @relation(fields: [userId], references: [id])
+  device  Device   @relation(fields: [deviceId], references: [id])
+  machine Machine? @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  station Station  @relation(fields: [stationId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, startedAt])
+  @@index([machineId, startedAt])
+  @@index([stationId, startedAt])
+  @@index([deviceId, startedAt])
+  // Aktif oturum filtreleri (endedAt IS NULL) — canlı panel + resolveActiveSession
+  @@index([endedAt])
+  // DB'de ayrıca ŞEMA-DIŞI iki partial unique var (migration 20260702121000):
+  //   work_sessions_active_machine_uq (machineId) WHERE "endedAt" IS NULL AND "machineId" IS NOT NULL
+  //   work_sessions_active_device_uq  (deviceId)  WHERE "endedAt" IS NULL
+  // "Bir makinede tek aktif oturum + bir cihazda tek aktif oturum" invariant'ının DB
+  // seddi — eşzamanlı open yarışının kaybedeni P2002 alır (servis 409'a çevirir).
+  // Partial UNIQUE @@index ile ifade edilemediğinden şemada karşılığı bilinçli YOK
+  // (roll_movements_one_open_per_roll_step_uq emsali).
+  @@map("work_sessions")
 }
 
 model Route {
@@ -814,6 +883,11 @@ model Roll {
   // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
   createdById String? @db.Uuid
 
+  // Audit — KK1 girişinde topun oluşturulduğu MAKİNE (aktif çalışma oturumundan
+  // damgalanır — Faz 2). KK1 girişi RollOperation üretmediği için makine atfı Roll
+  // üstünde kapanır (createdById'nin makine kardeşi). NULL = oturumsuz giriş (web).
+  createdMachineId String? @db.Uuid
+
   // Paketleme — topun okutulduğu sevkiyat oturumu. NULL = henüz sevkiyata girmedi
   // (serbest depo). Çuvallanan top PREPARING/READY/AT_DOOR boyunca WAREHOUSE kalır ama
   // shipmentId dolu → SERBEST stoktan düşer (çuval depo/kapı önü). SHIPPED'a yalnız
@@ -860,6 +934,7 @@ model Roll {
   currentStep          WorkOrderStep?              @relation("RollCurrentStep", fields: [currentStepId], references: [id])
   producedInStep       WorkOrderStep?              @relation("RollProducedInStep", fields: [producedInStepId], references: [id])
   createdBy            User?                       @relation("RollCreatedBy", fields: [createdById], references: [id])
+  createdMachine       Machine?                    @relation("RollCreatedMachine", fields: [createdMachineId], references: [id])
   properties           RollProperty[]
   shipment             Shipment?                   @relation(fields: [shipmentId], references: [id])
   sack                 Sack?                       @relation(fields: [sackId], references: [id])
@@ -875,6 +950,8 @@ model Roll {
   // @@index tam görünür ama DB'de partial'dır (Prisma 7 predicate'i drift saymaz).
   @@index([parentReceiptId])
   @@index([createdById])
+  // KK1 makine atfı raporu ("bu makinede girilen toplar")
+  @@index([createdMachineId])
   // Liste sayfaları: status filter + createdAt desc sort
   @@index([status, createdAt])
   // Ham/işlenmiş filter: WHERE "colorId" IS NULL (ham) — yüksek seçicilikli partial index

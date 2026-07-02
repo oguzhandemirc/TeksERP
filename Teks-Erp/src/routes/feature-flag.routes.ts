@@ -48,6 +48,8 @@ const updateSchema = z.object({
   sessionDurationHours: z.number().int().min(1).max(720).optional(),
   // auth.idleTimeoutMinutes — hareketsizlik zaman aşımı, dakika (0=kapalı, 0–1440). Frontend ENFORCE.
   idleTimeoutMinutes: z.number().int().min(0).max(1440).optional(),
+  // workSession.idleTimeoutMinutes — çalışma oturumu idle zaman aşımı, dakika (default 600, 0=kapalı). Backend TEMBEL ENFORCE.
+  workSessionIdleTimeoutMinutes: z.number().int().min(0).max(1440).optional(),
   // Saha #6: top etiketi kopya adedi (1–5). (Servis ayrıca doğrular.)
   labelCopies: z.number().int().min(1).max(5).optional(),
   // Saha #20: top adı format şablonu (maks 100; servis token doğrular).

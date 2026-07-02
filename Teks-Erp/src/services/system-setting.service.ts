@@ -96,6 +96,12 @@ export const SETTING_KEYS = {
    *  paneli bu kadar dakika hiç işlem (fare/klavye) görmezse otomatik çıkış yapar.
    *  Frontend ENFORCE eder (backend token'ı yine kendi mutlak ömrüne kadar geçerli). */
   AUTH_IDLE_TIMEOUT_MINUTES: "auth.idleTimeoutMinutes",
+  /** Çalışma oturumu (WorkSession — kim hangi makinede) hareketsizlik zaman aşımı,
+   *  DAKİKA. Default 600 (10 saat: vardiya boyu molalarda düşmez, gece açık unutulan
+   *  tablet sabaha temiz oturumla başlar). 0 = kapalı. Backend TEMBEL enforce eder:
+   *  timer YOK — aktif oturum okunurken lastActivityAt bu süreden eskiyse IDLE ile
+   *  kapatılır (work-session.helper). auth.idleTimeoutMinutes'ten (ekran kilidi) AYRI. */
+  WORK_SESSION_IDLE_TIMEOUT_MINUTES: "workSession.idleTimeoutMinutes",
   /** Saha #6: top etiketi kaç kopya basılır (default 2 — topun bir üstüne bir
    *  altına yapıştırılıyor). /labels/rolls/:id/html bu kadar sayfa döner;
    *  çağıran ?copies= ile tek baskı için override edebilir. 1-5 arası. */
@@ -125,6 +131,10 @@ const MAX_SESSION_DURATION_HOURS = 720;
 export const DEFAULT_IDLE_TIMEOUT_MINUTES = 0;
 /** Hareketsizlik zaman aşımı tavanı — dakika (24 saat). */
 const MAX_IDLE_TIMEOUT_MINUTES = 1440;
+/** Çalışma oturumu (WorkSession) idle varsayılanı — dakika (10 saat). 0 = kapalı. */
+export const DEFAULT_WORK_SESSION_IDLE_MINUTES = 600;
+/** Çalışma oturumu idle tavanı — dakika (24 saat). */
+const MAX_WORK_SESSION_IDLE_MINUTES = 1440;
 
 /** Firma adı verilmediğinde gösterilen varsayılan. */
 export const DEFAULT_COMPANY_NAME = "Adnan Şahin Tekstil";
@@ -392,6 +402,9 @@ export interface FeatureFlags {
   /** Hareketsizlik zaman aşımı — dakika (default 0 = kapalı). Panel bu kadar dakika
    *  işlem görmezse otomatik çıkış. Frontend ENFORCE eder. */
   idleTimeoutMinutes: number;
+  /** Çalışma oturumu (kim hangi makinede) idle zaman aşımı — dakika (default 600 =
+   *  10 saat; 0 = kapalı). Backend TEMBEL enforce eder (okuma anında IDLE kapatma). */
+  workSessionIdleTimeoutMinutes: number;
   /** Saha #6: top etiketi kopya adedi (default 2 — üst+alt yapıştırma). 1-5. */
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). Frontend okur. */
@@ -548,6 +561,7 @@ export class SystemSettingService {
       tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(cacheClient),
       sessionDurationHours: await readSessionDurationHours(cacheClient),
       idleTimeoutMinutes: await readIdleTimeoutMinutes(cacheClient),
+      workSessionIdleTimeoutMinutes: await readWorkSessionIdleTimeoutMinutes(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
       rollNameTemplate: await readRollNameTemplate(cacheClient),
       printerLanguage: await readPrinterLanguage(cacheClient),
@@ -786,6 +800,26 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_IDLE_TIMEOUT_MINUTES,
         Math.floor(v),
         "Hareketsizlik zaman aşımı, dakika — panel bu kadar süre işlem görmezse otomatik çıkış (0 = kapalı)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "workSessionIdleTimeoutMinutes")) {
+      const v = input.workSessionIdleTimeoutMinutes;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        v < 0 ||
+        v > MAX_WORK_SESSION_IDLE_MINUTES
+      ) {
+        throw AppError.badRequest(
+          `Çalışma oturumu zaman aşımı 0–${MAX_WORK_SESSION_IDLE_MINUTES} dakika aralığında olmalı (0 = kapalı)`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.WORK_SESSION_IDLE_TIMEOUT_MINUTES,
+        Math.floor(v),
+        "Çalışma oturumu (kim hangi makinede) hareketsizlik zaman aşımı, dakika — tembel IDLE kapatma (0 = kapalı)",
         userId
       );
     }
@@ -1249,6 +1283,26 @@ export async function readIdleTimeoutMinutes(
   if (parsed === null || parsed < 0) return DEFAULT_IDLE_TIMEOUT_MINUTES;
   return Math.min(Math.floor(parsed), MAX_IDLE_TIMEOUT_MINUTES);
 }
+/**
+ * Çalışma oturumu (WorkSession) hareketsizlik zaman aşımını DAKİKA olarak okur.
+ * Yoksa/geçersizse 600 (10 saat); 0 = kapalı; tavan 1440. Backend TEMBEL enforce
+ * eder — timer/cron yok: resolveActiveSession / sweepIdleSessions okuma anında
+ * süresi dolan oturumu IDLE ile kapatır (work-session.helper.ts).
+ */
+export async function readWorkSessionIdleTimeoutMinutes(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.WORK_SESSION_IDLE_TIMEOUT_MINUTES },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_WORK_SESSION_IDLE_MINUTES;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < 0) return DEFAULT_WORK_SESSION_IDLE_MINUTES;
+  return Math.min(Math.floor(parsed), MAX_WORK_SESSION_IDLE_MINUTES);
+}
+
 /**
  * Saha #6: top etiketi kopya adedi (default 2 — topun üstüne + altına).
  * 1-5 aralığına kırpılır; geçersiz/yok → 2.

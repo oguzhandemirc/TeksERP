@@ -6,8 +6,9 @@ import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { BaseService } from "../services/base.service";
 import { stationHardRemove } from "../services/helpers/guarded-hard-remove";
+import { WorkSessionService, MOBILE_SESSION_PERMS } from "../services/work-session.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 // --- Station ---
 const stationService = new BaseService({
@@ -61,7 +62,7 @@ const router = Router();
  *         schema: { type: string, enum: [INTERNAL, EXTERNAL] }
  *       - in: query
  *         name: filter[kind]
- *         schema: { type: string, enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, OTHER] }
+ *         schema: { type: string, enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, SHIPPING, OTHER] }
  *       - in: query
  *         name: filter[department]
  *         schema: { type: string }
@@ -137,7 +138,7 @@ router.get("/:id", verifyToken, requirePermission("station:read"), stationContro
  *               type: { type: string, enum: [INTERNAL, EXTERNAL] }
  *               kind:
  *                 type: string
- *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, OTHER]
+ *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, SHIPPING, OTHER]
  *                 description: Domain rolü — API davranış dispatch'i için kullanılır (ör. PROCESS_QC → Kurşun+QC2 akışı, TAMBUR → kesim/karar akışı). Varsayılan OTHER.
  *                 example: OTHER
  *               department: { type: string, example: "TERBIYE" }
@@ -171,7 +172,7 @@ router.post("/", verifyToken, requirePermission("station:write"), stationControl
  *               type: { type: string, enum: [INTERNAL, EXTERNAL] }
  *               kind:
  *                 type: string
- *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, OTHER]
+ *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, SHIPPING, OTHER]
  *               department: { type: string }
  *               isActive: { type: boolean }
  *     responses:
@@ -225,6 +226,39 @@ const machineRouter = Router();
  *         description: Makine listesi
  */
 machineRouter.get("/", verifyToken, requirePermission("station:read"), machineController.findAll);
+
+// IMPORTANT: /resolve, /:id'den ÖNCE olmalı (Express "resolve"u id sanmasın).
+/**
+ * @openapi
+ * /api/machines/resolve:
+ *   get:
+ *     tags: [Machines]
+ *     summary: Makine kodundan çözüm (QR → makine; çalışma oturumu yer seçimi)
+ *     description: Makine QR etiketi ham machine.code taşır — tam eşleşme ile aranır. İstasyon (kind dahil) birlikte döner.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: code
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Makine + istasyon }
+ *       404: { description: Makine bulunamadı }
+ */
+machineRouter.get(
+  "/resolve",
+  verifyToken,
+  requireAnyPermission("station:read", ...MOBILE_SESSION_PERMS),
+  async (req, res, next) => {
+    try {
+      const code = typeof req.query.code === "string" ? req.query.code : "";
+      const result = await WorkSessionService.resolveMachineByCode(code);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 /**
  * @openapi
