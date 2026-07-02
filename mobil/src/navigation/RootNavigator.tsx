@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { AppState, View, ActivityIndicator } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -53,14 +53,42 @@ export default function RootNavigator() {
   }).data;
 
   useEffect(() => {
-    void initBaseUrl();
+    let disposed = false;
+    let announceRetry: ReturnType<typeof setTimeout> | null = null;
+
+    // Tablet kendini bildirir (bilinmiyorsa PENDING kaydı açılır → admin onaylar).
+    // SAHA BUG'ı (test #1): tek atışlık announce açılış yarışlarında sessizce
+    // düşüyordu — (a) initBaseUrl beklenmeden ateşleniyordu (istek yanlış/varsayılan
+    // adrese gidebiliyor), (b) Wi-Fi/sunucu henüz hazır değilse hata yutulup bir
+    // daha DENENMİYORDU, (c) Android'de "kapat/aç" çoğu zaman resume'dur — açılış
+    // kodu hiç çalışmaz. Artık: baseUrl yüklendikten SONRA, başarılı olana dek
+    // 5 sn arayla dener + uygulama öne her gelişinde tazelenir (kalıcı silinen
+    // cihaz, uygulama açılınca kendiliğinden yeniden PENDING listesine düşer).
+    const announce = async () => {
+      if (disposed) return;
+      try {
+        const deviceId = await getOrCreateDeviceId();
+        await deviceService.announce({ deviceId });
+      } catch {
+        if (!disposed) announceRetry = setTimeout(() => void announce(), 5000);
+      }
+    };
+
     void initDevice();
     void initDeviceSettings();
     loadStoredAuth();
-    // Tablet kendini bildirir (bilinmiyorsa PENDING kaydı açılır → admin onaylar+atar).
-    void getOrCreateDeviceId().then((deviceId) =>
-      deviceService.announce({ deviceId }).catch(() => undefined),
-    );
+    void initBaseUrl().then(() => void announce());
+
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        if (announceRetry) {
+          clearTimeout(announceRetry);
+          announceRetry = null;
+        }
+        void announce();
+      }
+    });
+
     setUnauthorizedHandler(() => {
       // 401 → sadece kullanıcıyı çıkar, atamayı koru. Çalışma oturumu state'i de
       // sıfırlanır — yeni giriş taze GET current ile yükler (sunucudaki açık oturum
@@ -73,6 +101,12 @@ export default function RootNavigator() {
     setWorkSessionRequiredHandler(() => {
       useSessionStore.getState().clearActive();
     });
+
+    return () => {
+      disposed = true;
+      if (announceRetry) clearTimeout(announceRetry);
+      appStateSub.remove();
+    };
   }, []);
 
   // SettingsScreen gösterimi için `paired`'ı atama durumundan senkronla.
