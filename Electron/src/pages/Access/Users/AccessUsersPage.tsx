@@ -20,6 +20,7 @@ import type { ApiResponse } from "@/types/api";
 import { UserFormDialog, type UserFormValues } from "./UserFormDialog";
 import { UserDetailSheet } from "./UserDetailSheet";
 import { NewUserCredentialsDialog } from "./NewUserCredentialsDialog";
+import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
 
 const QUERY_KEY = "admin-users";
 
@@ -51,8 +52,9 @@ export function AccessUsersPage() {
   const [permissionsFor, setPermissionsFor] = useState<AdminUserListItem | null>(null);
   const [detailTab, setDetailTab] = useState<"permissions" | "quick-pin">("permissions");
   const [removingId, setRemovingId] = useState<string | null>(null);
-  // Yeni kullanıcı oluşturulunca açılan "kimlik kartı" (QR + hızlı PIN).
-  const [newCreds, setNewCreds] = useState<AdminUserListItem | null>(null);
+  // Yeni kullanıcı oluşturulunca açılan "kimlik kartı" (etkin yöntemlerin kimlikleri).
+  const [newCreds, setNewCreds] = useState<{ user: AdminUserListItem; password?: string } | null>(null);
+  const enabledMethods = useEnabledLoginMethods();
 
   const query = useQuery({
     queryKey: [QUERY_KEY],
@@ -73,13 +75,20 @@ export function AccessUsersPage() {
   const invalidate = () => qc.invalidateQueries({ queryKey: [QUERY_KEY] });
 
   const createMut = useMutation({
-    mutationFn: userMutations.create,
+    mutationFn: ({ _password, ...payload }: UserPayload & { _password?: string }) => {
+      void _password; // yalnız modal hatırlatması; backend'e gönderilmez
+      return userMutations.create(payload);
+    },
     onSuccess: (res, vars) => {
       toast.success("Kullanıcı oluşturuldu.");
       invalidate();
-      // Mobil kimlik üretildiyse (operatör) → kimlik kartı modalını aç.
+      // Kimlik kartı modalı YALNIZ bir mobil yöntem (PIN/kart) etkinken açılır
+      // ("ne aktifse onu göster" — salt liste ise gösterilecek QR/PIN yok, toast yeter).
       const created = res.data;
-      if (created && vars.generateMobileCredentials) setNewCreds(created);
+      const hasMobileMethod = enabledMethods.includes("pin") || enabledMethods.includes("card");
+      if (created && vars.generateMobileCredentials && hasMobileMethod) {
+        setNewCreds({ user: created, password: vars._password });
+      }
     },
   });
 
@@ -110,11 +119,13 @@ export function AccessUsersPage() {
       await updateMut.mutateAsync({ id: editing.id, data: payload });
     } else {
       // Yalnız oluşturmada gönder — varsayılan üretim izinleri (KK1/KK2/Tambur) +
-      // mobil kimlik (QR + hızlı PIN) aynı bayrağa bağlı (operatör).
+      // mobil kimlik üretimi (backend etkin yöntemlere göre üretir). _password
+      // modal'da "Kullanıcı+Şifre" yöntemi etkinse hatırlatılır (geri okunamaz).
       await createMut.mutateAsync({
         ...payload,
         grantOperatorDefaults: values.grantOperatorDefaults,
         generateMobileCredentials: values.grantOperatorDefaults,
+        _password: values.password || undefined,
       });
     }
     setFormOpen(false);
@@ -259,10 +270,11 @@ export function AccessUsersPage() {
       />
 
       <NewUserCredentialsDialog
-        user={newCreds}
+        user={newCreds?.user ?? null}
+        password={newCreds?.password}
         onOpenChange={(open) => !open && setNewCreds(null)}
         onManage={() => {
-          const u = newCreds;
+          const u = newCreds?.user;
           setNewCreds(null);
           if (u) {
             setDetailTab("quick-pin"); // "yönet" → Hızlı PIN sekmesiyle açılsın

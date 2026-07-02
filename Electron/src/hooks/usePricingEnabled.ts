@@ -17,6 +17,13 @@ export function useCompanyName(): string {
   return q.data?.data?.companyName?.trim() || DEFAULT_COMPANY_NAME;
 }
 
+/** Etkin mobil giriş yöntemleri (auth.loginMethods.enabled). Yüklenene dek yalnız liste. */
+export function useEnabledLoginMethods(): ("list" | "pin" | "card")[] {
+  const q = useFeatureFlags();
+  const enabled = q.data?.data?.loginMethods?.enabled;
+  return Array.isArray(enabled) && enabled.length > 0 ? enabled : ["list"];
+}
+
 export function usePricingEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.pricingEnabled ?? false;

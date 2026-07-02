@@ -6,8 +6,10 @@ import { IdCard, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
 import { printDocumentArea } from "@/lib/print";
 import { adminUserService } from "@/services/adminUserService";
+import { MethodDisabledNotice } from "./MethodDisabledNotice";
 
 interface Props {
   userId: string;
@@ -23,6 +25,7 @@ interface Props {
  */
 export function CardTokenTab({ userId, username, fullName }: Props) {
   const qc = useQueryClient();
+  const methodEnabled = useEnabledLoginMethods().includes("card");
   const areaRef = useRef<HTMLDivElement>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -49,6 +52,7 @@ export function CardTokenTab({ userId, username, fullName }: Props) {
 
   return (
     <div className="space-y-4">
+      {!methodEnabled && <MethodDisabledNotice label="QR Personel Kartı" />}
       <div className="flex gap-3 rounded-md border bg-card p-4">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
           <IdCard className="h-4 w-4" />

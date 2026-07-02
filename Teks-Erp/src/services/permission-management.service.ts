@@ -11,6 +11,7 @@ import bcrypt from "bcryptjs";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { AuthService } from "./auth.service";
+import { readLoginMethods } from "./system-setting.service";
 
 /**
  * Yeni kullanıcının varsayılan olarak aldığı üretim istasyon izinleri (opt-out'lu).
@@ -325,13 +326,19 @@ export class PermissionManagementService {
       },
     });
 
-    // Mobil kimlik: hızlı-PIN + QR kart otomatik üret (benzersizlik retry'ları
-    // AuthService içinde). User create'inden AYRI — quickPin @unique çakışması
-    // create'i düşürmesin (P2002 retry gerekir). Web kullanıcısında atlanabilir.
+    // Mobil kimlik: yalnız ETKİN giriş yöntemlerinin kimliği üretilir ("ne aktifse
+    // onu üret" — pin etkin→hızlı PIN, card etkin→QR kart; ikisi de kapalıysa hiç).
+    // User create'inden AYRI — quickPin @unique çakışması create'i düşürmesin
+    // (P2002 retry AuthService'te). generateMobileCredentials=false → web kullanıcısı.
     const genCreds = input.generateMobileCredentials ?? grantDefaults;
     if (genCreds) {
-      await AuthService.setQuickPin(user.id, {}, actorUserId).catch(() => undefined);
-      await AuthService.rotateCardToken(user.id, actorUserId).catch(() => undefined);
+      const methods = await readLoginMethods();
+      if (methods.enabled.includes("pin")) {
+        await AuthService.setQuickPin(user.id, {}, actorUserId).catch(() => undefined);
+      }
+      if (methods.enabled.includes("card")) {
+        await AuthService.rotateCardToken(user.id, actorUserId).catch(() => undefined);
+      }
     }
 
     return user;

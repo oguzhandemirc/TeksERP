@@ -115,15 +115,29 @@ async function main() {
     check("getUserCredentials → mevcut PIN okunur", cred.quickPin === "515151");
     check("getUserCredentials → kart kodu (kart yoksa null)", cred.cardCode === null);
 
-    // 11) createUser otomatik mobil kimlik üretir (generateMobileCredentials default)
+    // 11) createUser YALNIZ etkin yöntemlerin kimliğini üretir — pin+card etkin yap.
+    await systemSettingService.setFeatureFlags(
+      { loginMethods: { enabled: ["list", "pin", "card"], primary: "pin" } }, admin.id);
     const auto = await PermissionManagementService.createUser(
       { username: `test-qpin-auto-${ts}`, fullName: "TEST Auto", password: "123456" },
       admin.id,
     );
     created.push(auto.id);
     const autoCred = await AuthService.getUserCredentials(auto.id);
-    check("createUser → otomatik hızlı PIN", /^\d{6}$/.test(autoCred.quickPin ?? ""));
-    check("createUser → otomatik QR kart kodu", /^TEKSU:/.test(autoCred.cardCode ?? ""));
+    check("createUser (pin+card etkin) → otomatik hızlı PIN", /^\d{6}$/.test(autoCred.quickPin ?? ""));
+    check("createUser (pin+card etkin) → otomatik QR kart kodu", /^TEKSU:/.test(autoCred.cardCode ?? ""));
+
+    // 11b) yalnız card etkinken → PIN üretilmez, yalnız kart
+    await systemSettingService.setFeatureFlags(
+      { loginMethods: { enabled: ["list", "card"], primary: "card" } }, admin.id);
+    const cardOnly = await PermissionManagementService.createUser(
+      { username: `test-qpin-card-${ts}`, fullName: "TEST CardOnly", password: "123456" },
+      admin.id,
+    );
+    created.push(cardOnly.id);
+    const cardOnlyCred = await AuthService.getUserCredentials(cardOnly.id);
+    check("yalnız card etkin → kart var, PIN yok",
+      cardOnlyCred.cardCode !== null && cardOnlyCred.quickPin === null);
 
     // 12) generateMobileCredentials=false → kimlik üretilmez (web kullanıcısı)
     const web = await PermissionManagementService.createUser(
