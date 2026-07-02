@@ -70,6 +70,24 @@ async function main() {
     await svc.update(r.id, { languageOverride: null });
   });
 
+  // 4c. Guard HEDEF türe göre: yazıcılıktan çıkışta dil temizlenebilir; dilsiz
+  //     cihaz yazıcıya çevrilemez (ayna-boşluk kapalı).
+  const conv = await svc.create({
+    code: `TEST-PRNC-${stamp}`, name: "Dönüşen", kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP",
+    languageOverride: PrinterLanguage.PPLA,
+  });
+  const convRec = conv.data as { id: string };
+  createdPeripheralIds.push(convRec.id);
+  await svc.update(convRec.id, { kind: "SCALE", languageOverride: null });
+  const afterConv = await prisma.peripheralDevice.findUnique({ where: { id: convRec.id }, select: { kind: true, languageOverride: true } });
+  check("update: yazıcı→kantar dönüşümünde dil temizlenebilir", afterConv?.kind === "SCALE" && afterConv.languageOverride === null);
+  await expectThrow("update: dilsiz cihaz yazıcıya çevrilemez", () =>
+    svc.update(convRec.id, { kind: "LABEL_PRINTER" }),
+  );
+  await svc.update(convRec.id, { kind: "LABEL_PRINTER", languageOverride: PrinterLanguage.ZPL });
+  const backToPrinter = await prisma.peripheralDevice.findUnique({ where: { id: convRec.id }, select: { kind: true, languageOverride: true } });
+  check("update: dille birlikte yazıcıya dönüş kabul", backToPrinter?.kind === "LABEL_PRINTER" && backToPrinter.languageOverride === "ZPL");
+
   // 5. setTemplateRoute create + upsert + remove
   await svc.setTemplateRoute(rec.id, LabelKind.ROLL_FINISHED, tplId);
   let routeCount = await prisma.peripheralTemplateRoute.count({ where: { peripheralId: rec.id, kind: LabelKind.ROLL_FINISHED } });

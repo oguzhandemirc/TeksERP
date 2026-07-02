@@ -56,7 +56,7 @@ Yeni bir fabrikada `npm run seed` ile gelen güvenli defaultlar — gerçek I/O 
 
 | Ayar | Default | Anlamı |
 |---|---|---|
-| `label.printerLanguage` | `PPLA` | Global yazıcı dili (model dili önceliklidir) |
+| `label.printerLanguage` | `PPLA` | Global yazıcı dili (cihazdaki dil önceliklidir) |
 | `label.nativeSendEnabled` | `false` | Yazıcıya gerçek TCP gönderim KAPALI (HTML+OS fallback) |
 | `device.pairingRequired` | `false` | Onaysız tablet de çalışır |
 | `PeripheralDevice.simulate` | seed'de METER/SCALE için `true` | Metre/kantar SAHTE okur (donanımsız test) |
@@ -66,6 +66,6 @@ Gerçek donanıma geçiş: ilgili `PeripheralDevice.simulate`'i kapat + `address
 
 ## Yeni fabrika konfig yüzeyi (Electron Tanımlar)
 
-PrinterModels · LabelFormatProfiles · Etiket Standartları (LabelTemplate) ·
+LabelFormatProfiles · Etiket Standartları (LabelTemplate) ·
 **Cihaz Kaydı (PeripheralDevices — tek donanım sayfası)** · İstasyonlar · Makineler ·
 **Cihazlar (tablet onay/atama)** + Genel Ayarlar bayrakları. Hepsi veri; kod dağıtımı gerekmez.

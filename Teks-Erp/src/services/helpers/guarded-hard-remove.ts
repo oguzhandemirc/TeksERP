@@ -169,6 +169,64 @@ export const routeHardRemove = makeGuardedHardRemove({
 });
 
 /**
+ * Machine hard-delete. Yalnız HİÇ KULLANILMAMIŞ (yanlışlıkla açılmış — örn.
+ * donanım sanılıp makine olarak eklenmiş) makine kalıcı silinebilir. Herhangi
+ * bir üretim izi / eşleşme varsa 409 + somut sayı ile reddedilir → pasife alın.
+ * Guard gerekçeleri:
+ * - workSession: çalışma oturumu ayak izi olan makine silinmesin (FK Restrict).
+ * - rollOperation / rollMovement / rollCreated: üretim atfı sessizce null'lanmasın
+ *   (bu FK'lar SetNull — guard olmasa geçmiş bozulurdu).
+ * - device / peripheral: eşlenmiş tablet veya bağlı donanım yetim kalmasın.
+ */
+export const machineHardRemove = makeGuardedHardRemove({
+  tableName: "MACHINE",
+  notFoundMessage: "Makine bulunamadı",
+  load: (id) => prisma.machine.findUnique({ where: { id } }),
+  guards: [
+    {
+      key: "workSessionCount",
+      count: (id) => prisma.workSession.count({ where: { machineId: id } }),
+      message: (n) =>
+        `Bu makinede ${n} çalışma oturumu geçmişi var — kalıcı silinemez. Makineyi pasife alın.`,
+    },
+    {
+      key: "rollOperationCount",
+      count: (id) => prisma.rollOperation.count({ where: { machineId: id } }),
+      message: (n) =>
+        `Bu makineye damgalı ${n} üretim işlemi var — kalıcı silinemez. Pasife alın.`,
+    },
+    {
+      key: "rollMovementCount",
+      count: (id) => prisma.rollMovement.count({ where: { machineId: id } }),
+      message: (n) =>
+        `Bu makinede ${n} üretim hareketi kayıtlı — kalıcı silinemez. Pasife alın.`,
+    },
+    {
+      key: "rollCreatedCount",
+      count: (id) => prisma.roll.count({ where: { createdMachineId: id } }),
+      message: (n) =>
+        `Bu makinede ${n} top girişi (KK1) yapılmış — kalıcı silinemez. Pasife alın.`,
+    },
+    {
+      key: "deviceCount",
+      count: (id) => prisma.device.count({ where: { machineId: id } }),
+      message: (n) =>
+        `Bu makineye ${n} cihaz (tablet) atanmış — önce cihaz atamasını kaldırın.`,
+    },
+    {
+      key: "peripheralCount",
+      count: (id) => prisma.peripheralDevice.count({ where: { machineId: id } }),
+      message: (n) =>
+        `Bu makineye ${n} donanım bağlı — önce donanımı başka makineye taşıyın veya kaldırın.`,
+    },
+  ],
+  deleteTx: async (tx, id) => {
+    await tx.machine.delete({ where: { id } });
+  },
+  successMessage: "Makine kalıcı olarak silindi",
+});
+
+/**
  * ProductRecipe hard-delete — properties pivot'u tx içinde silinir
  * (onDelete: Cascade'e ek güvence).
  */

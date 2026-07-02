@@ -124,11 +124,20 @@ export class PeripheralDeviceService extends BaseService {
   async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
     delete data.printerModelId; // eski istemci toleransı — PrinterModel alanı 2026-07'de kaldırıldı
     const routes = takeRoutes(data);
-    // PATCH kısmiliğini bozmadan: yalnız dil EXPLICIT temizlenmek istenirse reddet.
-    if (Object.prototype.hasOwnProperty.call(data, "languageOverride") && !data.languageOverride) {
-      const existing = await prisma.peripheralDevice.findUnique({ where: { id }, select: { kind: true } });
-      if (existing?.kind === PeripheralKind.LABEL_PRINTER) {
-        throw AppError.badRequest("Yazıcı için dil seçimi zorunlu — dil boşaltılamaz");
+    // Dil kuralı HEDEF türe göre (PATCH kısmiliği korunur): tür yazıcı KALIYORSA/
+    // OLUYORSA etkin dil boş olamaz; yazıcılıktan çıkan cihazda (örn. → SCALE)
+    // dilin temizlenmesi meşrudur.
+    const touchesLang = Object.prototype.hasOwnProperty.call(data, "languageOverride");
+    const touchesKind = Object.prototype.hasOwnProperty.call(data, "kind");
+    if (touchesLang || touchesKind) {
+      const existing = await prisma.peripheralDevice.findUnique({
+        where: { id },
+        select: { kind: true, languageOverride: true },
+      });
+      const targetKind = touchesKind && data.kind ? data.kind : existing?.kind;
+      const effectiveLang = touchesLang ? data.languageOverride : existing?.languageOverride;
+      if (targetKind === PeripheralKind.LABEL_PRINTER && !effectiveLang) {
+        throw AppError.badRequest("Yazıcı için dil seçimi zorunlu");
       }
     }
     await this.validateRefs(data, id);

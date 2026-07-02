@@ -167,7 +167,7 @@ export interface FeatureFlags {
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). */
   rollNameTemplate: string;
   /** Varsayılan etiket yazıcı dili (RASTER_HTML | PPLA | PPLB | ZPL; default PPLA).
-   *  Native render bu dilde; istasyon yazıcı modeli kendi dilini belirtirse o önceliklidir. */
+   *  Native render bu dilde; cihaz kaydındaki dil (languageOverride) her zaman önceliklidir. */
   printerLanguage: PrinterLanguage;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;

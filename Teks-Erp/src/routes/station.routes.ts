@@ -5,7 +5,7 @@
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { BaseService } from "../services/base.service";
-import { stationHardRemove } from "../services/helpers/guarded-hard-remove";
+import { stationHardRemove, machineHardRemove } from "../services/helpers/guarded-hard-remove";
 import { WorkSessionService, MOBILE_SESSION_PERMS } from "../services/work-session.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
@@ -347,8 +347,11 @@ machineRouter.delete("/:id", verifyToken, requirePermission("station:write"), ma
  * /api/machines/{id}/permanent:
  *   delete:
  *     tags: [Machines]
- *     summary: Makineyi kalıcı olarak sil
- *     description: Veriyi veritabanından tamamen kaldırır. Bu işlem geri alınamaz.
+ *     summary: Makineyi kalıcı olarak sil (yalnız hiç kullanılmamışsa)
+ *     description: |
+ *       Veriyi veritabanından tamamen kaldırır (geri alınamaz). Üretim izi
+ *       (oturum/işlem/hareket/top girişi) veya eşleşme (cihaz/donanım) varsa 409
+ *       + somut Türkçe mesaj döner — bu durumda makine pasife alınmalıdır.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -362,7 +365,7 @@ machineRouter.delete("/:id", verifyToken, requirePermission("station:write"), ma
  *       404:
  *         description: Kayıt bulunamadı
  */
-machineRouter.delete("/:id/permanent", verifyToken, requirePermission("station:write"), machineController.hardRemove);
+machineRouter.delete("/:id/permanent", verifyToken, requirePermission("station:write"), machineHardRemove);
 
 export { machineRouter };
 export default router;

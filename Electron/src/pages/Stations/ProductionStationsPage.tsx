@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Pencil, HardDrive, Palette, QrCode } from "lucide-react";
+import { Plus, Pencil, HardDrive, Palette, QrCode, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useCrudMutations } from "@/hooks/useCrudMutations";
@@ -63,6 +64,7 @@ export function ProductionStationsPage() {
   const [machineDlg, setMachineDlg] = useState<{ open: boolean; initial: Machine | null; stationId?: string }>({ open: false, initial: null });
   const [capStation, setCapStation] = useState<StationCapabilitySummary | null>(null);
   const [qrMachine, setQrMachine] = useState<Machine | null>(null);
+  const [deleteMachine, setDeleteMachine] = useState<Machine | null>(null);
 
   const stations = (stationsQ.data?.data ?? []).filter((s) => PRODUCTION_KINDS.includes(s.kind));
   const machines = machinesQ.data?.data ?? [];
@@ -82,6 +84,16 @@ export function ProductionStationsPage() {
       ? machineMut.updateMutation.mutateAsync({ id: machineDlg.initial.id, data: payload })
       : machineMut.createMutation.mutateAsync(payload);
     void p.then(() => setMachineDlg({ open: false, initial: null }));
+  };
+
+  const handleMachineDelete = () => {
+    if (!deleteMachine) return;
+    void machineMut.hardRemoveMutation
+      .mutateAsync(deleteMachine.id)
+      .then(() => setDeleteMachine(null))
+      .catch(() => {
+        /* 409 (kullanımda) → apiClient interceptor backend mesajını toast'lar; modal açık kalır */
+      });
   };
 
   const loading = stationsQ.isLoading || machinesQ.isLoading;
@@ -153,6 +165,16 @@ export function ProductionStationsPage() {
                       >
                         <QrCode className="h-3 w-3" />
                       </button>
+                      {canWrite && (
+                        <button
+                          type="button"
+                          className="border-l px-1.5 py-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setDeleteMachine(m)}
+                          title="Makineyi kaldır"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
                     </span>
                   ))}
                   {canWrite && (
@@ -212,6 +234,23 @@ export function ProductionStationsPage() {
         onOpenChange={(o) => !o && setCapStation(null)}
       />
       <MachineQrPrintDialog machine={qrMachine} onOpenChange={(o) => !o && setQrMachine(null)} />
+
+      <ConfirmDialog
+        open={!!deleteMachine}
+        onOpenChange={(o) => !o && setDeleteMachine(null)}
+        title="Makineyi kalıcı sil"
+        description={
+          deleteMachine
+            ? `"${deleteMachine.name}" makinesi kalıcı olarak silinecek. Bu işlem geri alınamaz. ` +
+              `Makine üretimde kullanılmışsa (oturum/işlem/hareket/top girişi) veya bir cihaz/donanım bağlıysa ` +
+              `silme reddedilir — bu durumda makineyi düzenleyip pasife alın.`
+            : undefined
+        }
+        confirmLabel="Kalıcı sil"
+        destructive
+        onConfirm={handleMachineDelete}
+        isPending={machineMut.hardRemoveMutation.isPending}
+      />
     </div>
   );
 }

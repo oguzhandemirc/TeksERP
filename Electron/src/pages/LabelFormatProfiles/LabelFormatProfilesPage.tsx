@@ -7,7 +7,7 @@ import type { LabelFormatProfile } from "./types";
 
 /**
  * Etiket Format Profilleri — top etiketinin fiziksel geometrisi (medya boyutu +
- * güvenlik payı). Yazıcı modeli/makine bunlara referans tutar; etiket birkaç mm
+ * güvenlik payı). Cihaz kayıtları bunlara referans tutar; etiket birkaç mm
  * küçük çıksa bile pay sayesinde kırpılmaz. Test baskısı sonrası buradan ayarlanır.
  */
 export function LabelFormatProfilesPage({ hideHeader }: { hideHeader?: boolean } = {}) {

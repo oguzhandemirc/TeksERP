@@ -56,7 +56,7 @@
 ### A4. Seed (yalnızca İLK kurulumda) — DEMO içerir
 10. `npm run seed` (= `npx prisma db seed`).
     - **Tek `main()`, `create` ile yazar → ikinci kez çalıştırılamaz** (unique hatası). Güncellemelerde ASLA.
-    - **Bootstrap (prod-temel, gerekli):** 54 permission, 14 permission template, 7 kullanıcı (admin/123123 + 6 test/test123), 3 kalite sınıfı (1.KALITE/A1/FIRE), 6 iade nedeni, 2 etiket format profili (ARGOX + DEFAULT), Argox PPLA yazıcı modeli, 3 label template default.
+    - **Bootstrap (prod-temel, gerekli):** 54 permission, 14 permission template, 1 kullanıcı (yalnız admin/123123), 3 kalite sınıfı (1.KALITE/A1/FIRE), 6 iade nedeni, 2 etiket format profili (ARGOX + DEFAULT), 3 label template default.
     - **AYNI ZAMANDA DEMO master-data (NODE_ENV guard'ı YOK):** 4 müşteri, 6 renk, 7 özellik, 3 fason kategori + 3 fason firma, 6 istasyon, 4 makine, peripheral'lar, 3 rota, Patos ürünü, alias'lar, 3 şube.
     - **Temiz fabrika kararı:** Seed pratikte zorunlu (bootstrap olmadan sistem açılmaz). İki seçenek:
       - (a) Seed çalıştır → demo satırlarını Tanımlar UI'sından veya SQL ile **elle sil**, gerçeklerini gir.
@@ -90,18 +90,18 @@
 
 ## C. Master-Data Girişi (DOĞRU SIRAYLA — FK bağımlılıkları)
 
-**Seed'in zaten kurdukları (tekrar GİRME):** 54 izin, 14 izin template, admin + 6 test kullanıcı, 3 kalite sınıfı (UI'da salt-okunur), 6 iade nedeni, DEFAULT + ARGOX format profili, Argox PPLA yazıcı modeli, 3 label template default.
+**Seed'in zaten kurdukları (tekrar GİRME):** 54 izin, 14 izin template, admin kullanıcısı, 3 kalite sınıfı (UI'da salt-okunur), 6 iade nedeni, DEFAULT + ARGOX format profili, 3 label template default.
 
 > **C-uyarı (DEMO seed):** Seed "MASTER DEMO" bölümü gerçek fabrikaya ait OLMAYAN sahte müşteri/renk/özellik/istasyon/makine/rota/Patos/alias/şube üretir; bootstrap ile aynı `main()` içinde, ayrım yok. **Gerçek fabrikada bu demo satırları silinmeli.** Kalite sınıfları hariç (salt-okunur sistem sabiti).
 
 20. **ADIM 1 — Kullanıcı yetkileri.** admin ile gir; operatörlere `/admin/users/:id/permissions` üzerinden izin ata (template'lerden toplu). İzinsiz operatör hiçbir akışı yürütemez.
 21. **ADIM 2 — Bağımsız leaf kataloglar (FK yok, paralel):** Renkler · Kumaş Özellikleri (KURSUN/ZIMPARALI dahil) · Hata Tipleri (en az GENEL) · İade Nedenleri · Müşteriler · Fason Kategorileri · Etiket Format Profilleri.
 22. **ADIM 3 — Ürünler (Item).** Bağımlılık: renk + özellik. **`Roll.itemId` NOT NULL → en az 1 FABRIC Item zorunlu.** İzinli renk/özellik boş = "tüm aktif serbest".
-23. **ADIM 4 — Yazıcı Modelleri (PrinterModel).** Bağımlılık: `defaultProfileId` → format profili. `language` = PPLA. (Argox seed'de var.)
+23. **ADIM 4 — (KALDIRILDI, 2026-07).** Yazıcı modeli kataloğu yok — yazıcı dili/profili doğrudan Cihaz Kaydı'nda (ADIM 8) seçilir.
 24. **ADIM 5 — Fason Firmalar (Subcontractor).** Bağımlılık: SubcontractorCategory önce.
 25. **ADIM 6 — İstasyonlar (Station).** Zorunlu kind'ler: **RAW_QC=KK1** (giriş, adım picker'ında çıkmaz), **PROCESS_QC=Kurşun+KK2**, **TAMBUR**, **SUBCONTRACTOR/EXTERNAL=fason**, **OTHER=Sevkiyat/Paketleme**. EXTERNAL `defaultCategoryId` → kategori.
 26. **ADIM 7 — Makineler (Machine).** Bağımlılık: `stationId`. Her istasyona makine.
-27. **ADIM 8 — Cihaz Kaydı (PeripheralDevice).** Bağımlılık: machineId + printerModelId + formatProfileId. KK1/KK2/Tambur → yazıcı; Sevkiyat → SCALE. (Detay = F.)
+27. **ADIM 8 — Cihaz Kaydı (PeripheralDevice).** Bağımlılık: machineId (+ opsiyonel formatProfileId). Yazıcıda **dil (languageOverride) ZORUNLU**. KK1/KK2/Tambur → yazıcı; Sevkiyat → SCALE. (Detay = F.)
 28. **ADIM 9 — İstasyon Yetenekleri (StationColor + StationProperty).** Fason boyahane hangi renk/özelliği uygular; Kurşun=KURSUN, Zımpara=ZIMPARALI.
 29. **ADIM 10 — Üretim Rotaları (Route + RouteStep).** Bağımlılık: `RouteStep.stationId` ZORUNLU. Tipik: Boya → Kurşun+KK2 → Tambur. Akış adımları rotadan türer.
 30. **ADIM 11 — İş Emri Şablonları (ProductRecipe) — OPSİYONEL.**
@@ -109,7 +109,7 @@
 32. **ADIM 13 — Alias'lar (OPSİYONEL).** CustomerItemAlias + CustomerColorAlias — müşteri bağlamında.
 33. **ADIM 14 — Etiket Standartları (LabelTemplate).** Seed her LabelKind için 1 default kurdu (silinmesin). Görünüm buradan düzenlenir.
 
-> **FK sırası:** Item←Color+Property · Route←Station · EXTERNAL Station←Category · PrinterModel←FormatProfile · PeripheralDevice←Machine+PrinterModel+FormatProfile.
+> **FK sırası:** Item←Color+Property · Route←Station · EXTERNAL Station←Category · PeripheralDevice←Machine(+FormatProfile).
 
 ---
 
@@ -152,11 +152,11 @@
 ## F. Donanım
 
 ### F1. Yazıcı (Argox OS-214 PPLA)
-45. **Zorunlu minimum:** Seed Argox modelini (PPLA) + ARGOX/DEFAULT profilleri + istasyon yazıcılarını kurar; global dil PPLA → **tek-model PPLA'da Yazıcı Modelleri / Cihaz Kaydı düzenlemesi OPSİYONEL.** Cihaz eşleşmezse resolver global PPLA + DEFAULT profile düşer.
-46. **Opsiyonel katalog:** ek PrinterModel/profil, per-PC COM (D38), per-tablet BT (E44), native TCP (`nativeSendEnabled`).
-47. **⚠️ YANLIŞ `languageOverride`:** Dil önceliği `languageOverride > printerModel.language > global`. Tek-model PPLA'da bir cihaza RASTER_HTML/ZPL override girmek onu PPLA'dan koparır → diyalogsuz baskı "Yazıcı PPLA dilinde değil" hatası. **Override'ı boş bırak.**
+45. **Zorunlu minimum:** Seed ARGOX/DEFAULT profilleri + istasyon yazıcılarını (dil=PPLA cihaz üstünde) kurar; global dil PPLA → **tek-dil PPLA fabrikada Cihaz Kaydı düzenlemesi OPSİYONEL.** Cihaz eşleşmezse resolver global PPLA + DEFAULT profile düşer.
+46. **Opsiyonel:** ek format profili, per-PC COM (D38), per-tablet BT (E44), native TCP (`nativeSendEnabled`).
+47. **⚠️ YANLIŞ dil:** Dil önceliği `languageOverride > global` — yazıcıda dil ZORUNLU (boş bırakılamaz). Fiziksel yazıcının gerçekten konuştuğu dili seç (Argox=PPLA/PPLB firmware'ine göre); yanlış dil = boş/bozuk etiket.
 48. **Sahiplik tam-biri:** PeripheralDevice ya machineId YA deviceId taşır (ikisi/hiçbiri → yönlendirme bozulur). Ağ yazıcı=makine, BT yazıcı=tablet.
-49. **Marka/protokol değişimi = sıfır kod:** Argox→Zebra → printerModelId/languageOverride değiştir; yeni boyut → format profili. 4 dil hazır (PPLA/PPLB/ZPL/RASTER_HTML).
+49. **Marka/protokol değişimi = sıfır kod:** Argox→Zebra → cihazın languageOverride'ını değiştir; yeni boyut → format profili. 4 dil hazır (PPLA/PPLB/ZPL/RASTER_HTML).
 
 ### F2. Kantar / Metre — simulate ile başla, gerçeğe geç
 50. **Seed = SİMÜLE BAŞLAR:** Tüm METER/SCALE cihazları `simulate=true` (sahte okur). Seed MAC'leri örnektir.
@@ -175,7 +175,7 @@
 58. **Stok topu → Hızlı İş Emri:** Tabletten okut → WO başlat.
 59. **KK1:** RAW_QC'de topu okut, giriş (en az 1 FABRIC Item + kalite mevcut).
 60. **Akış:** [Fason Sevk/Kabul] → Kurşun+KK2 → Tambur (metre: simulate/gerçek) → Depo.
-61. **Etiket DİYALOGSUZ:** OS yazdırma ekranı ÇIKMADAN çıkıyor mu? Electron per-PC COM (D38) veya tablette BT (E44). Çıkmıyorsa: profil / printerModel.language / languageOverride (F47) + diyalogsuz seçim kontrol.
+61. **Etiket DİYALOGSUZ:** OS yazdırma ekranı ÇIKMADAN çıkıyor mu? Electron per-PC COM (D38) veya tablette BT (E44). Çıkmıyorsa: profil / cihazın dili (F47) + diyalogsuz seçim kontrol.
 62. **Çuval/Sevkiyat:** SCALE ile çuval tart → PREPARING→READY→AT_DOOR→DISPATCHED. Stok yalnız DISPATCH'te SHIPPED.
 
 ---
@@ -184,7 +184,7 @@
 
 - **Migration/generate sırası:** `install → prisma:generate → migrate deploy → (ilk) seed → build → node dist/src/server.js`. `prisma generate` atlanırsa derlenmez; `migrate` atlanırsa P2022. **`migrate dev` prod'da ASLA** (reset).
 - **electron:rebuild:** COM cihazlı her PC'de ZORUNLU; atlanırsa cihaz **sessizce** devre dışı. Electron yükseltme + `npm install` sonrası tekrar.
-- **languageOverride / RASTER_HTML:** Tek-model PPLA'da override'ı **boş bırak**. En sık hata.
+- **Yazıcı dili:** Cihaz Kaydı'nda dil ZORUNLU — fiziksel yazıcının firmware diliyle (PPLA/PPLB/ZPL) eşleşmeli. En sık hata: yanlış dil seçmek.
 - **DEMO seed:** bootstrap + demo birlikte yazılır (guard yok); installer ilk kurulumda da. Gerçek fabrikada demo satırlarını temizle. Tam reset = `DROP SCHEMA public CASCADE` → migrate → seed.
 - **JWT_SECRET <32:** Backend açılmaz; rastgele ≥32 üret.
 - **TEK-PROCESS:** cluster/2. replica EKLEME — presence + cache + scheduler bozulur. Fork modu.

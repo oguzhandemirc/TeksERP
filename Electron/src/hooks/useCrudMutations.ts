@@ -54,5 +54,15 @@ export function useCrudMutations<T>({ service, queryKey, entityName }: Options<T
     },
   });
 
-  return { createMutation, updateMutation, removeMutation, restoreMutation };
+  // Kalıcı silme (yalnız hiç kullanılmamış kayıt için — backend guard'lı). 409'da
+  // apiClient interceptor'ı backend'in somut mesajını toast'lar; geri-al yok.
+  const hardRemoveMutation = useMutation({
+    mutationFn: (id: string) => service.hardRemove(id),
+    onSuccess: () => {
+      toast.success(`${entityName} kalıcı olarak silindi.`);
+      invalidate();
+    },
+  });
+
+  return { createMutation, updateMutation, removeMutation, restoreMutation, hardRemoveMutation };
 }
