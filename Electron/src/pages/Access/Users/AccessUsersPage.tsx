@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, ShieldCheck, Trash2 } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Trash2, Power, PowerOff } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -40,6 +40,13 @@ const userMutations = {
     apiClient.post<ApiResponse<AdminUserListItem>>("/api/admin/users", data).then((r) => r.data),
   update: (id: string, data: UserPayload) =>
     apiClient.patch<ApiResponse<AdminUserListItem>>(`/api/admin/users/${id}`, data).then((r) => r.data),
+  /** GEÇİCİ pasife al (geri alınabilir). */
+  deactivate: (id: string) =>
+    apiClient.post<ApiResponse<AdminUserListItem>>(`/api/admin/users/${id}/deactivate`).then((r) => r.data),
+  /** Pasiften aktifleştir. */
+  reactivate: (id: string) =>
+    apiClient.post<ApiResponse<AdminUserListItem>>(`/api/admin/users/${id}/reactivate`).then((r) => r.data),
+  /** KALICI sil (geri alınamaz). */
   remove: (id: string) =>
     apiClient.delete<ApiResponse<AdminUserListItem>>(`/api/admin/users/${id}`).then((r) => r.data),
 };
@@ -51,7 +58,7 @@ export function AccessUsersPage() {
   const [editing, setEditing] = useState<AdminUserListItem | null>(null);
   const [permissionsFor, setPermissionsFor] = useState<AdminUserListItem | null>(null);
   const [detailTab, setDetailTab] = useState<"permissions" | "quick-pin">("permissions");
-  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [deletingUser, setDeletingUser] = useState<AdminUserListItem | null>(null);
   // Yeni kullanıcı oluşturulunca açılan "kimlik kartı" (etkin yöntemlerin kimlikleri).
   const [newCreds, setNewCreds] = useState<{ user: AdminUserListItem; password?: string } | null>(null);
   const enabledMethods = useEnabledLoginMethods();
@@ -63,8 +70,10 @@ export function AccessUsersPage() {
     staleTime: 0,
   });
 
+  // Backend silinmişleri (deletedAt) zaten gizler; pasif (isActive=false) kayıtlar
+  // GÖRÜNÜR (aktifleştirilebilsin). Aktifler önce (backend sıralar).
   const filtered = useMemo(() => {
-    const list = (query.data?.data ?? []).filter((u) => u.isActive);
+    const list = query.data?.data ?? [];
     if (!search) return list;
     const q = search.toLowerCase();
     return list.filter(
@@ -100,10 +109,27 @@ export function AccessUsersPage() {
     },
   });
 
+  const deactivateMut = useMutation({
+    mutationFn: userMutations.deactivate,
+    onSuccess: () => {
+      toast.success("Kullanıcı pasife alındı (geri alınabilir).");
+      invalidate();
+    },
+  });
+
+  const reactivateMut = useMutation({
+    mutationFn: userMutations.reactivate,
+    onSuccess: () => {
+      toast.success("Kullanıcı aktifleştirildi.");
+      invalidate();
+    },
+  });
+
   const removeMut = useMutation({
     mutationFn: userMutations.remove,
     onSuccess: () => {
-      toast.success("Kullanıcı pasife alındı.");
+      toast.success("Kullanıcı kalıcı olarak silindi.");
+      setDeletingUser(null);
       invalidate();
     },
   });
@@ -222,6 +248,7 @@ export function AccessUsersPage() {
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
+                        title="Düzenle"
                         onClick={() => {
                           setEditing(user);
                           setFormOpen(true);
@@ -229,11 +256,36 @@ export function AccessUsersPage() {
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
+                      {/* Pasife Al (aktifse) / Aktifleştir (pasifse) — GERİ ALINABİLİR */}
+                      {user.isActive ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Pasife al (geri alınabilir)"
+                          disabled={deactivateMut.isPending}
+                          onClick={() => deactivateMut.mutate(user.id)}
+                        >
+                          <PowerOff className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-emerald-600"
+                          title="Aktifleştir"
+                          disabled={reactivateMut.isPending}
+                          onClick={() => reactivateMut.mutate(user.id)}
+                        >
+                          <Power className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 text-destructive"
-                        onClick={() => setRemovingId(user.id)}
+                        title="Kalıcı sil (geri alınamaz)"
+                        onClick={() => setDeletingUser(user)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -284,17 +336,19 @@ export function AccessUsersPage() {
       />
 
       <ConfirmDialog
-        open={Boolean(removingId)}
-        onOpenChange={(open) => !open && setRemovingId(null)}
-        title="Kullanıcıyı sil"
-        description="Bu işlem kullanıcıyı pasife alır. Veritabanında kayıt korunur ama listede görünmez."
-        confirmLabel="Sil"
+        open={Boolean(deletingUser)}
+        onOpenChange={(open) => !open && setDeletingUser(null)}
+        title="Kullanıcıyı KALICI olarak sil"
+        description={
+          deletingUser
+            ? `"${deletingUser.fullName}" (${deletingUser.username}) KALICI olarak silinecek — bu işlem GERİ ALINAMAZ. Kayıt yalnız sistem geçmişi / veri bütünlüğü için saklanır; listede görünmez, aktifleştirilemez. Kullanıcı adı serbest kalır (aynı isimle yeni kullanıcı açılabilir). Geçici olarak durdurmak istiyorsanız "Pasife Al"ı kullanın.`
+            : undefined
+        }
+        confirmLabel="Kalıcı olarak sil"
         destructive
         isPending={removeMut.isPending}
-        onConfirm={async () => {
-          if (!removingId) return;
-          await removeMut.mutateAsync(removingId);
-          setRemovingId(null);
+        onConfirm={() => {
+          if (deletingUser) removeMut.mutate(deletingUser.id);
         }}
       />
     </div>

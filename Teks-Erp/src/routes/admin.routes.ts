@@ -152,10 +152,60 @@ router.patch(
 
 /**
  * @openapi
+ * /api/admin/users/{id}/deactivate:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Kullanıcıyı GEÇİCİ pasife al (geri alınabilir — reactivate ile)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/users/:id/deactivate",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = await PermissionManagementService.deactivateUser(
+        req.params.id as string,
+        req.user?.userId
+      );
+      res.status(200).json({ success: true, data: user });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/reactivate:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Pasif kullanıcıyı yeniden aktifleştir (silinmişlerde çalışmaz)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/users/:id/reactivate",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = await PermissionManagementService.reactivateUser(
+        req.params.id as string,
+        req.user?.userId
+      );
+      res.status(200).json({ success: true, data: user });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
  * /api/admin/users/{id}:
  *   delete:
  *     tags: [Admin]
- *     summary: Kullanıcıyı pasife al (soft delete)
+ *     summary: Kullanıcıyı KALICI sil (GERİ ALINAMAZ — kayıt yalnız geçmiş için durur)
  *     security: [{ bearerAuth: [] }]
  */
 router.delete(
@@ -164,12 +214,8 @@ router.delete(
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const id = req.params.id as string;
-      if (req.user?.userId === id) {
-        throw AppError.badRequest("Kendi hesabınızı pasife alamazsınız");
-      }
-      const user = await PermissionManagementService.deactivateUser(
-        id,
+      const user = await PermissionManagementService.deleteUser(
+        req.params.id as string,
         req.user?.userId
       );
       res.status(200).json({ success: true, data: user });

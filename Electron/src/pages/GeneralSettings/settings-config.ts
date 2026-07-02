@@ -171,8 +171,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "devices",
     label: "Cihazlar",
     icon: TabletSmartphone,
-    description: "Cihaz onay zorunluluğu + bu bilgisayarın sevkiyat kantarı (COM).",
-    keywords: "cihaz eşleştirme tablet pairing onay zorunlu kantar tartı com seri scale",
+    description: "Mobil cihaz (tablet/telefon) onay zorunluluğu ve eşleştirme.",
+    keywords: "cihaz eşleştirme tablet telefon pairing onay zorunlu allowlist mobil",
     kind: "device",
   },
   {
@@ -188,8 +188,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "label",
     label: "Etiket Baskısı",
     icon: Tags,
-    description: "Top etiketi baskı ayarları (kopya adedi).",
-    keywords: "etiket label baskı yazdır kopya adet çift üst alt yapıştır tambur",
+    description: "Org-geneli etiket baskı ayarları: kopya adedi, varsayılan yazıcı dili.",
+    keywords:
+      "etiket label baskı yazdır kopya adet çift üst alt yapıştır tambur dil ppla pplb zpl yazıcı dili native gönderim",
     kind: "label",
   },
   {
@@ -202,11 +203,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     kind: "scanner",
   },
   {
+    // id "system" tarihsel — komut paleti/derin linkler ?tab=system ile gelir, kırmayalım.
     id: "system",
-    label: "Sistem",
-    icon: Server,
-    description: "Bu bilgisayara özel bağlantı ayarları.",
-    keywords: "sunucu adresi API backend bağlantı url endpoint",
-    kind: "api",
+    label: "Bu Bilgisayar",
+    icon: Monitor,
+    description:
+      "Bu bilgisayara özel yerel ayarlar: etiket yazıcısı (seri/CUPS), sevkiyat kantarı ve sunucu adresi.",
+    keywords:
+      "yazıcı etiket yazıcısı printer com cups kuyruk seri baud diyalogsuz doğrudan baskı cihaz kaydı " +
+      "kantar tartı scale sunucu adresi API backend bağlantı url endpoint bu bilgisayar yerel workstation",
+    kind: "workstation",
   },
 ];

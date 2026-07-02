@@ -239,6 +239,11 @@ model User {
   /// (LAN-only + kısa ömür/rotasyon admin'den; cardToken emsali). NULL = tanımsız.
   /// Salt-PIN girişi yalnız auth.loginMethods "pin" içerirken çalışır.
   quickPin String? @unique @db.VarChar(12)
+  /// KALICI SİLME işareti (geri alınamaz). NULL = normal kayıt (isActive true=aktif,
+  /// false=GEÇİCİ pasif, geri alınabilir). Dolu = silinmiş: kayıt yalnız veri
+  /// bütünlüğü/geçmiş için durur, listede görünmez, aktifleştirilemez; username
+  /// serbest bırakılır (del_ ön-ek), kimlikler temizlenir. Pasif ≠ silinmiş.
+  deletedAt DateTime? @db.Timestamptz
 
   // Relations
   permissions                UserPermission[]        @relation("UserPermissionUser")

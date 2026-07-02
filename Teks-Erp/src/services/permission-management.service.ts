@@ -56,6 +56,10 @@ export class PermissionManagementService {
   // ---------------------------------------------------------------------------
   static async listUsers() {
     return prisma.user.findMany({
+      // Silinmiş kullanıcılar (deletedAt dolu) listede GÖRÜNMEZ — yalnız veri
+      // bütünlüğü/sistem geçmişi için DB'de durur. Pasif (isActive=false, deletedAt
+      // null) kayıtlar görünür ki admin aktifleştirebilsin.
+      where: { deletedAt: null },
       select: {
         id: true,
         username: true,
@@ -64,7 +68,7 @@ export class PermissionManagementService {
         createdAt: true,
         _count: { select: { permissions: true } },
       },
-      orderBy: { username: "asc" },
+      orderBy: [{ isActive: "desc" }, { username: "asc" }],
     });
   }
 
@@ -421,41 +425,93 @@ export class PermissionManagementService {
   }
 
   /** Soft delete (isActive=false). Self-deactivation + son-admin guard'ları serviste. */
+  /**
+   * GEÇİCİ PASİFE ALMA — geri alınabilir (reactivateUser ile aktifleştirilir).
+   * Username ve kimlikler KORUNUR (kullanıcı aynı kimlikle geri dönebilir).
+   * Silme (deleteUser) ile KARIŞTIRMA: pasif ≠ silinmiş.
+   */
   static async deactivateUser(id: string, actorUserId: string | undefined) {
     const existing = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, isActive: true, username: true },
+      select: { id: true, isActive: true, deletedAt: true },
     });
     if (!existing) throw AppError.notFound("Kullanıcı bulunamadı");
+    if (existing.deletedAt) throw AppError.badRequest("Bu kullanıcı silinmiş — pasife alınamaz");
 
     this.assertNotSelfDeactivation(id, actorUserId);
     await this.assertNotLastActiveAdmin(id);
 
-    // Username'i SERBEST BIRAK: pasif kayıt fiziksel durur (soft-delete) ama username
-    // @unique olduğundan aynı isimle yeni kullanıcı açılamazdı. Rastgele ön-ek ile
-    // yeniden adlandırıp orijinal ismi boşa çıkarıyoruz (aynı isim tekrar açılabilir).
-    // Ayrıca hızlı PIN'i de bırak (benzersiz havuzu tıkamasın); kart tokenı da temizle.
-    // Bir kez pasifleştirilmiş kayda tekrar dokunma (idempotent) — "del_" ön-eki varsa koru.
-    const alreadyFreed = /^del_[0-9a-f]{6}_/.test(existing.username);
-    const freedUsername = alreadyFreed
-      ? existing.username
-      : `del_${randomBytes(3).toString("hex")}_${existing.username}`.slice(0, 50);
-
     const user = await prisma.user.update({
       where: { id },
-      data: { isActive: false, username: freedUsername, quickPin: null, cardToken: null },
+      // tokenVersion++ → açık oturumları düşür (pasif kullanıcı çalışmaya devam etmesin).
+      data: { isActive: false, tokenVersion: { increment: 1 } },
       select: USER_SELECT,
     });
 
     await AuditService.log({
-      userId: actorUserId,
-      action: "DELETE",
-      tableName: "users",
-      recordId: id,
-      oldData: { isActive: existing.isActive, username: existing.username },
-      newData: { isActive: false, username: freedUsername },
+      userId: actorUserId, action: "UPDATE", tableName: "users", recordId: id,
+      oldData: { isActive: existing.isActive }, newData: { isActive: false, reason: "deactivated" },
     });
 
+    return user;
+  }
+
+  /** Pasif kullanıcıyı yeniden AKTİFLEŞTİR — yalnız SİLİNMEMİŞ kayıtlarda. */
+  static async reactivateUser(id: string, actorUserId: string | undefined) {
+    const existing = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, isActive: true, deletedAt: true },
+    });
+    if (!existing) throw AppError.notFound("Kullanıcı bulunamadı");
+    if (existing.deletedAt) throw AppError.badRequest("Silinmiş kullanıcı geri getirilemez");
+    if (existing.isActive) throw AppError.badRequest("Kullanıcı zaten aktif");
+
+    const user = await prisma.user.update({
+      where: { id }, data: { isActive: true }, select: USER_SELECT,
+    });
+    await AuditService.log({
+      userId: actorUserId, action: "UPDATE", tableName: "users", recordId: id,
+      oldData: { isActive: false }, newData: { isActive: true, reason: "reactivated" },
+    });
+    return user;
+  }
+
+  /**
+   * KALICI SİLME — GERİ ALINAMAZ. Kayıt fiziksel DURUR (veri bütünlüğü/geçmiş:
+   * eski loglar/atıflar bozulmasın) ama: deletedAt damgalanır (listeden gizlenir,
+   * aktifleştirilemez), username SERBEST bırakılır (del_ ön-ek → aynı isim tekrar
+   * açılabilir), kimlikler (quickPin/cardToken) temizlenir, oturumlar düşürülür.
+   */
+  static async deleteUser(id: string, actorUserId: string | undefined) {
+    const existing = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, username: true, isActive: true, deletedAt: true },
+    });
+    if (!existing) throw AppError.notFound("Kullanıcı bulunamadı");
+    if (existing.deletedAt) return existing; // idempotent — zaten silinmiş
+
+    if (actorUserId === id) throw AppError.badRequest("Kendi hesabınızı silemezsiniz");
+    await this.assertNotLastActiveAdmin(id);
+
+    const freedUsername = `del_${randomBytes(3).toString("hex")}_${existing.username}`.slice(0, 50);
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        isActive: false,
+        deletedAt: new Date(),
+        username: freedUsername,
+        quickPin: null,
+        cardToken: null,
+        tokenVersion: { increment: 1 },
+      },
+      select: USER_SELECT,
+    });
+
+    await AuditService.log({
+      userId: actorUserId, action: "DELETE", tableName: "users", recordId: id,
+      oldData: { username: existing.username, isActive: existing.isActive },
+      newData: { deleted: true, username: freedUsername },
+    });
     return user;
   }
 

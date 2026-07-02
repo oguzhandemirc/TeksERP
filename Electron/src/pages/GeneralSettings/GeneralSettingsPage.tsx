@@ -13,6 +13,7 @@ import { SessionSettingsSection } from "./SessionSettingsSection";
 import { LabelSettingsSection } from "./LabelSettingsSection";
 import { ScannerSettingsSection } from "./ScannerSettingsSection";
 import { ScaleDeviceSettings } from "./ScaleDeviceSettings";
+import { LabelPrinterDeviceSettings } from "./LabelPrinterDeviceSettings";
 
 /**
  * Genel Ayarlar — sol dikey kategori menüsü + sağ içerik. Ayarlar domaine bölünür
@@ -85,13 +86,23 @@ export function GeneralSettingsPage() {
                     {cat.kind === "flags" && cat.flags && (
                       <FeatureFlagSection flags={cat.flags} />
                     )}
-                    {cat.kind === "device" && (
+                    {cat.kind === "device" && <DevicePairingSection />}
+                    {cat.kind === "workstation" && (
+                      // Bu bilgisayara özel yerel ayarlar bir arada: yazıcı + kantar + sunucu.
                       <div className="space-y-6">
-                        <DevicePairingSection />
+                        <div>
+                          <p className="mb-2 text-sm font-medium">
+                            Etiket yazıcısı (bu bilgisayar)
+                          </p>
+                          <LabelPrinterDeviceSettings />
+                        </div>
                         <ScaleDeviceSettings />
+                        <div className="border-t pt-4">
+                          <p className="mb-2 text-sm font-medium">Sunucu Adresi</p>
+                          <ApiEndpointSection />
+                        </div>
                       </div>
                     )}
-                    {cat.kind === "api" && <ApiEndpointSection />}
                     {cat.kind === "company" && <CompanySettingsSection />}
                     {cat.kind === "session" && <SessionSettingsSection />}
                     {cat.kind === "label" && <LabelSettingsSection />}
