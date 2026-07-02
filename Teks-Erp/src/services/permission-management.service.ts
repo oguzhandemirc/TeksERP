@@ -41,6 +41,11 @@ const USER_SELECT = {
   createdAt: true,
 } as const;
 
+/** Ad-soyad normalizasyonu: baş/son boşluk kırp + iç ardışık boşlukları TEK'e indir. */
+function normalizeFullName(name: string): string {
+  return name.trim().replace(/\s+/g, " ");
+}
+
 export class PermissionManagementService {
   // ---------------------------------------------------------------------------
   // Yetki kataloğu — admin UI grid'i için
@@ -301,7 +306,7 @@ export class PermissionManagementService {
     const user = await prisma.user.create({
       data: {
         username: input.username,
-        fullName: input.fullName,
+        fullName: normalizeFullName(input.fullName),
         passwordHash,
         isActive: input.isActive ?? true,
         ...(defaultPerms.length
@@ -366,7 +371,7 @@ export class PermissionManagementService {
 
     const user = await prisma.user.update({
       where: { id },
-      data: { ...(input.fullName !== undefined ? { fullName: input.fullName } : {}) },
+      data: { ...(input.fullName !== undefined ? { fullName: normalizeFullName(input.fullName) } : {}) },
       select: USER_SELECT,
     });
 

@@ -474,34 +474,6 @@ model Device {
   @@map("devices")
 }
 
-/// Yazıcı modeli kataloğu — termal yazıcı tanımları (Argox OS 214 plus vb.).
-/// "Format/komut tanımları yazıcı değişse de kaybolmasın" = modeller + profiller
-/// kalıcı tablo; PeripheralDevice yalnız referans tutar. Faz-1: RASTER_HTML
-/// fiziksel basar, PPLA üretilir (gönderim simüle).
-model PrinterModel {
-  id           String          @db.Uuid @id @default(uuid())
-  code         String          @unique @db.VarChar(48) // "ARGOX_OS214_PLUS"
-  name         String          @db.VarChar(100)
-  manufacturer String?         @db.VarChar(64)
-  dpi          Int             @default(203) // 203 = 8 dot/mm
-  maxWidthMm   Int             @default(104) // fiziksel max baskı genişliği
-  language     PrinterLanguage @default(RASTER_HTML)
-  isActive     Boolean         @default(true)
-
-  // Bu model için varsayılan format profili (yeni donanım bağlanınca öneri).
-  defaultProfileId String?             @db.Uuid
-  defaultProfile   LabelFormatProfile? @relation("ModelDefaultProfile", fields: [defaultProfileId], references: [id], onDelete: SetNull)
-
-  peripherals PeripheralDevice[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([isActive])
-  @@index([defaultProfileId])
-  @@map("printer_models")
-}
-
 /// Etiketin fiziksel baskı geometrisi — sabit-kodlu A6'nın DB hali.
 /// widthMm/heightMm = medya (fiziksel etiket boyutu); marginMm = GÜVENLİK PAYI
 /// (her kenardan içerik insetı; ölçüm/etiket toleransını emer). İçerik genişliği

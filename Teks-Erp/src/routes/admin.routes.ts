@@ -73,15 +73,15 @@ router.get(
 );
 
 const createUserSchema = z.object({
-  // Kullanıcı adı: yalnız ASCII harf/rakam/nokta/alt-çizgi/tire — Türkçe karakter
-  // ve BOŞLUK yok (mobil login + benzersizlik + URL güvenliği). Küçük harfe normalize.
+  // Kullanıcı adı: YALNIZ İngilizce harf ve rakam — özel karakter/boşluk/Türkçe
+  // karakter yok (mobil login + benzersizlik + URL güvenliği).
   username: z
     .string()
     .trim()
     .min(3, "En az 3 karakter")
     .max(40)
-    .regex(/^[a-zA-Z0-9._-]+$/, "Yalnız İngilizce harf, rakam, nokta, alt çizgi ve tire kullanılabilir (boşluk/Türkçe karakter yok)"),
-  fullName: z.string().min(1, "Ad-soyad gerekli").max(120),
+    .regex(/^[a-zA-Z0-9]+$/, "Yalnız İngilizce harf ve rakam kullanılabilir (özel karakter, boşluk ve Türkçe karakter yok)"),
+  fullName: z.string().trim().min(1, "Ad-soyad gerekli").max(120),
   password: z.string().min(6, "Şifre en az 6 karakter"),
   isActive: z.boolean().optional(),
   // Varsayılan üretim istasyon izinlerini (KK1/KK2/Tambur) ver — default true (saha
@@ -92,7 +92,7 @@ const createUserSchema = z.object({
 });
 
 const updateUserSchema = z.object({
-  fullName: z.string().min(1).max(120).optional(),
+  fullName: z.string().trim().min(1).max(120).optional(),
   // isActive ARTIK burada YOK — aktiflik yalnız deactivate/reactivate/delete
   // uçlarından yönetilir (guard'lar + oturum düşürme orada).
 });
