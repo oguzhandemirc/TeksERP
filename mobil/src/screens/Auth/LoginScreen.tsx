@@ -36,11 +36,14 @@ const PIN_LENGTH = 6;
 
 /** Giriş yöntemi etiket/ikon/renkleri — yöntem değiştirici butonları. Renkler
  *  BİLEREK birbirinden uzak tonlar: fabrikada uzaktan/eldivenle tek bakışta
- *  ayırt edilebilsin (indigo=şifre, teal=hızlı PIN, amber=QR kart). */
+ *  ayırt edilebilsin. Hiçbir ekranda çakışma yok: bir yöntemin butonu kendi
+ *  ekranında görünmez → kart ekranı turuncu+teal, PIN ekranı turuncu+mavi,
+ *  liste ekranı teal+mavi görür; indigo ekranların ana vurgu rengi olarak
+ *  serbest kalır ("Kartı Okut" butonu vb. ile karışmaz). */
 const METHOD_META: Record<LoginMethod, { label: string; icon: string; color: string }> = {
-  list: { label: 'Kullanıcı + Şifre', icon: 'account-key', color: '#4f46e5' },
+  list: { label: 'Kullanıcı + Şifre', icon: 'account-key', color: '#ea580c' },
   pin: { label: 'Hızlı PIN', icon: 'dialpad', color: '#0d9488' },
-  card: { label: 'QR Personel Kartı', icon: 'qrcode-scan', color: '#d97706' },
+  card: { label: 'QR Personel Kartı', icon: 'qrcode-scan', color: '#2563eb' },
 };
 
 type Cell = { key: string; type: 'digit' | 'backspace' | 'empty' };
