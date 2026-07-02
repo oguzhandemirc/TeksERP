@@ -4,7 +4,7 @@
 // 4 dil de hazır: RASTER_HTML (HTML hattı, fiziksel baskı bugün OS-sürücüyle), PPLA
 // (Argox/Datamax-DPL), PPLB (Eltron/EPL2), ZPL (Zebra) — komut ÜRETİMİ gerçek;
 // ham gönderim Faz-2 (printer-transport simüle). Dil seçimi: cihaz kaydı
-// `languageOverride` > global ayar `label.printerLanguage` (default PPLA).
+// `languageOverride` (cihaz yoksa RASTER_HTML — global dil ayarı kaldırıldı).
 // Bilinmeyen/eksik driver → RASTER_HTML failsafe.
 // =============================================================================
 

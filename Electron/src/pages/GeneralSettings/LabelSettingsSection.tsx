@@ -4,23 +4,9 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
-import {
-  featureFlagService,
-  DEFAULT_PRINTER_LANGUAGE,
-  PRINTER_LANGUAGE_LABELS,
-  type PrinterLanguage,
-} from "@/services/featureFlagService";
+import { featureFlagService } from "@/services/featureFlagService";
 import { formatRollName } from "@/lib/roll-name";
-
-const PRINTER_LANGS: PrinterLanguage[] = ["PPLA", "PPLB", "ZPL", "RASTER_HTML"];
 
 const DEFAULT_COPIES = 2;
 const MAX_COPIES = 5;
@@ -60,15 +46,6 @@ export function LabelSettingsSection() {
     mutationFn: (payload: { rollNameTemplate: string }) => featureFlagService.update(payload),
     onSuccess: () => {
       toast.success("Top adı şablonu kaydedildi.");
-      void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
-    },
-  });
-
-  const currentLang: PrinterLanguage = flagsQ.data?.data?.printerLanguage ?? DEFAULT_PRINTER_LANGUAGE;
-  const langMut = useMutation({
-    mutationFn: (payload: { printerLanguage: PrinterLanguage }) => featureFlagService.update(payload),
-    onSuccess: () => {
-      toast.success("Yazıcı dili kaydedildi.");
       void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
     },
   });
@@ -178,34 +155,6 @@ export function LabelSettingsSection() {
           >
             {templateMut.isPending ? "Kaydediliyor…" : "Şablonu Kaydet"}
           </Button>
-        </div>
-
-        {/* Etiket yazıcı dili — native komut formatı (Argox PPLA vb.) */}
-        <div className="border-t pt-4">
-          <label htmlFor="printer-language" className="text-sm font-medium">
-            Etiket yazıcı dili
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Top etiketinin native komut formatı. Her yazıcının dili kendi cihaz kaydında
-            (Tanımlar → Donanım) tutulur ve <strong>her zaman önceliklidir</strong>; bu
-            seçim yalnız cihaz belirtilmeyen baskı/önizlemelerin genel varsayılanıdır.
-          </p>
-          <Select
-            value={currentLang}
-            onValueChange={(v) => langMut.mutate({ printerLanguage: v as PrinterLanguage })}
-            disabled={langMut.isPending}
-          >
-            <SelectTrigger id="printer-language" className="mt-2 w-64">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PRINTER_LANGS.map((l) => (
-                <SelectItem key={l} value={l}>
-                  {PRINTER_LANGUAGE_LABELS[l]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Faz-2: doğrudan yazıcıya gönderim (opt-in) */}

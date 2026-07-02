@@ -103,9 +103,9 @@ export function LabelPrinterDeviceSettings() {
           <span className="font-medium">Diyalogsuz doğrudan baskı</span>
           <span className="mt-0.5 block text-xs text-muted-foreground">
             Açıkken top/yeniden-etiket baskısı OS yazdırma diyaloğu yerine yazıcıya
-            doğrudan native komut (PPLA/PPLB/ZPL) gönderir. Dil, aşağıda Cihaz Kaydı
-            yazıcısı seçiliyse ondan, değilse global &quot;Etiket yazıcı dili&quot;nden çözülür —
-            gerçek yazıcıyla uyumlu olmalı. Kapalıyken eski davranış (yazdırma ekranı) sürer.
+            doğrudan native komut (PPLA/PPLB/ZPL) gönderir. Dil aşağıda seçilen Cihaz
+            Kaydı yazıcısından çözülür — cihaz seçilmeden native baskı yapılmaz.
+            Kapalıyken eski davranış (yazdırma ekranı) sürer.
           </span>
         </span>
       </label>
@@ -205,8 +205,9 @@ export function LabelPrinterDeviceSettings() {
           </SelectContent>
         </Select>
         <span className="mt-0.5 block text-muted-foreground">
-          Seçiliyse etiket dili ve şablonu bu cihazın kaydından (Tanımlar → Donanım)
-          çözülür; global dil ayarına dokunmadan bu bilgisayar kendi dilinde basar.
+          Etiket dili ve şablonu bu cihazın kaydından (Tanımlar → Donanım) çözülür.
+          Diyalogsuz baskı için seçim ZORUNLU — seçilmezse istek HTML döner ve
+          native baskı net hatayla durur.
         </span>
       </label>
 

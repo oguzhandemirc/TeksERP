@@ -152,9 +152,9 @@
 ## F. Donanım
 
 ### F1. Yazıcı (Argox OS-214 PPLA)
-45. **Zorunlu minimum:** Seed ARGOX/DEFAULT profilleri + istasyon yazıcılarını (dil=PPLA cihaz üstünde) kurar; global dil PPLA → **tek-dil PPLA fabrikada Cihaz Kaydı düzenlemesi OPSİYONEL.** Cihaz eşleşmezse resolver global PPLA + DEFAULT profile düşer.
+45. **Zorunlu minimum:** Seed ARGOX/DEFAULT profilleri + istasyon yazıcılarını (dil=PPLA cihaz üstünde) kurar. Global dil ayarı YOK — dil yalnız cihaz kaydından; cihaz eşleşmeyen istek native üretmez (HTML'e düşer, istemci "cihaz seçin" der).
 46. **Opsiyonel:** ek format profili, per-PC COM (D38), per-tablet BT (E44), native TCP (`nativeSendEnabled`).
-47. **⚠️ YANLIŞ dil:** Dil önceliği `languageOverride > global` — yazıcıda dil ZORUNLU (boş bırakılamaz). Fiziksel yazıcının gerçekten konuştuğu dili seç (Argox=PPLA/PPLB firmware'ine göre); yanlış dil = boş/bozuk etiket.
+47. **⚠️ YANLIŞ dil:** Dil YALNIZ cihaz kaydında ve yazıcıda ZORUNLU (global varsayılan kaldırıldı). Fiziksel yazıcının gerçekten konuştuğu dili seç (Argox=PPLA/PPLB firmware'ine göre); yanlış dil = boş/bozuk etiket. Native basan her Electron PC'de Genel Ayarlar → Bu Bilgisayar'dan cihaz seçilmeli.
 48. **Sahiplik tam-biri:** PeripheralDevice ya machineId YA deviceId taşır (ikisi/hiçbiri → yönlendirme bozulur). Ağ yazıcı=makine, BT yazıcı=tablet.
 49. **Marka/protokol değişimi = sıfır kod:** Argox→Zebra → cihazın languageOverride'ını değiştir; yeni boyut → format profili. 4 dil hazır (PPLA/PPLB/ZPL/RASTER_HTML).
 

@@ -638,7 +638,7 @@ export class LabelService {
   }
 
   /**
-   * Rolün etiketini SEÇİLİ dilde render eder — global ayar `label.printerLanguage`
+   * Rolün etiketini SEÇİLİ dilde render eder — cihaz kaydındaki dil (cihazsız → RASTER_HTML)
    * (default PPLA) veya istasyon yazıcı modelinin dili (resolver çözer). RASTER_HTML
    * → HTML; PPLA/PPLB/ZPL → native komut. Faz-1: üretim gerçek, ham gönderim simüle.
    */
@@ -1154,7 +1154,7 @@ export class LabelService {
   }
 
   /**
-   * Kartela etiketini SEÇİLİ dilde döner — global ayar `label.printerLanguage`
+   * Kartela etiketini SEÇİLİ dilde döner — cihaz kaydındaki dil (cihazsız → RASTER_HTML)
    * (default PPLA) veya istasyon yazıcı modelinin dili. RASTER_HTML → HTML;
    * PPLA/PPLB/ZPL → native komut. Roll `getRollLabelNative` analoğu.
    */

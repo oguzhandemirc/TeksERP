@@ -10,7 +10,6 @@ const buildPayload = (v: MachineFormValues, initial: Machine | null): Partial<Ma
   stationId: v.stationId,
   code: initial?.code ?? generateCode(CODE_PREFIXES.MACHINE),
   name: v.name,
-  isActive: v.isActive,
 });
 
 export function MachinesPage() {

@@ -2,11 +2,10 @@
 // Test: etiket format çözümü (resolveLabelFormat) öncelik zinciri
 // Çalıştır: npx tsx scripts/test_label_format_resolver.ts
 // Doğrulananlar: explicit profileId > machineId (makine-yazıcı PeripheralDevice.formatProfile)
-// > sistem-default > kod-fallback; dil bu katmanda HEP global ayardan; inactive atlanır.
+// > sistem-default > kod-fallback; dil bu katmanda HEP RASTER_HTML (yalnız cihazdan gelir); inactive atlanır.
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { resolveLabelFormat } from "../src/services/helpers/label-format.resolver";
-import { readPrinterLanguage } from "../src/services/system-setting.service";
 
 let pass = 0;
 let fail = 0;
@@ -49,11 +48,10 @@ async function main() {
     const r1 = await resolveLabelFormat({ profileId: p1.id });
     check("explicit profileId → P1 geometri", r1.widthMm === 110 && r1.marginMm === 5 && r1.source === "explicit");
 
-    // 2) machineId → cihazın formatProfile'ı (P1); dil bu katmanda GLOBAL ayardan
-    const globalLang = await readPrinterLanguage();
+    // 2) machineId → cihazın formatProfile'ı (P1); dil bu katmanda SABİT RASTER_HTML
     const r2 = await resolveLabelFormat({ machineId: machine.id });
     check("machineId → cihaz formatProfile P1", r2.widthMm === 110 && r2.source === "machine");
-    check("machineId → dil GLOBAL ayardan", r2.language === globalLang, `${r2.language} == ${globalLang}`);
+    check("machineId → dil RASTER_HTML (yalnız cihazdan biner)", r2.language === "RASTER_HTML", r2.language);
 
     // 3) cihaz formatProfile null → (model basamağı YOK) sistem-default'a düşer
     await prisma.peripheralDevice.update({ where: { id: printer.id }, data: { formatProfileId: null } });

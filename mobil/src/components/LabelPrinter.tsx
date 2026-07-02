@@ -109,15 +109,15 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
       try {
         if (viaBt && btPrinterAddr) {
           // Cihazın diline göre native (PPLA/PPLB/ZPL) — kayıttaki yazıcı belirler
-          // (backend resolveLabelRouting; cihaz kaydı yoksa global/model). kind:
-          // KK1 ham / Tambur bitmiş paritesi.
+          // (backend resolveLabelRouting; cihaz kaydı yoksa RASTER_HTML → aşağıda
+          // fail-closed). kind: KK1 ham / Tambur bitmiş paritesi.
           const native = await labelService.getRollNative(roll.id, kind, labelContext);
           // FAIL-CLOSED: yalnız bilinen native dil ham gönderilir. RASTER_HTML/boş/
           // bilinmeyen → diyaloğa düşmek yerine NET hata (akış ortasında yazdırma
           // ekranı çıkmasın; çöp etiket de basılmasın).
           if (!['PPLA', 'PPLB', 'ZPL'].includes(native.language) || !native.content) {
             throw new Error(
-              'Yazıcı PPLA dilinde değil — Cihaz Kaydı’ndan yazıcının dilini PPLA yapın.',
+              'Yazıcının dili çözülemedi — Tanımlar → Donanım’da bu makinenin yazıcısını ve dilini kontrol edin.',
             );
           }
           // İlk baskıda otomatik eşleştir (bond yoksa) — Bluetooth ayarlarına girmeden.

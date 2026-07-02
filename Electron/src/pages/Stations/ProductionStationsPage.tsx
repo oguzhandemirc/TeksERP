@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Pencil, HardDrive, Palette, QrCode, Trash2 } from "lucide-react";
+import { Plus, Pencil, HardDrive, Palette, QrCode, Trash2, Power, PowerOff, EyeOff, Eye } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,15 +46,21 @@ const buildMachinePayload = (v: MachineFormValues, initial: Machine | null): Par
   stationId: v.stationId,
   code: initial?.code ?? generateCode(CODE_PREFIXES.MACHINE),
   name: v.name,
-  isActive: v.isActive,
+  // Aktif/pasif form dışında yönetilir (Pasife Al / Aktifleştir aksiyonları).
 });
 
 export function ProductionStationsPage() {
   const { hasPermission } = useRoleAccess();
   const canWrite = hasPermission("station:write");
 
+  const [showInactive, setShowInactive] = useState(false);
+
   const stationsQ = useQuery({ queryKey: ["stations", "card"], queryFn: () => loadAllForPicker(stationService) });
-  const machinesQ = useQuery({ queryKey: ["machines", "card"], queryFn: () => loadAllForPicker(machineService) });
+  // showInactive → filtresiz yükle (pasif makineler de gelsin); aksi halde yalnız aktif.
+  const machinesQ = useQuery({
+    queryKey: ["machines", "card", showInactive],
+    queryFn: () => loadAllForPicker(machineService, showInactive ? { filters: {} } : undefined),
+  });
   const capsQ = useQuery({ queryKey: ["station-capabilities"], queryFn: () => stationCapabilityService.list() });
 
   const stationMut = useCrudMutations({ service: stationService, queryKey: "stations", entityName: "İstasyon" });
@@ -65,6 +71,7 @@ export function ProductionStationsPage() {
   const [capStation, setCapStation] = useState<StationCapabilitySummary | null>(null);
   const [qrMachine, setQrMachine] = useState<Machine | null>(null);
   const [deleteMachine, setDeleteMachine] = useState<Machine | null>(null);
+  const [deactivateMachine, setDeactivateMachine] = useState<Machine | null>(null);
 
   const stations = (stationsQ.data?.data ?? []).filter((s) => PRODUCTION_KINDS.includes(s.kind));
   const machines = machinesQ.data?.data ?? [];
@@ -96,6 +103,11 @@ export function ProductionStationsPage() {
       });
   };
 
+  const handleMachineDeactivate = () => {
+    if (!deactivateMachine) return;
+    void machineMut.removeMutation.mutateAsync(deactivateMachine.id).then(() => setDeactivateMachine(null));
+  };
+
   const loading = stationsQ.isLoading || machinesQ.isLoading;
 
   return (
@@ -106,6 +118,15 @@ export function ProductionStationsPage() {
         actions={
           <div className="flex gap-2">
             <RefreshButton queryKey="stations" />
+            <Button
+              size="sm"
+              variant={showInactive ? "default" : "outline"}
+              className={showInactive ? "bg-amber-500 text-white hover:bg-amber-600" : "border-amber-400 text-amber-600 hover:bg-amber-50"}
+              onClick={() => setShowInactive((v) => !v)}
+            >
+              {showInactive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+              {showInactive ? "Pasifleri gizle" : "Pasifleri göster"}
+            </Button>
             {canWrite && (
               <Button size="sm" onClick={() => setStationDlg({ open: true, initial: null })}>
                 <Plus className="h-4 w-4" /> İstasyon
@@ -145,38 +166,67 @@ export function ProductionStationsPage() {
                   <HardDrive className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Makineler:</span>
                   {sMachines.length === 0 && <span className="text-muted-foreground">—</span>}
-                  {sMachines.map((m) => (
-                    <span key={m.id} className="inline-flex items-center overflow-hidden rounded border">
-                      <button
-                        type="button"
-                        disabled={!canWrite}
-                        className="px-2 py-0.5 text-xs hover:bg-accent disabled:cursor-default disabled:hover:bg-transparent"
-                        onClick={() => canWrite && setMachineDlg({ open: true, initial: m })}
-                        title={canWrite ? "Düzenle" : undefined}
+                  {sMachines.map((m) => {
+                    const active = m.isActive !== false;
+                    return (
+                      <span
+                        key={m.id}
+                        className={`inline-flex items-center overflow-hidden rounded border ${active ? "" : "border-dashed opacity-60"}`}
                       >
-                        {m.name}
-                      </button>
-                      {/* Oturum QR'ı — operatör bu etiketi okutarak makineye oturum açar */}
-                      <button
-                        type="button"
-                        className="border-l px-1.5 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                        onClick={() => setQrMachine(m)}
-                        title="Makine QR etiketi (oturum açma)"
-                      >
-                        <QrCode className="h-3 w-3" />
-                      </button>
-                      {canWrite && (
                         <button
                           type="button"
-                          className="border-l px-1.5 py-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => setDeleteMachine(m)}
-                          title="Makineyi kaldır"
+                          disabled={!canWrite}
+                          className="px-2 py-0.5 text-xs hover:bg-accent disabled:cursor-default disabled:hover:bg-transparent"
+                          onClick={() => canWrite && setMachineDlg({ open: true, initial: m })}
+                          title={canWrite ? "Düzenle" : undefined}
                         >
-                          <Trash2 className="h-3 w-3" />
+                          {m.name}
+                          {!active && <span className="ml-1 text-[10px] text-muted-foreground">(pasif)</span>}
                         </button>
-                      )}
-                    </span>
-                  ))}
+                        {/* Oturum QR'ı — yalnız aktif makinede (pasif makineye oturum açılmaz) */}
+                        {active && (
+                          <button
+                            type="button"
+                            className="border-l px-1.5 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                            onClick={() => setQrMachine(m)}
+                            title="Makine QR etiketi (oturum açma)"
+                          >
+                            <QrCode className="h-3 w-3" />
+                          </button>
+                        )}
+                        {canWrite && active && (
+                          <button
+                            type="button"
+                            className="border-l px-1.5 py-0.5 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600"
+                            onClick={() => setDeactivateMachine(m)}
+                            title="Pasife al (geri alınabilir)"
+                          >
+                            <PowerOff className="h-3 w-3" />
+                          </button>
+                        )}
+                        {canWrite && !active && (
+                          <button
+                            type="button"
+                            className="border-l px-1.5 py-0.5 text-emerald-600 hover:bg-emerald-500/10"
+                            onClick={() => machineMut.restoreMutation.mutate(m.id)}
+                            title="Aktifleştir"
+                          >
+                            <Power className="h-3 w-3" />
+                          </button>
+                        )}
+                        {canWrite && (
+                          <button
+                            type="button"
+                            className="border-l px-1.5 py-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setDeleteMachine(m)}
+                            title="Kalıcı sil"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
                   {canWrite && (
                     <Button
                       variant="outline"
@@ -250,6 +300,21 @@ export function ProductionStationsPage() {
         destructive
         onConfirm={handleMachineDelete}
         isPending={machineMut.hardRemoveMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={!!deactivateMachine}
+        onOpenChange={(o) => !o && setDeactivateMachine(null)}
+        title="Makineyi pasife al"
+        description={
+          deactivateMachine
+            ? `"${deactivateMachine.name}" makinesi pasife alınacak — üretim geçmişi korunur ve istediğiniz zaman "Aktifleştir" ile geri getirebilirsiniz. ` +
+              `Pasif makine "Pasifleri göster" ile listelenir.`
+            : undefined
+        }
+        confirmLabel="Pasife al"
+        onConfirm={handleMachineDeactivate}
+        isPending={machineMut.removeMutation.isPending}
       />
     </div>
   );

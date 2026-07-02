@@ -1,14 +1,13 @@
 // =============================================================================
 // Test: birleşik etiket yönlendirme çözücü (resolveLabelRouting)
 // Çalıştır: npx tsx scripts/test_label_routing_resolver.ts
-// Öncelik matrisi: dil (override>global), şablon (explicit>route>default),
+// Öncelik matrisi: dil (override; yoksa RASTER_HTML), şablon (explicit>route>default),
 // format (explicit>cihaz profili>zincir), cihaz seçimi (explicit>device>machine).
 // Test verisi üretir, sonunda temizler.
 // =============================================================================
 import { ConnectionType, LabelKind, PrinterLanguage } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { resolveLabelRouting } from "../src/services/helpers/label-routing.resolver";
-import { readPrinterLanguage } from "../src/services/system-setting.service";
 
 let pass = 0;
 let fail = 0;
@@ -55,11 +54,10 @@ async function main() {
   check("şablon = route şablonu", r1.template?.id === tplRoute.id);
   check("format = cihaz profili (FP)", r1.format.profileId === fp.id);
 
-  // --- 2. languageOverride kaldır → dil = GLOBAL ayar (canlı DB'de değişken → dinamik oku) ---
+  // --- 2. languageOverride kaldır → dil RASTER_HTML (global ayar kaldırıldı; fail-closed) ---
   await prisma.peripheralDevice.update({ where: { id: peripheral.id }, data: { languageOverride: null } });
-  const globalLang = await readPrinterLanguage();
   const r2 = await resolveLabelRouting({ kind: LabelKind.ROLL_FINISHED, deviceId: device.id });
-  check("override yok → dil = GLOBAL ayar", r2.language === globalLang, `${r2.language} == ${globalLang}`);
+  check("override yok → dil = RASTER_HTML (fail-closed)", r2.language === "RASTER_HTML", r2.language);
 
   // --- 3. explicit templateId route'u ezer ---
   const r3 = await resolveLabelRouting({ kind: LabelKind.ROLL_FINISHED, deviceId: device.id, templateId: tplExplicit.id });

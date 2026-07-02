@@ -23,7 +23,6 @@ export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSub
     ? {
         stationId: initial.stationId,
         name: initial.name,
-        isActive: initial.isActive,
       }
     : { ...machineFormDefaults, stationId: defaultStationId ?? machineFormDefaults.stationId };
 
@@ -63,9 +62,6 @@ export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSub
           <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
             <Input id="name" autoFocus {...form.register("name")} />
           </FormField>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" {...form.register("isActive")} /> Aktif
-          </label>
         </>
       )}
     </EntityFormDialog>

@@ -188,9 +188,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "label",
     label: "Etiket Baskısı",
     icon: Tags,
-    description: "Org-geneli etiket baskı ayarları: kopya adedi, varsayılan yazıcı dili.",
+    description: "Org-geneli etiket baskı ayarları: kopya adedi, top adı şablonu, native gönderim.",
     keywords:
-      "etiket label baskı yazdır kopya adet çift üst alt yapıştır tambur dil ppla pplb zpl yazıcı dili native gönderim",
+      "etiket label baskı yazdır kopya adet çift üst alt yapıştır tambur top adı şablon native gönderim",
     kind: "label",
   },
   {

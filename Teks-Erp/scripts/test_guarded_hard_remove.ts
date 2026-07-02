@@ -10,6 +10,7 @@ import prisma from "../src/lib/prisma";
 import {
   routeHardRemove,
   stationHardRemove,
+  machineHardRemove,
 } from "../src/services/helpers/guarded-hard-remove";
 import type { Request, Response, NextFunction } from "express";
 
@@ -110,6 +111,67 @@ async function main() {
     await prisma.route.deleteMany({ where: { id: route.id } });
     await prisma.machine.deleteMany({ where: { stationId: station.id } });
     await prisma.station.deleteMany({ where: { id: station.id } });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Machine hard-delete guard (yanlışlıkla makine olarak eklenmiş donanım senaryosu)
+  // ---------------------------------------------------------------------------
+  const mStation = await prisma.station.create({
+    data: {
+      name: `TEST-GHR-MST-${suffix}`,
+      code: `TEST-GHR-M-${suffix}`.toUpperCase().slice(0, 32),
+      type: "INTERNAL",
+      kind: "PROCESS_QC",
+      isActive: true,
+    },
+  });
+  const machine = await prisma.machine.create({
+    data: {
+      stationId: mStation.id,
+      name: `TEST-GHR-MAK-${suffix}`,
+      code: `TEST-GHR-MK-${suffix}`.toUpperCase().slice(0, 32),
+      isActive: true,
+    },
+  });
+  const peripheral = await prisma.peripheralDevice.create({
+    data: {
+      code: `TEST-GHR-PER-${suffix}`.toUpperCase().slice(0, 32),
+      name: `TEST-GHR-DONANIM-${suffix}`,
+      kind: "LABEL_PRINTER",
+      connectionType: "NETWORK_TCP",
+      machineId: machine.id,
+    },
+  });
+
+  try {
+    // --- 6) 404: olmayan makine ---
+    const m404 = await invoke(machineHardRemove, "00000000-0000-0000-0000-000000000000");
+    check("Olmayan makine → 404", m404.status === 404);
+
+    // --- 7) 409: bağlı donanımı olan makine silinemez ---
+    const m409 = await invoke(machineHardRemove, machine.id);
+    check(
+      "Donanım bağlı makine → 409 + somut sayı",
+      m409.status === 409 &&
+        (m409.body.data as { peripheralCount?: number }).peripheralCount === 1,
+      m409.body.message
+    );
+
+    // --- 8) Donanım kaldırılınca makine temiz → 200 ---
+    await prisma.peripheralDevice.delete({ where: { id: peripheral.id } });
+    const m200 = await invoke(machineHardRemove, machine.id);
+    check("Temiz (kullanılmamış) makine → 200 kalıcı silindi", m200.status === 200, m200.body.message);
+    const machineGone = await prisma.machine.findUnique({ where: { id: machine.id } });
+    check("Makine DB'den gitti", machineGone === null);
+
+    const mAudit = await prisma.systemLog.count({
+      where: { tableName: "MACHINE", recordId: machine.id, action: "DELETE" },
+    });
+    check("Makine audit DELETE kaydı düştü", mAudit >= 1);
+  } finally {
+    await prisma.peripheralDevice.deleteMany({ where: { id: peripheral.id } });
+    await prisma.machine.deleteMany({ where: { id: machine.id } });
+    await prisma.station.deleteMany({ where: { id: mStation.id } });
   }
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

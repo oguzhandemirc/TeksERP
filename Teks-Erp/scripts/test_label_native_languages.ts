@@ -1,6 +1,6 @@
 // =============================================================================
 // Test: çok-dilli native etiket (PPLB/ZPL üreteçleri + registry dispatch +
-//       global yazıcı dili ayarı + resolver dil fallback)
+//       resolver dil davranışı: dil YALNIZ cihazdan, cihazsız → RASTER_HTML)
 // Çalıştır: npx tsx scripts/test_label_native_languages.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
@@ -9,7 +9,6 @@ import { buildRollLabelPplb } from "../src/services/helpers/label-pplb.helper";
 import { buildRollLabelZpl } from "../src/services/helpers/label-zpl.helper";
 import { renderLabel } from "../src/services/helpers/label-renderer.registry";
 import { resolveLabelFormat } from "../src/services/helpers/label-format.resolver";
-import { readPrinterLanguage, SETTING_KEYS, DEFAULT_PRINTER_LANGUAGE } from "../src/services/system-setting.service";
 import type { ResolvedLabelFormat } from "../src/services/helpers/label-format.resolver";
 import type { LabelPayload } from "../src/services/label.service";
 
@@ -81,44 +80,13 @@ async function main() {
   // veriyle bozulamaz. isAscii zaten latin1-dışı/komut-baytı kalmadığını kanıtlar.
   check("güvenlik: PPLA çıktısı tek STX L ile başlar (veri frame bozmadı)", trPpla.indexOf("\x02L") === trPpla.lastIndexOf("\x02L"));
 
-  // --- global ayar (readPrinterLanguage) + resolver dil fallback ---
-  check("default dil = PPLA", DEFAULT_PRINTER_LANGUAGE === "PPLA");
-  // Operatörün ayarlamış olabileceği değeri SİLME — sakla, finally'de geri yükle.
-  const originalLang = await prisma.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE },
-    select: { value: true },
-  });
-
-  try {
-    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE } });
-    check("ayar yokken read → PPLA", (await readPrinterLanguage()) === "PPLA");
-
-    // geçersiz değer → default'a düşer
-    await prisma.systemSetting.upsert({
-      where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE },
-      update: { value: "GARBAGE" }, create: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE, value: "GARBAGE" },
-    });
-    check("geçersiz değer → PPLA fallback", (await readPrinterLanguage()) === "PPLA");
-
-    // geçerli değer (PPLB) → okunur + resolver model'siz yolda bunu kullanır
-    await prisma.systemSetting.update({
-      where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE }, data: { value: "PPLB" },
-    });
-    check("ayar PPLB → read PPLB", (await readPrinterLanguage()) === "PPLB");
-    const r = await resolveLabelFormat(); // model bağlamı yok → global ayar
-    check("resolver (model'siz) → dil global ayardan (PPLB)", r.language === "PPLB");
-  } finally {
-    // Orijinal değeri geri yükle (yoksa sil) — operatör ayarı korunsun.
-    if (originalLang && typeof originalLang.value === "string") {
-      const v = originalLang.value;
-      await prisma.systemSetting.upsert({
-        where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE },
-        update: { value: v }, create: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE, value: v },
-      });
-    } else {
-      await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE } });
-    }
-  }
+  // --- resolver dil davranışı: global ayar KALDIRILDI (2026-07) ---
+  // Dil yalnız cihaz kaydından (languageOverride, routing katmanında) gelir;
+  // cihaz bağlamı olmayan format çözümü RASTER_HTML döner → istemciler fail-closed.
+  const r = await resolveLabelFormat();
+  check("resolver (cihazsız) → RASTER_HTML (fail-closed)", r.language === "RASTER_HTML", r.language);
+  const r2 = await resolveLabelFormat({ kind: "SWATCH" });
+  check("resolver (cihazsız, SWATCH) → RASTER_HTML", r2.language === "RASTER_HTML");
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();

@@ -7,8 +7,9 @@
 //   3. sistem default profili (top: isRollDefault; sonra code="DEFAULT"; yoksa en eski aktif)
 //   4. KOD FALLBACK (DB boş) → DEFAULT_LABEL_FORMAT + RASTER_HTML
 //
-// Dil bu katmanda HER ZAMAN global ayardır (`label.printerLanguage`); cihaz-özel
-// `languageOverride` bir üst katmanda (label-routing.resolver) biner.
+// Dil bu katmanda SABİT RASTER_HTML'dir — dil YALNIZ cihaz kaydındaki
+// `languageOverride`'dan gelir (bir üst katmanda, label-routing.resolver'da biner).
+// Global "varsayılan yazıcı dili" ayarı 2026-07'de kaldırıldı (heterojen filo).
 //
 // Mobil: `req.device.machineId` (device.middleware) → istasyon yazıcısı OTO çözülür.
 // Electron: device yok → sistem default (adım 3).
@@ -16,7 +17,6 @@
 
 import { PrinterLanguage, type LabelKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { readPrinterLanguage } from "../system-setting.service";
 import { DEFAULT_LABEL_FORMAT, type LabelFormatGeometry } from "./label-html.helper";
 
 export type FormatResolveSource = "explicit" | "machine" | "system-default" | "code-fallback";
@@ -133,9 +133,10 @@ export async function resolveLabelFormat(opts?: {
     }
   }
 
-  // Etkin dil — bu katmanda HER ZAMAN global ayar (`label.printerLanguage`, default
-  // PPLA). Cihaz-özel `languageOverride` bir üst katmanda (label-routing.resolver) biner.
-  const language = await readPrinterLanguage();
+  // Etkin dil — bu katmanda SABİT RASTER_HTML: dil YALNIZ cihaz kaydından gelir
+  // (languageOverride, routing resolver'da biner). Cihaz bağlamı olmayan istek native
+  // ÜRETMEZ; istemciler fail-closed davranır ("cihaz seçin" hatası / HTML önizleme).
+  const language: PrinterLanguage = PrinterLanguage.RASTER_HTML;
 
   // 4. KOD FALLBACK — DB'de hiç profil yok
   if (!profile) {

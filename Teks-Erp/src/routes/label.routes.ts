@@ -140,7 +140,7 @@ router.get(
  *     summary: Rolün etiketi SEÇİLİ yazıcı dilinde (global ayar / model dili)
  *     description: |
  *       Etkin dil = istasyon yazıcı modelinin dili (varsa) ya da global ayar
- *       `label.printerLanguage` (default PPLA). RASTER_HTML → text/html; PPLA/PPLB/ZPL
+ *       cihaz kaydındaki dil (cihazsız → RASTER_HTML). RASTER_HTML → text/html; PPLA/PPLB/ZPL
  *       → text/plain native komut. Dil `X-Label-Language` header'ında. Faz-1: native
  *       komutlar ÜRETİLİR, ham gönderim simüle (Faz-2). Format `?profileId=`/`?machineId=`
  *       veya istasyon (mobil oto) ile çözülür.

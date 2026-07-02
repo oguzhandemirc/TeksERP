@@ -5,7 +5,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { Prisma, PrinterLanguage } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -125,7 +125,6 @@ export const SETTING_KEYS = {
    *  (default PPLA). Bir yazıcı modeli kendi dilini belirtirse (Argox=PPLA, Zebra=ZPL)
    *  o istasyonda model dili ÖNCELİKLİDİR; bu global ayar model bağlamı çözülemeyen
    *  baskılar için (Electron/varsayılan) ve genel varsayılan olarak kullanılır. */
-  LABEL_PRINTER_LANGUAGE: "label.printerLanguage",
   /** Faz-2 opt-in: native etiket komutları (PPLA/ZPL) backend RAW TCP (9100) ile
    *  yazıcıya DOĞRUDAN gönderilsin mi (default false = Faz-1 simülasyon). Açıkken
    *  ENFORCE — printer-transport gerçek socket açar; kapalıyken hiç socket yok. */
@@ -432,9 +431,6 @@ export interface FeatureFlags {
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). Frontend okur. */
   rollNameTemplate: string;
-  /** Varsayılan etiket yazıcı dili (RASTER_HTML | PPLA | PPLB | ZPL; default PPLA).
-   *  Native render bu dilde üretilir; istasyon yazıcı modeli kendi dilini belirtirse o önceliklidir. */
-  printerLanguage: PrinterLanguage;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
 }
@@ -588,7 +584,6 @@ export class SystemSettingService {
       loginMethods: await readLoginMethods(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
       rollNameTemplate: await readRollNameTemplate(cacheClient),
-      printerLanguage: await readPrinterLanguage(cacheClient),
       nativeSendEnabled: await readLabelNativeSendEnabled(cacheClient),
     };
     // Yalnız okuma sürerken invalidate OLMADIYSA cache'le; olduysa bayat veriyi
@@ -902,21 +897,6 @@ export class SystemSettingService {
         SETTING_KEYS.ROLL_NAME_TEMPLATE,
         trimmed || DEFAULT_ROLL_NAME_TEMPLATE,
         "Top adı format şablonu — {item} {color} {width} {quality} token'ları",
-        userId
-      );
-    }
-
-    if (Object.prototype.hasOwnProperty.call(input, "printerLanguage")) {
-      const v = input.printerLanguage;
-      if (!PRINTER_LANGUAGES.includes(v as PrinterLanguage)) {
-        throw AppError.badRequest(
-          `Geçersiz yazıcı dili. İzinli: ${PRINTER_LANGUAGES.join(", ")}`,
-        );
-      }
-      await this.set(
-        SETTING_KEYS.LABEL_PRINTER_LANGUAGE,
-        v as string,
-        "Varsayılan etiket yazıcı dili (native render: PPLA/PPLB/ZPL veya HTML)",
         userId
       );
     }
@@ -1424,27 +1404,6 @@ export async function readRollNameTemplate(
   return typeof v === "string" && v.trim() ? v.slice(0, 100) : DEFAULT_ROLL_NAME_TEMPLATE;
 }
 
-/**
- * Varsayılan etiket yazıcı dili — native render (PPLA/PPLB/ZPL) veya HTML.
- * Default PPLA. Cihaz kaydında `languageOverride` doluysa o cihaz kendi dilinde
- * basar; bu ayar cihaz bağlamı olmayan baskı/önizlemelerin ve dili boş eski
- * kayıtların son çaresidir.
- */
-export const PRINTER_LANGUAGES: PrinterLanguage[] = ["RASTER_HTML", "PPLA", "PPLB", "ZPL"];
-export const DEFAULT_PRINTER_LANGUAGE: PrinterLanguage = "PPLA";
-export async function readPrinterLanguage(
-  tx?: Pick<typeof prisma, "systemSetting">,
-): Promise<PrinterLanguage> {
-  const client = tx ?? prisma;
-  const setting = await client.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.LABEL_PRINTER_LANGUAGE },
-    select: { value: true },
-  });
-  const v = setting?.value;
-  return typeof v === "string" && PRINTER_LANGUAGES.includes(v as PrinterLanguage)
-    ? (v as PrinterLanguage)
-    : DEFAULT_PRINTER_LANGUAGE;
-}
 
 /**
  * Faz-2 opt-in: native etiket komutları yazıcıya doğrudan (RAW TCP 9100) gönderilsin mi.

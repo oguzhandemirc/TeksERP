@@ -175,7 +175,7 @@ export class LabelController {
   };
 
   /**
-   * Rolün etiketini SEÇİLİ dilde döner — global ayar `label.printerLanguage`
+   * Rolün etiketini SEÇİLİ dilde döner — dil cihaz kaydından (cihazsız → RASTER_HTML)
    * (default PPLA) veya istasyon yazıcı modelinin dili. RASTER_HTML → text/html;
    * PPLA/PPLB/ZPL → text/plain native komut. Dil X-Label-Language header'ında.
    */

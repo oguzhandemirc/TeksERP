@@ -115,7 +115,6 @@ export const DEFAULT_COMPANY_NAME = "Adnan Şahin Tekstil";
 
 /** Etiket yazıcı dili (backend PrinterLanguage enum ile aynı). */
 export type PrinterLanguage = "RASTER_HTML" | "PPLA" | "PPLB" | "ZPL";
-export const DEFAULT_PRINTER_LANGUAGE: PrinterLanguage = "PPLA";
 export const PRINTER_LANGUAGE_LABELS: Record<PrinterLanguage, string> = {
   RASTER_HTML: "HTML (OS yazıcı sürücüsü)",
   PPLA: "PPLA (Argox/Datamax)",
@@ -166,9 +165,6 @@ export interface FeatureFlags {
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). */
   rollNameTemplate: string;
-  /** Varsayılan etiket yazıcı dili (RASTER_HTML | PPLA | PPLB | ZPL; default PPLA).
-   *  Native render bu dilde; cihaz kaydındaki dil (languageOverride) her zaman önceliklidir. */
-  printerLanguage: PrinterLanguage;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
   /** Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri). */

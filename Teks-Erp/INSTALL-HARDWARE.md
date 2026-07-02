@@ -56,7 +56,6 @@ Yeni bir fabrikada `npm run seed` ile gelen güvenli defaultlar — gerçek I/O 
 
 | Ayar | Default | Anlamı |
 |---|---|---|
-| `label.printerLanguage` | `PPLA` | Global yazıcı dili (cihazdaki dil önceliklidir) |
 | `label.nativeSendEnabled` | `false` | Yazıcıya gerçek TCP gönderim KAPALI (HTML+OS fallback) |
 | `device.pairingRequired` | `false` | Onaysız tablet de çalışır |
 | `PeripheralDevice.simulate` | seed'de METER/SCALE için `true` | Metre/kantar SAHTE okur (donanımsız test) |
