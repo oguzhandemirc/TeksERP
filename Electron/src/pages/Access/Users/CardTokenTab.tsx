@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
-import { BadgeCheck, IdCard, RefreshCcw } from "lucide-react";
+import { IdCard, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { printDocumentArea } from "@/lib/print";
 import { adminUserService } from "@/services/adminUserService";
 
@@ -14,27 +16,36 @@ interface Props {
 }
 
 /**
- * QR personel kartı — mobil kartla giriş için (auth.loginMode="card"). "Oluştur/
- * Yenile" yeni 32-hex sır üretir; QR yazdırılıp karta basılır. ROTASYON eski
- * kartı ANINDA öldürür (kayıp kart senaryosu) — açık oturumlar etkilenmez.
- * Sır yalnız üretim anında gösterilir; sonradan tekrar görüntülenemez (yeniden
- * basmak = yenilemek).
+ * QR personel kartı — mobil kartla giriş için ("QR Personel Kartı" yöntemi etkinken).
+ * Kart QR'ı HER ZAMAN görünür (yalnız yönetici görür); yenilemek isteyince TEYİT
+ * alınır (eski kart anında ölür — kayıp kart senaryosu). Açık JWT oturumları
+ * etkilenmez. QR içeriği "TEKSU:<userId>:<token>".
  */
 export function CardTokenTab({ userId, username, fullName }: Props) {
-  const [card, setCard] = useState<{ cardCode: string; rotated: boolean } | null>(null);
+  const qc = useQueryClient();
   const areaRef = useRef<HTMLDivElement>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const mutation = useMutation({
+  const credQ = useQuery({
+    queryKey: ["admin-user-credentials", userId],
+    queryFn: () => adminUserService.getCredentials(userId),
+  });
+  const cardCode = credQ.data?.data.cardCode ?? null;
+
+  const rotate = useMutation({
     mutationFn: () => adminUserService.rotateCardToken(userId),
     onSuccess: (res) => {
-      setCard(res.data);
+      setConfirmOpen(false);
       toast.success(
         res.data.rotated
           ? "Kart YENİLENDİ — eski kart artık geçersiz, yenisini basıp teslim edin"
           : "Personel kartı oluşturuldu — yazdırıp teslim edin",
       );
+      void qc.invalidateQueries({ queryKey: ["admin-user-credentials", userId] });
     },
   });
+
+  if (credQ.isLoading) return <Skeleton className="h-64 w-full" />;
 
   return (
     <div className="space-y-4">
@@ -47,25 +58,19 @@ export function CardTokenTab({ userId, username, fullName }: Props) {
             <span className="font-mono">{username}</span> için QR personel kartı
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Kartla giriş, Genel Ayarlar → Oturum & Güvenlik'te "QR Personel Kartı"
-            yöntemi etkinken çalışır. Kart kaybolursa burada YENİLE — eski kart anında
-            ölür. QR yalnız üretim anında gösterilir.
+            Kartla giriş, Genel Ayarlar → Oturum & Güvenlik'te "QR Personel Kartı" yöntemi
+            etkinken çalışır. Kart kaybolursa "Yenile" — eski kart anında geçersiz olur.
           </p>
         </div>
       </div>
 
-      <Button type="button" size="sm" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-        <RefreshCcw className="h-3.5 w-3.5" />
-        {mutation.isPending ? "Üretiliyor…" : "Kart Oluştur / Yenile"}
-      </Button>
-
-      {card && (
+      {cardCode ? (
         <div className="space-y-3">
           <div
             ref={areaRef}
             className="print-area mx-auto flex w-full max-w-[260px] flex-col items-center gap-2 rounded-md border bg-white p-6 text-center text-black"
           >
-            <QRCodeSVG value={card.cardCode} size={170} level="M" />
+            <QRCodeSVG value={cardCode} size={170} level="M" />
             <div className="text-base font-bold leading-tight">{fullName}</div>
             <div className="font-mono text-xs">@{username}</div>
             <div className="text-[10px] uppercase tracking-wide">Personel Kartı</div>
@@ -74,13 +79,38 @@ export function CardTokenTab({ userId, username, fullName }: Props) {
             <Button type="button" size="sm" variant="outline" onClick={() => printDocumentArea(areaRef.current)}>
               Yazdır
             </Button>
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <BadgeCheck className="h-3.5 w-3.5" />
-              {card.rotated ? "Yenilendi — eski kart geçersiz" : "İlk kart"}
-            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setConfirmOpen(true)}
+            >
+              <RefreshCcw className="h-3.5 w-3.5" /> Yenile
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-md border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+          Bu kullanıcının kartı yok.
+          <div className="mt-3">
+            <Button type="button" size="sm" onClick={() => rotate.mutate()} disabled={rotate.isPending}>
+              <IdCard className="h-3.5 w-3.5" /> {rotate.isPending ? "Oluşturuluyor…" : "Kart Oluştur"}
+            </Button>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Personel kartını yenile"
+        description={`${fullName} için yeni bir kart üretilecek. Eski kart ANINDA geçersiz olur — kullanıcı yeni kartı almadan kartla giremez. Açık oturumları etkilenmez. Devam edilsin mi?`}
+        confirmLabel="Yenile"
+        destructive
+        isPending={rotate.isPending}
+        onConfirm={() => rotate.mutate()}
+      />
     </div>
   );
 }

@@ -26,6 +26,17 @@ export const adminUserService = {
       )
       .then((r) => r.data),
 
+  /** Kullanıcının mobil kimlik bilgileri (hızlı PIN + QR kart kodu) — panel her
+   *  zaman gösterir. GÜVENLİK: düz saklandığından geri okunur (yalnız admin:users). */
+  getCredentials: (
+    userId: string,
+  ): Promise<ApiResponse<{ quickPin: string | null; cardCode: string | null }>> =>
+    apiClient
+      .get<ApiResponse<{ quickPin: string | null; cardCode: string | null }>>(
+        `/api/admin/users/${userId}/credentials`,
+      )
+      .then((r) => r.data),
+
   /** Hızlı PIN ata/üret/kaldır (salt-PIN girişi — benzersiz 6 hane). pin verilmezse
    *  rastgele üretilir; başkasında varsa backend 409 döner; clear=true kaldırır. */
   setQuickPin: (

@@ -204,6 +204,26 @@ export class AuthService {
     return { cardCode: `TEKSU:${user.id}:${token}`, rotated: user.cardToken != null };
   }
 
+  /**
+   * Admin: kullanıcının mobil kimlik bilgilerini OKU — hızlı PIN + QR kart kodu.
+   * Panel bunları HER ZAMAN gösterir (kart QR sürekli görünür, mevcut PIN görünür).
+   * GÜVENLİK: her ikisi de düz saklandığından geri okunabilir; bu uç yalnız
+   * admin:users yetkisiyle çağrılır ("bu ekranı yalnız yönetici görür" kararı).
+   */
+  static async getUserCredentials(
+    userId: string
+  ): Promise<{ quickPin: string | null; cardCode: string | null }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, quickPin: true, cardToken: true },
+    });
+    if (!user) throw AppError.notFound("Kullanıcı bulunamadı");
+    return {
+      quickPin: user.quickPin,
+      cardCode: user.cardToken ? `TEKSU:${user.id}:${user.cardToken}` : null,
+    };
+  }
+
   /** JWT üretimi — login ve loginWithCard'ın ortak çıkışı. */
   private static async issueToken(user: {
     id: string;

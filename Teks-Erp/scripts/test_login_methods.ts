@@ -14,6 +14,7 @@
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { AuthService } from "../src/services/auth.service";
+import { PermissionManagementService } from "../src/services/permission-management.service";
 import {
   systemSettingService,
   SETTING_KEYS,
@@ -50,6 +51,7 @@ async function main() {
     data: { username: `test-qpin2-${ts}`, passwordHash: await AuthService.hashPassword("123456"), fullName: "TEST QuickPin 2" },
     select: { id: true },
   });
+  const created: string[] = []; // createUser ile açılan ek kullanıcılar (cleanup)
 
   try {
     // 1) default
@@ -107,6 +109,33 @@ async function main() {
     await AuthService.setQuickPin(u1.id, { pin: "515151" }, admin.id);
     await prisma.user.update({ where: { id: u1.id }, data: { isActive: false } });
     await expectErr("pasif kullanıcı PIN'i 401", "tanınmadı", () => AuthService.loginWithQuickPin("515151"));
+
+    // 10) getUserCredentials — panel okuması (PIN + kart kodu geri okunabilir)
+    const cred = await AuthService.getUserCredentials(u1.id);
+    check("getUserCredentials → mevcut PIN okunur", cred.quickPin === "515151");
+    check("getUserCredentials → kart kodu (kart yoksa null)", cred.cardCode === null);
+
+    // 11) createUser otomatik mobil kimlik üretir (generateMobileCredentials default)
+    const auto = await PermissionManagementService.createUser(
+      { username: `test-qpin-auto-${ts}`, fullName: "TEST Auto", password: "123456" },
+      admin.id,
+    );
+    created.push(auto.id);
+    const autoCred = await AuthService.getUserCredentials(auto.id);
+    check("createUser → otomatik hızlı PIN", /^\d{6}$/.test(autoCred.quickPin ?? ""));
+    check("createUser → otomatik QR kart kodu", /^TEKSU:/.test(autoCred.cardCode ?? ""));
+
+    // 12) generateMobileCredentials=false → kimlik üretilmez (web kullanıcısı)
+    const web = await PermissionManagementService.createUser(
+      {
+        username: `test-qpin-web-${ts}`, fullName: "TEST Web", password: "123456",
+        grantOperatorDefaults: false, generateMobileCredentials: false,
+      },
+      admin.id,
+    );
+    created.push(web.id);
+    const webCred = await AuthService.getUserCredentials(web.id);
+    check("web kullanıcısı → PIN yok", webCred.quickPin === null && webCred.cardCode === null);
   } finally {
     if (prevMethods) {
       await prisma.systemSetting.upsert({
@@ -126,7 +155,9 @@ async function main() {
     } else {
       await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.AUTH_LOGIN_MODE } }).catch(() => {});
     }
-    await prisma.user.deleteMany({ where: { id: { in: [u1.id, u2.id] } } }).catch(() => {});
+    const allIds = [u1.id, u2.id, ...created];
+    await prisma.userPermission.deleteMany({ where: { userId: { in: allIds } } }).catch(() => {});
+    await prisma.user.deleteMany({ where: { id: { in: allIds } } }).catch(() => {});
   }
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

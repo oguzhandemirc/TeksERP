@@ -80,6 +80,8 @@ const createUserSchema = z.object({
   // Varsayılan üretim istasyon izinlerini (KK1/KK2/Tambur) ver — default true (saha
   // operatörü). Web/admin kullanıcısı açarken false gönderilir (temiz başlar).
   grantOperatorDefaults: z.boolean().optional(),
+  // Mobil kimlik (hızlı PIN + QR kart) otomatik üret — default grantOperatorDefaults.
+  generateMobileCredentials: z.boolean().optional(),
 });
 
 const updateUserSchema = z.object({
@@ -340,6 +342,29 @@ router.post(
         req.user?.userId
       );
       res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/credentials:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Kullanıcının mobil kimlik bilgileri (hızlı PIN + QR kart kodu) — admin panel
+ *     description: Panel bunları her zaman gösterir (kart QR sürekli görünür, mevcut PIN görünür). Yalnız admin:users.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/users/:id/credentials",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const data = await AuthService.getUserCredentials(req.params.id as string);
+      res.status(200).json({ success: true, data });
     } catch (error) {
       next(error);
     }

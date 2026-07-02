@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { AuthService } from "./auth.service";
 
 /**
  * Yeni kullanıcının varsayılan olarak aldığı üretim istasyon izinleri (opt-out'lu).
@@ -268,6 +269,9 @@ export class PermissionManagementService {
        *  saha operatörü tabletle çalışabilsin diye. Yalnız web/admin kullanıcısı
        *  açarken false geçilir (temiz başlar). */
       grantOperatorDefaults?: boolean;
+      /** Mobil giriş için otomatik hızlı-PIN + QR kart üret (default = grantOperatorDefaults).
+       *  Oluşturma-sonrası "kimlik kartı" modalı bunları gösterir. */
+      generateMobileCredentials?: boolean;
     },
     actorUserId: string | undefined
   ) {
@@ -320,6 +324,15 @@ export class PermissionManagementService {
         defaultPermissions: defaultPerms.map((p) => p.code),
       },
     });
+
+    // Mobil kimlik: hızlı-PIN + QR kart otomatik üret (benzersizlik retry'ları
+    // AuthService içinde). User create'inden AYRI — quickPin @unique çakışması
+    // create'i düşürmesin (P2002 retry gerekir). Web kullanıcısında atlanabilir.
+    const genCreds = input.generateMobileCredentials ?? grantDefaults;
+    if (genCreds) {
+      await AuthService.setQuickPin(user.id, {}, actorUserId).catch(() => undefined);
+      await AuthService.rotateCardToken(user.id, actorUserId).catch(() => undefined);
+    }
 
     return user;
   }

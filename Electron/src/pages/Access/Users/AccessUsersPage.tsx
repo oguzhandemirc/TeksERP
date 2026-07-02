@@ -19,6 +19,7 @@ import {
 import type { ApiResponse } from "@/types/api";
 import { UserFormDialog, type UserFormValues } from "./UserFormDialog";
 import { UserDetailSheet } from "./UserDetailSheet";
+import { NewUserCredentialsDialog } from "./NewUserCredentialsDialog";
 
 const QUERY_KEY = "admin-users";
 
@@ -29,6 +30,8 @@ interface UserPayload {
   isActive?: boolean;
   /** Yeni kullanıcıya üretim istasyon izinlerini (KK1/KK2/Tambur) otomatik ver. */
   grantOperatorDefaults?: boolean;
+  /** Mobil kimlik (hızlı PIN + QR kart) otomatik üret (oluşturma-sonrası modal gösterir). */
+  generateMobileCredentials?: boolean;
 }
 
 const userMutations = {
@@ -46,7 +49,10 @@ export function AccessUsersPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUserListItem | null>(null);
   const [permissionsFor, setPermissionsFor] = useState<AdminUserListItem | null>(null);
+  const [detailTab, setDetailTab] = useState<"permissions" | "quick-pin">("permissions");
   const [removingId, setRemovingId] = useState<string | null>(null);
+  // Yeni kullanıcı oluşturulunca açılan "kimlik kartı" (QR + hızlı PIN).
+  const [newCreds, setNewCreds] = useState<AdminUserListItem | null>(null);
 
   const query = useQuery({
     queryKey: [QUERY_KEY],
@@ -68,9 +74,12 @@ export function AccessUsersPage() {
 
   const createMut = useMutation({
     mutationFn: userMutations.create,
-    onSuccess: () => {
+    onSuccess: (res, vars) => {
       toast.success("Kullanıcı oluşturuldu.");
       invalidate();
+      // Mobil kimlik üretildiyse (operatör) → kimlik kartı modalını aç.
+      const created = res.data;
+      if (created && vars.generateMobileCredentials) setNewCreds(created);
     },
   });
 
@@ -100,8 +109,13 @@ export function AccessUsersPage() {
     if (editing) {
       await updateMut.mutateAsync({ id: editing.id, data: payload });
     } else {
-      // Yalnız oluşturmada gönder — varsayılan üretim izinleri (KK1/KK2/Tambur).
-      await createMut.mutateAsync({ ...payload, grantOperatorDefaults: values.grantOperatorDefaults });
+      // Yalnız oluşturmada gönder — varsayılan üretim izinleri (KK1/KK2/Tambur) +
+      // mobil kimlik (QR + hızlı PIN) aynı bayrağa bağlı (operatör).
+      await createMut.mutateAsync({
+        ...payload,
+        grantOperatorDefaults: values.grantOperatorDefaults,
+        generateMobileCredentials: values.grantOperatorDefaults,
+      });
     }
     setFormOpen(false);
     setEditing(null);
@@ -186,7 +200,10 @@ export function AccessUsersPage() {
                         variant="ghost"
                         size="sm"
                         className="h-7 gap-1"
-                        onClick={() => setPermissionsFor(user)}
+                        onClick={() => {
+                          setDetailTab("permissions");
+                          setPermissionsFor(user);
+                        }}
                       >
                         <ShieldCheck className="h-3.5 w-3.5" /> Yetkiler
                       </Button>
@@ -232,7 +249,26 @@ export function AccessUsersPage() {
       <UserDetailSheet
         user={permissionsFor}
         open={Boolean(permissionsFor)}
-        onOpenChange={(open) => !open && setPermissionsFor(null)}
+        initialTab={detailTab}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPermissionsFor(null);
+            setDetailTab("permissions");
+          }
+        }}
+      />
+
+      <NewUserCredentialsDialog
+        user={newCreds}
+        onOpenChange={(open) => !open && setNewCreds(null)}
+        onManage={() => {
+          const u = newCreds;
+          setNewCreds(null);
+          if (u) {
+            setDetailTab("quick-pin"); // "yönet" → Hızlı PIN sekmesiyle açılsın
+            setPermissionsFor(u);
+          }
+        }}
       />
 
       <ConfirmDialog

@@ -7,13 +7,17 @@ import { CardTokenTab } from "./CardTokenTab";
 import { QuickPinTab } from "./QuickPinTab";
 import type { AdminUserListItem } from "@/services/adminUserService";
 
+type UserDetailTab = "permissions" | "template" | "password" | "card" | "quick-pin";
+
 interface Props {
   user: AdminUserListItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Açılışta gösterilecek sekme (örn. yeni-kullanıcı "yönet" → hızlı PIN). */
+  initialTab?: UserDetailTab;
 }
 
-export function UserDetailSheet({ user, open, onOpenChange }: Props) {
+export function UserDetailSheet({ user, open, onOpenChange, initialTab = "permissions" }: Props) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-2xl overflow-hidden">
@@ -27,7 +31,8 @@ export function UserDetailSheet({ user, open, onOpenChange }: Props) {
         </SheetHeader>
 
         {user && (
-          <Tabs defaultValue="permissions" className="mt-4">
+          // key={initialTab}: farklı sekmeyle yeniden açılınca defaultValue tekrar uygulansın.
+          <Tabs key={initialTab} defaultValue={initialTab} className="mt-4">
             <TabsList>
               <TabsTrigger value="permissions">Yetkiler</TabsTrigger>
               <TabsTrigger value="template">Şablon Uygula</TabsTrigger>
