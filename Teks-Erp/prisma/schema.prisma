@@ -232,8 +232,13 @@ model User {
   /// QR personel kartı sırrı (32-hex, düz saklanır — fiziksel kart taşıyıcı sır;
   /// bcrypt login sıcak yolunda gereksiz). Kart içeriği "TEKSU:<userId>:<cardToken>".
   /// Kart kaybolursa admin ROTASYON yapar → eski kart anında ölür. NULL = kart yok.
-  /// Kartla giriş yalnız auth.loginMode="card" iken çalışır (default "pin").
+  /// Kartla giriş yalnız auth.loginMethods "card" içerirken çalışır.
   cardToken String? @unique @db.VarChar(64)
+  /// Salt-PIN girişi için HIZLI PIN (6 hane) — şifreden AYRI ve sistem genelinde
+  /// BENZERSİZ (PIN tek başına kimliği belirler; findUnique ile giriş). Düz saklanır
+  /// (LAN-only + kısa ömür/rotasyon admin'den; cardToken emsali). NULL = tanımsız.
+  /// Salt-PIN girişi yalnız auth.loginMethods "pin" içerirken çalışır.
+  quickPin String? @unique @db.VarChar(12)
 
   // Relations
   permissions                UserPermission[]        @relation("UserPermissionUser")

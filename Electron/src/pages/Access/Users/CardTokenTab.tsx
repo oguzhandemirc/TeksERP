@@ -47,9 +47,9 @@ export function CardTokenTab({ userId, username, fullName }: Props) {
             <span className="font-mono">{username}</span> için QR personel kartı
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Kartla giriş "Genel Ayarlar → Oturum & Güvenlik → Giriş yöntemi: Kart" iken
-            çalışır (PIN her zaman yedek kalır). Kart kaybolursa burada YENİLE — eski
-            kart anında ölür. QR yalnız üretim anında gösterilir.
+            Kartla giriş, Genel Ayarlar → Oturum & Güvenlik'te "QR Personel Kartı"
+            yöntemi etkinken çalışır. Kart kaybolursa burada YENİLE — eski kart anında
+            ölür. QR yalnız üretim anında gösterilir.
           </p>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { PermissionsTab } from "./PermissionsTab";
 import { ApplyTemplateTab } from "./ApplyTemplateTab";
 import { ResetPasswordTab } from "./ResetPasswordTab";
 import { CardTokenTab } from "./CardTokenTab";
+import { QuickPinTab } from "./QuickPinTab";
 import type { AdminUserListItem } from "@/services/adminUserService";
 
 interface Props {
@@ -32,6 +33,7 @@ export function UserDetailSheet({ user, open, onOpenChange }: Props) {
               <TabsTrigger value="template">Şablon Uygula</TabsTrigger>
               <TabsTrigger value="password">Şifre Sıfırla</TabsTrigger>
               <TabsTrigger value="card">Personel Kartı</TabsTrigger>
+              <TabsTrigger value="quick-pin">Hızlı PIN</TabsTrigger>
             </TabsList>
             <TabsContent value="permissions">
               <PermissionsTab userId={user.id} />
@@ -44,6 +46,9 @@ export function UserDetailSheet({ user, open, onOpenChange }: Props) {
             </TabsContent>
             <TabsContent value="card">
               <CardTokenTab userId={user.id} username={user.username} fullName={user.fullName} />
+            </TabsContent>
+            <TabsContent value="quick-pin">
+              <QuickPinTab userId={user.id} username={user.username} />
             </TabsContent>
           </Tabs>
         )}

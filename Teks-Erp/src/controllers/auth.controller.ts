@@ -6,7 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
-import { readDevicePairingRequired, readAuthLoginMode } from "../services/system-setting.service";
+import { readDevicePairingRequired, readLoginMethods } from "../services/system-setting.service";
 import "../types/express-augment";
 
 // Zod schemas for validation
@@ -17,6 +17,10 @@ const loginSchema = z.object({
 
 const loginCardSchema = z.object({
   cardCode: z.string().min(1, "Kart kodu gerekli").max(120),
+});
+
+const loginQuickPinSchema = z.object({
+  pin: z.string().regex(/^\d{6}$/, "PIN 6 haneli rakam olmalı"),
 });
 
 // K6 (2026-06-12): register endpoint'i + şeması kaldırıldı — kullanıcı
@@ -100,8 +104,8 @@ export class AuthController {
    * /api/auth/login-card:
    *   post:
    *     tags: [Auth]
-   *     summary: QR personel kartıyla giriş (auth.loginMode="card" iken)
-   *     description: Body { cardCode } — "TEKSU:<userId>:<token>". Mod "pin" ise 403.
+   *     summary: QR personel kartıyla giriş (auth.loginMethods "card" içerirken)
+   *     description: Body { cardCode } — "TEKSU:<userId>:<token>". Yöntem kapalıysa 403.
    *     responses:
    *       200: { description: Başarılı giriş }
    *       401: { description: Kart geçersiz/iptal }
@@ -148,17 +152,68 @@ export class AuthController {
 
   /**
    * @openapi
-   * /api/auth/login-mode:
+   * /api/auth/login-quick-pin:
+   *   post:
+   *     tags: [Auth]
+   *     summary: SALT hızlı-PIN ile giriş (auth.loginMethods "pin" içerirken)
+   *     description: Body { pin } — kullanıcı seçme yok; PIN benzersiz olduğundan kimliği tek başına belirler.
+   *     responses:
+   *       200: { description: Başarılı giriş }
+   *       401: { description: PIN tanınmadı }
+   *       403: { description: Hızlı PIN girişi kapalı }
+   */
+  static async loginQuickPin(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const body = (() => {
+      try {
+        return loginQuickPinSchema.parse(req.body);
+      } catch (error) {
+        next(error);
+        return null;
+      }
+    })();
+    if (!body) return;
+
+    const ipAddress = req.ip ?? null;
+    try {
+      const result = await AuthService.loginWithQuickPin(body.pin);
+      void AuditService.logEvent({
+        category: "AUTH",
+        action: "LOGIN_SUCCESS",
+        userId: result.user.userId,
+        recordId: result.user.username,
+        ipAddress,
+        payload: { method: "quick-pin" },
+      });
+      res.status(200).json({
+        success: true,
+        data: { token: result.token, user: result.user },
+        message: "Giriş başarılı",
+      });
+    } catch (error) {
+      void AuditService.logEvent({
+        category: "AUTH",
+        action: "LOGIN_FAILED",
+        recordId: "quick-pin",
+        ipAddress,
+        payload: { method: "quick-pin", reason: error instanceof Error ? error.message : "unknown" },
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/auth/login-methods:
    *   get:
    *     tags: [Auth]
-   *     summary: Mobil giriş yöntemi (public — login ekranı auth'suz okur)
+   *     summary: Mobil giriş yöntemleri (public — login ekranı auth'suz okur)
    *     responses:
-   *       200: { description: "{ mode: pin | card }" }
+   *       200: { description: "{ enabled: (list|pin|card)[], primary }" }
    */
-  static async loginMode(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async loginMethods(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const mode = await readAuthLoginMode();
-      res.status(200).json({ success: true, data: { mode } });
+      const methods = await readLoginMethods();
+      res.status(200).json({ success: true, data: methods });
     } catch (error) {
       next(error);
     }

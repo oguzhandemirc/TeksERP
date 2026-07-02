@@ -8,7 +8,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
-import { authService } from '../../services/auth.service';
+import { authService, type LoginMethod } from '../../services/auth.service';
 import { BarcodeScannerModal } from '../../components/BarcodeScannerModal';
 import PickerModal, { type PickerOption } from '../../components/PickerModal';
 import { useDeviceType, useIsPortrait } from '../../hooks/useDeviceType';
@@ -33,6 +33,13 @@ const COLORS = {
 };
 
 const PIN_LENGTH = 6;
+
+/** Giriş yöntemi etiket/ikonları — yöntem değiştirici butonları. */
+const METHOD_META: Record<LoginMethod, { label: string; icon: string }> = {
+  list: { label: 'Kullanıcı + Şifre', icon: 'account-key' },
+  pin: { label: 'Hızlı PIN', icon: 'dialpad' },
+  card: { label: 'QR Personel Kartı', icon: 'card-account-details-outline' },
+};
 
 type Cell = { key: string; type: 'digit' | 'backspace' | 'empty' };
 const NUMPAD_ROWS: Cell[][] = [
@@ -62,21 +69,32 @@ export default function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
 
-  // Giriş yöntemi (auth.loginMode ayarı — public uç): "card" ise QR personel
-  // kartı birincil akıştır; PIN her zaman fallback (kart unutuldu/bozuldu).
-  const loginModeQ = useQuery({
-    queryKey: ['auth', 'login-mode'],
-    queryFn: authService.getLoginMode,
+  // Giriş yöntemleri (auth.loginMethods ayarı — public uç): ekran ÖNCELİKLİ
+  // yöntemle açılır; diğer etkin yöntemler "Diğer giriş yöntemlerini dene"
+  // butonuyla seçenek olarak çıkar. list=kullanıcı+şifre, pin=salt hızlı-PIN
+  // (kullanıcı seçme yok — PIN benzersiz), card=QR personel kartı.
+  const methodsQ = useQuery({
+    queryKey: ['auth', 'login-methods'],
+    queryFn: authService.getLoginMethods,
     staleTime: 5 * 60 * 1000,
   });
-  const [showPinLogin, setShowPinLogin] = useState(false);
+  const enabledMethods = methodsQ.data?.enabled ?? ['list'];
+  const [pickedMethod, setPickedMethod] = useState<LoginMethod | null>(null);
+  const [methodPickerOpen, setMethodPickerOpen] = useState(false);
   const [cardScannerOpen, setCardScannerOpen] = useState(false);
-  const cardMode = loginModeQ.data === 'card' && !showPinLogin;
+  // Aktif görünüm: kullanıcı seçtiyse o; yoksa ayarın öncelikli yöntemi.
+  const activeMethod: LoginMethod =
+    pickedMethod && enabledMethods.includes(pickedMethod)
+      ? pickedMethod
+      : (methodsQ.data?.primary ?? 'list');
 
   const usersQuery = useQuery({
     queryKey: ['auth', 'mobile-users'],
     queryFn: () => authService.getMobileUsers(),
     staleTime: 5 * 60 * 1000,
+    // Kullanıcı listesi yalnız "liste+şifre" görünümünde gerekir (salt-PIN/kart
+    // görünümlerinde kimse listelenmez — gereksiz istek atma).
+    enabled: enabledMethods.includes('list'),
   });
 
   const users = usersQuery.data?.data ?? [];
@@ -106,6 +124,7 @@ export default function LoginScreen() {
   const pinRef = useRef(pin);
   const submittingRef = useRef(submitting);
   const selectedUserRef = useRef(selectedUser);
+  const methodRef = useRef<LoginMethod>(activeMethod);
   const pinInputRef = useRef<TextInput>(null);
   useEffect(() => {
     pinRef.current = pin;
@@ -116,6 +135,9 @@ export default function LoginScreen() {
   useEffect(() => {
     selectedUserRef.current = selectedUser;
   }, [selectedUser]);
+  useEffect(() => {
+    methodRef.current = activeMethod;
+  }, [activeMethod]);
 
   const submit = useCallback(
     async (rawPin: string, user: MobileUser) => {
@@ -132,6 +154,30 @@ export default function LoginScreen() {
         setError(msg);
         setPin('');
         Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg });
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [setAuth],
+  );
+
+  // SALT hızlı-PIN girişi — kullanıcı seçme yok; PIN benzersiz olduğundan kimliği
+  // tek başına belirler (backend findUnique).
+  const submitQuickPin = useCallback(
+    async (rawPin: string) => {
+      setSubmitting(true);
+      setError('');
+      try {
+        const res = await authService.loginWithQuickPin(rawPin);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Toast.show({ type: 'success', text1: 'Hoş geldin', text2: res.data.user.username });
+        await setAuth(res.data.user, res.data.token);
+      } catch (e) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        const msg = e instanceof Error ? e.message : 'PIN tanınmadı.';
+        setError(msg);
+        setPin('');
+        Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg, visibilityTime: 6000 });
       } finally {
         setSubmitting(false);
       }
@@ -161,12 +207,27 @@ export default function LoginScreen() {
     [setAuth],
   );
 
+  // 6 hane dolunca yönteme göre gönder: 'pin' = salt hızlı-PIN (kullanıcı yok);
+  // 'list' = seçili kullanıcı + şifre.
+  const submitPinByMethod = useCallback(
+    (fullPin: string) => {
+      if (methodRef.current === 'pin') {
+        void submitQuickPin(fullPin);
+        return;
+      }
+      const currentUser = selectedUserRef.current;
+      if (currentUser) void submit(fullPin, currentUser);
+    },
+    [submit, submitQuickPin],
+  );
+
   const handleKey = useCallback(
     (cell: Cell) => {
       const currentPin = pinRef.current;
       const currentSubmitting = submittingRef.current;
-      const currentUser = selectedUserRef.current;
-      if (currentSubmitting || !currentUser || cell.type === 'empty') return;
+      // Liste görünümünde kullanıcı seçilmeden PIN girilmez; salt-PIN'de gerekmez.
+      const needsUser = methodRef.current === 'list';
+      if (currentSubmitting || (needsUser && !selectedUserRef.current) || cell.type === 'empty') return;
       if (cell.type === 'backspace') {
         if (currentPin.length === 0) return;
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -179,22 +240,22 @@ export default function LoginScreen() {
       const next = currentPin + cell.key;
       setPin(next);
       setError('');
-      if (next.length === PIN_LENGTH) void submit(next, currentUser);
+      if (next.length === PIN_LENGTH) submitPinByMethod(next);
     },
-    [submit],
+    [submitPinByMethod],
   );
 
   // Telefon/dikey modda donanım numpad'i yerine Android sayı klavyesi kullanılıyor.
   const handlePinChange = useCallback(
     (text: string) => {
-      const currentUser = selectedUserRef.current;
-      if (!currentUser || submittingRef.current) return;
+      const needsUser = methodRef.current === 'list';
+      if ((needsUser && !selectedUserRef.current) || submittingRef.current) return;
       const digits = text.replace(/\D/g, '').slice(0, PIN_LENGTH);
       setPin(digits);
       setError('');
-      if (digits.length === PIN_LENGTH) void submit(digits, currentUser);
+      if (digits.length === PIN_LENGTH) submitPinByMethod(digits);
     },
-    [submit],
+    [submitPinByMethod],
   );
 
   // Telefon modu: görünmez TextInput'a odaklanıp Android sayı klavyesini açar.
@@ -202,7 +263,8 @@ export default function LoginScreen() {
   // tekrar focus() çağırmak IME'yi geri açmaz. Bu yüzden odaktaysa önce blur edip
   // bir frame sonra yeniden odaklanıyoruz — odak değişimi klavyeyi geri getiriyor.
   const focusPin = useCallback(() => {
-    if (submittingRef.current || !selectedUserRef.current) return;
+    const needsUser = methodRef.current === 'list';
+    if (submittingRef.current || (needsUser && !selectedUserRef.current)) return;
     const input = pinInputRef.current;
     if (!input) return;
     if (input.isFocused()) {
@@ -213,7 +275,7 @@ export default function LoginScreen() {
     }
   }, []);
 
-  const numpadDisabled = !selectedUser || submitting;
+  const numpadDisabled = (activeMethod === 'list' && !selectedUser) || submitting;
 
   const userSection = (
     <>
@@ -400,7 +462,47 @@ export default function LoginScreen() {
     </View>
   );
 
-  // Kart modu — QR personel kartı birincil giriş (PIN fallback butonuyla).
+  // Yöntem değiştirici — "Diğer giriş yöntemlerini dene" → diğer ETKİN yöntemler
+  // seçenek olarak çıkar (kullanıcı isteği: öncelikli yöntem açılışta, kalanlar tuşla).
+  const otherMethods = enabledMethods.filter((m) => m !== activeMethod);
+  const switchMethod = (m: LoginMethod) => {
+    setPickedMethod(m);
+    setMethodPickerOpen(false);
+    setPin('');
+    setError('');
+  };
+  const methodSwitcher =
+    otherMethods.length === 0 ? null : (
+      <View style={styles.methodSwitchWrap}>
+        {!methodPickerOpen ? (
+          <TouchableRipple
+            onPress={() => setMethodPickerOpen(true)}
+            rippleColor="rgba(99,102,241,0.2)"
+            style={styles.pinFallbackBtn}
+          >
+            <Text style={styles.pinFallbackText}>Diğer giriş yöntemlerini dene</Text>
+          </TouchableRipple>
+        ) : (
+          <View style={styles.methodRow}>
+            {otherMethods.map((m) => (
+              <TouchableRipple
+                key={m}
+                onPress={() => switchMethod(m)}
+                rippleColor="rgba(99,102,241,0.25)"
+                style={styles.methodBtn}
+              >
+                <View style={styles.methodBtnInner}>
+                  <Icon source={METHOD_META[m].icon} size={22} color="#c7d2fe" />
+                  <Text style={styles.methodBtnText}>{METHOD_META[m].label}</Text>
+                </View>
+              </TouchableRipple>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+
+  // Kart görünümü — QR personel kartıyla giriş.
   const cardSection = (
     <View style={styles.cardPanel}>
       <Icon source="card-account-details-outline" size={72} color={COLORS.accentLight} />
@@ -434,17 +536,96 @@ export default function LoginScreen() {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
-      <TouchableRipple
-        onPress={() => {
-          setError('');
-          setShowPinLogin(true);
-        }}
-        rippleColor="rgba(99,102,241,0.2)"
-        style={styles.pinFallbackBtn}
-      >
-        <Text style={styles.pinFallbackText}>Kartım yanımda değil — PIN ile giriş</Text>
-      </TouchableRipple>
+      {methodSwitcher}
     </View>
+  );
+
+  // SALT hızlı-PIN görünümü — kullanıcı seçme yok; PIN benzersiz, kimliği belirler.
+  const quickPinStatus = (
+    <View style={[styles.statusRow, isCompact && styles.statusRowCompact]}>
+      {submitting ? (
+        <>
+          <ActivityIndicator size={16} color={COLORS.accentLight} />
+          <Text style={styles.statusText}>Giriş yapılıyor...</Text>
+        </>
+      ) : error ? (
+        <>
+          <Icon source="alert-circle" size={18} color={COLORS.error} />
+          <Text style={styles.errorText}>{error}</Text>
+        </>
+      ) : (
+        <Text style={styles.statusText}>
+          {pin.length === 0 ? '6 haneli hızlı PIN\'ini gir' : `${pin.length} / ${PIN_LENGTH}`}
+        </Text>
+      )}
+    </View>
+  );
+
+  const quickPinDots = (
+    <View style={[styles.pinRow, isCompact && styles.pinRowCompact]}>
+      {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+        <View
+          key={i}
+          style={[
+            styles.pinDot,
+            i < pin.length && styles.pinDotFilled,
+            i === pin.length && !submitting && styles.pinDotActive,
+            !!error && styles.pinDotError,
+          ]}
+        />
+      ))}
+    </View>
+  );
+
+  const quickPinSection = (
+    <>
+      <Text style={styles.sectionLabel}>HIZLI PIN İLE GİRİŞ</Text>
+      <Text style={styles.quickPinHint}>
+        Sana özel 6 haneli hızlı PIN'i gir — kullanıcı seçmene gerek yok.
+      </Text>
+      {quickPinDots}
+      {quickPinStatus}
+    </>
+  );
+
+  const quickPinSectionCompact = (
+    <>
+      <Text style={styles.sectionLabel}>HIZLI PIN İLE GİRİŞ</Text>
+      <Text style={styles.quickPinHint}>
+        Sana özel 6 haneli hızlı PIN'i gir — kullanıcı seçmene gerek yok.
+      </Text>
+      <TouchableRipple
+        onPress={focusPin}
+        disabled={submitting}
+        rippleColor="rgba(99,102,241,0.25)"
+        borderless
+        style={styles.pinInputTap}
+      >
+        <View style={styles.pinInputWrap}>
+          {quickPinDots}
+          <TextInput
+            ref={pinInputRef}
+            value={pin}
+            onChangeText={handlePinChange}
+            keyboardType="number-pad"
+            maxLength={PIN_LENGTH}
+            autoFocus
+            caretHidden
+            importantForAutofill="no"
+            autoComplete="off"
+            autoCorrect={false}
+            contextMenuHidden
+            selectTextOnFocus={false}
+            editable={!submitting}
+            returnKeyType="done"
+            underlineColorAndroid="transparent"
+            style={styles.overlayInput}
+          />
+        </View>
+      </TouchableRipple>
+      <Text style={styles.pinHelper}>Hane girmek için dokunun</Text>
+      {quickPinStatus}
+    </>
   );
 
   return (
@@ -454,10 +635,28 @@ export default function LoginScreen() {
     >
       <TopBar compact={isCompact} />
 
-      {cardMode ? (
+      {activeMethod === 'card' ? (
         <ScrollView contentContainerStyle={styles.cardWrap} keyboardShouldPersistTaps="handled">
           {cardSection}
         </ScrollView>
+      ) : activeMethod === 'pin' ? (
+        isCompact ? (
+          <ScrollView
+            contentContainerStyle={styles.compactContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.compactSection}>{quickPinSectionCompact}</View>
+            {methodSwitcher}
+          </ScrollView>
+        ) : (
+          <View style={styles.main}>
+            <View style={styles.leftPanel}>
+              {quickPinSection}
+              {methodSwitcher}
+            </View>
+            <View style={styles.rightPanel}>{numpad}</View>
+          </View>
+        )
       ) : isCompact ? (
         <ScrollView
           contentContainerStyle={styles.compactContent}
@@ -465,30 +664,14 @@ export default function LoginScreen() {
         >
           <View style={styles.compactSection}>{userSection}</View>
           <View style={styles.compactSection}>{pinSectionCompact}</View>
-          {loginModeQ.data === 'card' && (
-            <TouchableRipple
-              onPress={() => setShowPinLogin(false)}
-              rippleColor="rgba(99,102,241,0.2)"
-              style={styles.pinFallbackBtn}
-            >
-              <Text style={styles.pinFallbackText}>← Kart ile girişe dön</Text>
-            </TouchableRipple>
-          )}
+          {methodSwitcher}
         </ScrollView>
       ) : (
         <View style={styles.main}>
           <View style={styles.leftPanel}>
             {userSection}
             {pinSection}
-            {loginModeQ.data === 'card' && (
-              <TouchableRipple
-                onPress={() => setShowPinLogin(false)}
-                rippleColor="rgba(99,102,241,0.2)"
-                style={styles.pinFallbackBtn}
-              >
-                <Text style={styles.pinFallbackText}>← Kart ile girişe dön</Text>
-              </TouchableRipple>
-            )}
+            {methodSwitcher}
           </View>
           <View style={styles.rightPanel}>{numpad}</View>
         </View>
@@ -723,6 +906,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     textDecorationLine: 'underline',
   },
+  // Yöntem değiştirici ("Diğer giriş yöntemlerini dene" → seçenek butonları)
+  methodSwitchWrap: { alignSelf: 'stretch', alignItems: 'center', marginTop: 6 },
+  methodRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
+  methodBtn: {
+    borderRadius: 12,
+    backgroundColor: COLORS.bgDarker,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  methodBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 52,
+  },
+  methodBtnText: { color: '#c7d2fe', fontSize: 15, fontWeight: '700' },
+  quickPinHint: { color: COLORS.subtext, fontSize: 14, lineHeight: 20, marginTop: 6, marginBottom: 12 },
 
   topBar: {
     flexDirection: 'row',

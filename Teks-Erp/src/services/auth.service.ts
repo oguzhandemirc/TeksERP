@@ -3,13 +3,14 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { randomBytes } from "crypto";
+import { randomBytes, randomInt } from "crypto";
 import { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { readSessionDurationHours, readAuthLoginMode } from "./system-setting.service";
+import { readSessionDurationHours, readLoginMethods } from "./system-setting.service";
 
 /** Personel kartı QR içeriği: TEKSU:<userId>:<32-hex token>. Makine QR'ı ham
  *  makine kodu (MAK-...) taşıdığından prefix çakışması yok. */
@@ -61,18 +62,18 @@ export class AuthService {
   }
 
   /**
-   * QR personel kartıyla giriş — YALNIZ auth.loginMode="card" iken (kapalıyken
-   * kart altyapısı saldırı yüzeyi açmaz; PIN girişi her modda çalışır — fallback).
+   * QR personel kartıyla giriş — YALNIZ auth.loginMethods "card" içerirken
+   * (kapalıyken kart altyapısı saldırı yüzeyi açmaz; klasik login HEP açık).
    * Kart içeriği "TEKSU:<userId>:<token>"; token users.cardToken'daki 32-hex sır.
    * Kart kaybolursa admin ROTASYON yapar (yeni token) → eski kart anında ölür.
    */
   static async loginWithCard(
     cardCode: string
   ): Promise<{ token: string; user: JwtPayload }> {
-    const mode = await readAuthLoginMode();
-    if (mode !== "card") {
+    const methods = await readLoginMethods();
+    if (!methods.enabled.includes("card")) {
       throw AppError.forbidden(
-        "Kartla giriş kapalı — Genel Ayarlar'dan giriş yöntemi 'Kart' yapılabilir"
+        "Kartla giriş kapalı — Genel Ayarlar'dan giriş yöntemlerine 'QR kart' eklenebilir"
       );
     }
     const m = CARD_CODE_RE.exec((cardCode ?? "").trim());
@@ -85,6 +86,96 @@ export class AuthService {
       throw AppError.unauthorized("Kart geçersiz veya iptal edilmiş — yöneticiden yeni kart isteyin");
     }
     return this.issueToken(user);
+  }
+
+  /**
+   * SALT hızlı-PIN ile giriş — YALNIZ auth.loginMethods "pin" içerirken. Kullanıcı
+   * seçme/ID yok: PIN sistem genelinde BENZERSİZ (users.quickPin @unique) olduğundan
+   * tek başına kimliği belirler (findUnique). Şifreden AYRI alandır.
+   */
+  static async loginWithQuickPin(
+    pin: string
+  ): Promise<{ token: string; user: JwtPayload }> {
+    const methods = await readLoginMethods();
+    if (!methods.enabled.includes("pin")) {
+      throw AppError.forbidden(
+        "Hızlı PIN ile giriş kapalı — Genel Ayarlar'dan giriş yöntemlerine 'Hızlı PIN' eklenebilir"
+      );
+    }
+    const normalized = (pin ?? "").trim();
+    if (!/^\d{6}$/.test(normalized)) {
+      throw AppError.unauthorized("Geçersiz PIN");
+    }
+    const user = await prisma.user.findFirst({
+      where: { quickPin: normalized, isActive: true },
+      select: { id: true, username: true, tokenVersion: true },
+    });
+    if (!user) throw AppError.unauthorized("PIN tanınmadı — yöneticinizden hızlı PIN isteyin");
+    return this.issueToken(user);
+  }
+
+  /**
+   * Admin: kullanıcıya hızlı PIN ata. `pin` verilirse (6 hane) o kullanılır —
+   * BAŞKASINDA varsa 409 (benzersizlik kimliğin temeli); verilmezse çakışmayan
+   * rastgele 6 hane üretilir. Düz döner (admin operatöre iletir). Açık oturumlar
+   * etkilenmez. `clear=true` → PIN kaldırılır (salt-PIN girişi kapanır).
+   */
+  static async setQuickPin(
+    userId: string,
+    input: { pin?: string; clear?: boolean },
+    actorUserId?: string
+  ): Promise<{ pin: string | null }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, isActive: true, quickPin: true },
+    });
+    if (!user || !user.isActive) throw AppError.notFound("Kullanıcı bulunamadı veya pasif");
+
+    if (input.clear) {
+      await prisma.user.update({ where: { id: userId }, data: { quickPin: null } });
+      await AuditService.log({
+        userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
+        recordId: userId, newData: { username: user.username, cleared: true },
+      }).catch(() => undefined);
+      return { pin: null };
+    }
+
+    if (input.pin !== undefined) {
+      const manual = input.pin.trim();
+      if (!/^\d{6}$/.test(manual)) throw AppError.badRequest("Hızlı PIN 6 haneli rakam olmalı");
+      try {
+        await prisma.user.update({ where: { id: userId }, data: { quickPin: manual } });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          throw AppError.conflict(
+            "Bu PIN başka bir kullanıcıda tanımlı — hızlı PIN benzersiz olmalı (farklı bir PIN girin veya rastgele üretin)"
+          );
+        }
+        throw e;
+      }
+      await AuditService.log({
+        userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
+        recordId: userId, newData: { username: user.username, rotated: user.quickPin != null },
+      }).catch(() => undefined);
+      return { pin: manual };
+    }
+
+    // Rastgele üret — P2002'de yeniden dene (1M kombinasyonda çakışma nadir).
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate = String(randomInt(0, 1_000_000)).padStart(6, "0");
+      try {
+        await prisma.user.update({ where: { id: userId }, data: { quickPin: candidate } });
+        await AuditService.log({
+          userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
+          recordId: userId, newData: { username: user.username, rotated: user.quickPin != null },
+        }).catch(() => undefined);
+        return { pin: candidate };
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
+        throw e;
+      }
+    }
+    throw AppError.internal("Benzersiz PIN üretilemedi — tekrar deneyin");
   }
 
   /**

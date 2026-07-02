@@ -8,6 +8,9 @@ import {
 
 export type { CompanyLetterhead, DocumentsConfig } from "./documentConfig";
 
+/** Mobil giriş yöntemleri (auth.loginMethods). */
+export type LoginMethod = "list" | "pin" | "card";
+
 export type TravelerCardPageSize = "A4" | "A5";
 export type TravelerCardFontWeight = "light" | "normal" | "bold";
 export interface TravelerCardMargins {
@@ -155,9 +158,10 @@ export interface FeatureFlags {
    *  = 10 saat; 0 = kapalı). Backend TEMBEL enforce: süre dolan oturum okuma anında IDLE
    *  kapanır; operatör bir sonraki işlemde yeniden yer onayı verir. */
   workSessionIdleTimeoutMinutes: number;
-  /** Mobil giriş yöntemi: "pin" (default — kullanıcı listesi + 6 haneli PIN) | "card"
-   *  (QR personel kartı okut; PIN her zaman fallback). Backend ENFORCE eder. */
-  loginMode: "pin" | "card";
+  /** Mobil giriş yöntemleri: list (kullanıcı+şifre), pin (SALT hızlı-PIN — kullanıcı
+   *  seçme yok, benzersiz PIN), card (QR personel kartı). En az biri etkin; login
+   *  ekranı primary ile açılır, diğerleri "Diğer giriş yöntemleri"nde. Backend ENFORCE. */
+  loginMethods: { enabled: LoginMethod[]; primary: LoginMethod };
   /** Saha #6: top etiketi kopya adedi (default 2 — topun üstüne + altına). 1-5. */
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). */

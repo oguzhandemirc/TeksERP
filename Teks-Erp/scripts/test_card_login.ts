@@ -1,5 +1,5 @@
 // =============================================================================
-// Test: QR personel kartıyla giriş (auth.loginMode="card") — Faz 5
+// Test: QR personel kartıyla giriş (auth.loginMethods "card" içerirken) — Faz 5
 // Çalıştır: npx tsx scripts/test_card_login.ts
 // Doğrulananlar:
 //   1. mod "pin" (default) iken login-card 403 (kart altyapısı kapalı)
@@ -29,8 +29,8 @@ async function main() {
   if (!admin) throw new Error("admin kullanıcısı yok (npm run seed)");
 
   // Ayarın test öncesi değerini sakla (finally'de geri yüklenir).
-  const prevMode = await prisma.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.AUTH_LOGIN_MODE },
+  const prevMethods = await prisma.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_LOGIN_METHODS },
     select: { value: true },
   });
 
@@ -54,9 +54,11 @@ async function main() {
   });
 
   try {
-    // 1) default mod "pin" → login-card kapalı
-    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.AUTH_LOGIN_MODE } });
-    await expectErr("mod pin iken login-card 403", "Kartla giriş kapalı", () =>
+    // 1) default (yalnız liste) → login-card kapalı
+    await prisma.systemSetting.deleteMany({
+      where: { key: { in: [SETTING_KEYS.AUTH_LOGIN_METHODS, SETTING_KEYS.AUTH_LOGIN_MODE] } },
+    });
+    await expectErr("card etkin değilken login-card 403", "Kartla giriş kapalı", () =>
       AuthService.loginWithCard("TEKSU:x:y"));
 
     // 2) kart üret
@@ -68,8 +70,11 @@ async function main() {
     );
     check("ilk üretimde rotated=false", issued.rotated === false);
 
-    // 3) mod "card" → geçerli kartla giriş
-    await systemSettingService.setFeatureFlags({ loginMode: "card" }, admin.id);
+    // 3) card etkin → geçerli kartla giriş
+    await systemSettingService.setFeatureFlags(
+      { loginMethods: { enabled: ["card", "list"], primary: "card" } },
+      admin.id,
+    );
     const login1 = await AuthService.loginWithCard(issued.cardCode);
     check("kartla giriş → JWT + doğru kullanıcı", !!login1.token && login1.user.username === testUser.username);
 
@@ -92,13 +97,13 @@ async function main() {
     check("PIN girişi card modunda da çalışır (fallback)", pinLogin.user.userId === testUser.id);
   } finally {
     // Ayarı test öncesi haline döndür
-    if (prevMode) {
+    if (prevMethods) {
       await prisma.systemSetting.update({
-        where: { key: SETTING_KEYS.AUTH_LOGIN_MODE },
-        data: { value: prevMode.value as never },
+        where: { key: SETTING_KEYS.AUTH_LOGIN_METHODS },
+        data: { value: prevMethods.value as never },
       }).catch(() => {});
     } else {
-      await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.AUTH_LOGIN_MODE } }).catch(() => {});
+      await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.AUTH_LOGIN_METHODS } }).catch(() => {});
     }
     await prisma.user.deleteMany({ where: { id: { in: [testUser.id, passiveUser.id] } } }).catch(() => {});
   }

@@ -346,6 +346,40 @@ router.post(
   }
 );
 
+const quickPinSchema = z.object({
+  // pin verilmezse rastgele üretilir; clear=true PIN'i kaldırır.
+  pin: z.string().regex(/^\d{6}$/, "Hızlı PIN 6 haneli rakam olmalı").optional(),
+  clear: z.boolean().optional(),
+});
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/quick-pin:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Hızlı PIN ata/üret/kaldır (salt-PIN girişi için — benzersiz)
+ *     description: Body { pin? (6 hane), clear? }. pin yoksa çakışmayan rastgele üretilir; başkasında varsa 409.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/users/:id/quick-pin",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = quickPinSchema.parse(req.body ?? {});
+      const result = await AuthService.setQuickPin(
+        req.params.id as string,
+        body,
+        req.user?.userId
+      );
+      res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 const applyTemplateSchema = z.object({
   templateId: z.string().min(1),
   mode: z.enum(["merge", "replace"]).default("merge"),

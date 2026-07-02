@@ -102,10 +102,17 @@ export const SETTING_KEYS = {
    *  timer YOK — aktif oturum okunurken lastActivityAt bu süreden eskiyse IDLE ile
    *  kapatılır (work-session.helper). auth.idleTimeoutMinutes'ten (ekran kilidi) AYRI. */
   WORK_SESSION_IDLE_TIMEOUT_MINUTES: "workSession.idleTimeoutMinutes",
-  /** Mobil giriş yöntemi: "pin" (default — kullanıcı listesi + 6 haneli PIN) veya
-   *  "card" (QR personel kartı okut; PIN her zaman fallback olarak kalır).
-   *  Backend ENFORCE eder: /auth/login-card yalnız "card" modunda çalışır. */
+  /** ESKİ mobil giriş yöntemi ("pin"|"card") — AUTH_LOGIN_METHODS'a evrildi; yalnız
+   *  geriye-uyum okuma için tutulur (yeni key yoksa buradan türetilir). Yazılmaz. */
   AUTH_LOGIN_MODE: "auth.loginMode",
+  /** Mobil giriş yöntemleri (JSON): { enabled: ("list"|"pin"|"card")[], primary }.
+   *  list = kullanıcı listesi + şifre/PIN (klasik); pin = SALT hızlı-PIN (kullanıcı
+   *  seçme yok — users.quickPin benzersiz); card = QR personel kartı. En az bir
+   *  yöntem etkin, primary etkinlerden biri. Login ekranı primary ile açılır;
+   *  diğer etkin yöntemler "Diğer giriş yöntemleri"nde sunulur. Backend ENFORCE:
+   *  login-card yalnız card, login-quick-pin yalnız pin etkinken çalışır
+   *  (klasik /auth/login HEP açık — Electron paneli + acil kapı). */
+  AUTH_LOGIN_METHODS: "auth.loginMethods",
   /** Saha #6: top etiketi kaç kopya basılır (default 2 — topun bir üstüne bir
    *  altına yapıştırılıyor). /labels/rolls/:id/html bu kadar sayfa döner;
    *  çağıran ?copies= ile tek baskı için override edebilir. 1-5 arası. */
@@ -139,9 +146,14 @@ const MAX_IDLE_TIMEOUT_MINUTES = 1440;
 export const DEFAULT_WORK_SESSION_IDLE_MINUTES = 600;
 /** Çalışma oturumu idle tavanı — dakika (24 saat). */
 const MAX_WORK_SESSION_IDLE_MINUTES = 1440;
-/** Mobil giriş yöntemi türü + varsayılanı. */
-export type AuthLoginMode = "pin" | "card";
-export const DEFAULT_AUTH_LOGIN_MODE: AuthLoginMode = "pin";
+/** Mobil giriş yöntemleri. list=liste+şifre, pin=salt hızlı-PIN, card=QR kart. */
+export type LoginMethod = "list" | "pin" | "card";
+export interface LoginMethodsConfig {
+  enabled: LoginMethod[];
+  primary: LoginMethod;
+}
+export const LOGIN_METHODS: LoginMethod[] = ["list", "pin", "card"];
+export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = { enabled: ["list"], primary: "list" };
 
 /** Firma adı verilmediğinde gösterilen varsayılan. */
 export const DEFAULT_COMPANY_NAME = "Adnan Şahin Tekstil";
@@ -412,9 +424,10 @@ export interface FeatureFlags {
   /** Çalışma oturumu (kim hangi makinede) idle zaman aşımı — dakika (default 600 =
    *  10 saat; 0 = kapalı). Backend TEMBEL enforce eder (okuma anında IDLE kapatma). */
   workSessionIdleTimeoutMinutes: number;
-  /** Mobil giriş yöntemi: "pin" (default) | "card" (QR personel kartı; PIN fallback).
-   *  Backend ENFORCE eder — /auth/login-card yalnız "card" modunda çalışır. */
-  loginMode: AuthLoginMode;
+  /** Mobil giriş yöntemleri: { enabled: ("list"|"pin"|"card")[], primary }. Login
+   *  ekranı primary ile açılır; diğer etkinler "Diğer giriş yöntemleri"nde. Backend
+   *  ENFORCE — card/pin uçları yalnız etkinken çalışır (klasik login hep açık). */
+  loginMethods: LoginMethodsConfig;
   /** Saha #6: top etiketi kopya adedi (default 2 — üst+alt yapıştırma). 1-5. */
   labelCopies: number;
   /** Saha #20: top adı format şablonu ({item} {color} {width} {quality}). Frontend okur. */
@@ -572,7 +585,7 @@ export class SystemSettingService {
       sessionDurationHours: await readSessionDurationHours(cacheClient),
       idleTimeoutMinutes: await readIdleTimeoutMinutes(cacheClient),
       workSessionIdleTimeoutMinutes: await readWorkSessionIdleTimeoutMinutes(cacheClient),
-      loginMode: await readAuthLoginMode(cacheClient),
+      loginMethods: await readLoginMethods(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
       rollNameTemplate: await readRollNameTemplate(cacheClient),
       printerLanguage: await readPrinterLanguage(cacheClient),
@@ -835,15 +848,26 @@ export class SystemSettingService {
       );
     }
 
-    if (Object.prototype.hasOwnProperty.call(input, "loginMode")) {
-      const v = input.loginMode;
-      if (v !== "pin" && v !== "card") {
-        throw AppError.badRequest('Giriş yöntemi "pin" veya "card" olmalı');
+    if (Object.prototype.hasOwnProperty.call(input, "loginMethods")) {
+      const v = input.loginMethods;
+      const valid =
+        v &&
+        typeof v === "object" &&
+        Array.isArray(v.enabled) &&
+        v.enabled.length > 0 &&
+        v.enabled.every((m) => LOGIN_METHODS.includes(m)) &&
+        new Set(v.enabled).size === v.enabled.length &&
+        LOGIN_METHODS.includes(v.primary) &&
+        v.enabled.includes(v.primary);
+      if (!valid) {
+        throw AppError.badRequest(
+          "Giriş yöntemleri geçersiz — en az bir yöntem (list/pin/card) etkin olmalı ve öncelikli yöntem etkinlerden biri olmalı",
+        );
       }
       await this.set(
-        SETTING_KEYS.AUTH_LOGIN_MODE,
-        v,
-        'Mobil giriş yöntemi: "pin" (kullanıcı + PIN) veya "card" (QR personel kartı; PIN fallback)',
+        SETTING_KEYS.AUTH_LOGIN_METHODS,
+        { enabled: v.enabled, primary: v.primary },
+        "Mobil giriş yöntemleri: list (kullanıcı+şifre), pin (salt hızlı-PIN), card (QR kart) + öncelikli yöntem",
         userId
       );
     }
@@ -1328,20 +1352,40 @@ export async function readWorkSessionIdleTimeoutMinutes(
 }
 
 /**
- * Mobil giriş yöntemini okur: "pin" (default) | "card". Backend ENFORCE eder —
- * /auth/login-card yalnız "card" modunda çalışır (kapalıyken kart altyapısı
- * saldırı yüzeyi açmaz); PIN girişi her iki modda da çalışır (fallback).
+ * Mobil giriş yöntemlerini okur: { enabled, primary }. Backend ENFORCE eder —
+ * login-card yalnız "card", login-quick-pin yalnız "pin" etkinken çalışır
+ * (kapalıyken ilgili altyapı saldırı yüzeyi açmaz); klasik /auth/login HEP açık.
+ * GERİYE-UYUM: yeni key yoksa eski auth.loginMode'dan türetilir
+ * ("card" → kart öncelikli + liste yedek; "pin"/yok → yalnız liste).
  */
-export async function readAuthLoginMode(
+export async function readLoginMethods(
   tx?: Pick<typeof prisma, "systemSetting">,
-): Promise<AuthLoginMode> {
+): Promise<LoginMethodsConfig> {
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_LOGIN_METHODS },
+    select: { value: true },
+  });
+  const v = setting?.value as { enabled?: unknown; primary?: unknown } | null | undefined;
+  if (v && typeof v === "object" && Array.isArray(v.enabled)) {
+    const enabled = v.enabled.filter((m): m is LoginMethod =>
+      LOGIN_METHODS.includes(m as LoginMethod),
+    );
+    if (enabled.length > 0) {
+      const primary =
+        typeof v.primary === "string" && enabled.includes(v.primary as LoginMethod)
+          ? (v.primary as LoginMethod)
+          : enabled[0];
+      return { enabled: Array.from(new Set(enabled)), primary };
+    }
+  }
+  // Geriye-uyum: eski tekil mod (Faz 5 ilk hali).
+  const legacy = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.AUTH_LOGIN_MODE },
     select: { value: true },
   });
-  const v = setting?.value;
-  return v === "card" ? "card" : DEFAULT_AUTH_LOGIN_MODE;
+  if (legacy?.value === "card") return { enabled: ["card", "list"], primary: "card" };
+  return DEFAULT_LOGIN_METHODS;
 }
 
 /**

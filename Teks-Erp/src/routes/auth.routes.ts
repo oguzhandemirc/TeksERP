@@ -10,9 +10,10 @@ import { verifyToken } from "../middlewares/auth.middleware";
 const router = Router();
 
 // Public (device-gated — global resolveDevice middleware + handler check)
-router.post("/login", AuthController.login);
-router.post("/login-card", AuthController.loginCard); // QR personel kartı (auth.loginMode="card")
-router.get("/login-mode", AuthController.loginMode); // login ekranı auth'suz okur
+router.post("/login", AuthController.login); // klasik (liste+şifre) — HEP açık (panel + acil kapı)
+router.post("/login-card", AuthController.loginCard); // QR personel kartı ("card" etkinken)
+router.post("/login-quick-pin", AuthController.loginQuickPin); // salt hızlı-PIN ("pin" etkinken)
+router.get("/login-methods", AuthController.loginMethods); // login ekranı auth'suz okur
 router.get("/mobile-users", AuthController.mobileUsers);
 
 // Protected

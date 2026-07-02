@@ -5,12 +5,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
-import { featureFlagService } from "@/services/featureFlagService";
+import { featureFlagService, type LoginMethod } from "@/services/featureFlagService";
 
 const DEFAULT_SESSION_HOURS = 8;
 const MAX_SESSION_HOURS = 720; // 30 gün
 const MAX_IDLE_MINUTES = 1440; // 24 saat
 const DEFAULT_WORK_SESSION_IDLE = 600; // 10 saat
+const DEFAULT_LOGIN_METHODS: { enabled: LoginMethod[]; primary: LoginMethod } = {
+  enabled: ["list"],
+  primary: "list",
+};
+const METHOD_LABELS: Record<LoginMethod, string> = {
+  list: "Kullanıcı + Şifre",
+  pin: "Hızlı PIN",
+  card: "QR Personel Kartı",
+};
+const METHOD_DESCS: Record<LoginMethod, string> = {
+  list: "Klasik: kullanıcı listeden seçilir, şifre/PIN girilir.",
+  pin: "SALT PIN: kullanıcı seçme yok — kişiye özel BENZERSİZ 6 haneli hızlı PIN kimliği belirler.",
+  card: "QR personel kartı okutulur — kullanıcı seçme ve PIN gerekmez.",
+};
 
 /**
  * Oturum & Güvenlik paneli — üç ayrı sayısal ayar:
@@ -29,26 +43,29 @@ export function SessionSettingsSection() {
   const currentIdle = flagsQ.data?.data?.idleTimeoutMinutes ?? 0;
   const currentWorkIdle =
     flagsQ.data?.data?.workSessionIdleTimeoutMinutes ?? DEFAULT_WORK_SESSION_IDLE;
-  const currentLoginMode = flagsQ.data?.data?.loginMode ?? "pin";
+  const currentMethods = flagsQ.data?.data?.loginMethods ?? DEFAULT_LOGIN_METHODS;
 
   // String tutulur — input'ta geçici boş değere izin vermek için (kaydederken parse edilir).
   const [session, setSession] = useState(String(currentSession));
   const [idle, setIdle] = useState(String(currentIdle));
   const [workIdle, setWorkIdle] = useState(String(currentWorkIdle));
-  const [loginMode, setLoginMode] = useState<"pin" | "card">(currentLoginMode);
+  const [enabledMethods, setEnabledMethods] = useState<LoginMethod[]>(currentMethods.enabled);
+  const [primaryMethod, setPrimaryMethod] = useState<LoginMethod>(currentMethods.primary);
   useEffect(() => {
     setSession(String(currentSession));
     setIdle(String(currentIdle));
     setWorkIdle(String(currentWorkIdle));
-    setLoginMode(currentLoginMode);
-  }, [currentSession, currentIdle, currentWorkIdle, currentLoginMode]);
+    setEnabledMethods(currentMethods.enabled);
+    setPrimaryMethod(currentMethods.primary);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSession, currentIdle, currentWorkIdle, JSON.stringify(currentMethods)]);
 
   const mut = useMutation({
     mutationFn: (payload: {
       sessionDurationHours: number;
       idleTimeoutMinutes: number;
       workSessionIdleTimeoutMinutes: number;
-      loginMode: "pin" | "card";
+      loginMethods: { enabled: LoginMethod[]; primary: LoginMethod };
     }) => featureFlagService.update(payload),
     onSuccess: () => {
       toast.success("Oturum ayarları kaydedildi.");
@@ -66,11 +83,23 @@ export function SessionSettingsSection() {
   const idleValid = Number.isInteger(idleNum) && idleNum >= 0 && idleNum <= MAX_IDLE_MINUTES;
   const workIdleValid =
     Number.isInteger(workIdleNum) && workIdleNum >= 0 && workIdleNum <= MAX_IDLE_MINUTES;
+  const methodsValid = enabledMethods.length > 0 && enabledMethods.includes(primaryMethod);
   const dirty =
     sessionNum !== currentSession ||
     idleNum !== currentIdle ||
     workIdleNum !== currentWorkIdle ||
-    loginMode !== currentLoginMode;
+    JSON.stringify([...enabledMethods].sort()) !== JSON.stringify([...currentMethods.enabled].sort()) ||
+    primaryMethod !== currentMethods.primary;
+
+  const toggleMethod = (m: LoginMethod, on: boolean) => {
+    setEnabledMethods((prev) => {
+      const next = on ? [...new Set([...prev, m])] : prev.filter((x) => x !== m);
+      // Öncelikli yöntem kapatıldıysa kalan ilk yönteme kaydır.
+      const fallback = next[0];
+      if (!on && primaryMethod === m && fallback) setPrimaryMethod(fallback);
+      return next;
+    });
+  };
 
   return (
     <PermissionGate
@@ -87,8 +116,8 @@ export function SessionSettingsSection() {
             value={currentWorkIdle > 0 ? `${currentWorkIdle} dakika` : "Kapalı"}
           />
           <ReadOnlyLine
-            label="Mobil giriş yöntemi"
-            value={currentLoginMode === "card" ? "QR personel kartı" : "PIN"}
+            label="Mobil giriş yöntemleri"
+            value={`${currentMethods.enabled.map((m) => METHOD_LABELS[m]).join(" · ")} (öncelik: ${METHOD_LABELS[currentMethods.primary]})`}
           />
           <p className="pt-2 text-xs text-muted-foreground">
             Bu ayarları değiştirmek için <code>admin:settings</code> yetkisi gerekir.
@@ -140,35 +169,62 @@ export function SessionSettingsSection() {
         </div>
 
         <div className="border-t pt-4">
-          <label htmlFor="login-mode" className="text-sm font-medium">
-            Mobil giriş yöntemi
-          </label>
+          <span className="text-sm font-medium">Mobil giriş yöntemleri</span>
           <p className="text-xs text-muted-foreground">
-            "QR personel kartı" seçilirse sahadaki giriş ekranı kart okutmayı ister (kullanıcı
-            seçme + PIN gerekmez; PIN "kartım yanımda değil" yedeği olarak kalır). Kartlar
-            Yetkilendirme → Kullanıcılar → Personel Kartı sekmesinden basılır.
+            En az bir yöntem seçili olmalı. Sahadaki giriş ekranı <b>öncelikli</b> yöntemle
+            açılır; diğer seçili yöntemler "Diğer giriş yöntemlerini dene" tuşuyla sunulur.
+            Kartlar ve hızlı PIN'ler Yetkilendirme → Kullanıcılar'dan yönetilir.
           </p>
-          <select
-            id="login-mode"
-            className="mt-2 flex h-9 w-64 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-            value={loginMode}
-            onChange={(e) => setLoginMode(e.target.value as "pin" | "card")}
-          >
-            <option value="pin">PIN (varsayılan)</option>
-            <option value="card">QR personel kartı (PIN yedek)</option>
-          </select>
+          <div className="mt-2 space-y-2">
+            {(Object.keys(METHOD_LABELS) as LoginMethod[]).map((m) => (
+              <label key={m} className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={enabledMethods.includes(m)}
+                  onChange={(e) => toggleMethod(m, e.target.checked)}
+                />
+                <span>
+                  {METHOD_LABELS[m]}
+                  <span className="block text-xs text-muted-foreground">{METHOD_DESCS[m]}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="mt-3">
+            <label htmlFor="primary-method" className="text-xs font-medium">
+              Öncelikli yöntem
+            </label>
+            <select
+              id="primary-method"
+              className="mt-1 flex h-9 w-64 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              value={primaryMethod}
+              onChange={(e) => setPrimaryMethod(e.target.value as LoginMethod)}
+            >
+              {enabledMethods.map((m) => (
+                <option key={m} value={m}>
+                  {METHOD_LABELS[m]}
+                </option>
+              ))}
+            </select>
+          </div>
+          {!methodsValid && (
+            <p className="mt-1 text-xs text-destructive">
+              En az bir yöntem seçin; öncelikli yöntem seçililerden biri olmalı.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
-            disabled={!dirty || !sessionValid || !idleValid || !workIdleValid || mut.isPending}
+            disabled={!dirty || !sessionValid || !idleValid || !workIdleValid || !methodsValid || mut.isPending}
             onClick={() =>
               mut.mutate({
                 sessionDurationHours: sessionNum,
                 idleTimeoutMinutes: idleNum,
                 workSessionIdleTimeoutMinutes: workIdleNum,
-                loginMode,
+                loginMethods: { enabled: enabledMethods, primary: primaryMethod },
               })
             }
           >

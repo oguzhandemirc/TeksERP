@@ -26,6 +26,16 @@ export const adminUserService = {
       )
       .then((r) => r.data),
 
+  /** Hızlı PIN ata/üret/kaldır (salt-PIN girişi — benzersiz 6 hane). pin verilmezse
+   *  rastgele üretilir; başkasında varsa backend 409 döner; clear=true kaldırır. */
+  setQuickPin: (
+    userId: string,
+    input: { pin?: string; clear?: boolean },
+  ): Promise<ApiResponse<{ pin: string | null }>> =>
+    apiClient
+      .post<ApiResponse<{ pin: string | null }>>(`/api/admin/users/${userId}/quick-pin`, input)
+      .then((r) => r.data),
+
   getPermissions: (userId: string): Promise<ApiResponse<UserPermissionGrant[]>> =>
     apiClient
       .get<ApiResponse<UserPermissionGrant[]>>(`/api/admin/users/${userId}/permissions`)
