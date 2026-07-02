@@ -29,9 +29,20 @@ export default function AwaitingAssignmentScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
+  // Bu ekranda getStatus yerine ANNOUNCE poll'la: announce idempotenttir ve
+  // cihaz panelden KALICI SİLİNMİŞSE kaydı yeniden açar (PENDING) + güncel durumu
+  // döner. Böylece silme sonrası tablet Ayarlar'dan "kendini bildir" aramadan
+  // kendiliğinden yeniden onay listesine düşer. deviceId store'dan (boot'ta üretilir).
+  // NOT: RootNavigator'ın ['device','status'] getStatus poll'undan AYRI anahtar —
+  // aynı key + farklı queryFn React Query'de belirsiz davranış. Bu ekran announce'la
+  // self-heal eder; gate'i RootNavigator'ın getStatus'u sürer (5s'de bir yakalar).
   const statusQ = useQuery({
-    queryKey: ['device', 'status'],
-    queryFn: deviceService.getStatus,
+    queryKey: ['device', 'announce-poll'],
+    queryFn: async () => {
+      if (!deviceId) return deviceService.getStatus();
+      return deviceService.announce({ deviceId });
+    },
+    enabled: deviceId != null,
     refetchInterval: (q) => (q.state.data?.status === 'APPROVED' ? false : 5000),
   });
   const status = statusQ.data?.status ?? 'UNKNOWN';

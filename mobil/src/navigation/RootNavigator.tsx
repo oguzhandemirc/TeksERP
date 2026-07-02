@@ -44,12 +44,16 @@ export default function RootNavigator() {
       staleTime: 5 * 60 * 1000,
     }).data ?? false;
 
-  // Atama durumu — zorunluyken APPROVED olana kadar poll'lanır.
+  // Atama durumu — SÜREKLİ poll'lanır (APPROVED olduktan SONRA da). Böylece cihaz
+  // sonradan panelden pasifleştirilir/silinir/onayı geri alınırsa tablet bunu fark
+  // eder ve "Cihaz Atama Bekliyor" ekranına KENDİLİĞİNDEN döner (operatör Ayarlar'dan
+  // "kendini bildir" aramaz). Onaylıyken seyrek (15s — sadece durum kaybını yakala),
+  // beklerken sık (5s — onay anında hızlı geç).
   const assignment = useQuery({
     queryKey: ['device', 'status'],
     queryFn: deviceService.getStatus,
     enabled: assignmentRequired,
-    refetchInterval: (q) => (q.state.data?.status === 'APPROVED' ? false : 5000),
+    refetchInterval: (q) => (q.state.data?.status === 'APPROVED' ? 15000 : 5000),
   }).data;
 
   useEffect(() => {

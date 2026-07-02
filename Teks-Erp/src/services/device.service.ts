@@ -83,8 +83,12 @@ export class DeviceService {
     return toAssignment(device);
   }
 
-  /** Admin: cihazı onayla + (opsiyonel) makineye ata. İstasyon makineden türetilir. */
-  static async approveAndAssign(id: string, input: { machineId?: string | null; kind?: string }, userId?: string) {
+  /** Admin: cihazı onayla + (opsiyonel) makineye ata + opsiyonel takma ad. İstasyon makineden türetilir. */
+  static async approveAndAssign(
+    id: string,
+    input: { machineId?: string | null; kind?: string; name?: string },
+    userId?: string,
+  ) {
     const existing = await prisma.device.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
     let machineId: string | null = input.machineId ?? null;
@@ -92,9 +96,17 @@ export class DeviceService {
       const m = await prisma.machine.findFirst({ where: { id: machineId, isActive: true }, select: { id: true } });
       if (!m) throw AppError.badRequest("Makine bulunamadı veya pasif");
     }
+    // Takma ad opsiyonel: verilmişse güncelle (yalnız panelde görünür — "Beratın telefonu").
+    const name = input.name?.trim();
     const updated = await prisma.device.update({
       where: { id },
-      data: { status: "APPROVED", isActive: true, machineId, ...(input.kind ? { kind: normalizeDeviceKind(input.kind) } : {}) },
+      data: {
+        status: "APPROVED",
+        isActive: true,
+        machineId,
+        ...(input.kind ? { kind: normalizeDeviceKind(input.kind) } : {}),
+        ...(name ? { name } : {}),
+      },
     });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "devices", recordId: id,

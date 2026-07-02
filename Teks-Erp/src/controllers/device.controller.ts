@@ -19,6 +19,8 @@ const announceSchema = z.object({
 const approveSchema = z.object({
   machineId: z.string().uuid("Geçersiz makine ID").optional().nullable(),
   kind: deviceKindSchema,
+  // Onay anında opsiyonel takma ad ("Beratın telefonu") — yalnız panelde görünür.
+  name: z.string().trim().min(1).max(80).optional(),
 });
 
 const assignHardwareSchema = z.object({
@@ -85,7 +87,11 @@ export class DeviceController {
     try {
       const id = req.params.id as string;
       const body = approveSchema.parse(req.body ?? {});
-      const data = await DeviceService.approveAndAssign(id, { machineId: body.machineId ?? null, kind: body.kind }, req.user?.userId);
+      const data = await DeviceService.approveAndAssign(
+        id,
+        { machineId: body.machineId ?? null, kind: body.kind, name: body.name },
+        req.user?.userId,
+      );
       res.status(200).json({ success: true, data });
     } catch (error) {
       next(error);

@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
 import { deviceService } from "./service";
 import type { DeviceListItem } from "./types";
@@ -29,13 +30,18 @@ interface Props {
  */
 export function ApproveAssignDialog({ device, onOpenChange, onDone }: Props) {
   const [kind, setKind] = useState<string>("TABLET");
+  const [name, setName] = useState<string>("");
 
   useEffect(() => {
     setKind(device?.kind ?? "TABLET");
+    // Otomatik üretilen ad ("Tablet a1b2c3d4") ise takma ad kutusunu boş bırak —
+    // operatör anlamlı bir isim ("Beratın telefonu") girmeye teşvik edilir.
+    const auto = /^(Tablet|Telefon|Masaüstü)\s+[0-9a-f]{8}$/i.test(device?.name ?? "");
+    setName(auto ? "" : (device?.name ?? ""));
   }, [device]);
 
   const mutation = useMutation({
-    mutationFn: (id: string) => deviceService.approve(id, null, kind),
+    mutationFn: (id: string) => deviceService.approve(id, null, kind, name),
     onSuccess: () => {
       toast.success("Cihaz onaylandı");
       onDone();
@@ -56,6 +62,18 @@ export function ApproveAssignDialog({ device, onOpenChange, onDone }: Props) {
         </DialogHeader>
 
         <div className="space-y-4">
+          <FormField
+            label="Takma Ad (opsiyonel)"
+            hint='Yalnız bu panelde görünür — cihazı tanımak için, örn. "Beratın telefonu". Boş bırakılırsa cihaz kimliği gösterilir.'
+          >
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Beratın telefonu"
+              maxLength={80}
+            />
+          </FormField>
+
           <FormField
             label="Tür"
             hint="TABLET/PHONE = sahada yer onayıyla çalışır; DESKTOP = yönetim paneli (oturum istemez)"

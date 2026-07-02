@@ -8,10 +8,20 @@ export const deviceService = {
   list: (): Promise<ApiResponse<DeviceListItem[]>> =>
     apiClient.get<ApiResponse<DeviceListItem[]>>(BASE).then((r) => r.data),
 
-  /** Cihazı onayla + (opsiyonel) makineye ata + tür (Tablet/Telefon/PC). */
-  approve: (id: string, machineId: string | null, kind?: string): Promise<ApiResponse<DeviceListItem>> =>
+  /** Cihazı onayla + tür (Tablet/Telefon/PC) + opsiyonel takma ad. (makineId çalışma
+   *  oturumu modelinde kullanılmaz — geriye-uyum imzası; null geçilir.) */
+  approve: (
+    id: string,
+    machineId: string | null,
+    kind?: string,
+    name?: string,
+  ): Promise<ApiResponse<DeviceListItem>> =>
     apiClient
-      .post<ApiResponse<DeviceListItem>>(`${BASE}/${id}/approve`, { machineId, ...(kind ? { kind } : {}) })
+      .post<ApiResponse<DeviceListItem>>(`${BASE}/${id}/approve`, {
+        machineId,
+        ...(kind ? { kind } : {}),
+        ...(name && name.trim() ? { name: name.trim() } : {}),
+      })
       .then((r) => r.data),
 
   /** Cihaza donanım (yazıcı/okuyucu) ata — peripheralIds = bu cihazın kullandığı donanım. */
