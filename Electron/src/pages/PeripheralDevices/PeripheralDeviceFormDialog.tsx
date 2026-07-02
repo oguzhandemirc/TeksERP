@@ -8,9 +8,7 @@ import { machineService } from "@/pages/Machines/service";
 import type { Machine } from "@/pages/Machines/types";
 import { stationService } from "@/pages/Stations/service";
 import { loadAllForPicker } from "@/lib/picker-loader";
-import { printerModelService } from "@/pages/PrinterModels/service";
-import { PRINTER_LANGUAGE_LABELS } from "@/pages/PrinterModels/columns";
-import type { PrinterModel } from "@/pages/PrinterModels/types";
+import { PRINTER_LANGUAGE_LABELS } from "@/services/featureFlagService";
 import { labelFormatProfileService } from "@/pages/LabelFormatProfiles/service";
 import type { LabelFormatProfile } from "@/pages/LabelFormatProfiles/types";
 import { labelTemplateService } from "@/services/labelTemplateService";
@@ -60,16 +58,6 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
   });
   const devices = devicesQuery.data?.data ?? [];
 
-  // Model listesi — dil/profil alanları boşken hangi değerin MİRAS alınacağını
-  // göstermek için (değer kopyalanmaz: boş kalan alan modele bağlı yaşamaya devam
-  // eder, modelin dili değişince cihaz da otomatik güncellenir).
-  const modelsQuery = useQuery({
-    queryKey: ["printer-models", "picker"],
-    queryFn: () => loadAllForPicker(printerModelService),
-    enabled: open,
-  });
-  const models = modelsQuery.data?.data ?? [];
-
   // MAKİNESİZ istasyonlar (SHIPPING gibi) — istasyona-sabit donanım yalnız bunlara
   // bağlanabilir (backend enforce; liste baştan filtreli sunulur).
   const stationsQuery = useQuery({
@@ -109,7 +97,6 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         machineId: initial.machineId ?? "",
         stationId: initial.stationId ?? "",
         deviceId: initial.deviceId ?? "",
-        printerModelId: initial.printerModelId ?? "",
         formatProfileId: initial.formatProfileId ?? "",
         languageOverride: initial.languageOverride ?? "",
         templateRawId: routeTemplateId(initial, "ROLL_RAW"),
@@ -275,32 +262,20 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
             </div>
 
             {/* Yazıcı dili/profili + şablon — YALNIZ yazıcıda (metre/kantar'da gizli).
-                Boş alan = modelden MİRAS (kopya değil): boş seçeneğin etiketi seçili
-                modelin etkin değerini gösterir; doldurulursa cihaz-özel override olur. */}
-            {isPrinter && (() => {
-              const selectedModel = models.find((m) => m.id === form.watch("printerModelId")) ?? null;
-              return (
+                Ayarların hepsi CİHAZA özeldir: dil ZORUNLU (bu yazıcı hangi komut
+                dilini konuşuyor), profil boşsa sistem varsayılan profili kullanılır. */}
+            {isPrinter && (
               <>
-            <div className="grid grid-cols-3 gap-3 rounded-md border bg-muted/20 p-3">
-              <FormField label="Yazıcı Modeli" hint="Dil ve varsayılan profil modelden gelir.">
-                <Controller
-                  control={form.control}
-                  name="printerModelId"
-                  render={({ field }) => (
-                    <ReferenceSelect<PrinterModel>
-                      value={field.value || null}
-                      onChange={(v) => field.onChange(v ?? "")}
-                      service={printerModelService}
-                      queryKey="printer-models"
-                      getLabel={(m) => `${m.code} — ${m.name}`}
-                      placeholder="Model seç..."
-                      nullable
-                      noneLabel="— (tanımsız)"
-                    />
-                  )}
-                />
+            <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/20 p-3">
+              <FormField label="Dil" error={form.formState.errors.languageOverride} required>
+                <select className={SELECT_CLS} {...form.register("languageOverride")}>
+                  <option value="">Dil seçin...</option>
+                  {LANGS.map((l) => (
+                    <option key={l} value={l}>{PRINTER_LANGUAGE_LABELS[l]}</option>
+                  ))}
+                </select>
               </FormField>
-              <FormField label="Format Profili" hint="Boş bırak → modelinki kullanılır.">
+              <FormField label="Format Profili" hint="Boş bırak → sistem varsayılan profili.">
                 <Controller
                   control={form.control}
                   name="formatProfileId"
@@ -313,28 +288,10 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                       getLabel={(p) => `${p.code} — ${p.name}`}
                       placeholder="Profil seç..."
                       nullable
-                      noneLabel={
-                        selectedModel?.defaultProfile
-                          ? `Varsayılan — modelden: ${selectedModel.defaultProfile.name}`
-                          : selectedModel
-                            ? "Varsayılan — sistem profili"
-                            : "— (model default)"
-                      }
+                      noneLabel="Varsayılan — sistem profili"
                     />
                   )}
                 />
-              </FormField>
-              <FormField label="Dil (override)" hint="Boş bırak → modelinki kullanılır.">
-                <select className={SELECT_CLS} {...form.register("languageOverride")}>
-                  <option value="">
-                    {selectedModel
-                      ? `Varsayılan — modelden: ${PRINTER_LANGUAGE_LABELS[selectedModel.language]}`
-                      : "— (model/global)"}
-                  </option>
-                  {LANGS.map((l) => (
-                    <option key={l} value={l}>{PRINTER_LANGUAGE_LABELS[l]}</option>
-                  ))}
-                </select>
               </FormField>
             </div>
 
@@ -359,8 +316,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
               </div>
             </div>
               </>
-              );
-            })()}
+            )}
 
             <FormField label="Not">
               <Input {...form.register("notes")} placeholder="örn. seri hatta HC-06 lehimli" />

@@ -9,14 +9,28 @@ describe("peripheralFormSchema", () => {
   it("varsayılanlar kod/ad boş → geçersiz", () => {
     expect(peripheralFormSchema.safeParse(peripheralFormDefaults).success).toBe(false);
   });
-  it("kod + ad dolu → geçerli", () => {
-    const r = peripheralFormSchema.safeParse({ ...peripheralFormDefaults, code: "BT-1", name: "Argox" });
+  it("kod + ad dolu → geçerli (yazıcıda dil de gerekli)", () => {
+    const r = peripheralFormSchema.safeParse({
+      ...peripheralFormDefaults, code: "BT-1", name: "Argox", languageOverride: "PPLA",
+    });
+    expect(r.success).toBe(true);
+  });
+  it("LABEL_PRINTER + boş dil → geçersiz (dil cihazda zorunlu)", () => {
+    const r = peripheralFormSchema.safeParse({
+      ...peripheralFormDefaults, code: "BT-1", name: "Argox", kind: "LABEL_PRINTER", languageOverride: "",
+    });
+    expect(r.success).toBe(false);
+  });
+  it("SCALE + boş dil → geçerli (dil yalnız yazıcıda aranır)", () => {
+    const r = peripheralFormSchema.safeParse({
+      ...peripheralFormDefaults, code: "KANTAR-1", name: "Kantar", kind: "SCALE", languageOverride: "",
+    });
     expect(r.success).toBe(true);
   });
 });
 
 describe("buildPeripheralPayload (form → API)", () => {
-  const base = { ...peripheralFormDefaults, code: "BT-1", name: "Argox" };
+  const base = { ...peripheralFormDefaults, code: "BT-1", name: "Argox", languageOverride: "PPLA" };
 
   it("owner=machine → machineId set, deviceId null", () => {
     const p = buildPeripheralPayload({ ...base, owner: "machine", machineId: "m1", deviceId: "d1" });

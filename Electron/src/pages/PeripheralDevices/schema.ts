@@ -24,7 +24,6 @@ export const peripheralFormSchema = z.object({
   machineId: z.string().optional().default(""),
   stationId: z.string().optional().default(""),
   deviceId: z.string().optional().default(""),
-  printerModelId: z.string().optional().default(""),
   formatProfileId: z.string().optional().default(""),
   languageOverride: z.string().optional().default(""),
   templateRawId: z.string().optional().default(""),
@@ -32,6 +31,12 @@ export const peripheralFormSchema = z.object({
   templateSwatchId: z.string().optional().default(""),
   notes: z.string().trim().max(500).optional().default(""),
   isActive: z.boolean(),
+}).superRefine((v, ctx) => {
+  // Yazıcının dili kendi kartında ZORUNLU — boş bırakılırsa globalden sürpriz
+  // etkilenir (backend de enforce eder; buradaki kural anlık form hatası için).
+  if (v.kind === "LABEL_PRINTER" && !v.languageOverride.trim()) {
+    ctx.addIssue({ code: "custom", path: ["languageOverride"], message: "Yazıcı dili seçin" });
+  }
 });
 
 export type PeripheralFormValues = z.infer<typeof peripheralFormSchema>;
@@ -62,7 +67,6 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     stationId: v.owner === "station" ? nn(v.stationId) : null,
     deviceId: v.owner === "device" ? nn(v.deviceId) : null,
     // Yazıcı alanları yalnız LABEL_PRINTER'da anlamlı; metre/kantar'da temizle.
-    printerModelId: v.kind === "LABEL_PRINTER" ? nn(v.printerModelId) : null,
     formatProfileId: v.kind === "LABEL_PRINTER" ? nn(v.formatProfileId) : null,
     languageOverride: v.kind === "LABEL_PRINTER" ? nn(v.languageOverride) : null,
     notes: nn(v.notes),
@@ -95,7 +99,6 @@ export const peripheralFormDefaults: PeripheralFormValues = {
   machineId: "",
   stationId: "",
   deviceId: "",
-  printerModelId: "",
   formatProfileId: "",
   languageOverride: "",
   templateRawId: "",

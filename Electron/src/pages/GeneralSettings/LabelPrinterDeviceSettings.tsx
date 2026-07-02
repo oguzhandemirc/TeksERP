@@ -199,7 +199,7 @@ export function LabelPrinterDeviceSettings() {
             <SelectItem value="none">Yok — genel &quot;Etiket yazıcı dili&quot; kullanılır</SelectItem>
             {labelPrinters.map((p) => (
               <SelectItem key={p.id} value={p.id}>
-                {p.name} — {p.languageOverride ?? p.printerModel?.language ?? "dil: genel"}
+                {p.name} — {p.languageOverride ?? "dil: genel"}
               </SelectItem>
             ))}
           </SelectContent>

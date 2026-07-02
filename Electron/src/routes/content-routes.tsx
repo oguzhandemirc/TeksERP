@@ -14,7 +14,6 @@ import { ProductionStationsPage } from "@/pages/Stations/ProductionStationsPage"
 import { EtiketlerPage } from "@/pages/Labels/EtiketlerPage";
 import { MachinesPage } from "@/pages/Machines/MachinesPage";
 import { PeripheralDevicesPage } from "@/pages/PeripheralDevices/PeripheralDevicesPage";
-import { PrinterModelsPage } from "@/pages/PrinterModels/PrinterModelsPage";
 import { LabelFormatProfilesPage } from "@/pages/LabelFormatProfiles/LabelFormatProfilesPage";
 import { DefectTypesPage } from "@/pages/DefectTypes/DefectTypesPage";
 import { QualityGradesPage } from "@/pages/QualityGrades/QualityGradesPage";
@@ -141,14 +140,6 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="station:read">
         <PeripheralDevicesPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "definitions/printer-models",
-    element: (
-      <ProtectedRoute requirePermission="station:read">
-        <PrinterModelsPage />
       </ProtectedRoute>
     ),
   },

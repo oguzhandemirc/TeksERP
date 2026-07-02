@@ -101,10 +101,10 @@ export const peripheralColumns: ColumnDef<PeripheralDevice>[] = [
     cell: ({ row }) => (
       <div className="min-w-0">
         <div className="text-xs">
-          {row.original.languageOverride ?? row.original.printerModel?.language ?? "—"}
+          {row.original.languageOverride ?? "genel"}
         </div>
         <div className="font-mono text-[10px] text-muted-foreground">
-          {row.original.formatProfile?.code ?? row.original.printerModel?.code ?? "—"}
+          {row.original.formatProfile?.code ?? "sistem varsayılanı"}
         </div>
       </div>
     ),

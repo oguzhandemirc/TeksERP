@@ -36,7 +36,6 @@ export interface PeripheralDevice {
   /** MAKİNESİZ istasyona sabit donanım (SHIPPING kantarı vb.) — çalışma oturumu modeli. */
   stationId: string | null;
   deviceId: string | null;
-  printerModelId: string | null;
   formatProfileId: string | null;
   languageOverride: PrinterLanguage | null;
   isActive: boolean;
@@ -45,7 +44,6 @@ export interface PeripheralDevice {
   machine?: { id: string; code: string; name: string } | null;
   station?: { id: string; code: string; name: string; kind: string } | null;
   device?: { id: string; name: string } | null;
-  printerModel?: { id: string; code: string; name: string; language: PrinterLanguage } | null;
   formatProfile?: { id: string; code: string; name: string } | null;
   templateRoutes?: PeripheralTemplateRouteRef[];
   createdAt: string;
