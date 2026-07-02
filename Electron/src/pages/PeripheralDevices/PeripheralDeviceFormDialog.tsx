@@ -150,18 +150,40 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
               </FormField>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <FormField label="Adres" hint="IP / MAC / COM / UUID" className="col-span-2">
-                <Input className="font-mono" {...form.register("address")} placeholder="192.168.1.50 / 00:23:09:..." />
-              </FormField>
-              <FormField label="Port" hint="TCP (boş→9100)">
-                <Input {...form.register("port")} placeholder="9100" />
-              </FormField>
-            </div>
-
-            <FormField label="Veri Deseni (regex)" hint="Kantar/metraj cihazı için (yazıcıda boş).">
-              <Input className="font-mono text-xs" {...form.register("identifyPattern")} placeholder="(\d+(?:\.\d+)?)" />
-            </FormField>
+            {/* Adres/Port yalnız anlamlı olduğu bağlantıda: TCP=IP+port, BT=MAC,
+                BLE=UUID, Seri=COM yolu. USB'de HİÇ gösterilmez — USB cihazın gerçek
+                hedefi (kuyruk/port) basan bilgisayarda seçilir (Genel Ayarlar →
+                Bu Bilgisayar), cihaz kartında adres tutulmaz. */}
+            {(() => {
+              const ct = form.watch("connectionType");
+              if (ct === "USB") {
+                return (
+                  <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                    USB cihazda adres gerekmez — hangi bilgisayardan kullanılacaksa
+                    kuyruk/port orada seçilir (Genel Ayarlar → Bu Bilgisayar).
+                  </p>
+                );
+              }
+              const meta = {
+                NETWORK_TCP: { label: "IP Adresi", hint: "Yazıcının sabit IP'si", ph: "192.168.1.50" },
+                BLUETOOTH_SPP: { label: "MAC Adresi", hint: "BT Classic (HC-05/06)", ph: "00:23:09:01:05:5E" },
+                BLE: { label: "BLE UUID", hint: "Cihazın servis UUID'si", ph: "0000ffe0-0000-1000-..." },
+                SERIAL_COM: { label: "COM Yolu", hint: "Bilgi amaçlı — gerçek port basan PC'de seçilir", ph: "COM5 / /dev/tty.usbserial" },
+              } as const;
+              const m = meta[ct];
+              return (
+                <div className="grid grid-cols-3 gap-3">
+                  <FormField label={m.label} hint={m.hint} className="col-span-2">
+                    <Input className="font-mono" {...form.register("address")} placeholder={m.ph} />
+                  </FormField>
+                  {ct === "NETWORK_TCP" && (
+                    <FormField label="Port" hint="boş → 9100">
+                      <Input {...form.register("port")} placeholder="9100" />
+                    </FormField>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Giriş cihazı (SCALE/METER) okuma protokolü */}
             {isInput && (
@@ -191,7 +213,10 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                   <FormField label="Zaman Aşımı (ms)" hint="boş→2500">
                     <Input {...form.register("timeoutMs")} placeholder="2500" />
                   </FormField>
-                  <label className="col-span-2 flex items-center gap-2 self-end pb-2 text-sm">
+                  <FormField label="Veri Deseni (regex)" hint="Ham cevaptan sayıyı ayıklar" className="col-span-2">
+                    <Input className="font-mono text-xs" {...form.register("identifyPattern")} placeholder="(\d+(?:\.\d+)?)" />
+                  </FormField>
+                  <label className="flex items-center gap-2 self-end pb-2 text-sm">
                     <input type="checkbox" {...form.register("simulate")} /> Simülasyon (sahte değer)
                   </label>
                 </div>
