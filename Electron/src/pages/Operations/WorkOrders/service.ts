@@ -1,6 +1,7 @@
 import { createCrudService } from "@/services/crudService";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
+import type { TravelerCardConfig } from "@/services/featureFlagService";
 import type { WorkOrder, TargetPropertyChangeImpact, TravelerCard } from "./types";
 
 const base = createCrudService<WorkOrder>("/api/work-orders");
@@ -56,6 +57,27 @@ export const workOrderService = {
   getTravelerCardHistory: (id: string) =>
     apiClient
       .get<ApiResponse<TravelerCard[]>>(`/api/work-orders/${id}/traveler-cards/history`)
+      .then((r) => r.data),
+
+  /** Refakat kartının baskı-hazır HTML'i (TEK KAYNAK) — backend render eder; mobil
+   *  + Electron birebir aynısını basar. QR sunucuda gömülü, text/html döner. */
+  getTravelerCardHtml: (cardId: string) =>
+    apiClient
+      .get<string>(`/api/traveler-cards/${cardId}/html`, {
+        responseType: "text",
+        headers: { Accept: "text/html" },
+      })
+      .then((r) => r.data),
+
+  /** Refakat Kartı Ayarları canlı önizlemesi — örnek veri + DÜZENLENEN taslak config
+   *  ile gerçek backend HTML (TASLAK filigranlı). Önizleme = gerçek baskı (tek kaynak). */
+  getTravelerCardSampleHtml: (config: TravelerCardConfig) =>
+    apiClient
+      .post<string>(
+        "/api/traveler-cards/sample-html",
+        { config },
+        { responseType: "text", headers: { Accept: "text/html" } },
+      )
       .then((r) => r.data),
 
   /** Fason sevk irsaliyesinin CANLI talimat alanları (istenen renk + fason

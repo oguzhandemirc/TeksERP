@@ -8,10 +8,8 @@ import * as Haptics from 'expo-haptics';
 
 import AppModal from '../../../components/AppModal';
 import WorkOrderHeaderFields, { type WoHeaderFieldValues } from './WorkOrderHeaderFields';
-import { useCardPrinter } from './useCardPrinter';
-import { buildWorkOrderCardData } from './printWorkOrder';
+import { printTravelerCardForWorkOrder } from '../../../services/travelerCardPrint';
 import { workOrderService } from '../../../services/workOrder.service';
-import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import {
   WORK_ORDER_STATUS_LABEL,
   WORK_ORDER_STATUS_COLOR,
@@ -34,8 +32,7 @@ type Mode = 'detail' | 'edit' | 'cancel';
 
 export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }: Props) {
   const qc = useQueryClient();
-  const companyName = useFeatureFlags().data?.companyName ?? 'Adnan Şahin Tekstil';
-  const { QrSink, printCard, printing } = useCardPrinter();
+  const [printing, setPrinting] = useState(false);
   const [mode, setMode] = useState<Mode>('detail');
   const [edit, setEdit] = useState<WoHeaderFieldValues | null>(null);
 
@@ -124,13 +121,19 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
     setMode('edit');
   };
 
+  // Refakat kartı — backend'in TEK KAYNAK HTML'ini basar (kullanıcı iptali sessiz).
   const doPrint = async () => {
     if (!workOrderId) return;
+    setPrinting(true);
     try {
-      const data = await buildWorkOrderCardData(workOrderId, companyName);
-      await printCard(data);
+      await printTravelerCardForWorkOrder(workOrderId);
     } catch (e) {
-      Toast.show({ type: 'error', text1: 'Çıktı alınamadı', text2: e instanceof Error ? e.message : '' });
+      const msg = e instanceof Error ? e.message : '';
+      if (!/cancel|dismiss/i.test(msg)) {
+        Toast.show({ type: 'error', text1: 'Çıktı alınamadı', text2: msg });
+      }
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -153,7 +156,6 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
 
   return (
     <AppModal visible={visible} onDismiss={onClose} position="bottom" contentStyle={styles.sheet}>
-      {QrSink}
       {/* Başlık */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>

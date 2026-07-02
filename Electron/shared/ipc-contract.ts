@@ -83,10 +83,10 @@ export interface ScannerDeviceApi {
   onStatus: (cb: (status: ScannerStatus) => void) => () => void;
 }
 
-// --- Native yazıcı transport (Faz-2: seri/COM + ağ TCP 9100) ---
+// --- Native yazıcı transport (Faz-2: seri/COM + ağ TCP 9100 + macOS CUPS) ---
 export interface PrinterSendOpts {
-  transport: "tcp" | "serial";
-  /** TCP: IP/host; serial: COM yolu. */
+  transport: "tcp" | "serial" | "cups";
+  /** TCP: IP/host; serial: COM yolu; cups: CUPS kuyruk adı (lp -d). */
   target: string;
   /** TCP portu (default 9100). */
   port?: number;
@@ -105,7 +105,10 @@ export interface PrinterSendResult {
 export interface PrinterTransportApi {
   /** Seri (COM) cihaz listesi — modül durumu + cihazlar (BT-COM dahil). */
   listSerial: () => Promise<ScannerListResult>;
-  /** Native komutu seri/TCP yazıcıya gönder. Modül yoksa available:false. */
+  /** macOS/Linux CUPS kuyrukları (lpstat -e) — her cihaz path=kuyruk adı.
+   * Windows'ta lp/lpstat yok → available:false (graceful). */
+  listCups: () => Promise<ScannerListResult>;
+  /** Native komutu seri/TCP/CUPS yazıcıya gönder. Modül yoksa available:false. */
   send: (opts: PrinterSendOpts) => Promise<PrinterSendResult>;
 }
 

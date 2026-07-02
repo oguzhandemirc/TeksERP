@@ -41,6 +41,7 @@ import {
   primaryScaleFor,
 } from '../../../hooks/useMachinePeripherals';
 import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
+import { isBonded, pairByMac } from '../../../services/hal/btClassic.transport';
 import {
   useShipmentConfirmationEnabled,
   FLAGS_KEY,
@@ -143,6 +144,30 @@ export default function PaketlemeScreen() {
         visibilityTime: 6000,
       });
       return null;
+    }
+    // İlk kullanımda otomatik eşleştir (bond yoksa) — Bluetooth ayarlarına girmeden.
+    // Uygulama MAC'ten createBond tetikler; Android PIN'i bir kez sorar (ör. 1234).
+    // Bond sonrası bu blok atlanır → doğrudan bağlanıp okur.
+    if (p.connectionType === 'BLUETOOTH_SPP' && p.address) {
+      try {
+        if (!(await isBonded(p.address))) {
+          Toast.show({
+            type: 'info',
+            text1: 'Kantar ilk kez eşleştiriliyor',
+            text2: 'PIN sorulursa girin (ör. 1234) — sonraki tartılarda otomatik bağlanır.',
+            visibilityTime: 8000,
+          });
+          await pairByMac(p.address);
+        }
+      } catch (e) {
+        Toast.show({
+          type: 'error',
+          text1: 'Kantar eşleştirilemedi',
+          text2: e instanceof Error ? e.message : 'Kantar açık ve menzilde mi? PIN girildi mi?',
+          visibilityTime: 6000,
+        });
+        return null;
+      }
     }
     try {
       const raw = await io.transport.read({

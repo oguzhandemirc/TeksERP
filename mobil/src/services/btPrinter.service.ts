@@ -11,12 +11,16 @@
 import {
   isBtSupported,
   listBonded,
+  discoverDevices,
+  isBonded,
+  pairByMac,
   testConnection as halTestConnection,
   writeRaw,
   type BtBondedDevice,
 } from './hal/btClassic.transport';
 
-export type BtPrinter = BtBondedDevice;
+/** Yazıcı satırı — eşleşme durumu (paired) UI'da "eşleşecek" rozetini besler. */
+export type BtPrinter = BtBondedDevice & { paired?: boolean };
 
 /** Bu derlemede Bluetooth Classic native modülü mevcut mu? */
 export function isBtPrinterSupported(): boolean {
@@ -25,7 +29,35 @@ export function isBtPrinterSupported(): boolean {
 
 /** Eşleşmiş (bonded) cihazları döner. Modül yoksa boş liste. */
 export function listBondedPrinters(): Promise<BtPrinter[]> {
-  return listBonded();
+  return listBonded().then((rows) => rows.map((r) => ({ ...r, paired: true })));
+}
+
+/**
+ * Eşleşmiş + çevrede keşfedilen cihazları birleşik döner (MAC'e göre tekilleştirir).
+ * Eşleşmiş olanlar `paired:true`; keşifte çıkan yeni cihazlar `paired:false` →
+ * seçilince otomatik eşleştirilir (Android ayarlarına girmeden). Keşif başarısız
+ * olursa yalnız eşleşmişlerle döner (graceful degrade).
+ */
+export async function findPrinters(): Promise<BtPrinter[]> {
+  const bonded = await listBondedPrinters();
+  const byMac = new Map<string, BtPrinter>();
+  for (const b of bonded) byMac.set(b.address.trim().toUpperCase(), b);
+  try {
+    const found = await discoverDevices();
+    for (const d of found) {
+      const key = d.address.trim().toUpperCase();
+      if (!byMac.has(key)) byMac.set(key, { ...d, paired: false });
+    }
+  } catch {
+    // Keşif izin/donanım/New-Arch nedeniyle patlarsa eşleşmiş liste yeterli.
+  }
+  return [...byMac.values()];
+}
+
+/** Bir yazıcı eşleşik değilse eşleştir (PIN bir kez). Zaten eşleşikse no-op. */
+export async function ensurePrinterPaired(address: string): Promise<void> {
+  if (await isBonded(address)) return;
+  await pairByMac(address);
 }
 
 /** Eşleşmiş yazıcıya RFCOMM soketi açıp bağlantıyı doğrular — fiziksel baskı yapmaz. */

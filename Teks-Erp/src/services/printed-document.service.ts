@@ -26,6 +26,7 @@ import {
   type DocumentConfig,
 } from "./system-setting.service";
 import { ApiResponse } from "../types/api.types";
+import { SAMPLE_PRINTED_DOCS } from "./document-render/sample-data";
 
 /** Builder'ların aldığı istemci — tx içinden (freeze) veya dışından (reissue/lazy) çalışır. */
 export type PrintedDocDb = Prisma.TransactionClient | typeof prisma;
@@ -265,6 +266,38 @@ export class PrintedDocumentService {
       );
     }
     const snapshot = await buildSnapshotEnvelope(prisma, docType, doc);
+    return entry.renderHtml(snapshot, { draft: true });
+  }
+
+  /**
+   * ÖRNEK HTML — "Belge Şablonları" panelindeki canlı önizleme. Donmuş belge YOK:
+   * sabit örnek `doc` (SAMPLE_PRINTED_DOCS) + admin'in DÜZENLEDİĞİ taslak config
+   * override + güncel firma/künye ile gerçek renderHtml çağrılır → önizleme baskıyla
+   * birebir aynı format. TASLAK filigranıyla döner; hiçbir şey persist edilmez.
+   */
+  async renderSampleHtml(
+    docType: PrintedDocType,
+    configOverride: DocumentConfig | null,
+  ): Promise<string> {
+    const entry = requireBuilder(docType);
+    if (!entry.renderHtml) {
+      throw AppError.badRequest(`Bu belge tipi için HTML çıktısı tanımlı değil: ${docType}`);
+    }
+    const doc = SAMPLE_PRINTED_DOCS[docType];
+    if (!doc) {
+      throw AppError.badRequest(`Bu belge tipi için örnek veri yok: ${docType}`);
+    }
+    const [companyName, letterhead] = [
+      await readCompanyName(prisma),
+      await readCompanyLetterhead(prisma),
+    ];
+    const snapshot: PrintedDocSnapshot = {
+      schemaVersion: 1,
+      frozenAt: new Date().toISOString(),
+      company: { name: companyName, letterhead },
+      docConfigOverride: configOverride,
+      doc,
+    };
     return entry.renderHtml(snapshot, { draft: true });
   }
 

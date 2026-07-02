@@ -75,6 +75,20 @@ async function run(): Promise<void> {
   check("print happy: success", r.success === true);
   check("print happy: 1 ACTIVE kart", (await activeCount(w1)) === 1);
 
+  // A2) getCardHtml — gerçek kart → donmuş snapshot → tek-kaynak HTML + SUNUCU QR.
+  // (Elle-kurulu unit fixture'ın yakalayamadığı snapshot-şekli + bwip wiring'i.)
+  const card1 = need(r.data, "print card");
+  const wo1 = need(
+    await prisma.workOrder.findUnique({ where: { id: w1 }, select: { batchNumber: true } }),
+    "wo1",
+  );
+  const html1 = await cards.getCardHtml(card1.id);
+  check("getCardHtml: HTML döndü", html1.length > 500, `len=${html1.length}`);
+  check("getCardHtml: REFAKAT KARTI başlık", html1.includes("REFAKAT KARTI"));
+  check("getCardHtml: kart no + barkod (cardMeta)", html1.includes(card1.cardNumber) && html1.includes(card1.barcode));
+  check("getCardHtml: batchNumber snapshot'tan", html1.includes(wo1.batchNumber));
+  check("getCardHtml: gömülü QR (svg)", html1.includes("<svg"));
+
   // B) sıralı tekrar → 409
   let seqErr: unknown;
   try {

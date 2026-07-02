@@ -4,47 +4,16 @@
 
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
-import { RouteService } from "../services/route.service";
+import { RouteService, ROUTE_SERVICE_CONFIG } from "../services/route.service";
 import { routeHardRemove } from "../services/helpers/guarded-hard-remove";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 // RouteService: bare BaseService yerine — nested step ref'lerinin isActive + sequence
 // soft-delete giriş guard'ı için (assertRouteRefsActive'in master-data CRUD karşılığı).
-const service = new RouteService({
-  modelName: "route",
-  tableName: "ROUTE",
-  searchFields: ["name"],
-  nestedCreateFields: ["steps"],
-  defaultInclude: {
-    steps: {
-      include: {
-        station: {
-          include: {
-            defaultCategory: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
-                // Hızlı İş Emri "Gelişmiş" renk/özellik uygulaması, rotanın bu adımı
-                // gerçekten uygulayıp uygulayamayacağını bu bayraklardan ölçer
-                // (sadece kategori atanmış olması yetmez — appliesColor/Property gerekir).
-                appliesColor: true,
-                appliesProperty: true,
-              },
-            },
-          },
-        },
-        // Saha #14: rota şablonunda saklı fason firması — istemci kayıtlı firmanın
-        // adını ayrı sorgu olmadan gösterebilsin. (Scalar plannedSubcontractorId
-        // zaten include ile dönüyor; bu yalnız adı ekler.)
-        plannedSubcontractor: { select: { id: true, name: true } },
-      },
-      orderBy: { sequence: "asc" },
-    },
-  },
-  uniqueField: "code",
-});
+// Config TEK KAYNAK route.service.ts'te (ROUTE_SERVICE_CONFIG) — regresyon testi
+// aynı config'i tüketir, defaultInclude drift'i test ile yakalanır.
+const service = new RouteService(ROUTE_SERVICE_CONFIG);
 
 const controller = new BaseController(service);
 const router = Router();

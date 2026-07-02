@@ -54,6 +54,39 @@ function requireDocPermission(kind: "read" | "write") {
 
 /**
  * @openapi
+ * /api/printed-documents/{docType}/sample-html:
+ *   post:
+ *     tags: [PrintedDocuments]
+ *     summary: Belge Şablonu canlı önizlemesi — örnek veri + taslak config ile gerçek HTML
+ *     description: |
+ *       "Tanımlar → Belge Şablonları" panelinde admin içerik ayarını düzenlerken
+ *       gördüğü önizleme. Gerçek renderHtml örnek veriyle + gönderilen taslak
+ *       config ile çağrılır (TASLAK filigranlı) → önizleme baskıyla birebir aynı.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: docType
+ *         required: true
+ *         schema: { type: string, enum: [SHIPMENT_DISPATCH, SUBCONTRACTOR_DISPATCH, SUBCONTRACTOR_DIRECT_SHIP, KARTELA_DISPATCH] }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               config: { type: object, nullable: true }
+ *     responses:
+ *       200: { description: text/html önizleme çıktısı }
+ */
+router.post(
+  "/:docType/sample-html",
+  verifyToken,
+  requireAnyPermission("admin:settings"),
+  controller.getSampleHtml
+);
+
+/**
+ * @openapi
  * /api/printed-documents/{docType}/{sourceId}/current:
  *   get:
  *     tags: [PrintedDocuments]

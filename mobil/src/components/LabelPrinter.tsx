@@ -5,7 +5,7 @@ import Toast from 'react-native-toast-message';
 import { labelService } from '../services/label.service';
 import { apiClient } from '../services/api';
 import { useBtPrinterStore } from '../store/btPrinterStore';
-import { isBtPrinterSupported, printRaw } from '../services/btPrinter.service';
+import { isBtPrinterSupported, printRaw, ensurePrinterPaired } from '../services/btPrinter.service';
 import type { Roll } from '../types/models';
 
 interface Props {
@@ -85,6 +85,12 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
       // (effect deps'i şişirmemek için getState).
       const btPrinter = useBtPrinterStore.getState().printer;
       const viaBt = btPrinter != null && isBtPrinterSupported();
+      // BT yazıcı seçili + bu derlemede destekleniyorsa operatör DİYALOGSUZ baskı
+      // bekliyor (KK1 peş peşe top akışı — "arada yazdırma ekranı çıkmasın"). Bu
+      // modda HTML/expo-print diyaloğuna ASLA düşme: başarısızlık sessizce yazdırma
+      // ekranı açmak yerine GÖRÜNÜR hata olsun. expo-print yalnız BT yazıcı YOKKEN
+      // (donanımsız/legacy kurulum) devreye girer.
+      const directOnly = viaBt;
       let usedBt = false;
       try {
         if (viaBt && btPrinter) {
@@ -92,13 +98,21 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
           // (backend resolveLabelRouting; cihaz kaydı yoksa global/model). kind:
           // KK1 ham / Tambur bitmiş paritesi.
           const native = await labelService.getRollNative(roll.id, kind, labelContext);
-          if (native.language !== 'RASTER_HTML' && native.content) {
-            await printRaw(btPrinter.address, native.content);
-            usedBt = true;
+          // FAIL-CLOSED: yalnız bilinen native dil ham gönderilir. RASTER_HTML/boş/
+          // bilinmeyen → diyaloğa düşmek yerine NET hata (akış ortasında yazdırma
+          // ekranı çıkmasın; çöp etiket de basılmasın).
+          if (!['PPLA', 'PPLB', 'ZPL'].includes(native.language) || !native.content) {
+            throw new Error(
+              'Yazıcı PPLA dilinde değil — Cihaz Kaydı’ndan yazıcının dilini PPLA yapın.',
+            );
           }
-          // Cihaz dili RASTER_HTML (native tanımsız) → ham gönderilemez; HTML'e düş.
+          // İlk baskıda otomatik eşleştir (bond yoksa) — Bluetooth ayarlarına girmeden.
+          // Zaten eşleşikse no-op; değilse Android PIN'i bir kez sorar, sonra basar.
+          await ensurePrinterPaired(btPrinter.address);
+          await printRaw(btPrinter.address, native.content);
+          usedBt = true;
         }
-        if (!usedBt) {
+        if (!usedBt && !directOnly) {
           const r = await apiClient.get<string>(`/labels/rolls/${roll.id}/html`, {
             params: {
               kind,

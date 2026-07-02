@@ -3,6 +3,9 @@
 import {
   isBtSupported,
   listBonded,
+  discoverDevices,
+  isBonded,
+  pairByMac,
   writeRaw,
   readResponse,
   testConnection,
@@ -19,6 +22,8 @@ describe('btClassic.transport', () => {
     mod.isBluetoothEnabled.mockResolvedValue(true);
     mod.requestBluetoothEnabled.mockResolvedValue(true);
     mod.getBondedDevices.mockResolvedValue([]);
+    mod.startDiscovery.mockResolvedValue([]);
+    mod.pairDevice.mockResolvedValue({});
     mod.isDeviceConnected.mockResolvedValue(false);
     mod.connectToDevice.mockResolvedValue({});
     mod.writeToDevice.mockResolvedValue(true);
@@ -70,6 +75,35 @@ describe('btClassic.transport', () => {
     expect(mod.clearFromDevice).toHaveBeenCalledWith('AA:11');
     expect(mod.writeToDevice).toHaveBeenCalledWith('AA:11', 'R\r\n', 'ascii');
     expect(raw).toBe('42.5\r\n');
+  });
+
+  it('isBonded MAC normalize eder (büyük/küçük harf + boşluk)', async () => {
+    mod.getBondedDevices.mockResolvedValue([{ address: 'aa:bb:cc', name: 'Kantar' }]);
+    expect(await isBonded('  AA:BB:CC ')).toBe(true);
+    expect(await isBonded('DD:EE:FF')).toBe(false);
+  });
+
+  it('pairByMac eşleşmemişse pairDevice çağırır', async () => {
+    mod.getBondedDevices.mockResolvedValue([]);
+    await pairByMac('AA:11');
+    expect(mod.pairDevice).toHaveBeenCalledWith('AA:11');
+  });
+
+  it('pairByMac zaten eşleşmişse pairDevice çağırmaz (idempotent)', async () => {
+    mod.getBondedDevices.mockResolvedValue([{ address: 'AA:11', name: 'Kantar' }]);
+    await pairByMac('aa:11');
+    expect(mod.pairDevice).not.toHaveBeenCalled();
+  });
+
+  it('discoverDevices keşfedilen cihazları adı boşsa adresle döner', async () => {
+    mod.startDiscovery.mockResolvedValue([
+      { address: 'CC:33', name: 'Argox' },
+      { address: 'DD:44', name: null },
+    ]);
+    expect(await discoverDevices()).toEqual([
+      { address: 'CC:33', name: 'Argox' },
+      { address: 'DD:44', name: 'DD:44' },
+    ]);
   });
 
   it('btClassicTransport.read terminator ile erken döner', async () => {

@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import { createRequire } from "node:module";
 import net from "node:net";
+import { spawn } from "node:child_process";
 import type {
   PrinterSendOpts,
   PrinterSendResult,
@@ -109,10 +110,63 @@ function sendSerial(opts: PrinterSendOpts): Promise<PrinterSendResult> {
   });
 }
 
+// macOS/Linux CUPS: ham PPLB/PPLA'yı `lp -d <kuyruk> -o raw` ile stdin'den yazıcıya.
+// USB printer-class cihaz seri düğümü açmadığı için Mac'te tek doğru yol budur.
+// Windows'ta lp yoktu → spawn "error" → available:false (uygulama çökmez).
+function sendCups(opts: PrinterSendOpts): Promise<PrinterSendResult> {
+  const buf = Buffer.from(opts.content, "latin1");
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (r: PrinterSendResult) => { if (settled) return; settled = true; resolve(r); };
+    try {
+      const child = spawn("lp", ["-d", opts.target, "-o", "raw"], { stdio: ["pipe", "ignore", "pipe"] });
+      let stderr = "";
+      child.stderr?.on("data", (c) => (stderr += String(c)));
+      child.on("error", (e) => done({ ok: false, bytes: 0, available: false, error: `lp çalıştırılamadı: ${e.message}` }));
+      child.on("close", (code) =>
+        code === 0
+          ? done({ ok: true, bytes: buf.length, available: true, error: null })
+          : done({ ok: false, bytes: 0, available: true, error: stderr.trim() || `lp çıkış kodu ${code}` }),
+      );
+      child.stdin?.on("error", () => { /* EPIPE: error handler zaten döner */ });
+      child.stdin?.end(buf);
+    } catch (e) {
+      done({ ok: false, bytes: 0, available: false, error: (e as Error).message });
+    }
+  });
+}
+
+// CUPS kuyruklarını listele (lpstat -e — sürücüsüz/raw dahil tüm hedefler).
+function listCups(): Promise<ScannerListResult> {
+  return new Promise((resolve) => {
+    try {
+      const child = spawn("lpstat", ["-e"], { stdio: ["ignore", "pipe", "pipe"] });
+      let out = "", err = "";
+      child.stdout?.on("data", (c) => (out += String(c)));
+      child.stderr?.on("data", (c) => (err += String(c)));
+      child.on("error", (e) => resolve({ available: false, error: e.message, devices: [] }));
+      child.on("close", (code) => {
+        if (code !== 0 && !out.trim()) {
+          resolve({ available: false, error: err.trim() || `lpstat çıkış ${code}`, devices: [] });
+          return;
+        }
+        const devices: ScannerDeviceInfo[] = out
+          .split("\n").map((s) => s.trim()).filter(Boolean)
+          .map((name) => ({ path: name, label: name }));
+        resolve({ available: true, error: null, devices });
+      });
+    } catch (e) {
+      resolve({ available: false, error: (e as Error).message, devices: [] });
+    }
+  });
+}
+
 export function registerPrinterIpc(): void {
   ipcMain.handle("printer:list-serial", () => listSerial());
+  ipcMain.handle("printer:list-cups", () => listCups());
   ipcMain.handle("printer:send", (_e, opts: PrinterSendOpts) => {
     if (!opts?.content) return Promise.resolve({ ok: false, bytes: 0, available: true, error: "İçerik boş" });
+    if (opts.transport === "cups") return sendCups(opts);
     return opts.transport === "serial" ? sendSerial(opts) : sendTcp(opts);
   });
 }

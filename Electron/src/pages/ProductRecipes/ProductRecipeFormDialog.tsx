@@ -20,6 +20,7 @@ import type { ProductionRoute } from "@/pages/Routes/types";
 import { TargetItemPicker } from "@/pages/Operations/WorkOrders/TargetItemPicker";
 import { RouteEditor } from "@/pages/Operations/WorkOrders/RouteEditor";
 import { useDesignerSteps } from "@/pages/Operations/WorkOrders/useDesignerSteps";
+import { routeStepsToCreatePayload } from "@/pages/Operations/WorkOrders/workOrderPrefill";
 import type { WorkOrderFormValues } from "@/pages/Operations/WorkOrders/schema";
 import {
   recipeFormDefaults,
@@ -110,11 +111,11 @@ export function ProductRecipeFormDialog({
       code: generateCode(CODE_PREFIXES.ROUTE),
       isActive: true,
       isFavorite: false,
-      steps: routeSteps.map((s, i) => ({
-        stationId: s.stationId,
-        sequence: i + 1,
-        defaultNotes: s.notes.trim() || null,
-      })),
+      // Saha #14: fason planlaması (kategori + firma) KORUNMALI. Eskiden buradaki
+      // inline map yalnız stationId/sequence/defaultNotes gönderiyordu → İş Emri
+      // Şablonu'na seçilen fason firma DÜŞÜYORDU (rota tekrar uygulanınca boş
+      // geliyordu). routeStepsToCreatePayload = WO formuyla tek ortak kaynak.
+      steps: routeStepsToCreatePayload(routeSteps),
     } as unknown as Partial<ProductionRoute>);
     return (res.data as { id: string }).id;
   };

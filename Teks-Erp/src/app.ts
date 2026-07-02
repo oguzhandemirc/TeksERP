@@ -83,7 +83,10 @@ app.use(
     strictTransportSecurity: false,
   })
 );
-app.use(cors());
+// exposedHeaders: tarayıcı/Electron renderer'ı cross-origin custom response
+// header'larını ancak burada listelenirse JS'e açar. Etiket dili (native baskı
+// guard'ı buna bakar) + sunucu saati (apiClient offset) okunabilsin diye gerekli.
+app.use(cors({ exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "Date"] }));
 // gzip + brotli yoksa sıkıştır — JSON listelerde 60-80% boyut tasarrufu.
 // 1KB altı response'lar atlanır (overhead'e değmez).
 app.use(compression({ threshold: 1024 }));

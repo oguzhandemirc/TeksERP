@@ -26,6 +26,7 @@ import { useDeviceStore } from '../../store/deviceStore';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import BtPrinterSettingsCard from '../../components/BtPrinterSettingsCard';
 import BtMeterSettingsCard from '../../components/BtMeterSettingsCard';
+import BtScaleSettingsCard from '../../components/BtScaleSettingsCard';
 import type { RootStackParamList } from '../../navigation/types';
 
 const COLORS = {
@@ -329,6 +330,9 @@ export default function SettingsScreen() {
 
         {/* ── Bluetooth metre makineleri (2/4 kat, HC-06) ── */}
         <BtMeterSettingsCard />
+
+        {/* ── Bluetooth sevkiyat kantarı (SCALE, HC-06) — MAC'ten eşleştir ── */}
+        <BtScaleSettingsCard />
 
         {/* ── Cihaz eşleştirme (durum + alt ekran) ── */}
         <TouchableRipple

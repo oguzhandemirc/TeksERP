@@ -164,6 +164,24 @@ async function run(ids: string[]): Promise<void> {
   // Ek güven: alias/override içerik gerçekten basılıyor mu (dalların canlı olduğu).
   check("alias dalı render edildi (BLK-ITEM-ALIAS bulk'ta)", bulk.includes("BLK-ITEM-ALIAS"));
   check("override dalı render edildi (OVR-ITEM bulk'ta)", bulk.includes("OVR-ITEM"));
+
+  // ── NATIVE bulk (diyalogsuz seri/BT tek-job) — aynı fixture matrisi ─────────
+  // bulk-native = N topun native bloklarının ardışık birleşimi. GROUND TRUTH:
+  // per-roll getRollLabelNative (preloaded=undefined) çıktılarını concat et.
+  const nativeBlocks: string[] = [];
+  for (const id of ids) {
+    nativeBlocks.push((await svc.getRollLabelNative(id, undefined, { copies })).data.content);
+  }
+  const expectedNative = nativeBlocks.join("");
+  const nativeRes = await svc.getBulkRollLabelsNative(ids, { copies });
+  check("native bulk count == top sayısı", nativeRes.data.count === ids.length, `${nativeRes.data.count}/${ids.length}`);
+  check("native bulk dili tanımlı", typeof nativeRes.data.language === "string" && nativeRes.data.language.length > 0, nativeRes.data.language);
+  check(
+    "native bulk == per-roll-native concat (byte-identik, date-masked)",
+    maskDate(nativeRes.data.content) === maskDate(expectedNative),
+    `len ${nativeRes.data.content.length} vs ${expectedNative.length}`,
+  );
+  check("native bulk içeriği boş değil", nativeRes.data.content.length > 0);
 }
 
 async function cleanup(): Promise<void> {

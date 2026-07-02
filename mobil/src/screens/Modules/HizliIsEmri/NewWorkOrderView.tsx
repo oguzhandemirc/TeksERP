@@ -25,17 +25,15 @@ import WorkOrderHeaderFields, {
 } from './WorkOrderHeaderFields';
 import OrderLinkPicker from './OrderLinkPicker';
 import RouteStepsModal from './RouteStepsModal';
-import { useCardPrinter } from './useCardPrinter';
-import { buildWorkOrderCardData } from './printWorkOrder';
 
 import { printFasonCeki } from '../../../services/fasonCekiPrint';
+import { printTravelerCardForWorkOrder } from '../../../services/travelerCardPrint';
 import { rollService } from '../../../services/roll.service';
 import { routeService } from '../../../services/route.service';
 import { productRecipeService } from '../../../services/productRecipe.service';
 import { subcontractorService } from '../../../services/subcontractor.service';
 import { workOrderService, type QuickStartRequest } from '../../../services/workOrder.service';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
-import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import type { Roll } from '../../../types/models';
 import { colors, spacing, radius } from '../../../theme';
@@ -71,8 +69,7 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
   const setLastRouteTemplateId = useDeviceSettingsStore((s) => s.setLastRouteTemplateId);
   const lastWoTemplateId = useDeviceSettingsStore((s) => s.lastWoTemplateId);
   const setLastWoTemplateId = useDeviceSettingsStore((s) => s.setLastWoTemplateId);
-  const companyName = useFeatureFlags().data?.companyName ?? 'Adnan Şahin Tekstil';
-  const { QrSink, printCard, printing } = useCardPrinter();
+  const [printing, setPrinting] = useState(false);
 
   const [scanned, setScanned] = useState<ScannedRoll[]>([]);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -597,13 +594,19 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
     setResult(null);
   };
 
+  // Refakat kartı — backend'in TEK KAYNAK HTML'ini basar (kullanıcı iptali sessiz).
   const printResult = async () => {
     if (!result) return;
+    setPrinting(true);
     try {
-      const data = await buildWorkOrderCardData(result.woId, companyName);
-      await printCard(data);
+      await printTravelerCardForWorkOrder(result.woId);
     } catch (e) {
-      Toast.show({ type: 'error', text1: 'Çıktı alınamadı', text2: e instanceof Error ? e.message : '' });
+      const msg = e instanceof Error ? e.message : '';
+      if (!/cancel|dismiss/i.test(msg)) {
+        Toast.show({ type: 'error', text1: 'Çıktı alınamadı', text2: msg });
+      }
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -628,7 +631,6 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
   if (result) {
     return (
       <View style={styles.successWrap}>
-        {QrSink}
         <Surface style={styles.successCard} elevation={2}>
           <View style={styles.successIcon}>
             <Icon source="check-circle" size={56} color={colors.success} />
@@ -679,7 +681,6 @@ export default function NewWorkOrderView({ rollListOpen, onRollListOpenChange }:
 
   return (
     <View style={styles.root}>
-      {QrSink}
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Toplar kartı */}
         <Surface style={styles.card} elevation={1}>

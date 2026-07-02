@@ -13,6 +13,7 @@ import type { CompanyLetterhead, DocumentConfig } from "@/services/documentConfi
 export type PrintedDocType =
   | "SHIPMENT_DISPATCH"
   | "SUBCONTRACTOR_DISPATCH"
+  | "SUBCONTRACTOR_DIRECT_SHIP"
   | "KARTELA_DISPATCH";
 
 export type PrintedDocStatus = "ACTIVE" | "SUPERSEDED" | "VOIDED";
@@ -116,6 +117,18 @@ export const printedDocumentService = {
         responseType: "text",
         headers: { Accept: "text/html" },
       })
+      .then((r) => r.data),
+
+  /** Belge Şablonu canlı önizlemesi — örnek veri + DÜZENLENEN taslak config ile
+   *  gerçek backend renderHtml çıktısı (TASLAK filigranlı). Kaydetmeden, anlık.
+   *  Önizleme = gerçek baskı (tek kaynak). */
+  getSampleHtml: (docType: PrintedDocType, config: DocumentConfig): Promise<string> =>
+    apiClient
+      .post<string>(
+        `${base}/${docType}/sample-html`,
+        { config },
+        { responseType: "text", headers: { Accept: "text/html" } },
+      )
       .then((r) => r.data),
 
   /** Gerekçeli revizyon → yeni versiyon (eskisi SUPERSEDED). */

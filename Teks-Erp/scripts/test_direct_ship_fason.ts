@@ -13,6 +13,7 @@
 import prisma from "../src/lib/prisma";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
+import { printedDocumentService } from "../src/services/printed-document.service";
 import {
   RollStatus,
   StepStatus,
@@ -182,6 +183,15 @@ async function main(): Promise<void> {
 
   const doc = await prisma.printedDocument.findFirst({ where: { docType: PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP, sourceId: dispatchId, status: PrintedDocStatus.ACTIVE }, select: { id: true } });
   check("PrintedDocument SUBCONTRACTOR_DIRECT_SHIP ACTIVE donmuş", doc != null);
+
+  // Tek-kaynak HTML — GERÇEK builder snapshot'ı → renderFasonDirectShipHtml
+  // (buildFasonDirectShipDoc → renderer kontratı; rolls + allocations doğru akıyor mu).
+  const dsHtml = (await printedDocumentService.getHtml(PrintedDocType.SUBCONTRACTOR_DIRECT_SHIP, dispatchId))
+    .data as { html: string } | null;
+  check("direct-ship getHtml HTML üretti", (dsHtml?.html.length ?? 0) > 500, `len=${dsHtml?.html.length ?? 0}`);
+  check("direct-ship getHtml başlık", !!dsHtml && dsHtml.html.includes("DOĞRUDAN SEVK İRSALİYESİ"));
+  check("direct-ship getHtml karşılanan sipariş (allocations)", !!dsHtml && dsHtml.html.includes("Karşılanan Siparişler"));
+  check("direct-ship getHtml sevk edilen toplar", !!dsHtml && dsHtml.html.includes("Sevk Edilen Toplar"));
 
   // Idempotency: ikinci çağrı çift-increment YAPMAMALI
   await sub.executeDirectShip({ dispatchId, reason: "tekrar (idempotency)" }, ADMIN);

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, Button, Icon, TouchableRipple } from 'react-native-paper';
+import { Text, Button, Icon, TouchableRipple, ActivityIndicator } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { useBtPrinterStore, BT_PRINTER_LANGS } from '../store/btPrinterStore';
 import {
   isBtPrinterSupported,
-  listBondedPrinters,
+  findPrinters,
+  ensurePrinterPaired,
   testConnection,
   type BtPrinter,
 } from '../services/btPrinter.service';
@@ -39,6 +40,7 @@ export default function BtPrinterSettingsCard() {
   const [scanning, setScanning] = useState(false);
   const [testing, setTesting] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  const [pairingAddr, setPairingAddr] = useState<string | null>(null);
 
   const supported = isBtPrinterSupported();
 
@@ -53,14 +55,15 @@ export default function BtPrinterSettingsCard() {
     }
     setScanning(true);
     try {
-      const list = await listBondedPrinters();
+      // Eşleşmiş + çevrede keşfedilenler birlikte — Android ayarlarına girmeden seç.
+      const list = await findPrinters();
       setDevices(list);
       setListOpen(true);
       if (list.length === 0) {
         Toast.show({
           type: 'info',
-          text1: 'Eşleşmiş cihaz yok',
-          text2: 'Önce Android Bluetooth ayarlarından yazıcıyı eşleştirin.',
+          text1: 'Yazıcı bulunamadı',
+          text2: 'Yazıcı açık ve menzilde mi? Tekrar tarayın.',
         });
       }
     } catch (e) {
@@ -74,9 +77,32 @@ export default function BtPrinterSettingsCard() {
     }
   };
 
-  const select = (d: BtPrinter) => {
+  // Seçim: eşleşmemişse önce eşleştir (PIN bir kez, ayarlara girmeden), sonra seç.
+  const select = async (d: BtPrinter) => {
     void Haptics.selectionAsync();
-    void setPrinter(d);
+    if (d.paired === false) {
+      setPairingAddr(d.address);
+      try {
+        Toast.show({
+          type: 'info',
+          text1: 'Yazıcı eşleştiriliyor',
+          text2: 'PIN sorulursa girin (ör. 1234).',
+          visibilityTime: 8000,
+        });
+        await ensurePrinterPaired(d.address);
+      } catch (e) {
+        Toast.show({
+          type: 'error',
+          text1: 'Eşleştirilemedi',
+          text2: e instanceof Error ? e.message : 'Yazıcı açık ve menzilde mi? PIN girildi mi?',
+          visibilityTime: 6000,
+        });
+        setPairingAddr(null);
+        return;
+      }
+      setPairingAddr(null);
+    }
+    void setPrinter({ address: d.address, name: d.name });
     setListOpen(false);
     Toast.show({ type: 'success', text1: 'Yazıcı seçildi', text2: d.name });
   };
@@ -116,8 +142,9 @@ export default function BtPrinterSettingsCard() {
         <View style={styles.headText}>
           <Text style={styles.title}>Etiket Yazıcısı (Bluetooth)</Text>
           <Text style={styles.subtitle}>
-            Seçiliyse top etiketleri bu Argox yazıcıya Bluetooth ile basılır.
-            Boşsa sistem yazdırma (PDF/OS) kullanılır.
+            "Yazıcıları Tara" → eşleşmemiş yazıcıyı da bulur; seçince ayarlara girmeden
+            eşleştirir (PIN bir kez). Seçiliyse top etiketleri bu Argox'a Bluetooth ile
+            basılır; boşsa sistem yazdırma (PDF/OS).
           </Text>
         </View>
       </View>
@@ -159,14 +186,16 @@ export default function BtPrinterSettingsCard() {
       {listOpen && (
         <View style={styles.list}>
           {devices.length === 0 ? (
-            <Text style={styles.noneText}>Eşleşmiş cihaz bulunamadı</Text>
+            <Text style={styles.noneText}>Cihaz bulunamadı</Text>
           ) : (
             devices.map((d) => {
               const active = printer?.address === d.address;
+              const isPairing = pairingAddr === d.address;
               return (
                 <TouchableRipple
                   key={d.address}
-                  onPress={() => select(d)}
+                  onPress={() => void select(d)}
+                  disabled={isPairing}
                   rippleColor="rgba(99,102,241,0.2)"
                   style={styles.deviceRow}
                 >
@@ -180,6 +209,11 @@ export default function BtPrinterSettingsCard() {
                       <Text style={styles.deviceName}>{d.name}</Text>
                       <Text style={styles.deviceAddr}>{d.address}</Text>
                     </View>
+                    {isPairing ? (
+                      <ActivityIndicator size="small" color={C.accentLight} />
+                    ) : d.paired === false ? (
+                      <Text style={styles.pairBadge}>eşleşecek</Text>
+                    ) : null}
                   </View>
                 </TouchableRipple>
               );
@@ -299,6 +333,16 @@ const styles = StyleSheet.create({
   },
   deviceName: { color: C.text, fontSize: 15, fontWeight: '600' },
   deviceAddr: { color: C.subtext, fontSize: 12, marginTop: 2, fontFamily: 'monospace' },
+  pairBadge: {
+    color: C.accentLight,
+    fontSize: 11,
+    fontWeight: '700',
+    borderWidth: 1,
+    borderColor: C.accentLight,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
 
   actions: { flexDirection: 'row', gap: 10, marginTop: 16 },
   btnSecondary: { flex: 1, borderRadius: 10, borderColor: C.accentLight, borderWidth: 1 },

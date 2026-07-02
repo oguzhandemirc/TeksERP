@@ -28,6 +28,11 @@ interface BtNativeModule {
   isBluetoothEnabled(): Promise<boolean>;
   requestBluetoothEnabled(): Promise<boolean>;
   getBondedDevices(): Promise<BtNativeDevice[]>;
+  /** Çevredeki (eşleşmemiş dahil) cihazları keşfet — ~12sn sürebilir. */
+  startDiscovery(): Promise<BtNativeDevice[]>;
+  cancelDiscovery?(): Promise<boolean>;
+  /** MAC'ten eşleştir (createBond) — Android sistem PIN diyaloğu çıkar, bond olunca çözülür. */
+  pairDevice(address: string): Promise<unknown>;
   isDeviceConnected(address: string): Promise<boolean>;
   connectToDevice(address: string, options?: Record<string, unknown>): Promise<unknown>;
   writeToDevice(address: string, message: string, encoding?: string): Promise<boolean>;
@@ -78,6 +83,26 @@ async function ensureConnectPermission(): Promise<void> {
   }
 }
 
+/** Android 12+ BLUETOOTH_SCAN (eski sürüm: ACCESS_FINE_LOCATION) — cihaz keşfi için şart. */
+async function ensureScanPermission(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  const apiLevel =
+    typeof Platform.Version === 'number' ? Platform.Version : parseInt(String(Platform.Version), 10);
+  const perm =
+    !Number.isNaN(apiLevel) && apiLevel >= 31
+      ? PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN
+      : PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
+  const granted = await PermissionsAndroid.request(perm, {
+    title: 'Bluetooth tarama izni',
+    message: 'Yakındaki yazıcıları bulmak için Bluetooth tarama izni gerekli.',
+    buttonPositive: 'İzin Ver',
+    buttonNegative: 'Vazgeç',
+  });
+  if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+    throw new Error('Bluetooth tarama izni verilmedi');
+  }
+}
+
 /** Adaptör kapalıysa kullanıcıdan açmasını iste. */
 async function ensureAdapterEnabled(mod: BtNativeModule): Promise<void> {
   const enabled = await mod.isBluetoothEnabled().catch(() => true);
@@ -106,6 +131,44 @@ export async function listBonded(): Promise<BtBondedDevice[]> {
   await ensureConnectPermission();
   const devices = await mod.getBondedDevices();
   return devices.map((d) => ({ address: d.address, name: d.name?.trim() || d.address }));
+}
+
+/**
+ * Çevredeki (eşleşmemiş dahil) Bluetooth Classic cihazları keşfet — yazıcıyı
+ * Android ayarlarına girmeden bulmak için. ~12sn sürebilir. Modül yoksa boş liste.
+ */
+export async function discoverDevices(): Promise<BtBondedDevice[]> {
+  const mod = getModule();
+  if (!mod) return [];
+  await ensureScanPermission();
+  await ensureConnectPermission();
+  await ensureAdapterEnabled(mod);
+  const devices = await mod.startDiscovery();
+  return devices.map((d) => ({ address: d.address, name: d.name?.trim() || d.address }));
+}
+
+const normMac = (a: string): string => a.trim().toUpperCase();
+
+/** Bu MAC Android'de zaten eşleşmiş (bonded) mi? Modül yoksa false. */
+export async function isBonded(address: string): Promise<boolean> {
+  const want = normMac(address);
+  const list = await listBonded();
+  return list.some((d) => normMac(d.address) === want);
+}
+
+/**
+ * MAC'ten DOĞRUDAN eşleştir — Bluetooth ayarlarına girmeden. Uygulama `createBond`
+ * tetikler; HC-06 gibi eski cihazlarda Android **sistem PIN diyaloğu** çıkar
+ * (kullanıcı PIN'i bir kez yazar, ör. 1234/0000). Bond tamamlanınca çözülür.
+ * Zaten eşleşmişse hemen döner (idempotent). Modül yoksa fırlatır.
+ */
+export async function pairByMac(address: string): Promise<void> {
+  const mod = getModule();
+  if (!mod) throw new Error('Bluetooth modülü bu derlemede yok (native build gerekli).');
+  await ensureConnectPermission();
+  await ensureAdapterEnabled(mod);
+  if (await isBonded(address)) return;
+  await mod.pairDevice(address);
 }
 
 /** RFCOMM soketi açıp bağlantıyı doğrula (yazma/okuma yapmaz). */

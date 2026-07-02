@@ -82,6 +82,15 @@ async function main(): Promise<void> {
   check("v1 snapshot frozenAt var", typeof cur1?.snapshot?.frozenAt === "string");
   const v1Json = JSON.stringify(cur1.snapshot);
 
+  // 1b) Tek-kaynak HTML — GERÇEK builder snapshot'ı → renderKartelaCekiHtml
+  // (kartela getHtml gerçek-builder kontratı; sample/unit fixture'ı değil).
+  const kHtml = (await printedDocumentService.getHtml(PrintedDocType.KARTELA_DISPATCH, kd1Id))
+    .data as { html: string } | null;
+  check("kartela getHtml HTML üretti", (kHtml?.html.length ?? 0) > 500, `len=${kHtml?.html.length ?? 0}`);
+  check("kartela getHtml başlık", !!kHtml && kHtml.html.includes("KARTELA ÇEKİ LİSTESİ"));
+  check("kartela getHtml sevk no (snapshot)", !!kHtml && kHtml.html.includes(cur1.snapshot.doc.dispatchNo));
+  check("kartela getHtml 2 top satırı (gerçek snapshot)", !!kHtml && kHtml.html.includes("Gönderilen Toplar (2)"));
+
   // 2) Kaynağı değiştir → snapshot SABİT kalmalı
   await prisma.kartelaDispatch.update({ where: { id: kd1Id }, data: { plateNumber: "99 ZZZ 99" } });
   const cur1b = (await printedDocumentService.getCurrent(PrintedDocType.KARTELA_DISPATCH, kd1Id)).data as any;

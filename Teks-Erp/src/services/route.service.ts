@@ -9,9 +9,51 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { BaseService } from "./base.service";
+import { BaseService, type BaseServiceConfig } from "./base.service";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
+
+/**
+ * Route servis konfigürasyonu — TEK KAYNAK. Hem canlı wiring (route.routes.ts)
+ * hem regresyon testi (scripts/test_route_firm_roundtrip.ts) buradan tüketir.
+ * Amaç: Saha #14 fason firma (`plannedSubcontractorId`) round-trip'i, biri
+ * `defaultInclude`'dan `plannedSubcontractor`'ı düşürürse SESSİZCE bozulmasın —
+ * test gerçek config'i doğrular.
+ */
+export const ROUTE_SERVICE_CONFIG: BaseServiceConfig = {
+  modelName: "route",
+  tableName: "ROUTE",
+  searchFields: ["name"],
+  nestedCreateFields: ["steps"],
+  defaultInclude: {
+    steps: {
+      include: {
+        station: {
+          include: {
+            defaultCategory: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                // Hızlı İş Emri "Gelişmiş" renk/özellik uygulaması, rotanın bu adımı
+                // gerçekten uygulayıp uygulayamayacağını bu bayraklardan ölçer
+                // (sadece kategori atanmış olması yetmez — appliesColor/Property gerekir).
+                appliesColor: true,
+                appliesProperty: true,
+              },
+            },
+          },
+        },
+        // Saha #14: rota şablonunda saklı fason firması — istemci kayıtlı firmanın
+        // adını ayrı sorgu olmadan gösterebilsin. (Scalar plannedSubcontractorId
+        // zaten include ile dönüyor; bu yalnız adı ekler.)
+        plannedSubcontractor: { select: { id: true, name: true } },
+      },
+      orderBy: { sequence: "asc" },
+    },
+  },
+  uniqueField: "code",
+};
 
 interface IncomingStep {
   stationId?: string;

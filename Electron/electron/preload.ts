@@ -48,6 +48,7 @@ const api: ApiBridge = {
   },
   printer: {
     listSerial: () => ipcRenderer.invoke("printer:list-serial"),
+    listCups: () => ipcRenderer.invoke("printer:list-cups"),
     send: (opts: PrinterSendOpts) => ipcRenderer.invoke("printer:send", opts),
   },
   scale: {

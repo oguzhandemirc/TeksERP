@@ -19,6 +19,20 @@ const reissueSchema = z.object({
   reason: z.string().trim().min(3, "Revizyon gerekçesi en az 3 karakter").max(500),
 });
 
+/** Belge Şablonu önizlemesi — admin'in düzenlediği taslak içerik ayarı (ResolvedDocConfig). */
+const docConfigSchema = z
+  .object({
+    titleOverride: z.string().optional(),
+    showLetterhead: z.boolean().optional(),
+    sections: z.record(z.string(), z.boolean()).optional(),
+    signatureLabels: z.array(z.string()).optional(),
+    showSignatures: z.boolean().optional(),
+    footerNote: z.string().optional(),
+  })
+  .nullable();
+
+const sampleHtmlSchema = z.object({ config: docConfigSchema.optional() });
+
 function parseParams(req: Request): { docType: PrintedDocType; sourceId: string } {
   return {
     docType: docTypeSchema.parse(req.params.docType),
@@ -30,6 +44,7 @@ export class PrintedDocumentController {
   constructor() {
     this.getCurrent = this.getCurrent.bind(this);
     this.getHtml = this.getHtml.bind(this);
+    this.getSampleHtml = this.getSampleHtml.bind(this);
     this.listVersions = this.listVersions.bind(this);
     this.getVersion = this.getVersion.bind(this);
     this.reissue = this.reissue.bind(this);
@@ -71,6 +86,22 @@ export class PrintedDocumentController {
         return;
       }
       res.type("html").send(data.html);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /api/printed-documents/:docType/sample-html
+   * Belge Şablonu canlı önizlemesi — örnek veri + gönderilen taslak config ile
+   * gerçek renderHtml çıktısı (TASLAK filigranlı). Persist edilmez.
+   */
+  async getSampleHtml(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const docType = docTypeSchema.parse(req.params.docType);
+      const { config } = sampleHtmlSchema.parse(req.body ?? {});
+      const html = await printedDocumentService.renderSampleHtml(docType, config ?? null);
+      res.type("html").send(html);
     } catch (err) {
       next(err);
     }
