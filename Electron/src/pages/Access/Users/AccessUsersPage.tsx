@@ -195,16 +195,21 @@ export function AccessUsersPage() {
           className="h-8 w-64 text-sm"
         />
         <Button
-          variant={showInactive ? "secondary" : "ghost"}
           size="sm"
-          className="h-8 gap-1"
+          className={`h-8 gap-1 ${
+            showInactive
+              ? "bg-amber-600 text-white hover:bg-amber-700"
+              : "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
+          }`}
           onClick={() => setShowInactive((v) => !v)}
           title="Pasife alınmış kullanıcıları göster/gizle"
         >
           {showInactive ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          Pasifleri göster
+          {showInactive ? "Pasifleri gizle" : "Pasifleri göster"}
           {inactiveCount > 0 && (
-            <Badge variant="muted" className="ml-1">{inactiveCount}</Badge>
+            <span className="ml-1 rounded-full bg-black/15 px-1.5 text-xs dark:bg-white/20">
+              {inactiveCount}
+            </span>
           )}
         </Button>
       </div>
