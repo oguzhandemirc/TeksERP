@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -21,7 +22,10 @@ import { NewTemplateDialog } from "./NewTemplateDialog";
 
 const QUERY_KEY = "label-templates";
 
-export function LabelTemplatesPage({ hideHeader }: { hideHeader?: boolean } = {}) {
+export function LabelTemplatesPage({
+  hideHeader,
+  actionsPortal,
+}: { hideHeader?: boolean; actionsPortal?: HTMLElement | null } = {}) {
   const navigate = useNavigate();
   const [sp, setSp] = useSearchParams();
   // Aktif tür URL'de (?kind=) — düzenle→geri dönünce hatırlanır (yoksa Bitmiş).
@@ -65,9 +69,10 @@ export function LabelTemplatesPage({ hideHeader }: { hideHeader?: boolean } = {}
 
       <div className="flex-1 overflow-auto p-4">
         <Tabs value={activeKind} onValueChange={(v) => setActiveKind(v as LabelKind)}>
-          {hideHeader && (
+          {hideHeader && !actionsPortal && (
             <div className="mb-3 flex items-center justify-end gap-2">{actions}</div>
           )}
+          {hideHeader && actionsPortal && createPortal(actions, actionsPortal)}
           <TabsList>
             {(Object.keys(labelKindLabels) as LabelKind[]).map((k) => (
               <TabsTrigger key={k} value={k}>

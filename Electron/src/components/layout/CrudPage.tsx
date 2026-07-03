@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Plus, Pencil, Trash2, RotateCcw, PowerOff } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
@@ -32,8 +33,11 @@ interface Props<T extends { id: string }> {
   /** Kayıt yokken "Yeni" butonunu glow animasyonuyla vurgula. */
   glowWhenEmpty?: boolean;
   /** Üst PageHeader'ı gizle (bir sekmeye gömülürken çift başlığı önler) —
-   * Yenile/Yeni butonları araç çubuğuna taşınır. */
+   * Yenile/Yeni butonları araç çubuğuna taşınır (actionsPortal verilirse oraya). */
   hideHeader?: boolean;
+  /** hideHeader iken Yenile/Yeni butonlarının render edileceği üst kapsayıcı
+   * (ör. saran sayfanın PageHeader aksiyon alanı) — createPortal ile taşınır. */
+  actionsPortal?: HTMLElement | null;
   /** KALICI SİLME ayrımı (users kalıbı): verilirse pasife-al ikonu PowerOff olur ve
    * ayrıca Trash2 = kalıcı sil (DELETE /:id/permanent) eklenir. Backend'i deletedAt
    * damgalı modellerde kayıt gizlenir ama veri bütünlüğü için DB'de durur. */
@@ -63,6 +67,7 @@ export function CrudPage<T extends { id: string }>({
   hideHeader,
   renderForm,
   permanentDelete,
+  actionsPortal,
 }: Props<T>) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<T | null>(null);
@@ -194,6 +199,7 @@ export function CrudPage<T extends { id: string }>({
       {!hideHeader && (
         <PageHeader title={title} description={description} actions={headerActions} />
       )}
+      {hideHeader && actionsPortal && createPortal(headerActions, actionsPortal)}
 
       <DataTableToolbar
         search={search}
@@ -203,7 +209,7 @@ export function CrudPage<T extends { id: string }>({
         exportName={title}
         actions={
           <>
-            {hideHeader && headerActions}
+            {hideHeader && !actionsPortal && headerActions}
             {filterBar}
             <label className="flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border bg-background px-3 text-xs">
               <Checkbox
