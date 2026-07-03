@@ -174,4 +174,11 @@ export class LabelTemplateController {
       res.status(200).json(result);
     } catch (e) { next(e); }
   };
+
+  hardDelete = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.hardDelete(req.params.id as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
 }

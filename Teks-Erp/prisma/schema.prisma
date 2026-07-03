@@ -499,6 +499,9 @@ model LabelFormatProfile {
   /// true (partial unique index). Kartela (SWATCH) bundan etkilenmez — o code="DEFAULT"
   /// kullanır; böylece top ile kartela boyutu bağımsız ayarlanır.
   isRollDefault Boolean @default(false)
+  /// KALICI silinme damgası (deletedAt kalıbı) — dolu=silinmiş: listelerde görünmez,
+  /// düzenlenemez; satır veri bütünlüğü için durur (kod DEL- önekiyle serbest).
+  deletedAt DateTime? @db.Timestamptz
 
   peripherals PeripheralDevice[]
 
@@ -2566,6 +2569,10 @@ model LabelTemplate {
   qrScale    Int?
   /// Sağ kenarda dikey metraj bandı (siyah zemin/beyaz değer, döndürülmüş) — opsiyonel.
   lengthBanner Boolean?
+
+  /// KALICI silinme damgası — dolu=silinmiş: listelerde görünmez, düzenlenemez;
+  /// yönlendirme satırları silinir, ad DEL- önekiyle serbest kalır.
+  deletedAt DateTime? @db.Timestamptz
 
   peripheralRoutes PeripheralTemplateRoute[]
 

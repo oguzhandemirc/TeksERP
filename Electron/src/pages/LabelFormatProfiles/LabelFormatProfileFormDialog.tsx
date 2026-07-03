@@ -45,7 +45,6 @@ export function LabelFormatProfileFormDialog({ open, onOpenChange, initial, onSu
         gapMm: Number(initial.gapMm),
         dpi: initial.dpi,
         orientation: initial.orientation,
-        isActive: initial.isActive,
       }
     : labelFormatProfileFormDefaults;
 
@@ -136,9 +135,8 @@ export function LabelFormatProfileFormDialog({ open, onOpenChange, initial, onSu
             </FormField>
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" {...form.register("isActive")} /> Aktif
-          </label>
+          {/* Aktiflik formdan YÖNETİLMEZ — yalnız listedeki Pasife Al / Aktifleştir /
+              Kalıcı Sil aksiyonlarından (users kalıbı). */}
         </>
       )}
     </EntityFormDialog>

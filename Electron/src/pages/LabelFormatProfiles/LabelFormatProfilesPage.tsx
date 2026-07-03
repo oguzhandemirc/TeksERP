@@ -22,6 +22,13 @@ export function LabelFormatProfilesPage({ hideHeader }: { hideHeader?: boolean }
       columns={labelFormatProfileColumns}
       writePermission="station:write"
       searchPlaceholder="Profil kodu/adı ara..."
+      permanentDelete={{
+        description: (p) =>
+          `"${p.name}" (${p.code}) KALICI olarak silinecek — bu işlem GERİ ALINAMAZ. ` +
+          `Kayıt yalnız veri bütünlüğü için arka planda saklanır; listelerde görünmez, ` +
+          `aktifleştirilemez. Bu profili kullanan cihazlar sistem varsayılan profiline döner; ` +
+          `profil koduyla yenisi açılabilir. Geçici durdurmak için "Pasife Al"ı kullanın.`,
+      }}
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <LabelFormatProfileFormDialog
           open={open}

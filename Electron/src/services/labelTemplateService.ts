@@ -137,6 +137,12 @@ export const labelTemplateService = {
       .delete<ApiResponse<void>>(`/api/label-templates/${id}`)
       .then((r) => r.data),
 
+  /** KALICI sil (deletedAt damgası) — listeden tamamen gizlenir, geri getirilemez. */
+  hardRemove: (id: string): Promise<ApiResponse<void>> =>
+    apiClient
+      .delete<ApiResponse<void>>(`/api/label-templates/${id}/permanent`)
+      .then((r) => r.data),
+
   /**
    * Şablon düzenleme önizleme HTML'i — backend mock payload + verilen field
    * listesi ile tam HTML üretir. Iframe srcDoc kaynağı; mobil ve Electron

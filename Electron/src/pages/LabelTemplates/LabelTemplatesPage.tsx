@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Star, StarOff, Trash2, Pencil } from "lucide-react";
+import { Plus, Star, StarOff, Trash2, Pencil, PowerOff, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,7 @@ export function LabelTemplatesPage({ hideHeader }: { hideHeader?: boolean } = {}
   };
   const [newOpen, setNewOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [hardDeleting, setHardDeleting] = useState<{ id: string; name: string } | null>(null);
 
   // Düzenleme sayfası, aynı tür+sekmeye dönebilmek için türü URL'den okur.
   const handleEdit = (id: string) =>
@@ -81,6 +82,7 @@ export function LabelTemplatesPage({ hideHeader }: { hideHeader?: boolean } = {}
                 kind={k}
                 onEdit={handleEdit}
                 onDelete={setDeletingId}
+                onHardDelete={(t) => setHardDeleting({ id: t.id, name: t.name })}
               />
             </TabsContent>
           ))}
@@ -97,6 +99,11 @@ export function LabelTemplatesPage({ hideHeader }: { hideHeader?: boolean } = {}
         id={deletingId}
         onClose={() => setDeletingId(null)}
       />
+
+      <HardDeleteConfirm
+        target={hardDeleting}
+        onClose={() => setHardDeleting(null)}
+      />
     </div>
   );
 }
@@ -105,10 +112,12 @@ function TemplateList({
   kind,
   onEdit,
   onDelete,
+  onHardDelete,
 }: {
   kind: LabelKind;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  onHardDelete: (t: LabelTemplate) => void;
 }) {
   const qc = useQueryClient();
   const queryKey = [QUERY_KEY, kind];
@@ -121,6 +130,15 @@ function TemplateList({
     mutationFn: (id: string) => labelTemplateService.setDefault(id),
     onSuccess: () => {
       toast.success("Varsayılan şablon güncellendi.");
+      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
+    },
+  });
+
+  // Pasif şablonu geri aktifleştir (users kalıbı: pasife alma GERİ ALINABİLİR).
+  const restoreMut = useMutation({
+    mutationFn: (id: string) => labelTemplateService.update(id, { isActive: true }),
+    onSuccess: () => {
+      toast.success("Şablon aktifleştirildi.");
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
     },
   });
@@ -147,6 +165,8 @@ function TemplateList({
           onSetDefault={() => setDefaultMut.mutate(t.id)}
           onEdit={() => onEdit(t.id)}
           onDelete={() => onDelete(t.id)}
+          onRestore={() => restoreMut.mutate(t.id)}
+          onHardDelete={() => onHardDelete(t)}
         />
       ))}
     </ul>
@@ -158,11 +178,15 @@ function TemplateRow({
   onSetDefault,
   onEdit,
   onDelete,
+  onRestore,
+  onHardDelete,
 }: {
   template: LabelTemplate;
   onSetDefault: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onRestore: () => void;
+  onHardDelete: () => void;
 }) {
   return (
     <li className="flex flex-wrap items-center gap-2 p-3 text-sm">
@@ -200,12 +224,39 @@ function TemplateRow({
         <Button type="button" size="sm" variant="outline" onClick={onEdit} className="gap-1">
           <Pencil className="h-3.5 w-3.5" /> Düzenle
         </Button>
+        {/* Pasife Al (aktifse) / Aktifleştir (pasifse) — GERİ ALINABİLİR */}
+        {!template.isDefault && template.isActive && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            title="Pasife Al (geri alınabilir)"
+            onClick={onDelete}
+            className="h-8 w-8 text-destructive"
+          >
+            <PowerOff className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {!template.isActive && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            title="Aktifleştir"
+            onClick={onRestore}
+            className="h-8 w-8 text-primary"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {/* Kalıcı Sil — GERİ ALINAMAZ (default şablonda kapalı; backend de reddeder) */}
         {!template.isDefault && (
           <Button
             type="button"
             size="icon"
             variant="ghost"
-            onClick={onDelete}
+            title="Kalıcı Sil (GERİ ALINAMAZ)"
+            onClick={onHardDelete}
             className="h-8 w-8 text-destructive"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -242,6 +293,45 @@ function DeleteConfirm({
       destructive
       onConfirm={() => {
         if (id) mut.mutate();
+      }}
+    />
+  );
+}
+
+function HardDeleteConfirm({
+  target,
+  onClose,
+}: {
+  target: { id: string; name: string } | null;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: () => labelTemplateService.hardRemove(target!.id),
+    onSuccess: () => {
+      toast.success("Şablon kalıcı olarak silindi.");
+      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
+      onClose();
+    },
+  });
+  return (
+    <ConfirmDialog
+      open={Boolean(target)}
+      onOpenChange={(open) => !open && onClose()}
+      title="Şablon KALICI silinsin mi?"
+      description={
+        target
+          ? `"${target.name}" KALICI olarak silinecek — bu işlem GERİ ALINAMAZ. Kayıt yalnız ` +
+            `veri bütünlüğü için arka planda saklanır; listelerde görünmez, aktifleştirilemez. ` +
+            `Cihazlardaki şablon yönlendirmeleri kaldırılır, şablon adı serbest kalır. ` +
+            `Geçici olarak durdurmak istiyorsanız "Pasife Al"ı kullanın.`
+          : ""
+      }
+      confirmLabel="Kalıcı Sil"
+      destructive
+      isPending={mut.isPending}
+      onConfirm={() => {
+        if (target) mut.mutate();
       }}
     />
   );

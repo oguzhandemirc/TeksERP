@@ -14,7 +14,6 @@ export const labelFormatProfileFormSchema = z.object({
   gapMm: z.coerce.number().min(0).max(50),
   dpi: z.coerce.number().int().min(50).max(1200),
   orientation: z.enum(["PORTRAIT", "LANDSCAPE"]),
-  isActive: z.boolean(),
 });
 
 export type LabelFormatProfileFormValues = z.infer<typeof labelFormatProfileFormSchema>;
@@ -34,7 +33,6 @@ export function buildLabelFormatProfilePayload(v: LabelFormatProfileFormValues) 
     gapMm: v.gapMm,
     dpi: v.dpi,
     orientation: v.orientation,
-    isActive: v.isActive,
   };
 }
 
@@ -51,5 +49,4 @@ export const labelFormatProfileFormDefaults: LabelFormatProfileFormValues = {
   gapMm: 2,
   dpi: 203,
   orientation: "LANDSCAPE",
-  isActive: true,
 };

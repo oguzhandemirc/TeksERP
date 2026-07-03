@@ -82,7 +82,8 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
   // --- 4. Şablon: explicit > cihaz route[kind] > kind default > null ---
   let template: LabelTemplate | null = null;
   if (opts.templateId) {
-    template = await prisma.labelTemplate.findUnique({ where: { id: opts.templateId } });
+    // KALICI silinmiş şablon explicit istense bile çözülmez.
+    template = await prisma.labelTemplate.findFirst({ where: { id: opts.templateId, deletedAt: null } });
   }
   if (!template && peripheral?.templateRoutes?.length) {
     template = peripheral.templateRoutes[0].template;

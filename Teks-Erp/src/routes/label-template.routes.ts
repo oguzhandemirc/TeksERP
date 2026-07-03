@@ -202,4 +202,18 @@ router.post("/:id/set-default", verifyToken, requirePermission("label-template:w
  */
 router.delete("/:id", verifyToken, requirePermission("label-template:write"), controller.deactivate);
 
+/**
+ * @openapi
+ * /api/label-templates/{id}/permanent:
+ *   delete:
+ *     tags: [Label Templates]
+ *     summary: Template'i KALICI sil (deletedAt damgası — satır veri bütünlüğü için durur)
+ *     description: |
+ *       Fiziksel DELETE değildir: kayıt hiçbir listede görünmez, geri getirilemez;
+ *       ad DEL- önekiyle serbest kalır, cihaz şablon yönlendirmeleri silinir.
+ *       Default template silinemez — önce başka birini default yapın.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.delete("/:id/permanent", verifyToken, requirePermission("label-template:write"), controller.hardDelete);
+
 export default router;

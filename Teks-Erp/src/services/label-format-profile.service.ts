@@ -59,6 +59,11 @@ function assertNonNegative(data: Record<string, unknown>, key: string, label: st
 }
 
 export class LabelFormatProfileService extends BaseService {
+  /** KALICI silinenler (deletedAt dolu) hiçbir listede görünmez — pasifler görünür. */
+  protected extraWhere(): Record<string, unknown> {
+    return { deletedAt: null };
+  }
+
   private validateRefs(data: Record<string, unknown>): void {
     assertPositive(data, "widthMm", "Etiket genişliği (mm)");
     assertPositive(data, "heightMm", "Etiket yüksekliği (mm)");
@@ -72,13 +77,43 @@ export class LabelFormatProfileService extends BaseService {
   }
 
   async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    delete data.deletedAt; // silinme damgası YALNIZ hardDelete'ten yazılır
     this.validateRefs(data);
     return super.create(data, userId);
   }
 
   async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    delete data.deletedAt;
+    const existing = await prisma.labelFormatProfile.findUnique({ where: { id }, select: { deletedAt: true } });
+    if (existing?.deletedAt) throw AppError.badRequest("Silinmiş profil düzenlenemez veya geri getirilemez");
     this.validateRefs(data);
     return super.update(id, data, userId);
+  }
+
+  /**
+   * KALICI silme — fiziksel DELETE DEĞİL (deletedAt kalıbı): satır veri bütünlüğü
+   * için durur, hiçbir listede görünmez. Kod DEL- önekiyle serbest kalır; bu profili
+   * kullanan cihazların referansı sökülür (sistem varsayılan profiline düşerler);
+   * top-varsayılanıysa bayrak düşürülür.
+   */
+  async hardDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const old = await prisma.labelFormatProfile.findUnique({ where: { id } });
+    if (!old) return { success: false, data: null, message: "Kayıt bulunamadı" };
+    if (old.deletedAt) return { success: true, data: old, message: "Kayıt zaten silinmiş" }; // idempotent
+    const freedCode = `DEL-${Date.now().toString(36).toUpperCase()}-${old.code}`.slice(0, 48);
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.peripheralDevice.updateMany({ where: { formatProfileId: id }, data: { formatProfileId: null } });
+      return tx.labelFormatProfile.update({
+        where: { id },
+        data: { deletedAt: new Date(), isActive: false, isRollDefault: false, code: freedCode },
+      });
+    });
+    await AuditService.log({
+      userId, action: "DELETE", tableName: "LABEL_FORMAT_PROFILE", recordId: id,
+      oldData: old as unknown as Record<string, unknown>,
+      newData: { deletedAt: updated.deletedAt, freedCode },
+    }).catch(() => undefined);
+    return { success: true, data: updated, message: "Profil kalıcı olarak silindi (kayıt veri bütünlüğü için saklanır)" };
   }
 
   /**

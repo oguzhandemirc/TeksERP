@@ -112,6 +112,7 @@ export class LabelTemplateService {
   }): Promise<ApiResponse<LabelTemplate[]>> {
     const rows = await prisma.labelTemplate.findMany({
       where: {
+        deletedAt: null, // KALICI silinenler hiçbir listede görünmez (pasifler görünür)
         ...(opts?.kind ? { kind: opts.kind } : {}),
         ...(opts?.includeInactive ? {} : { isActive: true }),
       },
@@ -122,7 +123,7 @@ export class LabelTemplateService {
 
   async findById(id: string): Promise<ApiResponse<LabelTemplate>> {
     const row = await prisma.labelTemplate.findUnique({ where: { id } });
-    if (!row) throw AppError.notFound("Template bulunamadı");
+    if (!row || row.deletedAt) throw AppError.notFound("Template bulunamadı");
     return { success: true, data: row };
   }
 
@@ -132,7 +133,7 @@ export class LabelTemplateService {
    */
   async findDefault(kind: LabelKind): Promise<LabelTemplate | null> {
     return prisma.labelTemplate.findFirst({
-      where: { kind, isDefault: true, isActive: true },
+      where: { kind, isDefault: true, isActive: true, deletedAt: null },
     });
   }
 
@@ -199,6 +200,7 @@ export class LabelTemplateService {
   async update(id: string, input: LabelTemplateUpdateInput, userId?: string): Promise<ApiResponse<LabelTemplate>> {
     const existing = await prisma.labelTemplate.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Template bulunamadı");
+    if (existing.deletedAt) throw AppError.badRequest("Silinmiş şablon düzenlenemez veya geri getirilemez");
 
     if (input.fields) {
       validateFields(existing.kind, input.fields);
@@ -258,6 +260,7 @@ export class LabelTemplateService {
   async setDefault(id: string, userId?: string): Promise<ApiResponse<LabelTemplate>> {
     const existing = await prisma.labelTemplate.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Template bulunamadı");
+    if (existing.deletedAt) throw AppError.badRequest("Silinmiş şablon default yapılamaz");
     if (!existing.isActive) throw AppError.badRequest("Pasif template default yapılamaz");
     if (existing.isDefault) {
       return { success: true, data: existing, message: "Zaten default" };
@@ -293,6 +296,7 @@ export class LabelTemplateService {
   async deactivate(id: string, userId?: string): Promise<ApiResponse<{ deactivated: true }>> {
     const existing = await prisma.labelTemplate.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Template bulunamadı");
+    if (existing.deletedAt) throw AppError.badRequest("Silinmiş şablon pasifleştirilemez");
     if (existing.isDefault) {
       throw AppError.badRequest(
         "Default template pasifleştirilemez — önce başka bir template'i default yapın"
@@ -317,6 +321,39 @@ export class LabelTemplateService {
     });
 
     return { success: true, data: { deactivated: true }, message: "Template pasifleştirildi" };
+  }
+
+  /**
+   * KALICI silme — fiziksel DELETE DEĞİL (deletedAt kalıbı): satır veri bütünlüğü
+   * için durur, hiçbir listede görünmez, geri getirilemez. Ad DEL- önekiyle serbest
+   * kalır (kind+name unique); cihaz şablon yönlendirmeleri silinir (pivot istisnası).
+   * Default şablon silinemez — önce başka şablon default yapılmalı.
+   */
+  async hardDelete(id: string, userId?: string): Promise<ApiResponse<{ deleted: true }>> {
+    const existing = await prisma.labelTemplate.findUnique({ where: { id } });
+    if (!existing) throw AppError.notFound("Template bulunamadı");
+    if (existing.deletedAt) {
+      return { success: true, data: { deleted: true }, message: "Zaten silinmiş" }; // idempotent
+    }
+    if (existing.isDefault) {
+      throw AppError.badRequest(
+        "Default template kalıcı silinemez — önce başka bir template'i default yapın"
+      );
+    }
+    const freedName = `DEL-${Date.now().toString(36).toUpperCase()} ${existing.name}`.slice(0, 100);
+    await prisma.$transaction(async (tx) => {
+      await tx.peripheralTemplateRoute.deleteMany({ where: { templateId: id } });
+      await tx.labelTemplate.update({
+        where: { id },
+        data: { deletedAt: new Date(), isActive: false, name: freedName },
+      });
+    });
+    await AuditService.log({
+      userId, action: "DELETE", tableName: TABLE, recordId: id,
+      oldData: existing as unknown as Record<string, unknown>,
+      newData: { deletedAt: new Date().toISOString(), freedName },
+    }).catch(() => undefined);
+    return { success: true, data: { deleted: true }, message: "Şablon kalıcı olarak silindi (kayıt veri bütünlüğü için saklanır)" };
   }
 
   /**
