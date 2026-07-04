@@ -23,11 +23,19 @@ export default function ModuleSelectScreen() {
   const device = useDeviceType();
   const nav = useNavigation<Nav>();
   const isPhone = device === 'phone';
-  const columns = isPhone ? 2 : 4;
   const gap = isPhone ? spacing.md : spacing.lg;
 
   // Sıra kullanıcı profilinden (backend) gelir; sürükle-bırakta geri yazılır.
   const { orderedScreens, setModuleOrder } = useModuleOrder();
+
+  // Tablet: kartlar yatayda ekranı DOLDURMALI. Sabit 4 sütun yerine kart
+  // sayısına göre dengeli sütun sayısı hesapla — az seçenek (örn. 3 modül)
+  // tek satırda tam genişliğe yayılır; daha çok seçenek satır başına eşit
+  // dağılır (maks. 4/satır). Telefon: her zaman 2 sütun (scroll'lu).
+  const count = orderedScreens.length;
+  const maxCols = isPhone ? 2 : 4;
+  const rows = Math.max(1, Math.ceil(count / maxCols));
+  const columns = isPhone ? 2 : Math.max(1, Math.ceil(count / rows));
 
   // Tablet: grid tek ekrana sığar → kartları ölçülen alana göre yükselt (doldur).
   // Telefon: scroll'lu, sabit yükseklik.
@@ -37,7 +45,6 @@ export default function ModuleSelectScreen() {
     setAreaH(e.nativeEvent.layout.height);
   }, []);
 
-  const rows = Math.max(1, Math.ceil(orderedScreens.length / columns));
   const cardHeight = isPhone
     ? 168
     : areaH > 0
