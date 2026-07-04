@@ -5,7 +5,7 @@
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { BaseService } from "../services/base.service";
-import { stationHardRemove, machineHardRemove } from "../services/helpers/guarded-hard-remove";
+import { stationHardRemove, machineHardRemove, machineDeletePreview } from "../services/helpers/guarded-hard-remove";
 import { WorkSessionService, MOBILE_SESSION_PERMS } from "../services/work-session.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
@@ -278,6 +278,23 @@ machineRouter.get(
  *         description: Makine detayı
  */
 machineRouter.get("/:id", verifyToken, requirePermission("station:read"), machineController.findById);
+
+/**
+ * @openapi
+ * /api/machines/{id}/delete-preview:
+ *   get:
+ *     tags: [Machines]
+ *     summary: Makine kalıcı silme önizlemesi (silinebilir mi + temizlenecek oturum sayısı)
+ *     description: |
+ *       `deletable` = üretim izi (işlem/hareket/top girişi) ve eşleşme (cihaz/donanım)
+ *       yoksa true. `workSessionCount` = silmede tx içinde temizlenecek oturum satırı
+ *       sayısı (denetim izi SystemLog'da kalır). `blockers` = engel varsa somut sebepler.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Önizleme }
+ *       404: { description: Makine bulunamadı }
+ */
+machineRouter.get("/:id/delete-preview", verifyToken, requirePermission("station:write"), machineDeletePreview);
 
 /**
  * @openapi

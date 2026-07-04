@@ -6,6 +6,7 @@ import { SettingsPage } from "@/pages/Settings/SettingsPage";
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
 import { AccessUsersPage } from "@/pages/Access/Users/AccessUsersPage";
+import { UserFootprintPage } from "@/pages/Access/Users/footprint/UserFootprintPage";
 import { TemplatesPage } from "@/pages/Access/Templates/TemplatesPage";
 import { PermissionsCatalogPage } from "@/pages/Access/Permissions/PermissionsCatalogPage";
 import { ItemsPage } from "@/pages/Items/ItemsPage";
@@ -40,6 +41,7 @@ import { LabelTemplateEditPage } from "@/pages/LabelTemplates/LabelTemplateEditP
 import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage";
 import { TravelerCardSettingsPage } from "@/pages/Definitions/TravelerCardSettingsPage";
 import { DevicesPage } from "@/pages/Devices/DevicesPage";
+import { DeviceDetailPage } from "@/pages/Devices/detail/DeviceDetailPage";
 import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
 import { ReportsHubPage } from "@/pages/Reports/ReportsHubPage";
 import { ProductionReportsHubPage } from "@/pages/Reports/Production/ProductionReportsHubPage";
@@ -288,6 +290,14 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  {
+    path: "definitions/devices/:id",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <DeviceDetailPage />
+      </ProtectedRoute>
+    ),
+  },
 
   // Yetkilendirme (Admin)
   {
@@ -303,6 +313,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:users">
         <AccessUsersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "access/users/:id",
+    element: (
+      <ProtectedRoute requirePermission="admin:users">
+        <UserFootprintPage />
       </ProtectedRoute>
     ),
   },

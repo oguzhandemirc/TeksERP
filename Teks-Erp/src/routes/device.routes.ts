@@ -60,6 +60,13 @@ deviceAdminRouter.get("/", verifyToken, requirePermission("admin:settings"), Dev
 
 /**
  * @openapi
+ * /api/admin/devices/{id}:
+ *   get: { tags: [Admin], summary: "Cihaz detayı — donanım/etiket profili + son çalışma oturumu", security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.get("/:id", verifyToken, requirePermission("admin:settings"), DeviceController.detail);
+
+/**
+ * @openapi
  * /api/admin/devices/{id}/approve:
  *   post: { tags: [Admin], summary: Cihazı onayla + makineye ata (body machineId?), security: [{ bearerAuth: [] }] }
  */

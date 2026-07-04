@@ -1,12 +1,16 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { DeviceListItem } from "./types";
+import type { DeviceDetail, DeviceListItem } from "./types";
 
 const BASE = "/api/admin/devices";
 
 export const deviceService = {
   list: (): Promise<ApiResponse<DeviceListItem[]>> =>
     apiClient.get<ApiResponse<DeviceListItem[]>>(BASE).then((r) => r.data),
+
+  /** Cihaz detayı — donanım (etiket profiliyle) + son çalışma oturumu. */
+  detail: (id: string): Promise<ApiResponse<DeviceDetail>> =>
+    apiClient.get<ApiResponse<DeviceDetail>>(`${BASE}/${id}`).then((r) => r.data),
 
   /** Cihazı onayla + tür (Tablet/Telefon/PC) + opsiyonel takma ad. (makineId çalışma
    *  oturumu modelinde kullanılmaz — geriye-uyum imzası; null geçilir.) */

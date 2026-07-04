@@ -168,63 +168,91 @@ export const routeHardRemove = makeGuardedHardRemove({
   successMessage: "Rota ve tüm adımları kalıcı olarak silindi",
 });
 
-/**
- * Machine hard-delete. Yalnız HİÇ KULLANILMAMIŞ (yanlışlıkla açılmış — örn.
- * donanım sanılıp makine olarak eklenmiş) makine kalıcı silinebilir. Herhangi
- * bir üretim izi / eşleşme varsa 409 + somut sayı ile reddedilir → pasife alın.
- * Guard gerekçeleri:
- * - workSession: çalışma oturumu ayak izi olan makine silinmesin (FK Restrict).
- * - rollOperation / rollMovement / rollCreated: üretim atfı sessizce null'lanmasın
- *   (bu FK'lar SetNull — guard olmasa geçmiş bozulurdu).
- * - device / peripheral: eşlenmiş tablet veya bağlı donanım yetim kalmasın.
- */
+// Makine silme guard'ları — ÜRETİM İZİ ve EŞLEŞME engeller; çalışma oturumu ETMEZ.
+// Gerekçe: gerçek üretim yapmış (top işlemi/hareketi/girişi) makine kalıcı
+// silinemez — atıf kaybolur, sadece pasife alınır. Ama yalnız oturum (login)
+// izi olan, hiç üretim yapmamış makine "kurulum artığı"dır: kalıcı silinebilir,
+// oturum satırları tx içinde temizlenir. Denetim (kim/ne zaman girdi) SystemLog'da
+// append-only kalır — WorkSession satırını silmek onu kaybettirmez.
+const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
+  {
+    key: "rollOperationCount",
+    count: (id) => prisma.rollOperation.count({ where: { machineId: id } }),
+    message: (n) => `Bu makineye damgalı ${n} üretim işlemi var — kalıcı silinemez. Pasife alın.`,
+  },
+  {
+    key: "rollMovementCount",
+    count: (id) => prisma.rollMovement.count({ where: { machineId: id } }),
+    message: (n) => `Bu makinede ${n} üretim hareketi kayıtlı — kalıcı silinemez. Pasife alın.`,
+  },
+  {
+    key: "rollCreatedCount",
+    count: (id) => prisma.roll.count({ where: { createdMachineId: id } }),
+    message: (n) => `Bu makinede ${n} top girişi (KK1) yapılmış — kalıcı silinemez. Pasife alın.`,
+  },
+  {
+    key: "deviceCount",
+    count: (id) => prisma.device.count({ where: { machineId: id } }),
+    message: (n) => `Bu makineye ${n} cihaz (tablet) atanmış — önce cihaz atamasını kaldırın.`,
+  },
+  {
+    key: "peripheralCount",
+    count: (id) => prisma.peripheralDevice.count({ where: { machineId: id } }),
+    message: (n) => `Bu makineye ${n} donanım bağlı — önce donanımı başka makineye taşıyın veya kaldırın.`,
+  },
+];
+
 export const machineHardRemove = makeGuardedHardRemove({
   tableName: "MACHINE",
   notFoundMessage: "Makine bulunamadı",
   load: (id) => prisma.machine.findUnique({ where: { id } }),
-  guards: [
-    {
-      key: "workSessionCount",
-      count: (id) => prisma.workSession.count({ where: { machineId: id } }),
-      message: (n) =>
-        `Bu makinede ${n} çalışma oturumu geçmişi var — kalıcı silinemez. Makineyi pasife alın.`,
-    },
-    {
-      key: "rollOperationCount",
-      count: (id) => prisma.rollOperation.count({ where: { machineId: id } }),
-      message: (n) =>
-        `Bu makineye damgalı ${n} üretim işlemi var — kalıcı silinemez. Pasife alın.`,
-    },
-    {
-      key: "rollMovementCount",
-      count: (id) => prisma.rollMovement.count({ where: { machineId: id } }),
-      message: (n) =>
-        `Bu makinede ${n} üretim hareketi kayıtlı — kalıcı silinemez. Pasife alın.`,
-    },
-    {
-      key: "rollCreatedCount",
-      count: (id) => prisma.roll.count({ where: { createdMachineId: id } }),
-      message: (n) =>
-        `Bu makinede ${n} top girişi (KK1) yapılmış — kalıcı silinemez. Pasife alın.`,
-    },
-    {
-      key: "deviceCount",
-      count: (id) => prisma.device.count({ where: { machineId: id } }),
-      message: (n) =>
-        `Bu makineye ${n} cihaz (tablet) atanmış — önce cihaz atamasını kaldırın.`,
-    },
-    {
-      key: "peripheralCount",
-      count: (id) => prisma.peripheralDevice.count({ where: { machineId: id } }),
-      message: (n) =>
-        `Bu makineye ${n} donanım bağlı — önce donanımı başka makineye taşıyın veya kaldırın.`,
-    },
-  ],
+  guards: MACHINE_DELETE_GUARDS,
   deleteTx: async (tx, id) => {
+    // Üretim izi olmayan makinenin oturum (login) satırlarını temizle — FK Restrict.
+    await tx.workSession.deleteMany({ where: { machineId: id } });
     await tx.machine.delete({ where: { id } });
   },
   successMessage: "Makine kalıcı olarak silindi",
 });
+
+/**
+ * Makine silme ÖNİZLEMESİ — frontend onay modalında ne olacağını gösterir.
+ * Silinebilir mi (üretim/eşleşme yok mu) + temizlenecek oturum sayısı.
+ */
+export async function machineDeletePreview(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const id = String(req.params.id);
+    const machine = await prisma.machine.findUnique({ where: { id }, select: { id: true, name: true } });
+    if (!machine) {
+      res.status(404).json({ success: false, data: null, message: "Makine bulunamadı" });
+      return;
+    }
+
+    const blockers: { key: string; count: number; message: string }[] = [];
+    for (const guard of MACHINE_DELETE_GUARDS) {
+      const n = await guard.count(id);
+      if (n > 0) blockers.push({ key: guard.key, count: n, message: guard.message(n) });
+    }
+    const workSessionCount = await prisma.workSession.count({ where: { machineId: id } });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        machineId: id,
+        machineName: machine.name,
+        deletable: blockers.length === 0,
+        workSessionCount,
+        blockers,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
 
 /**
  * ProductRecipe hard-delete — properties pivot'u tx içinde silinir

@@ -126,6 +126,29 @@ router.post(
 /**
  * @openapi
  * /api/admin/users/{id}:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Kullanıcı detayı — kimlik + yetki sayısı + son çalışma oturumu (Ayak İzi başlığı)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/users/:id",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = req.params.id as string;
+      const data = await PermissionManagementService.getUserById(id);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}:
  *   patch:
  *     tags: [Admin]
  *     summary: Kullanıcıyı güncelle (fullName / isActive)

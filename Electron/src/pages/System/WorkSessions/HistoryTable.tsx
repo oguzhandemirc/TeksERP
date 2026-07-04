@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/table";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { safeFormat } from "@/lib/format";
+import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
+import { deviceService } from "@/pages/Devices/service";
 import { machineService } from "@/pages/Machines/service";
 import { stationService } from "@/pages/Stations/service";
 import { adminUserService } from "@/services/adminUserService";
@@ -36,13 +38,16 @@ const SELECT_CLS = "h-9 rounded-md border border-input bg-background px-2 text-s
  */
 export function HistoryTable() {
   const [userId, setUserId] = useState("");
+  const [deviceId, setDeviceId] = useState("");
   const [machineId, setMachineId] = useState("");
   const [stationId, setStationId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
+  const openTarget = useOpenTarget();
 
   const usersQ = useQuery({ queryKey: ["admin-users", "picker"], queryFn: adminUserService.list });
+  const devicesQ = useQuery({ queryKey: ["admin-devices", "picker"], queryFn: deviceService.list });
   const machinesQ = useQuery({
     queryKey: ["machines", "picker"],
     queryFn: () => loadAllForPicker(machineService),
@@ -53,10 +58,11 @@ export function HistoryTable() {
   });
 
   const q = useQuery({
-    queryKey: ["work-sessions", "history", { userId, machineId, stationId, from, to, page }],
+    queryKey: ["work-sessions", "history", { userId, deviceId, machineId, stationId, from, to, page }],
     queryFn: () =>
       workSessionService.history({
         userId: userId || undefined,
+        deviceId: deviceId || undefined,
         machineId: machineId || undefined,
         stationId: stationId || undefined,
         from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
@@ -119,6 +125,21 @@ export function HistoryTable() {
             </option>
           ))}
         </select>
+        <select
+          className={SELECT_CLS}
+          value={deviceId}
+          onChange={(e) => {
+            setDeviceId(e.target.value);
+            resetPage();
+          }}
+        >
+          <option value="">Tüm cihazlar</option>
+          {(devicesQ.data?.data ?? []).map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
         <Input
           type="date"
           className="h-9 w-40"
@@ -176,7 +197,22 @@ export function HistoryTable() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{s.device.name}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      <button
+                        type="button"
+                        className="hover:underline"
+                        title="Cihaz işlem dökümü"
+                        onClick={(e) => openTarget(`/definitions/devices/${s.device.id}`, e)}
+                        onAuxClick={(e) => {
+                          if (e.button === 1) {
+                            e.preventDefault();
+                            openTarget(`/definitions/devices/${s.device.id}`, e);
+                          }
+                        }}
+                      >
+                        {s.device.name}
+                      </button>
+                    </TableCell>
                     <TableCell className="text-xs">{safeFormat(s.startedAt, "dd.MM.yyyy HH:mm")}</TableCell>
                     <TableCell className="text-xs">
                       {s.endedAt ? safeFormat(s.endedAt, "dd.MM.yyyy HH:mm") : <Badge>Açık</Badge>}

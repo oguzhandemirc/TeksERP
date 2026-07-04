@@ -152,7 +152,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
           </div>
         ) : (
           <div className="mt-4 flex h-[calc(100vh-180px)] flex-col">
-            <Tabs defaultValue={defaultTab} className="flex flex-1 flex-col">
+            <Tabs defaultValue={defaultTab} className="flex flex-1 flex-col min-h-0">
               <TabsList>
                 {canApplyColor && (
                   <TabsTrigger value="colors" className="gap-1.5">
@@ -175,7 +175,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
               </TabsList>
 
               {canApplyColor && (
-                <TabsContent value="colors" className="flex-1 mt-3">
+                <TabsContent value="colors" className="flex-1 mt-3 min-h-0">
                   <MultiSelectCheckboxList
                     items={colorItems}
                     value={colorIds}
@@ -187,7 +187,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
               )}
 
               {canApplyProperty && (
-                <TabsContent value="properties" className="flex-1 mt-3">
+                <TabsContent value="properties" className="flex-1 mt-3 min-h-0">
                   <MultiSelectCheckboxList
                     items={propertyItems}
                     value={propertyIds}

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatDurationMinutes, placeLabel, sessionDurationMinutes } from "./types";
+import {
+  endReasonTooltip,
+  formatDurationMinutes,
+  placeLabel,
+  sessionDurationMinutes,
+  type WorkSessionItem,
+} from "./types";
 
 describe("sessionDurationMinutes", () => {
   it("açık oturumda now'a göre hesaplar", () => {
@@ -26,6 +32,33 @@ describe("formatDurationMinutes", () => {
     expect(formatDurationMinutes(205)).toBe("3 sa 25 dk");
     expect(formatDurationMinutes(45)).toBe("45 dk");
     expect(formatDurationMinutes(0)).toBe("0 dk");
+  });
+});
+
+describe("endReasonTooltip", () => {
+  const base = { id: "a", userId: "u", deviceId: "d", machineId: "m", stationId: "s",
+    startedAt: "x", endedAt: "y", lastActivityAt: "z",
+    user: { id: "u", username: "un", fullName: "Ali" },
+    device: { id: "d", deviceId: "dd", name: "Tablet-1", kind: "TABLET" },
+    machine: { id: "m", code: "MAK-1", name: "Makine 1" },
+    station: { id: "s", code: "ST", name: "KK1", kind: "RAW_QC" } } as WorkSessionItem;
+  const successor = {
+    id: "b", startedAt: "x2", user: { fullName: "Veli" }, device: { name: "Tablet-2" },
+    machine: { code: "MAK-1", name: "Makine 1" }, station: { name: "KK1" },
+  };
+  it("bitiş yoksa boş", () => {
+    expect(endReasonTooltip({ ...base, endReason: null })).toBe("");
+  });
+  it("devralan yoksa yalnız açıklama", () => {
+    expect(endReasonTooltip({ ...base, endReason: "TAKEOVER", successor: null })).not.toContain("Devralan");
+  });
+  it("TAKEOVER + devralan → 'Devralan: cihaz · kullanıcı'", () => {
+    const t = endReasonTooltip({ ...base, endReason: "TAKEOVER", successor });
+    expect(t).toContain("Devralan: Tablet-2 · Veli");
+  });
+  it("NEW_LOGIN + ardıl → 'Yeni oturum: …'", () => {
+    const t = endReasonTooltip({ ...base, endReason: "NEW_LOGIN", successor });
+    expect(t).toContain("Yeni oturum: Tablet-2 · Veli");
   });
 });
 

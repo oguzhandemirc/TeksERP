@@ -1,11 +1,13 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse, PaginatedResponse } from "@/types/api";
-import type { WorkSessionItem } from "./types";
+import type { SessionActivityResponse, WorkSessionItem } from "./types";
 
 const BASE = "/api/work-sessions";
 
 export interface WorkSessionHistoryParams {
   userId?: string;
+  /** devices.id (PK) — cihaz işlem dökümü (Tanımlar → Cihazlar detayı). */
+  deviceId?: string;
   machineId?: string;
   stationId?: string;
   /** ISO tarih (gün başı/sonu çağıran ayarlar). */
@@ -29,4 +31,8 @@ export const workSessionService = {
   /** Oturumu zorla kapat (ADMIN) — sahadaki cihaz bir sonraki işlemde yeniden yer onayı ister. */
   forceClose: (id: string): Promise<ApiResponse<{ id: string }>> =>
     apiClient.post<ApiResponse<{ id: string }>>(`${BASE}/${id}/force-close`).then((r) => r.data),
+
+  /** Oturum penceresindeki işlem dökümü — kronolojik, tek çekiş (truncated bayrağı). */
+  activity: (id: string): Promise<SessionActivityResponse> =>
+    apiClient.get<SessionActivityResponse>(`${BASE}/${id}/activity`).then((r) => r.data),
 };

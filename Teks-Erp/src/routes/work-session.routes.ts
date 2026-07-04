@@ -84,11 +84,41 @@ router.get("/active", verifyToken, requirePermission("admin:settings"), WorkSess
  * /api/work-sessions:
  *   get:
  *     tags: [Work Sessions]
- *     summary: Oturum geçmişi (ayak izi) — kullanıcı/makine/istasyon/tarih filtreli
+ *     summary: Oturum geçmişi (ayak izi) — kullanıcı/cihaz/makine/istasyon/tarih filtreli
+ *     description: Cihaz ayak izi (admin:settings) + kullanıcı ayak izi (admin:users) paylaşır.
  *     security: [{ bearerAuth: [] }]
  *     responses: { 200: { description: Sayfalı oturum listesi } }
  */
-router.get("/", verifyToken, requirePermission("admin:settings"), WorkSessionController.history);
+router.get(
+  "/",
+  verifyToken,
+  requireAnyPermission("admin:settings", "admin:users"),
+  WorkSessionController.history,
+);
+
+/**
+ * @openapi
+ * /api/work-sessions/{id}/activity:
+ *   get:
+ *     tags: [Work Sessions]
+ *     summary: Oturum penceresindeki işlem dökümü (kronolojik — giriş/hata/işlem/çıkış)
+ *     description: |
+ *       İşlem Dökümü — migration'sız, saf okuma. Oturumun (startedAt..endedAt ?? now)
+ *       penceresinde makine damgası (MACHINE, kesin) veya operatör+pencere eşleşmesi
+ *       (OPERATOR_WINDOW, kesin cihaz kanıtı değil) ile atfedilen olaylar; RollMovement
+ *       giriş/çıkış + RollError + RollOperation, kronolojik sırada. Oturum sınırlı
+ *       olduğundan tek çekiş (truncated bayrağı üst sınırda). admin:settings VEYA admin:users.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ session, summary, events[] } + truncated" }
+ *       404: { description: Oturum bulunamadı }
+ */
+router.get(
+  "/:id/activity",
+  verifyToken,
+  requireAnyPermission("admin:settings", "admin:users"),
+  WorkSessionController.activity,
+);
 
 /**
  * @openapi

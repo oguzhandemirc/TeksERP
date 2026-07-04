@@ -40,6 +40,18 @@ function toAssignment(d: DeviceWithMachine) {
   };
 }
 
+/** Cihaz detayında gösterilen donanım özeti — etiket profili dahil (liste ucu
+ *  bunu ÇEKMEZ; over-fetch olmasın diye detay endpoint'ine ayrıldı). */
+const PERIPHERAL_SUMMARY_SELECT = {
+  id: true,
+  code: true,
+  name: true,
+  kind: true,
+  connectionType: true,
+  languageOverride: true,
+  formatProfile: { select: { id: true, code: true, name: true } },
+} as const;
+
 const DEVICE_KINDS = new Set(["TABLET", "PHONE", "DESKTOP"]);
 /** Geçerli cihaz türüne normalize et (geçersiz/boş → TABLET). */
 function normalizeDeviceKind(k?: string | null): string {
@@ -54,6 +66,66 @@ export class DeviceService {
       orderBy: [{ status: "asc" }, { isActive: "desc" }, { createdAt: "desc" }],
       include: DEVICE_INCLUDE,
     });
+  }
+
+  /**
+   * Admin: cihaz detayı (Cihaz İşlem Dökümü ekranının başlığı). Cihaz meta'sı +
+   * bağlı donanımlar (etiket profiliyle) + SON çalışma oturumu ("son oturum açma").
+   * Donanım iki sahiplik yolundan birleşir: legacy tekil (PeripheralDevice.deviceId)
+   * + M:N atama (DevicePeripheral) — id'ye göre dedup edilir.
+   */
+  static async detail(id: string) {
+    const device = await prisma.device.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        deviceId: true,
+        name: true,
+        kind: true,
+        status: true,
+        isActive: true,
+        lastSeenAt: true,
+        createdAt: true,
+        machineId: true,
+        machine: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            station: { select: { id: true, name: true } },
+          },
+        },
+        peripherals: { where: { isActive: true }, select: PERIPHERAL_SUMMARY_SELECT },
+        hardwareLinks: {
+          where: { peripheral: { isActive: true } },
+          select: { peripheral: { select: PERIPHERAL_SUMMARY_SELECT } },
+        },
+      },
+    });
+    if (!device) throw AppError.notFound("Cihaz bulunamadı");
+
+    const { peripherals, hardwareLinks, ...rest } = device;
+    const hardware = new Map<string, (typeof peripherals)[number]>();
+    for (const p of [...peripherals, ...hardwareLinks.map((l) => l.peripheral)]) {
+      hardware.set(p.id, p);
+    }
+
+    // Son oturum açma — [deviceId, startedAt] index'i sort-free karşılar.
+    const lastSession = await prisma.workSession.findFirst({
+      where: { deviceId: id },
+      orderBy: { startedAt: "desc" },
+      select: {
+        id: true,
+        startedAt: true,
+        endedAt: true,
+        endReason: true,
+        user: { select: { id: true, username: true, fullName: true } },
+        machine: { select: { id: true, code: true, name: true } },
+        station: { select: { id: true, code: true, name: true, kind: true } },
+      },
+    });
+
+    return { ...rest, hardware: [...hardware.values()], lastSession };
   }
 
   /**

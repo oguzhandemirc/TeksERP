@@ -11,9 +11,26 @@ export interface AdminUserListItem {
   _count: { permissions: number };
 }
 
+/** Kullanıcı detayı (Ayak İzi başlığı) — GET /api/admin/users/:id. */
+export interface AdminUserDetail extends AdminUserListItem {
+  lastSession: {
+    id: string;
+    startedAt: string;
+    endedAt: string | null;
+    endReason: string | null;
+    device: { id: string; name: string; kind: string };
+    machine: { id: string; code: string; name: string } | null;
+    station: { id: string; code: string; name: string; kind: string };
+  } | null;
+}
+
 export const adminUserService = {
   list: (): Promise<ApiResponse<AdminUserListItem[]>> =>
     apiClient.get<ApiResponse<AdminUserListItem[]>>("/api/admin/users").then((r) => r.data),
+
+  /** Kullanıcı detayı — kimlik + yetki sayısı + son çalışma oturumu. */
+  getById: (id: string): Promise<ApiResponse<AdminUserDetail>> =>
+    apiClient.get<ApiResponse<AdminUserDetail>>(`/api/admin/users/${id}`).then((r) => r.data),
 
   /** Personel kartı sırrını üret/YENİLE (rotasyon) — dönen cardCode QR olarak basılır.
    *  Eski kart anında geçersiz; açık oturumlar etkilenmez. */

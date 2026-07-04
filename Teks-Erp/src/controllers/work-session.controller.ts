@@ -9,6 +9,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { WorkSessionService } from "../services/work-session.service";
+import { WorkSessionActivityService } from "../services/work-session-activity.service";
 import { AppError } from "../utils/app-error";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 
@@ -24,6 +25,7 @@ const openSchema = z
 
 const historySchema = z.object({
   userId: z.string().uuid().optional(),
+  deviceId: z.string().uuid().optional(),
   machineId: z.string().uuid().optional(),
   stationId: z.string().uuid().optional(),
   from: z.coerce.date().optional(),
@@ -113,6 +115,16 @@ export class WorkSessionController {
     try {
       const q = historySchema.parse(req.query ?? {});
       const result = await WorkSessionService.history(q);
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  static activity = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = assertValidUuid(req.params.id, "id");
+      const result = await WorkSessionActivityService.list(id);
       res.status(200).json(result);
     } catch (e) {
       next(e);

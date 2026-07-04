@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, ShieldCheck, Trash2, Power, PowerOff, Eye, EyeOff } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Trash2, Power, PowerOff, Eye, EyeOff, History } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
+import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import apiClient from "@/services/apiClient";
 import {
   adminUserService,
@@ -52,6 +53,7 @@ const userMutations = {
 
 export function AccessUsersPage() {
   const qc = useQueryClient();
+  const openTarget = useOpenTarget();
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUserListItem | null>(null);
@@ -259,6 +261,18 @@ export function AccessUsersPage() {
                   <TableCell>{safeFormat(user.createdAt, "dd.MM.yyyy")}</TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1"
+                        title="Ayak izi (çalışma oturumları + işlem dökümü)"
+                        onClick={(e) => openTarget(`/access/users/${user.id}`, e)}
+                        onAuxClick={(e) => {
+                          if (e.button === 1) { e.preventDefault(); openTarget(`/access/users/${user.id}`, e); }
+                        }}
+                      >
+                        <History className="h-3.5 w-3.5" /> Ayak İzi
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"

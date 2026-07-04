@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { DeviceService } from "../services/device.service";
 import { readDevicePairingRequired } from "../services/system-setting.service";
+import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import "../types/express-augment";
 
 const deviceKindSchema = z.enum(["TABLET", "PHONE", "DESKTOP"]).optional();
@@ -36,6 +37,17 @@ export class DeviceController {
   static async list(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const data = await DeviceService.list();
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/admin/devices/:id — cihaz detayı (donanım/etiket profili + son oturum). */
+  static async detail(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = assertValidUuid(req.params.id, "id");
+      const data = await DeviceService.detail(id);
       res.status(200).json({ success: true, data });
     } catch (error) {
       next(error);

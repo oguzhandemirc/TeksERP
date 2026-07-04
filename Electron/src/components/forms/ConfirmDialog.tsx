@@ -12,6 +12,8 @@ interface Props {
   destructive?: boolean;
   onConfirm: () => void | Promise<void>;
   isPending?: boolean;
+  /** Onay butonunu pasifleştir (ör. ön-koşul sağlanmadı) — iptal hâlâ çalışır. */
+  confirmDisabled?: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ export function ConfirmDialog({
   destructive,
   onConfirm,
   isPending,
+  confirmDisabled,
 }: Props) {
   const [locked, setLocked] = useState(false);
   const unlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,7 +68,7 @@ export function ConfirmDialog({
           </Button>
           <Button
             variant={destructive ? "destructive" : "default"}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             onClick={handleConfirm}
           >
             {busy ? "..." : confirmLabel}

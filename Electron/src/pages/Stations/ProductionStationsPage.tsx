@@ -1,36 +1,37 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Pencil, HardDrive, Palette, QrCode, Trash2, Power, PowerOff, EyeOff, Eye } from "lucide-react";
+import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useCrudMutations } from "@/hooks/useCrudMutations";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { generateCode, CODE_PREFIXES } from "@/lib/code-generator";
-import { stationKindLabels } from "@/types/enums";
+import type { StationKind } from "@/types/enums";
 
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
 import type { StationFormValues } from "@/pages/Stations/schema";
 import { StationFormDialog } from "@/pages/Stations/StationFormDialog";
 
-import { machineService } from "@/pages/Machines/service";
+import { machineService, getMachineDeletePreview } from "@/pages/Machines/service";
 import type { Machine } from "@/pages/Machines/types";
 import { MachineQrPrintDialog } from "@/pages/Machines/MachineQrPrintDialog";
 import type { MachineFormValues } from "@/pages/Machines/schema";
 import { MachineFormDialog } from "@/pages/Machines/MachineFormDialog";
+import { StationCard } from "@/pages/Stations/StationCard";
+import { StationFilterBar, type MachinePresence } from "@/pages/Stations/StationFilterBar";
 
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
 import type { StationCapabilitySummary } from "@/pages/StationCapabilities/types";
 import { CapabilitiesEditSheet } from "@/pages/StationCapabilities/CapabilitiesEditSheet";
 
 // Üretim akışındaki istasyon türleri — sevkiyat/diğer (OTHER) bu ekranda yok.
-const PRODUCTION_KINDS = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SUBCONTRACTOR"];
+const PRODUCTION_KINDS: StationKind[] = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SUBCONTRACTOR"] as StationKind[];
 
 const buildStationPayload = (v: StationFormValues, initial: Station | null): Partial<Station> => ({
   code: initial?.code ?? generateCode(CODE_PREFIXES.STATION),
@@ -54,6 +55,11 @@ export function ProductionStationsPage() {
   const canWrite = hasPermission("station:write");
 
   const [showInactive, setShowInactive] = useState(false);
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const [stationId, setStationId] = useState("__all__");
+  const [machinePresence, setMachinePresence] = useState<MachinePresence>("all");
+  const [capOnly, setCapOnly] = useState(false);
 
   const stationsQ = useQuery({ queryKey: ["stations", "card"], queryFn: () => loadAllForPicker(stationService) });
   // showInactive → filtresiz yükle (pasif makineler de gelsin); aksi halde yalnız aktif.
@@ -73,9 +79,61 @@ export function ProductionStationsPage() {
   const [deleteMachine, setDeleteMachine] = useState<Machine | null>(null);
   const [deactivateMachine, setDeactivateMachine] = useState<Machine | null>(null);
 
-  const stations = (stationsQ.data?.data ?? []).filter((s) => PRODUCTION_KINDS.includes(s.kind));
-  const machines = machinesQ.data?.data ?? [];
-  const capByStation = new Map((capsQ.data?.data ?? []).map((c) => [c.stationId, c]));
+  const allStations = useMemo(
+    () => (stationsQ.data?.data ?? []).filter((s) => PRODUCTION_KINDS.includes(s.kind)),
+    [stationsQ.data],
+  );
+  const capByStation = useMemo(
+    () => new Map((capsQ.data?.data ?? []).map((c) => [c.stationId, c])),
+    [capsQ.data],
+  );
+  const machinesByStation = useMemo(() => {
+    const map = new Map<string, Machine[]>();
+    for (const m of machinesQ.data?.data ?? []) {
+      const list = map.get(m.stationId);
+      if (list) list.push(m);
+      else map.set(m.stationId, [m]);
+    }
+    return map;
+  }, [machinesQ.data]);
+  const hasAnyFason = useMemo(() => allStations.some((s) => s.kind === "SUBCONTRACTOR"), [allStations]);
+
+  // İstemci-tarafı filtre — tüm veri zaten yüklü (loadAllForPicker). AND (boyutlar
+  // arası) + OR (Tür chip'leri içinde). showInactive filtre DEĞİL, makine yüklemesini sürer.
+  const stations = useMemo(() => {
+    const q = debouncedSearch.trim().toLocaleLowerCase("tr");
+    return allStations.filter((s) => {
+      if (stationId !== "__all__" && s.id !== stationId) return false;
+
+      const sm = machinesByStation.get(s.id) ?? [];
+      if (machinePresence === "has" && sm.length === 0) return false;
+      if (machinePresence === "none" && sm.length > 0) return false;
+      if (machinePresence === "active" && !sm.some((m) => m.isActive !== false)) return false;
+
+      if (capOnly) {
+        const cap = capByStation.get(s.id);
+        if (!cap || !(cap.canApplyColor || cap.canApplyProperty)) return false;
+      }
+
+      if (q) {
+        const hay = [s.name, s.code, s.department ?? "", ...sm.flatMap((m) => [m.name, m.code])]
+          .join(" ")
+          .toLocaleLowerCase("tr");
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allStations, stationId, machinePresence, capOnly, debouncedSearch, machinesByStation, capByStation]);
+
+  const anyFilterActive =
+    debouncedSearch.trim() !== "" || stationId !== "__all__" || machinePresence !== "all" || capOnly;
+
+  const clearFilters = () => {
+    setSearch("");
+    setStationId("__all__");
+    setMachinePresence("all");
+    setCapOnly(false);
+  };
 
   const handleStationSubmit = (values: StationFormValues) => {
     const payload = buildStationPayload(values, stationDlg.initial);
@@ -92,6 +150,33 @@ export function ProductionStationsPage() {
       : machineMut.createMutation.mutateAsync(payload);
     void p.then(() => setMachineDlg({ open: false, initial: null }));
   };
+
+  // Silme önizlemesi — modal açıldığında (deleteMachine set) çekilir. Silinebilir mi
+  // + kaç oturum temizlenecek. Üretim izi varsa deletable=false → onay pasif.
+  const deletePreviewQ = useQuery({
+    queryKey: ["machine-delete-preview", deleteMachine?.id],
+    queryFn: () => getMachineDeletePreview(deleteMachine!.id),
+    enabled: !!deleteMachine,
+  });
+  const preview = deletePreviewQ.data;
+
+  const deleteDescription = (() => {
+    if (!deleteMachine) return undefined;
+    if (deletePreviewQ.isLoading) return "Kontrol ediliyor…";
+    if (!preview) return "Önizleme alınamadı — makineyi pasife almayı deneyin.";
+    if (!preview.deletable) {
+      return (
+        `"${deleteMachine.name}" kalıcı silinemez — ` +
+        preview.blockers.map((b) => b.message).join("; ") +
+        `. Bunun yerine makineyi pasife alın (üretim geçmişi korunur).`
+      );
+    }
+    const sess =
+      preview.workSessionCount > 0
+        ? ` Bu makinede yalnız ${preview.workSessionCount} oturum (login) kaydı var, üretim izi yok — silmede o kayıt(lar) da temizlenecek (denetim izi SystemLog'da kalır).`
+        : "";
+    return `"${deleteMachine.name}" kalıcı olarak silinecek. Bu işlem geri alınamaz.${sess}`;
+  })();
 
   const handleMachineDelete = () => {
     if (!deleteMachine) return;
@@ -118,15 +203,6 @@ export function ProductionStationsPage() {
         actions={
           <div className="flex gap-2">
             <RefreshButton queryKey="stations" />
-            <Button
-              size="sm"
-              variant={showInactive ? "default" : "outline"}
-              className={showInactive ? "bg-amber-500 text-white hover:bg-amber-600" : "border-amber-400 text-amber-600 hover:bg-amber-50"}
-              onClick={() => setShowInactive((v) => !v)}
-            >
-              {showInactive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-              {showInactive ? "Pasifleri gizle" : "Pasifleri göster"}
-            </Button>
             {canWrite && (
               <Button size="sm" onClick={() => setStationDlg({ open: true, initial: null })}>
                 <Plus className="h-4 w-4" /> İstasyon
@@ -136,131 +212,50 @@ export function ProductionStationsPage() {
         }
       />
 
+      <StationFilterBar
+        search={search}
+        onSearch={setSearch}
+        stationId={stationId}
+        onStationId={setStationId}
+        machinePresence={machinePresence}
+        onMachinePresence={setMachinePresence}
+        capOnly={capOnly}
+        onCapOnly={setCapOnly}
+        hasAnyFason={hasAnyFason}
+        stationOptions={allStations.map((s) => ({ id: s.id, name: s.name }))}
+        visibleCount={stations.length}
+        totalCount={allStations.length}
+        anyFilterActive={anyFilterActive}
+        onClear={clearFilters}
+        showInactive={showInactive}
+        onToggleInactive={() => setShowInactive((v) => !v)}
+      />
+
       <div className="flex-1 space-y-3 overflow-auto p-6">
         {loading && <Skeleton className="h-24 w-full" />}
-        {!loading && stations.length === 0 && (
+        {!loading && allStations.length === 0 && (
           <div className="text-sm text-muted-foreground">Üretim istasyonu yok.</div>
         )}
-        {stations.map((s) => {
-          const sMachines = machines.filter((m) => m.stationId === s.id);
-          const cap = capByStation.get(s.id);
-          const capEditable = !!(cap && (cap.canApplyColor || cap.canApplyProperty));
-          return (
-            <Card key={s.id}>
-              <CardContent className="space-y-2 p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{s.name}</span>
-                    <Badge variant="secondary">{stationKindLabels[s.kind]}</Badge>
-                    {!s.isActive && <Badge variant="outline">pasif</Badge>}
-                  </div>
-                  {canWrite && (
-                    <Button variant="ghost" size="sm" onClick={() => setStationDlg({ open: true, initial: s })}>
-                      <Pencil className="h-3.5 w-3.5" /> Düzenle
-                    </Button>
-                  )}
-                </div>
-
-                {/* Makineler */}
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <HardDrive className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Makineler:</span>
-                  {sMachines.length === 0 && <span className="text-muted-foreground">—</span>}
-                  {sMachines.map((m) => {
-                    const active = m.isActive !== false;
-                    return (
-                      <span
-                        key={m.id}
-                        className={`inline-flex items-center overflow-hidden rounded border ${active ? "" : "border-dashed opacity-60"}`}
-                      >
-                        <button
-                          type="button"
-                          disabled={!canWrite}
-                          className="px-2 py-0.5 text-xs hover:bg-accent disabled:cursor-default disabled:hover:bg-transparent"
-                          onClick={() => canWrite && setMachineDlg({ open: true, initial: m })}
-                          title={canWrite ? "Düzenle" : undefined}
-                        >
-                          {m.name}
-                          {!active && <span className="ml-1 text-[10px] text-muted-foreground">(pasif)</span>}
-                        </button>
-                        {/* Oturum QR'ı — yalnız aktif makinede (pasif makineye oturum açılmaz) */}
-                        {active && (
-                          <button
-                            type="button"
-                            className="border-l px-1.5 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                            onClick={() => setQrMachine(m)}
-                            title="Makine QR etiketi (oturum açma)"
-                          >
-                            <QrCode className="h-3 w-3" />
-                          </button>
-                        )}
-                        {canWrite && active && (
-                          <button
-                            type="button"
-                            className="border-l px-1.5 py-0.5 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600"
-                            onClick={() => setDeactivateMachine(m)}
-                            title="Pasife al (geri alınabilir)"
-                          >
-                            <PowerOff className="h-3 w-3" />
-                          </button>
-                        )}
-                        {canWrite && !active && (
-                          <button
-                            type="button"
-                            className="border-l px-1.5 py-0.5 text-emerald-600 hover:bg-emerald-500/10"
-                            onClick={() => machineMut.restoreMutation.mutate(m.id)}
-                            title="Aktifleştir"
-                          >
-                            <Power className="h-3 w-3" />
-                          </button>
-                        )}
-                        {canWrite && (
-                          <button
-                            type="button"
-                            className="border-l px-1.5 py-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => setDeleteMachine(m)}
-                            title="Kalıcı sil"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        )}
-                      </span>
-                    );
-                  })}
-                  {canWrite && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 px-2 text-xs"
-                      onClick={() => setMachineDlg({ open: true, initial: null, stationId: s.id })}
-                    >
-                      <Plus className="h-3 w-3" /> Makine
-                    </Button>
-                  )}
-                </div>
-
-                {/* Yetenekler (fason istasyonları) */}
-                {capEditable && (
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <Palette className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Yetenekler:</span>
-                    <span className="text-xs">🎨 {cap!.colorCount} renk · ⚙ {cap!.propertyCount} özellik</span>
-                    {canWrite && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        onClick={() => setCapStation(cap!)}
-                      >
-                        Düzenle
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+        {!loading && allStations.length > 0 && stations.length === 0 && (
+          <div className="text-sm text-muted-foreground">Filtreye uyan istasyon yok.</div>
+        )}
+        {stations.map((s) => (
+          <StationCard
+            key={s.id}
+            station={s}
+            machines={machinesByStation.get(s.id) ?? []}
+            cap={capByStation.get(s.id)}
+            canWrite={canWrite}
+            onEditStation={(st) => setStationDlg({ open: true, initial: st })}
+            onAddMachine={(stationId) => setMachineDlg({ open: true, initial: null, stationId })}
+            onEditMachine={(m) => setMachineDlg({ open: true, initial: m })}
+            onQrMachine={setQrMachine}
+            onDeactivateMachine={setDeactivateMachine}
+            onReactivateMachine={(m) => machineMut.restoreMutation.mutate(m.id)}
+            onDeleteMachine={setDeleteMachine}
+            onEditCap={setCapStation}
+          />
+        ))}
       </div>
 
       <StationFormDialog
@@ -289,17 +284,12 @@ export function ProductionStationsPage() {
         open={!!deleteMachine}
         onOpenChange={(o) => !o && setDeleteMachine(null)}
         title="Makineyi kalıcı sil"
-        description={
-          deleteMachine
-            ? `"${deleteMachine.name}" makinesi kalıcı olarak silinecek. Bu işlem geri alınamaz. ` +
-              `Makine üretimde kullanılmışsa (oturum/işlem/hareket/top girişi) veya bir cihaz/donanım bağlıysa ` +
-              `silme reddedilir — bu durumda makineyi düzenleyip pasife alın.`
-            : undefined
-        }
+        description={deleteDescription}
         confirmLabel="Kalıcı sil"
         destructive
         onConfirm={handleMachineDelete}
         isPending={machineMut.hardRemoveMutation.isPending}
+        confirmDisabled={deletePreviewQ.isLoading || !preview?.deletable}
       />
 
       <ConfirmDialog

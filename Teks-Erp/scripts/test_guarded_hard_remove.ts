@@ -11,6 +11,7 @@ import {
   routeHardRemove,
   stationHardRemove,
   machineHardRemove,
+  machineDeletePreview,
 } from "../src/services/helpers/guarded-hard-remove";
 import type { Request, Response, NextFunction } from "express";
 
@@ -142,35 +143,72 @@ async function main() {
       machineId: machine.id,
     },
   });
+  // Çalışma oturumu (login izi) — üretim DEĞİL. Yeni politika: silmeyi ENGELLEMEZ,
+  // silmede temizlenir. Fixture: admin + geçici cihaz + KAPALI oturum.
+  const admin = await prisma.user.findFirst({ where: { username: "admin" } });
+  if (!admin) throw new Error("Fixture bulunamadı: admin kullanıcı");
+  const device = await prisma.device.create({
+    data: { deviceId: `TEST-GHR-DEV-${suffix}`.slice(0, 64), name: `TEST-GHR-TABLET-${suffix}` },
+  });
+  await prisma.workSession.create({
+    data: {
+      userId: admin.id,
+      deviceId: device.id,
+      machineId: machine.id,
+      stationId: mStation.id,
+      endedAt: new Date(),
+      endReason: "LOGOUT",
+    },
+  });
 
   try {
     // --- 6) 404: olmayan makine ---
     const m404 = await invoke(machineHardRemove, "00000000-0000-0000-0000-000000000000");
     check("Olmayan makine → 404", m404.status === 404);
 
-    // --- 7) 409: bağlı donanımı olan makine silinemez ---
+    // --- 7) 409: bağlı DONANIMI olan makine silinemez (eşleşme engeli) ---
     const m409 = await invoke(machineHardRemove, machine.id);
     check(
       "Donanım bağlı makine → 409 + somut sayı",
-      m409.status === 409 &&
-        (m409.body.data as { peripheralCount?: number }).peripheralCount === 1,
+      m409.status === 409 && (m409.body.data as { peripheralCount?: number }).peripheralCount === 1,
       m409.body.message
     );
 
-    // --- 8) Donanım kaldırılınca makine temiz → 200 ---
+    // --- 8) Preview: donanım varken deletable=false + peripheral blocker ---
+    const pv1 = await invoke(machineDeletePreview, machine.id);
+    const pv1d = pv1.body.data as { deletable: boolean; blockers: { key: string }[] };
+    check(
+      "Preview (donanım bağlı) → deletable=false + peripheral blocker",
+      pv1.status === 200 && pv1d.deletable === false && pv1d.blockers.some((b) => b.key === "peripheralCount")
+    );
+
+    // --- 9) Donanım kaldırılınca yalnız OTURUM kalır → preview deletable=true, 1 oturum ---
     await prisma.peripheralDevice.delete({ where: { id: peripheral.id } });
+    const pv2 = await invoke(machineDeletePreview, machine.id);
+    const pv2d = pv2.body.data as { deletable: boolean; workSessionCount: number };
+    check(
+      "Preview (yalnız oturum) → deletable=true + workSessionCount=1",
+      pv2.status === 200 && pv2d.deletable === true && pv2d.workSessionCount === 1,
+      JSON.stringify(pv2d)
+    );
+
+    // --- 10) Oturum ENGELLEMİYOR → 200 kalıcı silindi + oturum temizlendi ---
     const m200 = await invoke(machineHardRemove, machine.id);
-    check("Temiz (kullanılmamış) makine → 200 kalıcı silindi", m200.status === 200, m200.body.message);
+    check("Yalnız oturumlu makine → 200 kalıcı silindi", m200.status === 200, m200.body.message);
     const machineGone = await prisma.machine.findUnique({ where: { id: machine.id } });
     check("Makine DB'den gitti", machineGone === null);
+    const sessionsGone = await prisma.workSession.count({ where: { machineId: machine.id } });
+    check("Oturum satırı tx içinde temizlendi", sessionsGone === 0);
 
     const mAudit = await prisma.systemLog.count({
       where: { tableName: "MACHINE", recordId: machine.id, action: "DELETE" },
     });
     check("Makine audit DELETE kaydı düştü", mAudit >= 1);
   } finally {
+    await prisma.workSession.deleteMany({ where: { machineId: machine.id } });
     await prisma.peripheralDevice.deleteMany({ where: { id: peripheral.id } });
     await prisma.machine.deleteMany({ where: { id: machine.id } });
+    await prisma.device.deleteMany({ where: { id: device.id } });
     await prisma.station.deleteMany({ where: { id: mStation.id } });
   }
 
