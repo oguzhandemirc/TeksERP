@@ -9,6 +9,8 @@ import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
 import { authService, type LoginMethod } from '../../services/auth.service';
+import { authActions } from '../../services/authActions';
+import { useSessionConflict } from '../../hooks/useSessionConflict';
 import { BarcodeScannerModal } from '../../components/BarcodeScannerModal';
 import PickerModal, { type PickerOption } from '../../components/PickerModal';
 import { useDeviceType, useIsPortrait } from '../../hooks/useDeviceType';
@@ -63,6 +65,7 @@ function initials(name: string): string {
 
 export default function LoginScreen() {
   const setAuth = useAuthStore((s) => s.setAuth);
+  const { requestConfirm, modal: conflictModal } = useSessionConflict();
   const device = useDeviceType();
   const portrait = useIsPortrait();
   const isCompact = device === 'phone' || portrait;
@@ -153,10 +156,11 @@ export default function LoginScreen() {
       setSubmitting(true);
       setError('');
       try {
-        const res = await authService.login({ username: user.username, password: rawPin });
+        const res = await authActions.password(user.username, rawPin, requestConfirm);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Toast.show({ type: 'success', text1: 'Hoş geldin', text2: user.fullName });
-        await setAuth(res.data.user, res.data.token);
+        // fullName seçili MobileUser'dan gelir (banner ismi gösterir).
+        await setAuth(res.data.user, res.data.token, user.fullName);
       } catch (e) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         const msg = e instanceof Error ? e.message : 'Hatalı PIN.';
@@ -167,7 +171,7 @@ export default function LoginScreen() {
         setSubmitting(false);
       }
     },
-    [setAuth],
+    [setAuth, requestConfirm],
   );
 
   // Yöntem 403'ü (panelden kapatılmış) → yerel seçimi bırak + ayarı ANINDA tazele;
@@ -192,10 +196,10 @@ export default function LoginScreen() {
       setSubmitting(true);
       setError('');
       try {
-        const res = await authService.loginWithQuickPin(rawPin);
+        const res = await authActions.quickPin(rawPin, requestConfirm);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Toast.show({ type: 'success', text1: 'Hoş geldin', text2: res.data.user.username });
-        await setAuth(res.data.user, res.data.token);
+        await setAuth(res.data.user, res.data.token, res.data.user.fullName);
       } catch (e) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         const msg = e instanceof Error ? e.message : 'PIN tanınmadı.';
@@ -207,7 +211,7 @@ export default function LoginScreen() {
         setSubmitting(false);
       }
     },
-    [setAuth, handleMethodDisabled],
+    [setAuth, handleMethodDisabled, requestConfirm],
   );
 
   // QR personel kartıyla giriş — okutma başarılıysa PIN'siz doğrudan token alınır.
@@ -216,10 +220,10 @@ export default function LoginScreen() {
       setSubmitting(true);
       setError('');
       try {
-        const res = await authService.loginWithCard(cardCode.trim());
+        const res = await authActions.card(cardCode.trim(), requestConfirm);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Toast.show({ type: 'success', text1: 'Hoş geldin', text2: res.data.user.username });
-        await setAuth(res.data.user, res.data.token);
+        await setAuth(res.data.user, res.data.token, res.data.user.fullName);
       } catch (e) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         const msg = e instanceof Error ? e.message : 'Kart okunamadı.';
@@ -230,7 +234,7 @@ export default function LoginScreen() {
         setSubmitting(false);
       }
     },
-    [setAuth, handleMethodDisabled],
+    [setAuth, handleMethodDisabled, requestConfirm],
   );
 
   // 6 hane dolunca yönteme göre gönder: 'pin' = salt hızlı-PIN (kullanıcı yok);
@@ -746,6 +750,9 @@ export default function LoginScreen() {
         emptyText="Aktif mobil kullanıcı yok"
         loading={usersQuery.isLoading}
       />
+
+      {/* 'notify' politikasında SESSION_EXISTS onayı — kick modda hiç görünmez. */}
+      {conflictModal}
     </SafeAreaView>
   );
 }

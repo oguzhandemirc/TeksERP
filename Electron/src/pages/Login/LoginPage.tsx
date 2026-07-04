@@ -1,4 +1,5 @@
 import { useState } from "react";
+import axios from "axios";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,14 +10,28 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
 import { authService } from "@/services/authService";
 import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt } from "@/lib/jwt";
+import { readSessionConflict } from "@/lib/session-auth";
 import { useAuthStore } from "@/store/auth";
-import { canEnterApp } from "@/types/auth";
+import { canEnterApp, type ExistingSessionInfo } from "@/types/auth";
 import { LoginHero } from "./LoginHero";
 import logoUrl from "@/assets/teks-logo-fullsize.png";
+
+/** 409 SESSION_EXISTS onay diyaloğu için, mevcut oturumu okunur cümleye çevir. */
+function describeExistingSession(info: ExistingSessionInfo): string {
+  const where = info.deviceType === "electron" ? "başka bir bilgisayarda" : "bir mobil cihazda";
+  const when = info.createdAt
+    ? ` (${new Date(info.createdAt).toLocaleString("tr-TR")}'de açıldı)`
+    : "";
+  return (
+    `Bu hesap ${where} zaten açık${when}. Yine de giriş yapmak istiyor musunuz? ` +
+    `İki oturum da açık kalacak.`
+  );
+}
 
 const schema = z.object({
   username: z.string().min(1, "Kullanıcı adı gerekli"),
@@ -31,6 +46,8 @@ export function LoginPage() {
   const setUser = useAuthStore((s) => s.setUser);
   const [submitting, setSubmitting] = useState(false);
   const [apiDialogOpen, setApiDialogOpen] = useState(false);
+  // 409 SESSION_EXISTS ('notify' politikası) — onay bekleyen çakışma bilgisi.
+  const [conflict, setConflict] = useState<{ values: FormValues; existing: ExistingSessionInfo } | null>(null);
   const { theme, setTheme } = useTheme();
 
   const form = useForm<FormValues>({
@@ -38,10 +55,19 @@ export function LoginPage() {
     defaultValues: { username: "", password: "" },
   });
 
-  const onSubmit = async (values: FormValues) => {
+  /**
+   * Girişi dener. `confirmKick=true` → 'notify' politikasında kullanıcı "iki
+   * oturum da açık kalsın" onayı verince tekrar çağrılır. Hata UX'ini bu fonksiyon
+   * yönetir (`suppressErrorToast`): 401 (yanlış şifre) interceptor'ın özel dalında
+   * zaten toast'lanır; 409 SESSION_EXISTS onay diyaloğunu açar; diğerleri burada.
+   */
+  const performLogin = async (values: FormValues, confirmKick: boolean) => {
     setSubmitting(true);
     try {
-      const res = await authService.login(values);
+      const res = await authService.login(
+        { ...values, confirmKick: confirmKick || undefined },
+        { suppressErrorToast: true },
+      );
       await tokenStore.set(res.data.token);
       const decoded = decodeJwt(res.data.token) ?? res.data.user;
       if (!canEnterApp(decoded.permissions)) {
@@ -49,13 +75,33 @@ export function LoginPage() {
         toast.error("Bu uygulamayı kullanma yetkin yok. Yöneticine başvur.");
         return;
       }
+      setConflict(null);
       setUser(decoded);
       const dest = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/";
       navigate(dest, { replace: true });
+    } catch (err) {
+      const existing = readSessionConflict(err);
+      if (existing) {
+        // 'notify': aynı hesap başka yerde açık — kullanıcıya sor, onaylarsa
+        // confirmKick=true ile tekrar dene (iki oturum da açık kalır).
+        setConflict({ values, existing });
+        return;
+      }
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+      // 401 interceptor'da toast'landı; kalanları burada göster.
+      if (status !== 401) {
+        const message = axios.isAxiosError(err)
+          ? ((err.response?.data as { message?: string } | undefined)?.message ??
+            (err.response ? "Giriş yapılamadı." : "Sunucuya ulaşılamıyor."))
+          : "Giriş yapılamadı.";
+        toast.error(message);
+      }
     } finally {
       setSubmitting(false);
     }
   };
+
+  const onSubmit = (values: FormValues) => performLogin(values, false);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden app-drag">
@@ -82,6 +128,21 @@ export function LoginPage() {
         </div>
 
         <ApiEndpointDialog open={apiDialogOpen} onOpenChange={setApiDialogOpen} />
+
+        <ConfirmDialog
+          open={conflict !== null}
+          onOpenChange={(o) => {
+            if (!o) setConflict(null);
+          }}
+          title="Hesap başka yerde açık"
+          description={conflict ? describeExistingSession(conflict.existing) : undefined}
+          confirmLabel="Yine de giriş yap"
+          cancelLabel="Vazgeç"
+          isPending={submitting}
+          onConfirm={() => {
+            if (conflict) void performLogin(conflict.values, true);
+          }}
+        />
 
         <div className="w-full max-w-sm space-y-8">
           <div className="flex flex-col items-center space-y-4 text-center">

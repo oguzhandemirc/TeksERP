@@ -9,13 +9,38 @@ import { touchUser } from "../lib/presence";
 import prisma from "../lib/prisma";
 
 /**
+ * Session.lastSeenAt yazımını cihaz başına (jti) kısıtla — her istekte DB update
+ * yerine en fazla LAST_SEEN_THROTTLE_MS'de bir. touchUser gibi fire-and-forget +
+ * bellekte (tek-process invariant). Restart'ta sıfırlanır (kalıcı defter değil).
+ */
+const lastSeenWrites = new Map<string, number>();
+const LAST_SEEN_THROTTLE_MS = 60_000;
+
+function touchSessionLastSeen(jti: string): void {
+  const now = Date.now();
+  const prev = lastSeenWrites.get(jti);
+  if (prev && now - prev < LAST_SEEN_THROTTLE_MS) return;
+  lastSeenWrites.set(jti, now);
+  // Fire-and-forget — yazım hatası isteği düşürmez (best-effort, touchUser emsali).
+  void prisma.session
+    .updateMany({ where: { jti }, data: { lastSeenAt: new Date(now) } })
+    .catch(() => undefined);
+  // Sınırsız büyümeyi önle: bayat girişleri ara sıra buda.
+  if (lastSeenWrites.size > 5000) {
+    const cutoff = now - LAST_SEEN_THROTTLE_MS;
+    for (const [k, t] of lastSeenWrites) if (t < cutoff) lastSeenWrites.delete(k);
+  }
+}
+
+/**
  * Middleware: Verify JWT token from Authorization header.
  * Sets `req.user` with decoded JwtPayload on success.
  *
- * İmza/expiry doğrulamasının ardından ANINDA-İPTAL kontrolü: User.tokenVersion +
- * isActive taze okunur (tek indeksli PK lookup). Yetki/şifre değişince tokenVersion
- * bump'lanır → eski token bu noktada 401 alır; pasifleştirilen kullanıcı da anında
- * düşer. (Eskiden tamamen stateless'tı; iptal token expiry'sine kadar gecikiyordu.)
+ * İmza/expiry doğrulamasının ardından ANINDA-İPTAL kontrolü:
+ *  1. User.tokenVersion + isActive taze okunur (yetki/şifre değişince bump → 401).
+ *  2. Session (jti) taze okunur; kayıt yoksa veya revokedAt set ise → 401 (oturum
+ *     iptal edildi / logout / başka cihazdan kick). Fail-closed: jti'siz eski token
+ *     (deploy öncesi üretilmiş) da 401 alır → bir kez re-login (kabul edilen davranış).
  */
 export const verifyToken = async (
   req: Request,
@@ -46,8 +71,20 @@ export const verifyToken = async (
     if (fresh.tokenVersion !== payload.tokenVersion) {
       throw AppError.unauthorized("Oturum geçersiz kılındı (yetki/şifre değişti). Tekrar giriş yapın.");
     }
+    // Session registry: anlık iptal kontrolü (jti). Eski (jti'siz) token → fail-closed.
+    if (!payload.jti) {
+      throw AppError.unauthorized("Oturum kaydı yok (eski token). Tekrar giriş yapın.");
+    }
+    const session = await prisma.session.findUnique({
+      where: { jti: payload.jti },
+      select: { revokedAt: true },
+    });
+    if (!session || session.revokedAt !== null) {
+      throw AppError.unauthorized("Oturum sonlandırıldı. Tekrar giriş yapın.");
+    }
     req.user = payload;
     touchUser(payload.userId); // anlık "online" izleme (bellekte, maliyetsiz)
+    touchSessionLastSeen(payload.jti); // Session.lastSeenAt throttled (fire-and-forget)
     next();
   } catch (error) {
     next(error);

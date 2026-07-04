@@ -46,13 +46,109 @@ function isP2002(e: unknown): boolean {
   return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 }
 
-/** Liste/detay cevaplarının ortak ilişki seçimi (panel + mobil onay ekranı besler). */
-const SESSION_INCLUDE = {
+/** Liste/detay cevaplarının ortak ilişki seçimi (panel + mobil onay ekranı +
+ *  oturum aktivite dökümü — work-session-activity.service — besler). */
+export const SESSION_INCLUDE = {
   user: { select: { id: true, username: true, fullName: true } },
   device: { select: { id: true, deviceId: true, name: true, kind: true } },
   machine: { select: { id: true, code: true, name: true } },
   station: { select: { id: true, code: true, name: true, kind: true } },
 } as const;
+
+/** "Devralan" ardıl oturumun tooltip için minimal alanları. */
+const SUCCESSOR_SELECT = {
+  id: true,
+  startedAt: true,
+  machineId: true,
+  deviceId: true,
+  user: { select: { fullName: true } },
+  device: { select: { name: true } },
+  machine: { select: { code: true, name: true } },
+  station: { select: { name: true } },
+} as const;
+// JS new Date() (endedAt) ile DB now() (startedAt) aynı takeover tx'inde birkaç ms
+// sapar → eşleştirme toleransı.
+const SUCCESSOR_WINDOW_MS = 5000;
+
+type SuccessorSrc = {
+  id: string;
+  endReason: WorkSessionEndReason | null;
+  machineId: string | null;
+  deviceId: string;
+  endedAt: Date | null;
+};
+
+/**
+ * TAKEOVER (aynı MAKİNE) / NEW_LOGIN (aynı CİHAZ) ile kapanan oturuma, onu kapatan
+ * "devralan" ardıl oturumu bağlar. Tek-aktif-oturum invariant'ı: ardıl, bu oturum
+ * kapandığı transaction'da açıldığından startedAt ≈ endedAt. Sayfa başına 2 TOPLU
+ * sorgu (N+1 yok) + dar zaman penceresi → aday kümesi küçük; [machineId/deviceId,
+ * startedAt] index'leri karşılar. Migration/yeni kolon yok.
+ */
+async function attachSuccessors<T extends SuccessorSrc>(
+  items: T[],
+): Promise<Array<T & { successor: unknown }>> {
+  const takeovers = items.filter((s) => s.endReason === "TAKEOVER" && s.machineId && s.endedAt);
+  const newLogins = items.filter((s) => s.endReason === "NEW_LOGIN" && s.endedAt);
+  if (takeovers.length === 0 && newLogins.length === 0) {
+    return items.map((s) => ({ ...s, successor: null }));
+  }
+
+  // Her oturum için DAR pencereli OR koşulu — geniş min/max tarama yerine (sayfa
+  // günlere yayılsa da) her dal endedAt±window'la sınırlı, [machineId/deviceId,
+  // startedAt] index'iyle ~1 satır döner. Tek sorgu, aday kümesi = ardıllar.
+  const win = (s: SuccessorSrc) => ({
+    gte: new Date((s.endedAt as Date).getTime() - SUCCESSOR_WINDOW_MS),
+    lte: new Date((s.endedAt as Date).getTime() + SUCCESSOR_WINDOW_MS),
+  });
+
+  const [machineCands, deviceCands] = await Promise.all([
+    takeovers.length
+      ? prisma.workSession.findMany({
+          where: { OR: takeovers.map((s) => ({ machineId: s.machineId, startedAt: win(s) })) },
+          orderBy: { startedAt: "asc" },
+          select: SUCCESSOR_SELECT,
+        })
+      : [],
+    newLogins.length
+      ? prisma.workSession.findMany({
+          where: { OR: newLogins.map((s) => ({ deviceId: s.deviceId, startedAt: win(s) })) },
+          orderBy: { startedAt: "asc" },
+          select: SUCCESSOR_SELECT,
+        })
+      : [],
+  ]);
+
+  // Pencere içindeki adaylardan endedAt'e EN YAKIN olanı seç — ilk-eşleşen DEĞİL.
+  // Gerçek ardıl aynı tx'te açıldığından startedAt≈endedAt (fark ≈0); ÖNCEKİ oturum
+  // ise kendi süresi kadar erken başlar. Hızlı ardışık devralmada önceki oturum da
+  // simetrik ±5s pencereye girebilir → "en yakın" ile önceki yanlışlıkla seçilmez.
+  type Cand = (typeof machineCands)[number];
+  const closest = (cands: Cand[], match: (c: Cand) => boolean, endedAt: Date): Cand | null => {
+    let best: Cand | null = null;
+    let bestGap = Infinity;
+    for (const c of cands) {
+      if (!match(c)) continue;
+      const gap = Math.abs(c.startedAt.getTime() - endedAt.getTime());
+      if (gap <= SUCCESSOR_WINDOW_MS && gap < bestGap) {
+        best = c;
+        bestGap = gap;
+      }
+    }
+    return best;
+  };
+  const successorOf = (s: SuccessorSrc) => {
+    if (s.endReason === "TAKEOVER" && s.machineId && s.endedAt) {
+      return closest(machineCands, (c) => c.id !== s.id && c.machineId === s.machineId, s.endedAt);
+    }
+    if (s.endReason === "NEW_LOGIN" && s.endedAt) {
+      return closest(deviceCands, (c) => c.id !== s.id && c.deviceId === s.deviceId, s.endedAt);
+    }
+    return null;
+  };
+
+  return items.map((s) => ({ ...s, successor: successorOf(s) }));
+}
 
 export class WorkSessionService {
   /**
@@ -147,13 +243,26 @@ export class WorkSessionService {
         // Devralınan makinedeki (başka cihazın) açık oturumu → devral. YALNIZ teyitli
         // istekte kapatılır: teyitsiz istekte precheck'i atlatan yarış, buradaki
         // kapatmaya değil create'in partial unique'ine çarpar (P2002 → 409) —
-        // onaysız devralma sızamaz.
+        // onaysız devralma sızamaz. (Cross-device NEW_LOGIN kapanışından ÖNCE koşar →
+        // devralınan makinedeki oturum daha isabetli TAKEOVER nedeniyle kapanır.)
         if (machineId && input.confirmTakeover) {
           await tx.workSession.updateMany({
             where: { machineId, endedAt: null },
             data: { endedAt: now, endReason: "TAKEOVER" as WorkSessionEndReason },
           });
         }
+        // Bir operatör = tek yer: bu kullanıcının BAŞKA cihazlardaki (devralma dışında
+        // kalan) açık oturumlarını da kapat — tablet A'da açık unutup B'ye geçince A
+        // boşa düşsün. Aynı-cihaz yukarıda, devralınan-makine TAKEOVER ile kapandı;
+        // burada geriye kalan diğer-cihaz oturumları NEW_LOGIN ile kapanır.
+        await tx.workSession.updateMany({
+          where: {
+            userId: input.userId,
+            endedAt: null,
+            deviceId: { not: input.deviceRowId },
+          },
+          data: { endedAt: now, endReason: "NEW_LOGIN" as WorkSessionEndReason },
+        });
         return tx.workSession.create({
           data: {
             userId: input.userId,
@@ -302,9 +411,10 @@ export class WorkSessionService {
     return { success: true, data: items };
   }
 
-  /** Geçmiş (ayak izi) sorgusu — kullanıcı/makine/istasyon/tarih filtreli, offset sayfalı. */
+  /** Geçmiş (ayak izi) sorgusu — kullanıcı/cihaz/makine/istasyon/tarih filtreli, offset sayfalı. */
   static async history(q: {
     userId?: string;
+    deviceId?: string;
     machineId?: string;
     stationId?: string;
     from?: Date;
@@ -316,6 +426,9 @@ export class WorkSessionService {
     const pageSize = Math.min(100, Math.max(1, q.pageSize ?? 25));
     const where: Prisma.WorkSessionWhereInput = {
       ...(q.userId ? { userId: q.userId } : {}),
+      // Cihaz dökümü (Tanımlar → Cihazlar detayı) — [deviceId, startedAt] index'i
+      // sıralamayı da karşılar (sort-free backward scan).
+      ...(q.deviceId ? { deviceId: q.deviceId } : {}),
       ...(q.machineId ? { machineId: q.machineId } : {}),
       ...(q.stationId ? { stationId: q.stationId } : {}),
       ...(q.from || q.to
@@ -332,9 +445,10 @@ export class WorkSessionService {
         take: pageSize,
       }),
     ]);
+    const data = await attachSuccessors(items);
     return {
       success: true,
-      data: items,
+      data,
       pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
     };
   }

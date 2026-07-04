@@ -152,6 +152,9 @@ async function main(): Promise<void> {
 async function cleanup(): Promise<void> {
   if (NOPERM_USER_ID) {
     await prisma.userPermission.deleteMany({ where: { userId: NOPERM_USER_ID } }).catch(() => {});
+    // Login artık Session kaydı yaratıyor (jti registry) → user silmeden önce temizle
+    // (sessions.userId onDelete Restrict).
+    await prisma.session.deleteMany({ where: { userId: NOPERM_USER_ID } }).catch(() => {});
     await prisma.user.delete({ where: { id: NOPERM_USER_ID } }).catch(() => {});
   }
   if (woIds.length === 0) return;

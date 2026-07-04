@@ -5,23 +5,45 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
+import type { LoginContext } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
 import { readDevicePairingRequired, readLoginMethods } from "../services/system-setting.service";
+import { SessionRegistryService } from "../services/session-registry.service";
 import "../types/express-augment";
+
+// Session/eşzamanlılık: her login yolu clientType (electron|mobile, default mobile) +
+// confirmKick ('notify' politikasında "ikisi de açık kalsın" onayı) taşır. deviceId
+// request'ten türetilir (req.device.deviceId ya da x-device-id header) — body'de değil.
+const clientTypeSchema = z.enum(["electron", "mobile"]).optional();
 
 // Zod schemas for validation
 const loginSchema = z.object({
   username: z.string().min(1, "Kullanıcı adı gerekli"),
   password: z.string().min(1, "Şifre gerekli"),
+  clientType: clientTypeSchema,
+  confirmKick: z.boolean().optional(),
 });
 
 const loginCardSchema = z.object({
   cardCode: z.string().min(1, "Kart kodu gerekli").max(120),
+  clientType: clientTypeSchema,
+  confirmKick: z.boolean().optional(),
 });
 
 const loginQuickPinSchema = z.object({
   pin: z.string().regex(/^\d{6}$/, "PIN 6 haneli rakam olmalı"),
+  clientType: clientTypeSchema,
+  confirmKick: z.boolean().optional(),
 });
+
+/** Login isteğinden cihaz kimliğini çöz: eşleşmiş cihazın deviceId'si öncelikli,
+ *  yoksa ham x-device-id header'ı (kayıtsız client de oturum açabilir). Yoksa null. */
+function resolveLoginDeviceId(req: Request): string | null {
+  if (req.device?.deviceId) return req.device.deviceId;
+  const h = req.headers["x-device-id"];
+  const v = Array.isArray(h) ? h[0] : h;
+  return typeof v === "string" && v.trim() ? v.trim().slice(0, 64) : null;
+}
 
 // K6 (2026-06-12): register endpoint'i + şeması kaldırıldı — kullanıcı
 // oluşturmanın tek yolu POST /api/admin/users (PermissionManagementService).
@@ -66,9 +88,14 @@ export class AuthController {
     if (!body) return;
 
     const ipAddress = req.ip ?? null;
+    const ctx: LoginContext = {
+      clientType: body.clientType,
+      deviceId: resolveLoginDeviceId(req),
+      confirmKick: body.confirmKick,
+    };
 
     try {
-      const result = await AuthService.login(body.username, body.password);
+      const result = await AuthService.login(body.username, body.password, ctx);
 
       // SystemLog'a AUTH event (Sistem Kayıtları sayfası bunu okur).
       void AuditService.logEvent({
@@ -123,8 +150,13 @@ export class AuthController {
     if (!body) return;
 
     const ipAddress = req.ip ?? null;
+    const ctx: LoginContext = {
+      clientType: body.clientType,
+      deviceId: resolveLoginDeviceId(req),
+      confirmKick: body.confirmKick,
+    };
     try {
-      const result = await AuthService.loginWithCard(body.cardCode);
+      const result = await AuthService.loginWithCard(body.cardCode, ctx);
       void AuditService.logEvent({
         category: "AUTH",
         action: "LOGIN_SUCCESS",
@@ -174,8 +206,13 @@ export class AuthController {
     if (!body) return;
 
     const ipAddress = req.ip ?? null;
+    const ctx: LoginContext = {
+      clientType: body.clientType,
+      deviceId: resolveLoginDeviceId(req),
+      confirmKick: body.confirmKick,
+    };
     try {
-      const result = await AuthService.loginWithQuickPin(body.pin);
+      const result = await AuthService.loginWithQuickPin(body.pin, ctx);
       void AuditService.logEvent({
         category: "AUTH",
         action: "LOGIN_SUCCESS",
@@ -334,6 +371,12 @@ export class AuthController {
    */
   static async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      // Bu oturumu (jti) registry'de iptal et → token silinmese bile bir sonraki
+      // istek 401 alır (anlık iptal). Best-effort: iptal yazımı düşse de logout başarılı.
+      await SessionRegistryService.revokeSession(req.user?.jti, "LOGOUT").catch(
+        () => undefined,
+      );
+
       void AuditService.logEvent({
         category: "AUTH",
         action: "LOGOUT",
@@ -344,8 +387,7 @@ export class AuthController {
 
       res.status(200).json({
         success: true,
-        message:
-          "Çıkış kaydedildi. Token'ı istemci tarafında silin (stateless logout).",
+        message: "Çıkış kaydedildi. Oturum iptal edildi — token istemci tarafında da silinmeli.",
       });
     } catch (error) {
       next(error);

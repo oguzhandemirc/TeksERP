@@ -216,6 +216,13 @@ enum Currency {
   GBP
 }
 
+/// Login yapan istemci türü — aynı-tip oturum politikası bunun üzerinden çalışır
+/// (1 Electron + 1 mobil serbest; 2. aynı-tip kick/notify/off ile yönetilir).
+enum ClientType {
+  ELECTRON
+  MOBILE
+}
+
 // =============================================================================
 // 1. RBAC - Auth & User Management
 // =============================================================================
@@ -274,6 +281,7 @@ model User {
   receivedReturns            RollReturn[]             @relation("RollReturnReceivedBy")
   cancelledReturns           RollReturn[]             @relation("RollReturnCancelledBy")
   workSessions               WorkSession[]
+  sessions                   Session[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -296,6 +304,37 @@ model UserPreference {
   updatedAt DateTime @updatedAt
 
   @@map("user_preferences")
+}
+
+/// Oturum kaydı — anlık JWT iptal + aynı-tip cihaz oturum politikası (kick/notify/off).
+/// jti login'de (jwt.sign jwtid) üretilir; auth.middleware her istekte revokedAt kontrol
+/// eder → iptal edilen oturum bir sonraki istekte 401 alır (tokenVersion'dan bağımsız,
+/// daha ince taneli: tek cihazı düşürür, tüm oturumları değil).
+///
+/// TEKLİK NOTU: (userId, deviceType) üzerinde partial-unique index YOK — kasıtlı.
+/// 'off'/'notify' politikaları aynı kullanıcı için çoklu aktif same-type oturum
+/// gerektirir; teklik ('kick') UYGULAMA KATMANINDA sağlanır
+/// (SessionRegistryService.openLoginSession tx: updateMany revoke → create).
+///
+/// deviceId serbest VARCHAR (FK DEĞİL) — kayıtsız/eşleşmemiş client de login yapıp
+/// oturum açabilmeli; buraya devices tablosuna FK koymak o senaryoyu kilitlerdi.
+model Session {
+  id           String     @db.Uuid @id @default(uuid())
+  userId       String     @db.Uuid
+  deviceType   ClientType
+  jti          String     @unique @db.Uuid
+  deviceId     String?    @db.VarChar(64)
+  createdAt    DateTime   @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  revokeReason String?    @db.VarChar(32)
+  lastSeenAt   DateTime?
+
+  // Ayak izi korunur — kullanıcı silinirken (soft-delete kalıbı) oturum geçmişi kaybolmaz.
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("sessions")
 }
 
 /// Yetki kataloğu — runtime'da sadece bu tablo + UserPermission birlikte tüketilir.

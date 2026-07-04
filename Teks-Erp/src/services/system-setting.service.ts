@@ -129,6 +129,22 @@ export const SETTING_KEYS = {
    *  yazıcıya DOĞRUDAN gönderilsin mi (default false = Faz-1 simülasyon). Açıkken
    *  ENFORCE — printer-transport gerçek socket açar; kapalıyken hiç socket yok. */
   LABEL_NATIVE_SEND_ENABLED: "label.nativeSendEnabled",
+  /** Aynı cihaz-tipinden (electron/mobil) ikinci giriş olunca ne yapılsın:
+   *  'kick' (default — eskiyi düşür, yeni kazanır) | 'notify' (kullanıcıya sor,
+   *  confirmKick ile ikisi de açık kalır) | 'off' (serbest, çoklu oturum). 1 Electron +
+   *  1 mobil HER ZAMAN serbest (politika yalnız AYNI tip 2. girişe uygulanır). Backend
+   *  ENFORCE eder (login → SessionRegistryService.openLoginSession). */
+  AUTH_SAME_TYPE_SESSION_POLICY: "auth.sameTypeSessionPolicy",
+  /** Token süresi dolunca istemci otomatik çıkış yapsın mı. Default true (açık).
+   *  Client ENFORCE eder (mobil + Electron JWT exp decode → timer). Kapalıyken süre
+   *  dolsa da istemci kendiliğinden çıkmaz (bir sonraki istek 401 alana kadar açık kalır). */
+  AUTH_AUTO_LOGOUT_ON_EXPIRY: "auth.autoLogoutOnExpiry",
+  /** Mobil hareketsizlik (idle) ekran kilidi açık mı. Default true. Açıkken tablet bu
+   *  kadar dakika (mobileIdleLockMinutes) dokunulmazsa kilit ekranı gelir (work session
+   *  AÇIK kalır; kart/PIN ile açılır). Client (mobil) ENFORCE eder. */
+  AUTH_MOBILE_IDLE_LOCK_ENABLED: "auth.mobileIdleLockEnabled",
+  /** Mobil idle kilit süresi, DAKİKA (1..120). Default 10. Client (mobil) ENFORCE eder. */
+  AUTH_MOBILE_IDLE_LOCK_MINUTES: "auth.mobileIdleLockMinutes",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -141,10 +157,25 @@ const MAX_SESSION_DURATION_HOURS = 720;
 export const DEFAULT_IDLE_TIMEOUT_MINUTES = 0;
 /** Hareketsizlik zaman aşımı tavanı — dakika (24 saat). */
 const MAX_IDLE_TIMEOUT_MINUTES = 1440;
-/** Çalışma oturumu (WorkSession) idle varsayılanı — dakika (10 saat). 0 = kapalı. */
-export const DEFAULT_WORK_SESSION_IDLE_MINUTES = 600;
+/** Çalışma oturumu (WorkSession) idle varsayılanı — dakika. 0 = kapalı. Eski 600
+ *  (10 saat) idi; saha kararı (2026-07-04): bir tablet bu kadar dakika hiç
+ *  kullanılmazsa oturum kapanır ve makine boşa düşer → 20 dk daha uygun. */
+export const DEFAULT_WORK_SESSION_IDLE_MINUTES = 20;
 /** Çalışma oturumu idle tavanı — dakika (24 saat). */
 const MAX_WORK_SESSION_IDLE_MINUTES = 1440;
+/** Aynı-tip oturum politikası — 2. aynı-tip girişte davranış. */
+export type SameTypeSessionPolicy = "kick" | "notify" | "off";
+export const SAME_TYPE_SESSION_POLICIES: SameTypeSessionPolicy[] = ["kick", "notify", "off"];
+/** Aynı-tip oturum politikası varsayılanı — eskiyi düşür, yeni kazanır. */
+export const DEFAULT_SAME_TYPE_SESSION_POLICY: SameTypeSessionPolicy = "kick";
+/** Token süresi dolunca otomatik çıkış varsayılanı — açık. */
+export const DEFAULT_AUTO_LOGOUT_ON_EXPIRY = true;
+/** Mobil idle ekran kilidi varsayılanı — açık. */
+export const DEFAULT_MOBILE_IDLE_LOCK_ENABLED = true;
+/** Mobil idle kilit süresi varsayılanı + aralık — dakika. */
+export const DEFAULT_MOBILE_IDLE_LOCK_MINUTES = 10;
+const MIN_MOBILE_IDLE_LOCK_MINUTES = 1;
+const MAX_MOBILE_IDLE_LOCK_MINUTES = 120;
 /** Mobil giriş yöntemleri. list=liste+şifre, pin=salt hızlı-PIN, card=QR kart. */
 export type LoginMethod = "list" | "pin" | "card";
 export interface LoginMethodsConfig {
@@ -420,9 +451,18 @@ export interface FeatureFlags {
   /** Hareketsizlik zaman aşımı — dakika (default 0 = kapalı). Panel bu kadar dakika
    *  işlem görmezse otomatik çıkış. Frontend ENFORCE eder. */
   idleTimeoutMinutes: number;
-  /** Çalışma oturumu (kim hangi makinede) idle zaman aşımı — dakika (default 600 =
-   *  10 saat; 0 = kapalı). Backend TEMBEL enforce eder (okuma anında IDLE kapatma). */
+  /** Çalışma oturumu (kim hangi makinede) idle zaman aşımı — dakika (default 20;
+   *  0 = kapalı). Backend TEMBEL enforce eder (okuma anında IDLE kapatma). */
   workSessionIdleTimeoutMinutes: number;
+  /** Aynı cihaz-tipinden 2. girişte politika: 'kick' (default) | 'notify' | 'off'.
+   *  Backend ENFORCE eder (login → openLoginSession). */
+  sameTypeSessionPolicy: SameTypeSessionPolicy;
+  /** Token süresi dolunca istemci otomatik çıkış yapsın mı (default true). Client ENFORCE. */
+  autoLogoutOnExpiry: boolean;
+  /** Mobil hareketsizlik ekran kilidi açık mı (default true). Client (mobil) ENFORCE. */
+  mobileIdleLockEnabled: boolean;
+  /** Mobil idle kilit süresi — dakika (default 10, 1..120). Client (mobil) ENFORCE. */
+  mobileIdleLockMinutes: number;
   /** Mobil giriş yöntemleri: { enabled: ("list"|"pin"|"card")[], primary }. Login
    *  ekranı primary ile açılır; diğer etkinler "Diğer giriş yöntemleri"nde. Backend
    *  ENFORCE — card/pin uçları yalnız etkinken çalışır (klasik login hep açık). */
@@ -581,6 +621,10 @@ export class SystemSettingService {
       sessionDurationHours: await readSessionDurationHours(cacheClient),
       idleTimeoutMinutes: await readIdleTimeoutMinutes(cacheClient),
       workSessionIdleTimeoutMinutes: await readWorkSessionIdleTimeoutMinutes(cacheClient),
+      sameTypeSessionPolicy: await readSameTypeSessionPolicy(cacheClient),
+      autoLogoutOnExpiry: await readAutoLogoutOnExpiry(cacheClient),
+      mobileIdleLockEnabled: await readMobileIdleLockEnabled(cacheClient),
+      mobileIdleLockMinutes: await readMobileIdleLockMinutes(cacheClient),
       loginMethods: await readLoginMethods(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
       rollNameTemplate: await readRollNameTemplate(cacheClient),
@@ -839,6 +883,65 @@ export class SystemSettingService {
         SETTING_KEYS.WORK_SESSION_IDLE_TIMEOUT_MINUTES,
         Math.floor(v),
         "Çalışma oturumu (kim hangi makinede) hareketsizlik zaman aşımı, dakika — tembel IDLE kapatma (0 = kapalı)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "sameTypeSessionPolicy")) {
+      const v = input.sameTypeSessionPolicy;
+      if (typeof v !== "string" || !SAME_TYPE_SESSION_POLICIES.includes(v as SameTypeSessionPolicy)) {
+        throw AppError.badRequest(
+          "Aynı-tip oturum politikası 'kick', 'notify' veya 'off' olmalı"
+        );
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_SAME_TYPE_SESSION_POLICY,
+        v,
+        "Aynı cihaz-tipinden 2. girişte davranış: kick (eskiyi düşür) / notify (sor) / off (serbest)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "autoLogoutOnExpiry")) {
+      if (typeof input.autoLogoutOnExpiry !== "boolean") {
+        throw AppError.badRequest("autoLogoutOnExpiry boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_AUTO_LOGOUT_ON_EXPIRY,
+        input.autoLogoutOnExpiry,
+        "Token süresi dolunca istemci otomatik çıkış yapsın (mobil + Electron)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "mobileIdleLockEnabled")) {
+      if (typeof input.mobileIdleLockEnabled !== "boolean") {
+        throw AppError.badRequest("mobileIdleLockEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_MOBILE_IDLE_LOCK_ENABLED,
+        input.mobileIdleLockEnabled,
+        "Mobil hareketsizlik ekran kilidi açık olsun (tablet belirli süre dokunulmazsa kilitlenir)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "mobileIdleLockMinutes")) {
+      const v = input.mobileIdleLockMinutes;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        v < MIN_MOBILE_IDLE_LOCK_MINUTES ||
+        v > MAX_MOBILE_IDLE_LOCK_MINUTES
+      ) {
+        throw AppError.badRequest(
+          `Mobil idle kilit süresi ${MIN_MOBILE_IDLE_LOCK_MINUTES}–${MAX_MOBILE_IDLE_LOCK_MINUTES} dakika aralığında olmalı`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_MOBILE_IDLE_LOCK_MINUTES,
+        Math.floor(v),
+        "Mobil idle ekran kilidi süresi, dakika — tablet bu kadar süre dokunulmazsa kilitlenir",
         userId
       );
     }
@@ -1329,6 +1432,76 @@ export async function readWorkSessionIdleTimeoutMinutes(
   const parsed = asNumber(setting.value);
   if (parsed === null || parsed < 0) return DEFAULT_WORK_SESSION_IDLE_MINUTES;
   return Math.min(Math.floor(parsed), MAX_WORK_SESSION_IDLE_MINUTES);
+}
+
+/**
+ * Aynı-tip oturum politikasını okur: 'kick' (default) | 'notify' | 'off'. Yoksa/
+ * geçersizse 'kick' (eskiyi düşür, yeni kazanır). AuthService.issueToken bunu okuyup
+ * SessionRegistryService.openLoginSession'a geçirir (backend ENFORCE).
+ */
+export async function readSameTypeSessionPolicy(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<SameTypeSessionPolicy> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_SAME_TYPE_SESSION_POLICY },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && SAME_TYPE_SESSION_POLICIES.includes(v as SameTypeSessionPolicy)) {
+    return v as SameTypeSessionPolicy;
+  }
+  return DEFAULT_SAME_TYPE_SESSION_POLICY;
+}
+
+/**
+ * Token süresi dolunca istemci otomatik çıkış yapsın mı? Default TRUE (kayıt yoksa).
+ * Client (mobil + Electron) ENFORCE eder — JWT exp decode → süre dolunca logout.
+ */
+export async function readAutoLogoutOnExpiry(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_AUTO_LOGOUT_ON_EXPIRY },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_AUTO_LOGOUT_ON_EXPIRY;
+  return asBoolean(setting.value);
+}
+
+/**
+ * Mobil hareketsizlik ekran kilidi açık mı? Default TRUE (kayıt yoksa). Client (mobil)
+ * ENFORCE eder — tablet mobileIdleLockMinutes kadar dokunulmazsa kilit ekranı gelir.
+ */
+export async function readMobileIdleLockEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_MOBILE_IDLE_LOCK_ENABLED },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_MOBILE_IDLE_LOCK_ENABLED;
+  return asBoolean(setting.value);
+}
+
+/**
+ * Mobil idle kilit süresini DAKİKA olarak okur. Yoksa/geçersizse 10; 1..120 aralığına
+ * kırpılır. Client (mobil) ENFORCE eder.
+ */
+export async function readMobileIdleLockMinutes(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_MOBILE_IDLE_LOCK_MINUTES },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_MOBILE_IDLE_LOCK_MINUTES;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < MIN_MOBILE_IDLE_LOCK_MINUTES) return DEFAULT_MOBILE_IDLE_LOCK_MINUTES;
+  return Math.min(Math.floor(parsed), MAX_MOBILE_IDLE_LOCK_MINUTES);
 }
 
 /**

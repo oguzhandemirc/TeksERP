@@ -1,5 +1,6 @@
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
+import type { SameTypeSessionPolicy } from "@/types/auth";
 import {
   type CompanyLetterhead,
   type DocumentsConfig,
@@ -153,10 +154,21 @@ export interface FeatureFlags {
   /** Hareketsizlik zaman aşımı — dakika (default 0 = kapalı). >0 iken panel bu kadar
    *  dakika hiç işlem (fare/klavye) görmezse otomatik çıkış yapar. Frontend ENFORCE eder. */
   idleTimeoutMinutes: number;
-  /** Çalışma oturumu (saha — kim hangi makinede) idle zaman aşımı — dakika (default 600
-   *  = 10 saat; 0 = kapalı). Backend TEMBEL enforce: süre dolan oturum okuma anında IDLE
-   *  kapanır; operatör bir sonraki işlemde yeniden yer onayı verir. */
+  /** Çalışma oturumu (saha — kim hangi makinede) idle zaman aşımı — dakika (default 20;
+   *  0 = kapalı). Backend TEMBEL enforce: süre dolan oturum okuma anında IDLE kapanır;
+   *  operatör bir sonraki işlemde yeniden yer onayı verir. */
   workSessionIdleTimeoutMinutes: number;
+  /** Token süresi dolunca istemci otomatik çıkış yapsın mı (default true; mobil+electron).
+   *  Client ENFORCE: JWT exp'e göre zamanlayıcı kurulur, süre dolunca oturum kapanır. */
+  autoLogoutOnExpiry: boolean;
+  /** Mobil hareketsizlik kilidi açık mı (default true). Client ENFORCE (yalnız mobil):
+   *  tablet bu kadar dakika kullanılmazsa kilit ekranı; work session açık kalır. */
+  mobileIdleLockEnabled: boolean;
+  /** Mobil hareketsizlik kilidi süresi — dakika (1..120, default 10). Client ENFORCE (mobil). */
+  mobileIdleLockMinutes: number;
+  /** Aynı hesabın aynı tip cihazda 2. oturumuna karşı politika (default 'kick').
+   *  kick = eskiyi düşür, notify = kullanıcıya sor, off = sınırsız. Backend (login) enforce. */
+  sameTypeSessionPolicy: SameTypeSessionPolicy;
   /** Mobil giriş yöntemleri: list (kullanıcı+şifre), pin (SALT hızlı-PIN — kullanıcı
    *  seçme yok, benzersiz PIN), card (QR personel kartı). En az biri etkin; login
    *  ekranı primary ile açılır, diğerleri "Diğer giriş yöntemleri"nde. Backend ENFORCE. */

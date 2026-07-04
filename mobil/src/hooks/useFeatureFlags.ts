@@ -45,3 +45,18 @@ export function useShipmentConfirmationEnabled(): boolean {
 export function useTamburOverQuantityEnabled(): boolean {
   return useFeatureFlags().data?.tamburOverQuantityEnabled ?? true;
 }
+
+/** Token süresi dolunca otomatik logout açık mı? Default TRUE (yüklenene kadar da açık). */
+export function useAutoLogoutOnExpiry(): boolean {
+  return useFeatureFlags().data?.autoLogoutOnExpiry ?? true;
+}
+
+/** Mobil hareketsizlik kilidi açık mı? Default TRUE. Kapalıysa ASLA kilitlenme. */
+export function useMobileIdleLockEnabled(): boolean {
+  return useFeatureFlags().data?.mobileIdleLockEnabled ?? true;
+}
+
+/** Kaç dakika hareketsizlikte kilit? Default 10 (1..120). */
+export function useMobileIdleLockMinutes(): number {
+  return useFeatureFlags().data?.mobileIdleLockMinutes ?? 10;
+}

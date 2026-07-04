@@ -189,6 +189,9 @@ async function cleanup(): Promise<void> {
   try {
     if (throwawayUserId) {
       await prisma.systemLog.deleteMany({ where: { userId: throwawayUserId } });
+      // Login artık Session kaydı yaratıyor (jti registry) → user silmeden önce temizle
+      // (sessions.userId onDelete Restrict).
+      await prisma.session.deleteMany({ where: { userId: throwawayUserId } });
       await prisma.user.delete({ where: { id: throwawayUserId } }).catch(() => {});
     }
     if (createdWoIds.length === 0 && rollBarcodes.length === 0) return;

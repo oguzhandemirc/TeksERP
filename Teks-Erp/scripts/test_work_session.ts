@@ -123,11 +123,16 @@ async function main() {
     check("eşzamanlı open → tam biri kazanır", wins === 1 && losses + occupied === 1,
       `wins=${wins} p2002=${losses} occupied=${occupied}`);
 
-    // 6) makinesiz istasyon (SHIPPING) oturumu — çoklu cihaz serbest
+    // 6) makinesiz istasyon (SHIPPING) oturumu — farklı cihaz açabilir; ancak AYNI
+    //    operatör "tek yer" kuralıyla ikinci cihazda açınca öncekini (dev1) düşürür.
     const st1 = await WorkSessionService.open({ userId: user.id, deviceRowId: dev1.id, stationId: sevkStation.id });
+    const st1id = (st1.data as { id: string; machineId: string | null }).id;
     check("istasyon-oturumu → machineId null", (st1.data as { machineId: string | null }).machineId === null);
     const st2 = await WorkSessionService.open({ userId: user.id, deviceRowId: dev2.id, stationId: sevkStation.id });
     check("aynı istasyonda ikinci cihaz da açabilir", !!(st2.data as { id: string }).id);
+    // Bir operatör = tek yer: st2 açılınca aynı kullanıcının dev1'deki st1'i NEW_LOGIN ile kapanır.
+    check("tek-yer: aynı operatör 2. cihazda açınca öncekini kapatır",
+      (await sessionById(st1id))?.endReason === "NEW_LOGIN");
 
     // 7) makinesi olan istasyona istasyon-oturumu → 400
     await expectErr("makineli istasyona istasyon-oturumu reddi", "makine seçilerek", () =>
@@ -149,7 +154,9 @@ async function main() {
     check("idle oturum → resolveActiveSession null", resolved === null);
     check("idle oturum → IDLE ile kapandı", idleAfter?.endReason === "IDLE");
 
-    // 10) closeForDevice idempotent
+    // 10) closeForDevice idempotent. (dev2'nin önceki oturumu 9. adımda "tek yer"
+    //     kuralıyla kapandığı için önce dev2'de taze bir oturum açıyoruz.)
+    await WorkSessionService.open({ userId: user.id, deviceRowId: dev2.id, stationId: sevkStation.id });
     const c1 = await WorkSessionService.closeForDevice(dev2.id);
     const c2 = await WorkSessionService.closeForDevice(dev2.id);
     check("closeForDevice → closed:true", c1.data.closed === true);

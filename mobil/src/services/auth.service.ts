@@ -14,16 +14,24 @@ export interface LoginMethodsConfig {
 export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = { enabled: ['list'], primary: 'list' };
 
 export const authService = {
+  /** clientType='mobile' HER giriş gövdesine eklenir (backend same-type policy).
+   *  confirmKick opsiyonel — 'notify' çakışmasını onaylayınca true ile tekrarlanır. */
   login: (credentials: LoginRequest): Promise<LoginResponse> =>
-    apiClient.post<LoginResponse>('/auth/login', credentials).then((r) => r.data),
+    apiClient
+      .post<LoginResponse>('/auth/login', { clientType: 'mobile', ...credentials })
+      .then((r) => r.data),
 
   /** QR personel kartıyla giriş — yalnız "card" yöntemi etkinken (aksi 403). */
-  loginWithCard: (cardCode: string): Promise<LoginResponse> =>
-    apiClient.post<LoginResponse>('/auth/login-card', { cardCode }).then((r) => r.data),
+  loginWithCard: (cardCode: string, confirmKick?: boolean): Promise<LoginResponse> =>
+    apiClient
+      .post<LoginResponse>('/auth/login-card', { cardCode, clientType: 'mobile', confirmKick })
+      .then((r) => r.data),
 
   /** SALT hızlı-PIN ile giriş — kullanıcı seçme yok (PIN benzersiz, kimliği belirler). */
-  loginWithQuickPin: (pin: string): Promise<LoginResponse> =>
-    apiClient.post<LoginResponse>('/auth/login-quick-pin', { pin }).then((r) => r.data),
+  loginWithQuickPin: (pin: string, confirmKick?: boolean): Promise<LoginResponse> =>
+    apiClient
+      .post<LoginResponse>('/auth/login-quick-pin', { pin, clientType: 'mobile', confirmKick })
+      .then((r) => r.data),
 
   /** Giriş yöntemleri (public — login ekranı auth'suz okur). Hata → yalnız liste. */
   getLoginMethods: (): Promise<LoginMethodsConfig> =>

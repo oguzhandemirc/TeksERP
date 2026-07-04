@@ -2,12 +2,42 @@ export interface JwtPayload {
   userId: string;
   username: string;
   permissions: string[];
+  /** Oturum registry kimliği (backend `jwt.sign {jwtid}` ile eklenir). Eski
+   *  token'larda olmayabilir — opsiyonel. Backend middleware bu jti'yi Session
+   *  tablosunda arar; iptal edilmişse sonraki istek 401 alır. */
+  jti?: string;
+  /** Token sona erme (saniye, epoch). Otomatik-logout zamanlaması bunu kullanır. */
+  exp?: number;
+  /** Token üretim zamanı (saniye, epoch). */
+  iat?: number;
 }
+
+/** Giriş yapan istemcinin türü — same-type oturum politikası bununla ayrışır. */
+export type ClientType = "electron" | "mobile";
+
+/** Aynı hesabın aynı tip cihazda ikinci oturumuna karşı politika (backend enforce).
+ *  kick = eskiyi düşür, notify = kullanıcıya sor, off = sınırsız çoklu oturum. */
+export type SameTypeSessionPolicy = "kick" | "notify" | "off";
 
 export interface LoginRequest {
   username: string;
   password: string;
+  /** İstemci türü — Electron her zaman 'electron' gönderir (default 'mobile'). */
+  clientType?: ClientType;
+  /** 'notify' politikasında aynı hesap başka yerde açıkken kullanıcı onayı verince
+   *  true ile tekrar çağrılır; backend iki oturumu da açık tutar. */
+  confirmKick?: boolean;
 }
+
+/** 409 SESSION_EXISTS yanıtındaki mevcut oturum bilgisi (backend `details`). */
+export interface ExistingSessionInfo {
+  deviceType: ClientType;
+  createdAt: string;
+  deviceId: string | null;
+}
+
+/** Backend 409 conflict `details.code` değeri — aynı hesap başka yerde açık. */
+export const SESSION_EXISTS_CODE = "SESSION_EXISTS" as const;
 
 export interface LoginResponse {
   success: boolean;

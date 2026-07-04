@@ -16,6 +16,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUser: (user) => set({ user }),
   setHydrated: (isHydrated) => set({ isHydrated }),
   logout: async () => {
+    // Önce backend'de oturumu iptal et (registry revoke + audit) — token yerelde
+    // silinince sunucuda geçerli kalmasın. Best-effort: dinamik import ile
+    // apiClient ↔ auth store döngüsünü kır; sunucuya ulaşılamasa/oturum zaten
+    // düşmüşse bile yerel temizliği yine yap.
+    try {
+      const { authService } = await import("@/services/authService");
+      await authService.logout();
+    } catch {
+      /* sunucuya ulaşılamadı / oturum zaten iptal — yerel temizliğe devam */
+    }
     await tokenStore.clear();
     set({ user: null });
   },

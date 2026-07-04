@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { featureFlagService, DEFAULT_COMPANY_NAME } from "@/services/featureFlagService";
+import type { SameTypeSessionPolicy } from "@/types/auth";
+import { isSameTypeSessionPolicy } from "@/lib/session-auth";
 
 const QUERY_KEY = ["feature-flags"];
 
@@ -79,6 +81,37 @@ export function useSessionDurationHours(): number {
 export function useIdleTimeoutMinutes(): number {
   const q = useFeatureFlags();
   return q.data?.data?.idleTimeoutMinutes ?? 0;
+}
+
+/** Çalışma oturumu (saha) idle zaman aşımı, dakika. Yüklenene kadar 20 (yeni default). */
+export function useWorkSessionIdleTimeoutMinutes(): number {
+  const q = useFeatureFlags();
+  return q.data?.data?.workSessionIdleTimeoutMinutes ?? 20;
+}
+
+/** Token süresi dolunca otomatik çıkış açık mı. Yüklenene kadar true (default açık). */
+export function useAutoLogoutOnExpiry(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.autoLogoutOnExpiry ?? true;
+}
+
+/** Mobil hareketsizlik kilidi açık mı. Yüklenene kadar true (default açık). */
+export function useMobileIdleLockEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.mobileIdleLockEnabled ?? true;
+}
+
+/** Mobil hareketsizlik kilidi süresi, dakika. Yüklenene kadar 10 (default). */
+export function useMobileIdleLockMinutes(): number {
+  const q = useFeatureFlags();
+  return q.data?.data?.mobileIdleLockMinutes ?? 10;
+}
+
+/** Aynı tip oturum politikası. Yüklenene/geçersiz değerde kadar 'kick' (default). */
+export function useSameTypeSessionPolicy(): SameTypeSessionPolicy {
+  const q = useFeatureFlags();
+  const v = q.data?.data?.sameTypeSessionPolicy;
+  return isSameTypeSessionPolicy(v) ? v : "kick";
 }
 
 /** Saha #20: top adı format şablonu. Yüklenene kadar default. */

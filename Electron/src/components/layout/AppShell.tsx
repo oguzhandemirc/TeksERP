@@ -9,6 +9,7 @@ import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useTabShortcuts } from "@/hooks/useTabShortcuts";
 import { useServerHeartbeat } from "@/hooks/useServerClock";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
+import { useExpiryAutoLogout } from "@/hooks/useExpiryAutoLogout";
 import { useScannerWedge } from "@/hooks/useScannerWedge";
 import { useDeviceScanner } from "@/hooks/useDeviceScanner";
 import { useDeviceAnnounce } from "@/hooks/useDeviceAnnounce";
@@ -58,6 +59,7 @@ export function AppShell() {
   useTabShortcuts();
   useServerHeartbeat();
   useIdleLogout();
+  useExpiryAutoLogout();
 
   const toggleSidebar = () =>
     setCollapsed((c) => {

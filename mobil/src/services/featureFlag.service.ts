@@ -41,6 +41,12 @@ export interface FeatureFlags {
   companyLetterhead: CompanyLetterhead;
   /** Yazdırılan belge içerik ayarı (canlı). resolveDocConfig ile çözülür. */
   documentsConfig: DocumentsConfig;
+  /** Token süresi dolunca cihaz otomatik logout etsin mi (default true, client enforce). */
+  autoLogoutOnExpiry: boolean;
+  /** Mobil hareketsizlik kilidi açık mı (default true). Kapalıysa ASLA kilitlenmez. */
+  mobileIdleLockEnabled: boolean;
+  /** Kaç dakika hareketsizlikte kilit ekranı (1..120, default 10). */
+  mobileIdleLockMinutes: number;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -56,6 +62,9 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   companyName: DEFAULT_COMPANY_NAME,
   companyLetterhead: DEFAULT_COMPANY_LETTERHEAD,
   documentsConfig: {},
+  autoLogoutOnExpiry: true,
+  mobileIdleLockEnabled: true,
+  mobileIdleLockMinutes: 10,
 };
 
 export const featureFlagService = {

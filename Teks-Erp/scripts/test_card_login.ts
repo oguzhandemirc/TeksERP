@@ -105,6 +105,9 @@ async function main() {
     } else {
       await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.AUTH_LOGIN_METHODS } }).catch(() => {});
     }
+    // Login artık Session kaydı yaratıyor (jti registry) → user silmeden önce temizle
+    // (sessions.userId onDelete Restrict).
+    await prisma.session.deleteMany({ where: { userId: { in: [testUser.id, passiveUser.id] } } }).catch(() => {});
     await prisma.user.deleteMany({ where: { id: { in: [testUser.id, passiveUser.id] } } }).catch(() => {});
   }
 

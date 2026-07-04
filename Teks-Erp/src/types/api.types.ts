@@ -46,4 +46,9 @@ export interface JwtPayload {
    *  (yetki/şifre değişince bump → eski token geçersiz). Eski (sürümsüz) tokenlar
    *  deploy sonrası bir kez re-login gerektirir. */
   tokenVersion: number;
+  /** JWT jti claim — Session registry satırının anahtarı (jwt.sign jwtid). Login'de
+   *  üretilir; auth.middleware her istekte Session.revokedAt kontrol eder → oturum
+   *  iptal edilince eski token 401 alır. Eski (jti'siz) tokenlar deploy sonrası bir
+   *  kez re-login gerektirir (fail-closed). */
+  jti: string;
 }

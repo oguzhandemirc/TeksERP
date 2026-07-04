@@ -3,14 +3,28 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, ClientType } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { randomBytes, randomInt } from "crypto";
+import { randomBytes, randomInt, randomUUID } from "crypto";
 import { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { readSessionDurationHours, readLoginMethods } from "./system-setting.service";
+import {
+  readSessionDurationHours,
+  readLoginMethods,
+  readSameTypeSessionPolicy,
+} from "./system-setting.service";
+import { SessionRegistryService } from "./session-registry.service";
+
+/** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
+ *  clientType body'den (default 'mobile'); deviceId x-device-id/req.device'den;
+ *  confirmKick 'notify' politikasında "ikisi de açık kalsın" onayı. */
+export interface LoginContext {
+  clientType?: "electron" | "mobile";
+  deviceId?: string | null;
+  confirmKick?: boolean;
+}
 
 /** Personel kartı QR içeriği: TEKSU:<userId>:<32-hex token>. Makine QR'ı ham
  *  makine kodu (MAK-...) taşıdığından prefix çakışması yok. */
@@ -36,7 +50,8 @@ export class AuthService {
    */
   static async login(
     username: string,
-    password: string
+    password: string,
+    ctx?: LoginContext
   ): Promise<{ token: string; user: JwtPayload }> {
     const user = await prisma.user.findUnique({
       where: { username },
@@ -58,7 +73,10 @@ export class AuthService {
       throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
     }
 
-    return this.issueToken({ id: user.id, username: user.username, tokenVersion: user.tokenVersion });
+    return this.issueToken(
+      { id: user.id, username: user.username, tokenVersion: user.tokenVersion },
+      ctx
+    );
   }
 
   /**
@@ -68,7 +86,8 @@ export class AuthService {
    * Kart kaybolursa admin ROTASYON yapar (yeni token) → eski kart anında ölür.
    */
   static async loginWithCard(
-    cardCode: string
+    cardCode: string,
+    ctx?: LoginContext
   ): Promise<{ token: string; user: JwtPayload }> {
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("card")) {
@@ -85,7 +104,7 @@ export class AuthService {
     if (!user) {
       throw AppError.unauthorized("Kart geçersiz veya iptal edilmiş — yöneticiden yeni kart isteyin");
     }
-    return this.issueToken(user);
+    return this.issueToken(user, ctx);
   }
 
   /**
@@ -94,7 +113,8 @@ export class AuthService {
    * tek başına kimliği belirler (findUnique). Şifreden AYRI alandır.
    */
   static async loginWithQuickPin(
-    pin: string
+    pin: string,
+    ctx?: LoginContext
   ): Promise<{ token: string; user: JwtPayload }> {
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("pin")) {
@@ -111,7 +131,7 @@ export class AuthService {
       select: { id: true, username: true, tokenVersion: true },
     });
     if (!user) throw AppError.unauthorized("PIN tanınmadı — yöneticinizden hızlı PIN isteyin");
-    return this.issueToken(user);
+    return this.issueToken(user, ctx);
   }
 
   /**
@@ -224,27 +244,56 @@ export class AuthService {
     };
   }
 
-  /** JWT üretimi — login ve loginWithCard'ın ortak çıkışı. */
-  private static async issueToken(user: {
-    id: string;
-    username: string;
-    tokenVersion: number;
-  }): Promise<{ token: string; user: JwtPayload }> {
+  /** JWT üretimi — login/loginWithCard/loginWithQuickPin'in ortak çıkışı. Session
+   *  registry'ye kayıt açar (aynı-tip politikası burada uygulanır) ve jti'yi jwtid
+   *  olarak token'a gömer → middleware anlık iptal kontrolü yapabilir. 'notify'
+   *  politikası + onaysız çakışma → openLoginSession 409 SESSION_EXISTS fırlatır. */
+  private static async issueToken(
+    user: {
+      id: string;
+      username: string;
+      tokenVersion: number;
+    },
+    ctx?: LoginContext
+  ): Promise<{ token: string; user: JwtPayload }> {
     const permissions = await this.getEffectivePermissions(user.id);
 
-    const payload: JwtPayload = {
+    // Oturum ömrü runtime ayardan (auth.sessionDurationHours, default 8) — saniyeye çevrilir.
+    const sessionHours = await readSessionDurationHours();
+    const expiresInSec = sessionHours * 60 * 60;
+
+    // jti = Session satırı anahtarı; JWT exp ile hizalı expiresAt hesapla.
+    const jti = randomUUID();
+    const expiresAt = new Date(Date.now() + expiresInSec * 1000);
+    const deviceType: ClientType =
+      ctx?.clientType === "electron" ? ClientType.ELECTRON : ClientType.MOBILE;
+    const policy = await readSameTypeSessionPolicy();
+
+    // Oturum kaydını AÇ (token imzalanmadan önce — notify çakışmasında token üretilmez).
+    await SessionRegistryService.openLoginSession({
+      userId: user.id,
+      deviceType,
+      deviceId: ctx?.deviceId ?? null,
+      jti,
+      expiresAt,
+      policy,
+      confirmKick: ctx?.confirmKick,
+    });
+
+    // jti token'a jwt.sign jwtid ile eklenir — sign payload'ında jti TUTMUYORUZ
+    // (jsonwebtoken "jti already present" hatası verir). Dönen JwtPayload jti taşır.
+    const signPayload = {
       userId: user.id,
       username: user.username,
       permissions,
       tokenVersion: user.tokenVersion,
     };
-
-    // Oturum ömrü runtime ayardan (auth.sessionDurationHours, default 8) — saniyeye çevrilir.
-    const sessionHours = await readSessionDurationHours();
-    const token = jwt.sign(payload, JWT_SECRET, {
-      expiresIn: sessionHours * 60 * 60,
+    const token = jwt.sign(signPayload, JWT_SECRET, {
+      expiresIn: expiresInSec,
+      jwtid: jti,
     });
 
+    const payload: JwtPayload = { ...signPayload, jti };
     return { token, user: payload };
   }
 

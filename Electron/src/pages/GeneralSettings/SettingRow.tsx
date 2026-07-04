@@ -34,6 +34,61 @@ export function FlagToggle({
   );
 }
 
+/**
+ * Sayısal ayar alanı — başlık + açıklama + number input + hata satırı. Değer
+ * string tutulur (geçici boş girişe izin); doğrulama/parse çağırana ait.
+ */
+export function NumberField({
+  id,
+  label,
+  desc,
+  value,
+  min,
+  max,
+  onChange,
+  error,
+}: {
+  id: string;
+  label: string;
+  desc: string;
+  value: string;
+  min: number;
+  max: number;
+  onChange: (next: string) => void;
+  error?: string;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="text-sm font-medium">
+        {label}
+      </label>
+      <p className="text-xs text-muted-foreground">{desc}</p>
+      <input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        value={value}
+        min={min}
+        max={max}
+        step={1}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-2 flex h-9 w-40 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      />
+      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+/** Salt-okunur "etiket → değer rozeti" satırı (yetkisiz görünüm listelerinde). */
+export function ReadOnlyLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="font-medium">{label}</span>
+      <span className="shrink-0 rounded-md border px-2 py-0.5 text-xs">{value}</span>
+    </div>
+  );
+}
+
 /** Yetkisiz kullanıcı için salt-okunur durum satırı (Açık/Kapalı rozeti). */
 export function ReadOnlyRow({
   title,

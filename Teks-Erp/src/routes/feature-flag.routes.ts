@@ -48,8 +48,16 @@ const updateSchema = z.object({
   sessionDurationHours: z.number().int().min(1).max(720).optional(),
   // auth.idleTimeoutMinutes — hareketsizlik zaman aşımı, dakika (0=kapalı, 0–1440). Frontend ENFORCE.
   idleTimeoutMinutes: z.number().int().min(0).max(1440).optional(),
-  // workSession.idleTimeoutMinutes — çalışma oturumu idle zaman aşımı, dakika (default 600, 0=kapalı). Backend TEMBEL ENFORCE.
+  // workSession.idleTimeoutMinutes — çalışma oturumu idle zaman aşımı, dakika (default 20, 0=kapalı). Backend TEMBEL ENFORCE.
   workSessionIdleTimeoutMinutes: z.number().int().min(0).max(1440).optional(),
+  // auth.sameTypeSessionPolicy — aynı-tip 2. girişte davranış (default kick). Backend ENFORCE (login).
+  sameTypeSessionPolicy: z.enum(["kick", "notify", "off"]).optional(),
+  // auth.autoLogoutOnExpiry — token dolunca istemci otomatik çıkış (default true). Client ENFORCE.
+  autoLogoutOnExpiry: z.boolean().optional(),
+  // auth.mobileIdleLockEnabled — mobil idle ekran kilidi (default true). Client (mobil) ENFORCE.
+  mobileIdleLockEnabled: z.boolean().optional(),
+  // auth.mobileIdleLockMinutes — mobil idle kilit süresi, dakika (default 10, 1–120). Client (mobil) ENFORCE.
+  mobileIdleLockMinutes: z.number().int().min(1).max(120).optional(),
   // auth.loginMethods — mobil giriş yöntemleri: list/pin/card + öncelikli. Backend ENFORCE
   // (en az bir etkin + primary ∈ enabled — servis ayrıca doğrular).
   loginMethods: z

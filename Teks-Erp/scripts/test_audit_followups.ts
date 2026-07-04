@@ -138,6 +138,9 @@ async function testTokenVersionBump(): Promise<void> {
 
 async function cleanup(): Promise<void> {
   await prisma.userPermission.deleteMany({ where: { userId: { in: userIds } } });
+  // Login artık Session kaydı yaratıyor (jti registry) → user silmeden önce temizle
+  // (sessions.userId onDelete Restrict).
+  await prisma.session.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   await prisma.device.deleteMany({ where: { deviceId: { in: deviceLocalIds } } });
   await prisma.machine.deleteMany({ where: { id: { in: machineIds } } });

@@ -11,7 +11,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { authRouter } from "./router";
 import { useAuthStore } from "@/store/auth";
 import { tokenStore } from "@/lib/secure-token";
-import { decodeJwt } from "@/lib/jwt";
+import { decodeJwt, jwtPayloadExpiryMs } from "@/lib/jwt";
 import { canEnterApp } from "@/types/auth";
 
 const queryClient = new QueryClient({
@@ -42,10 +42,7 @@ function AuthHydrator() {
         const decoded = decodeJwt(token);
         // L fix: süresi DOLMUŞ token'la uygulamayı açma — ilk istekte zaten 401
         // yenilecekti; exp kontrolüyle doğrudan login'e düşür (boş açılış yok).
-        const expMs =
-          decoded && typeof (decoded as { exp?: number }).exp === "number"
-            ? (decoded as { exp?: number }).exp! * 1000
-            : null;
+        const expMs = jwtPayloadExpiryMs(decoded);
         if (decoded && (expMs === null || expMs > Date.now())) {
           setUser(decoded);
         } else {

@@ -171,6 +171,9 @@ async function main() {
     }
     const allIds = [u1.id, u2.id, ...created];
     await prisma.userPermission.deleteMany({ where: { userId: { in: allIds } } }).catch(() => {});
+    // Login artık Session kaydı yaratıyor (jti registry) → user silmeden önce temizle
+    // (sessions.userId onDelete Restrict).
+    await prisma.session.deleteMany({ where: { userId: { in: allIds } } }).catch(() => {});
     await prisma.user.deleteMany({ where: { id: { in: allIds } } }).catch(() => {});
   }
 

@@ -13,6 +13,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { AuthService } from "./auth.service";
 import { readLoginMethods } from "./system-setting.service";
+import { SessionRegistryService } from "./session-registry.service";
 
 /**
  * Yeni kullanıcının varsayılan olarak aldığı üretim istasyon izinleri (opt-out'lu).
@@ -75,6 +76,42 @@ export class PermissionManagementService {
       },
       orderBy: [{ isActive: "desc" }, { username: "asc" }],
     });
+  }
+
+  /**
+   * Kullanıcı detayı (Ayak İzi başlığı) — kimlik + yetki sayısı + SON çalışma
+   * oturumu (cihaz + yer). Cihaz detayının (DeviceService.detail) analoğu.
+   */
+  static async getUserById(id: string) {
+    const user = await prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        isActive: true,
+        createdAt: true,
+        _count: { select: { permissions: true } },
+      },
+    });
+    if (!user) throw AppError.notFound("Kullanıcı bulunamadı");
+
+    // Son oturum açma — [userId, startedAt] index'i sort-free karşılar.
+    const lastSession = await prisma.workSession.findFirst({
+      where: { userId: id },
+      orderBy: { startedAt: "desc" },
+      select: {
+        id: true,
+        startedAt: true,
+        endedAt: true,
+        endReason: true,
+        device: { select: { id: true, name: true, kind: true } },
+        machine: { select: { id: true, code: true, name: true } },
+        station: { select: { id: true, code: true, name: true, kind: true } },
+      },
+    });
+
+    return { ...user, lastSession };
   }
 
   // ---------------------------------------------------------------------------
@@ -256,6 +293,11 @@ export class PermissionManagementService {
       where: { id: userId },
       data: { passwordHash, tokenVersion: { increment: 1 } },
     });
+    // Session registry'yi de temizle (tokenVersion ile birlikte — anlık iptalin ikinci
+    // katmanı: eski token hem tokenVersion hem revokedAt'ten düşer). Best-effort.
+    await SessionRegistryService.revokeAllForUser(userId, "PASSWORD_RESET").catch(
+      () => undefined,
+    );
 
     await AuditService.log({
       userId: actorUserId,
@@ -447,6 +489,9 @@ export class PermissionManagementService {
       data: { isActive: false, tokenVersion: { increment: 1 } },
       select: USER_SELECT,
     });
+    await SessionRegistryService.revokeAllForUser(id, "DEACTIVATED").catch(
+      () => undefined,
+    );
 
     await AuditService.log({
       userId: actorUserId, action: "UPDATE", tableName: "users", recordId: id,
@@ -506,6 +551,9 @@ export class PermissionManagementService {
       },
       select: USER_SELECT,
     });
+    await SessionRegistryService.revokeAllForUser(id, "DELETED").catch(
+      () => undefined,
+    );
 
     await AuditService.log({
       userId: actorUserId, action: "DELETE", tableName: "users", recordId: id,
