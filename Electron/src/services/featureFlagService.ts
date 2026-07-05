@@ -129,6 +129,8 @@ export interface FeatureFlags {
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
+  /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */
+  kk1WeightEntryEnabled: boolean;
   returnGradingEnabled: boolean;
   /** Kartela kabulünde cm/kg ölçü alanları + listelerde ölçü gösterimi (false=default, yalnız adet). */
   kartelaMeasurementEnabled: boolean;

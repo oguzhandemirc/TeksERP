@@ -28,6 +28,7 @@ import { colorService } from "@/pages/Colors/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { PropertyChipsField } from "@/components/forms/PropertyChipsField";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { useKk1WeightEntryEnabled } from "@/hooks/usePricingEnabled";
 import type { Item } from "@/pages/Items/types";
 import type { Color } from "@/pages/Colors/types";
 import { rollService, type InitialEntryPayload } from "./service";
@@ -61,6 +62,10 @@ interface Props {
 
 export function ManualEntryDialog({ open, onOpenChange }: Props) {
   const qc = useQueryClient();
+  // KK1 ağırlık girişi admin ayarıyla kapatılabilir (default kapalı). Kapalıyken
+  // alan gizlenir ve payload'a weightKg konmaz — aksi halde backend guard'ı
+  // (createInitialEntry) ağırlıklı girişi 400 ile reddeder.
+  const weightEntryEnabled = useKk1WeightEntryEnabled();
 
   const gradesQ = useQuery({
     queryKey: ["quality-grades", "picker"],
@@ -94,7 +99,7 @@ export function ManualEntryDialog({ open, onOpenChange }: Props) {
       itemId: v.itemId,
       colorId: v.colorId,
       initialQty: v.initialQty,
-      weightKg: v.weightKg ?? undefined,
+      weightKg: weightEntryEnabled ? v.weightKg ?? undefined : undefined,
       width: v.width,
       qualityGrade: v.qualityGrade,
       propertyIds: v.propertyIds,
@@ -177,7 +182,7 @@ export function ManualEntryDialog({ open, onOpenChange }: Props) {
             />
           </FormField>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className={weightEntryEnabled ? "grid grid-cols-3 gap-3" : "grid grid-cols-2 gap-3"}>
             <FormField label="Metraj (mt)" htmlFor="initialQty" error={form.formState.errors.initialQty} required>
               <Input
                 id="initialQty"
@@ -187,15 +192,17 @@ export function ManualEntryDialog({ open, onOpenChange }: Props) {
                 {...form.register("initialQty", { valueAsNumber: true })}
               />
             </FormField>
-            <FormField label="Ağırlık (kg)" htmlFor="weightKg" error={form.formState.errors.weightKg}>
-              <Input
-                id="weightKg"
-                type="number"
-                step="0.01"
-                min="0"
-                onChange={(e) => form.setValue("weightKg", numberOrNull(e.target.value))}
-              />
-            </FormField>
+            {weightEntryEnabled && (
+              <FormField label="Ağırlık (kg)" htmlFor="weightKg" error={form.formState.errors.weightKg}>
+                <Input
+                  id="weightKg"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  onChange={(e) => form.setValue("weightKg", numberOrNull(e.target.value))}
+                />
+              </FormField>
+            )}
             <FormField label="En (cm)" htmlFor="width" error={form.formState.errors.width}>
               <Input
                 id="width"

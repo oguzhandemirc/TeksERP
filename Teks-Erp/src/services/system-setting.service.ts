@@ -41,6 +41,9 @@ export const SETTING_KEYS = {
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
   /** KK1 ham kumaş girişinde "en" alanı gösterilsin mi. Default false (ham en önemsiz). */
   KK1_RAW_WIDTH_ENABLED: "kk1.rawWidthEnabled",
+  /** KK1 ham kumaş girişinde "ağırlık (kg)" alanı gösterilsin mi. Default false.
+   *  Backend ENFORCE eder — kapalıyken weightKg gelirse 400 (yanlış/kötü niyetli giriş reddi). */
+  KK1_WEIGHT_ENTRY_ENABLED: "kk1.weightEntryEnabled",
   /** İade kabulünde personel topun kalitesini değiştirebilsin mi. Default false
    *  (kapalıyken kalite butonu gizlenir + backend gönderilen override'ı yok sayar). */
   RETURN_GRADING_ENABLED: "return.gradingEnabled",
@@ -467,6 +470,9 @@ export interface FeatureFlags {
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
+  /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
+   *  backend ENFORCE eder (kapalıyken gelen weightKg reddedilir). */
+  kk1WeightEntryEnabled: boolean;
   returnGradingEnabled: boolean;
   /** Kartela kabulünde cm/kg ölçü alanları + kartela listelerinde ölçü gösterimi
    *  açık mı (default false — yalnız ADET). */
@@ -668,6 +674,7 @@ export class SystemSettingService {
       pricingEnabled: await readPricingEnabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
+      kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
       returnGradingEnabled: await readReturnGradingEnabled(cacheClient),
       kartelaMeasurementEnabled: await readKartelaMeasurementEnabled(cacheClient),
       partyCodeAuto: await readPartyCodeAuto(cacheClient),
@@ -747,6 +754,18 @@ export class SystemSettingService {
         SETTING_KEYS.KK1_RAW_WIDTH_ENABLED,
         input.rawWidthEnabled,
         "KK1 ham kumaş girişinde en (cm) alanını göster",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "kk1WeightEntryEnabled")) {
+      if (typeof input.kk1WeightEntryEnabled !== "boolean") {
+        throw AppError.badRequest("kk1WeightEntryEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KK1_WEIGHT_ENTRY_ENABLED,
+        input.kk1WeightEntryEnabled,
+        "KK1 ham kumaş girişinde ağırlık (kg) alanını göster",
         userId
       );
     }
@@ -1289,6 +1308,22 @@ export async function readRawWidthEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.KK1_RAW_WIDTH_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * KK1 ham kumaş girişinde ağırlık (kg) alanı açık mı? Default false.
+ * rawWidthEnabled'dan farkı: bu flag backend'de ENFORCE edilir — kapalıyken
+ * gelen weightKg createInitialEntry'de 400 ile reddedilir (yalnız UI rehberi değil).
+ */
+export async function readKk1WeightEntryEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KK1_WEIGHT_ENTRY_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

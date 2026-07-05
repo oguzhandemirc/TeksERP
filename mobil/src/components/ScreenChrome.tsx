@@ -6,13 +6,10 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
-import { useSessionStore } from '../store/sessionStore';
 import { useLockStore } from '../store/lockStore';
 import { usePermissions } from '../hooks/usePermission';
 import { performLogout, pendingStationOpsCount, isOnline } from '../offline/sessionSwitch';
-import { operatorColor, operatorInitials } from '../utils/operatorColor';
 import AppModal from './AppModal';
-import PlaceChip from './session/PlaceChip';
 import type { MainStackParamList, RootStackParamList } from '../navigation/types';
 
 interface Props {
@@ -37,7 +34,6 @@ export default function ScreenChrome({
   children,
 }: Props) {
   const user = useAuthStore((s) => s.user);
-  const activeSession = useSessionStore((s) => s.active);
   const lock = useLockStore((s) => s.lock);
   const { hasMultipleMobileScreens } = usePermissions();
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
@@ -86,8 +82,6 @@ export default function ScreenChrome({
   };
 
   const operatorName = user?.fullName || user?.username || '—';
-  const operatorTone = operatorColor(user?.userId);
-  const place = activeSession?.machine?.code || activeSession?.station?.name || null;
 
   return (
     <View style={styles.root}>
@@ -98,7 +92,12 @@ export default function ScreenChrome({
           <Appbar.BackAction onPress={onStepBack} color="#fff" accessibilityLabel="Önceki adım" />
         )}
         {showHome && (
-          <Appbar.Action icon="home" onPress={goHome} color="#fff" accessibilityLabel="Ana sayfa" />
+          <Appbar.Action
+            icon="view-grid"
+            onPress={goHome}
+            color="#fff"
+            accessibilityLabel="İstasyon değiştir"
+          />
         )}
         <View style={styles.appbarContent}>
           {title ? (
@@ -112,10 +111,6 @@ export default function ScreenChrome({
             </Text>
           )}
         </View>
-
-        {/* Yer çipi — yalnız oturumlu ekranlarda görünür (route'a göre kendisi karar
-            verir); dokununca yer değiştirme modalı (PlaceConfirmView) açılır. */}
-        <PlaceChip />
 
         {/* Ekran-spesifik tetikleyici — profilden önce, profil en sağda kalsın */}
         {headerExtras}
@@ -157,35 +152,6 @@ export default function ScreenChrome({
         </Menu>
       </Appbar.Header>
 
-      {/* Operatör bandı — üst barın hemen altında sabit satır: kim giriş yaptı
-          (isim + operatöre özel renk) + şu anki yer. Dokununca hesap menüsü
-          (Kilitle/geçiş/çıkış) açılır. Paylaşımlı tablette "ben kimim / neredeyim"
-          tek bakışta okunur. */}
-      <TouchableRipple
-        onPress={() => setMenuVisible(true)}
-        rippleColor="rgba(15,23,42,0.08)"
-        accessibilityLabel="Operatör menüsü"
-        style={[styles.banner, { borderLeftColor: operatorTone }]}
-      >
-        <View style={styles.bannerInner}>
-          <View style={[styles.bannerAvatar, { backgroundColor: operatorTone }]}>
-            <Text style={styles.bannerAvatarText}>{operatorInitials(operatorName)}</Text>
-          </View>
-          <Text style={styles.bannerName} numberOfLines={1}>
-            {operatorName}
-          </Text>
-          {place && (
-            <View style={styles.bannerPlace}>
-              <Icon source="map-marker" size={15} color="#334155" />
-              <Text style={styles.bannerPlaceText} numberOfLines={1}>
-                {place}
-              </Text>
-            </View>
-          )}
-          <View style={{ flex: 1 }} />
-          <Icon source="chevron-down" size={20} color="#94a3b8" />
-        </View>
-      </TouchableRipple>
       {/* paddingBottom: Android nav bar (gesture/buton) + dock içeriğin üstüne
           binmesin diye alt safe-area inset'i bırakılır. Tüm ScreenChrome
           ekranları (sticky footer'lar dahil) bundan faydalanır. */}
@@ -254,41 +220,6 @@ const styles = StyleSheet.create({
   },
   menuHeaderName: { fontWeight: '700', color: '#0f172a', fontSize: 14, flexShrink: 1 },
   content: { flex: 1 },
-
-  // Operatör bandı — açık zemin, operatöre özel sol renk şeridi (yüksek kontrast).
-  banner: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    borderLeftWidth: 5,
-  },
-  bannerInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-  },
-  bannerAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bannerAvatarText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-  bannerName: { color: '#0f172a', fontSize: 16, fontWeight: '800', flexShrink: 1 },
-  bannerPlace: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: '#f1f5f9',
-    maxWidth: 180,
-  },
-  bannerPlaceText: { color: '#334155', fontSize: 13, fontWeight: '700', flexShrink: 1 },
 
   confirmCard: {
     backgroundColor: '#fff',

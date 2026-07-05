@@ -41,6 +41,12 @@ export function useRawWidthEnabled(): boolean {
   return q.data?.data?.rawWidthEnabled ?? false;
 }
 
+/** KK1 ham kumaş girişinde ağırlık (kg) alanı açık mı? Default false; backend ENFORCE eder. */
+export function useKk1WeightEntryEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.kk1WeightEntryEnabled ?? false;
+}
+
 export function useReturnGradingEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.returnGradingEnabled ?? false;

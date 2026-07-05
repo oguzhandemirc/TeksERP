@@ -31,6 +31,7 @@ const updateSchema = z.object({
   pricingEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
+  kk1WeightEntryEnabled: z.boolean().optional(),
   returnGradingEnabled: z.boolean().optional(),
   // Kartela kabulünde cm/kg ölçü alanları + listelerde ölçü gösterimi (false=default, yalnız adet).
   kartelaMeasurementEnabled: z.boolean().optional(),

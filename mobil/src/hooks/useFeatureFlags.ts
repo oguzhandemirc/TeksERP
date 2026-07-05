@@ -19,6 +19,12 @@ export function useRawWidthEnabled(): boolean {
   return useFeatureFlags().data?.rawWidthEnabled ?? false;
 }
 
+/** KK1 manuel girişte ağırlık (kg) alanı açık mı? Default false (gizli).
+ *  Backend de ENFORCE eder — kapalıyken gönderilen kg reddedilir. */
+export function useKk1WeightEntryEnabled(): boolean {
+  return useFeatureFlags().data?.kk1WeightEntryEnabled ?? false;
+}
+
 /** İade kabulünde personel kaliteyi değiştirebilir mi? Default false (gizli). */
 export function useReturnGradingEnabled(): boolean {
   return useFeatureFlags().data?.returnGradingEnabled ?? false;

@@ -11,6 +11,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import { resolveQualityGradeId, resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
+import { readKk1WeightEntryEnabled } from "./system-setting.service";
 import {
   parseQueryParams,
   buildWhereClause,
@@ -334,6 +335,15 @@ export class InventoryService {
      *  RollOperation üretmediği için atıf Roll.createdMachineId üstünde kapanır. */
     machineId?: string | null
   ): Promise<ApiResponse<Roll>> {
+    // KK1 istasyonunda ağırlık (kg) girişi admin ayarıyla kapatılabilir (default kapalı).
+    // UI alanı gizlemek yetmez — kapalıyken gelen ağırlık payload'ını (yanlışlıkla ya da
+    // kötü niyetle) backend REDDEDER. Tüm istemcilerin (mobil + Electron + script) tek
+    // choke-point'i burası (defense-in-depth). Zod weightKg'yi pozitif zorunlu kıldığından
+    // >0 kontrolü, undefined/eksik girişleri serbest bırakır.
+    if ((data.weightKg ?? 0) > 0 && !(await readKk1WeightEntryEnabled())) {
+      throw AppError.badRequest("Ağırlık (kg) girişi bu istasyonda kapalı");
+    }
+
     // Ürün var VE aktif olmalı. Soft-delete (isActive=false) edilmiş ürünle
     // giriş yapılamaz — picker pasifleri gizler ama önceden seçili/persist
     // edilmiş itemId backend'e kadar gelebiliyordu (renk/özellik kontrolleriyle

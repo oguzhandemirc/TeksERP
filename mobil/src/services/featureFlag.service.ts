@@ -21,6 +21,9 @@ export interface FeatureFlags {
   targetQuantityEnabled: boolean;
   /** KK1 ham kumaş girişinde "en (cm)" alanı gösterilsin mi (default false). */
   rawWidthEnabled: boolean;
+  /** KK1 ham kumaş girişinde "ağırlık (kg)" alanı gösterilsin mi (default false).
+   *  Backend ENFORCE eder — kapalıyken gönderilen weightKg reddedilir. */
+  kk1WeightEntryEnabled: boolean;
   /** İade kabulünde personel kaliteyi değiştirebilsin mi (default false). */
   returnGradingEnabled: boolean;
   /** Kartela kabulünde cm/kg ölçü alanları gösterilsin mi (default false → yalnız adet). */
@@ -53,6 +56,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   pricingEnabled: false,
   targetQuantityEnabled: false,
   rawWidthEnabled: false,
+  kk1WeightEntryEnabled: false,
   returnGradingEnabled: false,
   kartelaMeasurementEnabled: false,
   fasonNoteMobileEntry: false,

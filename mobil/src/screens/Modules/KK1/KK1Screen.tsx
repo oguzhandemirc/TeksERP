@@ -51,7 +51,7 @@ import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
-import { useRawWidthEnabled } from '../../../hooks/useFeatureFlags';
+import { useRawWidthEnabled, useKk1WeightEntryEnabled } from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
@@ -179,6 +179,7 @@ export default function KK1Screen() {
   // Ham kumaşın eni önemsiz → en girişi feature flag'e bağlı (default kapalı).
   // Kapalıyken alan tamamen gizlidir (elle açma yok); yalnızca flag açıkken görünür.
   const rawWidthEnabled = useRawWidthEnabled();
+  const weightEntryEnabled = useKk1WeightEntryEnabled();
   // Otomatik metraj okuması için bu makineye atanmış METER cihaz(lar)ı (HAL).
   // Tablet hangi makineye atanmışsa onun cihazları gelir (backend for-device).
   const meterPeripherals = useMachinePeripherals('METER');
@@ -661,7 +662,9 @@ export default function KK1Screen() {
         Toast.show({ type: 'error', text1: 'Manuel metraj (mt) girilmeli' });
         return;
       }
-      const w = Number(manualWeight);
+      // Ağırlık yalnız flag açıkken payload'a girer — kapalıyken (alan gizli)
+      // eski/kalıntı kg değeri sızmasın. Backend de reddeder; client de temiz gönderir.
+      const w = weightEntryEnabled ? Number(manualWeight) : NaN;
       weightKg = w > 0 ? w : undefined;
     } else {
       blurAll();
@@ -711,7 +714,7 @@ export default function KK1Screen() {
 
   return (
     <ScreenChrome
-      title="KK1 — Ham Giriş"
+      title="Ham Giriş"
       headerExtras={
         <View style={styles.headerExtrasRow}>
           {printingCount > 0 && (
@@ -790,7 +793,7 @@ export default function KK1Screen() {
           style={styles.formScroll}
           contentContainerStyle={[
             styles.formContent,
-            compact && styles.formContentCompact,
+            compact ? styles.formContentCompact : styles.formContentTablet,
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator
@@ -822,15 +825,10 @@ export default function KK1Screen() {
               onPress={() => (manualMode ? setManualMode(false) : openManual())}
               style={styles.manualBarTouch}
             >
-              <View style={styles.manualBarInner}>
-                <Icon source="wrench-outline" size={20} color={colors.warningDark} />
+              <View style={[styles.manualBarInner, !compact && styles.manualBarInnerTablet]}>
+                <Icon source="keyboard-outline" size={compact ? 20 : 28} color={colors.warningDark} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.manualBarTitle}>Manuel Giriş</Text>
-                  <Text style={styles.manualBarSub}>
-                    {manualMode
-                      ? 'mt / kg elle giriliyor'
-                      : 'Makine arızasında mt / kg elle'}
-                  </Text>
+                  <Text style={[styles.manualBarTitle, !compact && styles.manualBarTitleTablet]}>Manuel Giriş</Text>
                 </View>
                 <View pointerEvents="none">
                   <Switch value={manualMode} color={colors.warningDark} />
@@ -841,10 +839,10 @@ export default function KK1Screen() {
               <Animated.View
                 entering={FadeInUp.duration(180)}
                 exiting={FadeOutUp.duration(140)}
-                style={styles.manualPanel}
+                style={[styles.manualPanel, !compact && styles.manualPanelTablet]}
               >
                 <View style={styles.manualField}>
-                  <Text style={styles.manualFieldLabel}>
+                  <Text style={[styles.manualFieldLabel, !compact && styles.manualFieldLabelTablet]}>
                     Metraj (mt) <Text style={styles.required}>*</Text>
                   </Text>
                   <NumpadInput
@@ -855,57 +853,96 @@ export default function KK1Screen() {
                     numpadLabel="Metraj (mt)"
                     placeholder="0.0"
                     style={styles.input}
-                    contentStyle={styles.manualInputContent}
+                    contentStyle={[styles.manualInputContent, !compact && styles.manualInputContentTablet]}
                     useNativeKeyboard={compact}
                   />
                 </View>
-                <View style={styles.manualField}>
-                  <Text style={styles.manualFieldLabel}>Ağırlık (kg)</Text>
-                  <NumpadInput
-                    ref={manualWeightRef}
-                    mode="outlined"
-                    value={manualWeight}
-                    onChangeText={setManualWeight}
-                    numpadLabel="Ağırlık (kg)"
-                    placeholder="0.0"
-                    style={styles.input}
-                    contentStyle={styles.manualInputContent}
-                    useNativeKeyboard={compact}
-                  />
-                </View>
+                {weightEntryEnabled && (
+                  <View style={styles.manualField}>
+                    <Text style={[styles.manualFieldLabel, !compact && styles.manualFieldLabelTablet]}>Ağırlık (kg)</Text>
+                    <NumpadInput
+                      ref={manualWeightRef}
+                      mode="outlined"
+                      value={manualWeight}
+                      onChangeText={setManualWeight}
+                      numpadLabel="Ağırlık (kg)"
+                      placeholder="0.0"
+                      style={styles.input}
+                      contentStyle={[styles.manualInputContent, !compact && styles.manualInputContentTablet]}
+                      useNativeKeyboard={compact}
+                    />
+                  </View>
+                )}
               </Animated.View>
             )}
           </Surface>
 
           {/* ── Üretim ayarı: ürün + en + kalite (kaydetler ARASI kalıcı) ── */}
-          <Surface style={styles.card} elevation={1}>
-            <View style={styles.cardHero}>
-              <Icon source="cog-outline" size={18} color={colors.brand} />
-              <Text style={styles.cardHeroTitle}>Üretim Ayarı</Text>
-            </View>
-            <Text style={styles.label}>
-              Ürün <Text style={styles.required}>*</Text>
-            </Text>
-            <TouchableRipple
-              borderless
-              rippleColor="rgba(79, 70, 229, 0.15)"
-              onPressIn={blurAll}
-              onPress={() => {
-                blurAll();
-                setPickerOpen('item');
-              }}
-              style={styles.picker}
-            >
-              <View style={styles.pickerInner}>
-                <Text
-                  style={[styles.pickerText, !form.itemId && styles.pickerPlaceholder]}
-                  numberOfLines={1}
+          <Surface style={[styles.card, !compact && styles.cardTablet]} elevation={1}>
+            {compact ? (
+              <TouchableRipple
+                borderless
+                rippleColor="rgba(79, 70, 229, 0.15)"
+                onPressIn={blurAll}
+                onPress={() => {
+                  blurAll();
+                  setPickerOpen('item');
+                }}
+                style={styles.picker}
+              >
+                <View style={styles.pickerInner}>
+                  <Text
+                    style={[styles.pickerText, !form.itemId && styles.pickerPlaceholder]}
+                    numberOfLines={1}
+                  >
+                    {form.itemLabel || 'Ürün seçiniz...'}
+                  </Text>
+                  <Icon source="chevron-down" size={22} color="#475569" />
+                </View>
+              </TouchableRipple>
+            ) : (
+              // Tablet: büyük "Ürün Seç" butonu + yanında seçili ürün adı (saha
+              // kullanımı için büyük dokunma hedefi + tek bakışta okunur seçim).
+              <View style={styles.productRowTablet}>
+                <Button
+                  mode="contained-tonal"
+                  icon="cube-outline"
+                  uppercase={false}
+                  onPressIn={blurAll}
+                  onPress={() => {
+                    blurAll();
+                    setPickerOpen('item');
+                  }}
+                  style={styles.productBtnTablet}
+                  contentStyle={styles.productBtnTabletContent}
+                  labelStyle={styles.productBtnTabletLabel}
                 >
-                  {form.itemLabel || 'Ürün seçiniz...'}
-                </Text>
-                <Icon source="chevron-down" size={22} color="#475569" />
+                  Desen Seç
+                </Button>
+                <View
+                  style={[
+                    styles.productSelectedBox,
+                    !!form.itemId && styles.productSelectedBoxActive,
+                  ]}
+                >
+                  <Text style={styles.productSelectedCaption}>Seçilen Desen</Text>
+                  <View style={styles.productSelectedValueRow}>
+                    {!!form.itemId && (
+                      <Icon source="check-circle" size={20} color={colors.success} />
+                    )}
+                    <Text
+                      style={[
+                        styles.productSelectedName,
+                        !form.itemId && styles.productSelectedNameEmpty,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {form.itemLabel || 'Henüz desen seçilmedi'}
+                    </Text>
+                  </View>
+                </View>
               </View>
-            </TouchableRipple>
+            )}
 
             {rawWidthEnabled && (
               <>
@@ -936,7 +973,6 @@ export default function KK1Screen() {
               </>
             )}
 
-            <Text style={[styles.label, styles.labelSpaced]}>Kalite Sınıfı</Text>
             {qualityGradesQuery.isLoading ? (
               <View style={styles.segmentLoading}>
                 <ActivityIndicator size="small" color="#4f46e5" />
@@ -948,13 +984,14 @@ export default function KK1Screen() {
                   : 'Tanımlı kalite sınıfı yok'}
               </Text>
             ) : (
-              <View style={styles.segmentRow}>
+              <View style={[styles.segmentRow, !compact && styles.segmentRowTablet]}>
                 {qualityGrades.map((qg) => (
                   <QualitySegment
                     key={qg.id}
                     grade={qg}
                     selected={form.qualityGrade === qg.code}
                     onPress={handleQualityGradeSelect}
+                    compact={compact}
                   />
                 ))}
               </View>
@@ -968,7 +1005,7 @@ export default function KK1Screen() {
             OFFLINE-AWARE: mutation'a disabled binding YOK — paused mutation
             isPending kalsa da sıradaki kayıt engellenmesin. Yalnız `pulling`
             (makineden okuma, ~1sn) sırasında çift-tetiklemeyi kilitleriz. */}
-        <View style={[styles.submitFooter, compact && styles.submitFooterCompact]}>
+        <View style={[styles.submitFooter, compact ? styles.submitFooterCompact : styles.submitFooterTablet]}>
           <Button
             mode="contained"
             icon={pulling ? undefined : justSaved ? 'check-bold' : 'package-check'}
@@ -977,8 +1014,8 @@ export default function KK1Screen() {
             disabled={pulling}
             buttonColor={justSaved ? colors.success : undefined}
             style={styles.submitBtn}
-            contentStyle={styles.submitBtnContent}
-            labelStyle={styles.submitBtnLabel}
+            contentStyle={[styles.submitBtnContent, !compact && styles.submitBtnContentTablet]}
+            labelStyle={[styles.submitBtnLabel, !compact && styles.submitBtnLabelTablet]}
           >
             {pulling
               ? 'Makineden okunuyor…'
@@ -1041,9 +1078,13 @@ export default function KK1Screen() {
 
             {/* Numpad yalnızca sayısal alan varken: en girişi (flag) açık VEYA
                 manuel mt/kg açık. İkisi de kapalıysa girilecek değer yok →
-                numpad gizlenir, boşuna yer kaplamaz. */}
+                numpad gizlenir, boşuna yer kaplamaz. Üstünde kalın marka-renkli
+                ayraç → "Son Kayıtlar" ile numpad ayrımı net. */}
             {(rawWidthEnabled || manualMode) && (
-              <NumpadHost style={styles.numpadHost} />
+              <>
+                <View style={styles.numpadDivider} />
+                <NumpadHost style={styles.numpadHost} />
+              </>
             )}
           </View>
         )}
@@ -1092,7 +1133,8 @@ export default function KK1Screen() {
           setForm((f) => ({
             ...f,
             itemId: value,
-            itemLabel: item ? `${item.label} — ${item.sublabel}` : '',
+            // Yalnız kumaş adı görünsün (kod değil) — sublabel (kod) atlanır.
+            itemLabel: item ? item.label : '',
           }));
         }}
       />
@@ -1961,6 +2003,7 @@ const styles = StyleSheet.create({
   formScroll: { flex: 1 },
   formContent: { padding: 16, gap: 12, flexGrow: 1, paddingBottom: 16 },
   formContentCompact: { padding: 12, gap: 10, paddingBottom: 14 },
+  formContentTablet: { padding: 16, gap: 16, paddingBottom: 16 },
   // Sabit alt aksiyon şeridi — ScrollView'in dışında, hep görünür.
   submitFooter: {
     paddingHorizontal: 16,
@@ -1971,7 +2014,15 @@ const styles = StyleSheet.create({
     borderTopColor: '#e2e8f0',
   },
   submitFooterCompact: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10 },
+  submitFooterTablet: {
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 16,
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+  },
   card: { padding: 14, borderRadius: 12, backgroundColor: '#fff', gap: 4 },
+  cardTablet: { padding: 16, gap: 12, borderRadius: 16 },
 
   // ── Manuel giriş paneli (üst, açılır-kapanır; amber = "anormal/dikkat") ──
   manualBar: {
@@ -1990,8 +2041,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
   },
+  manualBarInnerTablet: { paddingHorizontal: 16, paddingVertical: 14, gap: 16 },
   manualBarTitle: { fontSize: 15, fontWeight: '700', color: colors.warningDark },
-  manualBarSub: { fontSize: 12, color: '#92400e', marginTop: 1 },
+  manualBarTitleTablet: { fontSize: 20 },
   manualPanel: {
     flexDirection: 'row',
     gap: spacing.md,
@@ -1999,6 +2051,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     paddingTop: spacing.xs,
   },
+  manualPanelTablet: { gap: 16, paddingHorizontal: 16, paddingBottom: 16, paddingTop: 8 },
   manualField: { flex: 1 },
   manualFieldLabel: {
     fontSize: 13,
@@ -2006,7 +2059,9 @@ const styles = StyleSheet.create({
     color: '#92400e',
     marginBottom: 4,
   },
+  manualFieldLabelTablet: { fontSize: 18, marginBottom: 8 },
   manualInputContent: { fontSize: 24, fontWeight: '700', textAlign: 'center' },
+  manualInputContentTablet: { fontSize: 36, height: 72 },
 
   // ── En satırı + tek-tuş temizleme ──
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -2028,15 +2083,6 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   printChipText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-
-  // ── Üretim ayarı hero header ──
-  cardHero: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  cardHeroTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text },
 
   // ── Oturum sayacı çipi (koyu header — diğer pill'lerle aynı yükseklik) ──
   headerSessionChip: {
@@ -2103,6 +2149,56 @@ const styles = StyleSheet.create({
   pickerText: { fontSize: 16, color: '#0f172a', flex: 1 },
   pickerPlaceholder: { color: '#94a3b8' },
 
+  // ── Tablet ürün seçimi: büyük buton + yanında seçili ürün adı ──
+  productRowTablet: { flexDirection: 'row', alignItems: 'stretch', gap: 16 },
+  productBtnTablet: { borderRadius: 12 },
+  productBtnTabletContent: { height: 96, paddingHorizontal: 24 },
+  productBtnTabletLabel: { fontSize: 24, fontWeight: '700' },
+  // Seçili ürün gösterimi — "form alanı içinde seçili değer" kalıbı: başlık
+  // (caption) + değer; seçiliyken sol aksan çizgi + hafif marka rengi + tik.
+  productSelectedBox: {
+    flex: 1,
+    height: 96,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 14,
+    gap: 3,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  productSelectedBoxActive: {
+    borderColor: '#c7d2fe',
+    backgroundColor: '#eef2ff',
+    borderLeftWidth: 4,
+    borderLeftColor: '#4f46e5',
+  },
+  productSelectedCaption: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: '#64748b',
+    textTransform: 'uppercase',
+  },
+  productSelectedValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  productSelectedName: {
+    flex: 1,
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  productSelectedNameEmpty: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#94a3b8',
+    fontStyle: 'italic',
+  },
+
   row: { flexDirection: 'row', gap: 12, alignItems: 'flex-end' },
   rowSpaced: { marginTop: 8 },
   col: { flex: 1 },
@@ -2117,6 +2213,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  segmentRowTablet: { marginTop: 8 },
   segmentLoading: {
     minHeight: 60,
     alignItems: 'center',
@@ -2134,7 +2231,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 50,
     borderRadius: 10,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#cbd5e1',
     backgroundColor: '#fff',
     alignItems: 'center',
@@ -2145,21 +2242,31 @@ const styles = StyleSheet.create({
   segmentSelected: {
     borderColor: '#4f46e5',
     backgroundColor: '#eef2ff',
-    borderWidth: 2,
+    borderWidth: 4,
+  },
+  // Tablet: saha için daha büyük dokunma hedefi + yazı.
+  segmentTablet: {
+    minHeight: 96,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
   },
   segmentLabel: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
     color: '#475569',
     textAlign: 'center',
   },
+  segmentLabelTablet: { fontSize: 26, fontWeight: '800' },
   segmentLabelSelected: {
     color: '#4f46e5',
   },
 
   submitBtn: { borderRadius: 12, marginTop: 4 },
   submitBtnContent: { height: 56 },
+  submitBtnContentTablet: { height: 112 },
   submitBtnLabel: { fontSize: 18, fontWeight: '700' },
+  submitBtnLabelTablet: { fontSize: 30 },
 
   // Sağ — Son kayıtlar + Numpad
   recentsCol: {
@@ -2273,6 +2380,15 @@ const styles = StyleSheet.create({
   },
 
   // Sabit numpad — sağ sütunun altında
+  // "Son Kayıtlar" ↔ numpad ayracı — kalın, marka renginde (Ürün Seç butonuyla aynı).
+  numpadDivider: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.brand,
+    marginHorizontal: 12,
+    marginTop: 6,
+    marginBottom: 10,
+  },
   numpadHost: {
     margin: 12,
     marginTop: 0,
@@ -2286,10 +2402,12 @@ const QualitySegment = React.memo(function QualitySegment({
   grade,
   selected,
   onPress,
+  compact,
 }: {
   grade: QualityGrade;
   selected: boolean;
   onPress: (code: string) => void;
+  compact: boolean;
 }) {
   const handlePress = useCallback(
     () => onPress(grade.code),
@@ -2302,6 +2420,7 @@ const QualitySegment = React.memo(function QualitySegment({
       rippleColor="rgba(79, 70, 229, 0.15)"
       style={[
         styles.segment,
+        !compact && styles.segmentTablet,
         selected && styles.segmentSelected,
         selected && grade.color
           ? { backgroundColor: grade.color, borderColor: grade.color }
@@ -2311,6 +2430,7 @@ const QualitySegment = React.memo(function QualitySegment({
       <Text
         style={[
           styles.segmentLabel,
+          !compact && styles.segmentLabelTablet,
           selected && styles.segmentLabelSelected,
           selected && grade.color ? { color: '#fff' } : null,
         ]}

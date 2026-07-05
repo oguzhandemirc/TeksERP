@@ -1165,7 +1165,7 @@ export default function KursunQcScreen() {
   );
 
   return (
-    <ScreenChrome title="Kurşun + KK2" headerExtras={headerExtras}>
+    <ScreenChrome title="Kurşun" headerExtras={headerExtras}>
       <View
         style={[
           styles.body,

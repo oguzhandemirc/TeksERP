@@ -55,14 +55,14 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
   {
     key: 'KK1',
     permission: 'mobile:kk1',
-    label: 'KK1 — Ham Giriş',
+    label: 'Ham Giriş',
     icon: 'package-variant-plus',
     description: 'Ham mal kabul, ölçüm ve etiketleme',
   },
   {
     key: 'KursunQc',
     permission: 'mobile:kk2-kursun',
-    label: 'Kurşun + KK2',
+    label: 'Kurşun',
     icon: 'magnify-scan',
     description: 'Hata tespiti ve metraj girişi',
   },

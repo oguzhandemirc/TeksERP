@@ -90,7 +90,7 @@ export default function ModuleSelectScreen() {
   );
 
   return (
-    <ScreenChrome title="Modül Seçimi">
+    <ScreenChrome title="Adnan Şahin Tekstil" subtitle="İstasyon Seçimi">
       {isPhone ? (
         <Animated.ScrollView
           ref={scrollableRef}
