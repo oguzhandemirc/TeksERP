@@ -14,7 +14,8 @@ import { useSessionConflict } from '../../hooks/useSessionConflict';
 import { BarcodeScannerModal } from '../../components/BarcodeScannerModal';
 import PickerModal, { type PickerOption } from '../../components/PickerModal';
 import { useDeviceType, useIsPortrait } from '../../hooks/useDeviceType';
-import type { MobileUser } from '../../types/auth';
+import { operatorColor, operatorInitials } from '../../utils/operatorColor';
+import type { MobileUser, LoginResponse } from '../../types/auth';
 import type { RootStackParamList } from '../../navigation/types';
 
 const COLORS = {
@@ -35,6 +36,7 @@ const COLORS = {
 };
 
 const PIN_LENGTH = 6;
+const PASSWORD_MAX = 32;
 
 /** Giriş yöntemi etiket/ikon/renkleri — yöntem değiştirici butonları. Renkler
  *  BİLEREK birbirinden uzak tonlar: fabrikada uzaktan/eldivenle tek bakışta
@@ -63,7 +65,15 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export default function LoginScreen() {
+/** Kilit modu bağlamı — LoginScreen `lock` prop'u ile kilit ekranı olarak da
+ *  kullanılır. Verilmezse ekran birebir normal login gibi davranır (additive). */
+export interface LoginLockContext {
+  user: { userId: string; username: string; fullName?: string };
+  onAuthenticated: (res: LoginResponse) => Promise<void>;
+  onLogout: () => void;
+}
+
+export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) {
   const setAuth = useAuthStore((s) => s.setAuth);
   const { requestConfirm, modal: conflictModal } = useSessionConflict();
   const device = useDeviceType();
@@ -126,6 +136,14 @@ export default function LoginScreen() {
     }
   }, [users, selectedUserId]);
 
+  // Kilit modunda operatör zaten belli → 'liste' görünümünde kendisini ön-seç.
+  useEffect(() => {
+    if (lock && !selectedUserId && users.length > 0) {
+      const me = users.find((u) => u.id === lock.user.userId || u.username === lock.user.username);
+      if (me) setSelectedUserId(me.id);
+    }
+  }, [lock, users, selectedUserId]);
+
   const pickerOptions: PickerOption[] = useMemo(
     () => users.map((u) => ({ value: u.id, label: u.fullName, sublabel: `@${u.username}` })),
     [users]
@@ -151,6 +169,16 @@ export default function LoginScreen() {
     methodRef.current = activeMethod;
   }, [activeMethod]);
 
+  // Tek başarı yolu: normal login → setAuth; kilit modu → kilit aç / operatör
+  // geçişi (lock.onAuthenticated). Üç giriş yöntemi de bundan geçer.
+  const handleAuthed = useCallback(
+    async (res: LoginResponse, fullName?: string) => {
+      if (lock) await lock.onAuthenticated(res);
+      else await setAuth(res.data.user, res.data.token, fullName);
+    },
+    [lock, setAuth],
+  );
+
   const submit = useCallback(
     async (rawPin: string, user: MobileUser) => {
       setSubmitting(true);
@@ -158,9 +186,9 @@ export default function LoginScreen() {
       try {
         const res = await authActions.password(user.username, rawPin, requestConfirm);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Toast.show({ type: 'success', text1: 'Hoş geldin', text2: user.fullName });
+        if (!lock) Toast.show({ type: 'success', text1: 'Hoş geldin', text2: user.fullName });
         // fullName seçili MobileUser'dan gelir (banner ismi gösterir).
-        await setAuth(res.data.user, res.data.token, user.fullName);
+        await handleAuthed(res, user.fullName);
       } catch (e) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         const msg = e instanceof Error ? e.message : 'Hatalı PIN.';
@@ -171,7 +199,7 @@ export default function LoginScreen() {
         setSubmitting(false);
       }
     },
-    [setAuth, requestConfirm],
+    [handleAuthed, lock, requestConfirm],
   );
 
   // Yöntem 403'ü (panelden kapatılmış) → yerel seçimi bırak + ayarı ANINDA tazele;
@@ -198,8 +226,9 @@ export default function LoginScreen() {
       try {
         const res = await authActions.quickPin(rawPin, requestConfirm);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Toast.show({ type: 'success', text1: 'Hoş geldin', text2: res.data.user.username });
-        await setAuth(res.data.user, res.data.token, res.data.user.fullName);
+        if (!lock)
+          Toast.show({ type: 'success', text1: 'Hoş geldin', text2: res.data.user.username });
+        await handleAuthed(res, res.data.user.fullName);
       } catch (e) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         const msg = e instanceof Error ? e.message : 'PIN tanınmadı.';
@@ -211,7 +240,7 @@ export default function LoginScreen() {
         setSubmitting(false);
       }
     },
-    [setAuth, handleMethodDisabled, requestConfirm],
+    [handleAuthed, lock, handleMethodDisabled, requestConfirm],
   );
 
   // QR personel kartıyla giriş — okutma başarılıysa PIN'siz doğrudan token alınır.
@@ -222,8 +251,9 @@ export default function LoginScreen() {
       try {
         const res = await authActions.card(cardCode.trim(), requestConfirm);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Toast.show({ type: 'success', text1: 'Hoş geldin', text2: res.data.user.username });
-        await setAuth(res.data.user, res.data.token, res.data.user.fullName);
+        if (!lock)
+          Toast.show({ type: 'success', text1: 'Hoş geldin', text2: res.data.user.username });
+        await handleAuthed(res, res.data.user.fullName);
       } catch (e) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         const msg = e instanceof Error ? e.message : 'Kart okunamadı.';
@@ -234,7 +264,7 @@ export default function LoginScreen() {
         setSubmitting(false);
       }
     },
-    [setAuth, handleMethodDisabled, requestConfirm],
+    [handleAuthed, lock, handleMethodDisabled, requestConfirm],
   );
 
   // 6 hane dolunca yönteme göre gönder: 'pin' = salt hızlı-PIN (kullanıcı yok);
@@ -255,9 +285,9 @@ export default function LoginScreen() {
     (cell: Cell) => {
       const currentPin = pinRef.current;
       const currentSubmitting = submittingRef.current;
-      // Liste görünümünde kullanıcı seçilmeden PIN girilmez; salt-PIN'de gerekmez.
-      const needsUser = methodRef.current === 'list';
-      if (currentSubmitting || (needsUser && !selectedUserRef.current) || cell.type === 'empty') return;
+      // Liste görünümünde kullanıcı seçilmeden şifre girilmez; salt-PIN'de gerekmez.
+      const isList = methodRef.current === 'list';
+      if (currentSubmitting || (isList && !selectedUserRef.current) || cell.type === 'empty') return;
       if (cell.type === 'backspace') {
         if (currentPin.length === 0) return;
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -265,12 +295,15 @@ export default function LoginScreen() {
         setError('');
         return;
       }
-      if (currentPin.length >= PIN_LENGTH) return;
+      // Şifre değişken uzunlukta (numerik, PASSWORD_MAX'e kadar); salt-PIN sabit 6.
+      const cap = isList ? PASSWORD_MAX : PIN_LENGTH;
+      if (currentPin.length >= cap) return;
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const next = currentPin + cell.key;
       setPin(next);
       setError('');
-      if (next.length === PIN_LENGTH) submitPinByMethod(next);
+      // Yalnız salt-PIN 6 hanede oto-gönderir; şifrede kullanıcı butonla gönderir.
+      if (!isList && next.length === PIN_LENGTH) submitPinByMethod(next);
     },
     [submitPinByMethod],
   );
@@ -278,12 +311,14 @@ export default function LoginScreen() {
   // Telefon/dikey modda donanım numpad'i yerine Android sayı klavyesi kullanılıyor.
   const handlePinChange = useCallback(
     (text: string) => {
-      const needsUser = methodRef.current === 'list';
-      if ((needsUser && !selectedUserRef.current) || submittingRef.current) return;
-      const digits = text.replace(/\D/g, '').slice(0, PIN_LENGTH);
+      const isList = methodRef.current === 'list';
+      if ((isList && !selectedUserRef.current) || submittingRef.current) return;
+      const cap = isList ? PASSWORD_MAX : PIN_LENGTH;
+      const digits = text.replace(/\D/g, '').slice(0, cap);
       setPin(digits);
       setError('');
-      if (digits.length === PIN_LENGTH) submitPinByMethod(digits);
+      // Yalnız salt-PIN 6 hanede oto-gönderir; şifrede kullanıcı butonla gönderir.
+      if (!isList && digits.length === PIN_LENGTH) submitPinByMethod(digits);
     },
     [submitPinByMethod],
   );
@@ -306,6 +341,23 @@ export default function LoginScreen() {
   }, []);
 
   const numpadDisabled = (activeMethod === 'list' && !selectedUser) || submitting;
+
+  // Şifre (liste yöntemi) değişken uzunlukta → oto-gönderim YOK; kullanıcı bu
+  // butonla gönderir. Salt-PIN/kart yöntemleri bu butonu kullanmaz.
+  const canSubmitPassword = !!selectedUser && pin.length > 0 && !submitting;
+  const submitPasswordBtn = (
+    <TouchableRipple
+      onPress={() => selectedUser && void submit(pin, selectedUser)}
+      disabled={!canSubmitPassword}
+      rippleColor="rgba(255,255,255,0.2)"
+      style={[styles.pwSubmitBtn, !canSubmitPassword && styles.pwSubmitBtnOff]}
+    >
+      <View style={styles.pwSubmitInner}>
+        <Icon source="login" size={22} color="#fff" />
+        <Text style={styles.pwSubmitText}>{submitting ? 'Giriş yapılıyor…' : 'Giriş'}</Text>
+      </View>
+    </TouchableRipple>
+  );
 
   const userSection = (
     <>
@@ -342,9 +394,9 @@ export default function LoginScreen() {
 
   const pinSection = (
     <>
-      <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>2 · PIN (6 HANE)</Text>
+      <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>2 · ŞİFRE</Text>
       <View style={[styles.pinRow, isCompact && styles.pinRowCompact]}>
-        {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+        {Array.from({ length: Math.min(pin.length + 1, 12) }).map((_, i) => (
           <View
             key={i}
             style={[
@@ -373,11 +425,13 @@ export default function LoginScreen() {
             {!selectedUser
               ? 'Önce kullanıcı seç'
               : pin.length === 0
-                ? '6 haneli PIN gir'
-                : `${pin.length} / ${PIN_LENGTH}`}
+                ? 'Şifreni gir'
+                : `${pin.length} hane`}
           </Text>
         )}
       </View>
+
+      {submitPasswordBtn}
     </>
   );
 
@@ -386,7 +440,7 @@ export default function LoginScreen() {
   // üstünden açıldığı için dock sorunu yaşanmaz.
   const pinSectionCompact = (
     <>
-      <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>2 · PIN (6 HANE)</Text>
+      <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>2 · ŞİFRE</Text>
       <TouchableRipple
         onPress={focusPin}
         disabled={!selectedUser || submitting}
@@ -396,7 +450,7 @@ export default function LoginScreen() {
       >
         <View style={styles.pinInputWrap}>
           <View style={[styles.pinRow, styles.pinRowCompact]}>
-            {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+            {Array.from({ length: Math.min(pin.length + 1, 12) }).map((_, i) => (
               <View
                 key={i}
                 style={[
@@ -414,7 +468,7 @@ export default function LoginScreen() {
               value={pin}
               onChangeText={handlePinChange}
               keyboardType="number-pad"
-              maxLength={PIN_LENGTH}
+              maxLength={PASSWORD_MAX}
               autoFocus
               caretHidden
               // Görünmez overlay olduğu için sistemin çizdiği görsel öğeleri bastır:
@@ -436,7 +490,7 @@ export default function LoginScreen() {
         </View>
       </TouchableRipple>
 
-      <Text style={styles.pinHelper}>Hane girmek için dokunun</Text>
+      <Text style={styles.pinHelper}>Şifre girmek için dokunun</Text>
 
       <View style={[styles.statusRow, styles.statusRowCompact]}>
         {submitting ? (
@@ -454,11 +508,13 @@ export default function LoginScreen() {
             {!selectedUser
               ? 'Önce kullanıcı seç'
               : pin.length === 0
-                ? '6 haneli PIN gir'
-                : `${pin.length} / ${PIN_LENGTH}`}
+                ? 'Şifreni gir'
+                : `${pin.length} hane`}
           </Text>
         )}
       </View>
+
+      {submitPasswordBtn}
     </>
   );
 
@@ -674,7 +730,11 @@ export default function LoginScreen() {
       edges={['top', 'left', 'right']}
       style={[styles.root, { paddingBottom: insets.bottom }]}
     >
-      <TopBar compact={isCompact} />
+      {lock ? (
+        <LockHeader user={lock.user} onLogout={lock.onLogout} disabled={submitting} />
+      ) : (
+        <TopBar compact={isCompact} companyName={methodsQ.data?.companyName} />
+      )}
 
       {activeMethod === 'card' ? (
         <ScrollView contentContainerStyle={styles.cardWrap} keyboardShouldPersistTaps="handled">
@@ -727,6 +787,9 @@ export default function LoginScreen() {
         }}
         title="Personel kartını okut"
         notice="Kartındaki QR kodu kameraya göster"
+        // Kilit modunda (sabit tablet) rozeti önden okutmak kolay → ön kamera;
+        // login'de arka. Flip butonu her iki durumda da var.
+        initialFacing={lock ? 'front' : 'back'}
       />
 
       <PickerModal
@@ -808,7 +871,48 @@ const NumpadKey = React.memo(function NumpadKey({
   );
 });
 
-function TopBar({ compact }: { compact: boolean }) {
+// Kilit modu başlığı — TopBar yerine geçer: operatör avatarı + "EKRAN KİLİTLİ"
+// satırı + isim, sağda KIRMIZI "Çıkış" (login ekranına dön / farklı kullanıcı).
+function LockHeader({
+  user,
+  onLogout,
+  disabled,
+}: {
+  user: LoginLockContext['user'];
+  onLogout: () => void;
+  disabled: boolean;
+}) {
+  const name = user.fullName || user.username;
+  return (
+    <View style={styles.lockHeader}>
+      <View style={[styles.lockAvatar, { backgroundColor: operatorColor(user.userId) }]}>
+        <Text style={styles.lockAvatarText}>{operatorInitials(name)}</Text>
+      </View>
+      <View style={styles.lockHeaderText}>
+        <View style={styles.lockRow}>
+          <Icon source="lock" size={16} color={COLORS.subtext} />
+          <Text style={styles.lockLabel}>EKRAN KİLİTLİ</Text>
+        </View>
+        <Text style={styles.lockName} numberOfLines={1}>
+          {name}
+        </Text>
+      </View>
+      <TouchableRipple
+        onPress={onLogout}
+        disabled={disabled}
+        rippleColor="rgba(255,255,255,0.2)"
+        style={styles.lockLogoutBtn}
+      >
+        <View style={styles.lockLogoutInner}>
+          <Icon source="logout" size={18} color="#fff" />
+          <Text style={styles.lockLogoutText}>Çıkış</Text>
+        </View>
+      </TouchableRipple>
+    </View>
+  );
+}
+
+function TopBar({ compact, companyName }: { compact: boolean; companyName?: string }) {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   return (
@@ -822,6 +926,11 @@ function TopBar({ compact }: { compact: boolean }) {
       <View style={styles.brandTextGroup}>
         <Text style={styles.brandName}>TeksERP</Text>
         <Text style={styles.brandSub}>Üretim Yönetim Sistemi</Text>
+        {!!companyName && (
+          <Text style={styles.brandCompany} numberOfLines={1}>
+            {companyName}
+          </Text>
+        )}
       </View>
       {!compact && (
         <Text style={styles.shiftHint}>Vardiya değişimi · adına dokun, 6 haneli PIN gir</Text>
@@ -1002,7 +1111,42 @@ const styles = StyleSheet.create({
   brandTextGroup: { flex: 1 },
   brandName: { color: COLORS.text, fontSize: 18, fontWeight: '800' },
   brandSub: { color: COLORS.subtext, fontSize: 12 },
+  brandCompany: { color: COLORS.accentLight, fontSize: 13, fontWeight: '700', marginTop: 2 },
   shiftHint: { color: COLORS.subtext, fontSize: 13, fontStyle: 'italic' },
+
+  // Kilit modu başlık çubuğu (TopBar muadili)
+  lockHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderDark,
+    backgroundColor: COLORS.bgDarker,
+  },
+  lockAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockAvatarText: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  lockHeaderText: { flex: 1 },
+  lockRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  lockLabel: { color: COLORS.subtext, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  lockName: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  lockLogoutBtn: { borderRadius: 12, backgroundColor: '#dc2626', overflow: 'hidden' },
+  lockLogoutInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    minHeight: 44,
+  },
+  lockLogoutText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 
   main: { flex: 1, flexDirection: 'row' },
   leftPanel: { flex: 1, padding: 32, justifyContent: 'center' },
@@ -1137,6 +1281,19 @@ const styles = StyleSheet.create({
   statusRowCompact: { justifyContent: 'center' },
   statusText: { color: COLORS.subtext, fontSize: 14 },
   errorText: { color: COLORS.error, fontSize: 14, fontWeight: '600', flex: 1 },
+
+  // Diğer giriş yöntemi butonlarıyla (methodBtn/methodBtnInner) AYNI boyut.
+  pwSubmitBtn: { marginTop: 14, borderRadius: 14, backgroundColor: '#ea580c', alignSelf: 'stretch' },
+  pwSubmitBtnOff: { opacity: 0.5 },
+  pwSubmitInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 18,
+    minHeight: 62,
+  },
+  pwSubmitText: { color: '#fff', fontSize: 18, fontWeight: '800' },
 
   numpad: { gap: 14, maxWidth: 460, alignSelf: 'center', width: '100%' },
   numpadCompact: { gap: 10, maxWidth: 360 },

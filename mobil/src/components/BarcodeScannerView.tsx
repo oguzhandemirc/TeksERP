@@ -61,6 +61,10 @@ interface Props {
    * titreşimi olmasın. Çağıran isterse yakalama anında kendi hafif tık'ını verir.
    */
   captureHaptic?: boolean;
+  /** Kameranın başlangıç yönü — 'back' (arka, default) / 'front' (ön). Sabit
+   *  duran tablette QR'ı önden okutmak için kilit ekranı 'front' geçer; sağ-üst
+   *  flip butonuyla her zaman değiştirilebilir. */
+  initialFacing?: 'front' | 'back';
 }
 
 // Sürekli modda iki okuma arası yeniden silahlanma gecikmesi (ms).
@@ -92,10 +96,12 @@ export function BarcodeScannerView({
   notice,
   counter,
   captureHaptic = true,
+  initialFacing = 'back',
 }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
   const [busy, setBusy] = useState(false);
+  const [facing, setFacing] = useState<'front' | 'back'>(initialFacing);
   const reduced = useReducedMotion();
 
   const onScanRef = useRef(onScan);
@@ -228,7 +234,7 @@ export function BarcodeScannerView({
     <View style={styles.cameraWrap}>
       <CameraView
         style={StyleSheet.absoluteFill}
-        facing="back"
+        facing={facing}
         barcodeScannerSettings={{ barcodeTypes }}
         onBarcodeScanned={busy ? undefined : handleScanned}
       />
@@ -260,6 +266,15 @@ export function BarcodeScannerView({
           {busy ? 'Okundu' : "QR'ı çerçeve içine alın · otomatik okunur"}
         </Text>
       </View>
+      {/* Ön/arka kamera değiştir — sabit tablette QR'ı önden okutmak için. */}
+      <IconButton
+        icon="camera-flip"
+        size={24}
+        iconColor="#fff"
+        onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+        style={styles.flipBtn}
+        accessibilityLabel="Ön/arka kamera değiştir"
+      />
     </View>
   ) : (
     <View style={styles.center} />
@@ -362,6 +377,7 @@ const styles = StyleSheet.create({
   // daha geniş render edip yuvarlak sayfanın dışına taşabiliyor (kamera başlıktan
   // geniş görünüyor). Sert kırpma önizlemeyi sayfa genişliğine sabitler.
   cameraWrap: { flex: 1, backgroundColor: '#000', position: 'relative', overflow: 'hidden' },
+  flipBtn: { position: 'absolute', top: 6, right: 6, margin: 0, backgroundColor: 'rgba(15,23,42,0.55)' },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',

@@ -31,6 +31,9 @@ interface Props {
    *  kuralı: top okutulan her ekranda listeden seçim alternatifi olmalı
    *  (kamera çalışmasa/etiket okunmasa da akış kilitlenmez). */
   onPickFromList?: () => void;
+  /** Kameranın başlangıç yönü (BarcodeScannerView'e geçer). Default 'back';
+   *  sabit tablette önden okutmak için 'front' geç. Flip butonu her zaman var. */
+  initialFacing?: 'front' | 'back';
 }
 
 /**
@@ -56,6 +59,7 @@ export function BarcodeScannerModal({
   counter,
   captureHaptic,
   onPickFromList,
+  initialFacing,
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -105,6 +109,7 @@ export function BarcodeScannerModal({
           notice={notice}
           counter={counter}
           captureHaptic={captureHaptic}
+          initialFacing={initialFacing}
         />
         {onPickFromList && (
           <View style={styles.pickRow}>

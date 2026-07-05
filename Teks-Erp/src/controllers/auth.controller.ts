@@ -7,7 +7,7 @@ import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import type { LoginContext } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
-import { readDevicePairingRequired, readLoginMethods } from "../services/system-setting.service";
+import { readDevicePairingRequired, readLoginMethods, readCompanyName } from "../services/system-setting.service";
 import { SessionRegistryService } from "../services/session-registry.service";
 import "../types/express-augment";
 
@@ -250,7 +250,8 @@ export class AuthController {
   static async loginMethods(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const methods = await readLoginMethods();
-      res.status(200).json({ success: true, data: methods });
+      const companyName = await readCompanyName();
+      res.status(200).json({ success: true, data: { ...methods, companyName } });
     } catch (error) {
       next(error);
     }

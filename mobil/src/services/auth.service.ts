@@ -10,8 +10,15 @@ export type LoginMethod = 'list' | 'pin' | 'card';
 export interface LoginMethodsConfig {
   enabled: LoginMethod[];
   primary: LoginMethod;
+  /** Firma adı — public login-methods ucundan (company.name ayarı). Login/kilit
+   *  başlığında marka satırı olarak gösterilir. */
+  companyName?: string;
 }
-export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = { enabled: ['list'], primary: 'list' };
+export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = {
+  enabled: ['list'],
+  primary: 'list',
+  companyName: 'Adnan Şahin Tekstil',
+};
 
 export const authService = {
   /** clientType='mobile' HER giriş gövdesine eklenir (backend same-type policy).
