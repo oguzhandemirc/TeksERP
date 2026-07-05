@@ -309,9 +309,21 @@ router.post(
   }
 );
 
-const setSchema = z.object({
-  permissionIds: z.array(z.string().min(1)),
+// Toplu-set: yeni tarih-taşır şekil { permissions: [{permissionId, validFrom?, validUntil?}] }
+// VEYA geriye-uyum düz { permissionIds: string[] }. En az biri gerekli — normalize edilir.
+const permissionSetItemSchema = z.object({
+  permissionId: z.string().min(1),
+  validFrom: z.coerce.date().nullable().optional(),
+  validUntil: z.coerce.date().nullable().optional(),
 });
+const setSchema = z
+  .object({
+    permissions: z.array(permissionSetItemSchema).optional(),
+    permissionIds: z.array(z.string().min(1)).optional(),
+  })
+  .refine((v) => v.permissions !== undefined || v.permissionIds !== undefined, {
+    message: "permissions veya permissionIds gerekli",
+  });
 
 /**
  * @openapi
@@ -328,10 +340,13 @@ router.put(
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { permissionIds } = setSchema.parse(req.body);
+      const parsed = setSchema.parse(req.body);
+      const payload =
+        parsed.permissions ??
+        (parsed.permissionIds ?? []).map((permissionId) => ({ permissionId }));
       const data = await PermissionManagementService.setUserPermissions(
         req.params.id as string,
-        permissionIds,
+        payload,
         req.user?.userId
       );
       res.status(200).json({ success: true, data });

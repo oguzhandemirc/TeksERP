@@ -51,6 +51,10 @@ export class AppError extends Error {
     return new AppError(message, 409, true, details);
   }
 
+  static tooManyRequests(message: string, details?: Record<string, unknown>): AppError {
+    return new AppError(message, 429, true, details);
+  }
+
   static internal(message: string = "Sunucu hatası"): AppError {
     return new AppError(message, 500, false);
   }

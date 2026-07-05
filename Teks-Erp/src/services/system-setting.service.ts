@@ -151,6 +151,21 @@ export const SETTING_KEYS = {
   AUTH_MOBILE_IDLE_LOCK_ENABLED: "auth.mobileIdleLockEnabled",
   /** Mobil idle kilit süresi, DAKİKA (1..120). Default 10. Client (mobil) ENFORCE eder. */
   AUTH_MOBILE_IDLE_LOCK_MINUTES: "auth.mobileIdleLockMinutes",
+  /** Mutlak oturum tavanı, GÜN. Default 30 (0..365). Zaman aşımı KAPALI iken bile
+   *  token en fazla bu kadar gün geçerli olur (sızan token sonsuza kadar yaşamasın).
+   *  0 = gerçekten süresiz (exp claim'i yok). Backend ENFORCE eder (issueToken). */
+  AUTH_ABSOLUTE_SESSION_CAP_DAYS: "auth.absoluteSessionCapDays",
+  /** Hızlı-PIN + kart giriş deneme kilidi açık mı. Default true. Kapalıyken deneme
+   *  kilidi hiç uygulanmaz. Backend ENFORCE eder (login-lockout middleware). */
+  AUTH_PIN_LOCKOUT_ENABLED: "auth.pinLockoutEnabled",
+  /** Kilit tetiklenene kadar izin verilen ardışık yanlış deneme sayısı. Default 5 (1..20). */
+  AUTH_PIN_LOCKOUT_ATTEMPTS: "auth.pinLockoutAttempts",
+  /** Kısa ceza süresi, SANİYE. Default 60 (5..3600). Eşik aşılınca bu kadar saniye bloklanır. */
+  AUTH_PIN_LOCKOUT_PENALTY_SEC: "auth.pinLockoutPenaltySec",
+  /** Kaç ceza turundan sonra UZUN cezaya geçilir. Default 3 (1..20). */
+  AUTH_PIN_LOCKOUT_ESCALATE_AFTER: "auth.pinLockoutEscalateAfter",
+  /** Uzun ceza süresi, DAKİKA. Default 15 (1..1440). Escalate eşiğine varınca uygulanır. */
+  AUTH_PIN_LOCKOUT_LONG_PENALTY_MIN: "auth.pinLockoutLongPenaltyMin",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -186,6 +201,23 @@ export const DEFAULT_MOBILE_IDLE_LOCK_ENABLED = true;
 export const DEFAULT_MOBILE_IDLE_LOCK_MINUTES = 10;
 const MIN_MOBILE_IDLE_LOCK_MINUTES = 1;
 const MAX_MOBILE_IDLE_LOCK_MINUTES = 120;
+/** Mutlak oturum tavanı (gün) varsayılanı + aralık. 0 = gerçekten süresiz (exp yok). */
+export const DEFAULT_ABSOLUTE_SESSION_CAP_DAYS = 30;
+const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
+/** Hızlı-PIN/kart deneme kilidi varsayılanları + aralıkları. */
+export const DEFAULT_PIN_LOCKOUT_ENABLED = true;
+export const DEFAULT_PIN_LOCKOUT_ATTEMPTS = 5;
+const MIN_PIN_LOCKOUT_ATTEMPTS = 1;
+const MAX_PIN_LOCKOUT_ATTEMPTS = 20;
+export const DEFAULT_PIN_LOCKOUT_PENALTY_SEC = 60;
+const MIN_PIN_LOCKOUT_PENALTY_SEC = 5;
+const MAX_PIN_LOCKOUT_PENALTY_SEC = 3600;
+export const DEFAULT_PIN_LOCKOUT_ESCALATE_AFTER = 3;
+const MIN_PIN_LOCKOUT_ESCALATE_AFTER = 1;
+const MAX_PIN_LOCKOUT_ESCALATE_AFTER = 20;
+export const DEFAULT_PIN_LOCKOUT_LONG_PENALTY_MIN = 15;
+const MIN_PIN_LOCKOUT_LONG_PENALTY_MIN = 1;
+const MAX_PIN_LOCKOUT_LONG_PENALTY_MIN = 1440;
 /** Mobil giriş yöntemleri. list=liste+şifre, pin=salt hızlı-PIN, card=QR kart. */
 export type LoginMethod = "list" | "pin" | "card";
 export interface LoginMethodsConfig {
@@ -476,6 +508,19 @@ export interface FeatureFlags {
   mobileIdleLockEnabled: boolean;
   /** Mobil idle kilit süresi — dakika (default 10, 1..120). Client (mobil) ENFORCE. */
   mobileIdleLockMinutes: number;
+  /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = süresiz). Zaman aşımı kapalı
+   *  olsa bile token en fazla bu kadar gün yaşar. Backend ENFORCE (issueToken). */
+  absoluteSessionCapDays: number;
+  /** Hızlı-PIN + kart giriş deneme kilidi açık mı (default true). Backend ENFORCE. */
+  pinLockoutEnabled: boolean;
+  /** Kilit tetiklenene kadar izin verilen yanlış deneme (default 5, 1..20). */
+  pinLockoutAttempts: number;
+  /** Kısa ceza süresi — saniye (default 60, 5..3600). */
+  pinLockoutPenaltySec: number;
+  /** Kaç ceza turundan sonra uzun cezaya geçilir (default 3, 1..20). */
+  pinLockoutEscalateAfter: number;
+  /** Uzun ceza süresi — dakika (default 15, 1..1440). */
+  pinLockoutLongPenaltyMin: number;
   /** Mobil giriş yöntemleri: { enabled: ("list"|"pin"|"card")[], primary }. Login
    *  ekranı primary ile açılır; diğer etkinler "Diğer giriş yöntemleri"nde. Backend
    *  ENFORCE — card/pin uçları yalnız etkinken çalışır (klasik login hep açık). */
@@ -641,6 +686,12 @@ export class SystemSettingService {
       autoLogoutOnExpiry: await readAutoLogoutOnExpiry(cacheClient),
       mobileIdleLockEnabled: await readMobileIdleLockEnabled(cacheClient),
       mobileIdleLockMinutes: await readMobileIdleLockMinutes(cacheClient),
+      absoluteSessionCapDays: await readAbsoluteSessionCapDays(cacheClient),
+      pinLockoutEnabled: await readPinLockoutEnabled(cacheClient),
+      pinLockoutAttempts: await readPinLockoutAttempts(cacheClient),
+      pinLockoutPenaltySec: await readPinLockoutPenaltySec(cacheClient),
+      pinLockoutEscalateAfter: await readPinLockoutEscalateAfter(cacheClient),
+      pinLockoutLongPenaltyMin: await readPinLockoutLongPenaltyMin(cacheClient),
       loginMethods: await readLoginMethods(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
       rollNameTemplate: await readRollNameTemplate(cacheClient),
@@ -979,6 +1030,123 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_MOBILE_IDLE_LOCK_MINUTES,
         Math.floor(v),
         "Mobil idle ekran kilidi süresi, dakika — tablet bu kadar süre dokunulmazsa kilitlenir",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "absoluteSessionCapDays")) {
+      const v = input.absoluteSessionCapDays;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        !Number.isInteger(v) ||
+        v < 0 ||
+        v > MAX_ABSOLUTE_SESSION_CAP_DAYS
+      ) {
+        throw AppError.badRequest(
+          `Mutlak oturum tavanı 0–${MAX_ABSOLUTE_SESSION_CAP_DAYS} gün aralığında olmalı (0 = süresiz)`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_ABSOLUTE_SESSION_CAP_DAYS,
+        Math.floor(v),
+        "Mutlak oturum tavanı, gün — zaman aşımı kapalı olsa bile token en fazla bu kadar gün yaşar (0 = süresiz)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "pinLockoutEnabled")) {
+      if (typeof input.pinLockoutEnabled !== "boolean") {
+        throw AppError.badRequest("pinLockoutEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_PIN_LOCKOUT_ENABLED,
+        input.pinLockoutEnabled,
+        "Hızlı PIN + kart giriş deneme kilidi açık olsun (brute-force koruması)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "pinLockoutAttempts")) {
+      const v = input.pinLockoutAttempts;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        !Number.isInteger(v) ||
+        v < MIN_PIN_LOCKOUT_ATTEMPTS ||
+        v > MAX_PIN_LOCKOUT_ATTEMPTS
+      ) {
+        throw AppError.badRequest(
+          `İzin verilen yanlış deneme sayısı ${MIN_PIN_LOCKOUT_ATTEMPTS}–${MAX_PIN_LOCKOUT_ATTEMPTS} aralığında olmalı`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_PIN_LOCKOUT_ATTEMPTS,
+        Math.floor(v),
+        "Hızlı PIN/kart girişinde kilit tetiklenene kadar izin verilen ardışık yanlış deneme sayısı",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "pinLockoutPenaltySec")) {
+      const v = input.pinLockoutPenaltySec;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        !Number.isInteger(v) ||
+        v < MIN_PIN_LOCKOUT_PENALTY_SEC ||
+        v > MAX_PIN_LOCKOUT_PENALTY_SEC
+      ) {
+        throw AppError.badRequest(
+          `Ceza süresi ${MIN_PIN_LOCKOUT_PENALTY_SEC}–${MAX_PIN_LOCKOUT_PENALTY_SEC} saniye aralığında olmalı`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_PIN_LOCKOUT_PENALTY_SEC,
+        Math.floor(v),
+        "Hızlı PIN/kart deneme kilidi kısa ceza süresi, saniye",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "pinLockoutEscalateAfter")) {
+      const v = input.pinLockoutEscalateAfter;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        !Number.isInteger(v) ||
+        v < MIN_PIN_LOCKOUT_ESCALATE_AFTER ||
+        v > MAX_PIN_LOCKOUT_ESCALATE_AFTER
+      ) {
+        throw AppError.badRequest(
+          `Uzun ceza eşiği ${MIN_PIN_LOCKOUT_ESCALATE_AFTER}–${MAX_PIN_LOCKOUT_ESCALATE_AFTER} tur aralığında olmalı`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_PIN_LOCKOUT_ESCALATE_AFTER,
+        Math.floor(v),
+        "Hızlı PIN/kart deneme kilidi: kaç ceza turundan sonra uzun cezaya geçilir",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "pinLockoutLongPenaltyMin")) {
+      const v = input.pinLockoutLongPenaltyMin;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        !Number.isInteger(v) ||
+        v < MIN_PIN_LOCKOUT_LONG_PENALTY_MIN ||
+        v > MAX_PIN_LOCKOUT_LONG_PENALTY_MIN
+      ) {
+        throw AppError.badRequest(
+          `Uzun ceza süresi ${MIN_PIN_LOCKOUT_LONG_PENALTY_MIN}–${MAX_PIN_LOCKOUT_LONG_PENALTY_MIN} dakika aralığında olmalı`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_PIN_LOCKOUT_LONG_PENALTY_MIN,
+        Math.floor(v),
+        "Hızlı PIN/kart deneme kilidi uzun ceza süresi, dakika",
         userId
       );
     }
@@ -1572,6 +1740,102 @@ export async function readMobileIdleLockMinutes(
   const parsed = asNumber(setting.value);
   if (parsed === null || parsed < MIN_MOBILE_IDLE_LOCK_MINUTES) return DEFAULT_MOBILE_IDLE_LOCK_MINUTES;
   return Math.min(Math.floor(parsed), MAX_MOBILE_IDLE_LOCK_MINUTES);
+}
+
+/**
+ * Mutlak oturum tavanını GÜN olarak okur. Yoksa/geçersizse 30. 0 = süresiz (KABUL
+ * edilir — reader 0 döner); negatif → default. Tavan 365'e kırpılır. AuthService
+ * .issueToken bunu okur: zaman aşımı kapalıyken bile token en fazla bu kadar gün
+ * yaşar (capDays>0 → now+capDays gün exp; capDays=0 → gerçekten süresiz).
+ */
+export async function readAbsoluteSessionCapDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_ABSOLUTE_SESSION_CAP_DAYS },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_ABSOLUTE_SESSION_CAP_DAYS;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < 0) return DEFAULT_ABSOLUTE_SESSION_CAP_DAYS;
+  return Math.min(Math.floor(parsed), MAX_ABSOLUTE_SESSION_CAP_DAYS);
+}
+
+/**
+ * Hızlı-PIN/kart deneme kilidi açık mı? Default TRUE (kayıt yoksa). Kapalıyken
+ * login-lockout middleware hiç bloklamaz. Backend ENFORCE eder.
+ */
+export async function readPinLockoutEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_PIN_LOCKOUT_ENABLED },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_PIN_LOCKOUT_ENABLED;
+  return asBoolean(setting.value);
+}
+
+/** Kilit tetiklenene kadar izin verilen yanlış deneme (default 5, 1..20). */
+export async function readPinLockoutAttempts(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_PIN_LOCKOUT_ATTEMPTS },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_PIN_LOCKOUT_ATTEMPTS;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < MIN_PIN_LOCKOUT_ATTEMPTS) return DEFAULT_PIN_LOCKOUT_ATTEMPTS;
+  return Math.min(Math.floor(parsed), MAX_PIN_LOCKOUT_ATTEMPTS);
+}
+
+/** Kısa ceza süresi, SANİYE (default 60, 5..3600). */
+export async function readPinLockoutPenaltySec(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_PIN_LOCKOUT_PENALTY_SEC },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_PIN_LOCKOUT_PENALTY_SEC;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < MIN_PIN_LOCKOUT_PENALTY_SEC) return DEFAULT_PIN_LOCKOUT_PENALTY_SEC;
+  return Math.min(Math.floor(parsed), MAX_PIN_LOCKOUT_PENALTY_SEC);
+}
+
+/** Kaç ceza turundan sonra uzun cezaya geçilir (default 3, 1..20). */
+export async function readPinLockoutEscalateAfter(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_PIN_LOCKOUT_ESCALATE_AFTER },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_PIN_LOCKOUT_ESCALATE_AFTER;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < MIN_PIN_LOCKOUT_ESCALATE_AFTER) return DEFAULT_PIN_LOCKOUT_ESCALATE_AFTER;
+  return Math.min(Math.floor(parsed), MAX_PIN_LOCKOUT_ESCALATE_AFTER);
+}
+
+/** Uzun ceza süresi, DAKİKA (default 15, 1..1440). */
+export async function readPinLockoutLongPenaltyMin(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_PIN_LOCKOUT_LONG_PENALTY_MIN },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_PIN_LOCKOUT_LONG_PENALTY_MIN;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < MIN_PIN_LOCKOUT_LONG_PENALTY_MIN) return DEFAULT_PIN_LOCKOUT_LONG_PENALTY_MIN;
+  return Math.min(Math.floor(parsed), MAX_PIN_LOCKOUT_LONG_PENALTY_MIN);
 }
 
 /**

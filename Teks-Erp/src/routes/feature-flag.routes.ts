@@ -60,6 +60,18 @@ const updateSchema = z.object({
   mobileIdleLockEnabled: z.boolean().optional(),
   // auth.mobileIdleLockMinutes — mobil idle kilit süresi, dakika (default 10, 1–120). Client (mobil) ENFORCE.
   mobileIdleLockMinutes: z.number().int().min(1).max(120).optional(),
+  // auth.absoluteSessionCapDays — mutlak oturum tavanı, gün (0=süresiz, 0–365). Backend ENFORCE (issueToken).
+  absoluteSessionCapDays: z.number().int().min(0).max(365).optional(),
+  // auth.pinLockoutEnabled — hızlı PIN/kart deneme kilidi (default true). Backend ENFORCE.
+  pinLockoutEnabled: z.boolean().optional(),
+  // auth.pinLockoutAttempts — izin verilen yanlış deneme (default 5, 1–20).
+  pinLockoutAttempts: z.number().int().min(1).max(20).optional(),
+  // auth.pinLockoutPenaltySec — kısa ceza süresi, saniye (default 60, 5–3600).
+  pinLockoutPenaltySec: z.number().int().min(5).max(3600).optional(),
+  // auth.pinLockoutEscalateAfter — kaç turdan sonra uzun cezaya geçilir (default 3, 1–20).
+  pinLockoutEscalateAfter: z.number().int().min(1).max(20).optional(),
+  // auth.pinLockoutLongPenaltyMin — uzun ceza süresi, dakika (default 15, 1–1440).
+  pinLockoutLongPenaltyMin: z.number().int().min(1).max(1440).optional(),
   // auth.loginMethods — mobil giriş yöntemleri: list/pin/card + öncelikli. Backend ENFORCE
   // (en az bir etkin + primary ∈ enabled — servis ayrıca doğrular).
   loginMethods: z

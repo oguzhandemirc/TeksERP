@@ -18,9 +18,11 @@ import { AuthService } from "../src/services/auth.service";
 import {
   systemSettingService,
   readSessionDurationMinutes,
+  readAbsoluteSessionCapDays,
   invalidateFeatureFlagsCache,
   SETTING_KEYS,
   DEFAULT_SESSION_DURATION_MINUTES,
+  DEFAULT_ABSOLUTE_SESSION_CAP_DAYS,
 } from "../src/services/system-setting.service";
 
 let pass = 0,
@@ -37,6 +39,7 @@ function need<T>(v: T | null | undefined, what: string): T {
 const MIN_KEY = SETTING_KEYS.AUTH_SESSION_DURATION_MINUTES;
 const HRS_KEY = SETTING_KEYS.AUTH_SESSION_DURATION_HOURS;
 const AUTO_KEY = SETTING_KEYS.AUTH_AUTO_LOGOUT_ON_EXPIRY;
+const CAP_KEY = SETTING_KEYS.AUTH_ABSOLUTE_SESSION_CAP_DAYS;
 
 /** Ayarı doğrudan yaz (audit gürültüsü olmadan; updatedById TEST user'a bağlı). */
 async function rawSet(key: string, value: Prisma.InputJsonValue, userId: string) {
@@ -61,7 +64,7 @@ async function main() {
   // FK Restrict user silinemez.
   type SettingSnap = { value: Prisma.JsonValue; updatedById: string | null };
   const originals = new Map<string, SettingSnap | undefined>();
-  for (const k of [MIN_KEY, HRS_KEY, AUTO_KEY]) {
+  for (const k of [MIN_KEY, HRS_KEY, AUTO_KEY, CAP_KEY]) {
     const row = await prisma.systemSetting.findUnique({
       where: { key: k },
       select: { value: true, updatedById: true },
@@ -160,19 +163,52 @@ async function main() {
     const maxOk = await readSessionDurationMinutes();
     check("4d 43200 dk kabul edilir (tavan)", maxOk === 43200, `got ${maxOk}`);
 
-    // --- 5. Zaman aşımı KAPALI (autoLogoutOnExpiry=false) → token SÜRESİZ (exp yok) ---
+    // --- 5. Zaman aşımı KAPALI → Part A "mutlak oturum tavanı" devreye girer ---
+    // Zaman aşımı kapalıyken token artık SÜRESİZ DEĞİL: auth.absoluteSessionCapDays
+    // (default 30 gün) exp/expiresAt tavanını koyar. cap=0 → gerçekten süresiz.
+    check(
+      "5-pre default cap = 30 gün",
+      DEFAULT_ABSOLUTE_SESSION_CAP_DAYS === 30 && (await readAbsoluteSessionCapDays()) === 30,
+    );
     await systemSettingService.setFeatureFlags({ autoLogoutOnExpiry: false }, createdSessionUserId);
+    const decodedCap = await loginDecode();
+    const capSpan = typeof decodedCap.exp === "number" ? decodedCap.exp - (decodedCap.iat ?? 0) : NaN;
+    const capExpectSec = 30 * 24 * 60 * 60;
+    check(
+      "5a zaman aşımı kapalı + cap=30 → JWT exp VAR (≈30 gün)",
+      typeof decodedCap.exp === "number" && Math.abs(capSpan - capExpectSec) < 120,
+      `span=${capSpan}s (beklenen ~${capExpectSec}s)`,
+    );
+    const sessCap = await prisma.session.findFirst({
+      where: { userId: createdSessionUserId },
+      orderBy: { createdAt: "desc" },
+      select: { expiresAt: true },
+    });
+    const capMsSpan = sessCap ? sessCap.expiresAt.getTime() - Date.now() : NaN;
+    check(
+      "5b session expiresAt ≈ 30 gün (tavan)",
+      !!sessCap && Math.abs(capMsSpan - capExpectSec * 1000) < 5 * 60 * 1000,
+      sessCap ? sessCap.expiresAt.toISOString() : "session yok",
+    );
+
+    // 5c/5d: cap=0 → gerçekten süresiz (exp yok, expiresAt uzak gelecek) — eski davranış.
+    await systemSettingService.setFeatureFlags({ absoluteSessionCapDays: 0 }, createdSessionUserId);
     const decodedOff = await loginDecode();
-    check("5a zaman aşımı kapalı → JWT exp claim YOK", decodedOff.exp === undefined, `exp=${decodedOff.exp}`);
+    check("5c zaman aşımı kapalı + cap=0 → JWT exp claim YOK", decodedOff.exp === undefined, `exp=${decodedOff.exp}`);
     const sessOff = await prisma.session.findFirst({
       where: { userId: createdSessionUserId },
       orderBy: { createdAt: "desc" },
       select: { expiresAt: true },
     });
     check(
-      "5b session expiresAt uzak gelecek (>1 yıl)",
+      "5d cap=0 → session expiresAt uzak gelecek (>1 yıl)",
       !!sessOff && sessOff.expiresAt.getTime() - Date.now() > 365 * 24 * 60 * 60 * 1000,
       sessOff ? sessOff.expiresAt.toISOString() : "session yok",
+    );
+    // Cap'i default'a döndür (sonraki bölüm + restore hijyeni).
+    await systemSettingService.setFeatureFlags(
+      { absoluteSessionCapDays: DEFAULT_ABSOLUTE_SESSION_CAP_DAYS },
+      createdSessionUserId,
     );
 
     // --- 6. Tekrar AÇ → exp geri gelir ---
@@ -185,7 +221,7 @@ async function main() {
     await prisma.systemLog.deleteMany({ where: { userId: createdSessionUserId } });
     // Ayarları eski haline getir (test yarattıysa sil, vardıysa value+updatedById geri yaz —
     // updatedById restore edilmezse satır TEST user'a bağlı kalır ve user silinemez).
-    for (const k of [MIN_KEY, HRS_KEY, AUTO_KEY]) {
+    for (const k of [MIN_KEY, HRS_KEY, AUTO_KEY, CAP_KEY]) {
       const orig = originals.get(k);
       if (orig === undefined) {
         await prisma.systemSetting.deleteMany({ where: { key: k } });

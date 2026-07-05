@@ -180,16 +180,29 @@ export class PermissionManagementService {
   }
 
   // ---------------------------------------------------------------------------
-  // Toplu set (idempotent): body'deki permissionIds listesini hedef state yapar.
-  // Eksikler eklenir, fazlalar silinir. validFrom/validUntil sıfırlanır.
+  // Toplu set (idempotent): body'deki listeyi hedef state yapar. Eksikler eklenir,
+  // fazlalar silinir. Tarih-taşır: her öğe {permissionId, validFrom?, validUntil?}
+  // olabilir (ya da düz string — geriye-uyum, tarihler null'a sıfırlanır). Eklenen
+  // satırlar tarihleri alır; KALAN mevcut satırların tarihleri de yeni değere
+  // güncellenir. Herhangi bir tarih değişimi de tokenVersion++ tetikler (süreli
+  // izin uygulanınca issueToken exp'i en yakın validUntil'a çekilsin → oturum
+  // süresi bitince otomatik sonlansın).
   // ---------------------------------------------------------------------------
   static async setUserPermissions(
     userId: string,
-    permissionIds: string[],
+    permissions: Array<string | GrantInput>,
     actorUserId: string | undefined
   ) {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!user) throw AppError.notFound("Kullanıcı bulunamadı");
+
+    // Düz string → tarihsiz öğe. Tarih verilmeyen alan null'a çözülür (sıfırlama).
+    const items: Required<GrantInput>[] = permissions.map((p) =>
+      typeof p === "string"
+        ? { permissionId: p, validFrom: null, validUntil: null }
+        : { permissionId: p.permissionId, validFrom: p.validFrom ?? null, validUntil: p.validUntil ?? null },
+    );
+    const permissionIds = items.map((i) => i.permissionId);
 
     const validPerms = await prisma.permission.findMany({
       where: { id: { in: permissionIds } },
@@ -201,13 +214,22 @@ export class PermissionManagementService {
 
     const existing = await prisma.userPermission.findMany({
       where: { userId },
-      select: { id: true, permissionId: true },
+      select: { id: true, permissionId: true, validFrom: true, validUntil: true },
     });
 
-    const existingIds = new Set(existing.map((e) => e.permissionId));
+    const existingByPerm = new Map(existing.map((e) => [e.permissionId, e] as const));
     const target = new Set(permissionIds);
-    const toAdd = permissionIds.filter((id) => !existingIds.has(id));
+    const toAdd = items.filter((i) => !existingByPerm.has(i.permissionId));
     const toRemove = existing.filter((e) => !target.has(e.permissionId));
+
+    // Kalan (mevcut ∩ hedef) satırlarda tarihi değişenler — update + tokenVersion tetiği.
+    const sameTime = (a: Date | null, b: Date | null) =>
+      (a ? a.getTime() : null) === (b ? b.getTime() : null);
+    const toUpdate = items.filter((i) => {
+      const ex = existingByPerm.get(i.permissionId);
+      if (!ex) return false;
+      return !sameTime(ex.validFrom, i.validFrom) || !sameTime(ex.validUntil, i.validUntil);
+    });
 
     await prisma.$transaction(async (tx) => {
       if (toRemove.length) {
@@ -217,15 +239,24 @@ export class PermissionManagementService {
       }
       if (toAdd.length) {
         await tx.userPermission.createMany({
-          data: toAdd.map((permissionId) => ({
+          data: toAdd.map((i) => ({
             userId,
-            permissionId,
+            permissionId: i.permissionId,
+            validFrom: i.validFrom,
+            validUntil: i.validUntil,
             grantedById: actorUserId ?? null,
           })),
         });
       }
-      // Yetki seti değişti → token'ı geçersiz kıl (anında re-login, taze izinler).
-      if (toAdd.length || toRemove.length) {
+      // Kalan satırların tarihlerini yeni değere güncelle (tx.* seri — Promise.all YOK).
+      for (const i of toUpdate) {
+        await tx.userPermission.updateMany({
+          where: { userId, permissionId: i.permissionId },
+          data: { validFrom: i.validFrom, validUntil: i.validUntil },
+        });
+      }
+      // Yetki seti VEYA süre değişti → token'ı geçersiz kıl (anında re-login, taze izinler).
+      if (toAdd.length || toRemove.length || toUpdate.length) {
         await tx.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } });
       }
     });
@@ -236,7 +267,13 @@ export class PermissionManagementService {
       tableName: "USER_PERMISSION_SET",
       recordId: userId,
       oldData: { permissionIds: existing.map((e) => e.permissionId) },
-      newData: { permissionIds },
+      newData: {
+        permissions: items.map((i) => ({
+          permissionId: i.permissionId,
+          validFrom: i.validFrom,
+          validUntil: i.validUntil,
+        })),
+      },
     });
 
     return this.getUserPermissions(userId);

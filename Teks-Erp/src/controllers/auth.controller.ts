@@ -9,6 +9,13 @@ import type { LoginContext } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
 import { readDevicePairingRequired, readLoginMethods, readCompanyName } from "../services/system-setting.service";
 import { SessionRegistryService } from "../services/session-registry.service";
+import { AppError } from "../utils/app-error";
+import {
+  resolveLoginLockoutKey,
+  checkLoginLockout,
+  recordLoginFailure,
+  resetLoginLockout,
+} from "../middlewares/login-lockout";
 import "../types/express-augment";
 
 // Session/eşzamanlılık: her login yolu clientType (electron|mobile, default mobile) +
@@ -150,6 +157,18 @@ export class AuthController {
     if (!body) return;
 
     const ipAddress = req.ip ?? null;
+    // Deneme kilidi: IP/cihaz başına ardışık yanlış kartı throttle et (brute-force).
+    const lockoutKey = resolveLoginLockoutKey(req);
+    const lock = await checkLoginLockout(lockoutKey);
+    if (lock.blocked) {
+      next(
+        AppError.tooManyRequests(
+          `Çok fazla hatalı giriş denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,
+          { code: "LOGIN_LOCKED", retryAfterSec: lock.retryAfterSec },
+        ),
+      );
+      return;
+    }
     const ctx: LoginContext = {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
@@ -157,6 +176,7 @@ export class AuthController {
     };
     try {
       const result = await AuthService.loginWithCard(body.cardCode, ctx);
+      resetLoginLockout(lockoutKey);
       void AuditService.logEvent({
         category: "AUTH",
         action: "LOGIN_SUCCESS",
@@ -171,6 +191,7 @@ export class AuthController {
         message: "Giriş başarılı",
       });
     } catch (error) {
+      await recordLoginFailure(lockoutKey);
       void AuditService.logEvent({
         category: "AUTH",
         action: "LOGIN_FAILED",
@@ -206,6 +227,18 @@ export class AuthController {
     if (!body) return;
 
     const ipAddress = req.ip ?? null;
+    // Deneme kilidi: IP/cihaz başına ardışık yanlış PIN'i throttle et (brute-force).
+    const lockoutKey = resolveLoginLockoutKey(req);
+    const lock = await checkLoginLockout(lockoutKey);
+    if (lock.blocked) {
+      next(
+        AppError.tooManyRequests(
+          `Çok fazla hatalı giriş denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,
+          { code: "LOGIN_LOCKED", retryAfterSec: lock.retryAfterSec },
+        ),
+      );
+      return;
+    }
     const ctx: LoginContext = {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
@@ -213,6 +246,7 @@ export class AuthController {
     };
     try {
       const result = await AuthService.loginWithQuickPin(body.pin, ctx);
+      resetLoginLockout(lockoutKey);
       void AuditService.logEvent({
         category: "AUTH",
         action: "LOGIN_SUCCESS",
@@ -227,6 +261,7 @@ export class AuthController {
         message: "Giriş başarılı",
       });
     } catch (error) {
+      await recordLoginFailure(lockoutKey);
       void AuditService.logEvent({
         category: "AUTH",
         action: "LOGIN_FAILED",

@@ -91,6 +91,7 @@ async function main() {
     SETTING_KEYS.AUTH_SAME_TYPE_SESSION_POLICY,
     SETTING_KEYS.AUTH_AUTO_LOGOUT_ON_EXPIRY,
     SETTING_KEYS.AUTH_SESSION_DURATION_MINUTES,
+    SETTING_KEYS.AUTH_ABSOLUTE_SESSION_CAP_DAYS,
   ] as const;
   const saved: Record<string, Prisma.JsonValue | undefined> = {};
   for (const k of savedKeys) {
@@ -200,10 +201,27 @@ async function main() {
       `exp-iat=${span}sn`,
     );
 
-    await systemSettingService.setFeatureFlags({ autoLogoutOnExpiry: false }, admin.id);
+    // Zaman aşımı kapalıyken artık Part A "mutlak oturum tavanı" devreye girer:
+    // cap>0 (default 30) → exp yine VAR (≈cap gün); cap=0 → gerçekten süresiz (exp yok).
+    await systemSettingService.setFeatureFlags(
+      { autoLogoutOnExpiry: false, absoluteSessionCapDays: 30 },
+      admin.id,
+    );
+    const expCap = await AuthService.login(uList.username, PW);
+    const decCap = need(decodeJwt(expCap.token), "decode(expCap)");
+    const capSpan = (decCap.exp ?? 0) - (decCap.iat ?? 0);
+    check(
+      "4c autoLogout KAPALI + cap=30 → JWT exp VAR (≈30 gün)",
+      typeof decCap.exp === "number" && Math.abs(capSpan - 30 * 24 * 60 * 60) < 120,
+      `exp-iat=${capSpan}sn`,
+    );
+
+    await systemSettingService.setFeatureFlags({ absoluteSessionCapDays: 0 }, admin.id);
     const expOff = await AuthService.login(uList.username, PW);
     const decOff = need(decodeJwt(expOff.token), "decode(expOff)");
-    check("4c autoLogout KAPALI → JWT exp claim YOK", decOff.exp === undefined, `exp=${String(decOff.exp)}`);
+    check("4d cap=0 → JWT exp claim YOK (gerçekten süresiz)", decOff.exp === undefined, `exp=${String(decOff.exp)}`);
+    // Cap'i default'a döndür (sonraki bölümler + hijyen).
+    await systemSettingService.setFeatureFlags({ absoluteSessionCapDays: 30 }, admin.id);
 
     // =====================================================================
     // 5) Oturum kaydı — başarılı login'de jti ile session satırı açılır

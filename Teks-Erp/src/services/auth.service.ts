@@ -15,6 +15,7 @@ import {
   readAutoLogoutOnExpiry,
   readLoginMethods,
   readSameTypeSessionPolicy,
+  readAbsoluteSessionCapDays,
 } from "./system-setting.service";
 import { SessionRegistryService } from "./session-registry.service";
 
@@ -274,18 +275,55 @@ export class AuthService {
     // Oturum zaman aşımı TEK ayar: auth.autoLogoutOnExpiry.
     //  • Açık (varsayılan): token auth.sessionDurationMinutes (default 480) sonra dolar;
     //    süre bitince client otomatik çıkar, sunucu da 401 verir.
-    //  • Kapalı: token SÜRESİZ imzalanır (exp claim YOK) — zaman aşımıyla çıkış YOK;
-    //    oturum yine tokenVersion / session iptali / logout ile sonlandırılabilir.
+    //  • Kapalı: token yine de MUTLAK oturum tavanına (auth.absoluteSessionCapDays,
+    //    default 30 gün) kadar geçerlidir — sızan token sonsuza kadar yaşamasın.
+    //    Tavan 0 ise gerçekten SÜRESİZ imzalanır (exp claim YOK). Oturum yine
+    //    tokenVersion / session iptali / logout ile sonlandırılabilir.
     // (Dakika ayarı yoksa reader eski saat ayarına ×60 düşer — geriye-uyum.)
     const timeoutEnabled = await readAutoLogoutOnExpiry();
     const sessionMinutes = await readSessionDurationMinutes();
+    const capDays = await readAbsoluteSessionCapDays();
 
-    // jti = Session satırı anahtarı. Session expiresAt: zaman aşımı açıksa JWT exp ile
-    // hizalı; kapalıysa uzak gelecek (notify 'aktif oturum' kontrolü expiresAt>now'a bakar).
+    // jti = Session satırı anahtarı. Taban (mutlak) son-kullanma:
+    //   • zaman aşımı açık → now + oturum süresi (dakika)
+    //   • kapalı + cap>0 → now + cap gün (arka plan tavanı)
+    //   • kapalı + cap=0 → uzak gelecek (gerçekten süresiz; exp claim yok)
     const jti = randomUUID();
-    const expiresAt = timeoutEnabled
-      ? new Date(Date.now() + sessionMinutes * 60 * 1000)
-      : new Date("9999-12-31T23:59:59.000Z");
+    const nowMs = Date.now();
+    const FAR_FUTURE = new Date("9999-12-31T23:59:59.000Z");
+    let hasExp: boolean;
+    let effectiveExpiresAt: Date;
+    if (timeoutEnabled) {
+      hasExp = true;
+      effectiveExpiresAt = new Date(nowMs + sessionMinutes * 60 * 1000);
+    } else if (capDays > 0) {
+      hasExp = true;
+      effectiveExpiresAt = new Date(nowMs + capDays * 24 * 60 * 60 * 1000);
+    } else {
+      hasExp = false;
+      effectiveExpiresAt = FAR_FUTURE;
+    }
+
+    // Part C — süreli izinler: kullanıcının EN YAKIN gelecekteki validUntil'i tabanla
+    // min'lenir. Süreli izin verilmişse (grant tokenVersion++ ile re-login zorlar)
+    // yeni token bu tarihe kadar geçerli → izin süresi bitince oturum sunucu-tarafında
+    // ölür (401) ve re-login'de getEffectivePermissions o izni zaten hariç tutar.
+    // Nearest varsa exp HER durumda konur (süresiz taban bile bu tarihe kırpılır).
+    const nearest = await prisma.userPermission.findFirst({
+      where: { userId: user.id, validUntil: { gt: new Date(nowMs) } },
+      orderBy: { validUntil: "asc" },
+      select: { validUntil: true },
+    });
+    if (nearest?.validUntil) {
+      if (!hasExp || nearest.validUntil.getTime() < effectiveExpiresAt.getTime()) {
+        effectiveExpiresAt = nearest.validUntil;
+        hasExp = true;
+      }
+    }
+
+    // Session expiresAt: JWT exp ile HİZALI (kapalı+cap=0 → uzak gelecek; notify
+    // 'aktif oturum' kontrolü expiresAt>now'a bakar).
+    const expiresAt = effectiveExpiresAt;
     const deviceType: ClientType =
       ctx?.clientType === "electron" ? ClientType.ELECTRON : ClientType.MOBILE;
     const policy = await readSameTypeSessionPolicy();
@@ -310,7 +348,14 @@ export class AuthService {
       tokenVersion: user.tokenVersion,
     };
     const signOptions: jwt.SignOptions = { jwtid: jti };
-    if (timeoutEnabled) signOptions.expiresIn = sessionMinutes * 60;
+    // exp claim = effectiveExpiresAt'a göre saniye (aynı nowMs tabanı → Session.expiresAt
+    // ile birebir hizalı). hasExp=false ise exp claim konmaz (gerçekten süresiz).
+    if (hasExp) {
+      signOptions.expiresIn = Math.max(
+        1,
+        Math.floor((effectiveExpiresAt.getTime() - nowMs) / 1000),
+      );
+    }
     const token = jwt.sign(signPayload, JWT_SECRET, signOptions);
 
     const payload: JwtPayload = { ...signPayload, jti };
