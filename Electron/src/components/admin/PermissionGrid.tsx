@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Search, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { categoryLabels, moduleLabels, isWildcard, type Permission } from "@/types/permissions";
 
@@ -15,8 +16,8 @@ interface Props {
   disabled?: boolean;
   emptyHint?: string;
   /** Süreli izin bitiş tarihleri: permissionId → "YYYY-MM-DD" (boş/verilmez = süresiz).
-   *  `onDateChange` ile birlikte verilirse SEÇİLİ her iznin altında bitiş-tarihi seçici çıkar
-   *  (şablon düzenlemede verilmez → tarih UI'sı hiç görünmez). */
+   *  `onDateChange` ile birlikte verilirse "Bitiş Tarihi" sütunu görünür
+   *  (şablon düzenlemede verilmez → tarih sütunu hiç görünmez). */
   dates?: Record<string, string | null | undefined>;
   onDateChange?: (permissionId: string, value: string) => void;
 }
@@ -77,6 +78,7 @@ export function PermissionGrid({
     0,
   );
   const hasWildcard = permissions.some((p) => isWildcard(p.code) && selected.has(p.id));
+  const columnCount = onDateChange ? 4 : 3;
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -113,59 +115,72 @@ export function PermissionGrid({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto rounded-md border">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden rounded-md border">
         {totalVisible === 0 ? (
           <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
             {emptyHint ?? "Eşleşen yetki bulunamadı."}
           </div>
         ) : (
-          <div className="divide-y">
-            {Array.from(grouped.entries()).map(([category, modules]) => {
-              const allIds = Array.from(modules.values()).flat().map((p) => p.id);
-              const allChecked = allIds.every((id) => selected.has(id));
-              const someChecked = allIds.some((id) => selected.has(id));
+          <Table containerClassName="overflow-visible" className="table-fixed">
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead className="w-20"></TableHead>
+                <TableHead className="w-64">Yetki</TableHead>
+                <TableHead>Açıklama</TableHead>
+                {onDateChange && <TableHead className="w-44">Bitiş Tarihi</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {Array.from(grouped.entries()).map(([category, modules]) => {
+                const allIds = Array.from(modules.values()).flat().map((p) => p.id);
+                const allChecked = allIds.every((id) => selected.has(id));
+                const someChecked = allIds.some((id) => selected.has(id));
 
-              return (
-                <section key={category}>
-                  <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-card/90 px-3 py-2 backdrop-blur">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={allChecked ? true : someChecked ? "indeterminate" : false}
-                        onCheckedChange={(checked) => setMany(allIds, Boolean(checked))}
+                return (
+                  <Fragment key={category}>
+                    <TableRow className="bg-muted/30">
+                      <TableCell colSpan={columnCount} className="px-3 py-1.5">
+                        <label className="flex items-center gap-2">
+                          <Checkbox
+                            checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                            onCheckedChange={(checked) => setMany(allIds, Boolean(checked))}
+                            disabled={disabled}
+                          />
+                          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            {categoryLabels[category] ?? category}
+                          </span>
+                          <Badge variant="muted" className="font-normal">
+                            {allIds.length}
+                          </Badge>
+                        </label>
+                      </TableCell>
+                    </TableRow>
+                    {Array.from(modules.entries()).map(([module, perms]) => (
+                      <ModuleRows
+                        key={module}
+                        module={module}
+                        perms={perms}
+                        selected={selected}
+                        toggle={toggle}
+                        setMany={setMany}
                         disabled={disabled}
+                        dates={dates}
+                        onDateChange={onDateChange}
+                        columnCount={columnCount}
                       />
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        {categoryLabels[category] ?? category}
-                      </span>
-                      <Badge variant="muted" className="font-normal">
-                        {allIds.length}
-                      </Badge>
-                    </div>
-                  </div>
-                  {Array.from(modules.entries()).map(([module, perms]) => (
-                    <ModuleRow
-                      key={module}
-                      module={module}
-                      perms={perms}
-                      selected={selected}
-                      toggle={toggle}
-                      setMany={setMany}
-                      disabled={disabled}
-                      dates={dates}
-                      onDateChange={onDateChange}
-                    />
-                  ))}
-                </section>
-              );
-            })}
-          </div>
+                    ))}
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
         )}
       </div>
     </div>
   );
 }
 
-interface ModuleRowProps {
+interface ModuleRowsProps {
   module: string;
   perms: Permission[];
   selected: Set<string>;
@@ -174,9 +189,10 @@ interface ModuleRowProps {
   disabled?: boolean;
   dates?: Record<string, string | null | undefined>;
   onDateChange?: (permissionId: string, value: string) => void;
+  columnCount: number;
 }
 
-function ModuleRow({
+function ModuleRows({
   module,
   perms,
   selected,
@@ -185,69 +201,74 @@ function ModuleRow({
   disabled,
   dates,
   onDateChange,
-}: ModuleRowProps) {
+  columnCount,
+}: ModuleRowsProps) {
   const ids = perms.map((p) => p.id);
   const allChecked = ids.every((id) => selected.has(id));
   const someChecked = ids.some((id) => selected.has(id));
 
   return (
-    <div className="px-3 py-2">
-      <label className="flex items-center gap-2">
-        <Checkbox
-          checked={allChecked ? true : someChecked ? "indeterminate" : false}
-          onCheckedChange={(checked) => setMany(ids, Boolean(checked))}
-          disabled={disabled}
-        />
-        <span className="text-sm font-medium">{moduleLabels[module] ?? module}</span>
-      </label>
-      <ul className="ml-6 mt-1 grid gap-1 sm:grid-cols-2">
-        {perms.map((p) => {
-          const wild = isWildcard(p.code);
-          const checked = selected.has(p.id);
-          return (
-            <li key={p.id}>
-              <label
-                className={cn(
-                  "flex items-start gap-2 rounded-md p-1.5 hover:bg-accent/50",
-                  wild && "border border-destructive/30 bg-destructive/5 hover:bg-destructive/10",
+    <Fragment>
+      <TableRow className="bg-muted/10">
+        <TableCell colSpan={columnCount} className="py-1.5 pl-7">
+          <label className="flex items-center gap-2">
+            <Checkbox
+              checked={allChecked ? true : someChecked ? "indeterminate" : false}
+              onCheckedChange={(checked) => setMany(ids, Boolean(checked))}
+              disabled={disabled}
+            />
+            <span className="text-sm font-medium">{moduleLabels[module] ?? module}</span>
+          </label>
+        </TableCell>
+      </TableRow>
+      {perms.map((p) => {
+        const wild = isWildcard(p.code);
+        const checked = selected.has(p.id);
+        return (
+          <TableRow key={p.id} className={cn(wild && "bg-destructive/5")}>
+            <TableCell className="py-1.5 pl-10">
+              <Checkbox
+                checked={checked}
+                onCheckedChange={() => toggle(p.id)}
+                disabled={disabled}
+              />
+            </TableCell>
+            <TableCell className="py-1.5">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span
+                  className={cn("truncate font-mono text-xs", wild && "font-semibold text-destructive")}
+                  title={p.code}
+                >
+                  {p.code}
+                </span>
+                {wild && (
+                  <Badge variant="destructive" className="shrink-0 text-[10px]" title="Bu yetki, kategorideki tüm alt yetkileri otomatik kapsar.">
+                    tüm yetkiler
+                  </Badge>
                 )}
-              >
-                <Checkbox
-                  className="mt-0.5"
-                  checked={checked}
-                  onCheckedChange={() => toggle(p.id)}
-                  disabled={disabled}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className={cn("font-mono text-xs", wild && "text-destructive")}>{p.code}</span>
-                    {wild && (
-                      <Badge variant="destructive" className="text-[10px]" title="Bu yetki, kategorideki tüm alt yetkileri otomatik kapsar.">
-                        tüm yetkiler
-                      </Badge>
-                    )}
-                  </div>
-                  {p.description && (
-                    <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{p.description}</p>
-                  )}
-                </div>
-              </label>
-              {onDateChange && checked && (
-                <div className="ml-6 mt-1 flex items-center gap-2">
-                  <span className="shrink-0 text-[11px] text-muted-foreground">Bitiş tarihi:</span>
+              </div>
+            </TableCell>
+            <TableCell className="break-words py-1.5 text-xs text-muted-foreground">
+              {p.description}
+            </TableCell>
+            {onDateChange && (
+              <TableCell className="py-1.5">
+                {checked ? (
                   <DatePickerInput
                     value={dates?.[p.id] ?? ""}
                     onChange={(v) => onDateChange(p.id, v)}
                     disabled={disabled}
                     placeholder="Süresiz"
-                    className="h-8 w-44"
+                    className="h-8 w-40"
                   />
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+                ) : (
+                  <div className="flex h-8 w-40 items-center text-xs text-muted-foreground">—</div>
+                )}
+              </TableCell>
+            )}
+          </TableRow>
+        );
+      })}
+    </Fragment>
   );
 }

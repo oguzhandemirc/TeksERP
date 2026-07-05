@@ -33,6 +33,8 @@ export const moduleLabels: Record<string, string> = {
   QUALITY: "Kalite",
   LOGISTICS: "Lojistik",
   SUBCONTRACTOR: "Fason",
+  KARTELA: "Kartela",
+  REPORTS: "Raporlar",
   ADMIN: "Yönetim",
   MOBILE: "Mobil Ekranlar",
 };

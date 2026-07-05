@@ -1,14 +1,15 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Monitor, Smartphone, Shield, Search, Info, Asterisk } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RefreshButton } from "@/components/RefreshButton";
 import { permissionCatalogService } from "@/services/permissionCatalogService";
 import { categoryLabels, moduleLabels, isWildcard, type Permission } from "@/types/permissions";
+import { cn } from "@/lib/utils";
 
 const QUERY_KEY = "permission-catalog";
 
@@ -53,7 +54,7 @@ export function PermissionsCatalogPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Yetki Kataloğu"
-        description="Sistemdeki tüm yetkilerin referans listesi (read-only)."
+        description="Sistemdeki tüm yetkilerin referans listesi (salt-okunur)."
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
@@ -76,7 +77,7 @@ export function PermissionsCatalogPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
         {query.isLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-32 w-full" />
@@ -87,72 +88,79 @@ export function PermissionsCatalogPage() {
             Eşleşen yetki yok.
           </div>
         ) : (
-          <div className="space-y-4">
-            {Array.from(grouped.entries()).map(([category, modules]) => {
-              const Icon = categoryIcons[category] ?? Shield;
-              const total = Array.from(modules.values()).reduce((a, l) => a + l.length, 0);
-              return (
-                <Card key={category} className="p-4">
-                  <div className="flex items-center gap-2 border-b pb-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1">
-                      <h2 className="text-sm font-semibold">{categoryLabels[category] ?? category}</h2>
-                      <p className="text-xs text-muted-foreground">{total} yetki</p>
-                    </div>
-                  </div>
-                  <div className="grid gap-4 pt-3 sm:grid-cols-2">
-                    {Array.from(modules.entries()).map(([module, perms]) => (
-                      <div key={module}>
-                        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          {moduleLabels[module] ?? module}
-                        </div>
-                        <ul className="space-y-1">
+          <div className="rounded-md border">
+            <Table containerClassName="overflow-visible" className="table-fixed">
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead className="w-72">Yetki</TableHead>
+                  <TableHead>Açıklama</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Array.from(grouped.entries()).map(([category, modules]) => {
+                  const Icon = categoryIcons[category] ?? Shield;
+                  const total = Array.from(modules.values()).reduce((a, l) => a + l.length, 0);
+                  return (
+                    <Fragment key={category}>
+                      <TableRow className="bg-muted/30">
+                        <TableCell colSpan={2} className="px-3 py-1.5">
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-3.5 w-3.5" />
+                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              {categoryLabels[category] ?? category}
+                            </span>
+                            <Badge variant="muted" className="font-normal">
+                              {total}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {Array.from(modules.entries()).map(([module, perms]) => (
+                        <Fragment key={module}>
+                          <TableRow className="bg-muted/10">
+                            <TableCell colSpan={2} className="py-1.5 pl-7">
+                              <span className="text-sm font-medium">{moduleLabels[module] ?? module}</span>
+                            </TableCell>
+                          </TableRow>
                           {perms.map((p) => {
                             const wild = isWildcard(p.code);
                             return (
-                              <li
-                                key={p.id}
-                                className="flex items-start gap-2 rounded-md border bg-card p-2"
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <code
-                                      className={
-                                        wild
-                                          ? "text-xs text-destructive"
-                                          : "text-xs"
-                                      }
+                              <TableRow key={p.id} className={cn(wild && "bg-destructive/5")}>
+                                <TableCell className="py-1.5 pl-10">
+                                  <div className="flex min-w-0 items-center gap-1.5">
+                                    <span
+                                      className={cn(
+                                        "truncate font-mono text-xs",
+                                        wild && "font-semibold text-destructive",
+                                      )}
+                                      title={p.code}
                                     >
                                       {p.code}
-                                    </code>
+                                    </span>
                                     {wild && (
                                       <Badge
                                         variant="destructive"
-                                        className="text-[10px]"
+                                        className="shrink-0 text-[10px]"
                                         title="Bu yetki, kategorideki tüm alt yetkileri otomatik kapsar."
                                       >
                                         tüm yetkiler
                                       </Badge>
                                     )}
                                   </div>
-                                  {p.description && (
-                                    <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-                                      {p.description}
-                                    </p>
-                                  )}
-                                </div>
-                              </li>
+                                </TableCell>
+                                <TableCell className="break-words py-1.5 text-xs text-muted-foreground">
+                                  {p.description}
+                                </TableCell>
+                              </TableRow>
                             );
                           })}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              );
-            })}
+                        </Fragment>
+                      ))}
+                    </Fragment>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
         )}
 

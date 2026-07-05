@@ -91,6 +91,11 @@ export const adminUserService = {
   resetPassword: (userId: string, password: string): Promise<void> =>
     apiClient.post(`/api/admin/users/${userId}/reset-password`, { password }).then(() => undefined),
 
+  updateFullName: (userId: string, fullName: string): Promise<ApiResponse<AdminUserListItem>> =>
+    apiClient
+      .patch<ApiResponse<AdminUserListItem>>(`/api/admin/users/${userId}`, { fullName })
+      .then((r) => r.data),
+
   applyTemplate: (
     userId: string,
     templateId: string,

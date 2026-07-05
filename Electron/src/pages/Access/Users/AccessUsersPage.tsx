@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, ShieldCheck, Trash2, Power, PowerOff, Eye, EyeOff, History } from "lucide-react";
+import { Plus, UserCog, Trash2, Power, PowerOff, History } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -19,7 +20,7 @@ import {
 } from "@/services/adminUserService";
 import type { ApiResponse } from "@/types/api";
 import { UserFormDialog, type UserFormValues } from "./UserFormDialog";
-import { UserDetailSheet } from "./UserDetailSheet";
+import { UserDetailDialog } from "./UserDetailDialog";
 import { NewUserCredentialsDialog } from "./NewUserCredentialsDialog";
 import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
 
@@ -38,8 +39,6 @@ interface UserPayload {
 const userMutations = {
   create: (data: UserPayload) =>
     apiClient.post<ApiResponse<AdminUserListItem>>("/api/admin/users", data).then((r) => r.data),
-  update: (id: string, data: UserPayload) =>
-    apiClient.patch<ApiResponse<AdminUserListItem>>(`/api/admin/users/${id}`, data).then((r) => r.data),
   /** GEÇİCİ pasife al (geri alınabilir). */
   deactivate: (id: string) =>
     apiClient.post<ApiResponse<AdminUserListItem>>(`/api/admin/users/${id}/deactivate`).then((r) => r.data),
@@ -56,7 +55,6 @@ export function AccessUsersPage() {
   const openTarget = useOpenTarget();
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<AdminUserListItem | null>(null);
   const [permissionsFor, setPermissionsFor] = useState<AdminUserListItem | null>(null);
   const [detailTab, setDetailTab] = useState<"permissions" | "quick-pin">("permissions");
   const [deletingUser, setDeletingUser] = useState<AdminUserListItem | null>(null);
@@ -85,11 +83,6 @@ export function AccessUsersPage() {
     );
   }, [query.data, search, showInactive]);
 
-  const inactiveCount = useMemo(
-    () => (query.data?.data ?? []).filter((u) => !u.isActive).length,
-    [query.data],
-  );
-
   const invalidate = () => qc.invalidateQueries({ queryKey: [QUERY_KEY] });
 
   const createMut = useMutation({
@@ -107,14 +100,6 @@ export function AccessUsersPage() {
       if (created && vars.generateMobileCredentials && hasMobileMethod) {
         setNewCreds({ user: created, password: vars._password });
       }
-    },
-  });
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UserPayload }) => userMutations.update(id, data),
-    onSuccess: () => {
-      toast.success("Kullanıcı güncellendi.");
-      invalidate();
     },
   });
 
@@ -145,27 +130,19 @@ export function AccessUsersPage() {
 
   const onSubmit = async (values: UserFormValues) => {
     // isActive ARTIK formdan yönetilmez — aktiflik yalnız Pasife Al / Aktifleştir
-    // butonlarından (guard'lı uçlar). Yeni kullanıcı zaten aktif doğar.
-    const payload: UserPayload = {
+    // butonlarından (guard'lı uçlar). Yeni kullanıcı zaten aktif doğar. Varsayılan
+    // üretim izinleri (KK1/KK2/Tambur) + mobil kimlik üretimi (backend etkin
+    // yöntemlere göre üretir). _password modal'da "Kullanıcı+Şifre" yöntemi
+    // etkinse hatırlatılır (geri okunamaz).
+    await createMut.mutateAsync({
       username: values.username,
       fullName: values.fullName,
-    };
-    if (values.password) payload.password = values.password;
-    if (editing) {
-      await updateMut.mutateAsync({ id: editing.id, data: payload });
-    } else {
-      // Yalnız oluşturmada gönder — varsayılan üretim izinleri (KK1/KK2/Tambur) +
-      // mobil kimlik üretimi (backend etkin yöntemlere göre üretir). _password
-      // modal'da "Kullanıcı+Şifre" yöntemi etkinse hatırlatılır (geri okunamaz).
-      await createMut.mutateAsync({
-        ...payload,
-        grantOperatorDefaults: values.grantOperatorDefaults,
-        generateMobileCredentials: values.grantOperatorDefaults,
-        _password: values.password || undefined,
-      });
-    }
+      password: values.password,
+      grantOperatorDefaults: values.grantOperatorDefaults,
+      generateMobileCredentials: values.grantOperatorDefaults,
+      _password: values.password,
+    });
     setFormOpen(false);
-    setEditing(null);
   };
 
   return (
@@ -176,13 +153,7 @@ export function AccessUsersPage() {
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditing(null);
-                setFormOpen(true);
-              }}
-            >
+            <Button size="sm" onClick={() => setFormOpen(true)}>
               <Plus className="h-4 w-4" /> Yeni Kullanıcı
             </Button>
           </>
@@ -196,24 +167,13 @@ export function AccessUsersPage() {
           placeholder="Kullanıcı adı veya ad soyad ara..."
           className="h-8 w-64 text-sm"
         />
-        <Button
-          size="sm"
-          className={`h-8 gap-1 ${
-            showInactive
-              ? "bg-amber-600 text-white hover:bg-amber-700"
-              : "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
-          }`}
-          onClick={() => setShowInactive((v) => !v)}
-          title="Pasife alınmış kullanıcıları göster/gizle"
-        >
-          {showInactive ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          {showInactive ? "Pasifleri gizle" : "Pasifleri göster"}
-          {inactiveCount > 0 && (
-            <span className="ml-1 rounded-full bg-black/15 px-1.5 text-xs dark:bg-white/20">
-              {inactiveCount}
-            </span>
-          )}
-        </Button>
+        <label className="ml-auto flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border bg-background px-3 text-xs">
+          <Checkbox
+            checked={showInactive}
+            onCheckedChange={(c) => setShowInactive(Boolean(c))}
+          />
+          Pasifleri göster
+        </label>
       </div>
 
       <div className="flex-1 overflow-auto">
@@ -282,19 +242,7 @@ export function AccessUsersPage() {
                           setPermissionsFor(user);
                         }}
                       >
-                        <ShieldCheck className="h-3.5 w-3.5" /> Yetkiler
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Düzenle"
-                        onClick={() => {
-                          setEditing(user);
-                          setFormOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <UserCog className="h-3.5 w-3.5" /> Yönet
                       </Button>
                       {/* Pasife Al (aktifse) / Aktifleştir (pasifse) — GERİ ALINABİLİR */}
                       {user.isActive ? (
@@ -340,16 +288,12 @@ export function AccessUsersPage() {
 
       <UserFormDialog
         open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open);
-          if (!open) setEditing(null);
-        }}
-        initial={editing}
+        onOpenChange={setFormOpen}
         onSubmit={onSubmit}
-        isSubmitting={createMut.isPending || updateMut.isPending}
+        isSubmitting={createMut.isPending}
       />
 
-      <UserDetailSheet
+      <UserDetailDialog
         user={permissionsFor}
         open={Boolean(permissionsFor)}
         initialTab={detailTab}

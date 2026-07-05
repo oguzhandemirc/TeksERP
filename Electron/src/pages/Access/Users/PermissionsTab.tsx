@@ -1,15 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Save, Smartphone } from "lucide-react";
+import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGrid } from "@/components/admin/PermissionGrid";
 import { permissionCatalogService } from "@/services/permissionCatalogService";
 import { adminUserService, type PermissionSetItem } from "@/services/adminUserService";
-import { permissionTemplateService } from "@/services/permissionTemplateService";
-
-const MOBILE_TEMPLATE_PREFIX = "Mobil —";
+import { TemplateApplyPanel } from "./TemplateApplyPanel";
 
 interface Props {
   userId: string;
@@ -34,18 +32,6 @@ export function PermissionsTab({ userId }: Props) {
     staleTime: 0,
   });
 
-  const templates = useQuery({
-    queryKey: ["permission-templates"],
-    queryFn: permissionTemplateService.list,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const mobileTemplates = useMemo(
-    () =>
-      (templates.data?.data ?? []).filter((t) => t.name.startsWith(MOBILE_TEMPLATE_PREFIX)),
-    [templates.data],
-  );
-
   const grants = userPerms.data?.data ?? [];
   const initialIds = grants.map((g) => g.permissionId);
   // Süreli izinler: permissionId → "YYYY-MM-DD" (bitiş tarihi). validUntil ISO'dan gün
@@ -55,15 +41,6 @@ export function PermissionsTab({ userId }: Props) {
 
   const [selected, setSelected] = useState<string[]>(initialIds);
   const [dates, setDates] = useState<Record<string, string>>(initialDates);
-
-  const applyMobileTemplate = (templateId: string) => {
-    const tpl = mobileTemplates.find((t) => t.id === templateId);
-    if (!tpl) return;
-    const ids = new Set(selected);
-    for (const p of tpl.permissions) ids.add(p.permissionId);
-    setSelected(Array.from(ids));
-    toast.success(`${tpl.name} eklendi (kaydetmeyi unutmayın)`);
-  };
 
   useEffect(() => {
     if (!userPerms.data) return;
@@ -96,6 +73,26 @@ export function PermissionsTab({ userId }: Props) {
     setDates(initialDates);
   };
 
+  const clearAll = () => {
+    setSelected([]);
+    setDates({});
+  };
+
+  const applyTemplate = (permissionIds: string[], mode: "merge" | "replace") => {
+    if (mode === "replace") {
+      setSelected(permissionIds);
+      setDates((prev) => {
+        const next: Record<string, string> = {};
+        for (const id of permissionIds) if (prev[id]) next[id] = prev[id];
+        return next;
+      });
+      toast.success(`Şablon uygulandı (${permissionIds.length} yetki) — kaydetmeyi unutmayın.`);
+    } else {
+      setSelected((prev) => Array.from(new Set([...prev, ...permissionIds])));
+      toast.success("Şablon eklendi — kaydetmeyi unutmayın.");
+    }
+  };
+
   const mutation = useMutation({
     mutationFn: (items: PermissionSetItem[]) => adminUserService.setPermissions(userId, items),
     onSuccess: () => {
@@ -126,55 +123,41 @@ export function PermissionsTab({ userId }: Props) {
   }
 
   return (
-    <div className="flex h-[calc(100vh-220px)] flex-col gap-3">
-      {mobileTemplates.length > 0 && (
-        <div className="rounded-md border bg-muted/30 p-2">
-          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <Smartphone className="h-3.5 w-3.5" /> Mobil rol hızlı seç (mevcut yetkilere ekler)
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {mobileTemplates.map((t) => (
-              <Button
-                key={t.id}
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                disabled={mutation.isPending}
-                onClick={() => applyMobileTemplate(t.id)}
-                title={t.description ?? undefined}
-              >
-                {t.name.replace(`${MOBILE_TEMPLATE_PREFIX} `, "")}
-              </Button>
-            ))}
-          </div>
+    <div className="flex h-full flex-col gap-3">
+      <div className="flex min-h-0 flex-1 gap-3">
+        <div className="min-h-0 flex-1">
+          <PermissionGrid
+            permissions={catalog.data?.data ?? []}
+            value={selected}
+            onChange={setSelected}
+            disabled={mutation.isPending}
+            dates={dates}
+            onDateChange={handleDateChange}
+          />
         </div>
-      )}
-      <div className="min-h-0 flex-1">
-        <PermissionGrid
-          permissions={catalog.data?.data ?? []}
-          value={selected}
-          onChange={setSelected}
-          disabled={mutation.isPending}
-          dates={dates}
-          onDateChange={handleDateChange}
-        />
+        <TemplateApplyPanel onApply={applyTemplate} disabled={mutation.isPending} />
       </div>
-      <p className="text-xs text-muted-foreground">
-        Seçili her iznin altından opsiyonel <span className="font-medium">bitiş tarihi</span>{" "}
-        verebilirsiniz (boş = süresiz). Süreli izinde tarih dolduğunda kullanıcının o iznine
-        dayanan oturumu otomatik sona erer.
-      </p>
-      <div className="flex items-center justify-between border-t pt-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={!dirty || mutation.isPending}
-          onClick={reset}
-        >
-          Sıfırla
-        </Button>
+      <div className="flex shrink-0 items-center justify-between border-t pt-3">
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            disabled={selected.length === 0 || mutation.isPending}
+            onClick={clearAll}
+          >
+            Sıfırla
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!dirty || mutation.isPending}
+            onClick={reset}
+          >
+            Değişiklikleri Geri Al
+          </Button>
+        </div>
         <Button
           type="button"
           size="sm"
