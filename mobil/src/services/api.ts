@@ -37,6 +37,20 @@ export function isWorkSessionLost(err: unknown): boolean {
   return e?.status === 409 && e?.details?.code === 'WORK_SESSION_REQUIRED';
 }
 
+// 429 LOGIN_LOCKED → hızlı-PIN/kart brute-force deneme kilidi. Backend ardışık
+// yanlış denemeden sonra IP/cihazı süreli bloklar. Interceptor bunun için TEK
+// yetkili "neden giremiyorum" toast'ını gösterir; login ekranı kendi genel
+// "Giriş başarısız" toast'ını isLoginLocked ile bastırır (aksi hâlde iki toast).
+let lastLoginLockToastAt = 0;
+
+/** Hata "çok fazla yanlış giriş denemesi" (429 LOGIN_LOCKED) mi? Interceptor bu
+ *  durumda ZATEN net toast gösterir → LoginScreen kendi genel "Giriş başarısız"
+ *  toast'ını BASTIRSIN (inline hata mesajı yine set edilir). isWorkSessionLost eşi. */
+export function isLoginLocked(err: unknown): boolean {
+  const e = err as { status?: number; details?: { code?: string } } | null;
+  return e?.status === 429 && e?.details?.code === 'LOGIN_LOCKED';
+}
+
 apiClient.interceptors.request.use(async (config) => {
   // baseURL'i her istekte store'dan oku — kullanıcı Settings'ten değiştirdiğinde
   // restart gerekmeden anında geçer.
@@ -135,6 +149,31 @@ apiClient.interceptors.response.use(
         Toast.show({ type, text1, text2, visibilityTime: duration });
       }
       onWorkSessionRequired();
+    }
+
+    // Deneme kilidi (429 LOGIN_LOCKED) → hızlı-PIN/kart girişinde çok fazla yanlış
+    // deneme. Login çağrısında da göster (401'in aksine bastırma yok — kullanıcı
+    // neden giremediğini bilmeli). details.retryAfterSec = kalan blok süresi (sn).
+    // 5sn dedup: PIN spam'i tek toast üretir. LoginScreen isLoginLocked ile kendi
+    // genel toast'ını bastırır; inline hata mesajı yine görünür.
+    if (status === 429 && error.response?.data?.details?.code === 'LOGIN_LOCKED') {
+      const now = Date.now();
+      if (now - lastLoginLockToastAt > 5000) {
+        lastLoginLockToastAt = now;
+        const sec = Number(error.response?.data?.details?.retryAfterSec) || 0;
+        const wait =
+          sec >= 60
+            ? `${Math.ceil(sec / 60)} dakika sonra tekrar deneyin`
+            : sec > 0
+              ? `${sec} saniye sonra tekrar deneyin`
+              : 'Bir süre sonra tekrar deneyin';
+        Toast.show({
+          type: 'error',
+          text1: 'Çok fazla yanlış deneme',
+          text2: wait,
+          visibilityTime: 6000,
+        });
+      }
     }
 
     // K-A3 fix: backend mesajı yoksa ham axios İngilizcesi ('Network Error',

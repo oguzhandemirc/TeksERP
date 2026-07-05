@@ -9,6 +9,7 @@ import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
 import { authService, type LoginMethod } from '../../services/auth.service';
+import { isLoginLocked } from '../../services/api';
 import { authActions } from '../../services/authActions';
 import { useSessionConflict } from '../../hooks/useSessionConflict';
 import { BarcodeScannerModal } from '../../components/BarcodeScannerModal';
@@ -235,7 +236,10 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         setError(msg);
         setPin('');
         handleMethodDisabled(e);
-        Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg, visibilityTime: 6000 });
+        // Deneme kilidi (429 LOGIN_LOCKED) → interceptor ZATEN net toast gösterdi;
+        // inline hata yeterli, genel "Giriş başarısız" toast'ını tekrarlama.
+        if (!isLoginLocked(e))
+          Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg, visibilityTime: 6000 });
       } finally {
         setSubmitting(false);
       }
@@ -259,7 +263,10 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         const msg = e instanceof Error ? e.message : 'Kart okunamadı.';
         setError(msg);
         handleMethodDisabled(e);
-        Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg, visibilityTime: 6000 });
+        // Deneme kilidi (429 LOGIN_LOCKED) → interceptor ZATEN net toast gösterdi;
+        // inline hata yeterli, genel "Giriş başarısız" toast'ını tekrarlama.
+        if (!isLoginLocked(e))
+          Toast.show({ type: 'error', text1: 'Giriş başarısız', text2: msg, visibilityTime: 6000 });
       } finally {
         setSubmitting(false);
       }
