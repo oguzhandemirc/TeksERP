@@ -92,6 +92,12 @@ export const SETTING_KEYS = {
    *  Backend ENFORCE eder: login'de jwt.sign expiresIn buradan okunur. Değişiklik
    *  yalnız sonraki girişlere uygulanır; mevcut açık token'lar kendi süreleriyle biter. */
   AUTH_SESSION_DURATION_HOURS: "auth.sessionDurationHours",
+  /** Oturum (JWT token) ömrü, DAKİKA. Default 480 (8 saat). Yeni dakika-granüler ayar —
+   *  Genel Ayarlar → Oturum ekranı artık her süreyi DAKİKA olarak yönetir. Backend ENFORCE
+   *  eder: login'de jwt.sign expiresIn buradan (×60 sn) okunur. Kayıt yoksa eski
+   *  auth.sessionDurationHours ×60'a düşer (geriye-uyum), o da yoksa 480 (8 saat). 1..43200
+   *  (30 gün). Değişiklik yalnız sonraki girişlere uygulanır; açık token'lar kendi süreleriyle biter. */
+  AUTH_SESSION_DURATION_MINUTES: "auth.sessionDurationMinutes",
   /** Hareketsizlik (idle) zaman aşımı, DAKİKA. Default 0 (kapalı). >0 iken Electron
    *  paneli bu kadar dakika hiç işlem (fare/klavye) görmezse otomatik çıkış yapar.
    *  Frontend ENFORCE eder (backend token'ı yine kendi mutlak ömrüne kadar geçerli). */
@@ -153,6 +159,10 @@ const DEFAULT_DEADLINE_DAYS = 7;
 export const DEFAULT_SESSION_DURATION_HOURS = 8;
 /** Mutlak oturum ömrü tavanı — saat (30 gün). Üstü bu değere kırpılır. */
 const MAX_SESSION_DURATION_HOURS = 720;
+/** Oturum (JWT) ömrü varsayılanı — DAKİKA (8 saat). Dakika-granüler yeni ayarın default'u. */
+export const DEFAULT_SESSION_DURATION_MINUTES = 480;
+/** Mutlak oturum ömrü tavanı — DAKİKA (30 gün = 43200). Üstü bu değere kırpılır. */
+const MAX_SESSION_DURATION_MINUTES = 43200;
 /** Hareketsizlik zaman aşımı varsayılanı — dakika. 0 = kapalı (otomatik çıkış yok). */
 export const DEFAULT_IDLE_TIMEOUT_MINUTES = 0;
 /** Hareketsizlik zaman aşımı tavanı — dakika (24 saat). */
@@ -445,8 +455,11 @@ export interface FeatureFlags {
   /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (default TRUE/açık).
    *  Diğer flag'lerin aksine ENFORCE edilir — tambur kesim guard'ı bu flag'e bağlı. */
   tamburOverQuantityEnabled: boolean;
-  /** Oturum (JWT) ömrü — saat (default 8). Giriş sonrası token kaç saat geçerli.
-   *  Backend ENFORCE eder (login'de jwt.sign expiresIn). */
+  /** Oturum (JWT) ömrü — DAKİKA (default 480 = 8 saat). Dakika-granüler ayar; UI bunu
+   *  yönetir. Backend ENFORCE eder (login'de jwt.sign expiresIn = ×60 sn). */
+  sessionDurationMinutes: number;
+  /** Oturum (JWT) ömrü — saat (default 8). GERİYE-UYUM alanı: sessionDurationMinutes'ten
+   *  türetilir (Math.max(1, round(minutes/60))). Backend artık dakika ayarını ENFORCE eder. */
   sessionDurationHours: number;
   /** Hareketsizlik zaman aşımı — dakika (default 0 = kapalı). Panel bu kadar dakika
    *  işlem görmezse otomatik çıkış. Frontend ENFORCE eder. */
@@ -603,6 +616,8 @@ export class SystemSettingService {
       },
     } as unknown as Pick<typeof prisma, "systemSetting">;
 
+    // Oturum ömrü tek kaynaktan (dakika); saat alanı geriye-uyum için aynı değerden türetilir.
+    const sessionMinutes = await readSessionDurationMinutes(cacheClient);
     const flags: FeatureFlags = {
       companyName: await readCompanyName(cacheClient),
       pricingEnabled: await readPricingEnabled(cacheClient),
@@ -618,7 +633,8 @@ export class SystemSettingService {
       companyLetterhead: await readCompanyLetterhead(cacheClient),
       documentsConfig: await readDocumentsConfig(cacheClient),
       tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(cacheClient),
-      sessionDurationHours: await readSessionDurationHours(cacheClient),
+      sessionDurationMinutes: sessionMinutes,
+      sessionDurationHours: Math.max(1, Math.round(sessionMinutes / 60)),
       idleTimeoutMinutes: await readIdleTimeoutMinutes(cacheClient),
       workSessionIdleTimeoutMinutes: await readWorkSessionIdleTimeoutMinutes(cacheClient),
       sameTypeSessionPolicy: await readSameTypeSessionPolicy(cacheClient),
@@ -843,6 +859,27 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_SESSION_DURATION_HOURS,
         Math.floor(v),
         "Oturum (JWT token) ömrü, saat — giriş sonrası token kaç saat geçerli kalır",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "sessionDurationMinutes")) {
+      const v = input.sessionDurationMinutes;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        !Number.isInteger(v) ||
+        v < 1 ||
+        v > MAX_SESSION_DURATION_MINUTES
+      ) {
+        throw AppError.badRequest(
+          `Oturum süresi 1–${MAX_SESSION_DURATION_MINUTES} dakika aralığında olmalı`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_SESSION_DURATION_MINUTES,
+        Math.floor(v),
+        "Oturum (JWT token) ömrü, dakika — giriş sonrası token kaç dakika geçerli kalır",
         userId
       );
     }
@@ -1393,6 +1430,39 @@ export async function readSessionDurationHours(
   const parsed = asNumber(setting.value);
   if (parsed === null || parsed < 1) return DEFAULT_SESSION_DURATION_HOURS;
   return Math.min(Math.floor(parsed), MAX_SESSION_DURATION_HOURS);
+}
+
+/**
+ * Oturum (JWT) ömrünü DAKİKA olarak okur — dakika-granüler yeni ayar (tek kaynak).
+ * Öncelik: auth.sessionDurationMinutes. Bu satır YOKSA geriye-uyum: eski
+ * auth.sessionDurationHours ×60 (o da yoksa/geçersizse 480 = 8 saat). Değer
+ * 1..MAX_SESSION_DURATION_MINUTES (43200 = 30 gün) aralığına kırpılır.
+ * AuthService.issueToken bunu okuyup jwt.sign expiresIn'e (×60 saniye) çevirir.
+ */
+export async function readSessionDurationMinutes(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_SESSION_DURATION_MINUTES },
+    select: { value: true },
+  });
+  const clamp = (n: number) =>
+    Math.min(Math.max(1, Math.floor(n)), MAX_SESSION_DURATION_MINUTES);
+  if (!setting) {
+    // Dakika satırı yok → eski saat ayarına düş (×60), o da yoksa default 480.
+    const hoursSetting = await client.systemSetting.findUnique({
+      where: { key: SETTING_KEYS.AUTH_SESSION_DURATION_HOURS },
+      select: { value: true },
+    });
+    if (!hoursSetting) return DEFAULT_SESSION_DURATION_MINUTES;
+    const hours = asNumber(hoursSetting.value);
+    if (hours === null || hours < 1) return DEFAULT_SESSION_DURATION_MINUTES;
+    return clamp(Math.floor(hours) * 60);
+  }
+  const parsed = asNumber(setting.value);
+  if (parsed === null || parsed < 1) return DEFAULT_SESSION_DURATION_MINUTES;
+  return clamp(parsed);
 }
 
 /**

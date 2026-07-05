@@ -147,9 +147,13 @@ export interface FeatureFlags {
    *  Açıkken operatör kayıtlıdan fazla ölçtüğünde (örn. 100m açık kumaşı 150m top yapma)
    *  onay sonrası kabul edilir; kaynak top tamamen tüketilir. Backend ENFORCE eder. */
   tamburOverQuantityEnabled: boolean;
-  /** Oturum (JWT) ömrü — saat (default 8). Giriş sonrası token kaç saat geçerli kalır;
-   *  süre dolunca (aktif kullanırken bile) yeniden giriş gerekir. Backend ENFORCE eder
-   *  (yalnız sonraki girişlere uygulanır; mevcut açık oturumlar süreleriyle devam eder). */
+  /** Oturum (JWT) ömrü — DAKİKA (default 480 = 8 saat; 1..43200 = 30 gün). Giriş
+   *  sonrası token kaç dakika geçerli kalır; süre dolunca (aktif kullanırken bile)
+   *  yeniden giriş gerekir. Backend ENFORCE eder (yalnız sonraki girişlere uygulanır;
+   *  mevcut açık oturumlar süreleriyle devam eder). Tek kaynak budur. */
+  sessionDurationMinutes: number;
+  /** Geriye uyum: oturum ömrü — saat. Backend `sessionDurationMinutes`'ten türetir
+   *  (Math.max(1, round(dk/60))). Yeni yazımlarda `sessionDurationMinutes` gönderilir. */
   sessionDurationHours: number;
   /** Hareketsizlik zaman aşımı — dakika (default 0 = kapalı). >0 iken panel bu kadar
    *  dakika hiç işlem (fare/klavye) görmezse otomatik çıkış yapar. Frontend ENFORCE eder. */

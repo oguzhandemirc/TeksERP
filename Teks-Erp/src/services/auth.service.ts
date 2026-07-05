@@ -11,7 +11,8 @@ import { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import {
-  readSessionDurationHours,
+  readSessionDurationMinutes,
+  readAutoLogoutOnExpiry,
   readLoginMethods,
   readSameTypeSessionPolicy,
 } from "./system-setting.service";
@@ -258,13 +259,21 @@ export class AuthService {
   ): Promise<{ token: string; user: JwtPayload }> {
     const permissions = await this.getEffectivePermissions(user.id);
 
-    // Oturum ömrü runtime ayardan (auth.sessionDurationHours, default 8) — saniyeye çevrilir.
-    const sessionHours = await readSessionDurationHours();
-    const expiresInSec = sessionHours * 60 * 60;
+    // Oturum zaman aşımı TEK ayar: auth.autoLogoutOnExpiry.
+    //  • Açık (varsayılan): token auth.sessionDurationMinutes (default 480) sonra dolar;
+    //    süre bitince client otomatik çıkar, sunucu da 401 verir.
+    //  • Kapalı: token SÜRESİZ imzalanır (exp claim YOK) — zaman aşımıyla çıkış YOK;
+    //    oturum yine tokenVersion / session iptali / logout ile sonlandırılabilir.
+    // (Dakika ayarı yoksa reader eski saat ayarına ×60 düşer — geriye-uyum.)
+    const timeoutEnabled = await readAutoLogoutOnExpiry();
+    const sessionMinutes = await readSessionDurationMinutes();
 
-    // jti = Session satırı anahtarı; JWT exp ile hizalı expiresAt hesapla.
+    // jti = Session satırı anahtarı. Session expiresAt: zaman aşımı açıksa JWT exp ile
+    // hizalı; kapalıysa uzak gelecek (notify 'aktif oturum' kontrolü expiresAt>now'a bakar).
     const jti = randomUUID();
-    const expiresAt = new Date(Date.now() + expiresInSec * 1000);
+    const expiresAt = timeoutEnabled
+      ? new Date(Date.now() + sessionMinutes * 60 * 1000)
+      : new Date("9999-12-31T23:59:59.000Z");
     const deviceType: ClientType =
       ctx?.clientType === "electron" ? ClientType.ELECTRON : ClientType.MOBILE;
     const policy = await readSameTypeSessionPolicy();
@@ -288,10 +297,9 @@ export class AuthService {
       permissions,
       tokenVersion: user.tokenVersion,
     };
-    const token = jwt.sign(signPayload, JWT_SECRET, {
-      expiresIn: expiresInSec,
-      jwtid: jti,
-    });
+    const signOptions: jwt.SignOptions = { jwtid: jti };
+    if (timeoutEnabled) signOptions.expiresIn = sessionMinutes * 60;
+    const token = jwt.sign(signPayload, JWT_SECRET, signOptions);
 
     const payload: JwtPayload = { ...signPayload, jti };
     return { token, user: payload };

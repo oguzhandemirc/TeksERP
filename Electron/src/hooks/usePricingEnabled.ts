@@ -71,7 +71,16 @@ export function useShipmentConfirmationEnabled(): boolean {
   return q.data?.data?.shipmentConfirmationEnabled ?? false;
 }
 
-/** Oturum (JWT) ömrü, saat. Yüklenene kadar 8 (backend varsayılanı). */
+/** Oturum (JWT) ömrü, DAKİKA. Yeni key yoksa saat*60'a düşer, o da yoksa 480 (8 saat). */
+export function useSessionDurationMinutes(): number {
+  const q = useFeatureFlags();
+  const f = q.data?.data;
+  if (f?.sessionDurationMinutes != null) return f.sessionDurationMinutes;
+  if (f?.sessionDurationHours != null) return f.sessionDurationHours * 60;
+  return 480;
+}
+
+/** Oturum (JWT) ömrü, saat. Yüklenene kadar 8 (backend varsayılanı). Geriye uyum. */
 export function useSessionDurationHours(): number {
   const q = useFeatureFlags();
   return q.data?.data?.sessionDurationHours ?? 8;

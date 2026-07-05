@@ -1,12 +1,13 @@
 import type { LoginMethod } from "@/services/featureFlagService";
 import type { SameTypeSessionPolicy } from "@/types/auth";
 import { sessionPolicyLabel } from "@/lib/session-auth";
+import { minutesToLabel } from "@/lib/duration";
 import { ReadOnlyLine } from "./SettingRow";
 import { METHOD_LABELS } from "./LoginMethodsField";
 
 /** Oturum & Güvenlik ayarlarının yetkisiz (admin:settings yok) salt-okunur özeti. */
 export function SessionSettingsReadOnly({
-  sessionHours,
+  sessionMinutes,
   idleMinutes,
   autoLogout,
   policy,
@@ -15,7 +16,7 @@ export function SessionSettingsReadOnly({
   mobileLockMinutes,
   methods,
 }: {
-  sessionHours: number;
+  sessionMinutes: number;
   idleMinutes: number;
   autoLogout: boolean;
   policy: SameTypeSessionPolicy;
@@ -26,7 +27,10 @@ export function SessionSettingsReadOnly({
 }) {
   return (
     <div className="space-y-1 text-sm">
-      <ReadOnlyLine label="Oturum süresi" value={`${sessionHours} saat`} />
+      <ReadOnlyLine
+        label="Oturum süresi"
+        value={`${sessionMinutes} dakika (${minutesToLabel(sessionMinutes)})`}
+      />
       <ReadOnlyLine
         label="Hareketsizlik zaman aşımı"
         value={idleMinutes > 0 ? `${idleMinutes} dakika` : "Kapalı"}

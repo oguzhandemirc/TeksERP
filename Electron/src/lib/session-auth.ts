@@ -42,7 +42,8 @@ export const DEFAULT_SAME_TYPE_SESSION_POLICY: SameTypeSessionPolicy = "kick";
 export function sessionPolicyLabel(value: SameTypeSessionPolicy): string {
   return (
     SAME_TYPE_SESSION_POLICY_OPTIONS.find((o) => o.value === value)?.label ??
-    SAME_TYPE_SESSION_POLICY_OPTIONS[0].label
+    SAME_TYPE_SESSION_POLICY_OPTIONS[0]?.label ??
+    value
   );
 }
 
