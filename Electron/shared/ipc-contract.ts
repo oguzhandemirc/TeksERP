@@ -30,6 +30,13 @@ export interface SystemApi {
   showInFolder: (path: string) => void;
 }
 
+export interface PowerApi {
+  /** Sistem-geneli boşta kalma süresi (saniye) — Electron powerMonitor.getSystemIdleTime().
+   *  Yalnız Electron penceresi değil, TÜM bilgisayarın son fare/klavye girdisinden bu
+   *  yana geçen süre. Hareketsizlik (idle) çıkışı bunu periyodik okur. */
+  getSystemIdleTime: () => Promise<number>;
+}
+
 // ===========================================================================
 // Faz-2: seri/HID barkod tabancası (klavye-wedge YAPAMAYAN cihazlar)
 // Native modüller (serialport/node-hid) yalnız MAIN'de yüklenir; renderer
@@ -146,6 +153,7 @@ export interface ApiBridge {
   appInfo: AppInfoApi;
   window: WindowApi;
   system: SystemApi;
+  power: PowerApi;
   scanner: ScannerDeviceApi;
   printer: PrinterTransportApi;
   scale: ScaleApi;

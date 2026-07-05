@@ -1,9 +1,15 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
+import type { ApiBridge } from "@shared/ipc-contract";
 import { useAuthStore } from "@/store/auth";
 import { useIdleTimeoutMinutes } from "./usePricingEnabled";
 
-/** İzlenen kullanıcı aktivitesi event'leri — herhangi biri sayacı sıfırlar. */
+/** Sistem-geneli modda boşta süresi bu sıklıkla okunur (ms). */
+const POLL_MS = 5_000;
+/** Oturum kapanmadan bu kadar sn önce uyarı göster (girdi süreyi uzatır). */
+const WARNING_BEFORE_SEC = 60;
+const WARNING_TOAST_ID = "idle-logout-warning";
+/** Fallback (pencere-içi) modda sayaç sıfırlayan aktivite event'leri. */
 const ACTIVITY_EVENTS = [
   "mousemove",
   "mousedown",
@@ -13,39 +19,34 @@ const ACTIVITY_EVENTS = [
   "scroll",
 ] as const;
 
-/** Aktivite event'leri çok sık tetiklenir — sayacı en fazla bu aralıkla yenile. */
-const RESET_THROTTLE_MS = 1_000;
-
-/** K-B2: oturum kapanmadan bu kadar önce uyarı göster (aktivite süreyi uzatır). */
-const WARNING_BEFORE_MS = 60_000;
-const WARNING_TOAST_ID = "idle-logout-warning";
-
 /**
- * Hareketsizlik (idle) zaman aşımı — `auth.idleTimeoutMinutes` ayarı >0 iken, panel
- * bu kadar dakika hiçbir kullanıcı işlemi (fare/klavye/scroll) görmezse oturumu
- * otomatik kapatır ve login'e döner. 0 (default) iken devre dışı.
+ * Hareketsizlik (idle) zaman aşımı — `auth.idleTimeoutMinutes` > 0 iken, bu
+ * bilgisayar bu kadar dakika hiç girdi görmezse panel oturumunu kapatır. 0 = kapalı.
  *
- * K-B2 fix: eskiden uyarısız tetikleniyordu — açık formdaki veri sessizce
- * gidiyordu. Artık kapanmadan 60 sn önce kalıcı bir uyarı çıkar; HERHANGİ bir
- * aktivite (tıklama/klavye) süreyi uzatıp uyarıyı kapatır. Veri kaybı olacaksa
- * operatörün gözü önünde olur.
+ * İKİ MOD:
+ *  1) SİSTEM-GENELİ (tercih edilen): Electron `powerMonitor.getSystemIdleTime()`
+ *     (main süreç) periyodik okunur → yalnız Electron değil, TÜM makinenin son
+ *     girdisi sayılır (başka programla çalışırken düşmez). `window.api.power`
+ *     gerektirir; bu main/preload IPC'sidir → değişince TAM DEV RESTART şart
+ *     (renderer reload main'i yeniden derlemez).
+ *  2) FALLBACK (window.api.power yoksa — ör. main/preload build'i eski): pencere-içi
+ *     DOM aktivite dinleyicileri. Yalnız Electron penceresi hareketini sayar ama en
+ *     azından ÇALIŞIR → özellik hiç sessizce ölmez. Dev restart sonrası (1)'e döner.
  *
- * AppShell'de bir kez mount edilir (yalnız giriş yapılmışken render edilir). Backend
- * token'ı yine kendi mutlak ömrüne (auth.sessionDurationHours) kadar geçerli kalır;
- * bu hook salt client-side bir erken çıkış kapısıdır.
+ * AppShell'de bir kez mount edilir. Backend token'ı yine mutlak ömrüne kadar
+ * geçerli — bu hook salt client-side erken çıkış kapısıdır.
  */
 export function useIdleLogout(): void {
   const idleMinutes = useIdleTimeoutMinutes();
-  const lastResetRef = useRef(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const warnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warningShownRef = useRef(false);
 
   useEffect(() => {
     if (idleMinutes <= 0) return; // kapalı
     const timeoutMs = idleMinutes * 60_000;
-    // Çok kısa timeout'larda (uyarı penceresinden küçük) uyarıyı yarıya çek.
-    const warnAt = Math.max(timeoutMs - WARNING_BEFORE_MS, Math.floor(timeoutMs / 2));
+    const warnBeforeMs = WARNING_BEFORE_SEC * 1_000;
+    // Çok kısa timeout'larda uyarıyı yarıya çek (uyarı penceresinden küçükse).
+    const warnAtMs = Math.max(timeoutMs - warnBeforeMs, Math.floor(timeoutMs / 2));
+    let stopped = false;
 
     const clearWarning = () => {
       if (warningShownRef.current) {
@@ -55,6 +56,7 @@ export function useIdleLogout(): void {
     };
 
     const doLogout = () => {
+      stopped = true;
       clearWarning();
       void useAuthStore
         .getState()
@@ -67,44 +69,76 @@ export function useIdleLogout(): void {
         });
     };
 
-    const showWarning = () => {
+    const showWarning = (remainingSec: number) => {
       warningShownRef.current = true;
-      const remainingSec = Math.round((timeoutMs - warnAt) / 1000);
       toast.warning("Oturum kapanmak üzere", {
         id: WARNING_TOAST_ID,
-        description: `Hareketsizlik nedeniyle ~${remainingSec} sn içinde çıkış yapılacak — devam etmek için ekrana dokunun/tıklayın.`,
+        description: `Bilgisayar bir süredir kullanılmıyor — ~${remainingSec} sn içinde çıkış yapılacak. Devam etmek için fare veya klavyeyi kullanın.`,
         duration: Number.POSITIVE_INFINITY,
       });
     };
 
-    const arm = () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (warnTimerRef.current) clearTimeout(warnTimerRef.current);
-      timerRef.current = setTimeout(doLogout, timeoutMs);
-      warnTimerRef.current = setTimeout(showWarning, warnAt);
-    };
+    const power = (window as unknown as { api?: ApiBridge }).api?.power;
 
+    // --- MOD 1: SİSTEM-GENELİ (powerMonitor poll) ---
+    if (power) {
+      const timeoutSec = idleMinutes * 60;
+      const warnAtSec = Math.max(timeoutSec - WARNING_BEFORE_SEC, Math.floor(timeoutSec / 2));
+      const poll = async () => {
+        if (stopped) return;
+        let idleSec: number;
+        try {
+          idleSec = await power.getSystemIdleTime();
+        } catch {
+          return; // IPC hatası → bu turu atla (yanlışlıkla çıkış yapma)
+        }
+        if (stopped) return;
+        if (idleSec >= timeoutSec) doLogout();
+        else if (idleSec >= warnAtSec) showWarning(Math.max(1, Math.ceil(timeoutSec - idleSec)));
+        else clearWarning();
+      };
+      void poll();
+      const iv = setInterval(() => void poll(), POLL_MS);
+      return () => {
+        stopped = true;
+        clearInterval(iv);
+        clearWarning();
+      };
+    }
+
+    // --- MOD 2: FALLBACK (pencere-içi aktivite) ---
+    // window.api.power yok (main/preload henüz güncellenmemiş) → dev restart gerekli.
+    // Bu arada sessizce ölmemesi için pencere-içi hareketsizlik ile çalışır.
+    console.warn(
+      "[useIdleLogout] window.api.power yok → pencere-içi hareketsizlik moduna düşüldü. " +
+        "Sistem-geneli için tam dev restart (npm run dev) ile main/preload'ı yeniden derleyin.",
+    );
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let warnTimer: ReturnType<typeof setTimeout> | null = null;
+    const arm = () => {
+      if (timer) clearTimeout(timer);
+      if (warnTimer) clearTimeout(warnTimer);
+      timer = setTimeout(doLogout, timeoutMs);
+      warnTimer = setTimeout(
+        () => showWarning(Math.round((timeoutMs - warnAtMs) / 1000)),
+        warnAtMs,
+      );
+    };
     const onActivity = () => {
-      const now = Date.now();
-      // Uyarı görünüyorken throttle BEKLEMEDEN uzat — operatör "dokun" çağrısına
-      // uyduğu anda uyarı kapansın.
-      if (!warningShownRef.current && now - lastResetRef.current < RESET_THROTTLE_MS) return;
-      lastResetRef.current = now;
+      if (stopped) return;
       clearWarning();
       arm();
     };
-
-    arm(); // ilk sayaç
+    arm();
     for (const ev of ACTIVITY_EVENTS) {
       window.addEventListener(ev, onActivity, { passive: true });
     }
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (warnTimerRef.current) clearTimeout(warnTimerRef.current);
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      if (warnTimer) clearTimeout(warnTimer);
       clearWarning();
-      for (const ev of ACTIVITY_EVENTS) {
-        window.removeEventListener(ev, onActivity);
-      }
+      for (const ev of ACTIVITY_EVENTS) window.removeEventListener(ev, onActivity);
     };
   }, [idleMinutes]);
 }

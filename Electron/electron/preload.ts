@@ -29,6 +29,9 @@ const api: ApiBridge = {
     openExternal: (url) => ipcRenderer.invoke("system:open-external", url),
     showInFolder: (path) => ipcRenderer.send("system:show-in-folder", path),
   },
+  power: {
+    getSystemIdleTime: () => ipcRenderer.invoke("power:get-system-idle-time"),
+  },
   scanner: {
     list: (transport: ScannerTransport) => ipcRenderer.invoke("scanner:list", transport),
     open: (opts: ScannerOpenOpts) => ipcRenderer.invoke("scanner:open", opts),
