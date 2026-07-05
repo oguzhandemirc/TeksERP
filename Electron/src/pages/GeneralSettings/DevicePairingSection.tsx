@@ -31,18 +31,6 @@ export function DevicePairingSection() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <span
-          className={`rounded-md border px-2 py-0.5 text-xs ${
-            required
-              ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-              : "text-muted-foreground"
-          }`}
-        >
-          {required ? "Aktif (zorunlu)" : "Pasif (varsayılan)"}
-        </span>
-      </div>
-
       <PermissionGate
         permission="admin:settings"
         fallback={
@@ -58,10 +46,10 @@ export function DevicePairingSection() {
           title="Sahadaki tabletler için eşleştirmeyi zorunlu kıl"
           desc={
             <>
-              Kapalıyken (varsayılan) eşleştirme <strong>pasiftir</strong>: eşleşmemiş
+              Kapalıyken (varsayılan) eşleştirme <strong>pasiftir</strong>: onaylanmamış
               tabletler de login olup tüm istasyon ekranlarını kullanabilir. Açıkken bir
-              tablet ancak admin'in verdiği 6 haneli kodla bir makineye eşleştikten
-              sonra sisteme girebilir.
+              tablet ancak admin Cihazlar sayfasından <strong>"Onayla"</strong> ile
+              onaylamadan sisteme giremez.
             </>
           }
           checked={required}
