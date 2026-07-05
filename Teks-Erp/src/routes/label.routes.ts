@@ -12,21 +12,12 @@
 // (yanlış yazım garantisi), bir başkasına edit verip print'i kapatmak mümkün.
 // =============================================================================
 
-import { Router, Request, Response, NextFunction } from "express";
-import bwipjs from "bwip-js";
+import { Router } from "express";
 import { LabelController } from "../controllers/label.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const MOBILE_LABEL_PRINTERS = ["mobile:kk1", "mobile:tambur", "mobile:tarti-paket"] as const;
-const ALLOWED_BARCODE_FORMATS = new Set([
-  "code128",
-  "code39",
-  "ean13",
-  "ean8",
-  "upca",
-  "qrcode",
-]);
 
 const controller = new LabelController();
 const router = Router();
@@ -529,80 +520,6 @@ router.post(
   verifyToken,
   requireAnyPermission("label:print", ...MOBILE_LABEL_PRINTERS),
   controller.seedRollLabelSnapshot,
-);
-
-/**
- * @openapi
- * /api/labels/barcode:
- *   get:
- *     tags: [Labels]
- *     summary: Barkod SVG'si (Code128 varsayılan)
- *     description: |
- *       Verilen string için 1D/2D barkod görseli döner — mobil etiket HTML'inde
- *       `<img>` ile gömülür, scanner okuyabilir. Hem KK1 hem Tambur etiketleri,
- *       hem Electron preview'u tek doğru kaynak olarak buradan tüketir.
- *
- *       Cache-Control: deterministik (aynı value+format aynı SVG) — uzun süre
- *       cache'lenebilir, network maliyeti tek seferlik.
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - in: query
- *         name: value
- *         required: true
- *         schema: { type: string, maxLength: 128 }
- *       - in: query
- *         name: format
- *         schema: { type: string, enum: [code128, code39, ean13, ean8, upca, qrcode], default: code128 }
- *     responses:
- *       200: { description: SVG, content: { image/svg+xml: { schema: { type: string } } } }
- *       400: { description: value eksik veya format geçersiz }
- */
-router.get(
-  "/barcode",
-  verifyToken,
-  requireAnyPermission("label:read", ...MOBILE_LABEL_PRINTERS),
-  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const value = typeof req.query.value === "string" ? req.query.value.trim() : "";
-      if (!value) {
-        res.status(400).json({ success: false, message: "value zorunlu" });
-        return;
-      }
-      if (value.length > 128) {
-        res.status(400).json({ success: false, message: "value en fazla 128 karakter" });
-        return;
-      }
-      const format =
-        typeof req.query.format === "string" && req.query.format.length > 0
-          ? req.query.format
-          : "code128";
-      if (!ALLOWED_BARCODE_FORMATS.has(format)) {
-        res.status(400).json({
-          success: false,
-          message: `Geçersiz format. İzinli: ${[...ALLOWED_BARCODE_FORMATS].join(", ")}`,
-        });
-        return;
-      }
-
-      const svg = bwipjs.toSVG({
-        bcid: format,
-        text: value,
-        scale: 3,
-        height: 10,
-        includetext: false,
-        backgroundcolor: "FFFFFF",
-      });
-
-      res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
-      res.setHeader("Cache-Control", "public, max-age=86400, immutable");
-      res.status(200).send(svg);
-    } catch (error) {
-      // bwip-js geçersiz değer için throw eder — kullanıcıya 400 dön.
-      const msg = error instanceof Error ? error.message : "Barkod üretilemedi";
-      res.status(400).json({ success: false, message: msg });
-      next();
-    }
-  },
 );
 
 export default router;

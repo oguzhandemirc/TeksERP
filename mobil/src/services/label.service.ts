@@ -22,29 +22,6 @@ export const labelService = {
       .then((r) => r.data),
 
   /**
-   * Rulonun Argox PPLA native komut string'i (text/plain) — Bluetooth yazıcıya
-   * ham gönderim için. `/html` ile aynı bağlam (kind + müşteri/stok); profil
-   * istasyona göre oto çözülür (x-device-id → machineId).
-   */
-  getRollPpla: (
-    rollId: string,
-    kind: 'ROLL_RAW' | 'ROLL_FINISHED',
-    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean },
-  ): Promise<string> =>
-    apiClient
-      .get<string>(`/labels/rolls/${rollId}/ppla`, {
-        params: {
-          kind,
-          ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
-          ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
-          ...(ctx?.stock ? { stock: '1' } : {}),
-        },
-        responseType: 'text',
-        transformResponse: [(d) => d],
-      })
-      .then((r) => String(r.data ?? '')),
-
-  /**
    * Rulonun etiketi SEÇİLİ dilde (cihaz kaydının dili: PPLA/PPLB/ZPL veya
    * RASTER_HTML). Bluetooth yazıcıya ham gönderim için içerik + dil döner.
    * Dil X-Label-Language header'ından okunur; cihaz kaydı yoksa global/model.
