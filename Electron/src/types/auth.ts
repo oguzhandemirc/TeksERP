@@ -83,5 +83,7 @@ export function hasAdminAccess(permissions: string[]): boolean {
 }
 
 export function canEnterApp(permissions: string[]): boolean {
-  return permissions.length > 0;
+  // Masaüstü paneli için en az bir MOBİL-OLMAYAN izin gerekir. Yalnız mobil
+  // izinli (mobile:*) hesaplar panele giremez (backend login'de de 403 verir).
+  return permissions.some((p) => !p.startsWith("mobile:"));
 }

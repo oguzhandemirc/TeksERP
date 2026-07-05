@@ -99,7 +99,7 @@ const { isAdmin, hasPermission, hasAnyPermission, hasAllPermissions } = useRoleA
 
 `isAdmin = hasAdminAccess(permissions)` → `admin:users | admin:settings | admin:*` permission'larından herhangi biri varsa true. **`hasRole` yok** — tüm yetki kontrolü permission bazlı.
 
-**Uygulamaya kabul (`canEnterApp`):** Kullanıcının en az bir permission'ı olmalı. Admin-only sayfalar `<ProtectedRoute requirePermission="admin:*">` ile kilitli.
+**Uygulamaya kabul (`canEnterApp`):** Kullanıcının en az bir **mobil-olmayan (masaüstü) izni** olmalı — yalnız `mobile:*` izinli hesaplar panele giremez (backend `login`'de `clientType='electron'` iken 403 döner, token bile üretmez). Admin-only sayfalar `<ProtectedRoute requirePermission="admin:*">` ile kilitli.
 
 ## CRUD Pattern (yeni Master Data sayfası 5 dosya)
 

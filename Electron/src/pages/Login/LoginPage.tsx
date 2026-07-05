@@ -88,8 +88,8 @@ export function LoginPage() {
         return;
       }
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-      // 401 interceptor'da toast'landı; kalanları burada göster.
-      if (status !== 401) {
+      // 401 ve login-403 interceptor'da toast'landı; kalanları burada göster.
+      if (status !== 401 && status !== 403) {
         const message = axios.isAxiosError(err)
           ? ((err.response?.data as { message?: string } | undefined)?.message ??
             (err.response ? "Giriş yapılamadı." : "Sunucuya ulaşılamıyor."))

@@ -99,6 +99,13 @@ apiClient.interceptors.response.use(
       }
 
       if (status === 403) {
+        const isLoginRequest = error.config?.url?.includes("/api/auth/login");
+        if (isLoginRequest) {
+          // Login-403 (ör. yalnız-mobil hesap masaüstü paneline giremez) →
+          // backend'in NET mesajını göster (401 ile simetrik, suppress'e bağlı değil).
+          toast.error(buildErrorMessage(body));
+          return Promise.reject(error);
+        }
         if (!suppressToast) toast.error("Bu işlem için yetkiniz bulunmuyor.");
         return Promise.reject(error);
       }

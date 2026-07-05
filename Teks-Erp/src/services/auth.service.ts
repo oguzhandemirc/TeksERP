@@ -259,6 +259,18 @@ export class AuthService {
   ): Promise<{ token: string; user: JwtPayload }> {
     const permissions = await this.getEffectivePermissions(user.id);
 
+    // Masaüstü (Electron) girişi: kullanıcının en az bir MASAÜSTÜ (mobil-olmayan)
+    // izni olmalı. Yalnız mobil izinli (mobile:*) hesap panele giremez → 403,
+    // token BİLE üretilmez. Mobil girişte bu kısıt yok.
+    if (
+      ctx?.clientType === "electron" &&
+      !permissions.some((p) => !p.startsWith("mobile:"))
+    ) {
+      throw AppError.forbidden(
+        "Bu hesabın masaüstü paneline erişimi yok. Yalnızca mobil uygulamada kullanılabilir.",
+      );
+    }
+
     // Oturum zaman aşımı TEK ayar: auth.autoLogoutOnExpiry.
     //  • Açık (varsayılan): token auth.sessionDurationMinutes (default 480) sonra dolar;
     //    süre bitince client otomatik çıkar, sunucu da 401 verir.
