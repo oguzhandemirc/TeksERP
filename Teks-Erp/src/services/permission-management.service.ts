@@ -708,13 +708,22 @@ export class PermissionManagementService {
     const toAdd = templatePermIds.filter((id) => !existingIds.has(id));
 
     if (toAdd.length) {
-      await prisma.userPermission.createMany({
-        data: toAdd.map((permissionId) => ({
-          userId,
-          permissionId,
-          grantedById: actorUserId ?? null,
-        })),
-      });
+      // İzin EKLENDİ → uçuştaki token'ı geçersiz kıl (grant/revoke/set ile AYNI
+      // invariant: "izin değişince tokenVersion++"). Merge dalı bunu atlıyordu →
+      // eklenen izinler token dolana/re-login'e kadar etkisiz kalıyordu. Atomik.
+      await prisma.$transaction([
+        prisma.userPermission.createMany({
+          data: toAdd.map((permissionId) => ({
+            userId,
+            permissionId,
+            grantedById: actorUserId ?? null,
+          })),
+        }),
+        prisma.user.update({
+          where: { id: userId },
+          data: { tokenVersion: { increment: 1 } },
+        }),
+      ]);
     }
 
     await AuditService.log({
