@@ -5,6 +5,7 @@ import type { SameTypeSessionPolicy } from "@/types/auth";
 import { SAME_TYPE_SESSION_POLICY_OPTIONS } from "@/lib/session-auth";
 import { DurationField } from "./DurationField";
 import { NumberField, FlagToggle } from "./SettingRow";
+import { HintIcon, HintBody, type HintVariant } from "./SettingHint";
 import { LoginMethodsField } from "./LoginMethodsField";
 import { SessionSettingsReadOnly } from "./SessionSettingsReadOnly";
 import {
@@ -36,8 +37,13 @@ import {
  *  7) Mobil giriş yöntemleri.
  * Tek Kaydet + admin:settings yetkisi ister.
  */
+const POLICY_DESC =
+  "Aynı kullanıcı aynı tip cihazda (ör. iki bilgisayar ya da iki telefon) ikinci kez giriş yaptığında ne olacağı. Farklı tipler (1 bilgisayar + 1 telefon) her zaman serbesttir. Değişiklik sonraki girişlerde geçerli olur.";
+
 export function SessionSettingsSection() {
   const s = useSessionSettingsForm();
+  // Açıklamalar her yerde (i) info balonunda gösterilir.
+  const hint: HintVariant = "popover";
   if (s.isLoading) return <Skeleton className="h-48 w-full" />;
 
   return (
@@ -67,6 +73,7 @@ export function SessionSettingsSection() {
             sistem OTOMATİK çıkarır. Kapalı: oturum süresiz (zaman aşımı yok);
             toggle kapalıyken dakika input'u da pasifleşir. */}
         <DurationField
+          hint={hint}
           label="Oturum zaman aşımı — token ömrü (dakika)"
           desc="Açıkken oturum bu kadar dakika sonra dolar ve sistem kullanıcıyı OTOMATİK çıkarır (mobil + bu bilgisayar). Kapalıyken oturum süresiz olur — zaman aşımıyla çıkış yok (yönetici yine iptal edebilir). Değişiklik yalnızca sonraki girişlere uygulanır; şu an açık oturumlar mevcut süreleriyle devam eder."
           valueMinutes={s.sessionMin}
@@ -89,6 +96,7 @@ export function SessionSettingsSection() {
             aşımı kapalı olsa bile token en fazla bu kadar gün yaşar; 0 = süresiz. */}
         <div className="border-t pt-4">
           <NumberField
+            hint={hint}
             id="absolute-session-cap-days"
             label="Mutlak oturum tavanı (gün, 0 = süresiz)"
             desc="Oturum zaman aşımı kapalı olsa bile bir token en fazla bu kadar gün geçerli kalır — çalınan/sızan bir token sonsuza kadar kullanılamasın diye. 0 girilirse arka plan tavanı da kalkar (token gerçekten süresiz). Değişiklik yalnızca sonraki girişlere uygulanır."
@@ -105,6 +113,7 @@ export function SessionSettingsSection() {
         {/* 3) Panel hareketsizlik çıkışı */}
         <div className="border-t pt-4">
           <DurationField
+            hint={hint}
             label="Yönetim paneli hareketsizlik çıkışı süresi"
             desc="Bu bilgisayarda (hangi program açık olursa olsun) bu kadar dakika hiç fare/klavye hareketi olmazsa yönetim paneli oturumu kapanır. Sistem-geneli sayılır: başka programla çalışırken de sayaç sıfırlanır, yalnız kimse bilgisayara hiç dokunmadığında çıkış olur. Ayar tüm panel bilgisayarları için geçerlidir ama her bilgisayar kendi boşta süresini kendi sayar (ayar ortak, çıkış her bilgisayara özeldir). Kapalıyken hareketsizlikle çıkış olmaz. Açık paneller yeni ayarı kısa sürede otomatik alır."
             valueMinutes={s.idleMin}
@@ -127,6 +136,7 @@ export function SessionSettingsSection() {
         {/* 4) Mobil hareketsizlik kilidi */}
         <div className="border-t pt-4">
           <DurationField
+            hint={hint}
             label="Mobil kilit süresi"
             desc="Açıkken (varsayılan) tablet/telefon bu kadar dakika kullanılmazsa kilit ekranı gelir; iş oturumu açık kalır, operatör kart/PIN ile hızlıca devam eder. Kapalıyken mobilde hareketsizlik kilidi hiç devreye girmez. Açık tabletler yeni ayarı kısa sürede otomatik alır (uygulama öne gelince); yeni girişlerde hemen geçerli."
             valueMinutes={s.mobileLockMin}
@@ -149,6 +159,7 @@ export function SessionSettingsSection() {
         {/* 5) Çalışma oturumu zaman aşımı — saha */}
         <div className="border-t pt-4">
           <DurationField
+            hint={hint}
             label="Çalışma oturumu zaman aşımı süresi — saha"
             desc="Bir tablet bu kadar dakika hiç kullanılmazsa oradaki iş oturumu otomatik kapanır ve makine yeniden boşa düşer. Operatör bir sonraki işlemde yeniden yer onayı verir. Kapalıyken saha oturumu hareketsizlikle kapanmaz. Değişiklik hemen geçerli — açık oturumlar da yeni süreye göre değerlendirilir."
             valueMinutes={s.workMin}
@@ -170,14 +181,13 @@ export function SessionSettingsSection() {
 
         {/* 6) Aynı tip oturum politikası */}
         <div className="border-t pt-4">
-          <label htmlFor="same-type-policy" className="text-sm font-medium">
-            Aynı hesap aynı cihaz tipinde ikinci kez açılırsa
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Aynı kullanıcı aynı tip cihazda (ör. iki bilgisayar ya da iki telefon) ikinci
-            kez giriş yaptığında ne olacağı. Farklı tipler (1 bilgisayar + 1 telefon) her
-            zaman serbesttir. Değişiklik sonraki girişlerde geçerli olur.
-          </p>
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="same-type-policy" className="text-sm font-medium">
+              Aynı hesap aynı cihaz tipinde ikinci kez açılırsa
+            </label>
+            <HintIcon variant={hint} desc={POLICY_DESC} />
+          </div>
+          <HintBody variant={hint} desc={POLICY_DESC} />
           <select
             id="same-type-policy"
             className="mt-2 flex h-9 w-80 max-w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
@@ -196,6 +206,7 @@ export function SessionSettingsSection() {
             koruması. Toggle + 4 sayı alanı (adet/sn/tur/dk → NumberField). */}
         <div className="space-y-3 border-t pt-4">
           <FlagToggle
+            hint={hint}
             title="Hızlı PIN / kart deneme kilidi"
             desc="Açıkken (varsayılan) sahadaki hızlı PIN veya QR kart girişinde arka arkaya çok sayıda yanlış deneme yapılırsa o cihaz/IP geçici olarak bloklanır — 6 haneli PIN'in denenerek kırılmasını önler. Klasik kullanıcı adı + şifre girişini etkilemez. Kapalıyken deneme kilidi hiç uygulanmaz."
             checked={s.pinEnabled}
@@ -205,6 +216,7 @@ export function SessionSettingsSection() {
           {s.pinEnabled && (
             <div className="grid gap-4 pl-1 sm:grid-cols-2">
               <NumberField
+                hint={hint}
                 id="pin-lockout-attempts"
                 label="İzin verilen yanlış deneme"
                 desc="Kilit devreye girene kadar art arda kaç yanlış denemeye izin verilir."
@@ -219,6 +231,7 @@ export function SessionSettingsSection() {
                 }
               />
               <NumberField
+                hint={hint}
                 id="pin-lockout-penalty-sec"
                 label="Ceza süresi (saniye)"
                 desc="Eşik aşılınca cihaz/IP bu kadar saniye bloklanır."
@@ -233,6 +246,7 @@ export function SessionSettingsSection() {
                 }
               />
               <NumberField
+                hint={hint}
                 id="pin-lockout-escalate-after"
                 label="Uzun ceza eşiği (tur)"
                 desc="Bu kadar kısa ceza turundan sonra uzun cezaya geçilir (ısrarlı deneme)."
@@ -247,6 +261,7 @@ export function SessionSettingsSection() {
                 }
               />
               <NumberField
+                hint={hint}
                 id="pin-lockout-long-penalty-min"
                 label="Uzun ceza süresi (dakika)"
                 desc="Uzun ceza eşiğine varınca cihaz/IP bu kadar dakika bloklanır."

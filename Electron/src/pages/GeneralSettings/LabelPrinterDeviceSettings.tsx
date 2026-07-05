@@ -13,6 +13,7 @@ import {
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { peripheralService } from "@/pages/PeripheralDevices/service";
+import { FlagToggle } from "./SettingRow";
 import type { ScannerDeviceInfo } from "@shared/ipc-contract";
 
 /**
@@ -92,23 +93,12 @@ export function LabelPrinterDeviceSettings() {
 
   return (
     <div className="space-y-4">
-      <label className="flex items-start gap-2 text-sm">
-        <input
-          type="checkbox"
-          className="mt-0.5"
-          checked={cfg.enabled ?? false}
-          onChange={(e) => setCfg({ enabled: e.target.checked })}
-        />
-        <span>
-          <span className="font-medium">Diyalogsuz doğrudan baskı</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">
-            Açıkken top/yeniden-etiket baskısı OS yazdırma diyaloğu yerine yazıcıya
-            doğrudan native komut (PPLA/PPLB/ZPL) gönderir. Dil aşağıda seçilen Cihaz
-            Kaydı yazıcısından çözülür — cihaz seçilmeden native baskı yapılmaz.
-            Kapalıyken eski davranış (yazdırma ekranı) sürer.
-          </span>
-        </span>
-      </label>
+      <FlagToggle
+        title="Diyalogsuz doğrudan baskı"
+        desc="Açıkken top/yeniden-etiket baskısı OS yazdırma diyaloğu yerine yazıcıya doğrudan native komut (PPLA/PPLB/ZPL) gönderir. Dil aşağıda seçilen Cihaz Kaydı yazıcısından çözülür — cihaz seçilmeden native baskı yapılmaz. Kapalıyken eski davranış (yazdırma ekranı) sürer."
+        checked={cfg.enabled ?? false}
+        onChange={(v) => setCfg({ enabled: v })}
+      />
 
       <label className="block text-xs">
         <span className="block text-muted-foreground">Bağlantı türü</span>

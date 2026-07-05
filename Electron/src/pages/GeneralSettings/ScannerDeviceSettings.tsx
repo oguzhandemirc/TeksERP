@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePreferences } from "@/providers/PreferencesProvider";
+import { FlagToggle } from "./SettingRow";
 import type {
   ScannerDeviceInfo,
   ScannerStatus,
@@ -80,22 +81,18 @@ export function ScannerDeviceSettings() {
 
   return (
     <div className="space-y-4">
-      <label className="flex items-start gap-2 text-sm">
-        <input
-          type="checkbox"
-          className="mt-0.5"
-          checked={dev.enabled ?? false}
-          onChange={(e) => setDevice({ enabled: e.target.checked })}
-        />
-        <span>
-          <span className="font-medium">Seri/HID cihaz okuyucu (Faz-2)</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">
+      <FlagToggle
+        title="Seri/HID cihaz okuyucu (Faz-2)"
+        desc={
+          <>
             Yalnız <strong>klavye-wedge yapamayan</strong>, seri-COM / Bluetooth-SPP / raw-HID
             moduna kilitli tabancalar için. Çoğu tabanca klavye modunda çalışır ve bu ayara gerek
             duymaz. Açıkken kod okutulduğunda doğrudan "her yerde okut" paneli açılır.
-          </span>
-        </span>
-      </label>
+          </>
+        }
+        checked={dev.enabled ?? false}
+        onChange={(v) => setDevice({ enabled: v })}
+      />
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-xs">

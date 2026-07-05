@@ -188,12 +188,13 @@ export function ScaleDeviceSettings() {
 
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-xs">
+          <span>Simülasyon (sahte kg — donanımsız test)</span>
           <input
             type="checkbox"
+            className="h-5 w-5"
             checked={cfg.simulate ?? false}
             onChange={(e) => setCfg({ simulate: e.target.checked })}
           />
-          Simülasyon (sahte kg — donanımsız test)
         </label>
         <Button type="button" size="sm" variant="outline" onClick={() => void test()} disabled={testing}>
           {testing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}

@@ -1,27 +1,34 @@
 import type { ReactNode } from "react";
+import { HintIcon, HintBody, InfoPopover, type HintVariant } from "./SettingHint";
 
 /**
- * Tek bir aç/kapa ayar satırı: sol tarafta başlık + açıklama, sağda checkbox.
+ * Tek bir aç/kapa ayar satırı: sol tarafta başlık + (i) info balonu, sağda checkbox.
  * `admin:settings` yetkisi olmayan kullanıcıya `ReadOnlyRow` gösterilir.
+ * Açıklama varsayılan olarak (i) info balonunda gösterilir (`hint="popover"`).
  */
 export function FlagToggle({
   title,
   desc,
   checked,
-  disabled,
+  disabled = false,
   onChange,
+  hint = "popover",
 }: {
   title: string;
   desc: ReactNode;
   checked: boolean;
-  disabled: boolean;
+  disabled?: boolean;
   onChange: (next: boolean) => void;
+  hint?: HintVariant;
 }) {
   return (
     <label className="flex cursor-pointer items-start justify-between gap-4">
       <div className="space-y-1 text-sm">
-        <div className="font-medium">{title}</div>
-        <p className="text-xs text-muted-foreground">{desc}</p>
+        <div className="flex items-center gap-1.5 font-medium">
+          <span>{title}</span>
+          <HintIcon variant={hint} desc={desc} />
+        </div>
+        <HintBody variant={hint} desc={desc} />
       </div>
       <input
         type="checkbox"
@@ -47,6 +54,7 @@ export function NumberField({
   max,
   onChange,
   error,
+  hint = "popover",
 }: {
   id: string;
   label: string;
@@ -56,13 +64,17 @@ export function NumberField({
   max: number;
   onChange: (next: string) => void;
   error?: string;
+  hint?: HintVariant;
 }) {
   return (
     <div>
-      <label htmlFor={id} className="text-sm font-medium">
-        {label}
-      </label>
-      <p className="text-xs text-muted-foreground">{desc}</p>
+      <div className="flex items-center gap-1.5">
+        <label htmlFor={id} className="text-sm font-medium">
+          {label}
+        </label>
+        <HintIcon variant={hint} desc={desc} />
+      </div>
+      <HintBody variant={hint} desc={desc} />
       <input
         id={id}
         type="number"
@@ -75,6 +87,29 @@ export function NumberField({
         className="mt-2 flex h-9 w-40 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       />
       {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * Alan başlığı + (opsiyonel) (i) info balonu. Metin/sayı/seçim alanlarının
+ * üstünde uzun açıklama paragrafı yerine kullanılır — açıklama balonda açılır.
+ */
+export function FieldLabel({
+  htmlFor,
+  label,
+  desc,
+}: {
+  htmlFor?: string;
+  label: string;
+  desc?: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <label htmlFor={htmlFor} className="text-sm font-medium">
+        {label}
+      </label>
+      {desc ? <InfoPopover desc={desc} /> : null}
     </div>
   );
 }

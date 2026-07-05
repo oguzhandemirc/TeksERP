@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Clock } from "lucide-react";
 import { hoursPresetsUpTo, minutesToLabel } from "@/lib/duration";
+import { HintIcon, HintBody, type HintVariant } from "./SettingHint";
 
 const INPUT_CLASS =
   "flex h-9 w-28 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
@@ -20,6 +21,8 @@ export interface DurationFieldProps {
   /** Verilirse başlık yerine inline aç/kapa gelir; input yalnız `enabled` iken düzenlenir. */
   toggle?: { enabled: boolean; onToggle: (b: boolean) => void; label: string };
   error?: string;
+  /** Açıklama gösterimi: inline (varsayılan) / popover / disclosure. */
+  hint?: HintVariant;
 }
 
 /**
@@ -39,6 +42,7 @@ export function DurationField({
   disabled,
   toggle,
   error,
+  hint = "popover",
 }: DurationFieldProps) {
   const inputDisabled = Boolean(disabled) || (toggle ? !toggle.enabled : false);
   const presets = hoursPresetsUpTo(maxMinutes);
@@ -66,7 +70,11 @@ export function DurationField({
   return (
     <div className="space-y-1.5">
       {toggle ? (
-        <label className="flex cursor-pointer items-center gap-2">
+        <label className="flex cursor-pointer items-center justify-between gap-4">
+          <span className="flex items-center gap-1.5 text-sm font-medium">
+            {toggle.label}
+            <HintIcon variant={hint} desc={desc} />
+          </span>
           <input
             type="checkbox"
             checked={toggle.enabled}
@@ -74,13 +82,15 @@ export function DurationField({
             disabled={disabled}
             className="h-5 w-5 cursor-pointer"
           />
-          <span className="text-sm font-medium">{toggle.label}</span>
         </label>
       ) : (
-        <div className="text-sm font-medium">{label}</div>
+        <div className="flex items-center gap-1.5">
+          <div className="text-sm font-medium">{label}</div>
+          <HintIcon variant={hint} desc={desc} />
+        </div>
       )}
 
-      {desc && <p className="text-xs text-muted-foreground">{desc}</p>}
+      <HintBody variant={hint} desc={desc} />
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <input

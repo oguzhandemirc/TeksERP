@@ -16,6 +16,8 @@ import {
 } from "@/lib/scanner/wedge-detector";
 import { classifyBarcode } from "@/lib/scanner/barcode-kind";
 import { ScannerDeviceSettings } from "./ScannerDeviceSettings";
+import { FlagToggle, FieldLabel } from "./SettingRow";
+import { InfoPopover } from "./SettingHint";
 
 type Terminator = "Enter" | "Tab" | "both";
 
@@ -46,33 +48,20 @@ export function ScannerSettingsSection() {
   return (
     <div className="space-y-5">
       {/* Her yerde okut */}
-      <label className="flex items-start gap-2 text-sm">
-        <input
-          type="checkbox"
-          className="mt-0.5"
-          checked={scanAnywhere}
-          onChange={(e) => setScanner({ scanAnywhere: e.target.checked })}
-        />
-        <span>
-          <span className="font-medium">Her yerde okut (global)</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">
-            Açıkken, bir metin kutusuna odaklı değilken okutulan kod otomatik tanınır
-            (top / refakat / kartela / çuval) ve ilgili kayda gitmek için bir panel açılır.
-            Kapalıyken (varsayılan) yalnızca okutma alanı olan ekranlarda çalışır. Tabancayı
-            okutma istasyonunda kullananlar için açın.
-          </span>
-        </span>
-      </label>
+      <FlagToggle
+        title="Her yerde okut (global)"
+        desc="Açıkken, bir metin kutusuna odaklı değilken okutulan kod otomatik tanınır (top / refakat / kartela / çuval) ve ilgili kayda gitmek için bir panel açılır. Kapalıyken (varsayılan) yalnızca okutma alanı olan ekranlarda çalışır. Tabancayı okutma istasyonunda kullananlar için açın."
+        checked={scanAnywhere}
+        onChange={(v) => setScanner({ scanAnywhere: v })}
+      />
 
       {/* Terminator */}
       <div className="border-t pt-4">
-        <label htmlFor="scan-terminator" className="text-sm font-medium">
-          Bitiş tuşu (terminator)
-        </label>
-        <p className="text-xs text-muted-foreground">
-          Tabancanın kod sonunda gönderdiği tuş. Çoğu tabanca varsayılan olarak Enter
-          gönderir; tabancanız Tab gönderiyorsa burayı değiştirin.
-        </p>
+        <FieldLabel
+          htmlFor="scan-terminator"
+          label="Bitiş tuşu (terminator)"
+          desc="Tabancanın kod sonunda gönderdiği tuş. Çoğu tabanca varsayılan olarak Enter gönderir; tabancanız Tab gönderiyorsa burayı değiştirin."
+        />
         <Select value={terminator} onValueChange={(v) => setScanner({ terminator: v as Terminator })}>
           <SelectTrigger id="scan-terminator" className="mt-2 w-64">
             <SelectValue />
@@ -89,11 +78,10 @@ export function ScannerSettingsSection() {
 
       {/* Gelişmiş — hassasiyet */}
       <div className="border-t pt-4">
-        <p className="text-sm font-medium">Gelişmiş — burst hassasiyeti</p>
-        <p className="text-xs text-muted-foreground">
-          Tabancayı insan yazımından ayıran eşikler. Genelde dokunulmaz; aşağıdaki test
-          kutusuyla gerçek tabancanıza göre ince ayar yapabilirsiniz.
-        </p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-medium">Gelişmiş — burst hassasiyeti</p>
+          <InfoPopover desc="Tabancayı insan yazımından ayıran eşikler. Genelde dokunulmaz; aşağıdaki test kutusuyla gerçek tabancanıza göre ince ayar yapabilirsiniz." />
+        </div>
         <div className="mt-2 flex flex-wrap gap-4">
           <label className="text-xs">
             <span className="block text-muted-foreground">Maks. tuş aralığı (ms)</span>
@@ -178,13 +166,12 @@ function ScannerTestBox({ maxInterKeyMs, minLength, terminator }: TestBoxProps) 
 
   return (
     <div className="border-t pt-4">
-      <label htmlFor="scan-test" className="flex items-center gap-1.5 text-sm font-medium">
-        <ScanLine className="h-4 w-4" /> Tabancanı test et
-      </label>
-      <p className="text-xs text-muted-foreground">
-        Tabancayı bu kutuya okutun. Algılanan kodu, karakter sayısını ve tuş aralığını gösterir
-        — eşikleri buna göre ayarlayabilirsiniz. (Bu kutuda okutma global panele gitmez.)
-      </p>
+      <div className="flex items-center gap-1.5">
+        <label htmlFor="scan-test" className="flex items-center gap-1.5 text-sm font-medium">
+          <ScanLine className="h-4 w-4" /> Tabancanı test et
+        </label>
+        <InfoPopover desc="Tabancayı bu kutuya okutun. Algılanan kodu, karakter sayısını ve tuş aralığını gösterir — eşikleri buna göre ayarlayabilirsiniz. (Bu kutuda okutma global panele gitmez.)" />
+      </div>
       <Input
         id="scan-test"
         className="mt-2 max-w-md font-mono"

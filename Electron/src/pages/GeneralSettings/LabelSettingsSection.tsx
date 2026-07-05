@@ -7,6 +7,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { featureFlagService } from "@/services/featureFlagService";
 import { formatRollName } from "@/lib/roll-name";
+import { FieldLabel, FlagToggle } from "./SettingRow";
 
 const DEFAULT_COPIES = 2;
 const MAX_COPIES = 5;
@@ -89,14 +90,11 @@ export function LabelSettingsSection() {
     >
       <div className="space-y-4">
         <div>
-          <label htmlFor="label-copies" className="text-sm font-medium">
-            Etiket kopya adedi
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Bir top etiketi baskısında kaç kopya çıkar. 2 = etiket topun bir üstüne, bir
-            altına yapıştırılır (varsayılan). Tambur kesimi ve tartı/paket baskılarında
-            geçerlidir.
-          </p>
+          <FieldLabel
+            htmlFor="label-copies"
+            label="Etiket kopya adedi"
+            desc="Bir top etiketi baskısında kaç kopya çıkar. 2 = etiket topun bir üstüne, bir altına yapıştırılır (varsayılan). Tambur kesimi ve tartı/paket baskılarında geçerlidir."
+          />
           <input
             id="label-copies"
             type="number"
@@ -122,14 +120,17 @@ export function LabelSettingsSection() {
 
         {/* Saha #20: top adı format şablonu */}
         <div className="border-t pt-4">
-          <label htmlFor="roll-name-template" className="text-sm font-medium">
-            Top adı format şablonu
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Listelerde ve aramalarda gösterilen birleşik ürün adının düzeni. Token'lar:{" "}
-            <code>{"{item}"}</code> <code>{"{color}"}</code> <code>{"{width}"}</code>{" "}
-            <code>{"{quality}"}</code>. Boş alanlar (renksiz vb.) otomatik atlanır.
-          </p>
+          <FieldLabel
+            htmlFor="roll-name-template"
+            label="Top adı format şablonu"
+            desc={
+              <>
+                Listelerde ve aramalarda gösterilen birleşik ürün adının düzeni. Token'lar:{" "}
+                <code>{"{item}"}</code> <code>{"{color}"}</code> <code>{"{width}"}</code>{" "}
+                <code>{"{quality}"}</code>. Boş alanlar (renksiz vb.) otomatik atlanır.
+              </>
+            }
+          />
           <input
             id="roll-name-template"
             type="text"
@@ -159,25 +160,21 @@ export function LabelSettingsSection() {
 
         {/* Faz-2: doğrudan yazıcıya gönderim (opt-in) */}
         <div className="border-t pt-4">
-          <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={nativeOn}
-              disabled={nativeMut.isPending}
-              onChange={(e) => nativeMut.mutate({ nativeSendEnabled: e.target.checked })}
-            />
-            <span>
-              <span className="font-medium">Doğrudan yazıcıya gönder (native)</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
+          <FlagToggle
+            title="Doğrudan yazıcıya gönder (native)"
+            desc={
+              <>
                 Açıkken etiket komutları (PPLA/ZPL) backend'den yazıcıya doğrudan (TCP 9100)
                 gönderilir — OS yazıcı diyaloğu çıkmaz. <strong>Kapalıyken (varsayılan)</strong>{" "}
                 simüle edilir; fiziksel baskı HTML + OS sürücüyle yapılır. Açmadan önce makinelerin
                 <em> Yazıcı IP</em>'si tanımlı olmalı (Tanımlar → Donanım) ve bir test baskısıyla
                 doğrulanmalı.
-              </span>
-            </span>
-          </label>
+              </>
+            }
+            checked={nativeOn}
+            disabled={nativeMut.isPending}
+            onChange={(v) => nativeMut.mutate({ nativeSendEnabled: v })}
+          />
         </div>
       </div>
     </PermissionGate>

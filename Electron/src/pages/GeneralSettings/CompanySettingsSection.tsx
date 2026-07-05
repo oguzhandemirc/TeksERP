@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
+import { FieldLabel } from "./SettingRow";
+import { InfoPopover } from "./SettingHint";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import {
   featureFlagService,
@@ -72,11 +74,10 @@ export function CompanySettingsSection() {
         />
 
         <div className="border-t pt-4">
-          <div className="text-sm font-medium">Belge Künyesi</div>
-          <p className="text-xs text-muted-foreground">
-            Yazdırılan irsaliye/çeki listelerinin üst bloğunda firma adının altına
-            basılır (ilgili belgede "Firma künyesini bas" açıksa). Boş alanlar basılmaz.
-          </p>
+          <div className="flex items-center gap-1.5">
+            <div className="text-sm font-medium">Belge Künyesi</div>
+            <InfoPopover desc='Yazdırılan irsaliye/çeki listelerinin üst bloğunda firma adının altına basılır (ilgili belgede "Firma künyesini bas" açıksa). Boş alanlar basılmaz.' />
+          </div>
           <div className="mt-3 space-y-4">
             <Field
               id="company-address"
@@ -151,10 +152,7 @@ function Field({
 }) {
   return (
     <div>
-      <label htmlFor={id} className="text-sm font-medium">
-        {label}
-      </label>
-      {desc && <p className="text-xs text-muted-foreground">{desc}</p>}
+      <FieldLabel htmlFor={id} label={label} desc={desc} />
       <input
         id={id}
         value={value}

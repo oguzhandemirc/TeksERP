@@ -1,4 +1,6 @@
 import type { LoginMethod } from "@/services/featureFlagService";
+import { FlagToggle } from "./SettingRow";
+import { InfoPopover } from "./SettingHint";
 
 export const METHOD_LABELS: Record<LoginMethod, string> = {
   list: "Kullanıcı + Şifre",
@@ -10,6 +12,8 @@ const METHOD_DESCS: Record<LoginMethod, string> = {
   pin: "SALT PIN: kullanıcı seçme yok — kişiye özel BENZERSİZ 6 haneli hızlı PIN kimliği belirler.",
   card: "QR personel kartı okutulur — kullanıcı seçme ve PIN gerekmez.",
 };
+
+const SECTION_DESC = `En az bir yöntem seçili olmalı. Sahadaki giriş ekranı öncelikli yöntemle açılır; diğer seçili yöntemler "Diğer giriş yöntemlerini dene" tuşuyla sunulur. Kartlar ve hızlı PIN'ler Yetkilendirme → Kullanıcılar'dan yönetilir.`;
 
 /**
  * Mobil giriş yöntemleri seçimi (etkin yöntemler + öncelikli yöntem). Durumu
@@ -30,26 +34,19 @@ export function LoginMethodsField({
 }) {
   return (
     <div className="border-t pt-4">
-      <span className="text-sm font-medium">Mobil giriş yöntemleri</span>
-      <p className="text-xs text-muted-foreground">
-        En az bir yöntem seçili olmalı. Sahadaki giriş ekranı <b>öncelikli</b> yöntemle
-        açılır; diğer seçili yöntemler "Diğer giriş yöntemlerini dene" tuşuyla sunulur.
-        Kartlar ve hızlı PIN'ler Yetkilendirme → Kullanıcılar'dan yönetilir.
-      </p>
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm font-medium">Mobil giriş yöntemleri</span>
+        <InfoPopover desc={SECTION_DESC} />
+      </div>
       <div className="mt-2 space-y-2">
         {(Object.keys(METHOD_LABELS) as LoginMethod[]).map((m) => (
-          <label key={m} className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={enabled.includes(m)}
-              onChange={(e) => onToggle(m, e.target.checked)}
-            />
-            <span>
-              {METHOD_LABELS[m]}
-              <span className="block text-xs text-muted-foreground">{METHOD_DESCS[m]}</span>
-            </span>
-          </label>
+          <FlagToggle
+            key={m}
+            title={METHOD_LABELS[m]}
+            desc={METHOD_DESCS[m]}
+            checked={enabled.includes(m)}
+            onChange={(on) => onToggle(m, on)}
+          />
         ))}
       </div>
       <div className="mt-3">
