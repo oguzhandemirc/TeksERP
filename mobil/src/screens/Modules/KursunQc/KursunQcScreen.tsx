@@ -43,6 +43,7 @@ import {
   type FinishStepRequest,
   type ReopenPreview,
 } from '../../../services/kursunQc.service';
+import { isWorkSessionLost } from '../../../services/api';
 import { defectTypeService } from '../../../services/defectType.service';
 import { rollService } from '../../../services/roll.service';
 import { STATION_MUT } from '../../../offline/mutations';
@@ -504,6 +505,7 @@ export default function KursunQcScreen() {
       qc.invalidateQueries({ queryKey: ['kursun-qc', 'open-cards'] });
     },
     onError: (err, vars, context) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       // 4xx (örn. WO iptal) veya net 5xx — optimistic update'i geri al.
       if (context) {
         setOpenJobs((prev) =>
@@ -610,6 +612,7 @@ export default function KursunQcScreen() {
       await refetchActiveJob();
     },
     onError: (err, vars, context) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       // Sadece bu lekeyi geri al — diğer bekleyen optimistic lekeler korunur.
       if (context && vars.clientErrorId) {
         removeDefectOptimistic(context.cardId, context.rollId, vars.clientErrorId);
@@ -649,6 +652,7 @@ export default function KursunQcScreen() {
       await refetchActiveJob();
     },
     onError: (err, _vars, context) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       // Rollback: silinen lekeyi geri ekle.
       if (context) {
         setOpenJobs((prev) =>
@@ -757,6 +761,7 @@ export default function KursunQcScreen() {
       qc.invalidateQueries({ queryKey: ['rolls'] });
     },
     onError: (err, _rollId, context) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       if (context) {
         setOpenJobs((prev) =>
           prev.map((j) =>
@@ -814,6 +819,7 @@ export default function KursunQcScreen() {
       qc.invalidateQueries({ queryKey: ['kursun-qc', 'open-cards'] });
     },
     onError: (err, _vars, context) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       // Rollback: kapatılan kartı eski sırasına geri koy.
       if (context) {
         setOpenJobs((prev) => {

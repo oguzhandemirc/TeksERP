@@ -56,6 +56,7 @@ import { NumpadHost } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
 import { LabelPrinter } from '../../../components/LabelPrinter';
+import { isWorkSessionLost } from '../../../services/api';
 import { itemService } from '../../../services/item.service';
 import {
   rollService,
@@ -436,6 +437,7 @@ export default function KK1Screen() {
       qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
     },
     onError: (err, _vars, context) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       // "Ürün ... pasif/silinmiş" → ürün başka yerden soft-delete edilmiş.
       // Seçimi temizle ki operatör aynı silinmiş ürünle tekrar tekrar
       // denemesin (picker'da artık görünmüyor, kafası karışır). Renk/özellik
@@ -512,6 +514,7 @@ export default function KK1Screen() {
       return { snapshots };
     },
     onError: (err, _vars, context) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       context?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({

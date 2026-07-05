@@ -16,6 +16,7 @@ import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import { BarcodeScannerModal } from '../BarcodeScannerModal';
 import { useSessionStore } from '../../store/sessionStore';
+import { useDeviceType, useIsPortrait } from '../../hooks/useDeviceType';
 import { workSessionService, type ActiveWorkSession } from '../../services/workSession.service';
 import { SCREEN_BY_STATION_KIND, type SessionStationKind } from '../../constants/stationScreens';
 import { SCREEN_BY_KEY } from '../../types/permissions';
@@ -51,6 +52,11 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel }: Pro
   const lastPlace = useSessionStore((s) => s.lastPlace);
   const openSession = useSessionStore((s) => s.openSession);
   const screenLabel = SCREEN_BY_KEY[SCREEN_BY_STATION_KIND[expectedKind]]?.label ?? expectedKind;
+  // Telefon dikeyde içerik tepeye yapışıp fazla yukarıda kalıyordu → dikey ortala.
+  // Tablet/yatayda mevcut (üstten) yerleşim korunur. (Hook'lar koşulsuz çağrılır.)
+  const isPhone = useDeviceType() === 'phone';
+  const portrait = useIsPortrait();
+  const isPhonePortrait = isPhone && portrait;
 
   const placesQ = useQuery({
     queryKey: ['work-session', 'places'],
@@ -138,7 +144,7 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel }: Pro
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={[styles.scroll, isPhonePortrait && styles.scrollCenter]}>
         <View style={styles.header}>
           <Icon source="map-marker-radius" size={44} color={C.accentLight} />
           <Text style={styles.title}>{screenLabel} — Yer Onayı</Text>
@@ -282,17 +288,34 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel }: Pro
 
       {/* Devralma teyidi — makinede başka oturum açık. */}
       <Portal>
-        <Dialog visible={takeover != null} onDismiss={() => setTakeover(null)}>
+        <Dialog
+          visible={takeover != null}
+          onDismiss={() => setTakeover(null)}
+          style={styles.takeoverDialog}
+        >
           <Dialog.Icon icon="account-switch" />
-          <Dialog.Title>Makine dolu — devral?</Dialog.Title>
+          <Dialog.Title style={styles.takeoverTitle}>Makine dolu — devral?</Dialog.Title>
           <Dialog.Content>
-            <Text variant="bodyMedium">
-              {takeover?.label} makinesinde şu an{' '}
-              <Text style={{ fontWeight: '700' }}>
-                {takeover?.occupied.userFullName ?? 'başka bir kullanıcı'}
-              </Text>
-              {takeover?.occupied.deviceName ? ` (${takeover.occupied.deviceName})` : ''} çalışıyor.
-              Devralırsan onun oturumu kapanır ve bir sonraki işleminde yeniden yer onayı istenir.
+            {/* Kimden devralınacak — belirgin blok. */}
+            <View style={styles.occupantBox}>
+              <View style={styles.occupantIcon}>
+                <Icon source="account" size={26} color={C.warn} />
+              </View>
+              <View style={styles.occupantTextWrap}>
+                <Text style={styles.occupantLabel}>ŞU AN BU MAKİNEDE ÇALIŞAN</Text>
+                <Text style={styles.occupantName} numberOfLines={1}>
+                  {takeover?.occupied.userFullName ?? 'Başka bir kullanıcı'}
+                </Text>
+                {!!takeover?.occupied.deviceName && (
+                  <Text style={styles.occupantDevice} numberOfLines={1}>
+                    {takeover.occupied.deviceName}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <Text variant="bodyMedium" style={styles.takeoverHint}>
+              {takeover?.label} makinesini devralırsan onun oturumu kapanır ve bir
+              sonraki işleminde yeniden yer onayı istenir.
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
@@ -316,9 +339,39 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel }: Pro
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   scroll: { padding: 20, gap: 16, paddingBottom: 40 },
+  // Telefon dikey: kısa içerik dikey ortalanır (tepeye yapışmaz), uzunsa scroll eder.
+  scrollCenter: { flexGrow: 1, justifyContent: 'center' },
   header: { alignItems: 'center', gap: 8, marginTop: 12 },
   title: { color: C.text, fontSize: 24, fontWeight: '800', textAlign: 'center' },
   subtitle: { color: C.subtext, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  // Devralma modalı (paper Dialog = açık tema): tablette genişliği sınırla +
+  // kimden devralınacağı belirgin olsun.
+  takeoverDialog: { alignSelf: 'center', width: '100%', maxWidth: 440 },
+  takeoverTitle: { textAlign: 'center' },
+  occupantBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(245,158,11,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245,158,11,0.45)',
+    marginBottom: 14,
+  },
+  occupantIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(245,158,11,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  occupantTextWrap: { flex: 1 },
+  occupantLabel: { color: '#92640a', fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
+  occupantName: { color: '#0f172a', fontSize: 20, fontWeight: '800', marginTop: 1 },
+  occupantDevice: { color: '#64748b', fontSize: 13, marginTop: 1 },
+  takeoverHint: { color: '#475569' },
   card: {
     backgroundColor: C.card,
     borderRadius: 16,

@@ -34,6 +34,7 @@ import {
   type ShipmentSack,
   type ShipmentDestination,
 } from '../../../services/packing.service';
+import { isWorkSessionLost } from '../../../services/api';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import {
@@ -369,7 +370,10 @@ export default function PaketlemeScreen() {
       Toast.show({ type: 'success', text1: res.message ?? 'Güncellendi' });
       refreshShip();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: e.message }),
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      Toast.show({ type: 'error', text1: 'Güncellenemedi', text2: e.message });
+    },
   });
   const setDestination = (d: ShipmentDestination) => {
     if (shipmentId) destMut.mutate(d);
@@ -389,7 +393,10 @@ export default function PaketlemeScreen() {
       Toast.show({ type: 'success', text1: `Çuval ${sack.seq} açıldı`, text2: 'Topları bu çuvala okut.' });
       refreshShip(id);
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çuval açılamadı', text2: e.message }),
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      Toast.show({ type: 'error', text1: 'Çuval açılamadı', text2: e.message });
+    },
   });
 
   const weighSackMut = useMutation({
@@ -402,7 +409,10 @@ export default function PaketlemeScreen() {
       setWeighCode('');
       refreshShip();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: e.message }),
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      Toast.show({ type: 'error', text1: 'Kaydedilemedi', text2: e.message });
+    },
   });
 
   const moveRollMut = useMutation({
@@ -414,7 +424,10 @@ export default function PaketlemeScreen() {
       setMoveTarget(null);
       refreshShip();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Aktarılamadı', text2: e.message }),
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      Toast.show({ type: 'error', text1: 'Aktarılamadı', text2: e.message });
+    },
   });
 
   const removeSackMut = useMutation({
@@ -429,13 +442,19 @@ export default function PaketlemeScreen() {
       }
       refreshShip();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Silinemedi', text2: e.message }),
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      Toast.show({ type: 'error', text1: 'Silinemedi', text2: e.message });
+    },
   });
 
   const removeRollMut = useMutation({
     mutationFn: (rollId: string) => packingService.removeRoll(shipmentId!, rollId),
     onSuccess: () => refreshShip(),
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çıkarılamadı', text2: e.message }),
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      Toast.show({ type: 'error', text1: 'Çıkarılamadı', text2: e.message });
+    },
   });
 
   // "Çuval Depoya Kaldır" (markReady → READY): çuvallandı, firma içi depoda bekler (commit yapılır).
@@ -446,7 +465,10 @@ export default function PaketlemeScreen() {
       Toast.show({ type: 'success', text1: 'Çuval depoya kaldırıldı', text2: res.message });
       finishAndBack();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Çuval depoya kaldırılamadı', text2: e.message }),
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      Toast.show({ type: 'error', text1: 'Çuval depoya kaldırılamadı', text2: e.message });
+    },
   });
 
   // "Kapı Önüne Koy" (moveToDoor → AT_DOOR): sevk onayı açıkken çıkışın durağı; "Alındı" bekler.
@@ -457,7 +479,10 @@ export default function PaketlemeScreen() {
       Toast.show({ type: 'success', text1: 'Kapı önüne kondu', text2: res.message });
       finishAndBack();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Kapı önüne konamadı', text2: e.message }),
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      Toast.show({ type: 'error', text1: 'Kapı önüne konamadı', text2: e.message });
+    },
   });
 
   // "Hemen Sevk Et" (onay kapalı): → DISPATCHED tek adım — stok düşer, irsaliye kesilir.
@@ -468,7 +493,10 @@ export default function PaketlemeScreen() {
       Toast.show({ type: 'success', text1: 'Sevk edildi', text2: res.message });
       finishAndBack();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'Sevk edilemedi', text2: e.message }),
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      Toast.show({ type: 'error', text1: 'Sevk edilemedi', text2: e.message });
+    },
   });
 
   // İrsaliye — DISPATCHED'da donmuş resmi belge, öncesi TASLAK (expo-print).
@@ -499,7 +527,10 @@ export default function PaketlemeScreen() {
       setCancelOpen(false);
       finishAndBack();
     },
-    onError: (e: Error) => Toast.show({ type: 'error', text1: 'İptal edilemedi', text2: e.message }),
+    onError: (e: Error) => {
+      if (isWorkSessionLost(e)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      Toast.show({ type: 'error', text1: 'İptal edilemedi', text2: e.message });
+    },
   });
 
   const cancelPreviewQ = useQuery({

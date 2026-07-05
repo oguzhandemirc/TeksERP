@@ -157,6 +157,27 @@ async function main() {
     const mwRevoked = await runMiddleware(goodToken);
     check("7c middleware: revoke edilmiş jti 401", mwRevoked.err instanceof AppError && (mwRevoked.err as AppError).statusCode === 401);
 
+    // 7d/7e: kick (NEW_LOGIN) → 401 + doğru bildirim için details.code/reason
+    // (client "süresi doldu" değil "başka cihazdan giriş yapıldı" göstersin).
+    const uKickMw = await mkUser("kickmw");
+    const kickJti = await openSession(uKickMw.id, ClientType.MOBILE, "off");
+    const kickTok = jwt.sign(
+      { userId: uKickMw.id, username: uKickMw.username, permissions: [], tokenVersion: uKickMw.tokenVersion },
+      secret,
+      { expiresIn: 3600, jwtid: kickJti },
+    );
+    await SessionRegistryService.revokeSession(kickJti, "NEW_LOGIN");
+    const mwKick = await runMiddleware(kickTok);
+    const kickErr = mwKick.err instanceof AppError ? mwKick.err : null;
+    check(
+      "7d kick 401 + details.code=SESSION_REVOKED",
+      kickErr?.statusCode === 401 && kickErr?.details?.code === "SESSION_REVOKED",
+    );
+    check(
+      "7e kick reason=NEW_LOGIN (doğru bildirim)",
+      (kickErr?.details as { reason?: string } | undefined)?.reason === "NEW_LOGIN",
+    );
+
     // --- 8) WorkSession bir-operatör-tek-yer ---
     const sevk = need(
       await prisma.station.findFirst({ where: { code: "SEVK_1", isActive: true }, select: { id: true } }),

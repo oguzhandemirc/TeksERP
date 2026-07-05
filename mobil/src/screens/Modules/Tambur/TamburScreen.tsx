@@ -55,6 +55,7 @@ import { LabelPreviewSheet } from '../../../components/labels/LabelPreviewSheet'
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import RollPickerModal from '../../../components/RollPickerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
+import { isWorkSessionLost } from '../../../services/api';
 import { tamburService } from '../../../services/tambur.service';
 import { rollService } from '../../../services/roll.service';
 import { customerService } from '../../../services/customer.service';
@@ -575,6 +576,7 @@ export default function TamburScreen() {
       qc.invalidateQueries({ queryKey: ['rolls'] });
     },
     onError: (err: Error) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Finalize başarısız', text2: err.message });
     },
@@ -649,6 +651,7 @@ export default function TamburScreen() {
       }
     },
     onError: (err: Error) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Top oluşturulamadı', text2: err.message });
     },
@@ -735,6 +738,7 @@ export default function TamburScreen() {
       qc.invalidateQueries({ queryKey: ['rolls'] });
     },
     onError: (err, _vars, context) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       if (context) {
         setOpenJobs((prev) =>
           prev.map((j) =>
@@ -765,6 +769,7 @@ export default function TamburScreen() {
       await refetchActiveJob();
     },
     onError: (err: Error) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Eklenemedi', text2: err.message });
     },
@@ -777,8 +782,10 @@ export default function TamburScreen() {
       // Karar state'inden de düş
       await refetchActiveJob();
     },
-    onError: (err: Error) =>
-      Toast.show({ type: 'error', text1: 'Silinemedi', text2: err.message }),
+    onError: (err: Error) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      Toast.show({ type: 'error', text1: 'Silinemedi', text2: err.message });
+    },
   });
 
   // Top Kesme — multi-cut: her kesim child Roll doğurur, parent currentQty
@@ -860,6 +867,7 @@ export default function TamburScreen() {
       }
     },
     onError: (err: Error) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Kesim başarısız', text2: err.message });
     },
@@ -904,6 +912,7 @@ export default function TamburScreen() {
       }
     },
     onError: (err: Error) => {
+      if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Bitirilemedi', text2: err.message });
     },

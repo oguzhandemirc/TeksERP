@@ -16,6 +16,16 @@ import prisma from "../lib/prisma";
 const lastSeenWrites = new Map<string, number>();
 const LAST_SEEN_THROTTLE_MS = 60_000;
 
+/** Session.revokeReason → operatöre gösterilecek NET Türkçe mesaj. Yanlış
+ *  "oturum süresi doldu" bildirimini önler (asıl sebep: kick / şifre / pasif). */
+const SESSION_REVOKE_MESSAGES: Record<string, string> = {
+  NEW_LOGIN: "Bu hesapla başka bir cihazdan giriş yapıldığı için buradaki oturum kapatıldı.",
+  PASSWORD_RESET: "Şifreniz değiştiği için oturumunuz kapatıldı. Tekrar giriş yapın.",
+  DEACTIVATED: "Hesabınız pasife alındığı için oturumunuz kapatıldı.",
+  DELETED: "Hesabınız kaldırıldığı için oturumunuz kapatıldı.",
+  LOGOUT: "Oturumunuz kapatıldı. Tekrar giriş yapın.",
+};
+
 function touchSessionLastSeen(jti: string): void {
   const now = Date.now();
   const prev = lastSeenWrites.get(jti);
@@ -77,10 +87,18 @@ export const verifyToken = async (
     }
     const session = await prisma.session.findUnique({
       where: { jti: payload.jti },
-      select: { revokedAt: true },
+      select: { revokedAt: true, revokeReason: true },
     });
-    if (!session || session.revokedAt !== null) {
-      throw AppError.unauthorized("Oturum sonlandırıldı. Tekrar giriş yapın.");
+    if (!session) {
+      throw AppError.unauthorized("Oturum kaydı bulunamadı. Tekrar giriş yapın.", {
+        code: "SESSION_INVALID",
+      });
+    }
+    if (session.revokedAt !== null) {
+      // Sebebe göre NET mesaj — client "süresi doldu" gibi yanlış bildirim vermesin.
+      const reason = session.revokeReason ?? "";
+      const msg = SESSION_REVOKE_MESSAGES[reason] ?? "Oturumunuz sonlandırıldı. Tekrar giriş yapın.";
+      throw AppError.unauthorized(msg, { code: "SESSION_REVOKED", reason });
     }
     req.user = payload;
     touchUser(payload.userId); // anlık "online" izleme (bellekte, maliyetsiz)

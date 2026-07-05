@@ -32,8 +32,11 @@ export class AppError extends Error {
     return new AppError(message, 400, true, details);
   }
 
-  static unauthorized(message: string = "Yetkisiz erişim"): AppError {
-    return new AppError(message, 401);
+  static unauthorized(
+    message: string = "Yetkisiz erişim",
+    details?: Record<string, unknown>,
+  ): AppError {
+    return new AppError(message, 401, true, details);
   }
 
   static forbidden(message: string = "Bu işlem için yetkiniz yok"): AppError {

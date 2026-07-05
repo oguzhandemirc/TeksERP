@@ -80,9 +80,27 @@ export async function getStampContext(
   const session = await resolveActiveSession(req.device.id);
   if (!session) {
     if (opts?.enforceForMobile && req.device.kind !== "DESKTOP") {
+      // Sebebi ekle: bu cihazın SON kapanan oturumunun endReason'ı → client doğru
+      // bildirim gösterir (devralındı=TAKEOVER / hareketsizlik=IDLE / başka yerde
+      // giriş=NEW_LOGIN / yönetici=ADMIN). Aktif oturum yeni kapandıysa bu odur.
+      const last = await prisma.workSession.findFirst({
+        where: { deviceId: req.device.id, endedAt: { not: null } },
+        orderBy: { endedAt: "desc" },
+        select: { endReason: true, machineId: true },
+      });
+      // Devralma ise: o makineyi ŞU AN kim tutuyor → operatöre "X devraldı" yaz.
+      let takenBy: string | null = null;
+      if (last?.endReason === "TAKEOVER" && last.machineId) {
+        const holder = await prisma.workSession.findFirst({
+          where: { machineId: last.machineId, endedAt: null },
+          orderBy: { startedAt: "desc" },
+          select: { user: { select: { fullName: true, username: true } } },
+        });
+        takenBy = holder?.user?.fullName ?? holder?.user?.username ?? null;
+      }
       throw AppError.conflict(
         "Bu cihazda aktif çalışma oturumu yok — önce makine/istasyon onayı verin",
-        { code: "WORK_SESSION_REQUIRED" },
+        { code: "WORK_SESSION_REQUIRED", reason: last?.endReason ?? null, takenBy },
       );
     }
     return null;

@@ -91,7 +91,9 @@ apiClient.interceptors.response.use(
         // 5sn tekilleştirme ile tek toast.
         if (Date.now() - lastSessionExpiredToastAt > 5000) {
           lastSessionExpiredToastAt = Date.now();
-          toast.error("Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
+          // Sebebe göre backend NET mesaj döndürür (başka cihazdan giriş / şifre /
+          // pasif); yoksa generic "süresi doldu". Yanlış bildirim vermeyelim.
+          toast.error(body?.message || "Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
         }
         return Promise.reject(error);
       }
