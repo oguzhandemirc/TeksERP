@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { categoryLabels, moduleLabels, isWildcard, type Permission } from "@/types/permissions";
 
 interface Props {
@@ -13,9 +14,22 @@ interface Props {
   onChange: (next: string[]) => void;
   disabled?: boolean;
   emptyHint?: string;
+  /** Süreli izin bitiş tarihleri: permissionId → "YYYY-MM-DD" (boş/verilmez = süresiz).
+   *  `onDateChange` ile birlikte verilirse SEÇİLİ her iznin altında bitiş-tarihi seçici çıkar
+   *  (şablon düzenlemede verilmez → tarih UI'sı hiç görünmez). */
+  dates?: Record<string, string | null | undefined>;
+  onDateChange?: (permissionId: string, value: string) => void;
 }
 
-export function PermissionGrid({ permissions, value, onChange, disabled, emptyHint }: Props) {
+export function PermissionGrid({
+  permissions,
+  value,
+  onChange,
+  disabled,
+  emptyHint,
+  dates,
+  onDateChange,
+}: Props) {
   const [search, setSearch] = useState("");
 
   const grouped = useMemo(() => {
@@ -137,6 +151,8 @@ export function PermissionGrid({ permissions, value, onChange, disabled, emptyHi
                       toggle={toggle}
                       setMany={setMany}
                       disabled={disabled}
+                      dates={dates}
+                      onDateChange={onDateChange}
                     />
                   ))}
                 </section>
@@ -156,9 +172,20 @@ interface ModuleRowProps {
   toggle: (id: string) => void;
   setMany: (ids: string[], on: boolean) => void;
   disabled?: boolean;
+  dates?: Record<string, string | null | undefined>;
+  onDateChange?: (permissionId: string, value: string) => void;
 }
 
-function ModuleRow({ module, perms, selected, toggle, setMany, disabled }: ModuleRowProps) {
+function ModuleRow({
+  module,
+  perms,
+  selected,
+  toggle,
+  setMany,
+  disabled,
+  dates,
+  onDateChange,
+}: ModuleRowProps) {
   const ids = perms.map((p) => p.id);
   const allChecked = ids.every((id) => selected.has(id));
   const someChecked = ids.some((id) => selected.has(id));
@@ -205,6 +232,18 @@ function ModuleRow({ module, perms, selected, toggle, setMany, disabled }: Modul
                   )}
                 </div>
               </label>
+              {onDateChange && checked && (
+                <div className="ml-6 mt-1 flex items-center gap-2">
+                  <span className="shrink-0 text-[11px] text-muted-foreground">Bitiş tarihi:</span>
+                  <DatePickerInput
+                    value={dates?.[p.id] ?? ""}
+                    onChange={(v) => onDateChange(p.id, v)}
+                    disabled={disabled}
+                    placeholder="Süresiz"
+                    className="h-8 w-44"
+                  />
+                </div>
+              )}
             </li>
           );
         })}

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGrid } from "@/components/admin/PermissionGrid";
 import { permissionCatalogService } from "@/services/permissionCatalogService";
-import { adminUserService } from "@/services/adminUserService";
+import { adminUserService, type PermissionSetItem } from "@/services/adminUserService";
 import { permissionTemplateService } from "@/services/permissionTemplateService";
 
 const MOBILE_TEMPLATE_PREFIX = "Mobil —";
@@ -46,8 +46,15 @@ export function PermissionsTab({ userId }: Props) {
     [templates.data],
   );
 
-  const initialIds = userPerms.data?.data?.map((g) => g.permissionId) ?? [];
+  const grants = userPerms.data?.data ?? [];
+  const initialIds = grants.map((g) => g.permissionId);
+  // Süreli izinler: permissionId → "YYYY-MM-DD" (bitiş tarihi). validUntil ISO'dan gün
+  // kısmını al (UTC gece yarısı damgalandığı için slice drift'siz round-trip eder).
+  const initialDates: Record<string, string> = {};
+  for (const g of grants) if (g.validUntil) initialDates[g.permissionId] = g.validUntil.slice(0, 10);
+
   const [selected, setSelected] = useState<string[]>(initialIds);
+  const [dates, setDates] = useState<Record<string, string>>(initialDates);
 
   const applyMobileTemplate = (templateId: string) => {
     const tpl = mobileTemplates.find((t) => t.id === templateId);
@@ -59,29 +66,55 @@ export function PermissionsTab({ userId }: Props) {
   };
 
   useEffect(() => {
-    if (userPerms.data) setSelected(userPerms.data.data.map((g) => g.permissionId));
+    if (!userPerms.data) return;
+    const g = userPerms.data.data;
+    setSelected(g.map((x) => x.permissionId));
+    const d: Record<string, string> = {};
+    for (const x of g) if (x.validUntil) d[x.permissionId] = x.validUntil.slice(0, 10);
+    setDates(d);
   }, [userPerms.data]);
 
-  const dirty =
+  const handleDateChange = (permissionId: string, value: string) => {
+    setDates((prev) => {
+      const next = { ...prev };
+      if (value) next[permissionId] = value;
+      else delete next[permissionId];
+      return next;
+    });
+  };
+
+  const selectionDirty =
     selected.length !== initialIds.length ||
     selected.some((id) => !initialIds.includes(id)) ||
     initialIds.some((id) => !selected.includes(id));
+  // Yalnız seçili izinlerin tarihi anlamlı; seçili değilse tarih payload'a girmez.
+  const datesDirty = selected.some((id) => (dates[id] ?? "") !== (initialDates[id] ?? ""));
+  const dirty = selectionDirty || datesDirty;
+
+  const reset = () => {
+    setSelected(initialIds);
+    setDates(initialDates);
+  };
 
   const mutation = useMutation({
-    mutationFn: (ids: string[]) => adminUserService.setPermissions(userId, ids),
+    mutationFn: (items: PermissionSetItem[]) => adminUserService.setPermissions(userId, items),
     onSuccess: () => {
-      // O9 fix: yetkiler JWT'de taşınır (backend token'dan okur, DB'ye bakmaz) —
-      // hedef kullanıcının açık oturumu (8 saate kadar) ESKİ yetkilerle devam
-      // eder. Admin bunu bilsin; acil iptal gerekiyorsa kullanıcı çıkış yapmalı.
+      // Yetki/süre değişimi backend'de tokenVersion++ tetikler → hedef kullanıcının açık
+      // oturumu bir sonraki istekte 401 alıp sonlanır (yeniden giriş gerekir). Süreli
+      // izinlerde yeni token'ın ömrü en yakın bitiş tarihine çekilir → tarih dolunca
+      // oturum kendiliğinden biter.
       toast.success("Yetkiler güncellendi.", {
         description:
-          "Değişiklik, kullanıcı bir sonraki girişinde etkili olur — açık oturumu eski yetkilerle sürer.",
+          "Değişiklik hemen geçerli olur; kullanıcının açık oturumu bir sonraki işlemde sonlanır ve yeniden giriş ister. Süreli (bitiş tarihli) izinlerde, tarih dolduğunda kullanıcının oturumu otomatik sona erer.",
         duration: 8000,
       });
       void qc.invalidateQueries({ queryKey: userKey });
       void qc.invalidateQueries({ queryKey: ["admin-users"] });
     },
   });
+
+  const buildPayload = (): PermissionSetItem[] =>
+    selected.map((id) => ({ permissionId: id, validUntil: dates[id] || null }));
 
   if (catalog.isLoading || userPerms.isLoading) {
     return (
@@ -123,15 +156,22 @@ export function PermissionsTab({ userId }: Props) {
           value={selected}
           onChange={setSelected}
           disabled={mutation.isPending}
+          dates={dates}
+          onDateChange={handleDateChange}
         />
       </div>
+      <p className="text-xs text-muted-foreground">
+        Seçili her iznin altından opsiyonel <span className="font-medium">bitiş tarihi</span>{" "}
+        verebilirsiniz (boş = süresiz). Süreli izinde tarih dolduğunda kullanıcının o iznine
+        dayanan oturumu otomatik sona erer.
+      </p>
       <div className="flex items-center justify-between border-t pt-3">
         <Button
           type="button"
           variant="ghost"
           size="sm"
           disabled={!dirty || mutation.isPending}
-          onClick={() => setSelected(initialIds)}
+          onClick={reset}
         >
           Sıfırla
         </Button>
@@ -140,7 +180,7 @@ export function PermissionsTab({ userId }: Props) {
           size="sm"
           className="gap-1.5"
           disabled={!dirty || mutation.isPending}
-          onClick={() => mutation.mutate(selected)}
+          onClick={() => mutation.mutate(buildPayload())}
         >
           <Save className="h-4 w-4" /> {mutation.isPending ? "Kaydediliyor..." : "Yetkileri Kaydet"}
         </Button>

@@ -24,6 +24,13 @@ export interface AdminUserDetail extends AdminUserListItem {
   } | null;
 }
 
+/** Toplu yetki kaydı öğesi — izin + opsiyonel bitiş tarihi ("YYYY-MM-DD" veya null/sınırsız). */
+export interface PermissionSetItem {
+  permissionId: string;
+  /** Süreli izin bitişi. null/verilmezse süresiz. Backend z.coerce.date() ile Date'e çevirir. */
+  validUntil?: string | null;
+}
+
 export const adminUserService = {
   list: (): Promise<ApiResponse<AdminUserListItem[]>> =>
     apiClient.get<ApiResponse<AdminUserListItem[]>>("/api/admin/users").then((r) => r.data),
@@ -69,13 +76,15 @@ export const adminUserService = {
       .get<ApiResponse<UserPermissionGrant[]>>(`/api/admin/users/${userId}/permissions`)
       .then((r) => r.data),
 
+  /** Kullanıcının yetkilerini toplu set'le. Her öğe izin + opsiyonel bitiş tarihi taşır
+   *  (süreli izin). Backend { permissions: [{permissionId, validUntil?}] } bekler. */
   setPermissions: (
     userId: string,
-    permissionIds: string[],
+    permissions: PermissionSetItem[],
   ): Promise<ApiResponse<UserPermissionGrant[]>> =>
     apiClient
       .put<ApiResponse<UserPermissionGrant[]>>(`/api/admin/users/${userId}/permissions`, {
-        permissionIds,
+        permissions,
       })
       .then((r) => r.data),
 

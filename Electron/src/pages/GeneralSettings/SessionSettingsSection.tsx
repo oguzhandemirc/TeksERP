@@ -4,6 +4,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import type { SameTypeSessionPolicy } from "@/types/auth";
 import { SAME_TYPE_SESSION_POLICY_OPTIONS } from "@/lib/session-auth";
 import { DurationField } from "./DurationField";
+import { NumberField, FlagToggle } from "./SettingRow";
 import { LoginMethodsField } from "./LoginMethodsField";
 import { SessionSettingsReadOnly } from "./SessionSettingsReadOnly";
 import {
@@ -11,6 +12,15 @@ import {
   MAX_IDLE_MINUTES,
   MIN_MOBILE_IDLE_LOCK_MIN,
   MAX_MOBILE_IDLE_LOCK_MIN,
+  MAX_ABSOLUTE_CAP_DAYS,
+  MIN_PIN_LOCKOUT_ATTEMPTS,
+  MAX_PIN_LOCKOUT_ATTEMPTS,
+  MIN_PIN_LOCKOUT_PENALTY_SEC,
+  MAX_PIN_LOCKOUT_PENALTY_SEC,
+  MIN_PIN_LOCKOUT_ESCALATE_AFTER,
+  MAX_PIN_LOCKOUT_ESCALATE_AFTER,
+  MIN_PIN_LOCKOUT_LONG_PENALTY_MIN,
+  MAX_PIN_LOCKOUT_LONG_PENALTY_MIN,
   useSessionSettingsForm,
 } from "./useSessionSettingsForm";
 
@@ -43,6 +53,12 @@ export function SessionSettingsSection() {
           mobileLock={s.current.mobileLock}
           mobileLockMinutes={s.current.mobileLockMin}
           methods={s.current.methods}
+          absoluteCapDays={s.current.capDays}
+          pinLockoutEnabled={s.current.pinEnabled}
+          pinLockoutAttempts={s.current.pinAttempts}
+          pinLockoutPenaltySec={s.current.pinPenaltySec}
+          pinLockoutEscalateAfter={s.current.pinEscalate}
+          pinLockoutLongPenaltyMin={s.current.pinLongMin}
         />
       }
     >
@@ -68,6 +84,23 @@ export function SessionSettingsSection() {
               : undefined
           }
         />
+
+        {/* 2) Mutlak oturum tavanı — birim GÜN (dakika değil → NumberField). Zaman
+            aşımı kapalı olsa bile token en fazla bu kadar gün yaşar; 0 = süresiz. */}
+        <div className="border-t pt-4">
+          <NumberField
+            id="absolute-session-cap-days"
+            label="Mutlak oturum tavanı (gün, 0 = süresiz)"
+            desc="Oturum zaman aşımı kapalı olsa bile bir token en fazla bu kadar gün geçerli kalır — çalınan/sızan bir token sonsuza kadar kullanılamasın diye. 0 girilirse arka plan tavanı da kalkar (token gerçekten süresiz). Değişiklik yalnızca sonraki girişlere uygulanır."
+            value={s.capDays}
+            min={0}
+            max={MAX_ABSOLUTE_CAP_DAYS}
+            onChange={s.setCapDays}
+            error={
+              !s.capDaysValid ? `0–${MAX_ABSOLUTE_CAP_DAYS} arası bir gün sayısı girin.` : undefined
+            }
+          />
+        </div>
 
         {/* 3) Panel hareketsizlik çıkışı */}
         <div className="border-t pt-4">
@@ -159,7 +192,79 @@ export function SessionSettingsSection() {
           </select>
         </div>
 
-        {/* 7) Mobil giriş yöntemleri */}
+        {/* 7) Hızlı PIN + kart deneme kilidi — mobil hızlı giriş (PIN/kart) brute-force
+            koruması. Toggle + 4 sayı alanı (adet/sn/tur/dk → NumberField). */}
+        <div className="space-y-3 border-t pt-4">
+          <FlagToggle
+            title="Hızlı PIN / kart deneme kilidi"
+            desc="Açıkken (varsayılan) sahadaki hızlı PIN veya QR kart girişinde arka arkaya çok sayıda yanlış deneme yapılırsa o cihaz/IP geçici olarak bloklanır — 6 haneli PIN'in denenerek kırılmasını önler. Klasik kullanıcı adı + şifre girişini etkilemez. Kapalıyken deneme kilidi hiç uygulanmaz."
+            checked={s.pinEnabled}
+            disabled={s.isSaving}
+            onChange={s.setPinEnabled}
+          />
+          {s.pinEnabled && (
+            <div className="grid gap-4 pl-1 sm:grid-cols-2">
+              <NumberField
+                id="pin-lockout-attempts"
+                label="İzin verilen yanlış deneme"
+                desc="Kilit devreye girene kadar art arda kaç yanlış denemeye izin verilir."
+                value={s.pinAttempts}
+                min={MIN_PIN_LOCKOUT_ATTEMPTS}
+                max={MAX_PIN_LOCKOUT_ATTEMPTS}
+                onChange={s.setPinAttempts}
+                error={
+                  !s.pinAttemptsValid
+                    ? `${MIN_PIN_LOCKOUT_ATTEMPTS}–${MAX_PIN_LOCKOUT_ATTEMPTS} arası bir sayı girin.`
+                    : undefined
+                }
+              />
+              <NumberField
+                id="pin-lockout-penalty-sec"
+                label="Ceza süresi (saniye)"
+                desc="Eşik aşılınca cihaz/IP bu kadar saniye bloklanır."
+                value={s.pinPenaltySec}
+                min={MIN_PIN_LOCKOUT_PENALTY_SEC}
+                max={MAX_PIN_LOCKOUT_PENALTY_SEC}
+                onChange={s.setPinPenaltySec}
+                error={
+                  !s.pinPenaltyValid
+                    ? `${MIN_PIN_LOCKOUT_PENALTY_SEC}–${MAX_PIN_LOCKOUT_PENALTY_SEC} arası saniye girin.`
+                    : undefined
+                }
+              />
+              <NumberField
+                id="pin-lockout-escalate-after"
+                label="Uzun ceza eşiği (tur)"
+                desc="Bu kadar kısa ceza turundan sonra uzun cezaya geçilir (ısrarlı deneme)."
+                value={s.pinEscalate}
+                min={MIN_PIN_LOCKOUT_ESCALATE_AFTER}
+                max={MAX_PIN_LOCKOUT_ESCALATE_AFTER}
+                onChange={s.setPinEscalate}
+                error={
+                  !s.pinEscalateValid
+                    ? `${MIN_PIN_LOCKOUT_ESCALATE_AFTER}–${MAX_PIN_LOCKOUT_ESCALATE_AFTER} arası tur girin.`
+                    : undefined
+                }
+              />
+              <NumberField
+                id="pin-lockout-long-penalty-min"
+                label="Uzun ceza süresi (dakika)"
+                desc="Uzun ceza eşiğine varınca cihaz/IP bu kadar dakika bloklanır."
+                value={s.pinLongMin}
+                min={MIN_PIN_LOCKOUT_LONG_PENALTY_MIN}
+                max={MAX_PIN_LOCKOUT_LONG_PENALTY_MIN}
+                onChange={s.setPinLongMin}
+                error={
+                  !s.pinLongValid
+                    ? `${MIN_PIN_LOCKOUT_LONG_PENALTY_MIN}–${MAX_PIN_LOCKOUT_LONG_PENALTY_MIN} arası dakika girin.`
+                    : undefined
+                }
+              />
+            </div>
+          )}
+        </div>
+
+        {/* 8) Mobil giriş yöntemleri */}
         <LoginMethodsField
           enabled={s.enabledMethods}
           primary={s.primaryMethod}

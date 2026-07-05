@@ -116,6 +116,42 @@ export function useMobileIdleLockMinutes(): number {
   return q.data?.data?.mobileIdleLockMinutes ?? 10;
 }
 
+/** Mutlak oturum tavanı, gün. Yüklenene kadar 30 (default). 0 = süresiz. */
+export function useAbsoluteSessionCapDays(): number {
+  const q = useFeatureFlags();
+  return q.data?.data?.absoluteSessionCapDays ?? 30;
+}
+
+/** Hızlı PIN/kart deneme kilidi açık mı. Yüklenene kadar true (default açık). */
+export function usePinLockoutEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.pinLockoutEnabled ?? true;
+}
+
+/** Hızlı PIN/kart deneme kilidi: izin verilen yanlış deneme. Yüklenene kadar 5. */
+export function usePinLockoutAttempts(): number {
+  const q = useFeatureFlags();
+  return q.data?.data?.pinLockoutAttempts ?? 5;
+}
+
+/** Hızlı PIN/kart deneme kilidi: kısa ceza süresi (sn). Yüklenene kadar 60. */
+export function usePinLockoutPenaltySec(): number {
+  const q = useFeatureFlags();
+  return q.data?.data?.pinLockoutPenaltySec ?? 60;
+}
+
+/** Hızlı PIN/kart deneme kilidi: uzun cezaya geçiş eşiği (tur). Yüklenene kadar 3. */
+export function usePinLockoutEscalateAfter(): number {
+  const q = useFeatureFlags();
+  return q.data?.data?.pinLockoutEscalateAfter ?? 3;
+}
+
+/** Hızlı PIN/kart deneme kilidi: uzun ceza süresi (dk). Yüklenene kadar 15. */
+export function usePinLockoutLongPenaltyMin(): number {
+  const q = useFeatureFlags();
+  return q.data?.data?.pinLockoutLongPenaltyMin ?? 15;
+}
+
 /** Aynı tip oturum politikası. Yüklenene/geçersiz değerde kadar 'kick' (default). */
 export function useSameTypeSessionPolicy(): SameTypeSessionPolicy {
   const q = useFeatureFlags();

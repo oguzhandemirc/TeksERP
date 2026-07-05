@@ -15,6 +15,12 @@ export function SessionSettingsReadOnly({
   mobileLock,
   mobileLockMinutes,
   methods,
+  absoluteCapDays,
+  pinLockoutEnabled,
+  pinLockoutAttempts,
+  pinLockoutPenaltySec,
+  pinLockoutEscalateAfter,
+  pinLockoutLongPenaltyMin,
 }: {
   sessionMinutes: number;
   idleMinutes: number;
@@ -24,6 +30,12 @@ export function SessionSettingsReadOnly({
   mobileLock: boolean;
   mobileLockMinutes: number;
   methods: { enabled: LoginMethod[]; primary: LoginMethod };
+  absoluteCapDays: number;
+  pinLockoutEnabled: boolean;
+  pinLockoutAttempts: number;
+  pinLockoutPenaltySec: number;
+  pinLockoutEscalateAfter: number;
+  pinLockoutLongPenaltyMin: number;
 }) {
   return (
     <div className="space-y-1 text-sm">
@@ -44,6 +56,18 @@ export function SessionSettingsReadOnly({
       <ReadOnlyLine
         label="Mobil hareketsizlik kilidi"
         value={mobileLock ? `${mobileLockMinutes} dakika` : "Kapalı"}
+      />
+      <ReadOnlyLine
+        label="Mutlak oturum tavanı"
+        value={absoluteCapDays > 0 ? `${absoluteCapDays} gün` : "Süresiz"}
+      />
+      <ReadOnlyLine
+        label="Hızlı PIN / kart deneme kilidi"
+        value={
+          pinLockoutEnabled
+            ? `${pinLockoutAttempts} deneme · ${pinLockoutPenaltySec} sn ceza · ${pinLockoutEscalateAfter} turda ${pinLockoutLongPenaltyMin} dk`
+            : "Kapalı"
+        }
       />
       <ReadOnlyLine
         label="Mobil giriş yöntemleri"

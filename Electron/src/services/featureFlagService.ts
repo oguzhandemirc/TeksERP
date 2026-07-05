@@ -170,6 +170,21 @@ export interface FeatureFlags {
   mobileIdleLockEnabled: boolean;
   /** Mobil hareketsizlik kilidi süresi — dakika (1..120, default 10). Client ENFORCE (mobil). */
   mobileIdleLockMinutes: number;
+  /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = süresiz). Zaman aşımı kapalı
+   *  olsa bile token en fazla bu kadar gün yaşar (sızan token sonsuza kadar geçerli
+   *  kalmasın). Backend ENFORCE eder (issueToken). */
+  absoluteSessionCapDays: number;
+  /** Hızlı PIN + kart giriş deneme kilidi açık mı (default true). Backend ENFORCE
+   *  (login-lockout middleware). Kapalıyken deneme kilidi hiç uygulanmaz. */
+  pinLockoutEnabled: boolean;
+  /** Kilit tetiklenene kadar izin verilen ardışık yanlış deneme (default 5, 1..20). */
+  pinLockoutAttempts: number;
+  /** Kısa ceza süresi — saniye (default 60, 5..3600). Eşik aşılınca bu kadar bloklanır. */
+  pinLockoutPenaltySec: number;
+  /** Kaç ceza turundan sonra uzun cezaya geçilir (default 3, 1..20). */
+  pinLockoutEscalateAfter: number;
+  /** Uzun ceza süresi — dakika (default 15, 1..1440). Escalate eşiğine varınca uygulanır. */
+  pinLockoutLongPenaltyMin: number;
   /** Aynı hesabın aynı tip cihazda 2. oturumuna karşı politika (default 'kick').
    *  kick = eskiyi düşür, notify = kullanıcıya sor, off = sınırsız. Backend (login) enforce. */
   sameTypeSessionPolicy: SameTypeSessionPolicy;

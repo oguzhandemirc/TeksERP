@@ -14,6 +14,22 @@ export const DEFAULT_WORK_SESSION_IDLE = 20; // saha idle açılınca makul vars
 export const DEFAULT_MOBILE_IDLE_LOCK_MIN = 10;
 export const MIN_MOBILE_IDLE_LOCK_MIN = 1;
 export const MAX_MOBILE_IDLE_LOCK_MIN = 120; // 2 saat
+// Mutlak oturum tavanı — gün (0 = süresiz).
+export const DEFAULT_ABSOLUTE_CAP_DAYS = 30;
+export const MAX_ABSOLUTE_CAP_DAYS = 365;
+// Hızlı PIN/kart deneme kilidi — aralıklar (backend ile birebir).
+export const DEFAULT_PIN_LOCKOUT_ATTEMPTS = 5;
+export const MIN_PIN_LOCKOUT_ATTEMPTS = 1;
+export const MAX_PIN_LOCKOUT_ATTEMPTS = 20;
+export const DEFAULT_PIN_LOCKOUT_PENALTY_SEC = 60;
+export const MIN_PIN_LOCKOUT_PENALTY_SEC = 5;
+export const MAX_PIN_LOCKOUT_PENALTY_SEC = 3600;
+export const DEFAULT_PIN_LOCKOUT_ESCALATE_AFTER = 3;
+export const MIN_PIN_LOCKOUT_ESCALATE_AFTER = 1;
+export const MAX_PIN_LOCKOUT_ESCALATE_AFTER = 20;
+export const DEFAULT_PIN_LOCKOUT_LONG_PENALTY_MIN = 15;
+export const MIN_PIN_LOCKOUT_LONG_PENALTY_MIN = 1;
+export const MAX_PIN_LOCKOUT_LONG_PENALTY_MIN = 1440;
 const DEFAULT_LOGIN_METHODS: { enabled: LoginMethod[]; primary: LoginMethod } = {
   enabled: ["list"],
   primary: "list",
@@ -41,6 +57,12 @@ export function useSessionSettingsForm() {
   const currentPolicy = isSameTypeSessionPolicy(f?.sameTypeSessionPolicy)
     ? f!.sameTypeSessionPolicy
     : DEFAULT_SAME_TYPE_SESSION_POLICY;
+  const currentCapDays = f?.absoluteSessionCapDays ?? DEFAULT_ABSOLUTE_CAP_DAYS;
+  const currentPinEnabled = f?.pinLockoutEnabled ?? true;
+  const currentPinAttempts = f?.pinLockoutAttempts ?? DEFAULT_PIN_LOCKOUT_ATTEMPTS;
+  const currentPinPenaltySec = f?.pinLockoutPenaltySec ?? DEFAULT_PIN_LOCKOUT_PENALTY_SEC;
+  const currentPinEscalate = f?.pinLockoutEscalateAfter ?? DEFAULT_PIN_LOCKOUT_ESCALATE_AFTER;
+  const currentPinLongMin = f?.pinLockoutLongPenaltyMin ?? DEFAULT_PIN_LOCKOUT_LONG_PENALTY_MIN;
 
   const [sessionMin, setSessionMin] = useState(currentSessionMin);
   const [autoLogout, setAutoLogout] = useState(currentAutoLogout);
@@ -55,6 +77,13 @@ export function useSessionSettingsForm() {
   const [policy, setPolicy] = useState<SameTypeSessionPolicy>(currentPolicy);
   const [enabledMethods, setEnabledMethods] = useState<LoginMethod[]>(currentMethods.enabled);
   const [primaryMethod, setPrimaryMethod] = useState<LoginMethod>(currentMethods.primary);
+  // Birim dakika DEĞİL (gün/sn/tur/dk) → NumberField (string) ile tutulur; geçici boş girişe izin.
+  const [capDays, setCapDays] = useState(String(currentCapDays));
+  const [pinEnabled, setPinEnabled] = useState(currentPinEnabled);
+  const [pinAttempts, setPinAttempts] = useState(String(currentPinAttempts));
+  const [pinPenaltySec, setPinPenaltySec] = useState(String(currentPinPenaltySec));
+  const [pinEscalate, setPinEscalate] = useState(String(currentPinEscalate));
+  const [pinLongMin, setPinLongMin] = useState(String(currentPinLongMin));
   const methodsKey = JSON.stringify(currentMethods);
   useEffect(() => {
     setSessionMin(currentSessionMin);
@@ -68,6 +97,12 @@ export function useSessionSettingsForm() {
     setPolicy(currentPolicy);
     setEnabledMethods(currentMethods.enabled);
     setPrimaryMethod(currentMethods.primary);
+    setCapDays(String(currentCapDays));
+    setPinEnabled(currentPinEnabled);
+    setPinAttempts(String(currentPinAttempts));
+    setPinPenaltySec(String(currentPinPenaltySec));
+    setPinEscalate(String(currentPinEscalate));
+    setPinLongMin(String(currentPinLongMin));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     currentSessionMin,
@@ -78,6 +113,12 @@ export function useSessionSettingsForm() {
     currentMobileLock,
     currentPolicy,
     methodsKey,
+    currentCapDays,
+    currentPinEnabled,
+    currentPinAttempts,
+    currentPinPenaltySec,
+    currentPinEscalate,
+    currentPinLongMin,
   ]);
 
   const mut = useMutation({
@@ -90,6 +131,12 @@ export function useSessionSettingsForm() {
       mobileIdleLockEnabled: boolean;
       sameTypeSessionPolicy: SameTypeSessionPolicy;
       loginMethods: { enabled: LoginMethod[]; primary: LoginMethod };
+      absoluteSessionCapDays: number;
+      pinLockoutEnabled: boolean;
+      pinLockoutAttempts: number;
+      pinLockoutPenaltySec: number;
+      pinLockoutEscalateAfter: number;
+      pinLockoutLongPenaltyMin: number;
     }) => featureFlagService.update(payload),
     onSuccess: () => {
       toast.success("Oturum ayarları kaydedildi.");
@@ -112,7 +159,46 @@ export function useSessionSettingsForm() {
     mobileLockMin >= MIN_MOBILE_IDLE_LOCK_MIN &&
     mobileLockMin <= MAX_MOBILE_IDLE_LOCK_MIN;
   const methodsValid = enabledMethods.length > 0 && enabledMethods.includes(primaryMethod);
-  const allValid = sessionValid && idleValid && workValid && mobileLockMinValid && methodsValid;
+
+  // Gün/sn/tur/dk — string state → int parse + aralık doğrulama.
+  const capDaysNum = Number(capDays);
+  const capDaysValid =
+    capDays.trim() !== "" &&
+    Number.isInteger(capDaysNum) &&
+    capDaysNum >= 0 &&
+    capDaysNum <= MAX_ABSOLUTE_CAP_DAYS;
+  const inRangeInt = (raw: string, min: number, max: number) => {
+    const n = Number(raw);
+    return raw.trim() !== "" && Number.isInteger(n) && n >= min && n <= max;
+  };
+  const pinAttemptsValid = inRangeInt(pinAttempts, MIN_PIN_LOCKOUT_ATTEMPTS, MAX_PIN_LOCKOUT_ATTEMPTS);
+  const pinPenaltyValid = inRangeInt(
+    pinPenaltySec,
+    MIN_PIN_LOCKOUT_PENALTY_SEC,
+    MAX_PIN_LOCKOUT_PENALTY_SEC,
+  );
+  const pinEscalateValid = inRangeInt(
+    pinEscalate,
+    MIN_PIN_LOCKOUT_ESCALATE_AFTER,
+    MAX_PIN_LOCKOUT_ESCALATE_AFTER,
+  );
+  const pinLongValid = inRangeInt(
+    pinLongMin,
+    MIN_PIN_LOCKOUT_LONG_PENALTY_MIN,
+    MAX_PIN_LOCKOUT_LONG_PENALTY_MIN,
+  );
+  // Kilit kapalıyken alt-alan geçerliliği zorunlu değil (input pasif; kayıtlı değer korunur).
+  const pinValid =
+    !pinEnabled || (pinAttemptsValid && pinPenaltyValid && pinEscalateValid && pinLongValid);
+
+  const allValid =
+    sessionValid &&
+    idleValid &&
+    workValid &&
+    mobileLockMinValid &&
+    methodsValid &&
+    capDaysValid &&
+    pinValid;
 
   const methodsDirty =
     JSON.stringify([...enabledMethods].sort()) !==
@@ -126,7 +212,13 @@ export function useSessionSettingsForm() {
     autoLogout !== currentAutoLogout ||
     mobileLock !== currentMobileLock ||
     policy !== currentPolicy ||
-    methodsDirty;
+    methodsDirty ||
+    capDaysNum !== currentCapDays ||
+    pinEnabled !== currentPinEnabled ||
+    Number(pinAttempts) !== currentPinAttempts ||
+    Number(pinPenaltySec) !== currentPinPenaltySec ||
+    Number(pinEscalate) !== currentPinEscalate ||
+    Number(pinLongMin) !== currentPinLongMin;
 
   const toggleIdle = (on: boolean) => {
     setIdleEnabled(on);
@@ -145,6 +237,13 @@ export function useSessionSettingsForm() {
     });
   };
 
+  // Kilit kapalıyken alt-alan boş/geçersiz kalabilir → payload'da kayıtlı değere düş
+  // (backend her alanı int + aralık ister; NaN göndermeyelim).
+  const safeInt = (raw: string, fallback: number) => {
+    const n = Number(raw);
+    return Number.isInteger(n) ? n : fallback;
+  };
+
   const save = () =>
     mut.mutate({
       sessionDurationMinutes: sessionMin,
@@ -155,6 +254,12 @@ export function useSessionSettingsForm() {
       mobileIdleLockEnabled: mobileLock,
       sameTypeSessionPolicy: policy,
       loginMethods: { enabled: enabledMethods, primary: primaryMethod },
+      absoluteSessionCapDays: capDaysNum,
+      pinLockoutEnabled: pinEnabled,
+      pinLockoutAttempts: safeInt(pinAttempts, currentPinAttempts),
+      pinLockoutPenaltySec: safeInt(pinPenaltySec, currentPinPenaltySec),
+      pinLockoutEscalateAfter: safeInt(pinEscalate, currentPinEscalate),
+      pinLockoutLongPenaltyMin: safeInt(pinLongMin, currentPinLongMin),
     });
 
   return {
@@ -167,8 +272,15 @@ export function useSessionSettingsForm() {
     workEnabled, workMin, setWorkMin, toggleWork,
     policy, setPolicy,
     enabledMethods, primaryMethod, setPrimaryMethod, toggleMethod,
+    capDays, setCapDays,
+    pinEnabled, setPinEnabled,
+    pinAttempts, setPinAttempts,
+    pinPenaltySec, setPinPenaltySec,
+    pinEscalate, setPinEscalate,
+    pinLongMin, setPinLongMin,
     // doğrulama
     sessionValid, idleValid, workValid, mobileLockMinValid, methodsValid, allValid, dirty,
+    capDaysValid, pinAttemptsValid, pinPenaltyValid, pinEscalateValid, pinLongValid,
     // kaydet
     save, isSaving: mut.isPending,
     // yetkisiz salt-okunur özet için mevcut (kayıtlı) değerler
@@ -181,6 +293,12 @@ export function useSessionSettingsForm() {
       mobileLockMin: currentMobileLockMin,
       policy: currentPolicy,
       methods: currentMethods,
+      capDays: currentCapDays,
+      pinEnabled: currentPinEnabled,
+      pinAttempts: currentPinAttempts,
+      pinPenaltySec: currentPinPenaltySec,
+      pinEscalate: currentPinEscalate,
+      pinLongMin: currentPinLongMin,
     },
   };
 }
