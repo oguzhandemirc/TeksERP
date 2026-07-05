@@ -542,7 +542,8 @@ model LabelFormatProfile {
   /// düzenlenemez; satır veri bütünlüğü için durur (kod DEL- önekiyle serbest).
   deletedAt DateTime? @db.Timestamptz
 
-  peripherals PeripheralDevice[]
+  peripherals      PeripheralDevice[]
+  templateVariants LabelTemplateVariant[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1035,6 +1036,7 @@ model Customer {
   colorAliases  CustomerColorAlias[]
   shipments     Shipment[]
   rollReturns   RollReturn[]
+  templateRoutes CustomerTemplateRoute[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2588,25 +2590,32 @@ model CustomerColorAlias {
 ///     { "key": "itemName",    "label": "Ürün",    "order": 2, "isVisible": true },
 ///     { "key": "customerName","label": "Müşteri", "order": 3, "isVisible": true }
 ///   ]
+/// Etiket şablonu — TEK HAVUZ (Etiket Stüdyosu v2): şablon türden bağımsızdır,
+/// hangi bağlamda (ham/bitmiş/kartela) basılacağını ATAMALAR belirler
+/// (LabelContextDefault + PeripheralTemplateRoute + CustomerTemplateRoute).
+/// Yerleşim varyantlarda (LabelTemplateVariant.elements — kanvas modeli).
 model LabelTemplate {
   id        String @db.Uuid    @id @default(uuid())
   name      String    @db.VarChar(100) // "Standart Top Etiketi", "Müşteri X Özel"
-  kind      LabelKind
+  /// DEPRECATED (v2 havuz): kimlik değil, yalnız migration bilgisi — yeni şablonlar
+  /// null doğar. Baskı bağlamı baskı anında veriden türer. Saha onayı sonrası drop.
+  kind      LabelKind?
+  /// DEPRECATED (v2): tek doğru kaynak LabelContextDefault; geçiş boyunca çift-yazım
+  /// (eski client geri uyumu). Saha onayı sonrası drop.
   isDefault Boolean   @default(false)
   isActive  Boolean   @default(true)
-  /// Field listesi — operatör toggle/sırala/bold ile kalıcı düzenler.
+  /// DEPRECATED (v2): akış-modeli alan listesi — varyantı olmayan şablon için
+  /// fail-safe render yolu (dual-mode). Varyantlı şablonda kullanılmaz.
   fields    Json
   /// Uzman raw-code override (dil→kod): { PPLA?, PPLB?, ZPL?, RASTER_HTML? }. Bir dil
   /// için doluysa otomatik üretim yerine BU kod basılır ({{key}} yer-tutucuları payload
-  /// değeriyle doldurulur). Boş/yok → mevcut otomatik üretim.
+  /// değeriyle doldurulur). Boş/yok → varyant kanvası / akış üretimi.
   rawCode   Json?
 
-  /// Yerleşim ayarları (şablon başına, opsiyonel). Boş → mevcut/varsayılan davranış.
-  /// Satırlar arası mesafe (mm) — boşsa font boyutundan türetilir (native step).
+  /// DEPRECATED (v2) yerleşim düğmeleri — kanvas modelinde eleman özelliğine taşındı;
+  /// yalnız dual-mode akış yolunda okunur. Saha onayı sonrası drop.
   lineStepMm Decimal? @db.Decimal(4, 1)
-  /// QR modül büyütme (dots/modül; PPLB `s`, ZPL/PPLA mag) — boşsa varsayılan (5).
   qrScale    Int?
-  /// Sağ kenarda dikey metraj bandı (siyah zemin/beyaz değer, döndürülmüş) — opsiyonel.
   lengthBanner Boolean?
 
   /// KALICI silinme damgası — dolu=silinmiş: listelerde görünmez, düzenlenemez;
@@ -2614,14 +2623,80 @@ model LabelTemplate {
   deletedAt DateTime? @db.Timestamptz
 
   peripheralRoutes PeripheralTemplateRoute[]
+  variants         LabelTemplateVariant[]
+  customerRoutes   CustomerTemplateRoute[]
+  contextDefaults  LabelContextDefault[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([kind, name])
-  @@index([kind, isDefault])
-  @@index([kind, isActive])
+  @@unique([name])
+  @@index([isActive])
   @@map("label_templates")
+}
+
+/// Şablonun BOYUT VARYANTI — kendi tuvali (widthMm×heightMm) + kendi kanvas
+/// eleman yerleşimi. Yeni varyant mevcut varyanttan KOPYALANARAK başlar, elle
+/// düzeltilir/teyit edilir — OTOMATİK ÖLÇEKLEME YOK (sıfır-hata ilkesi).
+/// Baskıda cihaz profil boyutuna ±1mm eşleşen varyant seçilir; eşleşme yoksa
+/// isPrimary varyant basılır (baskı bloklanmaz) + panelde proaktif uyarı.
+model LabelTemplateVariant {
+  id         String  @db.Uuid @id @default(uuid())
+  templateId String  @db.Uuid
+  template   LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name       String  @db.VarChar(60) // "100×148 Standart"
+  widthMm    Decimal @db.Decimal(6, 2)
+  heightMm   Decimal @db.Decimal(6, 2)
+  /// Tuval ön-dolum referansı — SIKI BAĞ YOK (profil silinse varyant yaşar).
+  sourceProfileId String? @db.Uuid
+  sourceProfile   LabelFormatProfile? @relation(fields: [sourceProfileId], references: [id], onDelete: SetNull)
+  /// Şablon başına EN FAZLA bir primary (partial unique index — raw SQL).
+  isPrimary  Boolean @default(false)
+  /// Kanvas eleman listesi { v: 1, elements: LabelElement[] } — servis
+  /// validateElements ile doğrular (config/label-elements.ts tek kaynak).
+  elements   Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([templateId, widthMm, heightMm])
+  @@index([sourceProfileId])
+  @@map("label_template_variants")
+}
+
+/// Müşteriye özel şablon ataması (müşteri+bağlam → şablon). Çözüm zincirinde
+/// cihaz route'unun ÖNÜNE girer: explicit > müşteri > cihaz > bağlam default.
+/// Müşterisiz/stok baskıda hiç sorgulanmaz (etiket müşterisi explicit-only).
+/// Emsal desen: PeripheralTemplateRoute + CustomerColorAlias.
+model CustomerTemplateRoute {
+  id         String @db.Uuid @id @default(uuid())
+  customerId String @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  kind       LabelKind
+  templateId String @db.Uuid
+  template   LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([customerId, kind])
+  @@index([templateId])
+  @@map("customer_template_routes")
+}
+
+/// Bağlam (LabelKind) başına varsayılan şablon — eski "kind-başına isDefault"un
+/// yeni evi. kind @unique = bağlam başına tek default DB seddi.
+model LabelContextDefault {
+  id         String    @db.Uuid @id @default(uuid())
+  kind       LabelKind @unique
+  templateId String    @db.Uuid
+  template   LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([templateId])
+  @@map("label_context_defaults")
 }
 
 /// WorkOrder ↔ FabricProperty M:N — planlamacının iş emri için belirlediği

@@ -40,6 +40,17 @@ const PERIPHERAL_INCLUDE = (kind: LabelKind) => ({
   templateRoutes: { where: { kind }, include: { template: true }, take: 1 },
 });
 
+/** Bağlam (kind) varsayılan şablonu — tek doğru kaynak LabelContextDefault.
+ *  Pasif/kalıcı-silinmiş şablona işaret ediyorsa null (katalog default'una düşülür). */
+export async function findContextDefaultTemplate(kind: LabelKind): Promise<LabelTemplate | null> {
+  const def = await prisma.labelContextDefault.findUnique({
+    where: { kind },
+    include: { template: true },
+  });
+  if (!def) return null;
+  return def.template.isActive && def.template.deletedAt == null ? def.template : null;
+}
+
 export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<LabelRouting> {
   const { kind } = opts;
 
@@ -79,7 +90,7 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
   // --- 3. Dil: cihaz override > format.language (global ayar) ---
   const language = peripheral?.languageOverride ?? format.language;
 
-  // --- 4. Şablon: explicit > cihaz route[kind] > kind default > null ---
+  // --- 4. Şablon: explicit > cihaz route[kind] > bağlam default > null ---
   let template: LabelTemplate | null = null;
   if (opts.templateId) {
     // KALICI silinmiş şablon explicit istense bile çözülmez.
@@ -89,9 +100,8 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
     template = peripheral.templateRoutes[0].template;
   }
   if (!template) {
-    template = await prisma.labelTemplate.findFirst({
-      where: { kind, isDefault: true, isActive: true },
-    });
+    // Tek doğru kaynak: LabelContextDefault (eski kind-başına isDefault'un yeni evi).
+    template = await findContextDefaultTemplate(kind);
   }
 
   return {

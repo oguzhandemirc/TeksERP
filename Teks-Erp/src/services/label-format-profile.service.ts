@@ -17,6 +17,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import type { LabelPayload } from "./label.service";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
+import { findContextDefaultTemplate } from "./helpers/label-routing.resolver";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
 import { mmToDots } from "./helpers/native-label.shared";
@@ -152,9 +153,7 @@ export class LabelFormatProfileService extends BaseService {
    *  profil geometrisi (kind ile). Test baskısı/önizleme tek yerden beslenir. */
   private async buildSampleInput(id: string, kind: LabelKind): Promise<LabelRenderInput> {
     const payload = samplePayload(kind);
-    const template = await prisma.labelTemplate.findFirst({
-      where: { kind, isDefault: true, isActive: true },
-    });
+    const template = await findContextDefaultTemplate(kind);
     const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: SAMPLE_BC, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
     const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: SAMPLE_BC, scale: 3, backgroundcolor: "FFFFFF" });
     const format = await resolveLabelFormat({ profileId: id, kind });

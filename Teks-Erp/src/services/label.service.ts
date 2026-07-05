@@ -33,7 +33,7 @@ import {
 } from "./helpers/customer-name.helper";
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
 import { resolveLabelFormat, loadMachinePrinter, type ResolvedLabelFormat } from "./helpers/label-format.resolver";
-import { resolveLabelRouting } from "./helpers/label-routing.resolver";
+import { resolveLabelRouting, findContextDefaultTemplate } from "./helpers/label-routing.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
@@ -798,9 +798,7 @@ export class LabelService {
       batchNumber: "P-ORNEK-001",
       printedAt: new Date().toISOString(),
     };
-    const template = await prisma.labelTemplate.findFirst({
-      where: { kind: LabelKind.ROLL_FINISHED, isDefault: true, isActive: true },
-    });
+    const template = await findContextDefaultTemplate(LabelKind.ROLL_FINISHED);
     const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: sampleBarcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
     const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: sampleBarcode, scale: 3, backgroundcolor: "FFFFFF" });
     const format = await resolveLabelFormat({ profileId });

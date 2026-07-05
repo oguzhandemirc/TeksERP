@@ -1,11 +1,12 @@
 // =============================================================================
 // TeksERP - Label Template Service
 // =============================================================================
-// Etiket standardı (alan + sıra + Türkçe başlık + bold/font) yönetimi.
-// Her LabelKind için en fazla 1 isDefault=true — transaction içinde diğer
-// default'lar düşürülür VE DB seddi: partial unique index
-// `label_templates_one_default_per_kind` ON (kind) WHERE isDefault=true
-// (migration). Eşzamanlı iki setDefault'ta kaybeden P2002 alır → 409 (aşağıda).
+// Etiket standardı yönetimi — Etiket Stüdyosu v2: şablonlar TEK HAVUZ.
+// Bağlam (LabelKind) başına varsayılan artık LabelContextDefault tablosunda
+// (kind @unique = DB seddi; eşzamanlı yarışta kaybeden P2002 → 409 aşağıda).
+// GEÇİŞ: eski LabelTemplate.isDefault kolonu DEPRECATED ama ÇİFT-YAZIM ile
+// senkron tutulur (mobil useLabelTemplate + eski client geri uyumu) — saha
+// onayı sonrası kolonla birlikte kalkar.
 //
 // fields validation: src/config/label-fields.ts catalog'undan.
 // - Sadece izinli key'ler kabul (whitelist)
@@ -128,13 +129,18 @@ export class LabelTemplateService {
   }
 
   /**
-   * Bir LabelKind için aktif default template. Yoksa null döner — etiket
-   * önizleme endpoint'i bunu görüp catalog default'una düşer.
+   * Bir bağlam (LabelKind) için varsayılan şablon — tek doğru kaynak
+   * LabelContextDefault. Yoksa/pasifse null döner — etiket önizleme endpoint'i
+   * bunu görüp catalog default'una düşer.
    */
   async findDefault(kind: LabelKind): Promise<LabelTemplate | null> {
-    return prisma.labelTemplate.findFirst({
-      where: { kind, isDefault: true, isActive: true, deletedAt: null },
+    const def = await prisma.labelContextDefault.findUnique({
+      where: { kind },
+      include: { template: true },
     });
+    if (!def) return null;
+    const t = def.template;
+    return t.isActive && t.deletedAt == null ? t : null;
   }
 
   /**
@@ -159,14 +165,14 @@ export class LabelTemplateService {
     validateFields(input.kind, fields);
 
     const created = await prisma.$transaction(async (tx) => {
-      // isDefault=true geliyorsa diğerlerini düşür (kind içinde tek default).
+      // isDefault=true geliyorsa eski kolonda diğerlerini düşür (çift-yazım geri uyumu).
       if (input.isDefault) {
         await tx.labelTemplate.updateMany({
           where: { kind: input.kind, isDefault: true },
           data: { isDefault: false },
         });
       }
-      return tx.labelTemplate.create({
+      const row = await tx.labelTemplate.create({
         data: {
           name,
           kind: input.kind,
@@ -179,6 +185,15 @@ export class LabelTemplateService {
           lengthBanner: input.lengthBanner ?? null,
         },
       });
+      // Tek doğru kaynak: bağlam varsayılanını LabelContextDefault'a yaz.
+      if (input.isDefault) {
+        await tx.labelContextDefault.upsert({
+          where: { kind: input.kind },
+          create: { kind: input.kind, templateId: row.id },
+          update: { templateId: row.id },
+        });
+      }
+      return row;
     }).catch(rethrowDefaultConflict);
 
     await AuditService.log({
@@ -202,7 +217,9 @@ export class LabelTemplateService {
     if (!existing) throw AppError.notFound("Template bulunamadı");
     if (existing.deletedAt) throw AppError.badRequest("Silinmiş şablon düzenlenemez veya geri getirilemez");
 
-    if (input.fields) {
+    // kind null (havuz şablonu, F3+) → kind-whitelist'i yok; birleşik katalog
+    // doğrulaması kanvas/varyant katmanında yapılır (validateElements).
+    if (input.fields && existing.kind) {
       validateFields(existing.kind, input.fields);
     }
 
@@ -220,17 +237,36 @@ export class LabelTemplateService {
     if (input.qrScale !== undefined) data.qrScale = input.qrScale;
     if (input.lengthBanner !== undefined) data.lengthBanner = input.lengthBanner;
 
+    if (input.isDefault === true && !existing.kind) {
+      throw AppError.badRequest(
+        "Türsüz (havuz) şablonda varsayılan bu uçtan atanamaz — bağlam varsayılanları ekranını kullanın"
+      );
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
-      // isDefault=true'ya çekiliyorsa kind içindeki diğer default'ları düşür.
-      if (input.isDefault === true && !existing.isDefault) {
+      // isDefault=true'ya çekiliyorsa eski kolonda diğerlerini düşür (çift-yazım).
+      if (input.isDefault === true && !existing.isDefault && existing.kind) {
         await tx.labelTemplate.updateMany({
           where: { kind: existing.kind, isDefault: true, NOT: { id } },
           data: { isDefault: false },
         });
       }
-      // isDefault=false'a düşürülüyorsa engelle: kind'da en az 1 default kalmalı
-      // değil aslında — operatör hepsini default-değil yapabilir. UI'da uyarı verir.
-      return tx.labelTemplate.update({ where: { id }, data });
+      const row = await tx.labelTemplate.update({ where: { id }, data });
+      // Tek doğru kaynak senkronu: LabelContextDefault.
+      if (input.isDefault === true && existing.kind) {
+        await tx.labelContextDefault.upsert({
+          where: { kind: existing.kind },
+          create: { kind: existing.kind, templateId: id },
+          update: { templateId: id },
+        });
+      } else if (input.isDefault === false && existing.kind) {
+        // Bu şablon bağlamın default'uysa kaydı kaldır (bağlam default'suz kalabilir
+        // — operatör bilinçli düşürebilir, UI uyarır; eski davranışla birebir).
+        await tx.labelContextDefault.deleteMany({
+          where: { kind: existing.kind, templateId: id },
+        });
+      }
+      return row;
     }).catch(rethrowDefaultConflict);
 
     await AuditService.log({
@@ -255,21 +291,34 @@ export class LabelTemplateService {
   }
 
   /**
-   * Başka bir template'i kind içinde default yapar. Idempotent.
+   * Şablonu bağlamın (kind) varsayılanı yapar. Idempotent. Tek doğru kaynak
+   * LabelContextDefault; eski isDefault kolonu çift-yazımla senkron tutulur.
    */
   async setDefault(id: string, userId?: string): Promise<ApiResponse<LabelTemplate>> {
     const existing = await prisma.labelTemplate.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Template bulunamadı");
     if (existing.deletedAt) throw AppError.badRequest("Silinmiş şablon default yapılamaz");
     if (!existing.isActive) throw AppError.badRequest("Pasif template default yapılamaz");
-    if (existing.isDefault) {
+    if (!existing.kind) {
+      throw AppError.badRequest(
+        "Türsüz (havuz) şablonda varsayılan bu uçtan atanamaz — bağlam varsayılanları ekranını kullanın"
+      );
+    }
+    const kind = existing.kind;
+    const current = await prisma.labelContextDefault.findUnique({ where: { kind } });
+    if (existing.isDefault && current?.templateId === id) {
       return { success: true, data: existing, message: "Zaten default" };
     }
 
     const updated = await prisma.$transaction(async (tx) => {
       await tx.labelTemplate.updateMany({
-        where: { kind: existing.kind, isDefault: true },
+        where: { kind, isDefault: true },
         data: { isDefault: false },
+      });
+      await tx.labelContextDefault.upsert({
+        where: { kind },
+        create: { kind, templateId: id },
+        update: { templateId: id },
       });
       return tx.labelTemplate.update({
         where: { id },
@@ -297,7 +346,8 @@ export class LabelTemplateService {
     const existing = await prisma.labelTemplate.findUnique({ where: { id } });
     if (!existing) throw AppError.notFound("Template bulunamadı");
     if (existing.deletedAt) throw AppError.badRequest("Silinmiş şablon pasifleştirilemez");
-    if (existing.isDefault) {
+    const asDefault = await prisma.labelContextDefault.findFirst({ where: { templateId: id } });
+    if (asDefault || existing.isDefault) {
       throw AppError.badRequest(
         "Default template pasifleştirilemez — önce başka bir template'i default yapın"
       );
@@ -335,7 +385,8 @@ export class LabelTemplateService {
     if (existing.deletedAt) {
       return { success: true, data: { deleted: true }, message: "Zaten silinmiş" }; // idempotent
     }
-    if (existing.isDefault) {
+    const asDefault = await prisma.labelContextDefault.findFirst({ where: { templateId: id } });
+    if (asDefault || existing.isDefault) {
       throw AppError.badRequest(
         "Default template kalıcı silinemez — önce başka bir template'i default yapın"
       );
@@ -343,6 +394,9 @@ export class LabelTemplateService {
     const freedName = `DEL-${Date.now().toString(36).toUpperCase()} ${existing.name}`.slice(0, 100);
     await prisma.$transaction(async (tx) => {
       await tx.peripheralTemplateRoute.deleteMany({ where: { templateId: id } });
+      // Müşteri atamaları da temizlenir — öksüz atama müşteriyi sessizce default'a
+      // düşürmesin (cihaz route temizliğiyle simetrik).
+      await tx.customerTemplateRoute.deleteMany({ where: { templateId: id } });
       await tx.labelTemplate.update({
         where: { id },
         data: { deletedAt: new Date(), isActive: false, name: freedName },
@@ -363,7 +417,7 @@ export class LabelTemplateService {
    */
   async getDefaultCode(kind: LabelKind, language: PrinterLanguage): Promise<ApiResponse<{ code: string }>> {
     const payload = mockPayload(kind);
-    const tpl = await prisma.labelTemplate.findFirst({ where: { kind, isDefault: true, isActive: true } });
+    const tpl = await this.findDefault(kind);
     // rawCode'u sıyır → otomatik üretim (şablonun alanlarıyla); değerler fieldDisplayValue
     // formatında çıkar → aşağıdaki geri-çevirme birebir eşleşir.
     const template = tpl ? ({ ...tpl, rawCode: null } as LabelTemplate) : null;
