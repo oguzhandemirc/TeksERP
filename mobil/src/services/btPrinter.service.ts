@@ -76,9 +76,11 @@ export function printRaw(address: string, content: string): Promise<void> {
 /**
  * Native komut string'ini eşleşmiş yazıcıya yaz. İçerik latin1-güvenli (backend
  * asciiFold) + STX/CR kontrol baytları (<0x20) → 'latin1' encoding bayt-bire-bir korur.
- * Bayat soket halinde bir kez yeniden bağlanıp dener.
+ * Bayat soket halinde bir kez yeniden bağlanıp dener. 12 sn sert zaman sınırı:
+ * yazıcı kapalı / HC-06'yı başka cihaz tutuyorsa askıda kalıp KUYRUĞU DONDURMAK
+ * yerine net hata verir → sıradaki etiket basılmaya devam eder.
  */
 export async function printPpla(address: string, content: string): Promise<void> {
   if (!content) throw new Error('Etiket verisi boş');
-  await writeRaw(address, content, 'latin1', { retry: true });
+  await writeRaw(address, content, 'latin1', { retry: true, timeoutMs: 12_000 });
 }

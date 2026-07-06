@@ -67,7 +67,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   closeSession: async () => {
-    set({ active: null });
+    // isLoaded=false ŞART: yalnız active=null bırakılırsa, logout API çağrısı
+    // sürerken hâlâ mount olan SessionGate "oturum yok" görüp PlaceConfirmView'i
+    // açar → autoOpen ÇIKIŞ SIRASINDA yeni oturum yaratırdı (loglarda close'un
+    // hemen ardından POST /work-sessions 201 — hayalet oturum). isLoaded=false
+    // gate'i spinner'da tutar; sonraki girişte init() yeniden yükler.
+    set({ active: null, isLoaded: false });
     try {
       await workSessionService.close();
     } catch {
