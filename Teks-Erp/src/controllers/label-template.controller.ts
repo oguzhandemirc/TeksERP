@@ -73,6 +73,29 @@ const canvasPreviewSchema = z.object({
   language: z.enum(["PPLA", "PPLB", "ZPL", "RASTER_HTML"] as [string, ...string[]]).optional(),
 });
 
+// Boyut varyantı gövdeleri — eleman-düzeyi doğrulama serviste (validateCanvasLayout).
+const variantCreateSchema = z.object({
+  name: z.string().max(60).optional(),
+  widthMm: z.number().min(10).max(500),
+  heightMm: z.number().min(10).max(500),
+  sourceProfileId: z.string().uuid().nullable().optional(),
+  copyFromVariantId: z.string().uuid().nullable().optional(),
+  elements: z.unknown().optional(),
+});
+
+const variantUpdateSchema = z.object({
+  name: z.string().max(60).optional(),
+  widthMm: z.number().min(10).max(500).optional(),
+  heightMm: z.number().min(10).max(500).optional(),
+  sourceProfileId: z.string().uuid().nullable().optional(),
+  elements: z.unknown().optional(),
+});
+
+const contextDefaultSchema = z.object({
+  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH"] as [string, ...string[]]),
+  templateId: z.string().uuid().nullable(),
+});
+
 export class LabelTemplateController {
   private service = new LabelTemplateService();
 
@@ -191,6 +214,70 @@ export class LabelTemplateController {
     try {
       const result = await this.service.setDefault(req.params.id as string, req.user?.userId);
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  // ---- Boyut varyantları (Etiket Stüdyosu v2) ----
+
+  listVariants = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.service.listVariants(req.params.id as string));
+    } catch (e) { next(e); }
+  };
+
+  createVariant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = variantCreateSchema.parse(req.body);
+      const result = await this.service.createVariant(req.params.id as string, body, req.user?.userId);
+      res.status(201).json(result);
+    } catch (e) { next(e); }
+  };
+
+  updateVariant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = variantUpdateSchema.parse(req.body);
+      const result = await this.service.updateVariant(req.params.variantId as string, body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  deleteVariant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.deleteVariant(req.params.variantId as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  setPrimaryVariant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.setPrimaryVariant(req.params.variantId as string, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  // ---- Bağlam varsayılanları + birleşik katalog ----
+
+  listContextDefaults = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.service.listContextDefaults());
+    } catch (e) { next(e); }
+  };
+
+  setContextDefault = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = contextDefaultSchema.parse(req.body);
+      const result = await this.service.setContextDefault(
+        body.kind as LabelKind,
+        body.templateId,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  unifiedCatalog = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(this.service.getUnifiedCatalogResponse());
     } catch (e) { next(e); }
   };
 

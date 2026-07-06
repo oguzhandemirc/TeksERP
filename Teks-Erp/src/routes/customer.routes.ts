@@ -11,6 +11,7 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 const MOBILE_CUSTOMER_READ = ["mobile:tarti-paket", "mobile:sevkiyat", "mobile:fason-sevk", "mobile:fason-kabul", "mobile:tambur"] as const;
 import branchRoutes from "./customer-branch.routes";
 import aliasRoutes from "./customer-alias.routes";
+import templateRouteRoutes from "./customer-template-route.routes";
 
 const service = new CustomerService({
   modelName: "customer",
@@ -26,6 +27,8 @@ const router = Router();
 router.use("/:customerId/branches", branchRoutes);
 // /api/customers/:customerId/{aliases/suggest, item-aliases/:itemId, color-aliases/:colorId}
 router.use("/:customerId", aliasRoutes);
+// /api/customers/:customerId/template-routes — müşteriye özel etiket şablonu ataması
+router.use("/:customerId", templateRouteRoutes);
 
 /**
  * @openapi

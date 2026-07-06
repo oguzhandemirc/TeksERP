@@ -36,6 +36,8 @@ import {
   findFieldDef,
   getAllowedKeys,
   getRequiredKeys,
+  getUnifiedCatalog,
+  getUnifiedKeys,
 } from "../config/label-fields";
 import { renderLabel } from "./helpers/label-renderer.registry";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
@@ -153,6 +155,12 @@ export class LabelTemplateService {
     const fields = FIELD_CATALOG[kind];
     if (!fields) throw AppError.badRequest("Bilinmeyen LabelKind");
     return { success: true, data: { kind, fields } };
+  }
+
+  /** BİRLEŞİK katalog (tek havuz) — her alan + değer ürettiği bağlamlar. Kanvas
+   *  editörünün eleman paleti buradan beslenir. */
+  getUnifiedCatalogResponse(): ApiResponse<{ fields: ReturnType<typeof getUnifiedCatalog> }> {
+    return { success: true, data: { fields: getUnifiedCatalog() } };
   }
 
   // ---------------------------------------------------------------------------
@@ -410,6 +418,261 @@ export class LabelTemplateService {
       newData: { deletedAt: new Date().toISOString(), freedName },
     }).catch(() => undefined);
     return { success: true, data: { deleted: true }, message: "Şablon kalıcı olarak silindi (kayıt veri bütünlüğü için saklanır)" };
+  }
+
+  // ---------------------------------------------------------------------------
+  // BOYUT VARYANTLARI (Etiket Stüdyosu v2 — kanvas yerleşimi varyantta yaşar)
+  // ---------------------------------------------------------------------------
+
+  async listVariants(templateId: string): Promise<ApiResponse<LabelTemplateVariant[]>> {
+    const t = await prisma.labelTemplate.findUnique({ where: { id: templateId }, select: { id: true, deletedAt: true } });
+    if (!t || t.deletedAt) throw AppError.notFound("Template bulunamadı");
+    const rows = await prisma.labelTemplateVariant.findMany({
+      where: { templateId },
+      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+    });
+    return { success: true, data: rows };
+  }
+
+  /**
+   * Yeni boyut varyantı. İKİ kaynak: `copyFromVariantId` (mevcut bir varyantın
+   * yerleşimini KOPYALA — kullanıcı akışı: "100×60'ı tasarladım, 100×50'yi onun
+   * üstünden yapayım"; BAŞKA şablonun varyantından da kopyalanabilir) veya
+   * doğrudan `elements`. Otomatik ölçekleme YOK — kopyalanan yerleşim elle
+   * düzeltilir/teyit edilir. Şablonun İLK varyantı otomatik primary olur.
+   */
+  async createVariant(
+    templateId: string,
+    input: {
+      name?: string;
+      widthMm: number;
+      heightMm: number;
+      sourceProfileId?: string | null;
+      copyFromVariantId?: string | null;
+      elements?: unknown;
+    },
+    userId?: string,
+  ): Promise<ApiResponse<LabelTemplateVariant>> {
+    const template = await prisma.labelTemplate.findUnique({
+      where: { id: templateId },
+      select: { id: true, name: true, deletedAt: true, variants: { select: { id: true } } },
+    });
+    if (!template || template.deletedAt) throw AppError.notFound("Template bulunamadı");
+
+    let elementsRaw: unknown = input.elements;
+    if (input.copyFromVariantId) {
+      const src = await prisma.labelTemplateVariant.findUnique({
+        where: { id: input.copyFromVariantId },
+        select: { elements: true, template: { select: { deletedAt: true } } },
+      });
+      if (!src || src.template.deletedAt) throw AppError.badRequest("Kopyalanacak varyant bulunamadı");
+      elementsRaw = src.elements;
+    }
+    if (elementsRaw == null) {
+      throw AppError.badRequest("elements veya copyFromVariantId zorunlu");
+    }
+    const layout = this.parseCanvas(elementsRaw, input.widthMm, input.heightMm);
+
+    const created = await prisma.labelTemplateVariant
+      .create({
+        data: {
+          templateId,
+          name: (input.name?.trim() || `${input.widthMm}×${input.heightMm}`).slice(0, 60),
+          widthMm: input.widthMm,
+          heightMm: input.heightMm,
+          sourceProfileId: input.sourceProfileId ?? null,
+          isPrimary: template.variants.length === 0,
+          elements: layout as unknown as Prisma.InputJsonValue,
+        },
+      })
+      .catch((e: unknown) => {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          throw AppError.conflict("Bu şablonda bu boyutta bir varyant zaten var");
+        }
+        throw e;
+      });
+
+    await AuditService.log({
+      userId, action: "CREATE", tableName: "LABEL_TEMPLATE_VARIANT", recordId: created.id,
+      newData: { templateId, templateName: template.name, name: created.name, widthMm: input.widthMm, heightMm: input.heightMm, copiedFrom: input.copyFromVariantId ?? null },
+    });
+    return { success: true, data: created, message: "Varyant oluşturuldu" };
+  }
+
+  async updateVariant(
+    variantId: string,
+    input: { name?: string; widthMm?: number; heightMm?: number; sourceProfileId?: string | null; elements?: unknown },
+    userId?: string,
+  ): Promise<ApiResponse<LabelTemplateVariant>> {
+    const existing = await prisma.labelTemplateVariant.findUnique({
+      where: { id: variantId },
+      include: { template: { select: { deletedAt: true, name: true } } },
+    });
+    if (!existing || existing.template.deletedAt) throw AppError.notFound("Varyant bulunamadı");
+
+    const widthMm = input.widthMm ?? Number(existing.widthMm);
+    const heightMm = input.heightMm ?? Number(existing.heightMm);
+    const data: Prisma.LabelTemplateVariantUpdateInput = {};
+    if (input.name !== undefined) {
+      const trimmed = input.name.trim();
+      if (!trimmed) throw AppError.badRequest("Varyant adı boş olamaz");
+      data.name = trimmed.slice(0, 60);
+    }
+    if (input.widthMm !== undefined) data.widthMm = input.widthMm;
+    if (input.heightMm !== undefined) data.heightMm = input.heightMm;
+    if (input.sourceProfileId !== undefined) {
+      data.sourceProfile = input.sourceProfileId
+        ? { connect: { id: input.sourceProfileId } }
+        : { disconnect: true };
+    }
+    // Boyut değişiyorsa mevcut yerleşim de yeni tuvale göre doğrulanmalı.
+    const elementsRaw = input.elements !== undefined ? input.elements : (input.widthMm !== undefined || input.heightMm !== undefined) ? existing.elements : undefined;
+    if (elementsRaw !== undefined) {
+      const layout = this.parseCanvas(elementsRaw, widthMm, heightMm);
+      data.elements = layout as unknown as Prisma.InputJsonValue;
+    }
+
+    const updated = await prisma.labelTemplateVariant
+      .update({ where: { id: variantId }, data })
+      .catch((e: unknown) => {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          throw AppError.conflict("Bu şablonda bu boyutta bir varyant zaten var");
+        }
+        throw e;
+      });
+    await AuditService.log({
+      userId, action: "UPDATE", tableName: "LABEL_TEMPLATE_VARIANT", recordId: variantId,
+      oldData: { name: existing.name, widthMm: existing.widthMm, heightMm: existing.heightMm },
+      newData: { name: updated.name, widthMm: updated.widthMm, heightMm: updated.heightMm, elementsChanged: input.elements !== undefined },
+    });
+    return { success: true, data: updated, message: "Varyant güncellendi" };
+  }
+
+  /** Varyantı sil. Primary yalnız SON varyantsa silinebilir (son varyantın silinmesi
+   *  = şablonun akış-moduna dönüşü; migration geri-dönüş mekanizması). */
+  async deleteVariant(variantId: string, userId?: string): Promise<ApiResponse<{ deleted: true }>> {
+    const existing = await prisma.labelTemplateVariant.findUnique({
+      where: { id: variantId },
+      select: { id: true, name: true, isPrimary: true, templateId: true },
+    });
+    if (!existing) throw AppError.notFound("Varyant bulunamadı");
+    const siblings = await prisma.labelTemplateVariant.count({
+      where: { templateId: existing.templateId, NOT: { id: variantId } },
+    });
+    if (existing.isPrimary && siblings > 0) {
+      throw AppError.badRequest("Birincil varyant silinemez — önce başka bir varyantı birincil yapın");
+    }
+    await prisma.labelTemplateVariant.delete({ where: { id: variantId } });
+    await AuditService.log({
+      userId, action: "DELETE", tableName: "LABEL_TEMPLATE_VARIANT", recordId: variantId,
+      oldData: { templateId: existing.templateId, name: existing.name, isPrimary: existing.isPrimary },
+    });
+    return { success: true, data: { deleted: true }, message: "Varyant silindi" };
+  }
+
+  async setPrimaryVariant(variantId: string, userId?: string): Promise<ApiResponse<LabelTemplateVariant>> {
+    const existing = await prisma.labelTemplateVariant.findUnique({
+      where: { id: variantId },
+      select: { id: true, templateId: true, isPrimary: true },
+    });
+    if (!existing) throw AppError.notFound("Varyant bulunamadı");
+    if (existing.isPrimary) {
+      const row = await prisma.labelTemplateVariant.findUnique({ where: { id: variantId } });
+      return { success: true, data: row!, message: "Zaten birincil" };
+    }
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.labelTemplateVariant.updateMany({
+        where: { templateId: existing.templateId, isPrimary: true },
+        data: { isPrimary: false },
+      });
+      return tx.labelTemplateVariant.update({ where: { id: variantId }, data: { isPrimary: true } });
+    });
+    await AuditService.log({
+      userId, action: "UPDATE", tableName: "LABEL_TEMPLATE_VARIANT", recordId: variantId,
+      newData: { event: "SET_PRIMARY", templateId: existing.templateId },
+    });
+    return { success: true, data: updated, message: "Birincil varyant güncellendi" };
+  }
+
+  /** Kanvas doğrulama + bilinen bind kontrolü (Türkçe hatalar → 400). */
+  private parseCanvas(raw: unknown, widthMm: number, heightMm: number) {
+    try {
+      const layout = validateCanvasLayout(raw, { widthMm, heightMm });
+      const allowed = getUnifiedKeys();
+      for (const el of layout.elements) {
+        if (el.type === "field" && !allowed.has(el.bind)) {
+          throw new CanvasValidationError(`Bilinmeyen alan anahtarı: '${el.bind}'`);
+        }
+      }
+      return layout;
+    } catch (e) {
+      if (e instanceof CanvasValidationError) throw AppError.badRequest(e.message);
+      throw e;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // BAĞLAM VARSAYILANLARI (kind → şablon) — atama ekranı uçları
+  // ---------------------------------------------------------------------------
+
+  async listContextDefaults(): Promise<
+    ApiResponse<Array<{ kind: LabelKind; templateId: string; templateName: string }>>
+  > {
+    const rows = await prisma.labelContextDefault.findMany({
+      include: { template: { select: { id: true, name: true } } },
+      orderBy: { kind: "asc" },
+    });
+    return {
+      success: true,
+      data: rows.map((r) => ({ kind: r.kind, templateId: r.templateId, templateName: r.template.name })),
+    };
+  }
+
+  /** Bağlam varsayılanını ata/kaldır (templateId null → bağlam default'suz kalır).
+   *  Havuz şablonu (kind'sız) da atanabilir; eski isDefault bayrağı yalnız şablonun
+   *  legacy kind'ı bağlamla eşleşiyorsa senkronlanır (geri uyum penceresi). */
+  async setContextDefault(
+    kind: LabelKind,
+    templateId: string | null,
+    userId?: string,
+  ): Promise<ApiResponse<{ kind: LabelKind; templateId: string | null }>> {
+    if (!templateId) {
+      await prisma.$transaction(async (tx) => {
+        await tx.labelContextDefault.deleteMany({ where: { kind } });
+        await tx.labelTemplate.updateMany({ where: { kind, isDefault: true }, data: { isDefault: false } });
+      });
+      await AuditService.log({
+        userId, action: "UPDATE", tableName: TABLE, recordId: kind,
+        newData: { event: "SET_CONTEXT_DEFAULT", kind, templateId: null },
+      }).catch(() => undefined);
+      return { success: true, data: { kind, templateId: null }, message: "Bağlam varsayılanı kaldırıldı" };
+    }
+
+    const template = await prisma.labelTemplate.findFirst({
+      where: { id: templateId, isActive: true, deletedAt: null },
+      select: { id: true, name: true, kind: true },
+    });
+    if (!template) throw AppError.badRequest("Şablon bulunamadı veya pasif");
+
+    await prisma.$transaction(async (tx) => {
+      await tx.labelContextDefault.upsert({
+        where: { kind },
+        create: { kind, templateId },
+        update: { templateId },
+      });
+      // Çift-yazım (geri uyum): eski kolon kind-kapsamlı — yalnız eşleşen legacy
+      // kind'da senkronlanabilir.
+      await tx.labelTemplate.updateMany({ where: { kind, isDefault: true, NOT: { id: templateId } }, data: { isDefault: false } });
+      if (template.kind === kind) {
+        await tx.labelTemplate.update({ where: { id: templateId }, data: { isDefault: true } });
+      }
+    }).catch(rethrowDefaultConflict);
+
+    await AuditService.log({
+      userId, action: "UPDATE", tableName: TABLE, recordId: templateId,
+      newData: { event: "SET_CONTEXT_DEFAULT", kind, templateId, templateName: template.name },
+    }).catch(() => undefined);
+    return { success: true, data: { kind, templateId }, message: `${template.name} — ${kind} varsayılanı` };
   }
 
   /**

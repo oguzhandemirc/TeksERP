@@ -137,3 +137,40 @@ export function buildDefaultFields(kind: LabelKind): TemplateField[] {
     isVisible: true,
   }));
 }
+
+// =============================================================================
+// BİRLEŞİK KATALOG (Etiket Stüdyosu v2 — tek havuz)
+// =============================================================================
+// Üç bağlamın alan kümelerinin birleşimi + her alanın hangi bağlamlarda DEĞER
+// ürettiği. Kanvas editörü bu listeden eleman ekler; bağlam-dışı alan baskıda
+// boş kalır (present:false → eleman atlanır). TEMBEL kurulur — modül-üstü yeni
+// enum derefi eklememek için (TDZ kuralı).
+
+export interface UnifiedFieldDef extends FieldDef {
+  /** Bu alanın değer ürettiği bağlamlar. */
+  kinds: LabelKind[];
+}
+
+let unifiedCache: UnifiedFieldDef[] | null = null;
+
+export function getUnifiedCatalog(): UnifiedFieldDef[] {
+  if (unifiedCache) return unifiedCache;
+  const byKey = new Map<string, UnifiedFieldDef>();
+  for (const kind of Object.keys(FIELD_CATALOG) as LabelKind[]) {
+    for (const def of FIELD_CATALOG[kind]) {
+      const existing = byKey.get(def.key);
+      if (existing) {
+        existing.kinds.push(kind);
+      } else {
+        byKey.set(def.key, { ...def, kinds: [kind] });
+      }
+    }
+  }
+  unifiedCache = [...byKey.values()];
+  return unifiedCache;
+}
+
+/** Birleşik katalogdaki tüm izinli bind anahtarları (kanvas field elemanı için). */
+export function getUnifiedKeys(): Set<string> {
+  return new Set(getUnifiedCatalog().map((f) => f.key));
+}

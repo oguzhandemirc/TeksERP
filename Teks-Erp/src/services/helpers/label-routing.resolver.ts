@@ -41,6 +41,10 @@ export interface LabelRoutingOpts {
   templateId?: string | null;
   machineId?: string | null;
   deviceId?: string | null;
+  /** Baskı bağlamının müşterisi (EXPLICIT-ONLY çözülmüş payload.customerId) —
+   *  doluysa CustomerTemplateRoute halkası devreye girer. Stok/müşterisiz baskıda
+   *  null → halka hiç sorgulanmaz (WO tahmini YASAK kuralı korunur). */
+  customerId?: string | null;
 }
 
 const PERIPHERAL_INCLUDE = (kind: LabelKind) => ({
@@ -102,7 +106,11 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
   // --- 3. Dil: cihaz override > format.language (global ayar) ---
   const language = peripheral?.languageOverride ?? format.language;
 
-  // --- 4. Şablon: explicit > cihaz route[kind] > bağlam default > null ---
+  // --- 4. Şablon: explicit > MÜŞTERİ route[customerId,kind] > cihaz route[kind]
+  //         > bağlam default > null.
+  //     Müşteri > cihaz doğru sıradır: cihazın fiziksel kısıtları (dil, geometri)
+  //     şablondan bağımsız çözülür (yukarıda); müşteri şablonu yalnız İÇERİK
+  //     düzenini değiştirir. ---
   let template: TemplateWithVariants | null = null;
   if (opts.templateId) {
     // KALICI silinmiş şablon explicit istense bile çözülmez.
@@ -110,6 +118,15 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
       where: { id: opts.templateId, deletedAt: null },
       include: { variants: true },
     });
+  }
+  if (!template && opts.customerId) {
+    const route = await prisma.customerTemplateRoute.findUnique({
+      where: { customerId_kind: { customerId: opts.customerId, kind } },
+      include: { template: { include: { variants: true } } },
+    });
+    if (route && route.template.isActive && route.template.deletedAt == null) {
+      template = route.template;
+    }
   }
   if (!template && peripheral?.templateRoutes?.length) {
     template = peripheral.templateRoutes[0].template as TemplateWithVariants;

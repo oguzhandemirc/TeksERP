@@ -210,8 +210,13 @@ export class PeripheralDeviceService extends BaseService {
     if (!templateId) {
       await prisma.peripheralTemplateRoute.deleteMany({ where: { peripheralId, kind } });
     } else {
-      const tpl = await prisma.labelTemplate.findFirst({ where: { id: templateId, kind, isActive: true }, select: { id: true } });
-      if (!tpl) throw AppError.badRequest("Şablon bulunamadı / tür uyuşmuyor / pasif");
+      // TEK HAVUZ (Etiket Stüdyosu v2): şablon türden bağımsız — kind eşleşme
+      // şartı kalktı; yalnız var + aktif + kalıcı-silinmemiş kontrolü.
+      const tpl = await prisma.labelTemplate.findFirst({
+        where: { id: templateId, isActive: true, deletedAt: null },
+        select: { id: true },
+      });
+      if (!tpl) throw AppError.badRequest("Şablon bulunamadı veya pasif");
       await prisma.peripheralTemplateRoute.upsert({
         where: { peripheralId_kind: { peripheralId, kind } },
         update: { templateId },

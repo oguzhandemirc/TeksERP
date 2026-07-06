@@ -199,6 +199,10 @@ export class LabelController {
       res.setHeader("Content-Type", result.data.contentType);
       res.setHeader("X-Label-Language", result.data.language);
       res.setHeader("X-Label-Kind", result.data.kind);
+      // Tanılama izi (fail-open — client'lar yokluğunda da çalışır; cors
+      // exposedHeaders'ta OLMALI, aksi halde Electron'da undefined görünür).
+      if (result.data.meta.templateId) res.setHeader("X-Label-Template-Id", result.data.meta.templateId);
+      if (result.data.meta.variantMatch) res.setHeader("X-Label-Variant-Match", result.data.meta.variantMatch);
       res.status(200).send(result.data.content);
     } catch (e) { next(e); }
   };
@@ -350,6 +354,7 @@ export class LabelController {
         orderLineId?: string | null;
         customerId?: string | null;
         stock?: boolean;
+        peripheralId?: string | null;
       };
       const result = await this.service.recordPrintEvent(
         req.params.id as string,
@@ -358,6 +363,11 @@ export class LabelController {
           orderLineId: body.orderLineId ?? undefined,
           customerId: body.customerId ?? undefined,
           stock: body.stock === true,
+          // Audit şablon izi için cihaz bağlamı (best-effort): explicit gövde
+          // cihazı > tablete-bağlı yazıcı (x-device-id) > istasyon makinesi.
+          peripheralId: typeof body.peripheralId === "string" ? body.peripheralId : undefined,
+          deviceId: req.device?.id ?? undefined,
+          machineId: req.device?.machineId ?? undefined,
         },
       );
       res.status(200).json(result);
