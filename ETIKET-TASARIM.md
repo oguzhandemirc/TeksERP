@@ -64,7 +64,11 @@ rollTextLines şablonsuz fallback (bayt-stabil)
 ```
 
 - Medya komutları (q/Q, ^PW/^LL, STX M) **format profilinden**; eleman
-  koordinatları **varyanttan**.
+  koordinatları **varyanttan**. Profil PAYLARI (margin*) kanvas yolunda
+  KULLANILMAZ (boşluk = tasarım); yalnız eski akış düzenleri tüketir
+  (kartela + varyantsız şablon + şablonsuz fallback) — profil formunda
+  "gelişmiş" bölüme indirildi. gapMm (etiket arası) medya gerçeğidir,
+  kanvasta da kullanılır.
 - HTML kanvası native yerleşimle aynı düzendedir (bilinçli sapma: eski el-kodlu
   portrait/landscape HTML iskeletleri yalnız şablonsuz fallback'te yaşar; marka
   satırı isteyen statik metin elemanı ekler).

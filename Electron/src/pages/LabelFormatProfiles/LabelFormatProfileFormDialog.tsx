@@ -91,11 +91,21 @@ export function LabelFormatProfileFormDialog({ open, onOpenChange, initial, onSu
             </div>
           </div>
 
-          <div className="rounded-md border bg-muted/20 p-3">
-            <div className="mb-2 text-xs font-medium text-muted-foreground">
-              Paylar — her kenardan içerik boşluğu (mm). Sol = içeriğin başlangıcı, Alt = alt barkod yeri.
-            </div>
-            <div className="grid grid-cols-4 gap-3">
+          {/* PAYLAR — Etiket Stüdyosu (kanvas) şablonlarında KULLANILMAZ: boşluğu
+              tasarımcı elemanları yerleştirerek verir. Yalnız eski akış düzeni
+              tüketir → daraltılmış "gelişmiş" bölüm olarak durur. */}
+          <details className="rounded-md border bg-muted/20 p-3">
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+              Eski düzen payları (gelişmiş) — kanvas şablonlarında kullanılmaz
+            </summary>
+            <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+              Stüdyoda tasarlanan (kanvas varyantlı) şablonlarda kenar boşluğunu
+              elemanların konumu belirler; bu paylar YOK SAYILIR. Yalnız şu eski
+              akış düzenlerinde geçerlidir: <strong>kartela etiketi</strong>,
+              <strong> varyantsız şablonlar</strong> ve <strong>şablonsuz acil-durum
+              düzeni</strong>. Sol = içeriğin başlangıcı, Alt = alt barkod yeri.
+            </p>
+            <div className="mt-2 grid grid-cols-4 gap-3">
               <FormField label="Üst" error={form.formState.errors.marginTopMm} required>
                 <Input type="number" step="0.5" min="0" {...form.register("marginTopMm", { valueAsNumber: true })} />
               </FormField>
@@ -109,7 +119,7 @@ export function LabelFormatProfileFormDialog({ open, onOpenChange, initial, onSu
                 <Input type="number" step="0.5" min="0" {...form.register("marginLeftMm", { valueAsNumber: true })} />
               </FormField>
             </div>
-          </div>
+          </details>
 
           <div className="grid grid-cols-3 gap-3">
             <FormField label="Etiket arası (mm)" error={form.formState.errors.gapMm}>
