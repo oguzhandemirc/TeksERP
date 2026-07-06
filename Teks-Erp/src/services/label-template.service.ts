@@ -26,6 +26,7 @@ import {
   LabelKind,
   PrinterLanguage,
   Prisma,
+  type LabelTemplateVariant,
 } from "@prisma/client";
 import {
   FIELD_CATALOG,
@@ -38,6 +39,7 @@ import {
 } from "../config/label-fields";
 import { renderLabel } from "./helpers/label-renderer.registry";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
+import { validateCanvasLayout, CanvasValidationError } from "../config/label-elements";
 import { mockPayload } from "./helpers/label-rawcode";
 import { fieldDisplayValue } from "./helpers/label-field-values";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
@@ -494,6 +496,56 @@ export class LabelTemplateService {
     }
     const native = renderLabel(language, input).content;
     const svg = renderNativePreviewSvg(language, native, mmToDots(format.widthMm, format.dpi));
+    if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), native } };
+    return { success: true, data: { mode: "text", language, content: native, native } };
+  }
+
+  /**
+   * KANVAS canlı önizlemesi (Etiket Stüdyosu v2) — kaydedilmemiş varyant tuvali +
+   * eleman listesiyle WYSIWYG render. Medya = tuval boyutu (varyant tasarımı kendi
+   * boyutunda görülür); dil verilmezse aktif dil (cihazsız → RASTER_HTML). Native
+   * dil → komutlar SVG'ye çizilir ("önizleme = baskı"); çizilemeyen → ham komut.
+   */
+  async getCanvasPreview(opts: {
+    kind: LabelKind;
+    widthMm: number;
+    heightMm: number;
+    elements: unknown;
+    language?: PrinterLanguage;
+  }): Promise<
+    ApiResponse<{
+      mode: "svg" | "html" | "text";
+      language: PrinterLanguage;
+      content: string;
+      /** Ham yazıcı kodu — "Kod" görünümü (eleman değişimi → koda etkisi görünür). */
+      native: string;
+    }>
+  > {
+    let layout;
+    try {
+      layout = validateCanvasLayout(opts.elements, { widthMm: opts.widthMm, heightMm: opts.heightMm });
+    } catch (e) {
+      if (e instanceof CanvasValidationError) throw AppError.badRequest(e.message);
+      throw e;
+    }
+    const payload = mockPayload(opts.kind);
+    const base = await resolveLabelFormat({ kind: opts.kind });
+    const language = opts.language ?? base.language;
+    const format = { ...base, widthMm: opts.widthMm, heightMm: opts.heightMm, language };
+    const fakeVariant = {
+      elements: layout,
+      widthMm: opts.widthMm,
+      heightMm: opts.heightMm,
+    } as unknown as LabelTemplateVariant;
+    const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
+    const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });
+    const input = { payload, template: null, variant: fakeVariant, barcodeSvg, qrSvg, copies: 1, format };
+    if (language === PrinterLanguage.RASTER_HTML) {
+      const html = renderLabel(language, input).content;
+      return { success: true, data: { mode: "html", language, content: html, native: html } };
+    }
+    const native = renderLabel(language, input).content;
+    const svg = renderNativePreviewSvg(language, native, mmToDots(opts.widthMm, format.dpi));
     if (svg) return { success: true, data: { mode: "svg", language, content: svgToPreviewHtml(svg), native } };
     return { success: true, data: { mode: "text", language, content: native, native } };
   }

@@ -18,6 +18,7 @@ import { AuditService } from "./audit.service";
 import type { LabelPayload } from "./label.service";
 import { resolveLabelFormat } from "./helpers/label-format.resolver";
 import { findContextDefaultTemplate } from "./helpers/label-routing.resolver";
+import { pickVariant } from "./helpers/label-variant.resolver";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
 import { mmToDots } from "./helpers/native-label.shared";
@@ -157,7 +158,9 @@ export class LabelFormatProfileService extends BaseService {
     const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: SAMPLE_BC, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
     const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: SAMPLE_BC, scale: 3, backgroundcolor: "FFFFFF" });
     const format = await resolveLabelFormat({ profileId: id, kind });
-    return { payload, template, barcodeSvg, qrSvg, copies: 1, format };
+    // Test baskısı = gerçek baskı: profile uyan boyut varyantı da seçilir (WYSIWYG).
+    const { variant } = pickVariant(template?.variants, { widthMm: format.widthMm, heightMm: format.heightMm });
+    return { payload, template, variant, barcodeSvg, qrSvg, copies: 1, format };
   }
 
   /**

@@ -124,9 +124,10 @@ export function renderPplaToSvg(ppla: string, widthDots: number): string | null 
     let m: RegExpMatchArray | null;
     // Yükseklik: <STX>M#### (max label length)
     if ((m = ln.match(/^\x02?M(\d+)$/))) { H = +m[1]; continue; }
-    // QR: 1W1c0606<row4><col4><veri>  (metin regex'inden ÖNCE — "1W" ile başlar)
-    if ((m = ln.match(/^1W1c\d{4}(\d{4})(\d{4})(.*)$/))) {
-      els.push(svgQr(+m[2], +m[1], 4, m[3]));
+    // QR: 1W1c<mag2><mag2><row4><col4><veri>  (metin regex'inden ÖNCE — "1W" ile başlar)
+    // Modül büyütme komuttan okunur (eskiden sabit 4 varsayılıyordu — qrScale yansımıyordu).
+    if ((m = ln.match(/^1W1c(\d{2})(\d{2})(\d{4})(\d{4})(.*)$/))) {
+      els.push(svgQr(+m[4], +m[3], +m[1] || 4, m[5]));
       continue;
     }
     // Code128: 1e<n><w><h4><row4><col4><veri>
@@ -134,10 +135,13 @@ export function renderPplaToSvg(ppla: string, widthDots: number): string | null 
       els.push(svgBarcode(+m[3], +m[2], +m[1], m[4], false));
       continue;
     }
-    // Metin: 1<font><wMul><hMul>000<row4><col4><veri>
-    if ((m = ln.match(/^1([1-9])(\d)(\d)000(\d{4})(\d{4})(.*)$/))) {
-      const fd = EPL_FONT_BY_CODE[m[1]] ?? EPL_FONT_BY_CODE["3"];
-      els.push(svgTextCell(+m[5], +m[4], fd.w * (+m[2] || 1), fd.h * (+m[3] || 1), m[6]));
+    // Metin: <rot 1-4><font><wMul><hMul>000<row4><col4><veri> — DPL rot 1=0°,2=90°,
+    // 3=180°, 4=270° CW (kanvas elemanları döndürülmüş metin basabilir).
+    if ((m = ln.match(/^([1-4])([1-9])(\d)(\d)000(\d{4})(\d{4})(.*)$/))) {
+      const fd = EPL_FONT_BY_CODE[m[2]] ?? EPL_FONT_BY_CODE["3"];
+      const cell = svgTextCell(+m[6], +m[5], fd.w * (+m[3] || 1), fd.h * (+m[4] || 1), m[7]);
+      const deg = (+m[1] - 1) * 90;
+      els.push(deg ? `<g transform="rotate(${deg} ${+m[6]} ${+m[5]})">${cell}</g>` : cell);
       continue;
     }
     // <STX>n, <STX>L, D11, H10, Q####, E — çizim üretmez, atla.

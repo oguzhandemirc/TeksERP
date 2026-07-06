@@ -1,0 +1,137 @@
+// =============================================================================
+// Kanvas eleman modeli → HTML emit (RASTER_HTML / ev-tipi & OS-sürücülü yazıcı)
+// =============================================================================
+// Varyant tuvalini position:absolute mm koordinatlarıyla HTML'e derler — kanvaslı
+// şablonun HTML çıktısı native yerleşimle AYNI düzendedir (bilinçli sapma: eski
+// el-kodlu portrait/landscape iskeletler yalnız şablonsuz/varyantsız fallback'te).
+// Sayfa boyutu FORMAT profilinden (medya), eleman koordinatları VARYANTTAN.
+// HTML tarafı native'den zengindir: gerçek bold + tam UTF-8 (asciiFold yok).
+// =============================================================================
+
+import type { CanvasRenderInput } from "./label-canvas-native.helper";
+import { fieldDisplayValue } from "./label-field-values";
+import { escapeHtml, applyCopies } from "./label-html.shared";
+import { qrFootprintDots } from "./native-label.shared";
+import type { FieldElement, TextElement } from "../../config/label-elements";
+import { elementSupported } from "../../config/label-elements";
+
+/** HTML pt eşlemesi — mevcut akış HTML'iyle aynı kademe (label-html.shared). */
+const FONT_PT: Record<string, string> = { sm: "8pt", md: "10pt", lg: "14pt", xl: "20pt" };
+
+export interface CanvasHtmlInput extends CanvasRenderInput {
+  /** bwip-js Code128 SVG (ham). */
+  barcodeSvg: string;
+  /** bwip-js QR SVG (ham). */
+  qrSvg: string;
+}
+
+function textDiv(
+  el: FieldElement | TextElement,
+  content: string,
+): string {
+  const font = FONT_PT[el.font ?? "md"] ?? "10pt";
+  const parts = [
+    "position:absolute",
+    `left:${el.x}mm`,
+    `top:${el.y}mm`,
+    `font-size:${font}`,
+    "white-space:nowrap",
+    "line-height:1.1",
+  ];
+  if (el.bold) parts.push("font-weight:700");
+  if (el.rot) parts.push(`transform:rotate(${el.rot}deg)`, "transform-origin:top left");
+  return `<div style="${parts.join(";")}">${escapeHtml(content)}</div>`;
+}
+
+export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
+  const { payload, format, layout, copies, barcodeSvg, qrSvg } = input;
+  const dotsPerMm = (format.dpi || 203) / 25.4;
+  const els: string[] = [];
+
+  for (const el of layout.elements) {
+    if (!elementSupported(el.type, "RASTER_HTML")) continue;
+    switch (el.type) {
+      case "field":
+      case "text": {
+        const content =
+          el.type === "text"
+            ? el.text
+            : (() => {
+                const dv = fieldDisplayValue(payload, el.bind);
+                if (!dv.present) return null;
+                const label = el.label?.trim();
+                return label ? `${label}: ${dv.value}` : dv.value;
+              })();
+        if (content) els.push(textDiv(el, content));
+        break;
+      }
+      case "qr": {
+        if (!payload.barcode || !qrSvg) break;
+        const sizeMm = qrFootprintDots(payload.barcode.length, el.scale ?? 5) / dotsPerMm;
+        els.push(
+          `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${sizeMm.toFixed(1)}mm;height:${sizeMm.toFixed(1)}mm">` +
+            `<div style="width:100%;height:100%">${qrSvg.replace("<svg ", '<svg style="width:100%;height:100%" ')}</div></div>`,
+        );
+        break;
+      }
+      case "code128": {
+        if (!payload.barcode || !barcodeSvg) break;
+        const h = el.hMm ?? 9;
+        const human = el.human !== false;
+        els.push(
+          `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm">` +
+            `<div style="height:${h}mm">${barcodeSvg.replace("<svg ", `<svg style="height:${h}mm;width:auto" `)}</div>` +
+            (human
+              ? `<div style="font-size:8pt;letter-spacing:0.12em;text-align:center">${escapeHtml(payload.barcode)}</div>`
+              : "") +
+            `</div>`,
+        );
+        break;
+      }
+      case "line":
+        els.push(
+          `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${el.wMm}mm;height:${el.hMm}mm;background:#000"></div>`,
+        );
+        break;
+      case "box":
+        els.push(
+          `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${el.wMm}mm;height:${el.hMm}mm;border:${el.thickMm ?? 0.5}mm solid #000;box-sizing:border-box"></div>`,
+        );
+        break;
+      case "lengthBanner": {
+        const dv = fieldDisplayValue(payload, "lengthMeters");
+        if (!dv.present) break;
+        const w = el.wMm ?? 10;
+        const h = el.hMm ?? Math.max(10, format.heightMm - 2 * el.y);
+        els.push(
+          `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${w}mm;height:${h}mm;background:#000;color:#fff;display:flex;align-items:center;justify-content:center">` +
+            `<span style="transform:rotate(90deg);font-size:20pt;font-weight:700;white-space:nowrap">${escapeHtml(dv.value)}</span></div>`,
+        );
+        break;
+      }
+    }
+  }
+
+  const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Etiket ${escapeHtml(payload.barcode ?? "")}</title>
+<style>
+  @page { size: ${format.widthMm}mm ${format.heightMm}mm; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: #fff; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #000; }
+  .label { position: relative; width: ${format.widthMm}mm; height: ${format.heightMm}mm; overflow: hidden; }
+  @media print { .label { page-break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="label">
+${els.join("\n")}
+</div>
+</body>
+</html>`;
+
+  return applyCopies(html, copies);
+}

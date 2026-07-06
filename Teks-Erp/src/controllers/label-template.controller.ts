@@ -62,6 +62,17 @@ const previewRawSchema = z.object({
   code:     z.string().max(20000),
 });
 
+// Kanvas önizleme gövdesi (Etiket Stüdyosu v2) — hafif kabuk; eleman-düzeyi
+// doğrulama servistedir (validateCanvasLayout, Türkçe mesajlar). Enum'lar
+// string-literal + as cast (TDZ kuralı: modül-üstü enum ÜYESİ deref yasak).
+const canvasPreviewSchema = z.object({
+  kind: z.enum(["ROLL_RAW", "ROLL_FINISHED", "SWATCH"] as [string, ...string[]]),
+  widthMm: z.number().min(10).max(500),
+  heightMm: z.number().min(10).max(500),
+  elements: z.unknown(),
+  language: z.enum(["PPLA", "PPLB", "ZPL", "RASTER_HTML"] as [string, ...string[]]).optional(),
+});
+
 export class LabelTemplateController {
   private service = new LabelTemplateService();
 
@@ -133,9 +144,24 @@ export class LabelTemplateController {
     } catch (e) { next(e); }
   };
 
-  /** "Alanlar" sekmesi canlı önizlemesi — verilen alanları AKTİF DİLDE render eder. */
+  /** Canlı önizleme — İKİ gövde kabul eder:
+   *  v2 (kanvas): { kind, widthMm, heightMm, elements, language? } — Etiket Stüdyosu.
+   *  v1 (akış):   { kind, fields, lineStepMm?, qrScale?, lengthBanner? } — eski editör
+   *  gövdesi geçiş boyunca çalışmaya devam eder. */
   fieldsPreview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      if (req.body && typeof req.body === "object" && "elements" in req.body) {
+        const body = canvasPreviewSchema.parse(req.body);
+        const result = await this.service.getCanvasPreview({
+          kind: body.kind as LabelKind,
+          widthMm: body.widthMm,
+          heightMm: body.heightMm,
+          elements: body.elements,
+          language: body.language as PrinterLanguage | undefined,
+        });
+        res.status(200).json(result);
+        return;
+      }
       const { kind, fields, lineStepMm, qrScale, lengthBanner } = z
         .object({
           kind: z.nativeEnum(LabelKind),

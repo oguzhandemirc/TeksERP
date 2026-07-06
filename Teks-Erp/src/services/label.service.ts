@@ -19,7 +19,7 @@
 
 import bwipjs from "bwip-js";
 import { readLabelCopies, readLabelNativeSendEnabled } from "./system-setting.service";
-import { LabelKind, PrinterLanguage, Prisma, type LabelTemplate } from "@prisma/client";
+import { LabelKind, PrinterLanguage, Prisma, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -34,6 +34,7 @@ import {
 import { buildRollLabelHtml } from "./helpers/label-html.helper";
 import { resolveLabelFormat, loadMachinePrinter, type ResolvedLabelFormat } from "./helpers/label-format.resolver";
 import { resolveLabelRouting, findContextDefaultTemplate } from "./helpers/label-routing.resolver";
+import { pickVariant } from "./helpers/label-variant.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
 import { renderLabel, type LabelRenderInput } from "./helpers/label-renderer.registry";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
@@ -209,6 +210,8 @@ interface BulkLabelContext {
   aliasByCustomer: Map<string, BatchAliasResult>;
   format: ResolvedLabelFormat;
   templateByKind: Partial<Record<LabelKind, LabelTemplate | null>>;
+  /** Kind-başına seçili boyut varyantı (kanvas) — templateByKind ile aynı çözümden. */
+  variantByKind: Partial<Record<LabelKind, LabelTemplateVariant | null>>;
   copies: number;
 }
 
@@ -584,9 +587,11 @@ export class LabelService {
     // Tekil → birleşik yönlendirme: cihaz→{format, template, dil}. Cihaz eşleşmezse
     // bugünkü davranış (resolveLabelFormat + kind default şablon) — geri uyum.
     let template: LabelTemplate | null;
+    let variant: LabelTemplateVariant | null;
     let format: ResolvedLabelFormat;
     if (preloaded) {
       template = preloaded.templateByKind[kind] ?? null;
+      variant = preloaded.variantByKind[kind] ?? null;
       format = preloaded.format;
     } else {
       const routing = await resolveLabelRouting({
@@ -598,6 +603,7 @@ export class LabelService {
         deviceId: opts?.deviceId,
       });
       template = routing.template;
+      variant = routing.variant;
       format = routing.format;
     }
     const barcodeSvg = payload.barcode
@@ -608,7 +614,7 @@ export class LabelService {
       : "";
     // Saha #6: kopya adedi — istek override > bulk-sabit > ayar (default 2).
     const copies = opts?.copies ?? preloaded?.copies ?? (await readLabelCopies());
-    return { input: { payload, template, barcodeSvg, qrSvg, copies, format }, kind };
+    return { input: { payload, template, variant, barcodeSvg, qrSvg, copies, format }, kind };
   }
 
   async getRollLabelHtml(
@@ -802,7 +808,9 @@ export class LabelService {
     const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: sampleBarcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
     const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: sampleBarcode, scale: 3, backgroundcolor: "FFFFFF" });
     const format = await resolveLabelFormat({ profileId });
-    return { payload, template, barcodeSvg, qrSvg, copies: 1, format };
+    // Örnek baskı = gerçek baskı: şablonun medyaya uyan varyantı da seçilir (WYSIWYG).
+    const { variant } = pickVariant(template?.variants, { widthMm: format.widthMm, heightMm: format.heightMm });
+    return { payload, template, variant, barcodeSvg, qrSvg, copies: 1, format };
   }
 
   /**
@@ -910,6 +918,10 @@ export class LabelService {
       [LabelKind.ROLL_RAW]: rawRouting.template,
       [LabelKind.ROLL_FINISHED]: finishedRouting.template,
     };
+    const variantByKind: Partial<Record<LabelKind, LabelTemplateVariant | null>> = {
+      [LabelKind.ROLL_RAW]: rawRouting.variant,
+      [LabelKind.ROLL_FINISHED]: finishedRouting.variant,
+    };
 
     // §2-A: tüm top'ları tek findMany (getRollLabel ile AYNI include const → drift yok).
     const rolls = await prisma.roll.findMany({ where: { id: { in: ids } }, include: ROLL_LABEL_INCLUDE });
@@ -959,6 +971,7 @@ export class LabelService {
       aliasByCustomer: new Map(),
       format,
       templateByKind,
+      variantByKind,
       copies,
     };
     const byCustomer = new Map<string, { itemIds: Set<string>; colorIds: Set<string> }>();
@@ -980,7 +993,7 @@ export class LabelService {
       aliasByCustomer.set(cid, await batchLoadAliases(prisma, cid, [...g.itemIds], [...g.colorIds]));
     }
 
-    return { rollById, orderLineById, customerById, aliasByCustomer, format, templateByKind, copies };
+    return { rollById, orderLineById, customerById, aliasByCustomer, format, templateByKind, variantByKind, copies };
   }
 
   /**
@@ -1135,6 +1148,9 @@ export class LabelService {
       ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
       : "";
     const copies = opts?.copies ?? (await readLabelCopies());
+    // KARTELA v1 KAPSAM DIŞI (Etiket Stüdyosu): variant BİLEREK geçilmez — kartela
+    // hattı akış-modelinde bayt-aynı kalır. Kanvas'a alınırsa müşteri plumbing'iyle
+    // birlikte ayrı iş (KARTELA-TASARIM.md).
     return {
       input: { payload, template: routing.template, barcodeSvg, qrSvg, copies, format: routing.format },
       kind: LabelKind.SWATCH,

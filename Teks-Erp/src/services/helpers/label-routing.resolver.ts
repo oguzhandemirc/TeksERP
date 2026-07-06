@@ -14,13 +14,21 @@
 // şablon) — BAYT-stabil geri uyum.
 // =============================================================================
 
-import { LabelKind, PrinterLanguage, type LabelTemplate } from "@prisma/client";
+import { LabelKind, PrinterLanguage, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { resolveLabelFormat, type ResolvedLabelFormat } from "./label-format.resolver";
+import { pickVariant, type VariantMatch } from "./label-variant.resolver";
+
+/** Şablon + boyut varyantları — routing include'larıyla birlikte yüklenir. */
+export type TemplateWithVariants = LabelTemplate & { variants: LabelTemplateVariant[] };
 
 export interface LabelRouting {
   format: ResolvedLabelFormat;
   template: LabelTemplate | null;
+  /** Medyaya (format) uyan boyut varyantı — null → akış-modeli (dual-mode). */
+  variant: LabelTemplateVariant | null;
+  /** exact = boyut eşleşti; fallback = primary varyant basılıyor (uyumsuz medya). */
+  variantMatch: VariantMatch;
   language: PrinterLanguage;
   /** Çözülen cihaz id (yoksa null) — native gönderim hedefi için. */
   peripheralId: string | null;
@@ -37,15 +45,19 @@ export interface LabelRoutingOpts {
 
 const PERIPHERAL_INCLUDE = (kind: LabelKind) => ({
   formatProfile: true,
-  templateRoutes: { where: { kind }, include: { template: true }, take: 1 },
+  templateRoutes: {
+    where: { kind },
+    include: { template: { include: { variants: true } } },
+    take: 1,
+  },
 });
 
 /** Bağlam (kind) varsayılan şablonu — tek doğru kaynak LabelContextDefault.
  *  Pasif/kalıcı-silinmiş şablona işaret ediyorsa null (katalog default'una düşülür). */
-export async function findContextDefaultTemplate(kind: LabelKind): Promise<LabelTemplate | null> {
+export async function findContextDefaultTemplate(kind: LabelKind): Promise<TemplateWithVariants | null> {
   const def = await prisma.labelContextDefault.findUnique({
     where: { kind },
-    include: { template: true },
+    include: { template: { include: { variants: true } } },
   });
   if (!def) return null;
   return def.template.isActive && def.template.deletedAt == null ? def.template : null;
@@ -91,22 +103,34 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
   const language = peripheral?.languageOverride ?? format.language;
 
   // --- 4. Şablon: explicit > cihaz route[kind] > bağlam default > null ---
-  let template: LabelTemplate | null = null;
+  let template: TemplateWithVariants | null = null;
   if (opts.templateId) {
     // KALICI silinmiş şablon explicit istense bile çözülmez.
-    template = await prisma.labelTemplate.findFirst({ where: { id: opts.templateId, deletedAt: null } });
+    template = await prisma.labelTemplate.findFirst({
+      where: { id: opts.templateId, deletedAt: null },
+      include: { variants: true },
+    });
   }
   if (!template && peripheral?.templateRoutes?.length) {
-    template = peripheral.templateRoutes[0].template;
+    template = peripheral.templateRoutes[0].template as TemplateWithVariants;
   }
   if (!template) {
     // Tek doğru kaynak: LabelContextDefault (eski kind-başına isDefault'un yeni evi).
     template = await findContextDefaultTemplate(kind);
   }
 
+  // --- 5. Varyant: medya (format) boyutuna ±1mm eşleşen; yoksa primary (fallback);
+  //         şablon varyantsızsa null → akış-modeli (dual-mode, bayt-stabil). ---
+  const picked = pickVariant(template?.variants, {
+    widthMm: format.widthMm,
+    heightMm: format.heightMm,
+  });
+
   return {
     format: { ...format, language },
     template,
+    variant: picked.variant,
+    variantMatch: picked.match,
     language,
     peripheralId: peripheral?.id ?? null,
   };
