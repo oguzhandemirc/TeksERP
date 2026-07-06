@@ -762,6 +762,44 @@ export default function KK1Screen() {
   // Basılıyor + sırada bekleyen etiket sayısı (offline'da birikebilir).
   const printingCount = (activePrintRoll ? 1 : 0) + printQueue.length;
 
+  // Oturum/liste aksiyonları — tablette birincil bara sığar (headerExtras);
+  // telefonda dar olduğu için ScreenChrome'un 2. katına (secondRow) taşınır.
+  // "Tüm Girişler" = tüm ham giriş kayıtları geçmişi.
+  const sessionActionsRow = (
+    <>
+      {sessionCount > 0 && (
+        // Dokununca bu oturumda girilen topların listesi açılır.
+        <TouchableRipple
+          borderless
+          onPress={() => setSessionListOpen(true)}
+          rippleColor="rgba(255,255,255,0.2)"
+          style={styles.headerSessionChip}
+          accessibilityLabel="Bu oturumda girilenleri göster"
+        >
+          <View style={styles.headerSessionChipInner}>
+            <Icon source="check-circle" size={14} color="#86efac" />
+            <Text style={styles.headerSessionLabel}>Bu oturum</Text>
+            <AnimatedCounter value={sessionCount} style={styles.headerSessionCount} />
+          </View>
+        </TouchableRipple>
+      )}
+      <HeaderChip
+        icon="format-list-bulleted"
+        label="Tüm Girişler"
+        onPress={() => setHistoryOpen(true)}
+      />
+      <RefreshButton
+        headerStyle
+        label="Yenile"
+        onPress={refresh.onRefresh}
+        refreshing={refresh.refreshing}
+        isError={refresh.isError}
+        errorMessage={refresh.errorMessage}
+        successMessage={refresh.successMessage}
+      />
+    </>
+  );
+
   return (
     <ScreenChrome
       title="Ham Giriş"
@@ -794,42 +832,7 @@ export default function KK1Screen() {
             </Animated.View>
           )}
           <SyncStatusChip />
-          {/* Tablet: aksiyonlar header'a alınır ("Tüm Girişler" = tüm ham giriş
-              kayıtları geçmişi). Telefonda header dar; bunlar drawer'da kalır. */}
-          {!compact && (
-            <>
-              {sessionCount > 0 && (
-                // Dokununca bu oturumda girilen topların listesi açılır.
-                <TouchableRipple
-                  borderless
-                  onPress={() => setSessionListOpen(true)}
-                  rippleColor="rgba(255,255,255,0.2)"
-                  style={styles.headerSessionChip}
-                  accessibilityLabel="Bu oturumda girilenleri göster"
-                >
-                  <View style={styles.headerSessionChipInner}>
-                    <Icon source="check-circle" size={14} color="#86efac" />
-                    <Text style={styles.headerSessionLabel}>Bu oturum</Text>
-                    <AnimatedCounter value={sessionCount} style={styles.headerSessionCount} />
-                  </View>
-                </TouchableRipple>
-              )}
-              <HeaderChip
-                icon="format-list-bulleted"
-                label="Tüm Girişler"
-                onPress={() => setHistoryOpen(true)}
-              />
-              <RefreshButton
-                headerStyle
-                label="Yenile"
-                onPress={refresh.onRefresh}
-                refreshing={refresh.refreshing}
-                isError={refresh.isError}
-                errorMessage={refresh.errorMessage}
-                successMessage={refresh.successMessage}
-              />
-            </>
-          )}
+          {!compact && sessionActionsRow}
           {portraitPhone ? (
             <Appbar.Action
               icon="format-list-bulleted"
@@ -840,6 +843,7 @@ export default function KK1Screen() {
           ) : null}
         </View>
       }
+      secondRow={compact ? sessionActionsRow : undefined}
     >
       <View
         style={[
