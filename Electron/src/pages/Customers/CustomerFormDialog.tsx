@@ -19,6 +19,7 @@ import { customerFormDefaults, customerFormSchema, type CustomerFormValues } fro
 import { CustomerBranchesPanel } from "./CustomerBranchesPanel";
 import { CustomerItemAliasesPanel } from "./CustomerItemAliasesPanel";
 import { CustomerColorAliasesPanel } from "./CustomerColorAliasesPanel";
+import { CustomerTemplateRoutesPanel } from "./CustomerTemplateRoutesPanel";
 import type { Customer } from "./types";
 
 interface Props {
@@ -74,6 +75,9 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
             </TabsTrigger>
             <TabsTrigger value="color-aliases" disabled={!isEdit || !initial}>
               Müşterideki Renk Adları
+            </TabsTrigger>
+            <TabsTrigger value="label-templates" disabled={!isEdit || !initial}>
+              Etiket Şablonları
             </TabsTrigger>
           </TabsList>
 
@@ -146,6 +150,10 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
 
           <TabsContent value="color-aliases">
             {initial && <CustomerColorAliasesPanel customerId={initial.id} />}
+          </TabsContent>
+
+          <TabsContent value="label-templates">
+            {initial && <CustomerTemplateRoutesPanel customerId={initial.id} />}
           </TabsContent>
         </Tabs>
       </DialogContent>

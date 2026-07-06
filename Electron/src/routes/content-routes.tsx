@@ -37,7 +37,7 @@ import { ServerStatusPage } from "@/pages/System/ServerStatus/ServerStatusPage";
 import { WorkSessionsPage } from "@/pages/System/WorkSessions/WorkSessionsPage";
 import { BackupsPage } from "@/pages/System/Backups/BackupsPage";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
-import { LabelTemplateEditPage } from "@/pages/LabelTemplates/LabelTemplateEditPage";
+import { LabelStudioPage } from "@/pages/LabelTemplates/editor/LabelStudioPage";
 import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage";
 import { TravelerCardSettingsPage } from "@/pages/Definitions/TravelerCardSettingsPage";
 import { DevicesPage } from "@/pages/Devices/DevicesPage";
@@ -262,7 +262,7 @@ export const contentRoutes: RouteObject[] = [
     path: "definitions/label-templates/:id",
     element: (
       <ProtectedRoute requirePermission="label-template:write">
-        <LabelTemplateEditPage />
+        <LabelStudioPage />
       </ProtectedRoute>
     ),
   },

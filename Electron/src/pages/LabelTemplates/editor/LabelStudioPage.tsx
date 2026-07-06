@@ -1,0 +1,251 @@
+// =============================================================================
+// Etiket Stüdyosu — kanvas editör kabuğu (varyant sekmeleri + palet + tuval +
+// özellikler + backend WYSIWYG önizleme). Eski akış editörünün (FieldsPanel)
+// yerini alır; rawCode uzman modu AYNEN durur.
+// =============================================================================
+
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Save, Printer } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  LabelKind, labelKindLabels, labelTemplateService, type RawCodeMap,
+} from "@/services/labelTemplateService";
+import { RawCodePanel } from "../RawCodePanel";
+import { TemplateTestPrintDialog } from "../TemplateTestPrintDialog";
+import { useEditorState } from "./useEditorState";
+import { useCanvasLint } from "./useCanvasLint";
+import { CanvasStage } from "./CanvasStage";
+import { ElementPalette } from "./ElementPalette";
+import { PropertiesPanel } from "./PropertiesPanel";
+import { VariantTabs } from "./VariantTabs";
+import { VariantMismatchBanner } from "./VariantMismatchBanner";
+import { CanvasPreview } from "./CanvasPreview";
+import { DEFAULT_ZOOM, makeElement } from "./canvas-model";
+import type { LabelElementType } from "@/types/label-canvas";
+
+export function LabelStudioPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+
+  const templateQ = useQuery({
+    queryKey: ["label-template", id],
+    queryFn: () => labelTemplateService.getById(id!),
+    enabled: Boolean(id),
+  });
+  const template = templateQ.data?.data;
+
+  const variantsQ = useQuery({
+    queryKey: ["label-template-variants", id],
+    queryFn: () => labelTemplateService.listVariants(id!),
+    enabled: Boolean(id),
+  });
+  const variants = useMemo(() => variantsQ.data ?? [], [variantsQ.data]);
+
+  const [activeVariantId, setActiveVariantId] = useState<string | null>(null);
+  const activeVariant = variants.find((v) => v.id === activeVariantId) ?? null;
+
+  const [name, setName] = useState("");
+  const [rawCode, setRawCode] = useState<RawCodeMap>({});
+  // Önizleme bağlamı: mock verinin sözlüğü (havuz şablonu her bağlamda basılabilir).
+  const [previewKind, setPreviewKind] = useState<LabelKind>(LabelKind.ROLL_FINISHED);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const [testPrintOpen, setTestPrintOpen] = useState(false);
+
+  const state = useEditorState();
+  const canvas = {
+    widthMm: activeVariant?.widthMm ?? 100,
+    heightMm: activeVariant?.heightMm ?? 60,
+  };
+  const lint = useCanvasLint(state.elements, canvas);
+
+  useEffect(() => {
+    if (template) {
+      setName(template.name);
+      setRawCode(template.rawCode ?? {});
+      if (template.kind) setPreviewKind(template.kind);
+    }
+  }, [template]);
+
+  // Varyantlar gelince: birincil (yoksa ilk) seçilir; aktif varyant değişince tuval yüklenir.
+  useEffect(() => {
+    if (variants.length > 0 && !variants.some((v) => v.id === activeVariantId)) {
+      const pick = variants.find((v) => v.isPrimary) ?? variants[0];
+      if (pick) setActiveVariantId(pick.id);
+    }
+  }, [variants, activeVariantId]);
+  useEffect(() => {
+    state.loadLayout(activeVariant?.elements ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnız varyant kimliği değişince yükle
+  }, [activeVariant?.id]);
+
+  const catalogQ = useQuery({
+    queryKey: ["label-unified-catalog"],
+    queryFn: () => labelTemplateService.unifiedCatalog(),
+    staleTime: 5 * 60_000,
+  });
+  const catalog = useMemo(() => catalogQ.data ?? [], [catalogQ.data]);
+  const flowCatalogQ = useQuery({
+    queryKey: ["label-template-catalog", previewKind],
+    queryFn: () => labelTemplateService.getCatalog(previewKind),
+  });
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      await labelTemplateService.update(id!, { name: name.trim(), rawCode });
+      if (activeVariant) {
+        await labelTemplateService.updateVariant(activeVariant.id, { elements: state.layout });
+      }
+    },
+    onSuccess: () => {
+      toast.success("Şablon kaydedildi.");
+      state.markSaved();
+      void qc.invalidateQueries({ queryKey: ["label-templates"] });
+      void qc.invalidateQueries({ queryKey: ["label-template", id] });
+      void qc.invalidateQueries({ queryKey: ["label-template-variants", id] });
+    },
+  });
+
+  const addStructural = (type: Exclude<LabelElementType, "field">) =>
+    state.addElement(makeElement(type, { x: 5, y: 5 }));
+
+  const selected = state.elements.find((e) => e.id === state.selectedId) ?? null;
+  const errors = lint.filter((i) => i.level === "error");
+  const loading = templateQ.isLoading || variantsQ.isLoading;
+
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader
+        title={template ? `Etiket Stüdyosu: ${template.name}` : "Etiket Stüdyosu"}
+        description="Serbest kanvas tasarım — çıktı 4 dile (PPLA/PPLB/ZPL/HTML) otomatik derlenir; önizleme = baskı."
+        onBack={() => navigate("/definitions/labels?tab=templates")}
+        actions={
+          <>
+            <Button type="button" variant="outline" size="sm" disabled={loading || !activeVariant}
+              onClick={() => setTestPrintOpen(true)} className="gap-1"
+              title="Şu anki tasarımı örnek veriyle yazıcıya bas (kaydetmeden)">
+              <Printer className="h-4 w-4" /> Test Baskısı
+            </Button>
+            <Button type="button" size="sm" className="gap-1"
+              disabled={saveMut.isPending || !name.trim() || loading || errors.length > 0}
+              title={errors[0]?.message}
+              onClick={() => saveMut.mutate()}>
+              <Save className="h-4 w-4" /> {saveMut.isPending ? "Kaydediliyor…" : "Kaydet"}
+            </Button>
+          </>
+        }
+      />
+
+      <div className="flex-1 overflow-auto p-4">
+        {loading ? (
+          <Skeleton className="h-96 w-full" />
+        ) : !template ? (
+          <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+            Şablon bulunamadı.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-end gap-3 rounded-md border bg-card p-3">
+              <div className="min-w-[240px] flex-1">
+                <label className="text-xs font-medium text-muted-foreground">Şablon Adı</label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="w-44">
+                <label className="text-xs font-medium text-muted-foreground" title="Önizlemede kullanılan örnek verinin bağlamı">
+                  Önizleme bağlamı
+                </label>
+                <Select value={previewKind} onValueChange={(v) => setPreviewKind(v as LabelKind)}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(labelKindLabels) as LabelKind[]).map((k) => (
+                      <SelectItem key={k} value={k} className="text-xs">{labelKindLabels[k]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {state.dirty && <Badge variant="outline" className="text-[10px] text-amber-600">Kaydedilmedi</Badge>}
+            </div>
+
+            <VariantTabs templateId={template.id} variants={variants}
+              activeId={activeVariantId} onSelect={setActiveVariantId} dirty={state.dirty} />
+            <VariantMismatchBanner variants={variants} />
+
+            <Tabs defaultValue="design">
+              <TabsList>
+                <TabsTrigger value="design">Tasarım</TabsTrigger>
+                <TabsTrigger value="code">
+                  Kod (uzman)
+                  {Object.values(rawCode).some((v) => (v ?? "").trim()) && (
+                    <span className="ml-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  )}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="design" className="mt-3">
+                {!activeVariant ? (
+                  <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+                    Bu şablonun boyut varyantı yok — eski akış düzeninde basılıyor.
+                    Kanvasla tasarlamak için yukarıdan <strong>"Yeni boyut"</strong> ekleyin.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-[210px_minmax(0,1fr)_340px]">
+                    <ElementPalette
+                      onAddField={(f) => state.addElement(makeElement("field", { x: 5, y: 5 }, { bind: f.key, label: f.defaultLabel }))}
+                      onAddStructural={addStructural}
+                    />
+                    <CanvasStage canvas={canvas} state={state} zoom={zoom} onZoom={setZoom} lint={lint} />
+                    <div className="space-y-3 xl:sticky xl:top-4 xl:self-start">
+                      <PropertiesPanel element={selected} catalog={catalog}
+                        onChange={(patch) => selected && state.updateElement(selected.id, patch)}
+                        onRemove={() => selected && state.removeElement(selected.id)} />
+                      {lint.length > 0 && (
+                        <ul className="max-h-32 space-y-1 overflow-auto rounded-md border p-2 text-[10px]">
+                          {lint.map((i, idx) => (
+                            <li key={idx} className={
+                              i.level === "error" ? "text-destructive" :
+                              i.level === "warn" ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground"
+                            }>• {i.message}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <CanvasPreview kind={previewKind} widthMm={canvas.widthMm} heightMm={canvas.heightMm} layout={state.layout} />
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="code" className="mt-3">
+                <RawCodePanel kind={previewKind} catalog={flowCatalogQ.data?.data?.fields ?? []}
+                  rawCode={rawCode} onChange={setRawCode} />
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  Bir dil için kod doluysa o dilde KANVAS DA basılmaz — kod her şeyi ezer. "Kaydet" raw kodu da yazar.
+                </p>
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
+      </div>
+
+      <TemplateTestPrintDialog
+        open={testPrintOpen}
+        onOpenChange={setTestPrintOpen}
+        fetchNative={() =>
+          labelTemplateService.canvasPreview({
+            kind: previewKind, widthMm: canvas.widthMm, heightMm: canvas.heightMm, elements: state.layout,
+          })
+        }
+      />
+    </div>
+  );
+}

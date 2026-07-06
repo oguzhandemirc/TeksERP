@@ -121,6 +121,13 @@ export class LabelTemplateService {
         ...(opts?.kind ? { kind: opts.kind } : {}),
         ...(opts?.includeInactive ? {} : { isActive: true }),
       },
+      // Havuz listesi varyant boyutlarını rozet olarak gösterir — minimal select.
+      include: {
+        variants: {
+          select: { id: true, name: true, widthMm: true, heightMm: true, isPrimary: true },
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+        },
+      },
       orderBy: [{ kind: "asc" }, { isDefault: "desc" }, { name: "asc" }],
     });
     return { success: true, data: rows };

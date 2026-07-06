@@ -1,5 +1,6 @@
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
+import type { CanvasLayout } from "@/types/label-canvas";
 
 export const LabelKind = {
   ROLL_RAW: "ROLL_RAW",
@@ -45,7 +46,9 @@ export interface TemplateField {
 export interface LabelTemplate {
   id: string;
   name: string;
-  kind: LabelKind;
+  /** TEK HAVUZ (v2): kimlik değil legacy bilgi — yeni havuz şablonları null. */
+  kind: LabelKind | null;
+  /** DEPRECATED — tek doğru kaynak bağlam varsayılanları (context-defaults). */
   isDefault: boolean;
   isActive: boolean;
   fields: TemplateField[];
@@ -56,8 +59,40 @@ export interface LabelTemplate {
   qrScale?: number | null;
   /** Sağ kenar dikey metraj bandı (siyah zemin/beyaz değer). */
   lengthBanner?: boolean | null;
+  /** Liste ucunda gelen varyant özeti (boyut rozetleri). */
+  variants?: Array<{ id: string; name: string; widthMm: number | string; heightMm: number | string; isPrimary: boolean }>;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Boyut varyantı — tuval (mm) + kanvas eleman yerleşimi. Prisma Decimal JSON'da
+ *  string gelir → normalizeVariant Number()'a çevirir. */
+export interface LabelTemplateVariant {
+  id: string;
+  templateId: string;
+  name: string;
+  widthMm: number;
+  heightMm: number;
+  sourceProfileId: string | null;
+  isPrimary: boolean;
+  elements: CanvasLayout;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function normalizeVariant(v: LabelTemplateVariant): LabelTemplateVariant {
+  return { ...v, widthMm: Number(v.widthMm), heightMm: Number(v.heightMm) };
+}
+
+export interface ContextDefaultRow {
+  kind: LabelKind;
+  templateId: string;
+  templateName: string;
+}
+
+/** Birleşik katalog alanı — kinds: bu alanın değer ürettiği bağlamlar. */
+export interface UnifiedCatalogField extends CatalogField {
+  kinds: LabelKind[];
 }
 
 export interface CatalogField {
@@ -217,4 +252,110 @@ export const labelTemplateService = {
         }>
       >("/api/label-templates/preview", { kind, fields, ...layout })
       .then((r) => r.data.data),
+
+  // ==========================================================================
+  // ETİKET STÜDYOSU v2 — kanvas / varyant / atama uçları
+  // ==========================================================================
+
+  /** KANVAS canlı önizlemesi — kaydedilmemiş tuval+elemanlar WYSIWYG (backend
+   *  render: native dil → SVG "önizleme = baskı"; dil verilmezse aktif dil). */
+  canvasPreview: (body: {
+    kind: LabelKind;
+    widthMm: number;
+    heightMm: number;
+    elements: CanvasLayout;
+    language?: RawCodeLang;
+  }): Promise<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string }> =>
+    apiClient
+      .post<
+        ApiResponse<{ mode: "svg" | "html" | "text"; language: string; content: string; native: string }>
+      >("/api/label-templates/preview", body)
+      .then((r) => r.data.data),
+
+  /** BİRLEŞİK alan kataloğu (tek havuz) — eleman paleti buradan beslenir. */
+  unifiedCatalog: (): Promise<UnifiedCatalogField[]> =>
+    apiClient
+      .get<ApiResponse<{ fields: UnifiedCatalogField[] }>>("/api/label-templates/catalog")
+      .then((r) => r.data.data.fields),
+
+  listVariants: (templateId: string): Promise<LabelTemplateVariant[]> =>
+    apiClient
+      .get<ApiResponse<LabelTemplateVariant[]>>(`/api/label-templates/${templateId}/variants`)
+      .then((r) => r.data.data.map(normalizeVariant)),
+
+  /** Yeni boyut varyantı — copyFromVariantId (kopyala-başla; BAŞKA şablondan da
+   *  olabilir) veya elements. Otomatik ölçekleme YOK; elle düzeltilir/teyit edilir. */
+  createVariant: (
+    templateId: string,
+    body: {
+      name?: string;
+      widthMm: number;
+      heightMm: number;
+      sourceProfileId?: string | null;
+      copyFromVariantId?: string | null;
+      elements?: CanvasLayout;
+    },
+  ): Promise<LabelTemplateVariant> =>
+    apiClient
+      .post<ApiResponse<LabelTemplateVariant>>(`/api/label-templates/${templateId}/variants`, body)
+      .then((r) => normalizeVariant(r.data.data)),
+
+  updateVariant: (
+    variantId: string,
+    body: Partial<{
+      name: string;
+      widthMm: number;
+      heightMm: number;
+      sourceProfileId: string | null;
+      elements: CanvasLayout;
+    }>,
+  ): Promise<LabelTemplateVariant> =>
+    apiClient
+      .patch<ApiResponse<LabelTemplateVariant>>(`/api/label-templates/variants/${variantId}`, body)
+      .then((r) => normalizeVariant(r.data.data)),
+
+  /** Primary yalnız SON varyantsa silinebilir (akış-moduna dönüş mekanizması). */
+  deleteVariant: (variantId: string): Promise<void> =>
+    apiClient.delete(`/api/label-templates/variants/${variantId}`).then(() => undefined),
+
+  setPrimaryVariant: (variantId: string): Promise<LabelTemplateVariant> =>
+    apiClient
+      .post<ApiResponse<LabelTemplateVariant>>(`/api/label-templates/variants/${variantId}/set-primary`)
+      .then((r) => normalizeVariant(r.data.data)),
+
+  /** Bağlam (kind) → varsayılan şablon atamaları. */
+  listContextDefaults: (): Promise<ContextDefaultRow[]> =>
+    apiClient
+      .get<ApiResponse<ContextDefaultRow[]>>("/api/label-templates/context-defaults")
+      .then((r) => r.data.data),
+
+  /** Bağlam varsayılanını ata/kaldır (templateId null → bağlam default'suz). */
+  setContextDefault: (kind: LabelKind, templateId: string | null): Promise<void> =>
+    apiClient
+      .put("/api/label-templates/context-defaults", { kind, templateId })
+      .then(() => undefined),
+};
+
+// =============================================================================
+// Müşteriye özel şablon atamaları (CustomerTemplateRoute)
+// =============================================================================
+
+export interface CustomerTemplateRouteRow {
+  kind: LabelKind;
+  templateId: string;
+  templateName: string;
+  templateActive: boolean;
+}
+
+export const customerTemplateRouteService = {
+  list: (customerId: string): Promise<CustomerTemplateRouteRow[]> =>
+    apiClient
+      .get<ApiResponse<CustomerTemplateRouteRow[]>>(`/api/customers/${customerId}/template-routes`)
+      .then((r) => r.data.data),
+
+  /** Atama upsert/kaldır — çözüm zinciri: explicit > MÜŞTERİ > cihaz > bağlam default. */
+  set: (customerId: string, kind: LabelKind, templateId: string | null): Promise<void> =>
+    apiClient
+      .put(`/api/customers/${customerId}/template-routes`, { kind, templateId })
+      .then(() => undefined),
 };

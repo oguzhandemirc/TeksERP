@@ -6,6 +6,9 @@
 export type ConnectionType = "NETWORK_TCP" | "BLUETOOTH_SPP" | "BLE" | "USB" | "SERIAL_COM";
 export type PeripheralKind = "LABEL_PRINTER" | "SCALE" | "METER" | "SIGNAL_SOURCE";
 export type PrinterLanguage = "RASTER_HTML" | "PPLA" | "PPLB" | "ZPL";
+/** Yönlendirme BAĞLAMI (baskı anındaki iş bağlamı) — şablonun kimliği DEĞİL.
+ *  Etiket Stüdyosu v2 tek-havuz modeli: her bağlama havuzdaki HERHANGİ bir
+ *  şablon atanabilir (LabelTemplate.kind yalnız legacy bilgi, null olabilir). */
 export type RouteLabelKind = "ROLL_RAW" | "ROLL_FINISHED" | "SWATCH";
 
 export interface PeripheralTemplateRouteRef {

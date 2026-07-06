@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -22,28 +23,25 @@ import {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  defaultKind: LabelKind;
 }
 
-export function NewTemplateDialog({ open, onOpenChange, defaultKind }: Props) {
+/**
+ * Yeni şablon (TEK HAVUZ) — oluşturunca doğrudan Etiket Stüdyosu'na gider;
+ * boyut varyantı orada eklenir ("Yeni boyut": boş iskelet veya BAŞKA şablonun
+ * varyantından kopya). Tür artık kimlik değil: önizleme örnek-verisinin bağlamı.
+ */
+export function NewTemplateDialog({ open, onOpenChange }: Props) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<LabelKind>(defaultKind);
-  const [copyFrom, setCopyFrom] = useState<string>("");
+  const [kind, setKind] = useState<LabelKind>(LabelKind.ROLL_FINISHED);
 
   useEffect(() => {
     if (open) {
-      setKind(defaultKind);
+      setKind(LabelKind.ROLL_FINISHED);
       setName("");
-      setCopyFrom("");
     }
-  }, [open, defaultKind]);
-
-  const templatesQ = useQuery({
-    queryKey: ["label-templates", kind],
-    queryFn: () => labelTemplateService.list(kind),
-    enabled: open,
-  });
+  }, [open]);
 
   const catalogQ = useQuery({
     queryKey: ["label-template-catalog", kind],
@@ -53,30 +51,22 @@ export function NewTemplateDialog({ open, onOpenChange, defaultKind }: Props) {
 
   const mut = useMutation({
     mutationFn: () => {
-      const sourceFields = (() => {
-        if (copyFrom) {
-          const src = templatesQ.data?.data?.find((t) => t.id === copyFrom);
-          if (src) return src.fields;
-        }
-        const catalog = catalogQ.data?.data?.fields ?? [];
-        return catalog.map<TemplateField>((f, i) => ({
-          key: f.key,
-          label: f.defaultLabel,
-          order: i + 1,
-          isVisible: Boolean(f.required) || true,
-        }));
-      })();
-      return labelTemplateService.create({
-        name: name.trim(),
-        kind,
-        fields: sourceFields,
-        isDefault: false,
-      });
+      // fields = eski akış (dual-mode) emniyet düzeni — varyant eklenene kadar
+      // şablon bu düzenle basılabilir kalır.
+      const catalog = catalogQ.data?.data?.fields ?? [];
+      const fields = catalog.map<TemplateField>((f, i) => ({
+        key: f.key,
+        label: f.defaultLabel,
+        order: i + 1,
+        isVisible: true,
+      }));
+      return labelTemplateService.create({ name: name.trim(), kind, fields, isDefault: false });
     },
-    onSuccess: () => {
-      toast.success("Şablon oluşturuldu.");
+    onSuccess: (res) => {
+      toast.success("Şablon oluşturuldu — Stüdyoda boyut ekleyip tasarlayın.");
       void qc.invalidateQueries({ queryKey: ["label-templates"] });
       onOpenChange(false);
+      navigate(`/definitions/label-templates/${res.data.id}`);
     },
   });
 
@@ -88,12 +78,23 @@ export function NewTemplateDialog({ open, onOpenChange, defaultKind }: Props) {
         <DialogHeader>
           <DialogTitle>Yeni Etiket Şablonu</DialogTitle>
           <DialogDescription>
-            Sıfırdan veya mevcut bir şablondan kopyala.
+            Şablon havuza eklenir; boyut ve kanvas tasarımı Stüdyoda yapılır.
+            Mevcut bir tasarımın üstünden gitmek için Stüdyoda "Yeni boyut →
+            kopyala" kullanın (başka şablondan da kopyalanabilir).
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <FormField label="Tür" required>
+          <FormField label="Ad" required>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="örn. Müşteri X Özel"
+              autoFocus
+            />
+          </FormField>
+
+          <FormField label="Önizleme bağlamı (örnek verinin sözlüğü)">
             <select
               value={kind}
               onChange={(e) => setKind(e.target.value as LabelKind)}
@@ -105,30 +106,9 @@ export function NewTemplateDialog({ open, onOpenChange, defaultKind }: Props) {
                 </option>
               ))}
             </select>
-          </FormField>
-
-          <FormField label="Ad" required>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Müşteri X Özel"
-              autoFocus
-            />
-          </FormField>
-
-          <FormField label="Kaynak">
-            <select
-              value={copyFrom}
-              onChange={(e) => setCopyFrom(e.target.value)}
-              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-            >
-              <option value="">Sıfırdan (catalog default'ları)</option>
-              {(templatesQ.data?.data ?? []).map((t) => (
-                <option key={t.id} value={t.id}>
-                  Kopyala: {t.name}
-                </option>
-              ))}
-            </select>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Kimlik değildir — şablon her bağlama atanabilir; bağlam-dışı alanlar baskıda boş kalır.
+            </p>
           </FormField>
         </div>
 
@@ -136,12 +116,8 @@ export function NewTemplateDialog({ open, onOpenChange, defaultKind }: Props) {
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             İptal
           </Button>
-          <Button
-            type="button"
-            disabled={!valid || mut.isPending}
-            onClick={() => mut.mutate()}
-          >
-            {mut.isPending ? "Oluşturuluyor..." : "Oluştur"}
+          <Button type="button" disabled={!valid || mut.isPending} onClick={() => mut.mutate()}>
+            {mut.isPending ? "Oluşturuluyor..." : "Oluştur ve Stüdyoda Aç"}
           </Button>
         </DialogFooter>
       </DialogContent>
