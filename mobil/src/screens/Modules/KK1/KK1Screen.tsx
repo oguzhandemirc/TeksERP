@@ -1741,7 +1741,9 @@ function SessionRollsModal({
             </Text>
           ) : (
             rolls.map((r) => (
-              <RollListItem key={r.id} roll={r} onPrint={onPrint} singleLine={!isPhone} />
+              // hideOperator: liste zaten yalnız AKTİF kullanıcının girişleri —
+              // her satırda aynı adı tekrarlamak gürültü.
+              <RollListItem key={r.id} roll={r} onPrint={onPrint} singleLine={!isPhone} hideOperator />
             ))
           )}
         </ScrollView>
@@ -2066,6 +2068,7 @@ function RollListItem({
   compactLayout,
   singleLine,
   isNew,
+  hideOperator,
 }: {
   roll: Roll;
   onPrint: (roll: Roll) => void;
@@ -2075,6 +2078,9 @@ function RollListItem({
   singleLine?: boolean;
   /** Yeni kaydedilip listeye yeni düşen top — kısa süre vurgulanır. */
   isNew?: boolean;
+  /** Operatör çipini gizle — liste ZATEN tek kişiye aitken (örn. "Bu Oturumda
+   *  Girilenler": hepsi aktif kullanıcının) ad tekrarı gürültü olur. */
+  hideOperator?: boolean;
 }) {
   const operator = roll.createdBy?.fullName ?? roll.createdBy?.username ?? 'Bilinmiyor';
   const at = roll.createdAt ? dayjs(roll.createdAt) : null;
@@ -2192,15 +2198,19 @@ function RollListItem({
             <Text style={styles.recentBadgeText}>{roll.qualityGrade}</Text>
           </View>
 
-          <View style={[styles.recentOperatorChip, styles.recentTimeRight]}>
-            <View style={styles.recentOperatorAvatar}>
-              <Icon source="account" size={14} color="#fff" />
+          {!hideOperator && (
+            <View style={[styles.recentOperatorChip, styles.recentTimeRight]}>
+              <View style={styles.recentOperatorAvatar}>
+                <Icon source="account" size={14} color="#fff" />
+              </View>
+              <Text style={styles.recentOperatorText} numberOfLines={1}>
+                {operator}
+              </Text>
             </View>
-            <Text style={styles.recentOperatorText} numberOfLines={1}>
-              {operator}
-            </Text>
-          </View>
-          <Text style={styles.recentTime}>{at ? at.format('DD.MM HH:mm') : ''}</Text>
+          )}
+          <Text style={[styles.recentTime, hideOperator && styles.recentTimeRight]}>
+            {at ? at.format('DD.MM HH:mm') : ''}
+          </Text>
           {renderActions(true)}
         </View>
       </Surface>
@@ -2265,14 +2275,16 @@ function RollListItem({
           </Text>
         </View>
 
-        <View style={[styles.recentOperatorChip, compactLayout && { maxWidth: '42%' }]}>
-          <View style={styles.recentOperatorAvatar}>
-            <Icon source="account" size={14} color="#fff" />
+        {!hideOperator && (
+          <View style={[styles.recentOperatorChip, compactLayout && { maxWidth: '42%' }]}>
+            <View style={styles.recentOperatorAvatar}>
+              <Icon source="account" size={14} color="#fff" />
+            </View>
+            <Text style={styles.recentOperatorText} numberOfLines={1}>
+              {operator}
+            </Text>
           </View>
-          <Text style={styles.recentOperatorText} numberOfLines={1}>
-            {operator}
-          </Text>
-        </View>
+        )}
       </View>
     </Surface>
   );
