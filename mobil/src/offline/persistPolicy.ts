@@ -15,7 +15,13 @@
 // Mutation tarafı: TanStack default'u yalnız isPaused'u persist eder. Aktif
 // retry'daki (pending) İSTASYON kaydı app kill'de kaybolurdu — istasyon
 // mutation'ları idempotent olduğundan (client-key + P2002) pending'i de
-// persist etmek replay-güvenlidir; restore'da paused olarak döner.
+// persist etmek replay-güvenlidir.
+//
+// DİKKAT (denetimde çıktı): hydrate() state'i AYNEN geri kurar — pending +
+// isPaused:false persist edilen kayıt restore'da paused OLMAZ ve TÜM resume
+// yolları (resumePausedMutations) yalnız isPaused'u taradığından bir daha asla
+// denenmez (zombi → sessiz kayıt kaybı). Bu yüzden persister'ın deserialize'ı
+// revivePendingStationMutations ile bu kayıtları okuma anında paused'a çevirir.
 
 import type { QueryKey } from '@tanstack/react-query';
 
@@ -64,4 +70,36 @@ export function shouldPersistMutation(mutation: {
   return (
     mutation.state.status === 'pending' && isStationMutationKey(mutation.options.mutationKey)
   );
+}
+
+// Persister deserialize düzeltmesi için minimal yapısal tipler — kütüphanenin
+// PersistedClient tipine bağımlılık kurmadan (sürüm oynaklığına dayanıklı).
+interface PersistedMutationLike {
+  mutationKey?: unknown;
+  state?: { status?: string; isPaused?: boolean };
+}
+interface PersistedClientLike {
+  clientState?: { mutations?: PersistedMutationLike[] };
+}
+
+/**
+ * Restore düzeltmesi (ZOMBİ ÖNLEME): pending + isPaused:false persist edilmiş
+ * İSTASYON kaydını okuma anında paused'a çevirir → resumePausedMutations onu
+ * görür, registry'deki mutationFn ile replay eder (idempotent, güvenli).
+ * Idempotent: zaten paused olana ve istasyon-dışına dokunmaz; bozuk/eksik
+ * yapıda girdiyi aynen döndürür.
+ */
+export function revivePendingStationMutations<T extends PersistedClientLike>(persisted: T): T {
+  const mutations = persisted?.clientState?.mutations;
+  if (!Array.isArray(mutations)) return persisted;
+  for (const m of mutations) {
+    if (
+      isStationMutationKey(m?.mutationKey) &&
+      m.state?.status === 'pending' &&
+      !m.state.isPaused
+    ) {
+      m.state.isPaused = true;
+    }
+  }
+  return persisted;
 }

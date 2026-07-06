@@ -9,7 +9,7 @@ import { useBaseUrlStore } from '../store/baseUrlStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { useSessionStore } from '../store/sessionStore';
 import { setUnauthorizedHandler, setWorkSessionRequiredHandler } from '../services/api';
-import { nudgeOutbox } from '../offline/sessionSwitch';
+import { nudgeOutbox, clearUserScopedQueries } from '../offline/sessionSwitch';
 import { deviceService } from '../services/device.service';
 import { getOrCreateDeviceId } from '../utils/deviceId';
 import { usePermissions } from '../hooks/usePermission';
@@ -76,13 +76,20 @@ export default function RootNavigator() {
     // kodu hiç çalışmaz. Artık: baseUrl yüklendikten SONRA, başarılı olana dek
     // 5 sn arayla dener + uygulama öne her gelişinde tazelenir (kalıcı silinen
     // cihaz, uygulama açılınca kendiliğinden yeniden PENDING listesine düşer).
+    // Ardışık hata sayısına göre 5sn→60sn üstel geri çekilme: ölü sunucuda
+    // sabit 5sn'lik denemeler askıda soket biriktirip yükü büyütmesin.
+    // Başarıda ve uygulama öne gelince sayaç sıfırlanır (hızlı toparlanma).
+    let announceFailures = 0;
     const announce = async () => {
       if (disposed) return;
       try {
         const deviceId = await getOrCreateDeviceId();
         await deviceService.announce({ deviceId });
+        announceFailures = 0;
       } catch {
-        if (!disposed) announceRetry = setTimeout(() => void announce(), 5000);
+        announceFailures += 1;
+        const delay = Math.min(5000 * 2 ** Math.min(announceFailures - 1, 4), 60_000);
+        if (!disposed) announceRetry = setTimeout(() => void announce(), delay);
       }
     };
 
@@ -97,6 +104,7 @@ export default function RootNavigator() {
           clearTimeout(announceRetry);
           announceRetry = null;
         }
+        announceFailures = 0; // öne geliş = taze başlangıç, backoff sıfırlanır
         void announce();
       }
     });
@@ -107,6 +115,10 @@ export default function RootNavigator() {
       // yeni girişte NEW_LOGIN ile devrolur, kaybolmaz).
       useSessionStore.getState().reset();
       void clearAuth();
+      // İstemsiz çıkışta da kullanıcıya-özel cache düşmeli (paylaşımlı tablette
+      // sonraki operatör A'nın listelerini/tercihlerini görmesin) — normal
+      // logout'la aynı seçici temizlik: bootstrap + outbox korunur.
+      clearUserScopedQueries();
     });
     // 409 WORK_SESSION_REQUIRED (idle/devralındı/panelden kapatıldı) → yerel oturumu
     // düşür; SessionGate yer onayını yeniden ister (login'e ATMAZ).

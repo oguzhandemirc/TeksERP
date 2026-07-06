@@ -102,6 +102,10 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     queryFn: authService.getLoginMethods,
     refetchInterval: 5 * 60_000,
     refetchOnMount: 'always',
+    // Uzun vardiyada login ekranı saatlerce mount edilmez — default 5dk gcTime
+    // cache'i boşaltıp "anında çizim" vaadini bozar. 24sa: logout anında liste
+    // hâlâ bellekte (persister yalnız app açılışında devreye girer).
+    gcTime: 24 * 60 * 60 * 1000,
   });
   const enabledMethods = methodsQ.data?.enabled ?? ['list'];
   const [pickedMethod, setPickedMethod] = useState<LoginMethod | null>(null);
@@ -124,6 +128,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     queryFn: () => authService.getMobileUsers(),
     staleTime: 0,
     refetchOnMount: 'always',
+    gcTime: 24 * 60 * 60 * 1000, // bkz. methodsQ — vardiya boyu bellekte kalsın
     // Kullanıcı listesi yalnız "liste+şifre" görünümünde gerekir (salt-PIN/kart
     // görünümlerinde kimse listelenmez — gereksiz istek atma).
     enabled: enabledMethods.includes('list'),

@@ -47,6 +47,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { onlineManager, MutationObserver } from "@tanstack/react-query";
 import { kursunQcService } from "../services/kursunQc.service";
 import { resolveAuthToken } from "../services/api";
+import { useAuthStore } from "../store/authStore";
 import {
   registerStationMutationDefaults,
   STATION_MUT,
@@ -80,9 +81,22 @@ const defaultsFor = (key: readonly unknown[]) =>
 describe("OFFLINE_AWARE retry (kaydedilen gerçek config)", () => {
   // QC2_COMPLETE temsilci — tüm key'ler aynı OFFLINE_AWARE spread'ini paylaşır.
   const retry = () => defaultsFor(STATION_MUT.QC2_COMPLETE).retry as RetryFn;
+  const delay = () => defaultsFor(STATION_MUT.QC2_COMPLETE).retryDelay as DelayFn;
 
-  it("401 (oturum doldu) ASLA retry edilmez — ilk denemede düş", () => {
-    expect(retry()(0, { status: 401 })).toBe(false);
+  it("401 + bellekte TOKEN VARKEN (kick/iptal) retry edilmez — ilk denemede düş", () => {
+    useAuthStore.setState({ token: "canli-token" });
+    try {
+      expect(retry()(0, { status: 401 })).toBe(false);
+    } finally {
+      useAuthStore.setState({ token: null });
+    }
+  });
+
+  it("401 + token YOKKEN (uçuşta logout) KALICI düşmez — 15sn arayla bekler", () => {
+    useAuthStore.setState({ token: null });
+    expect(retry()(0, { status: 401 })).toBe(true);
+    expect(retry()(50, { status: 401 })).toBe(true);
+    expect(delay()(0, { status: 401 })).toBe(NO_AUTH_RETRY_MS);
   });
 
   it("deterministik 4xx (400/403/404/409) fail-fast", () => {

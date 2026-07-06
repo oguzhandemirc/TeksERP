@@ -35,7 +35,14 @@ function writeLastPlaceSnapshot(lastPlace: LastPlace | null): void {
 async function readLastPlaceSnapshot(): Promise<LastPlace | null> {
   try {
     const raw = await AsyncStorage.getItem(LAST_PLACE_SNAPSHOT_KEY);
-    return raw ? (JSON.parse(raw) as LastPlace | null) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as LastPlace | null;
+    // Şekil doğrulaması: bozuk-ama-geçerli JSON (eski sürüm/yarım yazım) render
+    // crash'ine dönüşmesin — station nesnesi yoksa snapshot yok sayılır.
+    if (!parsed || typeof parsed !== 'object' || !parsed.station || typeof parsed.station !== 'object') {
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }

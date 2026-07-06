@@ -6,6 +6,7 @@ import {
   isPersistedQueryKey,
   isStationMutationKey,
   shouldPersistMutation,
+  revivePendingStationMutations,
 } from './persistPolicy';
 
 describe('keyStartsWith', () => {
@@ -76,5 +77,41 @@ describe('shouldPersistMutation (paused ∪ pending-istasyon)', () => {
     expect(isStationMutationKey(['stationX'])).toBe(false);
     expect(isStationMutationKey('station')).toBe(false);
     expect(isStationMutationKey(undefined)).toBe(false);
+  });
+});
+
+describe('revivePendingStationMutations (restore zombi önleme)', () => {
+  const pc = (mutations: unknown) => ({ clientState: { mutations } }) as never;
+
+  it('pending + isPaused:false İSTASYON kaydı restore öncesi paused edilir', () => {
+    const persisted = pc([
+      { mutationKey: ['station', 'kk1-create-entry'], state: { status: 'pending', isPaused: false } },
+    ]);
+    const out = revivePendingStationMutations(persisted) as {
+      clientState: { mutations: { state: { isPaused: boolean } }[] };
+    };
+    // Bu düzeltme olmadan hydrate isPaused:false kurar ve resumePausedMutations
+    // kaydı ASLA görmez (zombi → sessiz kayıt kaybı).
+    expect(out.clientState.mutations[0].state.isPaused).toBe(true);
+  });
+
+  it('zaten paused olana ve istasyon-dışına DOKUNMAZ', () => {
+    const persisted = pc([
+      { mutationKey: ['station', 'qc2-complete'], state: { status: 'pending', isPaused: true } },
+      { mutationKey: ['preferences', 'save'], state: { status: 'pending', isPaused: false } },
+      { mutationKey: ['station', 'kk1-scrap'], state: { status: 'success', isPaused: false } },
+    ]);
+    const out = revivePendingStationMutations(persisted) as {
+      clientState: { mutations: { state: { isPaused: boolean } }[] };
+    };
+    expect(out.clientState.mutations[0].state.isPaused).toBe(true); // değişmedi
+    expect(out.clientState.mutations[1].state.isPaused).toBe(false); // istasyon değil
+    expect(out.clientState.mutations[2].state.isPaused).toBe(false); // pending değil
+  });
+
+  it('bozuk/eksik yapıda güvenli (crash yok, girdi aynen döner)', () => {
+    expect(revivePendingStationMutations({} as never)).toEqual({});
+    expect(revivePendingStationMutations(pc(undefined))).toEqual({ clientState: { mutations: undefined } });
+    expect(revivePendingStationMutations(pc([{ state: null }, {}]))).toBeDefined();
   });
 });

@@ -86,6 +86,7 @@ export default function ScreenChrome({
   // kapatılamaz gösterge; tavana takılan kayıtlar cihazda GÜVENLE bekletilir
   // (NoAuth guard + persist — girişten sonra otomatik gönderilir).
   const runLogout = async () => {
+    if (logoutBusy !== null) return; // çift dokunuş = tek çıkış akışı
     setLogoutBusy(pendingStationOpsCount());
     try {
       const outcome = await performLogout();
@@ -97,6 +98,15 @@ export default function ScreenChrome({
           visibilityTime: 6000,
         });
       }
+    } catch {
+      // Tek gerçekçi kaynak: SecureStore silme hatası (clearAuth). Kullanıcı
+      // oturumda kalır — sessiz unhandled rejection yerine tekrar denesin.
+      Toast.show({
+        type: 'error',
+        text1: 'Çıkış tamamlanamadı',
+        text2: 'Lütfen tekrar deneyin.',
+        visibilityTime: 6000,
+      });
     } finally {
       // Başarıda bileşen unmount olur (login ekranı); hata/istisna hâlinde
       // gösterge kalıcı takılı kalmasın.

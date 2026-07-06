@@ -15,8 +15,9 @@
 // sıfır). Giriş yapılınca ilk denemede akar (sessionSwitch.nudgeOutbox hızlandırır).
 
 import { queryClient } from './queryClient';
-import { fullJitterBackoff } from './backoff';
+import { jitteredBackoff } from './backoff';
 import { resolveAuthToken } from '../services/api';
+import { useAuthStore } from '../store/authStore';
 import {
   kursunQcService,
   type CompleteQc2Request,
@@ -93,17 +94,28 @@ const withAuthGuard =
 // L fix (Y12 genislemesi): TUM deterministik 4xx fail-fast — 400/403/404/409
 // yeniden denenince ayni cevabi alir, hata toastini ~8sn geciktirirdi.
 // NoAuthError İSTİSNA: HTTP'ye çıkmamış kayıt kalıcı düşürülmez, süresiz bekler.
+// 401 + bellekte token YOK da aynı istisnadır: guard'ı token'la geçmiş ama
+// uçuş sırasında logout olmuş istek sunucudan 401 alır — bu "oturum yok"
+// beklemesidir, kalıcı düşürme değil (api.ts toast'ı zaten 'girişten sonra
+// gönderilir' diyor; sözü kod da tutsun). Token bellekte DURUYORKEN gelen 401
+// (kick/iptal) eski Y12 kuralıyla fail-fast kalır.
 export const stationRetry = (failureCount: number, error: unknown): boolean => {
   if (isNoAuthError(error)) return true;
   const status = (error as { status?: number } | null)?.status;
+  if (status === 401 && !useAuthStore.getState().token) return true;
   if (status && status >= 400 && status < 500) return false;
   return failureCount < 3;
 };
 
-/** NoAuth: sabit 15sn (jitter gereksiz — istek ağa çıkmıyor). Diğerleri:
- *  tam-jitter üstel backoff (vardiya başı senkron retry dalgasını kırar). */
-export const stationRetryDelay = (attempt: number, error: unknown): number =>
-  isNoAuthError(error) ? NO_AUTH_RETRY_MS : fullJitterBackoff(attempt);
+/** NoAuth (ve token'sız 401): sabit 15sn — istek ağa çıkmıyor/çıkamayacak,
+ *  jitter gereksiz. Diğerleri: ±%30 jitter'lı üstel backoff (vardiya başı
+ *  senkron retry dalgasını kırar). */
+export const stationRetryDelay = (attempt: number, error: unknown): number => {
+  if (isNoAuthError(error)) return NO_AUTH_RETRY_MS;
+  const status = (error as { status?: number } | null)?.status;
+  if (status === 401 && !useAuthStore.getState().token) return NO_AUTH_RETRY_MS;
+  return jitteredBackoff(attempt);
+};
 
 const OFFLINE_AWARE = {
   networkMode: 'online' as const,

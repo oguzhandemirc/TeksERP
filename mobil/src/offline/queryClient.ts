@@ -7,7 +7,8 @@ import { QueryClient, onlineManager } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import NetInfo from '@react-native-community/netinfo';
-import { fullJitterBackoff } from './backoff';
+import { jitteredBackoff } from './backoff';
+import { revivePendingStationMutations } from './persistPolicy';
 
 onlineManager.setEventListener((setOnline) => {
   return NetInfo.addEventListener((state) => {
@@ -21,7 +22,7 @@ export const queryClient = new QueryClient({
       retry: 1,
       // Jitter'lı backoff: vardiya başında onlarca tabletin senkron retry
       // dalgası sunucuya aynı anda vurmasın (SAHA-AG-DAYANIKLILIK.md §S5).
-      retryDelay: (attempt) => fullJitterBackoff(attempt),
+      retryDelay: (attempt) => jitteredBackoff(attempt),
       staleTime: 30_000,
     },
     mutations: {
@@ -39,6 +40,10 @@ export const asyncStoragePersister = createAsyncStoragePersister({
   storage: AsyncStorage,
   key: 'TEKSERP_RQ_CACHE_V1',
   throttleTime: 1000,
+  // ZOMBİ ÖNLEME: pending persist edilen istasyon kaydı restore'da paused'a
+  // çevrilir — aksi hâlde hiçbir resume yolu onu tetiklemez ve kayıt sessizce
+  // kaybolur (bkz. persistPolicy.revivePendingStationMutations).
+  deserialize: (cached) => revivePendingStationMutations(JSON.parse(cached)),
 });
 
 // Bump'lar persist cache'i invalidate eder: registry shape değiştiğinde veya

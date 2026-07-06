@@ -24,21 +24,22 @@
 ## 2. İş Maddeleri
 
 ### S1 — Sınırlı süreli logout + güvenli outbox
-**Dosyalar:** `src/offline/flushThenLogout.ts`, `src/offline/deadline.ts` (yeni), `src/offline/sessionSwitch.ts`, `src/offline/mutations.ts`, `src/components/ScreenChrome.tsx`, `App.tsx`
+**Dosyalar:** `src/offline/flushThenLogout.ts`, `src/offline/deadline.ts` (yeni), `src/offline/sessionSwitch.ts`, `src/offline/mutations.ts`, `src/offline/queryClient.ts`, `src/components/ScreenChrome.tsx`, `src/components/lock/LockScreen.tsx`, `src/navigation/RootNavigator.tsx`, `src/hooks/useAutoLogout.ts`, `App.tsx`
 
 - `flushThenLogout`/`flushThenSwitch`: kuyruk flush'ı **5sn**, work-session close **4sn** tavanla (`withDeadline` — asla reject etmez, `timedOut` bayrağı döner). Tavan dolunca akış devam eder; sonuç `{pendingCount}` döner.
-- ScreenChrome çıkışı: flush sürerken kapatılamaz "Kayıtlar gönderiliyor… (N)" göstergesi (AppModal); tavan dolarsa toast: "N kayıt bekletildi — bağlantı gelince otomatik gönderilir".
-- **Veri kaybı deliği kapanır:** bugün token silindikten sonra ateşlenen kuyruk kaydı 401 alıp KALICI düşüyor. Yeni: her istasyon mutationFn'i token yoksa HTTP'ye ÇIKMADAN `NoAuthError` fırlatır; retry politikası bu hatayı **sonsuz + 15sn sabit aralıkla** yeniden dener (sunucuya istek gitmez, kayıt yaşar; giriş yapılınca akar). Girişten sonra `nudgeOutbox()` bekletilenleri hemen tetikler.
+- ScreenChrome + LockScreen çıkışı: flush sürerken kapatılamaz "Kayıtlar gönderiliyor… (N)" göstergesi; tavan dolarsa toast: "N kayıt bekletildi — girişten sonra otomatik gönderilir"; hata yolunda Türkçe toast + re-entrancy guard (çift dokunuş tek akış).
+- **Veri kaybı deliği kapanır:** token silindikten sonra ateşlenen kuyruk kaydı 401 alıp KALICI düşüyordu. Yeni: her istasyon mutationFn'i token yoksa HTTP'ye ÇIKMADAN `NoAuthError` fırlatır; retry politikası bu hatayı **sonsuz + 15sn sabit aralıkla** yeniden dener (sunucuya istek gitmez, kayıt yaşar; giriş yapılınca akar). **Uçuş sırasında logout yarışı da kapalı:** sunucudan 401 dönüp bellekte token YOKSA bu da "oturum yok" beklemesi sayılır (kalıcı düşürme değil); token bellekteyken gelen 401 (kick) eski fail-fast kuralında kalır. Girişten sonra `nudgeOutbox()` bekletilenleri hemen tetikler.
 - **Persist deliği kapanır:** TanStack default'u yalnız `isPaused` mutation'ları diske yazar; aktif-retry'daki (`pending`) istasyon kaydı app kill'de kaybolurdu. `shouldDehydrateMutation` genişletilir: paused **veya** (pending ve `mutationKey[0]==='station'`). Tüm istasyon mutation'ları idempotent (client-key + P2002) → replay güvenli.
-- **KRİTİK sıra düzeltmesi:** `queryClient.clear()` mutation cache'i de siliyordu — tavanla çıkışta bekletilen kuyruğu YOK EDERDİ. Logout artık yalnız query'leri temizler (`removeQueries`), mutation cache'e DOKUNMAZ (S2'deki seçici temizlik).
+- **Restore zombisi kapanır (denetimde çıktı):** `hydrate()` state'i aynen kurar — pending+`isPaused:false` yazılmış kayıt restore'da paused OLMAZ ve `resumePausedMutations` onu asla görmezdi. Persister `deserialize`'ı `revivePendingStationMutations` ile bu kayıtları okuma anında paused'a çevirir.
+- **KRİTİK sıra düzeltmesi:** `queryClient.clear()` mutation cache'i de siliyordu — tavanla çıkışta bekletilen kuyruğu YOK EDERDİ. TÜM çıkış yolları (normal logout, 401 istemsiz çıkış, token-süresi-dolumu) artık yalnız query'leri seçici temizler (`clearUserScopedQueries`), mutation cache'e DOKUNMAZ.
 
-**Bilinçli kabul:** Bekletilen kayıt, bir SONRAKİ girişte kimin token'ı varsa onunla gider (bugünkü app-restart davranışıyla aynı). Operatör-atıf hassasiyeti sunucu tarafında deviceId/WorkSession damgasıyla zaten kısmen korunur; tam kimlik bağlama bu kapsamda değil.
+**Bilinçli kabuller:** (1) Bekletilen kayıt, bir SONRAKİ girişte kimin token'ı varsa onunla gider (bugünkü app-restart davranışıyla aynı); operatör-atıf sunucu tarafında deviceId/WorkSession damgasıyla kısmen korunur, tam kimlik bağlama kapsam dışı. (2) `PERSIST_BUSTER` bump'ı (v9→v10) güncelleme anında diskte bekleyen ESKİ persist kayıtlarını (varsa eski paused outbox dahil) geçersiz kılar — güncellemeyi kuyruk boşken yapmak yeterli; sonraki bump'larda da aynı dikkat.
 
 ### S2 — Login ekranı stale-while-revalidate
 **Dosyalar:** `src/screens/Auth/LoginScreen.tsx`, `src/services/auth.service.ts`, `src/offline/sessionSwitch.ts` (seçici temizlik), `src/hooks/useFeatureFlags.ts`
 
-- `mobile-users` sorgusu: `staleTime: 0` + `refetchOnMount: 'always'` + `placeholderData: keepPreviousData` → ekran son bilinen listeyle ANINDA çizilir, her açılışta taze çekilir ("değişikliğimi göremiyorum" derdi biter: 5dk bayatlık penceresi kalkar).
-- `login-methods` + `mobile-users` servis çağrılarına **5sn** özel timeout (global 10sn mutasyonlar için kalır).
+- `mobile-users` sorgusu: `staleTime: 0` + `refetchOnMount: 'always'` → ekran son bilinen listeyle ANINDA çizilir (anında çizim cache'in KORUNMASINDAN gelir: seçici logout temizliği + `gcTime: 24sa` — default 5dk gcTime uzun vardiyada cache'i boşaltıp vaadi bozuyordu), her açılışta taze çekilir ("değişikliğimi göremiyorum" derdi biter: 5dk bayatlık penceresi kalkar).
+- `login-methods` + `mobile-users` servis çağrılarına **5sn** özel timeout (global 10sn mutasyonlar için kalır). `login-methods` ağ hatasında artık default'a DÜŞMEZ (hata fırlatır → query son bilinen konfigürasyonu korur); yalnız bozuk-ama-başarılı cevapta default devreye girer.
 - Logout'taki cache temizliği SEÇİCİ olur: public bootstrap anahtarları (`['auth','mobile-users']`, `['auth','login-methods']`, `['feature-flags']`, `['device','status']`, `['device','assignment-required']`) KORUNUR — logout sonrası login ekranı cache'ten anında çizilir; kullanıcıya-özel tüm query'ler silinir.
 - `useFeatureFlags`: `enabled: !!token` — logout sonrası token'sız 401 çifti ve sahte "Oturum süresi doldu" toast'ı biter; son bilinen flag verisi cache'te kalır (idle-lock offline davranışı korunur).
 
@@ -46,7 +47,7 @@
 **Dosyalar:** `src/store/sessionStore.ts`, `src/services/workSession.service.ts`
 
 - `GET /work-sessions/current` çağrısına **5sn** timeout → tam ekran spinner tavanı 10sn'den ~5sn'e iner; hata/timeout'ta `isLoaded: true` (mevcut fail-open davranış korunur).
-- `lastPlace` AsyncStorage'a snapshot'lanır (`session_snapshot_v1`); ağ hatasında öneri ("Sarım-2'desiniz, doğru mu?") kaybolmaz. `active` ASLA snapshot'tan gelmez (hayalet oturum riski yok — sunucu tek kaynak, 409 guard'ı zaten var).
+- `lastPlace` AsyncStorage'a snapshot'lanır (`session_last_place_v1`, okurken şekil doğrulamalı); ağ hatasında öneri ("Sarım-2'desiniz, doğru mu?") kaybolmaz. `active` ASLA snapshot'tan gelmez (hayalet oturum riski yok — sunucu tek kaynak, 409 guard'ı zaten var).
 
 ### S4 — token/deviceId bellek cache'i
 **Dosyalar:** `src/services/api.ts`, `src/utils/deviceId.ts`
@@ -58,9 +59,9 @@
 ### S5 — Timeout/retry/jitter/poll bütçeleri
 **Dosyalar:** `src/offline/queryClient.ts`, `src/offline/mutations.ts`, `src/navigation/RootNavigator.tsx`
 
-- Query default `retryDelay`: tam-jitter üstel backoff (`min(1000·2^n, 30sn) × rand[0.7,1.3]`) — vardiya başında tüm tabletlerin senkron retry dalgası (thundering herd) kırılır.
-- `OFFLINE_AWARE.retryDelay`: aynı jitter; `NoAuthError` dalında sabit 15sn.
-- Cihaz durum poll'u (`['device','status']`): hata halinde 5-15sn → **30sn**'e geriler (ölü sunucuda soket birikmesi/şişirme önlenir), toparlanınca normale döner.
+- Query default `retryDelay`: ±%30 jitter'lı üstel backoff (`min(1000·2^n, 30sn) × rand[0.7,1.3]`, efektif üst 39sn) — vardiya başında tüm tabletlerin senkron retry dalgası (thundering herd) kırılır.
+- `OFFLINE_AWARE.retryDelay`: aynı jitter; `NoAuthError` ve token'sız-401 dalında sabit 15sn.
+- Cihaz durum poll'u (`['device','status']`): hata halinde 5-15sn → **30sn**'e geriler (ölü sunucuda soket birikmesi/şişirme önlenir), toparlanınca normale döner. Cihaz announce döngüsü de ardışık hatada 5sn→60sn üstel geri çekilir (öne gelişte sıfırlanır).
 
 ### S6 — Persister kapsam daraltma
 **Dosyalar:** `App.tsx`, `src/offline/persistPolicy.ts` (yeni), `src/offline/queryClient.ts`
@@ -87,8 +88,8 @@
 > Her madde için: geçti/kaldı + dosya:satır kanıtı + (varsa) kaçırılan kenar durum.
 
 - [ ] **C1** `flushThenLogout`: flush ve closeSession tavanlı; tavan dolunca akış clearAuth'a İLERLİYOR ve sonuç pendingCount döndürüyor. Deadline helper'ı asla reject etmiyor (unhandled rejection yok).
-- [ ] **C2** Tavanla çıkış SONRASI bekletilen mutation'lar token'sız HTTP isteği ATMIYOR (guard HTTP öncesi devrede) ve KALICI FAİL olmuyor (NoAuth dalında retry sonsuz, aralık ~15sn, sunucuya istek yok).
-- [ ] **C3** Logout'taki cache temizliği mutation cache'ine dokunmuyor (paused/pending kuyruk yaşıyor) ve public bootstrap query'leri koruyor; kullanıcıya-özel query'ler siliniyor.
+- [ ] **C2** Tavanla çıkış SONRASI bekletilen mutation'lar token'sız HTTP isteği ATMIYOR (guard HTTP öncesi devrede) ve KALICI FAİL olmuyor (NoAuth + token'sız-401 dalında retry sonsuz, aralık ~15sn). App kill + restore'da pending-istasyon kaydı `deserialize` revive'ı ile paused'a çevrilip resume ediliyor (zombi yok).
+- [ ] **C3** TÜM çıkış yollarındaki (normal logout, 401 istemsiz çıkış, token-süresi-dolumu) cache temizliği mutation cache'ine dokunmuyor (paused/pending kuyruk yaşıyor) ve public bootstrap query'leri koruyor; kullanıcıya-özel query'ler (tercihler dahil) siliniyor.
 - [ ] **C4** `shouldDehydrateMutation`: paused VEYA pending-station persist ediliyor; pending ama station-olmayan ve tamamlanmış mutation'lar persist EDİLMİYOR. Restore sonrası station mutation'ların fn'i registry'den çözülüyor (mevcut setMutationDefaults düzeni bozulmamış).
 - [ ] **C5** ScreenChrome çıkışı: flush sırasında kapatılamaz ilerleme göstergesi; pendingCount>0 bitişinde bilgilendirme toast'ı; mevcut offline+pending ön-onayı korunmuş. Paper/AppModal konvansiyonlarına uygun (Card+onPress yok, raw hex yok).
 - [ ] **C6** LoginScreen `mobile-users`: placeholder + her açılışta taze çekim; 5sn timeout; logout→login döngüsünde liste ANINDA görünüyor (cache korunduğu için) ve arkada tazeleniyor.
@@ -96,7 +97,7 @@
 - [ ] **C8** `sessionStore.init`: 5sn üstünde spinner'da KALMIYOR; lastPlace snapshot'ı yazılıyor/okunuyor; `active` snapshot'tan ASLA restore edilmiyor.
 - [ ] **C9** api.ts token'ı bellekten okuyor; cold-start (store hydrate öncesi) fallback çalışıyor; logout sonrası bellekte token kalmıyor (Authorization header'ı eklenmiyor).
 - [ ] **C10** deviceId memoize: SecureStore'a süreç ömründe ≤1 okuma; eşzamanlı ilk çağrılar tek okumaya biniyor.
-- [ ] **C11** retryDelay'ler jitter'lı (deterministik senkron dalga yok); sınırlar doğru (üst 30sn; NoAuth 15sn sabit).
+- [ ] **C11** retryDelay'ler jitter'lı (deterministik senkron dalga yok); sınırlar doğru (jitter-öncesi tavan 30sn, efektif üst 39sn; NoAuth 15sn sabit).
 - [ ] **C12** Cihaz durum poll'u hata halinde 30sn'e geriliyor, düzelince 5/15sn'e dönüyor.
 - [ ] **C13** Persister beyaz-listesi: listede olmayan hiçbir query diske yazılmıyor (ör. rolls/iş listeleri); BUSTER v10.
 - [ ] **C14** netStats: her istek ölçülüyor, ring buffer sınırlı (bellek sızıntısı yok), eşik uyarısı çalışıyor; interceptor hata yolunda da süre kaydediyor.
