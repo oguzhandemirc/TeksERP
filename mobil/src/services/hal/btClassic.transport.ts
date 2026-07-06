@@ -35,6 +35,7 @@ interface BtNativeModule {
   pairDevice(address: string): Promise<unknown>;
   isDeviceConnected(address: string): Promise<boolean>;
   connectToDevice(address: string, options?: Record<string, unknown>): Promise<unknown>;
+  disconnectFromDevice?(address: string): Promise<boolean>;
   writeToDevice(address: string, message: string, encoding?: string): Promise<boolean>;
   // Okuma alt kümesi (modül-seviye API):
   availableFromDevice(address: string): Promise<number>;
@@ -177,24 +178,60 @@ export async function testConnection(address: string): Promise<void> {
 }
 
 /**
+ * Promise'e sert süre sınırı. BT connect/write native çağrıları (yazıcı KAPALI /
+ * HC-06'yı BAŞKA cihaz tutuyor — modül tek RFCOMM bağlantısı kabul eder) SÜRESİZ
+ * askıda kalabiliyor; askıda kalan baskı sözü hiç çözülmeyince etiket kuyruğu
+ * sessizce donuyordu ("hata verince/bazen sıradakini basmıyor" saha bug'ı).
+ * Zaman aşımında soket best-effort kapatılır + NET Türkçe hata fırlatılır →
+ * çağıran (LabelPrinter) finally'sine düşer, kuyruk bir sonrakine ilerler.
+ */
+async function withDeadline<T>(p: Promise<T>, ms: number, onTimeout?: () => void): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutP = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      onTimeout?.();
+      reject(
+        new Error(
+          'Yazıcıya bağlanılamadı (zaman aşımı) — yazıcı kapalı ya da başka bir cihaz bağlı olabilir.',
+        ),
+      );
+    }, ms);
+  });
+  try {
+    return await Promise.race([p, timeoutP]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Ham içerik yaz. `latin1` = native komut baytları (STX/CR korunur), `ascii` = sorgu
  * komutu. Bayat soket halinde bir kez yeniden bağlanıp dener (retry varsayılan açık).
+ * `timeoutMs` verilirse bağlan+yaz (retry dahil) toplamı bu süreyi AŞAMAZ.
  */
 export async function writeRaw(
   address: string,
   content: string,
   encoding: 'latin1' | 'ascii' = 'latin1',
-  opts?: { retry?: boolean },
+  opts?: { retry?: boolean; timeoutMs?: number },
 ): Promise<void> {
-  const mod = await ensureReady(address);
-  try {
-    await mod.writeToDevice(address, content, encoding);
-  } catch (e) {
-    if (opts?.retry === false) throw e;
-    // Soket düşmüş olabilir → tek sefer yeniden bağlan + yaz.
-    await mod.connectToDevice(address);
-    await mod.writeToDevice(address, content, encoding);
-  }
+  const run = async (): Promise<void> => {
+    const mod = await ensureReady(address);
+    try {
+      await mod.writeToDevice(address, content, encoding);
+    } catch (e) {
+      if (opts?.retry === false) throw e;
+      // Soket düşmüş olabilir → tek sefer yeniden bağlan + yaz.
+      await mod.connectToDevice(address);
+      await mod.writeToDevice(address, content, encoding);
+    }
+  };
+  const ms = opts?.timeoutMs;
+  if (!ms) return run();
+  return withDeadline(run(), ms, () => {
+    // Askıda kalan connect/write'ı koparmayı dene — sonraki deneme temiz başlasın.
+    void getModule()?.disconnectFromDevice?.(address).catch(() => {});
+  });
 }
 
 export interface ReadResponseOptions {
