@@ -92,13 +92,15 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
   // yöntemle açılır; diğer etkin yöntemler "Diğer giriş yöntemlerini dene"
   // butonuyla seçenek olarak çıkar. list=kullanıcı+şifre, pin=salt hızlı-PIN
   // (kullanıcı seçme yok — PIN benzersiz), card=QR personel kartı.
-  // SAHA BUG'ı: 5 dk staleTime + ekran hep açık → panelden yöntem değişikliği
-  // tablete çok geç yansıyordu. Login ekranı zaten boşta bekleyen bir ekran:
-  // açıkken 10 sn'de bir tazele (public uç, minik yanıt; ekran kapanınca durur).
+  // Ayar ÇOK nadir değişir → her ekran açılışında BİR taze çekim yeter
+  // (refetchOnMount). Yalnız açık unutulup bekleyen tablet için seyrek (5 dk)
+  // emniyet yoklaması — eski 10 sn'lik yoklama gereksiz gürültüydü (log dolduruyordu),
+  // ama tamamen kapatmak da eski saha şikâyetini ("panelden yöntem değişti,
+  // tablete yansımadı") geri getirirdi.
   const methodsQ = useQuery({
     queryKey: ['auth', 'login-methods'],
     queryFn: authService.getLoginMethods,
-    refetchInterval: 10_000,
+    refetchInterval: 5 * 60_000,
     refetchOnMount: 'always',
   });
   const enabledMethods = methodsQ.data?.enabled ?? ['list'];
