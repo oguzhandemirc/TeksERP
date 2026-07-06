@@ -52,6 +52,9 @@ export interface Code128Element extends ElementBase {
   type: "code128";
   hMm?: number; // yok → 9
   human?: boolean; // yok → true
+  /** Modül (dar çubuk) kalınlığı dot (1-4). Yok → 2. Genişlik serbest ölçü değil —
+   *  okunabilirlik için tam-sayı dot şart; büyütme bu kademeyle ORANTILI. */
+  mw?: number;
 }
 
 export interface LineElement extends ElementBase {
@@ -94,8 +97,11 @@ export const CAPABILITY: Record<LabelElementType, Record<"PPLA" | "PPLB" | "ZPL"
   text:         { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
   qr:           { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
   code128:      { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
-  line:         { PPLA: "skip", PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
-  box:          { PPLA: "skip", PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
+  // line/box: DPL font-X kayıtlarıyla PPLA'da da basılır.
+  line:         { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
+  box:          { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
+  // lengthBanner PPLA'da basılamaz: ters-renk (siyah zemin/beyaz değer) ister,
+  // DPL'de güvenilir reverse yok (PPLB 'R' / ZPL ^FR var).
   lengthBanner: { PPLA: "skip", PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
 };
 

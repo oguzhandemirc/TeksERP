@@ -72,6 +72,10 @@ export interface Code128Element extends ElementBase {
   hMm?: number;
   /** Okunur satır (insan-okur barkod değeri). Yok → true. */
   human?: boolean;
+  /** Modül (dar çubuk) kalınlığı — dot (1-4). Yok → 2. Barkod genişliği serbest
+   *  ölçü DEĞİLDİR: okunabilirlik için çubuklar tam-sayı dot olmalı; genişletme
+   *  bu kademeyle ORANTILI yapılır (her kademe ≈ %50-100 genişletir). */
+  mw?: number;
 }
 
 export interface LineElement extends ElementBase {
@@ -124,8 +128,11 @@ export const CAPABILITY: Record<LabelElementType, Record<LangKey, "ok" | "skip">
   text:         { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
   qr:           { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
   code128:      { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
-  line:         { PPLA: "skip", PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
-  box:          { PPLA: "skip", PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
+  // line/box: DPL font-X kayıtlarıyla PPLA'da da basılır (L=dolu çizgi, B=çerçeve).
+  line:         { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
+  box:          { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
+  // lengthBanner PPLA'da BASILAMAZ: siyah zemin/beyaz değer TERS-RENK ister;
+  // DPL'de güvenilir reverse yok (saha gerçeği — PPLB 'R' / ZPL ^FR var).
   lengthBanner: { PPLA: "skip", PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
 };
 
@@ -238,6 +245,10 @@ export function validateCanvasLayout(
       case "code128":
         if (el.hMm !== undefined) checkMm(el.hMm, `'${el.id}' hMm`, 100);
         if (el.human !== undefined && typeof el.human !== "boolean") bad(`'${el.id}' human boolean olmalı`);
+        if (el.mw !== undefined) {
+          if (typeof el.mw !== "number" || !Number.isInteger(el.mw)) bad(`'${el.id}' mw tamsayı olmalı`);
+          if ((el.mw as number) < 1 || (el.mw as number) > 4) bad(`'${el.id}' mw 1-4 aralığında olmalı (modül kalınlığı)`);
+        }
         scannable++;
         break;
       case "line":

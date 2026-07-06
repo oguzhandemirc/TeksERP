@@ -45,6 +45,10 @@ export function qrSizeMm(scale: number | undefined): number {
   return ((qrModules(SAMPLE_BC_LEN) + 8) * (scale ?? 5)) / 8;
 }
 
+/** Code128 taban genişliği (mm, mw=1 için) — örnek barkod uzunluğuyla yaklaşık:
+ *  ~11 modül/karakter × (19+3) + stop ≈ 255 modül / 8 dot-per-mm ≈ 32mm. */
+export const BC_BASE_MM = 32;
+
 export interface BoundsMm {
   x: number;
   y: number;
@@ -74,7 +78,8 @@ export function estimateBounds(el: LabelElement, canvas: { widthMm: number; heig
     }
     case "code128": {
       const h = (el.hMm ?? 9) + (el.human !== false ? 3.5 : 0);
-      return { x: el.x, y: el.y, w: Math.min(60, canvas.widthMm - el.x - 2), h };
+      // Genişlik ≈ modül sayısı × modül kalınlığı (mw) — örnek barkod uzunluğuyla.
+      return { x: el.x, y: el.y, w: Math.min(BC_BASE_MM * (el.mw ?? 2), canvas.widthMm - el.x - 1), h };
     }
     case "line":
       return { x: el.x, y: el.y, w: el.wMm, h: el.hMm };
@@ -117,9 +122,15 @@ export function applyResize(
     case "lengthBanner":
       return { wMm: Math.max(3, w), hMm: Math.max(10, h) };
     case "code128": {
-      // Sürüklenen kutu okunur satırı da içerir — bar yüksekliğine geri çevir.
+      // Dikey: bar yüksekliği (okunur satır payı düşülür). Yatay: modül kalınlığı
+      // kademesi (1-4) — barkod genişliği serbest ölçü değildir, ORANTILI büyür.
       const human = el.human !== false ? 3.5 : 0;
-      return { hMm: clamp(snap(h - human), 3, 40) };
+      const patch: { hMm?: number; mw?: number } = {};
+      const hNew = clamp(snap(h - human), 3, 40);
+      if (hNew !== (el.hMm ?? 9)) patch.hMm = hNew;
+      const mwNew = clamp(Math.round(w / BC_BASE_MM), 1, 4);
+      if (mwNew !== (el.mw ?? 2)) patch.mw = mwNew;
+      return patch.hMm !== undefined || patch.mw !== undefined ? patch : null;
     }
     case "qr": {
       // Ayak izi = (modül+8)×scale/8 mm → hedef kenardan ölçek çöz (2-15 ayrık).

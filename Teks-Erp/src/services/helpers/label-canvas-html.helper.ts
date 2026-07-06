@@ -78,13 +78,18 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
         if (!payload.barcode || !barcodeSvg) break;
         const h = el.hMm ?? 9;
         const human = el.human !== false;
+        // Modül kalınlığı: native'de dar-çubuk dot'u — HTML'de eşdeğeri yatay
+        // orantılı ölçek (mw=2 taban; vektör olduğundan okunabilirlik bozulmaz).
+        const scaleX = (el.mw ?? 2) / 2;
+        const inner =
+          `<div style="height:${h}mm">${barcodeSvg.replace("<svg ", `<svg style="height:${h}mm;width:auto" `)}</div>` +
+          (human
+            ? `<div style="font-size:8pt;letter-spacing:0.12em;text-align:center">${escapeHtml(payload.barcode)}</div>`
+            : "");
         els.push(
-          `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm">` +
-            `<div style="height:${h}mm">${barcodeSvg.replace("<svg ", `<svg style="height:${h}mm;width:auto" `)}</div>` +
-            (human
-              ? `<div style="font-size:8pt;letter-spacing:0.12em;text-align:center">${escapeHtml(payload.barcode)}</div>`
-              : "") +
-            `</div>`,
+          `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm${
+            scaleX !== 1 ? `;transform:scaleX(${scaleX});transform-origin:top left` : ""
+          }">${inner}</div>`,
         );
         break;
       }

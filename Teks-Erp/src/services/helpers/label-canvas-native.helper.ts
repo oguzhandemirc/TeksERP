@@ -10,7 +10,7 @@
 //   ikisi aynıdır (±1mm); fallback varyantta taşan elemanı yazıcı kırpar —
 //   çakışma/taşma sorumluluğu EDİTÖRDE (lint), emit katmanı basar.
 // - Dil yetenek matrisi (CAPABILITY, config/label-elements.ts): desteklenmeyen
-//   eleman o dilde SESSİZCE atlanır (örn. line/box/lengthBanner PPLA'da yok).
+//   eleman o dilde SESSİZCE atlanır (örn. lengthBanner PPLA'da yok — reverse yok).
 // - present:false veri alanı ATLANIR — mutlak konumda satır kayması olmaz,
 //   yalnız boşluk kalır.
 // - Sanitize akış üreticileriyle birebir: cleanCtl/asciiFold + dil-özel kaçış.
@@ -116,7 +116,10 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
         if (!bc) break;
         const h = d(el.hMm ?? 9);
         const human = el.human !== false ? "B" : "N";
-        lines.push(`B${x},${y},0,1,2,3,${h},${human},"${bc}"`);
+        // Modül (dar çubuk) kalınlığı — genişlik bununla ORANTILI büyür; mw yokken
+        // bugünkü 2,3 aynen (bayt-uyum).
+        const mw = el.mw ?? 2;
+        lines.push(`B${x},${y},0,1,${mw},${mw + 1},${h},${human},"${bc}"`);
         break;
       }
       case "line":
@@ -166,7 +169,7 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
   const dplRot = (rot?: number) => String(((rot ?? 0) / 90) + 1);
 
   for (const el of layout.elements) {
-    if (!elementSupported(el.type, "PPLA")) continue; // line/box/lengthBanner → yok
+    if (!elementSupported(el.type, "PPLA")) continue; // lengthBanner → yok (reverse yok)
     const row = d(el.y);
     const col = d(el.x);
     switch (el.type) {
@@ -188,12 +191,25 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
       case "code128": {
         if (!bc) break;
         const h = d(el.hMm ?? 9);
-        lines.push(`1e22${pad4(h)}${pad4(row)}${pad4(col)}${bc}`);
+        // Modül kalınlığı: DPL barkod kaydında 'e' sonrası dar+geniş tek hane.
+        // mw yokken bugünkü "22" aynen (bayt-uyum).
+        const mw = Math.min(9, el.mw ?? 2);
+        lines.push(`1e${mw}${mw}${pad4(h)}${pad4(row)}${pad4(col)}${bc}`);
         // PPLB/ZPL'de okunur satırı yazıcı çizer; DPL'de elle küçük metin (akış paritesi).
         // Format: <rot=1><font=1><mul=11>000<row4><col4><veri>
         if (el.human !== false) {
           lines.push(`1111000${pad4(row + h + d(1))}${pad4(col)}${bc}`);
         }
+        break;
+      }
+      // DPL font-X grafik kayıtları: L=dolu çizgi/kutu, B=çerçeve.
+      // Format: 1X11000<row4><col4><L|B><yatay4><dikey4>[<alt-üst duvar4><yan duvar4>]
+      case "line":
+        lines.push(`1X11000${pad4(row)}${pad4(col)}L${pad4(d(el.wMm))}${pad4(d(el.hMm))}`);
+        break;
+      case "box": {
+        const t = Math.max(1, d(el.thickMm ?? 0.5));
+        lines.push(`1X11000${pad4(row)}${pad4(col)}B${pad4(d(el.wMm))}${pad4(d(el.hMm))}${pad4(t)}${pad4(t)}`);
         break;
       }
     }
@@ -251,7 +267,9 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
         if (!bc) break;
         const h = d(el.hMm ?? 9);
         const human = el.human !== false ? "Y" : "N";
-        lines.push(`^FO${x},${y}^BCN,${h},${human},N,N^FD${bc}^FS`);
+        // ^BY = modül kalınlığı (genişlik orantılı) — mw yokken emit edilmez (bayt-uyum).
+        const by = el.mw != null ? `^BY${Math.min(10, el.mw)}` : "";
+        lines.push(`^FO${x},${y}${by}^BCN,${h},${human},N,N^FD${bc}^FS`);
         break;
       }
       case "line": {

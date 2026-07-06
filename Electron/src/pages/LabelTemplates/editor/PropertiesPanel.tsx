@@ -149,10 +149,16 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
         <div className="grid grid-cols-2 items-end gap-2">
           <NumField label="Bar yüksekliği (mm)" value={el.hMm ?? 9} min={3} max={40}
             onChange={(v) => onChange({ hMm: v } as Partial<LabelElement>)} />
-          <label className="flex h-7 items-center gap-1.5 text-xs">
+          <NumField label="Kalınlık (modül 1-4)" value={el.mw ?? 2} min={1} max={4} step={1}
+            onChange={(v) => onChange({ mw: Math.round(v) } as Partial<LabelElement>)} />
+          <label className="col-span-2 flex h-7 items-center gap-1.5 text-xs">
             <Checkbox checked={el.human !== false} onCheckedChange={(v) => onChange({ human: v === true } as Partial<LabelElement>)} />
             Okunur satır
           </label>
+          <p className="col-span-2 text-[10px] leading-snug text-muted-foreground">
+            Genişlik serbest ölçü değildir: çubuklar tam-sayı dot olmalı (okunabilirlik).
+            Kalınlık kademesi barkodu ORANTILI genişletir; köşe tutamacının yatayı da buna oturur.
+          </p>
         </div>
       )}
 

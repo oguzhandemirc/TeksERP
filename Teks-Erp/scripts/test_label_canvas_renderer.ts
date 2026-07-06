@@ -68,8 +68,11 @@ async function main() {
   const zpl = emitCanvasZpl(mk());
   const html = buildCanvasLabelHtml({ ...mk(), barcodeSvg: "<svg viewBox=\"0 0 10 10\"></svg>", qrSvg: "<svg viewBox=\"0 0 10 10\"></svg>" });
 
-  // --- Degrade matrisi: PPLA'da line/box/banner YOK; PPLB/ZPL'de VAR ---
-  check("PPLA: line/box/banner atlanır", !ppla.includes("LO") && !/X\d+,\d+,\d+,/.test(ppla));
+  // --- Degrade matrisi: PPLA'da YALNIZ banner yok (reverse yok); line/box artık
+  //     DPL font-X kayıtlarıyla PPLA'da da basılır ---
+  check("PPLA: line (X-font L kaydı) basılır", /1X11000\d{4}\d{4}L\d{4}\d{4}/.test(ppla));
+  check("PPLA: box (X-font B kaydı) basılır", /1X11000\d{4}\d{4}B\d{4}\d{4}\d{4}\d{4}/.test(ppla));
+  check("PPLA: banner (ters-renk) ATLANIR", !/,R,"/.test(ppla) && !ppla.includes("METRAJ"));
   check("PPLB: line (LO) basılır", /LO24,240,719,6/.test(pplb));
   check("PPLB: box (X) basılır", /X24,256,8,344,336/.test(pplb) || /^X24,256,/m.test(pplb));
   check("PPLB: banner ters metin (R) basılır", /,R,"/.test(pplb));
@@ -88,9 +91,21 @@ async function main() {
   check("PPLB: QR s6", pplb.includes(`b24,24,Q,m2,s6,"${payload.barcode}"`));
   check("PPLA: QR 1W1c0606", ppla.includes(`1W1c0606`));
   check("ZPL: QR mag 6", zpl.includes("^BQN,2,6"));
-  check("PPLB: Code128 human=B", /B24,368,0,1,2,3,72,B,/.test(pplb));
-  check("PPLA: Code128 + okunur satır", /1e22\d{4}\d{4}\d{4}TEKS/.test(ppla) && /1111000\d{8}TEKS/.test(ppla));
-  check("ZPL: Code128 human=Y", /\^BCN,72,Y,N,N/.test(zpl));
+  check("PPLB: Code128 human=B (mw yok → 2,3 bayt-uyum)", /B24,368,0,1,2,3,72,B,/.test(pplb));
+  check("PPLA: Code128 + okunur satır (mw yok → 22)", /1e22\d{4}\d{4}\d{4}TEKS/.test(ppla) && /1111000\d{8}TEKS/.test(ppla));
+  check("ZPL: Code128 human=Y (mw yok → ^BY emit edilmez)", /\^BCN,72,Y,N,N/.test(zpl) && !zpl.includes("^BY"));
+
+  // --- Modül kalınlığı (mw): üç dilde orantılı genişletme ---
+  const mwLayout: CanvasLayout = {
+    v: 1,
+    elements: [{ id: "bc3", type: "code128", x: 3, y: 10, hMm: 9, human: true, mw: 3 }],
+  };
+  const pplbMw = emitCanvasPplb(mk({ layout: mwLayout }));
+  const pplaMw = emitCanvasPpla(mk({ layout: mwLayout }));
+  const zplMw = emitCanvasZpl(mk({ layout: mwLayout }));
+  check("PPLB: mw=3 → dar/geniş 3,4", /B24,80,0,1,3,4,72,B,/.test(pplbMw));
+  check("PPLA: mw=3 → 1e33", /1e33\d{4}/.test(pplaMw));
+  check("ZPL: mw=3 → ^BY3", zplMw.includes("^BY3^BCN,72,Y,N,N"));
 
   // --- Medya komutları format profilinden ---
   check("PPLB: q/Q medya boyutu", pplb.includes("q799") && /Q480,16/.test(pplb));
