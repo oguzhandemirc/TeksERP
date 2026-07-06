@@ -46,6 +46,8 @@ export function withWorkSession(
       );
     }
     // Oturum açılınca store güncellenir → matches true → ekran render (onDone no-op).
-    return <PlaceConfirmView expectedKind={expectedKind} onDone={() => undefined} />;
+    // autoOpen: girişte makine seçtirme YOK — çözülebilir yer (son yer / tek istasyon+
+    // tek makine) varsa otomatik açılır; değilse seçim ekranı çıkar.
+    return <PlaceConfirmView expectedKind={expectedKind} onDone={() => undefined} autoOpen />;
   };
 }

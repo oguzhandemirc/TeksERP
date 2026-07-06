@@ -39,6 +39,12 @@ describe('suggestPlace', () => {
     expect(suggestPlace(null, places, 'RAW_QC')).toBeNull();
   });
 
+  it('türde tek istasyon + TEK makine → o makineyi önerir (source=single) — girişte otomatik açılır', () => {
+    // Gate autoOpen bu öneriyi seçtirmeden açar: "1 istasyon + 1 makine → direkt sayfa".
+    const s = suggestPlace(null, places, 'TAMBUR');
+    expect(s).toMatchObject({ stationId: 'tambur', machineId: 't1', source: 'single' });
+  });
+
   it('makinesiz istasyon (SHIPPING) → istasyon-oturumu önerisi (machineId null)', () => {
     const s = suggestPlace(null, places, 'SHIPPING');
     expect(s).toMatchObject({ stationId: 'sevk', machineId: null, source: 'single' });
