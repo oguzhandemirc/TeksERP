@@ -40,6 +40,9 @@ const ACTIVE_SELECT = {
 export async function resolveActiveSession(deviceRowId: string): Promise<ActiveWorkSession | null> {
   const session = await prisma.workSession.findFirst({
     where: { deviceId: deviceRowId, endedAt: null },
+    // Birden çok açık oturum kalırsa (offline/kesinti kalıntısı) EN YENİSİ geçerli —
+    // orderBy olmadan findFirst rastgele/eski birini döndürüp yanlış 409'a yol açardı.
+    orderBy: { startedAt: 'desc' },
     select: ACTIVE_SELECT,
   });
   if (!session) return null;
@@ -73,11 +76,23 @@ export interface StampContext {
  * - Tx DIŞINDA çağrılmalı (tx süresi kısa kuralı) — indexed tek sorgu + tembel idle.
  */
 export async function getStampContext(
-  req: { device?: { id: string; kind?: string } },
+  req: { device?: { id: string; kind?: string }; user?: { userId?: string } },
   opts?: { enforceForMobile?: boolean },
 ): Promise<StampContext | null> {
   if (!req.device) return null;
-  const session = await resolveActiveSession(req.device.id);
+  let session = await resolveActiveSession(req.device.id);
+  // Öz-onarım: oturum BAŞKA kullanıcıya aitse (önceki kullanıcının logout'u
+  // kaçmış kalıntı) ASLA benimseme — üretim atfı yanlış kişiye yazılırdı
+  // ("ayak izinde eski kullanıcı hâlâ aktif" saha bug'ı). Kalıntıyı vardiya
+  // değişimi (NEW_LOGIN) ile kapat; akış "oturum yok" dalına düşer → mobilde
+  // yer onayı yeni kullanıcı adına taze oturum açar.
+  if (session && req.user?.userId && session.userId !== req.user.userId) {
+    await prisma.workSession.updateMany({
+      where: { id: session.id, endedAt: null },
+      data: { endedAt: new Date(), endReason: "NEW_LOGIN" as WorkSessionEndReason },
+    });
+    session = null;
+  }
   if (!session) {
     if (opts?.enforceForMobile && req.device.kind !== "DESKTOP") {
       // Sebebi ekle: bu cihazın SON kapanan oturumunun endReason'ı → client doğru

@@ -295,19 +295,17 @@ export class WorkSessionService {
     return { success: true, data: created };
   }
 
-  /** Cihazın aktif oturumunu kapat (idempotent — açık oturum yoksa closed:false). */
+  /** Cihazın açık oturumlarının TÜMÜNÜ kapat (idempotent — açık oturum yoksa closed:false).
+   *  Eskiden findFirst ile (orderBy'sız) RASTGELE tek oturum kapanıyordu: cihazda kalıntı
+   *  oturum birikmişse çıkış eski kalıntıyı kapatıp GERÇEK oturumu açık bırakabiliyordu
+   *  ("ayak izinde eski kullanıcı hâlâ aktif" saha bug'ı). Logout = cihaz temiz. */
   static async closeForDevice(
     deviceRowId: string,
     reason: "LOGOUT" | "IDLE" = "LOGOUT",
     auditUserId?: string,
   ): Promise<ApiResponse<{ closed: boolean }>> {
-    const active = await prisma.workSession.findFirst({
-      where: { deviceId: deviceRowId, endedAt: null },
-      select: { id: true },
-    });
-    if (!active) return { success: true, data: { closed: false } };
     const res = await prisma.workSession.updateMany({
-      where: { id: active.id, endedAt: null },
+      where: { deviceId: deviceRowId, endedAt: null },
       data: { endedAt: new Date(), endReason: reason as WorkSessionEndReason },
     });
     if (res.count > 0) {
@@ -315,8 +313,8 @@ export class WorkSessionService {
         userId: auditUserId,
         action: "UPDATE",
         tableName: TABLE,
-        recordId: active.id,
-        newData: { endReason: reason },
+        recordId: deviceRowId,
+        newData: { endReason: reason, closedCount: res.count },
       }).catch(() => undefined);
     }
     return { success: true, data: { closed: res.count > 0 } };
@@ -328,8 +326,19 @@ export class WorkSessionService {
    * onay ekranının "Sarım-2'desiniz, doğru mu?" varsayılanı. Server-side hafıza:
    * cihaz storage'ı silinse de yer hatırlanır. Pasifleşen makine/istasyon önerilmez.
    */
-  static async current(deviceRowId: string): Promise<ApiResponse<unknown>> {
-    const activeMin = await resolveActiveSession(deviceRowId);
+  static async current(deviceRowId: string, requestUserId?: string): Promise<ApiResponse<unknown>> {
+    let activeMin = await resolveActiveSession(deviceRowId);
+    // Öz-onarım: aktif oturum BAŞKA kullanıcıya aitse (önceki kullanıcının logout'u
+    // kaçmış kalıntı) yeni kullanıcıya BENİMSETME — vardiya değişimi (NEW_LOGIN) ile
+    // kapat, active=null dön. lastPlace korunur → yer onayı aynı makineyi yeni
+    // kullanıcı adına önerir/açar.
+    if (activeMin && requestUserId && activeMin.userId !== requestUserId) {
+      await prisma.workSession.updateMany({
+        where: { id: activeMin.id, endedAt: null },
+        data: { endedAt: new Date(), endReason: "NEW_LOGIN" as WorkSessionEndReason },
+      });
+      activeMin = null;
+    }
     const active = activeMin
       ? await prisma.workSession.findUnique({
           where: { id: activeMin.id },
