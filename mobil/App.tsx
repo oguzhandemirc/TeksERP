@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Toast from 'react-native-toast-message';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import RootNavigator from './src/navigation/RootNavigator';
 import { NumpadProvider } from './src/components/NumpadProvider';
 import { toastConfig } from './src/components/ToastConfig';
@@ -69,6 +70,21 @@ export default function App() {
       }
     });
     return () => sub.remove();
+  }, []);
+
+  // Etiket Stüdyosu v2 geçişi: eski kind-anahtarlı şablon cache'i ('@label-template:*')
+  // kaldırıldı — bayat cache yanlış şablon bilgisi göstermesin diye açılışta bir kez
+  // temizlenir (anahtar kalmayınca no-op; kalıcı maliyeti yok).
+  useEffect(() => {
+    void (async () => {
+      try {
+        const keys = await AsyncStorage.getAllKeys();
+        const stale = keys.filter((k) => k.startsWith('@label-template:'));
+        if (stale.length > 0) await AsyncStorage.multiRemove(stale);
+      } catch {
+        // best-effort — temizlik başarısızlığı açılışı engellemez
+      }
+    })();
   }, []);
 
   // Kök dokunma izleme (idle kilit) — capture fazında HER dokunma başında
