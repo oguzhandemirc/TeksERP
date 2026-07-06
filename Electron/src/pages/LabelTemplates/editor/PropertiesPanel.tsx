@@ -13,7 +13,7 @@ import {
 import type { CanvasRotation, LabelElement } from "@/types/label-canvas";
 import { elementTypeLabels, skippedLanguages } from "@/types/label-canvas";
 import type { UnifiedCatalogField } from "@/services/labelTemplateService";
-import { FONT_MM } from "./canvas-model";
+import { BC_BASE_MM, FONT_MM } from "./canvas-model";
 
 interface Props {
   element: LabelElement | null;
@@ -155,15 +155,28 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
         <div className="grid grid-cols-2 items-end gap-2">
           <NumField label="Bar yüksekliği (mm)" value={el.hMm ?? 9} min={3} max={40}
             onChange={(v) => onChange({ hMm: v } as Partial<LabelElement>)} />
-          <NumField label="Kalınlık (modül 1-4)" value={el.mw ?? 2} min={1} max={4} step={1}
-            onChange={(v) => onChange({ mw: Math.round(v) } as Partial<LabelElement>)} />
+          <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground">Kalınlık (modül)</Label>
+            <Select value={String(el.mw ?? 2)}
+              onValueChange={(v) => onChange({ mw: Number(v) } as Partial<LabelElement>)}>
+              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {[1, 2, 3, 4].map((m) => (
+                  <SelectItem key={m} value={String(m)} className="text-xs">
+                    {m} dot — ≈{BC_BASE_MM * m} mm
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <label className="col-span-2 flex h-7 items-center gap-1.5 text-xs">
             <Checkbox checked={el.human !== false} onCheckedChange={(v) => onChange({ human: v === true } as Partial<LabelElement>)} />
             Okunur satır
           </label>
           <p className="col-span-2 text-[10px] leading-snug text-muted-foreground">
-            Genişlik serbest ölçü değildir: çubuklar tam-sayı dot olmalı (okunabilirlik).
-            Kalınlık kademesi barkodu ORANTILI genişletir; köşe tutamacının yatayı da buna oturur.
+            Ara değer (örn. 2.5) BASILAMAZ: termal kafa sabit nokta ızgarasıdır — çubuk
+            genişliği çubuk başına TAM SAYI dot'tur (203dpi'da 1 dot=0.125mm). Kademeler
+            barkodu orantılı genişletir; mm değerleri örnek barkod uzunluğuna göre yaklaşıktır.
           </p>
         </div>
       )}
