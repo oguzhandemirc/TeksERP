@@ -208,7 +208,10 @@ export function LabelStudioPage() {
                       onAddStructural={addStructural}
                     />
                     <CanvasStage canvas={canvas} state={state} zoom={zoom} onZoom={setZoom} lint={lint} />
+                    {/* Sağ kolon sırası: ÖNİZLEME üstte (her değişikliğin sonucu ilk
+                        bakışta), altında seçili elemanın özellikleri, en altta lint. */}
                     <div className="space-y-3 xl:sticky xl:top-4 xl:self-start">
+                      <CanvasPreview kind={previewKind} widthMm={canvas.widthMm} heightMm={canvas.heightMm} layout={state.layout} />
                       <PropertiesPanel element={selected} catalog={catalog}
                         multiCount={state.selectedIds.length}
                         onChange={(patch) => selected && state.updateElement(selected.id, patch)}
@@ -223,7 +226,6 @@ export function LabelStudioPage() {
                           ))}
                         </ul>
                       )}
-                      <CanvasPreview kind={previewKind} widthMm={canvas.widthMm} heightMm={canvas.heightMm} layout={state.layout} />
                     </div>
                   </div>
                 )}
