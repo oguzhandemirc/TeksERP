@@ -1,13 +1,13 @@
 // =============================================================================
 // PlaceActions — profil menüsündeki "Makine değiştir / Bölüm değiştir" desteği
 // =============================================================================
-// Bu işlemler tablette üst barda DEĞİL, profil (👤) menüsünde Ayarlar'ın
-// altındadır — saha kararı: tablet arıza yapmadıkça kullanılmayan nadir
-// işlemler açık yerde durmasın. Bu dosya iki parça sağlar:
+// Bu işlemler üst barda DEĞİL, profil (👤) menüsünde Ayarlar'ın altındadır —
+// saha kararı: arıza dışında kullanılmayan nadir işlemler açık yerde durmasın.
+// TABLET ve TELEFONDA AYNI: cihaz ayrımı yok, görünürlük yalnız oturum/yetki
+// durumuna bakar. Bu dosya iki parça sağlar:
 //  - usePlaceActions(): menü maddelerinin görünürlük kuralları
 //      · Makine değiştir → oturumlu ekran + türde seçilebilir yer > 1
 //      · Bölüm değiştir  → birden çok ekran yetkisi (ModuleSelect'te gizli)
-//      · Telefonda ikisi de false (çip dokunuşu + ev ikonu sürer).
 //  - MachinePickerModal: PlaceConfirmView'i saran makine seçme modalı — menü
 //    kapanınca da yaşasın diye ScreenChrome kökünde render edilir.
 // =============================================================================
@@ -19,7 +19,6 @@ import { useRoute } from '@react-navigation/native';
 import AppModal from '../AppModal';
 import PlaceConfirmView from './PlaceConfirmView';
 import { useSessionStore } from '../../store/sessionStore';
-import { useDeviceType } from '../../hooks/useDeviceType';
 import { usePermissions } from '../../hooks/usePermission';
 import { workSessionService } from '../../services/workSession.service';
 import { placesOfKind } from './placeSuggest';
@@ -32,19 +31,18 @@ export function usePlaceActions(): {
   showStation: boolean;
 } {
   const route = useRoute();
-  const isTablet = useDeviceType() === 'tablet';
   const { hasMultipleMobileScreens } = usePermissions();
   const active = useSessionStore((s) => s.active);
 
   const expectedKind = STATION_KIND_BY_SCREEN[route.name as MobileScreenKey];
   const sessionMatches = !!expectedKind && !!active && active.station.kind === expectedKind;
 
-  // Yerler — yalnız tablette ve oturumlu ekranda çekilir (cache'li, 5 dk taze).
+  // Yerler — yalnız oturumlu ekranda çekilir (cache'li, 5 dk taze).
   const placesQ = useQuery({
     queryKey: ['work-session', 'places'],
     queryFn: workSessionService.places,
     staleTime: 5 * 60 * 1000,
-    enabled: isTablet && sessionMatches,
+    enabled: sessionMatches,
   });
 
   // Bu türde seçilebilir toplam yer: makineli istasyon = makine sayısı,
@@ -55,8 +53,8 @@ export function usePlaceActions(): {
 
   return {
     expectedKind,
-    showMachine: isTablet && sessionMatches && optionCount > 1,
-    showStation: isTablet && hasMultipleMobileScreens && route.name !== 'ModuleSelect',
+    showMachine: sessionMatches && optionCount > 1,
+    showStation: hasMultipleMobileScreens && route.name !== 'ModuleSelect',
   };
 }
 
