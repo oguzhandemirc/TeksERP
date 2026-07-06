@@ -193,10 +193,17 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
       )}
 
       {el.type === "lengthBanner" && (
-        <div className="grid grid-cols-2 gap-2">
-          <NumField label="Bant genişliği (mm)" value={el.wMm ?? 9} onChange={(v) => onChange({ wMm: v } as Partial<LabelElement>)} />
-          <NumField label="Bant boyu (mm)" value={el.hMm ?? 40} onChange={(v) => onChange({ hMm: v } as Partial<LabelElement>)} />
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <NumField label="Bant genişliği (mm)" value={el.wMm ?? 9} onChange={(v) => onChange({ wMm: v } as Partial<LabelElement>)} />
+            <NumField label="Bant boyu (mm)" value={el.hMm ?? 40} onChange={(v) => onChange({ hMm: v } as Partial<LabelElement>)} />
+          </div>
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            PPLB/ZPL/HTML: dolgulu siyah bant (beyaz değer). PPLA: ÇERÇEVELİ sürüm
+            (kutu + siyah dikey değer) — DPL'de ters-renk güvenilmez. Fark önizlemede
+            dil seçerek görülebilir.
+          </p>
+        </>
       )}
     </div>
   );

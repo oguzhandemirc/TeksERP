@@ -143,9 +143,10 @@ export const CAPABILITY: Record<LabelElementType, Record<LangKey, "ok" | "skip">
   // line/box: DPL font-X kayıtlarıyla PPLA'da da basılır (L=dolu çizgi, B=çerçeve).
   line:         { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
   box:          { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
-  // lengthBanner PPLA'da BASILAMAZ: siyah zemin/beyaz değer TERS-RENK ister;
-  // DPL'de güvenilir reverse yok (saha gerçeği — PPLB 'R' / ZPL ^FR var).
-  lengthBanner: { PPLA: "skip", PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
+  // lengthBanner: PPLA'da ÇERÇEVELİ sürüm basılır (kutu + döndürülmüş siyah değer)
+  // — ters-renk (siyah zemin/beyaz değer) DPL'de güvenilmez (saha gerçeği; PPLB
+  // 'R' / ZPL ^FR var). Görünüm farkı: PPLB/ZPL/HTML dolgulu, PPLA dolgusuz.
+  lengthBanner: { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
 };
 
 export function elementSupported(type: LabelElementType, language: string): boolean {

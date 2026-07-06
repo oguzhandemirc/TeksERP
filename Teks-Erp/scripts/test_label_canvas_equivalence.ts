@@ -106,16 +106,27 @@ async function main() {
     } as unknown as LabelTemplateVariant;
 
     for (const lang of NATIVE_LANGS) {
+      // PPLA paritesi banner'SIZ karşılaştırılır: akış PPLA'da bandı HİÇ basmazdı;
+      // kanvas artık çerçeveli sürümü basıyor (kasıtlı iyileştirme — parite dışı).
+      const cmpLayout =
+        lang === "PPLA"
+          ? { ...layout, elements: layout.elements.filter((e) => e.type !== "lengthBanner") }
+          : layout;
+      const cmpVariant = {
+        elements: cmpLayout,
+        widthMm: format.widthMm,
+        heightMm: format.heightMm,
+      } as unknown as LabelTemplateVariant;
       const flow = renderLabel(lang as PrinterLanguage, {
         payload, template: flowTemplate, barcodeSvg: "", qrSvg: "", copies: 2,
         format: { ...format, language: lang as PrinterLanguage },
       }).content;
       const canvas = renderLabel(lang as PrinterLanguage, {
-        payload, template: flowTemplate, variant: fakeVariant, barcodeSvg: "", qrSvg: "", copies: 2,
+        payload, template: flowTemplate, variant: cmpVariant, barcodeSvg: "", qrSvg: "", copies: 2,
         format: { ...format, language: lang as PrinterLanguage },
       }).content;
       const diff = structuralDiff(flow, canvas);
-      check(`${tag} × ${lang}: yapısal eşdeğer`, diff == null, diff ?? "");
+      check(`${tag} × ${lang}: yapısal eşdeğer${lang === "PPLA" ? " (banner hariç — akışta yoktu)" : ""}`, diff == null, diff ?? "");
     }
 
     // HTML içerik paritesi — NATIVE'E GÖRE (bilinçli sapma: kanvas HTML'i native

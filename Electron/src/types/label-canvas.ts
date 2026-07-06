@@ -110,9 +110,9 @@ export const CAPABILITY: Record<LabelElementType, Record<"PPLA" | "PPLB" | "ZPL"
   // line/box: DPL font-X kayıtlarıyla PPLA'da da basılır.
   line:         { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
   box:          { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
-  // lengthBanner PPLA'da basılamaz: ters-renk (siyah zemin/beyaz değer) ister,
-  // DPL'de güvenilir reverse yok (PPLB 'R' / ZPL ^FR var).
-  lengthBanner: { PPLA: "skip", PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
+  // lengthBanner: PPLA'da ÇERÇEVELİ basılır (dolgu/ters-renk yok — DPL reverse
+  // güvenilmez); PPLB/ZPL/HTML dolgulu siyah bant.
+  lengthBanner: { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
 };
 
 /** Elemanın basılMAdığı diller (rozet metni için). */

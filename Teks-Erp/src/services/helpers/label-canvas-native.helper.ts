@@ -228,6 +228,24 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
         lines.push(`1X11000${pad4(row)}${pad4(col)}B${pad4(d(el.wMm))}${pad4(d(el.hMm))}${pad4(t)}${pad4(t)}`);
         break;
       }
+      case "lengthBanner": {
+        // PPLA ÇERÇEVELİ sürüm: ters-renk DPL'de güvenilmez → kutu + içinde 90°
+        // döndürülmüş SİYAH metraj değeri (dolgu yok; PPLB/ZPL dolgulu basar).
+        const dv = fieldDisplayValue(payload, "lengthMeters");
+        if (!dv.present) break;
+        const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
+        const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * row;
+        lines.push(`1X11000${pad4(row)}${pad4(col)}B${pad4(w)}${pad4(h)}${pad4(2)}${pad4(2)}`);
+        const val = cleanCtl(String(payload.lengthMeters));
+        // Glif bandı doldursun: döndürülmüş yüksekliği (glif h) band genişliğine
+        // en yakın xl-çarpanı; anchor sağ kenar hizası (rot=2, blok sola+aşağı).
+        const mul = Math.max(1, Math.min(4, Math.round(w / EPL_FONT.xl.h)));
+        const textLen = val.length * EPL_FONT.xl.w * mul;
+        const ty = row + Math.max(0, Math.round((h - textLen) / 2));
+        const tx = col + Math.round((w + EPL_FONT.xl.h * mul) / 2);
+        lines.push(`2${EPL_FONT.xl.code}${mul}${mul}000${pad4(ty)}${pad4(tx)}${val}`);
+        break;
+      }
     }
   }
 

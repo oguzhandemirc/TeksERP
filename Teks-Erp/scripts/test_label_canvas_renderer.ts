@@ -72,7 +72,12 @@ async function main() {
   //     DPL font-X kayıtlarıyla PPLA'da da basılır ---
   check("PPLA: line (X-font L kaydı) basılır", /1X11000\d{4}\d{4}L\d{4}\d{4}/.test(ppla));
   check("PPLA: box (X-font B kaydı) basılır", /1X11000\d{4}\d{4}B\d{4}\d{4}\d{4}\d{4}/.test(ppla));
-  check("PPLA: banner (ters-renk) ATLANIR", !/,R,"/.test(ppla) && !ppla.includes("METRAJ"));
+  // Banner PPLA'da ÇERÇEVELİ basılır: band kutusu + 90° döndürülmüş siyah değer
+  // (ters-renk yok — DPL reverse güvenilmez; dolgulu sürüm PPLB/ZPL'de).
+  check(
+    "PPLA: banner çerçeveli sürüm (kutu + rot-90 değer, ters-renksiz)",
+    (ppla.match(/1X11000\d{4}\d{4}B/g) ?? []).length >= 2 && /^24\d\d000\d{8}320/m.test(ppla),
+  );
   check("PPLB: line (LO) basılır", /LO24,240,719,6/.test(pplb));
   check("PPLB: box (X) basılır", /X24,256,8,344,336/.test(pplb) || /^X24,256,/m.test(pplb));
   check("PPLB: banner ters metin (R) basılır", /,R,"/.test(pplb));

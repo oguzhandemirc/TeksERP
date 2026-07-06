@@ -39,12 +39,13 @@ describe("useCanvasLint", () => {
     expect(issues.some((i) => i.level === "warn" && i.message.includes("binme"))).toBe(true);
   });
 
-  it("PPLA'da basılmayan eleman info üretir", () => {
+  it("tam dil kapsamı: hiçbir eleman degrade info'su üretmez (banner dahil — PPLA çerçeveli basar)", () => {
     const issues = lint([
       { id: "q", type: "qr", x: 3, y: 3, scale: 5 },
       { id: "bn", type: "lengthBanner", x: 90, y: 3, wMm: 9, hMm: 50 },
+      { id: "ln", type: "line", x: 3, y: 55, wMm: 40, hMm: 1 },
     ]);
-    expect(issues.some((i) => i.level === "info" && i.elementId === "bn" && i.message.includes("PPLA"))).toBe(true);
+    expect(issues.filter((i) => i.level === "info")).toHaveLength(0);
   });
 
   it("ayrık elemanlarda gereksiz uyarı yok", () => {

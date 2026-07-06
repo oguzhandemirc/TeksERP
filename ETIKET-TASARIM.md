@@ -78,7 +78,8 @@ rollTextLines şablonsuz fallback (bayt-stabil)
 | Eleman | PPLA | PPLB | ZPL | HTML |
 |---|---|---|---|---|
 | field/text/qr/code128 | ✓ | ✓ | ✓ | ✓ |
-| line / box / lengthBanner | **basılmaz** | ✓ | ✓ | ✓ |
+| line / box | ✓ (DPL font-X) | ✓ | ✓ | ✓ |
+| lengthBanner | **çerçeveli** (ters-renksiz — DPL reverse güvenilmez) | ✓ dolgulu | ✓ dolgulu | ✓ dolgulu |
 | logo/görsel | v1'de YOK (karar) | — | — | — |
 
 - Yapısal gerçekler: native'de Türkçe ASCII'ye katlanır (Ş→S; latin1 komut-baytı
