@@ -22,6 +22,10 @@ interface Props {
   labelContext?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean };
   /** Print akışı bittiğinde (başarılı / hatalı) parent state'ini temizler. */
   onDone: () => void;
+  /** Sonuç bildirimi (opsiyonel): ok=false + cancelled=false → GERÇEK hata —
+   *  parent (KK1) topu "başarısızlar" listesine alıp Tekrar Dene sunar.
+   *  İptal (expo-print diyaloğu kapatıldı) hata SAYILMAZ (cancelled=true). */
+  onResult?: (r: { ok: boolean; cancelled: boolean; error?: string }) => void;
 }
 
 /**
@@ -32,7 +36,7 @@ interface Props {
  * "Mobil ile Electron'daki etiket farklı" sorunu yapısal olarak çözülür —
  * Electron LabelPreview de iframe ile aynı HTML'i tüketir.
  */
-export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
+export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Props) {
   const firedRef = useRef(false);
 
   // onDone parent'tan inline arrow gelebilir → effect deps'inden çıkarmak için
@@ -41,6 +45,10 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
   useEffect(() => {
     onDoneRef.current = onDone;
   }, [onDone]);
+  const onResultRef = useRef(onResult);
+  useEffect(() => {
+    onResultRef.current = onResult;
+  }, [onResult]);
 
   // Async print akışı saniyeler sürer; bu sırada parent unmount olursa
   // onDone çağrısı ve Toast/Haptic side-effect'leri anlamsız → mounted bayrağı.
@@ -152,6 +160,7 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
         }
         if (!mountedRef.current) return;
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onResultRef.current?.({ ok: true, cancelled: false });
         // Niyet YUKARIDA seedSnapshot ile zaten kalıcı. Burada — yalnız GERÇEK
         // baskı tamamlandığında — LABEL_PRINTED audit'i düş (iptal/hata catch'e
         // gider, audit YAZILMAZ → "basıldı" yalanı olmaz). best-effort.
@@ -170,6 +179,7 @@ export function LabelPrinter({ roll, kind, labelContext, onDone }: Props) {
         // Print.printAsync native hatası mı, eksik PrintSpooler mı). Kök neden
         // bulununca bu satır kaldırılacak.
         console.warn('[LabelPrinter] print failed:', msg, err);
+        onResultRef.current?.({ ok: false, cancelled: isCancel, error: msg });
         void Haptics.notificationAsync(
           isCancel
             ? Haptics.NotificationFeedbackType.Warning

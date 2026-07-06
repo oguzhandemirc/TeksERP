@@ -67,6 +67,24 @@ describe('btClassic.transport', () => {
     expect(mod.writeToDevice).toHaveBeenCalledTimes(2);
   });
 
+  it('writeRaw timeoutMs: askıda kalan connect zaman aşımıyla NET hata verir (kuyruk donmaz)', async () => {
+    // Yazıcı kapalı / HC-06 başka cihazda → native connect hiç çözülmez (askıda).
+    mod.isDeviceConnected.mockResolvedValue(false);
+    mod.connectToDevice.mockImplementation(() => new Promise(() => {}));
+    mod.disconnectFromDevice = jest.fn().mockResolvedValue(true);
+    await expect(
+      writeRaw('AA:11', 'X', 'latin1', { retry: true, timeoutMs: 50 }),
+    ).rejects.toThrow(/zaman aşımı/);
+    // Askıdaki soketi koparma denenir (best-effort).
+    expect(mod.disconnectFromDevice).toHaveBeenCalledWith('AA:11');
+  });
+
+  it('writeRaw timeoutMs: hızlı yazım zaman aşımına takılmaz', async () => {
+    mod.isDeviceConnected.mockResolvedValue(true);
+    await writeRaw('AA:11', 'HELLO', 'latin1', { timeoutMs: 5000 });
+    expect(mod.writeToDevice).toHaveBeenCalledWith('AA:11', 'HELLO', 'latin1');
+  });
+
   it('readResponse: pollCommand ascii + CR/LF eklenir, yanıt döner', async () => {
     mod.isDeviceConnected.mockResolvedValue(true);
     mod.availableFromDevice.mockResolvedValueOnce(6);
