@@ -730,9 +730,8 @@ export default function KK1Screen() {
             </Animated.View>
           )}
           <SyncStatusChip />
-          {/* Tablet: aksiyonlar header'a alınır. "Son Kayıtlar" başlığı ise sağ
-              kolonun en üstünde (ayrım çizgisiyle) kalır → liste sütunuyla tam
-              hizalı. Telefonda header dar; bunlar drawer'da kalır. */}
+          {/* Tablet: aksiyonlar header'a alınır ("Tüm Girişler" = tüm ham giriş
+              kayıtları geçmişi). Telefonda header dar; bunlar drawer'da kalır. */}
           {!compact && (
             <>
               {sessionCount > 0 && (
@@ -744,7 +743,7 @@ export default function KK1Screen() {
               )}
               <HeaderChip
                 icon="format-list-bulleted"
-                label="Tümünü Gör"
+                label="Tüm Girişler"
                 onPress={() => setHistoryOpen(true)}
               />
               <RefreshButton
@@ -1026,16 +1025,11 @@ export default function KK1Screen() {
         </View>
         </KeyboardAvoidingView>
 
-        {/* ── SAĞ: Üstte son kayıtlar + altta Numpad. Aksiyonlar header'a alındı;
-            başlık ise kolonun en üstünde (ayrım çizgisiyle) → liste sütunuyla
-            tam hizalı. ── */}
+        {/* ── SAĞ: Üstte son kayıtlar listesi + altta Numpad. Aksiyonlar header'da;
+            "Son Kayıtlar" başlığı KALDIRILDI (kullanıcı isteği — liste kendini
+            anlatıyor, başlık yer kaplıyordu). ── */}
         {!compact && (
           <View style={styles.recentsCol}>
-            <View style={styles.recentsColHeader}>
-              <Icon source="history" size={16} color="#475569" />
-              <Text style={styles.recentsColTitle}>Son Kayıtlar</Text>
-              <Text style={styles.recentsColCount}>· {recentRolls.length}</Text>
-            </View>
             <View style={styles.recentsList}>
               {recentRollsQuery.isLoading ? (
                 <SkeletonList count={6} />
@@ -1279,7 +1273,7 @@ function RecentsDrawer({
           onPress={onOpenHistory}
           style={drawerStyles.historyBtn}
         >
-          Tümünü Gör
+          Tüm Girişler
         </Button>
       </View>
     </AppModal>
@@ -1397,7 +1391,7 @@ function RollHistoryModal({
         <View style={historyStyles.header}>
           <View style={{ flex: 1 }}>
             <Text variant="titleLarge" style={historyStyles.title}>
-              Tüm KK1 Kayıtları
+              Tüm Ham Giriş Kayıtları
             </Text>
             <Text variant="bodySmall" style={historyStyles.subtitle}>
               Toplam {totalCount} kayıt
@@ -2099,19 +2093,6 @@ const styles = StyleSheet.create({
   },
   headerSessionLabel: { fontSize: 13, fontWeight: '700', color: '#dcfce7' },
   headerSessionCount: { fontSize: 14, fontWeight: '800', color: '#fff' },
-  // ── "Son Kayıtlar · N" — sağ kolonun en üstü; liste sütunuyla tam hizalı,
-  //    altında ince ayrım çizgisi (liste ile arasında). ──
-  recentsColHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  recentsColTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
-  recentsColCount: { fontSize: 14, fontWeight: '700', color: '#64748b' },
 
   // ── Yeni-kayıt vurgusu ──
   recentItemNew: {
