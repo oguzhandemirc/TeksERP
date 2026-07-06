@@ -2170,19 +2170,23 @@ function RollListItem({
         elevation={1}
       >
         <View style={styles.recentSingleRow}>
-          <Text
-            style={[styles.recentItemName, isInactive && styles.recentBarcodeScrapped]}
-            numberOfLines={1}
-          >
-            {roll.item?.name ?? '—'}
-            {roll.color?.name ? ` · ${roll.color.name}` : ''}
-          </Text>
-          <Text
-            style={[styles.recentBarcode, isInactive && styles.recentBarcodeScrapped]}
-            numberOfLines={1}
-          >
-            {barcode}
-          </Text>
+          {/* Sol blok: AD tam genişlik (uzun isim 2 satıra sarar, okunur kalır);
+              barkod adın ALTINDA küçük — tek satırda adla yer kavgası yapmasın. */}
+          <View style={styles.recentSingleLeft}>
+            <Text
+              style={[styles.recentItemName, isInactive && styles.recentBarcodeScrapped]}
+              numberOfLines={2}
+            >
+              {roll.item?.name ?? '—'}
+              {roll.color?.name ? ` · ${roll.color.name}` : ''}
+            </Text>
+            <Text
+              style={[styles.recentBarcodeSub, isInactive && styles.recentBarcodeScrapped]}
+              numberOfLines={1}
+            >
+              {barcode}
+            </Text>
+          </View>
           <View style={styles.recentBadge}>
             <Icon source="arrow-expand-vertical" size={14} color="#0f172a" />
             <Text style={styles.recentBadgeText}>{qty}</Text>
@@ -2613,6 +2617,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  // Tek-satır düzende sol blok: ad (2 satıra sarabilir) + altında küçük barkod.
+  // flex:1 → uzun ürün adı, barkodla aynı satırı paylaşmak yerine tam genişlik alır.
+  recentSingleLeft: { flex: 1, minWidth: 0, gap: 1 },
+  recentBarcodeSub: { fontFamily: 'monospace', fontSize: 11, color: '#64748b' },
   recentBarcode: {
     flexShrink: 1,
     minWidth: 0,
