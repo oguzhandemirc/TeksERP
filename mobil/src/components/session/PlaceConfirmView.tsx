@@ -1,10 +1,12 @@
 // =============================================================================
-// Yer onayı — "KK1 — Sarım-2'desiniz. Doğru mu?" [Devam] / [Başka makinedeyim]
+// Yer onayı / seçimi — gate'te OTOMATİK açılış, değiştirmede istasyon→makine
 // =============================================================================
-// SessionGate (tam ekran) ve PlaceChip (modal, yer değiştir) tarafından paylaşılır.
-// Akış: öneri (son yer / türde tek yer) → tek dokunuş Devam; rotasyonda makine
-// QR'ı okut VEYA istasyon-gruplu listeden seç. Dolu makinede devralma teyidi
-// (MACHINE_OCCUPIED → "X çalışıyor — devral?").
+// SessionGate (tam ekran, autoOpen) ve PlaceChip (modal, yer değiştir) paylaşır.
+// Gate: çözülebilir yer (cihazın son yeri / tek istasyon+tek-sıfır makine) varsa
+// SEÇTİRMEDEN sessizce açılır; çözülemezse seçim ekranına düşer.
+// Seçim = drill-down: önce İSTASYON (tekse atlanır) → sonra MAKİNE; makinesiz
+// istasyona (SHIPPING) dokunmak oturumu doğrudan açar. QR okutma her zaman var.
+// Dolu makinede devralma teyidi (MACHINE_OCCUPIED → "X çalışıyor — devral?").
 // Operatör CİHAZ SEÇMEZ — yer seçer; donanım yerin özelliğidir (for-session).
 // =============================================================================
 
@@ -16,7 +18,6 @@ import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import { BarcodeScannerModal } from '../BarcodeScannerModal';
 import { useSessionStore } from '../../store/sessionStore';
-import { useDeviceType, useIsPortrait } from '../../hooks/useDeviceType';
 import { workSessionService, type ActiveWorkSession } from '../../services/workSession.service';
 import { SCREEN_BY_STATION_KIND, type SessionStationKind } from '../../constants/stationScreens';
 import { SCREEN_BY_KEY } from '../../types/permissions';
@@ -32,7 +33,6 @@ const C = {
   text: '#f1f5f9',
   subtext: '#94a3b8',
   warn: '#f59e0b',
-  suggest: '#0d9488', // "önerilen yere dön" — indigo primary'den ayrık teal
 };
 
 interface OccupiedInfo {
@@ -63,11 +63,6 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
   const lastPlace = useSessionStore((s) => s.lastPlace);
   const openSession = useSessionStore((s) => s.openSession);
   const screenLabel = SCREEN_BY_KEY[SCREEN_BY_STATION_KIND[expectedKind]]?.label ?? expectedKind;
-  // Telefon dikeyde içerik tepeye yapışıp fazla yukarıda kalıyordu → dikey ortala.
-  // Tablet/yatayda mevcut (üstten) yerleşim korunur. (Hook'lar koşulsuz çağrılır.)
-  const isPhone = useDeviceType() === 'phone';
-  const portrait = useIsPortrait();
-  const isPhonePortrait = isPhone && portrait;
 
   const placesQ = useQuery({
     queryKey: ['work-session', 'places'],
@@ -81,7 +76,18 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
     [lastPlace, places, expectedKind],
   );
 
-  const [mode, setMode] = useState<'suggest' | 'pick'>('suggest');
+  // Drill-down: önce istasyon, sonra makine. Türde TEK istasyon varsa istasyon
+  // adımı ATLANIR (aktif istasyon otomatik o olur); çoksa alfabetik liste.
+  const sortedStations = useMemo(
+    () => [...kindPlaces].sort((a, b) => a.name.localeCompare(b.name, 'tr')),
+    [kindPlaces],
+  );
+  const [pickedStationId, setPickedStationId] = useState<string | null>(null);
+  const activeStation =
+    kindPlaces.length === 1
+      ? kindPlaces[0]
+      : (pickedStationId && kindPlaces.find((s) => s.id === pickedStationId)) || null;
+
   const [scannerOpen, setScannerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   // Devralma teyidi — MACHINE_OCCUPIED detayı + tekrar denenecek payload.
@@ -133,7 +139,6 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
       // Otomatik açılış başarısız/meşgul → spinner'da takılma, seçim ekranını göster
       // (meşgulse arkada seçim + üstte devral onayı).
       setAutoBusy(false);
-      setMode('pick');
     } finally {
       setBusy(false);
     }
@@ -157,14 +162,12 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
       if (lastAutoAttempt && lastAutoAttempt.key === key && now - lastAutoAttempt.at < 6000) {
         // Az önce bu yeri otomatik açtık ve geri düştük → döngü. Otomatik açma, seçime düş.
         setAutoBusy(false);
-        setMode('pick');
         return;
       }
       lastAutoAttempt = { key, at: now };
       void openSuggestion(suggestion);
     } else {
       setAutoBusy(false);
-      setMode('pick');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpen, placesQ.isLoading, suggestion]);
@@ -205,55 +208,17 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
         </Text>
       </View>
 
-      {autoBusy || (placesQ.isLoading && !suggestion) ? (
+      {autoBusy || (placesQ.isLoading && kindPlaces.length === 0) ? (
         <View style={[styles.body, styles.bodyCenter]}>
           <View style={styles.centerRow}>
             <ActivityIndicator color={C.accentLight} />
             <Text style={styles.muted}>{autoBusy ? 'Yer hazırlanıyor…' : 'Yerler yükleniyor…'}</Text>
           </View>
         </View>
-      ) : mode === 'suggest' && suggestion ? (
-        <View style={[styles.body, isPhonePortrait && styles.bodyCenter]}>
-          <View style={styles.card}>
-            <Text style={styles.suggestLead}>
-              {suggestion.source === 'last' ? 'Son çalıştığın yer:' : 'Bu ekranın yeri:'}
-            </Text>
-            <Text style={styles.suggestPlace}>
-              {suggestion.machineName
-                ? `${suggestion.stationName} — ${suggestion.machineName}`
-                : suggestion.stationName}
-            </Text>
-            {suggestion.machineCode ? (
-              <Text style={styles.suggestCode}>{suggestion.machineCode}</Text>
-            ) : null}
-            <Button
-              mode="contained"
-              icon="check-bold"
-              buttonColor={C.accent}
-              style={styles.primaryBtn}
-              contentStyle={styles.primaryBtnContent}
-              labelStyle={styles.primaryBtnLabel}
-              loading={busy}
-              disabled={busy}
-              onPress={() => void openSuggestion(suggestion)}
-            >
-              Buradayım — Devam
-            </Button>
-            <Button
-              mode="outlined"
-              icon="swap-horizontal"
-              textColor={C.text}
-              style={styles.secondaryBtn}
-              disabled={busy}
-              onPress={() => setMode('pick')}
-            >
-              Başka makinedeyim
-            </Button>
-          </View>
-        </View>
       ) : (
-        // "Başka makinedeyim": QR butonu + geri butonu SABİT; ARADA makine
-        // listesi kendi içinde kayar (kart gövdeyi doldurur → sayfa kaymaz).
+        // Seçim (drill-down): QR butonu SABİT; ARADA liste kendi içinde kayar
+        // (kart gövdeyi doldurur → sayfa kaymaz). Adım 1 istasyon (tekse atlanır),
+        // adım 2 o istasyonun makineleri.
         <View style={styles.body}>
           <View style={[styles.card, styles.cardFill]}>
             <Button
@@ -275,36 +240,84 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
                 (Tanımlar → İstasyonlar).
               </Text>
             ) : (
-              <View style={styles.scrollWrap}>
-                <ScrollView
-                  style={styles.machineScroll}
-                  contentContainerStyle={styles.machineScrollContent}
-                  showsVerticalScrollIndicator
-                  scrollEventThrottle={16}
-                  onLayout={(e) => {
-                    vpH.current = e.nativeEvent.layout.height;
-                    recomputeMore();
-                  }}
-                  onContentSizeChange={(_w, h) => {
-                    contentH.current = h;
-                    recomputeMore();
-                  }}
-                  onScroll={(e) => {
-                    offY.current = e.nativeEvent.contentOffset.y;
-                    recomputeMore();
-                  }}
-                >
-                  {kindPlaces.map((st) => (
-                    <View key={st.id} style={styles.stationGroup}>
-                      {/* İstasyon adı yalnız birden çok istasyon varken — tekse
-                          başlıkta zaten yazıyor, tekrar etmesin. */}
-                      {kindPlaces.length > 1 && (
-                        <Text style={styles.stationName}>{st.name}</Text>
-                      )}
-                      {st.machines.length === 0 ? (
-                        // Makinesiz istasyon (SHIPPING) — oturum istasyonla açılır.
+              <>
+                {/* Adım başlığı: makine adımında (çok istasyonda) geri + istasyon adı */}
+                {activeStation && kindPlaces.length > 1 && (
+                  <View style={styles.pickHeaderRow}>
+                    <Button
+                      mode="text"
+                      icon="arrow-left"
+                      compact
+                      textColor={C.subtext}
+                      disabled={busy}
+                      onPress={() => setPickedStationId(null)}
+                    >
+                      İstasyonlar
+                    </Button>
+                    <Text style={styles.pickHeaderStation} numberOfLines={1}>
+                      {activeStation.name}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.scrollWrap}>
+                  <ScrollView
+                    style={styles.machineScroll}
+                    contentContainerStyle={styles.machineScrollContent}
+                    showsVerticalScrollIndicator
+                    scrollEventThrottle={16}
+                    onLayout={(e) => {
+                      vpH.current = e.nativeEvent.layout.height;
+                      recomputeMore();
+                    }}
+                    onContentSizeChange={(_w, h) => {
+                      contentH.current = h;
+                      recomputeMore();
+                    }}
+                    onScroll={(e) => {
+                      offY.current = e.nativeEvent.contentOffset.y;
+                      recomputeMore();
+                    }}
+                  >
+                    {!activeStation ? (
+                      // ── Adım 1: İSTASYON seç (alfabetik). Makinesiz istasyona
+                      // dokunmak oturumu doğrudan açar (SHIPPING).
+                      <View style={styles.stationGroup}>
+                        <Text style={styles.stationName}>İstasyon seç</Text>
+                        {sortedStations.map((st) => (
+                          <TouchableRipple
+                            key={st.id}
+                            onPress={() =>
+                              st.machines.length === 0
+                                ? void open({ stationId: st.id }, st.name)
+                                : setPickedStationId(st.id)
+                            }
+                            disabled={busy}
+                            rippleColor="rgba(99,102,241,0.2)"
+                            style={styles.machineRow}
+                          >
+                            <View style={styles.machineRowInner}>
+                              <Icon source="factory" size={26} color={C.accentLight} />
+                              <View style={styles.rowTextWrap}>
+                                <Text style={[styles.machineName, styles.rowNameTight]} numberOfLines={1}>
+                                  {st.name}
+                                </Text>
+                                <Text style={styles.rowSub}>
+                                  {st.machines.length === 0
+                                    ? 'Makinesiz — doğrudan çalış'
+                                    : `${st.machines.length} makine`}
+                                </Text>
+                              </View>
+                              <Icon source="chevron-right" size={26} color={C.subtext} />
+                            </View>
+                          </TouchableRipple>
+                        ))}
+                      </View>
+                    ) : activeStation.machines.length === 0 ? (
+                      // Tek istasyon + makinesiz (SHIPPING) — doğrudan çalış satırı.
+                      <View style={styles.stationGroup}>
                         <TouchableRipple
-                          onPress={() => void open({ stationId: st.id }, st.name)}
+                          onPress={() => void open({ stationId: activeStation.id }, activeStation.name)}
                           disabled={busy}
                           rippleColor="rgba(99,102,241,0.2)"
                           style={styles.machineRow}
@@ -315,13 +328,22 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
                             <Icon source="chevron-right" size={26} color={C.subtext} />
                           </View>
                         </TouchableRipple>
-                      ) : (
-                        [...st.machines]
+                      </View>
+                    ) : (
+                      // ── Adım 2: seçili istasyonun MAKİNELERİ (alfabetik).
+                      <View style={styles.stationGroup}>
+                        <Text style={styles.stationName}>Makine seç</Text>
+                        {[...activeStation.machines]
                           .sort((a, b) => a.name.localeCompare(b.name, 'tr'))
                           .map((m) => (
                             <TouchableRipple
                               key={m.id}
-                              onPress={() => void open({ machineId: m.id }, `${st.name} — ${m.name}`)}
+                              onPress={() =>
+                                void open(
+                                  { machineId: m.id },
+                                  `${activeStation.name} — ${m.name}`,
+                                )
+                              }
                               disabled={busy}
                               rippleColor="rgba(99,102,241,0.2)"
                               style={styles.machineRow}
@@ -334,39 +356,23 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
                                 <Icon source="chevron-right" size={26} color={C.subtext} />
                               </View>
                             </TouchableRipple>
-                          ))
-                      )}
-                    </View>
-                  ))}
-                </ScrollView>
+                          ))}
+                      </View>
+                    )}
+                  </ScrollView>
 
-                {/* Kaydırma ipucu — altta gizli öğe varken görünür pill (saha operatörü
-                    listenin kaydığını anlasın); en alta inince kaybolur. */}
-                {moreBelow && (
-                  <View style={styles.scrollHint} pointerEvents="none">
-                    <View style={styles.scrollHintPill}>
-                      <Icon source="chevron-down" size={18} color="#fff" />
-                      <Text style={styles.scrollHintText}>Aşağı kaydır</Text>
+                  {/* Kaydırma ipucu — altta gizli öğe varken görünür pill (saha operatörü
+                      listenin kaydığını anlasın); en alta inince kaybolur. */}
+                  {moreBelow && (
+                    <View style={styles.scrollHint} pointerEvents="none">
+                      <View style={styles.scrollHintPill}>
+                        <Icon source="chevron-down" size={18} color="#fff" />
+                        <Text style={styles.scrollHintText}>Aşağı kaydır</Text>
+                      </View>
                     </View>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {suggestion && (
-              <Button
-                mode="contained"
-                icon="arrow-left"
-                buttonColor={C.suggest}
-                textColor="#fff"
-                style={styles.backBtn}
-                contentStyle={styles.backBtnContent}
-                labelStyle={styles.backBtnLabel}
-                disabled={busy}
-                onPress={() => setMode('suggest')}
-              >
-                Önerilen yere dön
-              </Button>
+                  )}
+                </View>
+              </>
             )}
           </View>
         </View>
@@ -510,17 +516,18 @@ const styles = StyleSheet.create({
   },
   centerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, justifyContent: 'center', padding: 16 },
   muted: { color: C.subtext, fontSize: 13, lineHeight: 18 },
-  suggestLead: { color: C.subtext, fontSize: 14 },
-  suggestPlace: { color: C.text, fontSize: 22, fontWeight: '800' },
-  suggestCode: { color: C.subtext, fontSize: 13, fontFamily: 'monospace' },
   primaryBtn: { marginTop: 10, borderRadius: 12 },
   primaryBtnContent: { minHeight: 56 },
   primaryBtnLabel: { fontSize: 17, fontWeight: '700' },
-  secondaryBtn: { borderRadius: 12, borderColor: C.border },
-  // "Önerilen yere dön" — dolu renkli buton (listenin altında ayrık), yüksek.
-  backBtn: { borderRadius: 12, marginTop: 8 },
-  backBtnContent: { minHeight: 56 },
-  backBtnLabel: { fontSize: 16, fontWeight: '700' },
+  // Makine adımı başlığı: "‹ İstasyonlar" geri tuşu + seçili istasyon adı.
+  pickHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  pickHeaderStation: { flex: 1, color: C.text, fontSize: 17, fontWeight: '800', textAlign: 'right' },
+  // İstasyon satırı: ad + alt bilgi (makine sayısı) iki satır.
+  rowTextWrap: { flex: 1, gap: 2 },
+  // Sarmalayıcı (rowTextWrap) zaten flex:1 — içteki adın flex'i sıfırlanır
+  // (kolon içinde dikey esneme yapmasın).
+  rowNameTight: { flex: 0 },
+  rowSub: { color: C.subtext, fontSize: 13 },
   stationGroup: { marginTop: 14, gap: 8 },
   stationName: { color: C.subtext, fontSize: 13, fontWeight: '700', textTransform: 'uppercase' },
   machineRow: {

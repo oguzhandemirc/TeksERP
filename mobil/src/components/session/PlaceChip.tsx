@@ -1,11 +1,12 @@
 // =============================================================================
-// PlaceChip — header'da "şu an neredeyim" çipi + ekran-içi yer değiştirme
+// PlaceChip — header'da "şu an neredeyim" çipi (bulunulan makine ADI)
 // =============================================================================
 // ScreenChrome her ekranda render eder; çip yalnız OTURUMLU ekranlarda (route
 // adı STATION_KIND_BY_SCREEN'de) ve aktif oturum ekranla eşleşince görünür.
-// Dokununca PlaceConfirmView modal açılır — operatör makine değiştirir (eski
-// oturum backend'de NEW_LOGIN/TAKEOVER ile kapanır), sorgular oturum id'siyle
-// anahtarlandığından donanım kendiliğinden tazelenir.
+// TABLET: salt gösterge — makine değiştirme, ortadaki açık etiketli "Makine
+// Değiş" butonundadır (PlaceActions); çipe dokunmak bir şey yapmaz.
+// TELEFON: dokununca PlaceConfirmView modalı açılır (yer/makine değiştirme) —
+// telefonda ortada buton için yer yok, eski davranış korunur.
 // =============================================================================
 
 import React, { useState } from 'react';
@@ -15,12 +16,14 @@ import { useRoute } from '@react-navigation/native';
 import AppModal from '../AppModal';
 import PlaceConfirmView from './PlaceConfirmView';
 import { useSessionStore } from '../../store/sessionStore';
+import { useDeviceType } from '../../hooks/useDeviceType';
 import { STATION_KIND_BY_SCREEN } from '../../constants/stationScreens';
 import type { MobileScreenKey } from '../../types/permissions';
 
 export default function PlaceChip() {
   const route = useRoute();
   const active = useSessionStore((s) => s.active);
+  const isTablet = useDeviceType() === 'tablet';
   const [open, setOpen] = useState(false);
   const { width: winW, height: winH } = useWindowDimensions();
 
@@ -31,6 +34,20 @@ export default function PlaceChip() {
   // Ad boşsa koda düş; makinesiz (SHIPPING) istasyonda istasyon adı.
   const label = active.machine ? active.machine.name || active.machine.code : active.station.name;
 
+  const inner = (
+    <View style={styles.chipInner}>
+      <Icon source={isTablet ? 'cog' : 'swap-horizontal'} size={16} color="#a5b4fc" />
+      <Text style={styles.chipText} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+
+  // Tablet: dokunulmaz etiket (değiştirme "Makine Değiş" butonunda).
+  if (isTablet) {
+    return <View style={styles.chip}>{inner}</View>;
+  }
+
   return (
     <>
       <TouchableRipple
@@ -39,13 +56,7 @@ export default function PlaceChip() {
         style={styles.chip}
         accessibilityLabel="Yer değiştir"
       >
-        <View style={styles.chipInner}>
-          {/* Transfer/değiştir ikonu — çipe dokununca makine değiştirilebilir. */}
-          <Icon source="swap-horizontal" size={16} color="#a5b4fc" />
-          <Text style={styles.chipText} numberOfLines={1}>
-            {label}
-          </Text>
-        </View>
+        {inner}
       </TouchableRipple>
 
       <AppModal visible={open} onDismiss={() => setOpen(false)}>
@@ -62,17 +73,22 @@ export default function PlaceChip() {
 }
 
 const styles = StyleSheet.create({
+  // Header pill'leriyle (Tümünü Gör / Yenile / Makine Değiş) AYNI yükseklik:
+  // paddingV 9 + 1px kenarlık + radius 10 (eskiden 7/16 — kısa kalıyordu).
   chip: {
-    borderRadius: 16,
+    borderRadius: 10,
     backgroundColor: 'rgba(99,102,241,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(99,102,241,0.40)',
     marginHorizontal: 4,
+    overflow: 'hidden',
   },
   chipInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     maxWidth: 220,
   },
   chipText: { color: '#c7d2fe', fontSize: 13, fontWeight: '700' },
