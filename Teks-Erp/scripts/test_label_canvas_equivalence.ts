@@ -1,11 +1,12 @@
 // =============================================================================
-// Test: akış→kanvas dönüşüm SADAKATİ (Etiket Stüdyosu F2 kanıtı)
+// Test: akış→kanvas dönüşüm SADAKATİ (Etiket Stüdyosu — veri düşmez)
 // =============================================================================
-// DB'deki her aktif akış şablonu için: mevcut üretici çıktısı (flow) ile
-// dönüştürücünün (flowTemplateToCanvas) ürettiği kanvasın emit çıktısını
-// PPLA/PPLB/ZPL'de karşılaştırır — komut iskeleti AYNI + koordinatlar ±8 dot
-// (1mm; mm-yuvarlama + PPLA okunur-satır payı farkını emer). HTML bilinçli
-// sapmadır (kanvas mutlak düzen) — yalnız İÇERİK paritesi doğrulanır.
+// F2'de yapısal byte-eşdeğerlik kanıtlanmıştı. Sonraki BİLİNÇLİ iyileştirmeler
+// (barkod okunur-satırı ortalama, metraj bandı siyah-zemin/beyaz-yazı reverse,
+// serbest boyut) kanvası akıştan kasıtlı ayırdı. Bu test artık VERİ SADAKATİNİ
+// doğrular: dönüştürücü hiçbir görünür alan değerini DÜŞÜRMEZ — her dilde
+// (PPLA/PPLB/ZPL native + HTML) kanvas çıktısı, o alanın değerini içerir; sığmayan
+// alanlar native akışta da yoktu (fit gerçeği, dönüştürücü hatası değil).
 // Çalıştır: npx tsx scripts/test_label_canvas_equivalence.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
@@ -15,6 +16,7 @@ import { flowTemplateToCanvas } from "../src/services/helpers/label-flow-to-canv
 import { mockPayload } from "../src/services/helpers/label-rawcode";
 import { fieldDisplayValue } from "../src/services/helpers/label-field-values";
 import { escapeHtml } from "../src/services/helpers/label-html.shared";
+import { asciiFold } from "../src/services/helpers/native-label.shared";
 import type { TemplateField } from "../src/config/label-fields";
 import type { LabelTemplate, LabelTemplateVariant, PrinterLanguage } from "@prisma/client";
 
@@ -25,64 +27,7 @@ function check(label: string, ok: boolean, extra = "") {
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
 }
 
-/** Koordinat toleransı (dot @203dpi): 8 dot ≈ 1mm. */
-const TOL_DOTS = 8;
-const NUM_RE = /\d+/g;
-
-/** İki rakam-dizisi toleransla "yakın" mı? PPLA gibi AYRAÇSIZ formatlarda birden
- *  çok sabit-genişlik alan tek rakam-koşusuna yapışır (nw+h4+row4+col4) — düz
- *  int farkı anlamsız büyür. Eşit uzunluklu koşularda ortak önek+sonek soyulup
- *  kalan hizalı bölüm karşılaştırılır (fark tek alanda lokalize ise gerçek dot
- *  farkını verir). */
-function numbersClose(aStr: string, bStr: string, tol: number): boolean {
-  if (aStr === bStr) return true;
-  if (Math.abs(+aStr - +bStr) <= tol) return true;
-  if (aStr.length !== bStr.length) return false;
-  let p = 0;
-  while (p < aStr.length && aStr[p] === bStr[p]) p++;
-  let s = 0;
-  while (s < aStr.length - p && aStr[aStr.length - 1 - s] === bStr[bStr.length - 1 - s]) s++;
-  const ma = aStr.slice(p, aStr.length - s) || "0";
-  const mb = bStr.slice(p, bStr.length - s) || "0";
-  return Math.abs(+ma - +mb) <= tol;
-}
-
-/** İki komut akışını yapısal karşılaştır: satır sayısı + sayı-dışı iskelet birebir,
- *  sayılar çift-çift ±tol. Uymayan ilk farkı döner (null = eşdeğer). */
-function structuralDiff(a: string, b: string, tol = TOL_DOTS): string | null {
-  // PPLA satırları yalnız CR ile ayrılır — \r|\r\n|\n hepsini böl.
-  const la = a.split(/\r\n|\r|\n/).filter(Boolean);
-  const lb = b.split(/\r\n|\r|\n/).filter(Boolean);
-  if (la.length !== lb.length) return `satır sayısı ${la.length} ≠ ${lb.length}`;
-  for (let i = 0; i < la.length; i++) {
-    const ska = la[i].replace(NUM_RE, "#");
-    const skb = lb[i].replace(NUM_RE, "#");
-    if (ska !== skb) return `satır ${i + 1} iskelet farkı:\n  flow  : ${la[i]}\n  canvas: ${lb[i]}`;
-    const na = la[i].match(NUM_RE) ?? [];
-    const nb = lb[i].match(NUM_RE) ?? [];
-    for (let j = 0; j < na.length; j++) {
-      if (!numbersClose(na[j], nb[j], tol)) {
-        return `satır ${i + 1} sayı farkı ${na[j]} vs ${nb[j]} (>±${tol}):\n  flow  : ${la[i]}\n  canvas: ${lb[i]}`;
-      }
-    }
-  }
-  return null;
-}
-
 const NATIVE_LANGS = ["PPLA", "PPLB", "ZPL"] as const;
-
-/** Akış çıktısından ESKİ dolgulu bant satırlarını düş — banner parite kapsamı dışı
- *  (kanvas ortak-payda çerçeveli tasarıma geçti; akış PPLB'de ters 'R' metni,
- *  ZPL'de solid ^GB + ^FR basıyordu). */
-function stripFlowBanner(lang: string, content: string): string {
-  const lines = content.split(/\r\n|\r|\n/);
-  const kept = lines.filter((ln) => {
-    if (lang === "PPLB" && /,R,"/.test(ln)) return false;
-    if (lang === "ZPL" && (ln.includes("^FR") || /\^GB(\d+),\d+,\1,B\^FS/.test(ln))) return false;
-    return true;
-  });
-  return kept.join("\n");
-}
 
 async function main() {
   const templates = await prisma.labelTemplate.findMany({
@@ -93,14 +38,13 @@ async function main() {
     check("aktif akış şablonu yok — dönüşüm kanıtlanacak şablon bulunamadı", false);
     return;
   }
-  console.log(`${templates.length} şablon karşılaştırılıyor (±${TOL_DOTS} dot tolerans)...\n`);
+  console.log(`${templates.length} şablon karşılaştırılıyor (veri sadakati)...\n`);
 
   for (const t of templates) {
     const kind = t.kind!;
     const tag = `[${kind}] ${t.name}`;
     const format = await resolveLabelFormat({ kind });
     const payload = { ...mockPayload(kind), kind };
-    // rawCode sıyrılır — iki yol da OTOMATİK üretimle karşılaştırılır.
     const flowTemplate = { ...t, rawCode: null } as LabelTemplate;
     const layout = flowTemplateToCanvas(
       {
@@ -118,48 +62,37 @@ async function main() {
       heightMm: format.heightMm,
     } as unknown as LabelTemplateVariant;
 
+    // Kanvasa GİREN veri alanları (fit sonrası) + değerleri (present).
+    const layoutBinds = new Set(
+      layout.elements.filter((e) => e.type === "field").map((e) => (e as { bind: string }).bind),
+    );
+    const boundValues = [...layoutBinds]
+      .map((key) => ({ key, dv: fieldDisplayValue(payload, key) }))
+      .filter((x) => x.dv.present && x.dv.role !== "scan");
+
+    // NATIVE: değer ASCII'ye katlanır → katlanmış değer çıktıda olmalı (veri düşmez).
     for (const lang of NATIVE_LANGS) {
-      // Banner parite kapsamı DIŞI (tüm dillerde): akış dolgulu/dilden-dile farklı
-      // basardı; kanvas ORTAK PAYDA çerçeveli tasarıma geçti (kullanıcı kararı:
-      // eleman her dilde AYNI görünmeli) — akışla birebir kıyas anlamsız.
-      const cmpLayout = { ...layout, elements: layout.elements.filter((e) => e.type !== "lengthBanner") };
-      const cmpVariant = {
-        elements: cmpLayout,
-        widthMm: format.widthMm,
-        heightMm: format.heightMm,
-      } as unknown as LabelTemplateVariant;
-      const flow = stripFlowBanner(lang, renderLabel(lang as PrinterLanguage, {
-        payload, template: flowTemplate, barcodeSvg: "", qrSvg: "", copies: 2,
-        format: { ...format, language: lang as PrinterLanguage },
-      }).content);
-      const canvas = renderLabel(lang as PrinterLanguage, {
-        payload, template: flowTemplate, variant: cmpVariant, barcodeSvg: "", qrSvg: "", copies: 2,
+      const out = renderLabel(lang as PrinterLanguage, {
+        payload, template: flowTemplate, variant: fakeVariant, barcodeSvg: "", qrSvg: "", copies: 2,
         format: { ...format, language: lang as PrinterLanguage },
       }).content;
-      const diff = structuralDiff(flow, canvas);
-      check(`${tag} × ${lang}: yapısal eşdeğer (banner hariç — ortak-payda tasarımı)`, diff == null, diff ?? "");
+      const missing = boundValues.filter((x) => !out.includes(asciiFold(x.dv.value))).map((x) => x.key);
+      check(`${tag} × ${lang}: kanvas alan değerleri çıktıda (${boundValues.length} alan, veri düşmez)`,
+        missing.length === 0, missing.length ? `eksik: ${missing.join(", ")}` : "");
     }
 
-    // HTML içerik paritesi — NATIVE'E GÖRE (bilinçli sapma: kanvas HTML'i native
-    // yerleşime yakınsar). Kanvasa giren her alanın değeri HTML'de olmalı.
+    // HTML: değer tam UTF-8 (katlama yok) → escapeHtml'li değer içerikte.
     const html = renderLabel("RASTER_HTML" as PrinterLanguage, {
       payload, template: flowTemplate, variant: fakeVariant,
       barcodeSvg: "<svg viewBox=\"0 0 10 10\"></svg>", qrSvg: "<svg viewBox=\"0 0 10 10\"></svg>",
       copies: 1, format: { ...format, language: "RASTER_HTML" as PrinterLanguage },
     }).content;
-    const layoutBinds = new Set(
-      layout.elements.filter((e) => e.type === "field").map((e) => (e as { bind: string }).bind),
-    );
-    const missing = [...layoutBinds]
-      .map((key) => ({ key, dv: fieldDisplayValue(payload, key) }))
-      .filter((x) => x.dv.present && !html.includes(escapeHtml(x.dv.value)))
-      .map((x) => x.key);
-    check(`${tag} × HTML: kanvas alanları içerikte (${layoutBinds.size} alan)`, missing.length === 0,
-      missing.length ? `eksik: ${missing.join(", ")}` : "");
+    const missingHtml = boundValues.filter((x) => !html.includes(escapeHtml(asciiFold(x.dv.value)))).map((x) => x.key);
+    check(`${tag} × HTML: kanvas alan değerleri içerikte (${boundValues.length} alan)`,
+      missingHtml.length === 0, missingHtml.length ? `eksik: ${missingHtml.join(", ")}` : "");
 
-    // Sığma gerçeği raporu: şablonun görünür alanlarından kanvasa GİREMEYENLER
-    // (medya boyuna sığmadı). Bunlar native akışta da basılmıyordu — kanıtla:
-    // flow PPLB çıktısında da değerleri yok (dönüştürücü hatası DEĞİL, fit gerçeği).
+    // Sığma gerçeği: şablonun görünür alanlarından kanvasa GİREMEYENLER (medya boyu)
+    // native akışta da basılmıyordu — dönüştürücü hatası DEĞİL, fit gerçeği.
     const visibleKeys = ((t.fields as unknown as TemplateField[]) ?? [])
       .filter((f) => f.isVisible)
       .map((f) => ({ f, dv: fieldDisplayValue(payload, f.key) }))
@@ -171,10 +104,8 @@ async function main() {
         format: { ...format, language: "PPLB" as PrinterLanguage },
       }).content;
       const wronglyDropped = dropped
-        // Barkod değerini taşıyan metin alanları (parentRollBarcode) hariç — değer
-        // barkod satırında zaten geçer, yanlış pozitif üretir.
-        .filter((x) => x.dv.value !== payload.barcode)
-        .filter((x) => flowPplb.includes(x.dv.value))
+        .filter((x) => x.dv.value !== payload.barcode) // barkod değerini taşıyan alanlar hariç
+        .filter((x) => flowPplb.includes(asciiFold(x.dv.value)))
         .map((x) => x.f.key);
       check(
         `${tag}: sığmayan ${dropped.length} alan native akışta da yoktu (${dropped.map((x) => x.f.key).join(", ")})`,

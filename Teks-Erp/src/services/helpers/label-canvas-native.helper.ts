@@ -76,6 +76,16 @@ function bannerGeom(colDots: number, rowDots: number, wDots: number, hDots: numb
   return { mul, gh, gw, ty, tx };
 }
 
+/** Code128 sembol genişliği (dot) — okunur satırı barkod ALTINDA ortalamak için.
+ *  ≈ 11 modül/karakter + start/check/stop (~35 modül); modül = mwDots. Sessiz
+ *  bölge hariç (kabaca; merkezleme için yeterli). */
+function code128WidthDots(len: number, mwDots: number): number {
+  return (11 * len + 35) * Math.max(1, mwDots);
+}
+
+/** Küçük okunur-satır glif genişliği (dot) — native font "1" (8×12). */
+const HUMAN_CHAR_W = 8;
+
 // =============================================================================
 // PPLB (EPL2)
 // =============================================================================
@@ -127,11 +137,16 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
       case "code128": {
         if (!bc) break;
         const h = d(el.hMm ?? 9);
-        const human = el.human !== false ? "B" : "N";
         // Modül (dar çubuk) kalınlığı — genişlik bununla ORANTILI büyür; mw yokken
         // bugünkü 2,3 aynen (bayt-uyum).
         const mw = el.mw ?? 2;
-        lines.push(`B${x},${y},0,1,${mw},${mw + 1},${h},${human},"${bc}"`);
+        // Okunur satır firmware'de SOLA yaslanır → kapat (N) + manuel ORTALA.
+        lines.push(`B${x},${y},0,1,${mw},${mw + 1},${h},N,"${bc}"`);
+        if (el.human !== false) {
+          const bw = code128WidthDots(bc.length, mw);
+          const hx = x + Math.max(0, Math.round((bw - bc.length * HUMAN_CHAR_W) / 2));
+          lines.push(`A${hx},${y + h + d(1)},0,1,1,1,N,"${bc}"`);
+        }
         break;
       }
       case "line":
@@ -143,17 +158,21 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
         break;
       }
       case "lengthBanner": {
-        // ORTAK PAYDA: çerçeveli bant (X kutu + rot-90 SİYAH değer) — PPLA/ZPL/HTML
-        // ile BİREBİR AYNI görünüm (dolgulu 'R' sürümü kaldırıldı: PPLA basamıyordu,
-        // eleman dilden dile farklı görünmemeli).
+        // SİYAH ZEMİN / BEYAZ DEĞER — ters (R) metin + boşluk dolgusu kendi siyah
+        // bandını çizer (Argox XOR gotcha'sı: ayrı LO kutu YOK). PPLB gerçek saha
+        // yazıcısı; reverse güvenilir.
         const dv = fieldDisplayValue(payload, "lengthMeters");
         if (!dv.present) break;
         const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * y;
         const val = eplData(String(payload.lengthMeters));
-        const g = bannerGeom(x, y, w, h, val.length);
-        lines.push(`X${x},${y},2,${x + w},${y + h}`);
-        lines.push(`A${g.tx},${g.ty},1,${EPL_FONT.xl.code},${g.mul},${g.mul},N,"${val}"`);
+        const mul = Math.max(1, Math.min(4, Math.round(w / EPL_FONT.xl.h)));
+        const adv = EPL_FONT.xl.w * mul; // döndürülmüş glif ilerlemesi
+        const target = Math.max(val.length, Math.floor((h * 0.85) / adv));
+        const pad = Math.max(0, Math.floor((target - val.length) / 2));
+        const padded = " ".repeat(pad) + val + " ".repeat(pad);
+        const ty = y + Math.max(0, Math.round((h - padded.length * adv) / 2));
+        lines.push(`A${x + w},${ty},1,${EPL_FONT.xl.code},${mul},${mul},R,"${padded}"`);
         break;
       }
     }
@@ -217,10 +236,12 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
         // mw yokken bugünkü "22" aynen (bayt-uyum).
         const mw = Math.min(9, el.mw ?? 2);
         lines.push(`1e${mw}${mw}${pad4(h)}${pad4(row)}${pad4(col)}${bc}`);
-        // PPLB/ZPL'de okunur satırı yazıcı çizer; DPL'de elle küçük metin (akış paritesi).
+        // Okunur satır — barkodun altında ORTALANMIŞ (eskiden sola yaslıydı).
         // Format: <rot=1><font=1><mul=11>000<row4><col4><veri>
         if (el.human !== false) {
-          lines.push(`1111000${pad4(row + h + d(1))}${pad4(col)}${bc}`);
+          const bw = code128WidthDots(bc.length, mw);
+          const hcol = col + Math.max(0, Math.round((bw - bc.length * HUMAN_CHAR_W) / 2));
+          lines.push(`1111000${pad4(row + h + d(1))}${pad4(hcol)}${bc}`);
         }
         break;
       }
@@ -235,7 +256,10 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
         break;
       }
       case "lengthBanner": {
-        // ORTAK PAYDA çerçeveli bant — dört dilde aynı görünüm (bannerGeom paylaşımlı).
+        // PPLA/DPL İSTİSNASI: siyah zemin/beyaz yazı (ters-renk) DPL'de güvenilir
+        // DEĞİL (Datamax reverse cihaza bağlı). Değer görünmez (siyah-üstü-siyah)
+        // riskine düşmemek için PPLA'da ÇERÇEVELİ basılır (kutu + siyah dikey
+        // değer, her zaman okunur). PPLB/ZPL/HTML dolgulu siyah + beyaz değer.
         const dv = fieldDisplayValue(payload, "lengthMeters");
         if (!dv.present) break;
         const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
@@ -309,10 +333,16 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
       case "code128": {
         if (!bc) break;
         const h = d(el.hMm ?? 9);
-        const human = el.human !== false ? "Y" : "N";
         // ^BY = modül kalınlığı (genişlik orantılı) — mw yokken emit edilmez (bayt-uyum).
         const by = el.mw != null ? `^BY${Math.min(10, el.mw)}` : "";
-        lines.push(`^FO${x},${y}${by}^BCN,${h},${human},N,N^FD${bc}^FS`);
+        // ZPL yorum satırı (interpretation) sola yaslar → kapat (N) + manuel ORTALA.
+        lines.push(`^FO${x},${y}${by}^BCN,${h},N,N,N^FD${bc}^FS`);
+        if (el.human !== false) {
+          const bw = code128WidthDots(bc.length, el.mw ?? 2);
+          const fh = 20, fw = 12;
+          const hx = x + Math.max(0, Math.round((bw - bc.length * fw) / 2));
+          lines.push(`^FO${hx},${y + h + d(1)}^A0N,${fh},${fw}^FD${bc}^FS`);
+        }
         break;
       }
       case "line": {
@@ -327,16 +357,21 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
         break;
       }
       case "lengthBanner": {
-        // ORTAK PAYDA çerçeveli bant — dolgulu ^GB+^FR sürümü kaldırıldı (PPLA
-        // basamıyordu; eleman dilden dile farklı görünmemeli).
+        // SİYAH ZEMİN / BEYAZ DEĞER — ^GB dolu siyah kutu + ^FR (field reverse)
+        // döndürülmüş değer (glifler beyaza döner). Boşluk dolgusu bandı doldurur.
         const dv = fieldDisplayValue(payload, "lengthMeters");
         if (!dv.present) break;
         const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * y;
         const val = zplData(String(payload.lengthMeters));
-        const g = bannerGeom(x, y, w, h, val.length);
-        lines.push(`^FO${x},${y}^GB${w},${h},2^FS`); // çerçeve (t=2)
-        lines.push(`^FO${g.tx},${g.ty}^A0R,${g.gh},${g.gw}^FD${val}^FS`); // siyah rot-90 değer
+        const mul = Math.max(1, Math.min(4, Math.round(w / EPL_FONT.xl.h)));
+        const gh = EPL_FONT.xl.h * mul, gw = EPL_FONT.xl.w * mul;
+        const target = Math.max(val.length, Math.floor((h * 0.85) / gw));
+        const pad = Math.max(0, Math.floor((target - val.length) / 2));
+        const padded = " ".repeat(pad) + val + " ".repeat(pad);
+        const ty = y + Math.max(0, Math.round((h - padded.length * gw) / 2));
+        lines.push(`^FO${x},${y}^GB${w},${h},${w},B^FS`); // dolu siyah zemin (t=w)
+        lines.push(`^FO${x},${ty}^A0R,${gh},${gw}^FR^FD${padded}^FS`); // ters (beyaz) değer
         break;
       }
     }

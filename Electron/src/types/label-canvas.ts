@@ -110,8 +110,8 @@ export const CAPABILITY: Record<LabelElementType, Record<"PPLA" | "PPLB" | "ZPL"
   // line/box: DPL font-X kayıtlarıyla PPLA'da da basılır.
   line:         { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
   box:          { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
-  // lengthBanner: PPLA'da ÇERÇEVELİ basılır (dolgu/ters-renk yok — DPL reverse
-  // güvenilmez); PPLB/ZPL/HTML dolgulu siyah bant.
+  // lengthBanner: PPLB/ZPL/HTML siyah zemin+beyaz değer; PPLA çerçeveli (DPL
+  // reverse güvenilmez) — hepsi basılır ("ok"), yalnız görünüm dolgusu farklı.
   lengthBanner: { PPLA: "ok",   PPLB: "ok", ZPL: "ok", RASTER_HTML: "ok" },
 };
 

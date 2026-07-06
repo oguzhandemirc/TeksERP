@@ -80,10 +80,10 @@ async function main() {
   );
   check("PPLB: line (LO) basılır", /LO24,240,719,6/.test(pplb));
   check("PPLB: box (X) basılır", /X24,256,8,344,336/.test(pplb) || /^X24,256,/m.test(pplb));
-  // ORTAK PAYDA bant: dört dilde AYNI çerçeveli görünüm — ters-renk/dolgu YOK.
-  check("PPLB: banner çerçeveli (X kutu + N metin, R YOK)", /X703,24,2,775,424/.test(pplb) && /A775,161,1,4,3,3,N,"320"/.test(pplb) && !/,R,"/.test(pplb));
+  // Bant: PPLB/ZPL SİYAH ZEMİN + BEYAZ değer (ters); PPLA çerçeveli (DPL reverse yok).
+  check("PPLB: banner SİYAH+beyaz (ters R + boşluk dolgu)", /A775,77,1,4,3,3,R,"  320  "/.test(pplb));
   check("ZPL: line dolu ^GB", /\^GB719,6,6,B/.test(zpl));
-  check("ZPL: banner çerçeveli (^GB t=2 + ^A0R, ^FR YOK)", /\^FO703,24\^GB72,400,2\^FS/.test(zpl) && /\^FO775,161\^A0R,72,42\^FD320\^FS/.test(zpl) && !zpl.includes("^FR"));
+  check("ZPL: banner SİYAH+beyaz (dolu ^GB + ^FR ters)", /\^FO703,24\^GB72,400,72,B\^FS/.test(zpl) && /\^FO703,77\^A0R,72,42\^FR\^FD  320  \^FS/.test(zpl));
 
   // --- Metin/rotasyon/font ---
   check("PPLB: bold metin çarpan 2", /A240,24,0,3,2,2,N,"PATOS"/.test(pplb));
@@ -97,9 +97,11 @@ async function main() {
   check("PPLB: QR s6", pplb.includes(`b24,24,Q,m2,s6,"${payload.barcode}"`));
   check("PPLA: QR 1W1c0606", ppla.includes(`1W1c0606`));
   check("ZPL: QR mag 6", zpl.includes("^BQN,2,6"));
-  check("PPLB: Code128 human=B (mw yok → 2,3 bayt-uyum)", /B24,368,0,1,2,3,72,B,/.test(pplb));
-  check("PPLA: Code128 + okunur satır (mw yok → 22)", /1e22\d{4}\d{4}\d{4}TEKS/.test(ppla) && /1111000\d{8}TEKS/.test(ppla));
-  check("ZPL: Code128 human=Y (mw yok → ^BY emit edilmez)", /\^BCN,72,Y,N,N/.test(zpl) && !zpl.includes("^BY"));
+  // Barkod okunur satırı: firmware KAPALI (N) + manuel, barkod ALTINDA ORTALANMIŞ
+  // (barkod sol x=24 değil; PPLB hx=171 / PPLA hcol=0171 / ZPL hx=139).
+  check("PPLB: Code128 human=N + ortalanmış (171)", /B24,368,0,1,2,3,72,N,/.test(pplb) && /A171,448,0,1,1,1,N,"TEKS20260706AB12"/.test(pplb));
+  check("PPLA: Code128 + okunur satır ORTALANMIŞ (0171)", /1e22\d{4}\d{4}\d{4}TEKS/.test(ppla) && /1111000\d{4}0171TEKS20260706AB12/.test(ppla));
+  check("ZPL: Code128 interpretation=N + ortalanmış (139)", /\^BCN,72,N,N,N/.test(zpl) && /\^FO139,448\^A0N,20,12\^FDTEKS20260706AB12\^FS/.test(zpl) && !zpl.includes("^BY"));
 
   // --- SERBEST metin boyutu (hMm/wr): ZPL/HTML birebir, PPLA/PPLB en yakın kombinasyon ---
   const freeLayout: CanvasLayout = {
@@ -130,9 +132,9 @@ async function main() {
   const pplbMw = emitCanvasPplb(mk({ layout: mwLayout }));
   const pplaMw = emitCanvasPpla(mk({ layout: mwLayout }));
   const zplMw = emitCanvasZpl(mk({ layout: mwLayout }));
-  check("PPLB: mw=3 → dar/geniş 3,4", /B24,80,0,1,3,4,72,B,/.test(pplbMw));
+  check("PPLB: mw=3 → dar/geniş 3,4 (human firmware KAPALI)", /B24,80,0,1,3,4,72,N,/.test(pplbMw));
   check("PPLA: mw=3 → 1e33", /1e33\d{4}/.test(pplaMw));
-  check("ZPL: mw=3 → ^BY3", zplMw.includes("^BY3^BCN,72,Y,N,N"));
+  check("ZPL: mw=3 → ^BY3 (interpretation KAPALI)", zplMw.includes("^BY3^BCN,72,N,N,N"));
 
   // --- Medya komutları format profilinden ---
   check("PPLB: q/Q medya boyutu", pplb.includes("q799") && /Q480,16/.test(pplb));

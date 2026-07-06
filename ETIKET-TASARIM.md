@@ -86,11 +86,16 @@ fark glif piksel şekilleri (bitmap kafa vs vektör motor) — boyut/konum/metin
 |---|---|---|---|---|
 | field/text/qr/code128 | ✓ | ✓ | ✓ | ✓ |
 | line / box | ✓ (DPL font-X) | ✓ | ✓ | ✓ |
-| lengthBanner | ✓ çerçeveli | ✓ çerçeveli | ✓ çerçeveli | ✓ çerçeveli |
+| **barkod okunur satırı** | ✓ ortalı | ✓ ortalı | ✓ ortalı | ✓ ortalı |
+| lengthBanner | **çerçeveli** (DPL reverse güvenilmez) | ✓ siyah/beyaz | ✓ siyah/beyaz | ✓ siyah/beyaz |
 | logo/görsel | v1'de YOK (karar) | — | — | — |
 
-- Bant HEPSINDE çerçevelidir (ortak payda: dolgulu ters-renk DPL'de güvenilmez;
-  fiziksel testte çalışırsa dolgulu sürüme dördü birden geçirilebilir).
+- **Barkod okunur satırı** dört dilde de firmware'in sola-yasladığı satır KAPATILIP
+  manuel olarak barkod ALTINDA ORTALANIR (code128WidthDots ile).
+- **lengthBanner**: PPLB (saha yazıcısı) / ZPL / HTML'de siyah zemin + beyaz değer
+  (reverse). PPLA/DPL'de ters-renk cihaza bağlı ve güvenilmez → değer siyah-üstü-siyah
+  görünmez riskine düşmemek için ÇERÇEVELİ (kutu + siyah dikey değer). Fiziksel
+  Argox-PPLA testinde reverse çalışırsa PPLA da dolguluya geçirilebilir (tek dal).
 - Yapısal gerçekler: kanvas yolunda dört dil de ASCII basar; EPL_FONT tablosu
   **203dpi'a gömülü** (saha parkı kabulü — 300dpi cihaz gelirse font/mm
   ölçekleme borcu). PPLA ısı/yoğunluk (H10/D8) fiziksel testle doğrulanacak.

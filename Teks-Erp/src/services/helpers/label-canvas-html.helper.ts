@@ -119,9 +119,9 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
         );
         break;
       case "lengthBanner": {
-        // ORTAK PAYDA çerçeveli bant — native ile aynı: çerçeve + SİYAH rot-90
-        // değer (dolgulu sürüm kaldırıldı; PPLA basamıyordu). Glif yüksekliği
-        // native bannerGeom ile aynı hesap: xl(24 dot) × band-genişliği çarpanı.
+        // SİYAH ZEMİN / BEYAZ DEĞER — dolgulu siyah kutu + beyaz döndürülmüş değer
+        // (PPLB/ZPL ile aynı görünüm). Glif yüksekliği native ile aynı: xl(24 dot)
+        // × band-genişliği çarpanı.
         const dv = fieldDisplayValue(payload, "lengthMeters");
         if (!dv.present) break;
         const w = el.wMm ?? 10;
@@ -131,7 +131,7 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
         const glyphMm = (24 * mul) / dotsPerMm;
         const val = asciiFold(String(payload.lengthMeters));
         els.push(
-          `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${w}mm;height:${h}mm;border:0.5mm solid #000;box-sizing:border-box;display:flex;align-items:center;justify-content:center">` +
+          `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${w}mm;height:${h}mm;background:#000;color:#fff;display:flex;align-items:center;justify-content:center">` +
             `<span style="transform:rotate(90deg);font-family:'Courier New',monospace;font-size:${glyphMm.toFixed(2)}mm;line-height:1;white-space:nowrap">${escapeHtml(val)}</span></div>`,
         );
         break;

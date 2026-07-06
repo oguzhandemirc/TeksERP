@@ -214,9 +214,9 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
             <NumField label="Bant boyu (mm)" value={el.hMm ?? 40} onChange={(v) => onChange({ hMm: v } as Partial<LabelElement>)} />
           </div>
           <p className="text-[10px] leading-snug text-muted-foreground">
-            PPLB/ZPL/HTML: dolgulu siyah bant (beyaz değer). PPLA: ÇERÇEVELİ sürüm
-            (kutu + siyah dikey değer) — DPL'de ters-renk güvenilmez. Fark önizlemede
-            dil seçerek görülebilir.
+            PPLB (saha yazıcınız) / ZPL / HTML: <strong>siyah zemin + beyaz değer</strong>.
+            PPLA (Datamax): ters-renk DPL'de güvenilmez → çerçeveli (kutu + siyah dikey
+            değer, her zaman okunur). Fark önizlemede dil seçerek görülür.
           </p>
         </>
       )}
