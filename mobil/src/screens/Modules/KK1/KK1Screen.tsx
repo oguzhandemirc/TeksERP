@@ -762,27 +762,29 @@ export default function KK1Screen() {
   // Basılıyor + sırada bekleyen etiket sayısı (offline'da birikebilir).
   const printingCount = (activePrintRoll ? 1 : 0) + printQueue.length;
 
-  // Oturum/liste aksiyonları — tablette birincil bara sığar (headerExtras);
-  // telefonda dar olduğu için ScreenChrome'un 2. katına (secondRow) taşınır.
-  // "Tüm Girişler" = tüm ham giriş kayıtları geçmişi.
+  // "Bu oturum" rozeti — hem tablet birincil barında hem telefon 2. katında
+  // kullanılır (tek yerde tanımlı, iki yere de aynen basılır).
+  const sessionCountChip = sessionCount > 0 && (
+    // Dokununca bu oturumda girilen topların listesi açılır.
+    <TouchableRipple
+      borderless
+      onPress={() => setSessionListOpen(true)}
+      rippleColor="rgba(255,255,255,0.2)"
+      style={styles.headerSessionChip}
+      accessibilityLabel="Bu oturumda girilenleri göster"
+    >
+      <View style={styles.headerSessionChipInner}>
+        <Icon source="check-circle" size={14} color="#86efac" />
+        <Text style={styles.headerSessionLabel}>Bu oturum</Text>
+        <AnimatedCounter value={sessionCount} style={styles.headerSessionCount} />
+      </View>
+    </TouchableRipple>
+  );
+
+  // Tablet birincil barı — "Bu oturum" + "Tüm Girişler" + "Yenile" (yer var).
   const sessionActionsRow = (
     <>
-      {sessionCount > 0 && (
-        // Dokununca bu oturumda girilen topların listesi açılır.
-        <TouchableRipple
-          borderless
-          onPress={() => setSessionListOpen(true)}
-          rippleColor="rgba(255,255,255,0.2)"
-          style={styles.headerSessionChip}
-          accessibilityLabel="Bu oturumda girilenleri göster"
-        >
-          <View style={styles.headerSessionChipInner}>
-            <Icon source="check-circle" size={14} color="#86efac" />
-            <Text style={styles.headerSessionLabel}>Bu oturum</Text>
-            <AnimatedCounter value={sessionCount} style={styles.headerSessionCount} />
-          </View>
-        </TouchableRipple>
-      )}
+      {sessionCountChip}
       <HeaderChip
         icon="format-list-bulleted"
         label="Tüm Girişler"
@@ -799,6 +801,13 @@ export default function KK1Screen() {
       />
     </>
   );
+
+  // Telefon 2. katı — yalnız "Bu oturum". "Tüm Girişler" + "Yenile" burada
+  // TEKRARLANMAZ (çekmecede zaten var: liste üstünde Yenile, altında Tüm
+  // Girişler butonu); makine adı çipi ScreenChrome tarafından otomatik eklenir.
+  // Fragment daima "truthy" → ScreenChrome sessionCountChip null olsa bile
+  // 2. katı render eder (makine adı çipi yine görünsün).
+  const phoneSecondRow = <>{sessionCountChip}</>;
 
   return (
     <ScreenChrome
@@ -843,7 +852,7 @@ export default function KK1Screen() {
           ) : null}
         </View>
       }
-      secondRow={compact ? sessionActionsRow : undefined}
+      secondRow={compact ? phoneSecondRow : undefined}
     >
       <View
         style={[
