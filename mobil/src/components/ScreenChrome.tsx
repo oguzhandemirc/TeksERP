@@ -162,29 +162,16 @@ export default function ScreenChrome({
                 {/* size 18: pill iç yüksekliği yazı satırıyla (13px→~18) eş kalsın —
                     diğer header pill'leriyle piksel-eş boy. */}
                 <Icon source="account-circle" size={18} color="#fff" />
-                {/* Kullanıcı adı — tablette görünür (telefonda yer dar, yalnız ikon). */}
-                {isTablet && (
-                  <Text style={styles.userTriggerName} numberOfLines={1}>
-                    {operatorName}
-                  </Text>
-                )}
+                {/* Kullanıcı adı — tablet ve telefonda AYNI (cihaz ayrımı yok). */}
+                <Text style={styles.userTriggerName} numberOfLines={1}>
+                  {operatorName}
+                </Text>
               </View>
             </TouchableRipple>
           }
         >
-          {/* Menü başlığı (kim giriş yaptı) — YALNIZ telefonda: tablette ad zaten
-              tetik butonunda yazıyor, menüde tekrar etmesin. */}
-          {!isTablet && (
-            <>
-              <View style={styles.menuHeader}>
-                <Icon source="account-circle" size={22} color="#475569" />
-                <Text style={styles.menuHeaderName} numberOfLines={1}>
-                  {operatorName}
-                </Text>
-              </View>
-              <Divider />
-            </>
-          )}
+          {/* Menü içeriği tablet/telefon AYNI — ad zaten tetik butonunda yazıyor,
+              menüde tekrar etmez. */}
           <Menu.Item
             leadingIcon="cog"
             onPress={openSettings}
@@ -327,15 +314,6 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   userTriggerName: { color: '#fff', fontWeight: '700', fontSize: 13, maxWidth: 160 },
-  menuHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minWidth: 170,
-  },
-  menuHeaderName: { fontWeight: '700', color: '#0f172a', fontSize: 15, flexShrink: 1 },
   // Menü maddeleri — saha dokunma hedefi (min 56dp kuralı) + büyük yazı.
   menuItem: { height: 58, maxWidth: 340 },
   menuItemTitle: { fontSize: 17 },
