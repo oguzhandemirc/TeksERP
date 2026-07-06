@@ -1124,6 +1124,11 @@ export default function KK1Screen() {
                   data={recentRolls}
                   keyExtractor={(r) => r.id}
                   extraData={flashRollId}
+                  // FlashList v2'de "görünür pozisyonu koru" VARSAYILAN AÇIK: yeni
+                  // kayıt tepeye eklenince liste mevcut bakış yerini sabit tutup
+                  // bizim scrollToOffset(0)'ı eziyordu ("yeni kayıt düşüyor ama
+                  // tepeye çıkmıyor"). Dev eşik = her prepend'de NATIVE tepeye kay.
+                  maintainVisibleContentPosition={{ autoscrollToTopThreshold: 100000 }}
                   renderItem={({ item }) => (
                     <RollListItem
                       roll={item}
