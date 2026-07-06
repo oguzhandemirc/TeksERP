@@ -41,21 +41,24 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
     return () => clearTimeout(t);
   }, [liveKey]);
 
+  // enabled DEBOUNCE EDİLMİŞ yüke bakar (canlıya değil): açılışta tuval bir an
+  // boşken canlı state dolar dolmaz sorgu, hâlâ boş-eleman taşıyan debounce
+  // anahtarıyla ateşlenip backend'ten "en az 1 eleman" 400'ü (ve interceptor
+  // toast'u) üretiyordu. Boş yük hiç istek atmaz.
+  const debounced = JSON.parse(debouncedKey) as {
+    kind: LabelKind; widthMm: number; heightMm: number; layout: CanvasLayout; lang: "active" | RawCodeLang;
+  };
   const previewQ = useQuery({
     queryKey: ["label-canvas-preview", debouncedKey],
-    queryFn: () => {
-      const p = JSON.parse(debouncedKey) as {
-        kind: LabelKind; widthMm: number; heightMm: number; layout: CanvasLayout; lang: "active" | RawCodeLang;
-      };
-      return labelTemplateService.canvasPreview({
-        kind: p.kind,
-        widthMm: p.widthMm,
-        heightMm: p.heightMm,
-        elements: p.layout,
-        language: p.lang === "active" ? undefined : p.lang,
-      });
-    },
-    enabled: layout.elements.length > 0,
+    queryFn: () =>
+      labelTemplateService.canvasPreview({
+        kind: debounced.kind,
+        widthMm: debounced.widthMm,
+        heightMm: debounced.heightMm,
+        elements: debounced.layout,
+        language: debounced.lang === "active" ? undefined : debounced.lang,
+      }),
+    enabled: debounced.layout.elements.length > 0,
     staleTime: 0,
     retry: false,
   });
