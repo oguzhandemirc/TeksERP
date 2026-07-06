@@ -78,7 +78,8 @@ export function ElementPalette({ onAddField, onAddStructural }: Props) {
         {catalogQ.isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : (
-          <div className="max-h-[420px] space-y-1 overflow-auto pr-1">
+          // Kendi iç scroll'u YOK — sol kolon tek scrollbar'la kayar (nested scroll olmaz).
+          <div className="space-y-1">
             {(catalogQ.data ?? [])
               .filter((f) => f.type !== "qr" && f.type !== "barcode")
               .map((f) => (

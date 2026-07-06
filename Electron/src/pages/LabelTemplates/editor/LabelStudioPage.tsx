@@ -150,7 +150,7 @@ export function LabelStudioPage() {
         }
       />
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4 xl:overflow-hidden">
         {loading ? (
           <Skeleton className="h-96 w-full" />
         ) : !template ? (
@@ -158,34 +158,19 @@ export function LabelStudioPage() {
             Şablon bulunamadı.
           </div>
         ) : (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-end gap-3 rounded-md border bg-card p-3">
-              <div className="min-w-[240px] flex-1">
-                <label className="text-xs font-medium text-muted-foreground">Şablon Adı</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
+          <>
+            {/* Üst şerit (sabit): varyant sekmeleri + uyumsuzluk uyarısı + dirty */}
+            <div className="flex shrink-0 flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <VariantTabs templateId={template.id} variants={variants}
+                  activeId={activeVariantId} onSelect={setActiveVariantId} dirty={state.dirty} />
+                {state.dirty && <Badge variant="outline" className="text-[10px] text-amber-600">Kaydedilmedi</Badge>}
               </div>
-              <div className="w-44">
-                <label className="text-xs font-medium text-muted-foreground" title="Önizlemede kullanılan örnek verinin bağlamı">
-                  Önizleme bağlamı
-                </label>
-                <Select value={previewKind} onValueChange={(v) => setPreviewKind(v as LabelKind)}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(labelKindLabels) as LabelKind[]).map((k) => (
-                      <SelectItem key={k} value={k} className="text-xs">{labelKindLabels[k]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {state.dirty && <Badge variant="outline" className="text-[10px] text-amber-600">Kaydedilmedi</Badge>}
+              <VariantMismatchBanner variants={variants} />
             </div>
 
-            <VariantTabs templateId={template.id} variants={variants}
-              activeId={activeVariantId} onSelect={setActiveVariantId} dirty={state.dirty} />
-            <VariantMismatchBanner variants={variants} />
-
-            <Tabs defaultValue="design">
-              <TabsList>
+            <Tabs defaultValue="design" className="flex flex-col xl:min-h-0 xl:flex-1">
+              <TabsList className="shrink-0">
                 <TabsTrigger value="design">Tasarım</TabsTrigger>
                 <TabsTrigger value="code">
                   Kod (uzman)
@@ -195,29 +180,56 @@ export function LabelStudioPage() {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="design" className="mt-3">
+              <TabsContent value="design" className="mt-3 xl:min-h-0 xl:flex-1">
                 {!activeVariant ? (
                   <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
                     Bu şablonun boyut varyantı yok — eski akış düzeninde basılıyor.
                     Kanvasla tasarlamak için yukarıdan <strong>"Yeni boyut"</strong> ekleyin.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-[210px_minmax(0,1fr)_340px]">
-                    <ElementPalette
-                      onAddField={(f) => state.addElement(makeElement("field", { x: 5, y: 5 }, { bind: f.key, label: f.defaultLabel }))}
-                      onAddStructural={addStructural}
-                    />
-                    <CanvasStage canvas={canvas} state={state} zoom={zoom} onZoom={setZoom} lint={lint} />
-                    {/* Sağ kolon sırası: ÖNİZLEME üstte (her değişikliğin sonucu ilk
-                        bakışta), altında seçili elemanın özellikleri, en altta lint. */}
-                    <div className="space-y-3 xl:sticky xl:top-4 xl:self-start">
+                  // 3 kolon — her biri xl'de kendi içinde kaydırılır (sayfa kaymaz).
+                  <div className="grid grid-cols-1 gap-3 xl:h-full xl:grid-cols-[260px_minmax(0,1fr)_360px]">
+                    {/* SOL: şablon adı + önizleme bağlamı + eleman paleti */}
+                    <div className="space-y-3 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">Şablon Adı</label>
+                        <Input value={name} onChange={(e) => setName(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground" title="Önizlemede kullanılan örnek verinin bağlamı">
+                          Önizleme bağlamı
+                        </label>
+                        <Select value={previewKind} onValueChange={(v) => setPreviewKind(v as LabelKind)}>
+                          <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {(Object.keys(labelKindLabels) as LabelKind[]).map((k) => (
+                              <SelectItem key={k} value={k} className="text-xs">{labelKindLabels[k]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="border-t pt-3">
+                        <ElementPalette
+                          onAddField={(f) => state.addElement(makeElement("field", { x: 5, y: 5 }, { bind: f.key, label: f.defaultLabel }))}
+                          onAddStructural={addStructural}
+                        />
+                      </div>
+                    </div>
+
+                    {/* ORTA: kanvas */}
+                    <div className="xl:min-h-0 xl:overflow-y-auto">
+                      <CanvasStage canvas={canvas} state={state} zoom={zoom} onZoom={setZoom} lint={lint} />
+                    </div>
+
+                    {/* SAĞ: önizleme + seçili eleman özellikleri + lint */}
+                    <div className="space-y-3 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
                       <CanvasPreview kind={previewKind} widthMm={canvas.widthMm} heightMm={canvas.heightMm} layout={state.layout} />
                       <PropertiesPanel element={selected} catalog={catalog}
                         multiCount={state.selectedIds.length}
                         onChange={(patch) => selected && state.updateElement(selected.id, patch)}
                         onRemove={() => selected && state.removeElement(selected.id)} />
                       {lint.length > 0 && (
-                        <ul className="max-h-32 space-y-1 overflow-auto rounded-md border p-2 text-[10px]">
+                        <ul className="space-y-1 rounded-md border p-2 text-[10px]">
                           {lint.map((i, idx) => (
                             <li key={idx} className={
                               i.level === "error" ? "text-destructive" :
@@ -231,7 +243,7 @@ export function LabelStudioPage() {
                 )}
               </TabsContent>
 
-              <TabsContent value="code" className="mt-3">
+              <TabsContent value="code" className="mt-3 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
                 <RawCodePanel kind={previewKind} catalog={flowCatalogQ.data?.data?.fields ?? []}
                   rawCode={rawCode} onChange={setRawCode} />
                 <p className="mt-2 text-[10px] text-muted-foreground">
@@ -239,7 +251,7 @@ export function LabelStudioPage() {
                 </p>
               </TabsContent>
             </Tabs>
-          </div>
+          </>
         )}
       </div>
 
