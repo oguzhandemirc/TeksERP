@@ -57,6 +57,7 @@ import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { isWorkSessionLost } from '../../../services/api';
+import { useSessionEntriesStore } from '../../../store/sessionEntriesStore';
 import { itemService } from '../../../services/item.service';
 import {
   rollService,
@@ -196,8 +197,13 @@ export default function KK1Screen() {
   const [manualMode, setManualMode] = useState(false);
   const [manualQty, setManualQty] = useState('');
   const [manualWeight, setManualWeight] = useState('');
-  // Bu oturumda kaydedilen top sayısı (seri girişte ilerleme hissi).
-  const [sessionCount, setSessionCount] = useState(0);
+  // "Bu oturumda girilenler" — GİRİŞ OTURUMU ömürlü store (sessionEntriesStore):
+  // Bölüm Değiş/aynı bölüme dönüş, makine-istasyon değişimi, araya başka bölüme
+  // bakmak listeyi SIFIRLAMAZ; yalnız çıkış/operatör değişimi temizler.
+  // Sayaç = onaylı kayıtlar + gönderimde bekleyenler (çevrimdışı dahil).
+  const sessionBucket = useSessionEntriesStore((s) => s.buckets['RAW_QC']);
+  const sessionRolls = sessionBucket?.rolls ?? [];
+  const sessionCount = sessionRolls.length + (sessionBucket?.pending ?? 0);
   // Kaydet sonrası kısa "✓ Kaydedildi" başarı flaşı (CTA).
   const [justSaved, setJustSaved] = useState(false);
   // Listede yeni beliren topu kısa süre vurgulamak için.
@@ -237,10 +243,7 @@ export default function KK1Screen() {
   // alınır. İptal (yazdırma diyaloğu kapatıldı) hata SAYILMAZ.
   const [failedPrints, setFailedPrints] = useState<{ roll: Roll; error: string }[]>([]);
   const [queueOpen, setQueueOpen] = useState(false);
-  // Bu oturumda kaydedilen toplar (server-onaylı) — "Bu oturum" rozetine
-  // dokununca listelenir. Çevrimdışı kayıtlar senkron olunca listeye düşer
-  // (sayaç optimistik olduğundan kısa süre sayı > liste olabilir).
-  const [sessionRolls, setSessionRolls] = useState<Roll[]>([]);
+  // "Bu oturum" rozetine dokununca oturum listesi modalı (veri sessionEntriesStore'da).
   const [sessionListOpen, setSessionListOpen] = useState(false);
 
   // onResult anında activePrintRoll state'i closure'da bayat olabilir → ref.
@@ -455,8 +458,8 @@ export default function KK1Screen() {
           ? `Barkod: ${vars.clientBarcode ?? '...'}`
           : `Çevrimdışı — sync bekliyor · ${vars.clientBarcode ?? ''}`,
       });
-      // Oturum sayacı + başarı flaşı (ekran-içi tatmin, offline'da da çalışır).
-      setSessionCount((c) => c + 1);
+      // Oturum sayacı (pending) + başarı flaşı (ekran-içi tatmin, offline'da da çalışır).
+      useSessionEntriesStore.getState().addPending('RAW_QC');
       setJustSaved(true);
       // Form'daki her alan KALICI (ürün, en, kalite) — aynı en'den seri giriş.
       // Yalnızca per-roll manuel değerler (mt/kg) temizlenir.
@@ -478,11 +481,13 @@ export default function KK1Screen() {
       // Queue'ya at: birden fazla mutation sırayla resume olduğunda hepsi basılır
       // (eskiden setPrintRoll overwrite ediyordu, sadece son etiket basıyordu).
       enqueuePrint(res.data);
-      // "Bu oturum" listesi — server-onaylı kayıtlar (rozet dokununca görünür).
-      setSessionRolls((prev) => [res.data as Roll, ...prev].slice(0, 200));
+      // "Bu oturum" listesi — sunucu onayı: pending → onaylı kayda dönüşür.
+      useSessionEntriesStore.getState().confirmRoll('RAW_QC', res.data as Roll);
       qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
     },
     onError: (err, _vars, context) => {
+      // Kayıt reddedildi → oturum sayacındaki pending geri alınır (sayaç şişmesin).
+      useSessionEntriesStore.getState().failPending('RAW_QC');
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       // "Ürün ... pasif/silinmiş" → ürün başka yerden soft-delete edilmiş.
       // Seçimi temizle ki operatör aynı silinmiş ürünle tekrar tekrar
