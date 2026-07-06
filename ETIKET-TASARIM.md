@@ -75,18 +75,25 @@ rollTextLines şablonsuz fallback (bayt-stabil)
 
 ## 5. Dil yetenek (degrade) matrisi
 
+**ORTAK PAYDA İLKESİ (kullanıcı kararı):** kanvas yolunda bir eleman DÖRT dilde
+BİREBİR AYNI çıkar — aynı boyut (dördü de aynı font+çarpan kombinasyonunu basar;
+ZPL/HTML serbest ölçeklenebilse de bilerek kullanılmaz), aynı metin (HTML de
+Türkçe'yi ASCII'ye katlar), aynı görünüm (bant hepsinde çerçeveli; bold kanvas
+yolunda parite dışı — kalın görünümü genişlik oranı verir). Kapatılamayan tek
+fark glif piksel şekilleri (bitmap kafa vs vektör motor) — boyut/konum/metin aynı.
+
 | Eleman | PPLA | PPLB | ZPL | HTML |
 |---|---|---|---|---|
 | field/text/qr/code128 | ✓ | ✓ | ✓ | ✓ |
 | line / box | ✓ (DPL font-X) | ✓ | ✓ | ✓ |
-| lengthBanner | **çerçeveli** (ters-renksiz — DPL reverse güvenilmez) | ✓ dolgulu | ✓ dolgulu | ✓ dolgulu |
+| lengthBanner | ✓ çerçeveli | ✓ çerçeveli | ✓ çerçeveli | ✓ çerçeveli |
 | logo/görsel | v1'de YOK (karar) | — | — | — |
 
-- Yapısal gerçekler: native'de Türkçe ASCII'ye katlanır (Ş→S; latin1 komut-baytı
-  güvenliği), gerçek bold yalnız HTML (native = boyut ikilemesi), EPL_FONT
-  tablosu **203dpi'a gömülü** (saha parkı kabulü — 300dpi cihaz gelirse font/mm
-  ölçekleme borcu). PPLA ısı/yoğunluk (H10/D8) + degrade davranışı fiziksel
-  testle doğrulanacak (donanım sahada).
+- Bant HEPSINDE çerçevelidir (ortak payda: dolgulu ters-renk DPL'de güvenilmez;
+  fiziksel testte çalışırsa dolgulu sürüme dördü birden geçirilebilir).
+- Yapısal gerçekler: kanvas yolunda dört dil de ASCII basar; EPL_FONT tablosu
+  **203dpi'a gömülü** (saha parkı kabulü — 300dpi cihaz gelirse font/mm
+  ölçekleme borcu). PPLA ısı/yoğunluk (H10/D8) fiziksel testle doğrulanacak.
 - Çakışma/taşma sorumluluğu **editördedir** (useCanvasLint) — backend basmayı
   reddetmez; taranabilirlik (≥1 QR|Code128) hem editörde error hem backend'te
   kayıt guard'ı.

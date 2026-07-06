@@ -49,6 +49,27 @@ export function qrSizeMm(scale: number | undefined): number {
  *  ~11 modül/karakter × (19+3) + stop ≈ 255 modül / 8 dot-per-mm ≈ 32mm. */
 export const BC_BASE_MM = 32;
 
+/** Backend resolveEplTextStyle AYNASI (203dpi, maxMul=6) — "fiilen basılacak"
+ *  boyutu panelde göstermek için. ORTAK PAYDA: dört dil bu kombinasyonu basar. */
+const EPL_BASE: ReadonlyArray<{ w: number; h: number }> = [
+  { w: 8, h: 12 }, { w: 10, h: 16 }, { w: 12, h: 20 }, { w: 14, h: 24 }, { w: 32, h: 48 },
+];
+
+export function achievedTextStyleMm(hMm: number, wr: number): { hMm: number; scaleX: number } {
+  const target = hMm * 8; // 203dpi ≈ 8 dot/mm
+  let best = { hDots: 16, v: 1, baseH: 16, diff: Number.POSITIVE_INFINITY };
+  for (const f of EPL_BASE) {
+    for (let v = 1; v <= 6; v++) {
+      const diff = Math.abs(f.h * v - target);
+      if (diff < best.diff || (diff === best.diff && f.h > best.baseH)) {
+        best = { hDots: f.h * v, v, baseH: f.h, diff };
+      }
+    }
+  }
+  const hmul = Math.max(1, Math.min(6, Math.round(best.v * wr)));
+  return { hMm: best.hDots / 8, scaleX: hmul / best.v };
+}
+
 export interface BoundsMm {
   x: number;
   y: number;

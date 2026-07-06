@@ -13,7 +13,7 @@ import {
 import type { CanvasRotation, LabelElement } from "@/types/label-canvas";
 import { elementTypeLabels, skippedLanguages } from "@/types/label-canvas";
 import type { UnifiedCatalogField } from "@/services/labelTemplateService";
-import { BC_BASE_MM, FONT_MM } from "./canvas-model";
+import { achievedTextStyleMm, BC_BASE_MM, FONT_MM } from "./canvas-model";
 
 interface Props {
   element: LabelElement | null;
@@ -123,6 +123,15 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
               value={el.wr ?? 1}
               onChange={(v) => onChange({ wr: Math.max(0.25, Math.min(4, v)), ...(el.hMm == null ? { hMm: FONT_MM[el.font ?? "md"].h * (el.bold ? 2 : 1) } : {}) } as Partial<LabelElement>)} />
           </div>
+          {el.hMm != null && (() => {
+            const a = achievedTextStyleMm(el.hMm, el.wr ?? 1);
+            return (
+              <p className="rounded bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">
+                Fiilen basılacak: <strong>≈{a.hMm.toFixed(1)}mm</strong> × oran{" "}
+                <strong>{a.scaleX.toFixed(2)}</strong> — DÖRT DİLDE AYNI (ortak payda).
+              </p>
+            );
+          })()}
           <div className="grid grid-cols-2 items-end gap-2">
             <div className="space-y-1">
               <Label className="text-[10px] text-muted-foreground">Dönüş</Label>
@@ -133,15 +142,21 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
                 </SelectContent>
               </Select>
             </div>
-            <label className="flex h-7 items-center gap-1.5 text-xs">
-              <Checkbox checked={el.bold ?? false} onCheckedChange={(v) => onChange({ bold: v === true } as Partial<LabelElement>)} />
-              Kalın{el.hMm != null ? " (HTML)" : ""}
-            </label>
+            {/* Kalın yalnız ESKİ kademeli elemanlarda (orada 2x çarpan anlamı var).
+                Serbest boyutta kalınlık görünümünü genişlik oranı verir — dört
+                dilde aynı olsun diye font-weight parite dışı bırakıldı. */}
+            {el.hMm == null && (
+              <label className="flex h-7 items-center gap-1.5 text-xs">
+                <Checkbox checked={el.bold ?? false} onCheckedChange={(v) => onChange({ bold: v === true } as Partial<LabelElement>)} />
+                Kalın
+              </label>
+            )}
           </div>
           <p className="text-[10px] leading-snug text-muted-foreground">
-            Serbest boyut: ZPL/HTML birebir basar; PPLA/PPLB (bitmap font) en yakın
-            basılabilir kombinasyona oturur. Genişlik oranı dar/geniş — bitmap'te
-            "ince/kalın" görünümü de bu verir. Köşe tutamacı: dikey=yükseklik, yatay=oran.
+            ORTAK PAYDA: dört dil (PPLA/PPLB/ZPL/HTML) AYNI boyut kombinasyonunu ve
+            AYNI metni (Türkçe→ASCII) basar — eleman dilden dile farklı görünmez.
+            Genişlik oranı dar/geniş; "kalın" görünümü de oran verir. Köşe tutamacı:
+            dikey=yükseklik, yatay=oran.
           </p>
         </>
       )}

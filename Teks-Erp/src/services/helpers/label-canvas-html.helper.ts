@@ -11,12 +11,9 @@
 import type { CanvasRenderInput } from "./label-canvas-native.helper";
 import { fieldDisplayValue } from "./label-field-values";
 import { escapeHtml, applyCopies } from "./label-html.shared";
-import { qrFootprintDots } from "./native-label.shared";
+import { asciiFold, qrFootprintDots, resolveEplTextStyle, EPL_FONT } from "./native-label.shared";
 import type { FieldElement, TextElement } from "../../config/label-elements";
 import { elementSupported } from "../../config/label-elements";
-
-/** HTML pt eşlemesi — mevcut akış HTML'iyle aynı kademe (label-html.shared). */
-const FONT_PT: Record<string, string> = { sm: "8pt", md: "10pt", lg: "14pt", xl: "20pt" };
 
 export interface CanvasHtmlInput extends CanvasRenderInput {
   /** bwip-js Code128 SVG (ham). */
@@ -25,29 +22,40 @@ export interface CanvasHtmlInput extends CanvasRenderInput {
   qrSvg: string;
 }
 
-function textDiv(
-  el: FieldElement | TextElement,
-  content: string,
-): string {
-  // SERBEST boyut (hMm) → mm cinsinden birebir; yoksa eski 4-kademe pt eşlemesi.
-  const fontSize = el.hMm != null ? `${el.hMm}mm` : (FONT_PT[el.font ?? "md"] ?? "10pt");
+// ORTAK PAYDA (kullanıcı kararı: eleman dilden dile FARKLI çıktı vermemeli):
+// HTML metni de native ile aynı davranır — Türkçe ASCII'ye katlanır, monospace
+// (yazıcı hücre modeli) kullanılır ve boyut native'in seçtiği kombinasyonun
+// FİİLEN basılan yüksekliğidir (serbest mm değil). Kalınlık görünümünü genişlik
+// oranı (wr) verir — font-weight parite dışı bırakıldı.
+function textDiv(el: FieldElement | TextElement, content: string, dpi: number): string {
+  const dotsPerMm = (dpi || 203) / 25.4;
+  let hDots: number;
+  let scaleX = 1;
+  if (el.hMm != null) {
+    const st = resolveEplTextStyle(el.hMm * dotsPerMm, el.wr ?? 1, 6);
+    hDots = st.hDots;
+    scaleX = st.hmul / st.vmul; // yatay/dikey çarpan farkı = dar/geniş görünüm
+  } else {
+    const f = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
+    hDots = f.h * (el.bold ? 2 : 1);
+  }
+  const fontMm = hDots / dotsPerMm;
   const parts = [
     "position:absolute",
     `left:${el.x}mm`,
     `top:${el.y}mm`,
-    `font-size:${fontSize}`,
+    `font-size:${fontMm.toFixed(2)}mm`,
+    "font-family:'Courier New',monospace",
     "white-space:nowrap",
-    el.hMm != null ? "line-height:1" : "line-height:1.1",
+    "line-height:1",
   ];
-  if (el.bold) parts.push("font-weight:700");
   const transforms: string[] = [];
   if (el.rot) transforms.push(`rotate(${el.rot}deg)`);
-  const wr = el.wr ?? 1;
-  if (el.hMm != null && wr !== 1) transforms.push(`scaleX(${wr})`);
+  if (scaleX !== 1) transforms.push(`scaleX(${scaleX})`);
   if (transforms.length > 0) {
     parts.push(`transform:${transforms.join(" ")}`, "transform-origin:top left");
   }
-  return `<div style="${parts.join(";")}">${escapeHtml(content)}</div>`;
+  return `<div style="${parts.join(";")}">${escapeHtml(asciiFold(content))}</div>`;
 }
 
 export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
@@ -69,7 +77,7 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
                 const label = el.label?.trim();
                 return label ? `${label}: ${dv.value}` : dv.value;
               })();
-        if (content) els.push(textDiv(el, content));
+        if (content) els.push(textDiv(el, content, format.dpi));
         break;
       }
       case "qr": {
@@ -91,7 +99,7 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
         const inner =
           `<div style="height:${h}mm">${barcodeSvg.replace("<svg ", `<svg style="height:${h}mm;width:auto" `)}</div>` +
           (human
-            ? `<div style="font-size:8pt;letter-spacing:0.12em;text-align:center">${escapeHtml(payload.barcode)}</div>`
+            ? `<div style="font-family:'Courier New',monospace;font-size:1.5mm;letter-spacing:0.12em;text-align:center">${escapeHtml(payload.barcode)}</div>`
             : "");
         els.push(
           `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm${
@@ -111,13 +119,20 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
         );
         break;
       case "lengthBanner": {
+        // ORTAK PAYDA çerçeveli bant — native ile aynı: çerçeve + SİYAH rot-90
+        // değer (dolgulu sürüm kaldırıldı; PPLA basamıyordu). Glif yüksekliği
+        // native bannerGeom ile aynı hesap: xl(24 dot) × band-genişliği çarpanı.
         const dv = fieldDisplayValue(payload, "lengthMeters");
         if (!dv.present) break;
         const w = el.wMm ?? 10;
         const h = el.hMm ?? Math.max(10, format.heightMm - 2 * el.y);
+        const dotsPerMm = (format.dpi || 203) / 25.4;
+        const mul = Math.max(1, Math.min(4, Math.round((w * dotsPerMm) / 24)));
+        const glyphMm = (24 * mul) / dotsPerMm;
+        const val = asciiFold(String(payload.lengthMeters));
         els.push(
-          `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${w}mm;height:${h}mm;background:#000;color:#fff;display:flex;align-items:center;justify-content:center">` +
-            `<span style="transform:rotate(90deg);font-size:20pt;font-weight:700;white-space:nowrap">${escapeHtml(dv.value)}</span></div>`,
+          `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${w}mm;height:${h}mm;border:0.5mm solid #000;box-sizing:border-box;display:flex;align-items:center;justify-content:center">` +
+            `<span style="transform:rotate(90deg);font-family:'Courier New',monospace;font-size:${glyphMm.toFixed(2)}mm;line-height:1;white-space:nowrap">${escapeHtml(val)}</span></div>`,
         );
         break;
       }

@@ -71,6 +71,19 @@ function structuralDiff(a: string, b: string, tol = TOL_DOTS): string | null {
 
 const NATIVE_LANGS = ["PPLA", "PPLB", "ZPL"] as const;
 
+/** Akış çıktısından ESKİ dolgulu bant satırlarını düş — banner parite kapsamı dışı
+ *  (kanvas ortak-payda çerçeveli tasarıma geçti; akış PPLB'de ters 'R' metni,
+ *  ZPL'de solid ^GB + ^FR basıyordu). */
+function stripFlowBanner(lang: string, content: string): string {
+  const lines = content.split(/\r\n|\r|\n/);
+  const kept = lines.filter((ln) => {
+    if (lang === "PPLB" && /,R,"/.test(ln)) return false;
+    if (lang === "ZPL" && (ln.includes("^FR") || /\^GB(\d+),\d+,\1,B\^FS/.test(ln))) return false;
+    return true;
+  });
+  return kept.join("\n");
+}
+
 async function main() {
   const templates = await prisma.labelTemplate.findMany({
     where: { isActive: true, deletedAt: null, kind: { not: null } },
@@ -106,27 +119,25 @@ async function main() {
     } as unknown as LabelTemplateVariant;
 
     for (const lang of NATIVE_LANGS) {
-      // PPLA paritesi banner'SIZ karşılaştırılır: akış PPLA'da bandı HİÇ basmazdı;
-      // kanvas artık çerçeveli sürümü basıyor (kasıtlı iyileştirme — parite dışı).
-      const cmpLayout =
-        lang === "PPLA"
-          ? { ...layout, elements: layout.elements.filter((e) => e.type !== "lengthBanner") }
-          : layout;
+      // Banner parite kapsamı DIŞI (tüm dillerde): akış dolgulu/dilden-dile farklı
+      // basardı; kanvas ORTAK PAYDA çerçeveli tasarıma geçti (kullanıcı kararı:
+      // eleman her dilde AYNI görünmeli) — akışla birebir kıyas anlamsız.
+      const cmpLayout = { ...layout, elements: layout.elements.filter((e) => e.type !== "lengthBanner") };
       const cmpVariant = {
         elements: cmpLayout,
         widthMm: format.widthMm,
         heightMm: format.heightMm,
       } as unknown as LabelTemplateVariant;
-      const flow = renderLabel(lang as PrinterLanguage, {
+      const flow = stripFlowBanner(lang, renderLabel(lang as PrinterLanguage, {
         payload, template: flowTemplate, barcodeSvg: "", qrSvg: "", copies: 2,
         format: { ...format, language: lang as PrinterLanguage },
-      }).content;
+      }).content);
       const canvas = renderLabel(lang as PrinterLanguage, {
         payload, template: flowTemplate, variant: cmpVariant, barcodeSvg: "", qrSvg: "", copies: 2,
         format: { ...format, language: lang as PrinterLanguage },
       }).content;
       const diff = structuralDiff(flow, canvas);
-      check(`${tag} × ${lang}: yapısal eşdeğer${lang === "PPLA" ? " (banner hariç — akışta yoktu)" : ""}`, diff == null, diff ?? "");
+      check(`${tag} × ${lang}: yapısal eşdeğer (banner hariç — ortak-payda tasarımı)`, diff == null, diff ?? "");
     }
 
     // HTML içerik paritesi — NATIVE'E GÖRE (bilinçli sapma: kanvas HTML'i native

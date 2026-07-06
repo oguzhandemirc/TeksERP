@@ -116,7 +116,9 @@ function ElementBody({ el, zoom }: { el: LabelElement; zoom: number }) {
       if (wr !== 1) transforms.push(`scaleX(${wr})`);
       return (
         <div
-          className={cn("whitespace-nowrap font-mono leading-none text-foreground", el.bold && "font-bold")}
+          // Kalın yalnız eski kademeli elemanlarda görsel — serbest boyutta parite
+          // gereği vuruş kalınlığı yok (oran verir).
+          className={cn("whitespace-nowrap font-mono leading-none text-foreground", el.hMm == null && el.bold && "font-bold")}
           style={{
             fontSize: Math.max(7, hMm * zoom * 0.85),
             transform: transforms.length ? transforms.join(" ") : undefined,

@@ -80,9 +80,10 @@ async function main() {
   );
   check("PPLB: line (LO) basılır", /LO24,240,719,6/.test(pplb));
   check("PPLB: box (X) basılır", /X24,256,8,344,336/.test(pplb) || /^X24,256,/m.test(pplb));
-  check("PPLB: banner ters metin (R) basılır", /,R,"/.test(pplb));
+  // ORTAK PAYDA bant: dört dilde AYNI çerçeveli görünüm — ters-renk/dolgu YOK.
+  check("PPLB: banner çerçeveli (X kutu + N metin, R YOK)", /X703,24,2,775,424/.test(pplb) && /A775,161,1,4,3,3,N,"320"/.test(pplb) && !/,R,"/.test(pplb));
   check("ZPL: line dolu ^GB", /\^GB719,6,6,B/.test(zpl));
-  check("ZPL: banner ^GB + ^FR", zpl.includes("^FR"));
+  check("ZPL: banner çerçeveli (^GB t=2 + ^A0R, ^FR YOK)", /\^FO703,24\^GB72,400,2\^FS/.test(zpl) && /\^FO775,161\^A0R,72,42\^FD320\^FS/.test(zpl) && !zpl.includes("^FR"));
 
   // --- Metin/rotasyon/font ---
   check("PPLB: bold metin çarpan 2", /A240,24,0,3,2,2,N,"PATOS"/.test(pplb));
@@ -115,8 +116,11 @@ async function main() {
   // 6mm=48 dot → font5 (32×48) ×1 birebir; wr=2 → yatay çarpan 2.
   check("PPLB serbest: font5×(h2,v1) seçildi", /A24,24,0,5,2,1,N,"KALIN"/.test(pplbFree));
   check("PPLA serbest: 1 5 2 1 kaydı", /^1521000\d{8}KALIN/m.test(pplaFree));
-  check("ZPL serbest: ^A0N,48,58 (birebir + oran)", /\^A0N,48,58\^FDKALIN\^FS/.test(zplFree));
-  check("HTML serbest: font-size 6mm + scaleX(2)", htmlFree.includes("font-size:6mm") && htmlFree.includes("scaleX(2)"));
+  // ORTAK PAYDA: ZPL de PPLB/PPLA'nın seçtiği kombinasyonun boyutunu basar
+  // (font5 h48 × hmul2 → w64) — dört dil AYNI boyut.
+  check("ZPL serbest: ^A0N,48,64 (ortak kombinasyon)", /\^A0N,48,64\^FDKALIN\^FS/.test(zplFree));
+  // 48 dot @203dpi = 6.006mm → HTML fiilen basılan boyutu yazar (6.01mm).
+  check("HTML serbest: ortak kombinasyonun FİİLİ boyutu (≈6.01mm) + scaleX(2)", /font-size:6\.0\dmm/.test(htmlFree) && htmlFree.includes("scaleX(2)"));
 
   // --- Modül kalınlığı (mw): üç dilde orantılı genişletme ---
   const mwLayout: CanvasLayout = {
@@ -146,7 +150,9 @@ async function main() {
 
   // --- HTML: mutlak konum + UTF-8 (native'de asciiFold, HTML'de tam Türkçe) ---
   check("HTML: mutlak konum mm", html.includes("left:30mm") && html.includes("top:3mm"));
-  check("HTML: UTF-8 korunur", html.includes("Şahin Tekstil") && html.includes("SABİT NOT"));
+  // ORTAK PAYDA: HTML de native ile AYNI metni basar (Türkçe ASCII'ye katlanır)
+  // — eleman dilden dile farklı çıktı vermez (kullanıcı kararı).
+  check("HTML: metin native ile aynı (ASCII katlama)", html.includes("Sahin Tekstil") && html.includes("SABIT NOT") && !html.includes("Şahin"));
   check("HTML: @page medya boyutu", html.includes("size: 100mm 60mm"));
   check("HTML: kopya=2 sayfa", (html.match(/page-break-after/g) ?? []).length === 1);
   check("HTML: line/box div'leri", html.includes("background:#000") && html.includes("border:1mm solid #000"));
