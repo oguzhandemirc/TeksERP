@@ -5,7 +5,7 @@
 // sahnesi yaklaşıktır; buradaki görüntü yazıcıya gidenin aynısıdır. 350ms
 // debounce ile kaydetmeden canlı yansır. Dil seçilebilir (Aktif = cihaz ayarı).
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Eye, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,9 +29,40 @@ interface Props {
   layout: CanvasLayout;
 }
 
+/** Önizleme kutusu üst sınırı (px) — dar/uzun etiketler bunda sınırlanır. */
+const PREVIEW_MAX_H = 460;
+/** CSS mm → px (ekran 96dpi): buildCanvasLabelHtml `.label` fiziksel mm basar. */
+const PX_PER_MM = 96 / 25.4;
+
 export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
   const [view, setView] = useState<"visual" | "code">("visual");
   const [lang, setLang] = useState<"active" | RawCodeLang>("active");
+
+  // Önizleme kutusu TUVAL ORANINI izler: mevcut genişliği ölçüp etiket
+  // en/boy oranından kutu boyutunu türetir; iframe içeriği (fiziksel mm) bu
+  // kutuya birebir ölçeklenir. Böylece 100×250 girince önizleme de uzar/incelir.
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [availW, setAvailW] = useState(0);
+  useLayoutEffect(() => {
+    const el = measureRef.current;
+    if (!el) return;
+    const update = () => setAvailW(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const ratio = widthMm > 0 && heightMm > 0 ? widthMm / heightMm : 1;
+  let boxW = availW || 300;
+  let boxH = boxW / ratio;
+  if (boxH > PREVIEW_MAX_H) {
+    boxH = PREVIEW_MAX_H;
+    boxW = boxH * ratio;
+  }
+  const wPx = widthMm * PX_PER_MM;
+  const hPx = heightMm * PX_PER_MM;
+  const fitScale = wPx > 0 ? boxW / wPx : 1;
 
   // 350ms debounce — her sürükleme adımında backend'e gitmesin.
   const liveKey = JSON.stringify({ kind, widthMm, heightMm, layout, lang });
@@ -98,30 +129,47 @@ export function CanvasPreview({ kind, widthMm, heightMm, layout }: Props) {
       </div>
 
       <div className="rounded-lg border-2 border-dashed bg-background p-2 shadow-sm">
-        {layout.elements.length === 0 ? (
-          <div className="py-8 text-center text-xs italic text-muted-foreground">Tuval boş.</div>
-        ) : previewQ.isLoading ? (
-          <Skeleton className="h-72 w-full" />
-        ) : previewQ.isError ? (
-          <div className="py-6 text-center text-xs italic text-destructive">
-            Önizleme alınamadı: {(previewQ.error as Error).message}
-          </div>
-        ) : view === "code" || p?.mode === "text" ? (
-          <pre className="h-[480px] overflow-auto whitespace-pre-wrap break-all rounded bg-muted/20 p-2 font-mono text-[11px] leading-relaxed">
-            {view === "code" ? p?.native ?? "" : p?.content ?? ""}
-          </pre>
-        ) : (
-          <iframe
-            title="Kanvas önizleme"
-            srcDoc={p?.content ?? ""}
-            sandbox="allow-same-origin allow-modals"
-            className="h-[480px] w-full rounded border bg-white"
-          />
-        )}
+        <div ref={measureRef} className="w-full">
+          {layout.elements.length === 0 ? (
+            <div className="py-8 text-center text-xs italic text-muted-foreground">Tuval boş.</div>
+          ) : previewQ.isLoading ? (
+            <Skeleton className="mx-auto" style={{ width: boxW, height: boxH }} />
+          ) : previewQ.isError ? (
+            <div className="py-6 text-center text-xs italic text-destructive">
+              Önizleme alınamadı: {(previewQ.error as Error).message}
+            </div>
+          ) : view === "code" || p?.mode === "text" ? (
+            <pre className="h-[480px] overflow-auto whitespace-pre-wrap break-all rounded bg-muted/20 p-2 font-mono text-[11px] leading-relaxed">
+              {view === "code" ? p?.native ?? "" : p?.content ?? ""}
+            </pre>
+          ) : (
+            // Kutu = tuval oranı; iframe fiziksel mm boyutunda çizip kutuya ölçeklenir.
+            <div
+              className="relative mx-auto overflow-hidden rounded border bg-white"
+              style={{ width: boxW, height: boxH }}
+            >
+              <iframe
+                title="Kanvas önizleme"
+                srcDoc={p?.content ?? ""}
+                sandbox="allow-same-origin allow-modals"
+                style={{
+                  width: wPx,
+                  height: hPx,
+                  border: 0,
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  transform: `scale(${fitScale})`,
+                  transformOrigin: "top left",
+                }}
+              />
+            </div>
+          )}
+        </div>
       </div>
       <p className="text-[10px] text-muted-foreground">
-        Örnek (mock) veriyle backend'te üretildi — yazıcıya gidenin aynısı. Native dillerde
-        Türkçe karakter ASCII'ye katlanır (Ş→S); HTML/ev-tipi tam Türkçe basar.
+        Örnek (mock) veriyle backend'te üretildi — yazıcıya gidenin aynısı, tuval
+        oranıyla ({widthMm}×{heightMm} mm). Native dillerde Türkçe ASCII'ye katlanır (Ş→S).
       </p>
     </div>
   );
