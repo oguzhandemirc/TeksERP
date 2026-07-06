@@ -1723,11 +1723,12 @@ function SessionRollsModal({
       <View style={[qmStyles.card, { width: Math.min(winW - 32, 720), maxHeight: winH * 0.85 }]}>
         <View style={qmStyles.header}>
           <Icon source="check-circle" size={22} color="#059669" />
-          <View style={{ flex: 1 }}>
+          {/* Kayıt sayısı başlığın YANINDA (altında ayrı satır değil). */}
+          <View style={qmStyles.titleRow}>
             <Text style={qmStyles.title}>Bu Oturumda Girilenler</Text>
-            <Text style={qmStyles.subtitle}>
-              {rolls.length} kayıt
-              {pendingSync > 0 ? ` · ${pendingSync} çevrimdışı senkron bekliyor` : ''}
+            <Text style={qmStyles.titleCount}>
+              · {rolls.length} kayıt
+              {pendingSync > 0 ? ` · ${pendingSync} senkron bekliyor` : ''}
             </Text>
           </View>
           <IconButton icon="close" size={20} onPress={onDismiss} accessibilityLabel="Kapat" />
@@ -1765,7 +1766,9 @@ const qmStyles = StyleSheet.create({
     borderBottomColor: '#e2e8f0',
   },
   title: { fontSize: 17, fontWeight: '800', color: '#0f172a' },
-  subtitle: { fontSize: 12, color: '#64748b', marginTop: 1 },
+  // Başlık + sayı yan yana (baseline hizalı).
+  titleRow: { flex: 1, flexDirection: 'row', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' },
+  titleCount: { fontSize: 14, fontWeight: '700', color: '#64748b' },
   body: { padding: 12, gap: 8 },
   section: {
     fontSize: 12,
