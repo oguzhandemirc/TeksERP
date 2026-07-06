@@ -16,6 +16,8 @@ import type { UnifiedCatalogField } from "@/services/labelTemplateService";
 
 interface Props {
   element: LabelElement | null;
+  /** Seçili eleman sayısı — >1 iken panel yerine çoklu-seçim bilgisi gösterilir. */
+  multiCount?: number;
   catalog: UnifiedCatalogField[];
   onChange: (patch: Partial<LabelElement>) => void;
   onRemove: () => void;
@@ -45,11 +47,19 @@ function NumField({ label, value, onChange, min = 0, max = 500, step = 0.5 }: {
   );
 }
 
-export function PropertiesPanel({ element: el, catalog, onChange, onRemove }: Props) {
+export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange, onRemove }: Props) {
   if (!el) {
     return (
       <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-        Eleman seçin — özellikleri burada düzenlenir.
+        {multiCount > 1 ? (
+          <>
+            <strong>{multiCount} eleman seçili.</strong> Tuval üstündeki araç çubuğuyla
+            hizala / boşlukları eşitle; birlikte sürükle veya ok tuşlarıyla it;
+            Delete hepsini siler. Tekil özellik için tek eleman seç.
+          </>
+        ) : (
+          <>Eleman seçin — özellikleri burada düzenlenir. Ctrl+tık ile çoklu seçim.</>
+        )}
       </div>
     );
   }

@@ -15,13 +15,15 @@ interface Props {
   canvas: { widthMm: number; heightMm: number };
   zoom: number;
   selected: boolean;
+  /** Tutamaçlar yalnız TEKLİ seçimde gösterilir (çoklu seçimde grup taşınır). */
+  showHandles: boolean;
   hasLintWarn: boolean;
   onPointerDown: (e: React.PointerEvent, id: string) => void;
   /** Seçili elemanın köşe/döndürme tutamacı basımı — CanvasStage sürüklemeyi yürütür. */
   onHandlePointerDown: (e: React.PointerEvent, id: string, mode: HandleMode) => void;
 }
 
-export function CanvasElementView({ element: el, canvas, zoom, selected, hasLintWarn, onPointerDown, onHandlePointerDown }: Props) {
+export function CanvasElementView({ element: el, canvas, zoom, selected, showHandles, hasLintWarn, onPointerDown, onHandlePointerDown }: Props) {
   const b = estimateBounds(el, canvas);
   const style: React.CSSProperties = {
     position: "absolute",
@@ -67,7 +69,7 @@ export function CanvasElementView({ element: el, canvas, zoom, selected, hasLint
           {hasLintWarn ? <AlertTriangle className="h-2.5 w-2.5" /> : "!"}
         </span>
       )}
-      {selected && (
+      {showHandles && (
         <>
           {/* SE köşe: boyutlandırma. Metinde font kademesine (4'lü), QR'da ölçeğe
               (2-15), barkodda bar yüksekliğine oturur — serbest boyut yalnız

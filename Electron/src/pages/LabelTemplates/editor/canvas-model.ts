@@ -153,6 +153,97 @@ export function snapRotation(deg: number): CanvasRotation {
   return norm as CanvasRotation;
 }
 
+// =============================================================================
+// Çoklu seçim: hizalama + boşluk eşitleme (saf fonksiyonlar — tek undo adımı
+// olarak applyPatches ile uygulanır). Sınır kutuları estimateBounds tahminiyle.
+// =============================================================================
+
+export type AlignMode = "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom";
+export type DistributeMode = "h" | "v";
+
+type PatchMap = Record<string, { x?: number; y?: number }>;
+
+function selectedBounds(
+  elements: LabelElement[],
+  ids: string[],
+  canvas: { widthMm: number; heightMm: number },
+): Array<{ el: LabelElement; b: BoundsMm }> {
+  const set = new Set(ids);
+  return elements.filter((e) => set.has(e.id)).map((el) => ({ el, b: estimateBounds(el, canvas) }));
+}
+
+/** Seçimi kendi ortak sınır kutusuna göre hizalar (≥2 eleman). */
+export function alignElements(
+  elements: LabelElement[],
+  ids: string[],
+  mode: AlignMode,
+  canvas: { widthMm: number; heightMm: number },
+): PatchMap {
+  const sel = selectedBounds(elements, ids, canvas);
+  if (sel.length < 2) return {};
+  const minX = Math.min(...sel.map((s) => s.b.x));
+  const maxR = Math.max(...sel.map((s) => s.b.x + s.b.w));
+  const minY = Math.min(...sel.map((s) => s.b.y));
+  const maxB = Math.max(...sel.map((s) => s.b.y + s.b.h));
+  const cx = (minX + maxR) / 2;
+  const cy = (minY + maxB) / 2;
+
+  const patches: PatchMap = {};
+  for (const { el, b } of sel) {
+    let x: number | undefined;
+    let y: number | undefined;
+    switch (mode) {
+      case "left":    x = minX; break;
+      case "hcenter": x = cx - b.w / 2; break;
+      case "right":   x = maxR - b.w; break;
+      case "top":     y = minY; break;
+      case "vcenter": y = cy - b.h / 2; break;
+      case "bottom":  y = maxB - b.h; break;
+    }
+    const patch: { x?: number; y?: number } = {};
+    if (x !== undefined && snap(x) !== el.x) patch.x = Math.max(0, snap(x));
+    if (y !== undefined && snap(y) !== el.y) patch.y = Math.max(0, snap(y));
+    if (patch.x !== undefined || patch.y !== undefined) patches[el.id] = patch;
+  }
+  return patches;
+}
+
+/** Aradaki boşlukları eşitler (≥3 eleman): ilk ve son sabit kalır, aradakiler
+ *  eşit aralıkla dizilir (negatif boşluk = bilinçli bindirme, korunur). */
+export function distributeElements(
+  elements: LabelElement[],
+  ids: string[],
+  mode: DistributeMode,
+  canvas: { widthMm: number; heightMm: number },
+): PatchMap {
+  const sel = selectedBounds(elements, ids, canvas);
+  if (sel.length < 3) return {};
+  const pos = (b: BoundsMm) => (mode === "h" ? b.x : b.y);
+  const size = (b: BoundsMm) => (mode === "h" ? b.w : b.h);
+  const sorted = [...sel].sort((a, z) => pos(a.b) - pos(z.b));
+  const first = sorted[0]!;
+  const last = sorted[sorted.length - 1]!;
+  const span = pos(last.b) + size(last.b) - pos(first.b);
+  const total = sorted.reduce((acc, s) => acc + size(s.b), 0);
+  const gap = (span - total) / (sorted.length - 1);
+
+  const patches: PatchMap = {};
+  let cursor = pos(first.b);
+  for (const { el, b } of sorted) {
+    const target = snap(cursor);
+    if (mode === "h") {
+      if (target !== el.x) patches[el.id] = { x: Math.max(0, target) };
+    } else if (target !== el.y) {
+      patches[el.id] = { y: Math.max(0, target) };
+    }
+    cursor += size(b) + gap;
+  }
+  // İlk/son eleman konumu değişmemeli (sabit uçlar) — snap sapması olursa çıkar.
+  delete patches[first.el.id];
+  delete patches[last.el.id];
+  return patches;
+}
+
 /** Palet fabrikası — tuvale tıklama noktasına makul varsayılanlarla eleman doğurur. */
 export function makeElement(
   type: LabelElementType,

@@ -1,7 +1,9 @@
 // Etiket Stüdyosu — kanvas model yardımcıları birim testleri
 import { describe, expect, it } from "vitest";
 import {
+  alignElements,
   applyResize,
+  distributeElements,
   estimateBounds,
   makeElement,
   qrSizeMm,
@@ -9,7 +11,7 @@ import {
   snapRotation,
   starterLayout,
 } from "./canvas-model";
-import type { Code128Element, FieldElement, LineElement, QrElement, TextElement } from "@/types/label-canvas";
+import type { Code128Element, FieldElement, LabelElement, LineElement, QrElement, TextElement } from "@/types/label-canvas";
 
 const CANVAS = { widthMm: 100, heightMm: 60 };
 
@@ -87,6 +89,48 @@ describe("applyResize", () => {
     const el: TextElement = { id: "t", type: "text", text: "x", x: 0, y: 0, font: "sm" };
     expect(applyResize(el, 30, 3.1)).toEqual({ font: "xl" });
     expect(applyResize(el, 30, 1.4)).toBeNull(); // zaten sm — değişiklik yok
+  });
+});
+
+describe("alignElements / distributeElements", () => {
+  // Sabit boyutlu çizgiler — estimateBounds tahmini birebir (w=wMm, h=hMm).
+  const boxes: LabelElement[] = [
+    { id: "a", type: "line", x: 10, y: 10, wMm: 10, hMm: 4 },
+    { id: "b", type: "line", x: 30, y: 20, wMm: 20, hMm: 4 },
+    { id: "c", type: "line", x: 70, y: 40, wMm: 10, hMm: 4 },
+  ];
+
+  it("sola hizala: hepsi seçimin min-x'ine", () => {
+    const p = alignElements(boxes, ["a", "b", "c"], "left", CANVAS);
+    expect(p["b"]).toEqual({ x: 10 });
+    expect(p["c"]).toEqual({ x: 10 });
+    expect(p["a"]).toBeUndefined(); // zaten min-x'te — yama yok
+  });
+
+  it("sağa hizala: sağ kenarlar seçimin max sağına", () => {
+    const p = alignElements(boxes, ["a", "b", "c"], "right", CANVAS);
+    expect(p["a"]).toEqual({ x: 70 }); // 80 - 10
+    expect(p["b"]).toEqual({ x: 60 }); // 80 - 20
+    expect(p["c"]).toBeUndefined();
+  });
+
+  it("üste hizala + tek eleman seçiliyse no-op", () => {
+    const p = alignElements(boxes, ["a", "b", "c"], "top", CANVAS);
+    expect(p["b"]).toEqual({ y: 10 });
+    expect(p["c"]).toEqual({ y: 10 });
+    expect(alignElements(boxes, ["a"], "left", CANVAS)).toEqual({});
+  });
+
+  it("yatay boşluk eşitle: uçlar sabit, aradaki eşit aralığa", () => {
+    // span=10..80, toplam w=40, gap=(70-40)/2=15 → b.x = 10+10+15 = 35
+    const p = distributeElements(boxes, ["a", "b", "c"], "h", CANVAS);
+    expect(p["b"]).toEqual({ x: 35 });
+    expect(p["a"]).toBeUndefined();
+    expect(p["c"]).toBeUndefined();
+  });
+
+  it("boşluk eşitleme <3 elemanda no-op", () => {
+    expect(distributeElements(boxes, ["a", "b"], "h", CANVAS)).toEqual({});
   });
 });
 

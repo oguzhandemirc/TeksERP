@@ -120,7 +120,10 @@ export function LabelStudioPage() {
   const addStructural = (type: Exclude<LabelElementType, "field">) =>
     state.addElement(makeElement(type, { x: 5, y: 5 }));
 
-  const selected = state.elements.find((e) => e.id === state.selectedId) ?? null;
+  const selected =
+    state.selectedIds.length === 1
+      ? state.elements.find((e) => e.id === state.selectedIds[0]) ?? null
+      : null;
   const errors = lint.filter((i) => i.level === "error");
   const loading = templateQ.isLoading || variantsQ.isLoading;
 
@@ -207,6 +210,7 @@ export function LabelStudioPage() {
                     <CanvasStage canvas={canvas} state={state} zoom={zoom} onZoom={setZoom} lint={lint} />
                     <div className="space-y-3 xl:sticky xl:top-4 xl:self-start">
                       <PropertiesPanel element={selected} catalog={catalog}
+                        multiCount={state.selectedIds.length}
                         onChange={(patch) => selected && state.updateElement(selected.id, patch)}
                         onRemove={() => selected && state.removeElement(selected.id)} />
                       {lint.length > 0 && (
