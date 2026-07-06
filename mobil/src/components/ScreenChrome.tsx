@@ -10,6 +10,7 @@ import { useLockStore } from '../store/lockStore';
 import { usePermissions } from '../hooks/usePermission';
 import { performLogout, pendingStationOpsCount, isOnline } from '../offline/sessionSwitch';
 import AppModal from './AppModal';
+import PlaceChip from './session/PlaceChip';
 import type { MainStackParamList, RootStackParamList } from '../navigation/types';
 
 interface Props {
@@ -100,11 +101,17 @@ export default function ScreenChrome({
           />
         )}
         <View style={styles.appbarContent}>
-          {title ? (
-            <Text variant="titleLarge" style={styles.title} numberOfLines={1}>
-              {title}
-            </Text>
-          ) : null}
+          <View style={styles.titleRow}>
+            {title ? (
+              <Text variant="titleLarge" style={styles.title} numberOfLines={1}>
+                {title}
+              </Text>
+            ) : null}
+            {/* Bulunulan makine ADI — başlığın hemen yanında. Yalnız oturumlu
+                istasyon ekranlarında görünür (PlaceChip kendi kendini gate'ler);
+                dokununca yer/makine değiştirme açılır. */}
+            <PlaceChip />
+          </View>
           {subtitle && (
             <Text variant="labelMedium" style={styles.subtitle} numberOfLines={1}>
               {subtitle}
@@ -195,7 +202,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f8fafc' },
   appbar: { backgroundColor: '#0f172a' },
   // RN Paper Appbar.Content title bazı sürümlerde center hizalar; sola sabitle.
-  title: { color: '#fff', fontWeight: '700', textAlign: 'left' },
+  // flexShrink: makine çipi yanına sığsın diye başlık gerekirse kısalır.
+  title: { color: '#fff', fontWeight: '700', textAlign: 'left', flexShrink: 1 },
+  // Başlık + makine çipi yan yana.
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   subtitle: { textAlign: 'left', color: '#cbd5e1' },
   // Content view'i sola hizala — title kenara dayalı. paddingLeft 4: ufak nefes
   // payı, ev/back ikonuna yakın dursun (telefonda sağdaki aksiyon butonları için yer açar).

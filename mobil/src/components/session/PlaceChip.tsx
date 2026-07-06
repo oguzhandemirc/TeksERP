@@ -27,7 +27,9 @@ export default function PlaceChip() {
   const expectedKind = STATION_KIND_BY_SCREEN[route.name as MobileScreenKey];
   if (!expectedKind || !active || active.station.kind !== expectedKind) return null;
 
-  const label = active.machine ? active.machine.code : active.station.name;
+  // Makine ADI göster (kod değil) — saha operatörü kodu değil adı tanır.
+  // Ad boşsa koda düş; makinesiz (SHIPPING) istasyonda istasyon adı.
+  const label = active.machine ? active.machine.name || active.machine.code : active.station.name;
 
   return (
     <>
@@ -38,7 +40,8 @@ export default function PlaceChip() {
         accessibilityLabel="Yer değiştir"
       >
         <View style={styles.chipInner}>
-          <Icon source="map-marker" size={16} color="#a5b4fc" />
+          {/* Transfer/değiştir ikonu — çipe dokununca makine değiştirilebilir. */}
+          <Icon source="swap-horizontal" size={16} color="#a5b4fc" />
           <Text style={styles.chipText} numberOfLines={1}>
             {label}
           </Text>
@@ -70,7 +73,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    maxWidth: 150,
+    maxWidth: 220,
   },
   chipText: { color: '#c7d2fe', fontSize: 13, fontWeight: '700' },
 });
