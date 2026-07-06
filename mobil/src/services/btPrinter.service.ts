@@ -76,11 +76,21 @@ export function printRaw(address: string, content: string): Promise<void> {
 /**
  * Native komut string'ini eşleşmiş yazıcıya yaz. İçerik latin1-güvenli (backend
  * asciiFold) + STX/CR kontrol baytları (<0x20) → 'latin1' encoding bayt-bire-bir korur.
- * Bayat soket halinde bir kez yeniden bağlanıp dener. 12 sn sert zaman sınırı:
- * yazıcı kapalı / HC-06'yı başka cihaz tutuyorsa askıda kalıp KUYRUĞU DONDURMAK
- * yerine net hata verir → sıradaki etiket basılmaya devam eder.
+ * Bayat soket halinde bir kez yeniden bağlanıp dener. Her deneme 12 sn sert zaman
+ * sınırlı: yazıcı kapalı / HC-06'yı başka cihaz tutuyorsa askıda kalıp KUYRUĞU
+ * DONDURMAK yerine net hata verir → sıradaki etiket basılmaya devam eder.
+ * GEÇİCİ MEŞGUL için otomatik 2. deneme: HC-06 tek RFCOMM bağlantısı kabul eder —
+ * başka tablet o an bir etiket basıyorsa 2.5 sn bekleyip bir kez daha denenir
+ * (tipik baskı ~1-3 sn). Yine olmazsa hata fırlar (KK1 başarısızlar listesi +
+ * elle Tekrar Dene devralır). Not: zaman aşımı veri yazıldıktan SONRA gelirse
+ * tekrar deneme çift etiket basabilir — eksik etiketten iyidir (fazlası atılır).
  */
 export async function printPpla(address: string, content: string): Promise<void> {
   if (!content) throw new Error('Etiket verisi boş');
-  await writeRaw(address, content, 'latin1', { retry: true, timeoutMs: 12_000 });
+  try {
+    await writeRaw(address, content, 'latin1', { retry: true, timeoutMs: 12_000 });
+  } catch {
+    await new Promise((r) => setTimeout(r, 2_500));
+    await writeRaw(address, content, 'latin1', { retry: true, timeoutMs: 12_000 });
+  }
 }

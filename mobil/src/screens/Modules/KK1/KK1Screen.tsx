@@ -230,6 +230,49 @@ export default function KK1Screen() {
   const handlePrintDone = useCallback(() => {
     setActivePrintRoll(null); // useEffect bir sonrakini alır
   }, []);
+
+  // ── Başarısız baskılar + kuyruk görünümü ──
+  // BT hatası / zaman aşımında etiket KAYBOLMAZ: top "başarısızlar"a düşer,
+  // kuyruk çipine dokununca açılan görünümden Tekrar Dene ile yeniden sıraya
+  // alınır. İptal (yazdırma diyaloğu kapatıldı) hata SAYILMAZ.
+  const [failedPrints, setFailedPrints] = useState<{ roll: Roll; error: string }[]>([]);
+  const [queueOpen, setQueueOpen] = useState(false);
+  // Bu oturumda kaydedilen toplar (server-onaylı) — "Bu oturum" rozetine
+  // dokununca listelenir. Çevrimdışı kayıtlar senkron olunca listeye düşer
+  // (sayaç optimistik olduğundan kısa süre sayı > liste olabilir).
+  const [sessionRolls, setSessionRolls] = useState<Roll[]>([]);
+  const [sessionListOpen, setSessionListOpen] = useState(false);
+
+  // onResult anında activePrintRoll state'i closure'da bayat olabilir → ref.
+  const activePrintRollRef = useRef<Roll | null>(null);
+  useEffect(() => {
+    activePrintRollRef.current = activePrintRoll;
+  }, [activePrintRoll]);
+  const handlePrintResult = useCallback(
+    (r: { ok: boolean; cancelled: boolean; error?: string }) => {
+      const roll = activePrintRollRef.current;
+      if (!roll) return;
+      if (r.ok) {
+        setFailedPrints((f) => f.filter((x) => x.roll.id !== roll.id));
+      } else if (!r.cancelled) {
+        setFailedPrints((f) => [
+          { roll, error: r.error || 'Yazdırma hatası' },
+          ...f.filter((x) => x.roll.id !== roll.id),
+        ]);
+      }
+    },
+    [],
+  );
+  const retryFailedPrint = useCallback((roll: Roll) => {
+    setFailedPrints((f) => f.filter((x) => x.roll.id !== roll.id));
+    setPrintQueue((q) => [...q, roll]);
+  }, []);
+  const dismissFailedPrint = useCallback((id: string) => {
+    setFailedPrints((f) => f.filter((x) => x.roll.id !== id));
+  }, []);
+  const removeFromQueue = useCallback((id: string) => {
+    setPrintQueue((q) => q.filter((r) => r.id !== id));
+  }, []);
   // Scrap onay modal'ı — native Alert yerine kendi modalımız (alert telefon yönünü değiştiriyordu).
   const [scrapTarget, setScrapTarget] = useState<Roll | null>(null);
   // react-native-modal aynı anda iki modal'ı doğru stack edemiyor (Android Dialog
@@ -435,6 +478,8 @@ export default function KK1Screen() {
       // Queue'ya at: birden fazla mutation sırayla resume olduğunda hepsi basılır
       // (eskiden setPrintRoll overwrite ediyordu, sadece son etiket basıyordu).
       enqueuePrint(res.data);
+      // "Bu oturum" listesi — server-onaylı kayıtlar (rozet dokununca görünür).
+      setSessionRolls((prev) => [res.data as Roll, ...prev].slice(0, 200));
       qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
     },
     onError: (err, _vars, context) => {
@@ -717,16 +762,30 @@ export default function KK1Screen() {
       title="Ham Giriş"
       headerExtras={
         <View style={styles.headerExtrasRow}>
-          {printingCount > 0 && (
+          {(printingCount > 0 || failedPrints.length > 0) && (
             <Animated.View
               entering={FadeInUp.duration(180)}
               exiting={FadeOutUp.duration(140)}
-              style={styles.printChip}
             >
-              <Pulse color="#fff" size={7} />
-              <Text style={styles.printChipText}>
-                {printingCount} etiket{!isOnline ? ' · çevrimdışı bekliyor' : ''}
-              </Text>
+              {/* Dokununca yazıcı kuyruğu görünümü: basılıyor / sırada / başarısız. */}
+              <TouchableRipple
+                borderless
+                onPress={() => setQueueOpen(true)}
+                rippleColor="rgba(255,255,255,0.2)"
+                style={[styles.printChip, failedPrints.length > 0 && styles.printChipFailed]}
+                accessibilityLabel="Yazıcı kuyruğunu göster"
+              >
+                <View style={styles.printChipInner}>
+                  {printingCount > 0 && <Pulse color="#fff" size={7} />}
+                  <Text style={styles.printChipText}>
+                    {printingCount > 0
+                      ? `${printingCount} etiket${!isOnline ? ' · çevrimdışı' : ''}`
+                      : ''}
+                    {printingCount > 0 && failedPrints.length > 0 ? ' · ' : ''}
+                    {failedPrints.length > 0 ? `${failedPrints.length} HATALI` : ''}
+                  </Text>
+                </View>
+              </TouchableRipple>
             </Animated.View>
           )}
           <SyncStatusChip />
@@ -735,11 +794,20 @@ export default function KK1Screen() {
           {!compact && (
             <>
               {sessionCount > 0 && (
-                <View style={styles.headerSessionChip}>
-                  <Icon source="check-circle" size={14} color="#86efac" />
-                  <Text style={styles.headerSessionLabel}>Bu oturum</Text>
-                  <AnimatedCounter value={sessionCount} style={styles.headerSessionCount} />
-                </View>
+                // Dokununca bu oturumda girilen topların listesi açılır.
+                <TouchableRipple
+                  borderless
+                  onPress={() => setSessionListOpen(true)}
+                  rippleColor="rgba(255,255,255,0.2)"
+                  style={styles.headerSessionChip}
+                  accessibilityLabel="Bu oturumda girilenleri göster"
+                >
+                  <View style={styles.headerSessionChipInner}>
+                    <Icon source="check-circle" size={14} color="#86efac" />
+                    <Text style={styles.headerSessionLabel}>Bu oturum</Text>
+                    <AnimatedCounter value={sessionCount} style={styles.headerSessionCount} />
+                  </View>
+                </TouchableRipple>
               )}
               <HeaderChip
                 icon="format-list-bulleted"
@@ -1114,6 +1182,27 @@ export default function KK1Screen() {
         onScrap={handleScrapRoll}
       />
 
+      {/* ── Yazıcı kuyruğu görünümü (çipe dokununca): basılıyor / sırada / başarısız ── */}
+      <PrintQueueModal
+        visible={queueOpen}
+        onDismiss={() => setQueueOpen(false)}
+        active={activePrintRoll}
+        queue={printQueue}
+        failed={failedPrints}
+        onRetry={retryFailedPrint}
+        onRemove={removeFromQueue}
+        onDismissFailed={dismissFailedPrint}
+      />
+
+      {/* ── Bu oturumda girilenler ("Bu oturum" rozetine dokununca) ── */}
+      <SessionRollsModal
+        visible={sessionListOpen}
+        onDismiss={() => setSessionListOpen(false)}
+        rolls={sessionRolls}
+        sessionCount={sessionCount}
+        onPrint={handlePrintLabel}
+      />
+
       {/* ── Picker Modal'lar ── */}
       <PickerModal
         visible={pickerOpen === 'item'}
@@ -1142,6 +1231,7 @@ export default function KK1Screen() {
         roll={activePrintRoll}
         kind="ROLL_RAW"
         onDone={handlePrintDone}
+        onResult={handlePrintResult}
       />
 
       {/* ── Scrap onay modal'ı (kendi modalımız; native Alert'i değiştirdi) ── */}
@@ -1485,6 +1575,213 @@ const historyStyles = StyleSheet.create({
   emptyText: { fontSize: 16, color: '#94a3b8', fontWeight: '600' },
   emptyHint: { fontSize: 13, color: '#cbd5e1' },
   loadingMore: { paddingVertical: 16, alignItems: 'center' },
+});
+
+// ── Yazıcı Kuyruğu Modal ──
+// Kuyruk çipine dokununca: ne basılıyor, sırada neler var, neler BAŞARISIZ.
+// Başarısızlar Tekrar Dene ile yeniden kuyruğa alınır; sırada bekleyen çıkarılabilir
+// (basılmakta olan durdurulamaz — HC-06'ya baytlar zaten akıyor olabilir).
+function PrintQueueModal({
+  visible,
+  onDismiss,
+  active,
+  queue,
+  failed,
+  onRetry,
+  onRemove,
+  onDismissFailed,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  active: Roll | null;
+  queue: Roll[];
+  failed: { roll: Roll; error: string }[];
+  onRetry: (roll: Roll) => void;
+  onRemove: (id: string) => void;
+  onDismissFailed: (id: string) => void;
+}) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  const rollTitle = (r: Roll) =>
+    r.item?.name ? `${r.item.name} · ${r.barcode ?? '—'}` : (r.barcode ?? '—');
+  return (
+    <AppModal visible={visible} onDismiss={onDismiss}>
+      <View style={[qmStyles.card, { width: Math.min(winW - 32, 620), maxHeight: winH * 0.85 }]}>
+        <View style={qmStyles.header}>
+          <Icon source="printer" size={22} color={colors.brand} />
+          <Text style={qmStyles.title}>Yazıcı Kuyruğu</Text>
+          <View style={{ flex: 1 }} />
+          <IconButton icon="close" size={20} onPress={onDismiss} accessibilityLabel="Kapat" />
+        </View>
+        <ScrollView contentContainerStyle={qmStyles.body} showsVerticalScrollIndicator>
+          {failed.length > 0 && (
+            <>
+              <Text style={[qmStyles.section, qmStyles.sectionFailed]}>
+                Başarısız ({failed.length})
+              </Text>
+              {failed.map(({ roll, error }) => (
+                <View key={roll.id} style={[qmStyles.row, qmStyles.rowFailed]}>
+                  <View style={qmStyles.rowText}>
+                    <Text style={qmStyles.rowTitle} numberOfLines={1}>
+                      {rollTitle(roll)}
+                    </Text>
+                    <Text style={qmStyles.rowError} numberOfLines={2}>
+                      {error}
+                    </Text>
+                  </View>
+                  <Button
+                    mode="contained"
+                    compact
+                    buttonColor="#dc2626"
+                    onPress={() => onRetry(roll)}
+                    labelStyle={qmStyles.rowBtnLabel}
+                  >
+                    Tekrar Dene
+                  </Button>
+                  <IconButton
+                    icon="close"
+                    size={18}
+                    onPress={() => onDismissFailed(roll.id)}
+                    accessibilityLabel="Listeden çıkar"
+                  />
+                </View>
+              ))}
+            </>
+          )}
+
+          <Text style={qmStyles.section}>Basılıyor</Text>
+          {active ? (
+            <View style={qmStyles.row}>
+              <ActivityIndicator size="small" color={colors.brand} />
+              <View style={qmStyles.rowText}>
+                <Text style={qmStyles.rowTitle} numberOfLines={1}>
+                  {rollTitle(active)}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={qmStyles.empty}>Şu an basılan etiket yok</Text>
+          )}
+
+          <Text style={qmStyles.section}>Sırada ({queue.length})</Text>
+          {queue.length === 0 ? (
+            <Text style={qmStyles.empty}>Sırada bekleyen yok</Text>
+          ) : (
+            queue.map((r, i) => (
+              <View key={r.id} style={qmStyles.row}>
+                <Text style={qmStyles.rowIndex}>{i + 1}</Text>
+                <View style={qmStyles.rowText}>
+                  <Text style={qmStyles.rowTitle} numberOfLines={1}>
+                    {rollTitle(r)}
+                  </Text>
+                </View>
+                <IconButton
+                  icon="close"
+                  size={18}
+                  onPress={() => onRemove(r.id)}
+                  accessibilityLabel="Kuyruktan çıkar"
+                />
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </View>
+    </AppModal>
+  );
+}
+
+// ── Bu Oturumda Girilenler Modal ──
+// "Bu oturum" rozetine dokununca: bu oturumda kaydedilen toplar (server-onaylı;
+// çevrimdışı bekleyenler senkron olunca düşer). Satırdan etiket yeniden basılır.
+function SessionRollsModal({
+  visible,
+  onDismiss,
+  rolls,
+  sessionCount,
+  onPrint,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  rolls: Roll[];
+  sessionCount: number;
+  onPrint: (roll: Roll) => void;
+}) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  const isPhone = useDeviceType() === 'phone';
+  const pendingSync = Math.max(0, sessionCount - rolls.length);
+  return (
+    <AppModal visible={visible} onDismiss={onDismiss}>
+      <View style={[qmStyles.card, { width: Math.min(winW - 32, 720), maxHeight: winH * 0.85 }]}>
+        <View style={qmStyles.header}>
+          <Icon source="check-circle" size={22} color="#059669" />
+          <View style={{ flex: 1 }}>
+            <Text style={qmStyles.title}>Bu Oturumda Girilenler</Text>
+            <Text style={qmStyles.subtitle}>
+              {rolls.length} kayıt
+              {pendingSync > 0 ? ` · ${pendingSync} çevrimdışı senkron bekliyor` : ''}
+            </Text>
+          </View>
+          <IconButton icon="close" size={20} onPress={onDismiss} accessibilityLabel="Kapat" />
+        </View>
+        <ScrollView contentContainerStyle={qmStyles.body} showsVerticalScrollIndicator>
+          {rolls.length === 0 ? (
+            <Text style={qmStyles.empty}>
+              {pendingSync > 0
+                ? 'Kayıtlar çevrimdışı — senkron olunca burada listelenir.'
+                : 'Bu oturumda henüz kayıt yok.'}
+            </Text>
+          ) : (
+            rolls.map((r) => (
+              <RollListItem key={r.id} roll={r} onPrint={onPrint} singleLine={!isPhone} />
+            ))
+          )}
+        </ScrollView>
+      </View>
+    </AppModal>
+  );
+}
+
+const qmStyles = StyleSheet.create({
+  card: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingLeft: 16,
+    paddingRight: 6,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  title: { fontSize: 17, fontWeight: '800', color: '#0f172a' },
+  subtitle: { fontSize: 12, color: '#64748b', marginTop: 1 },
+  body: { padding: 12, gap: 8 },
+  section: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginTop: 6,
+  },
+  sectionFailed: { color: '#dc2626' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  rowFailed: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
+  rowIndex: { width: 18, textAlign: 'center', fontWeight: '800', color: '#64748b' },
+  rowText: { flex: 1 },
+  rowTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  rowError: { fontSize: 12, color: '#b91c1c', marginTop: 2 },
+  rowBtnLabel: { fontSize: 12, fontWeight: '800' },
+  empty: { fontSize: 13, color: '#94a3b8', paddingVertical: 4, paddingHorizontal: 2 },
 });
 
 // ── Scrap onay modal'ı ──
@@ -2065,31 +2362,39 @@ const styles = StyleSheet.create({
   widthInputContent: { fontSize: 28, fontWeight: '700', textAlign: 'center' },
   widthClearBtn: { margin: 0 },
 
-  // ── Etiket kuyruğu çipi (header) ──
+  // ── Etiket kuyruğu çipi (header, dokununca kuyruk görünümü) ──
   printChip: {
+    backgroundColor: colors.brand,
+    borderRadius: radius.md,
+    marginRight: spacing.sm,
+    overflow: 'hidden',
+  },
+  // Başarısız etiket varken kırmızı — göze çarpsın (Tekrar Dene içeride).
+  printChipFailed: { backgroundColor: '#dc2626' },
+  printChipInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.brand,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: radius.md,
-    marginRight: spacing.sm,
   },
   printChipText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 
-  // ── Oturum sayacı çipi (koyu header — diğer pill'lerle aynı yükseklik) ──
+  // ── Oturum sayacı çipi (koyu header — dokununca oturum listesi) ──
   headerSessionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
     marginLeft: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
     borderRadius: 10,
     backgroundColor: 'rgba(16,185,129,0.20)',
     borderWidth: 1,
     borderColor: 'rgba(134,239,172,0.45)',
+    overflow: 'hidden',
+  },
+  headerSessionChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   headerSessionLabel: { fontSize: 13, fontWeight: '700', color: '#dcfce7' },
   headerSessionCount: { fontSize: 14, fontWeight: '800', color: '#fff' },
