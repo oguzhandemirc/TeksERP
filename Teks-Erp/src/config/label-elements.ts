@@ -47,7 +47,14 @@ export interface FieldElement extends ElementBase {
   bind: string;
   /** Dolu → "Etiket: değer"; boş/yok → yalnız değer. */
   label?: string;
-  font?: FontSize; // yok → md
+  /** ESKİ 4-kademe sistem (geri uyum) — hMm doluysa YOK SAYILIR. */
+  font?: FontSize;
+  /** SERBEST yükseklik (mm, 1-30): ZPL/HTML birebir; PPLA/PPLB en yakın
+   *  basılabilir kombinasyon (resolveEplTextStyle — 5 font × çarpanlar). */
+  hMm?: number;
+  /** Genişlik oranı (0.25-4, 1=doğal): dar/geniş — bitmap'te "ince/kalın" görünüm. */
+  wr?: number;
+  /** hMm YOKKEN eski anlam (çarpan×2); hMm doluysa yalnız HTML font-weight. */
   bold?: boolean;
   rot?: CanvasRotation;
 }
@@ -55,7 +62,12 @@ export interface FieldElement extends ElementBase {
 export interface TextElement extends ElementBase {
   type: "text";
   text: string;
+  /** ESKİ 4-kademe sistem (geri uyum) — hMm doluysa YOK SAYILIR. */
   font?: FontSize;
+  /** SERBEST yükseklik (mm) — bkz. FieldElement.hMm. */
+  hMm?: number;
+  /** Genişlik oranı — bkz. FieldElement.wr. */
+  wr?: number;
   bold?: boolean;
   rot?: CanvasRotation;
 }
@@ -212,6 +224,18 @@ export function validateCanvasLayout(
 
     if (el.font !== undefined && !FONTS.includes(el.font as string)) {
       bad(`'${el.id}' font geçersiz. İzinli: ${FONTS.join(", ")}`);
+    }
+    // Serbest metin boyutu YALNIZ metin tiplerinde (line/code128'in hMm'i farklı
+    // anlamda — kendi case'lerinde doğrulanır).
+    if (type === "field" || type === "text") {
+      if (el.hMm !== undefined) {
+        if (typeof el.hMm !== "number" || !Number.isFinite(el.hMm)) bad(`'${el.id}' hMm sayı olmalı`);
+        if ((el.hMm as number) < 1 || (el.hMm as number) > 30) bad(`'${el.id}' hMm 1-30 mm aralığında olmalı`);
+      }
+      if (el.wr !== undefined) {
+        if (typeof el.wr !== "number" || !Number.isFinite(el.wr)) bad(`'${el.id}' wr sayı olmalı`);
+        if ((el.wr as number) < 0.25 || (el.wr as number) > 4) bad(`'${el.id}' wr 0.25-4 aralığında olmalı (genişlik oranı)`);
+      }
     }
     if (el.rot !== undefined && !ROTS.includes(el.rot as number)) {
       bad(`'${el.id}' rot geçersiz. İzinli: ${ROTS.join(", ")}`);

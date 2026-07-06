@@ -29,17 +29,24 @@ function textDiv(
   el: FieldElement | TextElement,
   content: string,
 ): string {
-  const font = FONT_PT[el.font ?? "md"] ?? "10pt";
+  // SERBEST boyut (hMm) → mm cinsinden birebir; yoksa eski 4-kademe pt eşlemesi.
+  const fontSize = el.hMm != null ? `${el.hMm}mm` : (FONT_PT[el.font ?? "md"] ?? "10pt");
   const parts = [
     "position:absolute",
     `left:${el.x}mm`,
     `top:${el.y}mm`,
-    `font-size:${font}`,
+    `font-size:${fontSize}`,
     "white-space:nowrap",
-    "line-height:1.1",
+    el.hMm != null ? "line-height:1" : "line-height:1.1",
   ];
   if (el.bold) parts.push("font-weight:700");
-  if (el.rot) parts.push(`transform:rotate(${el.rot}deg)`, "transform-origin:top left");
+  const transforms: string[] = [];
+  if (el.rot) transforms.push(`rotate(${el.rot}deg)`);
+  const wr = el.wr ?? 1;
+  if (el.hMm != null && wr !== 1) transforms.push(`scaleX(${wr})`);
+  if (transforms.length > 0) {
+    parts.push(`transform:${transforms.join(" ")}`, "transform-origin:top left");
+  }
   return `<div style="${parts.join(";")}">${escapeHtml(content)}</div>`;
 }
 

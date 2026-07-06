@@ -10,9 +10,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import type { CanvasFontSize, CanvasRotation, LabelElement } from "@/types/label-canvas";
+import type { CanvasRotation, LabelElement } from "@/types/label-canvas";
 import { elementTypeLabels, skippedLanguages } from "@/types/label-canvas";
 import type { UnifiedCatalogField } from "@/services/labelTemplateService";
+import { FONT_MM } from "./canvas-model";
 
 interface Props {
   element: LabelElement | null;
@@ -23,7 +24,6 @@ interface Props {
   onRemove: () => void;
 }
 
-const FONTS: CanvasFontSize[] = ["sm", "md", "lg", "xl"];
 const ROTS: CanvasRotation[] = [0, 90, 180, 270];
 
 function NumField({ label, value, onChange, min = 0, max = 500, step = 0.5 }: {
@@ -114,30 +114,36 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
       )}
 
       {isText && (
-        <div className="grid grid-cols-3 items-end gap-2">
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground">Font</Label>
-            <Select value={el.font ?? "md"} onValueChange={(v) => onChange({ font: v as CanvasFontSize } as Partial<LabelElement>)}>
-              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {FONTS.map((f) => <SelectItem key={f} value={f} className="text-xs">{f}</SelectItem>)}
-              </SelectContent>
-            </Select>
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <NumField label="Yükseklik (mm)" min={1} max={30} step={0.5}
+              value={el.hMm ?? FONT_MM[el.font ?? "md"].h * (el.bold ? 2 : 1)}
+              onChange={(v) => onChange({ hMm: Math.max(1, Math.min(30, v)) } as Partial<LabelElement>)} />
+            <NumField label="Genişlik oranı" min={0.25} max={4} step={0.05}
+              value={el.wr ?? 1}
+              onChange={(v) => onChange({ wr: Math.max(0.25, Math.min(4, v)), ...(el.hMm == null ? { hMm: FONT_MM[el.font ?? "md"].h * (el.bold ? 2 : 1) } : {}) } as Partial<LabelElement>)} />
           </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground">Dönüş</Label>
-            <Select value={String(el.rot ?? 0)} onValueChange={(v) => onChange({ rot: Number(v) as CanvasRotation } as Partial<LabelElement>)}>
-              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {ROTS.map((r) => <SelectItem key={r} value={String(r)} className="text-xs">{r}°</SelectItem>)}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 items-end gap-2">
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Dönüş</Label>
+              <Select value={String(el.rot ?? 0)} onValueChange={(v) => onChange({ rot: Number(v) as CanvasRotation } as Partial<LabelElement>)}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ROTS.map((r) => <SelectItem key={r} value={String(r)} className="text-xs">{r}°</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <label className="flex h-7 items-center gap-1.5 text-xs">
+              <Checkbox checked={el.bold ?? false} onCheckedChange={(v) => onChange({ bold: v === true } as Partial<LabelElement>)} />
+              Kalın{el.hMm != null ? " (HTML)" : ""}
+            </label>
           </div>
-          <label className="flex h-7 items-center gap-1.5 text-xs">
-            <Checkbox checked={el.bold ?? false} onCheckedChange={(v) => onChange({ bold: v === true } as Partial<LabelElement>)} />
-            Kalın
-          </label>
-        </div>
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            Serbest boyut: ZPL/HTML birebir basar; PPLA/PPLB (bitmap font) en yakın
+            basılabilir kombinasyona oturur. Genişlik oranı dar/geniş — bitmap'te
+            "ince/kalın" görünümü de bu verir. Köşe tutamacı: dikey=yükseklik, yatay=oran.
+          </p>
+        </>
       )}
 
       {el.type === "qr" && (

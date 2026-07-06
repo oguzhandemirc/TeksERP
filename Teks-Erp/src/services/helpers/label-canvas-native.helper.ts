@@ -23,6 +23,7 @@ import {
   clampCopies,
   mmToDots,
   resolveQrScale,
+  resolveEplTextStyle,
   EPL_FONT,
 } from "./native-label.shared";
 import { fieldDisplayValue } from "./label-field-values";
@@ -101,10 +102,18 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
       case "text": {
         const text = elementText(el, payload);
         if (!text) break;
-        const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
-        const mul = el.bold ? 2 : 1;
         const rotCode = (el.rot ?? 0) / 90;
-        lines.push(`A${x},${y},${rotCode},${font.code},${mul},${mul},N,"${eplData(text)}"`);
+        if (el.hMm != null) {
+          // SERBEST boyut: hedef mm → en yakın (font, çarpan) kombinasyonu;
+          // wr yatay çarpana biner (EPL2 güvenli aralık maxMul=6).
+          const st = resolveEplTextStyle(d(el.hMm), el.wr ?? 1, 6);
+          lines.push(`A${x},${y},${rotCode},${st.code},${st.hmul},${st.vmul},N,"${eplData(text)}"`);
+        } else {
+          // ESKİ 4-kademe yol (bayt-uyum): bold = her iki çarpan ×2.
+          const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
+          const mul = el.bold ? 2 : 1;
+          lines.push(`A${x},${y},${rotCode},${font.code},${mul},${mul},N,"${eplData(text)}"`);
+        }
         break;
       }
       case "qr": {
@@ -177,9 +186,16 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
       case "text": {
         const text = elementText(el, payload);
         if (!text) break;
-        const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
-        const mult = el.bold ? "22" : "11";
-        lines.push(`${dplRot(el.rot)}${font.code}${mult}000${pad4(row)}${pad4(col)}${cleanCtl(text)}`);
+        if (el.hMm != null) {
+          // SERBEST boyut — DPL çarpanları tek hane (1-9).
+          const st = resolveEplTextStyle(d(el.hMm), el.wr ?? 1, 9);
+          lines.push(`${dplRot(el.rot)}${st.code}${st.hmul}${st.vmul}000${pad4(row)}${pad4(col)}${cleanCtl(text)}`);
+        } else {
+          // ESKİ 4-kademe yol (bayt-uyum).
+          const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
+          const mult = el.bold ? "22" : "11";
+          lines.push(`${dplRot(el.rot)}${font.code}${mult}000${pad4(row)}${pad4(col)}${cleanCtl(text)}`);
+        }
         break;
       }
       case "qr": {
@@ -251,10 +267,18 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
       case "text": {
         const text = elementText(el, payload);
         if (!text) break;
-        const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
-        const mul = el.bold ? 2 : 1;
         const rot = ZPL_ROT[el.rot ?? 0] ?? "N";
-        lines.push(`^FO${x},${y}^A0${rot},${font.h * mul},${font.w * mul}^FD${zplData(text)}^FS`);
+        if (el.hMm != null) {
+          // ZPL ^A0 tam ölçeklenebilir — hedef mm BİREBİR basılır; wr genişliğe.
+          const h = Math.max(4, d(el.hMm));
+          const w = Math.max(3, Math.round(h * 0.6 * (el.wr ?? 1)));
+          lines.push(`^FO${x},${y}^A0${rot},${h},${w}^FD${zplData(text)}^FS`);
+        } else {
+          // ESKİ 4-kademe yol (bayt-uyum).
+          const font = EPL_FONT[el.font ?? "md"] ?? EPL_FONT.md;
+          const mul = el.bold ? 2 : 1;
+          lines.push(`^FO${x},${y}^A0${rot},${font.h * mul},${font.w * mul}^FD${zplData(text)}^FS`);
+        }
         break;
       }
       case "qr": {

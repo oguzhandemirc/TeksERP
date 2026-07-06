@@ -106,16 +106,20 @@ function ElementBody({ el, zoom }: { el: LabelElement; zoom: number }) {
   switch (el.type) {
     case "field":
     case "text": {
-      const font = FONT_MM[el.font ?? "md"];
-      const mul = el.bold ? 2 : 1;
+      // Serbest boyut (hMm) varsa birebir; yoksa eski 4-kademe eşleniği.
+      const hMm = el.hMm ?? FONT_MM[el.font ?? "md"].h * (el.bold ? 2 : 1);
+      const wr = el.hMm != null ? (el.wr ?? 1) : 1;
       const text = el.type === "text" ? el.text : `${el.label?.trim() ? `${el.label}: ` : ""}‹${el.bind}›`;
       const rot = el.rot ?? 0;
+      const transforms: string[] = [];
+      if (rot) transforms.push(`rotate(${rot}deg)`);
+      if (wr !== 1) transforms.push(`scaleX(${wr})`);
       return (
         <div
           className={cn("whitespace-nowrap font-mono leading-none text-foreground", el.bold && "font-bold")}
           style={{
-            fontSize: Math.max(7, font.h * mul * zoom * 0.85),
-            transform: rot ? `rotate(${rot}deg)` : undefined,
+            fontSize: Math.max(7, hMm * zoom * 0.85),
+            transform: transforms.length ? transforms.join(" ") : undefined,
             transformOrigin: "top left",
           }}
         >

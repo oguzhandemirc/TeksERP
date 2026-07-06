@@ -30,7 +30,15 @@ export interface FieldElement extends ElementBase {
   type: "field";
   bind: string;
   label?: string;
+  /** ESKİ 4-kademe (geri uyum) — hMm doluysa yok sayılır. */
   font?: CanvasFontSize;
+  /** SERBEST yükseklik (mm, 1-30): ZPL/HTML birebir; PPLA/PPLB en yakın
+   *  basılabilir kombinasyona oturur (5 font × çarpanlar — eski 4 kademeden
+   *  çok daha granüler). */
+  hMm?: number;
+  /** Genişlik oranı (0.25-4, 1=doğal) — dar/geniş; bitmap'te "ince/kalın" görünüm. */
+  wr?: number;
+  /** hMm YOKKEN eski anlam (2x çarpan); hMm doluysa yalnız HTML kalınlığı. */
   bold?: boolean;
   rot?: CanvasRotation;
 }
@@ -39,6 +47,8 @@ export interface TextElement extends ElementBase {
   type: "text";
   text: string;
   font?: CanvasFontSize;
+  hMm?: number;
+  wr?: number;
   bold?: boolean;
   rot?: CanvasRotation;
 }

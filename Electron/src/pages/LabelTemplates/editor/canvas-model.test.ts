@@ -85,10 +85,21 @@ describe("applyResize", () => {
     expect(applyResize(el, 1, 1)).toEqual({ scale: 2 });
   });
 
-  it("metin: hedef yüksekliğe EN YAKIN font kademesi (serbest punto yok)", () => {
-    const el: TextElement = { id: "t", type: "text", text: "x", x: 0, y: 0, font: "sm" };
-    expect(applyResize(el, 30, 3.1)).toEqual({ font: "xl" });
-    expect(applyResize(el, 30, 1.4)).toBeNull(); // zaten sm — değişiklik yok
+  it("metin: SERBEST boyut — dikey=hMm (0.5 snap), yatay=genişlik oranı", () => {
+    const el: TextElement = { id: "t", type: "text", text: "ÖRNEK YAZI", x: 0, y: 0 };
+    // hedef 5.2mm → 5mm; doğal genişlik 10 kr × 5 × 0.6 = 30 → oran değişmez
+    expect(applyResize(el, 30, 5.2)).toEqual({ hMm: 5 });
+    // yatay iki katına çek → wr 2
+    expect(applyResize({ ...el, hMm: 5 }, 60, 5)).toEqual({ wr: 2 });
+    // değişiklik yoksa null
+    expect(applyResize({ ...el, hMm: 5, wr: 2 }, 60, 5)).toBeNull();
+  });
+
+  it("metin: hMm/wr sınır kutusuna birebir yansır", () => {
+    const el: TextElement = { id: "t", type: "text", text: "AB", x: 0, y: 0, hMm: 8, wr: 2 };
+    const b = estimateBounds(el, CANVAS);
+    expect(b.h).toBe(8);
+    expect(b.w).toBeCloseTo(2 * 8 * 0.6 * 2);
   });
 });
 

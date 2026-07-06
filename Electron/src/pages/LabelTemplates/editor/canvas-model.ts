@@ -62,11 +62,19 @@ export function estimateBounds(el: LabelElement, canvas: { widthMm: number; heig
   switch (el.type) {
     case "field":
     case "text": {
-      const font = FONT_MM[el.font ?? "md"];
-      const mul = el.bold ? 2 : 1;
       const sample = el.type === "text" ? el.text : `${el.label ? `${el.label}: ` : ""}Örnek Değer`;
-      const w = Math.max(8, sample.length * font.w * mul * 0.9);
-      const h = font.h * mul;
+      let w: number;
+      let h: number;
+      if (el.hMm != null) {
+        // SERBEST boyut: yükseklik birebir; genişlik ≈ karakter × 0.6h × oran.
+        h = el.hMm;
+        w = Math.max(4, sample.length * el.hMm * 0.6 * (el.wr ?? 1));
+      } else {
+        const font = FONT_MM[el.font ?? "md"];
+        const mul = el.bold ? 2 : 1;
+        w = Math.max(8, sample.length * font.w * mul * 0.9);
+        h = font.h * mul;
+      }
       const rot = el.rot ?? 0;
       return rot === 90 || rot === 270
         ? { x: el.x, y: el.y, w: h, h: w }
@@ -140,19 +148,18 @@ export function applyResize(
     }
     case "field":
     case "text": {
-      // Native bitmap font: yalnız 4 kademe (+bold=2x). Hedef yüksekliğe en yakın
-      // kademe seçilir — serbest punto basılamaz, dürüst davranış budur.
-      const mul = el.bold ? 2 : 1;
-      let best: CanvasFontSize = "sm";
-      let bestDiff = Number.POSITIVE_INFINITY;
-      for (const f of Object.keys(FONT_MM) as CanvasFontSize[]) {
-        const diff = Math.abs(FONT_MM[f].h * mul - h);
-        if (diff < bestDiff) {
-          bestDiff = diff;
-          best = f;
-        }
-      }
-      return best === (el.font ?? "md") ? null : { font: best };
+      // SERBEST sistem: dikey sürükleme yüksekliği (mm, 0.5 snap), yatay
+      // sürükleme genişlik oranını (0.05 adım) ayarlar. ZPL/HTML birebir basar;
+      // PPLA/PPLB baskıda en yakın basılabilir kombinasyona oturur.
+      const sample = el.type === "text" ? el.text : `${el.label ? `${el.label}: ` : ""}Örnek Değer`;
+      const patch: { hMm?: number; wr?: number } = {};
+      const hNew = clamp(snap(h), 1, 30);
+      const hCur = el.hMm ?? FONT_MM[el.font ?? "md"].h * (el.bold ? 2 : 1);
+      if (hNew !== hCur) patch.hMm = hNew;
+      const natural = Math.max(4, sample.length * hNew * 0.6);
+      const wrNew = clamp(Math.round((w / natural) / 0.05) * 0.05, 0.25, 4);
+      if (Math.abs(wrNew - (el.wr ?? 1)) >= 0.05) patch.wr = wrNew;
+      return patch.hMm !== undefined || patch.wr !== undefined ? patch : null;
     }
   }
 }

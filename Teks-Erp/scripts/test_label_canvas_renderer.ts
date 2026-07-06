@@ -95,6 +95,24 @@ async function main() {
   check("PPLA: Code128 + okunur satır (mw yok → 22)", /1e22\d{4}\d{4}\d{4}TEKS/.test(ppla) && /1111000\d{8}TEKS/.test(ppla));
   check("ZPL: Code128 human=Y (mw yok → ^BY emit edilmez)", /\^BCN,72,Y,N,N/.test(zpl) && !zpl.includes("^BY"));
 
+  // --- SERBEST metin boyutu (hMm/wr): ZPL/HTML birebir, PPLA/PPLB en yakın kombinasyon ---
+  const freeLayout: CanvasLayout = {
+    v: 1,
+    elements: [
+      { id: "qr0", type: "qr", x: 3, y: 30, scale: 4 },
+      { id: "big", type: "text", text: "KALIN", x: 3, y: 3, hMm: 6, wr: 2 },
+    ],
+  };
+  const pplbFree = emitCanvasPplb(mk({ layout: freeLayout }));
+  const pplaFree = emitCanvasPpla(mk({ layout: freeLayout }));
+  const zplFree = emitCanvasZpl(mk({ layout: freeLayout }));
+  const htmlFree = buildCanvasLabelHtml({ ...mk({ layout: freeLayout }), barcodeSvg: "<svg viewBox=\"0 0 1 1\"></svg>", qrSvg: "<svg viewBox=\"0 0 1 1\"></svg>" });
+  // 6mm=48 dot → font5 (32×48) ×1 birebir; wr=2 → yatay çarpan 2.
+  check("PPLB serbest: font5×(h2,v1) seçildi", /A24,24,0,5,2,1,N,"KALIN"/.test(pplbFree));
+  check("PPLA serbest: 1 5 2 1 kaydı", /^1521000\d{8}KALIN/m.test(pplaFree));
+  check("ZPL serbest: ^A0N,48,58 (birebir + oran)", /\^A0N,48,58\^FDKALIN\^FS/.test(zplFree));
+  check("HTML serbest: font-size 6mm + scaleX(2)", htmlFree.includes("font-size:6mm") && htmlFree.includes("scaleX(2)"));
+
   // --- Modül kalınlığı (mw): üç dilde orantılı genişletme ---
   const mwLayout: CanvasLayout = {
     v: 1,
