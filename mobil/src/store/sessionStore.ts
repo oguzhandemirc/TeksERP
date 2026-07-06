@@ -17,6 +17,7 @@ import {
   type ActiveWorkSession,
   type LastPlace,
 } from '../services/workSession.service';
+import { useSessionEntriesStore } from './sessionEntriesStore';
 
 interface SessionState {
   active: ActiveWorkSession | null;
@@ -85,5 +86,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (get().active) set({ active: null });
   },
 
-  reset: () => set({ active: null, lastPlace: null, isLoaded: false }),
+  reset: () => {
+    // "Bu oturumda girilenler" listeleri de oturumla ölür (çıkış/operatör değişimi).
+    useSessionEntriesStore.getState().clearAll();
+    set({ active: null, lastPlace: null, isLoaded: false });
+  },
 }));
