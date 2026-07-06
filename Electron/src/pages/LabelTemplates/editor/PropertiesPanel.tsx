@@ -213,6 +213,23 @@ export function PropertiesPanel({ element: el, multiCount = 0, catalog, onChange
             <NumField label="Bant genişliği (mm)" value={el.wMm ?? 9} onChange={(v) => onChange({ wMm: v } as Partial<LabelElement>)} />
             <NumField label="Bant boyu (mm)" value={el.hMm ?? 40} onChange={(v) => onChange({ hMm: v } as Partial<LabelElement>)} />
           </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground">Değer dönüşü</Label>
+            <Select value={String(el.rot ?? 90)} onValueChange={(v) => onChange({ rot: Number(v) as CanvasRotation } as Partial<LabelElement>)}>
+              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {ROTS.map((r) => (
+                  <SelectItem key={r} value={String(r)} className="text-xs">
+                    {r}°{r === 90 ? " (dikey ↑)" : r === 0 ? " (yatay →)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              Dikey bant için dar+uzun (örn. 9×40), yatay bant için geniş+kısa (örn. 40×9)
+              boyut + uygun dönüşü seçin.
+            </p>
+          </div>
           <p className="text-[10px] leading-snug text-muted-foreground">
             PPLB (saha yazıcınız) / ZPL / HTML: <strong>siyah zemin + beyaz değer</strong>.
             PPLA (Datamax): ters-renk DPL'de güvenilmez → çerçeveli (kutu + siyah dikey

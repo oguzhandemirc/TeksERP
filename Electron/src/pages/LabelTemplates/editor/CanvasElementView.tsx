@@ -87,7 +87,7 @@ export function CanvasElementView({ element: el, canvas, zoom, selected, showHan
                     : "Sürükle → boyutlandır"
             }
           />
-          {(el.type === "field" || el.type === "text") && (
+          {(el.type === "field" || el.type === "text" || el.type === "lengthBanner") && (
             <span
               onPointerDown={(e) => onHandlePointerDown(e, el.id, "rotate")}
               className="absolute -top-5 left-1/2 flex h-4 w-4 -translate-x-1/2 cursor-grab items-center justify-center rounded-full border border-primary bg-background shadow"
@@ -161,8 +161,13 @@ function ElementBody({ el, zoom }: { el: LabelElement; zoom: number }) {
       );
     case "lengthBanner":
       return (
-        <div className="flex h-full w-full items-center justify-center bg-foreground text-background">
-          <span className="rotate-90 whitespace-nowrap font-mono text-[8px] font-bold">METRAJ</span>
+        <div className="flex h-full w-full items-center justify-center overflow-hidden bg-foreground text-background">
+          <span
+            className="whitespace-nowrap font-mono text-[8px] font-bold"
+            style={{ transform: `rotate(${el.rot ?? 90}deg)` }}
+          >
+            METRAJ
+          </span>
         </div>
       );
   }

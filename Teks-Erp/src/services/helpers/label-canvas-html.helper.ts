@@ -120,19 +120,21 @@ export function buildCanvasLabelHtml(input: CanvasHtmlInput): string {
         break;
       case "lengthBanner": {
         // SİYAH ZEMİN / BEYAZ DEĞER — dolgulu siyah kutu + beyaz döndürülmüş değer
-        // (PPLB/ZPL ile aynı görünüm). Glif yüksekliği native ile aynı: xl(24 dot)
-        // × band-genişliği çarpanı.
+        // (PPLB/ZPL ile aynı görünüm). Değer ROT ile döner; glif yüksekliği metne-DİK
+        // eksene oturur (native ile aynı: xl 24 dot × çarpan).
         const dv = fieldDisplayValue(payload, "lengthMeters");
         if (!dv.present) break;
+        const rot = el.rot ?? 90;
         const w = el.wMm ?? 10;
         const h = el.hMm ?? Math.max(10, format.heightMm - 2 * el.y);
         const dotsPerMm = (format.dpi || 203) / 25.4;
-        const mul = Math.max(1, Math.min(4, Math.round((w * dotsPerMm) / 24)));
+        const crossMm = rot === 90 || rot === 270 ? w : h;
+        const mul = Math.max(1, Math.min(4, Math.round((crossMm * dotsPerMm) / 24)));
         const glyphMm = (24 * mul) / dotsPerMm;
         const val = asciiFold(String(payload.lengthMeters));
         els.push(
           `<div style="position:absolute;left:${el.x}mm;top:${el.y}mm;width:${w}mm;height:${h}mm;background:#000;color:#fff;display:flex;align-items:center;justify-content:center">` +
-            `<span style="transform:rotate(90deg);font-family:'Courier New',monospace;font-size:${glyphMm.toFixed(2)}mm;line-height:1;white-space:nowrap">${escapeHtml(val)}</span></div>`,
+            `<span style="transform:rotate(${rot}deg);font-family:'Courier New',monospace;font-size:${glyphMm.toFixed(2)}mm;line-height:1;white-space:nowrap">${escapeHtml(val)}</span></div>`,
         );
         break;
       }

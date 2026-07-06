@@ -94,8 +94,12 @@ fark glif piksel şekilleri (bitmap kafa vs vektör motor) — boyut/konum/metin
   manuel olarak barkod ALTINDA ORTALANIR (code128WidthDots ile).
 - **lengthBanner**: PPLB (saha yazıcısı) / ZPL / HTML'de siyah zemin + beyaz değer
   (reverse). PPLA/DPL'de ters-renk cihaza bağlı ve güvenilmez → değer siyah-üstü-siyah
-  görünmez riskine düşmemek için ÇERÇEVELİ (kutu + siyah dikey değer). Fiziksel
-  Argox-PPLA testinde reverse çalışırsa PPLA da dolguluya geçirilebilir (tek dal).
+  görünmez riskine düşmemek için ÇERÇEVELİ (kutu + siyah değer). Fiziksel Argox-PPLA
+  testinde reverse çalışırsa PPLA da dolguluya geçirilebilir (tek dal).
+- **Bant ÇEVRİLEBİLİR** (`rot` 0/90/180/270; varsayılan 90 dikey↑): değer 90° adımlarla
+  döner (bannerGeom top-sol anchor + CW merkezleme; dört dil aynı model). Dikey bant =
+  dar+uzun boyut (9×40) rot 90; yatay bant = geniş+kısa (40×9) rot 0. Yanlış şekilde
+  metin bantı taşarsa koordinat 0'a kıstırılır (etikette kalır).
 - Yapısal gerçekler: kanvas yolunda dört dil de ASCII basar; EPL_FONT tablosu
   **203dpi'a gömülü** (saha parkı kabulü — 300dpi cihaz gelirse font/mm
   ölçekleme borcu). PPLA ısı/yoğunluk (H10/D8) fiziksel testle doğrulanacak.

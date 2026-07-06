@@ -84,6 +84,8 @@ export interface LengthBannerElement extends ElementBase {
   type: "lengthBanner";
   wMm?: number;
   hMm?: number;
+  /** Değerin dönüşü (0/90/180/270). Yok → 90 (dikey bant). */
+  rot?: CanvasRotation;
 }
 
 export type LabelElement =

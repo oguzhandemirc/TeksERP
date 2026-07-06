@@ -125,8 +125,10 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint }: Props) {
     const b = estimateBounds(el, canvas);
     const deg = (Math.atan2(at.y - (el.y + b.h / 2), at.x - (el.x + b.w / 2)) * 180) / Math.PI + 90;
     const rot = snapRotation(deg);
-    if ((el.type === "field" || el.type === "text") && rot !== (el.rot ?? 0)) {
-      state.updateElementLive(drag.id, { rot });
+    if (el.type === "field" || el.type === "text") {
+      if (rot !== (el.rot ?? 0)) state.updateElementLive(drag.id, { rot });
+    } else if (el.type === "lengthBanner") {
+      if (rot !== (el.rot ?? 90)) state.updateElementLive(drag.id, { rot });
     }
   };
 

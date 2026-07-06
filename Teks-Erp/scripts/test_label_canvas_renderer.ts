@@ -83,7 +83,7 @@ async function main() {
   // Bant: PPLB/ZPL SİYAH ZEMİN + BEYAZ değer (ters); PPLA çerçeveli (DPL reverse yok).
   check("PPLB: banner SİYAH+beyaz (ters R + boşluk dolgu)", /A775,77,1,4,3,3,R,"  320  "/.test(pplb));
   check("ZPL: line dolu ^GB", /\^GB719,6,6,B/.test(zpl));
-  check("ZPL: banner SİYAH+beyaz (dolu ^GB + ^FR ters)", /\^FO703,24\^GB72,400,72,B\^FS/.test(zpl) && /\^FO703,77\^A0R,72,42\^FR\^FD  320  \^FS/.test(zpl));
+  check("ZPL: banner SİYAH+beyaz (dolu ^GB + ^FR ORTALANMIŞ değer)", /\^FO703,24\^GB72,400,72,B\^FS/.test(zpl) && /\^FO775,161\^A0R,72,42\^FR\^FD320\^FS/.test(zpl));
 
   // --- Metin/rotasyon/font ---
   check("PPLB: bold metin çarpan 2", /A240,24,0,3,2,2,N,"PATOS"/.test(pplb));
@@ -102,6 +102,21 @@ async function main() {
   check("PPLB: Code128 human=N + ortalanmış (171)", /B24,368,0,1,2,3,72,N,/.test(pplb) && /A171,448,0,1,1,1,N,"TEKS20260706AB12"/.test(pplb));
   check("PPLA: Code128 + okunur satır ORTALANMIŞ (0171)", /1e22\d{4}\d{4}\d{4}TEKS/.test(ppla) && /1111000\d{4}0171TEKS20260706AB12/.test(ppla));
   check("ZPL: Code128 interpretation=N + ortalanmış (139)", /\^BCN,72,N,N,N/.test(zpl) && /\^FO139,448\^A0N,20,12\^FDTEKS20260706AB12\^FS/.test(zpl) && !zpl.includes("^BY"));
+
+  // --- ÇEVRİLEBİLİR bant: rot metin yönünü döndürür (varsayılan 90 dikey) ---
+  const bnRot0: CanvasLayout = { v: 1, elements: [
+    { id: "q9", type: "qr", x: 3, y: 40, scale: 4 },
+    { id: "bn0", type: "lengthBanner", x: 30, y: 3, wMm: 40, hMm: 8, rot: 0 },
+  ] };
+  const pplbR0 = emitCanvasPplb(mk({ layout: bnRot0 }));
+  const zplR0 = emitCanvasZpl(mk({ layout: bnRot0 }));
+  const pplaR0 = emitCanvasPpla(mk({ layout: bnRot0 }));
+  // rot=0 → PPLB rotCode 0, ZPL ^A0N, PPLA rot öneki 1 (yatay metin).
+  check("bant rot=0: PPLB rotCode 0 (yatay)", /A\d+,\d+,0,4,\d,\d,R," *320 *"/.test(pplbR0));
+  check("bant rot=0: ZPL ^A0N (yatay)", /\^A0N,\d+,\d+\^FR\^FD320\^FS/.test(zplR0));
+  check("bant rot=0: PPLA rot öneki 1 (yatay)", /14\d\d000\d{8}320/.test(pplaR0));
+  // Varsayılan (rot yok) = 90 dikey — bayt-uyum (ana layout banner'ı).
+  check("bant rot yok → 90 dikey (PPLB rotCode 1)", /A\d+,\d+,1,4,\d,\d,R,/.test(pplb));
 
   // --- SERBEST metin boyutu (hMm/wr): ZPL/HTML birebir, PPLA/PPLB en yakın kombinasyon ---
   const freeLayout: CanvasLayout = {

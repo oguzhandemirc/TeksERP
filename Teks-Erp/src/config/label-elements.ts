@@ -110,6 +110,8 @@ export interface LengthBannerElement extends ElementBase {
   wMm?: number;
   /** Bant boyu (mm). Yok → tuval boyu − 2×y. */
   hMm?: number;
+  /** Değerin dönüşü (0/90/180/270). Yok → 90 (dikey bant, yukarı okunur). */
+  rot?: CanvasRotation;
 }
 
 export type LabelElement =

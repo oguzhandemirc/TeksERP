@@ -62,18 +62,37 @@ function elementText(el: FieldElement | TextElement, payload: LabelPayload): str
   return label ? `${label}: ${dv.value}` : dv.value;
 }
 
-/** ORTAK PAYDA bant geometrisi — dört dil AYNI çerçeveli bandı basar (dolgulu
- *  sürüm PPLA'da fiziksel imkânsız → ortak görünüm çerçeve + siyah dikey değer).
- *  Glif çarpanı band genişliğine oturur; değer dikeyde ortalanır; anchor sağ
- *  hiza (rot-90 blok sola+aşağı uzar — üç dilin önizleme modeliyle aynı). */
-function bannerGeom(colDots: number, rowDots: number, wDots: number, hDots: number, valLen: number) {
-  const mul = Math.max(1, Math.min(4, Math.round(wDots / EPL_FONT.xl.h)));
+/** ÇEVRİLEBİLİR bant geometrisi — value metni ROT (0/90/180/270) ile döner.
+ *  Glif yüksekliği bandın metne-DİK (cross) eksenine oturur; metin bant içinde
+ *  ORTALANIR. origin(len): top-sol anchor + CW dönüşle merkezlenmiş köşe (üç native
+ *  dil + DPL aynı model). pad: PPLB'nin kendi-siyah-bandı için boşluk dolgusu. */
+function bannerGeom(colDots: number, rowDots: number, wDots: number, hDots: number, rot: number, valLen: number) {
+  const vertical = rot === 90 || rot === 270;
+  const cross = vertical ? wDots : hDots; // glif yüksekliği bunu doldurur
+  const along = vertical ? hDots : wDots; // metin ilerlemesi bunu doldurur
+  const mul = Math.max(1, Math.min(4, Math.round(cross / EPL_FONT.xl.h)));
   const gh = EPL_FONT.xl.h * mul;
   const gw = EPL_FONT.xl.w * mul;
-  const textLen = valLen * gw;
-  const ty = rowDots + Math.max(0, Math.round((hDots - textLen) / 2));
-  const tx = colDots + Math.round((wDots + gh) / 2);
-  return { mul, gh, gw, ty, tx };
+  const targetChars = Math.max(valLen, Math.floor((along * 0.85) / gw));
+  const pad = Math.max(0, Math.floor((targetChars - valLen) / 2));
+  const cx = colDots + wDots / 2;
+  const cy = rowDots + hDots / 2;
+  /** `len` karakterlik bloğun (top-sol anchor, CW dönüş) merkeze oturan köşesi. */
+  const origin = (len: number) => {
+    const W = len * gw; // ilerleme (advance)
+    const H = gh; // glif yüksekliği
+    let ox: number, oy: number;
+    switch (rot) {
+      case 0:   ox = cx - W / 2; oy = cy - H / 2; break;
+      case 90:  ox = cx + H / 2; oy = cy - W / 2; break;
+      case 180: ox = cx + W / 2; oy = cy + H / 2; break;
+      default:  ox = cx - H / 2; oy = cy + W / 2; break; // 270
+    }
+    // Yanlış bant şekli (örn. kısa banta dikey metin) negatife düşürebilir →
+    // etikette kal (0'a kıstır); değer bantı taşarsa kullanıcı boyut/dönüş ayarlar.
+    return { ox: Math.max(0, Math.round(ox)), oy: Math.max(0, Math.round(oy)) };
+  };
+  return { mul, gh, gw, pad, paddedLen: valLen + 2 * pad, origin };
 }
 
 /** Code128 sembol genişliği (dot) — okunur satırı barkod ALTINDA ortalamak için.
@@ -159,20 +178,17 @@ export function emitCanvasPplb({ payload, format, copies, layout }: CanvasRender
       }
       case "lengthBanner": {
         // SİYAH ZEMİN / BEYAZ DEĞER — ters (R) metin + boşluk dolgusu kendi siyah
-        // bandını çizer (Argox XOR gotcha'sı: ayrı LO kutu YOK). PPLB gerçek saha
-        // yazıcısı; reverse güvenilir.
+        // bandını çizer (Argox XOR gotcha'sı: ayrı LO kutu YOK). Metin ROT ile döner.
         const dv = fieldDisplayValue(payload, "lengthMeters");
         if (!dv.present) break;
+        const rot = el.rot ?? 90;
         const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * y;
         const val = eplData(String(payload.lengthMeters));
-        const mul = Math.max(1, Math.min(4, Math.round(w / EPL_FONT.xl.h)));
-        const adv = EPL_FONT.xl.w * mul; // döndürülmüş glif ilerlemesi
-        const target = Math.max(val.length, Math.floor((h * 0.85) / adv));
-        const pad = Math.max(0, Math.floor((target - val.length) / 2));
-        const padded = " ".repeat(pad) + val + " ".repeat(pad);
-        const ty = y + Math.max(0, Math.round((h - padded.length * adv) / 2));
-        lines.push(`A${x + w},${ty},1,${EPL_FONT.xl.code},${mul},${mul},R,"${padded}"`);
+        const g = bannerGeom(x, y, w, h, rot, val.length);
+        const padded = " ".repeat(g.pad) + val + " ".repeat(g.pad);
+        const o = g.origin(g.paddedLen);
+        lines.push(`A${o.ox},${o.oy},${rot / 90},${EPL_FONT.xl.code},${g.mul},${g.mul},R,"${padded}"`);
         break;
       }
     }
@@ -258,16 +274,18 @@ export function emitCanvasPpla({ payload, format, copies, layout }: CanvasRender
       case "lengthBanner": {
         // PPLA/DPL İSTİSNASI: siyah zemin/beyaz yazı (ters-renk) DPL'de güvenilir
         // DEĞİL (Datamax reverse cihaza bağlı). Değer görünmez (siyah-üstü-siyah)
-        // riskine düşmemek için PPLA'da ÇERÇEVELİ basılır (kutu + siyah dikey
-        // değer, her zaman okunur). PPLB/ZPL/HTML dolgulu siyah + beyaz değer.
+        // riskine düşmemek için PPLA'da ÇERÇEVELİ basılır (kutu + siyah değer, her
+        // zaman okunur). Değer ROT ile döner. PPLB/ZPL/HTML dolgulu siyah + beyaz.
         const dv = fieldDisplayValue(payload, "lengthMeters");
         if (!dv.present) break;
+        const rot = el.rot ?? 90;
         const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * row;
         lines.push(`1X11000${pad4(row)}${pad4(col)}B${pad4(w)}${pad4(h)}${pad4(2)}${pad4(2)}`);
         const val = cleanCtl(String(payload.lengthMeters));
-        const g = bannerGeom(col, row, w, h, val.length);
-        lines.push(`2${EPL_FONT.xl.code}${g.mul}${g.mul}000${pad4(g.ty)}${pad4(g.tx)}${val}`);
+        const g = bannerGeom(col, row, w, h, rot, val.length);
+        const o = g.origin(val.length);
+        lines.push(`${rot / 90 + 1}${EPL_FONT.xl.code}${g.mul}${g.mul}000${pad4(o.oy)}${pad4(o.ox)}${val}`);
         break;
       }
     }
@@ -358,20 +376,17 @@ export function emitCanvasZpl({ payload, format, copies, layout }: CanvasRenderI
       }
       case "lengthBanner": {
         // SİYAH ZEMİN / BEYAZ DEĞER — ^GB dolu siyah kutu + ^FR (field reverse)
-        // döndürülmüş değer (glifler beyaza döner). Boşluk dolgusu bandı doldurur.
+        // ORTALANMIŞ değer (glifler beyaza döner). Değer ROT ile döner.
         const dv = fieldDisplayValue(payload, "lengthMeters");
         if (!dv.present) break;
+        const rot = el.rot ?? 90;
         const w = el.wMm != null ? d(el.wMm) : EPL_FONT.xl.h * BANNER_MUL;
         const h = el.hMm != null ? d(el.hMm) : d(format.heightMm) - 2 * y;
         const val = zplData(String(payload.lengthMeters));
-        const mul = Math.max(1, Math.min(4, Math.round(w / EPL_FONT.xl.h)));
-        const gh = EPL_FONT.xl.h * mul, gw = EPL_FONT.xl.w * mul;
-        const target = Math.max(val.length, Math.floor((h * 0.85) / gw));
-        const pad = Math.max(0, Math.floor((target - val.length) / 2));
-        const padded = " ".repeat(pad) + val + " ".repeat(pad);
-        const ty = y + Math.max(0, Math.round((h - padded.length * gw) / 2));
-        lines.push(`^FO${x},${y}^GB${w},${h},${w},B^FS`); // dolu siyah zemin (t=w)
-        lines.push(`^FO${x},${ty}^A0R,${gh},${gw}^FR^FD${padded}^FS`); // ters (beyaz) değer
+        const g = bannerGeom(x, y, w, h, rot, val.length);
+        const o = g.origin(val.length);
+        lines.push(`^FO${x},${y}^GB${w},${h},${Math.min(w, h)},B^FS`); // dolu siyah zemin
+        lines.push(`^FO${o.ox},${o.oy}^A0${ZPL_ROT[rot] ?? "R"},${g.gh},${g.gw}^FR^FD${val}^FS`);
         break;
       }
     }
