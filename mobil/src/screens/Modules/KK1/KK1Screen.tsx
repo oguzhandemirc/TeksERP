@@ -2234,29 +2234,33 @@ function RollListItem({
       ]}
       elevation={1}
     >
-      {/* Satır 1: top adı + kod (sol) — aksiyonlar (sağda) */}
+      {/* Satır 1: SOL blok = ad (tam genişlik, kırpılmaz) + ALTINDA küçük barkod;
+          sağda aksiyonlar. Adla barkod aynı satırı paylaşmıyor → ikisi de okunur.
+          İki ince metin, buton yüksekliğine sığar — satır YÜKSELMEZ. */}
       <View style={[styles.recentItemHeader, compactLayout && { gap: 4 }]}>
-        <Text
-          style={[
-            styles.recentItemName,
-            isInactive && styles.recentBarcodeScrapped,
-            compactLayout && { fontSize: 12 },
-          ]}
-          numberOfLines={1}
-        >
-          {roll.item?.name ?? '—'}
-          {roll.color?.name ? ` · ${roll.color.name}` : ''}
-        </Text>
-        <Text
-          style={[
-            styles.recentBarcode,
-            isInactive && styles.recentBarcodeScrapped,
-            compactLayout && { fontSize: 11, paddingVertical: 0 },
-          ]}
-          numberOfLines={1}
-        >
-          {barcode}
-        </Text>
+        <View style={styles.recentHeadLeft}>
+          <Text
+            style={[
+              styles.recentItemName,
+              isInactive && styles.recentBarcodeScrapped,
+              compactLayout && { fontSize: 12 },
+            ]}
+            numberOfLines={1}
+          >
+            {roll.item?.name ?? '—'}
+            {roll.color?.name ? ` · ${roll.color.name}` : ''}
+          </Text>
+          <Text
+            style={[
+              styles.recentBarcodeSub,
+              isInactive && styles.recentBarcodeScrapped,
+              compactLayout && { fontSize: 10 },
+            ]}
+            numberOfLines={1}
+          >
+            {barcode}
+          </Text>
+        </View>
         <View style={styles.recentHeaderActions}>{renderActions(!compactLayout)}</View>
       </View>
       {/* Satır 2: boy · en · kalite · tarih (sol) — giriş yapan kişi (en sağ) */}
@@ -2623,19 +2627,9 @@ const styles = StyleSheet.create({
   // Tek-satır düzende sol blok: ad (2 satıra sarabilir) + altında küçük barkod.
   // flex:1 → uzun ürün adı, barkodla aynı satırı paylaşmak yerine tam genişlik alır.
   recentSingleLeft: { flex: 1, minWidth: 0, gap: 1 },
+  // Normal (2 katlı) düzenin satır-1 sol bloğu — aynı prensip.
+  recentHeadLeft: { flex: 1, minWidth: 0, gap: 1 },
   recentBarcodeSub: { fontFamily: 'monospace', fontSize: 11, color: '#64748b' },
-  recentBarcode: {
-    flexShrink: 1,
-    minWidth: 0,
-    fontFamily: 'monospace',
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0f172a',
-    backgroundColor: '#dcfce7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
   recentTime: { fontSize: 12, color: '#0d4a8fff' },
   recentTimeRight: { marginLeft: 'auto' },
   recentPrintBtn: { margin: 0, width: 35, height: 35 },
