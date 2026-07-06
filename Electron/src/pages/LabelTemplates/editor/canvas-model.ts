@@ -8,6 +8,7 @@
 import type {
   CanvasFontSize,
   CanvasLayout,
+  CanvasRotation,
   LabelElement,
   LabelElementType,
 } from "@/types/label-canvas";
@@ -93,6 +94,63 @@ let seq = 0;
 export function newElementId(type: LabelElementType): string {
   seq += 1;
   return `${type}-${Date.now().toString(36)}${seq}`;
+}
+
+/**
+ * Köşe tutamacıyla boyutlandırma — hedef kutu (mm) elemanın tipine çevrilir.
+ * Her tip "boyut"u farklı taşır: line/box/banner gerçek w/h; code128 yalnız bar
+ * yüksekliği; QR ayrık ölçek (2-15); metin 4 kademeli font (native bitmap font
+ * gerçeği — serbest punto YOK, en yakın kademeye oturur).
+ */
+export function applyResize(
+  el: LabelElement,
+  targetWmm: number,
+  targetHmm: number,
+): Partial<LabelElement> | null {
+  const w = Math.max(0.5, snap(targetWmm));
+  const h = Math.max(0.5, snap(targetHmm));
+  switch (el.type) {
+    case "line":
+      return { wMm: w, hMm: h };
+    case "box":
+      return { wMm: Math.max(2, w), hMm: Math.max(2, h) };
+    case "lengthBanner":
+      return { wMm: Math.max(3, w), hMm: Math.max(10, h) };
+    case "code128": {
+      // Sürüklenen kutu okunur satırı da içerir — bar yüksekliğine geri çevir.
+      const human = el.human !== false ? 3.5 : 0;
+      return { hMm: clamp(snap(h - human), 3, 40) };
+    }
+    case "qr": {
+      // Ayak izi = (modül+8)×scale/8 mm → hedef kenardan ölçek çöz (2-15 ayrık).
+      const side = Math.max(w, h);
+      const scale = clamp(Math.round((side * 8) / (qrModules(SAMPLE_BC_LEN) + 8)), 2, 15);
+      return { scale };
+    }
+    case "field":
+    case "text": {
+      // Native bitmap font: yalnız 4 kademe (+bold=2x). Hedef yüksekliğe en yakın
+      // kademe seçilir — serbest punto basılamaz, dürüst davranış budur.
+      const mul = el.bold ? 2 : 1;
+      let best: CanvasFontSize = "sm";
+      let bestDiff = Number.POSITIVE_INFINITY;
+      for (const f of Object.keys(FONT_MM) as CanvasFontSize[]) {
+        const diff = Math.abs(FONT_MM[f].h * mul - h);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          best = f;
+        }
+      }
+      return best === (el.font ?? "md") ? null : { font: best };
+    }
+  }
+}
+
+/** Döndürme tutamacı açısı → 90° adımlı rotasyon (yazıcı dillerinin sınırı:
+ *  PPLA/PPLB bitmap font + ZPL ^A0 yalnız N/R/I/B — serbest açı basılamaz). */
+export function snapRotation(deg: number): CanvasRotation {
+  const norm = ((Math.round(deg / 90) * 90) % 360 + 360) % 360;
+  return norm as CanvasRotation;
 }
 
 /** Palet fabrikası — tuvale tıklama noktasına makul varsayılanlarla eleman doğurur. */

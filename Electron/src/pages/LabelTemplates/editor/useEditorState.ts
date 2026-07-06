@@ -16,6 +16,8 @@ export interface EditorState {
   addElement: (el: LabelElement) => void;
   updateElement: (id: string, patch: Partial<LabelElement>) => void;
   moveElement: (id: string, x: number, y: number) => void;
+  /** Snapshot'sız canlı yama — tutamaç sürüklemesi (boyut/döndür) için. */
+  updateElementLive: (id: string, patch: Partial<LabelElement>) => void;
   removeElement: (id: string) => void;
   /** Kaydetten sonra çağrılır — dirty sıfırlanır. */
   markSaved: () => void;
@@ -58,6 +60,13 @@ export function useEditorState(): EditorState {
     setDirty(true);
   }, []);
 
+  // moveElement'in genel hali: tutamaç sürüklemesinde (boyut/döndür) her adımda
+  // SNAPSHOT ALMADAN yama uygular — undo noktası sürükleme başındaki commit'tir.
+  const updateElementLive = useCallback((id: string, patch: Partial<LabelElement>) => {
+    setEls((prev) => prev.map((e) => (e.id === id ? ({ ...e, ...patch } as LabelElement) : e)));
+    setDirty(true);
+  }, []);
+
   const removeElement = useCallback((id: string) => {
     commit((prev) => prev.filter((e) => e.id !== id));
     setSelectedId((s) => (s === id ? null : s));
@@ -89,6 +98,7 @@ export function useEditorState(): EditorState {
     addElement,
     updateElement,
     moveElement,
+    updateElementLive,
     removeElement,
     markSaved: () => setDirty(false),
     loadLayout,

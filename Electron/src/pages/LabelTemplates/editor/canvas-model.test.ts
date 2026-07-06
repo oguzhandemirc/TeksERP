@@ -1,13 +1,15 @@
 // Etiket Stüdyosu — kanvas model yardımcıları birim testleri
 import { describe, expect, it } from "vitest";
 import {
+  applyResize,
   estimateBounds,
   makeElement,
   qrSizeMm,
   snap,
+  snapRotation,
   starterLayout,
 } from "./canvas-model";
-import type { FieldElement, QrElement } from "@/types/label-canvas";
+import type { Code128Element, FieldElement, LineElement, QrElement, TextElement } from "@/types/label-canvas";
 
 const CANVAS = { widthMm: 100, heightMm: 60 };
 
@@ -58,6 +60,43 @@ describe("makeElement", () => {
       expect(el.bind).toBe("customerName");
       expect(el.label).toBe("Müşteri");
     }
+  });
+});
+
+describe("applyResize", () => {
+  it("line: w/h 0.5mm snap'li serbest boyut", () => {
+    const el: LineElement = { id: "l", type: "line", x: 0, y: 0, wMm: 10, hMm: 1 };
+    expect(applyResize(el, 40.26, 2.24)).toEqual({ wMm: 40.5, hMm: 2 });
+  });
+
+  it("code128: kutu yüksekliğinden okunur-satır payı düşülür + 3-40 clamp", () => {
+    const el: Code128Element = { id: "b", type: "code128", x: 0, y: 0, hMm: 9, human: true };
+    expect(applyResize(el, 50, 15.5)).toEqual({ hMm: 12 }); // 15.5 - 3.5
+    expect(applyResize(el, 50, 100)).toEqual({ hMm: 40 });
+  });
+
+  it("qr: hedef kenardan ayrık ölçek (2-15) çözülür", () => {
+    const el: QrElement = { id: "q", type: "qr", x: 0, y: 0, scale: 5 };
+    const target = qrSizeMm(8);
+    expect(applyResize(el, target, target)).toEqual({ scale: 8 });
+    expect(applyResize(el, 500, 500)).toEqual({ scale: 15 });
+    expect(applyResize(el, 1, 1)).toEqual({ scale: 2 });
+  });
+
+  it("metin: hedef yüksekliğe EN YAKIN font kademesi (serbest punto yok)", () => {
+    const el: TextElement = { id: "t", type: "text", text: "x", x: 0, y: 0, font: "sm" };
+    expect(applyResize(el, 30, 3.1)).toEqual({ font: "xl" });
+    expect(applyResize(el, 30, 1.4)).toBeNull(); // zaten sm — değişiklik yok
+  });
+});
+
+describe("snapRotation", () => {
+  it("en yakın 90° adıma oturur ve 0-270 normalize eder", () => {
+    expect(snapRotation(10)).toBe(0);
+    expect(snapRotation(80)).toBe(90);
+    expect(snapRotation(190)).toBe(180);
+    expect(snapRotation(-95)).toBe(270);
+    expect(snapRotation(350)).toBe(0);
   });
 });
 

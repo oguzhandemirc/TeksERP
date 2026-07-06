@@ -2,11 +2,13 @@
 // Etiket Stüdyosu — kanvas eleman görseli (yaklaşık; gerçek WYSIWYG backend'te)
 // =============================================================================
 
-import { QrCode, AlertTriangle } from "lucide-react";
+import { QrCode, AlertTriangle, RotateCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LabelElement } from "@/types/label-canvas";
 import { skippedLanguages } from "@/types/label-canvas";
 import { estimateBounds, FONT_MM } from "./canvas-model";
+
+export type HandleMode = "resize" | "rotate";
 
 interface Props {
   element: LabelElement;
@@ -15,9 +17,11 @@ interface Props {
   selected: boolean;
   hasLintWarn: boolean;
   onPointerDown: (e: React.PointerEvent, id: string) => void;
+  /** Seçili elemanın köşe/döndürme tutamacı basımı — CanvasStage sürüklemeyi yürütür. */
+  onHandlePointerDown: (e: React.PointerEvent, id: string, mode: HandleMode) => void;
 }
 
-export function CanvasElementView({ element: el, canvas, zoom, selected, hasLintWarn, onPointerDown }: Props) {
+export function CanvasElementView({ element: el, canvas, zoom, selected, hasLintWarn, onPointerDown, onHandlePointerDown }: Props) {
   const b = estimateBounds(el, canvas);
   const style: React.CSSProperties = {
     position: "absolute",
@@ -62,6 +66,35 @@ export function CanvasElementView({ element: el, canvas, zoom, selected, hasLint
         >
           {hasLintWarn ? <AlertTriangle className="h-2.5 w-2.5" /> : "!"}
         </span>
+      )}
+      {selected && (
+        <>
+          {/* SE köşe: boyutlandırma. Metinde font kademesine (4'lü), QR'da ölçeğe
+              (2-15), barkodda bar yüksekliğine oturur — serbest boyut yalnız
+              çizgi/kutu/bantta (yazıcı gerçekleri). */}
+          <span
+            onPointerDown={(e) => onHandlePointerDown(e, el.id, "resize")}
+            className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-nwse-resize rounded-sm border border-primary bg-background shadow"
+            title={
+              el.type === "field" || el.type === "text"
+                ? "Sürükle → font kademesi (sm/md/lg/xl — yazıcı bitmap fontları serbest punto basmaz)"
+                : el.type === "qr"
+                  ? "Sürükle → QR ölçeği (2-15)"
+                  : el.type === "code128"
+                    ? "Sürükle → bar yüksekliği"
+                    : "Sürükle → boyutlandır"
+            }
+          />
+          {(el.type === "field" || el.type === "text") && (
+            <span
+              onPointerDown={(e) => onHandlePointerDown(e, el.id, "rotate")}
+              className="absolute -top-5 left-1/2 flex h-4 w-4 -translate-x-1/2 cursor-grab items-center justify-center rounded-full border border-primary bg-background shadow"
+              title="Sürükle → döndür (90° adımlarla oturur — PPLA/PPLB/ZPL yalnız 0/90/180/270 basar)"
+            >
+              <RotateCw className="h-2.5 w-2.5 text-primary" />
+            </span>
+          )}
+        </>
       )}
     </div>
   );

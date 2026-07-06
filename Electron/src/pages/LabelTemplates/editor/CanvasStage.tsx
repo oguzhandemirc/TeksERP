@@ -10,8 +10,8 @@ import { useRef, useState } from "react";
 import { ZoomIn, ZoomOut, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LabelElement } from "@/types/label-canvas";
-import { clamp, MAX_ZOOM, MIN_ZOOM, snap } from "./canvas-model";
-import { CanvasElementView } from "./CanvasElementView";
+import { applyResize, clamp, estimateBounds, MAX_ZOOM, MIN_ZOOM, snap, snapRotation } from "./canvas-model";
+import { CanvasElementView, type HandleMode } from "./CanvasElementView";
 import type { EditorState } from "./useEditorState";
 import type { LintIssue } from "./useCanvasLint";
 
@@ -25,7 +25,9 @@ interface Props {
 
 export function CanvasStage({ canvas, state, zoom, onZoom, lint }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
-  const [drag, setDrag] = useState<{ id: string; offMmX: number; offMmY: number } | null>(null);
+  const [drag, setDrag] = useState<
+    { mode: "move" | HandleMode; id: string; offMmX: number; offMmY: number } | null
+  >(null);
   const warnIds = new Set(lint.filter((i) => i.level !== "info" && i.elementId).map((i) => i.elementId));
 
   const mmFromEvent = (e: React.PointerEvent): { x: number; y: number } => {
@@ -41,18 +43,49 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint }: Props) {
     // Sürükleme başlangıcında undo noktası (no-op commit — snapshot alır).
     state.updateElement(id, {});
     const at = mmFromEvent(e);
-    setDrag({ id, offMmX: at.x - el.x, offMmY: at.y - el.y });
+    setDrag({ mode: "move", id, offMmX: at.x - el.x, offMmY: at.y - el.y });
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  // Köşe (boyutlandır) / döndür tutamacı — sürüklemeyi sahne yürütür.
+  const onHandlePointerDown = (e: React.PointerEvent, id: string, mode: HandleMode) => {
+    e.stopPropagation();
+    state.select(id);
+    state.updateElement(id, {}); // undo noktası
+    setDrag({ mode, id, offMmX: 0, offMmY: 0 });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag) return;
     const at = mmFromEvent(e);
-    state.moveElement(
-      drag.id,
-      clamp(at.x - drag.offMmX, 0, canvas.widthMm - 1),
-      clamp(at.y - drag.offMmY, 0, canvas.heightMm - 1),
-    );
+    const el = state.elements.find((x) => x.id === drag.id);
+    if (!el) return;
+
+    if (drag.mode === "move") {
+      state.moveElement(
+        drag.id,
+        clamp(at.x - drag.offMmX, 0, canvas.widthMm - 1),
+        clamp(at.y - drag.offMmY, 0, canvas.heightMm - 1),
+      );
+      return;
+    }
+    if (drag.mode === "resize") {
+      // Hedef kutu = elemanın sol-üstünden imlece; tip kendi "boyut" anlamına çevirir
+      // (metin→font kademesi, QR→ölçek, barkod→bar yüksekliği — applyResize).
+      const patch = applyResize(el, at.x - el.x, at.y - el.y);
+      if (patch) state.updateElementLive(drag.id, patch);
+      return;
+    }
+    // rotate: eleman merkezine göre imleç açısı → 90° adıma oturt (yazıcı sınırı).
+    const b = estimateBounds(el, canvas);
+    const cx = el.x + b.w / 2;
+    const cy = el.y + b.h / 2;
+    const deg = (Math.atan2(at.y - cy, at.x - cx) * 180) / Math.PI + 90; // tutamaç üstte
+    const rot = snapRotation(deg);
+    if ((el.type === "field" || el.type === "text") && rot !== (el.rot ?? 0)) {
+      state.updateElementLive(drag.id, { rot });
+    }
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -133,6 +166,7 @@ export function CanvasStage({ canvas, state, zoom, onZoom, lint }: Props) {
               selected={state.selectedId === el.id}
               hasLintWarn={warnIds.has(el.id)}
               onPointerDown={onElementPointerDown}
+              onHandlePointerDown={onHandlePointerDown}
             />
           ))}
           {state.elements.length === 0 && (
