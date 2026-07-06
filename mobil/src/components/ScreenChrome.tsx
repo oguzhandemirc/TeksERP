@@ -13,6 +13,7 @@ import { performLogout, pendingStationOpsCount, isOnline } from '../offline/sess
 import AppModal from './AppModal';
 import PlaceChip from './session/PlaceChip';
 import { usePlaceActions, MachinePickerModal } from './session/PlaceActions';
+import HeaderSecondRow from './HeaderSecondRow';
 import type { MainStackParamList, RootStackParamList } from '../navigation/types';
 
 interface Props {
@@ -25,6 +26,9 @@ interface Props {
   /** Appbar.Content'ten sonra, sağdaki sistem aksiyonlarından önce render edilir.
    *  Ekran-spesifik tetikler (örn. Tambur'da "Açık İşler") için. */
   headerExtras?: React.ReactNode;
+  /** Appbar'ın ALTINDA opsiyonel 2. satır — birincil bara sığmayan aksiyonlar
+   *  (dar telefon ekranı) için. Bkz. HeaderSecondRow. Verilmezse render edilmez. */
+  secondRow?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -34,6 +38,7 @@ export default function ScreenChrome({
   onBack,
   onStepBack,
   headerExtras,
+  secondRow,
   children,
 }: Props) {
   const user = useAuthStore((s) => s.user);
@@ -236,6 +241,8 @@ export default function ScreenChrome({
           />
         </Menu>
       </Appbar.Header>
+
+      {secondRow && <HeaderSecondRow>{secondRow}</HeaderSecondRow>}
 
       {/* paddingBottom: Android nav bar (gesture/buton) + dock içeriğin üstüne
           binmesin diye alt safe-area inset'i bırakılır. Tüm ScreenChrome
