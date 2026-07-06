@@ -76,7 +76,8 @@ export class WorkSessionController {
   static current = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const device = requireDevice(req);
-      const result = await WorkSessionService.current(device.id);
+      // req.user → öz-onarım: başka kullanıcının kalıntı oturumu benimsetilmez (NEW_LOGIN kapanır).
+      const result = await WorkSessionService.current(device.id, req.user?.userId);
       res.status(200).json(result);
     } catch (e) {
       next(e);
