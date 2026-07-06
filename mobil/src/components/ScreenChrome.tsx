@@ -128,11 +128,11 @@ export default function ScreenChrome({
                 {title}
               </Text>
             ) : null}
-            {/* Bulunulan makine ADI — başlığın hemen yanında. Yalnız oturumlu
-                istasyon ekranlarında görünür (PlaceChip kendi kendini gate'ler).
-                Tablette SALT GÖSTERGE (değiştirme profil menüsünde); telefonda
-                dokununca yer/makine değiştirme açılır. */}
-            <PlaceChip />
+            {/* Bulunulan makine ADI (salt gösterge — PlaceChip kendi kendini
+                gate'ler). Ekranın 2. katı VARSA (dar telefon) oraya iner —
+                başlığın yanında sıkışmasın; yoksa (tablet) burada, başlığın
+                hemen yanında kalır. */}
+            {!secondRow && <PlaceChip />}
           </View>
           {subtitle && (
             <Text variant="labelMedium" style={styles.subtitle} numberOfLines={1}>
@@ -229,7 +229,14 @@ export default function ScreenChrome({
         </Menu>
       </Appbar.Header>
 
-      {secondRow && <HeaderSecondRow>{secondRow}</HeaderSecondRow>}
+      {/* Makine adı çipi 2. katın İLK öğesi — ekran kendi secondRow içeriğini
+          (varsa) yanına ekler. Başlık satırındaki PlaceChip yerini alır. */}
+      {secondRow && (
+        <HeaderSecondRow>
+          <PlaceChip />
+          {secondRow}
+        </HeaderSecondRow>
+      )}
 
       {/* paddingBottom: Android nav bar (gesture/buton) + dock içeriğin üstüne
           binmesin diye alt safe-area inset'i bırakılır. Tüm ScreenChrome
