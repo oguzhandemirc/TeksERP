@@ -20,6 +20,7 @@
 import React, { useCallback } from 'react';
 import { StyleSheet, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import Toast from 'react-native-toast-message';
 import LoginScreen from '../../screens/Auth/LoginScreen';
 import { useAuthStore } from '../../store/authStore';
 import { useLockStore } from '../../store/lockStore';
@@ -51,7 +52,15 @@ export default function LockScreen() {
 
   const doLogout = useCallback(() => {
     void (async () => {
-      await performLogout();
+      const outcome = await performLogout();
+      if (outcome.pendingCount > 0) {
+        Toast.show({
+          type: 'info',
+          text1: `${outcome.pendingCount} kayıt bekletildi`,
+          text2: 'Kayıtlar cihazda güvende — girişten sonra otomatik gönderilecek.',
+          visibilityTime: 6000,
+        });
+      }
       unlock();
     })();
   }, [unlock]);

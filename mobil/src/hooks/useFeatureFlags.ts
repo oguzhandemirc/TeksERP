@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { featureFlagService } from '../services/featureFlag.service';
+import { useAuthStore } from '../store/authStore';
 
 // Feature flag'ler app genelinde tek query — React Query cache'i AsyncStorage'a
 // persist edildiği için (App.tsx) son bilinen değer offline'da da uygulanır.
@@ -7,10 +8,15 @@ import { featureFlagService } from '../services/featureFlag.service';
 export const FLAGS_KEY = ['feature-flags'] as const;
 
 export function useFeatureFlags() {
+  // Uç auth'lu: token yokken (login ekranı) istek atma — logout sonrası
+  // garanti 401 çifti + sahte "Oturum süresi doldu" toast'ı üretiyordu.
+  // Cache'teki son değer disabled'ken de okunur (offline davranış korunur).
+  const hasToken = useAuthStore((s) => !!s.token);
   return useQuery({
     queryKey: FLAGS_KEY,
     queryFn: featureFlagService.get,
     staleTime: 5 * 60 * 1000,
+    enabled: hasToken,
   });
 }
 

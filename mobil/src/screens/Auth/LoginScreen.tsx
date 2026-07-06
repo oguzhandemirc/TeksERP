@@ -113,10 +113,17 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
       ? pickedMethod
       : (methodsQ.data?.primary ?? 'list');
 
+  // Stale-while-revalidate: liste SON BİLİNEN haliyle ANINDA çizilir (cache
+  // logout'ta bilerek korunur — sessionSwitch.clearUserScopedQueries), her ekran
+  // açılışında TAZE çekilir (staleTime 0 + refetchOnMount 'always' → panelden
+  // eklenen kullanıcı 5dk beklemez; eski staleTime bayatlık şikâyeti üretiyordu).
+  // Ağ öldüğünde ekran yine çalışır: son liste görünür, 5sn timeout + arka plan
+  // retry sessizce tazelemeyi dener (SAHA-AG-DAYANIKLILIK.md §S2).
   const usersQuery = useQuery({
     queryKey: ['auth', 'mobile-users'],
     queryFn: () => authService.getMobileUsers(),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
     // Kullanıcı listesi yalnız "liste+şifre" görünümünde gerekir (salt-PIN/kart
     // görünümlerinde kimse listelenmez — gereksiz istek atma).
     enabled: enabledMethods.includes('list'),

@@ -12,12 +12,34 @@
 // =============================================================================
 
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   workSessionService,
   type ActiveWorkSession,
   type LastPlace,
 } from '../services/workSession.service';
 import { useSessionEntriesStore } from './sessionEntriesStore';
+
+// Son yer snapshot'ı — CİHAZ hafızası (kullanıcıya özel değil; server-side
+// lastPlace ile aynı anlam). Ağ/timeout'ta GET current düşerse öneri
+// ("Sarım-2'desiniz, doğru mu?") kaybolmasın diye yerelde de tutulur.
+// `active` ASLA snapshot'lanmaz: bayat "açık oturum" göstermek hayalet oturum
+// riskidir — aktif oturumun tek kaynağı sunucudur (409 guard'ı da onu korur).
+const LAST_PLACE_SNAPSHOT_KEY = 'session_last_place_v1';
+
+function writeLastPlaceSnapshot(lastPlace: LastPlace | null): void {
+  // Fire-and-forget: snapshot yazımı UI'ı asla bekletmez.
+  void AsyncStorage.setItem(LAST_PLACE_SNAPSHOT_KEY, JSON.stringify(lastPlace)).catch(() => {});
+}
+
+async function readLastPlaceSnapshot(): Promise<LastPlace | null> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_PLACE_SNAPSHOT_KEY);
+    return raw ? (JSON.parse(raw) as LastPlace | null) : null;
+  } catch {
+    return null;
+  }
+}
 
 interface SessionState {
   active: ActiveWorkSession | null;
@@ -49,21 +71,23 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       const { active, lastPlace } = await workSessionService.current();
       set({ active, lastPlace, isLoaded: true });
+      writeLastPlaceSnapshot(lastPlace);
     } catch {
-      // Ağ/izin hatası — gate onay akışına düşer; öneri (lastPlace) sadece kaybolur.
-      set({ isLoaded: true });
+      // Ağ/izin hatası (5sn timeout dahil) — gate onay akışına düşer; öneri
+      // yerel snapshot'tan gelir (sunucuya ulaşılamasa da "son yer" hatırlanır).
+      const snapshot = await readLastPlaceSnapshot();
+      set({ lastPlace: snapshot ?? get().lastPlace, isLoaded: true });
     }
   },
 
   openSession: async (input) => {
     const session = await workSessionService.open(input);
-    set({
-      active: session,
-      lastPlace: {
-        machine: session.machine ? { ...session.machine, isActive: true } : null,
-        station: { ...session.station, isActive: true },
-      },
-    });
+    const lastPlace: LastPlace = {
+      machine: session.machine ? { ...session.machine, isActive: true } : null,
+      station: { ...session.station, isActive: true },
+    };
+    set({ active: session, lastPlace });
+    writeLastPlaceSnapshot(lastPlace);
     return session;
   },
 

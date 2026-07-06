@@ -8,6 +8,7 @@
 // =============================================================================
 
 import { apiClient } from './api';
+import { BOOTSTRAP_TIMEOUT_MS } from '../constants/api';
 import type { ApiResponse } from '../types/api';
 import type { SessionStationKind } from '../constants/stationScreens';
 
@@ -64,11 +65,15 @@ export const workSessionService = {
       .post<ApiResponse<{ closed: boolean }>>('/work-sessions/close', {})
       .then((r) => r.data.data),
 
-  /** Aktif oturum + son yer (onay ekranı varsayılanı — server-side hafıza). */
+  /** Aktif oturum + son yer (onay ekranı varsayılanı — server-side hafıza).
+   *  Kısa timeout: MainNavigator bu cevaba kadar tam ekran spinner'da —
+   *  yanıtsız sunucuda 10sn boş ekran yerine ≤5sn'de gate akışına düşülür
+   *  (sessionStore.init hatayı yutar, yerel lastPlace snapshot'ı devreye girer). */
   current: (): Promise<{ active: ActiveWorkSession | null; lastPlace: LastPlace | null }> =>
     apiClient
       .get<ApiResponse<{ active: ActiveWorkSession | null; lastPlace: LastPlace | null }>>(
         '/work-sessions/current',
+        { timeout: BOOTSTRAP_TIMEOUT_MS },
       )
       .then((r) => r.data.data),
 

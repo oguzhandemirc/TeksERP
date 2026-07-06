@@ -9,6 +9,7 @@ import { useBaseUrlStore } from '../store/baseUrlStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { useSessionStore } from '../store/sessionStore';
 import { setUnauthorizedHandler, setWorkSessionRequiredHandler } from '../services/api';
+import { nudgeOutbox } from '../offline/sessionSwitch';
 import { deviceService } from '../services/device.service';
 import { getOrCreateDeviceId } from '../utils/deviceId';
 import { usePermissions } from '../hooks/usePermission';
@@ -53,7 +54,14 @@ export default function RootNavigator() {
     queryKey: ['device', 'status'],
     queryFn: deviceService.getStatus,
     enabled: assignmentRequired,
-    refetchInterval: (q) => (q.state.data?.status === 'APPROVED' ? 15000 : 5000),
+    // Hata halinde 30sn'e geriler — ölü/boğulmuş sunucuda sık poll askıda soket
+    // biriktirip yükü büyütmesin; sunucu toparlanınca normal tempoya döner.
+    refetchInterval: (q) =>
+      q.state.fetchFailureCount > 0
+        ? 30_000
+        : q.state.data?.status === 'APPROVED'
+          ? 15_000
+          : 5_000,
   }).data;
 
   useEffect(() => {
@@ -112,6 +120,13 @@ export default function RootNavigator() {
       appStateSub.remove();
     };
   }, []);
+
+  // Girişten hemen sonra bekletilen outbox dürtülür — logout tavanında paused
+  // kalan / restore edilen istasyon kayıtları taze token'la hemen akar
+  // (NoAuth-bekleyenler zaten ≤15sn içinde kendiliğinden dener).
+  useEffect(() => {
+    if (user) nudgeOutbox();
+  }, [user]);
 
   // SettingsScreen gösterimi için `paired`'ı atama durumundan senkronla.
   useEffect(() => {

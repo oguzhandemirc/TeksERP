@@ -1,11 +1,17 @@
 // =============================================================================
 // Tablet local deviceId — kalıcı UUID, ilk açılışta üretilir.
 // SecureStore'da saklanır. Tablet sıfırlanmadıkça değişmez.
+// Değer süreç ömründe DEĞİŞMEZ → modülde memoize edilir: her API isteği bu
+// fonksiyonu çağırıyor ve Keystore köprü turu istek başına gereksiz vergiydi.
+// Promise cache'lenir ki açılıştaki eşzamanlı ilk istekler tek okumaya binsin
+// (yarışta iki UUID üretilmesin).
 // =============================================================================
 
 import { storage } from './storage';
 
 const STORAGE_KEY = 'device_local_id';
+
+let cachedDeviceId: Promise<string> | null = null;
 
 /**
  * RN ortamında crypto.randomUUID güvenli değil; basit UUID v4 yeterli.
@@ -28,10 +34,20 @@ function generateUuidV4(): string {
   return uuid;
 }
 
-export async function getOrCreateDeviceId(): Promise<string> {
-  const existing = await storage.getItem(STORAGE_KEY);
-  if (existing && existing.length >= 8) return existing;
-  const fresh = generateUuidV4();
-  await storage.setItem(STORAGE_KEY, fresh);
-  return fresh;
+export function getOrCreateDeviceId(): Promise<string> {
+  if (!cachedDeviceId) {
+    cachedDeviceId = (async () => {
+      const existing = await storage.getItem(STORAGE_KEY);
+      if (existing && existing.length >= 8) return existing;
+      const fresh = generateUuidV4();
+      await storage.setItem(STORAGE_KEY, fresh);
+      return fresh;
+    })().catch((err) => {
+      // Okuma/yazma hatasında cache'i bırakma — sonraki çağrı yeniden denesin
+      // (kalıcı boş deviceId'yle sıkışmayalım).
+      cachedDeviceId = null;
+      throw err;
+    });
+  }
+  return cachedDeviceId;
 }

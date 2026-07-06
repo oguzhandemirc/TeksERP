@@ -4,12 +4,48 @@ import { storage } from '../utils/storage';
 import { API_URL } from '../constants/api';
 import { getCurrentBaseUrl } from '../store/baseUrlStore';
 import { getOrCreateDeviceId } from '../utils/deviceId';
+// Import yönü güvenli: authStore yalnız utils/storage'a bağımlı (api'yi import etmez).
+import { useAuthStore } from '../store/authStore';
+import { recordNetSample } from './netStats';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
 });
+
+/**
+ * Token çözümü — BELLEK ÖNCE: her istekte SecureStore/Keystore okumak istek
+ * başına 5-30ms (zayıf cihazda 200-300ms) sabit vergiydi. authStore zaten
+ * token'ı bellekte tutar ve setAuth/clearAuth ile günceller → tek kaynak.
+ * Cold start (loadStoredAuth bitmeden atılan istek) SecureStore'a düşer.
+ * mutations.ts NoAuth guard'ı da bunu kullanır (token yok → HTTP'ye çıkma).
+ */
+export async function resolveAuthToken(): Promise<string | null> {
+  const s = useAuthStore.getState();
+  if (!s.isLoading) return s.token;
+  return (await storage.getItem('auth_token')) ?? null;
+}
+
+/** İstek süresi ölçümü için config'e damgalanan başlangıç zamanı. */
+interface TimedConfig {
+  __startedAt?: number;
+}
+
+function sampleFromConfig(
+  config: { method?: string; url?: string } | undefined,
+  status: number | 'ERR' | 'TIMEOUT',
+  startedAt: number | undefined,
+): void {
+  if (!startedAt) return;
+  recordNetSample({
+    method: (config?.method ?? 'GET').toUpperCase(),
+    url: config?.url ?? '?',
+    status,
+    ms: Date.now() - startedAt,
+    at: Date.now(),
+  });
+}
 
 // 401 → kullanıcıyı login ekranına döndür. Eşleşme korunur (machineId silinmez);
 // cihaz pasifleştirilse bile admin aktif yapınca aynı eşleşme ile devam edilir.
@@ -52,10 +88,11 @@ export function isLoginLocked(err: unknown): boolean {
 }
 
 apiClient.interceptors.request.use(async (config) => {
+  (config as TimedConfig).__startedAt = Date.now();
   // baseURL'i her istekte store'dan oku — kullanıcı Settings'ten değiştirdiğinde
   // restart gerekmeden anında geçer.
   config.baseURL = getCurrentBaseUrl();
-  const token = await storage.getItem('auth_token');
+  const token = await resolveAuthToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   // Backend bu header'ı Device → Machine'a çözer; rolMovement/rollOperation kayıtlarına yazılır.
   try {
@@ -68,9 +105,17 @@ apiClient.interceptors.request.use(async (config) => {
 });
 
 apiClient.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    sampleFromConfig(res.config, res.status, (res.config as TimedConfig).__startedAt);
+    return res;
+  },
   (error) => {
     const status = error.response?.status;
+    sampleFromConfig(
+      error.config,
+      status ?? (error.code === 'ECONNABORTED' ? 'TIMEOUT' : 'ERR'),
+      (error.config as TimedConfig | undefined)?.__startedAt,
+    );
     const url: string | undefined = error.config?.url;
     const isLoginCall = url?.includes('/auth/login');
 
