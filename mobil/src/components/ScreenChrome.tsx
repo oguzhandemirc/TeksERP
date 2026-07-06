@@ -8,9 +8,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { useLockStore } from '../store/lockStore';
 import { usePermissions } from '../hooks/usePermission';
+import { useDeviceType } from '../hooks/useDeviceType';
 import { performLogout, pendingStationOpsCount, isOnline } from '../offline/sessionSwitch';
 import AppModal from './AppModal';
 import PlaceChip from './session/PlaceChip';
+import { usePlaceActions, MachinePickerModal } from './session/PlaceActions';
 import type { MainStackParamList, RootStackParamList } from '../navigation/types';
 
 interface Props {
@@ -43,10 +45,17 @@ export default function ScreenChrome({
   const [menuVisible, setMenuVisible] = useState(false);
   // Offline + bekleyen istasyon yazımı varken çıkış: uyar + onay iste.
   const [logoutConfirm, setLogoutConfirm] = useState<{ pending: number } | null>(null);
+  // Tablet: "Makine değiştir / Bölüm değiştir" profil menüsünde (nadir/arıza-durumu
+  // işlemleri — açık yerde durmasın). Modal, menü kapansa da yaşasın diye burada.
+  const placeActions = usePlaceActions();
+  const [machinePickerOpen, setMachinePickerOpen] = useState(false);
 
   // Zaten ana sayfadaysak (Modül Seçimi) ev tuşu çıkmasın — kendine gitmek anlamsız.
+  // TABLETTE ev ikonu hiç çıkmaz: bölüm değiştirme, profil menüsünde
+  // ("Bölüm değiştir" — Ayarlar'ın altında). Telefon eski davranışı korur.
+  const isTablet = useDeviceType() === 'tablet';
   const onHomeScreen = route.name === 'ModuleSelect';
-  const showHome = hasMultipleMobileScreens && !onBack && !onHomeScreen;
+  const showHome = hasMultipleMobileScreens && !onBack && !onHomeScreen && !isTablet;
   const goHome = () => navigation.navigate('ModuleSelect');
   const insets = useSafeAreaInsets();
 
@@ -97,10 +106,17 @@ export default function ScreenChrome({
             icon="view-grid"
             onPress={goHome}
             color="#fff"
-            accessibilityLabel="İstasyon değiştir"
+            accessibilityLabel="Bölüm değiştir"
           />
         )}
-        <View style={styles.appbarContent}>
+        <View
+          style={[
+            styles.appbarContent,
+            // Solda ikon yoksa (tablet: ev ikonu kalktı) başlık kenara yapışmasın —
+            // içerik kolonuyla (ör. Manuel Giriş kutusu, 16px) aynı hizaya gelsin.
+            !onBack && !onStepBack && !showHome && styles.appbarContentNoLead,
+          ]}
+        >
           <View style={styles.titleRow}>
             {title ? (
               <Text variant="titleLarge" style={styles.title} numberOfLines={1}>
@@ -108,7 +124,8 @@ export default function ScreenChrome({
               </Text>
             ) : null}
             {/* Bulunulan makine ADI — başlığın hemen yanında. Yalnız oturumlu
-                istasyon ekranlarında görünür (PlaceChip kendi kendini gate'ler);
+                istasyon ekranlarında görünür (PlaceChip kendi kendini gate'ler).
+                Tablette SALT GÖSTERGE (değiştirme profil menüsünde); telefonda
                 dokununca yer/makine değiştirme açılır. */}
             <PlaceChip />
           </View>
@@ -126,6 +143,9 @@ export default function ScreenChrome({
           visible={menuVisible}
           onDismiss={() => setMenuVisible(false)}
           anchorPosition="bottom"
+          // Tetik (profil ikonu) barın içinde birkaç px yukarıda biter — menüyü
+          // barın ALT KENARINDAN başlat (üstüne binmesin).
+          style={styles.menu}
           anchor={
             <TouchableRipple
               onPress={() => setMenuVisible(true)}
@@ -134,28 +154,86 @@ export default function ScreenChrome({
               accessibilityLabel="Kullanıcı menüsü"
             >
               <View style={styles.userTriggerInner}>
-                <Icon source="account-circle" size={26} color="#cbd5e1" />
+                {/* size 18: pill iç yüksekliği yazı satırıyla (13px→~18) eş kalsın —
+                    diğer header pill'leriyle piksel-eş boy. */}
+                <Icon source="account-circle" size={18} color="#fff" />
+                {/* Kullanıcı adı — tablette görünür (telefonda yer dar, yalnız ikon). */}
+                {isTablet && (
+                  <Text style={styles.userTriggerName} numberOfLines={1}>
+                    {operatorName}
+                  </Text>
+                )}
               </View>
             </TouchableRipple>
           }
         >
-          {/* Menü başlığı — tıklayınca kim giriş yaptıysa adı görünür. */}
-          <View style={styles.menuHeader}>
-            <Icon source="account-circle" size={22} color="#475569" />
-            <Text style={styles.menuHeaderName} numberOfLines={1}>
-              {operatorName}
-            </Text>
-          </View>
-          <Divider />
+          {/* Menü başlığı (kim giriş yaptı) — YALNIZ telefonda: tablette ad zaten
+              tetik butonunda yazıyor, menüde tekrar etmesin. */}
+          {!isTablet && (
+            <>
+              <View style={styles.menuHeader}>
+                <Icon source="account-circle" size={22} color="#475569" />
+                <Text style={styles.menuHeaderName} numberOfLines={1}>
+                  {operatorName}
+                </Text>
+              </View>
+              <Divider />
+            </>
+          )}
           <Menu.Item
             leadingIcon="cog"
             onPress={openSettings}
             title="Ayarlar"
+            style={styles.menuItem}
+            titleStyle={styles.menuItemTitle}
+          />
+          {/* Tablet: nadir yer-değiştirme işlemleri — Ayarlar'ın ALTINDA.
+              Görünürlük kuralları usePlaceActions'ta (tek makine / tek bölüm → gizli). */}
+          {(placeActions.showMachine || placeActions.showStation) && (
+            <>
+              <Divider />
+              {placeActions.showMachine && (
+                <Menu.Item
+                  leadingIcon="swap-horizontal"
+                  onPress={() => {
+                    setMenuVisible(false);
+                    setMachinePickerOpen(true);
+                  }}
+                  title="Makine değiştir"
+                  style={styles.menuItem}
+                  titleStyle={styles.menuItemTitle}
+                />
+              )}
+              {placeActions.showStation && (
+                <Menu.Item
+                  leadingIcon="view-grid"
+                  onPress={() => {
+                    setMenuVisible(false);
+                    goHome();
+                  }}
+                  title="Bölüm değiştir"
+                  style={styles.menuItem}
+                  titleStyle={styles.menuItemTitle}
+                />
+              )}
+            </>
+          )}
+          <Divider />
+          <Menu.Item
+            leadingIcon="lock"
+            onPress={doLock}
+            title="Kilitle / operatör değiştir"
+            style={styles.menuItem}
+            titleStyle={styles.menuItemTitle}
           />
           <Divider />
-          <Menu.Item leadingIcon="lock" onPress={doLock} title="Kilitle / operatör değiştir" />
-          <Divider />
-          <Menu.Item leadingIcon="logout" onPress={doLogout} title="Çıkış" />
+          <Menu.Item
+            leadingIcon="logout"
+            onPress={doLogout}
+            title="Çıkış"
+            style={styles.menuItem}
+            titleStyle={styles.menuItemTitle}
+          />
         </Menu>
       </Appbar.Header>
 
@@ -163,6 +241,16 @@ export default function ScreenChrome({
           binmesin diye alt safe-area inset'i bırakılır. Tüm ScreenChrome
           ekranları (sticky footer'lar dahil) bundan faydalanır. */}
       <View style={[styles.content, { paddingBottom: insets.bottom }]}>{children}</View>
+
+      {/* Makine seçme modalı (profil menüsü → Makine değiştir). Menü kapansa da
+          yaşasın diye burada — menü içinde olsaydı kapanınca unmount olurdu. */}
+      {placeActions.expectedKind && (
+        <MachinePickerModal
+          visible={machinePickerOpen}
+          expectedKind={placeActions.expectedKind}
+          onClose={() => setMachinePickerOpen(false)}
+        />
+      )}
 
       {/* Offline + bekleyen kayıt varken çıkış onayı — kayıp riski açıkça belirtilir. */}
       <AppModal
@@ -212,14 +300,26 @@ const styles = StyleSheet.create({
   // flex: 1 de vererek available space'i kaplamasını garanti edelim.
   // justifyContent: 'center' ekleyerek dikeyde ortalayalım.
   appbarContent: { alignItems: 'flex-start', justifyContent: 'center', paddingLeft: 4, flex: 1 },
-  userTrigger: { borderRadius: 8, marginHorizontal: 4 },
+  // Baştaki ikonsuz düzen (tablet): içerik padding'iyle (16) hizalı başlık.
+  appbarContentNoLead: { paddingLeft: 16 },
+  // Profil tetiği — kendini belli eden DOLU marka-indigo buton (diğer soluk
+  // pill'lerden ayrışır); ölçüler aynı (radius 10 + paddingV 9 → eş boy).
+  userTrigger: {
+    borderRadius: 10,
+    backgroundColor: '#4f46e5',
+    borderWidth: 1,
+    borderColor: '#818cf8',
+    overflow: 'hidden',
+    marginHorizontal: 4,
+  },
   userTriggerInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
+  userTriggerName: { color: '#fff', fontWeight: '700', fontSize: 13, maxWidth: 160 },
   menuHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -228,7 +328,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     minWidth: 170,
   },
-  menuHeaderName: { fontWeight: '700', color: '#0f172a', fontSize: 14, flexShrink: 1 },
+  menuHeaderName: { fontWeight: '700', color: '#0f172a', fontSize: 15, flexShrink: 1 },
+  // Menü maddeleri — saha dokunma hedefi (min 56dp kuralı) + büyük yazı.
+  menuItem: { height: 58, maxWidth: 340 },
+  menuItemTitle: { fontSize: 17 },
+  // Menü penceresi barın alt kenarından başlasın (tetik bar içinde yukarıda bitiyor).
+  menu: { marginTop: 12 },
   content: { flex: 1 },
 
   confirmCard: {
