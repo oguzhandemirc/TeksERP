@@ -1282,7 +1282,9 @@ model WorkOrderStep {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([workOrderId, stepSequence])
+  // D-12: adım sırası benzersiz — aynı WO'da iki adım aynı stepSequence'a sahip
+  // olamaz (refakat kartı okutma sırası / "sıradaki adım" çözümlemesi belirsizleşmesin).
+  @@unique([workOrderId, stepSequence])
   @@index([workOrderId, status])
   @@index([requiredCategoryId])
   @@index([plannedSubcontractorId])
@@ -2211,6 +2213,15 @@ model Sack {
   // Sevkiyat içinde cuval sırası benzersiz — silme sonrası yeniden ekleme/yarış
   // çift "Çuval N" üretemez (M-17; migration 20260612103000)
   @@unique([shipmentId, seq])
+  // O-7: manualCode SEVKIYAT-İÇİ benzersiz — DB'de PARTIAL UNIQUE (WHERE manualCode
+  // IS NOT NULL; migration 20260708120000). @@index tam görünür ama Prisma 7 partial
+  // predicate'i drift saymaz (CLAUDE.md kural 4).
+  @@index([shipmentId, manualCode])
+  // O-22: Roll/Swatch↔Sack↔Shipment tutarlılık invariant'ının FK hedefi. Bu unique
+  // sayesinde rolls & swatches'a composite FK (sackId, shipmentId) -> sacks(id,
+  // shipmentId) kurulur (DEFERRABLE, raw-SQL; migration 20260708120000). Composite
+  // FK'lar Prisma şemasında YOK (native ifade edilemez) — DB seviyesinde yaşar.
+  @@unique([id, shipmentId])
   @@map("sacks")
 }
 
@@ -2262,7 +2273,9 @@ model ShipmentOrder {
   shipmentId String @db.Uuid
   orderId    String @db.Uuid
 
-  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  // D-10: muhasebe defteri — shipment fiziksel silinirse allocation/order defteri
+  // sessizce yok olup shippedQty'yi bozmasın. App shipment'ı hard-delete etmez.
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
   order    Order    @relation(fields: [orderId], references: [id])
 
   createdAt DateTime @default(now())
@@ -2282,7 +2295,8 @@ model ShipmentAllocation {
   orderLineId String @db.Uuid
   qty         Decimal @db.Decimal(12, 3) // Bu sevkiyatın bu satıra düşürdüğü metraj
 
-  shipment  Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  // D-10: muhasebe defteri — bkz. ShipmentOrder.shipment (Cascade -> Restrict).
+  shipment  Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
   orderLine OrderLine @relation(fields: [orderLineId], references: [id])
 
   createdAt DateTime @default(now())
