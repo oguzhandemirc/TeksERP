@@ -49,6 +49,10 @@ interface RollSummary {
   qc2Completed: boolean;
   errorCount: number;
   defects: RollDefectSummary[];
+  /// Kumaş cinsi + renk — WO.targetItem/targetColor (kart geneli aynı). Açık
+  /// kumaş toplarında barkod yok; mobil liste bunları ad + renkle tanımlar.
+  itemName: string | null;
+  colorName: string | null;
 }
 
 interface StepSummary {
@@ -1021,7 +1025,14 @@ export class KursunQcService {
       where: { id: stepId },
       include: {
         station: true,
-        workOrder: { select: { id: true, batchNumber: true } },
+        workOrder: {
+          select: {
+            id: true,
+            batchNumber: true,
+            targetItem: { select: { name: true } },
+            targetColor: { select: { name: true } },
+          },
+        },
       },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
@@ -1084,6 +1095,10 @@ export class KursunQcService {
       });
     }
 
+    // Kumaş cinsi + renk kart geneli aynı (WO target) — her role kopyalanır ki
+    // barkodsuz açık kumaş topları listede ad + renkle görünsün.
+    const itemName = step.workOrder.targetItem?.name ?? null;
+    const colorName = step.workOrder.targetColor?.name ?? null;
     const rolls: RollSummary[] = openMovements.map((m) => {
       const defects = defectsByRoll.get(m.roll.id) ?? [];
       return {
@@ -1093,6 +1108,8 @@ export class KursunQcService {
         qc2Completed: qc2DoneSet.has(m.roll.id),
         errorCount: defects.length,
         defects,
+        itemName,
+        colorName,
       };
     });
 
