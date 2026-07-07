@@ -6,6 +6,24 @@
 
 ---
 
+## 0. Uygulama Durumu (2026-07-08 · `fix/db-installer-audit`)
+
+Denetim sonrası düzeltmeler bir git branch'inde (**5 commit**) uygulandı; her migration önce `pg_dump` klonunda, sonra dev DB'de doğrulandı — **tracked-drift sıfır** (`prisma migrate diff` ile teyit), üstelik önceden var olan bir drift de (`subcontractor_dispatches.dyehouseNote`) temizlendi. App-code bulguları paralel bir **backend track'ine** devredildi; **ürün-kararı** bulguları beklemede.
+
+| Faz / Commit | Düzeltilen bulgular | Durum |
+|---|---|---|
+| **Faz 1** `da48b0d` — installer | Y-4, O-15, O-16, O-17 | offsite yedek + bütünlük + bellek tuning + PG18 paritesi & major-guard |
+| **Faz 4** `d90947f` — migration `…120000` | O-5, O-7, D-12, D-10, O-22 | 8 CHECK + partial-unique + unique + FK Restrict + composite FK; **dev'e uygulandı + resolve** |
+| **Faz 5** `b43fdba` — migration `…130000` | O-13, O-14, D-5, D-6, D-7 | 9 index drop + 2 composite + partial; **dev'e uygulandı + resolve** |
+| **Faz 6** `49ecb71` — migration `…140000` | O-9, O-10, O-11, D-9, D-14, D-16, B-11 | dyehouseNote/updatedAt/uuid + `consistency-check.sql` + doc; **dev'e uygulandı + resolve** |
+| **Backend track** (ayrı oturum) | Y-2, Y-3, O-1, O-2, O-3, O-4, O-6, O-18, O-21, O-23, D-13, D-15, B-1 | app-code (`services`/`controllers`/`lib`) — devredildi |
+| **Ürün kararı** (bekliyor) | Y-1, O-19, O-20, D-3 | tedarikçi-lot / operatör izi + dara/net / vardiya-maliyet |
+| **Bilgi — aksiyon yok** | B-2…B-10, D-2 vb. | bilinçli tasarım tespitleri (belge amaçlı) |
+
+> **⚠️ Üretim deploy notu:** Faz 4/5/6 DDL'i (özellikle Faz 5 `roll_operations` yeni index'leri) dolu üretim tablosunda yazma kilidi alır → **vardiya dışı** `prisma migrate deploy` (CLAUDE.md kural 14; her migration başında `SET statement_timeout = 0` var). Dev DB'de 3 migration resolve'lu; üretimde `migrate deploy` uygular. **Koordinasyon:** dev DB'de bu 3 migration kayıtlı ama paralel backend branch'inde dosyaları yok — o oturum `prisma migrate deploy/status` çalıştırmamalı (merge'de uzlaşır).
+
+---
+
 ## 1. Yönetici Özeti
 
 Bu, "veritabanını mimari olarak nasıl değerlendirirdim" sorusundan yola çıkıp önce bir **değerlendirme çerçevesi** kurup (Bölüm 3), sonra bu çerçeveyi TeksERP'e uygulayan bir denetimdir. Tekstil fabrikası bağlamı boyunca merkeze alındı: fabrikanın **tüm** üretim/QK/sevkiyat kaydı tek bir yerel PostgreSQL sunucusunda yaşayacak, yüz binlerce satır birikecek ve sistem yıllarca (10+ yıl hedefiyle) çalışacak.
