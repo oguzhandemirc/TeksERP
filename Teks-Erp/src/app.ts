@@ -61,6 +61,7 @@ import reportsRoutes from "./routes/reports.routes";
 import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
 import workSessionRoutes from "./routes/work-session.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
+import { latencyMiddleware } from "./middlewares/latency.middleware";
 import { getPresence } from "./lib/presence";
 
 const app: Express = express();
@@ -93,6 +94,11 @@ app.use(cors({ exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Cou
 app.use(compression({ threshold: 1024 }));
 app.use(express.json());
 app.use(morgan("dev"));
+
+// Per-endpoint gecikme istatistiği (istek başına O(1), saf bellek) — morgan'dan
+// sonra, resolveDevice'tan ÖNCE: statik/health/swagger dahil her şey ölçülür.
+// Okuma: GET /api/admin/perf. Bkz. SAHA-DAYANIKLILIK-FAZ2.md §B.
+app.use(latencyMiddleware);
 
 // x-device-id header'ı varsa req.device'a Device + machineId çöz
 app.use(resolveDevice);

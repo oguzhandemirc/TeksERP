@@ -11,6 +11,7 @@ import { PermissionManagementService } from "../services/permission-management.s
 import { systemSettingService } from "../services/system-setting.service";
 import { SystemLogService } from "../services/system-log.service";
 import { triggerManualBackup, listBackups, resolveBackupPath } from "../services/backup.service";
+import { latencySnapshot, resetLatencyStats } from "../services/latency-stats.service";
 import { AppError } from "../utils/app-error";
 import { z } from "zod";
 import "../types/express-augment";
@@ -625,6 +626,64 @@ router.delete(
     try {
       await PermissionManagementService.deleteTemplate(req.params.id as string, req.user?.userId);
       res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================================================
+// ENDPOINT GECİKME İSTATİSTİKLERİ (latency-stats — saf bellek, DB yok)
+// =============================================================================
+
+/**
+ * @openapi
+ * /api/admin/perf:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Endpoint gecikme istatistikleri
+ *     description: >
+ *       Route bazında count/errCount/p50/p95/max (bucket-yaklaşık) + son yavaş
+ *       istekler (≥1sn, son 50). Süreç başlangıcından (veya son reset'ten) beri.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/perf",
+  verifyToken,
+  requirePermission("admin:settings"),
+  (_req: Request, res: Response, next: NextFunction): void => {
+    try {
+      res.status(200).json({ success: true, data: latencySnapshot() });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/perf/reset:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Gecikme sayaçlarını sıfırla
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/perf/reset",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      resetLatencyStats();
+      // Best-effort audit (tx yok — saf bellek işlemi ama state değişikliği iz bırakır).
+      await AuditService.log({
+        userId: req.user?.userId,
+        action: "DELETE",
+        tableName: "latency_stats",
+        recordId: "in-memory",
+        newData: { resetAt: new Date().toISOString() },
+      });
+      res.status(200).json({ success: true, data: { reset: true } });
     } catch (error) {
       next(error);
     }

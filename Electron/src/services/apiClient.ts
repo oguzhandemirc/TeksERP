@@ -4,6 +4,27 @@ import { tokenStore } from "@/lib/secure-token";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
 import { useAuthStore } from "@/store/auth";
 import { useServerStatusStore } from "@/store/serverStatus";
+import { recordNetSample } from "@/services/netStats";
+
+/** İstek süresi ölçümü için config'e damgalanan başlangıç zamanı. */
+interface TimedConfig {
+  __startedAt?: number;
+}
+
+function sampleFromConfig(
+  config: { method?: string; url?: string } | undefined,
+  status: number | "ERR" | "TIMEOUT",
+  startedAt: number | undefined,
+): void {
+  if (!startedAt) return;
+  recordNetSample({
+    method: (config?.method ?? "GET").toUpperCase(),
+    url: config?.url ?? "?",
+    status,
+    ms: Date.now() - startedAt,
+    at: Date.now(),
+  });
+}
 
 /** Yanıt header'ından `Date`'i (sunucu saati) güvenli oku — yoksa undefined. */
 function readDateHeader(headers: unknown): string | undefined {
@@ -26,6 +47,7 @@ const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use(async (config) => {
+  (config as TimedConfig).__startedAt = Date.now();
   const token = await tokenStore.get();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   // Bu PC'yi backend'e tanıt: Device → Machine çözümü (sevkiyat kantarı vb.).
@@ -57,12 +79,22 @@ function buildErrorMessage(body: ApiErrorBody | undefined): string {
 
 apiClient.interceptors.response.use(
   (response) => {
+    sampleFromConfig(
+      response.config,
+      response.status,
+      (response.config as TimedConfig).__startedAt,
+    );
     // Her başarılı yanıt = backend ulaşılabilir + sunucu saati (Date header).
     useServerStatusStore.getState().markReachable(readDateHeader(response.headers));
     return response;
   },
   async (error) => {
     if (axios.isAxiosError(error)) {
+      sampleFromConfig(
+        error.config,
+        error.response?.status ?? (error.code === "ECONNABORTED" ? "TIMEOUT" : "ERR"),
+        (error.config as TimedConfig | undefined)?.__startedAt,
+      );
       // Sunucu cevap verdiyse (4xx/5xx dahil) ulaşılabilir sayılır; yanıt hiç
       // yoksa (ağ hatası/timeout) offline. Toast bastırılmış olsa da durum güncellenir.
       if (error.response) {
@@ -84,16 +116,23 @@ apiClient.interceptors.response.use(
           toast.error(buildErrorMessage(body));
           return Promise.reject(error);
         }
-        await tokenStore.clear();
-        // Auth store'u temizle → App.tsx `Root` kapısı oturum-dışı router'a geçer.
-        useAuthStore.getState().setUser(null);
-        // L fix: oturum düşerken uçuştaki paralel istekler 401 yağmuru üretir —
-        // 5sn tekilleştirme ile tek toast.
-        if (Date.now() - lastSessionExpiredToastAt > 5000) {
-          lastSessionExpiredToastAt = Date.now();
-          // Sebebe göre backend NET mesaj döndürür (başka cihazdan giriş / şifre /
-          // pasif); yoksa generic "süresi doldu". Yanlış bildirim vermeyelim.
-          toast.error(body?.message || "Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
+        // Tek-uçuş guard'ı (Faz 2 §E4): 401 yağmurunda her istek ayrı IPC/disk
+        // temizliği koşturuyordu; oturum zaten kapalıysa (manuel logout sonrası
+        // arka plan istekleri dahil) temizliği VE toast'ı atla. setUser(null)
+        // SENKRON önce → sonraki 401 handler'ları kapıyı kapalı görür.
+        const hadUser = Boolean(useAuthStore.getState().user);
+        if (hadUser) {
+          // Auth store'u temizle → App.tsx `Root` kapısı oturum-dışı router'a geçer.
+          useAuthStore.getState().setUser(null);
+          await tokenStore.clear();
+          // L fix: oturum düşerken uçuştaki paralel istekler 401 yağmuru üretir —
+          // 5sn tekilleştirme ile tek toast.
+          if (Date.now() - lastSessionExpiredToastAt > 5000) {
+            lastSessionExpiredToastAt = Date.now();
+            // Sebebe göre backend NET mesaj döndürür (başka cihazdan giriş / şifre /
+            // pasif); yoksa generic "süresi doldu". Yanlış bildirim vermeyelim.
+            toast.error(body?.message || "Oturum süreniz doldu. Lütfen tekrar giriş yapın.");
+          }
         }
         return Promise.reject(error);
       }
