@@ -76,9 +76,13 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
   // gösterir).
   const handleNativeChange = useCallback(
     (text: string) => {
+      // Türkçe decimal-pad ondalık ayırıcı olarak VİRGÜL gösteriyor; sistem
+      // yalnız NOKTA kabul ediyor → virgülü noktaya çevir (silme!). Aksi halde
+      // "40,5" yazınca virgül düşüp "405" oluyordu.
+      const normalized = text.replace(',', '.');
       const cleaned = allowDecimal
-        ? text.replace(/[^0-9.]/g, '').replace(/(\..*)\..*/, '$1')
-        : text.replace(/\D/g, '');
+        ? normalized.replace(/[^0-9.]/g, '').replace(/(\..*)\..*/, '$1')
+        : normalized.replace(/\D/g, '');
       if (numpadMaxLength !== undefined && cleaned.length > numpadMaxLength) return;
       onChangeText(cleaned);
     },

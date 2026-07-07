@@ -3,8 +3,9 @@
 // =============================================================================
 // ScreenChrome her ekranda render eder; çip yalnız OTURUMLU ekranlarda (route
 // adı STATION_KIND_BY_SCREEN'de) ve aktif oturum ekranla eşleşince görünür.
-// SALT GÖSTERGE — tablet ve telefonda AYNI: dokunmak bir şey yapmaz. Makine
-// değiştirme her iki cihazda da profil (👤) menüsündedir (PlaceActions).
+// SALT GÖSTERGE — dokunmak bir şey yapmaz. Makine değiştirme profil (👤)
+// menüsündedir (PlaceActions). Not: KK1 telefonda makine adını başlık
+// subtitle'ında gösterir → bu çipi `hidePlaceChip` ile gizler.
 // =============================================================================
 
 import React from 'react';
