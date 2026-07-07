@@ -380,7 +380,7 @@ model UserPermission {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, permissionId])
-  @@index([userId])
+  // D-6: @@index([userId]) kaldırıldı — @@unique([userId, permissionId]) sol-prefix'i kapsar.
   @@index([permissionId])
   @@map("user_permissions")
 }
@@ -1128,7 +1128,7 @@ model OrderLine {
   updatedAt DateTime @updatedAt
 
   @@index([orderId])
-  @@index([itemId])
+  // D-6: @@index([itemId]) kaldırıldı — @@index([itemId, createdAt]) sol-prefix'i kapsar.
   @@index([colorId])
   // Sipariş-önce aramalı liste (cursor keyset createdAt asc) + ürün-filtreli sayfalama.
   @@index([createdAt])
@@ -1438,6 +1438,8 @@ model RollError {
   @@index([rollId, startMeter, defectTypeId], map: "roll_errors_roll_meter_defect_uq")
   // Operatör performans raporu: kim hangi tarihte hata kapadı
   @@index([processedByUserId, processedAt])
+  // D-5: detectedByUserId sorgu yolu (Cihaz İşlem Dökümü raporu); processedBy emsaliyle simetrik.
+  @@index([detectedByUserId, detectedAt])
   // Dashboard "bugün açılan hata" + kalite raporu tarih aralıkları (H-14):
   @@index([detectedAt])
   @@index([processedAt])
@@ -1472,8 +1474,9 @@ model RollOperation {
   createdAt DateTime @default(now())
 
   @@unique([rollId, workOrderStepId, operationType])
-  @@index([rollId])
-  @@index([operationType])
+  // O-13: @@index([rollId]) (unique sol-prefix'i) ve @@index([operationType]) (tek başına
+  // sürücü değil) kaldırıldı. O-14: rapor için operationType+createdAt (operationType-only'yi de kapsar).
+  @@index([operationType, createdAt])
   @@index([operatorId])
   @@index([machineId])
   @@index([inheritedFromParentRollId])
@@ -1816,7 +1819,7 @@ model SubcontractorReceiptItem {
   createdAt DateTime @default(now())
 
   @@unique([receiptId, newRollId])
-  @@index([receiptId])
+  // D-6: @@index([receiptId]) kaldırıldı — @@unique([receiptId, newRollId]) sol-prefix'i kapsar.
   @@index([newRollId])
   @@index([sourceDispatchItemId])
   @@map("subcontractor_receipt_items")
@@ -2072,7 +2075,7 @@ model KartelaReceiptItem {
   createdAt DateTime @default(now())
 
   @@unique([receiptId, consumedRollId])
-  @@index([receiptId])
+  // D-6: @@index([receiptId]) kaldırıldı — @@unique([receiptId, consumedRollId]) sol-prefix'i kapsar.
   @@index([consumedRollId])
   @@index([sourceDispatchItemId])
   @@map("kartela_receipt_items")
@@ -2207,7 +2210,7 @@ model Sack {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([shipmentId])
+  // D-6: @@index([shipmentId]) kaldırıldı — @@unique([shipmentId, seq]) sol-prefix'i kapsar (FK dahil).
   // Saha #5: AMB%05d otomatik kod üretimi global max okur — range seek için.
   @@index([manualCode])
   // Sevkiyat içinde cuval sırası benzersiz — silme sonrası yeniden ekleme/yarış
@@ -2522,7 +2525,7 @@ model CustomerItemAlias {
   updatedAt DateTime @updatedAt
 
   @@unique([customerId, itemId])
-  @@index([customerId])
+  // D-6: @@index([customerId]) kaldırıldı — @@unique([customerId, itemId]) sol-prefix'i kapsar.
   @@index([itemId])
   @@map("customer_item_aliases")
 }
@@ -2551,7 +2554,7 @@ model CustomerColorAlias {
   updatedAt DateTime @updatedAt
 
   @@unique([customerId, colorId])
-  @@index([customerId])
+  // D-6: @@index([customerId]) kaldırıldı — @@unique([customerId, colorId]) sol-prefix'i kapsar.
   // Picker scope + sipariş guard sorguları: "renk herhangi bir müşteriye atanmış mı"
   // (none/some assigned) ve "bu renkler atanmış mı" (colorId IN + assigned).
   // (colorId, assigned) composite, colorId-prefix lookup'ları da karşılar.
