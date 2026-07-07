@@ -570,6 +570,21 @@ export class SubcontractorService {
           `Bu iş emrinde sevk yapılamaz: ${woFresh?.status ?? "bulunamadı"}. Sayfayı yenileyin.`
         );
       }
+
+      // Step status TAZE (F73): step.status tx DIŞINDA okundu. WO kilidi (555)
+      // altında eşzamanlı receive/cancel adımı COMPLETED, downstream directShip
+      // SKIPPED yapmış olabilir. ACTIVE'e-açma kararı bayat status'a dayanırsa
+      // yeni sevk topları AT_SUBCONTRACTOR olurken adım yanlış statüde kalır.
+      const stepFresh = await tx.workOrderStep.findUnique({
+        where: { id: step.id },
+        select: { status: true, startedAt: true },
+      });
+      if (!stepFresh) throw AppError.notFound("İş emri adımı bulunamadı");
+      if (stepFresh.status === StepStatus.SKIPPED) {
+        throw AppError.conflict(
+          "Adım bu sırada atlandı (SKIPPED). Sevk yapılamaz. Sayfayı yenileyin."
+        );
+      }
       // Otomatik attach: serbest stoktaki toplar bu adıma bağlanır.
       // (status STOCK kalır — alt blok aynı transaction içinde AT_SUBCONTRACTOR'a çekecek.)
       // ATOMİK CLAIM: autoAttachIds tx-DIŞI bayat okumadan geliyor (currentStepId=null
@@ -596,14 +611,14 @@ export class SubcontractorService {
       // sevki yapılıyor, adımı YENİDEN AÇ (çoklu sevk). startedAt korunur,
       // completedAt sıfırlanır ki "şu an açık" görünsün.
       if (
-        step.status === StepStatus.PENDING ||
-        step.status === StepStatus.COMPLETED
+        stepFresh.status === StepStatus.PENDING ||
+        stepFresh.status === StepStatus.COMPLETED
       ) {
         await tx.workOrderStep.update({
           where: { id: step.id },
           data: {
             status: StepStatus.ACTIVE,
-            startedAt: step.startedAt ?? new Date(),
+            startedAt: stepFresh.startedAt ?? new Date(),
             completedAt: null,
           },
         });
@@ -4002,10 +4017,10 @@ export class SubcontractorService {
     // Bu sevk, dispatch'in TÜM (hâlâ fasonda) toplarını mı kapsıyor? Kısmi sevkte
     // dispatch AÇIK kalır (kalan toplar normal kabulle döner), directShippedAt
     // SET EDİLMEZ, donmuş belge üretilmez (belge tüm dispatch'i gösterir).
-    const dispatchStillAtSub = await prisma.roll.count({
-      where: { id: { in: dispatchRollIds }, status: RollStatus.AT_SUBCONTRACTOR },
-    });
-    const isFullDispatchShip = dispatchStillAtSub === shipRollIds.length;
+    // Karar TX İÇİNDE, WO kilidi altında TAZE sayımla verilir (F72 — aşağıda);
+    // tx-DIŞI bayat sayım eşzamanlı receive()'in döndürdüğü topları görmez → 'full'
+    // olması gereken sevk 'partial' hesaplanıp directShippedAt set edilmez / belge donmaz.
+    let isFullDispatchShip = false;
 
     // Opsiyonel karşılanma doğrulaması (verilmişse).
     const allocations = data.orderLineAllocations ?? [];
@@ -4063,6 +4078,14 @@ export class SubcontractorService {
       // Fason completion yarışı (subcon #4): WO satırını kilitle — stillAtSubcontractor
       // sayımı + downstream SKIP eşzamanlı dispatch'le serileşsin.
       await touchWorkOrderTx(tx, dispatch.workOrderId);
+      // isFullDispatchShip TAZE (F72): WO satırı kilitli olduğundan bu sayım
+      // eşzamanlı değişiklikleri (receive()'in dispatch'ten döndürdüğü toplar)
+      // görür. roll-consume'dan (aşağıda) ÖNCE yapıldığından shipRollIds hâlâ
+      // AT_SUBCONTRACTOR sayılır; biri eşzamanlı taşınmışsa false + roll-claim 409.
+      const dispatchStillAtSub = await tx.roll.count({
+        where: { id: { in: dispatchRollIds }, status: RollStatus.AT_SUBCONTRACTOR },
+      });
+      isFullDispatchShip = dispatchStillAtSub === shipRollIds.length;
       // 1) Dispatch işareti — yalnız dispatch'in TÜMÜ sevk edildiyse directShippedAt
       //    set edilir (atomik claim). Kısmi sevkte dispatch AÇIK kalır; atomiklik
       //    aşağıdaki roll claim'iyle (status=AT_SUBCONTRACTOR + count) sağlanır.

@@ -30,6 +30,7 @@ import {
 } from "@prisma/client";
 import { assertWoAtStepKind } from "./helpers/roll-step.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 
 interface RollDefectSummary {
   id: string;
@@ -620,6 +621,14 @@ export class KursunQcService {
     const { recomputeStepStatus } = await import("./helpers/roll-step.helper");
 
     const result = await prisma.$transaction(async (tx) => {
+      // 0) O-2 write-skew guard: WO satırını tx başında write-kilitle → son-adım
+      //    WO oto-tamamlama sayımını (aşağıdaki remainingSteps) eşzamanlı fason
+      //    receive/cancel/dispatch ve finalize (tambur) yollarıyla serileştir.
+      //    Paylaşımlı kilit olmadan iki tx birbirinin commit'ini görmez → WO ya
+      //    mal fasondayken COMPLETED'a kaçar ya da tüm adımlar bittiği halde
+      //    IN_PROGRESS'te asılı kalır. Lock sırası WO→movement/roll (kardeşlerle tutarlı).
+      await touchWorkOrderTx(tx, step.workOrderId);
+
       // 1) Açık movement'leri ATOMİK kapat (qty/weight per-row eşitlik) + RETURNING
       //    ile fiilen BİZİM kapattığımız rolleri al. `exitedAt IS NULL` guard'ı:
       //    movement seti tx DIŞINDA okunduğundan (satır ~577) bu guard olmasa iki
