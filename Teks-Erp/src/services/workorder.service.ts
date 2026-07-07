@@ -2589,9 +2589,39 @@ export class WorkOrderService {
     const stepIds = existing.steps.map((step) => step.id);
 
     const { updated } = await prisma.$transaction(async (tx) => {
-      // GUARD: Fasonda (boyahanede) işlem gören/görmüş in-flight top varsa iptal
-      // edilemez. Fason malı asla ham stoğa dönemez — sipariş kopsa bile bu mal
-      // stok için üretilmeye devam eder.
+      // ATOMİK CLAIM ÖNCE (F57): WO satırını status-koşullu updateMany ile
+      // kilitle. Fason in-flight guard'ı BUNDAN SONRA çalışır — böylece guard,
+      // WO satır kilidini tutarken okur ve eşzamanlı bir fason sevkinin (dispatch
+      // tx başında touchWorkOrderTx ile AYNI satırı kilitler) COMMIT'li
+      // AT_SUBCONTRACTOR toplarını her zaman görür. Guard önce çalışsaydı, READ
+      // COMMITTED'da commit'siz dispatch topları görülmez (count=0), sonra claim
+      // dispatch commit'inden sonra geçer ve mal fasondayken WO iptal olurdu.
+      // Ayrıca eşzamanlı son-top finalize (tambur.finalize / kursun.finishStep)
+      // WO'yu COMPLETED yaparsa bu claim count===0 görür → 409. tx-DIŞI ön-kontrol
+      // (2371-2376) yalnız UX; asıl koruma burada.
+      const cancelClaim = await tx.workOrder.updateMany({
+        where: {
+          id,
+          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
+        },
+        data: { status: WorkOrderStatus.CANCELLED },
+      });
+      if (cancelClaim.count === 0) {
+        const fresh = await tx.workOrder.findUnique({
+          where: { id },
+          select: { status: true },
+        });
+        throw AppError.conflict(
+          `İş emri bu sırada ${
+            fresh?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
+          }, iptal edilemez. Listeyi yenileyin.`
+        );
+      }
+
+      // GUARD (claim'den SONRA — F57): Fasonda (boyahanede) işlem gören/görmüş
+      // in-flight top varsa iptal edilemez. Fason malı asla ham stoğa dönemez —
+      // sipariş kopsa bile bu mal stok için üretilmeye devam eder. Guard triplerse
+      // tüm tx (claim dahil) geri sarılır → WO IN_PROGRESS kalır.
       //   - AT_SUBCONTRACTOR                     → halen boyahanede
       //   - RETURNED_FROM_SUBCONTRACTOR          → fason dönüşü (eski model)
       //   - IN_PRODUCTION + SUBCONTRACTOR_RETURN → boyanmış açık kumaş, KK2'de
@@ -2625,31 +2655,6 @@ export class WorkOrderService {
               "stok için üretilmeye devam eder. İş emri iptal edilemez."
           );
         }
-      }
-
-      // ATOMİK CLAIM (check-then-act DEĞİL): terminal-durum reddini tx İÇİNDE,
-      // status-koşullu updateMany ile yap. tx-DIŞI ön-kontrol (2371-2376) yalnız
-      // UX; asıl koruma burada. Eşzamanlı son-top finalize (tambur.finalize /
-      // kursun.finishStep) WO'yu COMPLETED yaparsa bu claim count===0 görür →
-      // 409. Aksi halde READ COMMITTED'da bayat IN_PROGRESS okunup COMPLETED
-      // koşulsuzca CANCELLED'e ezilir, bitmiş depo malı iptal WO altında öksüz kalırdı.
-      const cancelClaim = await tx.workOrder.updateMany({
-        where: {
-          id,
-          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
-        },
-        data: { status: WorkOrderStatus.CANCELLED },
-      });
-      if (cancelClaim.count === 0) {
-        const fresh = await tx.workOrder.findUnique({
-          where: { id },
-          select: { status: true },
-        });
-        throw AppError.conflict(
-          `İş emri bu sırada ${
-            fresh?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
-          }, iptal edilemez. Listeyi yenileyin.`
-        );
       }
 
       if (stepIds.length > 0) {
