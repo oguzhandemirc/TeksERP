@@ -3,6 +3,10 @@ import { View, ScrollView, StyleSheet } from 'react-native';
 
 interface Props {
   children: React.ReactNode;
+  /** true: düz esnek satır, uçlara yaslı (`space-between`) — caller sol/sağ
+   *  yerleşimini iki-slot ile kontrol eder (ör. KK1: "Bu oturum" solda, "Son
+   *  Kayıtlar" sağda). false (varsayılan): yatayda kayar (çok chip taşmaz). */
+  spread?: boolean;
 }
 
 /**
@@ -11,11 +15,19 @@ interface Props {
  * (başlık + geri/ev + profil) zaten dolu olduğunda kullanılır; tablette
  * genelde gerek kalmaz (birincil satırda yer var).
  *
- * Yatayda kayar (ScrollView) — çok chip birikse bile taşma/kırpılma olmaz.
+ * Varsayılan: yatayda kayar (ScrollView) — çok chip birikse bile taşma/kırpılma
+ * olmaz. `spread` ile bunun yerine düz esnek satır (uçlara yaslı) render eder.
  * Kullanım: `<ScreenChrome secondRow={<>...chip'ler...</>}>`. `secondRow`
  * verilmezse ScreenChrome bu barı hiç render etmez (ekstra yükseklik yok).
  */
-export default function HeaderSecondRow({ children }: Props) {
+export default function HeaderSecondRow({ children, spread = false }: Props) {
+  if (spread) {
+    return (
+      <View style={styles.bar}>
+        <View style={styles.spreadContent}>{children}</View>
+      </View>
+    );
+  }
   return (
     <View style={styles.bar}>
       <ScrollView
@@ -39,6 +51,14 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  spreadContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,

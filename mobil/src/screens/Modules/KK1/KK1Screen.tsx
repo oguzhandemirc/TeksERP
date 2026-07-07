@@ -4,8 +4,6 @@ import {
   ScrollView,
   StyleSheet,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
   useWindowDimensions,
   TextInput as RNTextInput,
 } from 'react-native';
@@ -17,7 +15,6 @@ import {
   IconButton,
   Icon,
   TouchableRipple,
-  Appbar,
   Switch,
 } from 'react-native-paper';
 import Animated, {
@@ -26,6 +23,7 @@ import Animated, {
   Easing,
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedKeyboard,
   withTiming,
   withRepeat,
 } from 'react-native-reanimated';
@@ -58,6 +56,7 @@ import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRe
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { isWorkSessionLost } from '../../../services/api';
 import { useSessionEntriesStore } from '../../../store/sessionEntriesStore';
+import { useSessionStore } from '../../../store/sessionStore';
 import { itemService } from '../../../services/item.service';
 import {
   rollService,
@@ -110,11 +109,14 @@ function HeaderChip({
   label,
   onPress,
   spinning,
+  fill,
 }: {
   icon: string;
   label: string;
   onPress: () => void;
   spinning?: boolean;
+  /** true: telefon 2. katında satırı YARI YARIYA paylaşır (flex:1 + ortalı). */
+  fill?: boolean;
 }) {
   const rot = useSharedValue(0);
   const wasSpinning = useRef(false);
@@ -151,16 +153,18 @@ function HeaderChip({
   return (
     <TouchableRipple
       onPress={handlePress}
-      style={styles.headerChip}
+      style={[styles.headerChip, fill && styles.headerChipFill]}
       borderless
       rippleColor="rgba(255,255,255,0.2)"
       accessibilityLabel={label}
     >
-      <View style={styles.headerChipInner}>
+      <View style={[styles.headerChipInner, fill && styles.headerChipInnerFill]}>
         <Animated.View style={spinStyle}>
           <Icon source={icon} size={18} color="#fff" />
         </Animated.View>
-        <Text style={styles.headerChipText}>{label}</Text>
+        <Text style={styles.headerChipText} numberOfLines={1}>
+          {label}
+        </Text>
       </View>
     </TouchableRipple>
   );
@@ -173,6 +177,15 @@ export default function KK1Screen() {
   const device = useDeviceType();
   const compact = device === 'phone';
   useLandscapeLock(!compact);
+
+  // Bulunulan makine adı — telefonda başlık subtitle'ı olarak gösterilir (üst
+  // barda ⚙ çip yerine). SessionGate sayesinde oturum daima RAW_QC ile eşleşir.
+  const activeSession = useSessionStore((s) => s.active);
+  const machineName =
+    activeSession?.machine?.name ||
+    activeSession?.machine?.code ||
+    activeSession?.station?.name ||
+    undefined;
 
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
@@ -187,6 +200,17 @@ export default function KK1Screen() {
   // Telefon dikey: son kayıtlar tetiği header'a taşınır, body'deki buton gizlenir.
   const { width: winW, height: winH } = useWindowDimensions();
   const portraitPhone = compact && winH > winW;
+
+  // Klavye (yalnız telefon) — "Kaydet ve Etiket Bas" footer'ını klavye açılınca
+  // YUMUŞAKÇA üstüne kaldır, kapanınca geri indir. useAnimatedKeyboard klavyeyle
+  // birlikte akan bir shared value verir → jank/bekleme yok. Footer absolute
+  // olduğundan `bottom`'u animasyonluyoruz (edge-to-edge'de pencere küçülmüyor;
+  // insets.bottom ScreenChrome içeriğinde zaten uygulanıyor → onu düş).
+  const keyboard = useAnimatedKeyboard();
+  const footerAnimStyle = useAnimatedStyle(() => ({
+    bottom: Math.max(0, keyboard.height.value - insets.bottom),
+  }));
+
   // Compact'ta sağ panel drawer'a taşınır.
   const [recentsDrawerOpen, setRecentsDrawerOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -762,18 +786,19 @@ export default function KK1Screen() {
   // Basılıyor + sırada bekleyen etiket sayısı (offline'da birikebilir).
   const printingCount = (activePrintRoll ? 1 : 0) + printQueue.length;
 
-  // "Bu oturum" rozeti — hem tablet birincil barında hem telefon 2. katında
-  // kullanılır (tek yerde tanımlı, iki yere de aynen basılır).
+  // "Bu oturum" rozeti — hem tablet birincil barında hem telefon 2. katında.
+  // fill (yalnız compact/telefon): 2. katta "Son Kayıtlar" ile satırı YARI
+  // YARIYA paylaşır (flex:1 + içerik ortalı). Tablette (compact=false) fill yok.
   const sessionCountChip = sessionCount > 0 && (
     // Dokununca bu oturumda girilen topların listesi açılır.
     <TouchableRipple
       borderless
       onPress={() => setSessionListOpen(true)}
       rippleColor="rgba(255,255,255,0.2)"
-      style={styles.headerSessionChip}
+      style={[styles.headerSessionChip, compact && styles.headerSessionChipFill]}
       accessibilityLabel="Bu oturumda girilenleri göster"
     >
-      <View style={styles.headerSessionChipInner}>
+      <View style={[styles.headerSessionChipInner, compact && styles.headerChipInnerFill]}>
         <Icon source="check-circle" size={14} color="#86efac" />
         <Text style={styles.headerSessionLabel}>Bu oturum</Text>
         <AnimatedCounter value={sessionCount} style={styles.headerSessionCount} />
@@ -802,16 +827,31 @@ export default function KK1Screen() {
     </>
   );
 
-  // Telefon 2. katı — yalnız "Bu oturum". "Tüm Girişler" + "Yenile" burada
-  // TEKRARLANMAZ (çekmecede zaten var: liste üstünde Yenile, altında Tüm
-  // Girişler butonu); makine adı çipi ScreenChrome tarafından otomatik eklenir.
-  // Fragment daima "truthy" → ScreenChrome sessionCountChip null olsa bile
-  // 2. katı render eder (makine adı çipi yine görünsün).
-  const phoneSecondRow = <>{sessionCountChip}</>;
+  // Telefon 2. katı: "Bu oturum" (sol) + "Son Kayıtlar" (sağ) satırı YARI YARIYA
+  // paylaşır — her çip fill (flex:1). Biri yoksa (sayaç 0 / yatay) diğeri tüm
+  // satırı kaplar. Makine adı BURADA DEĞİL — başlık subtitle'ına taşındı
+  // (hidePlaceChip). "Tüm Girişler" + "Yenile" burada YOK (çekmecede var).
+  const phoneSecondRow = (
+    <>
+      {sessionCountChip}
+      {portraitPhone && (
+        <HeaderChip
+          icon="format-list-bulleted"
+          label={`Son Kayıtlar · ${totalCount}`}
+          onPress={() => setRecentsDrawerOpen(true)}
+          fill
+        />
+      )}
+    </>
+  );
 
   return (
     <ScreenChrome
       title="Ham Giriş"
+      // Telefon: makine adı başlık altında subtitle olarak (üst bardaki ⚙ çip
+      // yerine); tablet eskisi gibi çipi başlığın yanında gösterir.
+      subtitle={compact ? machineName : undefined}
+      hidePlaceChip={compact}
       headerExtras={
         <View style={styles.headerExtrasRow}>
           {(printingCount > 0 || failedPrints.length > 0) && (
@@ -842,17 +882,15 @@ export default function KK1Screen() {
           )}
           <SyncStatusChip />
           {!compact && sessionActionsRow}
-          {portraitPhone ? (
-            <Appbar.Action
-              icon="format-list-bulleted"
-              color="#fff"
-              onPress={() => setRecentsDrawerOpen(true)}
-              accessibilityLabel={`Son kayıtlar (${totalCount})`}
-            />
-          ) : null}
+          {/* Dikey telefonda "Son Kayıtlar" çekmece tetiği artık 2. katta
+              (phoneSecondRow) — yan menü açan tuş burada değil. */}
         </View>
       }
-      secondRow={compact ? phoneSecondRow : undefined}
+      // 2. katı yalnız içerik varken göster: dikey telefon (Son Kayıtlar hep
+      // var) VEYA sayaç>0 (Bu oturum). Yatay telefonda + sayaç 0 → boş şerit
+      // olmasın (Son Kayıtlar yatayda form gövdesinde).
+      secondRow={compact && (portraitPhone || sessionCount > 0) ? phoneSecondRow : undefined}
+      secondRowSpread={compact}
     >
       <View
         style={[
@@ -867,13 +905,11 @@ export default function KK1Screen() {
         ]}
       >
         {/* ── SOL: Form (kaydırılabilir — küçük ekranda taşmasın) ── */}
-        {/* Telefonda native klavye footer'ı örtmesin diye KAV; tablette numpad
-            sağ kolonda (native klavye yok) → enabled=false ile devre dışı. */}
-        <KeyboardAvoidingView
-          style={styles.formCol}
-          enabled={compact}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
+        {/* KAV kullanılmıyor: SDK 54/RN 0.81 edge-to-edge'de KAV & adjustResize
+            klavyeyi güvenilir yönetmiyor. Bunun yerine klavye yüksekliğini elle
+            dinleyip (keyboardHeight) alttaki "Kaydet ve Etiket Bas" footer'ına
+            marginBottom veriyoruz → footer klavyenin üstüne çıkar. */}
+        <View style={styles.formCol}>
         <ScrollView
           style={styles.formScroll}
           contentContainerStyle={[
@@ -927,16 +963,20 @@ export default function KK1Screen() {
                 style={[styles.manualPanel, !compact && styles.manualPanelTablet]}
               >
                 <View style={styles.manualField}>
-                  <Text style={[styles.manualFieldLabel, !compact && styles.manualFieldLabelTablet]}>
-                    Metraj (mt) <Text style={styles.required}>*</Text>
-                  </Text>
+                  {/* Telefonda üst etiket YOK (yer kazanmak için) — alan adı
+                      placeholder'da; tablette etiket kalır. */}
+                  {!compact && (
+                    <Text style={[styles.manualFieldLabel, styles.manualFieldLabelTablet]}>
+                      Metraj (mt) <Text style={styles.required}>*</Text>
+                    </Text>
+                  )}
                   <NumpadInput
                     ref={manualQtyRef}
                     mode="outlined"
                     value={manualQty}
                     onChangeText={setManualQty}
                     numpadLabel="Metraj (mt)"
-                    placeholder="0.0"
+                    placeholder={compact ? 'Metraj (mt)' : '0.0'}
                     style={styles.input}
                     contentStyle={[styles.manualInputContent, !compact && styles.manualInputContentTablet]}
                     useNativeKeyboard={compact}
@@ -944,14 +984,16 @@ export default function KK1Screen() {
                 </View>
                 {weightEntryEnabled && (
                   <View style={styles.manualField}>
-                    <Text style={[styles.manualFieldLabel, !compact && styles.manualFieldLabelTablet]}>Ağırlık (kg)</Text>
+                    {!compact && (
+                      <Text style={[styles.manualFieldLabel, styles.manualFieldLabelTablet]}>Ağırlık (kg)</Text>
+                    )}
                     <NumpadInput
                       ref={manualWeightRef}
                       mode="outlined"
                       value={manualWeight}
                       onChangeText={setManualWeight}
                       numpadLabel="Ağırlık (kg)"
-                      placeholder="0.0"
+                      placeholder={compact ? 'Ağırlık (kg)' : '0.0'}
                       style={styles.input}
                       contentStyle={[styles.manualInputContent, !compact && styles.manualInputContentTablet]}
                       useNativeKeyboard={compact}
@@ -965,26 +1007,52 @@ export default function KK1Screen() {
           {/* ── Üretim ayarı: ürün + en + kalite (kaydetler ARASI kalıcı) ── */}
           <Surface style={[styles.card, !compact && styles.cardTablet]} elevation={1}>
             {compact ? (
-              <TouchableRipple
-                borderless
-                rippleColor="rgba(79, 70, 229, 0.15)"
-                onPressIn={blurAll}
-                onPress={() => {
-                  blurAll();
-                  setPickerOpen('item');
-                }}
-                style={styles.picker}
-              >
-                <View style={styles.pickerInner}>
-                  <Text
-                    style={[styles.pickerText, !form.itemId && styles.pickerPlaceholder]}
-                    numberOfLines={1}
-                  >
-                    {form.itemLabel || 'Ürün seçiniz...'}
-                  </Text>
-                  <Icon source="chevron-down" size={22} color="#475569" />
+              // Telefon: tablettekiyle AYNI dil ama YAN YANA — "Desen Seç" butonu
+              // 1/4 (flex:1), "Seçilen Desen" kutusu 3/4 (flex:3). Dar butona
+              // sığsın diye ikon yok + küçük yazı.
+              <View style={styles.productRowCompact}>
+                {/* Paper Button etiketi `\n`'i yutuyordu → TouchableRipple ile
+                    2-satır ("Desen" / "Seç") ORTALI, dar 1/4 butona sığar. */}
+                <TouchableRipple
+                  borderless
+                  onPressIn={blurAll}
+                  onPress={() => {
+                    blurAll();
+                    setPickerOpen('item');
+                  }}
+                  rippleColor="rgba(79,70,229,0.16)"
+                  style={styles.productBtnCompact}
+                  accessibilityLabel="Desen seç"
+                >
+                  <View style={styles.productBtnCompactInner}>
+                    <Text style={styles.productBtnCompactLabel}>{'Desen\nSeç'}</Text>
+                  </View>
+                </TouchableRipple>
+                <View
+                  style={[
+                    styles.productSelectedBox,
+                    styles.productSelectedBoxCompact,
+                    !!form.itemId && styles.productSelectedBoxActive,
+                  ]}
+                >
+                  <Text style={styles.productSelectedCaption}>Seçilen Desen</Text>
+                  <View style={styles.productSelectedValueRow}>
+                    {!!form.itemId && (
+                      <Icon source="check-circle" size={18} color={colors.success} />
+                    )}
+                    <Text
+                      style={[
+                        styles.productSelectedName,
+                        styles.productSelectedNameCompact,
+                        !form.itemId && styles.productSelectedNameEmpty,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {form.itemLabel || 'Henüz desen seçilmedi'}
+                    </Text>
+                  </View>
                 </View>
-              </TouchableRipple>
+              </View>
             ) : (
               // Tablet: büyük "Ürün Seç" butonu + yanında seçili ürün adı (saha
               // kullanımı için büyük dokunma hedefi + tek bakışta okunur seçim).
@@ -1069,7 +1137,13 @@ export default function KK1Screen() {
                   : 'Tanımlı kalite sınıfı yok'}
               </Text>
             ) : (
-              <View style={[styles.segmentRow, !compact && styles.segmentRowTablet]}>
+              <View
+                style={[
+                  styles.segmentRow,
+                  compact && styles.segmentRowCompact,
+                  !compact && styles.segmentRowTablet,
+                ]}
+              >
                 {qualityGrades.map((qg) => (
                   <QualitySegment
                     key={qg.id}
@@ -1090,7 +1164,14 @@ export default function KK1Screen() {
             OFFLINE-AWARE: mutation'a disabled binding YOK — paused mutation
             isPending kalsa da sıradaki kayıt engellenmesin. Yalnız `pulling`
             (makineden okuma, ~1sn) sırasında çift-tetiklemeyi kilitleriz. */}
-        <View style={[styles.submitFooter, compact ? styles.submitFooterCompact : styles.submitFooterTablet]}>
+        <Animated.View
+          style={[
+            styles.submitFooter,
+            compact ? styles.submitFooterCompact : styles.submitFooterTablet,
+            // Telefon: footer absolute + yumuşak klavye takibi (bottom animasyonlu).
+            compact && footerAnimStyle,
+          ]}
+        >
           <Button
             mode="contained"
             icon={pulling ? undefined : justSaved ? 'check-bold' : 'package-check'}
@@ -1108,8 +1189,8 @@ export default function KK1Screen() {
                 ? 'Kaydedildi ✓'
                 : 'Kaydet ve Etiket Bas'}
           </Button>
+        </Animated.View>
         </View>
-        </KeyboardAvoidingView>
 
         {/* ── SAĞ: Üstte son kayıtlar listesi + altta Numpad. Aksiyonlar header'da;
             "Son Kayıtlar" başlığı KALDIRILDI (kullanıcı isteği — liste kendini
@@ -2326,6 +2407,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.28)',
     overflow: 'hidden',
   },
+  // fill (telefon 2. katı): satırı yarı yarıya paylaşmak için flex:1; dış boşluk
+  // sıfır (aralığı HeaderSecondRow'un kendi gap'i belirler).
+  headerChipFill: { flex: 1, marginLeft: 0 },
   headerChipInner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2333,13 +2417,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
+  // fill: içerik yarım-genişlik pilde ortalansın.
+  headerChipInnerFill: { justifyContent: 'center' },
   headerChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   // Sol — Form
   formCol: { flex: 1.4, backgroundColor: '#f8fafc' },
   formScroll: { flex: 1 },
   formContent: { padding: 16, gap: 12, flexGrow: 1, paddingBottom: 16 },
-  formContentCompact: { padding: 12, gap: 10, paddingBottom: 14 },
+  // paddingTop: Manuel Giriş üst boşluğu; gap: Manuel ↔ ürün kartı arası;
+  // paddingBottom: YÜZEN Kaydet butonunun altında içerik kalmasın (buton ~58 +
+  // footer padding + pay).
+  formContentCompact: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 80, gap: 8 },
   formContentTablet: { padding: 16, gap: 16, paddingBottom: 16 },
   // Sabit alt aksiyon şeridi — ScrollView'in dışında, hep görünür.
   submitFooter: {
@@ -2350,7 +2439,20 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
   },
-  submitFooterCompact: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10 },
+  // Telefon: footer AKIŞTAN ÇIKAR — formCol'un altında YÜZER (absolute), arka
+  // plan/çizgi YOK (sadece buton, gri şerit yok). İçerik full-height kayar,
+  // formContentCompact.paddingBottom butonun altında kalmayı önler.
+  submitFooterCompact: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 6,
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+  },
   submitFooterTablet: {
     paddingHorizontal: 14,
     paddingTop: 16,
@@ -2358,7 +2460,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderTopWidth: 0,
   },
-  card: { padding: 14, borderRadius: 12, backgroundColor: '#fff', gap: 4 },
+  // gap 12: telefon kartındaki blok arası (Desen Seç/Seçilen Desen satırı ↔ Fire
+  // tuşları) eşit boşlukta olsun (ürün satırı + kalite arası aynı).
+  card: { padding: 14, borderRadius: 12, backgroundColor: '#fff', gap: 12 },
   cardTablet: { padding: 16, gap: 12, borderRadius: 16 },
 
   // ── Manuel giriş paneli (üst, açılır-kapanır; amber = "anormal/dikkat") ──
@@ -2371,22 +2475,24 @@ const styles = StyleSheet.create({
   },
   manualBarActive: { borderColor: colors.warningDark },
   manualBarTouch: { borderRadius: radius.md },
+  // Telefon değerleri: klavye açılınca form altta kalmasın diye kompakt tutuldu
+  // (tablet kendi büyük değerlerini kullanır).
   manualBarInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: spacing.sm,
   },
   manualBarInnerTablet: { paddingHorizontal: 16, paddingVertical: 14, gap: 16 },
-  manualBarTitle: { fontSize: 15, fontWeight: '700', color: colors.warningDark },
+  manualBarTitle: { fontSize: 16, fontWeight: '700', color: colors.warningDark },
   manualBarTitleTablet: { fontSize: 20 },
   manualPanel: {
     flexDirection: 'row',
     gap: spacing.md,
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+    paddingTop: 2,
   },
   manualPanelTablet: { gap: 16, paddingHorizontal: 16, paddingBottom: 16, paddingTop: 8 },
   manualField: { flex: 1 },
@@ -2394,10 +2500,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#92400e',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   manualFieldLabelTablet: { fontSize: 18, marginBottom: 8 },
-  manualInputContent: { fontSize: 24, fontWeight: '700', textAlign: 'center' },
+  manualInputContent: { fontSize: 20, fontWeight: '700', textAlign: 'center', height: 42 },
   manualInputContentTablet: { fontSize: 36, height: 72 },
 
   // ── En satırı + tek-tuş temizleme ──
@@ -2435,6 +2541,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(134,239,172,0.45)',
     overflow: 'hidden',
   },
+  // fill (telefon 2. katı): "Son Kayıtlar" ile satırı yarı yarıya paylaş (flex:1).
+  headerSessionChipFill: { flex: 1, marginLeft: 0 },
   headerSessionChipInner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2463,23 +2571,26 @@ const styles = StyleSheet.create({
   labelSpaced: { marginTop: 8 },
   required: { color: '#dc2626' },
 
-  picker: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    overflow: 'hidden',
-  },
-  pickerInner: {
-    flexDirection: 'row',
+  // ── Telefon ürün seçimi: YAN YANA — "Desen Seç" 1/4 (flex:1), "Seçilen
+  //    Desen" 3/4 (flex:3). Dar butona sığsın diye 2-satır ORTALI etiket. ──
+  productRowCompact: { flexDirection: 'row', alignItems: 'stretch', gap: 10 },
+  // contained-tonal görünümü (açık indigo zemin + indigo yazı).
+  productBtnCompact: { flex: 1, borderRadius: 12, backgroundColor: '#e0e7ff', overflow: 'hidden' },
+  productBtnCompactInner: {
+    height: 64,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 50,
-    paddingHorizontal: 14,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
-  pickerDisabled: { backgroundColor: '#f1f5f9', opacity: 0.6 },
-  pickerText: { fontSize: 16, color: '#0f172a', flex: 1 },
-  pickerPlaceholder: { color: '#94a3b8' },
+  productBtnCompactLabel: {
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 19,
+    textAlign: 'center',
+    color: '#4338ca',
+  },
+  productSelectedBoxCompact: { flex: 3, height: 64 },
+  productSelectedNameCompact: { fontSize: 20 },
 
   // ── Tablet ürün seçimi: büyük buton + yanında seçili ürün adı ──
   productRowTablet: { flexDirection: 'row', alignItems: 'stretch', gap: 16 },
@@ -2545,6 +2656,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  // Telefon: TEK SATIR, hepsi eşit (flex:1) — sarmaz, taşarsa küçülür.
+  segmentRowCompact: { flexWrap: 'nowrap' },
   segmentRowTablet: { marginTop: 8 },
   segmentLoading: {
     minHeight: 60,
@@ -2561,6 +2674,7 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
+    minWidth: 0, // nowrap satırda taşmadan küçülebilsin (uzun etiket kırpılır)
     minHeight: 50,
     borderRadius: 10,
     borderWidth: 2,
@@ -2583,6 +2697,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 12,
   },
+  // Telefon: yan yana tek satır (flex:1 base'ten). Birden çok sınıf sığsın diye
+  // yatay dolgu küçük; taşarsa metin kırpılır (minWidth:0).
+  segmentCompact: {
+    minHeight: 56,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
   segmentLabel: {
     fontSize: 16,
     fontWeight: '800',
@@ -2590,12 +2712,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   segmentLabelTablet: { fontSize: 26, fontWeight: '800' },
+  segmentLabelCompact: { fontSize: 16, lineHeight: 18 },
   segmentLabelSelected: {
     color: '#4f46e5',
   },
 
   submitBtn: { borderRadius: 12, marginTop: 4 },
-  submitBtnContent: { height: 56 },
+  // Telefon boyu (tablet kendi büyük değerini kullanır).
+  submitBtnContent: { height: 58 },
   submitBtnContentTablet: { height: 112 },
   submitBtnLabel: { fontSize: 18, fontWeight: '700' },
   submitBtnLabelTablet: { fontSize: 30 },
@@ -2746,6 +2870,7 @@ const QualitySegment = React.memo(function QualitySegment({
       rippleColor="rgba(79, 70, 229, 0.15)"
       style={[
         styles.segment,
+        compact && styles.segmentCompact,
         !compact && styles.segmentTablet,
         selected && styles.segmentSelected,
         selected && grade.color
@@ -2754,8 +2879,10 @@ const QualitySegment = React.memo(function QualitySegment({
       ]}
     >
       <Text
+        numberOfLines={2}
         style={[
           styles.segmentLabel,
+          compact && styles.segmentLabelCompact,
           !compact && styles.segmentLabelTablet,
           selected && styles.segmentLabelSelected,
           selected && grade.color ? { color: '#fff' } : null,

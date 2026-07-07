@@ -29,6 +29,12 @@ interface Props {
   /** Appbar'ın ALTINDA opsiyonel 2. satır — birincil bara sığmayan aksiyonlar
    *  (dar telefon ekranı) için. Bkz. HeaderSecondRow. Verilmezse render edilmez. */
   secondRow?: React.ReactNode;
+  /** true: 2. kat uçlara-yaslı (space-between) — caller sol/sağ yerleşimi verir
+   *  (bkz. HeaderSecondRow `spread`). false (varsayılan): doğal genişlik + kayar. */
+  secondRowSpread?: boolean;
+  /** true: makine adı çipini (PlaceChip) HİÇ gösterme — makine adını ekranın
+   *  kendisi başka yerde (ör. subtitle) gösteriyorsa. */
+  hidePlaceChip?: boolean;
   children: React.ReactNode;
 }
 
@@ -39,6 +45,8 @@ export default function ScreenChrome({
   onStepBack,
   headerExtras,
   secondRow,
+  secondRowSpread,
+  hidePlaceChip,
   children,
 }: Props) {
   const user = useAuthStore((s) => s.user);
@@ -131,8 +139,9 @@ export default function ScreenChrome({
             {/* Bulunulan makine ADI (salt gösterge — PlaceChip kendi kendini
                 gate'ler). Ekranın 2. katı VARSA (dar telefon) oraya iner —
                 başlığın yanında sıkışmasın; yoksa (tablet) burada, başlığın
-                hemen yanında kalır. */}
-            {!secondRow && <PlaceChip />}
+                hemen yanında kalır. hidePlaceChip → hiç gösterilmez (makine adı
+                subtitle'a taşınmışsa). */}
+            {!secondRow && !hidePlaceChip && <PlaceChip />}
           </View>
           {subtitle && (
             <Text variant="labelMedium" style={styles.subtitle} numberOfLines={1}>
@@ -229,11 +238,12 @@ export default function ScreenChrome({
         </Menu>
       </Appbar.Header>
 
-      {/* Makine adı çipi 2. katın İLK öğesi — ekran kendi secondRow içeriğini
-          (varsa) yanına ekler. Başlık satırındaki PlaceChip yerini alır. */}
+      {/* 2. kat — makine adı çipi (hidePlaceChip değilse) İLK öğe olarak eklenir,
+          ekranın secondRow içeriği devamına gelir. hidePlaceChip → yalnız ekranın
+          kendi içeriği (KK1: "Bu oturum" / "Son Kayıtlar" uçlara yaslı). */}
       {secondRow && (
-        <HeaderSecondRow>
-          <PlaceChip />
+        <HeaderSecondRow spread={secondRowSpread}>
+          {!hidePlaceChip && <PlaceChip />}
           {secondRow}
         </HeaderSecondRow>
       )}
