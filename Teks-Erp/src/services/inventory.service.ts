@@ -97,6 +97,7 @@ import {
   openMovementForNextStep,
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
 import { touchShipmentPreparingTx } from "./helpers/shipment-locks.helper";
 
@@ -1838,10 +1839,35 @@ export class InventoryService {
       };
     }
 
-    // STOCK → CANCELLED. RollError ve diğer geçmiş kayıtları aynen kalır.
-    const updated = await prisma.roll.update({
-      where: { id },
-      data: { status: RollStatus.CANCELLED },
+    // STOCK → CANCELLED (F113/O-1). Atomik claim: hâlâ STOCK iken çek —
+    // eşzamanlı prepareRawForSale/recoverOpenFabricToProduction/fason sevk topu
+    // STOCK'tan çıkardıysa count===0 → 409 (koşulsuz update dangling CANCELLED
+    // üretiyordu). CANCELLED top hiçbir istasyon/sevk/çuval referansı taşımamalı.
+    const updated = await prisma.$transaction(async (tx) => {
+      const claim = await tx.roll.updateMany({
+        where: { id, status: RollStatus.STOCK },
+        data: {
+          status: RollStatus.CANCELLED,
+          currentStepId: null,
+          shipmentId: null,
+          sackId: null,
+        },
+      });
+      if (claim.count === 0) {
+        throw AppError.conflict(
+          "Top az önce başka bir akışa girdi (durumu değişti) — tekrar deneyin",
+        );
+      }
+      // STOCK topun currentStepId'si normalde null; anomali olarak takılıysa açık
+      // movement'ı kapat + step recompute (softDelete hijyeni; defansif).
+      if (existing.currentStepId) {
+        await tx.rollMovement.updateMany({
+          where: { rollId: id, exitedAt: null },
+          data: { exitedAt: new Date(), qtyOut: 0, weightOut: 0, notes: "ARCHIVED" },
+        });
+        await recomputeStepStatus(tx, existing.currentStepId);
+      }
+      return tx.roll.findUniqueOrThrow({ where: { id } });
     });
 
     await AuditService.log({
@@ -2205,10 +2231,43 @@ export class InventoryService {
     const defaultQualityGradeId = await resolveQualityGradeId("1.KALITE");
 
     const roll = await prisma.$transaction(async (tx) => {
+      // F115: WO satırını tx başında kilitle → cancelReceipt (o da tx başında
+      // touchWorkOrderTx alır) ve WO-completion yollarıyla serileş. Guard'ları
+      // kilit ALTINDA TAZE oku — pre-tx guard'lar (2197-2227) yalnız UX; araya
+      // giren cancelReceipt/WO-tamamlama commit ederse iptalli/tamamlanmış
+      // parent'a hayalet IN_PRODUCTION top doğardı (write-skew).
+      await touchWorkOrderTx(tx, receipt.workOrderId);
+
+      const fr = await tx.subcontractorReceipt.findUnique({
+        where: { id: data.receiptId },
+        select: {
+          cancelledAt: true,
+          workOrder: { select: { status: true, targetItemId: true } },
+        },
+      });
+      if (!fr) throw AppError.notFound("Mal kabul belgesi bulunamadı");
+      if (fr.cancelledAt) {
+        throw AppError.conflict("Mal kabul bu sırada iptal edildi — açık kumaş açılamaz");
+      }
+      if (fr.workOrder.status === WorkOrderStatus.COMPLETED) {
+        throw AppError.conflict("İş emri bu sırada tamamlandı — açık kumaş açılamaz");
+      }
+      if (!fr.workOrder.targetItemId) {
+        throw AppError.badRequest("İş emrinde hedef ürün (targetItem) tanımlı değil");
+      }
+      const fs = await tx.workOrderStep.findUnique({
+        where: { id: data.stepId },
+        select: { status: true },
+      });
+      if (!fs) throw AppError.notFound("İş emri adımı bulunamadı");
+      if (fs.status === StepStatus.COMPLETED || fs.status === StepStatus.SKIPPED) {
+        throw AppError.conflict(`Adım bu sırada kapandı (${fs.status}) — açık kumaş açılamaz`);
+      }
+
       const created = await tx.roll.create({
         data: {
           barcode: null,
-          itemId: receipt.workOrder.targetItemId!,
+          itemId: fr.workOrder.targetItemId,
           colorId: receipt.appliedColorId,
           initialQty: 0,
           currentQty: 0,
