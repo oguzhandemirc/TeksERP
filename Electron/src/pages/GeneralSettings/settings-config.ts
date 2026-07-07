@@ -193,9 +193,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "label",
     label: "Etiket Baskısı",
     icon: Tags,
-    description: "Org-geneli etiket baskı ayarları: kopya adedi, top adı şablonu, native gönderim.",
+    description: "Org-geneli etiket baskı ayarları: kopya adedi, top adı şablonu, varsayılan medya, native gönderim.",
     keywords:
-      "etiket label baskı yazdır kopya adet çift üst alt yapıştır tambur top adı şablon native gönderim",
+      "etiket label baskı yazdır kopya adet çift üst alt yapıştır tambur top adı şablon native gönderim varsayılan medya boyut ölçü mm dpi eni boyu boşluk pay",
     kind: "label",
   },
   {

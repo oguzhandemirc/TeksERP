@@ -78,7 +78,6 @@ const variantCreateSchema = z.object({
   name: z.string().max(60).optional(),
   widthMm: z.number().min(10).max(500),
   heightMm: z.number().min(10).max(500),
-  sourceProfileId: z.string().uuid().nullable().optional(),
   copyFromVariantId: z.string().uuid().nullable().optional(),
   elements: z.unknown().optional(),
 });
@@ -87,7 +86,6 @@ const variantUpdateSchema = z.object({
   name: z.string().max(60).optional(),
   widthMm: z.number().min(10).max(500).optional(),
   heightMm: z.number().min(10).max(500).optional(),
-  sourceProfileId: z.string().uuid().nullable().optional(),
   elements: z.unknown().optional(),
 });
 

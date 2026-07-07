@@ -49,7 +49,7 @@ async function main() {
   const format: ResolvedLabelFormat = {
     widthMm: 100, heightMm: 60, marginMm: 3, marginTopMm: 3, marginRightMm: 3,
     marginBottomMm: 3, marginLeftMm: 3, gapMm: 2, orientation: "LANDSCAPE" as never,
-    dpi: 203, language: "PPLB" as never, profileId: "p", source: "machine" as never,
+    dpi: 203, language: "PPLB" as never, source: "machine" as never,
   };
   const payload = { barcode: "TEKS20260706XX01", itemName: "PATOS", lengthMeters: 100 } as unknown as LabelPayload;
   const out = emitCanvasPplb({

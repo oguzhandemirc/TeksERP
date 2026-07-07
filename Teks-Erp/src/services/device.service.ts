@@ -49,7 +49,10 @@ const PERIPHERAL_SUMMARY_SELECT = {
   kind: true,
   connectionType: true,
   languageOverride: true,
-  formatProfile: { select: { id: true, code: true, name: true } },
+  // Etiket Stüdyosu v2: medya cihazın kendinde ("Boyutlar" profili emekli).
+  labelWidthMm: true,
+  labelHeightMm: true,
+  labelDpi: true,
 } as const;
 
 const DEVICE_KINDS = new Set(["TABLET", "PHONE", "DESKTOP"]);

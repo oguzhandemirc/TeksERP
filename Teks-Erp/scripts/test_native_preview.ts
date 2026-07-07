@@ -20,7 +20,7 @@ function check(label: string, ok: boolean, extra = "") {
 const fmt = {
   widthMm: 100, heightMm: 50, marginMm: 3,
   marginTopMm: 3, marginRightMm: 3, marginBottomMm: 3, marginLeftMm: 3,
-  gapMm: 2, dpi: 203, orientation: "LANDSCAPE", language: "PPLB", profileId: null, source: "system-default",
+  gapMm: 2, dpi: 203, orientation: "LANDSCAPE", language: "PPLB", source: "system-default",
 } as never;
 const payload = mockPayload("ROLL_FINISHED" as never);
 const wd = mmToDots(100, 203);

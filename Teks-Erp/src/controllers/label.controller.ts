@@ -41,20 +41,20 @@ const previewSchema = z.object({
 
 // Test Et: örnek etiketi verilen yazıcıya gönder (Faz-2 doğrulama).
 const testNativeSchema = z.object({
-  profileId: z.string().uuid("Geçersiz profil ID").optional(),
+  /** Örnek baskıda medyası kullanılacak yazıcı cihazı (boş → sistem varsayılan medyası). */
+  peripheralId: z.string().uuid().optional(),
   printerIp: z.string().trim().min(3, "Yazıcı IP gerekli").max(64),
   port: z.number().int().min(1).max(65535).optional(),
   language: z.enum(["RASTER_HTML", "PPLA", "PPLB", "ZPL"]).optional(),
 });
 
 /**
- * Fiziksel format çözümü girdisi: explicit ?profileId= veya makine bağlamı.
- * machineId önceliği: AKTİF ÇALIŞMA OTURUMU (mobil baskı oturumun makinesinin
+ * Fiziksel medya çözümü girdisi: explicit ?peripheralId= (cihaz medyası) veya makine
+ * bağlamı. machineId önceliği: AKTİF ÇALIŞMA OTURUMU (mobil baskı oturumun makinesinin
  * yazıcısına gider) → GEÇİŞ fallback'i cihazın statik ataması (req.device.machineId,
- * Faz 6'da sökülür) → opsiyonel ?machineId= query (Electron). Yoksa sistem-default.
+ * Faz 6'da sökülür) → opsiyonel ?machineId= query (Electron). Yoksa sistem-varsayılan medya.
  */
 async function resolveFormatOpts(req: Request): Promise<{
-  profileId?: string;
   machineId?: string;
   peripheralId?: string;
   deviceId?: string;
@@ -66,7 +66,6 @@ async function resolveFormatOpts(req: Request): Promise<{
     req.device?.machineId ??
     (typeof req.query.machineId === "string" ? req.query.machineId : undefined);
   return {
-    profileId: typeof req.query.profileId === "string" ? req.query.profileId : undefined,
     machineId: machineId ?? undefined,
     // Cihaz kaydı yönlendirmesi: explicit ?peripheralId= veya tablete-bağlı yazıcı
     // için req.device.id (device.middleware). ?templateId= explicit şablon override.
@@ -241,13 +240,13 @@ export class LabelController {
     } catch (e) { next(e); }
   };
 
-  /** Test Et: profil geometrisinde örnek etiket HTML'i (boyut/pay önizleme). */
+  /** Test Et: seçili yazıcının medyasında örnek etiket HTML'i (boyut/pay önizleme). */
   getSampleLabelHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const profileId =
+      const peripheralId =
         (req.params.id as string | undefined) ??
-        (typeof req.query.profileId === "string" ? req.query.profileId : undefined);
-      const result = await this.service.getSampleLabelHtml(profileId);
+        (typeof req.query.peripheralId === "string" ? req.query.peripheralId : undefined);
+      const result = await this.service.getSampleLabelHtml(peripheralId);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(200).send(result.data.html);
     } catch (e) { next(e); }
@@ -298,7 +297,7 @@ export class LabelController {
 
   /**
    * Kartela etiketinin tam HTML'i (text/html). `/rolls/:id/html`'in kartela analoğu.
-   * Kartela hep 100×60 yatay düzende basılır; format `?profileId=`/`?machineId=` veya
+   * Kartela hep 100×60 yatay düzende basılır; format `?peripheralId=`/`?machineId=` veya
    * sistem default ile çözülür.
    */
   getSwatchLabelHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

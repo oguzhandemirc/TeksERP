@@ -32,7 +32,10 @@ export interface PeripheralSummary {
   kind: string;
   connectionType: string;
   languageOverride: string | null;
-  formatProfile: { id: string; code: string; name: string } | null;
+  // Etiket Stüdyosu v2: medya cihazın kendinde ("Boyutlar" profili emekli).
+  labelWidthMm: number | null;
+  labelHeightMm: number | null;
+  labelDpi: number | null;
 }
 
 /** Cihazın SON çalışma oturumu — "son oturum açma" başlık verisi. */

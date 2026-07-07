@@ -5,8 +5,8 @@
 // Yeni varyant mevcut birinden KOPYALANIR (otomatik ölçekleme YOK) veya boş
 // iskeletle başlar. Baskıda medyaya ±1mm uyan varyant; yoksa birincil (★).
 
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Star, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,10 +21,12 @@ import {
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { labelTemplateService, type LabelTemplateVariant } from "@/services/labelTemplateService";
-import { loadAllForPicker } from "@/lib/picker-loader";
-import { labelFormatProfileService } from "@/pages/LabelFormatProfiles/service";
-import type { LabelFormatProfile } from "@/pages/LabelFormatProfiles/types";
 import { starterLayout } from "./canvas-model";
+
+// Sabit varsayılan medya (mm) — birincil varyant yoksa yeni varyant bununla açılır.
+// ("Boyutlar"/LabelFormatProfile kataloğu emekli; ölçü artık cihaz medyasında.)
+const DEFAULT_W = 100;
+const DEFAULT_H = 50;
 
 interface Props {
   templateId: string;
@@ -118,15 +120,19 @@ function NewVariantDialog({ open, onOpenChange, templateId, variants, onCreated 
   variants: LabelTemplateVariant[];
   onCreated: (v: LabelTemplateVariant) => void;
 }) {
-  const [widthMm, setWidthMm] = useState(100);
-  const [heightMm, setHeightMm] = useState(60);
+  const primary = variants.find((v) => v.isPrimary) ?? variants[0] ?? null;
+  const [widthMm, setWidthMm] = useState(primary ? primary.widthMm : DEFAULT_W);
+  const [heightMm, setHeightMm] = useState(primary ? primary.heightMm : DEFAULT_H);
   const [source, setSource] = useState<string>("blank"); // "blank" | variantId
 
-  const profilesQ = useQuery({
-    queryKey: ["label-format-profiles", "picker"],
-    queryFn: () => loadAllForPicker(labelFormatProfileService).then((r) => r.data),
-    enabled: open,
-  });
+  // Her açılışta ölçüyü birincil varyanttan (yoksa 100×50) ön-doldur — elle
+  // düzenlenebilir kalır. (Boyut kataloğu bağı yok; ölçü serbest girilir.)
+  useEffect(() => {
+    if (!open) return;
+    setWidthMm(primary ? primary.widthMm : DEFAULT_W);
+    setHeightMm(primary ? primary.heightMm : DEFAULT_H);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -148,32 +154,11 @@ function NewVariantDialog({ open, onOpenChange, templateId, variants, onCreated 
     },
   });
 
-  const applyProfile = (p: LabelFormatProfile) => {
-    setWidthMm(Number(p.widthMm));
-    setHeightMm(Number(p.heightMm));
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>Yeni Boyut Varyantı</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Boyut profili (referans — ön-doldurur, bağlamaz)</Label>
-            <Select onValueChange={(id) => {
-              const p = (profilesQ.data ?? []).find((x) => x.id === id);
-              if (p) applyProfile(p);
-            }}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Profilden ölçü al…" /></SelectTrigger>
-              <SelectContent>
-                {(profilesQ.data ?? []).map((p) => (
-                  <SelectItem key={p.id} value={p.id} className="text-xs">
-                    {p.name} ({Number(p.widthMm)}×{Number(p.heightMm)} mm)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <Label className="text-xs">Genişlik (mm)</Label>

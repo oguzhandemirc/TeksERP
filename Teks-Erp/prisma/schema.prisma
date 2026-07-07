@@ -147,7 +147,7 @@ enum PrinterLanguage {
   ZPL
 }
 
-/// Etiket yönü — format profili geometrisi.
+/// Etiket yönü — medya geometrisinden türer (w ≥ h → LANDSCAPE).
 enum LabelOrientation {
   PORTRAIT
   LANDSCAPE
@@ -513,50 +513,11 @@ model Device {
   @@map("devices")
 }
 
-/// Etiketin fiziksel baskı geometrisi — sabit-kodlu A6'nın DB hali.
-/// widthMm/heightMm = medya (fiziksel etiket boyutu); marginMm = GÜVENLİK PAYI
-/// (her kenardan içerik insetı; ölçüm/etiket toleransını emer). İçerik genişliği
-/// = widthMm − 2×marginMm. Bir profil çok istasyon/model tarafından paylaşılır.
-model LabelFormatProfile {
-  id          String           @db.Uuid @id @default(uuid())
-  code        String           @unique @db.VarChar(48) // "ARGOX_TOP_100x148"
-  name        String           @db.VarChar(100)
-  widthMm     Decimal          @db.Decimal(6, 2)
-  heightMm    Decimal          @db.Decimal(6, 2)
-  marginMm    Decimal          @default(3) @db.Decimal(5, 2) // genel/eski tek pay (per-side boşsa buna düşer)
-  /// Kenar-başına pay (mm). Boş → marginMm'e düşer (geri uyumlu). PPLB üreticisi
-  /// bunları kullanır: sol=x başlangıcı, üst=y başlangıcı, alt=alt barkod, sağ=içerik sınırı.
-  marginTopMm    Decimal? @db.Decimal(5, 2)
-  marginRightMm  Decimal? @db.Decimal(5, 2)
-  marginBottomMm Decimal? @db.Decimal(5, 2)
-  marginLeftMm   Decimal? @db.Decimal(5, 2)
-  gapMm       Decimal          @default(2) @db.Decimal(5, 2) // etiketler arası boşluk (gap sensörü)
-  dpi         Int              @default(203)
-  orientation LabelOrientation @default(PORTRAIT)
-  isActive    Boolean          @default(true)
-  /// TOP (rulo) etiketlerinin sistem-varsayılan boyutu. Aynı anda EN FAZLA bir profil
-  /// true (partial unique index). Kartela (SWATCH) bundan etkilenmez — o code="DEFAULT"
-  /// kullanır; böylece top ile kartela boyutu bağımsız ayarlanır.
-  isRollDefault Boolean @default(false)
-  /// KALICI silinme damgası (deletedAt kalıbı) — dolu=silinmiş: listelerde görünmez,
-  /// düzenlenemez; satır veri bütünlüğü için durur (kod DEL- önekiyle serbest).
-  deletedAt DateTime? @db.Timestamptz
-
-  peripherals      PeripheralDevice[]
-  templateVariants LabelTemplateVariant[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([isActive])
-  @@map("label_format_profiles")
-}
-
 /// Birleşik CİHAZ KAYDI — yazıcılar (ağ/Bluetooth/USB/seri) + tekstil makine
 /// sinyal kaynakları (kantar/metraj, kayıt-only). Her cihaz dilini (languageOverride;
-/// boş → global `label.printerLanguage`), format profilini (boş → sistem-default
-/// profil) ve şablon yönlendirmesini taşır →
-/// baskı anında cihaz→{dil,profil,şablon} çözülür. Sahiplik tam-biri: makineye
+/// boş → global `label.printerLanguage`), MEDYASINI (labelWidthMm vd.; boş → sistem
+/// varsayılan medyası) ve şablon yönlendirmesini taşır →
+/// baskı anında cihaz→{dil,medya,şablon} çözülür. Sahiplik tam-biri: makineye
 /// SABİT (machineId) VEYA tablete-BAĞLI (deviceId, BT yazıcı tabletle gezer).
 /// Saha donanımının TEK kaynağı — eski `MachineHardware` emekliye ayrıldı.
 model PeripheralDevice {
@@ -592,8 +553,14 @@ model PeripheralDevice {
   stationId String?  @db.Uuid
   station   Station? @relation(fields: [stationId], references: [id], onDelete: SetNull)
 
-  formatProfileId  String?             @db.Uuid
-  formatProfile    LabelFormatProfile? @relation(fields: [formatProfileId], references: [id], onDelete: Restrict)
+  // Yazıcı MEDYASI — takılı etiket ölçüsü DOĞRUDAN cihazda (Etiket Stüdyosu v2:
+  // ayrı LabelFormatProfile "Boyutlar" kataloğu EMEKLİ; baskıda medya buradan,
+  // eleman koordinatları varyanttan). Boş → sistem varsayılan medyası (ayar).
+  labelWidthMm  Decimal? @db.Decimal(6, 2)
+  labelHeightMm Decimal? @db.Decimal(6, 2)
+  labelDpi      Int? // boş → 203
+  labelGapMm    Decimal? @db.Decimal(5, 2) // etiketler arası (gap sensörü); boş → 2
+
   languageOverride PrinterLanguage? // cihaz dili (boş → global ayar label.printerLanguage)
 
   isActive   Boolean   @default(true)
@@ -613,7 +580,6 @@ model PeripheralDevice {
   @@index([machineId])
   @@index([deviceId])
   @@index([stationId])
-  @@index([formatProfileId])
   @@index([connectionType])
   @@index([isActive])
   @@map("peripheral_devices")
@@ -2638,7 +2604,7 @@ model LabelTemplate {
 /// Şablonun BOYUT VARYANTI — kendi tuvali (widthMm×heightMm) + kendi kanvas
 /// eleman yerleşimi. Yeni varyant mevcut varyanttan KOPYALANARAK başlar, elle
 /// düzeltilir/teyit edilir — OTOMATİK ÖLÇEKLEME YOK (sıfır-hata ilkesi).
-/// Baskıda cihaz profil boyutuna ±1mm eşleşen varyant seçilir; eşleşme yoksa
+/// Baskıda cihaz MEDYA boyutuna ±1mm eşleşen varyant seçilir; eşleşme yoksa
 /// isPrimary varyant basılır (baskı bloklanmaz) + panelde proaktif uyarı.
 model LabelTemplateVariant {
   id         String  @db.Uuid @id @default(uuid())
@@ -2647,9 +2613,6 @@ model LabelTemplateVariant {
   name       String  @db.VarChar(60) // "100×148 Standart"
   widthMm    Decimal @db.Decimal(6, 2)
   heightMm   Decimal @db.Decimal(6, 2)
-  /// Tuval ön-dolum referansı — SIKI BAĞ YOK (profil silinse varyant yaşar).
-  sourceProfileId String? @db.Uuid
-  sourceProfile   LabelFormatProfile? @relation(fields: [sourceProfileId], references: [id], onDelete: SetNull)
   /// Şablon başına EN FAZLA bir primary (partial unique index — raw SQL).
   isPrimary  Boolean @default(false)
   /// Kanvas eleman listesi { v: 1, elements: LabelElement[] } — servis
@@ -2660,7 +2623,6 @@ model LabelTemplateVariant {
   updatedAt DateTime @updatedAt
 
   @@unique([templateId, widthMm, heightMm])
-  @@index([sourceProfileId])
   @@map("label_template_variants")
 }
 

@@ -389,27 +389,18 @@ async function main() {
   });
   console.log("✅ 3 makine (KK1-M1, KK2-M1, TAMBUR-M1)");
 
-  // --- Yazıcı modeli kataloğu + etiket format profilleri ---
-  // "Yazıcı değişse de format/komut tanımları kaybolmasın" → kalıcı katalog.
-  // Argox OS 214 plus: 203dpi, max 104mm. Kumaş etiketi medya 100×58 mm YATAY +
-  // 3mm GÜVENLİK PAYI (içerik ~94×52) — topa yatay yapıştırılır; iki kolon
-  // (sol QR+barkod, sağ metin). Etiket birkaç mm küçük çıksa bile kırpılmaz.
-  const argoxProfile = await prisma.labelFormatProfile.create({
-    data: {
-      code: "ARGOX_TOP_100x58",
-      name: "Argox 100×58 mm Yatay Top (3mm pay)",
-      widthMm: 100, heightMm: 58, marginMm: 3, gapMm: 2, dpi: 203, orientation: "LANDSCAPE",
-    },
+  // --- Sistem varsayılan etiket medyası (Etiket Stüdyosu v2) ---
+  // "Boyutlar" (LabelFormatProfile) kataloğu KALDIRILDI: medya artık doğrudan yazıcı
+  // cihazında (labelWidthMm vd.). Cihaz seçili değilken (Electron önizleme, kartela)
+  // bu ayar kullanılır. Argox OS 214 plus kumaş etiketi: 100×58 mm YATAY, 203dpi,
+  // 2mm gap, 3mm GÜVENLİK PAYI (içerik ~94×52) — topa yatay yapıştırılır.
+  const DEFAULT_MEDIA = { widthMm: 100, heightMm: 58, dpi: 203, gapMm: 2, marginMm: 3 };
+  await prisma.systemSetting.upsert({
+    where: { key: "label.defaultMedia" },
+    create: { key: "label.defaultMedia", value: DEFAULT_MEDIA },
+    update: { value: DEFAULT_MEDIA },
   });
-  // Sistem default profili — Electron (device yok) ve resolver fallback bunu kullanır.
-  await prisma.labelFormatProfile.create({
-    data: {
-      code: "DEFAULT",
-      name: "Varsayılan Top Etiketi (100×58 yatay, 3mm pay)",
-      widthMm: 100, heightMm: 58, marginMm: 3, gapMm: 2, dpi: 203, orientation: "LANDSCAPE",
-    },
-  });
-  console.log("✅ 2 etiket format profili");
+  console.log("✅ Sistem varsayılan etiket medyası (label.defaultMedia = 100×58, 203dpi)");
 
   // --- Saha donanımı: makineye-bağlı yazıcılar (PeripheralDevice, NETWORK_TCP) ---
   // MachineHardware emekli; saha donanımının TEK kaynağı PeripheralDevice. Faz-1
@@ -429,8 +420,8 @@ async function main() {
     await prisma.peripheralDevice.create({
       data: {
         code: sp.code, name: sp.name, kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP",
-        address: sp.address, port: 9100, machineId,
-        languageOverride: "PPLA", formatProfileId: argoxProfile.id,
+        address: sp.address, port: 9100, machineId, languageOverride: "PPLA",
+        labelWidthMm: 100, labelHeightMm: 58, labelDpi: 203, labelGapMm: 2,
       },
     });
   }
@@ -438,7 +429,7 @@ async function main() {
 
   // --- Birleşik cihaz kaydı (PeripheralDevice) — Tambur ağ yazıcısı ---
   // Tambur makinesine bağlı Argox ağ yazıcısı (NETWORK_TCP). Baskı anında
-  // label.service cihaz→{dil,profil,şablon} çözer. Mobil BT yazıcılar sahada
+  // label.service cihaz→{dil,medya,şablon} çözer. Mobil BT yazıcılar sahada
   // register-bt ile kendiliğinden eklenir.
   const tamburMachineId = mById("TAMBUR-M1");
   if (tamburMachineId) {
@@ -452,7 +443,7 @@ async function main() {
         port: 9100,
         machineId: tamburMachineId,
         languageOverride: "PPLA",
-        formatProfileId: argoxProfile.id,
+        labelWidthMm: 100, labelHeightMm: 58, labelDpi: 203, labelGapMm: 2,
       },
     });
     const finishedDefault = await prisma.labelTemplate.findFirst({

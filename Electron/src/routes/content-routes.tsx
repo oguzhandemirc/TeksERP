@@ -15,7 +15,6 @@ import { ProductionStationsPage } from "@/pages/Stations/ProductionStationsPage"
 import { EtiketlerPage } from "@/pages/Labels/EtiketlerPage";
 import { MachinesPage } from "@/pages/Machines/MachinesPage";
 import { PeripheralDevicesPage } from "@/pages/PeripheralDevices/PeripheralDevicesPage";
-import { LabelFormatProfilesPage } from "@/pages/LabelFormatProfiles/LabelFormatProfilesPage";
 import { DefectTypesPage } from "@/pages/DefectTypes/DefectTypesPage";
 import { QualityGradesPage } from "@/pages/QualityGrades/QualityGradesPage";
 import { ColorsPage } from "@/pages/Colors/ColorsPage";
@@ -142,14 +141,6 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="station:read">
         <PeripheralDevicesPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "definitions/label-formats",
-    element: (
-      <ProtectedRoute requirePermission="station:read">
-        <LabelFormatProfilesPage />
       </ProtectedRoute>
     ),
   },

@@ -454,7 +454,6 @@ export class LabelTemplateService {
       name?: string;
       widthMm: number;
       heightMm: number;
-      sourceProfileId?: string | null;
       copyFromVariantId?: string | null;
       elements?: unknown;
     },
@@ -487,7 +486,6 @@ export class LabelTemplateService {
           name: (input.name?.trim() || `${input.widthMm}×${input.heightMm}`).slice(0, 60),
           widthMm: input.widthMm,
           heightMm: input.heightMm,
-          sourceProfileId: input.sourceProfileId ?? null,
           isPrimary: template.variants.length === 0,
           elements: layout as unknown as Prisma.InputJsonValue,
         },
@@ -508,7 +506,7 @@ export class LabelTemplateService {
 
   async updateVariant(
     variantId: string,
-    input: { name?: string; widthMm?: number; heightMm?: number; sourceProfileId?: string | null; elements?: unknown },
+    input: { name?: string; widthMm?: number; heightMm?: number; elements?: unknown },
     userId?: string,
   ): Promise<ApiResponse<LabelTemplateVariant>> {
     const existing = await prisma.labelTemplateVariant.findUnique({
@@ -527,11 +525,6 @@ export class LabelTemplateService {
     }
     if (input.widthMm !== undefined) data.widthMm = input.widthMm;
     if (input.heightMm !== undefined) data.heightMm = input.heightMm;
-    if (input.sourceProfileId !== undefined) {
-      data.sourceProfile = input.sourceProfileId
-        ? { connect: { id: input.sourceProfileId } }
-        : { disconnect: true };
-    }
     // Boyut değişiyorsa mevcut yerleşim de yeni tuvale göre doğrulanmalı.
     const elementsRaw = input.elements !== undefined ? input.elements : (input.widthMm !== undefined || input.heightMm !== undefined) ? existing.elements : undefined;
     if (elementsRaw !== undefined) {

@@ -1,16 +1,7 @@
-import { useState } from "react";
-import { Controller, type UseFormReturn } from "react-hook-form";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil } from "lucide-react";
-import { toast } from "sonner";
+import { type UseFormReturn } from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
 import { FormField } from "@/components/forms/FormField";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
-import { Button } from "@/components/ui/button";
-import { LabelFormatProfileFormDialog } from "@/pages/LabelFormatProfiles/LabelFormatProfileFormDialog";
-import { buildLabelFormatProfilePayload } from "@/pages/LabelFormatProfiles/schema";
-import { labelFormatProfileService } from "@/pages/LabelFormatProfiles/service";
-import type { LabelFormatProfile } from "@/pages/LabelFormatProfiles/types";
-import { loadAllForPicker } from "@/lib/picker-loader";
+import { Input } from "@/components/ui/input";
 import { PRINTER_LANGUAGE_LABELS } from "@/services/featureFlagService";
 import { labelTemplateService } from "@/services/labelTemplateService";
 import { TemplateVariantHint } from "./TemplateVariantHint";
@@ -37,22 +28,10 @@ interface Props {
   form: UseFormReturn<PeripheralFormValues>;
 }
 
-/** Yazıcı-özel alanlar: dil (zorunlu) + format profili (hızlı ekle/düzenle) +
- *  bağlam→şablon yönlendirmesi. Yalnız kind=LABEL_PRINTER iken render edilir. */
+/** Yazıcı-özel alanlar: dil (zorunlu) + medya boyutu (mm/dpi — cihazda) +
+ *  bağlam→şablon yönlendirmesi. Yalnız kind=LABEL_PRINTER iken render edilir.
+ *  "Boyutlar" (LabelFormatProfile) kataloğu emekli — medya artık doğrudan burada. */
 export function PrinterSettingsFields({ form }: Props) {
-  // Hızlı profil ekleme/düzenleme — formu terk etmeden oluştur (otomatik seç)
-  // veya seçili profili düzenle. Edit için profil nesnesi listeden çözülür.
-  const qc = useQueryClient();
-  const [profileDialog, setProfileDialog] = useState<
-    { mode: "create" } | { mode: "edit"; profile: LabelFormatProfile } | null
-  >(null);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const profilesQuery = useQuery({
-    queryKey: ["label-format-profiles", "device-form"],
-    queryFn: () => loadAllForPicker(labelFormatProfileService),
-  });
-  const profiles = profilesQuery.data?.data ?? [];
-
   // Şablon yönlendirme select'leri için TEK HAVUZ — aktif şablonların tamamı.
   const templatesQuery = useQuery({
     queryKey: ["label-templates", "all"],
@@ -60,12 +39,13 @@ export function PrinterSettingsFields({ form }: Props) {
   });
   const templates = templatesQuery.data?.data ?? [];
 
-  const selProfileId = form.watch("formatProfileId");
-  const selProfile = profiles.find((pr) => pr.id === selProfileId) ?? null;
-  // Varyant uyumsuzluk hint'i için profil medya boyutu (Decimal → Number).
-  const profileSize = selProfile
-    ? { widthMm: Number(selProfile.widthMm), heightMm: Number(selProfile.heightMm) }
-    : null;
+  // Varyant uyumsuzluk hint'i için cihaz medya boyutu (form → Number; eksik → null).
+  const wStr = form.watch("labelWidthMm");
+  const hStr = form.watch("labelHeightMm");
+  const mediaSize =
+    wStr.trim() && hStr.trim()
+      ? { widthMm: Number(wStr), heightMm: Number(hStr) }
+      : null;
 
   return (
     <>
@@ -78,79 +58,28 @@ export function PrinterSettingsFields({ form }: Props) {
             ))}
           </select>
         </FormField>
-        <FormField label="Format Profili" hint="Boş bırak → sistem varsayılan profili.">
-          <div className="flex gap-1.5">
-            <div className="min-w-0 flex-1">
-              <Controller
-                control={form.control}
-                name="formatProfileId"
-                render={({ field }) => (
-                  <ReferenceSelect<LabelFormatProfile>
-                    value={field.value || null}
-                    onChange={(v) => field.onChange(v ?? "")}
-                    service={labelFormatProfileService}
-                    queryKey="label-format-profiles"
-                    getLabel={(p) => `${p.code} — ${p.name}`}
-                    placeholder="Profil seç..."
-                    nullable
-                    noneLabel="Varsayılan — sistem profili"
-                  />
-                )}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-9 w-9 shrink-0"
-              title={selProfile ? `"${selProfile.code}" profilini düzenle` : "Önce bir profil seçin"}
-              disabled={!selProfile}
-              onClick={() => selProfile && setProfileDialog({ mode: "edit", profile: selProfile })}
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-9 w-9 shrink-0"
-              title="Yeni format profili ekle"
-              onClick={() => setProfileDialog({ mode: "create" })}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-        </FormField>
       </div>
 
-      {/* Hızlı profil ekle/düzenle — iç dialog portal'a taşınır ama React ağacında
-          bu formun içinde: submit'i dış cihaz formuna SIZDIRMA (stopPropagation). */}
-      <div onSubmit={(e) => e.stopPropagation()}>
-        <LabelFormatProfileFormDialog
-          open={Boolean(profileDialog)}
-          onOpenChange={(o) => !o && setProfileDialog(null)}
-          initial={profileDialog?.mode === "edit" ? profileDialog.profile : null}
-          isSubmitting={savingProfile}
-          onSubmit={async (values) => {
-            setSavingProfile(true);
-            try {
-              const payload = buildLabelFormatProfilePayload(values) as Partial<LabelFormatProfile>;
-              if (profileDialog?.mode === "edit") {
-                await labelFormatProfileService.update(profileDialog.profile.id, payload);
-                toast.success("Format profili güncellendi.");
-              } else {
-                const res = await labelFormatProfileService.create(payload);
-                const id = (res.data as LabelFormatProfile | null)?.id;
-                if (id) form.setValue("formatProfileId", id, { shouldDirty: true });
-                toast.success("Format profili eklendi ve bu yazıcı için seçildi.");
-              }
-              await qc.invalidateQueries({ queryKey: ["label-format-profiles"] });
-              setProfileDialog(null);
-            } finally {
-              setSavingProfile(false);
-            }
-          }}
-        />
+      {/* Yazıcı medyası — mm/dpi doğrudan cihazda (ayrı "Boyutlar" kataloğu yok).
+          Boş bırak → sistem varsayılan medyası kullanılır. */}
+      <div className="rounded-md border bg-muted/20 p-3">
+        <div className="mb-2 text-xs font-medium text-muted-foreground">
+          Etiket Medyası (boş → sistem varsayılanı)
+        </div>
+        <div className="grid grid-cols-4 gap-3">
+          <FormField label="Eni (mm)" error={form.formState.errors.labelWidthMm} hint="10-500">
+            <Input type="number" step="0.1" {...form.register("labelWidthMm")} placeholder="100" />
+          </FormField>
+          <FormField label="Boyu (mm)" error={form.formState.errors.labelHeightMm} hint="10-500">
+            <Input type="number" step="0.1" {...form.register("labelHeightMm")} placeholder="50" />
+          </FormField>
+          <FormField label="DPI" error={form.formState.errors.labelDpi} hint="tipik 203">
+            <Input type="number" {...form.register("labelDpi")} placeholder="203" />
+          </FormField>
+          <FormField label="Boşluk (mm)" error={form.formState.errors.labelGapMm} hint="gap 2-3">
+            <Input type="number" step="0.1" {...form.register("labelGapMm")} placeholder="2" />
+          </FormField>
+        </div>
       </div>
 
       {/* Şablon yönlendirme (bağlam-başına; boş → bağlam varsayılanı). Her select
@@ -173,7 +102,7 @@ export function PrinterSettingsFields({ form }: Props) {
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
                 </select>
-                <TemplateVariantHint templateId={selTemplateId} profile={profileSize} />
+                <TemplateVariantHint templateId={selTemplateId} media={mediaSize} />
               </FormField>
             );
           })}

@@ -28,7 +28,6 @@ const service = new PeripheralDeviceService({
     machine: { select: { id: true, code: true, name: true } },
     device: { select: { id: true, name: true } },
     station: { select: { id: true, code: true, name: true, kind: true } },
-    formatProfile: { select: { id: true, code: true, name: true } },
     templateRoutes: { select: { kind: true, templateId: true, template: { select: { id: true, name: true } } } },
   },
 });

@@ -1,8 +1,8 @@
 // =============================================================================
 // TeksERP - Peripheral Device (birleşik cihaz kaydı) Service
 // =============================================================================
-// BaseService + validateRefs (label-format-profile.service deseni). Bare BaseController Zod
-// taşımaz → FK/sahiplik/port hijyeni serviste. Ayrıca per-kind şablon yönlendirme
+// BaseService + validateRefs. Bare BaseController Zod
+// taşımaz → FK/sahiplik/port/medya hijyeni serviste. Ayrıca per-kind şablon yönlendirme
 // (setTemplateRoute) ve bağlantı testi (test). (register-bt ucu 2026-07'de kaldırıldı.)
 // İzin: donanım ailesiyle tutarlı `station:read/write`.
 // =============================================================================
@@ -83,10 +83,22 @@ export class PeripheralDeviceService extends BaseService {
       const s = Number(data.scale);
       if (!Number.isFinite(s) || s <= 0) throw AppError.badRequest("Ölçek (scale) pozitif olmalı");
     }
-    if (typeof data.formatProfileId === "string" && data.formatProfileId) {
-      const f = await prisma.labelFormatProfile.findFirst({ where: { id: data.formatProfileId, isActive: true }, select: { id: true } });
-      if (!f) throw AppError.badRequest("Etiket format profili bulunamadı veya pasif");
+    // Yazıcı MEDYASI (Etiket Stüdyosu v2 — cihazda) — additive, opsiyonel.
+    for (const dim of ["labelWidthMm", "labelHeightMm"] as const) {
+      if (data[dim] !== undefined && data[dim] !== null) {
+        const v = Number(data[dim]);
+        if (!Number.isFinite(v) || v < 10 || v > 500) throw AppError.badRequest("Etiket ölçüsü 10-500 mm arası olmalı");
+      }
     }
+    if (data.labelDpi !== undefined && data.labelDpi !== null) {
+      const v = Number(data.labelDpi);
+      if (!Number.isInteger(v) || v < 50 || v > 1200) throw AppError.badRequest("DPI 50-1200 arası olmalı");
+    }
+    if (data.labelGapMm !== undefined && data.labelGapMm !== null) {
+      const v = Number(data.labelGapMm);
+      if (!Number.isFinite(v) || v < 0 || v > 50) throw AppError.badRequest("Etiket arası boşluk 0-50 mm arası olmalı");
+    }
+    // Medya doğrudan cihazda (yukarıda) — ayrı "Boyutlar" (LabelFormatProfile) kataloğu kaldırıldı.
     if (typeof data.machineId === "string" && data.machineId) {
       const mc = await prisma.machine.findFirst({ where: { id: data.machineId, isActive: true }, select: { id: true } });
       if (!mc) throw AppError.badRequest("Makine bulunamadı veya pasif");

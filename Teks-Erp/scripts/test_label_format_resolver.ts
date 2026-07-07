@@ -1,8 +1,11 @@
 // =============================================================================
-// Test: etiket format çözümü (resolveLabelFormat) öncelik zinciri
+// Test: etiket format çözümü (resolveLabelFormat) öncelik zinciri — Etiket Stüdyosu v2
 // Çalıştır: npx tsx scripts/test_label_format_resolver.ts
-// Doğrulananlar: explicit profileId > machineId (makine-yazıcı PeripheralDevice.formatProfile)
-// > sistem-default > kod-fallback; dil bu katmanda HEP RASTER_HTML (yalnız cihazdan gelir); inactive atlanır.
+// Doğrulananlar: explicit peripheralId (cihaz medyası) > machineId (makineye-bağlı
+// LABEL_PRINTER cihaz medyası) > sistem-default (label.defaultMedia) > kod-fallback.
+// Medya artık CİHAZDA (labelWidthMm/labelHeightMm/labelDpi/labelGapMm); ayrı "Boyutlar"
+// (LabelFormatProfile) kataloğu EMEKLİ. Orientation w≥h → LANDSCAPE. Dil bu katmanda
+// HEP RASTER_HTML (yalnız cihaz languageOverride'ından biner).
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { resolveLabelFormat } from "../src/services/helpers/label-format.resolver";
@@ -24,51 +27,51 @@ async function main() {
     data: { stationId: station.id, code: `TST-RES-M-${ts}`, name: "TEST RES MAK" },
     select: { id: true },
   });
-  const p1 = await prisma.labelFormatProfile.create({
-    data: { code: `RES-P1-${ts}`, name: "P1", widthMm: 110, heightMm: 160, marginMm: 5, dpi: 203, orientation: "PORTRAIT" },
-  });
-  const p2 = await prisma.labelFormatProfile.create({
-    data: { code: `RES-P2-${ts}`, name: "P2", widthMm: 90, heightMm: 120, marginMm: 2, dpi: 300, orientation: "PORTRAIT" },
-  });
-  const pInactive = await prisma.labelFormatProfile.create({
-    data: { code: `RES-PX-${ts}`, name: "PX", widthMm: 200, heightMm: 200, marginMm: 9, dpi: 203, orientation: "PORTRAIT", isActive: false },
-  });
-  // Makineye-bağlı yazıcı (MachineHardware emekli → PeripheralDevice tek kaynak).
+  // Makineye-bağlı yazıcı: medya CİHAZDA (110×160, 203dpi, gap 3).
   const printer = await prisma.peripheralDevice.create({
     data: {
       code: `RES-PRN-${ts}`, name: "TEST RES YAZICI", kind: "LABEL_PRINTER",
       connectionType: "NETWORK_TCP", machineId: machine.id,
-      languageOverride: "PPLA", formatProfileId: p1.id, address: "10.0.0.9",
+      languageOverride: "PPLA", address: "10.0.0.9",
+      labelWidthMm: 110, labelHeightMm: 160, labelDpi: 203, labelGapMm: 3,
     },
     select: { id: true },
   });
+  // Medyasız (labelWidthMm null) ikinci bir aktif yazıcı — çözümü etkilememeli
+  // (fromPeripheralMedia null döner → zincir sistem-default'a düşer). Test için
+  // ayrı makineye bağla ki 1. yazıcıyı gölgelemesin.
 
   try {
-    // 1) explicit profileId → P1
-    const r1 = await resolveLabelFormat({ profileId: p1.id });
-    check("explicit profileId → P1 geometri", r1.widthMm === 110 && r1.marginMm === 5 && r1.source === "explicit");
+    // 1) explicit peripheralId → cihaz medyası (110×160), source explicit
+    const r1 = await resolveLabelFormat({ peripheralId: printer.id });
+    check("explicit peripheralId → cihaz medyası", r1.widthMm === 110 && r1.heightMm === 160 && r1.source === "explicit");
+    check("explicit → dpi cihazdan (203)", r1.dpi === 203, String(r1.dpi));
+    check("explicit → orientation w≥h LANDSCAPE mı? (110<160 → PORTRAIT)", r1.orientation === "PORTRAIT", r1.orientation);
+    check("explicit → dil RASTER_HTML (yalnız cihazdan biner)", r1.language === "RASTER_HTML", r1.language);
 
-    // 2) machineId → cihazın formatProfile'ı (P1); dil bu katmanda SABİT RASTER_HTML
+    // 2) machineId → makineye-bağlı cihazın medyası (110×160), source machine
     const r2 = await resolveLabelFormat({ machineId: machine.id });
-    check("machineId → cihaz formatProfile P1", r2.widthMm === 110 && r2.source === "machine");
-    check("machineId → dil RASTER_HTML (yalnız cihazdan biner)", r2.language === "RASTER_HTML", r2.language);
+    check("machineId → makine yazıcısı medyası", r2.widthMm === 110 && r2.heightMm === 160 && r2.source === "machine");
 
-    // 3) cihaz formatProfile null → (model basamağı YOK) sistem-default'a düşer
-    await prisma.peripheralDevice.update({ where: { id: printer.id }, data: { formatProfileId: null } });
+    // 3) cihaz medyası boşalınca → machineId sistem-default'a düşer
+    await prisma.peripheralDevice.update({
+      where: { id: printer.id },
+      data: { labelWidthMm: null, labelHeightMm: null, labelDpi: null, labelGapMm: null },
+    });
     const r3 = await resolveLabelFormat({ machineId: machine.id });
-    check("cihaz profili yok → sistem-default'a düşer", r3.source === "system-default" && r3.profileId !== p1.id, r3.source);
+    check("cihaz medyası yok → sistem-default'a düşer", r3.source === "system-default", r3.source);
+    check("sistem-default → geçerli geometri (width>0)", r3.widthMm > 0 && r3.marginMm >= 0);
 
-    // 4) explicit inactive profil → ATLANIR → sistem-default'a düşer
-    const r4 = await resolveLabelFormat({ profileId: pInactive.id });
-    check("inactive profil atlandı (explicit değil)", r4.source !== "explicit" && r4.profileId !== pInactive.id);
+    // 4) explicit peripheralId ama medyasız → yine sistem-default (explicit medya yoksa atlanır)
+    const r4 = await resolveLabelFormat({ peripheralId: printer.id });
+    check("medyasız explicit cihaz → sistem-default", r4.source === "system-default", r4.source);
 
-    // 5) opts yok → sistem default (DEFAULT profili backfill/seed'den) veya kod-fallback
+    // 5) opts yok → sistem-default (seed'li label.defaultMedia) veya kod-fallback
     const r5 = await resolveLabelFormat();
-    check("opts yok → system-default/code-fallback", r5.source === "system-default" || r5.source === "code-fallback");
-    check("opts yok → geçerli geometri (width>0, pay≥0)", r5.widthMm > 0 && r5.marginMm >= 0);
+    check("opts yok → system-default/code-fallback", r5.source === "system-default" || r5.source === "code-fallback", r5.source);
+    check("opts yok → orientation w/h'den türer", r5.orientation === (r5.widthMm >= r5.heightMm ? "LANDSCAPE" : "PORTRAIT"));
   } finally {
     await prisma.peripheralDevice.deleteMany({ where: { id: printer.id } });
-    await prisma.labelFormatProfile.deleteMany({ where: { id: { in: [p1.id, p2.id, pInactive.id] } } });
     await prisma.machine.deleteMany({ where: { id: machine.id } });
     await prisma.station.deleteMany({ where: { id: station.id } });
   }

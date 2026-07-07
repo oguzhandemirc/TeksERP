@@ -73,7 +73,6 @@ export interface LabelTemplateVariant {
   name: string;
   widthMm: number;
   heightMm: number;
-  sourceProfileId: string | null;
   isPrimary: boolean;
   elements: CanvasLayout;
   createdAt: string;
@@ -291,7 +290,6 @@ export const labelTemplateService = {
       name?: string;
       widthMm: number;
       heightMm: number;
-      sourceProfileId?: string | null;
       copyFromVariantId?: string | null;
       elements?: CanvasLayout;
     },
@@ -306,7 +304,6 @@ export const labelTemplateService = {
       name: string;
       widthMm: number;
       heightMm: number;
-      sourceProfileId: string | null;
       elements: CanvasLayout;
     }>,
   ): Promise<LabelTemplateVariant> =>

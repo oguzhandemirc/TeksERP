@@ -71,7 +71,6 @@ async function main() {
             name: name.slice(0, 60),
             widthMm: format.widthMm,
             heightMm: format.heightMm,
-            sourceProfileId: format.profileId ?? null,
             isPrimary: true,
             elements: layout as unknown as Prisma.InputJsonValue,
           },

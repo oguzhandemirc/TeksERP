@@ -7,7 +7,7 @@
 //
 // Öncelikler:
 //   dil    : peripheral.languageOverride > format.language (global ayar)
-//   format : explicit profileId > peripheral.formatProfile > resolveLabelFormat zinciri
+//   format : cihaz medyası (peripheral.labelWidthMm vd.) > sistem varsayılan medyası
 //   şablon : explicit templateId > peripheral.templateRoutes[kind] > kind default (isDefault) > null
 //
 // Cihaz eşleşmezse: tümüyle bugünkü davranış (resolveLabelFormat + kind default
@@ -16,7 +16,7 @@
 
 import { LabelKind, PrinterLanguage, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { resolveLabelFormat, type ResolvedLabelFormat } from "./label-format.resolver";
+import { resolveLabelFormat, formatFromPeripheralOrDefault, type ResolvedLabelFormat } from "./label-format.resolver";
 import { pickVariant, type VariantMatch } from "./label-variant.resolver";
 
 /** Şablon + boyut varyantları — routing include'larıyla birlikte yüklenir. */
@@ -37,7 +37,6 @@ export interface LabelRouting {
 export interface LabelRoutingOpts {
   kind: LabelKind;
   peripheralId?: string | null;
-  profileId?: string | null;
   templateId?: string | null;
   machineId?: string | null;
   deviceId?: string | null;
@@ -48,7 +47,6 @@ export interface LabelRoutingOpts {
 }
 
 const PERIPHERAL_INCLUDE = (kind: LabelKind) => ({
-  formatProfile: true,
   templateRoutes: {
     where: { kind },
     include: { template: { include: { variants: true } } },
@@ -94,14 +92,10 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
     });
   }
 
-  // --- 2. Geometri: explicit profileId > cihazın profili > resolveLabelFormat zinciri ---
-  const peripheralProfileId =
-    peripheral?.formatProfile?.isActive ? peripheral.formatProfileId : null;
-  const format = await resolveLabelFormat({
-    profileId: opts.profileId ?? peripheralProfileId ?? null,
-    machineId: opts.machineId ?? null,
-    kind,
-  });
+  // --- 2. Geometri: cihazın MEDYASI (labelWidthMm vd.) > sistem varsayılan medyası ---
+  const format = peripheral
+    ? await formatFromPeripheralOrDefault(peripheral, PrinterLanguage.RASTER_HTML)
+    : await resolveLabelFormat({ machineId: opts.machineId ?? null, kind });
 
   // --- 3. Dil: cihaz override > format.language (global ayar) ---
   const language = peripheral?.languageOverride ?? format.language;

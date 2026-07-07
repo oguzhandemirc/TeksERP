@@ -3,13 +3,20 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { safeFormat } from "@/lib/format";
 import { placeLabel } from "@/pages/System/WorkSessions/types";
-import type { DeviceDetail } from "../types";
+import type { DeviceDetail, PeripheralSummary } from "../types";
 
 const KIND_LABEL: Record<string, string> = { TABLET: "Tablet", PHONE: "Telefon", DESKTOP: "PC" };
 
+/** Yazıcı donanımının etiket medyası özeti (boş → sistem varsayılanı). */
+function mediaSummary(h: PeripheralSummary): string {
+  if (h.labelWidthMm == null || h.labelHeightMm == null) return "Sistem varsayılanı";
+  const dpi = h.labelDpi ? `, ${h.labelDpi}dpi` : "";
+  return `${h.labelWidthMm}×${h.labelHeightMm} mm${dpi}`;
+}
+
 /**
  * Cihaz detay başlığı: kimlik/durum + son oturum açma (WorkSession.startedAt) +
- * son aktivite (Device.lastSeenAt) + bağlı donanımın etiket profili.
+ * son aktivite (Device.lastSeenAt) + bağlı donanımın etiket medyası.
  */
 export function DeviceHeaderCard({ device }: { device: DeviceDetail }) {
   const fmt = (v: string | null) => (v ? safeFormat(v, "dd.MM.yyyy HH:mm") : "—");
@@ -58,7 +65,7 @@ export function DeviceHeaderCard({ device }: { device: DeviceDetail }) {
 
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Printer className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="text-muted-foreground">Donanım / etiket profili:</span>
+          <span className="text-muted-foreground">Donanım / etiket medyası:</span>
           {device.hardware.length === 0 ? (
             <span className="text-muted-foreground">bağlı donanım yok</span>
           ) : (
@@ -66,7 +73,7 @@ export function DeviceHeaderCard({ device }: { device: DeviceDetail }) {
               <Badge key={h.id} variant="outline" className="font-normal">
                 {h.name}
                 <span className="ml-1 text-muted-foreground">
-                  → {h.formatProfile?.name ?? "Sistem varsayılanı"}
+                  → {mediaSummary(h)}
                   {h.languageOverride ? ` · ${h.languageOverride}` : ""}
                 </span>
               </Badge>

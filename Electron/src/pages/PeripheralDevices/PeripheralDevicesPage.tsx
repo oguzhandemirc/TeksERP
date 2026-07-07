@@ -7,15 +7,16 @@ import type { PeripheralDevice } from "./types";
 
 /**
  * Cihaz Kaydı — birleşik yazıcı + tekstil makine sinyal kaydı. Her cihaz dilini
- * (cihaz kaydından; boş → genel ayar), format profilini ve per-kind şablon
- * yönlendirmesini taşır; baskı anında backend cihaz→{dil,profil,şablon} çözer.
- * Yazıcı yönetiminin TEK ekranı — PrinterModel kataloğu 2026-07'de kaldırıldı.
+ * (cihaz kaydından; boş → genel ayar), medya boyutunu (mm/dpi — doğrudan cihazda)
+ * ve per-kind şablon yönlendirmesini taşır; baskı anında backend cihaz→{dil,medya,
+ * şablon} çözer. Yazıcı yönetiminin TEK ekranı — PrinterModel kataloğu ve ayrı
+ * "Boyutlar" (LabelFormatProfile) kataloğu 2026-07'de kaldırıldı.
  */
 export function PeripheralDevicesPage() {
   return (
     <CrudPage<PeripheralDevice>
       title="Cihaz Kaydı"
-      description="Yazıcılar (ağ/Bluetooth/USB/seri) + kantar/metraj sinyal kaynakları. Dil/profil/şablon yönlendirmesi."
+      description="Yazıcılar (ağ/Bluetooth/USB/seri) + kantar/metraj sinyal kaynakları. Dil/medya/şablon yönlendirmesi."
       entityName="Cihaz"
       queryKey="peripherals"
       service={peripheralService}

@@ -87,6 +87,17 @@ const updateSchema = z.object({
   rollNameTemplate: z.string().max(100).optional(),
   // label.nativeSendEnabled — Faz-2 doğrudan yazıcıya gönderim (default false).
   nativeSendEnabled: z.boolean().optional(),
+  // label.defaultMedia — cihazsız baskı/önizleme için sistem varsayılan etiket medyası.
+  // Yazıcı cihazı seçildiğinde onun medyası önceliklidir; bu yalnız fallback. (Servis ayrıca doğrular.)
+  defaultLabelMedia: z
+    .object({
+      widthMm: z.number().min(10).max(500),
+      heightMm: z.number().min(10).max(500),
+      dpi: z.number().int().min(50).max(1200),
+      gapMm: z.number().min(0).max(50),
+      marginMm: z.number().min(0).max(50),
+    })
+    .optional(),
   // Refakat kartı marka/içerik ayarı (firma adı + bölüm görünürlükleri).
   travelerCardConfig: z
     .object({

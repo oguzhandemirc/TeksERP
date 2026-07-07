@@ -136,9 +136,7 @@ export interface RollLabelRenderOpts {
   stock?: boolean;
   /** Saha #6: kopya adedi override (1-5). Verilmezse label.copies ayarı (default 2). */
   copies?: number;
-  /** Fiziksel format profili — explicit override. */
-  profileId?: string | null;
-  /** İstasyon makinesi — yazıcı/profil + dil oto çözülür (mobil: req.device.machineId). */
+  /** İstasyon makinesi — yazıcı medyası + dil oto çözülür (mobil: req.device.machineId). */
   machineId?: string | null;
   /** Cihaz kaydı (PeripheralDevice) — explicit hedef yazıcı (dil/profil/şablon yönlendirmesi). */
   peripheralId?: string | null;
@@ -615,7 +613,6 @@ export class LabelService {
       const routing = await resolveLabelRouting({
         kind,
         peripheralId: opts?.peripheralId,
-        profileId: opts?.profileId,
         templateId: opts?.templateId,
         machineId: opts?.machineId,
         deviceId: opts?.deviceId,
@@ -665,10 +662,10 @@ export class LabelService {
     rollId: string,
     kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
-  ): Promise<ApiResponse<{ ppla: string; profileId: string | null }>> {
+  ): Promise<ApiResponse<{ ppla: string }>> {
     const { input } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     const ppla = renderLabel(PrinterLanguage.PPLA, input).content;
-    return { success: true, data: { ppla, profileId: input.format.profileId } };
+    return { success: true, data: { ppla } };
   }
 
   /**
@@ -680,12 +677,12 @@ export class LabelService {
     rollId: string,
     kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
-  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind; profileId: string | null; meta: LabelResolutionMeta }>> {
+  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind; meta: LabelResolutionMeta }>> {
     const { input, kind, meta } = await this.buildRollRenderInput(rollId, kindOverride, opts);
     const r = renderLabel(input.format.language, input);
     return {
       success: true,
-      data: { content: r.content, language: r.language, contentType: r.contentType, kind, profileId: input.format.profileId, meta },
+      data: { content: r.content, language: r.language, contentType: r.contentType, kind, meta },
     };
   }
 
@@ -773,11 +770,12 @@ export class LabelService {
   }
 
   /**
-   * Test Et: profil geometrisinde ÖRNEK etiket HTML'i — boyut/pay görsel doğrulaması
-   * (Faz-1, her zaman güvenli). Gerçek top gerekmez; mock veri.
+   * Test Et: seçili yazıcının medyasında ÖRNEK etiket HTML'i — boyut/pay görsel
+   * doğrulaması (Faz-1, her zaman güvenli). Gerçek top gerekmez; mock veri.
+   * peripheralId verilmezse sistem varsayılan medyası kullanılır.
    */
-  async getSampleLabelHtml(profileId?: string | null): Promise<ApiResponse<{ html: string }>> {
-    const input = await this.buildSampleRenderInput(profileId);
+  async getSampleLabelHtml(peripheralId?: string | null): Promise<ApiResponse<{ html: string }>> {
+    const input = await this.buildSampleRenderInput(peripheralId);
     const html = renderLabel(PrinterLanguage.RASTER_HTML, input).content;
     return { success: true, data: { html } };
   }
@@ -788,12 +786,12 @@ export class LabelService {
    * gerçek yazıcıyı (Faz-2) doğrulama aracı.
    */
   async testNativeSend(opts: {
-    profileId?: string | null;
+    peripheralId?: string | null;
     printerIp: string;
     port?: number;
     language?: PrinterLanguage;
   }): Promise<ApiResponse<PrinterTransportResult>> {
-    const input = await this.buildSampleRenderInput(opts.profileId);
+    const input = await this.buildSampleRenderInput(opts.peripheralId);
     const lang = opts.language ?? input.format.language;
     const rendered = renderLabel(lang, input);
     const enabled = await readLabelNativeSendEnabled();
@@ -805,8 +803,8 @@ export class LabelService {
     return { success: true, data: result };
   }
 
-  /** Örnek (mock) top etiketi render girdisi — Test Et için. profileId geometriyi belirler. */
-  private async buildSampleRenderInput(profileId?: string | null): Promise<LabelRenderInput> {
+  /** Örnek (mock) top etiketi render girdisi — Test Et için. peripheralId medyayı (geometri) belirler. */
+  private async buildSampleRenderInput(peripheralId?: string | null): Promise<LabelRenderInput> {
     const sampleBarcode = "TEKSORNEK0001";
     const payload: LabelPayload = {
       rollId: "ornek-id",
@@ -835,7 +833,8 @@ export class LabelService {
     const template = await findContextDefaultTemplate(LabelKind.ROLL_FINISHED);
     const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: sampleBarcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
     const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: sampleBarcode, scale: 3, backgroundcolor: "FFFFFF" });
-    const format = await resolveLabelFormat({ profileId });
+    // Örnek baskı: peripheralId verilirse o cihazın medyası, yoksa sistem varsayılan medyası.
+    const format = await resolveLabelFormat({ peripheralId });
     // Örnek baskı = gerçek baskı: şablonun medyaya uyan varyantı da seçilir (WYSIWYG).
     const { variant } = pickVariant(template?.variants, { widthMm: format.widthMm, heightMm: format.heightMm });
     return { payload, template, variant, barcodeSvg, qrSvg, copies: 1, format };
@@ -1192,7 +1191,6 @@ export class LabelService {
     const routing = await resolveLabelRouting({
       kind: LabelKind.SWATCH,
       peripheralId: opts?.peripheralId,
-      profileId: opts?.profileId,
       templateId: opts?.templateId,
       machineId: opts?.machineId,
       deviceId: opts?.deviceId,
@@ -1231,12 +1229,12 @@ export class LabelService {
   async getSwatchLabelNative(
     swatchId: string,
     opts?: RollLabelRenderOpts,
-  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind; profileId: string | null }>> {
+  ): Promise<ApiResponse<{ content: string; language: PrinterLanguage; contentType: string; kind: LabelKind }>> {
     const { input, kind } = await this.buildSwatchRenderInput(swatchId, opts);
     const r = renderLabel(input.format.language, input);
     return {
       success: true,
-      data: { content: r.content, language: r.language, contentType: r.contentType, kind, profileId: input.format.profileId },
+      data: { content: r.content, language: r.language, contentType: r.contentType, kind },
     };
   }
 

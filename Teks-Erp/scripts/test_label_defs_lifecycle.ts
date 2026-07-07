@@ -1,12 +1,13 @@
 // =============================================================================
 // Test: Etiket tanımlarında pasife-alma ↔ KALICI silme ayrımı (deletedAt kalıbı)
-//       — LabelFormatProfile + LabelTemplate yaşam döngüsü.
+//       — LabelTemplate yaşam döngüsü.
 // Çalıştır: npx tsx scripts/test_label_defs_lifecycle.ts
+// Not: "Boyutlar" (LabelFormatProfile) kataloğu 2026-07'de emekliye ayrıldı (medya
+//      artık yazıcı cihazında) → profil yaşam döngüsü bölümü kaldırıldı.
 // Test verisi üretir, sonunda fiziksel temizler.
 // =============================================================================
 import { LabelKind, PrinterLanguage } from "@prisma/client";
 import prisma from "../src/lib/prisma";
-import { LabelFormatProfileService } from "../src/services/label-format-profile.service";
 import { LabelTemplateService } from "../src/services/label-template.service";
 import { resolveLabelRouting } from "../src/services/helpers/label-routing.resolver";
 
@@ -21,52 +22,25 @@ async function expectThrow(label: string, fn: () => Promise<unknown>) {
   catch { check(label, true); }
 }
 
-const profileSvc = new LabelFormatProfileService({
-  modelName: "labelFormatProfile", tableName: "LABEL_FORMAT_PROFILE", searchFields: ["code", "name"], uniqueField: "code",
-});
 const tplSvc = new LabelTemplateService();
 
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-const profileIds: string[] = [];
 const templateIds: string[] = [];
 const peripheralIds: string[] = [];
 
 async function main() {
-  // === 1) FORMAT PROFİLİ yaşam döngüsü ===
-  const pRes = await profileSvc.create({ code: `TEST-LDL-P-${stamp}`, name: "LDL Profil", widthMm: 100, heightMm: 58 });
-  const prof = pRes.data as { id: string };
-  profileIds.push(prof.id);
-
-  // Bu profili kullanan bir cihaz — silmede referans sökülmeli.
+  // Şablon yönlendirmesi için bir yazıcı cihazı (medya cihazın kendinde).
   const dev = await prisma.peripheralDevice.create({
     data: {
       code: `TEST-LDL-PRN-${stamp}`, name: "LDL Yazıcı", kind: "LABEL_PRINTER",
-      connectionType: "NETWORK_TCP", languageOverride: PrinterLanguage.PPLA, formatProfileId: prof.id,
+      connectionType: "NETWORK_TCP", languageOverride: PrinterLanguage.PPLA,
+      labelWidthMm: 100, labelHeightMm: 58, labelDpi: 203,
     },
     select: { id: true },
   });
   peripheralIds.push(dev.id);
 
-  await profileSvc.hardDelete(prof.id);
-  const pAfter = await prisma.labelFormatProfile.findUnique({ where: { id: prof.id } });
-  check("profil hardDelete: satır DB'de durur", !!pAfter);
-  check("profil hardDelete: deletedAt + pasif + rollDefault düşük",
-    !!pAfter?.deletedAt && pAfter.isActive === false && pAfter.isRollDefault === false);
-  check("profil hardDelete: kod DEL- önekiyle serbest", (pAfter?.code ?? "").startsWith("DEL-"));
-  const devAfter = await prisma.peripheralDevice.findUnique({ where: { id: dev.id }, select: { formatProfileId: true } });
-  check("profil hardDelete: cihaz referansı söküldü (→ sistem profili)", devAfter?.formatProfileId === null);
-  await expectThrow("silinmiş profil düzenlenemez", () => profileSvc.update(prof.id, { name: "X" }));
-  const pAgain = await profileSvc.hardDelete(prof.id);
-  check("profil hardDelete: idempotent", pAgain.success === true);
-  const pRe = await profileSvc.create({ code: `TEST-LDL-P-${stamp}`, name: "LDL Profil 2", widthMm: 100, heightMm: 58 });
-  const profRe = pRe.data as { id: string };
-  profileIds.push(profRe.id);
-  check("profil hardDelete: aynı kod yeniden kullanılabilir", !!profRe.id);
-  const pList = await profileSvc.findAll({ query: {} } as never) as { data: Array<{ id: string }> };
-  check("profil listesi: silinmiş GİZLİ, yeni görünür",
-    !pList.data.some((r) => r.id === prof.id) && pList.data.some((r) => r.id === profRe.id));
-
-  // === 2) ŞABLON yaşam döngüsü ===
+  // === ŞABLON yaşam döngüsü ===
   const tRes = await tplSvc.create({ name: `TEST-LDL-T-${stamp}`, kind: LabelKind.ROLL_FINISHED, isDefault: false });
   const tpl = tRes.data;
   templateIds.push(tpl.id);
@@ -110,7 +84,6 @@ async function main() {
 async function cleanup() {
   await prisma.peripheralDevice.deleteMany({ where: { id: { in: peripheralIds } } });
   await prisma.labelTemplate.deleteMany({ where: { id: { in: templateIds } } });
-  await prisma.labelFormatProfile.deleteMany({ where: { id: { in: profileIds } } });
   console.log("Cleanup: test kayıtları silindi.");
 }
 

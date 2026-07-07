@@ -48,6 +48,14 @@ function TestCell({ device }: { device: PeripheralDevice }) {
 const mono = (v: string | null | undefined) =>
   v ? <span className="font-mono text-xs">{v}</span> : <span className="text-muted-foreground">—</span>;
 
+/** Cihaz medyasını kısa metne çevir: "100×50 mm, 203dpi" (eksikse "sistem varsayılanı"). */
+function mediaSummary(d: PeripheralDevice): string {
+  if (d.labelWidthMm == null || d.labelHeightMm == null) return "sistem varsayılanı";
+  const fmt = (n: number) => String(Math.round(n * 10) / 10);
+  const dpi = d.labelDpi != null ? `, ${d.labelDpi}dpi` : "";
+  return `${fmt(d.labelWidthMm)}×${fmt(d.labelHeightMm)} mm${dpi}`;
+}
+
 export const peripheralColumns: ColumnDef<PeripheralDevice>[] = [
   {
     id: "name",
@@ -97,14 +105,14 @@ export const peripheralColumns: ColumnDef<PeripheralDevice>[] = [
   },
   {
     id: "lang",
-    header: "Dil / Profil",
+    header: "Dil / Medya",
     cell: ({ row }) => (
       <div className="min-w-0">
         <div className="text-xs">
           {row.original.languageOverride ?? "genel"}
         </div>
         <div className="font-mono text-[10px] text-muted-foreground">
-          {row.original.formatProfile?.code ?? "sistem varsayılanı"}
+          {row.original.kind === "LABEL_PRINTER" ? mediaSummary(row.original) : "—"}
         </div>
       </div>
     ),

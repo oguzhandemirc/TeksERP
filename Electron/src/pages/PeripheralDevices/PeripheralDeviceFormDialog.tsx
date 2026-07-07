@@ -79,8 +79,11 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         machineId: initial.machineId ?? "",
         stationId: initial.stationId ?? "",
         deviceId: initial.deviceId ?? "",
-        formatProfileId: initial.formatProfileId ?? "",
         languageOverride: initial.languageOverride ?? "",
+        labelWidthMm: initial.labelWidthMm != null ? String(initial.labelWidthMm) : "",
+        labelHeightMm: initial.labelHeightMm != null ? String(initial.labelHeightMm) : "",
+        labelDpi: initial.labelDpi != null ? String(initial.labelDpi) : "",
+        labelGapMm: initial.labelGapMm != null ? String(initial.labelGapMm) : "",
         templateRawId: routeTemplateId(initial, "ROLL_RAW"),
         templateFinishedId: routeTemplateId(initial, "ROLL_FINISHED"),
         templateSwatchId: routeTemplateId(initial, "SWATCH"),
@@ -267,9 +270,10 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
               )}
             </div>
 
-            {/* Yazıcı dili/profili + şablon yönlendirme — YALNIZ yazıcıda (metre/
-                kantar'da gizli). Ayarların hepsi CİHAZA özeldir; şablonlar tek
-                havuzdan seçilir + varyant uyumsuzluk hint'i (PrinterSettingsFields). */}
+            {/* Yazıcı dili/medyası + şablon yönlendirme — YALNIZ yazıcıda (metre/
+                kantar'da gizli). Ayarların hepsi CİHAZA özeldir; medya (mm/dpi)
+                doğrudan cihazda, şablonlar tek havuzdan seçilir + varyant
+                uyumsuzluk hint'i (PrinterSettingsFields). */}
             {isPrinter && <PrinterSettingsFields form={form} />}
 
             {/* Aktiflik formdan YÖNETİLMEZ — yalnız listedeki Pasife Al / Aktifleştir /
