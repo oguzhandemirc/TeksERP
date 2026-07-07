@@ -129,4 +129,25 @@ export class SessionRegistryService {
     });
     return !!s && s.revokedAt === null;
   }
+
+  /**
+   * ÖLÜ oturum satırlarının fiziksel temizliği (admin bakım ucu — Faz 3).
+   * Tablo hiç temizlenmiyordu: login başına 1 satır + hiç DELETE yok → yıllar
+   * içinde sınırsız büyüme (ilk dayanıklılık denetiminin hijyen bulgusu).
+   * KAPSAM MATEMATİĞİ: yalnız `revokedAt < cutoff` VEYA `expiresAt < cutoff`
+   * satırlar silinir — aktif oturum (revokedAt null + expiresAt gelecekte) iki
+   * koşula da giremez, silinmesi imkânsız. Fiziksel DELETE bilinçli istisnadır
+   * (system-logs archive emsali: operasyonel kayıt bakımı, domain verisi değil).
+   * Silinen jti'nin middleware etkisi yok: isSessionValid kayıt-yok'u zaten
+   * geçersiz sayar (fail-closed) — purge edilen oturum çoktan ölüydü.
+   */
+  static async purgeDeadSessions(olderThanDays: number): Promise<{ deleted: number }> {
+    const cutoff = new Date(Date.now() - olderThanDays * 86_400_000);
+    const res = await prisma.session.deleteMany({
+      where: {
+        OR: [{ revokedAt: { lt: cutoff } }, { expiresAt: { lt: cutoff } }],
+      },
+    });
+    return { deleted: res.count };
+  }
 }

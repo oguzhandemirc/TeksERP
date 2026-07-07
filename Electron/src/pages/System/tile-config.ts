@@ -1,4 +1,4 @@
-import { Activity, Archive, Cpu, DatabaseBackup, FileCode2, MapPin, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { Activity, Archive, Cpu, DatabaseBackup, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
 
 export type SystemTileGroup = "activity" | "archive" | "config";
 
@@ -79,6 +79,15 @@ export const systemTiles: SystemTile[] = [
     icon: Search,
     to: "/system/archive/search",
     group: "archive",
+    adminOnly: true,
+  },
+  {
+    key: "perf",
+    title: "Endpoint Performansı",
+    description: "Hangi uç yavaş — route bazında p50/p95, yavaş istek defteri, günlük trend",
+    icon: Gauge,
+    to: "/system/perf",
+    group: "activity",
     adminOnly: true,
   },
   {

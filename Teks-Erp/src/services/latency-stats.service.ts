@@ -13,8 +13,9 @@
 //     hassasiyetinde); endpoint'ler arası KARŞILAŞTIRMA ve trend için yeterli,
 //     mikro-benchmark için değil.
 
-/** Bucket üst sınırları (ms) — son eleman +∞ (maxMs ile raporlanır). */
-const BUCKET_BOUNDS_MS = [
+/** Bucket üst sınırları (ms) — son eleman +∞ (maxMs ile raporlanır).
+ *  DIŞA AÇIK: latency-persist.service günlük özetleri aynı hizalamayla yazar. */
+export const BUCKET_BOUNDS_MS = [
   1, 2, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000, 60_000,
   Number.POSITIVE_INFINITY,
 ];
@@ -65,7 +66,8 @@ const slowRing: SlowRequestEntry[] = [];
 let statsSince = Date.now();
 let totalCount = 0;
 
-function bucketIndex(ms: number): number {
+/** DIŞA AÇIK: persist servisi delta'ları aynı bucket hizalamasıyla sayar. */
+export function bucketIndex(ms: number): number {
   for (let i = 0; i < BUCKET_BOUNDS_MS.length; i++) {
     if (ms <= BUCKET_BOUNDS_MS[i]) return i;
   }
@@ -74,19 +76,30 @@ function bucketIndex(ms: number): number {
 
 /** Kümülatif bucket sayımından persentil — bucket üst sınırını döner ama
  *  gözlenen max'ı ASLA aşmaz (aksi hâlde "p50=100, max=85" gibi çelişkili
- *  görünürdü); +∞ bucket'ına düşerse gözlenen maxMs raporlanır. */
-function percentileMs(stat: RouteStat, p: number): number {
-  const target = Math.ceil(stat.count * p);
-  const observedMax = Math.round(stat.maxMs);
+ *  görünürdü); +∞ bucket'ına düşerse gözlenen maxMs raporlanır.
+ *  DIŞA AÇIK saf yardımcı: history ucu DB'den okunan birleşik bucket'lardan
+ *  aynı hesapla persentil üretir (tek kaynak). */
+export function percentileFromBuckets(
+  buckets: readonly number[],
+  count: number,
+  p: number,
+  observedMaxMs: number,
+): number {
+  const target = Math.ceil(count * p);
+  const observedMax = Math.round(observedMaxMs);
   let cumulative = 0;
-  for (let i = 0; i < stat.buckets.length; i++) {
-    cumulative += stat.buckets[i];
+  for (let i = 0; i < buckets.length; i++) {
+    cumulative += buckets[i];
     if (cumulative >= target) {
       const bound = BUCKET_BOUNDS_MS[i];
       return Number.isFinite(bound) ? Math.min(bound, observedMax) : observedMax;
     }
   }
   return observedMax;
+}
+
+function percentileMs(stat: RouteStat, p: number): number {
+  return percentileFromBuckets(stat.buckets, stat.count, p, stat.maxMs);
 }
 
 /** Middleware'in tek giriş noktası — istek başına O(1). */

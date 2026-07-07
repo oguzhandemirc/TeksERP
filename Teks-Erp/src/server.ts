@@ -4,6 +4,7 @@ import os from "os";
 import app from './app';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
 import { AuditService } from './services/audit.service';
+import { flushLatencyNow } from './services/latency-persist.service';
 
 const PORT = process.env.PORT || 4000;
 // 0.0.0.0 = tüm ağ arayüzlerinden dinle (tablet/diğer cihazlar LAN üzerinden erişebilsin).
@@ -88,9 +89,16 @@ function gracefulShutdown(signal: string): void {
         process.exit(1);
     }, 5000);
     forceTimer.unref();
-    server.close(() => {
-        console.log("Sunucu kapandı.");
-        process.exit(0);
+    // Son gecikme delta'ları kaybolmasın (dev'de nodemon her kayıtta restart eder!)
+    // — 2sn tavanlı best-effort flush; başarısızlık kapanışı ASLA bloklamaz.
+    void Promise.race([
+        flushLatencyNow().catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 2000).unref()),
+    ]).finally(() => {
+        server.close(() => {
+            console.log("Sunucu kapandı.");
+            process.exit(0);
+        });
     });
 }
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));

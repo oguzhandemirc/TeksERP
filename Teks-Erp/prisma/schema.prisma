@@ -2788,3 +2788,23 @@ model SystemLogArchive {
   @@index([category, createdAt])
   @@map("system_log_archives")
 }
+
+/// Endpoint gecikme GÜNLÜK özetleri (Faz 3 — SAHA-DAYANIKLILIK-FAZ3.md §P1).
+/// RAM'deki latency-stats her ~5dk istek-güdümlü flush ile buraya merge edilir;
+/// bucket sayaçları JSON'da tutulur → günler TOPLANABİLİR, persentil okuma
+/// anında hesaplanır. Retention: flush 90 günden eskiyi siler (tablo TAVANLI —
+/// ~150-200 satır/gün, yılda birkaç MB). JSON sorgulanmaz (GIN gerekmez); FK yok.
+model EndpointLatencyDaily {
+  id        String   @db.Uuid @id @default(uuid())
+  day       DateTime @db.Date
+  routeKey  String   @db.VarChar(200)
+  count     Int
+  errCount  Int
+  maxMs     Int
+  buckets   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([day, routeKey])
+  @@map("endpoint_latency_daily")
+}

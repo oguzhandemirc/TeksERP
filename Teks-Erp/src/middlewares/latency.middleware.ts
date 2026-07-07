@@ -15,6 +15,7 @@ import {
   UNMATCHED_ROUTE_KEY,
   STATIC_ROUTE_KEY,
 } from "../services/latency-stats.service";
+import { noteLatencyDelta } from "../services/latency-persist.service";
 
 const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NUMERIC_SEGMENT = /^\d+$/;
@@ -88,7 +89,9 @@ export function latencyMiddleware(req: Request, res: Response, next: NextFunctio
     if (recorded) return;
     recorded = true;
     const ms = Number(process.hrtime.bigint() - startNs) / 1e6;
-    recordLatency(req.method, resolveRouteKey(req, status), status, ms);
+    const routeKey = resolveRouteKey(req, status);
+    recordLatency(req.method, routeKey, status, ms); // RAM (canlı snapshot)
+    noteLatencyDelta(req.method, routeKey, status, ms); // günlük özet delta'sı (Faz 3)
   };
   // finish = cevap tamamlandı; close = soket kapandı (abort'ta finish gelmez —
   // Node her iki durumda da 'close' yayar, recorded guard'ı çifte kaydı önler).

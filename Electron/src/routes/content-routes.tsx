@@ -33,6 +33,7 @@ import { SystemEventsPage } from "@/pages/System/Events/SystemEventsPage";
 import { ActivityArchivePage } from "@/pages/System/Archive/ActivityArchivePage";
 import { ArchiveSearchPage } from "@/pages/System/Archive/ArchiveSearchPage";
 import { ServerStatusPage } from "@/pages/System/ServerStatus/ServerStatusPage";
+import { PerfPage } from "@/pages/System/Perf/PerfPage";
 import { WorkSessionsPage } from "@/pages/System/WorkSessions/WorkSessionsPage";
 import { BackupsPage } from "@/pages/System/Backups/BackupsPage";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
@@ -346,6 +347,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:settings">
         <ActivityPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "system/perf",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <PerfPage />
       </ProtectedRoute>
     ),
   },

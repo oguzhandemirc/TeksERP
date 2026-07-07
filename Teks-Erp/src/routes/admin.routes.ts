@@ -12,6 +12,12 @@ import { systemSettingService } from "../services/system-setting.service";
 import { SystemLogService } from "../services/system-log.service";
 import { triggerManualBackup, listBackups, resolveBackupPath } from "../services/backup.service";
 import { latencySnapshot, resetLatencyStats } from "../services/latency-stats.service";
+import {
+  getLatencyPersistHealth,
+  latencyHistory,
+  latencyHistoryRoutes,
+} from "../services/latency-persist.service";
+import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
 import { z } from "zod";
 import "../types/express-augment";
@@ -653,7 +659,47 @@ router.get(
   requirePermission("admin:settings"),
   (_req: Request, res: Response, next: NextFunction): void => {
     try {
-      res.status(200).json({ success: true, data: latencySnapshot() });
+      res.status(200).json({
+        success: true,
+        // persist: kalıcılaştırma sağlığı (flush hataları /health'teki audit
+        // sayacı deseniyle burada görünür — sessiz veri kaybı olmasın).
+        data: { ...latencySnapshot(), persist: getLatencyPersistHealth() },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+const perfHistoryQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).default(14),
+  route: z.string().min(1).max(200).optional(),
+});
+
+/**
+ * @openapi
+ * /api/admin/perf/history:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Endpoint gecikme günlük geçmişi (kalıcı özetlerden)
+ *     description: >
+ *       Gün bazlı seri — route verilirse o uç, verilmezse tüm uçların birleşik
+ *       toplamı. Persentiller birleşik bucket'lardan hesaplanır (grafik-hazır).
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/perf/history",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { days, route } = perfHistoryQuerySchema.parse(req.query);
+      const series = await latencyHistory(days, route);
+      const routes = await latencyHistoryRoutes(days);
+      res.status(200).json({
+        success: true,
+        data: { days, route: route ?? null, series, routes },
+      });
     } catch (error) {
       next(error);
     }
@@ -684,6 +730,49 @@ router.post(
         newData: { resetAt: new Date().toISOString() },
       });
       res.status(200).json({ success: true, data: { reset: true } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// =============================================================================
+// SESSIONS BAKIMI (jti registry — ölü satır temizliği, Faz 3)
+// =============================================================================
+
+const sessionPurgeSchema = z.object({
+  olderThanDays: z.number().int().min(7).max(365).default(90),
+});
+
+/**
+ * @openapi
+ * /api/admin/sessions/purge:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Ölü oturum kayıtlarını temizle
+ *     description: >
+ *       revokedAt/expiresAt değeri eşikten eski oturum satırlarını fiziksel
+ *       siler; aktif oturumlar matematiksel olarak kapsam dışıdır (bkz.
+ *       SessionRegistryService.purgeDeadSessions). Operasyonel bakım —
+ *       6 ayda bir system-logs arşiviyle birlikte koşun.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/sessions/purge",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { olderThanDays } = sessionPurgeSchema.parse(req.body ?? {});
+      const result = await SessionRegistryService.purgeDeadSessions(olderThanDays);
+      await AuditService.log({
+        userId: req.user?.userId,
+        action: "DELETE",
+        tableName: "sessions",
+        recordId: "purge",
+        newData: { olderThanDays, deleted: result.deleted },
+      });
+      res.status(200).json({ success: true, data: result });
     } catch (error) {
       next(error);
     }
