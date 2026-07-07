@@ -42,7 +42,9 @@ export function TrendChart({
         <p className="py-8 text-center text-sm text-muted-foreground">
           {historyQ.isPending
             ? "Yükleniyor…"
-            : "Bu aralıkta kalıcı özet yok — özetler ~5 dk'da bir yazılır."}
+            : historyQ.isError
+              ? "Geçmiş alınamadı — sunucuya ulaşılamıyor veya yetki yok."
+              : "Bu aralıkta kalıcı özet yok — özetler ~5 dk'da bir yazılır."}
         </p>
       ) : (
         <div className="h-64">

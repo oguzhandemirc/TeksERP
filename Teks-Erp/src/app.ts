@@ -94,9 +94,11 @@ app.use(compression({ threshold: 1024 }));
 app.use(express.json());
 app.use(morgan("dev"));
 
-// Per-endpoint gecikme istatistiği (istek başına O(1), saf bellek) — morgan'dan
-// sonra, resolveDevice'tan ÖNCE: statik/health/swagger dahil her şey ölçülür.
-// Okuma: GET /api/admin/perf. Bkz. SAHA-DAYANIKLILIK-FAZ2.md §B.
+// Per-endpoint gecikme istatistiği (istek başına O(1)) — morgan'dan sonra,
+// resolveDevice'tan ÖNCE: statik/health/swagger dahil her şey ölçülür. Canlı
+// sayaçlar bellekte (GET /api/admin/perf); Faz 3 ile ~5dk'da bir istek-güdümlü
+// flush günlük özet tablosuna yazar (GET /api/admin/perf/history — trend).
+// Bkz. SAHA-DAYANIKLILIK-FAZ2.md §B + SAHA-DAYANIKLILIK-FAZ3.md §P1.
 app.use(latencyMiddleware);
 
 // x-device-id header'ı varsa req.device'a Device + machineId çöz

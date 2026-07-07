@@ -33,10 +33,12 @@ const ROUTE = `/api/TEST-perf-${RUN}`; // benzersiz TEST- anahtarı
 const KEY = `GET ${ROUTE}`;
 const OLD_KEY = `GET /api/TEST-perf-old-${RUN}`;
 
+// Servisin gün temsiliyle AYNI: yerel Y/M/D + UTC-midnight (DATE kolonuna
+// UTC gün-parçası yazıldığı için — bkz. latency-persist.service localDay).
 function localDay(offsetDays = 0): Date {
   const n = new Date();
-  const d = new Date(n.getFullYear(), n.getMonth(), n.getDate());
-  d.setDate(d.getDate() + offsetDays);
+  const d = new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()));
+  d.setUTCDate(d.getUTCDate() + offsetDays);
   return d;
 }
 
@@ -107,6 +109,25 @@ async function main(): Promise<void> {
 
     const routes = await latencyHistoryRoutes(7);
     check("route listesi anahtarı içeriyor", routes.includes(KEY));
+
+    // --- MUTLAK takvim günü (denetim bulgusu): DB'deki day::text YEREL bugüne
+    // eşit olmalı — localDay yanlış üretse round-trip yine tutar, bu tutmaz.
+    const n = new Date();
+    const todayLocal = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+    const rawDay = await prisma.$queryRaw<Array<{ d: string }>>`
+      SELECT day::text AS d FROM endpoint_latency_daily WHERE "routeKey" = ${KEY}`;
+    check(`DB'deki gün etiketi YEREL bugün (${todayLocal})`, rawDay[0]?.d === todayLocal);
+    check("history etiketi de yerel bugün", series[0]?.day === todayLocal);
+
+    // --- Route'suz history: farklı uçların bucket'ları GÜN İÇİNDE birleşir ----
+    const ROUTE2 = `/api/TEST-perf-b-${RUN}`;
+    for (let i = 0; i < 20; i++) noteLatencyDelta("GET", ROUTE2, 200, 3_000); // yavaş uç
+    await flushLatencyNow();
+    const all = await latencyHistory(7); // route filtresi YOK
+    const today = all.find((s) => s.day === todayLocal);
+    // Dev DB'de başka satır olabilir — en azından iki TEST ucunun toplamını kapsamalı
+    check("route'suz seri iki ucu da kapsıyor (count ≥ 173)", (today?.count ?? 0) >= 173);
+    check("birleşik p95 yavaş ucu görüyor (≥ 400)", (today?.p95Ms ?? 0) >= 400);
 
     // --- Sağlık: başarılı akışta failure yok -------------------------------------
     const health = getLatencyPersistHealth();

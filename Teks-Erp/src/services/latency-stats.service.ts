@@ -31,7 +31,8 @@ const MAX_ROUTE_KEYS = 500;
 export const UNMATCHED_ROUTE_KEY = "(eşleşmeyen)";
 /** Route'suz ama başarılı cevaplar (statik dosya, swagger UI iç varlıkları). */
 export const STATIC_ROUTE_KEY = "(statik/diğer)";
-const OVERFLOW_ROUTE_KEY = "(diğer)";
+/** DIŞA AÇIK: persist yolunun kardinalite tavanı da aynı kovaya düşer. */
+export const OVERFLOW_ROUTE_KEY = "(diğer)";
 
 interface RouteStat {
   count: number;

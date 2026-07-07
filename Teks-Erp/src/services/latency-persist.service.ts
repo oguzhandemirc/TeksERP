@@ -20,12 +20,22 @@
 //     TAVANLI kalır: ~150-200 satır/gün × 90 gün).
 
 import prisma from "../lib/prisma";
-import { BUCKET_BOUNDS_MS, bucketIndex, percentileFromBuckets } from "./latency-stats.service";
+import {
+  BUCKET_BOUNDS_MS,
+  bucketIndex,
+  percentileFromBuckets,
+  OVERFLOW_ROUTE_KEY,
+} from "./latency-stats.service";
 
 /** Flush throttle penceresi. */
 export const FLUSH_INTERVAL_MS = 5 * 60_000;
 /** Günlük özet saklama süresi. */
 export const RETENTION_DAYS = 90;
+/** Pending delta anahtarı tavanı — stats'in 500-cap'inin persist muadili
+ *  (denetim bulgusu: bu yol kendi map'ini tutar, guard'sız kalamaz). */
+const MAX_PENDING_KEYS = 600;
+/** routeKey kolonu VarChar(200) — taşan anahtar flush'ta P2000'e düşmesin. */
+const MAX_ROUTE_KEY_LEN = 200;
 
 interface PendingDelta {
   count: number;
@@ -42,13 +52,20 @@ let flushFailures = 0;
 let lastFlushError: string | null = null;
 let lastFlushOkAt: number | null = null;
 
-/** Yerel gün başlangıcı — fabrika "günü" sunucu saatiyle anlamlıdır. */
+/**
+ * Fabrika-YEREL takvim günü, UTC-midnight Date olarak. NEDEN UTC-midnight:
+ * Prisma 7 + adapter-pg, DateTime'ı UTC'ye çevirip DATE kolonuna UTC
+ * gün-parçasını yazar — local-midnight verilseydi (UTC+3'te önceki gün 21:00Z)
+ * her satır 1 gün geri etiketlenirdi (denetimde canlı probla kanıtlandı).
+ * Yerel Y/M/D + Date.UTC → kolonda tam yerel takvim günü durur.
+ */
 function localDay(now = new Date()): Date {
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
 }
 
+/** DB'den dönen day her zaman UTC-midnight → ISO gün parçası doğru etiket. */
 function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return d.toISOString().slice(0, 10);
 }
 
 /**
@@ -56,8 +73,14 @@ function dayKey(d: Date): string {
  * O(1) bellek işlemi + throttle kontrolü. HTTP cevabını asla bekletmez.
  */
 export function noteLatencyDelta(method: string, routeKey: string, status: number, ms: number): void {
-  const key = `${method} ${routeKey}`;
+  let key = `${method} ${routeKey}`.slice(0, MAX_ROUTE_KEY_LEN);
   let d = pending.get(key);
+  if (!d && pending.size >= MAX_PENDING_KEYS) {
+    // Kardinalite guard'ı (stats'teki 500-cap'in muadili): tavan üstü yeni
+    // anahtarlar tek kovada birikir — pending/DB sınırsız büyüyemez.
+    key = OVERFLOW_ROUTE_KEY;
+    d = pending.get(key);
+  }
   if (!d) {
     d = { count: 0, errCount: 0, maxMs: 0, buckets: BUCKET_BOUNDS_MS.map(() => 0) };
     pending.set(key, d);
@@ -94,8 +117,13 @@ export async function flushLatencyNow(): Promise<void> {
           select: { id: true, maxMs: true, buckets: true },
         });
         if (existing) {
-          const merged = (existing.buckets as number[]).map(
-            (v, i) => v + (d.buckets[i] ?? 0),
+          // Max-uzunluk birleşimi: BUCKET_BOUNDS_MS ileride genişlerse eski
+          // satır kısa kalır — kuyruk sayaçları sessizce düşmesin (denetim).
+          const existingB = existing.buckets as number[];
+          const len = Math.max(existingB.length, d.buckets.length);
+          const merged = Array.from(
+            { length: len },
+            (_, i) => (existingB[i] ?? 0) + (d.buckets[i] ?? 0),
           );
           await prisma.endpointLatencyDaily.update({
             where: { id: existing.id },
@@ -132,7 +160,7 @@ export async function flushLatencyNow(): Promise<void> {
       lastRetentionDayKey = todayKey;
       try {
         const cutoff = localDay();
-        cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
+        cutoff.setUTCDate(cutoff.getUTCDate() - RETENTION_DAYS);
         await prisma.endpointLatencyDaily.deleteMany({ where: { day: { lt: cutoff } } });
       } catch (err) {
         flushFailures += 1;
@@ -170,11 +198,14 @@ export interface LatencyHistoryPoint {
  */
 export async function latencyHistory(days: number, route?: string): Promise<LatencyHistoryPoint[]> {
   const from = localDay();
-  from.setDate(from.getDate() - (days - 1));
+  from.setUTCDate(from.getUTCDate() - (days - 1));
   const rows = await prisma.endpointLatencyDaily.findMany({
     where: { day: { gte: from }, ...(route ? { routeKey: route } : {}) },
     orderBy: { day: "asc" },
     select: { day: true, count: true, errCount: true, maxMs: true, buckets: true },
+    // Emniyet tavanı: retention + kardinalite guard'ı ile satır sayısı zaten
+    // ~90×(route tavanı) ile sınırlı; yine de LIMIT'siz tam tarama bırakma.
+    take: 60_000,
   });
 
   const byDay = new Map<string, { count: number; errCount: number; maxMs: number; buckets: number[] }>();
@@ -189,7 +220,10 @@ export async function latencyHistory(days: number, route?: string): Promise<Late
     agg.errCount += r.errCount;
     agg.maxMs = Math.max(agg.maxMs, r.maxMs);
     const b = r.buckets as number[];
-    for (let i = 0; i < agg.buckets.length; i++) agg.buckets[i] += b[i] ?? 0;
+    // Max-uzunluk toplama — saklanan dizi daha uzunsa kuyruk yok sayılmasın.
+    for (let i = 0; i < Math.max(agg.buckets.length, b.length); i++) {
+      agg.buckets[i] = (agg.buckets[i] ?? 0) + (b[i] ?? 0);
+    }
   }
 
   return [...byDay.entries()].map(([day, a]) => ({
@@ -205,12 +239,13 @@ export async function latencyHistory(days: number, route?: string): Promise<Late
 /** Kalıcı özet route listesi (UI seçicisi) — son N günde görülen anahtarlar. */
 export async function latencyHistoryRoutes(days: number): Promise<string[]> {
   const from = localDay();
-  from.setDate(from.getDate() - (days - 1));
+  from.setUTCDate(from.getUTCDate() - (days - 1));
   const rows = await prisma.endpointLatencyDaily.findMany({
     where: { day: { gte: from } },
     distinct: ["routeKey"],
     select: { routeKey: true },
     orderBy: { routeKey: "asc" },
+    take: 2_000,
   });
   return rows.map((r) => r.routeKey);
 }

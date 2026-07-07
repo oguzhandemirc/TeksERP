@@ -53,7 +53,30 @@ const cfg: Profile = {
   drop: Number(arg("drop") ?? base?.drop ?? 0),
 };
 const PORT = Number(arg("port") ?? 4100);
-const TARGET = new URL(arg("target") ?? "http://127.0.0.1:4000");
+// NaN/aralık doğrulaması — bozuk argüman simülatörü sessizce etkisizleştirmesin.
+if (!Number.isFinite(cfg.rtt) || cfg.rtt < 0) {
+  console.error(`Geçersiz --rtt: '${arg("rtt")}' (ms, ≥0 sayı olmalı)`);
+  process.exit(1);
+}
+if (!Number.isFinite(cfg.jitter) || cfg.jitter < 0) {
+  console.error(`Geçersiz --jitter: '${arg("jitter")}' (ms, ≥0 sayı olmalı)`);
+  process.exit(1);
+}
+if (!Number.isFinite(cfg.drop) || cfg.drop < 0 || cfg.drop > 1) {
+  console.error(`Geçersiz --drop: '${arg("drop")}' (0..1 arası oran olmalı, ör. 0.05)`);
+  process.exit(1);
+}
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+  console.error(`Geçersiz --port: '${arg("port")}' (1-65535)`);
+  process.exit(1);
+}
+let TARGET: URL;
+try {
+  TARGET = new URL(arg("target") ?? "http://127.0.0.1:4000");
+} catch {
+  console.error(`Geçersiz --target: '${arg("target")}' (ör. http://192.168.1.50:4000)`);
+  process.exit(1);
+}
 
 const oneWay = () => cfg.rtt / 2 + Math.random() * (cfg.jitter / 2);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

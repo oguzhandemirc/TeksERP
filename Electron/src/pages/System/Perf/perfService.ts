@@ -55,13 +55,19 @@ export interface PerfHistory {
 
 const SNAPSHOT_REFRESH_MS = 15_000;
 
-/** Canlı snapshot — sekme aktifken 15sn'de bir tazelenir (ServerStatus deseni). */
+/** Canlı snapshot — sekme aktifken 15sn'de bir tazelenir (ServerStatus deseni).
+ *  suppressErrorToast: 15sn'lik poll kalıcı hatada toast yağmuru üretmesin —
+ *  sayfa kendi hata durumunu gösterir. */
 export function usePerfSnapshot() {
   const isTabActive = useIsTabActive();
   return useQuery({
     queryKey: ["perf", "snapshot"],
     queryFn: async (): Promise<PerfSnapshot> =>
-      (await apiClient.get<{ success: boolean; data: PerfSnapshot }>("/api/admin/perf")).data.data,
+      (
+        await apiClient.get<{ success: boolean; data: PerfSnapshot }>("/api/admin/perf", {
+          suppressErrorToast: true,
+        })
+      ).data.data,
     refetchInterval: isTabActive ? SNAPSHOT_REFRESH_MS : false,
   });
 }
@@ -74,6 +80,7 @@ export function usePerfHistory(days: number, route: string | null) {
       (
         await apiClient.get<{ success: boolean; data: PerfHistory }>("/api/admin/perf/history", {
           params: { days, ...(route ? { route } : {}) },
+          suppressErrorToast: true,
         })
       ).data.data,
   });

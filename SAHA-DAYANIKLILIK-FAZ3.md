@@ -48,8 +48,9 @@
   davranışları (bekletilen kayıt, tavanlı logout, poll backoff) masada test edilir.
 
 ### P4 — Electron "Endpoint Performansı" sayfası
-**Dosyalar:** `src/pages/System/Perf/` (types/service/PerfPage/LiveTable/SlowList/TrendChart),
-`src/pages/System/tile-config.ts` (kart), `src/routes/content-routes.tsx` (route)
+**Dosyalar:** `src/pages/System/Perf/` (perfService [tipler+hook'lar] / PerfPage /
+LiveTable / SlowList / TrendChart), `src/pages/System/tile-config.ts` (kart),
+`src/routes/content-routes.tsx` (route)
 
 - Canlı tablo (`GET /api/admin/perf`): route, istek, hata, p50/p95/max, son istek — p95 desc.
 - Yavaş istek defteri (≥1sn son 50) listesi.
@@ -57,6 +58,17 @@
 - "Sıfırla" butonu ConfirmDialog ile (`POST /perf/reset`).
 - `ProtectedRoute requirePermission="admin:settings"`; System hub'ına adminOnly kart;
   dosya-boyu kuralları (sayfa <200, dosya <300) parçalamayla korunur.
+
+## 1.5 Bilinen Minörler (denetimden — bilinçli bırakıldı)
+
+- `day` kolonu fabrika-YEREL takvim gününü UTC-midnight olarak saklar (denetimde
+  yakalanan -1 gün kayması düzeltildi; test artık `day::text`'i mutlak doğrular).
+- Süreçler-arası flush yarışında (restart örtüşmesi) buckets read-modify-write
+  atomik değil — pencere ms'ler, veri operasyonel özet; kabul edildi ve kodda belgeli.
+- `test_session_purge` tablo-geneli purge çağırır: dev DB'deki gerçek ölü satırlar
+  da temizlenir (bakım yan-etkisi — assert'ler toleranslı, dosya başında not).
+- Flush başarısız olursa o turun delta'ları düşer (best-effort, sağlık sayaçlı);
+  cevap gövdesi flush edilmiş abort'lar 499 sayılır (Faz-2 kararıyla tutarlı).
 
 ## 2. Kapsam Dışı
 - pg_stat_statements (üretim kutusuna manuel operasyon), alarm/uyarı eşikleri (ileride),

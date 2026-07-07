@@ -52,6 +52,12 @@ export function PerfPage() {
       />
 
       <div className="space-y-6 overflow-y-auto p-6">
+        {snapshotQ.isError && (
+          <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <span>Canlı istatistik alınamadı — sunucuya ulaşılamıyor. 15 sn'de bir yeniden denenir.</span>
+          </div>
+        )}
         {persistUnhealthy && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />

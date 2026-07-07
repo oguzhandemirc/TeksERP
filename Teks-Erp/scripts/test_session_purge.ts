@@ -4,6 +4,8 @@
 // Koşum: npx tsx scripts/test_session_purge.ts
 // KRİTİK SÖZLEŞME: aktif oturum (revokedAt null + expiresAt gelecekte) ASLA
 // silinemez; yalnız eşikten eski revoked/expired satırlar gider.
+// NOT: purge çağrısı tablo-genelidir — dev DB'deki GERÇEK ölü satırlar da
+// silinir (bu bir bakım işlemidir, veri kaybı değil; assert'ler buna toleranslı).
 
 import { randomUUID } from "node:crypto";
 import prisma from "../src/lib/prisma";
