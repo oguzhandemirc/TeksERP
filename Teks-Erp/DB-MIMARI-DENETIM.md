@@ -16,8 +16,9 @@ Denetim sonrası düzeltmeler bir git branch'inde (**5 commit**) uygulandı; her
 | **Faz 4** `d90947f` — migration `…120000` | O-5, O-7, D-12, D-10, O-22 | 8 CHECK + partial-unique + unique + FK Restrict + composite FK; **dev'e uygulandı + resolve** |
 | **Faz 5** `b43fdba` — migration `…130000` | O-13, O-14, D-5, D-6, D-7 | 9 index drop + 2 composite + partial; **dev'e uygulandı + resolve** |
 | **Faz 6** `49ecb71` — migration `…140000` | O-9, O-10, O-11, D-9, D-14, D-16, B-11 | dyehouseNote/updatedAt/uuid + `consistency-check.sql` + doc; **dev'e uygulandı + resolve** |
-| **Backend track** (ayrı oturum) | Y-2, Y-3, O-1, O-2, O-3, O-4, O-6, O-18, O-21, O-23, D-13, D-15, B-1 | app-code (`services`/`controllers`/`lib`) — devredildi |
-| **Ürün kararı** (bekliyor) | Y-1, O-19, O-20, D-3 | tedarikçi-lot / operatör izi + dara/net / vardiya-maliyet |
+| **Faz 7** `c550ac4` — migration `…150000` | Y-1, O-19 | GoodsReceipt (izlenebilirlik kökü) + Roll.goodsReceiptId/supplierLotNo + Shipment/Sack operatör izi; **şema foundation** (app-code entegrasyonu devir); dev'e uygulandı + resolve |
+| **Backend track** (ayrı oturum) | Y-2, Y-3, O-1, O-2, O-3, O-4, O-6, O-18, O-21, O-23, D-13, D-15, B-1 + **Y-1/O-19 app-code** | app-code (`services`/`controllers`/`lib`) — devredildi |
+| **Ürün kararı** (ileriye) | O-20, D-3 | çuval dara/net + vardiya-maliyet (bugünün ihtiyacı değil) |
 | **Bilgi — aksiyon yok** | B-2…B-10, D-2 vb. | bilinçli tasarım tespitleri (belge amaçlı) |
 
 > **⚠️ Üretim deploy notu:** Faz 4/5/6 DDL'i (özellikle Faz 5 `roll_operations` yeni index'leri) dolu üretim tablosunda yazma kilidi alır → **vardiya dışı** `prisma migrate deploy` (CLAUDE.md kural 14; her migration başında `SET statement_timeout = 0` var). Dev DB'de 3 migration resolve'lu; üretimde `migrate deploy` uygular. **Koordinasyon:** dev DB'de bu 3 migration kayıtlı ama paralel backend branch'inde dosyaları yok — o oturum `prisma migrate deploy/status` çalıştırmamalı (merge'de uzlaşır).
