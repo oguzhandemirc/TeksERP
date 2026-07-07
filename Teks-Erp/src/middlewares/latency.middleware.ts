@@ -20,14 +20,21 @@ const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const NUMERIC_SEGMENT = /^\d+$/;
 /** Barkod/token benzeri uzun opak segmentler için savunma eşiği. */
 const LONG_OPAQUE_SEGMENT = 24;
+/** Route sözlüğü görünümü: küçük-harf kelime(+tire). Uzunluktan bağımsız MUAF —
+ *  denetimde 'subcontractor-categories' (tam 24 kr) yanlış pozitif çıkmıştı;
+ *  opak değerler (barkod TEKS-..., hex, UUID) rakam/büyük harf içerir, bu
+ *  desene uymaz. ':param' adları da iki noktayla ayrışır, zaten dokunulmaz. */
+const WORDLIKE_SEGMENT = /^[a-z][a-z-]*$/;
 
 /** Somut değer taşıyan segmentleri pattern'e indirger — ':param' adları ve
- *  normal path kelimeleri (items, branches...) olduğu gibi kalır. */
+ *  normal path kelimeleri (items, subcontractor-categories...) olduğu gibi kalır. */
 function normalizeKeyPath(path: string): string {
   return path
     .split("/")
     .map((seg) =>
-      UUID_SEGMENT.test(seg) || NUMERIC_SEGMENT.test(seg) || seg.length >= LONG_OPAQUE_SEGMENT
+      UUID_SEGMENT.test(seg) ||
+      NUMERIC_SEGMENT.test(seg) ||
+      (seg.length >= LONG_OPAQUE_SEGMENT && !WORDLIKE_SEGMENT.test(seg))
         ? ":id"
         : seg,
     )
@@ -62,7 +69,11 @@ function resolveRouteKey(req: Request, statusCode: number): string {
     const key = normalizeKeyPath(`${mountPrefix(req, routePath)}${suffix}`);
     return key === "" ? "/" : key;
   }
-  return statusCode === 404 ? UNMATCHED_ROUTE_KEY : STATIC_ROUTE_KEY;
+  // Route'a hiç ulaşmadan abort edilen istek (499) de "eşleşmemiş" sayılır —
+  // statik dosya kovasına düşmesi yanıltıcı olurdu.
+  return statusCode === 404 || statusCode === CLIENT_ABORTED_STATUS
+    ? UNMATCHED_ROUTE_KEY
+    : STATIC_ROUTE_KEY;
 }
 
 /** İstemci isteği yarıda kesti (timeout/pencere kapatma) — cevap tamamlanmadı.

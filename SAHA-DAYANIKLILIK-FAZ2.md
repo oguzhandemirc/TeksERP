@@ -68,7 +68,9 @@ Route anahtarı `req.baseUrl + req.route.path` HEDEFLİdir ama iki Express gerç
 düzeltilir (denetimde çıktı): (1) `req.baseUrl` pattern değil eşleşen GERÇEK
 string'dir — parametreli iç mount'larda (`/:customerId/branches`) UUID sızar →
 anahtar her durumda **segment normalizasyonundan** geçer (UUID/sayı/uzun-opak →
-`:id`); (2) hata yolunda (`next(error)`) Express baseUrl'i geri sarar → önek
+`:id`; küçük-harf kelime+tire görünümlü segmentler uzunluktan bağımsız MUAF —
+`subcontractor-categories` 24 kr olduğu için 2. tur denetimde yanlış-pozitif
+çıkmıştı); (2) hata yolunda (`next(error)`) Express baseUrl'i geri sarar → önek
 originalUrl'den segment aritmetiğiyle yeniden kurulur; kök route'ta ('/') tüm
 path önektir ('GET /' çöküşü yok). Route eşleşmemişse `(eşleşmeyen)`.
 `app.ts`'te morgan'dan hemen sonra, resolveDevice'tan ÖNCE mount → statik/health/
@@ -111,6 +113,9 @@ kod değil); Electron'a perf görüntüleme sayfası (uç hazır olunca ayrı k�
 - [ ] **F12** Konvansiyon uyumu: latency-stats.service'te DB/audit yok (saf bellek); yeni timer kurulmadı (/health "yeni timer yok" ilkesi — ölçüm istek-güdümlü); `any` yok; mevcut yorum diline uyum.
 
 ## 3.5 Bilinen Minörler (denetimden — bilinçli bırakıldı)
+
+- İç-mount param'ına UUID/sayı/opak-olmayan KISA çöp değer gönderilirse (`/api/customers/undefined/branches` — istemci bug'ı) somut segment anahtara girer; 500'lük tavan + `(diğer)` kovası belleği sınırlar, LAN-only ortamda kabul edilen kalıntı.
+- Cevap gövdesi flush edilmişken abort edilen istek telde 200 taşısa da 499 yazılır (sentetik — nginx konvansiyonu; "istemci beklemedi" bilgisi statüden değerli).
 
 - CORS preflight (OPTIONS) ve `express.json` parse-hatası 400'leri latency mount'undan önce kısa devre olur → ölçüm dışı; gövde okuma süresi ms'e dahil değil (ölçüm middleware-sonrasıdır).
 - Perf reset audit'i `tableName: 'latency_stats'` ile DOMAIN kategorisine düşer — Aktivite Günlüğü tablo filtresinde sanal bir ad görünür (kayıt izi bilinçli tercih).

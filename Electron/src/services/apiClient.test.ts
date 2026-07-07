@@ -26,6 +26,7 @@ vi.mock("sonner", () => ({ toast: { error: (...a: unknown[]) => toastError(...a)
 // serverStatus GERÇEK store — offset/online davranışını uçtan uca doğrulamak için.
 import apiClient from "./apiClient";
 import { useServerStatusStore } from "@/store/serverStatus";
+import { tokenStore } from "@/lib/secure-token"; // vi.mock'lu — spy'lara erişim
 
 type Handler = {
   fulfilled: (r: AxiosResponse) => unknown;
@@ -71,6 +72,42 @@ function makeNetworkError(code = "ENOTFOUND"): AxiosError {
   err.response = undefined;
   return err;
 }
+
+describe("apiClient request interceptor — Authorization", () => {
+  type ReqHandler = { fulfilled: (c: unknown) => Promise<{ headers: AxiosHeaders }> };
+  const getReqInterceptor = (): ReqHandler => {
+    const handlers = (apiClient.interceptors.request as unknown as { handlers: ReqHandler[] })
+      .handlers;
+    const h = handlers.find(Boolean);
+    if (!h) throw new Error("request interceptor bulunamadı");
+    return h;
+  };
+
+  beforeEach(() => {
+    (tokenStore.get as ReturnType<typeof vi.fn>).mockReset();
+  });
+
+  it("preset Authorization EZİLMEZ — logout revoke'u yakalanan token'la gider", async () => {
+    (tokenStore.get as ReturnType<typeof vi.fn>).mockResolvedValue("yeni-token");
+    const out = await getReqInterceptor().fulfilled({
+      headers: new AxiosHeaders({ Authorization: "Bearer eski-token" }),
+    });
+    // Ezilseydi: logout→anında re-login yarışında YENİ oturum revoke edilirdi.
+    expect(out.headers.Authorization).toBe("Bearer eski-token");
+  });
+
+  it("preset yoksa store token'ı yazılır (normal istek davranışı değişmedi)", async () => {
+    (tokenStore.get as ReturnType<typeof vi.fn>).mockResolvedValue("yeni-token");
+    const out = await getReqInterceptor().fulfilled({ headers: new AxiosHeaders() });
+    expect(out.headers.Authorization).toBe("Bearer yeni-token");
+  });
+
+  it("token yokken header eklenmez", async () => {
+    (tokenStore.get as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    const out = await getReqInterceptor().fulfilled({ headers: new AxiosHeaders() });
+    expect(out.headers.Authorization).toBeUndefined();
+  });
+});
 
 describe("apiClient interceptor", () => {
   beforeEach(() => {

@@ -54,6 +54,14 @@ function buildApp() {
   orders.get("/", (_req, _res, next) => next(new Error("boom")));
   app.use("/api/orders", orders);
 
+  // 24 karakterlik GERÇEK route kelimesi (denetimde yanlış-pozitif çıkmıştı):
+  // normalizasyon bunu ':id' sanmamalı (WORDLIKE muafiyeti).
+  const subCats = express.Router();
+  subCats.get("/", (_req, res) => {
+    res.json({ ok: true });
+  });
+  app.use("/api/subcontractor-categories", subCats);
+
   app.get("/health", (_req, res) => {
     res.json({ ok: true });
   });
@@ -108,6 +116,22 @@ async function main(): Promise<void> {
     // 4) Kök route başarı + query string etkisiz
     await fetch(`${base}/api/customers?page=1`);
     check("kök route başarı anahtarı", routes().includes("GET /api/customers"));
+
+    // 4b) 24 kr'lik gerçek route kelimesi ':id' OLMAZ (yanlış-pozitif regresyonu)
+    await fetch(`${base}/api/subcontractor-categories`);
+    check(
+      "uzun route kelimesi korunur (subcontractor-categories)",
+      routes().includes("GET /api/subcontractor-categories") &&
+        !routes().includes("GET /api/:id")
+    );
+
+    // 4c) Barkod benzeri uzun OPAK değer (rakam/büyük harf) ':id' OLUR —
+    // iç-mount param'ına barkod girerse öneğe sızmamalı.
+    await fetch(`${base}/api/customers/TEKS-20260101-ABCD1234567/branches`);
+    check(
+      "opak barkod segmenti :id'ye normalize edilir",
+      !routes().some((r) => r.includes("TEKS-20260101"))
+    );
 
     // 5) App-level route: çift slash yok
     await fetch(`${base}/health`);
