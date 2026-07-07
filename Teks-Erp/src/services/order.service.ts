@@ -46,6 +46,7 @@ const ORDER_LINE_WRITABLE = new Set([
 ]);
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
 import { assertColorsAssignableToCustomer } from "./helpers/color-assignment.helper";
 import { CustomerAliasService } from "./customer-alias.service";
@@ -1385,6 +1386,21 @@ export class OrderService extends BaseService {
     // Tek transaction: lines diff + header update + final fetch.
     const updated = await prisma.$transaction(async (tx) => {
       if (incomingLines) {
+        // F144: WO-bağı guard'ını tx İÇİNDE TAZE re-check et — pre-tx (1362) okuma
+        // ile deleteMany arasında eşzamanlı WO create (orderLinks INSERT) araya
+        // girip CASCADE ile linki sessizce silebilir; statement commit'li linkleri görür.
+        const activeLink = await tx.workOrderToOrderLine.findFirst({
+          where: {
+            orderLine: { orderId: id },
+            workOrder: { status: { not: WorkOrderStatus.CANCELLED } },
+          },
+          select: { workOrderId: true },
+        });
+        if (activeLink) {
+          throw AppError.conflict(
+            "İş emri açılmış siparişin kalemleri değiştirilemez. Önce iş emrini iptal edin.",
+          );
+        }
         const existingById = new Map(current.lines.map((l) => [l.id, l]));
         const incomingIds = new Set(
           incomingLines
@@ -1395,6 +1411,23 @@ export class OrderService extends BaseService {
         // Delete: existing - incoming. Cascade ile requiredProperties otomatik siler.
         const toDelete = [...existingById.keys()].filter((eid) => !incomingIds.has(eid));
         if (toDelete.length > 0) {
+          // O-6: silinecek satırları FOR UPDATE ile kilitle — in-flight WO orderLine
+          // INSERT'i (FK → FOR KEY SHARE) yalnız FOR UPDATE bloklar (FOR NO KEY UPDATE
+          // yetmez). Sonra toDelete-scope taze link kontrolü: araya giren INSERT ya
+          // guard'da yakalanır (409) ya da silme sonrası FK ihlaliyle düşer.
+          await tx.$queryRaw`SELECT id FROM order_lines WHERE id = ANY(${toDelete}::uuid[]) FOR UPDATE`;
+          const linkedToDeleted = await tx.workOrderToOrderLine.findFirst({
+            where: {
+              orderLineId: { in: toDelete },
+              workOrder: { status: { not: WorkOrderStatus.CANCELLED } },
+            },
+            select: { workOrderId: true },
+          });
+          if (linkedToDeleted) {
+            throw AppError.conflict(
+              "İş emri açılmış siparişin kalemleri değiştirilemez. Önce iş emrini iptal edin.",
+            );
+          }
           await tx.orderLine.deleteMany({ where: { id: { in: toDelete } } });
         }
 
@@ -1598,26 +1631,59 @@ export class OrderService extends BaseService {
       );
     }
 
-    const plannedLinkIds = allLinks
-      .filter((l) => l.workOrder.status === "PLANNED")
-      .map((l) => ({ workOrderId: l.workOrderId, orderLineId: l.orderLineId }));
-
     const updated = await prisma.$transaction(async (tx) => {
-      if (plannedLinkIds.length > 0) {
+      // F142: atomik claim ÖNCE — çift-paralel iptal ve araya giren COMPLETED
+      // (manualComplete/recompute) koşulsuz CANCELLED ezmesini kapat.
+      const cancelClaim = await tx.order.updateMany({
+        where: { id, status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
+        data: { status: OrderStatus.CANCELLED },
+      });
+      if (cancelClaim.count === 0) {
+        const fresh = await tx.order.findUnique({ where: { id }, select: { status: true } });
+        throw AppError.conflict(
+          `Sipariş bu sırada ${
+            fresh?.status === OrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
+          }, tekrar iptal edilemez. Sayfayı yenileyin.`,
+        );
+      }
+
+      // BU siparişin satır bağlarını TAZE oku (orderLineId scope — shared WO'nun
+      // başka sipariş bağları korunur). Linkli WO satırlarını sıralı kilitle
+      // (workorder softDelete deseniyle simetrik) → eşzamanlı WO status geçişi serileşir.
+      const myLinks = await tx.workOrderToOrderLine.findMany({
+        where: { orderLine: { orderId: id } },
+        select: { workOrderId: true, orderLineId: true },
+      });
+      const woIds = [...new Set(myLinks.map((l) => l.workOrderId))].sort();
+      for (const wid of woIds) await touchWorkOrderTx(tx, wid); // döngü — Promise.all(tx.*) YASAK
+      const woRows = await tx.workOrder.findMany({
+        where: { id: { in: woIds } },
+        select: { id: true, status: true, batchNumber: true },
+      });
+      const woById = new Map(woRows.map((w) => [w.id, w]));
+      const blocking = woRows.filter((w) => blockingStatuses.has(w.status));
+      if (blocking.length > 0) {
+        const batchNumbers = [...new Set(blocking.map((w) => w.batchNumber))].join(", ");
+        throw AppError.conflict(
+          `Bu siparişe bağlı aktif/tamamlanmış iş emirleri var: ${batchNumbers}. Önce onları iptal edin.`,
+        );
+      }
+      // Yalnız BU siparişin PLANNED WO link çiftlerini kopar.
+      const plannedPairs = myLinks.filter(
+        (l) => woById.get(l.workOrderId)?.status === "PLANNED",
+      );
+      if (plannedPairs.length > 0) {
         await tx.workOrderToOrderLine.deleteMany({
           where: {
-            OR: plannedLinkIds.map((k) => ({
+            OR: plannedPairs.map((k) => ({
               workOrderId: k.workOrderId,
               orderLineId: k.orderLineId,
             })),
           },
         });
       }
-
-      return tx.order.update({
-        where: { id },
-        data: { status: "CANCELLED" },
-      });
+      const order = await tx.order.findUnique({ where: { id } });
+      return { order: order!, unlinkedCount: plannedPairs.length };
     });
 
     await AuditService.log({
@@ -1628,16 +1694,16 @@ export class OrderService extends BaseService {
       oldData: oldRecord as unknown as Record<string, unknown>,
       newData: {
         status: "CANCELLED",
-        unlinkedWorkOrderCount: plannedLinkIds.length,
+        unlinkedWorkOrderCount: updated.unlinkedCount,
       },
     });
 
     return {
       success: true,
-      data: updated,
+      data: updated.order,
       message:
-        plannedLinkIds.length > 0
-          ? `Sipariş iptal edildi. ${plannedLinkIds.length} planlı iş emri bağlantısı koparıldı.`
+        updated.unlinkedCount > 0
+          ? `Sipariş iptal edildi. ${updated.unlinkedCount} planlı iş emri bağlantısı koparıldı.`
           : "Sipariş iptal edildi",
     };
   }
@@ -1916,13 +1982,56 @@ export class OrderService extends BaseService {
           }, tekrar iptal edilemez. Sayfayı yenileyin.`
         );
       }
+      // F145: preview↔apply arası WO status yarışını kapat. Etkilenen WO'ları
+      // SIRALI kilitle (WO start/dispatch/finalize/cancel yolları da bu satırı
+      // kilitler → serileşir), sonra TAZE status + TAZE sole-order oku ve her
+      // non-CANCEL aksiyonu bayat preview yerine güncel duruma karşı doğrula.
+      const affectedWoIds = [...new Set(preview.affectedWorkOrders.map((w) => w.id))].sort();
+      for (const wid of affectedWoIds) await touchWorkOrderTx(tx, wid); // döngü — Promise.all(tx.*) YASAK
+      const freshRows = await tx.workOrder.findMany({
+        where: { id: { in: affectedWoIds } },
+        select: { id: true, status: true },
+      });
+      const freshStatus = new Map(freshRows.map((r) => [r.id, r.status]));
+      const otherLinks = await tx.workOrderToOrderLine.findMany({
+        where: { workOrderId: { in: affectedWoIds }, orderLine: { orderId: { not: orderId } } },
+        select: { workOrderId: true },
+      });
+      const hasOther = new Set(otherLinks.map((l) => l.workOrderId));
+      for (const wo of preview.affectedWorkOrders) {
+        const action = actionByWO.get(wo.id)!;
+        if (action === "CANCEL_WO") continue; // adım 4'te kendi claim'iyle iptal edilir
+        const fs = freshStatus.get(wo.id);
+        if (!fs) {
+          throw AppError.conflict("İş emri bu sırada kaldırıldı, tekrar deneyin. Sayfayı yenileyin.");
+        }
+        if (!computeAllowedActions(fs, !hasOther.has(wo.id)).includes(action)) {
+          throw AppError.conflict(
+            "İş emri durumu değişti (önizleme bayatladı). Sayfayı yenileyip iptali tekrar onaylayın.",
+          );
+        }
+      }
+      // Önizleme sonrası bu siparişe DOĞAN yeni WO bağı → onaysız kopmayı engelle.
+      const currentLinks = await tx.workOrderToOrderLine.findMany({
+        where: { orderLine: { orderId }, workOrder: { status: { not: WorkOrderStatus.CANCELLED } } },
+        select: { workOrderId: true },
+      });
+      if (currentLinks.some((l) => !affectedWoIds.includes(l.workOrderId))) {
+        throw AppError.conflict(
+          "Önizleme sonrası bu siparişe yeni iş emri bağlandı. Sayfayı yenileyip iptali tekrar onaylayın.",
+        );
+      }
+
       for (const wo of preview.affectedWorkOrders) {
         const action = actionByWO.get(wo.id)!;
         if (action === "CONVERT_TO_STOCK") {
-          await tx.workOrder.update({
-            where: { id: wo.id },
+          const conv = await tx.workOrder.updateMany({
+            where: { id: wo.id, status: { not: WorkOrderStatus.CANCELLED } },
             data: { type: "STOCK_PRODUCTION" },
           });
+          if (conv.count === 0) {
+            throw AppError.conflict("İş emri bu sırada iptal edildi, stoğa çevrilemedi. Sayfayı yenileyin.");
+          }
         }
         // UNLINK_ONLY / CONVERT_TO_STOCK / CANCEL_WO hepsi join'i temizler.
         await tx.workOrderToOrderLine.deleteMany({
