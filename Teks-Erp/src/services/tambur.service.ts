@@ -46,6 +46,7 @@ import {
 } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 import { assertWoAtStepKind, recomputeStepStatus } from "./helpers/roll-step.helper";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { buildIntentSnapshot } from "./label.service";
 
 /**
@@ -699,6 +700,12 @@ export class TamburService {
     // SONRA emit et.
     const childAudits: Array<{ recordId: string; newData: Record<string, unknown> }> = [];
     const updatedRoll = await prisma.$transaction(async (tx) => {
+      // O-2 write-skew guard: WO satırını kilitle → son-top tamamlama sayımı
+      // (~1024) eşzamanlı finalize/finalizeOpenFabric/receive/cancel/directShip ile
+      // serileşsin; hepsi WO satırını tx başında kilitlediğinden sayım COMMIT'li
+      // adım statülerini görür (yoksa iki tx birbirinin adımını açık sayıp WO
+      // IN_PROGRESS'te takılır). Lock sırası WO→roll (kardeşlerle tutarlı).
+      if (wo?.id) await touchWorkOrderTx(tx, wo.id);
       // ATOMIK CLAIM: parent'ı tek hamlede sahiplen. Koşullu updateMany satır
       // kilidi + status guard ile iki eşzamanlı finalize'dan yalnız BİRİNE
       // count=1 verir; kaybeden count=0 alır → tx geri sarılır, mükerrer child
@@ -1807,15 +1814,19 @@ export class TamburService {
       // Önceki kesim de initialQty=currentQty yaptığı için iki decrement aynı sonucu verir.
       // Aşımda (cutLength > currentQty) decrement negatife düşer → bunun yerine topu
       // tamamen tüket (currentQty/initialQty=0). gt:0 guard eşzamanlı çift-tüketimi engeller.
+      // F128: guarded-decrement = atomik claim. WHERE'e status + shipmentId:null
+      // eklenerek pre-tx (check-then-act) statü/rezervasyon kontrolü tx içine alınır:
+      // eşzamanlı sevkiyat rezervasyonu (shipping updateMany {id, shipmentId:null,
+      // status:WAREHOUSE}) araya girerse WHERE eşleşmez → P2025 → 409 (rezerve top kesilmez).
       let updatedParent;
       try {
         updatedParent = exceedsRemaining
           ? await tx.roll.update({
-              where: { id: parent.id, currentQty: { gt: 0 } },
+              where: { id: parent.id, status: parent.status, shipmentId: null, currentQty: { gt: 0 } },
               data: { currentQty: 0, initialQty: 0 },
             })
           : await tx.roll.update({
-              where: { id: parent.id, currentQty: { gte: data.cutLength } },
+              where: { id: parent.id, status: parent.status, shipmentId: null, currentQty: { gte: data.cutLength } },
               data: {
                 currentQty: { decrement: data.cutLength },
                 initialQty: { decrement: data.cutLength },
@@ -1827,7 +1838,7 @@ export class TamburService {
           err.code === "P2025"
         ) {
           throw AppError.conflict(
-            "Topun kalan metresi yetersiz — başka bir işlem aynı topu kullanıyor olabilir"
+            "Top bu sırada değişti (statü değişmiş / sevkiyata rezerve edilmiş / kalan metre yetersiz) — listeyi yenileyip tekrar deneyin"
           );
         }
         throw err;
@@ -2191,6 +2202,7 @@ export class TamburService {
       data.qualityGrade ?? statusToQuality[data.status] ?? "1.KALITE";
     const childStatus = RollStatus.WAREHOUSE;
     const tamburStepId = parent.currentStep.id;
+    const woId = parent.currentStep.workOrderId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
     const childBarcode = data.clientChildBarcode ?? generateTamburChildBarcode();
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
@@ -2205,6 +2217,17 @@ export class TamburService {
     let result: { child: Roll; newParentQty: number };
     try {
       result = await prisma.$transaction(async (tx) => {
+      // F130: WO satırını kilitle → eşzamanlı WO iptaliyle (softDelete cancelClaim
+      // aynı WO satırını kilitler) serileş; iptal-guard'ını kilit ALTINDA TAZE oku
+      // (pre-tx 2169 guard'ının atomik hali). Lock sırası WO→roll (kardeşlerle tutarlı).
+      await touchWorkOrderTx(tx, woId);
+      const freshWo = await tx.workOrder.findUnique({
+        where: { id: woId },
+        select: { status: true },
+      });
+      if (freshWo?.status === WorkOrderStatus.CANCELLED) {
+        throw AppError.conflict("İptal edilmiş iş emrinin açık kumaşı kesilemez");
+      }
       // Child Roll oluştur
       const child = await tx.roll.create({
         data: {
@@ -2288,13 +2311,16 @@ export class TamburService {
       // kumaşı tamamen tüket (currentQty=0). gt:0 guard eşzamanlı çift-tüketimi engeller.
       let updatedParent;
       try {
+        // F130: guarded-decrement = atomik claim. status + currentStepId eklendi:
+        // eşzamanlı KK2 reopen (currentStepId'yi KK2 step'e çeker) araya girerse
+        // WHERE eşleşmez → P2025 → 409 (KK2'ye geri çekilmiş top kesilmez).
         updatedParent = exceedsRemaining
           ? await tx.roll.update({
-              where: { id: parent.id, currentQty: { gt: 0 } },
+              where: { id: parent.id, status: RollStatus.IN_PRODUCTION, currentStepId: tamburStepId, currentQty: { gt: 0 } },
               data: { currentQty: 0 },
             })
           : await tx.roll.update({
-              where: { id: parent.id, currentQty: { gte: data.lengthMeters } },
+              where: { id: parent.id, status: RollStatus.IN_PRODUCTION, currentStepId: tamburStepId, currentQty: { gte: data.lengthMeters } },
               data: { currentQty: { decrement: data.lengthMeters } },
             });
       } catch (err) {
@@ -2303,7 +2329,7 @@ export class TamburService {
           err.code === "P2025"
         ) {
           throw AppError.conflict(
-            "Açık kumaşın kalan metresi yetersiz — başka bir işlem aynı topu kullanıyor olabilir"
+            "Açık kumaş bu sırada değişti (KK2'ye geri çekilmiş / statü değişmiş / kalan metre yetersiz) — listeyi yenileyip tekrar deneyin"
           );
         }
         throw err;
@@ -2472,6 +2498,10 @@ export class TamburService {
     const childQualityGradeId = await resolveQualityGradeId(childQualityGrade);
 
     const result = await prisma.$transaction(async (tx) => {
+      // O-2 write-skew guard: WO satırını kilitle → son-top tamamlama sayımı
+      // (~2620) eşzamanlı finalize/finalizeOpenFabric/receive/cancel/directShip ile
+      // serileşsin (yoksa iki tx birbirinin adımını açık sayıp WO IN_PROGRESS'te takılır).
+      await touchWorkOrderTx(tx, woId);
       // ATOMİK CLAIM (finalize()'daki desen): idempotency ön-kontrolü tx DIŞINDA
       // check-then-act — eşzamanlı çift çağrı ikisinde de geçer ve kalan child
       // İKİ kez basılırdı (TAMBUR_PROCESSED upsert'i ikinci tx'i düşürmez:
