@@ -382,6 +382,7 @@ export class KursunQcService {
         where: { id: data.clientErrorId },
       });
       if (cached) {
+        this.assertClientErrorIdMatches(cached, data);
         return {
           success: true,
           data: cached,
@@ -453,6 +454,7 @@ export class KursunQcService {
             where: { id: data.clientErrorId },
           });
           if (dup) {
+            this.assertClientErrorIdMatches(dup, data);
             return {
               success: true,
               data: dup,
@@ -1002,6 +1004,30 @@ export class KursunQcService {
   // ---------------------------------------------------------------------------
   // HELPERS
   // ---------------------------------------------------------------------------
+  /**
+   * F160: clientErrorId idempotent dönüşünde, mevcut kaydın gelen istekle AYNI
+   * mantıksal hatayı (aynı top + hata tipi + adım + metre) temsil ettiğini doğrula.
+   * Aynı id başka bir kayıt için kullanılmışsa (yabancı kayıt / istemci id-yeniden-
+   * kullanım bug'ı) sessizce "başarı" dönmek amaçlanan hatayı kaybettirir → 409.
+   */
+  private assertClientErrorIdMatches(
+    cached: RollError,
+    data: { rollId: string; stepId: string; startMeter: number; defectTypeId: string },
+  ): void {
+    const matches =
+      cached.rollId === data.rollId &&
+      cached.defectTypeId === data.defectTypeId &&
+      cached.detectedAtStepId === data.stepId &&
+      new Prisma.Decimal(data.startMeter).equals(cached.startMeter);
+    if (!matches) {
+      throw AppError.conflict(
+        "Bu hata kimliği (clientErrorId) farklı bir kayıt için kullanılmış — " +
+          "aynı id ile farklı top/metre/hata tipi gönderilemez. Listeyi yenileyin.",
+        { code: "CLIENT_ERROR_ID_MISMATCH", existingErrorId: cached.id },
+      );
+    }
+  }
+
   private async assertRollInStep(
     rollId: string,
     stepId: string,

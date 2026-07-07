@@ -519,11 +519,39 @@ export class InventoryService {
           },
         });
         if (existing) {
-          return {
-            success: true,
-            data: existing,
-            message: `Top zaten kayıtlı (idempotent retry). Barkod: ${existing.barcode}`,
-          };
+          // F117: İdempotent retry SADECE gelen payload mevcut kayıtla ÖZDEŞSE
+          // geçerli. Çapraz-cihaz barkod çakışmasında (iki farklı KK1 girişi aynı
+          // clientBarcode üretirse — günlük entropi 32 bit) 2. giriş sessizce
+          // "kaydedildi" görünüp asla yaratılmamalı; kimlik-kilit alanları
+          // (item/renk/metre) uyuşmuyorsa 409 çakışma fırlat.
+          const sameItem = existing.itemId === data.itemId;
+          const sameColor = existing.colorId === (data.colorId ?? null);
+          const sameQty = new Prisma.Decimal(data.initialQty).equals(existing.initialQty);
+          if (sameItem && sameColor && sameQty) {
+            return {
+              success: true,
+              data: existing,
+              message: `Top zaten kayıtlı (idempotent retry). Barkod: ${existing.barcode}`,
+            };
+          }
+          throw AppError.conflict(
+            "Bu barkod farklı bir topla zaten kayıtlı (barkod çakışması). Topu yeniden okutup tekrar deneyin.",
+            {
+              code: "BARCODE_COLLISION",
+              barcode: existing.barcode,
+              existing: {
+                id: existing.id,
+                itemId: existing.itemId,
+                colorId: existing.colorId,
+                initialQty: Number(existing.initialQty),
+              },
+              incoming: {
+                itemId: data.itemId,
+                colorId: data.colorId ?? null,
+                initialQty: data.initialQty,
+              },
+            },
+          );
         }
       }
       throw err;

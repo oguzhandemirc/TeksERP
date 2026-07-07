@@ -469,6 +469,23 @@ export class KartelaService {
     // Soft-delete guard: pasife alınmış firmadan kartela kabulü yapılamaz.
     if (!subcontractor.isActive) throw AppError.badRequest("Kartela firması pasif durumda");
 
+    // F169: Bilgi amaçlı dispatch bağı verildiyse var-mı + iptal-değil + firma-tutarlı
+    // olsun (soft-delete/iptal giriş guard'ı deseni). Yanlış/iptal/yabancı bir dispatchId
+    // belgeyi ve dispatch↔receipt görünümünü bozar; var-olmayan ID tx içinde ham P2003 verir.
+    if (data.dispatchId) {
+      const dispatch = await prisma.kartelaDispatch.findUnique({
+        where: { id: data.dispatchId },
+        select: { id: true, cancelledAt: true, subcontractorId: true },
+      });
+      if (!dispatch) throw AppError.notFound("Kartela sevki bulunamadı");
+      if (dispatch.cancelledAt) {
+        throw AppError.conflict("İptal edilmiş kartela sevkine kabul yapılamaz");
+      }
+      if (dispatch.subcontractorId !== data.subcontractorId) {
+        throw AppError.badRequest("Kartela sevki bu firmaya ait değil");
+      }
+    }
+
     // Doğrula: adet + ölçüm tutarlılığı
     for (const ret of data.returns) {
       if (!Number.isInteger(ret.count) || ret.count <= 0) {

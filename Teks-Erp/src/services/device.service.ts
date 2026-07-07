@@ -144,10 +144,19 @@ export class DeviceService {
     const device = await prisma.device.upsert({
       where: { deviceId },
       create: { deviceId, name: fallbackName, kind, status: "PENDING", isActive: true, lastSeenAt: new Date() },
-      // Var olan cihazda türü yalnız client açıkça gönderdiyse güncelle (admin override'ı ezme).
-      update: { lastSeenAt: new Date(), ...(input.kind ? { kind } : {}) },
+      // F216: Var olan cihazda announce SADECE canlılık (lastSeenAt) yazar — kind burada
+      // DEĞİŞTİRİLMEZ. Aksi halde APPROVED bir cihaz public announce ile kind'ını DESKTOP'a
+      // flip edip work-session zorunluluğunu bypass edebilirdi.
+      update: { lastSeenAt: new Date() },
       include: DEVICE_INCLUDE,
     });
+    // Cihaz tipini YALNIZ henüz onaylanmamış (PENDING) cihaz, client düzeltmesiyle
+    // güncelleyebilir (ör. ilk announce TABLET tahmin etti, gerçekte PHONE). APPROVED
+    // cihazın tipini yalnız admin (approveAndAssign) değiştirir. Atomik WHERE status=PENDING:
+    // APPROVED satır 0 etkilenir (upsert↔onay race'inde de güvenli).
+    if (input.kind && device.status === "PENDING" && device.kind !== kind) {
+      await prisma.device.updateMany({ where: { deviceId, status: "PENDING" }, data: { kind } });
+    }
     return toAssignment(device);
   }
 

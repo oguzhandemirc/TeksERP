@@ -73,7 +73,7 @@ export function renderLabel(language: PrinterLanguage, input: LabelRenderInput):
   // kullan ({{key}} yer-tutucuları payload'dan doldurulur). Yoksa generator çalışır.
   const raw = readTemplateRawCode(input.template?.rawCode, effective);
   if (raw) {
-    let content = applyRawCode(raw, input.payload, { barcodeSvg: input.barcodeSvg, qrSvg: input.qrSvg });
+    let content = applyRawCode(raw, input.payload, effective, { barcodeSvg: input.barcodeSvg, qrSvg: input.qrSvg });
     // Native yazıcılar (PPLA/PPLB/ZPL) komut satırlarını CR/LF ile ayırır — otomatik
     // üretici CRLF verir + SON komutu da CRLF ile sonlandırır. Kullanıcı LF yapıştırsa
     // ya da sonda satır sonu bırakmasa da normalize et; yoksa son komut (P1=bas)
