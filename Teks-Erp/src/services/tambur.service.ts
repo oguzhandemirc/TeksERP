@@ -48,10 +48,15 @@ import { v4 as uuidv4 } from "uuid";
 import { assertWoAtStepKind, recomputeStepStatus } from "./helpers/roll-step.helper";
 import { buildIntentSnapshot } from "./label.service";
 
-/** Generate a barcode for a split-off roll */
-function generateSplitBarcode(originalBarcode: string): string {
+/**
+ * Generate a barcode for a split-off roll (ayraçsız).
+ * Tire YOK — el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu
+ * (1D wedge bozuyor, QR kamera doğru okuyor). Parent barkodu zaten ayraçsız
+ * (`generateBarcode` = TEKSYYYYMMDDXXXXXXXX); child = parent + "KS" + suffix.
+ */
+export function generateSplitBarcode(originalBarcode: string): string {
   const suffix = uuidv4().replace(/-/g, "").substring(0, 6).toUpperCase();
-  return `${originalBarcode}-KS-${suffix}`;
+  return `${originalBarcode}KS${suffix}`;
 }
 
 /**
@@ -570,7 +575,7 @@ export class TamburService {
     }
 
     // Parent barkodlu (klasik) ise child barkodlar parent prefix'i ile üretilir;
-    // açık kumaş (barcode=null, boyahane dönüşü) ise TEKS-YYYYMMDD-XXXX formatı.
+    // açık kumaş (barcode=null, boyahane dönüşü) ise TEKSYYYYMMDDXXXXXXXX (ayraçsız).
     const parentBarcode = roll.barcode;
 
     const totalQty = Number(roll.currentQty);

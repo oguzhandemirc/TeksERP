@@ -199,7 +199,11 @@ export class ItemService extends BaseService {
 
     const allowedColorIds = data.allowedColorIds as string[] | undefined;
     const allowedPropertyIds = data.allowedPropertyIds as string[] | undefined;
-    const restData = { ...data };
+    // M-4/F208: bu dal super.update'i (dolayısıyla sanitizeWriteData'yı) atladığı
+    // için restData'yı burada aynı beyaz listeden geçir — ham gövdeden gelen nested
+    // ilişki-write'ları (ör. {"rolls":{"deleteMany":{}}}) doğrudan Prisma'ya
+    // geçmesin, yalnız gerçek scalar kolonlar (name/unit/isActive) kalsın.
+    const restData = this.sanitizeWriteData({ ...data });
     delete restData.allowedColorIds;
     delete restData.allowedPropertyIds;
 

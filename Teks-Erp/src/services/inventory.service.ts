@@ -305,6 +305,41 @@ function generateBarcode(): string {
   return `TEKS${datePart}${randomPart}`;
 }
 
+/**
+ * F112: Operatör iptalinin (softDelete) izin verdiği statü beyaz listesi.
+ * Yalnız operasyonel (henüz sevk/tüketim muhasebesi işlenmemiş) toplar iptal
+ * edilebilir. SHIPPED / *_CONSUMED / AT_KARTELA / AT_SUBCONTRACTOR bu listede
+ * DEĞİL — bunların geri alınması ilgili modülün işidir (iade, fason/kartela
+ * kabul), yoksa sevk edilmiş mal canlı veride "hiç olmamış" olur.
+ * softDelete ve getCancelPreview bu tek kaynağı paylaşır (guard paritesi).
+ */
+const CANCELABLE_ROLL_STATUSES: RollStatus[] = [
+  RollStatus.STOCK,
+  RollStatus.IN_PRODUCTION,
+  RollStatus.PRODUCED,
+  RollStatus.A1_STOCK,
+  RollStatus.WAREHOUSE,
+  RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+];
+
+/** İptal edilemeyen statü için operatöre net Türkçe gerekçe. */
+function nonCancelableRollReason(status: RollStatus): string {
+  switch (status) {
+    case RollStatus.SHIPPED:
+      return "Bu top müşteriye sevk edilmiş — iptal edilemez. Geri almak için İade akışını kullanın.";
+    case RollStatus.TAMBUR_CONSUMED:
+      return "Bu top Tambur'da bölünüp çocuk toplara dönüştürülmüş — iptal edilemez.";
+    case RollStatus.KARTELA_CONSUMED:
+      return "Bu top kartelalara bölünüp kapatılmış — iptal edilemez.";
+    case RollStatus.SUBCONTRACTOR_CONSUMED:
+      return "Bu top fason kabulde kapatılmış — iptal edilemez.";
+    case RollStatus.AT_KARTELA:
+      return "Bu top kartela fasonunda işlemde — iptal edilemez, önce kartela kabulü yapın.";
+    default:
+      return `Bu top '${status}' durumunda — iptal edilemez.`;
+  }
+}
+
 export class InventoryService {
   /**
    * Initial goods receipt — creates a new Roll in STOCK status.
@@ -1549,6 +1584,9 @@ export class InventoryService {
       blockReason = `Top zaten iptal/hurda: ${roll.barcode}`;
     } else if (roll.status === RollStatus.AT_SUBCONTRACTOR) {
       blockReason = "Fasondaki top iptal edilemez — önce fason mal kabul yapın";
+    } else if (!CANCELABLE_ROLL_STATUSES.includes(roll.status)) {
+      // F112: softDelete ile aynı beyaz liste — SHIPPED/*_CONSUMED/AT_KARTELA.
+      blockReason = nonCancelableRollReason(roll.status);
     } else {
       const openDispatch = await prisma.subcontractorDispatchItem.findFirst({
         where: { rollId: id, dispatch: { cancelledAt: null } },
@@ -1621,6 +1659,14 @@ export class InventoryService {
       throw AppError.conflict(
         "Fasondaki top iptal edilemez — önce fason mal kabul yapın",
       );
+    }
+
+    // F112: Pozitif statü beyaz listesi (docstring'i UYGULA). SHIPPED /
+    // TAMBUR_CONSUMED / SUBCONTRACTOR_CONSUMED / KARTELA_CONSUMED / AT_KARTELA
+    // gibi sevk/tüketim statüleri buraya kadar geliyordu ve iptal edilip
+    // shipmentId null'lanabiliyordu — sevk edilmiş mal canlı veriden siliniyordu.
+    if (!CANCELABLE_ROLL_STATUSES.includes(existing.status)) {
+      throw AppError.conflict(nonCancelableRollReason(existing.status));
     }
 
     // Açık fason sevkiyatına bağlı mı?
