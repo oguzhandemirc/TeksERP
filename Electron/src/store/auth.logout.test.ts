@@ -12,10 +12,11 @@ vi.mock("@/lib/secure-token", () => ({
   },
 }));
 
-// Revoke isteği bilerek YAVAŞ (50ms) — logout'un onu beklemediğini kanıtlar.
+// Revoke isteği HİÇ çözülmez — logout'un onu beklemediğinin kesin kanıtı
+// (süre ölçümüne dayalı flaky assert yerine: beklenseydi test timeout'a düşerdi).
 vi.mock("@/services/authService", () => ({
   authService: {
-    logout: vi.fn(() => new Promise<void>((resolve) => setTimeout(resolve, 50))),
+    logout: vi.fn(() => new Promise<void>(() => {})),
   },
 }));
 
@@ -32,10 +33,9 @@ beforeEach(() => {
 
 describe("local-first logout", () => {
   it("logout revoke isteğini BEKLEMEDEN çözülür; user hemen null", async () => {
-    const started = Date.now();
+    // Revoke mock'u ASLA çözülmez — logout onu bekleseydi bu await asılı kalır,
+    // vitest testi timeout ile düşürürdü. Çözülmesi = beklemiyor kanıtı.
     await useAuthStore.getState().logout();
-    // Revoke mock'u 50ms — logout onu beklemiş olsaydı süre ≥50ms olurdu.
-    expect(Date.now() - started).toBeLessThan(40);
     expect(useAuthStore.getState().user).toBeNull();
     expect(tokenStore.clear).toHaveBeenCalled();
   });

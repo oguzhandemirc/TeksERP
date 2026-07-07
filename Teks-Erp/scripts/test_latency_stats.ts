@@ -77,6 +77,11 @@ try {
   const slow = latencySnapshot().slowRequests;
   check("ring 50 ile sınırlı", slow.length === 50);
   check("en yenisi başta", slow[0].ms === SLOW_REQUEST_MS + 59);
+  // 60 kayıt girdi, ilk 10 (ms: +0..+9) düşmüş olmalı — en eskisi düşer.
+  check(
+    "tavan aşımında EN ESKİLER düşer",
+    !slow.some((s) => s.ms < SLOW_REQUEST_MS + 10)
+  );
 
   // --- Kardinalite guard'ı: tavan üstü yeni route'lar '(diğer)' kovasında --------
   resetLatencyStats();
@@ -88,11 +93,13 @@ try {
   check("toplam istek kaybolmadı (520)", snap.totalCount === 520);
 
   // --- Reset --------------------------------------------------------------------
+  const beforeResetAt = latencySnapshot().sinceAt;
   resetLatencyStats();
   const after = latencySnapshot();
   check("reset: route yok", after.routes.length === 0);
   check("reset: yavaş defter boş", after.slowRequests.length === 0);
   check("reset: totalCount 0", after.totalCount === 0);
+  check("reset: sinceAt ilerledi (pencere başlangıcı yenilendi)", after.sinceAt >= beforeResetAt);
 
   // --- Sıralama: p95 büyük olan üstte -------------------------------------------
   recordLatency("GET", "/api/a", 200, 5);

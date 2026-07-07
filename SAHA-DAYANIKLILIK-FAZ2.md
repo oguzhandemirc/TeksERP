@@ -61,10 +61,19 @@ tek panel, sürü etkisi yok.
 - Sabit bellek, kilit yok, istek başına O(1).
 
 **B2. Middleware** — `middlewares/latency.middleware.ts` (yeni):
-`process.hrtime.bigint()` ile başlangıç; `res.on('finish')` → `record(...)`.
-Route anahtarı finish anında `req.method + ' ' + req.baseUrl + (req.route?.path ?? '')`;
-route eşleşmemişse `(eşleşmeyen)`. `app.ts`'te morgan'dan hemen sonra, resolveDevice'tan
-ÖNCE mount → statik/health/swagger dahil her şey ölçülür.
+`process.hrtime.bigint()` ile başlangıç; `res.on('finish')` + `res.on('close')`
+(recorded-guard'lı) → `record(...)`. **İstemci abort'u** (finish gelmez) 499 ile
+ölçülür — client timeout'una takılan en yavaş istekler defter dışı kalmaz.
+Route anahtarı `req.baseUrl + req.route.path` HEDEFLİdir ama iki Express gerçeği
+düzeltilir (denetimde çıktı): (1) `req.baseUrl` pattern değil eşleşen GERÇEK
+string'dir — parametreli iç mount'larda (`/:customerId/branches`) UUID sızar →
+anahtar her durumda **segment normalizasyonundan** geçer (UUID/sayı/uzun-opak →
+`:id`); (2) hata yolunda (`next(error)`) Express baseUrl'i geri sarar → önek
+originalUrl'den segment aritmetiğiyle yeniden kurulur; kök route'ta ('/') tüm
+path önektir ('GET /' çöküşü yok). Route eşleşmemişse `(eşleşmeyen)`.
+`app.ts`'te morgan'dan hemen sonra, resolveDevice'tan ÖNCE mount → statik/health/
+swagger dahil ölçülür (CORS preflight ve body-parse 400'leri mount'tan önce
+kısa devre olur — bilinçli kapsam dışı).
 
 **B3. Admin ucu** — `routes/admin.routes.ts` içine (ince-read istisnası, controller'sız):
 - `GET /api/admin/perf` → `verifyToken` + `requirePermission("admin:settings")`
@@ -73,9 +82,11 @@ route eşleşmemişse `(eşleşmeyen)`. `app.ts`'te morgan'dan hemen sonra, reso
   (state değişikliği). Swagger JSDoc iki uca da.
 - Route dosyasında prisma import YOK (konvansiyon).
 
-**B4. Test** — `scripts/test_latency_stats.ts` (sözleşmeye uygun: ✅/❌ sayaçlar +
-`=== Sonuç ===` + exit code; DB gerekmez): bucket/persentil doğruluğu, ring tavanı,
-kardinalite guard'ı, reset, err sayacı.
+**B4. Test** — `scripts/test_latency_stats.ts` (birim: bucket/persentil, ring
+tavanı + en-eski-düşer, kardinalite guard'ı, reset+sinceAt, err sayacı) ve
+`scripts/test_latency_middleware.ts` (GERÇEK Express harness: parametreli iç
+mount'ta UUID sızmaz, kök-route hata anahtarı, 404/statik kovaları, abort→499,
+5xx atribüsyonu). İkisi de sözleşmeye uygun (✅/❌ + exit code; DB gerekmez).
 
 **Kapsam dışı:** `pg_stat_statements` (üretim kutusuna manuel kurulum — operasyonel iş,
 kod değil); Electron'a perf görüntüleme sayfası (uç hazır olunca ayrı küçük UI işi);
@@ -98,6 +109,13 @@ kod değil); Electron'a perf görüntüleme sayfası (uç hazır olunca ayrı k�
 - [ ] **F10** Admin uçları: `verifyToken` + `requirePermission("admin:settings")` (seed'de mevcut kod), Swagger JSDoc, route'ta prisma import yok, reset `AuditService.log` çağırıyor (best-effort, tx dışı), `admin` dışı kullanıcı 403 alıyor.
 - [ ] **F11** Backend `npx tsc --noEmit` + `npx tsx scripts/test_latency_stats.ts` geçiyor; canlı smoke (PORT=4010): birkaç istek sonrası `GET /api/admin/perf` gerçek istatistik döndürüyor, `POST .../reset` sıfırlıyor.
 - [ ] **F12** Konvansiyon uyumu: latency-stats.service'te DB/audit yok (saf bellek); yeni timer kurulmadı (/health "yeni timer yok" ilkesi — ölçüm istek-güdümlü); `any` yok; mevcut yorum diline uyum.
+
+## 3.5 Bilinen Minörler (denetimden — bilinçli bırakıldı)
+
+- CORS preflight (OPTIONS) ve `express.json` parse-hatası 400'leri latency mount'undan önce kısa devre olur → ölçüm dışı; gövde okuma süresi ms'e dahil değil (ölçüm middleware-sonrasıdır).
+- Perf reset audit'i `tableName: 'latency_stats'` ile DOMAIN kategorisine düşer — Aktivite Günlüğü tablo filtresinde sanal bir ad görünür (kayıt izi bilinçli tercih).
+- Electron: logout→aynı milisaniyede re-login yarışına karşı preset-Authorization koruması eklendi; ilk `tokenStore.get`'te in-flight IPC dedupe yok (eşzamanlı ilk okumalar zararsız çift IPC yapabilir).
+- Electron AuthHydrator'da süresi-dolmuş-token temizliği reject ederse hydrate takılır — önceden var olan davranış, Faz-2 kapsamı dışı.
 
 ## 4. Doğrulama Sonrası (kullanıcı)
 

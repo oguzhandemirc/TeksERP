@@ -49,7 +49,12 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(async (config) => {
   (config as TimedConfig).__startedAt = Date.now();
   const token = await tokenStore.get();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Per-istek açık Authorization (ör. logout revoke'unun YAKALANMIŞ token'ı)
+  // EZİLMEZ — aksi hâlde logout→anında re-login yarışında revoke isteği yeni
+  // oturumun token'ıyla gidip YENİ oturumu iptal ederdi.
+  if (token && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   // Bu PC'yi backend'e tanıt: Device → Machine çözümü (sevkiyat kantarı vb.).
   // Atanmamışsa backend normal çalışır (atıf null) — header zararsız.
   try {
@@ -124,7 +129,12 @@ apiClient.interceptors.response.use(
         if (hadUser) {
           // Auth store'u temizle → App.tsx `Root` kapısı oturum-dışı router'a geçer.
           useAuthStore.getState().setUser(null);
-          await tokenStore.clear();
+          try {
+            await tokenStore.clear();
+          } catch {
+            // Bellek cache'i clear'ın ilk satırında null'landı (istekler token'ı
+            // bıraktı); disk silme hatası oturum-doldu bildirimini engellemesin.
+          }
           // L fix: oturum düşerken uçuştaki paralel istekler 401 yağmuru üretir —
           // 5sn tekilleştirme ile tek toast.
           if (Date.now() - lastSessionExpiredToastAt > 5000) {
