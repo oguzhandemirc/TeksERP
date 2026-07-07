@@ -112,6 +112,26 @@ otomatik alınan yedeğe dönebilirsin:
 ```
 (Şema değişen bir sürümde, koddan da eski sürüme dönmen gerekebilir — önce eski `setup.exe`'yi çalıştır, sonra restore et.)
 
+### PostgreSQL major sürüm yükseltme (ör. 16 → 18)
+
+Yeni setup **daha yeni bir PostgreSQL major** sürümü içeriyorsa, gömülü binary mevcut
+veri dizinini (eski major) **doğrudan açamaz**. Kurulum bunu algılar ve **net bir hatayla
+güvenle durur** (cryptic bir "servis başlamadı" hatası vermez). Yükseltme adımları:
+
+1. **Önce eski sürümle yedek al** (henüz eski `setup.exe` kuruluyken):
+   ```powershell
+   .\manage.ps1 -Action backup -OffsitePath \\NAS\teksyedek
+   ```
+2. **Temiz kur + geri yükle:** yeni `setup.exe`'yi kur; veri dizini yeni major'da
+   `initdb` ile oluşur, sonra yedeği geri yükle:
+   ```powershell
+   .\manage.ps1 -Action restore -BackupFile \\NAS\teksyedek\tekserp_YYYYAAGG_SSDDSS.dump
+   ```
+   (Alternatif: PostgreSQL'in `pg_upgrade` aracıyla yerinde yükseltme — ileri düzey.)
+
+> Bu senaryo yalnızca major sürüm (16→18) atlarken geçerlidir; aynı major içindeki
+> normal güncellemeler (D bölümü) veriyi olduğu gibi korur.
+
 ---
 
 ## D) Günlük yönetim komutları
@@ -125,6 +145,7 @@ Yönetici PowerShell'de (`C:\Program Files\TeksERP\scripts\`):
 .\manage.ps1 -Action start
 .\manage.ps1 -Action backup     # C:\ProgramData\TeksERP\backups\ içine .dump al
 .\manage.ps1 -Action backup -BackupPath D:\Yedekler
+.\manage.ps1 -Action backup -OffsitePath \\NAS\teksyedek   # ayrıca makine dışına kopyala (bir kez ayarla, kalıcı olur)
 .\manage.ps1 -Action restore -BackupFile C:\...\tekserp_20260601_0300.dump
 ```
 
@@ -138,9 +159,23 @@ her gece **03:00**'te çalışan bir yedek görevi otomatik kurar — elle ayarl
 gerek yok. Zamanlı yedeklerden (`tekserp_*.dump`) en yeni **14 tanesi** tutulur,
 eskiler otomatik silinir (disk dolmaz). Migration öncesi yedekler (`premigrate_*`)
 bu temizliğe dahil değildir. Saati/günü Görev Zamanlayıcı'dan değiştirebilirsin.
+Her yedek alındıktan sonra **`pg_restore --list` ile bütünlüğü doğrulanır**; bozuk
+çıkarsa o dosya silinir ve sağlam eski yedekler korunur. `secret.json` da her yedekle
+birlikte `backups\` klasörüne kopyalanır (geri yükleme için ikisi de gerekir).
 
-> Yedekleri ayrı bir diske/sunucuya da kopyalamak güvenlidir; `secret.json` ile
-> birlikte sakla (geri yükleme için ikisi de gerekir).
+> ⚠️ **Makine dışı (offsite) yedek — önemli:** Yedekler varsayılan olarak veritabanıyla
+> **aynı diskte** (`C:\ProgramData\TeksERP`). Tek disk arızası / fidye yazılımı / yangın
+> hem veriyi hem yedekleri aynı anda yok eder. İkinci bir kopyayı **başka bir makineye/diske**
+> almak için bir kez şunu çalıştır:
+> ```powershell
+> .\manage.ps1 -Action backup -OffsitePath \\NAS\teksyedek
+> ```
+> Verdiğin yol `C:\ProgramData\TeksERP\backup-offsite.txt`'e kaydedilir; bundan sonra
+> **gece yedekleri de otomatik** o hedefe kopyalanır (`.dump` + `secret.json`). Hedef bir
+> ağ paylaşımı (`\\NAS\...`), harici disk (`E:\yedek`) veya başka sunucu olabilir.
+>
+> **6 ayda bir tatbikat:** Bir yedeği boş/test bir DB'ye geri yükleyip açıldığını doğrula —
+> "yedek var" demek "yedek çalışıyor" demek değildir.
 
 ---
 
