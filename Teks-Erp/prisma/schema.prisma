@@ -325,6 +325,7 @@ model Session {
   jti          String     @unique @db.Uuid
   deviceId     String?    @db.VarChar(64)
   createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   expiresAt    DateTime
   revokedAt    DateTime?
   revokeReason String?    @db.VarChar(32)
@@ -874,7 +875,7 @@ model Roll {
   // Tambur kesiminde çocuk roll'a KALITILIR → bir dal tüm rota boyunca (depodaki
   // bölünmüş çocuklar dahil) tek kimlikle izlenir. NULL = fason'a hiç girmemiş
   // ana akış. FK değil (dispatch silinmez ama soft-cancel olur; serbest grup anahtarı).
-  batchSplitId String?
+  batchSplitId String? @db.Uuid
 
   // Audit — KK1 girişinde / sistem genelinde topu kim oluşturdu
   // (vardiya devirlerinde "bu kaydı kim aldı" sorgusu için)
@@ -1190,10 +1191,9 @@ model WorkOrder {
   /// metadata'sına yazılır).
   foldType String?
 
-  /// Boyahaneye özel talimat — iş emri oluştururken girilir. Fason Sevk açılınca
-  /// dispatch.dyehouseNote'a default kopyalanır (operatör flag açıkken override
-  /// edebilir). Sevk fişinde "İstenen Renk"in yanında basılır.
-  dyehouseNote String?
+  // O-9: WorkOrder.dyehouseNote kaldırıldı — fason talimatı tek kaynağı
+  // WorkOrderStep.notes (bkz. project_dyehouse_note). Kolon drift-fix ile yanlışlıkla
+  // geri gelmişti, kod kullanmıyordu; migration 20260708140000 ile DROP edildi.
 
   // Soft-delete bayrağı — hardDelete artık `isActive=false` yapar; bağlı
   // RollOperation / TravelerCard / Manifest / Swatch / Dispatch / Receipt
@@ -1600,6 +1600,7 @@ model RollMovement {
   machine  Machine?      @relation(fields: [machineId], references: [id])
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([workOrderStepId])
   @@index([enteredAt])
@@ -2137,7 +2138,7 @@ model PrintedDocument {
   docType  PrintedDocType
   // Polimorfik kaynak: shipmentId / subcontractorDispatchId / kartelaDispatchId.
   // FK YOK (3 tabloya birden bağlanamaz); bütünlük servis katmanında.
-  sourceId String
+  sourceId String @db.Uuid
   version  Int              @default(1)
   status   PrintedDocStatus @default(ACTIVE)
   // İnsan-okur belge no (shipmentNo/dispatchNo) — listede snapshot JSON'u
@@ -2342,9 +2343,9 @@ model RollReturn {
   receivedById String @db.Uuid // İadeyi teslim alan personel
 
   // İade öncesi durum snapshot'ı — iptal (geri al) bunlarla topu eski haline döndürür.
-  prevSackId         String? // İade anındaki sackId (iptalde geri yazılır)
+  prevSackId         String? @db.Uuid // İade anındaki sackId (iptalde geri yazılır)
   prevQualityGrade   String? // İade anındaki qualityGrade etiketi
-  prevQualityGradeId String? // İade anındaki qualityGradeId
+  prevQualityGradeId String? @db.Uuid // İade anındaki qualityGradeId
 
   /// İade anında topa UYGULANAN statü (WAREHOUSE/A1_STOCK/SCRAP — kalite override'ına
   /// göre). İptal (geri al) guard'ı "top hâlâ iade ettiği rafta mı" kontrolünü bununla
@@ -2357,6 +2358,7 @@ model RollReturn {
   cancelledById String? @db.Uuid
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   roll         Roll          @relation(fields: [rollId], references: [id])
