@@ -16,17 +16,36 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUser: (user) => set({ user }),
   setHydrated: (isHydrated) => set({ isHydrated }),
   logout: async () => {
-    // Önce backend'de oturumu iptal et (registry revoke + audit) — token yerelde
-    // silinince sunucuda geçerli kalmasın. Best-effort: dinamik import ile
-    // apiClient ↔ auth store döngüsünü kır; sunucuya ulaşılamasa/oturum zaten
-    // düşmüşse bile yerel temizliği yine yap.
+    // LOCAL-FIRST çıkış (Faz 2): UI sunucuyu BEKLEMEZ. Eski hali revoke POST'unu
+    // await ediyordu — sunucu asılıysa login sayfası 15sn'e kadar gecikiyordu.
+    // Sıra: (1) token'ı YAKALA (yerel silme sonrası istek 401 alırdı),
+    // (2) yerel temizlik hemen (Root kapısı anında login'e düşer),
+    // (3) sunucu revoke'u ARKA PLANDA best-effort (3sn timeout; başarısızsa
+    // oturum expiry/kick ile düşer — eski best-effort semantiği korunur).
+    // Bu fonksiyon ASLA reject etmez: çağıranlar `.then(→ #/login)` zincirine
+    // güvenir (Topbar/CommandPalette).
+    let token: string | null = null;
     try {
-      const { authService } = await import("@/services/authService");
-      await authService.logout();
+      token = await tokenStore.get();
     } catch {
-      /* sunucuya ulaşılamadı / oturum zaten iptal — yerel temizliğe devam */
+      /* token okunamadı — revoke atlanır, yerel temizlik yeter */
     }
-    await tokenStore.clear();
+    try {
+      await tokenStore.clear();
+    } catch {
+      /* disk silinemedi — user null yine de set edilir; token exp ile ölür */
+    }
     set({ user: null });
+    if (token) {
+      // Dinamik import: apiClient ↔ auth store döngüsünü kır (eski desen korunur).
+      void (async () => {
+        try {
+          const { authService } = await import("@/services/authService");
+          await authService.logout(token);
+        } catch {
+          /* sunucuya ulaşılamadı / oturum zaten iptal — sessiz */
+        }
+      })();
+    }
   },
 }));

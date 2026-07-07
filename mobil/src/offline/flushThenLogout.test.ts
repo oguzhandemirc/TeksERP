@@ -28,6 +28,7 @@ function makeDeps(online: boolean) {
     initSession: jest.fn(async () => {
       calls.push('initSession');
     }),
+    pendingStationOps: jest.fn(() => 0),
   };
 }
 
@@ -36,11 +37,12 @@ const userB: JwtPayload = { userId: 'b', username: 'operatorB', permissions: [] 
 describe('flushThenLogout', () => {
   it('ONLINE: flush ÖNCE clearAuth, clear() flush SONRASI', async () => {
     const d = makeDeps(true);
-    await flushThenLogout(d);
+    const outcome = await flushThenLogout(d);
     expect(d.calls).toEqual(['flush', 'closeSession', 'resetSession', 'clearAuth', 'clear']);
     // Kritik invariant'lar:
     expect(d.calls.indexOf('flush')).toBeLessThan(d.calls.indexOf('clearAuth'));
     expect(d.calls.indexOf('clear')).toBeGreaterThan(d.calls.indexOf('flush'));
+    expect(outcome).toEqual({ flushTimedOut: false, pendingCount: 0 });
   });
 
   it('OFFLINE: flush ÇAĞRILMAZ (kuyruk beklemede kalır), diğer sıra korunur', async () => {
@@ -53,10 +55,46 @@ describe('flushThenLogout', () => {
   it('flush hatası çıkışı bloklamaz (best-effort)', async () => {
     const d = makeDeps(true);
     d.resumePausedMutations.mockRejectedValueOnce(new Error('net'));
-    await expect(flushThenLogout(d)).resolves.toBeUndefined();
+    const outcome = await flushThenLogout(d);
     // flush denendi ama düştü → yine de logout tamamlandı
+    expect(outcome.flushTimedOut).toBe(false);
     expect(d.clearAuth).toHaveBeenCalled();
     expect(d.clearQueryCache).toHaveBeenCalled();
+  });
+
+  it('flush TAVANA takılırsa akış clearAuth ile tamamlanır; pendingCount raporlanır', async () => {
+    jest.useFakeTimers();
+    try {
+      const d = makeDeps(true);
+      // Asla bitmeyen flush — parazitli sahada takılı kayıt senaryosu.
+      d.resumePausedMutations.mockImplementation(() => new Promise(() => {}));
+      d.pendingStationOps.mockReturnValue(3);
+      const p = flushThenLogout(d, { flushDeadlineMs: 5_000 });
+      await jest.advanceTimersByTimeAsync(5_001);
+      const outcome = await p;
+      expect(outcome).toEqual({ flushTimedOut: true, pendingCount: 3 });
+      expect(d.closeSession).toHaveBeenCalled();
+      expect(d.clearAuth).toHaveBeenCalled();
+      expect(d.clearQueryCache).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('closeSession TAVANA takılırsa da çıkış tamamlanır (bekleme ≤ tavan)', async () => {
+    jest.useFakeTimers();
+    try {
+      const d = makeDeps(true);
+      d.closeSession.mockImplementation(() => new Promise(() => {}));
+      const p = flushThenLogout(d, { closeDeadlineMs: 4_000 });
+      await jest.advanceTimersByTimeAsync(4_001);
+      const outcome = await p;
+      expect(outcome.flushTimedOut).toBe(false);
+      expect(d.clearAuth).toHaveBeenCalled();
+      expect(d.clearQueryCache).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 
@@ -84,5 +122,22 @@ describe('flushThenSwitch', () => {
     expect(d.resumePausedMutations).not.toHaveBeenCalled();
     expect(d.calls).toEqual(['closeSession', 'resetSession', 'clear', 'setAuth', 'initSession']);
     expect(d.setAuth).toHaveBeenCalledWith(userB, 'tok-b', undefined);
+  });
+
+  it('flush tavana takılsa da B girişi tamamlanır', async () => {
+    jest.useFakeTimers();
+    try {
+      const d = makeDeps(true);
+      d.resumePausedMutations.mockImplementation(() => new Promise(() => {}));
+      d.pendingStationOps.mockReturnValue(2);
+      const p = flushThenSwitch(d, { user: userB, token: 'tok-b' }, { flushDeadlineMs: 5_000 });
+      await jest.advanceTimersByTimeAsync(5_001);
+      const outcome = await p;
+      expect(outcome).toEqual({ flushTimedOut: true, pendingCount: 2 });
+      expect(d.setAuth).toHaveBeenCalled();
+      expect(d.initSession).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

@@ -13,6 +13,7 @@ import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../store/authStore';
 import { useSessionStore } from '../store/sessionStore';
 import { useLockStore } from '../store/lockStore';
+import { clearUserScopedQueries } from '../offline/sessionSwitch';
 import { useAutoLogoutOnExpiry } from './useFeatureFlags';
 import { decodeJwtExpMs, shouldAutoLogout } from '../utils/jwtExpiry';
 
@@ -26,6 +27,8 @@ async function runExpiryLogout(): Promise<void> {
     useLockStore.getState().unlock();
     useSessionStore.getState().reset();
     await useAuthStore.getState().clearAuth();
+    // 401 yoluyla aynı: kullanıcıya-özel cache düşer (bootstrap + outbox korunur).
+    clearUserScopedQueries();
     Toast.show({
       type: 'info',
       text1: 'Oturum süresi doldu',

@@ -24,6 +24,7 @@ import {
   PERSIST_MAX_AGE_MS,
 } from './src/offline/queryClient';
 import { registerStationMutationDefaults } from './src/offline/mutations';
+import { isPersistedQueryKey, shouldPersistMutation } from './src/offline/persistPolicy';
 import { FLAGS_KEY } from './src/hooks/useFeatureFlags';
 import { colors } from './src/theme/tokens';
 import { recordActivity } from './src/store/lockStore';
@@ -105,8 +106,20 @@ export default function App() {
             persister: asyncStoragePersister,
             maxAge: PERSIST_MAX_AGE_MS,
             buster: PERSIST_BUSTER,
+            // Persist kapsamı DARALTILDI (persistPolicy.ts): yalnız login
+            // bootstrap'ı + tercihler diske yazılır — üretim ekran verileri
+            // app restart'ta "dünkü haliyle" görünmez (hayalet veri biter).
+            // Mutation tarafı GENİŞLETİLDİ: paused ∪ pending-istasyon — aktif
+            // retry'daki kayıt app kill'de kaybolmaz (istasyon uçları idempotent).
+            dehydrateOptions: {
+              shouldDehydrateQuery: (q) =>
+                q.state.status === 'success' && isPersistedQueryKey(q.queryKey),
+              shouldDehydrateMutation: (m) => shouldPersistMutation(m),
+            },
           }}
           onSuccess={() => {
+            // Restore sonrası kuyruk dürtülür; token henüz yoksa mutations.ts
+            // NoAuth guard'ı HTTP'ye çıkmadan bekletir (girişte akar).
             void queryClient.resumePausedMutations();
           }}
         >

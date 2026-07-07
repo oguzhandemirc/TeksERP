@@ -23,10 +23,25 @@ export const authService = {
    * Çıkış — bu oturumu backend registry'sinde iptal eder (+ audit). Best-effort:
    * çağıran (auth store) sunucuya ulaşılamasa bile yerel temizliği yapar. Genel
    * hata toast'ı bastırılır; çıkış zaten kullanıcının niyeti.
+   *
+   * Faz 2 (local-first logout): çağıran token'ı YEREL SİLMEDEN ÖNCE yakalayıp
+   * buraya verir — istek arka planda giderken interceptor store'da token
+   * bulamayacağı için header'ı buradan taşırız. 3sn timeout: revoke best-effort,
+   * UI zaten beklemiyor; asılı sunucuya 15sn bağlı kalmanın anlamı yok.
    */
-  logout: (): Promise<void> =>
+  logout: (capturedToken?: string): Promise<void> =>
     apiClient
-      .post("/api/auth/logout", {}, { suppressErrorToast: true })
+      .post(
+        "/api/auth/logout",
+        {},
+        {
+          suppressErrorToast: true,
+          timeout: 3_000,
+          ...(capturedToken
+            ? { headers: { Authorization: `Bearer ${capturedToken}` } }
+            : {}),
+        },
+      )
       .then(() => undefined),
 
   getMe: (): Promise<ApiResponse<JwtPayload>> =>

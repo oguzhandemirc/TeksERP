@@ -7,6 +7,8 @@ import { QueryClient, onlineManager } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import NetInfo from '@react-native-community/netinfo';
+import { jitteredBackoff } from './backoff';
+import { revivePendingStationMutations } from './persistPolicy';
 
 onlineManager.setEventListener((setOnline) => {
   return NetInfo.addEventListener((state) => {
@@ -18,6 +20,9 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
+      // Jitter'lı backoff: vardiya başında onlarca tabletin senkron retry
+      // dalgası sunucuya aynı anda vurmasın (SAHA-AG-DAYANIKLILIK.md §S5).
+      retryDelay: (attempt) => jitteredBackoff(attempt),
       staleTime: 30_000,
     },
     mutations: {
@@ -35,10 +40,16 @@ export const asyncStoragePersister = createAsyncStoragePersister({
   storage: AsyncStorage,
   key: 'TEKSERP_RQ_CACHE_V1',
   throttleTime: 1000,
+  // ZOMBİ ÖNLEME: pending persist edilen istasyon kaydı restore'da paused'a
+  // çevrilir — aksi hâlde hiçbir resume yolu onu tetiklemez ve kayıt sessizce
+  // kaybolur (bkz. persistPolicy.revivePendingStationMutations).
+  deserialize: (cached) => revivePendingStationMutations(JSON.parse(cached)),
 });
 
 // Bump'lar persist cache'i invalidate eder: registry shape değiştiğinde veya
 // eski persisted mutation'larla incompatible bir değişiklik yapıldığında bump'la.
+// v10: persist kapsamı daraltıldı (App.tsx dehydrateOptions — yalnız bootstrap
+//      query'leri + paused/pending-istasyon mutation'ları; persistPolicy.ts).
 // v9: QC2_FINISH_STEP registry'e eklendi (adımı kapat offline-aware).
 // v8: QC2_REPORT_ERROR + QC2_DELETE_ERROR registry'e eklendi (leke offline-aware).
 // v7: KK1_SCRAP registry'e eklendi (top iptali offline-aware).
@@ -47,5 +58,5 @@ export const asyncStoragePersister = createAsyncStoragePersister({
 // v4: KK1_CREATE_ENTRY registry'e eklendi (client-side barkod ile offline).
 // v3: TAMBUR_FINALIZE_OPEN_FABRIC registry'e eklendi.
 // v2: KURSUN_FINISH registry'e eklendi + default networkMode 'always'a çevrildi.
-export const PERSIST_BUSTER = 'tekserp-v9';
+export const PERSIST_BUSTER = 'tekserp-v10';
 export const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;

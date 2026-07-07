@@ -5,10 +5,19 @@
 // resume çalışmaz. Çözüm: mutationFn'leri global setMutationDefaults ile
 // mutationKey'e bağla; component'ler sadece mutationKey kullansın.
 //
-// TanStack Query v5 default `shouldDehydrateMutation` zaten yalnızca
-// isPaused=true mutation'ları persist eder — tamamlanmış olanlar yer kaplamaz.
+// Persist kapsamı App.tsx'te persistPolicy.shouldPersistMutation ile genişletildi:
+// paused ∪ pending-istasyon (aktif retry'daki kayıt app kill'de kaybolmasın).
+//
+// AUTH GUARD (veri kaybı önleme): logout tavana takılıp token silindiğinde
+// kuyruktaki kayıt HTTP'ye çıkarsa 401 alır ve 4xx fail-fast kuralıyla KALICI
+// düşerdi. withAuthGuard token yokken isteği HİÇ atmaz — NoAuthError fırlatır;
+// retry politikası bu hatayı süresiz, 15sn arayla yeniden dener (sunucuya yük
+// sıfır). Giriş yapılınca ilk denemede akar (sessionSwitch.nudgeOutbox hızlandırır).
 
 import { queryClient } from './queryClient';
+import { jitteredBackoff } from './backoff';
+import { resolveAuthToken } from '../services/api';
+import { useAuthStore } from '../store/authStore';
 import {
   kursunQcService,
   type CompleteQc2Request,
@@ -53,27 +62,72 @@ export interface TamburFinalizeOpenFabricVars {
   foldType: string | null;
 }
 
+/** NoAuth bekleme aralığı — token gelene dek sunucusuz "yokla" periyodu. */
+export const NO_AUTH_RETRY_MS = 15_000;
+
+/** Token yokken fırlatılır — HTTP'ye hiç çıkılmadığı için sunucu yükü sıfır;
+ *  retry politikası bunu süresiz bekletir (kayıt kaybolmaz). */
+export class NoAuthError extends Error {
+  readonly noAuth = true;
+  constructor() {
+    super('Oturum yok — kayıt girişten sonra gönderilecek');
+    this.name = 'NoAuthError';
+  }
+}
+
+export function isNoAuthError(error: unknown): boolean {
+  return !!(error as { noAuth?: boolean } | null)?.noAuth;
+}
+
+/** mutationFn sarmalayıcısı: token yoksa isteği HİÇ atma (guard HTTP öncesi). */
+const withAuthGuard =
+  <V, R>(fn: (vars: V) => Promise<R>) =>
+  async (vars: V): Promise<R> => {
+    if (!(await resolveAuthToken())) throw new NoAuthError();
+    return fn(vars);
+  };
+
+// Y12 fix: 401 retry edilmez — ilk 401 token'ı sildiğinden kalan denemeler de
+// 401 alıyordu; 3 deneme boyunca dönmek hem kuyruğu oyalıyor hem hata anını
+// geciktiriyordu. 401'de hemen düş; operatör yeniden girişten sonra kaydı
+// tekrar gönderir (api.ts artık 'oturum doldu' toast'ı gösteriyor).
+// L fix (Y12 genislemesi): TUM deterministik 4xx fail-fast — 400/403/404/409
+// yeniden denenince ayni cevabi alir, hata toastini ~8sn geciktirirdi.
+// NoAuthError İSTİSNA: HTTP'ye çıkmamış kayıt kalıcı düşürülmez, süresiz bekler.
+// 401 + bellekte token YOK da aynı istisnadır: guard'ı token'la geçmiş ama
+// uçuş sırasında logout olmuş istek sunucudan 401 alır — bu "oturum yok"
+// beklemesidir, kalıcı düşürme değil (api.ts toast'ı zaten 'girişten sonra
+// gönderilir' diyor; sözü kod da tutsun). Token bellekte DURUYORKEN gelen 401
+// (kick/iptal) eski Y12 kuralıyla fail-fast kalır.
+export const stationRetry = (failureCount: number, error: unknown): boolean => {
+  if (isNoAuthError(error)) return true;
+  const status = (error as { status?: number } | null)?.status;
+  if (status === 401 && !useAuthStore.getState().token) return true;
+  if (status && status >= 400 && status < 500) return false;
+  return failureCount < 3;
+};
+
+/** NoAuth (ve token'sız 401): sabit 15sn — istek ağa çıkmıyor/çıkamayacak,
+ *  jitter gereksiz. Diğerleri: ±%30 jitter'lı üstel backoff (vardiya başı
+ *  senkron retry dalgasını kırar). */
+export const stationRetryDelay = (attempt: number, error: unknown): number => {
+  if (isNoAuthError(error)) return NO_AUTH_RETRY_MS;
+  const status = (error as { status?: number } | null)?.status;
+  if (status === 401 && !useAuthStore.getState().token) return NO_AUTH_RETRY_MS;
+  return jitteredBackoff(attempt);
+};
+
 const OFFLINE_AWARE = {
   networkMode: 'online' as const,
-  // Y12 fix: 401 retry edilmez — ilk 401 token'ı sildiğinden kalan denemeler de
-  // 401 alıyordu; 3 deneme boyunca dönmek hem kuyruğu oyalıyor hem hata anını
-  // geciktiriyordu. 401'de hemen düş; operatör yeniden girişten sonra kaydı
-  // tekrar gönderir (api.ts artık 'oturum doldu' toast'ı gösteriyor).
-  retry: (failureCount: number, error: unknown) => {
-    const status = (error as { status?: number } | null)?.status;
-    // L fix (Y12 genislemesi): TUM deterministik 4xx fail-fast — 400/403/404/409
-    // yeniden denenince ayni cevabi alir, hata toastini ~8sn geciktirirdi.
-    if (status && status >= 400 && status < 500) return false;
-    return failureCount < 3;
-  },
-  retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 30_000),
+  retry: stationRetry,
+  retryDelay: stationRetryDelay,
 };
 
 export function registerStationMutationDefaults(): void {
   // queryClient default 'always' — burada explicit'ten 'online'a override:
   // offline'da pause + AsyncStorage persist + online resume.
   queryClient.setMutationDefaults(STATION_MUT.QC2_COMPLETE, {
-    mutationFn: (vars: CompleteQc2Request) => kursunQcService.completeQc2(vars),
+    mutationFn: withAuthGuard((vars: CompleteQc2Request) => kursunQcService.completeQc2(vars)),
     ...OFFLINE_AWARE,
   });
   // Leke (RollError) ekleme — client-üretimi UUID (clientErrorId) vars'ta.
@@ -82,38 +136,38 @@ export function registerStationMutationDefaults(): void {
   // girişine devam edebilsin diye QC2_COMPLETE ile birlikte kuyruğa alınır —
   // ikisinden biri eksikse offline akış yarım kalır.
   queryClient.setMutationDefaults(STATION_MUT.QC2_REPORT_ERROR, {
-    mutationFn: (vars: ReportErrorRequest) => kursunQcService.reportError(vars),
+    mutationFn: withAuthGuard((vars: ReportErrorRequest) => kursunQcService.reportError(vars)),
     ...OFFLINE_AWARE,
   });
   // Leke silme — backend idempotent: kayıt yoksa (replay veya offline'da
   // ekle→sil) başarı döner. Henüz sync olmamış (paused) ekleme silinirse ekran
   // tarafında o mutation kuyruktan iptal edilir, buraya hiç düşmez.
   queryClient.setMutationDefaults(STATION_MUT.QC2_DELETE_ERROR, {
-    mutationFn: (vars: DeleteErrorRequest) => kursunQcService.deleteError(vars),
+    mutationFn: withAuthGuard((vars: DeleteErrorRequest) => kursunQcService.deleteError(vars)),
     ...OFFLINE_AWARE,
   });
   // Adımı kapat — barkodlu topların hepsi KK2 işaretliyse topluca Tambur'a taşır.
   // Resume FIFO: önce QC2/leke mutation'ları, sonra bu. Backend idempotent: adım
   // zaten kapalıysa (açık movement yok) başarı döner → replay güvenli.
   queryClient.setMutationDefaults(STATION_MUT.QC2_FINISH_STEP, {
-    mutationFn: (vars: FinishStepRequest) => kursunQcService.finishStep(vars),
+    mutationFn: withAuthGuard((vars: FinishStepRequest) => kursunQcService.finishStep(vars)),
     ...OFFLINE_AWARE,
   });
   // Açık kumaş bitirme (fason dönüşü) — barkodlu QC2 ile aynı offline pattern.
   // Backend idempotent: priorFinish check + skipDuplicates RollOperation.
   queryClient.setMutationDefaults(STATION_MUT.KURSUN_FINISH, {
-    mutationFn: (rollId: string) => rollService.kursunFinish(rollId, {}),
+    mutationFn: withAuthGuard((rollId: string) => rollService.kursunFinish(rollId, {})),
     ...OFFLINE_AWARE,
   });
   // Tambur açık kumaş bitirme (Tambur'un son aksiyonu).
   // Backend idempotent: status===TAMBUR_CONSUMED check + cached metadata.
   // Per-cut (cutOpenFabric) hala online-only — label print + per-call barcode.
   queryClient.setMutationDefaults(STATION_MUT.TAMBUR_FINALIZE_OPEN_FABRIC, {
-    mutationFn: (vars: TamburFinalizeOpenFabricVars) =>
+    mutationFn: withAuthGuard((vars: TamburFinalizeOpenFabricVars) =>
       tamburService.finalizeOpenFabric(vars.rollId, {
         remainingAction: vars.remainingAction,
         foldType: vars.foldType,
-      }),
+      })),
     ...OFFLINE_AWARE,
   });
   // KK1 ham mal girişi — client-üretimi barkod (TEKS-YYYYMMDD-XXXXXXXX) vars'ta.
@@ -121,8 +175,8 @@ export function registerStationMutationDefaults(): void {
   // Etiket basımı onSuccess'te tetiklenir (LabelPrinter backend HTML çeker) —
   // offline pause durumunda etiket online dönünce basılır.
   queryClient.setMutationDefaults(STATION_MUT.KK1_CREATE_ENTRY, {
-    mutationFn: (vars: InitialEntryRequest) =>
-      rollService.createInitialEntry(vars),
+    mutationFn: withAuthGuard((vars: InitialEntryRequest) =>
+      rollService.createInitialEntry(vars)),
     ...OFFLINE_AWARE,
   });
   // KK1 top iptali (Sil) — offline-aware. Backend softDelete idempotent: top
@@ -131,15 +185,15 @@ export function registerStationMutationDefaults(): void {
   // confirmActive=false gider — top bu arada bir istasyonda aktifleştiyse
   // backend conflict atar, replay'de optimistic kaldırma rollback olur.
   queryClient.setMutationDefaults(STATION_MUT.KK1_SCRAP, {
-    mutationFn: (vars: { id: string; confirmActive: boolean }) =>
-      rollService.scrap(vars.id, vars.confirmActive),
+    mutationFn: withAuthGuard((vars: { id: string; confirmActive: boolean }) =>
+      rollService.scrap(vars.id, vars.confirmActive)),
     ...OFFLINE_AWARE,
   });
   // Fason Kabul — boyahaneden dönen malın kabul kaydı. Backend idempotent:
   // bir step'te bir kez receive olur, 2. çağrı mevcut SubcontractorReceipt'i
   // cached döner.
   queryClient.setMutationDefaults(STATION_MUT.FASON_KABUL_RECEIVE, {
-    mutationFn: (vars: ReceiveRequest) => subcontractorService.receive(vars),
+    mutationFn: withAuthGuard((vars: ReceiveRequest) => subcontractorService.receive(vars)),
     ...OFFLINE_AWARE,
   });
   // Fason Sevk — boyahaneye sevk. UX şartı: operatör offline iken irsaliyeyi
@@ -147,19 +201,19 @@ export function registerStationMutationDefaults(): void {
   // oluşturur. Backend idempotent: aynı step+rollIds+subcontractor payload
   // ile 2. çağrı openDispatch'i cached döner; farklı payload → conflict.
   queryClient.setMutationDefaults(STATION_MUT.FASON_SEVK_DISPATCH, {
-    mutationFn: (vars: DispatchRequest) => subcontractorService.dispatch(vars),
+    mutationFn: withAuthGuard((vars: DispatchRequest) => subcontractorService.dispatch(vars)),
     ...OFFLINE_AWARE,
   });
   // Kartela Sevk — bitmiş topu kartela firmasına gönder. Backend idempotent:
   // aynı firma + aynı toplarla açık sevk varsa cached döner.
   queryClient.setMutationDefaults(STATION_MUT.KARTELA_SEVK_DISPATCH, {
-    mutationFn: (vars: KartelaDispatchRequest) => kartelaService.dispatch(vars),
+    mutationFn: withAuthGuard((vars: KartelaDispatchRequest) => kartelaService.dispatch(vars)),
     ...OFFLINE_AWARE,
   });
   // Kartela Kabul — firmadan dönen kartelaların kabulü. Backend idempotent:
   // toplar zaten KARTELA_CONSUMED ise cached receipt döner.
   queryClient.setMutationDefaults(STATION_MUT.KARTELA_KABUL_RECEIVE, {
-    mutationFn: (vars: KartelaReceiveRequest) => kartelaService.receive(vars),
+    mutationFn: withAuthGuard((vars: KartelaReceiveRequest) => kartelaService.receive(vars)),
     ...OFFLINE_AWARE,
   });
 }
