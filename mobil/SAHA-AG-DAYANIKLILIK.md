@@ -103,7 +103,14 @@
 - [ ] **C14** netStats: her istek ölçülüyor, ring buffer sınırlı (bellek sızıntısı yok), eşik uyarısı çalışıyor; interceptor hata yolunda da süre kaydediyor.
 - [ ] **C15** Genel: `npx tsc --noEmit` temiz; jest testleri geçiyor; yeni davranışların testi var (deadline, guard, persist policy, seçici temizlik); değişen dosyalarda mevcut yorum/konvansiyon diline uyulmuş; import döngüsü yaratılmamış (api.ts ↔ store'lar).
 
-## 5. Saha Testi (kullanıcı — fiziksel cihaz)
+## 5. Bilinen Minörler (2. tur denetimden — bilinçli bırakıldı)
+
+- Logout'u BİZZAT tetikleyen 401'de (kick/expiry ilk kez bir istasyon yazımında görülürse) o TEK kayıt eski kuralda fail-fast düşer — mikro-görev zamanlaması gereği token o an bellekte görünür; olay başına ≤1 kayıt, düzeltme öncesine göre regresyon değil. İleride `details.code` (SESSION_REVOKED vs expiry) ayrımıyla expiry dalı da korunabilir.
+- Login ekranında "cihazda N kayıt bekliyor" rozeti yok — bilgi logout anındaki toast'la sınırlı; istenirse `pendingStationOpsCount` hazır.
+- 401 yolunda seçici temizlik `clearAuth` await'inden önce koşar (zararsız — iki işlem bağımsız); persist edilen `['preferences']` ~1sn throttle penceresinde app kill edilirse diskte kalabilir ve restore'da geri gelir (login-anı backstop temizliği eklenebilir).
+- Announce döngüsünde foreground yarışı teorik olarak paralel retry zinciri bırakabilir — bu değişiklikten önce de vardı.
+
+## 6. Saha Testi (kullanıcı — fiziksel cihaz)
 
 1. Uçak modu AÇIKKEN 2 KK1 kaydı gir → çıkış → "bekletildi" bilgisi → Wi-Fi aç → aynı kullanıcıyla gir → kayıtların gittiğini panelden doğrula.
 2. Sunucuyu durdur → logout → login ekranı ≤6sn içinde gelmeli (eski davranış: 20-60sn).

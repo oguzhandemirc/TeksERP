@@ -278,4 +278,37 @@ describe("AsyncStorage persist (app restart'ta paused kuyruk kalır)", () => {
     const restored = await asyncStoragePersister.restoreClient();
     expect(restored?.buster).toBe(PERSIST_BUSTER);
   });
+
+  it("ZOMBİ ÖNLEME entegrasyonu: pending-istasyon kaydı restoreClient'tan PAUSED döner", async () => {
+    // Yazım tarafı dehydrate şeklinin birebir taklidi: app kill anında aktif
+    // retry'da (pending, isPaused:false) yakalanmış KK1 girişi.
+    await asyncStoragePersister.persistClient({
+      buster: PERSIST_BUSTER,
+      timestamp: Date.now(),
+      clientState: {
+        queries: [],
+        mutations: [
+          {
+            mutationKey: [...STATION_MUT.KK1_CREATE_ENTRY],
+            state: {
+              context: undefined,
+              data: undefined,
+              error: null,
+              failureCount: 1,
+              failureReason: null,
+              isPaused: false,
+              status: "pending",
+              variables: { barcode: "TEKS-TEST-1" },
+              submittedAt: Date.now(),
+            },
+          } as never,
+        ],
+      },
+    });
+    const restored = await asyncStoragePersister.restoreClient();
+    // Bu assert, queryClient.ts'teki deserialize=revivePendingStationMutations
+    // bağlantısını korur — bağlantı silinirse isPaused false kalır ve hydrate
+    // sonrası hiçbir resume yolu kaydı göremez (sessiz kayıt kaybı).
+    expect(restored?.clientState.mutations[0]?.state.isPaused).toBe(true);
+  });
 });
