@@ -60,7 +60,7 @@ import {
   ensureWorkOrderInProgress,
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
-import { computeWorkOrderLocks } from "./helpers/workorder-locks.helper";
+import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -273,17 +273,21 @@ export class WorkOrderService {
 
     // Retry loop — nadiren de olsa unique çakışma olursa tekrar dene
     for (let attempt = 0; attempt < 5; attempt++) {
-      const last = await prisma.workOrder.findFirst({
-        where: { batchNumber: { startsWith: prefix } },
-        orderBy: { batchNumber: "desc" },
+      // O-4: collation-güvenli (gte index seek + startsWith tam-prefix) + NUMERIC
+      // max — lexicographic "999">"1000" taşmasını (seq kalıcı 1000'de sıkışırdı) ve
+      // manuel harf-kuyruklu batchNumber'ın parseInt→NaN zehirlenmesini (Number.isFinite
+      // ile) önler. findFirst+orderBy desc ikisine de açıktı.
+      const todays = await prisma.workOrder.findMany({
+        where: { batchNumber: { gte: prefix, startsWith: prefix } },
         select: { batchNumber: true },
       });
+      const maxSeq = todays.reduce((max, w) => {
+        const tail = w.batchNumber?.split("-").pop() ?? "";
+        const n = parseInt(tail, 10);
+        return Number.isFinite(n) && n > max ? n : max;
+      }, 0);
 
-      const seq = last
-        ? parseInt(last.batchNumber.split("-").pop() ?? "0", 10) + 1
-        : 1;
-
-      const candidate = `${prefix}${String(seq).padStart(3, "0")}`;
+      const candidate = `${prefix}${String(maxSeq + 1).padStart(3, "0")}`;
 
       const exists = await prisma.workOrder.findUnique({ where: { batchNumber: candidate } });
       if (!exists) return candidate;
@@ -3175,36 +3179,69 @@ export class WorkOrderService {
     // ATOMİK CLAIM (check-then-act DEĞİL): terminal-durum reddini yazmanın WHERE'ine
     // koy. tx-DIŞI ön-kontrol (2815-2822) UX; eşzamanlı finalize WO'yu COMPLETED
     // yaparsa bu updateMany count===0 → 409 (terminal WO'ya alan yazımı engellenir).
-    const updateClaim = await prisma.workOrder.updateMany({
-      where: {
-        id,
-        status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
-      },
-      data: {
-        batchNumber: data.batchNumber?.trim() || undefined,
-        width: data.width ?? undefined,
-        targetQuantity: data.targetQuantity ?? undefined,
-        targetWeight: data.targetWeight ?? undefined,
-        plannedStartDate: data.plannedStartDate
-          ? new Date(data.plannedStartDate)
-          : data.plannedStartDate === null
-            ? null
-            : undefined,
-        plannedEndDate: data.plannedEndDate
-          ? new Date(data.plannedEndDate)
-          : data.plannedEndDate === null
-            ? null
-            : undefined,
-        targetItemId: data.targetItemId === undefined ? undefined : data.targetItemId,
-        targetColorId: data.targetColorId === undefined ? undefined : data.targetColorId,
-        foldType: data.foldType === undefined ? undefined : data.foldType,
-      },
+    await prisma.$transaction(async (tx) => {
+      // F58: WO satırını kilitle → locks'u kilit ALTINDA taze hesapla ve kilit
+      // guard'larını yeniden doğrula. 3085'teki tx-DIŞI locks eşzamanlı adım-tamamlama/
+      // sevkle bayatlayabilir; bu turda finishStep/finalize/createOpenFabric/cutOpenFabric
+      // WO satırını kilitlediğinden ara-adım geçişleri de bu kilitle serileşir.
+      await touchWorkOrderTx(tx, id);
+      const freshLocks = await computeWorkOrderLocks(tx, id);
+      if (data.width != null && normNum(wo.width) !== normNum(data.width) && freshLocks.width) {
+        throw AppError.conflict(freshLocks.reasons.width ?? "En kilitli.");
+      }
+      if (
+        data.targetItemId !== undefined &&
+        (wo.targetItemId ?? null) !== (data.targetItemId ?? null) &&
+        freshLocks.targetItem
+      ) {
+        throw AppError.conflict(freshLocks.reasons.targetItem ?? "Hedef ürün kilitli.");
+      }
+      if (
+        data.targetColorId !== undefined &&
+        (wo.targetColorId ?? null) !== (data.targetColorId ?? null) &&
+        freshLocks.targetColor
+      ) {
+        throw AppError.conflict(freshLocks.reasons.targetColor ?? "Hedef renk kilitli.");
+      }
+      if (
+        data.foldType !== undefined &&
+        (wo.foldType ?? null) !== (data.foldType ?? null) &&
+        freshLocks.foldType
+      ) {
+        throw AppError.conflict(freshLocks.reasons.foldType ?? "Kat tipi kilitli.");
+      }
+      // ATOMİK CLAIM: terminal-durum reddini yazmanın WHERE'ine koy (kilit altında).
+      const updateClaim = await tx.workOrder.updateMany({
+        where: {
+          id,
+          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
+        },
+        data: {
+          batchNumber: data.batchNumber?.trim() || undefined,
+          width: data.width ?? undefined,
+          targetQuantity: data.targetQuantity ?? undefined,
+          targetWeight: data.targetWeight ?? undefined,
+          plannedStartDate: data.plannedStartDate
+            ? new Date(data.plannedStartDate)
+            : data.plannedStartDate === null
+              ? null
+              : undefined,
+          plannedEndDate: data.plannedEndDate
+            ? new Date(data.plannedEndDate)
+            : data.plannedEndDate === null
+              ? null
+              : undefined,
+          targetItemId: data.targetItemId === undefined ? undefined : data.targetItemId,
+          targetColorId: data.targetColorId === undefined ? undefined : data.targetColorId,
+          foldType: data.foldType === undefined ? undefined : data.foldType,
+        },
+      });
+      if (updateClaim.count === 0) {
+        throw AppError.conflict(
+          "İş emri bu sırada tamamlandı veya iptal edildi, düzenlenemez. Sayfayı yenileyin."
+        );
+      }
     });
-    if (updateClaim.count === 0) {
-      throw AppError.conflict(
-        "İş emri bu sırada tamamlandı veya iptal edildi, düzenlenemez. Sayfayı yenileyin."
-      );
-    }
     const updated = await prisma.workOrder.findUnique({ where: { id } });
 
     await AuditService.log({
@@ -3598,6 +3635,55 @@ export class WorkOrderService {
         );
       }
 
+      // F58: locks'u WO satır kilidi (replaceClaim) ALTINDA taze hesapla ve kilit
+      // guard'larını yeniden doğrula — 3295'teki tx-DIŞI locks eşzamanlı adım-
+      // tamamlama/sevkle bayatlayabilir (tx-dışı guard'lar 3297+ yalnız UX fast-fail).
+      const freshLocks = await computeWorkOrderLocks(tx, id);
+      if (normNum(existing.width) !== normNum(data.width) && freshLocks.width) {
+        throw AppError.conflict(freshLocks.reasons.width ?? "En kilitli.");
+      }
+      if (
+        (existing.targetItemId ?? null) !== (data.targetItemId ?? null) &&
+        freshLocks.targetItem
+      ) {
+        throw AppError.conflict(freshLocks.reasons.targetItem ?? "Hedef ürün kilitli.");
+      }
+      if (
+        (existing.targetColorId ?? null) !== (data.targetColorId ?? null) &&
+        freshLocks.targetColor
+      ) {
+        throw AppError.conflict(freshLocks.reasons.targetColor ?? "Hedef renk kilitli.");
+      }
+      if (
+        (existing.foldType ?? null) !== (data.foldType ?? null) &&
+        freshLocks.foldType
+      ) {
+        throw AppError.conflict(freshLocks.reasons.foldType ?? "Kat tipi kilitli.");
+      }
+      if (data.targetPropertyIds) {
+        const existingPropIds = new Set(
+          existing.targetProperties.map((p) => p.propertyId),
+        );
+        const incomingSet = new Set(data.targetPropertyIds);
+        for (const lockedId of freshLocks.lockedPropertyIds) {
+          if (existingPropIds.has(lockedId) && !incomingSet.has(lockedId)) {
+            throw AppError.conflict(
+              freshLocks.reasons.properties?.[lockedId] ??
+                "Bu özellik artık kaldırılamaz.",
+            );
+          }
+        }
+        const applicableSet = new Set(freshLocks.applicablePropertyIds);
+        for (const newId of data.targetPropertyIds) {
+          if (existingPropIds.has(newId)) continue;
+          if (!applicableSet.has(newId)) {
+            throw AppError.conflict(
+              "Eklenen özelliği uygulayabilecek istasyon bu rotada yok veya adımı tamamlanmış.",
+            );
+          }
+        }
+      }
+
       // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK (fazla üretim → stok).
       // Yalnız (a) satır varlığı, (b) material committed iken kumaş + en uyumu.
       if (allocations.length > 0) {
@@ -3611,7 +3697,8 @@ export class WorkOrderService {
 
         // Material committed iken yeni sipariş bağlamada kumaş + en uyumluluğu
         // zorunlu — boyahaneye gönderdiğimiz kumaşı uyumsuz siparişe yamamak yasak.
-        if (locks.materialCommitted) {
+        // F58: kilit altında taze hesaplanan freshLocks kullan (bayat locks değil).
+        if (freshLocks.materialCommitted) {
           // Sadece **yeni** bağlanan satırları kontrol et — mevcut bağlar zaten
           // geçmişten geliyor (en/kumaş kilitli, değişmiyorlar).
           const previousLinkIds = new Set(
@@ -4561,15 +4648,20 @@ export class WorkOrderService {
     // numaraları gibi withBarcodeRetry ile sarıldı (P2002'de sequence closure
     // içinde yeniden okunur).
     const manifest = await withBarcodeRetry(async () => {
-      const last = await prisma.manifest.findFirst({
-        where: { manifestNo: { startsWith: prefix } },
-        orderBy: { manifestNo: "desc" },
+      // O-4: collation-güvenli (gte + startsWith) + NUMERIC max — lexicographic
+      // "999">"1000" taşmasını önler (findFirst+orderBy desc "...999"da sıkışıp
+      // withBarcodeRetry'ı kalıcı 409'a düşürüyordu). withBarcodeRetry sarması
+      // korunur: P2002'de closure taze max okur.
+      const todays = await prisma.manifest.findMany({
+        where: { manifestNo: { gte: prefix, startsWith: prefix } },
         select: { manifestNo: true },
       });
-      const seq = last
-        ? parseInt(last.manifestNo.split("-").pop() ?? "0", 10) + 1
-        : 1;
-      const manifestNo = `${prefix}${String(seq).padStart(3, "0")}`;
+      const maxSeq = todays.reduce((max, m) => {
+        const tail = m.manifestNo.split("-").pop() ?? "";
+        const n = parseInt(tail, 10);
+        return Number.isFinite(n) && n > max ? n : max;
+      }, 0);
+      const manifestNo = `${prefix}${String(maxSeq + 1).padStart(3, "0")}`;
 
       return prisma.manifest.create({
         data: {
