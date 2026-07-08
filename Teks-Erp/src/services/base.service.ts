@@ -52,6 +52,21 @@ function sortableFieldsFor(modelName: string): Set<string> | null {
   return result;
 }
 
+// F29: Boot-time guard — sanitizeWriteData/safeSortBy/safeFilters süzgeçleri
+// Prisma.dmmf'e (runtime, deprecated yüzey) bağlı. Bir Prisma major upgrade'inde
+// bu yüzey kalkarsa TÜM modeller null döner ve üç guard da SESSİZCE fail-open olur
+// (13 bare-BaseController route'un mass-assignment koruması düşer). Fail-CLOSED:
+// çekirdek model çözülemezse sunucuyu başlatma (server.ts app.listen'den ÖNCE çağırır).
+export function assertBaseServiceGuards(): void {
+  const probe = sortableFieldsFor("Item");
+  if (!probe || probe.size === 0) {
+    throw new Error(
+      "[base.service] KRİTİK: Prisma DMMF çözülemedi — sanitizeWriteData/safeSortBy " +
+        "guardları fail-open olur. Sunucu başlatılmıyor. (Prisma sürüm/generate uyumsuzluğu?)",
+    );
+  }
+}
+
 // Model adı → NULLABLE (isRequired=false) skaler alanlar. Nullable kolona göre
 // cursor sıralamasında orderBy'a `nulls:'last'` verilir ve cursor where'i
 // null-aware kurulur (Postgres default'u DESC'te NULLS FIRST — cursor null

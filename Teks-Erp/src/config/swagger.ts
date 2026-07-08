@@ -1,6 +1,14 @@
 import swaggerJSDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { Express } from 'express';
+import path from 'path';
+
+// F11: apis glob'unu __dirname'e göre kur — CWD'den bağımsız + özyinelemeli
+// (routes/reports/*.ts alt dizini eskiden taranmıyordu) + hem .ts (dev/ts-node)
+// hem .js (derlenmiş prod dist) tarasın. glob 7 (swagger-jsdoc bağımlılığı) TÜM
+// platformlarda yalnız '/' ayracını kabul ettiğinden Windows'ta path.join'in
+// ürettiği '\' forward-slash'a normalize edilir (yoksa prod'da 0 dosya eşlenir).
+const apiGlob = (rel: string): string => path.join(__dirname, rel).replace(/\\/g, '/');
 
 const options: swaggerJSDoc.Options = {
     definition: {
@@ -31,10 +39,24 @@ const options: swaggerJSDoc.Options = {
             },
         ],
     },
-    apis: ['./src/routes/*.ts', './src/controllers/*.ts'], // Generate documentation from routes and controllers
+    apis: [
+        apiGlob('../routes/**/*.ts'),
+        apiGlob('../routes/**/*.js'),
+        apiGlob('../controllers/**/*.ts'),
+        apiGlob('../controllers/**/*.js'),
+    ], // Generate documentation from routes and controllers (recursive; dev .ts + prod .js)
 };
 
 const swaggerSpec = swaggerJSDoc(options);
+
+// F11: sessiz bozulmayı görünür kıl — glob CWD/uzantı uyuşmazlığında spec boş kalır.
+const swaggerPaths = (swaggerSpec as { paths?: Record<string, unknown> }).paths;
+if (!swaggerPaths || Object.keys(swaggerPaths).length === 0) {
+    console.warn(
+        '[swagger] UYARI: OpenAPI spec BOŞ — hiçbir route/controller taranamadı ' +
+        '(apis glob CWD/uzantı uyuşmazlığı olabilir). /api-docs boş görünecek.',
+    );
+}
 
 export const setupSwagger = (app: Express): void => {
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));

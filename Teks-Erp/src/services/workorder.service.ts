@@ -619,7 +619,7 @@ export class WorkOrderService {
     }
 
     // Refakat kartı barkodu / parti kodu sequence çakışırsa (P2002) tx'i baştan dene.
-    const workOrder = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
+    const { wo: workOrder, cardRes } = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
       const batchNumber = manualBatchNumber ?? (await this.generateBatchNumber());
       // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK. Sipariş bağı yalnız
       // "bu iş emri hangi siparişler için" niyetidir (metraj taşımaz); fazla
@@ -703,9 +703,9 @@ export class WorkOrderService {
       // Refakat kartını WO ile birlikte oluştur — istasyon ekranlarında kart
       // okutulmadan WO görünmüyor (örn. KursunQc by-card / open-cards).
       // Idempotent: aktif kart varsa atlar (yarıda kesilen retry'larda güvenli).
-      await travelerCardService.createForWorkOrder(tx, wo.id, userId);
+      const cardRes = await travelerCardService.createForWorkOrder(tx, wo.id, userId);
 
-      return wo;
+      return { wo, cardRes };
     }));
 
     await AuditService.log({
@@ -726,6 +726,23 @@ export class WorkOrderService {
         targetPropertyIds,
       },
     });
+
+    // F273: refakat kartı audit'i tx COMMIT'inden SONRA, yalnız yeni kart üretildiyse
+    // (idempotent yol audit yazmaz — reprint()/print() ile tutarlı; retry'da mükerrer yok).
+    if (cardRes.created) {
+      await AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "TRAVELER_CARD",
+        recordId: cardRes.card.id,
+        newData: {
+          cardNumber: cardRes.card.cardNumber,
+          barcode: cardRes.card.barcode,
+          version: 1,
+          event: "AUTO_PRINT_ON_WO_CREATE",
+        },
+      });
+    }
 
     return {
       success: true,
@@ -2076,7 +2093,8 @@ export class WorkOrderService {
     const S = reEntryStep.stepSequence;
     const newType = data.orderMode === "keep" ? sourceWo.type : "STOCK_PRODUCTION";
 
-    const result = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
+    // F273: cardRes tx dışında audit için ayrılır; API response `data`sına sızmaz.
+    const { cardRes, ...result } = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
       const batchNumber = manualBatchNumber ?? (await this.generateBatchNumber());
       // Tx içinde partiyi yeniden kilitle/doğrula — durum değişmiş olabilir.
       const fresh = await tx.roll.findMany({
@@ -2345,13 +2363,13 @@ export class WorkOrderService {
 
       // Yeni WO için yeni refakat kartı — parti ayrı WO'da hareket eder,
       // operatör basıp ayrılan demete takar.
-      await travelerCardService.createForWorkOrder(tx, newWo.id, userId);
+      const cardRes = await travelerCardService.createForWorkOrder(tx, newWo.id, userId);
 
       // Kaynak WO'nun, partinin ÇIKTIĞI adımını yeniden hesapla (başka parti
       // hâlâ orada olabilir → ACTIVE kalır, yoksa PENDING/COMPLETED).
       await recomputeStepStatus(tx, rollStep.id);
 
-      return { newWorkOrderId: newWo.id, batchNumber: newWo.batchNumber, movedRollCount: laneRollIds.length };
+      return { newWorkOrderId: newWo.id, batchNumber: newWo.batchNumber, movedRollCount: laneRollIds.length, cardRes };
     }));
 
     await AuditService.log({
@@ -2383,6 +2401,21 @@ export class WorkOrderService {
         orderMode: data.orderMode,
       },
     });
+    // F273: yeni WO'nun refakat kartı audit'i tx commit'inden SONRA, yalnız yeni kart üretildiyse.
+    if (cardRes.created) {
+      await AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "TRAVELER_CARD",
+        recordId: cardRes.card.id,
+        newData: {
+          cardNumber: cardRes.card.cardNumber,
+          barcode: cardRes.card.barcode,
+          version: 1,
+          event: "AUTO_PRINT_ON_WO_CREATE",
+        },
+      });
+    }
 
     return {
       success: true,

@@ -198,6 +198,15 @@ export const errorHandler = (
     // 5xx olarak işaretle ve audit'e düşür — client'ı yanıltmayalım.
     if (prismaErr.code === "P2022") {
       console.error("[error.middleware] Schema drift detected (P2022):", prismaErr.meta);
+      // F21: 5xx'e eşlenen şema-drift incident'i de SYSTEM/ERROR audit'e/metriğe düşsün.
+      void AuditService.logEvent({
+        category: "SYSTEM",
+        action: "ERROR",
+        userId: req.user?.userId,
+        recordId: prismaErr.code,
+        ipAddress: req.ip ?? null,
+        payload: { code: prismaErr.code, method: req.method, path: req.originalUrl },
+      });
       res.status(500).json({
         success: false,
         message: "Sunucu yapılandırma hatası. Lütfen yöneticiyle iletişime geçin.",
@@ -210,6 +219,36 @@ export const errorHandler = (
       res.status(400).json({
         success: false,
         message: "İlişki kuralı ihlali: zorunlu bağlı kayıt değiştirilemez.",
+      });
+      return;
+    }
+
+    // F21: P2034 — write conflict / deadlock (eşzamanlı çakışan işlem). İstemci
+    // verisi hatası DEĞİL → 409 + retry sinyali. (Atomik-claim yolları zaten 409
+    // döner; bu, ORM/engine seviyesinde kaçan serialization/deadlock içindir.)
+    if (prismaErr.code === "P2034") {
+      res.status(409).json({
+        success: false,
+        message: "İşlem şu anda başka bir işlemle çakıştı. Lütfen tekrar deneyin.",
+      });
+      return;
+    }
+
+    // F21: P2024 (bağlantı havuzu zaman aşımı) / P2028 (transaction zaman aşımı) —
+    // sunucu tarafı tıkanıklık → 503 + SYSTEM/ERROR audit (5xx izleme/metriğe düşsün).
+    if (prismaErr.code === "P2024" || prismaErr.code === "P2028") {
+      console.error(`[error.middleware] Prisma ${prismaErr.code} (sunucu tıkanıklık):`, prismaErr.meta);
+      void AuditService.logEvent({
+        category: "SYSTEM",
+        action: "ERROR",
+        userId: req.user?.userId,
+        recordId: prismaErr.code,
+        ipAddress: req.ip ?? null,
+        payload: { code: prismaErr.code, method: req.method, path: req.originalUrl },
+      });
+      res.status(503).json({
+        success: false,
+        message: "Sunucu şu anda yoğun. Lütfen birkaç saniye sonra tekrar deneyin.",
       });
       return;
     }

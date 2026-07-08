@@ -46,39 +46,36 @@ export function resolveLoginLockoutKey(req: Request): string {
 }
 
 /**
- * Anahtar bloklu mu? Kilit KAPALIYSA (pinLockoutEnabled=false) her zaman
- * {blocked:false}. Bloktaysa kalan süreyi (saniye, yukarı yuvarlanmış) döner.
+ * F20: Login denemesini ATOMİK rezerve et — blok kontrolü + sayaç artışı tek
+ * çağrıda, get→mutate→set arasında AWAIT YOK. Node tek-thread olduğundan ayar
+ * okumaları bittikten sonraki senkron bölge, N paralel isteği seri işletir; her
+ * biri kendi fails++'ını görür → eşik tam sayıda denemede kurulur (eski
+ * check→verify→record akışında N istek record'dan önce check'i geçip
+ * brute-force penceresi açıyordu).
+ *
+ * Deneme başarısız VARSAYIMIYLA sayılır; başarılı giriş `resetLoginLockout` ile
+ * geri alır (net sıfır). Eşiği kuran deneme yine doğrulamaya geçer, SONRAKİ
+ * denemeler bloklanır (orijinal "N deneme sonra kilit" semantiği korunur). Kilit
+ * kapalıysa (pinLockoutEnabled=false) her zaman {blocked:false}.
  */
-export async function checkLoginLockout(
+export async function reserveLoginAttempt(
   key: string,
 ): Promise<{ blocked: boolean; retryAfterSec: number }> {
   const enabled = await readPinLockoutEnabled();
   if (!enabled) return { blocked: false, retryAfterSec: 0 };
-  const entry = failCounts.get(key);
-  if (!entry) return { blocked: false, retryAfterSec: 0 };
+  const [attempts, penaltySec, escalateAfter, longPenaltyMin] = await Promise.all([
+    readPinLockoutAttempts(),
+    readPinLockoutPenaltySec(),
+    readPinLockoutEscalateAfter(),
+    readPinLockoutLongPenaltyMin(),
+  ]);
+
+  // --- SENKRON BÖLGE: buradan sonra await YOK → paralel N istek seri işlenir. ---
   const now = Date.now();
+  const entry = failCounts.get(key) ?? { fails: 0, penaltyRounds: 0, blockedUntil: 0 };
   if (entry.blockedUntil > now) {
     return { blocked: true, retryAfterSec: Math.ceil((entry.blockedUntil - now) / 1000) };
   }
-  return { blocked: false, retryAfterSec: 0 };
-}
-
-/**
- * Yanlış giriş kaydı: fails++. Eşiğe (attempts) ulaşınca ceza turu artar, fails
- * sıfırlanır ve blok kurulur — turun escalateAfter'a varması UZUN cezaya
- * (longPenaltyMin) yükseltir, aksi halde KISA ceza (penaltySec). Kilit
- * kapalıysa hiçbir şey yapmaz.
- */
-export async function recordLoginFailure(key: string): Promise<void> {
-  const enabled = await readPinLockoutEnabled();
-  if (!enabled) return;
-  const attempts = await readPinLockoutAttempts();
-  const penaltySec = await readPinLockoutPenaltySec();
-  const escalateAfter = await readPinLockoutEscalateAfter();
-  const longPenaltyMin = await readPinLockoutLongPenaltyMin();
-
-  const now = Date.now();
-  const entry = failCounts.get(key) ?? { fails: 0, penaltyRounds: 0, blockedUntil: 0 };
   entry.fails += 1;
   if (entry.fails >= attempts) {
     entry.penaltyRounds += 1;
@@ -97,6 +94,8 @@ export async function recordLoginFailure(key: string): Promise<void> {
       if (e.blockedUntil < now && e.fails === 0) failCounts.delete(k);
     }
   }
+
+  return { blocked: false, retryAfterSec: 0 }; // bu deneme doğrulamaya geçer
 }
 
 /** Başarılı girişte anahtarı temizle — sayaç sıfırdan başlar. */

@@ -152,19 +152,25 @@ export class TravelerCardService {
    * Transaction-aware idempotent kart oluşturucu — WorkOrder.create flow'undan
    * çağrılır. WO zaten varlık doğrulamış olduğu için tekrar kontrol etmez.
    *
-   * - Halihazırda ACTIVE kart varsa onu döner (idempotent — yarıda kesilen
-   *   create/recreate akışlarında güvenli).
-   * - Aksi halde version=1 ile yeni kart üretir, AuditService.log düşer.
+   * - Halihazırda ACTIVE kart varsa onu döner ({created:false}) — idempotent;
+   *   yarıda kesilen create/recreate akışlarında güvenli.
+   * - Aksi halde version=1 ile yeni kart üretir ({created:true}).
+   *
+   * F273: Audit BU METOTTAN KALDIRILDI. Çağıran tx `withBarcodeRetry` ile sarılı
+   * olduğundan tx içinde atılan audit, P2002 retry'ında/rollback'te SystemLog'a
+   * hayalet kayıt bırakırdı (AuditService global pool'da ayrı bağlantıda hemen
+   * commit eder). Çağıran, `created:true` ise audit'i tx COMMIT'inden SONRA yazar
+   * (reprint()/print() deseniyle tutarlı).
    */
   async createForWorkOrder(
     tx: Prisma.TransactionClient,
     workOrderId: string,
     userId?: string
-  ): Promise<TravelerCard> {
+  ): Promise<{ card: TravelerCard; created: boolean }> {
     const existing = await tx.travelerCard.findFirst({
       where: { workOrderId, status: TravelerCardStatus.ACTIVE },
     });
-    if (existing) return existing;
+    if (existing) return { card: existing, created: false };
 
     const now = new Date();
     const seq = await this.nextMonthlySequence(now);
@@ -184,22 +190,7 @@ export class TravelerCardService {
       },
     });
 
-    // Audit dış prisma'ya yazıyor — tx commit'inden sonra düşse bile kayıp olmaz
-    // (best-effort log). Asıl card kaydı tx içinde garanti.
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: "TRAVELER_CARD",
-      recordId: card.id,
-      newData: {
-        cardNumber,
-        barcode,
-        version: 1,
-        event: "AUTO_PRINT_ON_WO_CREATE",
-      },
-    });
-
-    return card;
+    return { card, created: true };
   }
 
   /**

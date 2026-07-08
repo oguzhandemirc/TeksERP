@@ -12,8 +12,7 @@ import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
 import {
   resolveLoginLockoutKey,
-  checkLoginLockout,
-  recordLoginFailure,
+  reserveLoginAttempt,
   resetLoginLockout,
 } from "../middlewares/login-lockout";
 import "../types/express-augment";
@@ -159,7 +158,8 @@ export class AuthController {
     const ipAddress = req.ip ?? null;
     // Deneme kilidi: IP/cihaz başına ardışık yanlış kartı throttle et (brute-force).
     const lockoutKey = resolveLoginLockoutKey(req);
-    const lock = await checkLoginLockout(lockoutKey);
+    // F20: rezervasyon = blok kontrolü + (fail varsayımıyla) sayaç artışı tek atomik çağrıda.
+    const lock = await reserveLoginAttempt(lockoutKey);
     if (lock.blocked) {
       next(
         AppError.tooManyRequests(
@@ -191,7 +191,7 @@ export class AuthController {
         message: "Giriş başarılı",
       });
     } catch (error) {
-      await recordLoginFailure(lockoutKey);
+      // F20: deneme reserveLoginAttempt'te zaten sayıldı; başarıda reset temizler.
       void AuditService.logEvent({
         category: "AUTH",
         action: "LOGIN_FAILED",
@@ -229,7 +229,8 @@ export class AuthController {
     const ipAddress = req.ip ?? null;
     // Deneme kilidi: IP/cihaz başına ardışık yanlış PIN'i throttle et (brute-force).
     const lockoutKey = resolveLoginLockoutKey(req);
-    const lock = await checkLoginLockout(lockoutKey);
+    // F20: rezervasyon = blok kontrolü + (fail varsayımıyla) sayaç artışı tek atomik çağrıda.
+    const lock = await reserveLoginAttempt(lockoutKey);
     if (lock.blocked) {
       next(
         AppError.tooManyRequests(
@@ -261,7 +262,7 @@ export class AuthController {
         message: "Giriş başarılı",
       });
     } catch (error) {
-      await recordLoginFailure(lockoutKey);
+      // F20: deneme reserveLoginAttempt'te zaten sayıldı; başarıda reset temizler.
       void AuditService.logEvent({
         category: "AUTH",
         action: "LOGIN_FAILED",
