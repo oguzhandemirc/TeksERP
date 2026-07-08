@@ -109,9 +109,9 @@ enum WorkOrderType {
 enum WorkOrderStatus {
   PLANNED
   IN_PROGRESS
-  PAUSED
   COMPLETED
   CANCELLED
+  // F71: PAUSED kaldırıldı (app'te hiç atanmıyordu; 16 ref backend'de temizlendi — bba0f15).
 }
 
 enum StepStatus {
