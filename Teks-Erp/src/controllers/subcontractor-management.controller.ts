@@ -8,6 +8,7 @@ import {
   SubcontractorCategoryService,
   SubcontractorManagementService,
 } from "../services/subcontractor-management.service";
+import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import "../types/express-augment";
 
 // ─── Subcontractor Schemas ──────────────────────────────────────────────────
@@ -66,7 +67,7 @@ export class SubcontractorManagementController {
   };
   findById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      res.json(await this.service.findById(req.params.id as string));
+      res.json(await this.service.findById(assertValidUuid(req.params.id)));
     } catch (e) {
       next(e);
     }
@@ -82,14 +83,14 @@ export class SubcontractorManagementController {
   update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = updateSubcontractorSchema.parse(req.body);
-      res.json(await this.service.update(req.params.id as string, body, req.user?.userId));
+      res.json(await this.service.update(assertValidUuid(req.params.id), body, req.user?.userId));
     } catch (e) {
       next(e);
     }
   };
   remove = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      res.json(await this.service.remove(req.params.id as string, req.user?.userId));
+      res.json(await this.service.remove(assertValidUuid(req.params.id), req.user?.userId));
     } catch (e) {
       next(e);
     }
@@ -108,7 +109,7 @@ export class SubcontractorCategoryController {
   };
   findById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      res.json(await this.service.findById(req.params.id as string));
+      res.json(await this.service.findById(assertValidUuid(req.params.id)));
     } catch (e) {
       next(e);
     }
@@ -124,14 +125,14 @@ export class SubcontractorCategoryController {
   update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = updateCategorySchema.parse(req.body);
-      res.json(await this.service.update(req.params.id as string, body, req.user?.userId));
+      res.json(await this.service.update(assertValidUuid(req.params.id), body, req.user?.userId));
     } catch (e) {
       next(e);
     }
   };
   remove = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      res.json(await this.service.remove(req.params.id as string, req.user?.userId));
+      res.json(await this.service.remove(assertValidUuid(req.params.id), req.user?.userId));
     } catch (e) {
       next(e);
     }

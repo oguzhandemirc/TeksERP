@@ -245,14 +245,18 @@ export class SubcontractorManagementService {
     // Standart filtreler (isActive, code...) buildWhereClause halleder
     const where = buildWhereClause(params.filters, ["code", "name", "taxNumber"], params.search);
 
-    // categoryId filter — relation üzerinden M:N filter
-    const categoryId = params.filters["categoryId"] as string | undefined;
-    if (categoryId) {
+    // categoryId filter — relation üzerinden M:N filter. F92: dizi | CSV | tek değeri
+    // normalize et (birden çok kategori seçimi de çalışsın; tek → eşitlik, çok → {in}).
+    const rawCategoryId = params.filters["categoryId"];
+    const catIds = (Array.isArray(rawCategoryId) ? rawCategoryId : String(rawCategoryId ?? "").split(","))
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (catIds.length > 0) {
       (where as Record<string, unknown>).categories = {
-        some: { categoryId },
+        some: { categoryId: catIds.length === 1 ? catIds[0] : { in: catIds } },
       };
-      delete (where as Record<string, unknown>).categoryId;
     }
+    delete (where as Record<string, unknown>).categoryId;
 
     const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
     const { skip, take } = buildPagination(params.page, params.pageSize);

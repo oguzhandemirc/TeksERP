@@ -1829,7 +1829,7 @@ export class ShippingService {
       action: "CREATE",
       tableName: "SACK",
       recordId: sack.id,
-      newData: { sackNo: sack.sackNo, shipmentId: data.shipmentId, weightKg: data.weightKg ?? null, manualCode: code },
+      newData: { sackNo: sack.sackNo, shipmentId: data.shipmentId, weightKg: data.weightKg ?? null, manualCode: sack.manualCode }, // F108: gerçek üretilen kod
     });
     return {
       success: true,

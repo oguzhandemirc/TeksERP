@@ -1386,8 +1386,8 @@ export class SubcontractorService {
                 data: { status: WorkOrderStatus.COMPLETED },
               });
               await tx.travelerCard.updateMany({
-                where: { workOrderId: dispatch.workOrderId, status: "ACTIVE" },
-                data: { status: "COMPLETED" },
+                where: { workOrderId: dispatch.workOrderId, status: TravelerCardStatus.ACTIVE },
+                data: { status: TravelerCardStatus.COMPLETED }, // F83: string literal yerine enum
               });
             }
           } else {
