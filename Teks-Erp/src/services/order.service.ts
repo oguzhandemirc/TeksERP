@@ -45,6 +45,7 @@ const ORDER_LINE_WRITABLE = new Set([
   "customerColorName",
 ]);
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
+import { CURRENCIES } from "../config/currencies";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
@@ -258,7 +259,7 @@ export class OrderService extends BaseService {
    *   - unitPrice >= 0 ya da null (null = "fiyatlandırılmamış", iş kuralı)
    * Negatif/sıfır metraj veya negatif fiyat finansal kayıt + üretim akışını
    * bozacağı için service seviyesinde reddedilir (Zod yerine inline AppError,
-   * mevcut validateBranch / isValidCurrency deseniyle uyumlu).
+   * mevcut validateBranch / assertValidCurrency deseniyle uyumlu).
    */
   private validateLines(lines: unknown): void {
     if (!Array.isArray(lines)) return;
@@ -446,18 +447,34 @@ export class OrderService extends BaseService {
     }
   }
 
+  /** F148: para birimi ISO 4217 kataloğunda mı (create/update simetrik). null=opsiyonel. */
+  private assertValidCurrency(currency: unknown): void {
+    if (currency == null) return; // opsiyonel; şema default TRY
+    const code = String(currency);
+    if (!CURRENCIES.some((c) => c.code === code)) {
+      throw AppError.badRequest(`Geçersiz para birimi: ${code}`);
+    }
+  }
+
+  /** F148: termin >= sipariş tarihi (verilmezse referans = now). create/update ortak. */
+  private assertDeadlineNotBeforeOrderDate(deadline: unknown, orderDate: unknown): void {
+    if (deadline == null) return;
+    const d = new Date(deadline as string);
+    if (Number.isNaN(d.getTime())) throw AppError.badRequest("Termin tarihi geçersiz");
+    const ref = orderDate != null ? new Date(orderDate as string) : new Date();
+    if (Number.isNaN(ref.getTime())) throw AppError.badRequest("Sipariş tarihi geçersiz");
+    if (d.getTime() < ref.getTime()) {
+      throw AppError.badRequest("Termin tarihi sipariş tarihinden önce olamaz");
+    }
+  }
+
   /**
    * İş emri picker'ı için müsait sipariş listesi.
    *
-   * Standart `findAll`'dan iki farkı var:
-   *   1. Sipariş kalemlerini `workOrderLinks`'e göre filtreler. Aktif bir WO'ya
-   *      (PLANNED / IN_PROGRESS / PAUSED / COMPLETED) bağlı kalemler hem
-   *      `include`'dan çıkarılır hem de "hiç müsait kalemi yok" olan siparişler
-   *      tamamen listeden düşer. CANCELLED WO'ya bağlı kalemler tekrar müsait
-   *      sayılır (WO iptal olduysa kalem serbest).
-   *   2. `excludeWorkOrderId` verilirse o WO'nun kendi bağları "bağ değilmiş
-   *      gibi" sayılır. Edit modunda picker mevcut WO'nun seçimlerini gösterip
-   *      kontrol edebilsin diye.
+   * Gevşek/gap model (güncel): açık > 0 (quantity − shippedQty) satırı olan,
+   * CANCELLED/COMPLETED-dışı siparişleri döner. WO bağı müsaitliği ETKİLEMEZ —
+   * sipariş yalnız SEVKle kapanır, üretime girince değil. (Eski workOrderLinks-bazlı
+   * filtreleme ve excludeWorkOrderId artık YOK; açık-satır süzgeci DB WHERE'inde.)
    *
    * Standart `filters` (status, customerId), `search`, `dateFrom/dateTo`,
    * `sortBy` ve sayfalama parametreleri `findAll` ile aynı şekilde çalışır.
@@ -488,9 +505,12 @@ export class OrderService extends BaseService {
     //   Açık = quantity − sevk (OrderLine.shippedQty). WO bağı açığı ETKİLEMEZ —
     //   sipariş ancak sevk edilince kapanır, üretime girince değil (gevşek model).
     // Kapalı/iptal sipariş hariç (gap hesabı yalnız açık siparişlerde anlamlı).
+    // F147: açık-satır koşulunu WHERE'e taşı → 500-tavanı yalnız açık siparişlere
+    // harcanır (memory filtresi `lines.length>0` zaten kapalıları eliyordu; özdeş).
     const where = {
       ...baseWhere,
       status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
+      lines: { some: { quantity: { gt: prisma.orderLine.fields.shippedQty } } },
     };
 
     // sortBy güvenlik süzgeci (BaseService) — bilinmeyen kolon 500'ünü engeller.
@@ -681,7 +701,9 @@ export class OrderService extends BaseService {
     if (!itemId) throw AppError.badRequest("itemId gerekli");
 
     const lines = await prisma.orderLine.findMany({
-      where: baseWhere,
+      // F146: legacy mod da cursor moddaki açık-satır süzgecini uygular (200-tavanı
+      // açık satırlara harcanır). Bellek süzgeci (openQty>0) defansif kalır — özdeş.
+      where: { ...baseWhere, quantity: { gt: prisma.orderLine.fields.shippedQty } },
       take: 200,
       orderBy: { createdAt: "asc" },
       select: {
@@ -954,6 +976,9 @@ export class OrderService extends BaseService {
       data.customerId as string | null | undefined,
     );
 
+    // F148: para birimi kataloğa karşı doğrula (create/update simetrik).
+    this.assertValidCurrency(data.currency);
+
     // totalAmount: gönderilmediyse lines'tan otomatik hesapla. Gönderilmiş ise
     // (planlamacı override etmiş — KDV/indirim gibi) olduğu gibi bırak.
     if (
@@ -979,21 +1004,8 @@ export class OrderService extends BaseService {
       deadline.setDate(deadline.getDate() + days);
       data.deadline = deadline;
     } else {
-      // İş kuralı: deadline >= orderDate olmalı (geçmişe teslim anlamsız).
-      // orderDate verilmediyse şema default'u (now()); bu durumda da deadline
-      // bugünden önce olmamalı.
-      const deadlineDate = new Date(data.deadline as string);
-      if (Number.isNaN(deadlineDate.getTime())) {
-        throw AppError.badRequest("Termin tarihi geçersiz");
-      }
-      const orderDateRef = data.orderDate
-        ? new Date(data.orderDate as string)
-        : new Date();
-      if (deadlineDate.getTime() < orderDateRef.getTime()) {
-        throw AppError.badRequest(
-          "Termin tarihi sipariş tarihinden önce olamaz"
-        );
-      }
+      // F148: İş kuralı deadline >= orderDate (helper — update ile simetrik).
+      this.assertDeadlineNotBeforeOrderDate(data.deadline, data.orderDate);
     }
 
     const today = new Date();
@@ -1190,20 +1202,47 @@ export class OrderService extends BaseService {
       quantity: Number(g.quantity),
     }));
 
-    // Siparişi normal create ile aç (orderNumber + doğrulama + audit + alias terfisi).
+    // F143: CLAIM-FIRST. Eskiden sipariş create edilip SONRA topları claim ediyordu;
+    // claim.count HİÇ kontrol edilmiyordu → topların bir kısmı arada başka akışta
+    // tüketilse bile sipariş açılıyor ve preparedToWarehouse yalan söylüyordu.
+    // Artık: create-fail-after-claim'i önlemek için müşteri/şubeyi claim'den ÖNCE
+    // doğrula, sonra topları atomik claim et; count eşleşmezse tüm claim rollback +
+    // 409 (kaçan topların barkodları somut listelenir), sipariş HİÇ açılmaz.
+    await this.validateCustomer(data.customerId);
+    if (data.branchId) await this.validateBranch(data.branchId, data.customerId);
+
+    const stockRollIds = rolls.filter((r) => r.status === RollStatus.STOCK).map((r) => r.id);
+    if (stockRollIds.length > 0) {
+      await prisma.$transaction(async (tx) => {
+        const claimed = await tx.roll.updateMany({
+          where: { id: { in: stockRollIds }, status: RollStatus.STOCK, shipmentId: null, currentStepId: null },
+          data: { status: RollStatus.WAREHOUSE },
+        });
+        if (claimed.count !== stockRollIds.length) {
+          const escaped = await tx.roll.findMany({
+            where: {
+              id: { in: stockRollIds },
+              NOT: { status: RollStatus.WAREHOUSE, shipmentId: null, currentStepId: null },
+            },
+            select: { id: true, barcode: true },
+          });
+          const list = escaped.map((r) => r.barcode ?? r.id).join(", ");
+          throw AppError.conflict(
+            `Şu toplar işlem sırasında başka bir akışta tüketildi; hızlı sipariş açılmadı, lütfen tekrar okutup deneyin: ${list}`,
+          );
+        }
+      });
+    }
+
+    // Sipariş aç (claim garanti; satırlar gerçek metrajı temsil eder).
     const created = await this.create(
       { customerId: data.customerId, branchId: data.branchId ?? null, lines },
       userId,
     );
     const order = created.data as { id: string; orderNumber: string };
 
-    // STOK toplar → WAREHOUSE (sevke hazır). Atomik: hâlâ STOCK + serbest olanlar.
-    const stockRollIds = rolls.filter((r) => r.status === RollStatus.STOCK).map((r) => r.id);
+    // Roll hareketini denetle (best-effort, tx DIŞI).
     if (stockRollIds.length > 0) {
-      await prisma.roll.updateMany({
-        where: { id: { in: stockRollIds }, status: RollStatus.STOCK, shipmentId: null, currentStepId: null },
-        data: { status: RollStatus.WAREHOUSE },
-      });
       await AuditService.log({
         userId,
         action: "UPDATE",
@@ -1244,6 +1283,8 @@ export class OrderService extends BaseService {
         customerId: true,
         branchId: true,
         status: true,
+        orderDate: true, // F148: termin-tarih kuralı için mevcut referans
+        deadline: true,
         lines: {
           select: {
             id: true,
@@ -1284,6 +1325,20 @@ export class OrderService extends BaseService {
     // için özel endpoint'ler var (cancel, manual-close).
     for (const key of Object.keys(cleanData)) {
       if (!ORDER_HEADER_WRITABLE.has(key)) delete cleanData[key];
+    }
+
+    // F148: create ile simetrik doğrulama (update'te eksikti). PARTIAL_SHIPPED'ten
+    // ÖNCE çalışır → deadline-only PATCH'te de termin kuralı uygulanır (currency
+    // PARTIAL_SHIPPED'te zaten whitelist'ten düşer).
+    if (Object.prototype.hasOwnProperty.call(cleanData, "currency")) {
+      this.assertValidCurrency(cleanData.currency);
+    }
+    const deadlineChanging = Object.prototype.hasOwnProperty.call(cleanData, "deadline");
+    const orderDateChanging = Object.prototype.hasOwnProperty.call(cleanData, "orderDate");
+    if (deadlineChanging || orderDateChanging) {
+      const effDeadline = deadlineChanging ? cleanData.deadline : current.deadline;
+      const effOrderDate = orderDateChanging ? cleanData.orderDate : current.orderDate;
+      this.assertDeadlineNotBeforeOrderDate(effDeadline, effOrderDate);
     }
 
     // PARTIAL_SHIPPED: sadece deadline. Lines kabul edilmez, diğer header

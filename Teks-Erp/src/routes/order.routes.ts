@@ -520,12 +520,15 @@ router.post(
  * /api/orders/{id}:
  *   patch:
  *     tags: [Orders]
- *     summary: Sipariş güncelle (header alanları)
+ *     summary: Sipariş güncelle (header + kalemler)
  *     description: |
- *       APPROVED durumunda customerId, branchId, currency, totalAmount, deadline
- *       güncellenebilir (aktif WO bağı varsa customer/branch kilit). PARTIAL_SHIPPED'de
- *       sadece deadline. COMPLETED/CANCELLED kilitli. Kalemler hiçbir durumda
- *       güncellenmez.
+ *       APPROVED/PENDING durumunda header alanları (customerId, branchId, currency,
+ *       totalAmount, deadline, orderDate) + kalemler (lines) güncellenebilir: id
+ *       eşleşene update, yeniye create, çıkarılana delete (diff). Aktif (CANCELLED-dışı)
+ *       iş emri bağı varsa kalemler kilit (409); customer/branch değişimi
+ *       IN_PROGRESS/PAUSED/COMPLETED WO bağında kilit. PARTIAL_SHIPPED'de yalnız
+ *       deadline. COMPLETED/CANCELLED kilitli. currency ISO 4217 kataloğuna, deadline
+ *       >= orderDate kuralına göre doğrulanır.
  *     security:
  *       - bearerAuth: []
  *     parameters:
