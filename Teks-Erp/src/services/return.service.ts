@@ -692,10 +692,15 @@ export class ReturnService {
       if (!reason) throw AppError.badRequest("İade nedeni bulunamadı");
     }
 
-    await prisma.rollReturn.update({
-      where: { id: rr.id },
+    // F198: Atomik claim — eşzamanlı cancelReturn ile yarışta düzeltmeyi deterministik
+    // reddet (cancelledAt guard update WHERE'inde — check-then-act değil).
+    const updated = await prisma.rollReturn.updateMany({
+      where: { id: rr.id, cancelledAt: null },
       data: { reasonId: nextReasonId, reasonText: nextReasonText, note: nextNote },
     });
+    if (updated.count === 0) {
+      throw AppError.conflict("İptal edilmiş iade düzeltilemez.");
+    }
 
     await AuditService.log({
       userId,

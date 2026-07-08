@@ -460,8 +460,11 @@ export class InventoryService {
     // soft-delete giriş guard'ı; typo'lu kod byQuality istatistiklerini
     // parçalayıp FIRE-dışlama string filtresinden kaçıyordu); default sabit
     // "1.KALITE" lenient kalır.
-    const qualityGradeCode = data.qualityGrade ?? "1.KALITE";
-    const qualityGradeId = data.qualityGrade
+    // F120: Boş/whitespace kalite = 'verilmedi' → default lenient path (aksi halde
+    // qualityGrade="" + qualityGradeId=null katalog-dışı snapshot sızıyordu).
+    const trimmedQuality = data.qualityGrade?.trim();
+    const qualityGradeCode = trimmedQuality || "1.KALITE";
+    const qualityGradeId = trimmedQuality
       ? await resolveQualityGradeIdStrict(qualityGradeCode)
       : await resolveQualityGradeId(qualityGradeCode);
 

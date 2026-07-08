@@ -957,6 +957,10 @@ export class OrderService extends BaseService {
     data: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    // F154: satırsız sipariş = ölü kayıt (coverage/MRP işleyemez, wo-picker düşürür).
+    if (!Array.isArray(data.lines) || data.lines.length === 0) {
+      throw AppError.badRequest("Sipariş en az bir kalem içermeli.");
+    }
     this.validateLines(data.lines);
     await this.validateLineItems(data.lines);
 
