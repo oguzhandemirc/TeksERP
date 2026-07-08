@@ -34,7 +34,7 @@ async function main(): Promise<void> {
     check("aktif liste şubeyi içerir", l1.some((b) => b.id === branchId));
 
     // 4) deactivate → soft (isActive=false, fiziksel DELETE yok)
-    await svc.deactivate(branchId, undefined);
+    await svc.deactivate(customer.id, branchId, undefined);
     const row = await prisma.customerBranch.findUnique({ where: { id: branchId }, select: { isActive: true } });
     check("deactivate → isActive=false, kayıt duruyor", row?.isActive === false);
 
@@ -45,13 +45,13 @@ async function main(): Promise<void> {
     check("includeInactive → pasif şube görünür", l3.some((b) => b.id === branchId));
 
     // 6) idempotent deactivate
-    const again = await svc.deactivate(branchId, undefined);
+    const again = await svc.deactivate(customer.id, branchId, undefined);
     check("tekrar deactivate → 'zaten pasif'", (again.message ?? "").includes("zaten pasif"));
 
     // 7) M-26: açık siparişli şube deactivate → 409 + sipariş no listelenir
     const b2 = (await svc.create(customer.id, { name: "Şube 2" }, undefined)).data as { id: string };
     const ord = await prisma.order.create({ data: { orderNumber: `TEST-CBORD-${stamp}`, customerId: customer.id, branchId: b2.id, status: "APPROVED" } });
-    let blocked: unknown; try { await svc.deactivate(b2.id, undefined); } catch (e) { blocked = e; }
+    let blocked: unknown; try { await svc.deactivate(customer.id, b2.id, undefined); } catch (e) { blocked = e; }
     check("açık siparişli şube deactivate → 409", hasStatus(blocked, 409));
     check("409 mesajı sipariş no listeler", blocked instanceof AppError && blocked.message.includes(ord.orderNumber));
     await prisma.order.delete({ where: { id: ord.id } });

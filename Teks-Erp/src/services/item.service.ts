@@ -324,8 +324,11 @@ export class ItemService extends BaseService {
       return { success: true, data: existing, message: "Renk zaten dahil" };
     }
 
-    const created = await prisma.itemAllowedColor.create({
-      data: { itemId, colorId },
+    // F214: upsert — eşzamanlı çift-istekte P2002 yerine mevcut satır idempotent döner.
+    const created = await prisma.itemAllowedColor.upsert({
+      where: { itemId_colorId: { itemId, colorId } },
+      create: { itemId, colorId },
+      update: {},
       include: { color: true },
     });
 
@@ -377,8 +380,11 @@ export class ItemService extends BaseService {
       return { success: true, data: existing, message: "Özellik zaten dahil" };
     }
 
-    const created = await prisma.itemAllowedProperty.create({
-      data: { itemId, propertyId },
+    // F214: upsert — eşzamanlı çift-istekte P2002 yerine mevcut satır idempotent döner.
+    const created = await prisma.itemAllowedProperty.upsert({
+      where: { itemId_propertyId: { itemId, propertyId } },
+      create: { itemId, propertyId },
+      update: {},
       include: { property: true },
     });
 

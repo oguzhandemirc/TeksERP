@@ -507,10 +507,16 @@ export class OrderService extends BaseService {
     // Kapalı/iptal sipariş hariç (gap hesabı yalnız açık siparişlerde anlamlı).
     // F147: açık-satır koşulunu WHERE'e taşı → 500-tavanı yalnız açık siparişlere
     // harcanır (memory filtresi `lines.length>0` zaten kapalıları eliyordu; özdeş).
-    const where = {
-      ...baseWhere,
+    // F150: filter[status] (buildWhereClause → baseWhere.status) notIn ile EZİLMESİN —
+    // AND ile birleştir (picker daima iptal/tamamlanmışı eler; ek statü onu daraltır).
+    const { status: filterStatus, ...restBase } = baseWhere;
+    const where: Prisma.OrderWhereInput = {
+      ...restBase,
       status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
       lines: { some: { quantity: { gt: prisma.orderLine.fields.shippedQty } } },
+      ...(filterStatus !== undefined
+        ? { AND: [{ status: filterStatus as Prisma.OrderWhereInput["status"] }] }
+        : {}),
     };
 
     // sortBy güvenlik süzgeci (BaseService) — bilinmeyen kolon 500'ünü engeller.
@@ -1254,7 +1260,9 @@ export class OrderService extends BaseService {
         userId,
         action: "UPDATE",
         tableName: "ROLL",
-        recordId: order.id,
+        // F153: tableName=ROLL ise recordId bir ROLL olmalı (order.id değil) — audit
+        // tutarlılığı; sipariş bağı newData.orderNumber/rollIds ile korunur.
+        recordId: stockRollIds[0],
         newData: { kind: "QUICK_ORDER_RAW_TO_WAREHOUSE", rollIds: stockRollIds, orderNumber: order.orderNumber },
       });
     }
@@ -1361,7 +1369,9 @@ export class OrderService extends BaseService {
         if (!allowed.has(key)) delete cleanData[key];
       }
       if (Object.keys(cleanData).length === 0) {
-        return { success: true, data: current, message: "Değişiklik yok" };
+        // F156: no-op'ta da normal update ile aynı (defaultInclude'lu) tam şekli dön.
+        const full = await this.findById(id);
+        return { ...full, message: "Değişiklik yok" };
       }
       return super.update(id, cleanData, userId);
     }

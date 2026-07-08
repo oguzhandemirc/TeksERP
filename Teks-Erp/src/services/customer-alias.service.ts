@@ -215,6 +215,9 @@ export class CustomerAliasService {
     colorId: string | null,
     tx?: Prisma.TransactionClient
   ): Promise<AliasLookupResult> {
+    // F207: kardeş metodlarla (getAliases/setAlias) parite — müşteri var+aktif doğrula
+    // (yoksa sessiz boş sonuç yerine net 404).
+    await assertCustomer(customerId);
     const client = tx ?? prisma;
     // pg adapter: tx içinde Promise.all yasak — seri çekiyoruz.
     const itemRow = await client.customerItemAlias.findUnique({
