@@ -18,6 +18,7 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import { decodeCursor, cursorWhere, buildNextCursor } from "../utils/cursor";
+import { buildTurkishSearch } from "../utils/query-parser";
 
 const UNSHIPPED: ShipmentStatus[] = [
   ShipmentStatus.PREPARING,
@@ -60,15 +61,15 @@ export class SackSearchService {
     };
     if (params.customerId) shipmentWhere.customerId = params.customerId;
     const shipmentNo = params.shipmentNo?.trim();
-    if (shipmentNo) shipmentWhere.shipmentNo = { contains: shipmentNo, mode: "insensitive" };
+    if (shipmentNo) shipmentWhere.OR = buildTurkishSearch<Prisma.ShipmentWhereInput>(shipmentNo, ["shipmentNo"]);
 
     const where: Prisma.SackWhereInput = { shipment: shipmentWhere };
     const sackCode = params.sackCode?.trim();
     if (sackCode) {
-      where.OR = [
-        { manualCode: { contains: sackCode, mode: "insensitive" } },
-        { sackNo: { contains: sackCode, mode: "insensitive" } },
-      ];
+      where.OR = buildTurkishSearch<Prisma.SackWhereInput>(sackCode, [
+        "manualCode",
+        "sackNo",
+      ]);
     }
     if (hasContentFilter) where.rolls = { some: rollFilter };
 

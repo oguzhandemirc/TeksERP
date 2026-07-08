@@ -54,6 +54,7 @@ import {
   applyDateRange,
   buildOrderByClause,
   buildPagination,
+  buildTurkishSearch,
   buildWhereClause,
   parseQueryParams,
 } from "../utils/query-parser";
@@ -475,12 +476,12 @@ export class OrderService extends BaseService {
 
     const search = params.search?.trim();
     if (search) {
-      baseWhere.OR = [
-        { orderNumber: { contains: search, mode: "insensitive" } },
-        { customer: { name: { contains: search, mode: "insensitive" } } },
-        { lines: { some: { item: { name: { contains: search, mode: "insensitive" } } } } },
-        { lines: { some: { customerItemName: { contains: search, mode: "insensitive" } } } },
-      ];
+      baseWhere.OR = buildTurkishSearch<Prisma.OrderWhereInput>(search, [
+        "orderNumber",
+        "customer.name",
+        "lines.some.item.name",
+        "lines.some.customerItemName",
+      ]);
     }
 
     // Gap-bazlı picker: bir satır "müsait" ise Açık > 0.
@@ -583,12 +584,12 @@ export class OrderService extends BaseService {
     if (params.width != null) baseWhere.width = params.width;
     const term = params.search?.trim();
     if (term) {
-      baseWhere.OR = [
-        { order: { orderNumber: { contains: term, mode: "insensitive" } } },
-        { order: { customer: { name: { contains: term, mode: "insensitive" } } } },
-        { item: { name: { contains: term, mode: "insensitive" } } },
-        { customerItemName: { contains: term, mode: "insensitive" } },
-      ];
+      baseWhere.OR = buildTurkishSearch<Prisma.OrderLineWhereInput>(term, [
+        "order.orderNumber",
+        "order.customer.name",
+        "item.name",
+        "customerItemName",
+      ]);
     }
 
     // ── CURSOR MOD (limit verildi): itemId opsiyonel, "sipariş-önce" aramalı liste.

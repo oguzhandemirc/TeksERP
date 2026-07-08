@@ -53,6 +53,7 @@ import {
   isCursorRequested,
   buildWhereClause,
   applyDateRange,
+  buildTurkishSearch,
 } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
@@ -1997,12 +1998,12 @@ export class ShippingService {
       // Çuval kodu = hem sistem `sackNo` (CV-YYMMDD-NNN) hem elle yazılan
       // `manualCode` (AMB.. / serbest) — tabancayla okutulan etiket ikisinden
       // biri olabilir, "Okutarak Sevk" akışı her ikisini de bulabilsin.
-      where.OR = [
-        { shipmentNo: { contains: search, mode: "insensitive" } },
-        { customer: { name: { contains: search, mode: "insensitive" } } },
-        { sacks: { some: { sackNo: { contains: search, mode: "insensitive" } } } },
-        { sacks: { some: { manualCode: { contains: search, mode: "insensitive" } } } },
-      ];
+      where.OR = buildTurkishSearch<Prisma.ShipmentWhereInput>(search, [
+        "shipmentNo",
+        "customer.name",
+        "sacks.some.sackNo",
+        "sacks.some.manualCode",
+      ]);
     }
 
     // Keyset cursor — readyAt asc (en uzun bekleyen üstte), id tiebreak.

@@ -22,7 +22,7 @@ import {
   renderTravelerCardHtml,
   type TravelerCardSnapshot,
 } from "./document-render/traveler-card.html";
-import { parseQueryParams, buildPagination, resolveSortBy } from "../utils/query-parser";
+import { parseQueryParams, buildPagination, resolveSortBy, buildTurkishSearch } from "../utils/query-parser";
 
 // Refakat kartı listesinde sıralanabilir kolonlar. createdAt BİLEREK yok →
 // varsayılan/createdAt isteği printedAt'e düşer (yeni basılan kart ilk gelsin).
@@ -555,7 +555,9 @@ export class TravelerCardService {
       where.OR = [
         { cardNumber: q },
         { barcode: q },
-        { workOrder: { batchNumber: { contains: q, mode: "insensitive" } } },
+        ...buildTurkishSearch<Prisma.TravelerCardWhereInput>(q, [
+          "workOrder.batchNumber",
+        ]),
       ];
     }
 

@@ -20,6 +20,7 @@ import {
   isCursorRequested,
   applyDateRange,
   resolveSortBy,
+  buildTurkishSearch,
 } from "../utils/query-parser";
 
 const ROLL_DATE_FIELDS = ["createdAt"] as const;
@@ -609,8 +610,10 @@ export class InventoryService {
       // olarak kalır → "patos" gibi fuzzy ürün araması bozulmadan çalışır.
       where.OR = [
         { barcode: search },
-        { item: { name: { contains: search, mode: "insensitive" } } },
-        { item: { code: { contains: search, mode: "insensitive" } } },
+        ...buildTurkishSearch<Prisma.RollWhereInput>(search, [
+          "item.name",
+          "item.code",
+        ]),
       ];
     }
 

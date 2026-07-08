@@ -25,6 +25,7 @@ import {
   dynamicCursorWhere,
   buildNextDynamicCursor,
 } from "../utils/cursor";
+import { buildTurkishSearch } from "../utils/query-parser";
 import type { CursorPaginatedResponse } from "./base.service";
 
 export interface SwatchStats {
@@ -1143,14 +1144,12 @@ export class TamburService {
       // parti küçük master tablolarda kaldığı için `contains` (fuzzy) korunur.
       where.OR = [
         { barcode: search },
-        { item: { name: { contains: search, mode: "insensitive" } } },
-        { item: { code: { contains: search, mode: "insensitive" } } },
-        { color: { name: { contains: search, mode: "insensitive" } } },
-        {
-          producedInStep: {
-            workOrder: { batchNumber: { contains: search, mode: "insensitive" } },
-          },
-        },
+        ...buildTurkishSearch<Prisma.RollWhereInput>(search, [
+          "item.name",
+          "item.code",
+          "color.name",
+          "producedInStep.workOrder.batchNumber",
+        ]),
       ];
     }
 
@@ -1254,8 +1253,10 @@ export class TamburService {
       where.OR = [
         { barcode: search },
         { cardNumber: search },
-        { item: { name: { contains: search, mode: "insensitive" } } },
-        { item: { code: { contains: search, mode: "insensitive" } } },
+        ...buildTurkishSearch<Prisma.SwatchWhereInput>(search, [
+          "item.name",
+          "item.code",
+        ]),
       ];
     }
 
@@ -1345,8 +1346,10 @@ export class TamburService {
       where.OR = [
         { barcode: search },
         { cardNumber: search },
-        { item: { name: { contains: search, mode: "insensitive" } } },
-        { item: { code: { contains: search, mode: "insensitive" } } },
+        ...buildTurkishSearch<Prisma.SwatchWhereInput>(search, [
+          "item.name",
+          "item.code",
+        ]),
       ];
     }
 

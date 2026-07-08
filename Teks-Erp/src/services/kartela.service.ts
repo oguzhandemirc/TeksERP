@@ -30,7 +30,7 @@ import {
 import { renderKartelaCekiHtml } from "./document-render/kartela-ceki.html";
 import { buildPrefixedCardNumber, buildPrefixedBarcode } from "../utils/barcode";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { buildPagination } from "../utils/query-parser";
+import { buildPagination, buildTurkishSearch } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -860,10 +860,9 @@ export class KartelaService {
     }
     const search = params?.search?.trim();
     if (search) {
-      where.OR = [
-        { dispatchNo: { contains: search, mode: "insensitive" } },
-        { subcontractor: { name: { contains: search, mode: "insensitive" } } },
-      ];
+      where.OR = buildTurkishSearch<Prisma.KartelaDispatchWhereInput>(search, [
+        "dispatchNo", "subcontractor.name",
+      ]);
     }
 
     // Liste için hafif select — detay (`getDispatch`) tam veriyi döner.
@@ -985,11 +984,9 @@ export class KartelaService {
     }
     const search = params?.search?.trim();
     if (search) {
-      where.OR = [
-        { receiptNo: { contains: search, mode: "insensitive" } },
-        { manifestNo: { contains: search, mode: "insensitive" } },
-        { subcontractor: { name: { contains: search, mode: "insensitive" } } },
-      ];
+      where.OR = buildTurkishSearch<Prisma.KartelaReceiptWhereInput>(search, [
+        "receiptNo", "manifestNo", "subcontractor.name",
+      ]);
     }
 
     const select = {
