@@ -80,7 +80,6 @@ import {
 } from "../utils/cursor";
 import type { CursorPaginatedResponse } from "./base.service";
 import { Request } from "express";
-import { v4 as uuidv4 } from "uuid";
 import {
   Prisma,
   Roll,
@@ -102,6 +101,8 @@ import {
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
 import { touchShipmentPreparingTx } from "./helpers/shipment-locks.helper";
+import { generateRollBarcode, ROLL_BARCODE_RE } from "./helpers/roll-barcode.helper";
+import { withBarcodeRetry } from "../utils/barcode-retry";
 
 export interface RollStats {
   totalCount: number;
@@ -293,22 +294,6 @@ function operationLabel(type: RollOperationType): string {
 }
 
 /**
- * Generate a unique barcode string: TEKSYYYYMMDDXXXXXXXX (ayraçsız).
- * Tire YOK — el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu
- * (QR kamera doğru okuyordu, 1D wedge bozuyordu); ayraçsız salt harf-rakam her
- * klavye düzeninde sorunsuz okunur.
- */
-function generateBarcode(): string {
-  const now = new Date();
-  const datePart =
-    now.getFullYear().toString() +
-    (now.getMonth() + 1).toString().padStart(2, "0") +
-    now.getDate().toString().padStart(2, "0");
-  const randomPart = uuidv4().replace(/-/g, "").substring(0, 8).toUpperCase();
-  return `TEKS${datePart}${randomPart}`;
-}
-
-/**
  * F112: Operatör iptalinin (softDelete) izin verdiği statü beyaz listesi.
  * Yalnız operasyonel (henüz sevk/tüketim muhasebesi işlenmemiş) toplar iptal
  * edilebilir. SHIPPED / *_CONSUMED / AT_KARTELA / AT_SUBCONTRACTOR bu listede
@@ -361,7 +346,7 @@ export class InventoryService {
       propertyIds?: string[];
       /**
        * Opsiyonel client-üretimi barkod. Offline KK1 girişi için mobil tarafta
-       * üretilir (generateBarcode ile aynı format: TEKSYYYYMMDDXXXXXXXX).
+       * üretilir (generateRollBarcode ile aynı format: TEKSYYYYMMDDXXXXXXXX).
        * Verilmezse backend üretir (default davranış). Verilirse retry/dedup
        * doğal anchor olarak Roll.barcode @unique kullanılır — aynı barkodla
        * 2. çağrı cached Roll döner.
@@ -446,12 +431,17 @@ export class InventoryService {
 
     // Barkod: client verdiyse onu kullan (offline retry idempotency), yoksa üret.
     // Client format validasyonu: TEKSYYYYMMDDXXXXXXXX (uppercase hex 8 char, ayraçsız).
-    if (data.clientBarcode && !/^TEKS\d{8}[0-9A-F]{8}$/.test(data.clientBarcode)) {
+    if (data.clientBarcode && !ROLL_BARCODE_RE.test(data.clientBarcode)) {
       throw AppError.badRequest(
         "Geçersiz client-üretimi barkod formatı (beklenen: TEKSYYYYMMDDXXXXXXXX)",
       );
     }
-    const barcode = data.clientBarcode ?? generateBarcode();
+    // F272: Sunucu-üretimi barkod (clientBarcode yok) 32-bit entropi ile nadiren
+    // çakışabilir; eskiden bu P2002 doğrudan 500'e düşüyordu. withBarcodeRetry +
+    // `serverGenerated` predicate ile sadece sunucu-çakışması yeni barkodla retry
+    // edilir; clientBarcode P2002 predicate=false → aşağıdaki idempotency catch'e düşer.
+    const serverGenerated = !data.clientBarcode;
+    let barcode = data.clientBarcode ?? generateRollBarcode();
 
     // Tüm item tipleri (fabric, yarn, consumable, vb) tedarikçiden gelir → SUPPLIER_RECEIPT.
     const entrySource: RollEntrySource = RollEntrySource.SUPPLIER_RECEIPT;
@@ -476,7 +466,9 @@ export class InventoryService {
 
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
     try {
-      roll = await prisma.$transaction(async (tx) => {
+      roll = await withBarcodeRetry(
+        () => prisma.$transaction(async (tx) => {
+        if (serverGenerated) barcode = generateRollBarcode();
         const created = await tx.roll.create({
           data: {
             barcode,
@@ -505,7 +497,10 @@ export class InventoryService {
           });
         }
         return created;
-      });
+        }),
+        undefined,
+        () => serverGenerated,
+      );
     } catch (err) {
       // Offline retry idempotency: aynı clientBarcode ile 2. çağrı geldi.
       // Roll.barcode @unique → P2002 → mevcut Roll'u dön (audit log atılmaz,
@@ -888,7 +883,7 @@ export class InventoryService {
       // rawWidthEnabled kapalıyken stokun çoğu null): nulls EN SONA + null-aware
       // cursor — yoksa DESC'te NULLS FIRST cursor'ı null grubuna kilitler ve
       // "En"/"Barkod" başlığına tıklayan operatör listenin çoğunu hiç göremezdi.
-      const NULLABLE_ROLL_SORT = new Set(["barcode", "width", "qualityGrade"]);
+      const NULLABLE_ROLL_SORT = new Set(["barcode", "width"]);
       const sortNullable = NULLABLE_ROLL_SORT.has(sortBy);
       const orderByPrimary = sortNullable
         ? { [sortBy]: { sort: sortOrder, nulls: "last" as const } }
@@ -1024,10 +1019,14 @@ export class InventoryService {
     const agg = (where: Prisma.RollWhereInput) =>
       prisma.roll.aggregate({ where, _count: { _all: true }, _sum: { currentQty: true } });
 
-    const free = await agg({ status: RollStatus.WAREHOUSE, shipmentId: null });
-    const preparing = await agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.PREPARING } });
-    const sackStore = await agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.READY } });
-    const atDoor = await agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.AT_DOOR } });
+    // F121: tx-DIŞI 4 bağımsız aggregate — seri yerine paralel (pg adapter tx-dışı
+    // paralel sorguya izin verir; kural 11 yalnız tx.* Promise.all'ı yasaklar).
+    const [free, preparing, sackStore, atDoor] = await Promise.all([
+      agg({ status: RollStatus.WAREHOUSE, shipmentId: null }),
+      agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.PREPARING } }),
+      agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.READY } }),
+      agg({ status: RollStatus.WAREHOUSE, shipment: { status: ShipmentStatus.AT_DOOR } }),
+    ]);
 
     const pick = (r: { _count: { _all: number }; _sum: { currentQty: Prisma.Decimal | null } }) => ({
       count: r._count._all,
@@ -2161,31 +2160,33 @@ export class InventoryService {
         });
       }
 
-      await tx.systemLog.create({
-        data: {
-          userId: userId ?? null,
-          action: "UPDATE",
-          tableName: "ROLL_MANUAL_OVERRIDE",
-          recordId: rollId,
-          oldData: {
-            colorId: roll.colorId,
-            width: roll.width != null ? Number(roll.width) : null,
-            qualityGrade: roll.qualityGrade,
-            currentQty: Number(roll.currentQty),
-          } as Prisma.InputJsonValue,
-          newData: {
-            colorId: data.colorId,
-            propertyIds: dedupedProps,
-            width: data.width,
-            qualityGrade: data.qualityGrade,
-            currentQty: data.currentQty ?? null,
-            reason: data.reason ?? null,
-            // Saha akışı (Yeniden Etiketle) sebep göndermez → RELABEL; süpervizör
-            // "Manuel Düzelt" zorunlu sebep gönderir → MANUAL_ATTRIBUTE.
-            event: data.reason ? "MANUAL_ATTRIBUTE" : "RELABEL",
-          } as Prisma.InputJsonValue,
-        },
-      });
+    });
+
+    // F119: audit tx-DIŞI (best-effort konvansiyonu — bu dosyadaki diğer tüm CUD
+    // gibi). oldData/newData tx öncesi yüklenen `roll` + `data` + `dedupedProps`
+    // kapsamda kalır; yazım hatası mutasyonu düşürmez.
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL_MANUAL_OVERRIDE",
+      recordId: rollId,
+      oldData: {
+        colorId: roll.colorId,
+        width: roll.width != null ? Number(roll.width) : null,
+        qualityGrade: roll.qualityGrade,
+        currentQty: Number(roll.currentQty),
+      },
+      newData: {
+        colorId: data.colorId,
+        propertyIds: dedupedProps,
+        width: data.width,
+        qualityGrade: data.qualityGrade,
+        currentQty: data.currentQty ?? null,
+        reason: data.reason ?? null,
+        // Saha akışı (Yeniden Etiketle) sebep göndermez → RELABEL; süpervizör
+        // "Manuel Düzelt" zorunlu sebep gönderir → MANUAL_ATTRIBUTE.
+        event: data.reason ? "MANUAL_ATTRIBUTE" : "RELABEL",
+      },
     });
 
     return {

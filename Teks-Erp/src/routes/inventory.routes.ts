@@ -343,10 +343,12 @@ router.post("/initial-entry", verifyToken, requireAnyPermission("roll:write", ..
  * /api/rolls/{id}:
  *   delete:
  *     tags: [Inventory]
- *     summary: Topu hurda olarak işaretle (soft delete)
+ *     summary: Topu iptal et (soft delete → CANCELLED)
  *     description: |
- *       Topun durumunu SCRAP olarak değiştirir.
- *       Sadece STOCK durumundaki toplar hurda olarak işaretlenebilir.
+ *       Topun durumunu CANCELLED yapar (iptal — SCRAP fire kararı DEĞİL).
+ *       STOCK / IN_PRODUCTION / PRODUCED / A1_STOCK / WAREHOUSE /
+ *       RETURNED_FROM_SUBCONTRACTOR durumundaki toplar iptal edilebilir;
+ *       SHIPPED / *_CONSUMED / AT_KARTELA / AT_SUBCONTRACTOR iptal edilemez.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -356,9 +358,9 @@ router.post("/initial-entry", verifyToken, requireAnyPermission("roll:write", ..
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Top hurda olarak işaretlendi
+ *         description: Top iptal edildi (CANCELLED)
  *       400:
- *         description: Sadece STOCK durumundaki toplar hurda olarak işaretlenebilir
+ *         description: Bu durumdaki top iptal edilemez
  *       404:
  *         description: Top bulunamadı
  */
@@ -399,10 +401,11 @@ router.delete("/:id", verifyToken, requireAnyPermission("roll:write", ...MOBILE_
  * /api/rolls/{id}/permanent:
  *   delete:
  *     tags: [Inventory]
- *     summary: Topu kalıcı olarak sil (hard delete)
+ *     summary: Topu arşivle (soft — CANCELLED)
  *     description: |
- *       Topu veritabanından fiziksel olarak siler.
- *       Sadece STOCK veya SCRAP durumundaki toplar silinebilir.
+ *       Topu FİZİKSEL SİLMEZ (CLAUDE.md: asla fiziksel DELETE);
+ *       STOCK / SCRAP / CANCELLED durumundaki topu CANCELLED'e çeker,
+ *       RollError / RollMovement / RollOperation korunur.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -412,9 +415,9 @@ router.delete("/:id", verifyToken, requireAnyPermission("roll:write", ...MOBILE_
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: Top kalıcı olarak silindi
+ *         description: Top arşivlendi (CANCELLED)
  *       400:
- *         description: Sadece STOCK veya SCRAP durumundaki toplar silinebilir
+ *         description: Sadece STOCK / SCRAP / CANCELLED durumundaki toplar arşivlenebilir
  *       404:
  *         description: Top bulunamadı
  */
@@ -711,7 +714,7 @@ router.post(
  *       - Kurşun/KK2 movement'ı kapatılır (qtyOut = totalMeters)
  *       - Sonraki step (Tambur) için movement açılır + Roll.currentStepId güncellenir
  *
- *       Yeniden çağırma engellenir (`initialQty > 0` ise 409).
+ *       Yeniden çağırma idempotenttir (Roll PROCESS_QC'yi bırakmışsa 200 döner).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -719,14 +722,13 @@ router.post(
  *         required: true
  *         schema: { type: string, format: uuid }
  *     requestBody:
- *       required: true
+ *       required: false
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [totalMeters]
  *             properties:
- *               totalMeters: { type: number, example: 500 }
+ *               totalMeters: { type: number, example: 500, description: "Opsiyonel — verilmezse mevcut currentQty kullanılır" }
  *               errors:
  *                 type: array
  *                 items:

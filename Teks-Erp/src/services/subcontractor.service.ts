@@ -1143,7 +1143,7 @@ export class SubcontractorService {
       qualityGrade: r.qualityGrade,
       width: r.width != null ? Number(r.width) : null,
     }));
-    const totalQty = rolls.reduce((s, r) => s + r.dispatchedQty, 0);
+    const totalQty = Number(rolls.reduce((s, r) => s.plus(r.dispatchedQty), new Prisma.Decimal(0)));
 
     const doc = assembleFasonCekiDoc({
       dispatchNo: "(TASLAK)",
@@ -4391,7 +4391,7 @@ function assembleFasonCekiDoc(args: {
   totalQty: number;
 }): Record<string, unknown> {
   const rolls = args.rolls.map((r, idx) => ({ sequence: idx + 1, ...r }));
-  const totalWeight = rolls.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
+  const totalWeight = Number(rolls.reduce((s, r) => s.plus(r.dispatchedWeight ?? 0), new Prisma.Decimal(0)));
   return {
     dispatchNo: args.dispatchNo,
     dispatchedAt: args.dispatchedAt,
@@ -4556,7 +4556,7 @@ async function buildFasonDirectShipDoc(
     qualityGrade: item.roll.qualityGrade,
     width: item.roll.width != null ? Number(item.roll.width) : null,
   }));
-  const totalWeight = rolls.reduce((s, r) => s + (r.dispatchedWeight ?? 0), 0);
+  const totalWeight = Number(rolls.reduce((s, r) => s.plus(r.dispatchedWeight ?? 0), new Prisma.Decimal(0)));
   const allocations = dispatch.directShipAllocations.map((a) => ({
     orderNumber: a.orderLine.order.orderNumber,
     itemCode: a.orderLine.item.code,

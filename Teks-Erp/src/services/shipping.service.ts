@@ -3145,8 +3145,10 @@ async function collectShipmentDocContent(
     totalMeters: Number(p.totalMeters),
   }));
   const totalRolls = products.reduce((s, p) => s + p.rollCount, 0);
-  const totalMeters = sackRows.reduce((s, r) => s + r.totalMeters, 0);
-  const totalKg = sackRows.reduce((s, r) => s + r.totalKg, 0);
+  // F279: Decimal akümülasyon — Number()'lı per-çuval değerlerin float-toplamı
+  // yerine binary-float artefaktı olmadan topla (accounting-export ile hizalı).
+  const totalMeters = Number(sackRows.reduce((s, r) => s.plus(r.totalMeters), D0()));
+  const totalKg = Number(sackRows.reduce((s, r) => s.plus(r.totalKg), D0()));
   const orderNos = [...new Set(sh.orders.map((o) => o.order.orderNumber))].join(", ");
 
   return {

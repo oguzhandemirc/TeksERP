@@ -49,6 +49,7 @@ import { v4 as uuidv4 } from "uuid";
 import { assertWoAtStepKind, recomputeStepStatus } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { buildIntentSnapshot } from "./label.service";
+import { generateRollBarcode } from "./helpers/roll-barcode.helper";
 
 /**
  * Generate a barcode for a split-off roll (ayraçsız).
@@ -91,20 +92,6 @@ async function resolveCutLabelIntent(data: {
   return { stock: true };
 }
 
-/**
- * Generate a barcode for a Tambur-born physical roll (open fabric child).
- * Open fabric'ın parent barkodu olmadığı için TEKSYYYYMMDDXXXXXXXX formatı kullanılır
- * (ayraçsız — el tarayıcı klavye-taklidi Türkçe düzende `-`'yi `*`'a çeviriyordu).
- */
-function generateTamburChildBarcode(): string {
-  const now = new Date();
-  const datePart =
-    now.getFullYear().toString() +
-    (now.getMonth() + 1).toString().padStart(2, "0") +
-    now.getDate().toString().padStart(2, "0");
-  const randomPart = uuidv4().replace(/-/g, "").substring(0, 8).toUpperCase();
-  return `TEKS${datePart}${randomPart}`;
-}
 
 interface ErrorDecision {
   errorId: string;
@@ -852,7 +839,7 @@ export class TamburService {
       for (const seg of segments) {
         const splitBarcode = parentBarcode
           ? generateSplitBarcode(parentBarcode)
-          : generateTamburChildBarcode();
+          : generateRollBarcode();
         const splitRoll = await tx.roll.create({
           data: {
             barcode: splitBarcode,
@@ -1731,7 +1718,7 @@ export class TamburService {
         ? await resolveQualityGradeIdStrict(resolvedQualityGrade)
         : parent.qualityGradeId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
-    const childBarcode = data.clientChildBarcode ?? generateTamburChildBarcode();
+    const childBarcode = data.clientChildBarcode ?? generateRollBarcode();
     // Etiket niyeti (pre-tx çözüm) — yalnız WAREHOUSE child anlamlı; raw→STOCK
     // (üretime devam) child stok etiketle doğar.
     const cutIntentSnapshot =
@@ -2018,7 +2005,7 @@ export class TamburService {
       if (wantChild) {
         const child = await tx.roll.create({
           data: {
-            barcode: generateTamburChildBarcode(),
+            barcode: generateRollBarcode(),
             itemId: parent.itemId,
             colorId: parent.colorId,
             width: parent.width,
@@ -2225,7 +2212,7 @@ export class TamburService {
     const tamburStepId = parent.currentStep.id;
     const woId = parent.currentStep.workOrderId;
     const propertyIds = parent.properties.map((p) => p.propertyId);
-    const childBarcode = data.clientChildBarcode ?? generateTamburChildBarcode();
+    const childBarcode = data.clientChildBarcode ?? generateRollBarcode();
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
     const cutIntentSnapshot = buildIntentSnapshot(await resolveCutLabelIntent(data));
 
@@ -2558,7 +2545,7 @@ export class TamburService {
       if (wantChild) {
         const child = await tx.roll.create({
           data: {
-            barcode: generateTamburChildBarcode(),
+            barcode: generateRollBarcode(),
             itemId: parent.itemId,
             colorId: parent.colorId,
             width: parent.width,
