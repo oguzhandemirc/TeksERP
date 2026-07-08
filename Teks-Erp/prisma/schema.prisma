@@ -82,6 +82,13 @@ enum CompanyType {
   SUPPLIER
 }
 
+// F6+D-15: Device.kind serbest string yerine enum (saha cihaz tipi).
+enum DeviceKind {
+  TABLET
+  PHONE
+  DESKTOP
+}
+
 // Phase 1: yaşam döngüsü sadeleşti. READY/SHORT/IN_PRODUCTION kaldırıldı —
 // "envanter hazır mı?" / "üretim sürüyor mu?" runtime hesabı (allocation +
 // workOrder.status üzerinden). Lifecycle:
@@ -102,9 +109,9 @@ enum WorkOrderType {
 enum WorkOrderStatus {
   PLANNED
   IN_PROGRESS
-  PAUSED
   COMPLETED
   CANCELLED
+  // F71: PAUSED kaldırıldı (app'te hiç atanmıyordu; 16 ref backend'de temizlendi — bba0f15).
 }
 
 enum StepStatus {
@@ -347,7 +354,7 @@ model Session {
 model Permission {
   id          String @db.Uuid             @id @default(uuid())
   code        String             @unique @db.VarChar(64) // "order:read", "mobile:kk2", "admin:users", "mobile:*"
-  module      String // "SALES", "PRODUCTION", "FINANCE", "MOBILE"
+  module      String @db.VarChar(32) // "SALES", "PRODUCTION", "FINANCE", "MOBILE" (D-15: sınırlı)
   category    PermissionCategory @default(web)
   description String?
 
@@ -431,7 +438,7 @@ model Station {
   name       String      @db.VarChar(100)
   type       StationType // INTERNAL or EXTERNAL
   kind       StationKind @default(OTHER) // Domain rolü — API davranış dispatch'i
-  department String? // DOKUMA, DEVERE, TERBIYE, SEVKIYAT etc.
+  department String? @db.VarChar(32) // DOKUMA, DEVERE, TERBIYE, SEVKIYAT etc. (D-15: sınırlı)
   isActive   Boolean     @default(true)
 
   /// İş emri adım picker'ında bu istasyon gösterilsin mi?
@@ -501,7 +508,7 @@ model Device {
   /// Allowlist durumu: PENDING (yeni, atama bekliyor) / APPROVED (onaylı + kullanır).
   status     DeviceStatus @default(PENDING)
   /// Cihaz türü: TABLET / PHONE / DESKTOP (yönetici PC'si). Sadece görsel/etiket.
-  kind       String       @default("TABLET") @db.VarChar(16)
+  kind       DeviceKind   @default(TABLET)
 
   // Relations
   machine       Machine?           @relation(fields: [machineId], references: [id])
@@ -983,6 +990,9 @@ model Roll {
   // "markedForKartela" = true) — migration 20260607020000. True olan satırlar
   // toplam rollerin %1-2'si → micro-index; false satırlar indekslenmez.
   @@index([markedForKartela])
+  // F123: status-filtreli listede currentQty sıralaması (depo miktar). initialQty/width/
+  // qualityGrade İÇİN eklenmedi — rolls çok-index'li (D-8); ölçekte EXPLAIN ihtiyaç gösterirse.
+  @@index([status, currentQty])
   @@map("rolls")
 }
 
@@ -1310,6 +1320,7 @@ model WorkOrderToOrderLine {
   orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@id([workOrderId, orderLineId])
   @@index([orderLineId])
@@ -2636,6 +2647,9 @@ model LabelTemplate {
 
   @@unique([name])
   @@index([isActive])
+  // F188: DB'de ŞEMA-DIŞI partial unique — label_templates_one_default_per_kind (kind)
+  // WHERE isDefault=true (migration 20260708180000; roll_movements_one_open emsali). Kind
+  // başına tek isDefault=true garantisi; label-template.service rethrowDefaultConflict yakalar.
   @@map("label_templates")
 }
 

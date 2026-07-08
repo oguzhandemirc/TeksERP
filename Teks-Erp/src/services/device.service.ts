@@ -9,6 +9,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { DeviceKind } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 
@@ -55,11 +56,11 @@ const PERIPHERAL_SUMMARY_SELECT = {
   labelDpi: true,
 } as const;
 
-const DEVICE_KINDS = new Set(["TABLET", "PHONE", "DESKTOP"]);
-/** Geçerli cihaz türüne normalize et (geçersiz/boş → TABLET). */
-function normalizeDeviceKind(k?: string | null): string {
+/** Geçerli cihaz türüne normalize et (geçersiz/boş → TABLET). F6: Device.kind artık
+ *  DeviceKind enum'u — dönüş tipi de enum, yazım uçları (create/update) tip-güvenli. */
+function normalizeDeviceKind(k?: string | null): DeviceKind {
   const v = (k ?? "").toUpperCase();
-  return DEVICE_KINDS.has(v) ? v : "TABLET";
+  return (Object.values(DeviceKind) as string[]).includes(v) ? (v as DeviceKind) : DeviceKind.TABLET;
 }
 
 export class DeviceService {
