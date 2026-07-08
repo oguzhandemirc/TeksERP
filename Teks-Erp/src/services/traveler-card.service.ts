@@ -474,6 +474,15 @@ export class TravelerCardService {
       throw AppError.conflict("Bağlı iş emri iptal edilmiş");
     }
 
+    // F191: stationId sadece uuid formatında doğrulanıyordu; var-olmayan/pasif
+    // istasyon FK ihlaliyle generic 500 verirdi. Net Türkçe 404/400'e çevir.
+    const station = await prisma.station.findUnique({
+      where: { id: data.stationId },
+      select: { isActive: true },
+    });
+    if (!station) throw AppError.notFound("İstasyon bulunamadı");
+    if (!station.isActive) throw AppError.badRequest("İstasyon pasif — okutma yapılamaz");
+
     // İstasyona karşılık gelen step'i bul (birden fazla varsa PENDING/ACTIVE olanı tercih et)
     const matchingStep = card.workOrder.steps.find(
       (s) => s.stationId === data.stationId && s.status !== "COMPLETED" && s.status !== "SKIPPED"

@@ -2503,6 +2503,12 @@ export class ShippingService {
         this.assertReadyInvariants(fresh);
         const { alloc, orderIds } = this.computeShipmentAllocation(fresh);
         await this.commitGoodsTx(tx, shipmentId, alloc, orderIds);
+      } else {
+        // F106: READY→AT_DOOR dalı da claim SONRASI tx-içinde taze yükleyip invaryantı
+        // yeniden doğrulasın (boş/geçersiz sevkiyat kapıya çıkmasın) — fromPreparing dalıyla parite.
+        const fresh = await this.loadShipmentForFinalize(shipmentId, tx);
+        if (!fresh) throw AppError.notFound("Sevkiyat bulunamadı");
+        this.assertReadyInvariants(fresh);
       }
     });
     await AuditService.log({

@@ -71,7 +71,7 @@ router.get("/open-orders", verifyToken, READ, controller.openOrders);
  *     parameters:
  *       - in: query
  *         name: status
- *         schema: { type: string, enum: [PREPARING, READY, DISPATCHED, CANCELLED] }
+ *         schema: { type: string, enum: [PREPARING, READY, AT_DOOR, DISPATCHED, CANCELLED] }
  *       - in: query
  *         name: customerId
  *         schema: { type: string, format: uuid }
@@ -266,6 +266,31 @@ router.get("/accounting-export", verifyToken, ACCOUNTING_READ, controller.getAcc
 router.get("/shipments/:id", verifyToken, READ, controller.getShipment);
 
 // Seçilen siparişleri düzenle
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/orders:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevkiyata sipariş(ler) ekle (kapsam hedefi)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderIds]
+ *             properties:
+ *               orderIds: { type: array, items: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Siparişler eklendi }
+ *       409: { description: Sevkiyat PREPARING değil }
+ */
 router.post("/shipments/:id/orders", verifyToken, WRITE, controller.addOrders);
 
 /**
@@ -320,6 +345,31 @@ router.post("/shipments/:id/destination", verifyToken, WRITE, controller.setDest
  *       409: { description: Sevkiyat sevk/iptal edilmiş }
  */
 router.post("/shipments/:id/procedure-code", verifyToken, WRITE, controller.setProcedureCode);
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/remove-order:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevkiyattan sipariş çıkar (kapsam hedefinden)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderId]
+ *             properties:
+ *               orderId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Sipariş çıkarıldı }
+ *       409: { description: Sevkiyat PREPARING değil }
+ */
 router.post("/shipments/:id/remove-order", verifyToken, WRITE, controller.removeOrder);
 
 /**
@@ -446,7 +496,59 @@ router.post("/shipments/:id/retarget-preview", verifyToken, READ, controller.ret
  *       200: { description: Eklendi }
  */
 router.post("/shipments/:id/scan", verifyToken, WRITE, controller.scan);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/remove-roll:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevkiyattan top çıkar (çuvaldan da sökülür)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollId]
+ *             properties:
+ *               rollId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Top çıkarıldı }
+ *       409: { description: Sevkiyat düzenlenebilir durumda değil }
+ */
 router.post("/shipments/:id/remove-roll", verifyToken, WRITE, controller.removeRoll);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/remove-swatch:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevkiyattan kartela çıkar
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [swatchId]
+ *             properties:
+ *               swatchId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Kartela çıkarıldı }
+ *       409: { description: Sevkiyat düzenlenebilir durumda değil }
+ */
 router.post("/shipments/:id/remove-swatch", verifyToken, WRITE, controller.removeSwatch);
 
 /**
@@ -624,14 +726,115 @@ router.post("/shipments/:id/move-to-door", verifyToken, WRITE, controller.moveTo
  *       200: { description: Çuval depoya geri çekildi }
  */
 router.post("/shipments/:id/pull-back", verifyToken, WRITE, controller.pullBackFromDoor);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/dispatch:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevk et (AT_DOOR → DISPATCHED) — "Alındı"; stok burada SHIPPED düşer
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Sevk edildi, irsaliye dondu }
+ *       409: { description: Sevkiyat AT_DOOR değil }
+ */
 router.post("/shipments/:id/dispatch", verifyToken, WRITE, controller.dispatchShipment);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/cancel-preview:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Sevkiyat iptal önizlemesi (etkilenen top/çuval/sipariş)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: İptal önizleme bilgisi }
+ *       404: { description: Sevkiyat bulunamadı }
+ */
 router.get("/shipments/:id/cancel-preview", verifyToken, READ, controller.cancelPreview);
+
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/cancel:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevkiyatı iptal et (top/çuval serbest; DISPATCHED iptal edilemez)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason: { type: string }
+ *     responses:
+ *       200: { description: İptal edildi }
+ *       409: { description: DISPATCHED sevkiyat iptal edilemez }
+ */
 router.post("/shipments/:id/cancel", verifyToken, WRITE, controller.cancelShipment);
 
 // ===========================================================================
 // ÇUVAL (tartı) — güncelle / sil
 // ===========================================================================
+/**
+ * @openapi
+ * /api/shipping/sacks/{id}/weigh:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Çuvalı tart (toplam kg + metraj gir)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               totalKg:     { type: number }
+ *               totalMeters: { type: number }
+ *     responses:
+ *       200: { description: Tartıldı }
+ *       404: { description: Çuval bulunamadı }
+ */
 router.post("/sacks/:id/weigh", verifyToken, WRITE, controller.weighSack);
+
+/**
+ * @openapi
+ * /api/shipping/sacks/{id}/remove:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Boş çuvalı sil
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Çuval silindi }
+ *       409: { description: Çuval boş değil }
+ */
 router.post("/sacks/:id/remove", verifyToken, WRITE, controller.removeSack);
 
 export default router;
