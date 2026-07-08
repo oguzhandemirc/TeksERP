@@ -663,10 +663,26 @@ export class InventoryService {
         where.status = scope;
       }
     };
+    // F116 (M-29 türevi): explicit colorId, processingStatus'un renk koşulunu EZMEZ —
+    // where.AND ile KESİŞİR. Aksi halde 'İşlenmiş' sekmesi + belirli renk birlikte
+    // gelince renk sessizce düşer, TÜM renkteki işlenmiş toplar (ve aynı where'i
+    // paylaşan /rolls/stats toplamları) yanlış filtreyle döner. raw+colorId çelişkisi
+    // doğal boş küme döner.
+    const hasExplicitColor = Boolean(colorIdFilter);
+    const applyColorScope = (scope: unknown) => {
+      if (hasExplicitColor) {
+        where.AND = [
+          ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+          { colorId: scope },
+        ];
+      } else {
+        where.colorId = scope;
+      }
+    };
     if (processingStatus === "raw") {
-      where.colorId = null;
+      applyColorScope(null);
     } else if (processingStatus === "processed") {
-      where.colorId = { not: null };
+      applyColorScope({ not: null });
       // İzinli statüler EXPLICIT (in) — eski notIn listesi CANCELLED/SHIPPED/
       // A1_STOCK/AT_KARTELA/KARTELA_CONSUMED/RETURNED'ı "işlenmekte" listesine
       // ve aynı where'i paylaşan /rolls/stats toplamlarına sızdırıyordu
@@ -1956,6 +1972,39 @@ export class InventoryService {
     if (!roll) throw AppError.notFound("Top bulunamadı");
     if (roll.status === RollStatus.SCRAP || roll.status === RollStatus.CANCELLED) {
       throw AppError.badRequest("Hurda/iptal edilmiş topun rengi/özelliği değiştirilemez");
+    }
+    // F114: statü kapsamı ÇAĞIRANA göre (mevcut reason↔event ayrımıyla tutarlı —
+    // paylaşılan motor iki farklı ucu karıştırmasın). Süpervizör yolu (/:id/manual-attributes,
+    // reason ZORUNLU): istasyonda açık kumaşı (IN_PRODUCTION/PRODUCED) da düzeltebilir;
+    // yalnız gerçekten tehlikeli statüler (fason/kartelada, emekli/lineage veya sevk edilmiş)
+    // bloklanır. Yeniden Etiketle yolu (/:id/label, reason YOK): yalnız serbest satılabilir stok.
+    const isSupervisor = Boolean(data.reason && data.reason.trim());
+    if (isSupervisor) {
+      const SUPERVISOR_BLOCKED: RollStatus[] = [
+        RollStatus.AT_SUBCONTRACTOR,
+        RollStatus.AT_KARTELA,
+        RollStatus.TAMBUR_CONSUMED,
+        RollStatus.SUBCONTRACTOR_CONSUMED,
+        RollStatus.KARTELA_CONSUMED,
+        RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+        RollStatus.SHIPPED,
+      ];
+      if (SUPERVISOR_BLOCKED.includes(roll.status)) {
+        throw AppError.badRequest(
+          "Bu top fason/kartelada, emekliye ayrılmış veya sevk edilmiş — nitelikleri düzeltilemez (sevk↔kabul paritesi ve izlenebilirlik bozulur).",
+        );
+      }
+    } else {
+      const RELABEL_ALLOWED: RollStatus[] = [
+        RollStatus.STOCK,
+        RollStatus.WAREHOUSE,
+        RollStatus.A1_STOCK,
+      ];
+      if (!RELABEL_ALLOWED.includes(roll.status)) {
+        throw AppError.badRequest(
+          "Bu top serbest/satılabilir stokta değil (fason/üretim/kartela/emekli veya sevk edilmiş) — etiketi ancak STOCK, WAREHOUSE veya A1 durumundaki (ya da hazırlıktaki PREPARING sevkiyat) toplarda düzeltebilirsiniz.",
+        );
+      }
     }
     // Saha #4: etiket (renk/özellik/en/kalite) değiştirme. Commit'li sevkiyatta
     // (READY/AT_DOOR/DISPATCHED) renk/en değişimi spec-karşılanmayı bozar → reddet;
