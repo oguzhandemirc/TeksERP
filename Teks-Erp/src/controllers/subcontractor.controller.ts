@@ -11,7 +11,7 @@ const dispatchSchema = z.object({
   workOrderId: z.string().uuid(),
   stepId: z.string().uuid(),
   subcontractorId: z.string().uuid(),
-  rollIds: z.array(z.string().uuid()).min(1, "En az bir top seçmelisiniz"),
+  rollIds: z.array(z.string().uuid()).min(1, "En az bir top seçmelisiniz").max(500, "Tek seferde en fazla 500 top sevk edilebilir"),
   plateNumber: z.string().max(32).optional(),
   driverName: z.string().max(128).optional(),
   notes: z.string().max(1000).optional(),
@@ -30,7 +30,7 @@ const bulkDispatchSchema = z.object({
   /** Yoksa adımın plannedSubcontractorId'si kullanılır. */
   subcontractorId: z.string().uuid().optional(),
   /** Verilirse yalnız bu toplar sevk edilir; yoksa adımdaki bekleyen hepsi. */
-  rollIds: z.array(z.string().uuid()).min(1).optional(),
+  rollIds: z.array(z.string().uuid()).min(1).max(500, "Tek seferde en fazla 500 top seçilebilir").optional(),
   allowRouteSkip: z.boolean().optional(),
   instruction: z.string().max(1000).optional(),
   plateNumber: z.string().max(32).optional(),
@@ -44,7 +44,7 @@ const transferNextSchema = z.object({
   /** Yoksa sonraki adımın plannedSubcontractorId'si kullanılır. */
   nextSubcontractorId: z.string().uuid().optional(),
   /** Verilirse yalnız bu (fasonda bekleyen) toplar aktarılır; yoksa hepsi. */
-  rollIds: z.array(z.string().uuid()).min(1).optional(),
+  rollIds: z.array(z.string().uuid()).min(1).max(500, "Tek seferde en fazla 500 top seçilebilir").optional(),
   instruction: z.string().max(1000).optional(),
 });
 

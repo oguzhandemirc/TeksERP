@@ -371,7 +371,7 @@ export class SubcontractorService {
         stepId: data.stepId,
         cancelledAt: null,
         directShippedAt: null, // doğrudan-sevk edilmiş sevk "açık" sayılmaz
-        items: { some: { receiptItems: { none: {} } } },
+        items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
       },
       select: {
         id: true,
@@ -2122,7 +2122,7 @@ export class SubcontractorService {
 
       const dispatches = await prisma.subcontractorDispatch.findMany({
         // Doğrudan-sevk edilmiş sevk "son açık sevk" gösteriminde yer almaz.
-        where: { stepId: { in: stepIds }, directShippedAt: null },
+        where: { stepId: { in: stepIds }, cancelledAt: null, directShippedAt: null },
         select: {
           id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
           driverName: true, stepId: true, subcontractorId: true,
@@ -2210,7 +2210,7 @@ export class SubcontractorService {
 
     const dispatches = await prisma.subcontractorDispatch.findMany({
       // Doğrudan-sevk edilmiş sevk "son açık sevk" gösteriminde yer almaz.
-      where: { stepId: { in: stepIds }, directShippedAt: null },
+      where: { stepId: { in: stepIds }, cancelledAt: null, directShippedAt: null },
       select: {
         id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,
@@ -2300,7 +2300,7 @@ export class SubcontractorService {
     // Eskiden tek `lastDispatch` (findFirst) dönüyordu; çoklu sevkte partiler
     // ayrışamıyordu. lastDispatch geriye-uyumluluk için en güncel sevk olarak korunur.
     const dispatches = await prisma.subcontractorDispatch.findMany({
-      where: { stepId, cancelledAt: null },
+      where: { stepId, cancelledAt: null, directShippedAt: null },
       select: {
         id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,

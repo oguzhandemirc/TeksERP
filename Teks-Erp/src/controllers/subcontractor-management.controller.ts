@@ -36,17 +36,17 @@ const updateSubcontractorSchema = z.object({
 // ─── Category Schemas ───────────────────────────────────────────────────────
 
 const createCategorySchema = z.object({
-  code: z.string().trim().min(1).max(64),
-  name: z.string().trim().min(1).max(128),
-  description: z.string().trim().max(500).optional(),
+  code: z.string().trim().min(1, "Kod boş bırakılamaz").max(64, "Kod en fazla 64 karakter olabilir"),
+  name: z.string().trim().min(1, "Kategori adı boş bırakılamaz").max(128, "Kategori adı en fazla 128 karakter olabilir"),
+  description: z.string().trim().max(500, "Açıklama en fazla 500 karakter olabilir").optional(),
   appliesColor: z.boolean().optional(),
   appliesProperty: z.boolean().optional(),
 });
 
 const updateCategorySchema = z.object({
-  code: z.string().trim().min(1).max(64).optional(),
-  name: z.string().trim().min(1).max(128).optional(),
-  description: z.string().trim().max(500).nullish(),
+  code: z.string().trim().min(1, "Kod boş bırakılamaz").max(64, "Kod en fazla 64 karakter olabilir").optional(),
+  name: z.string().trim().min(1, "Kategori adı boş bırakılamaz").max(128, "Kategori adı en fazla 128 karakter olabilir").optional(),
+  description: z.string().trim().max(500, "Açıklama en fazla 500 karakter olabilir").nullish(),
   isActive: z.boolean().optional(),
   appliesColor: z.boolean().optional(),
   appliesProperty: z.boolean().optional(),
