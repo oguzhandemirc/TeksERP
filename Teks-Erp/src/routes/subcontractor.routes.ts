@@ -511,11 +511,12 @@ router.get(
  *     summary: Fason kabulü iptal et (soft cancel)
  *     description: |
  *       Mal kabul yanlış girilmişse geri alır. Kabul belgesi silinmez,
- *       cancelledAt/By/Reason set edilir. Bu kabul'deki rulalar
- *       AT_SUBCONTRACTOR'a geri döner; "renk veren" kategoriden geldiyse
- *       Roll.colorId ve WO.targetProperties listesindeki RollProperty
- *       silinir. Sonraki adımda iz (kapalı movement, RollOperation, yeni
- *       fason sevki) varsa REDDEDİLİR.
+ *       cancelledAt/By/Reason set edilir. Kabulde SUBCONTRACTOR_CONSUMED'a
+ *       çekilen ORİJİNAL rulolar AT_SUBCONTRACTOR'a geri döner; kabulde DOĞAN
+ *       açık-kumaş Roll'lar (parentReceiptId) CANCELLED'e çekilir ve receipt'e
+ *       yazılan renk/özellik (KartelaReceiptItem property) kayıtları silinir.
+ *       Sonraki adımda iz (kapalı movement, RollOperation, yeni fason sevki)
+ *       varsa REDDEDİLİR.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -545,7 +546,7 @@ router.post(
 );
 
 /**
- * @swagger
+ * @openapi
  * /api/subcontractor/receipts/{id}/cancel-preview:
  *   get:
  *     tags: [Subcontractor]

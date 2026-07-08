@@ -16,6 +16,7 @@ import {
   buildWhereClause,
   buildOrderByClause,
   buildPagination,
+  resolveSortBy,
 } from "../utils/query-parser";
 import { Request } from "express";
 
@@ -27,7 +28,14 @@ export class SubcontractorCategoryService {
   async findAll(req: Request): Promise<PaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
     const where = buildWhereClause(params.filters, ["code", "name"], params.search);
-    const orderBy = buildOrderByClause(params.sortBy === "createdAt" ? "name" : params.sortBy, params.sortOrder === "desc" && params.sortBy === "createdAt" ? "asc" : params.sortOrder);
+    // F90: sortBy verilmediğinde name/asc default; explicit createdAt saygı görür;
+    // bilinmeyen sortBy 500 yerine name'e düşer. (Eski çift-ternary HER createdAt'i
+    // — explicit olanı bile — name/asc'a zorluyordu.)
+    const rawSortBy = req.query.sortBy as string | undefined;
+    const orderBy = buildOrderByClause(
+      resolveSortBy(rawSortBy, ["code", "name", "createdAt"], "name"),
+      rawSortBy ? params.sortOrder : "asc",
+    );
     const { skip, take } = buildPagination(params.page, params.pageSize);
 
     const [data, total] = await Promise.all([
@@ -124,18 +132,29 @@ export class SubcontractorCategoryService {
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    // F94: mutasyon öncesi before-state — audit oldData boş kalmasın.
+    const before = await prisma.subcontractorCategory.findUnique({
+      where: { id },
+      select: { code: true, name: true, description: true, isActive: true, appliesColor: true, appliesProperty: true },
+    });
     const cat = await prisma.subcontractorCategory.update({ where: { id }, data });
     await AuditService.log({
       userId,
       action: "UPDATE",
       tableName: "SUBCONTRACTOR_CATEGORY",
       recordId: id,
+      oldData: before ?? null,
       newData: data as Record<string, unknown>,
     });
     return { success: true, data: cat, message: "Kategori güncellendi" };
   }
 
   async remove(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    // F94: soft-delete öncesi before-state.
+    const before = await prisma.subcontractorCategory.findUnique({
+      where: { id },
+      select: { code: true, name: true, description: true, isActive: true, appliesColor: true, appliesProperty: true },
+    });
     // Soft delete — bağlı subcontractor veya step varsa veriyi koruyoruz
     const cat = await prisma.subcontractorCategory.update({
       where: { id },
@@ -146,6 +165,7 @@ export class SubcontractorCategoryService {
       action: "DELETE",
       tableName: "SUBCONTRACTOR_CATEGORY",
       recordId: id,
+      oldData: before ?? null,
     });
     return { success: true, data: cat, message: "Kategori pasife alındı" };
   }
@@ -417,6 +437,12 @@ export class SubcontractorManagementService {
   ): Promise<ApiResponse<unknown>> {
     const { categoryIds, ...rest } = data;
 
+    // F94: mutasyon öncesi before-state — audit oldData boş kalmasın.
+    const before = await prisma.subcontractor.findUnique({
+      where: { id },
+      select: { code: true, name: true, taxNumber: true, phone: true, address: true, isActive: true, isFavorite: true },
+    });
+
     // Update'te her alan tamamen optional. Gönderilmemişse undefined kalır
     // (Prisma update no-op). Gönderildiyse format şartı uygulanır; sonuç
     // (string ya da null) doğrudan yazılır.
@@ -466,13 +492,20 @@ export class SubcontractorManagementService {
       action: "UPDATE",
       tableName: "SUBCONTRACTOR",
       recordId: id,
-      newData: data as Record<string, unknown>,
+      oldData: before ?? null,
+      // F94: normalize edilmiş değerleri logla (ham `data` değil) — kategoriler dahil.
+      newData: { ...rest, categoryIds } as Record<string, unknown>,
     });
 
     return { success: true, data: sub, message: "Fason firma güncellendi" };
   }
 
   async remove(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    // F94: soft-delete öncesi before-state.
+    const before = await prisma.subcontractor.findUnique({
+      where: { id },
+      select: { code: true, name: true, taxNumber: true, phone: true, address: true, isActive: true, isFavorite: true },
+    });
     const sub = await prisma.subcontractor.update({
       where: { id },
       data: { isActive: false },
@@ -482,6 +515,7 @@ export class SubcontractorManagementService {
       action: "DELETE",
       tableName: "SUBCONTRACTOR",
       recordId: id,
+      oldData: before ?? null,
     });
     return { success: true, data: sub, message: "Fason firma pasife alındı" };
   }

@@ -189,7 +189,7 @@ export function renderFasonCekiHtml(
         font-size: 96px; font-weight: 800; color: rgba(220,38,38,0.16);
         transform: rotate(-22deg); letter-spacing: 8px; z-index: 0; }
   .wm-old { color: rgba(100,116,139,0.18); }
-  .wm-draft { color: rgba(100,116,139,0.16); } /* F196: TASLAK filigranı ESKİ KOPYA'dan ayrı sınıf */
+  .wm-draft { color: rgba(100,116,139,0.16); } /* F196: taslak filigranı ESKİ KOPYA'dan ayrı sınıf */
   header { display: flex; justify-content: space-between; align-items: flex-start;
            border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; gap: 12px; }
   .hl { flex: 1; min-width: 0; }

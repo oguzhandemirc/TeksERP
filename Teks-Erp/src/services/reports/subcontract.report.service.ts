@@ -47,11 +47,16 @@ export async function getSubcontractorPerformance(range: DateRange): Promise<Sub
         AND sd."directShippedAt" IS NULL
     ),
     returned AS (
-      SELECT sri."sourceDispatchItemId", sr."receivedAt"
+      -- F95: dispatch-item başına EN FAZLA bir dönüş satırı (DISTINCT ON) — aksi halde
+      -- aynı sourceDispatchItemId'de iki aktif receipt item olursa aşağıdaki LEFT JOIN
+      -- satırları çoğaltıp rollsReturned/avgTurnaround'ı şişiriyordu.
+      SELECT DISTINCT ON (sri."sourceDispatchItemId")
+        sri."sourceDispatchItemId", sr."receivedAt"
       FROM subcontractor_receipt_items sri
       JOIN subcontractor_receipts sr ON sri."receiptId" = sr.id
       WHERE sr."cancelledAt" IS NULL
         AND sri."sourceDispatchItemId" IS NOT NULL
+      ORDER BY sri."sourceDispatchItemId", sr."receivedAt"
     )
     SELECT
       sub.id                                  AS "subcontractorId",
