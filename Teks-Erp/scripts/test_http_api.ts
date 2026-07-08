@@ -164,6 +164,26 @@ async function main() {
     });
     check("aktif duplicate kod → 400 (badRequest mapping)", dup.status === 400, `status=${dup.status}`);
     check("400 gövdesi success:false", dup.body.success === false, String(dup.body.message ?? ""));
+
+    // ---- 10) F264 — RBAC MATRİS: veri-güdümlü guard (token yok→401, yetkisiz→403) ----
+    // Salt-okunur koleksiyon GET'leri (path-param yok → uuid-param middleware karışmaz).
+    // Mobil requireAnyPermission uçları da dahil: 0-izinli lowToken hepsinde 403 almalı
+    // (mobil izne de sahip değil → 'requireAnyPermission web+mobil' zinciri kilitlenir).
+    const guardMatrix: { path: string; guard: string }[] = [
+      { path: "/api/work-orders", guard: "workorder:read | mobile:*" },
+      { path: "/api/rolls", guard: "roll:read | mobile:*" },
+      { path: "/api/orders", guard: "order:read" },
+      { path: "/api/stations", guard: "station:read" },
+      { path: "/api/quality-grades", guard: "quality:read" },
+      { path: "/api/subcontractors", guard: "subcontractor:read | mobile:fason-* (requireAnyPermission)" },
+      { path: "/api/subcontractor-categories", guard: "subcontractor:read | mobile:fason-* (requireAnyPermission)" },
+    ];
+    for (const rt of guardMatrix) {
+      const anon = await call("GET", rt.path);
+      check(`[401] GET ${rt.path} token YOK`, anon.status === 401, `status=${anon.status}`);
+      const forbidden = await call("GET", rt.path, { token: lowToken });
+      check(`[403] GET ${rt.path} yetkisiz`, forbidden.status === 403, `status=${forbidden.status} (${rt.guard})`);
+    }
   } finally {
     if (createdCustomerId) {
       await prisma.customer.delete({ where: { id: createdCustomerId } }).catch(() => {});
