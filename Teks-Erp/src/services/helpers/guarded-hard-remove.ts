@@ -189,6 +189,14 @@ export const routeHardRemove = makeGuardedHardRemove({
       message: (n) =>
         `Bu rotadan üretilmiş ${n} iş emri var — kalıcı silinemez (soy izi korunur). Rotayı pasife alın.`,
     },
+    // F211: rotayı kullanan reçete varsa silme — ProductRecipe.routeId SetNull olur
+    // (reçete rotasını sessizce kaybeder).
+    {
+      key: "recipeCount",
+      count: (id) => prisma.productRecipe.count({ where: { routeId: id } }),
+      message: (n) =>
+        `Bu rotayı kullanan ${n} üretim reçetesi var — kalıcı silinemez (reçete rotasını kaybeder). Rotayı pasife alın.`,
+    },
   ],
   deleteTx: async (tx, id) => {
     await tx.routeStep.deleteMany({ where: { routeId: id } });

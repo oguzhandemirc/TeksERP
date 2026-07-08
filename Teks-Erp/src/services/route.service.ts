@@ -60,13 +60,49 @@ interface IncomingStep {
   requiredCategoryId?: string | null;
   plannedSubcontractorId?: string | null;
   sequence?: number;
+  defaultNotes?: string | null;
 }
 
 export class RouteService extends BaseService {
+  // F209: rota adımında izinli alanlar — nested create çocukları sanitizeWriteData'yı
+  // baypas eder; yalnız bunlar geçer (mass-assignment kapatılır).
+  private static readonly ALLOWED_STEP_KEYS = new Set([
+    "stationId",
+    "sequence",
+    "defaultNotes",
+    "requiredCategoryId",
+    "plannedSubcontractorId",
+  ]);
+
+  /** Dizi-form VE nested-write ({create:[...]}) formundan step nesnelerini çıkarır. */
+  private extractSteps(rawSteps: unknown): IncomingStep[] | null {
+    if (Array.isArray(rawSteps)) return rawSteps as IncomingStep[];
+    if (rawSteps && typeof rawSteps === "object") {
+      const create = (rawSteps as Record<string, unknown>).create;
+      if (Array.isArray(create)) return create as IncomingStep[];
+      if (create && typeof create === "object") return [create as IncomingStep];
+    }
+    return null;
+  }
+
   private async validateSteps(data: Record<string, unknown>): Promise<void> {
-    if (!Array.isArray(data.steps)) return;
-    const steps = data.steps as IncomingStep[];
+    if (!("steps" in data) || data.steps == null) return;
+    const steps = this.extractSteps(data.steps);
+    if (steps === null) {
+      throw AppError.badRequest(
+        "Rota adımları geçersiz biçimde (dizi veya { create: [...] } bekleniyor)",
+      );
+    }
     if (steps.length === 0) return;
+
+    // F209: mass-assignment guard — nested create çocukları için izinli-alan kontrolü.
+    for (const s of steps) {
+      for (const k of Object.keys(s as Record<string, unknown>)) {
+        if (!RouteService.ALLOWED_STEP_KEYS.has(k)) {
+          throw AppError.badRequest(`Rota adımında izin verilmeyen alan: ${k}`);
+        }
+      }
+    }
 
     // sequence: pozitif tam sayı + tekrarsız
     const seqs = steps.map((s) => s.sequence);

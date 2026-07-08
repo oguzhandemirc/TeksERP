@@ -165,6 +165,29 @@ export class CustomerAliasService {
     });
     if (!existing) throw AppError.notFound("Alias bulunamadı");
 
+    // F201: renk bu müşteriye ÖZEL atanmışsa (assigned=true) satırı SİLME — silersen
+    // renk PUBLIC'e döner ve başka müşterilerin siparişlerinde serbest kalır (exclusive
+    // atama sessizce yok olur). Yalnız adı temizle (color.service toKeepUnassigned simetriği).
+    if (existing.assigned) {
+      if (existing.alias === null) {
+        return { success: true, data: { deleted: false } };
+      }
+      await prisma.customerColorAlias.update({
+        where: { id: existing.id },
+        data: { alias: null },
+      });
+      await AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: TABLE_COLOR,
+        recordId: existing.id,
+        oldData: { customerId, colorId, alias: existing.alias },
+        newData: { customerId, colorId, alias: null },
+      });
+      return { success: true, data: { deleted: false } };
+    }
+
+    // Yalnız ad taşıyan (assigned=false) satır — fiziksel silinebilir.
     await prisma.customerColorAlias.delete({ where: { id: existing.id } });
 
     await AuditService.log({

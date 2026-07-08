@@ -111,4 +111,37 @@ export class CustomerService extends BaseService {
     }
     return super.softDelete(id, userId);
   }
+
+  /**
+   * F203: kalıcı silme guard'ı — bağımlı kayıt varsa ham FK (P2003) yerine anlamlı
+   * 409. Tümü prisma.* (tx DIŞI) → Promise.all serbest (kural yalnız tx.* için).
+   */
+  async hardDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const existing = await prisma.customer.findUnique({
+      where: { id },
+      select: { id: true, code: true, name: true },
+    });
+    if (!existing) return { success: false, data: null, message: "Müşteri bulunamadı" };
+
+    const [orderCount, shipmentCount, returnCount, branchCount] = await Promise.all([
+      prisma.order.count({ where: { customerId: id } }),
+      prisma.shipment.count({ where: { customerId: id } }),
+      prisma.rollReturn.count({ where: { customerId: id } }),
+      prisma.customerBranch.count({ where: { customerId: id } }),
+    ]);
+
+    const blockers: string[] = [];
+    if (orderCount > 0) blockers.push(`${orderCount} sipariş`);
+    if (shipmentCount > 0) blockers.push(`${shipmentCount} sevkiyat`);
+    if (returnCount > 0) blockers.push(`${returnCount} iade`);
+    if (branchCount > 0) blockers.push(`${branchCount} şube`);
+
+    if (blockers.length > 0) {
+      throw AppError.conflict(
+        `Müşteriye bağlı kayıtlar var (${blockers.join(", ")}) — kalıcı silinemez. ` +
+          `Müşteriyi pasife alın.`,
+      );
+    }
+    return super.hardDelete(id, userId);
+  }
 }
