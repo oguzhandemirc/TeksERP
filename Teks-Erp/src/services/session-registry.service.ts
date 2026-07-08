@@ -53,33 +53,41 @@ export class SessionRegistryService {
   ): Promise<{ id: string }> {
     const { userId, deviceType, deviceId, jti, expiresAt, policy, confirmKick } = input;
 
-    // notify: onay verilmediyse ve aynı tipte AKTİF (revoke edilmemiş, süresi dolmamış)
-    // oturum varsa 409 döner; client confirmKick=true ile tekrar çağırıp ikisini açar.
-    if (policy === "notify" && !confirmKick) {
-      const existing = await prisma.session.findFirst({
-        where: {
-          userId,
-          deviceType,
-          revokedAt: null,
-          expiresAt: { gt: new Date() },
-        },
-        orderBy: { createdAt: "desc" },
-        select: { deviceType: true, createdAt: true, deviceId: true },
-      });
-      if (existing) {
-        const existingSession: ExistingSessionInfo = {
-          deviceType: existing.deviceType,
-          createdAt: existing.createdAt,
-          deviceId: existing.deviceId,
-        };
-        throw AppError.conflict("Bu hesap başka bir cihazda açık", {
-          code: "SESSION_EXISTS",
-          existingSession,
-        });
-      }
-    }
-
+    // F50: notify ön-kontrolü + kick, tek tx İÇİNDE ve (userId,deviceType) başına
+    // pg advisory xact-lock ile serileştirilir. Eskiden notify findFirst tx DIŞINDA
+    // (check-then-act) idi → iki eşzamanlı login birbirinin commit edilmemiş satırını
+    // görmeyip notify'ı sessizce deliyordu / kick'te iki aktif oturum kalabiliyordu.
+    // Advisory xact-lock commit/rollback'te otomatik bırakılır; throw yalnız okuma
+    // sonrası olduğundan rollback yan etkisiz. $executeRaw parametreli → injection yok.
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${userId}|${deviceType}`}))`;
+
+      // notify: onay verilmediyse ve aynı tipte AKTİF (revoke edilmemiş, süresi dolmamış)
+      // oturum varsa 409 döner; client confirmKick=true ile tekrar çağırıp ikisini açar.
+      if (policy === "notify" && !confirmKick) {
+        const existing = await tx.session.findFirst({
+          where: {
+            userId,
+            deviceType,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { deviceType: true, createdAt: true, deviceId: true },
+        });
+        if (existing) {
+          const existingSession: ExistingSessionInfo = {
+            deviceType: existing.deviceType,
+            createdAt: existing.createdAt,
+            deviceId: existing.deviceId,
+          };
+          throw AppError.conflict("Bu hesap başka bir cihazda açık", {
+            code: "SESSION_EXISTS",
+            existingSession,
+          });
+        }
+      }
+
       // kick: aynı (userId,deviceType) aktif oturumları düşür (atomik claim). off/notify
       // için düşürme YOK — ikisi de (ya da çoklu) açık kalır.
       if (policy === "kick") {

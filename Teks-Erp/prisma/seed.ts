@@ -10,7 +10,7 @@
 //   npm run seed
 //
 // Yüklenenler:
-//   1. 54 permission (web + mobil + admin)
+//   1. 55 permission (web + mobil + admin — roll:manual-adjust dahil)
 //   2. 14 permission template (Admin Tam Yetki + mobil/masaüstü roller)
 //   3. 1 kullanıcı (yalnız admin — ek test kullanıcıları kaldırıldı 2026-07-03)
 //   4. Admin'e tüm yetkiler atanır

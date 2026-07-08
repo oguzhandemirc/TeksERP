@@ -1123,7 +1123,11 @@ router.post(
 router.get(
   "/backups",
   verifyToken,
+  // F287: pg_dump .dump TÜM kullanıcıların düz quickPin/cardToken'ını içerir →
+  // admin:users da ZORUNLU (zincir = AND). admin:* her ikisini karşılar; yalnız
+  // salt-admin:settings aktör 403 alır (mobil giriş sırlarını yedekten harvest edemez).
   requirePermission("admin:settings"),
+  requirePermission("admin:users"),
   (_req: Request, res: Response, next: NextFunction): void => {
     try {
       res.status(200).json({ success: true, ...listBackups() });
@@ -1152,7 +1156,9 @@ router.get(
 router.get(
   "/backups/:name/download",
   verifyToken,
+  // F287: yedek düz-metin giriş sırları içerir → admin:settings + admin:users (AND).
   requirePermission("admin:settings"),
+  requirePermission("admin:users"),
   (req: Request, res: Response, next: NextFunction): void => {
     try {
       const abs = resolveBackupPath(req.params.name as string);

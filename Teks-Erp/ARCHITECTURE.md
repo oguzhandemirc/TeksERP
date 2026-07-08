@@ -28,7 +28,7 @@
 Teks-Erp/
 ├── prisma/
 │   ├── schema.prisma          # 65 model, 23 enum
-│   ├── seed.ts                # Tek dosya: 54 permission + 14 template + 7 kullanıcı + 3 kalite + master demo
+│   ├── seed.ts                # Tek dosya: 55 permission + 14 template + 7 kullanıcı + 3 kalite + master demo
 │   └── migrations/            # 2026-05-25 baseline reset + 44 migration (son: 20260612103000)
 │
 ├── src/
@@ -290,7 +290,7 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 
 ## 6. RBAC Permission Kodları
 
-`requirePermission(code)` middleware'i `req.user.permissions[]` array'ini kontrol eder. Toplam **54 permission**, 10 modül. Permissions doğrudan kullanıcıya bağlanır (`UserPermission` modeli); ayrıca tekrar kullanılabilir setler için `PermissionTemplate` / `PermissionTemplateItem` var (rol modeli **yok**).
+`requirePermission(code)` middleware'i `req.user.permissions[]` array'ini kontrol eder. Toplam **55 permission**, 10 modül. Permissions doğrudan kullanıcıya bağlanır (`UserPermission` modeli); ayrıca tekrar kullanılabilir setler için `PermissionTemplate` / `PermissionTemplateItem` var (rol modeli **yok**).
 
 | Modül | Permissions |
 |---|---|
@@ -309,7 +309,7 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 
 ### Seed Sonrası Yetki Dağılımı
 
-`seed.ts` **yalnız `admin`'i (tüm 54 permission) seed'ler** (`prisma/seed.ts` §3-4). Ek test kullanıcıları 2026-07-03'te KALDIRILDI (her reseed'de tek tek silmek gerekiyordu). Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; 0-izinli RBAC senaryosu gereken HTTP testleri (`test_http_api`, `test_direct_ship_api`) kendi geçici kullanıcısını üretip temizler.
+`seed.ts` **yalnız `admin`'i (tüm 55 permission) seed'ler** (`prisma/seed.ts` §3-4). Ek test kullanıcıları 2026-07-03'te KALDIRILDI (her reseed'de tek tek silmek gerekiyordu). Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; 0-izinli RBAC senaryosu gereken HTTP testleri (`test_http_api`, `test_direct_ship_api`) kendi geçici kullanıcısını üretip temizler.
 
 ### Yeni Endpoint Yazarken
 
@@ -935,7 +935,7 @@ npx tsc --noEmit             # Type-check (build'siz)
 
 | Username | Şifre | Yetkiler |
 |---|---|---|
-| `admin` | `123123` | ✅ TÜM 54 permission (seed §4) |
+| `admin` | `123123` | ✅ TÜM 55 permission (seed §4) |
 
 > **2026-07-03:** Seed'de YALNIZ `admin` var. Eski ek test kullanıcıları (mehmet.planlama, ali.operator, ...) KALDIRILDI — her reseed'de tek tek silinmeleri gerekiyordu. Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; yeni kullanıcı varsayılan olarak üretim istasyon izinlerini (KK1/KK2/Tambur) + mobil kimlik (hızlı PIN + QR kart) alır (opt-out'lu). 0-izinli RBAC testleri kendi geçici kullanıcısını üretip temizler.
 

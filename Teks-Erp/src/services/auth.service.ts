@@ -309,14 +309,31 @@ export class AuthService {
     // yeni token bu tarihe kadar geçerli → izin süresi bitince oturum sunucu-tarafında
     // ölür (401) ve re-login'de getEffectivePermissions o izni zaten hariç tutar.
     // Nearest varsa exp HER durumda konur (süresiz taban bile bu tarihe kırpılır).
-    const nearest = await prisma.userPermission.findFirst({
-      where: { userId: user.id, validUntil: { gt: new Date(nowMs) } },
-      orderBy: { validUntil: "asc" },
-      select: { validUntil: true },
-    });
-    if (nearest?.validUntil) {
-      if (!hasExp || nearest.validUntil.getTime() < effectiveExpiresAt.getTime()) {
-        effectiveExpiresAt = nearest.validUntil;
+    // F51: iki aday sınır — (a) EFEKTİF (validFrom geçmiş/boş) grant'ın en yakın
+    // validUntil'i (kapanış); (b) henüz BAŞLAMAMIŞ (validFrom gelecekte) grant'ın
+    // en yakın validFrom'u (açılış → re-login'de token o izni alsın). Eski sorgu
+    // yalnız validUntil>now bakıyordu: henüz-başlamamış grant'ın validUntil'i
+    // oturumu gereksiz kırpıyor, açılış anı ise hiç yakalanmıyordu.
+    const nowDate = new Date(nowMs);
+    const [nearestExpiry, nearestOpening] = await Promise.all([
+      prisma.userPermission.findFirst({
+        where: {
+          userId: user.id,
+          validUntil: { gt: nowDate },
+          OR: [{ validFrom: null }, { validFrom: { lte: nowDate } }],
+        },
+        orderBy: { validUntil: "asc" },
+        select: { validUntil: true },
+      }),
+      prisma.userPermission.findFirst({
+        where: { userId: user.id, validFrom: { gt: nowDate } },
+        orderBy: { validFrom: "asc" },
+        select: { validFrom: true },
+      }),
+    ]);
+    for (const boundary of [nearestExpiry?.validUntil, nearestOpening?.validFrom]) {
+      if (boundary && (!hasExp || boundary.getTime() < effectiveExpiresAt.getTime())) {
+        effectiveExpiresAt = boundary;
         hasExp = true;
       }
     }

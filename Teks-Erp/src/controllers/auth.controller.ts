@@ -14,6 +14,7 @@ import {
   resolveLoginLockoutKey,
   reserveLoginAttempt,
   resetLoginLockout,
+  releaseLoginAttempt,
 } from "../middlewares/login-lockout";
 import "../types/express-augment";
 
@@ -191,13 +192,21 @@ export class AuthController {
         message: "Giriş başarılı",
       });
     } catch (error) {
-      // F20: deneme reserveLoginAttempt'te zaten sayıldı; başarıda reset temizler.
+      // F49: yalnız 401 (kimlik-bilgisi hatası) brute-force sayılır. 409 SESSION_EXISTS
+      // / 403 (yöntem kapalı / erişim yok) brute-force DEĞİL → assume-fail rezervasyonunu
+      // geri al (paylaşımlı tablet 429'a kilitlenmesin). F20: deneme zaten reserve'de sayıldı.
+      const isCredentialError = error instanceof AppError && error.statusCode === 401;
+      if (!isCredentialError) releaseLoginAttempt(lockoutKey);
       void AuditService.logEvent({
         category: "AUTH",
-        action: "LOGIN_FAILED",
+        action: isCredentialError ? "LOGIN_FAILED" : "LOGIN_CONFLICT",
         recordId: "card",
         ipAddress,
-        payload: { method: "card", reason: error instanceof Error ? error.message : "unknown" },
+        payload: {
+          method: "card",
+          statusCode: error instanceof AppError ? error.statusCode : 500,
+          reason: error instanceof Error ? error.message : "unknown",
+        },
       });
       next(error);
     }
@@ -262,13 +271,19 @@ export class AuthController {
         message: "Giriş başarılı",
       });
     } catch (error) {
-      // F20: deneme reserveLoginAttempt'te zaten sayıldı; başarıda reset temizler.
+      // F49: yalnız 401 brute-force sayılır; 409/403 assume-fail'i geri al (F20 reserve).
+      const isCredentialError = error instanceof AppError && error.statusCode === 401;
+      if (!isCredentialError) releaseLoginAttempt(lockoutKey);
       void AuditService.logEvent({
         category: "AUTH",
-        action: "LOGIN_FAILED",
+        action: isCredentialError ? "LOGIN_FAILED" : "LOGIN_CONFLICT",
         recordId: "quick-pin",
         ipAddress,
-        payload: { method: "quick-pin", reason: error instanceof Error ? error.message : "unknown" },
+        payload: {
+          method: "quick-pin",
+          statusCode: error instanceof AppError ? error.statusCode : 500,
+          reason: error instanceof Error ? error.message : "unknown",
+        },
       });
       next(error);
     }

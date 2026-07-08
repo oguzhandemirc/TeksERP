@@ -71,12 +71,12 @@ Sadece bunlar. Alternatif tanıtma.
 
 ## RBAC Permission Kodları
 
-`requirePermission(code)` → `req.user.permissions[]` array. Permissions doğrudan kullanıcıya bağlanır (`UserPermission`), tekrar kullanım için `PermissionTemplate` var (rol modeli **yok**). Toplam **54 permission**, **10 modül**:
+`requirePermission(code)` → `req.user.permissions[]` array. Permissions doğrudan kullanıcıya bağlanır (`UserPermission`), tekrar kullanım için `PermissionTemplate` var (rol modeli **yok**). Toplam **55 permission**, **10 modül**:
 
 | Modül | Permissions |
 |---|---|
 | SALES | `order:read/write`, `customer:read/write`, `customer-alias:read/write` |
-| PRODUCTION | `workorder:read/write`, `roll:read/write`, `station:read/write` |
+| PRODUCTION | `workorder:read/write`, `roll:read/write`, `roll:manual-adjust`, `station:read/write` |
 | MASTER_DATA | `item:read/write` |
 | QUALITY | `quality:read/write`, `property:read/write` |
 | SUBCONTRACTOR | `subcontractor:read/write` |
