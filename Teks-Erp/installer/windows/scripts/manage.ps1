@@ -8,7 +8,7 @@
 #   .\manage.ps1 -Action uninstall     Servisleri kaldır (veri korunur)
 #   .\manage.ps1 -Action uninstall -RemoveData   Servisleri + TÜM veriyi sil
 #   .\manage.ps1 -Action start|stop|restart|status
-#   .\manage.ps1 -Action backup [-BackupPath C:\yedek]
+#   .\manage.ps1 -Action backup [-BackupPath C:\yedek] [-OffsitePath \\NAS\yedek]
 #   .\manage.ps1 -Action restore -BackupFile C:\yedek\tekserp_xxx.dump
 #
 # Windows PowerShell 5.1 ile uyumludur (Windows Server varsayılanı). PS7 de çalışır.
@@ -24,7 +24,10 @@ param(
     [string]$InstallDir,
     [switch]$RemoveData,
     [string]$BackupPath,
-    [string]$BackupFile
+    [string]$BackupFile,
+    # Offsite (makine disi) yedek hedefi: UNC (\\NAS\pay) veya harici surucu (E:\yedek).
+    # Verilirse backup-offsite.txt'e kalici yazilir -> sonraki gece yedekleri de kullanir.
+    [string]$OffsitePath
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,6 +54,9 @@ $SecretFile = Join-Path $DataRoot "secret.json"
 $SeededFlag = Join-Path $DataRoot ".seeded"
 $VersionFile= Join-Path $DataRoot "version.txt"   # kurulu sürüm (güncelleme karşılaştırması)
 $EnvFile    = Join-Path $AppDir ".env"   # backend CWD'sinde dursun (dotenv)
+# Offsite yedek hedefi burada kalici tutulur (bir kez -OffsitePath ile yazilir,
+# sonra gece gorevi param'siz calissa da bu dosyadan okur). Bos/yoksa offsite atlanir.
+$OffsiteConfigFile = Join-Path $DataRoot "backup-offsite.txt"
 
 $BackupTaskName = "TeksERP Gece Yedek"   # Görev Zamanlayıcı'daki otomatik yedek görevi
 
@@ -281,6 +287,29 @@ function Install-Database {
 
     $alreadyInit = Test-Path (Join-Path $PgData "PG_VERSION")
 
+    # MAJOR surum uyusmazligi guard'i: gomulu PostgreSQL binary'sinin major surumu
+    # ile mevcut veri dizininin surumu AYNI olmali. PG 18 binary'si bir PG 16 veri
+    # dizinini ACAMAZ -> servis sessizce baslamaz ve "60sn icinde hazir olmadi" ile
+    # patlar. Onun yerine burada NET hata verip yukseltme yolunu gosteririz.
+    if ($alreadyInit) {
+        $dataMajor = (Get-Content (Join-Path $PgData "PG_VERSION") -Raw).Trim()
+        $binMajor  = $null
+        try {
+            $vstr = & (Join-Path $PgBin "postgres.exe") --version 2>$null   # "postgres (PostgreSQL) 18.4"
+            if ("$vstr" -match '(\d+)\.\d+') { $binMajor = $Matches[1] }
+        } catch { }
+        if ($binMajor -and ($dataMajor -ne $binMajor)) {
+            throw @"
+PostgreSQL MAJOR surum uyusmazligi: veri dizini PG $dataMajor, kurulan binary PG $binMajor.
+PG $binMajor, PG $dataMajor veri dizinini ACAMAZ -> major yukseltme gerekir:
+  1) ONCE eski surumle yedek al (eski setup.exe ile):
+       manage.ps1 -Action backup -OffsitePath <guvenli-bir-yer>
+  2) Sonra veriyi tasi: pg_upgrade, VEYA temiz kurulumda -Action restore ile .dump'i geri yukle.
+Ayrintili adimlar: README-KURULUM.md (Surum yukseltme). Guncelleme burada guvenle durduruldu.
+"@
+        }
+    }
+
     if (-not $alreadyInit) {
         Write-Step "PostgreSQL veri dizini olusturuluyor (initdb)..."
         New-Item -ItemType Directory -Path $PgData -Force | Out-Null
@@ -328,6 +357,31 @@ log_min_duration_statement = 500
 "@
         $confChanged = $true
         Write-Ok "postgresql.conf TeksERP ayarlari uygulandi (port $PgPort)."
+    }
+
+    # Bellek/performans tuning (AYRI idempotent blok, kendi marker'i ile). Ayri
+    # tutulmasinin sebebi: mevcut kurulumlarda "TeksERP ayarlari" bloğu zaten var
+    # ama bellek satirlari yok -> ayri marker sayesinde onlar da guncellemede alir.
+    # PostgreSQL default'lari (shared_buffers=128MB, work_mem=4MB) yuzbinlerce satirlik
+    # uretim DB'sinde rapor aggregate'lerini diske tasirir ve cache isabetini dusurur;
+    # 50s statement_timeout ile birlesince yillik raporlar iptal olmaya baslar.
+    if ($confText -notmatch "TeksERP bellek ayarlari") {
+        $ramBytes = 0
+        try { $ramBytes = [int64](Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory } catch { }
+        $ramMb    = if ($ramBytes -gt 0) { [int][math]::Round($ramBytes / 1MB) } else { 4096 }  # okunamzsa 4GB varsay
+        $sharedMb = [int][math]::Max(128, [math]::Min(8192, [math]::Round($ramMb * 0.25)))       # ~%25, 8GB tavan
+        $cacheMb  = [int][math]::Max(512, [math]::Round($ramMb * 0.60))                          # ~%60 (planner ipucu)
+        $maintMb  = [int][math]::Max(64,  [math]::Min(512, [math]::Round($ramMb * 0.05)))        # REINDEX/CREATE INDEX
+        Add-Content -Path $conf -Value @"
+
+# --- TeksERP bellek ayarlari (RAM ~${ramMb}MB'a gore olceklendi) ---
+shared_buffers = '${sharedMb}MB'
+effective_cache_size = '${cacheMb}MB'
+work_mem = '16MB'
+maintenance_work_mem = '${maintMb}MB'
+"@
+        $confChanged = $true
+        Write-Ok "postgresql.conf bellek ayarlari uygulandi (shared_buffers=${sharedMb}MB, RAM ${ramMb}MB)."
     }
 
     # Servisi kaydet (yoksa)
@@ -665,6 +719,12 @@ function Do-Install {
     Write-Host "  Loglar:          $LogDir"
     Write-Host "  Yedekler:        $BackupDir"
     Write-Host "  Otomatik yedek:  her gun 03:00 (Gorev Zamanlayici: '$BackupTaskName')"
+    $offsiteVal = if (Test-Path $OffsiteConfigFile) { (Get-Content $OffsiteConfigFile -Raw).Trim() } else { "" }
+    if ($offsiteVal) {
+        Write-Host "  Offsite kopya:   $offsiteVal" -ForegroundColor Green
+    } else {
+        Write-Host "  Offsite kopya:   AYARLANMADI — makine disi yedek icin: manage.ps1 -Action backup -OffsitePath \\NAS\pay" -ForegroundColor Yellow
+    }
     Write-Host ""
 }
 
@@ -735,6 +795,27 @@ function Do-Backup {
     if ($code -ne 0) { throw "pg_dump basarisiz (kod $code)." }
     Write-Ok "Yedek alindi: $out"
 
+    # O-17: Butunluk kontrolu — dump gercekten okunabiliyor mu? pg_dump exit code 0
+    # dondugu halde dosya yarim/bozuk olabilir (disk dolmasi, sessiz kesinti). Bozuk
+    # bir dump 14'luk rotasyonla SAGLAM yedeklerin yerini alirsa felakete kadar fark
+    # edilmez -> once dogrula, bozuksa SIL (retention'a inmez, eski yedekler korunur).
+    Write-Step "Yedek butunlugu kontrol ediliyor (pg_restore --list)..."
+    & (Join-Path $PgBin "pg_restore.exe") --list $out *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item $out -Force -ErrorAction SilentlyContinue
+        throw "Yedek DOGRULANAMADI (pg_restore --list kod $LASTEXITCODE) — bozuk dump silindi, onceki yedekler korundu."
+    }
+    Write-Ok "Yedek butunlugu dogrulandi."
+
+    # O-17: secret.json'i yedegin YANINA kopyala. Geri yukleme icin ikisi de gerekir
+    # (DEPLOY-RUNBOOK: 'Yedegi + secret.json'i birlikte sakla') ve offsite kopya da
+    # onu tasisin. Kisitli ACL korunur (yalniz SYSTEM + Administrators).
+    $secretCopy = Join-Path $BackupPath "secret.json"
+    Copy-Item $SecretFile $secretCopy -Force -ErrorAction SilentlyContinue
+    if (Test-Path $secretCopy) {
+        icacls $secretCopy /inheritance:r /grant "SYSTEM:(F)" "Administrators:(F)" *> $null
+    }
+
     # Saklama (retention): zamanli gunluk yedek (tekserp_*) dosyalarindan en yeni
     # 14'u tutulur, eskiler silinir -> disk dolmaz. Migration oncesi yedekler
     # (premigrate_*) ve elle baska klasore alinanlar bu temizlige DAHIL DEGIL.
@@ -744,6 +825,41 @@ function Do-Backup {
     foreach ($f in $old) {
         Remove-Item $f.FullName -Force -ErrorAction SilentlyContinue
         Write-Step "Eski yedek silindi (saklama: $keep): $($f.Name)"
+    }
+
+    # Y-4: Offsite (makine disi) kopya. Tek disk arizasi / ransomware / yangin hem DB'yi
+    # hem yedekleri ayni anda yok etmesin diye ikinci bir ortama (NAS/UNC/harici disk)
+    # kopyalar. Hedef: -OffsitePath param'i veya backup-offsite.txt (gece gorevi param'siz
+    # calistigi icin kalici config dosyasi sart). Ayarli degilse ACIK uyari verir.
+    if ($OffsitePath) {
+        # Elle -OffsitePath verildi: sonraki (param'siz) gece yedekleri de kullansin.
+        Set-Content -Path $OffsiteConfigFile -Value $OffsitePath.Trim() -Encoding UTF8 -NoNewline
+    }
+    $offsite = if (Test-Path $OffsiteConfigFile) { (Get-Content $OffsiteConfigFile -Raw).Trim() } else { $null }
+    if ($offsite) {
+        Write-Step "Offsite kopya -> $offsite"
+        if (-not (Test-Path $offsite)) {
+            New-Item -ItemType Directory -Path $offsite -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        if (Test-Path $offsite) {
+            # robocopy yalniz yedek dosyalari + secret.json'i tasir; sadece yeni/degisen
+            # dosyayi kopyalar (mevcutlari atlar). /MIR YOK -> offsite'ta gecmis birikir
+            # (guvenli taraf); offsite saklama operatore birakilir.
+            & robocopy $BackupPath $offsite "tekserp_*.dump" "secret.json" /R:2 /W:5 /NFL /NDL /NJH /NJS /NP *> $null
+            $rc = $LASTEXITCODE   # robocopy: 0-7 basari, 8+ hata
+            if ($rc -ge 8) {
+                Write-Warn2 "Offsite kopya BASARISIZ (robocopy kod $rc) — hedefe erisilemiyor olabilir: $offsite"
+            } else {
+                Write-Ok "Offsite kopya tamam -> $offsite"
+            }
+        } else {
+            Write-Warn2 "Offsite hedefi olusturulamadi/erisilemiyor: $offsite"
+        }
+    } else {
+        Write-Warn2 "OFFSITE YEDEK AYARLANMADI — tum yedekler DB ile ayni diskte (felaket riski)."
+        Write-Warn2 "  Ikinci kopya icin sunlardan birini yapin:"
+        Write-Warn2 "    * '$OffsiteConfigFile' dosyasina hedef yol yazin (or. \\NAS\teksyedek veya E:\yedek)"
+        Write-Warn2 "    * veya bir kez:  manage.ps1 -Action backup -OffsitePath \\NAS\teksyedek"
     }
 }
 

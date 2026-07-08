@@ -113,10 +113,11 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **seed.ts'te olmal�
 ## Operasyonel Bakım
 
 - **`statement_timeout=50s`** aktif (uzun sorgu otomatik iptal; `pg_db_role_setting`'den 2026-06-12 doğrulandı). DB-level: `ALTER DATABASE <db> SET statement_timeout = '50s'` — migration ile değil, manuel uygulanır. DB adı ortama göre: dev=`adnansahin_db` (.env), Windows production=`TeksErpDb` (installer). Detay: ARCHITECTURE.md §10.1.
-- **Slow query log** (`>500ms`) PostgreSQL log dosyasına düşer.
-- **6 ayda bir** `POST /api/admin/system-logs/archive { "monthsToKeep": 6 }` — `archived=0` dönene kadar tekrar et.
+- **Slow query log** (`>500ms`) PostgreSQL log dosyasına düşer — **yalnız üretim kurulumunda** (`manage.ps1` conf `log_min_duration_statement=500`). Dev'de kapalı (`-1`); açmak istersen `ALTER DATABASE adnansahin_db SET log_min_duration_statement = 500` (D-16).
+- **SystemLog arşivi OTOMATİK** (`jobs/archive-scheduler.ts`, `server.ts`'te aktif — server start +60sn, 24 saatte bir kontrol, 30 günde bir 6 aydan eskiyi taşır). Manuel `POST /api/admin/system-logs/archive { "monthsToKeep": 6 }` yalnız acil disk baskısında (idempotent, `archived=0` dönene kadar). (B-11: eskiden manuel talimattı, artık otomasyon önde.)
 - **6 ayda bir** (arşivle birlikte) `POST /api/admin/sessions/purge { "olderThanDays": 90 }` — jti registry'nin ölü satırları temizlenir; aktif oturumlar matematiksel kapsam dışı.
-- **3 ayda bir** ARCHITECTURE.md §10.2 sağlık kontrol SQL'lerini çalıştır.
+- **3 ayda bir** ARCHITECTURE.md §10.2 sağlık kontrolü + **`psql <db> -f scripts/consistency-check.sql`** (D-9: shippedQty mutabakatı — DB seddi olmayan tek denormalize alan; drift olursa karşılanma/MRP sessizce yanlışlanır).
+- **Şema tip konvansiyonu (O-11):** yeni `DateTime` kolonları `@db.Timestamptz`; mevcutlara dokunma (rewrite maliyetli). Raw SQL bakım scriptlerinde `timestamp` kolonuyla karşılaştırırken `now() AT TIME ZONE 'UTC'` kullan (Europe/Istanbul'da 3 saat kayma tuzağı). Yeni UUID taşıyan kolon FK olmasa bile `@db.Uuid` (D-14).
 - **Bloat ölçülünce** (takvimle değil) `REINDEX INDEX CONCURRENTLY` — `scripts/index-health.sql` §8 (ölü-satır proxy) + §9 (pgstattuple kesin bloat) ile şişen indeksi tespit et, sadece onu reindex et. Tipik eşik: indeks boş-alan >%30 veya tablo ölü-satır >%20. Canlı/dolu DB'de CONCURRENTLY şart (yazma kilidi almaz).
 
 ## Yeni Endpoint Kontrol Listesi
