@@ -313,47 +313,63 @@ export class ShippingService {
     }
 
     // Tek aktif sevkiyat (F103): bir açık sipariş aynı anda yalnız bir
-    // PREPARING/READY/AT_DOOR sevkiyatta olabilir. alreadyIn kontrolü + create
-    // TEK tx'te; tx başında sipariş satırlarına yazma-kilidi konur → eşzamanlı iki
-    // createShipment serileşir, ikincisi birincinin shipmentOrder'ını taze görüp
-    // 409 alır (aksi halde TOCTOU: ikisi de kontrolü geçip çift-bağ yaratır).
-    // Kalıcı DB seddi (shipment_orders partial unique) DB oturumuna devredildi;
-    // o eklenince buradaki serileştirme kilidi kaldırılabilir.
-    const shipment = await withBarcodeRetry(() =>
-      prisma.$transaction(async (tx) => {
-        // Serileştirme kilidi: sipariş satırlarını artan-id sırada kilitle (deadlock-güvenli).
-        await tx.order.updateMany({
-          where: { id: { in: [...orderIds].sort() } },
-          data: { updatedAt: new Date() },
-        });
-        const alreadyIn = await tx.shipmentOrder.findFirst({
-          where: {
-            orderId: { in: orderIds },
-            shipment: { status: { in: [ShipmentStatus.PREPARING, ShipmentStatus.READY, ShipmentStatus.AT_DOOR] } },
-          },
-          select: { orderId: true, shipment: { select: { shipmentNo: true } } },
-        });
-        if (alreadyIn) {
-          const ordNo = orders.find((o) => o.id === alreadyIn.orderId)?.orderNumber ?? "";
-          throw AppError.conflict(
-            `Sipariş ${ordNo} zaten bir sevkiyatta (${alreadyIn.shipment.shipmentNo}) — onu sürdür.`
-          );
-        }
-        const shipmentNo = await nextShipmentNo();
-        return tx.shipment.create({
-          data: {
-            shipmentNo,
-            customerId,
-            branchId,
-            status: ShipmentStatus.PREPARING,
-            destination: data.destination ?? ShipmentDestination.DOMESTIC, // saha #19: yurtiçi default
-            procedureCode: data.procedureCode?.trim() || null, // saha #21
-            orders: { create: orderIds.map((orderId) => ({ orderId })) },
-          },
-          select: { id: true, shipmentNo: true, status: true, destination: true },
-        });
-      })
-    );
+    // PREPARING/READY/AT_DOOR sevkiyatta olabilir. Bunu DB seddi (partial unique
+    // shipment_orders_active_order_uq = orderId WHERE isActive) atomik zorluyor.
+    // alreadyIn = dostça hızlı ön-kontrol (net mesaj); yarış penceresinde ikinci
+    // istek partial unique'ten P2002 alır → aşağıda 409'a çevrilir. (Eski serileştirme
+    // kilidi kaldırıldı — DB seddi geldi.)
+    const ACTIVE_ORDER_UQ = "shipment_orders_active_order_uq";
+    const isActiveOrderConflict = (err: unknown): boolean =>
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002" &&
+      JSON.stringify(err.meta ?? "").includes(ACTIVE_ORDER_UQ);
+    let shipment;
+    try {
+      shipment = await withBarcodeRetry(
+        async () => {
+          const alreadyIn = await prisma.shipmentOrder.findFirst({
+            where: {
+              orderId: { in: orderIds },
+              shipment: { status: { in: [ShipmentStatus.PREPARING, ShipmentStatus.READY, ShipmentStatus.AT_DOOR] } },
+            },
+            select: { orderId: true, shipment: { select: { shipmentNo: true } } },
+          });
+          if (alreadyIn) {
+            const ordNo = orders.find((o) => o.id === alreadyIn.orderId)?.orderNumber ?? "";
+            throw AppError.conflict(
+              `Sipariş ${ordNo} zaten bir sevkiyatta (${alreadyIn.shipment.shipmentNo}) — onu sürdür.`
+            );
+          }
+          const shipmentNo = await nextShipmentNo();
+          return prisma.shipment.create({
+            data: {
+              shipmentNo,
+              customerId,
+              branchId,
+              status: ShipmentStatus.PREPARING,
+              destination: data.destination ?? ShipmentDestination.DOMESTIC, // saha #19: yurtiçi default
+              procedureCode: data.procedureCode?.trim() || null, // saha #21
+              orders: { create: orderIds.map((orderId) => ({ orderId })) },
+            },
+            select: { id: true, shipmentNo: true, status: true, destination: true },
+          });
+        },
+        undefined,
+        // F103: active-order partial unique P2002'yi RETRY ETME (koleksiyon kalıcı,
+        // retry boşa döner) → propagate olsun, aşağıda 409'a çevrilir. shipmentNo
+        // P2002 (yeni numara üretir) ise retry edilir — varsayılan davranış.
+        (err) => !isActiveOrderConflict(err),
+      );
+    } catch (err) {
+      // Yarış penceresi: alreadyIn geçti ama eşzamanlı bir create partial unique'i
+      // önce doldurdu → siparişlerden biri zaten aktif sevkiyatta.
+      if (isActiveOrderConflict(err)) {
+        throw AppError.conflict(
+          "Bu siparişlerden biri az önce başka bir sevkiyata eklendi — sayfayı yenileyip tekrar deneyin."
+        );
+      }
+      throw err;
+    }
 
     await AuditService.log({
       userId,
@@ -2634,6 +2650,13 @@ export class ShippingService {
       if (claim.count === 0) {
         throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
       }
+      // F103: sevkiyat artık aktif değil (DISPATCHED) → shipment_orders.isActive=false.
+      // Partial unique (orderId WHERE isActive) böylece o siparişe YENİ sevkiyat açmaya
+      // izin verir; bayat true kalırsa yanlışlıkla bloklardı.
+      await tx.shipmentOrder.updateMany({
+        where: { shipmentId },
+        data: { isActive: false },
+      });
       // İÇERİK TX İÇİNDE, claim SONRASI yeniden yüklenir (M-2): tahsis, SHIPPED
       // flip'i ve donan irsaliye HER ZAMAN taze kümeyle yazılır — eşzamanlı
       // removeRoll'un düşürdüğü top SHIPPED'a "diriltilemez", eşzamanlı scan'in
@@ -2803,6 +2826,12 @@ export class ShippingService {
       if (claim.count === 0) {
         throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
       }
+      // F103: sevkiyat artık aktif değil (CANCELLED) → shipment_orders.isActive=false,
+      // ki o siparişlere yeni sevkiyat açılabilsin (partial unique orderId WHERE isActive).
+      await tx.shipmentOrder.updateMany({
+        where: { shipmentId },
+        data: { isActive: false },
+      });
       // Tahsis varsa geri al — satır shippedQty düş + tahsis sil (legacy güvenliği)
       if (hadAllocations) {
         for (const a of shipment.allocations) {
