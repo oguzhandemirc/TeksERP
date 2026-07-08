@@ -2323,6 +2323,13 @@ model Shipment {
 model ShipmentOrder {
   shipmentId String @db.Uuid
   orderId    String @db.Uuid
+  // F103: shipment aktifliğinin DENORM bayrağı (shipment.status IN PREPARING/READY/AT_DOOR).
+  // Bakımı UYGULAMA katmanında: dispatch/cancel -> false, reopen/uncancel -> true.
+  // DB'de ayrıca ŞEMA-DIŞI partial unique var: shipment_orders_active_order_uq (orderId)
+  // WHERE isActive — "bir sipariş aynı anda tek aktif sevkiyatta" invariant seddi
+  // (roll_movements_one_open emsali; migration 20260708160000). Partial UNIQUE @@index'le
+  // eşleşmediğinden şemada karşılığı bilinçli YOK.
+  isActive   Boolean @default(true)
 
   // D-10: muhasebe defteri — shipment fiziksel silinirse allocation/order defteri
   // sessizce yok olup shippedQty'yi bozmasın. App shipment'ı hard-delete etmez.

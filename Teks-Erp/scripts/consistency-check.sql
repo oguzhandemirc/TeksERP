@@ -53,4 +53,12 @@ JOIN sacks s ON r."sackId" = s.id
 WHERE r."shipmentId" IS DISTINCT FROM s."shipmentId";
 
 \echo ''
+\echo '== 5) shipment_orders.isActive  vs  shipment.status  (F103 denorm drift) =='
+\echo '   (satır varsa: isActive bayrağı bakımı bir sevkiyat geçişinde atlanmış)'
+SELECT so."shipmentId", so."orderId", so."isActive" AS bayrak, s.status AS gercek_durum
+FROM shipment_orders so
+JOIN shipments s ON s.id = so."shipmentId"
+WHERE so."isActive" <> (s.status IN ('PREPARING', 'READY', 'AT_DOOR'));
+
+\echo ''
 \echo '== Tutarlılık kontrolü bitti. Yukarıda hiç satır YOKSA sistem sağlıklı. =='
