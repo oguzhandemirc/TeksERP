@@ -939,6 +939,15 @@ export class SystemSettingService {
         "Oturum (JWT token) ömrü, saat — giriş sonrası token kaç saat geçerli kalır",
         userId
       );
+      // F232: enforcement/UI dakika anahtarını okur (readSessionDurationMinutes
+      // önce dakikayı, yoksa saati baz alır). Saat güncellenince dakika kaynağı
+      // bayat kalmasın diye türetilmiş dakikayı da yaz.
+      await this.set(
+        SETTING_KEYS.AUTH_SESSION_DURATION_MINUTES,
+        Math.min(Math.floor(v) * 60, MAX_SESSION_DURATION_MINUTES),
+        "Oturum ömrü, dakika — saat ayarından türetildi",
+        userId
+      );
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "sessionDurationMinutes")) {

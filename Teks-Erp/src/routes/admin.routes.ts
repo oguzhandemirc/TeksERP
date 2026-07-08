@@ -8,7 +8,7 @@ import { requirePermission } from "../middlewares/rbac.middleware";
 import { AuditService } from "../services/audit.service";
 import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
-import { systemSettingService } from "../services/system-setting.service";
+import { systemSettingService, SETTING_KEYS } from "../services/system-setting.service";
 import { SystemLogService } from "../services/system-log.service";
 import { triggerManualBackup, listBackups, resolveBackupPath } from "../services/backup.service";
 import { latencySnapshot, resetLatencyStats } from "../services/latency-stats.service";
@@ -1026,6 +1026,15 @@ const settingUpsertSchema = z.object({
   description: z.string().max(500).optional(),
 });
 
+// F233: yapılandırılmış JSON tutan anahtarlar — kendi tipli ekranları var
+// (setFeatureFlags: travelerCardConfig/documentsConfig/loginMethods). Generic
+// PUT /settings/:key düz string yazarak bu JSON'ları bozmasın.
+const STRUCTURED_SETTING_KEYS = new Set<string>([
+  SETTING_KEYS.TRAVELER_CARD_CONFIG,
+  SETTING_KEYS.DOCUMENTS_CONFIG,
+  SETTING_KEYS.AUTH_LOGIN_METHODS,
+]);
+
 /**
  * @openapi
  * /api/admin/settings:
@@ -1081,9 +1090,15 @@ router.put(
   requirePermission("admin:settings"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const key = req.params.key as string;
+      if (STRUCTURED_SETTING_KEYS.has(key)) {
+        throw AppError.badRequest(
+          "Bu ayar yapılandırılmış JSON içerir — kendi tipli ekranından güncelleyin, düz metinle değiştirilemez",
+        );
+      }
       const { value, description } = settingUpsertSchema.parse(req.body);
       const result = await systemSettingService.set(
-        req.params.key as string,
+        key,
         value,
         description,
         req.user?.userId
@@ -1155,9 +1170,9 @@ router.get(
   // salt-admin:settings aktör 403 alır (mobil giriş sırlarını yedekten harvest edemez).
   requirePermission("admin:settings"),
   requirePermission("admin:users"),
-  (_req: Request, res: Response, next: NextFunction): void => {
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      res.status(200).json({ success: true, ...listBackups() });
+      res.status(200).json({ success: true, ...(await listBackups()) });
     } catch (error) {
       next(error);
     }
@@ -1186,14 +1201,23 @@ router.get(
   // F287: yedek düz-metin giriş sırları içerir → admin:settings + admin:users (AND).
   requirePermission("admin:settings"),
   requirePermission("admin:users"),
-  (req: Request, res: Response, next: NextFunction): void => {
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const abs = resolveBackupPath(req.params.name as string);
+      const name = req.params.name as string;
+      const abs = resolveBackupPath(name);
       if (!abs) {
         next(AppError.notFound("Yedek dosyası bulunamadı."));
         return;
       }
-      res.download(abs, req.params.name as string);
+      // F235: hassas DB dump'ının indirilmesini izle (kim/ne zaman) — BACKUP_TRIGGER
+      // ile aynı best-effort desen.
+      await AuditService.logEvent({
+        category: "SYSTEM",
+        action: "BACKUP_DOWNLOAD",
+        userId: req.user?.userId ?? null,
+        payload: { name },
+      });
+      res.download(abs, name);
     } catch (error) {
       next(error);
     }

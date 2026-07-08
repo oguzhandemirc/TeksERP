@@ -380,10 +380,26 @@ export class WorkSessionService {
     // kapat, active=null dön. lastPlace korunur → yer onayı aynı makineyi yeni
     // kullanıcı adına önerir/açar.
     if (activeMin && requestUserId && activeMin.userId !== requestUserId) {
-      await prisma.workSession.updateMany({
+      const reclaim = await prisma.workSession.updateMany({
         where: { id: activeMin.id, endedAt: null },
         data: { endedAt: new Date(), endReason: "NEW_LOGIN" as WorkSessionEndReason },
       });
+      // F285: başka kullanıcının oturumunu kapatan öz-onarım iz bırakmıyordu
+      // (closeForNewLogin loglar). Best-effort audit — koşullu (0 satır kapatılırsa
+      // eşzamanlı başka bir kapanış araya girmiştir, log atma).
+      if (reclaim.count > 0) {
+        await AuditService.log({
+          userId: requestUserId,
+          action: "UPDATE",
+          tableName: TABLE,
+          recordId: activeMin.id,
+          newData: {
+            endReason: "NEW_LOGIN",
+            reclaimedFromUserId: activeMin.userId,
+            byUserId: requestUserId,
+          },
+        }).catch(() => undefined);
+      }
       activeMin = null;
     }
     const active = activeMin

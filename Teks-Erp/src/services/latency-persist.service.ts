@@ -157,11 +157,13 @@ export async function flushLatencyNow(): Promise<void> {
     // Retention — günde en fazla 1 kez, flush'ın kuyruğunda (timer'sız).
     const todayKey = dayKey(day);
     if (lastRetentionDayKey !== todayKey) {
-      lastRetentionDayKey = todayKey;
       try {
         const cutoff = localDay();
         cutoff.setUTCDate(cutoff.getUTCDate() - RETENTION_DAYS);
         await prisma.endpointLatencyDaily.deleteMany({ where: { day: { lt: cutoff } } });
+        // F236: key'i başarıdan SONRA işaretle — geçici deleteMany hatası retention'ı
+        // bugün için sessizce atlatıp bekleyen satırların birikmesine yol açardı.
+        lastRetentionDayKey = todayKey;
       } catch (err) {
         flushFailures += 1;
         lastFlushError = err instanceof Error ? err.message : String(err);
