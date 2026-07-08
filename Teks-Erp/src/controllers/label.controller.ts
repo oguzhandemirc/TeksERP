@@ -48,6 +48,15 @@ const testNativeSchema = z.object({
   language: z.enum(["RASTER_HTML", "PPLA", "PPLB", "ZPL"]).optional(),
 });
 
+// F180: recordPrintEvent + seedRollLabelSnapshot gövdesi (eskiden ham `as` cast; malformed
+// UUID Prisma'da 500'e düşerdi). nullish → mobil {customerId:null} yükleri geçerli kalır.
+const printEventSchema = z.object({
+  orderLineId: z.string().uuid("Geçersiz sipariş kalemi ID").nullish(),
+  customerId: z.string().uuid("Geçersiz müşteri ID").nullish(),
+  stock: z.boolean().optional(),
+  peripheralId: z.string().uuid("Geçersiz cihaz ID").nullish(),
+});
+
 /**
  * Fiziksel medya çözümü girdisi: explicit ?peripheralId= (cihaz medyası) veya makine
  * bağlamı. machineId önceliği: AKTİF ÇALIŞMA OTURUMU (mobil baskı oturumun makinesinin
@@ -349,12 +358,7 @@ export class LabelController {
 
   recordPrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const body = (req.body ?? {}) as {
-        orderLineId?: string | null;
-        customerId?: string | null;
-        stock?: boolean;
-        peripheralId?: string | null;
-      };
+      const body = printEventSchema.parse(req.body ?? {});
       const result = await this.service.recordPrintEvent(
         req.params.id as string,
         req.user?.userId,
@@ -380,11 +384,7 @@ export class LabelController {
    */
   seedRollLabelSnapshot = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const body = (req.body ?? {}) as {
-        orderLineId?: string | null;
-        customerId?: string | null;
-        stock?: boolean;
-      };
+      const body = printEventSchema.parse(req.body ?? {});
       const result = await this.service.seedRollLabelSnapshot(
         req.params.id as string,
         req.user?.userId,

@@ -406,11 +406,18 @@ export class AuthService {
   > {
     // Emniyet tavanı: mobil login ekranının kullanıcı seçicisi — gerçekte onlarca
     // operatör. `take` ile sınırsız okumayı kapatıyoruz (pratikte hiç dolmaz).
+    // F55: getEffectivePermissions ile aynı geçerlilik penceresi — süresi geçmiş/henüz
+    // başlamamış mobil izin sahibi listede görünüp login olup 403 (boş izin) almasın.
+    const now = new Date();
     return prisma.user.findMany({
       where: {
         isActive: true,
         permissions: {
           some: {
+            AND: [
+              { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+              { OR: [{ validUntil: null }, { validUntil: { gte: now } }] },
+            ],
             permission: { code: { startsWith: "mobile:" } },
           },
         },

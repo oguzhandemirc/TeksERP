@@ -213,6 +213,12 @@ export class KartelaService {
     // Soft-delete guard: pasife alınmış firmaya yeni kartela sevki açılamaz.
     if (!subcontractor.isActive) throw AppError.badRequest("Kartela firması pasif durumda");
 
+    // F172: mükerrer top kimliği guard'ı (receive() ile simetri) — { in } dedup ettiğinden
+    // aksi halde N istenen ama 1 top bulunup sessizce/parite hatasıyla ilerlerdi.
+    if (new Set(data.rollIds).size !== data.rollIds.length) {
+      throw AppError.badRequest("Aynı top birden fazla kez girilemez");
+    }
+
     const rolls = await prisma.roll.findMany({
       where: { id: { in: data.rollIds } },
       include: {
@@ -974,8 +980,11 @@ export class KartelaService {
     const where: Prisma.KartelaReceiptWhereInput = {};
     if (params?.subcontractorId) where.subcontractorId = params.subcontractorId;
     const status = params?.status ?? "active";
-    if (status === "active") where.cancelledAt = null;
-    else if (status === "cancelled") where.cancelledAt = { not: null };
+    // F171: controller open/received durumlarını da geçiriyor; bunlar 'active' gibi
+    // cancelledAt=null süzülmeli (aksi halde iptaller de listeye sızıyordu). Yalnız
+    // 'cancelled' ve 'all' özel; geri kalan tümü aktif filtresine düşer.
+    if (status === "cancelled") where.cancelledAt = { not: null };
+    else if (status !== "all") where.cancelledAt = null;
     if (params?.dateFrom || params?.dateTo) {
       where.receivedAt = {
         ...(params?.dateFrom ? { gte: params.dateFrom } : {}),

@@ -560,6 +560,12 @@ export class KursunQcService {
         rollId: err.rollId,
         startMeter: err.startMeter,
         errorType: err.errorType,
+        // F163: fiziksel DELETE geri-alınamaz → tüm alanları denetime al (yeniden kurmak için).
+        defectTypeId: err.defectTypeId,
+        detectedAtStepId: err.detectedAtStepId,
+        detectedByUserId: err.detectedByUserId,
+        detectedAt: err.detectedAt,
+        isProcessed: err.isProcessed,
       },
     });
 

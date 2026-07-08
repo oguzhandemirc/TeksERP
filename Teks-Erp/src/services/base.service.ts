@@ -429,6 +429,12 @@ export class BaseService {
    * Model dmmf'te bulunamazsa süzme yapılmaz (geri uyum — safeSortBy ile aynı).
    */
   protected sanitizeWriteData(data: Record<string, unknown>): Record<string, unknown> {
+    // F44: Express 5'te Content-Type application/json değilse req.body undefined
+    // kalır; Object.entries(undefined) → TypeError → 500 + audit gürültüsü.
+    // İstemci hatası 5xx'e düşmesin diye erken net 400 ver.
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw AppError.badRequest("Geçersiz istek gövdesi");
+    }
     const allowed = sortableFieldsFor(this.config.modelName);
     if (!allowed) return data;
     const out: Record<string, unknown> = {};
