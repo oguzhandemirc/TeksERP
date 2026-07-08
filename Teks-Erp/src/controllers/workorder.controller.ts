@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { WorkOrderService } from "../services/workorder.service";
+import { foldTypeSchema } from "../services/helpers/fold-type";
 import "../types/express-augment";
 
 // Create + quick-start ortak alan şeması. refine'siz tutuluyor ki spread ile
@@ -22,7 +23,7 @@ const workOrderCoreShape = {
   targetItemId:      z.string().uuid().optional().nullable(),
   targetColorId:     z.string().uuid().optional().nullable(),
   // Tambur planlama bilgisi — operatör override edebilir.
-  foldType:          z.string().trim().max(32).optional().nullable(),
+  foldType:          foldTypeSchema,
   steps: z
     .array(z.object({
       stationId:              z.string().uuid("Geçersiz istasyon ID"),
@@ -114,7 +115,7 @@ const updateWorkOrderSchema = z.object({
   plannedEndDate: z.string().nullable().optional(),
   targetItemId: z.string().uuid().nullable().optional(),
   targetColorId: z.string().uuid().nullable().optional(),
-  foldType: z.string().trim().max(32).nullable().optional(),
+  foldType: foldTypeSchema,
 });
 
 /**
@@ -133,7 +134,7 @@ const replaceWorkOrderSchema = z.object({
   routeTemplateId:   z.string().uuid().optional().nullable(),
   targetItemId:      z.string().uuid().optional().nullable(),
   targetColorId:     z.string().uuid().optional().nullable(),
-  foldType:          z.string().trim().max(32).optional().nullable(),
+  foldType:          foldTypeSchema,
   steps: z
     .array(z.object({
       // smart-merge için: mevcut step'i güncellemek istersen id gönder.
