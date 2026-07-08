@@ -219,11 +219,18 @@ export class KartelaService {
       throw AppError.badRequest("Aynı top birden fazla kez girilemez");
     }
 
+    // F176: yalnız kullanılan alanlar — item/color include'u hiç okunmuyordu
+    // (validasyon + item create sadece id/barcode/status/shipmentId/currentQty/weightKg
+    // kullanıyor; yanıt `result`, bu `rolls` değil).
     const rolls = await prisma.roll.findMany({
       where: { id: { in: data.rollIds } },
-      include: {
-        item: { select: { code: true, name: true } },
-        color: { select: { code: true, name: true } },
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        shipmentId: true,
+        currentQty: true,
+        weightKg: true,
       },
     });
     if (rolls.length !== data.rollIds.length) {
@@ -541,19 +548,31 @@ export class KartelaService {
           consumedRollId: { in: rollIds },
           receipt: { cancelledAt: null },
         },
-        select: { receiptId: true, receipt: { select: { receiptNo: true } } },
+        select: { receiptId: true },
       });
       const receiptIds = new Set(existingItems.map((i) => i.receiptId));
       if (receiptIds.size === 1) {
-        const rec = await prisma.kartelaReceipt.findUnique({
-          where: { id: [...receiptIds][0] },
-        });
-        if (rec) {
-          return {
-            success: true,
-            data: rec,
-            message: `Kartela kabulü zaten yapılmış (idempotent): ${rec.receiptNo}`,
-          };
+        const receiptId = [...receiptIds][0];
+        const rec = await prisma.kartelaReceipt.findUnique({ where: { id: receiptId } });
+        // F173: idempotent replay YALNIZ tam eşleşmede — aynı firma + birebir aynı
+        // top kümesi. Aksi halde (farklı firma, kısmi ya da fazladan top) gerçek
+        // çakışmadır → aşağıdaki 409 ile net reddet, sessizce "kaydedildi" gösterme.
+        if (rec && rec.subcontractorId === data.subcontractorId) {
+          const receiptRolls = await prisma.kartelaReceiptItem.findMany({
+            where: { receiptId },
+            select: { consumedRollId: true },
+          });
+          const incoming = new Set(rollIds);
+          const sameRolls =
+            receiptRolls.length === incoming.size &&
+            receiptRolls.every((r) => incoming.has(r.consumedRollId));
+          if (sameRolls) {
+            return {
+              success: true,
+              data: rec,
+              message: `Kartela kabulü zaten yapılmış (idempotent): ${rec.receiptNo}`,
+            };
+          }
         }
       }
       throw AppError.conflict("Bu toplar zaten kartela olarak kabul edilmiş.");

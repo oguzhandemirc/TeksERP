@@ -12,7 +12,7 @@
 //   Auth/Zod : login başarılı(200+token) · yanlış şifre(401) · eksik alan(400 Zod)
 //   verifyToken : token yok(401) · bozuk token(401) · geçerli(200)
 //   RBAC : yetkisiz kullanıcı requirePermission(403) + requireAnyPermission(403)
-//   Yazma + error-mapping : create(201) · aktif duplicate(400 badRequest)
+//   Yazma + error-mapping : create(201) · aktif duplicate(409 conflict)
 // =============================================================================
 import type { Server } from "http";
 import type { AddressInfo } from "net";
@@ -157,13 +157,13 @@ async function main() {
     createdCustomerId = (createdData.id as string) ?? null;
     check("201 gövdesi success:true + id", created.body.success === true && typeof createdData.id === "string");
 
-    // ---- 9) error-mapping: aynı aktif kod tekrar → 400 (BaseService uniqueField guard) ----
+    // ---- 9) error-mapping: aynı aktif kod tekrar → 409 (BaseService uniqueField guard, F43) ----
     const dup = await call("POST", "/api/customers", {
       token: adminToken,
       body: { code, name: "TEST HTTP Müşteri 2" },
     });
-    check("aktif duplicate kod → 400 (badRequest mapping)", dup.status === 400, `status=${dup.status}`);
-    check("400 gövdesi success:false", dup.body.success === false, String(dup.body.message ?? ""));
+    check("aktif duplicate kod → 409 (conflict mapping)", dup.status === 409, `status=${dup.status}`);
+    check("409 gövdesi success:false", dup.body.success === false, String(dup.body.message ?? ""));
 
     // ---- 10) F264 — RBAC MATRİS: veri-güdümlü guard (token yok→401, yetkisiz→403) ----
     // Salt-okunur koleksiyon GET'leri (path-param yok → uuid-param middleware karışmaz).

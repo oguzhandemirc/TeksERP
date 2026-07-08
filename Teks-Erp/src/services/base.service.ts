@@ -471,7 +471,9 @@ export class BaseService {
 
         if (existing) {
           if (existing.isActive === true) {
-            throw AppError.badRequest(
+            // F43: aktif duplicate = 409 Conflict — her route'un Swagger'ı '409 Kod
+            // zaten mevcut' belgeliyordu; kod 400 dönüyordu (contract sapması).
+            throw AppError.conflict(
               `Bu ${key} ile aktif kayıt zaten var`,
             );
           }

@@ -665,8 +665,19 @@ export class OrderService extends BaseService {
       const page = hasMore ? rows.slice(0, limit) : rows;
       const last = page[page.length - 1] as Record<string, unknown> | undefined;
       const nextCursor = hasMore ? buildNextDynamicCursor(last, "createdAt") : null;
+      // F152: cursor mod da withInProduction'ı hesaplasın (eskiden 0 hardcode idi).
+      // Yalnız itemId sabitlendiğinde anlamlı (spec-havuz item bazlı); broad modda atlanır.
+      let inProdBySpec: Map<string, Prisma.Decimal> | null = null;
+      if (params.withInProduction && params.itemId) {
+        inProdBySpec = await this.computeInProdBySpec(params.itemId);
+      }
       const data = page.map((l) => {
         const openQty = new Prisma.Decimal(l.quantity).minus(l.shippedQty);
+        const inProduction =
+          inProdBySpec?.get(
+            `${l.itemId}|${l.colorId ?? ""}|${l.width == null ? "" : new Prisma.Decimal(l.width).toString()}`,
+          ) ?? new Prisma.Decimal(0);
+        const netOpenQty = Prisma.Decimal.max(0, openQty.minus(inProduction));
         return {
           lineId: l.id,
           itemId: l.itemId,
@@ -686,8 +697,8 @@ export class OrderService extends BaseService {
           width: l.width,
           quantity: l.quantity,
           openQty,
-          inProduction: new Prisma.Decimal(0),
-          netOpenQty: openQty,
+          inProduction,
+          netOpenQty,
         };
       });
       return {
@@ -744,35 +755,9 @@ export class OrderService extends BaseService {
       width: Prisma.Decimal | number | null,
     ): string =>
       `${itemId}|${colorId ?? ""}|${width == null ? "" : new Prisma.Decimal(width).toString()}`;
+    // F152: üretimdeki hesabı computeInProdBySpec'e çıkarıldı (cursor mod da kullanır).
     let inProdBySpec: Map<string, Prisma.Decimal> | null = null;
-    if (params.withInProduction) {
-      const liveWos = await prisma.workOrder.findMany({
-        where: {
-          status: {
-            in: [
-              WorkOrderStatus.PLANNED,
-              WorkOrderStatus.IN_PROGRESS,
-              WorkOrderStatus.PAUSED,
-            ],
-          },
-          isActive: true,
-          targetItemId: itemId,
-        },
-        select: { id: true, targetColorId: true, width: true },
-      });
-      const woMat = await computeWoMaterial(prisma, liveWos.map((w) => w.id));
-      inProdBySpec = new Map<string, Prisma.Decimal>();
-      for (const w of liveWos) {
-        const mat = woMat.get(w.id);
-        const inFlight = Prisma.Decimal.max(
-          0,
-          (mat?.committed ?? new Prisma.Decimal(0)).minus(mat?.finished ?? 0),
-        );
-        if (inFlight.lessThanOrEqualTo(0)) continue;
-        const key = specKey(w.targetColorId, w.width);
-        inProdBySpec.set(key, (inProdBySpec.get(key) ?? new Prisma.Decimal(0)).plus(inFlight));
-      }
-    }
+    if (params.withInProduction) inProdBySpec = await this.computeInProdBySpec(itemId);
 
     const data = lines
       .map((l) => {
@@ -810,6 +795,43 @@ export class OrderService extends BaseService {
       .filter((l) => l.openQty.greaterThan(0));
 
     return { success: true, data };
+  }
+
+  /**
+   * F152: bir item'ın canlı WO'larından spec-havuz (item|renk|en) başına üretimdeki
+   * (in-flight = committed − finished) miktarı. findAvailableOrderLines'ın hem cursor
+   * hem legacy modu paylaşır. Anahtar formatı: `${itemId}|${colorId}|${width}`.
+   */
+  private async computeInProdBySpec(
+    itemId: string,
+  ): Promise<Map<string, Prisma.Decimal>> {
+    const liveWos = await prisma.workOrder.findMany({
+      where: {
+        status: {
+          in: [
+            WorkOrderStatus.PLANNED,
+            WorkOrderStatus.IN_PROGRESS,
+            WorkOrderStatus.PAUSED,
+          ],
+        },
+        isActive: true,
+        targetItemId: itemId,
+      },
+      select: { id: true, targetColorId: true, width: true },
+    });
+    const woMat = await computeWoMaterial(prisma, liveWos.map((w) => w.id));
+    const map = new Map<string, Prisma.Decimal>();
+    for (const w of liveWos) {
+      const mat = woMat.get(w.id);
+      const inFlight = Prisma.Decimal.max(
+        0,
+        (mat?.committed ?? new Prisma.Decimal(0)).minus(mat?.finished ?? 0),
+      );
+      if (inFlight.lessThanOrEqualTo(0)) continue;
+      const key = `${itemId}|${w.targetColorId ?? ""}|${w.width == null ? "" : new Prisma.Decimal(w.width).toString()}`;
+      map.set(key, (map.get(key) ?? new Prisma.Decimal(0)).plus(inFlight));
+    }
+    return map;
   }
 
   /**

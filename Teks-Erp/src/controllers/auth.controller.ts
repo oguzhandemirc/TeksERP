@@ -406,16 +406,12 @@ export class AuthController {
    * /api/auth/logout:
    *   post:
    *     tags: [Auth]
-   *     summary: Çıkış (stateless — frontend token'ı silmeli)
+   *     summary: Çıkış (jti registry ile anlık iptal)
    *     description: |
-   *       Stateless logout: backend tarafında bir state tutulmaz çünkü JWT
-   *       self-contained ve revoke edilmez. Frontend bu endpoint'i çağırdıktan
-   *       sonra token'ı local storage'dan silmeli. Audit log için kullanıcı
-   *       çıkış event'i yazılır.
-   *
-   *       Çalınan/sızan token'ı erken iptal etme ihtiyacı doğarsa blacklist
-   *       (in-memory ya da DB) veya refresh-token mimarisi gerek. Şu an Phase 1
-   *       kapsamında değil.
+   *       Bu oturumun jti'si SessionRegistry'de iptal edilir → token silinmese
+   *       bile bir SONRAKI istek 401 alır (anlık revoke, best-effort: iptal yazımı
+   *       düşse de logout başarılı döner). Frontend yine de token'ı local
+   *       storage'dan temizlemeli. Audit log için kullanıcı çıkış event'i yazılır.
    *     security: [{ bearerAuth: [] }]
    *     responses:
    *       200: { description: Çıkış kaydedildi }
