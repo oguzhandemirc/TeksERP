@@ -91,8 +91,13 @@ app.use(cors({ exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Cou
 // gzip + brotli yoksa sıkıştır — JSON listelerde 60-80% boyut tasarrufu.
 // 1KB altı response'lar atlanır (overhead'e değmez).
 app.use(compression({ threshold: 1024 }));
-app.use(express.json());
-app.use(morgan("dev"));
+// F16: 1MB limit — toplu uçlar (yüzlerce rollId) 100kb default'u aşınca generic
+// 500/İngilizce 'entity.too.large' yerine error.middleware net 413 Türkçe döner.
+app.use(express.json({ limit: "1mb" }));
+// F17: production'da 'combined' (tarih/IP/UA — NSSM dosya log'una ANSI'siz),
+// dev'de renkli kısa 'dev'.
+const isProd = (process.env.APP_ENV ?? process.env.NODE_ENV) === "production";
+app.use(morgan(isProd ? "combined" : "dev"));
 
 // Per-endpoint gecikme istatistiği (istek başına O(1)) — morgan'dan sonra,
 // resolveDevice'tan ÖNCE: statik/health/swagger dahil her şey ölçülür. Canlı

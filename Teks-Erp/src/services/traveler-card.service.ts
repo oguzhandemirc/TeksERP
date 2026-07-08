@@ -104,7 +104,13 @@ export class TravelerCardService {
    * sessizce 1'e dönüp duplicate üretmek yerine bir sonraki geçerli kayda
    * geçer. Hiçbiri parse edilemezse net hata fırlatır — admin müdahale eder.
    */
-  private async nextMonthlySequence(date: Date): Promise<number> {
+  private async nextMonthlySequence(
+    date: Date,
+    // F270: tx içinden çağrıldığında tx snapshot'ından oku — global prisma ile
+    // okumak withBarcodeRetry+$transaction closure'ında retry'lar arası tutarsız
+    // sequence görebilirdi.
+    client: Prisma.TransactionClient = prisma,
+  ): Promise<number> {
     const yy = String(date.getFullYear()).slice(2);
     const mm = String(date.getMonth() + 1).padStart(2, "0");
     const prefix = `RK${yy}${mm}`; // ayraçsız barkod: RKYYMM ile başlar
@@ -112,7 +118,7 @@ export class TravelerCardService {
     // O-21: gte (index seek) + startsWith (tam-prefix, collation-bağımsız) ile aydaki
     // TÜM kartları çek; orderBy desc + take 10 glibc collation'ında gerçek max'ı ilk 10
     // dışında bırakıp DUPLICATE üretebiliyordu. Sayısal max'ı Crockford decode ile bul.
-    const candidates = await prisma.travelerCard.findMany({
+    const candidates = await client.travelerCard.findMany({
       where: { barcode: { gte: prefix, startsWith: prefix } },
       select: { barcode: true },
     });
@@ -173,7 +179,7 @@ export class TravelerCardService {
     if (existing) return { card: existing, created: false };
 
     const now = new Date();
-    const seq = await this.nextMonthlySequence(now);
+    const seq = await this.nextMonthlySequence(now, tx);
     const cardNumber = buildCardNumber(now, seq);
     const barcode = buildBarcode(now, seq);
     const snapshot = await this.buildSnapshot(tx, workOrderId);
@@ -308,7 +314,7 @@ export class TravelerCardService {
         // Not: createCardInternal kendi küçük transaction'ı var; burada dış
         // transaction'a katılması için tx'i direkt geçiremeyiz. Basit çözüm:
         // kart oluşturma işini burada inline yapalım.
-        const seq = await this.nextMonthlySequence(new Date());
+        const seq = await this.nextMonthlySequence(new Date(), tx);
         const now = new Date();
         const cardNumber = buildCardNumber(now, seq);
         const barcode = buildBarcode(now, seq);

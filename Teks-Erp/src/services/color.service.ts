@@ -265,6 +265,9 @@ export class ColorService extends BaseService {
       }
       if (toCreate.length > 0) {
         await tx.customerColorAlias.createMany({
+          // F271: existing-set tx-DIŞI okunuyor; iki eşzamanlı renk-formu kaydı
+          // aynı (colorId,customerId) satırını eklerse 500 yerine sessiz merge.
+          skipDuplicates: true,
           data: toCreate.map((customerId) => ({
             customerId,
             colorId,

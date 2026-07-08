@@ -119,6 +119,16 @@ export const errorHandler = (
     return;
   }
 
+  // F16: express.json({ limit: "1mb" }) aşıldığında body-parser 'entity.too.large'
+  // fırlatır — generic 500 yerine net 413 Türkçe.
+  if ((err as { type?: string }).type === "entity.too.large") {
+    res.status(413).json({
+      success: false,
+      message: "İstek gövdesi çok büyük (1MB sınırı aşıldı). Daha az kayıtla tekrar deneyin.",
+    });
+    return;
+  }
+
   // Prisma known request errors
   // F25: instanceof (bundler-güvenli) + constructor.name (fallback).
   if (err instanceof Prisma.PrismaClientKnownRequestError || err.constructor.name === "PrismaClientKnownRequestError") {
