@@ -275,7 +275,7 @@ router.post("/finalize", verifyToken, requireAnyPermission("quality:write", "mob
  *       Refakat kartı barkoduyla Tambur step'ini çözer ve operatör ekranı için
  *       tek atışta tüm veriyi döner:
  *       - WO bilgisi
- *       - WO'ya bağlı orderlar + her sipariş satırı için orderedQty/shippedQty
+ *       - WO'ya bağlı orderlar + her sipariş satırı için orderedQty
  *       - Tambur step'inde bekleyen açık kumaş Roll'lar (LIFO — en son giren en üstte)
  *       - Her açık kumaşın RollError listesi (Kurşun/KK2'de tespit edilen hatalar)
  *     security: [{ bearerAuth: [] }]

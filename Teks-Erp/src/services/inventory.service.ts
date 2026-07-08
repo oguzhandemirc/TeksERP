@@ -97,6 +97,7 @@ import {
   ensureWorkOrderInProgress,
   openMovementForNextStep,
   recomputeStepStatus,
+  completeWorkOrderIfStepsDone,
 } from "./helpers/roll-step.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
@@ -3032,6 +3033,10 @@ export class InventoryService {
     let raceLost = false;
     try {
     await prisma.$transaction(async (tx) => {
+      // F162: O-2 write-skew guard (finishStep paritesi) — son-adım WO oto-tamamlama
+      // sayımını eşzamanlı fason receive/cancel/finalize ile serileştir.
+      await touchWorkOrderTx(tx, woId);
+
       // 1) Roll metraj güncelle
       await tx.roll.update({
         where: { id: rollId },
@@ -3137,6 +3142,11 @@ export class InventoryService {
 
       await recomputeStepStatus(tx, stepId);
       await ensureWorkOrderInProgress(tx, woId);
+      // F162: rota PROCESS_QC ile bitiyorsa (nextStep yok) ve tüm adımlar bittiyse
+      // WO + refakat kartı COMPLETED'a çekilir — 'sonsuza-dek IN_PROGRESS' bug'ı kapanır.
+      if (!nextStep) {
+        await completeWorkOrderIfStepsDone(tx, woId);
+      }
     });
     } catch (e) {
       if (raceLost) {

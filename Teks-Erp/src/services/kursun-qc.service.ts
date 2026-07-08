@@ -15,6 +15,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { randomUUID } from "crypto";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -638,7 +639,9 @@ export class KursunQcService {
     );
 
     // Lazily import helper to avoid circular (roll-step.helper → prisma)
-    const { recomputeStepStatus } = await import("./helpers/roll-step.helper");
+    const { recomputeStepStatus, completeWorkOrderIfStepsDone } = await import(
+      "./helpers/roll-step.helper"
+    );
 
     const result = await prisma.$transaction(async (tx) => {
       // 0) O-2 write-skew guard: WO satırını tx başında write-kilitle → son-adım
@@ -661,6 +664,11 @@ export class KursunQcService {
       //    arasında adıma yeni giren top (fason kabul / önceki adım FINISH)
       //    QC2_COMPLETED'sız süpürülüp Tambur'a ilerlerdi. Yeni gelen top açık
       //    kalır; recomputeStepStatus adımı ACTIVE tutar.
+      // F161: kapanış marker'ına TUR kimliği (uygulamada üretilen tek uuid — PARAMETRE
+      // bağlı). gen_random_uuid() VOLATILE olup çok-satırlı UPDATE'te SATIR-BAŞINA
+      // farklı değer üretirdi; app-marker tüm satırlara AYNI turu damgalar → reopen
+      // yalnız SON turu geri çeker (fason çoklu-sevk: batch1 A,B ile batch2 C,D karışmaz).
+      const finishMarker = `QC2_STEP_FINISHED:${randomUUID()}`;
       const closed = await tx.$queryRaw<
         Array<{ rollId: string; qtyIn: Prisma.Decimal; weightIn: Prisma.Decimal | null }>
       >`
@@ -668,7 +676,7 @@ export class KursunQcService {
         SET "qtyOut" = "qtyIn",
             "weightOut" = "weightIn",
             "exitedAt" = NOW(),
-            "notes" = 'QC2_STEP_FINISHED'
+            "notes" = ${finishMarker}
         WHERE "workOrderStepId" = ${step.id}::uuid
           AND "exitedAt" IS NULL
           AND "rollId" = ANY(${rollIds}::uuid[])
@@ -702,12 +710,11 @@ export class KursunQcService {
         // 4a) Step durumlarını birer kez recompute et (per-roll değil).
         await recomputeStepStatus(tx, nextStep.id);
       } else {
-        // 2b) Son adımdıysa toplar PRODUCED'a düşer + WO/refakat kartı
-        // tamamlama kontrolü koşar (M-27 — production.handleStepFinish ve
-        // inventory.kursunFinish kardeş yollarıyla aynı semantik). Eskiden
-        // yalnız pointer temizleniyordu: toplar IN_PRODUCTION limbosunda
-        // kalıyor, WO sonsuza dek IN_PROGRESS görünüyordu (rota tanımı
-        // PROCESS_QC ile bitebiliyor — son-adım kuralı yok).
+        // 2b) Son adımdıysa toplar PRODUCED'a düşer + WO/refakat kartı tamamlama
+        // kontrolü koşar (F162 — inventory.kursunFinish kardeş yoluyla ORTAK
+        // completeWorkOrderIfStepsDone yardımcısı; aynı semantik). Eskiden yalnız
+        // pointer temizleniyordu: toplar IN_PRODUCTION limbosunda kalıyor, WO
+        // sonsuza dek IN_PROGRESS görünüyordu (rota PROCESS_QC ile bitebiliyor).
         await tx.roll.updateMany({
           where: { id: { in: closedRollIds } },
           data: { currentStepId: null, status: RollStatus.PRODUCED },
@@ -717,22 +724,8 @@ export class KursunQcService {
       await recomputeStepStatus(tx, step.id);
 
       if (!nextStep) {
-        const remainingSteps = await tx.workOrderStep.count({
-          where: {
-            workOrderId: step.workOrderId,
-            status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
-          },
-        });
-        if (remainingSteps === 0) {
-          await tx.workOrder.update({
-            where: { id: step.workOrderId },
-            data: { status: WorkOrderStatus.COMPLETED },
-          });
-          await tx.travelerCard.updateMany({
-            where: { workOrderId: step.workOrderId, status: "ACTIVE" },
-            data: { status: "COMPLETED" },
-          });
-        }
+        // F162: kursunFinish ile ORTAK yardımcı (drift önlenir; davranış birebir).
+        await completeWorkOrderIfStepsDone(tx, step.workOrderId);
       }
 
       return { moved: closed.length };
@@ -755,6 +748,50 @@ export class KursunQcService {
       data: { movedRollCount: result.moved },
       message: `Adım kapatıldı, ${result.moved} top bir sonraki istasyona taşındı`,
     };
+  }
+
+  /**
+   * F161: Bir PROCESS_QC adımının EN SON finish turunun kapalı movement'lerini yükler.
+   * Kapanış marker'ı (QC2_STEP_FINISHED:<uuid>) tur başına benzersizdir; exitedAt DESC
+   * ile en son turun bir satırını bulup o turun marker'ıyla filtreleriz → farklı turlar
+   * (fason çoklu-sevk) karışmaz. Eski suffix'siz 'QC2_STEP_FINISHED' satırları da
+   * startsWith ile yakalanır (reseed öncesi test verisi).
+   */
+  private async loadLatestFinishTurn(stepId: string): Promise<{
+    closed: Array<{
+      id: string;
+      rollId: string;
+      notes: string | null;
+      roll: {
+        id: string;
+        status: RollStatus;
+        currentStepId: string | null;
+        barcode: string | null;
+        currentQty: Prisma.Decimal;
+      };
+    }>;
+    latestMarker: string | null;
+  }> {
+    const finishMoves = await prisma.rollMovement.findMany({
+      where: {
+        workOrderStepId: stepId,
+        exitedAt: { not: null },
+        notes: { startsWith: "QC2_STEP_FINISHED" },
+      },
+      orderBy: { exitedAt: "desc" },
+      select: {
+        id: true,
+        rollId: true,
+        notes: true,
+        roll: {
+          select: { id: true, status: true, currentStepId: true, barcode: true, currentQty: true },
+        },
+      },
+    });
+    if (finishMoves.length === 0) return { closed: [], latestMarker: null };
+    const latestMarker = finishMoves[0].notes;
+    const closed = finishMoves.filter((m) => m.notes === latestMarker);
+    return { closed, latestMarker };
   }
 
   // ---------------------------------------------------------------------------
@@ -803,23 +840,9 @@ export class KursunQcService {
       (s) => s.stepSequence > step.stepSequence
     );
 
-    // finishStep notes='QC2_STEP_FINISHED' ile bu step'in açık hareketlerini kapatmıştı.
-    // Bu sayede aynı step'in eski tarihli (önceki finishStep'lerden gelmiş) kapalı
-    // hareketleri ile yenisini ayırt edebiliyoruz.
-    const closedMovements = await prisma.rollMovement.findMany({
-      where: {
-        workOrderStepId: step.id,
-        exitedAt: { not: null },
-        notes: "QC2_STEP_FINISHED",
-      },
-      select: {
-        id: true,
-        rollId: true,
-        roll: {
-          select: { id: true, status: true, currentStepId: true, barcode: true },
-        },
-      },
-    });
+    // F161: yalnız EN SON finish turunu geri aç (aynı step birden çok turda kapatıldıysa
+    // — fason çoklu-sevk — eski turun rulolarını yanlış geri çekme/eski turu bloklama).
+    const { closed: closedMovements } = await this.loadLatestFinishTurn(step.id);
 
     if (closedMovements.length === 0) {
       throw AppError.badRequest(
@@ -848,6 +871,10 @@ export class KursunQcService {
     const movementIds = closedMovements.map((m) => m.id);
 
     await prisma.$transaction(async (tx) => {
+      // F159: O-2 write-skew guard (finishStep paritesi) — son-adım WO/kart geri
+      // alma ile eşzamanlı finish/finalize'ı serileştir.
+      await touchWorkOrderTx(tx, step.workOrderId);
+
       if (nextStep) {
         // Sonraki adımda finishStep'in oluşturduğu açık movement'leri sil
         await tx.rollMovement.deleteMany({
@@ -876,6 +903,28 @@ export class KursunQcService {
             "Toplardan biri bu sırada ilerledi/değişti (örn. Tambur'da işlendi). Listeyi yenileyip tekrar deneyin."
           );
         }
+      } else {
+        // F159: SON adım (nextStep yok) — finishStep 'PRODUCED + currentStepId=null'
+        // yapmıştı. Bunun TERSİ: topları IN_PRODUCTION'a ve bu adıma geri çek (atomik
+        // claim: biri sevk/tüketim ile PRODUCED'dan çıktıysa count uyuşmaz → 409).
+        const pulledBack = await tx.roll.updateMany({
+          where: { id: { in: rollIds }, status: RollStatus.PRODUCED, currentStepId: null },
+          data: { status: RollStatus.IN_PRODUCTION, currentStepId: step.id },
+        });
+        if (pulledBack.count !== rollIds.length) {
+          throw AppError.conflict(
+            "Toplardan biri artık üretim dışı (sevk/tüketim) — yeniden açılamaz. Listeyi yenileyin."
+          );
+        }
+        // finishStep son-adım dalı WO/kartı COMPLETED yapmış olabilir → geri al.
+        await tx.workOrder.updateMany({
+          where: { id: step.workOrderId, status: WorkOrderStatus.COMPLETED },
+          data: { status: WorkOrderStatus.IN_PROGRESS },
+        });
+        await tx.travelerCard.updateMany({
+          where: { workOrderId: step.workOrderId, status: "COMPLETED" },
+          data: { status: "ACTIVE" },
+        });
       }
 
       // Bu step'in kapatılmış movement'lerini geri aç
@@ -961,25 +1010,8 @@ export class KursunQcService {
       (s) => s.stepSequence > step.stepSequence
     );
 
-    const closedMovements = await prisma.rollMovement.findMany({
-      where: {
-        workOrderStepId: step.id,
-        exitedAt: { not: null },
-        notes: "QC2_STEP_FINISHED",
-      },
-      select: {
-        rollId: true,
-        roll: {
-          select: {
-            id: true,
-            status: true,
-            currentStepId: true,
-            barcode: true,
-            currentQty: true,
-          },
-        },
-      },
-    });
+    // F161: yalnız EN SON finish turu (reopenStep ile aynı kaynak).
+    const { closed: closedMovements } = await this.loadLatestFinishTurn(step.id);
 
     if (closedMovements.length === 0) {
       return block("Bu adımı yeniden açacak kapalı hareket yok");
@@ -995,6 +1027,16 @@ export class KursunQcService {
           );
         }
         if (cm.roll.status !== RollStatus.IN_PRODUCTION) {
+          return block(
+            `Top (${cm.roll.barcode ?? cm.rollId.slice(0, 8)}) artık üretimde değil (${cm.roll.status}) — yeniden açılamaz`
+          );
+        }
+      }
+    } else {
+      // F159: son adımda toplar PRODUCED + currentStepId=null olmalı; sevk/tüketim ile
+      // çıkmışsa reopenStep 409 verir — preview bunu canReopen=false ile önceden gösterir.
+      for (const cm of closedMovements) {
+        if (cm.roll.status !== RollStatus.PRODUCED || cm.roll.currentStepId !== null) {
           return block(
             `Top (${cm.roll.barcode ?? cm.rollId.slice(0, 8)}) artık üretimde değil (${cm.roll.status}) — yeniden açılamaz`
           );

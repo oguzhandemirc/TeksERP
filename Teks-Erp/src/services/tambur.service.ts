@@ -1935,6 +1935,17 @@ export class TamburService {
     if (parent.barcode === null) {
       throw AppError.badRequest("Bu Roll açık kumaş; finalizeWarehouseCut sadece barkodlu depo topu için");
     }
+    // F132: Ağ-retry idempotency (finalizeOpenFabric kardeşi). Barkodlu bir top YALNIZ
+    // bu yol ile TAMBUR_CONSUMED'a düşer → TAMBUR_CONSUMED = 'finalize zaten koştu' güvenli
+    // sinyali. 2. çağrı 400 yerine success döner (kalan child zaten depoda; adımsız depo topu
+    // durable RollOperation yazmadığından kalan child/qty replay'de yeniden türetilemez → null/0).
+    if (parent.status === RollStatus.TAMBUR_CONSUMED) {
+      return {
+        success: true,
+        data: { rollId: parent.id, remainingChild: null, remainingQty: 0 },
+        message: "Top zaten kesim ile tamamlanmış (idempotent retry).",
+      };
+    }
     // Ham (renksiz STOCK) kesimi de bu fonksiyonla bitirilir — parent arşivlenir.
     const isRawParent =
       parent.status === RollStatus.STOCK && parent.colorId === null;
@@ -2721,7 +2732,6 @@ export class TamburService {
           colorCode: string | null;
           colorName: string | null;
           orderedQty: number;
-          shippedQty: number;
           /// Sipariş satırı kesim notu + eşit-parça önerisi (Tambur talimatı).
           cutNote: string | null;
           pieceLengthM: number | null;
@@ -2812,7 +2822,6 @@ export class TamburService {
           colorName: string | null;
           width: number | null;
           orderedQty: number;
-          shippedQty: number;
           cutNote: string | null;
           pieceLengthM: number | null;
           requiredProperties: { id: string; name: string }[];
@@ -2822,9 +2831,8 @@ export class TamburService {
     for (const link of links) {
       const ol = link.orderLine;
       const order = ol.order;
-      // Sevkiyat modülü 2026-05-25 silindi, yeniden yazılacak. O zamana kadar
-      // shippedQty her zaman 0 — frontend tarafında gösterilmiyor.
-      const shippedQty = 0;
+      // F133: daima-0 shippedQty alanı kaldırıldı — loose modelde top→sipariş satırı
+      // bağı yok, per-line karşılanma türetilemez (spec-toplam üzerinden işler).
       if (!ordersMap.has(order.id)) {
         ordersMap.set(order.id, {
           orderId: order.id,
@@ -2843,7 +2851,6 @@ export class TamburService {
         colorName: ol.color?.name ?? null,
         width: ol.width !== null ? Number(ol.width) : null,
         orderedQty: Number(ol.quantity),
-        shippedQty,
         cutNote: ol.cutNote ?? null,
         pieceLengthM: ol.pieceLengthM !== null ? Number(ol.pieceLengthM) : null,
         requiredProperties: ol.requiredProperties.map((rp) => ({
@@ -2875,11 +2882,14 @@ export class TamburService {
             color: { select: { code: true, name: true } },
             parentReceipt: { select: { receiptNo: true } },
             errors: {
+              // F131: kardeş sorgularla (getPendingRolls/getRollForDecision/loadTamburRolls)
+              // aynı işlenmemiş-hata filtresi — NO_CUT ile idari kapatılmış (isProcessed=true)
+              // hata, fason turundan sonra dönen açık kumaşta 'açık hata' olarak listelenmesin.
+              where: { isProcessed: false },
               orderBy: { startMeter: "asc" },
               select: {
                 id: true,
                 startMeter: true,
-                
                 errorType: true,
               },
             },

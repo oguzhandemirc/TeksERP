@@ -175,6 +175,37 @@ export async function ensureWorkOrderInProgress(
 }
 
 /**
+ * F162: Son üretim adımı bitince WO'yu (ve ACTIVE refakat kartını) COMPLETED yap —
+ * ama YALNIZ kalan (COMPLETED/SKIPPED-dışı) adım kalmadıysa. finishStep (kursun-qc)
+ * ve kursunFinish (inventory) son-adım dallarının ORTAK yardımcısı (drift önlenir).
+ * Çağıran tx başında touchWorkOrderTx ile WO'yu write-kilitlemeli (remainingSteps
+ * sayımı eşzamanlı finish/fason/finalize ile serileşsin).
+ */
+export async function completeWorkOrderIfStepsDone(
+  tx: TxClient,
+  workOrderId: string
+): Promise<void> {
+  const remaining = await tx.workOrderStep.count({
+    where: {
+      workOrderId,
+      status: { notIn: [StepStatus.COMPLETED, StepStatus.SKIPPED] },
+    },
+  });
+  if (remaining !== 0) return;
+  await tx.workOrder.updateMany({
+    where: {
+      id: workOrderId,
+      status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] },
+    },
+    data: { status: WorkOrderStatus.COMPLETED },
+  });
+  await tx.travelerCard.updateMany({
+    where: { workOrderId, status: "ACTIVE" },
+    data: { status: "COMPLETED" },
+  });
+}
+
+/**
  * Bir roll için sonraki step'i açar:
  *   - Roll.currentStepId güncellenir
  *   - RollMovement.create (qtyIn, weightIn)
