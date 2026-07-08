@@ -32,6 +32,10 @@ export interface LabelRouting {
   language: PrinterLanguage;
   /** Çözülen cihaz id (yoksa null) — native gönderim hedefi için. */
   peripheralId: string | null;
+  /** F179: native gönderim hedef adresi (IP/host) — çözülen cihazdan taşınır. */
+  peripheralAddress: string | null;
+  /** F179: hedef port (null → çağıran 9100 varsayar). */
+  peripheralPort: number | null;
 }
 
 export interface LabelRoutingOpts {
@@ -144,5 +148,7 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
     variantMatch: picked.match,
     language,
     peripheralId: peripheral?.id ?? null,
+    peripheralAddress: peripheral?.address ?? null,
+    peripheralPort: peripheral?.port ?? null,
   };
 }

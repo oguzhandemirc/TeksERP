@@ -1317,11 +1317,18 @@ export class TamburService {
       };
     }
 
+    // F170: legacy dal da cursor moduyla AYNI 1..200 clamp'ini uygular — controller
+    // ham Number(req.query.limit) geçiyor (NaN / negatif / 500000 mümkün); ağır
+    // parentRoll+properties+color include'lu sınırsız satır çekimini önle.
+    const legacyLimit = Math.min(
+      Math.max(1, Number.isFinite(params?.limit) ? (params!.limit as number) : 100),
+      200,
+    );
     const swatches = await prisma.swatch.findMany({
       where,
       include,
       orderBy: { createdAt: "desc" },
-      take: params?.limit ?? 100,
+      take: legacyLimit,
     });
     return { success: true, data: swatches };
   }

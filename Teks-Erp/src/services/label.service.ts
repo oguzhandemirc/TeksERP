@@ -571,7 +571,13 @@ export class LabelService {
     kindOverride: LabelKind | undefined,
     opts?: RollLabelRenderOpts,
     preloaded?: BulkLabelContext,
-  ): Promise<{ input: LabelRenderInput; kind: LabelKind; meta: LabelResolutionMeta }> {
+  ): Promise<{
+    input: LabelRenderInput;
+    kind: LabelKind;
+    meta: LabelResolutionMeta;
+    // F179: çözülen yönlendirme cihazının native gönderim hedefi (preloaded/bulk'ta null).
+    routing: { peripheralId: string | null; address: string | null; port: number | null } | null;
+  }> {
     const payloadResp = await this.getRollLabel(rollId, opts, preloaded);
     const payload = payloadResp.data;
 
@@ -600,6 +606,8 @@ export class LabelService {
     let variant: LabelTemplateVariant | null;
     let format: ResolvedLabelFormat;
     let variantMatch: "exact" | "fallback" | null = null;
+    // F179: native hedef adresi yalnız tekil (non-preloaded) yönlendirmede çözülür.
+    let routingPeripheral: { peripheralId: string | null; address: string | null; port: number | null } | null = null;
     if (preloaded) {
       // Müşteri-şablon halkasının bulk karşılığı: route'u olan müşterinin topu
       // kendi şablonuyla basılır (tekil yolla AYNI öncelik: müşteri > cihaz > default).
@@ -624,6 +632,11 @@ export class LabelService {
       variant = routing.variant;
       format = routing.format;
       variantMatch = routing.variantMatch;
+      routingPeripheral = {
+        peripheralId: routing.peripheralId,
+        address: routing.peripheralAddress,
+        port: routing.peripheralPort,
+      };
     }
     const barcodeSvg = payload.barcode
       ? bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" })
@@ -639,7 +652,7 @@ export class LabelService {
       variantId: variant?.id ?? null,
       variantMatch,
     };
-    return { input: { payload, template, variant, barcodeSvg, qrSvg, copies, format }, kind, meta };
+    return { input: { payload, template, variant, barcodeSvg, qrSvg, copies, format }, kind, meta, routing: routingPeripheral };
   }
 
   async getRollLabelHtml(
@@ -741,12 +754,15 @@ export class LabelService {
     userId?: string,
     opts?: RollLabelRenderOpts & { port?: number },
   ): Promise<ApiResponse<PrinterTransportResult & { kind: LabelKind }>> {
-    const { input, kind } = await this.buildRollRenderInput(rollId, undefined, opts);
+    const { input, kind, routing } = await this.buildRollRenderInput(rollId, undefined, opts);
     const rendered = renderLabel(input.format.language, input);
     const enabled = await readLabelNativeSendEnabled();
-    let printerIp: string | null = null;
-    let printerPort: number | undefined = opts?.port;
-    if (opts?.machineId) {
+    // F179: çözülen yönlendirme cihazının (explicit peripheralId / tablet deviceId /
+    // machineId hepsi routing'de çözüldü) adresi BİRİNCİL hedef; loadMachinePrinter
+    // yalnız defansif fallback (routing adres vermezse).
+    let printerIp: string | null = routing?.address ?? null;
+    let printerPort: number | undefined = opts?.port ?? routing?.port ?? undefined;
+    if (printerIp == null && opts?.machineId) {
       const printer = await loadMachinePrinter(opts.machineId);
       printerIp = printer?.address ?? null;
       if (printerPort == null && printer?.port != null) printerPort = printer.port;
@@ -862,6 +878,10 @@ export class LabelService {
     const bodyRe = /<body[^>]*>([\s\S]*?)<\/body>/i;
     let head = "";
     const bodies: string[] = [];
+    // F178: her top buildRollRenderInput içinde bwipjs.toSVG'yi (Code128+QR) 2 SENKRON
+    // çağırır → çok sayıda topta event-loop starvation (istasyon donması). ~25 topta bir
+    // setImmediate ile check fazına dön → LAN'daki diğer operatörlerin bekleyen soketleri servis edilir.
+    let yielded = 0;
     for (const id of ids) {
       const res = await this.getRollLabelHtml(id, undefined, { copies }, ctx);
       const full = res.data.html;
@@ -872,6 +892,7 @@ export class LabelService {
       }
       const m = full.match(bodyRe);
       if (m) bodies.push(m[1]);
+      if (++yielded % 25 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
     }
     // Her topu kendi sayfasında tut (etiket .label zaten A6; topu ayır).
     const combinedBody = bodies
@@ -904,11 +925,14 @@ export class LabelService {
     const language = ctx.format.language;
     let contentType = "text/plain; charset=utf-8";
     const blocks: string[] = [];
+    // F178: getBulkRollLabelsHtml ile aynı — ~25 topta bir event-loop'a nefes aldır.
+    let yieldedN = 0;
     for (const id of ids) {
       const { input } = await this.buildRollRenderInput(id, undefined, { copies }, ctx);
       const r = renderLabel(language, input);
       contentType = r.contentType;
       if (r.content) blocks.push(r.content);
+      if (++yieldedN % 25 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
     }
     return {
       success: true,

@@ -615,7 +615,7 @@ export class TravelerCardService {
    */
   async findByBarcode(
     input: string,
-  ): Promise<ApiResponse<(TravelerCard & { hasOpenDispatch: boolean }) | null>> {
+  ): Promise<ApiResponse<(Omit<TravelerCard, "snapshot"> & { hasOpenDispatch: boolean }) | null>> {
     const normalized = input.trim().toUpperCase();
 
     const isFullBarcode = /^RK\d{4}[0-9A-Z]{6}[0-9A-Z]$/.test(normalized);
@@ -632,6 +632,9 @@ export class TravelerCardService {
 
     const card = await prisma.travelerCard.findFirst({
       where: isFullBarcode ? { barcode: normalized } : { cardNumber: normalized },
+      // F190: önizleme uçları (FasonSevk/FasonKabul tarama) donmuş `snapshot`ı KULLANMAZ
+      // (getCardHtml ayrı çeker) — Prisma 7 omit ile ağır Json'u atla; kalan alanlar/relations byte-uyumlu.
+      omit: { snapshot: true },
       include: {
         workOrder: {
           include: {
