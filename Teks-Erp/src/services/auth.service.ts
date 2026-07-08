@@ -384,7 +384,8 @@ export class AuthService {
    */
   static verifyToken(token: string): JwtPayload {
     try {
-      return jwt.verify(token, JWT_SECRET) as JwtPayload;
+      // F22: algorithms sabitle (HS256) — algoritma-karışıklığı/none saldırısına karşı.
+      return jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as JwtPayload;
     } catch {
       throw AppError.unauthorized("Geçersiz veya süresi dolmuş token");
     }

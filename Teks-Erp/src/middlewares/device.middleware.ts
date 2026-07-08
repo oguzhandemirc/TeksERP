@@ -40,7 +40,9 @@ export const resolveDevice = async (
   if (!deviceId || typeof deviceId !== "string") {
     return next();
   }
-  if (EXEMPT_PATHS.has(req.path)) {
+  // F27: trailing-slash / büyük-harf varyantında announce/status/pairing kilitlenmesin.
+  const normalizedPath = req.path.replace(/\/+$/, "").toLowerCase();
+  if (EXEMPT_PATHS.has(normalizedPath)) {
     return next();
   }
   // F19: try YALNIZ resolveDevice etrafında. Eskiden boş catch, DB hatasında

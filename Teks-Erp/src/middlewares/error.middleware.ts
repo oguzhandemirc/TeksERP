@@ -3,6 +3,8 @@
 // =============================================================================
 
 import { Request, Response, NextFunction } from "express";
+import { Prisma } from "@prisma/client";
+import { ZodError } from "zod";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "../services/audit.service";
 import "../types/express-augment";
@@ -118,7 +120,8 @@ export const errorHandler = (
   }
 
   // Prisma known request errors
-  if (err.constructor.name === "PrismaClientKnownRequestError") {
+  // F25: instanceof (bundler-güvenli) + constructor.name (fallback).
+  if (err instanceof Prisma.PrismaClientKnownRequestError || err.constructor.name === "PrismaClientKnownRequestError") {
     const prismaErr = err as Error & { code: string; meta?: Record<string, unknown> };
 
     if (prismaErr.code === "P2002") {
@@ -275,7 +278,7 @@ export const errorHandler = (
   }
 
   // Prisma validation errors (wrong data shape for model)
-  if (err.constructor.name === "PrismaClientValidationError") {
+  if (err instanceof Prisma.PrismaClientValidationError || err.constructor.name === "PrismaClientValidationError") {
     res.status(400).json({
       success: false,
       message: "Geçersiz veri yapısı. Gönderilen alanları ve tipleri kontrol edin.",
@@ -284,7 +287,7 @@ export const errorHandler = (
   }
 
   // Zod validation errors
-  if (err.constructor.name === "ZodError") {
+  if (err instanceof ZodError || err.constructor.name === "ZodError") {
     const zodErr = err as Error & { issues: Array<{ path: (string | number)[]; message: string }> };
     res.status(400).json({
       success: false,

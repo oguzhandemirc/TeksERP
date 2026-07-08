@@ -287,7 +287,16 @@ const grantSchema = z.object({
   permissionId: z.string().min(1),
   validFrom: z.coerce.date().optional().nullable(),
   validUntil: z.coerce.date().optional().nullable(),
-});
+})
+  // F256: geçerlilik penceresi tutarlı olmalı (aksi halde ölü/hatalı yetki).
+  .refine((v) => !v.validFrom || !v.validUntil || v.validUntil > v.validFrom, {
+    message: "Bitiş tarihi başlangıç tarihinden sonra olmalı",
+    path: ["validUntil"],
+  })
+  .refine((v) => !v.validUntil || v.validUntil > new Date(), {
+    message: "Bitiş tarihi gelecekte olmalı (geçmiş tarih ölü yetki yaratır)",
+    path: ["validUntil"],
+  });
 
 /**
  * @openapi
@@ -318,11 +327,21 @@ router.post(
 
 // Toplu-set: yeni tarih-taşır şekil { permissions: [{permissionId, validFrom?, validUntil?}] }
 // VEYA geriye-uyum düz { permissionIds: string[] }. En az biri gerekli — normalize edilir.
-const permissionSetItemSchema = z.object({
-  permissionId: z.string().min(1),
-  validFrom: z.coerce.date().nullable().optional(),
-  validUntil: z.coerce.date().nullable().optional(),
-});
+const permissionSetItemSchema = z
+  .object({
+    permissionId: z.string().min(1),
+    validFrom: z.coerce.date().nullable().optional(),
+    validUntil: z.coerce.date().nullable().optional(),
+  })
+  // F256: her yetki kaleminde geçerlilik penceresi tutarlı olmalı.
+  .refine((v) => !v.validFrom || !v.validUntil || v.validUntil > v.validFrom, {
+    message: "Bitiş tarihi başlangıç tarihinden sonra olmalı",
+    path: ["validUntil"],
+  })
+  .refine((v) => !v.validUntil || v.validUntil > new Date(), {
+    message: "Bitiş tarihi gelecekte olmalı (geçmiş tarih ölü yetki yaratır)",
+    path: ["validUntil"],
+  });
 const setSchema = z
   .object({
     permissions: z.array(permissionSetItemSchema).optional(),

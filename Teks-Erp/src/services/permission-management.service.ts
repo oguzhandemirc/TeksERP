@@ -701,6 +701,20 @@ export class PermissionManagementService {
     return t;
   }
 
+  /** F257: yetki kimlikleri var mı doğrula + dedup — geçersiz/mükerrer id P2003/P2002
+   *  (generic hata) yerine net 400 döner, şablon bayat/eksik yazılmaz. */
+  private static async validatePermissionIds(ids: string[]): Promise<string[]> {
+    const unique = [...new Set(ids)];
+    const found = await prisma.permission.findMany({
+      where: { id: { in: unique } },
+      select: { id: true },
+    });
+    if (found.length !== unique.length) {
+      throw AppError.badRequest("Bir veya daha fazla geçersiz yetki kimliği");
+    }
+    return unique;
+  }
+
   static async createTemplate(
     input: { name: string; description?: string | null; permissionIds: string[] },
     actorUserId: string | undefined
@@ -708,13 +722,14 @@ export class PermissionManagementService {
     if (!input.permissionIds.length) {
       throw AppError.badRequest("Şablon en az bir yetki içermeli");
     }
+    const permissionIds = await this.validatePermissionIds(input.permissionIds);
 
     const created = await prisma.permissionTemplate.create({
       data: {
         name: input.name,
         description: input.description ?? null,
         permissions: {
-          create: input.permissionIds.map((permissionId) => ({ permissionId })),
+          create: permissionIds.map((permissionId) => ({ permissionId })),
         },
       },
       include: { permissions: { include: { permission: true } } },
@@ -725,7 +740,7 @@ export class PermissionManagementService {
       action: "CREATE",
       tableName: "PERMISSION_TEMPLATE",
       recordId: created.id,
-      newData: { name: created.name, permissionIds: input.permissionIds },
+      newData: { name: created.name, permissionIds },
     });
 
     return created;
@@ -742,6 +757,11 @@ export class PermissionManagementService {
     });
     if (!existing) throw AppError.notFound("Şablon bulunamadı");
 
+    // F257: tx'ten ÖNCE doğrula + dedup (geçersiz id → 400, mükerrer → @@unique P2002 önlenir).
+    const validatedIds = input.permissionIds
+      ? await this.validatePermissionIds(input.permissionIds)
+      : undefined;
+
     const updated = await prisma.$transaction(async (tx) => {
       const data: Prisma.PermissionTemplateUpdateInput = {};
       if (input.name !== undefined) data.name = input.name;
@@ -749,11 +769,11 @@ export class PermissionManagementService {
 
       const t = await tx.permissionTemplate.update({ where: { id }, data });
 
-      if (input.permissionIds) {
+      if (validatedIds) {
         await tx.permissionTemplateItem.deleteMany({ where: { templateId: id } });
-        if (input.permissionIds.length) {
+        if (validatedIds.length) {
           await tx.permissionTemplateItem.createMany({
-            data: input.permissionIds.map((permissionId) => ({ templateId: id, permissionId })),
+            data: validatedIds.map((permissionId) => ({ templateId: id, permissionId })),
           });
         }
       }
