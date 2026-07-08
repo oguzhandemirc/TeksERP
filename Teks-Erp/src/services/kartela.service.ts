@@ -99,26 +99,28 @@ async function nextKartelaDocSequence(
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const docPrefix = `${prefix}${yy}${mm}`; // ayraçsız: PFXYYMM ile başlar
 
-  let lastNo: string | null = null;
+  // O-21: gte (index seek) + startsWith (collation-bağımsız tam-prefix) + JS sayısal
+  // max. Eski startsWith-tek + orderBy desc glibc collation sırasına/lex taşmaya
+  // güveniyordu (glibc seq-no bug — order.service.ts:1065 deseni).
+  let nos: string[];
   if (kind === "dispatch") {
-    const last = await tx.kartelaDispatch.findFirst({
-      where: { dispatchNo: { startsWith: docPrefix } },
-      orderBy: { dispatchNo: "desc" },
+    const rows = await tx.kartelaDispatch.findMany({
+      where: { dispatchNo: { gte: docPrefix, startsWith: docPrefix } },
       select: { dispatchNo: true },
     });
-    lastNo = last?.dispatchNo ?? null;
+    nos = rows.map((r) => r.dispatchNo);
   } else {
-    const last = await tx.kartelaReceipt.findFirst({
-      where: { receiptNo: { startsWith: docPrefix } },
-      orderBy: { receiptNo: "desc" },
+    const rows = await tx.kartelaReceipt.findMany({
+      where: { receiptNo: { gte: docPrefix, startsWith: docPrefix } },
       select: { receiptNo: true },
     });
-    lastNo = last?.receiptNo ?? null;
+    nos = rows.map((r) => r.receiptNo);
   }
-
-  if (!lastNo) return 1;
-  const n = parseInt(lastNo.slice(6), 10); // ayraçsız PFXYYMMNNNNNN → NNNNNN = 6..
-  return (Number.isFinite(n) ? n : 0) + 1;
+  const maxSeq = nos.reduce((max, no) => {
+    const n = parseInt(no.slice(6), 10); // ayraçsız PFXYYMMNNNNNN → NNNNNN = 6..
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+  return maxSeq + 1;
 }
 
 /** SW- kartela barkodu sequence (4 parçalı, Crockford + checksum). */
@@ -129,14 +131,18 @@ async function nextSwatchSequence(
   const yy = String(date.getFullYear()).slice(2);
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const barcodePrefix = `SW${yy}${mm}`; // ayraçsız: SWYYMM ile başlar
-  const last = await tx.swatch.findFirst({
-    where: { barcode: { startsWith: barcodePrefix } },
-    orderBy: { barcode: "desc" },
+  // O-21: gte + startsWith (tam-prefix) + Crockford decode max — tek collation-top
+  // satıra güvenmek yerine aydaki tüm barkodların sayısal max'ı.
+  const rows = await tx.swatch.findMany({
+    where: { barcode: { gte: barcodePrefix, startsWith: barcodePrefix } },
     select: { barcode: true },
   });
-  if (!last?.barcode) return 1;
-  const n = decodeSequenceFromBarcode(last.barcode);
-  return (n ?? 0) + 1;
+  const maxSeq = rows.reduce((max, r) => {
+    if (!r.barcode) return max;
+    const n = decodeSequenceFromBarcode(r.barcode);
+    return n !== null && n > max ? n : max;
+  }, 0);
+  return maxSeq + 1;
 }
 
 // -----------------------------------------------------------------------------

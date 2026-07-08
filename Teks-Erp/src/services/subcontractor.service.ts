@@ -40,7 +40,7 @@ import {
 import { buildPrefixedCardNumber } from "../utils/barcode";
 import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
 import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
-import { buildPagination } from "../utils/query-parser";
+import { buildPagination, buildTurkishSearch } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -77,6 +77,23 @@ function decodeSequenceFromBarcode(barcode: string): number | null {
   return n;
 }
 
+/** Ayraçsız ondalık belge no (PFXYYMMNNNNNN) listesinden sayısal max; boş/parse-edilemez atlanır. */
+function decimalDocMax(nos: (string | null)[]): number {
+  return nos.reduce((max, no) => {
+    if (!no) return max;
+    const n = parseInt(no.slice(6), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+}
+/** Ayraçsız Crockford barkod (PFXYYMMXXXXXXC) listesinden sayısal max; boş/decode-edilemez atlanır. */
+function crockfordMax(barcodes: (string | null)[]): number {
+  return barcodes.reduce((max, b) => {
+    if (!b) return max;
+    const n = decodeSequenceFromBarcode(b);
+    return n !== null && n > max ? n : max;
+  }, 0);
+}
+
 // Export: workorder.service per-roll split'te taşınan toplar için yeni SD dispatch
 // numarası üretirken yeniden kullanır (aynı sequence kaynağı).
 export async function nextPrefixedSequence(
@@ -89,48 +106,36 @@ export async function nextPrefixedSequence(
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const barcodePrefix = `${prefix}${yy}${mm}`; // ayraçsız: PFXYYMM ile başlar
 
-  let lastBarcode: string | null = null;
+  // O-21: collation-güvenli — gte (index seek) + startsWith (tam-prefix, collation-
+  // bağımsız) ile aydaki TÜM kayıtları çek, sayısal max'ı JS'te reduce et. Eski
+  // startsWith-tek + orderBy desc glibc collation sırasına + lex taşmaya güveniyordu
+  // (glibc seq-no bug — bkz. order.service.ts:1065 kanıtlı desen).
   if (table === "subcontractorDispatch") {
-    const last = await tx.subcontractorDispatch.findFirst({
-      where: { dispatchNo: { startsWith: barcodePrefix } },
-      orderBy: { dispatchNo: "desc" },
+    const rows = await tx.subcontractorDispatch.findMany({
+      where: { dispatchNo: { gte: barcodePrefix, startsWith: barcodePrefix } },
       select: { dispatchNo: true },
     });
-    lastBarcode = last?.dispatchNo ?? null;
-  } else if (table === "subcontractorReceipt") {
-    const last = await tx.subcontractorReceipt.findFirst({
-      where: { receiptNo: { startsWith: barcodePrefix } },
-      orderBy: { receiptNo: "desc" },
+    return decimalDocMax(rows.map((r) => r.dispatchNo)) + 1;
+  }
+  if (table === "subcontractorReceipt") {
+    const rows = await tx.subcontractorReceipt.findMany({
+      where: { receiptNo: { gte: barcodePrefix, startsWith: barcodePrefix } },
       select: { receiptNo: true },
     });
-    lastBarcode = last?.receiptNo ?? null;
-  } else if (table === "swatch") {
-    const last = await tx.swatch.findFirst({
-      where: { barcode: { startsWith: barcodePrefix } },
-      orderBy: { barcode: "desc" },
+    return decimalDocMax(rows.map((r) => r.receiptNo)) + 1;
+  }
+  if (table === "swatch") {
+    const rows = await tx.swatch.findMany({
+      where: { barcode: { gte: barcodePrefix, startsWith: barcodePrefix } },
       select: { barcode: true },
     });
-    lastBarcode = last?.barcode ?? null;
-  } else {
-    const last = await tx.roll.findFirst({
-      where: { barcode: { startsWith: barcodePrefix } },
-      orderBy: { barcode: "desc" },
-      select: { barcode: true },
-    });
-    lastBarcode = last?.barcode ?? null;
+    return crockfordMax(rows.map((r) => r.barcode)) + 1;
   }
-
-  if (!lastBarcode) return 1;
-
-  // Dispatch/Receipt no ayraçsız ondalık: SDYYMMNNNNNN → NNNNNN = pozisyon 6..
-  // Swatch/Roll barkodları ayraçsız Crockford+checksum: PFXYYMMXXXXXXC (decode 6..12)
-  if (table === "subcontractorDispatch" || table === "subcontractorReceipt") {
-    const n = parseInt(lastBarcode.slice(6), 10);
-    return (Number.isFinite(n) ? n : 0) + 1;
-  }
-
-  const n = decodeSequenceFromBarcode(lastBarcode);
-  return (n ?? 0) + 1;
+  const rows = await tx.roll.findMany({
+    where: { barcode: { gte: barcodePrefix, startsWith: barcodePrefix } },
+    select: { barcode: true },
+  });
+  return crockfordMax(rows.map((r) => r.barcode)) + 1;
 }
 
 async function logTravelerScan(
@@ -2344,11 +2349,12 @@ export class SubcontractorService {
 
     const search = params?.search?.trim();
     if (search) {
-      where.OR = [
-        { dispatchNo: { contains: search, mode: "insensitive" } },
-        { subcontractor: { name: { contains: search, mode: "insensitive" } } },
-        { workOrder: { batchNumber: { contains: search, mode: "insensitive" } } },
-      ];
+      // Y-2/Y-3: Türkçe-duyarlı arama (C-locale ILIKE İ/ı katlamaz).
+      where.OR = buildTurkishSearch<Prisma.SubcontractorDispatchWhereInput>(search, [
+        "dispatchNo",
+        "subcontractor.name",
+        "workOrder.batchNumber",
+      ]);
     }
 
     // Liste için ÇOK HAFIF select — detay endpoint (`getDispatch`) tam veriyi döner.

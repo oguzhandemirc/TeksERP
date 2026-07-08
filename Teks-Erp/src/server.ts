@@ -2,6 +2,7 @@ import "dotenv/config"; // .env yükle — diğer tüm importlardan ÖNCE (JWT_S
 import "./lib/zod-locale"; // Zod tr locale
 import os from "os";
 import app from './app';
+import prisma, { pool } from './lib/prisma';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
@@ -97,7 +98,18 @@ function gracefulShutdown(signal: string): void {
     ]).finally(() => {
         server.close(() => {
             console.log("Sunucu kapandı.");
-            process.exit(0);
+            // O3-3: DB kaynaklarını temiz bırak (eski lib/prisma.ts shutdown handler'ından
+            // TAŞINDI — çift handler F10 graceful shutdown'ı boşa çıkarıyordu). Sıra önemli:
+            // önce $disconnect, sonra pool.end. Best-effort; üstteki 5s forceTimer güvenlik ağı korur.
+            void (async () => {
+                try {
+                    await prisma.$disconnect();
+                    await pool.end();
+                } catch (err) {
+                    console.error("[shutdown]: DB kapanış hatası:", err);
+                }
+                process.exit(0);
+            })();
         });
     });
 }

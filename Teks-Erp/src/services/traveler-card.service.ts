@@ -109,16 +109,18 @@ export class TravelerCardService {
     const mm = String(date.getMonth() + 1).padStart(2, "0");
     const prefix = `RK${yy}${mm}`; // ayraçsız barkod: RKYYMM ile başlar
 
+    // O-21: gte (index seek) + startsWith (tam-prefix, collation-bağımsız) ile aydaki
+    // TÜM kartları çek; orderBy desc + take 10 glibc collation'ında gerçek max'ı ilk 10
+    // dışında bırakıp DUPLICATE üretebiliyordu. Sayısal max'ı Crockford decode ile bul.
     const candidates = await prisma.travelerCard.findMany({
-      where: { barcode: { startsWith: prefix } },
-      orderBy: { barcode: "desc" },
-      take: 10,
+      where: { barcode: { gte: prefix, startsWith: prefix } },
       select: { barcode: true },
     });
 
     if (candidates.length === 0) return 1;
 
     const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    let maxSeq = -1;
     for (const c of candidates) {
       // barcode = RKYYMMXXXXXXC (ayraçsız, 13 char) → XXXXXX = pozisyon 6..12
       const b = c.barcode.toUpperCase();
@@ -134,13 +136,16 @@ export class TravelerCardService {
         }
         n = n * 32 + v;
       }
-      if (valid) return n + 1;
+      if (valid && n > maxSeq) maxSeq = n;
     }
 
-    throw AppError.internal(
-      `Refakat kartı sequence: ${prefix} prefix'inde bozuk barkodlar tespit edildi, ` +
-        `son 10 kayıttan hiçbiri parse edilemiyor. DB'yi manuel inceleyin.`
-    );
+    if (maxSeq < 0) {
+      throw AppError.internal(
+        `Refakat kartı sequence: ${prefix} prefix'inde bozuk barkodlar tespit edildi, ` +
+          `hiçbir kayıt parse edilemiyor. DB'yi manuel inceleyin.`
+      );
+    }
+    return maxSeq + 1;
   }
 
   /**

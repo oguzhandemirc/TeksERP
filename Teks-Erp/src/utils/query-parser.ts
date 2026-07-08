@@ -148,26 +148,53 @@ export function buildWhereClause(
     }
   }
 
-  // Full-text search across multiple fields via OR + contains
+  // Full-text search — Türkçe-duyarlı (Y-2/Y-3: C-locale ILIKE İ/ı/ğ/ş katlamaz).
   if (search && searchFields && searchFields.length > 0) {
-    const clauses: Record<string, unknown>[] = searchFields.map((field) => ({
-      [field]: { contains: search, mode: "insensitive" },
-    }));
-    // Türkçe İ/ı: adlar BÜYÜK saklanıyor (saha #13) ama ILIKE en_US.UTF-8'de
-    // i↔İ ve ı↔I'yı eşlemez ("siyah" %...% 'SİYAH' = false). Sorgunun tr-upper
-    // varyantını da (case-sensitive contains) OR'a ekle.
-    // 'i' → 'İ' ve 'ı' → 'I' dönüşümleri ILIKE'ın katlayamadığı tek durumlar;
-    // sorguda bu harfler yoksa insensitive clause yeterli, varyant eklenmez.
-    if (/[ıi]/.test(search)) {
-      const trUpper = search.toLocaleUpperCase("tr-TR");
-      for (const field of searchFields) {
-        clauses.push({ [field]: { contains: trUpper } });
-      }
-    }
-    where.OR = clauses;
+    where.OR = buildTurkishSearch(search, searchFields);
   }
 
   return where;
+}
+
+// ── Türkçe-duyarlı arama (C-locale ILIKE İ/ı/ğ/ş/ç/ö/ü KATLAMAZ) ──────────────
+// PG C-locale'de mode:"insensitive" (ILIKE) YALNIZ ASCII a-z↔A-Z katlar; Türkçe
+// çiftlerini (i↔İ, ı↔I, ç↔Ç, ğ↔Ğ, ö↔Ö, ş↔Ş, ü↔Ü) eşlemez. Adlar BÜYÜK saklanır
+// (name-normalize.helper) → küçük harfli arama sessizce boş döner. Çözüm: her alan
+// için ILIKE (ASCII fold) + Türkçe BÜYÜK ve KÜÇÜK case-sensitive varyantları.
+const TR_FOLD = /[iıİIçÇğĞöÖşŞüÜ]/;
+
+/** "a.b.c" → { a: { b: { c: leaf } } } (list-relation `some` dahil düz iç içe). */
+function nestPath(path: string, leaf: unknown): Record<string, unknown> {
+  const segs = path.split(".");
+  let node: unknown = leaf;
+  for (let i = segs.length - 1; i >= 0; i--) node = { [segs[i]]: node };
+  return node as Record<string, unknown>;
+}
+
+/**
+ * Türkçe-duyarlı `contains` OR koşulları üretir. paths nokta-notasyonu ile nested
+ * relation destekler ("customer.name", "sacks.some.sackNo").
+ * DİKKAT: boş term/paths → [] döner; boş [] doğrudan `.OR`'a atanırsa Prisma HİÇBİR
+ * kaydı eşlemez → çağıran mutlaka `if (search)` guard'ını korumalı.
+ */
+export function buildTurkishSearch<T = Record<string, unknown>>(
+  search: string,
+  paths: readonly string[]
+): T[] {
+  const term = search.trim();
+  if (!term || paths.length === 0) return [];
+  const leaves: Record<string, unknown>[] = [{ contains: term, mode: "insensitive" }];
+  if (TR_FOLD.test(term)) {
+    const upper = term.toLocaleUpperCase("tr-TR");
+    if (upper !== term) leaves.push({ contains: upper });
+    const lower = term.toLocaleLowerCase("tr-TR");
+    if (lower !== term && lower !== upper) leaves.push({ contains: lower });
+  }
+  const clauses: Record<string, unknown>[] = [];
+  for (const path of paths) {
+    for (const leaf of leaves) clauses.push(nestPath(path, leaf));
+  }
+  return clauses as unknown as T[];
 }
 
 /**
