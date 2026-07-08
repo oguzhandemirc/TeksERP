@@ -706,7 +706,25 @@ export class WorkOrderService {
       const cardRes = await travelerCardService.createForWorkOrder(tx, wo.id, userId);
 
       return { wo, cardRes };
-    }));
+    }), undefined, manualBatchNumber
+      ? (err) => {
+          const meta = (err.meta ?? {}) as Record<string, unknown>;
+          const target = JSON.stringify(meta.target ?? "");
+          const driver = meta.driverAdapterError as
+            | { cause?: { constraint?: unknown; originalMessage?: unknown } }
+            | undefined;
+          const constraint =
+            typeof driver?.cause?.constraint === "string" ? driver.cause.constraint : "";
+          const orig =
+            typeof driver?.cause?.originalMessage === "string" ? driver.cause.originalMessage : "";
+          // F61: batchNumber P2002'si MANUEL modda retry EDİLMEZ (hep aynı numarayı yazar) —
+          // doğrudan anlaşılır 409. Kart/barkod sequence P2002'si eskisi gibi retry (true).
+          if (/batchNumber/i.test(target + constraint + orig)) {
+            throw AppError.conflict(`Bu parti kodu zaten kullanılıyor: ${manualBatchNumber}`);
+          }
+          return true;
+        }
+      : undefined);
 
     await AuditService.log({
       userId,
@@ -2136,6 +2154,12 @@ export class WorkOrderService {
         (s, r) => s.plus(r.currentQty),
         new Prisma.Decimal(0),
       );
+      // F67: hedef ağırlık de TAŞINAN toplardan (targetQuantity ile simetrik). Toplam 0 ise
+      // (hiç ağırlık girilmemiş) null bırak — yanıltıcı "0 kg planlandı" yazma.
+      const movedTotalWeight = movedFresh.reduce(
+        (s, r) => s.plus(r.weightKg ?? 0),
+        new Prisma.Decimal(0),
+      );
 
       // ── Yeni WO: kaynağın birebir rotası + özellikleri, YENİ renk ──
       const newWo = await tx.workOrder.create({
@@ -2144,6 +2168,7 @@ export class WorkOrderService {
           type: newType,
           width: sourceWo.width,
           targetQuantity: movedTotalQty,
+          targetWeight: movedTotalWeight.gt(0) ? movedTotalWeight : null,
           parameters: (sourceWo.parameters as Prisma.InputJsonValue) ?? undefined,
           status: WorkOrderStatus.IN_PROGRESS,
           plannedStartDate: planDates.plannedStartDate,
@@ -4206,12 +4231,25 @@ export class WorkOrderService {
       }
     }
 
-    const updated = await prisma.workOrderStep.update({
-      where: { id: stepId },
+    // F66: ATOMİK CLAIM (check-then-act DEĞİL) — WO terminal-durum kontrolünü yazmanın
+    // WHERE'ine koy; eşzamanlı finalize WO'yu COMPLETED yaptıktan sonra planlama sızmasın.
+    const claim = await prisma.workOrderStep.updateMany({
+      where: {
+        id: stepId,
+        workOrder: { status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED] } },
+      },
       data: {
         requiredCategoryId: data.requiredCategoryId,
         plannedSubcontractorId: data.plannedSubcontractorId,
       },
+    });
+    if (claim.count === 0) {
+      throw AppError.conflict(
+        "İş emri bu sırada tamamlandı/iptal edildi — adım planlaması güncellenemedi. Sayfayı yenileyin.",
+      );
+    }
+    const updated = await prisma.workOrderStep.findUnique({
+      where: { id: stepId },
       include: {
         station: true,
         requiredCategory: true,
@@ -4237,7 +4275,7 @@ export class WorkOrderService {
    * Topları İş Emrinden (Sepetten) Çıkarma
    * Sepet mantığı için eklendi: Yanlış bağlanan stok topların rotasını ve durumunu temizler.
    */
-  async detachRolls(workOrderId: string, rollIds: string[], userId?: string): Promise<ApiResponse<any>> {
+  async detachRolls(workOrderId: string, rollIds: string[], userId?: string): Promise<ApiResponse<{ detached: number; errors: string[] }>> {
     const wo = await prisma.workOrder.findUnique({
       where: { id: workOrderId },
       include: { steps: true },
@@ -4443,7 +4481,7 @@ export class WorkOrderService {
   /**
    * Sepetteki (Bağlanmış) Topları Getir
    */
-  async getAttachedRolls(workOrderId: string): Promise<ApiResponse<any[]>> {
+  async getAttachedRolls(workOrderId: string): Promise<ApiResponse<unknown[]>> {
     const wo = await prisma.workOrder.findUnique({
       where: { id: workOrderId },
       include: { steps: true },

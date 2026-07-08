@@ -257,6 +257,16 @@ export class WorkSessionService {
       stationId = station.id;
     }
 
+    // F226: devralınacak açık oturumları tx KAPATMADAN ÖNCE yakala → devralma sonrası
+    // her biri için TAKEOVER audit'i yaz (kim kimin oturumunu devraldı izlenebilsin).
+    const takenOver =
+      machineId && input.confirmTakeover
+        ? await prisma.workSession.findMany({
+            where: { machineId, endedAt: null },
+            select: { id: true, userId: true },
+          })
+        : [];
+
     const now = new Date();
     let created;
     try {
@@ -317,6 +327,17 @@ export class WorkSessionService {
       recordId: created.id,
       newData: { deviceId: input.deviceRowId, machineId, stationId },
     }).catch(() => undefined);
+
+    // F226: devralınan oturumlar için TAKEOVER izi (best-effort, tx dışı, seri).
+    for (const s of takenOver) {
+      await AuditService.log({
+        userId: input.userId,
+        action: "UPDATE",
+        tableName: TABLE,
+        recordId: s.id,
+        newData: { endReason: "TAKEOVER", takenOverFromUserId: s.userId, byUserId: input.userId, machineId },
+      }).catch(() => undefined);
+    }
 
     return { success: true, data: created };
   }

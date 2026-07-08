@@ -183,6 +183,16 @@ export const errorHandler = (
       return;
     }
 
+    // F65: P2023 — Inconsistent column data (örn. UUID kolonuna geçersiz path param).
+    // Generic dala düşmesin → net 400.
+    if (prismaErr.code === "P2023") {
+      res.status(400).json({
+        success: false,
+        message: "Geçersiz ID formatı (beklenen: UUID). Adresi kontrol edin.",
+      });
+      return;
+    }
+
     // P2020 — Value out of range for the type.
     // Yüksek sayı, taşmış decimal, geçersiz tarih vb.
     if (prismaErr.code === "P2020") {

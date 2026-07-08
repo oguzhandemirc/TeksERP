@@ -442,13 +442,15 @@ export class WorkSessionActivityService {
     const truncated = events.length > MAX_ACTIVITY_EVENTS;
     const shown = truncated ? events.slice(0, MAX_ACTIVITY_EVENTS) : events;
 
+    // F225: özet sayaçları TÜM events'ten (truncate edilmiş `shown`'dan değil) —
+    // truncated olduğunda özet gerçek toplamı göstersin (liste kısalsa da doğru say).
     const summary: SessionActivitySummary = {
-      rollCreatedCount: shown.filter((e) => e.kind === "ROLL_CREATED").length,
-      operationCount: shown.filter((e) => e.kind === "OPERATION").length,
-      moveInCount: shown.filter((e) => e.kind === "MOVE_IN").length,
-      moveOutCount: shown.filter((e) => e.kind === "MOVE_OUT").length,
-      errorCount: shown.filter((e) => e.kind === "ERROR").length,
-      rollCancelledCount: shown.filter((e) => e.kind === "ROLL_CANCELLED").length,
+      rollCreatedCount: events.filter((e) => e.kind === "ROLL_CREATED").length,
+      operationCount: events.filter((e) => e.kind === "OPERATION").length,
+      moveInCount: events.filter((e) => e.kind === "MOVE_IN").length,
+      moveOutCount: events.filter((e) => e.kind === "MOVE_OUT").length,
+      errorCount: events.filter((e) => e.kind === "ERROR").length,
+      rollCancelledCount: events.filter((e) => e.kind === "ROLL_CANCELLED").length,
     };
 
     return {
