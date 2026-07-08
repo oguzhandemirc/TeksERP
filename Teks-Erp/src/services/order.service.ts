@@ -1205,11 +1205,14 @@ export class OrderService extends BaseService {
     // F143: CLAIM-FIRST. Eskiden sipariş create edilip SONRA topları claim ediyordu;
     // claim.count HİÇ kontrol edilmiyordu → topların bir kısmı arada başka akışta
     // tüketilse bile sipariş açılıyor ve preparedToWarehouse yalan söylüyordu.
-    // Artık: create-fail-after-claim'i önlemek için müşteri/şubeyi claim'den ÖNCE
-    // doğrula, sonra topları atomik claim et; count eşleşmezse tüm claim rollback +
-    // 409 (kaçan topların barkodları somut listelenir), sipariş HİÇ açılmaz.
+    // Artık: create-fail-after-claim'i önlemek için create()'in fırlatabileceği TÜM
+    // doğrulamaları (müşteri/şube + ürün/renk-atanabilirlik) claim'den ÖNCE koştur;
+    // sonra topları atomik claim et. Aksi halde create() içindeki validateLineColors/
+    // validateLineItems fırlatırsa toplar WAREHOUSE'da yetim kalırdı (rollback yok).
     await this.validateCustomer(data.customerId);
     if (data.branchId) await this.validateBranch(data.branchId, data.customerId);
+    await this.validateLineItems(lines);
+    await this.validateLineColors(lines, data.customerId);
 
     const stockRollIds = rolls.filter((r) => r.status === RollStatus.STOCK).map((r) => r.id);
     if (stockRollIds.length > 0) {

@@ -7,6 +7,7 @@
 import prisma from "../src/lib/prisma";
 import { OrderService } from "../src/services/order.service";
 import { AppError } from "../src/utils/app-error";
+import { RollStatus } from "@prisma/client";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -33,7 +34,13 @@ async function main(): Promise<void> {
   const item = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
   const customer = await prisma.customer.findFirst({ where: { isActive: true }, select: { id: true } });
   if (!item || !customer) throw new Error("item/customer fixture yok");
+  const grade = await prisma.qualityGrade.findFirst({ select: { id: true, code: true } });
+  const admin = await prisma.user.findFirst({ select: { id: true } });
+  if (!grade || !admin) throw new Error("grade/user fixture yok");
   const createdOrderIds: string[] = [];
+  const stamp = Date.now();
+  let f143ItemId = "";
+  let f143RollId = "";
 
   try {
     const validLine = { itemId: item.id, quantity: 100 };
@@ -78,12 +85,40 @@ async function main(): Promise<void> {
     try { await svc.update(order.id, { deadline: "2026-08-01T00:00:00.000Z" }); okUpdate = true; }
     catch { okUpdate = false; }
     check("F148 update: geçerli deadline kabul edildi", okUpdate);
+
+    // --- F143 (adversarial review fix): claim-first, create() DOĞRULAMASI fırlarsa
+    //     toplar WAREHOUSE'da yetim KALMAMALI (validation claim'den ÖNCE koşar) ---
+    const f143Item = await prisma.item.create({
+      data: { code: `TEST-F143ITM-${stamp}`, name: "F143 Kumaş", itemType: "FABRIC" },
+      select: { id: true },
+    });
+    f143ItemId = f143Item.id;
+    const f143Roll = await prisma.roll.create({
+      data: {
+        barcode: `TEST-F143RL-${stamp}`, itemId: f143Item.id, initialQty: 100, currentQty: 100,
+        status: RollStatus.STOCK, qualityGrade: grade.code, qualityGradeId: grade.id,
+        entrySource: "SUPPLIER_RECEIPT", createdById: admin.id,
+      },
+      select: { id: true },
+    });
+    f143RollId = f143Roll.id;
+    // Ürünü PASİFLE → create() içindeki validateLineItems fırlatır (soft-delete guard).
+    await prisma.item.update({ where: { id: f143Item.id }, data: { isActive: false } });
+    let f143Threw = false;
+    try {
+      await svc.quickOrderFromRolls({ customerId: customer.id, rollIds: [f143Roll.id] }, admin.id);
+    } catch { f143Threw = true; }
+    check("F143: create() doğrulaması fırlarsa quickOrder reddedilir", f143Threw);
+    const rollAfter = await prisma.roll.findUniqueOrThrow({ where: { id: f143Roll.id }, select: { status: true } });
+    check("F143: reddedilen top STOCK kaldı (WAREHOUSE'a yetim düşmedi)", rollAfter.status === RollStatus.STOCK, rollAfter.status);
   } finally {
     // Order + lines + audit cleanup (soft-delete kuralı test DB'de fiziksel temizlik serbest).
     for (const oid of createdOrderIds) {
       await prisma.orderLine.deleteMany({ where: { orderId: oid } }).catch(() => {});
       await prisma.order.deleteMany({ where: { id: oid } }).catch(() => {});
     }
+    if (f143RollId) await prisma.roll.deleteMany({ where: { id: f143RollId } }).catch(() => {});
+    if (f143ItemId) await prisma.item.deleteMany({ where: { id: f143ItemId } }).catch(() => {});
   }
 }
 
