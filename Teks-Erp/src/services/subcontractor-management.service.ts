@@ -6,6 +6,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { Prisma } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
@@ -215,6 +216,28 @@ function normalizeAndValidateAddress(raw: unknown): string | null | undefined {
   return trimmed;
 }
 
+/**
+ * F88: categoryIds var-mı + isActive doğrulaması (dedupe) — pasif kategoriye bağ
+ * kurulmasını, olmayan UUID'nin belirsiz P2003'ünü ve mükerrer UUID'nin P2002'sini önler.
+ */
+async function assertActiveCategories(
+  tx: Prisma.TransactionClient,
+  ids: string[],
+): Promise<string[]> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return unique;
+  const found = await tx.subcontractorCategory.findMany({
+    where: { id: { in: unique }, isActive: true },
+    select: { id: true },
+  });
+  if (found.length !== unique.length) {
+    const ok = new Set(found.map((c) => c.id));
+    const invalid = unique.filter((id) => !ok.has(id));
+    throw AppError.badRequest(`Geçersiz veya pasif fason kategorisi: ${invalid.join(", ")}`);
+  }
+  return unique;
+}
+
 export class SubcontractorManagementService {
   async findAll(req: Request): Promise<PaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
@@ -317,33 +340,37 @@ export class SubcontractorManagementService {
     }
 
     const sub = await prisma.$transaction(async (tx) => {
-      let created: { id: string };
+      let createdId: string;
       if (existing && !existing.isActive) {
-        // Reactivate: M:N kategorileri replace + diriltme + güncel veri.
+        // F87: reaktivasyonu atomik claim'e çevir — eşzamanlı iki istek birbirini
+        // sessizce ezmesin; kaybeden 'aktif zaten var' 409 alır.
+        const claim = await tx.subcontractor.updateMany({
+          where: { id: existing.id, isActive: false },
+          data: { ...payload, isActive: true },
+        });
+        if (claim.count === 0) {
+          throw AppError.conflict("Bu kod ile aktif fason firma zaten var");
+        }
         await tx.subcontractorToCategory.deleteMany({
           where: { subcontractorId: existing.id },
         });
-        created = await tx.subcontractor.update({
-          where: { id: existing.id },
-          data: { ...payload, isActive: true },
-          select: { id: true },
-        });
+        createdId = existing.id;
       } else {
-        created = await tx.subcontractor.create({
-          data: payload,
-          select: { id: true },
-        });
+        const c = await tx.subcontractor.create({ data: payload, select: { id: true } });
+        createdId = c.id;
       }
-      if (categoryIds.length > 0) {
+      // F88: kategori doğrulama (var + aktif + dedupe) createMany ÖNCESİ.
+      const uniqueCategoryIds = await assertActiveCategories(tx, categoryIds);
+      if (uniqueCategoryIds.length > 0) {
         await tx.subcontractorToCategory.createMany({
-          data: categoryIds.map((categoryId) => ({
-            subcontractorId: created.id,
+          data: uniqueCategoryIds.map((categoryId) => ({
+            subcontractorId: createdId,
             categoryId,
           })),
         });
       }
       return tx.subcontractor.findUnique({
-        where: { id: created.id },
+        where: { id: createdId },
         include: { categories: { include: { category: true } } },
       });
     });
@@ -412,9 +439,11 @@ export class SubcontractorManagementService {
 
       if (categoryIds !== undefined) {
         await tx.subcontractorToCategory.deleteMany({ where: { subcontractorId: id } });
-        if (categoryIds.length > 0) {
+        // F88: kategori doğrulama (var + aktif + dedupe) createMany öncesi.
+        const uniqueCategoryIds = await assertActiveCategories(tx, categoryIds);
+        if (uniqueCategoryIds.length > 0) {
           await tx.subcontractorToCategory.createMany({
-            data: categoryIds.map((categoryId) => ({
+            data: uniqueCategoryIds.map((categoryId) => ({
               subcontractorId: id,
               categoryId,
             })),

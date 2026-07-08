@@ -924,9 +924,11 @@ export class SubcontractorService {
 
     const allSteps = step.workOrder.steps;
     const currentIndex = allSteps.findIndex((s) => s.id === step.id);
+    // F76: ilk NON-SKIPPED sonraki adım — SKIPPED terminal adıma bağlanınca top
+    // akışta görünmez, WO tamamlanamaz (recomputeStepStatus SKIPPED'e dokunmaz).
     const nextStep =
-      currentIndex >= 0 && currentIndex < allSteps.length - 1
-        ? allSteps[currentIndex + 1]
+      currentIndex >= 0
+        ? allSteps.slice(currentIndex + 1).find((s) => s.status !== StepStatus.SKIPPED) ?? null
         : null;
     if (!nextStep) {
       throw AppError.badRequest(
@@ -1648,6 +1650,7 @@ export class SubcontractorService {
         barcode: true,
         currentQty: true,
         weightKg: true,
+        batchSplitId: true, // F74: kaynak sevk (firma çapraz-kontrolü için)
       },
     });
     const outstandingIds = new Set(outstandingRolls.map((r) => r.id));
@@ -1668,10 +1671,42 @@ export class SubcontractorService {
       }
     }
 
+    // F74: dönen topların kaynak sevk firması, seçilen firmayla (data.subcontractorId)
+    // eşleşmeli — yoksa farklı firmaya ait toplar bu makbuza karışır (firma başına
+    // ayrı kabul olmalı). batchSplitId = kaynak SubcontractorDispatch.
+    const returnedRolls = outstandingRolls.filter((r) => returnIds.has(r.id));
+    const srcDispatchIds = [
+      ...new Set(returnedRolls.map((r) => r.batchSplitId).filter((x): x is string => !!x)),
+    ];
+    const srcDispatches =
+      srcDispatchIds.length > 0
+        ? await prisma.subcontractorDispatch.findMany({
+            where: { id: { in: srcDispatchIds } },
+            select: { id: true, subcontractorId: true },
+          })
+        : [];
+    const firmByDispatch = new Map(srcDispatches.map((d) => [d.id, d.subcontractorId]));
+    for (const r of returnedRolls) {
+      const firmId = r.batchSplitId ? firmByDispatch.get(r.batchSplitId) : undefined;
+      if (!firmId) {
+        throw AppError.conflict(
+          "Dönen topun kaynak sevki bulunamadı. Listeyi yenileyip tekrar deneyin.",
+        );
+      }
+      if (firmId !== data.subcontractorId) {
+        throw AppError.badRequest(
+          "Seçilen toplardan biri farklı bir fason firmasına ait — bu makbuza dahil edilemez. Firma başına ayrı kabul yapın.",
+        );
+      }
+    }
+
     const allSteps = step.workOrder.steps;
     const currentIndex = allSteps.findIndex((s) => s.id === step.id);
+    // F76: ilk NON-SKIPPED sonraki adım (SKIPPED terminal adıma bağlanmayı önle).
     const nextStep =
-      currentIndex < allSteps.length - 1 ? allSteps[currentIndex + 1] : null;
+      currentIndex >= 0
+        ? allSteps.slice(currentIndex + 1).find((s) => s.status !== StepStatus.SKIPPED) ?? null
+        : null;
 
     // withBarcodeRetry: receiptNo (@unique) tx içinde nextPrefixedSequence ile
     // üretiliyor; eşzamanlı kabullerde P2002 çakışmasında tx baştan denenir.
