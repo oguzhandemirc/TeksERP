@@ -281,6 +281,21 @@ export class KursunQcService {
       select: { id: true },
     });
 
+    // F283: Idempotency — op zaten varsa (offline outbox replay: sunucu commit etti
+    // ama yanıt istemciye ulaşmadı) upsert no-op'tur. RollOperation append-only
+    // (updatedAt YOK) → no-op'ta hiçbir şey değişmez; audit'i CREATE olarak TEKRAR
+    // yazma (createInitialEntry replay-skip deseni).
+    const existedBefore = await prisma.rollOperation.findUnique({
+      where: {
+        rollId_workOrderStepId_operationType: {
+          rollId: data.rollId,
+          workOrderStepId: data.stepId,
+          operationType: RollOperationType.QC2_COMPLETED,
+        },
+      },
+      select: { id: true },
+    });
+
     const op = await prisma.$transaction(async (tx) => {
       const qc2Op = await tx.rollOperation.upsert({
         where: {
@@ -329,18 +344,21 @@ export class KursunQcService {
       return qc2Op;
     });
 
-    await AuditService.log({
-      userId,
-      action: "CREATE",
-      tableName: "ROLL_OPERATION",
-      recordId: op.id,
-      newData: {
-        rollId: data.rollId,
-        stepId: data.stepId,
-        type: RollOperationType.QC2_COMPLETED,
-        kursunAutoApplied: !!hasKursunCap,
-      },
-    });
+    // F283: yalnız gerçekten yeni oluşturulduysa audit yaz (replay'de mükerrer önlenir).
+    if (!existedBefore) {
+      await AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "ROLL_OPERATION",
+        recordId: op.id,
+        newData: {
+          rollId: data.rollId,
+          stepId: data.stepId,
+          type: RollOperationType.QC2_COMPLETED,
+          kursunAutoApplied: !!hasKursunCap,
+        },
+      });
+    }
 
     return { success: true, data: op, message: "Kalite Kontrol 2 tamamlandı" };
   }

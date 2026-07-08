@@ -211,9 +211,16 @@ export class AuditService {
     oldestLog: Date | null;
     lastAutoArchiveAt: string | null;
   }> {
-    const [activeCount, archiveCount, oldest, lastRun] = await Promise.all([
-      prisma.systemLog.count(),
-      prisma.systemLogArchive.count(),
+    // F229: iki tam COUNT(*) yerine pg_class.reltuples TAHMİNİ. system_logs +
+    // system_log_archives sınırsız büyür; milyonlarca satırda COUNT(*) index tam
+    // taraması saniyeler (statement_timeout=50s riski). Boyut göstergesi için
+    // kesin sayı gerekmez; reltuples autovacuum/ANALYZE ile güncellenir (YAKLAŞIK).
+    const [sizes, oldest, lastRun] = await Promise.all([
+      prisma.$queryRaw<Array<{ active: bigint; archive: bigint }>>(Prisma.sql`
+        SELECT
+          GREATEST(COALESCE((SELECT c.reltuples FROM pg_class c WHERE c.oid = to_regclass('public.system_logs')), 0), 0)::bigint AS active,
+          GREATEST(COALESCE((SELECT c.reltuples FROM pg_class c WHERE c.oid = to_regclass('public.system_log_archives')), 0), 0)::bigint AS archive
+      `),
       prisma.systemLog.findFirst({
         orderBy: { createdAt: "asc" },
         select: { createdAt: true },
@@ -224,8 +231,8 @@ export class AuditService {
       }),
     ]);
     return {
-      activeCount,
-      archiveCount,
+      activeCount: Number(sizes[0]?.active ?? 0),
+      archiveCount: Number(sizes[0]?.archive ?? 0),
       oldestLog: oldest?.createdAt ?? null,
       lastAutoArchiveAt: (lastRun?.value as string | null) ?? null,
     };

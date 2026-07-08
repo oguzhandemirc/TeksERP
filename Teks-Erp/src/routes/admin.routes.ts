@@ -803,6 +803,14 @@ router.post(
     try {
       const { monthsToKeep } = archiveSchema.parse(req.body);
       const result = await AuditService.archiveOlderThan(monthsToKeep);
+      // F230: binlerce satırı fiziksel taşıyan yıkıcı bakım — kardeş uçlar (perf/reset,
+      // sessions/purge, backup) gibi logla. Best-effort (tx dışında, hata isteği düşürmez).
+      await AuditService.logEvent({
+        category: "SYSTEM",
+        action: "AUDIT_ARCHIVE",
+        userId: req.user?.userId ?? null,
+        payload: { monthsToKeep, archived: result.archived, cutoff: result.cutoff },
+      });
       res.status(200).json({ success: true, data: result });
     } catch (error) {
       next(error);

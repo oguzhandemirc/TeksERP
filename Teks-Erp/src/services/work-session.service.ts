@@ -19,6 +19,7 @@ import { Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { resolveActiveSession, sweepIdleSessions } from "./helpers/work-session.helper";
+import { buildPagination } from "../utils/query-parser";
 import type { WorkSessionEndReason, StationKind } from "@prisma/client";
 import type { ApiResponse, PaginatedResponse } from "../types/api.types";
 
@@ -444,14 +445,17 @@ export class WorkSessionService {
         ? { startedAt: { ...(q.from ? { gte: q.from } : {}), ...(q.to ? { lte: q.to } : {}) } }
         : {}),
     };
+    // F275: MAX_OFFSET guard (skip>10K → Türkçe 400). WorkSession her login/vardiyada
+    // büyür; ham (page-1)*pageSize sınırsız derin OFFSET taramasına açıktı.
+    const { skip, take } = buildPagination(page, pageSize);
     const [total, items] = await Promise.all([
       prisma.workSession.count({ where }),
       prisma.workSession.findMany({
         where,
         include: SESSION_INCLUDE,
         orderBy: { startedAt: "desc" },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip,
+        take,
       }),
     ]);
     const data = await attachSuccessors(items);

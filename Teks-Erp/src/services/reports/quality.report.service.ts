@@ -178,18 +178,8 @@ export interface KursunApplicationSummary {
 }
 
 export async function getKursunApplication(range: DateRange): Promise<KursunApplicationSummary> {
-  const totalsRow = await prisma.$queryRaw<
-    Array<{ qc2: bigint; kursun: bigint }>
-  >(Prisma.sql`
-    SELECT
-      COUNT(*) FILTER (WHERE ro."operationType" = 'QC2_COMPLETED')  AS qc2,
-      COUNT(*) FILTER (WHERE ro."operationType" = 'KURSUN_APPLIED') AS kursun
-    FROM roll_operations ro
-    WHERE ro."createdAt" >= ${range.from} AND ro."createdAt" <= ${range.to}
-      AND ro."inheritedFromParentRollId" IS NULL
-      AND ro."operationType" IN ('QC2_COMPLETED','KURSUN_APPLIED')
-  `);
-
+  // F243: totalsRow KALDIRILDI — total = Σ daily (aynı WHERE ile roll_operations'ı
+  // ikinci kez taramaya gerek yok; audit raporu deseni). Tek grup-tarama yeter.
   const dailyRows = await prisma.$queryRaw<
     Array<{ day: Date; qc2: bigint; kursun: bigint }>
   >(Prisma.sql`
@@ -205,8 +195,8 @@ export async function getKursunApplication(range: DateRange): Promise<KursunAppl
     ORDER BY 1
   `);
 
-  const qc2 = Number(totalsRow[0]?.qc2 ?? 0);
-  const kursun = Number(totalsRow[0]?.kursun ?? 0);
+  const qc2 = dailyRows.reduce((a, r) => a + Number(r.qc2), 0);
+  const kursun = dailyRows.reduce((a, r) => a + Number(r.kursun), 0);
   const pct = qc2 > 0 ? Math.round((kursun / qc2) * 1000) / 10 : 0;
 
   return {

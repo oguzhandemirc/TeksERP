@@ -18,7 +18,7 @@
 import prisma from "../lib/prisma";
 import { OrderStatus, Prisma, RollStatus, WorkOrderStatus } from "@prisma/client";
 import { ApiResponse } from "../types/api.types";
-import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
+import { computeWoMaterial } from "./helpers/coverage.helper";
 
 const LIVE_WO: WorkOrderStatus[] = [
   WorkOrderStatus.PLANNED,
@@ -201,10 +201,9 @@ export class ProductionBalanceService {
       },
     });
 
-    // Kalem başına kapsama (sevk + canlı WO rezervesi) — bind tahsis tavanı için.
-    // excludeWorkOrderId YOK → yeni WO create doğrulamasıyla aynı remaining.
-    const cov = await computeLineCoverage(prisma, lines.map((l) => l.id));
-
+    // F237: computeLineCoverage(coverage=shippedQty) tüm açık kalemleri GEREKSİZ
+    // ikinci kez tarıyordu. lines zaten shippedQty ile yüklü; remaining =
+    // max(0, quantity - shippedQty) → open = remaining.floor() (birebir eşdeğer, bir DB round-trip elenir).
     for (const l of lines) {
       const acc = ensure(l.itemId, l.colorId, l.width, {
         itemName: l.item.name,
@@ -235,11 +234,8 @@ export class ProductionBalanceService {
           shipped: new Prisma.Decimal(l.shippedQty),
           remaining,
           // Tabana yuvarla: metre tamsayı; pro-rata bölme artığı (…,371) atılır.
-          // floor → backend remaining (ondalıklı) asla aşılmaz.
-          open: Prisma.Decimal.max(
-            0,
-            new Prisma.Decimal(l.quantity).minus(cov.get(l.id)?.coverage ?? 0)
-          ).floor(),
+          // floor → backend remaining (ondalıklı) asla aşılmaz. F237: remaining'den türetilir.
+          open: remaining.floor(),
           requiredProperties: l.requiredProperties.map((rp) => ({
             id: rp.propertyId,
             name: rp.property.name,
